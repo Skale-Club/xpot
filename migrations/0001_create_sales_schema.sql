@@ -54,7 +54,8 @@ CREATE TABLE IF NOT EXISTS "sales_reps" (
   "phone" TEXT,
   "team" TEXT,
   "role" "sales_rep_role" NOT NULL DEFAULT 'rep',
-  "vcard_id" INTEGER REFERENCES "vcards"("id"),
+  -- vcard_id kept as plain integer (no FK) — vcards table lives in skaleclub only
+  "vcard_id" INTEGER,
   "ghl_user_id" TEXT,
   "is_active" BOOLEAN NOT NULL DEFAULT true,
   "created_at" TIMESTAMP DEFAULT NOW(),
