@@ -1,0 +1,271 @@
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-sans: 'Inter', sans-serif;
+  --font-display: 'Inter', sans-serif;
+
+  /* Light Mode Colors */
+  --background: 0 0% 100%;
+  --foreground: 0 0% 11%;
+
+  --primary: 215 71% 37%; /* #1C53A3 */
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 210 40% 96.1%; /* slate-100 */
+  --secondary-foreground: 0 0% 11%;
+
+  --muted: 210 40% 96.1%;
+  --muted-foreground: 215.4 16.3% 46.9%;
+
+  --accent: 213 93% 93%; /* blue-100 */
+  --accent-foreground: 217 91% 24%; /* blue-900 */
+
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 210 40% 98%;
+
+  /* Soft hairline border — subtle, never harsh black/white solid */
+  --border: hsl(222 20% 8% / 0.08);
+  --input: hsl(222 20% 8% / 0.1);
+  --ring: 215 71% 37%;
+  --radius: 0.75rem;
+
+  --popover: 0 0% 100%;
+  --popover-foreground: 222.2 84% 4.9%;
+
+  /* Card and Section backgrounds */
+  --card: 0 0% 100%;
+  --card-foreground: 0 0% 11%;
+  --section: 210 40% 98%; /* slate-50 */
+
+  /* Sidebar */
+  --sidebar: 0 0% 100%;
+  --sidebar-foreground: 0 0% 11%;
+  --sidebar-border: hsl(222 20% 8% / 0.08);
+  --sidebar-accent: 210 40% 96.1%;
+  --sidebar-accent-foreground: 0 0% 11%;
+
+  /* Success color */
+  --success: 142 76% 36%;
+  --success-foreground: 0 0% 100%;
+
+  /* Warning color */
+  --warning: 38 92% 50%;
+  --warning-foreground: 0 0% 11%;
+
+  /* Button outline border */
+  --button-outline: var(--border);
+
+  /* Variant borders — subtle by default */
+  --primary-border: hsl(var(--primary) / 0.8);
+  --secondary-border: var(--border);
+  --destructive-border: hsl(var(--destructive) / 0.8);
+  --sidebar-primary-border: hsl(var(--primary) / 0.8);
+  --badge-outline: var(--border);
+}
+
+/* Dark Mode Colors — neutral/desaturated charcoal */
+.dark {
+  --background: 0 0% 7%; /* #121212 — neutral charcoal */
+  --foreground: 0 0% 95%; /* near-white, no tint */
+
+  --primary: 217 91% 60%; /* keep brand blue for CTAs */
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 0 0% 14%; /* #242424 */
+  --secondary-foreground: 0 0% 95%;
+
+  --muted: 0 0% 11%; /* #1c1c1c */
+  --muted-foreground: 0 0% 60%; /* neutral gray */
+
+  --accent: 0 0% 16%; /* #292929 */
+  --accent-foreground: 0 0% 95%;
+
+  --destructive: 0 62% 50%;
+  --destructive-foreground: 0 0% 100%;
+
+  /* Soft hairline border — subtle, never harsh white solid */
+  --border: hsl(0 0% 100% / 0.06);
+  --input: hsl(0 0% 100% / 0.08);
+  --ring: 217 91% 60%;
+
+  --popover: 0 0% 9%;
+  --popover-foreground: 0 0% 95%;
+
+  /* Card and Section backgrounds — neutral charcoal */
+  --card: 0 0% 10%; /* #1a1a1a */
+  --card-foreground: 0 0% 95%;
+  --section: 0 0% 7%;
+
+  /* Sidebar */
+  --sidebar: 0 0% 9%;
+  --sidebar-foreground: 0 0% 95%;
+  --sidebar-border: hsl(0 0% 100% / 0.06);
+  --sidebar-accent: 0 0% 14%;
+  --sidebar-accent-foreground: 0 0% 95%;
+
+  /* Success color */
+  --success: 142 71% 45%;
+  --success-foreground: 0 0% 100%;
+
+  /* Warning color */
+  --warning: 38 92% 50%;
+  --warning-foreground: 0 0% 11%;
+
+  /* Button outline border */
+  --button-outline: var(--border);
+
+  /* Variant borders — subtle by default */
+  --primary-border: hsl(var(--primary) / 0.8);
+  --secondary-border: var(--border);
+  --destructive-border: hsl(var(--destructive) / 0.8);
+  --sidebar-primary-border: hsl(var(--primary) / 0.8);
+  --badge-outline: var(--border);
+}
+
+@layer base {
+  *, *::before, *::after {
+    border-color: var(--border);
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased font-sans;
+    transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display tracking-tight text-foreground;
+  }
+
+  /* Remove default focus outline from all elements */
+  *:focus {
+    outline: none !important;
+  }
+
+  /* Remove focus-visible ring specifically for Shadcn/Tailwind components if needed */
+  .focus-visible\:ring-2,
+  .focus-visible\:ring-offset-2 {
+    --tw-ring-offset-width: 0px !important;
+    --tw-ring-width: 0px !important;
+  }
+
+  .dark input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+  }
+}
+
+@layer components {
+  .container-custom {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+
+  .glass-panel {
+    @apply bg-white/80 backdrop-blur-md border border-white/20 shadow-xl;
+  }
+
+  /* Admin Panel Design Tokens */
+
+  /* Card container - usado para cards de conteúdo */
+  .admin-card {
+    @apply bg-card text-card-foreground rounded-lg border border-border p-6;
+    transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out;
+  }
+
+  /* Section container - usado para agrupar seções */
+  .admin-section {
+    @apply bg-muted rounded-lg p-6 space-y-4;
+    transition: background-color 0.2s ease-in-out;
+  }
+
+  /* Form group - espaçamento padrão para formulários */
+  .admin-form-group {
+    @apply space-y-4;
+  }
+
+  /* Form field - campo individual de formulário */
+  .admin-form-field {
+    @apply space-y-2;
+  }
+
+  /* Grid padrão para formulários de 2 colunas */
+  .admin-form-grid {
+    @apply grid gap-4 sm:grid-cols-2;
+  }
+
+  /* Header de página */
+  .admin-page-header {
+    @apply mb-6;
+  }
+
+  .admin-page-title {
+    @apply text-2xl font-bold text-foreground;
+  }
+
+  .admin-page-subtitle {
+    @apply text-muted-foreground mt-1;
+  }
+
+  /* Stat card para dashboard */
+  .admin-stat-card {
+    @apply bg-card rounded-lg p-6 border border-border;
+    transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out;
+  }
+
+  /* Table container */
+  .admin-table-container {
+    @apply bg-card rounded-lg border border-border overflow-hidden;
+    transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out;
+  }
+
+  /* Action buttons group */
+  .admin-actions {
+    @apply flex items-center gap-2;
+  }
+
+  /* Badge variants para status */
+  .admin-badge-success {
+    @apply bg-success/10 text-success border-success/20;
+  }
+
+  .admin-badge-warning {
+    @apply bg-warning/10 text-warning border-warning/20;
+  }
+
+  .admin-badge-error {
+    @apply bg-destructive/10 text-destructive border-destructive/20;
+  }
+
+  /* Input padrão com suporte a dark mode */
+  .admin-input {
+    @apply bg-background border-input text-foreground placeholder:text-muted-foreground;
+    transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out;
+  }
+
+  .admin-editor:empty:before {
+    content: attr(data-placeholder);
+    color: hsl(var(--muted-foreground));
+    pointer-events: none;
+  }
+}
+
+/* Utility to hide scrollbars (used in carrossel track) */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Reviews widget should keep square edges */
+.lc_reviews_widget {
+  border-radius: 0 !important;
+  background: #111111 !important;
+}
+
+/* If the widget injects its own markup, keep all corners square */
+.lc_reviews_widget * {
+  border-radius: 0 !important;
+}
