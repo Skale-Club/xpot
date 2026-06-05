@@ -21,8 +21,5 @@
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/index" },
     { "source": "/((?!assets/).*)", "destination": "/index.html" }
-  ],
-  "crons": [
-    { "path": "/api/keepalive", "schedule": "0 6 * * *" }
   ]
 }
