@@ -319,10 +319,6 @@ export async function syncVisitToGhl(visitId: number): Promise<{ synced: boolean
 // sync but targets the originating Xphere prospect via the lead's xphereRef.
 // Unlike GHL, prospect-stage leads ARE synced (that is the whole point here).
 export async function syncVisitToXphere(visitId: number): Promise<{ synced: boolean; message?: string }> {
-  const apiUrl = (process.env.XPHERE_API_URL || "https://xphere.app").replace(/\/$/, "");
-  const apiKey = process.env.XPHERE_API_KEY || "";
-  if (!apiKey) return { synced: false, message: "Xphere not configured" };
-
   const visit = await storage.getSalesVisit(visitId);
   if (!visit) return { synced: false, message: "Visit not found" };
 
@@ -332,6 +328,17 @@ export async function syncVisitToXphere(visitId: number): Promise<{ synced: bool
   const ref = (lead as { xphereRef?: string | null }).xphereRef;
   if (!ref || !ref.includes(":")) return { synced: false, message: "Lead has no Xphere ref" };
   const [kind, id] = ref.split(":");
+
+  // Per-tenant config: resolve the lead owner's Xphere integration (rep -> user).
+  if (!lead.ownerRepId) return { synced: false, message: "Lead has no owner" };
+  const ownerRep = await storage.getSalesRep(lead.ownerRepId);
+  if (!ownerRep) return { synced: false, message: "Owner rep not found" };
+  const integration = await storage.getXphereIntegrationByUserId(ownerRep.userId);
+  if (!integration || !integration.isEnabled || !integration.apiKey) {
+    return { synced: false, message: "Xphere not configured" };
+  }
+  const apiUrl = (integration.apiUrl || "https://xphere.app").replace(/\/$/, "");
+  const apiKey = integration.apiKey;
 
   const note = await storage.getSalesVisitNote(visitId);
   const occurredAt = (visit.checkedOutAt ? new Date(visit.checkedOutAt) : new Date()).toISOString();

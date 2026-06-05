@@ -266,6 +266,22 @@ export const salesAppSettings = pgTable("sales_app_settings", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Per-user (tenant) Xphere integration config. Each user/email is a tenant with
+// its own inbound key (identifies the tenant on inbound) + outbound xph_ token.
+export const xphereIntegrations = pgTable("xphere_integrations", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").references(() => users.id).notNull(),
+  inboundApiKey: text("inbound_api_key"),
+  apiKey: text("api_key"),
+  apiUrl: text("api_url").default("https://xphere.app"),
+  isEnabled: boolean("is_enabled").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  userIdx: uniqueIndex("xphere_integrations_user_idx").on(table.userId),
+  inboundKeyIdx: uniqueIndex("xphere_integrations_inbound_key_idx").on(table.inboundApiKey),
+}));
+
 export const insertSalesRepSchema = z.object({
   userId: z.string().min(1),
   displayName: z.string().min(1),
@@ -449,3 +465,6 @@ export type SalesSyncStatus = typeof salesSyncStatusEnum.enumValues[number];
 
 export type SalesAppSettings = typeof salesAppSettings.$inferSelect;
 export type InsertSalesAppSettings = typeof salesAppSettings.$inferInsert;
+
+export type XphereIntegration = typeof xphereIntegrations.$inferSelect;
+export type InsertXphereIntegration = typeof xphereIntegrations.$inferInsert;

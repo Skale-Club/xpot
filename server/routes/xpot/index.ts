@@ -10,6 +10,7 @@ import { createSyncRouter } from "./sync.js";
 import { createPlaceSearchRouter } from "./place-search.js";
 import { createAdminRouter } from "./admin.js";
 import { createInboundRouter } from "./inbound.js";
+import { createXphereRouter } from "./xphere.js";
 
 export function registerXpotRoutes(app: Express) {
   app.use("/api/xpot", createInboundRouter());
@@ -23,4 +24,5 @@ export function registerXpotRoutes(app: Express) {
   app.use("/api/xpot", createSyncRouter());
   app.use("/api/xpot", createPlaceSearchRouter());
   app.use("/api/xpot", createAdminRouter());
+  app.use("/api/xpot", createXphereRouter());
 }

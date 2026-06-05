@@ -19,6 +19,7 @@ import {
   salesSyncEvents,
   chatIntegrations,
   integrationSettings,
+  xphereIntegrations,
   // Inferred types
   type SalesAppSettings,
   type SalesRep,
@@ -44,6 +45,8 @@ import {
   type InsertSalesSyncEvent,
   type ChatIntegration,
   type IntegrationSettings,
+  type XphereIntegration,
+  type InsertXphereIntegration,
 } from "#shared/schema.js";
 
 // ─── Recent-visits joined shape (used by /api/xpot/admin/recent-visits) ──────
@@ -66,6 +69,11 @@ export interface IStorage {
   updateSalesAppSettings(settings: Partial<InsertSalesAppSettings>): Promise<SalesAppSettings>;
   getChatIntegration(provider: string): Promise<ChatIntegration | undefined>;
   getIntegrationSettings(provider: string): Promise<IntegrationSettings | undefined>;
+
+  // Xphere per-user (tenant) integration config
+  getXphereIntegrationByUserId(userId: string): Promise<XphereIntegration | undefined>;
+  getXphereIntegrationByInboundKey(key: string): Promise<XphereIntegration | undefined>;
+  upsertXphereIntegration(userId: string, data: Partial<Omit<InsertXphereIntegration, "userId">>): Promise<XphereIntegration>;
 
   // Reps
   listSalesReps(): Promise<SalesRep[]>;
@@ -145,6 +153,32 @@ export class DatabaseStorage implements IStorage {
   async getIntegrationSettings(provider: string): Promise<IntegrationSettings | undefined> {
     const [settings] = await db.select().from(integrationSettings).where(eq(integrationSettings.provider, provider));
     return settings;
+  }
+
+  // ── Xphere per-user (tenant) integration config ──
+
+  async getXphereIntegrationByUserId(userId: string): Promise<XphereIntegration | undefined> {
+    const [row] = await db.select().from(xphereIntegrations).where(eq(xphereIntegrations.userId, userId));
+    return row;
+  }
+
+  async getXphereIntegrationByInboundKey(key: string): Promise<XphereIntegration | undefined> {
+    const [row] = await db.select().from(xphereIntegrations).where(eq(xphereIntegrations.inboundApiKey, key));
+    return row;
+  }
+
+  async upsertXphereIntegration(userId: string, data: Partial<Omit<InsertXphereIntegration, "userId">>): Promise<XphereIntegration> {
+    const existing = await this.getXphereIntegrationByUserId(userId);
+    if (existing) {
+      const [updated] = await db
+        .update(xphereIntegrations)
+        .set({ ...data, updatedAt: new Date() })
+        .where(eq(xphereIntegrations.id, existing.id))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(xphereIntegrations).values({ userId, ...data }).returning();
+    return created;
   }
 
   // ── Reps ──
