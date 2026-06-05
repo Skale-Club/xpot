@@ -2,7 +2,7 @@ import { Router } from "express";
 import { storage } from "../../storage.js";
 import { requireXpotUser, ensureXpotRep, isManagerOrAdmin } from "./middleware.js";
 import type { SalesVisitStatus } from "#shared/schema/sales.js";
-import { analyzeVisitTranscript, getDistanceMeters, syncVisitToGhl } from "./helpers.js";
+import { analyzeVisitTranscript, getDistanceMeters, syncVisitToGhl, syncVisitToXphere } from "./helpers.js";
 import { xpotCheckInSchema, xpotCheckOutSchema, xpotVisitNoteUpsertSchema } from "#shared/xpot.js";
 
 export function createVisitsRouter() {
@@ -137,6 +137,10 @@ export function createVisitsRouter() {
     // Fire GHL sync after response — non-blocking, failure is logged to sync_events
     syncVisitToGhl(visit.id).catch((err) =>
       console.error("[check-out] syncVisitToGhl error:", err)
+    );
+    // Sync the visit back to the originating Xphere prospect (if any).
+    syncVisitToXphere(visit.id).catch((err) =>
+      console.error("[check-out] syncVisitToXphere error:", err)
     );
   });
 

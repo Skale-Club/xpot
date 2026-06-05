@@ -102,6 +102,9 @@ export const salesLeads = pgTable("sales_leads", {
   lastVisitAt: timestamp("last_visit_at"),
   nextVisitDueAt: timestamp("next_visit_due_at"),
   notes: text("notes"),
+  // Round-trip reference to the originating Xphere prospect ("contact:uuid" or
+  // "account:uuid"), set when a lead is pushed in from Xphere for a field visit.
+  xphereRef: text("xphere_ref"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => ({

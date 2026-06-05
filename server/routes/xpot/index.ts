@@ -9,8 +9,10 @@ import { createTasksRouter } from "./tasks.js";
 import { createSyncRouter } from "./sync.js";
 import { createPlaceSearchRouter } from "./place-search.js";
 import { createAdminRouter } from "./admin.js";
+import { createInboundRouter } from "./inbound.js";
 
 export function registerXpotRoutes(app: Express) {
+  app.use("/api/xpot", createInboundRouter());
   app.use("/api/xpot", createAuthRouter());
   app.use("/api/xpot", createDashboardRouter());
   app.use("/api/xpot", createMetricsRouter());

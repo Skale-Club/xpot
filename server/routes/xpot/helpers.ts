@@ -314,3 +314,63 @@ export async function syncVisitToGhl(visitId: number): Promise<{ synced: boolean
 
   return { synced: true };
 }
+
+// Sync a completed visit back to Xphere's prospect timeline. Mirrors the GHL
+// sync but targets the originating Xphere prospect via the lead's xphereRef.
+// Unlike GHL, prospect-stage leads ARE synced (that is the whole point here).
+export async function syncVisitToXphere(visitId: number): Promise<{ synced: boolean; message?: string }> {
+  const apiUrl = (process.env.XPHERE_API_URL || "https://xphere.app").replace(/\/$/, "");
+  const apiKey = process.env.XPHERE_API_KEY || "";
+  if (!apiKey) return { synced: false, message: "Xphere not configured" };
+
+  const visit = await storage.getSalesVisit(visitId);
+  if (!visit) return { synced: false, message: "Visit not found" };
+
+  const lead = await storage.getSalesLead(visit.leadId);
+  if (!lead) return { synced: false, message: "Lead not found" };
+
+  const ref = (lead as { xphereRef?: string | null }).xphereRef;
+  if (!ref || !ref.includes(":")) return { synced: false, message: "Lead has no Xphere ref" };
+  const [kind, id] = ref.split(":");
+
+  const note = await storage.getSalesVisitNote(visitId);
+  const occurredAt = (visit.checkedOutAt ? new Date(visit.checkedOutAt) : new Date()).toISOString();
+
+  try {
+    const res = await fetch(`${apiUrl}/api/integrations/xpot/visits`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        xphere_id: id,
+        xphere_kind: kind,
+        outcome: note?.outcome ?? null,
+        summary: note?.summary ?? null,
+        sentiment: note?.sentiment ?? null,
+        occurred_at: occurredAt,
+      }),
+    });
+
+    if (!res.ok) {
+      await storage.createSalesSyncEvent({
+        entityType: "sales_visit",
+        entityId: String(visitId),
+        status: "failed",
+        lastError: `Xphere returned HTTP ${res.status}`,
+        lastAttemptAt: new Date(),
+      });
+      return { synced: false, message: `Xphere HTTP ${res.status}` };
+    }
+
+    await storage.createSalesSyncEvent({
+      entityType: "sales_visit",
+      entityId: String(visitId),
+      status: "synced",
+      payload: { xphereRef: ref },
+      lastAttemptAt: new Date(),
+    });
+    return { synced: true };
+  } catch (err) {
+    console.error("[syncVisitToXphere] failed:", err);
+    return { synced: false, message: "Request failed" };
+  }
+}
