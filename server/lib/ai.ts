@@ -1,38 +1,61 @@
-// Minimal Gemini-only AI client for Xpot.
-// Uses the Google OpenAI-compat endpoint so we can reuse the OpenAI SDK shape
-// (chat.completions.create) without adding a second SDK.
+// AI/LLM client resolution for Xpot.
+// Reuses the OpenAI SDK shape (chat.completions.create) for every provider via
+// their OpenAI-compatible endpoints, so callers stay provider-agnostic.
 //
-// Key resolution order:
-//   1. process.env.GEMINI_API_KEY (env override — useful for dev)
-//   2. chat_integrations.gemini.apiKey (admin-configured in skaleclub)
-// Returns null when no key is found, so callers can degrade gracefully.
+// Resolution order for the general LLM client (summaries, etc.):
+//   1. OpenRouter — env OPENROUTER_API_KEY, else chat_integrations."openrouter"
+//   2. Gemini     — env GEMINI_API_KEY,     else chat_integrations."gemini"
+// Returns null when nothing is configured, so callers degrade gracefully.
+//
+// Keys are read fresh (no module cache) so admin edits take effect immediately.
 
 import { OpenAI } from "openai";
 import { storage } from "../storage.js";
 
 const GEMINI_OPENAI_COMPAT_BASE_URL =
   "https://generativelanguage.googleapis.com/v1beta/openai/";
+const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 
 export interface AIClient {
   client: OpenAI;
   model: string;
 }
 
-let cachedKey: string | null = null;
+export async function getOpenRouterClient(): Promise<AIClient | null> {
+  let apiKey = process.env.OPENROUTER_API_KEY || null;
+  let model = process.env.OPENROUTER_MODEL || null;
+  if (!apiKey) {
+    const integration = await storage.getChatIntegration("openrouter");
+    if (integration?.apiKey && integration.enabled !== false) {
+      apiKey = integration.apiKey;
+      model = model || integration.model || null;
+    }
+  }
+  if (!apiKey) return null;
+  return {
+    client: new OpenAI({ apiKey, baseURL: OPENROUTER_BASE_URL }),
+    model: model || "openai/gpt-4o-mini",
+  };
+}
 
 export async function getGeminiClient(): Promise<AIClient | null> {
-  if (process.env.GEMINI_API_KEY) {
-    cachedKey = process.env.GEMINI_API_KEY;
-  }
-  if (!cachedKey) {
+  let apiKey = process.env.GEMINI_API_KEY || null;
+  let model = process.env.GEMINI_MODEL || null;
+  if (!apiKey) {
     const integration = await storage.getChatIntegration("gemini");
-    if (integration?.apiKey) cachedKey = integration.apiKey;
+    if (integration?.apiKey) {
+      apiKey = integration.apiKey;
+      model = model || integration.model || null;
+    }
   }
-  if (!cachedKey) return null;
-
+  if (!apiKey) return null;
   return {
-    client: new OpenAI({ apiKey: cachedKey, baseURL: GEMINI_OPENAI_COMPAT_BASE_URL }),
-    // gemini-2.5-flash is the standard project default for cheap tool calls.
-    model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
+    client: new OpenAI({ apiKey, baseURL: GEMINI_OPENAI_COMPAT_BASE_URL }),
+    model: model || "gemini-2.5-flash",
   };
+}
+
+/** General-purpose LLM client: OpenRouter preferred, Gemini fallback. */
+export async function getLLMClient(): Promise<AIClient | null> {
+  return (await getOpenRouterClient()) || (await getGeminiClient());
 }

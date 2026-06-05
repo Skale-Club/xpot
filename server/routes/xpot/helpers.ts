@@ -1,5 +1,5 @@
 import { storage } from "../../storage.js";
-import { getGeminiClient } from "../../lib/ai.js";
+import { getLLMClient } from "../../lib/ai.js";
 import { getOrCreateGHLContact, createGHLOpportunity, updateGHLOpportunity, createGHLTask, createGHLNote } from "../../integrations/ghl.js";
 import { z } from "zod";
 
@@ -55,7 +55,7 @@ export async function analyzeVisitTranscript(transcript: string): Promise<VisitA
   const cleanedTranscript = transcript.trim();
   if (!cleanedTranscript) return null;
 
-  const ai = await getGeminiClient();
+  const ai = await getLLMClient();
   if (!ai) return null;
 
   const prompt = buildVisitAudioAnalysisPrompt(cleanedTranscript);

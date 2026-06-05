@@ -12,6 +12,8 @@ import { XpotDashboard } from "./pages/xpot/XpotDashboard";
 import { XpotProfileEditor } from "./pages/xpot/XpotProfileEditor";
 import Login from "./pages/Login";
 import { Loader2 } from "@/components/ui/loader";
+import { Shield } from "lucide-react";
+import { AdminApp } from "./pages/admin/AdminApp";
 
 function XpotAppShell() {
   const { me, xpotMeQuery, isOnline, activeTab } = useXpotQueries();
@@ -98,6 +100,18 @@ function XpotAppShell() {
                 </button>
               );
             })}
+            {me && (me.user.isAdmin || ["admin", "manager"].includes(me.rep.role)) && (
+              <button
+                type="button"
+                onClick={() => setLocation("/admin/overview")}
+                style={{ WebkitTapHighlightColor: "transparent" }}
+                className="relative flex min-w-0 flex-1 flex-col items-center gap-1 rounded-xl px-2 py-2 text-[11px] font-medium text-white/35 transition-all touch-manipulation hover:text-white/60"
+                title="Admin"
+              >
+                <Shield className="relative h-[18px] w-[18px]" />
+                <span className="relative truncate">Admin</span>
+              </button>
+            )}
           </div>
         </nav>
       </div>
@@ -116,6 +130,9 @@ export default function App() {
     <Router>
       <Switch>
         <Route path="/login" component={Login} />
+        <Route path="/admin/:section?">
+          {(params) => <AdminApp section={params.section ?? "overview"} />}
+        </Route>
         <Route>
           <GeoProvider>
             <XpotAppShell />

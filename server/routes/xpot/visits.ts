@@ -266,6 +266,27 @@ export function createVisitsRouter() {
         }
       }
 
+      // Fallback to OpenAI Whisper when Groq is unconfigured or failed.
+      if (!audioTranscription) {
+        const openaiIntegration = await storage.getChatIntegration("openai");
+        const openaiApiKey = openaiIntegration?.apiKey;
+        if (openaiApiKey && openaiIntegration?.enabled !== false) {
+          try {
+            const { OpenAI } = await import("openai");
+            const openai = new OpenAI({ apiKey: openaiApiKey });
+            const file = new File([buffer], filename, { type: "audio/webm" });
+            const transcription = await openai.audio.transcriptions.create({
+              file,
+              model: "whisper-1",
+              response_format: "text",
+            });
+            audioTranscription = (transcription as unknown as string).trim() || null;
+          } catch (transcriptionError: any) {
+            console.error("OpenAI transcription error:", transcriptionError.message);
+          }
+        }
+      }
+
       const existingNote = await storage.getSalesVisitNote(visitId);
       const analysis = audioTranscription ? await analyzeVisitTranscript(audioTranscription) : null;
 

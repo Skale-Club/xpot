@@ -9,6 +9,7 @@ import { createTasksRouter } from "./tasks.js";
 import { createSyncRouter } from "./sync.js";
 import { createPlaceSearchRouter } from "./place-search.js";
 import { createAdminRouter } from "./admin.js";
+import { createAdminIntegrationsRouter } from "./admin-integrations.js";
 import { createInboundRouter } from "./inbound.js";
 import { createXphereRouter } from "./xphere.js";
 
@@ -24,5 +25,6 @@ export function registerXpotRoutes(app: Express) {
   app.use("/api/xpot", createSyncRouter());
   app.use("/api/xpot", createPlaceSearchRouter());
   app.use("/api/xpot", createAdminRouter());
+  app.use("/api/xpot", createAdminIntegrationsRouter());
   app.use("/api/xpot", createXphereRouter());
 }

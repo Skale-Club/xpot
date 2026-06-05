@@ -69,11 +69,16 @@ export interface IStorage {
   updateSalesAppSettings(settings: Partial<InsertSalesAppSettings>): Promise<SalesAppSettings>;
   getChatIntegration(provider: string): Promise<ChatIntegration | undefined>;
   getIntegrationSettings(provider: string): Promise<IntegrationSettings | undefined>;
+  listChatIntegrations(): Promise<ChatIntegration[]>;
+  listIntegrationSettings(): Promise<IntegrationSettings[]>;
+  upsertChatIntegration(provider: string, data: Partial<typeof chatIntegrations.$inferInsert>): Promise<ChatIntegration>;
+  upsertIntegrationSettings(provider: string, data: Partial<typeof integrationSettings.$inferInsert>): Promise<IntegrationSettings>;
 
   // Xphere per-user (tenant) integration config
   getXphereIntegrationByUserId(userId: string): Promise<XphereIntegration | undefined>;
   getXphereIntegrationByInboundKey(key: string): Promise<XphereIntegration | undefined>;
   upsertXphereIntegration(userId: string, data: Partial<Omit<InsertXphereIntegration, "userId">>): Promise<XphereIntegration>;
+  listXphereIntegrations(): Promise<XphereIntegration[]>;
 
   // Reps
   listSalesReps(): Promise<SalesRep[]>;
@@ -155,6 +160,48 @@ export class DatabaseStorage implements IStorage {
     return settings;
   }
 
+  async listChatIntegrations(): Promise<ChatIntegration[]> {
+    return await db.select().from(chatIntegrations);
+  }
+
+  async listIntegrationSettings(): Promise<IntegrationSettings[]> {
+    return await db.select().from(integrationSettings);
+  }
+
+  async upsertChatIntegration(
+    provider: string,
+    data: Partial<typeof chatIntegrations.$inferInsert>
+  ): Promise<ChatIntegration> {
+    const existing = await this.getChatIntegration(provider);
+    if (existing) {
+      const [updated] = await db
+        .update(chatIntegrations)
+        .set({ ...data, updatedAt: new Date() })
+        .where(eq(chatIntegrations.id, existing.id))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(chatIntegrations).values({ ...data, provider }).returning();
+    return created;
+  }
+
+  async upsertIntegrationSettings(
+    provider: string,
+    data: Partial<typeof integrationSettings.$inferInsert>
+  ): Promise<IntegrationSettings> {
+    const existing = await this.getIntegrationSettings(provider);
+    if (existing) {
+      const [updated] = await db
+        .update(integrationSettings)
+        .set({ ...data, updatedAt: new Date() })
+        .where(eq(integrationSettings.id, existing.id))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(integrationSettings).values({ ...data, provider }).returning();
+    return created;
+  }
+
   // ── Xphere per-user (tenant) integration config ──
 
   async getXphereIntegrationByUserId(userId: string): Promise<XphereIntegration | undefined> {
@@ -179,6 +226,10 @@ export class DatabaseStorage implements IStorage {
     }
     const [created] = await db.insert(xphereIntegrations).values({ userId, ...data }).returning();
     return created;
+  }
+
+  async listXphereIntegrations(): Promise<XphereIntegration[]> {
+    return await db.select().from(xphereIntegrations);
   }
 
   // ── Reps ──

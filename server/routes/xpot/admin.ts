@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { randomBytes } from "crypto";
 import { storage } from "../../storage.js";
 import { requireXpotManager } from "./middleware.js";
 import { getGHLPipelines } from "../../integrations/ghl.js";
@@ -7,6 +8,8 @@ import { getGHLPipelines } from "../../integrations/ghl.js";
 export function createAdminRouter() {
   const router = Router();
   router.use(requireXpotManager);
+
+  const genInboundKey = () => `xpot_${randomBytes(24).toString("base64url")}`;
 
   router.get("/admin/overview", async (_req, res) => {
     const [reps, leads, visits, opportunities, tasks, syncEvents] = await Promise.all([
@@ -90,6 +93,59 @@ export function createAdminRouter() {
     }
 
     res.json(result);
+  });
+
+  // ── Xphere per-user config, managed by the admin across all reps ──
+
+  router.get("/admin/xphere", async (_req, res) => {
+    const [reps, configs] = await Promise.all([
+      storage.listSalesReps(),
+      storage.listXphereIntegrations(),
+    ]);
+    const byUser = new Map(configs.map((c) => [c.userId, c]));
+    const items = reps.map((rep) => {
+      const cfg = rep.userId ? byUser.get(rep.userId) : undefined;
+      return {
+        userId: rep.userId,
+        repId: rep.id,
+        displayName: rep.displayName,
+        email: rep.email,
+        inboundApiKey: cfg?.inboundApiKey ?? null,
+        apiUrl: cfg?.apiUrl ?? "https://xphere.app",
+        apiKeySet: Boolean(cfg?.apiKey),
+        isEnabled: Boolean(cfg?.isEnabled),
+      };
+    });
+    res.json(items);
+  });
+
+  router.put("/admin/xphere/:userId", async (req, res) => {
+    const userId = req.params.userId;
+    if (!userId) return res.status(400).json({ message: "userId required" });
+
+    const input = z
+      .object({
+        apiKey: z.string().trim().nullable().optional(),
+        apiUrl: z.string().url().nullable().optional(),
+        isEnabled: z.boolean().optional(),
+      })
+      .parse(req.body);
+
+    const existing = await storage.getXphereIntegrationByUserId(userId);
+    const data: Record<string, unknown> = {};
+    if (input.apiKey !== undefined) data.apiKey = input.apiKey || null;
+    if (input.apiUrl !== undefined) data.apiUrl = input.apiUrl || "https://xphere.app";
+    if (input.isEnabled !== undefined) data.isEnabled = input.isEnabled;
+    if (!existing?.inboundApiKey) data.inboundApiKey = genInboundKey();
+
+    const saved = await storage.upsertXphereIntegration(userId, data);
+    res.json({
+      userId,
+      inboundApiKey: saved.inboundApiKey ?? null,
+      apiUrl: saved.apiUrl ?? "https://xphere.app",
+      apiKeySet: Boolean(saved.apiKey),
+      isEnabled: Boolean(saved.isEnabled),
+    });
   });
 
   return router;
