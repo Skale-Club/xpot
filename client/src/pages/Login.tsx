@@ -178,14 +178,18 @@ export default function Login() {
 
   if (isInitializing) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#06090f]">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="flex min-h-screen items-center justify-center text-white" style={{ background: "linear-gradient(160deg, #060912 0%, #090f1c 50%, #060c14 100%)" }}>
+        <Loader2 className="h-8 w-8 animate-spin text-blue-400" />
       </div>
     );
   }
 
   return (
-    <main className="min-h-screen bg-background text-foreground px-4 flex flex-col items-center justify-center">
+    <main className="relative min-h-screen px-4 flex flex-col items-center justify-center text-white" style={{ background: "linear-gradient(160deg, #060912 0%, #090f1c 50%, #060c14 100%)" }}>
+      <div
+        className="pointer-events-none fixed inset-0 opacity-[0.03]"
+        style={{ backgroundImage: "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.8) 1px, transparent 0)", backgroundSize: "32px 32px" }}
+      />
       <div className="w-full max-w-md">
         <Card className="w-full rounded-2xl border-border bg-card shadow-sm">
           <CardHeader className="px-5 pb-4 pt-7 text-center md:px-6">
