@@ -2,16 +2,18 @@ import { useEffect } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "@/components/ui/loader";
-import { ShieldAlert, ArrowLeft, LayoutDashboard, Users, Plug, Webhook } from "lucide-react";
+import { ShieldAlert, ArrowLeft, LayoutDashboard, Users, Plug, Webhook, Palette } from "lucide-react";
 import type { XpotMeResponse } from "@/pages/xpot/types";
 import { AdminOverview } from "./AdminOverview";
 import { AdminReps } from "./AdminReps";
 import { AdminIntegrations } from "./AdminIntegrations";
 import { AdminXphere } from "./AdminXphere";
+import { AdminBranding } from "./AdminBranding";
 
 const SECTIONS = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
   { id: "integrations", label: "Integrações", icon: Plug },
+  { id: "branding", label: "Branding", icon: Palette },
   { id: "xphere", label: "Xphere", icon: Webhook },
   { id: "reps", label: "Reps", icon: Users },
 ] as const;
@@ -106,6 +108,7 @@ export function AdminApp({ section }: { section: string }) {
         <main>
           {active === "overview" && <AdminOverview />}
           {active === "integrations" && <AdminIntegrations />}
+          {active === "branding" && <AdminBranding />}
           {active === "xphere" && <AdminXphere />}
           {active === "reps" && <AdminReps />}
         </main>

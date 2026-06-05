@@ -11,7 +11,18 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Xpot" />
+    <!-- Favicon / PWA / SEO — served dynamically from the admin-uploaded icon
+         (see /api/branding/*). Static /favicon.svg stays as a no-JS fallback. -->
+    <link rel="icon" href="/api/branding/favicon" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/api/branding/apple-touch-icon.png" />
+    <link rel="manifest" href="/api/branding/manifest.webmanifest" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Xpot" />
+    <meta property="og:description" content="Xpot — mobile-first field sales CRM." />
+    <meta property="og:image" content="/api/branding/icon-512.png" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:image" content="/api/branding/icon-512.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=Outfit:wght@100..900&display=swap" rel="stylesheet">

@@ -10,10 +10,14 @@ import { createSyncRouter } from "./sync.js";
 import { createPlaceSearchRouter } from "./place-search.js";
 import { createAdminRouter } from "./admin.js";
 import { createAdminIntegrationsRouter } from "./admin-integrations.js";
+import { createBrandingPublicRouter, createBrandingAdminRouter } from "./branding.js";
 import { createInboundRouter } from "./inbound.js";
 import { createXphereRouter } from "./xphere.js";
 
 export function registerXpotRoutes(app: Express) {
+  // Public branding (favicon / manifest / apple-touch) — no auth.
+  app.use("/api/branding", createBrandingPublicRouter());
+
   app.use("/api/xpot", createInboundRouter());
   app.use("/api/xpot", createAuthRouter());
   app.use("/api/xpot", createDashboardRouter());
@@ -26,5 +30,6 @@ export function registerXpotRoutes(app: Express) {
   app.use("/api/xpot", createPlaceSearchRouter());
   app.use("/api/xpot", createAdminRouter());
   app.use("/api/xpot", createAdminIntegrationsRouter());
+  app.use("/api/xpot", createBrandingAdminRouter());
   app.use("/api/xpot", createXphereRouter());
 }

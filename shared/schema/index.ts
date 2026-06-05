@@ -4,3 +4,4 @@
 export * from "./auth.js";
 export * from "./sales.js";
 export * from "./integrations.js";
+export * from "./branding.js";

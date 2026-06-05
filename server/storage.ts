@@ -20,6 +20,7 @@ import {
   chatIntegrations,
   integrationSettings,
   xphereIntegrations,
+  appBranding,
   // Inferred types
   type SalesAppSettings,
   type SalesRep,
@@ -47,6 +48,8 @@ import {
   type IntegrationSettings,
   type XphereIntegration,
   type InsertXphereIntegration,
+  type AppBranding,
+  type InsertAppBranding,
 } from "#shared/schema.js";
 
 // ─── Recent-visits joined shape (used by /api/xpot/admin/recent-visits) ──────
@@ -79,6 +82,10 @@ export interface IStorage {
   getXphereIntegrationByInboundKey(key: string): Promise<XphereIntegration | undefined>;
   upsertXphereIntegration(userId: string, data: Partial<Omit<InsertXphereIntegration, "userId">>): Promise<XphereIntegration>;
   listXphereIntegrations(): Promise<XphereIntegration[]>;
+
+  // App branding (favicon + PWA manifest)
+  getAppBranding(): Promise<AppBranding>;
+  upsertAppBranding(data: Partial<Omit<InsertAppBranding, "id">>): Promise<AppBranding>;
 
   // Reps
   listSalesReps(): Promise<SalesRep[]>;
@@ -230,6 +237,26 @@ export class DatabaseStorage implements IStorage {
 
   async listXphereIntegrations(): Promise<XphereIntegration[]> {
     return await db.select().from(xphereIntegrations);
+  }
+
+  // ── App branding (singleton row, id = 1) ──
+
+  async getAppBranding(): Promise<AppBranding> {
+    const [row] = await db.select().from(appBranding).where(eq(appBranding.id, 1));
+    if (row) return row;
+    // Seed on first read if the migration's seed somehow didn't run.
+    const [created] = await db.insert(appBranding).values({ id: 1 }).onConflictDoNothing().returning();
+    return created ?? (await db.select().from(appBranding).where(eq(appBranding.id, 1)))[0];
+  }
+
+  async upsertAppBranding(data: Partial<Omit<InsertAppBranding, "id">>): Promise<AppBranding> {
+    await this.getAppBranding(); // ensure the row exists
+    const [updated] = await db
+      .update(appBranding)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(appBranding.id, 1))
+      .returning();
+    return updated;
   }
 
   // ── Reps ──
