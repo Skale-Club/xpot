@@ -51,7 +51,9 @@ export default defineConfig({
     },
   },
   server: {
-    port: 2000,
+    // The client is served by Vite in middleware mode from inside the Express
+    // server (see server/vite.ts), so everything runs on one port — there is no
+    // standalone dev port or /api proxy to configure here.
     fs: { strict: true, deny: ["**/.*"] },
   },
 });

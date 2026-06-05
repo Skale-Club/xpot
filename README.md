@@ -17,7 +17,7 @@ Mobile-first field sales CRM. Reps check in with GPS, log visits with voice note
 
 ```bash
 npm install          # First-time setup
-npm run dev          # Dev server on http://localhost:2000
+npm run dev          # Dev server (client + API, one port) on http://localhost:2110
 npm run check        # TypeScript typecheck
 npm run build        # Production build to dist/
 npm run start        # Run production build

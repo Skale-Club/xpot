@@ -8,3 +8,6 @@ dist
 .vercel
 .cache
 tsbuildinfo
+
+# Claude Code local (per-machine) settings
+.claude/settings.local.json
