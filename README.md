@@ -10,7 +10,7 @@ Mobile-first field sales CRM. Reps check in with GPS, log visits with voice note
 
 - **Frontend:** React 18 + Vite + Wouter + Tailwind + shadcn/ui primitives
 - **Backend:** Express + Drizzle ORM + Supabase Auth
-- **DB:** PostgreSQL (Supabase) — currently shared with Skale Club; standalone migration TBD
+- **DB:** PostgreSQL on a dedicated Supabase project (`Xpot`, ref `swqxxeivetzakglaphil`, us-east-1) — independent from Skale Club (own database **and** Auth)
 - **Integrations:** GoHighLevel (lead/opp/task/note sync), Google Places (address autocomplete)
 
 ## Commands
@@ -62,18 +62,16 @@ All tables RLS-protected. Reps see only their own data; managers/admins see all.
 
 ## Auth model
 
-Reuses Supabase Auth from Skale Club:
+Supabase Auth on the project's own Auth instance:
 - User signs in → session stored in `sessions` table (`connect-pg-simple`)
 - `salesReps.userId` FK → `users.id` links the auth user to a rep profile
 - Role hierarchy: `rep` < `manager` < `admin`
 - Middleware `requireXpotUser` enforces session + rep existence on all `/api/xpot/*` routes
 
-## Notes for future Supabase migration
+## Supabase project
 
-If/when Xpot gets its own Supabase project:
-1. Export the 9 `sales_*` tables + `users` rows that have a matching `salesReps.user_id`
-2. Import into the new project
-3. Update `POSTGRES_URL` + `SUPABASE_*` env vars
-4. The `salesReps.userId` FK will need to point to the new project's `users` table — handled by re-running the migrations against the new DB
-
-Until then, this app shares the Skale Club DB and Supabase Auth project.
+Xpot runs on its **own** dedicated Supabase project (`Xpot`, ref `swqxxeivetzakglaphil`)
+— separate database and Auth from Skale Club. The schema is created end-to-end by
+the migrations in `migrations/` (run `npm run migrate`); nothing is shared with the
+Skale Club project. The split from Skale Club (see the extraction note above) is
+complete — this section previously described it as TBD, which was stale.
