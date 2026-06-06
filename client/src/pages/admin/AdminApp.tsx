@@ -12,7 +12,7 @@ import { AdminBranding } from "./AdminBranding";
 
 const SECTIONS = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
-  { id: "integrations", label: "Integrações", icon: Plug },
+  { id: "integrations", label: "Integrations", icon: Plug },
   { id: "branding", label: "Branding", icon: Palette },
   { id: "xphere", label: "Xphere", icon: Webhook },
   { id: "reps", label: "Reps", icon: Users },
@@ -25,7 +25,7 @@ export function AdminApp({ section }: { section: string }) {
   const meQuery = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
 
   useEffect(() => {
-    document.title = "Xpot — Admin";
+    document.title = "Xpot | Admin";
   }, []);
 
   const me = meQuery.data;
@@ -46,16 +46,16 @@ export function AdminApp({ section }: { section: string }) {
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#060912] px-6 text-center text-white">
         <ShieldAlert className="h-10 w-10 text-red-400" />
         <div>
-          <p className="text-lg font-semibold">Acesso restrito</p>
+          <p className="text-lg font-semibold">Access restricted</p>
           <p className="mt-1 text-sm text-white/50">
-            {me ? "Você não tem permissão de administrador." : "Faça login para continuar."}
+            {me ? "You don't have admin permission." : "Sign in to continue."}
           </p>
         </div>
         <button
-          onClick={() => setLocation(me ? "/dashboard" : "/login")}
+          onClick={() => setLocation(me ? "/dashboard" : "/")}
           className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 transition-colors hover:bg-white/10"
         >
-          {me ? "Voltar ao app" : "Ir para o login"}
+          {me ? "Back to app" : "Go to sign in"}
         </button>
       </div>
     );
@@ -74,7 +74,7 @@ export function AdminApp({ section }: { section: string }) {
             <button
               onClick={() => setLocation("/dashboard")}
               className="rounded-lg border border-white/10 bg-white/5 p-2 text-white/70 transition-colors hover:bg-white/10"
-              title="Voltar ao app"
+              title="Back to app"
             >
               <ArrowLeft className="h-4 w-4" />
             </button>

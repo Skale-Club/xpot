@@ -1,15 +1,20 @@
 import { useCallback, useEffect, useState } from "react";
 import { useLocation } from "wouter";
-import { Mail, MapPinned, Lock } from "lucide-react";
 import { initSupabase } from "@/lib/supabase";
 import { queryClient } from "@/lib/queryClient";
-import { getXpotHomePath, getXpotLoginPath } from "@/lib/xpot";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { getXpotHomePath } from "@/lib/xpot";
 import { Loader2 } from "@/components/ui/loader";
 import type { XpotMeResponse } from "./xpot/types";
+
+// /login is a thin OAuth callback handler. The actual sign-in UI lives in the
+// landing page dialog (XpotLandingPage). This page:
+//   1. Surfaces OAuth errors (?error= from Supabase when user cancels Google),
+//      bounces the user back to the landing.
+//   2. Detects the Supabase session from the URL (?code= in PKCE flow),
+//      exchanges it for an Express session via /api/auth/login, then redirects
+//      to /dashboard.
+//   3. If the user already has an Express session, just redirects to /dashboard.
+//   4. If nothing matches, bounces back to / (landing) where the dialog awaits.
 
 async function getCurrentUser() {
   const response = await fetch("/api/auth/user", { credentials: "include" });
@@ -17,8 +22,18 @@ async function getCurrentUser() {
   return response.json();
 }
 
-async function getXpotSession() {
+async function getXpotSession(retryOn401 = true): Promise<{
+  ok: boolean;
+  status: number;
+  data: XpotMeResponse | null;
+  message: string | undefined;
+}> {
   const response = await fetch("/api/xpot/me", { credentials: "include" });
+  // Defense against a post-login session/cookie propagation race: retry once.
+  if (response.status === 401 && retryOn401) {
+    await new Promise((r) => setTimeout(r, 300));
+    return getXpotSession(false);
+  }
   const payload = await response.json().catch(() => null);
   return {
     ok: response.ok,
@@ -28,255 +43,134 @@ async function getXpotSession() {
   };
 }
 
-function getXpotSessionErrorMessage(status: number, message?: string) {
-  if (message) return message;
-  if (status === 403) return "Your Xpot access is disabled.";
-  if (status >= 500) return "Xpot is temporarily unavailable. Please try again in a moment.";
-  return "Sign-in failed. Please try again.";
+function cleanUrl() {
+  if (window.location.hash || window.location.search) {
+    window.history.replaceState(null, "", window.location.pathname);
+  }
 }
 
 export default function Login() {
   const [, setLocation] = useLocation();
+  const [status, setStatus] = useState<"working" | "error">("working");
+  const [errorMsg, setErrorMsg] = useState<string>("");
 
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [googleSubmitting, setGoogleSubmitting] = useState(false);
-  const [isSupabaseAuth, setIsSupabaseAuth] = useState(false);
-  const [isInitializing, setIsInitializing] = useState(true);
+  const goLanding = useCallback(
+    (msg?: string) => {
+      cleanUrl();
+      if (msg) {
+        // Pass the error via sessionStorage so the landing dialog can surface it.
+        try {
+          sessionStorage.setItem("xpot_auth_error", msg);
+        } catch {
+          // ignore
+        }
+      }
+      setLocation("/");
+    },
+    [setLocation],
+  );
 
-  const googleLogoUrl = "https://commons.wikimedia.org/wiki/Special:FilePath/Google_Favicon_2025.svg";
-
-  const openXpotWorkspace = useCallback(async () => {
+  const goDashboard = useCallback(async () => {
     const result = await getXpotSession();
     if (!result.ok) {
-      setError(getXpotSessionErrorMessage(result.status, result.message));
-      return false;
+      const reason =
+        result.message ||
+        (result.status === 403
+          ? "Your Xpot access is disabled."
+          : "Sign-in failed. Please try again.");
+      setErrorMsg(reason);
+      setStatus("error");
+      setTimeout(() => goLanding(reason), 1500);
+      return;
     }
     queryClient.setQueryData(["/api/xpot/me"], result.data);
+    cleanUrl();
     setLocation(getXpotHomePath());
-    return true;
-  }, [setLocation]);
+  }, [goLanding, setLocation]);
 
   useEffect(() => {
     let mounted = true;
 
-    async function initialize() {
-      try {
-        const response = await fetch("/api/supabase-config");
-        const config = await response.json();
-        const hasSupabase = Boolean(config.url && config.anonKey);
+    async function run() {
+      // 1. OAuth provider error in URL — user cancelled, Google rejected, etc.
+      const params = new URLSearchParams(window.location.search);
+      const oauthError = params.get("error_description") || params.get("error");
+      if (oauthError) {
+        const decoded = decodeURIComponent(oauthError.replace(/\+/g, " "));
+        if (mounted) goLanding(decoded);
+        return;
+      }
 
-        const user = await getCurrentUser();
-        if (mounted && user) {
-          await openXpotWorkspace();
+      // 2. Already logged in via Express session — straight to dashboard.
+      const existingUser = await getCurrentUser();
+      if (!mounted) return;
+      if (existingUser) {
+        await goDashboard();
+        return;
+      }
+
+      // 3. Try to exchange an OAuth session from the URL (PKCE: ?code=…).
+      try {
+        const configResponse = await fetch("/api/supabase-config");
+        const config = await configResponse.json();
+        const hasSupabase = Boolean(config.url && config.anonKey);
+        if (!hasSupabase) {
+          if (mounted) goLanding("Authentication is not configured.");
           return;
         }
 
-        if (mounted) {
-          setIsSupabaseAuth(hasSupabase);
-          setIsInitializing(false);
+        const supabase = await initSupabase();
+        const { data } = await supabase.auth.getSession();
+        const accessToken = data.session?.access_token;
+
+        if (!accessToken) {
+          // No callback in flight, no session — go back to landing.
+          if (mounted) goLanding();
+          return;
         }
 
-        // After Google OAuth redirect, Supabase sets a session from the URL hash —
-        // exchange it for an Express session immediately.
-        if (hasSupabase) {
-          try {
-            const supabase = await initSupabase();
-            const { data } = await supabase.auth.getSession();
-            const accessToken = data.session?.access_token;
+        const loginResponse = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ accessToken }),
+        });
 
-            if (accessToken) {
-              const loginResponse = await fetch("/api/auth/login", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                credentials: "include",
-                body: JSON.stringify({ accessToken }),
-              });
+        if (!mounted) return;
 
-              if (mounted && loginResponse.ok) {
-                await openXpotWorkspace();
-              } else if (mounted) {
-                const result = await loginResponse.json().catch(() => ({}));
-                setError(result.message || "Sign-in failed. Please try again.");
-              }
-            }
-          } catch (err: any) {
-            if (mounted) setError(err.message || "Sign-in failed. Please try again.");
-          }
+        if (!loginResponse.ok) {
+          const result = await loginResponse.json().catch(() => ({}));
+          goLanding(result.message || "Sign-in failed. Please try again.");
+          return;
         }
-      } catch {
-        if (mounted) setIsInitializing(false);
+
+        await goDashboard();
+      } catch (err: any) {
+        if (mounted) goLanding(err?.message || "Sign-in failed. Please try again.");
       }
     }
 
-    void initialize();
+    void run();
     return () => {
       mounted = false;
     };
-  }, [openXpotWorkspace]);
-
-  const handleEmailLogin = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setError("");
-    setSubmitting(true);
-
-    try {
-      if (!isSupabaseAuth) {
-        setError("Supabase auth is not configured. Set SUPABASE_URL + SUPABASE_ANON_KEY.");
-        return;
-      }
-
-      const supabase = await initSupabase();
-      const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-      if (signInError) throw signInError;
-
-      const accessToken = data.session?.access_token;
-      if (!accessToken) throw new Error("No access token returned");
-
-      const response = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ accessToken }),
-      });
-
-      if (!response.ok) {
-        const result = await response.json().catch(() => ({ message: "Login failed" }));
-        throw new Error(result.message || "Login failed");
-      }
-
-      await openXpotWorkspace();
-    } catch (loginError: any) {
-      setError(loginError.message || "Login failed");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleGoogleLogin = async () => {
-    setError("");
-    setGoogleSubmitting(true);
-
-    try {
-      if (!isSupabaseAuth) {
-        setError("Supabase auth is not configured.");
-        return;
-      }
-      const supabase = await initSupabase();
-      const { error: oauthError } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: { redirectTo: `${window.location.origin}${getXpotLoginPath()}` },
-      });
-      if (oauthError) throw oauthError;
-    } catch (loginError: any) {
-      setError(loginError.message || "Login failed");
-      setGoogleSubmitting(false);
-    }
-  };
-
-  if (isInitializing) {
-    return (
-      <div className="flex min-h-screen items-center justify-center text-white" style={{ background: "linear-gradient(160deg, #060912 0%, #090f1c 50%, #060c14 100%)" }}>
-        <Loader2 className="h-8 w-8 animate-spin text-blue-400" />
-      </div>
-    );
-  }
+  }, [goDashboard, goLanding]);
 
   return (
-    <main className="relative min-h-screen px-4 flex flex-col items-center justify-center text-white" style={{ background: "linear-gradient(160deg, #060912 0%, #090f1c 50%, #060c14 100%)" }}>
-      <div
-        className="pointer-events-none fixed inset-0 opacity-[0.03]"
-        style={{ backgroundImage: "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.8) 1px, transparent 0)", backgroundSize: "32px 32px" }}
-      />
-      <div className="w-full max-w-md">
-        <Card className="w-full rounded-2xl border-border bg-card shadow-sm">
-          <CardHeader className="px-5 pb-4 pt-7 text-center md:px-6">
-            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center">
-              <MapPinned className="h-6 w-6 text-primary" />
-            </div>
-            <CardTitle className="text-2xl leading-none tracking-tight text-card-foreground">
-              Xpot
-            </CardTitle>
-            <CardDescription className="pt-2 text-base text-muted-foreground">
-              Sign in to access your field sales workspace
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-5 px-5 pb-7 md:px-6">
-            {error && (
-              <div className="rounded-md bg-destructive/15 p-3 text-sm text-destructive">{error}</div>
-            )}
-
-            {isSupabaseAuth ? (
-              <>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleGoogleLogin}
-                  disabled={googleSubmitting}
-                  className="h-12 w-full"
-                >
-                  {googleSubmitting ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <img src={googleLogoUrl} alt="" aria-hidden="true" className="mr-2 h-4 w-4" />
-                  )}
-                  Continue with Google
-                </Button>
-
-                <div className="flex items-center gap-3">
-                  <div className="h-px flex-1 bg-border" />
-                  <div className="text-xs uppercase tracking-wider text-muted-foreground">or continue with</div>
-                  <div className="h-px flex-1 bg-border" />
-                </div>
-
-                <form onSubmit={handleEmailLogin} className="space-y-5">
-                  <div className="space-y-2">
-                    <Label htmlFor="xpot-email" className="text-base font-medium">Email</Label>
-                    <div className="relative">
-                      <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                      <Input
-                        id="xpot-email"
-                        type="email"
-                        value={email}
-                        onChange={(event) => setEmail(event.target.value)}
-                        placeholder="rep@example.com"
-                        className="h-12 bg-background pl-10 text-base"
-                        required
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="xpot-password" className="text-base font-medium">Password</Label>
-                    <div className="relative">
-                      <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                      <Input
-                        id="xpot-password"
-                        type="password"
-                        value={password}
-                        onChange={(event) => setPassword(event.target.value)}
-                        placeholder="*****"
-                        className="h-12 bg-background pl-10 text-base"
-                        required
-                      />
-                    </div>
-                  </div>
-                  <Button type="submit" disabled={submitting} className="h-12 w-full">
-                    {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                    Sign In
-                  </Button>
-                </form>
-              </>
-            ) : (
-              <div className="rounded-md bg-muted p-4 text-sm text-muted-foreground text-center">
-                Supabase Auth is not configured. Set <code>SUPABASE_URL</code> and{" "}
-                <code>SUPABASE_ANON_KEY</code> on the server.
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-    </main>
+    <div
+      className="flex min-h-screen flex-col items-center justify-center gap-4 text-white"
+      style={{ background: "linear-gradient(160deg, #060912 0%, #090f1c 50%, #060c14 100%)" }}
+    >
+      {status === "working" ? (
+        <>
+          <Loader2 className="h-8 w-8 animate-spin text-blue-400" />
+          <p className="text-sm text-white/40">Finishing sign-in…</p>
+        </>
+      ) : (
+        <p className="max-w-sm rounded-md bg-red-500/10 px-4 py-3 text-center text-sm text-red-300">
+          {errorMsg}
+        </p>
+      )}
+    </div>
   );
 }

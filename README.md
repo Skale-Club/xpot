@@ -1,6 +1,6 @@
 # Xpot
 
-Mobile-first field sales CRM. Reps check in with GPS, log visits with voice notes, manage leads, and push pipeline updates that sync to GoHighLevel.
+Mobile-first field sales companion. Reps check in with GPS, log visits with voice notes, manage leads, and push pipeline updates that sync to GoHighLevel.
 
 **Extracted from `skaleclub` on 2026-05-18** as a standalone project. See `EXTRACTION-NOTES.md` for the migration history.
 

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { createClient } from "@supabase/supabase-js";
 import { storage } from "../../storage.js";
 import { requireXpotUser, ensureXpotRep } from "./middleware.js";
 import { getSupabaseAdmin } from "../../lib/supabase.js";
@@ -35,6 +36,8 @@ export function createAuthRouter() {
     displayName: z.string().min(1).max(100).optional(),
     phone: z.string().max(30).optional().nullable(),
     avatarUrl: z.string().url().optional().nullable(),
+    firstName: z.string().max(100).optional().nullable(),
+    lastName: z.string().max(100).optional().nullable(),
   });
 
   router.patch("/me", async (req, res) => {
@@ -44,13 +47,35 @@ export function createAuthRouter() {
       if (!parsed.success) {
         return res.status(400).json({ message: "Invalid input", errors: parsed.error.flatten() });
       }
-      const data: { displayName?: string; phone?: string; avatarUrl?: string } = {};
-      if (parsed.data.displayName !== undefined) data.displayName = parsed.data.displayName;
-      if (parsed.data.phone !== undefined) data.phone = parsed.data.phone ?? undefined;
-      if (parsed.data.avatarUrl !== undefined) data.avatarUrl = parsed.data.avatarUrl ?? undefined;
+      const { firstName, lastName, ...repData } = parsed.data;
+      const repPatch: { displayName?: string; phone?: string; avatarUrl?: string } = {};
+      if (repData.displayName !== undefined) repPatch.displayName = repData.displayName;
+      if (repData.phone !== undefined) repPatch.phone = repData.phone ?? undefined;
+      if (repData.avatarUrl !== undefined) repPatch.avatarUrl = repData.avatarUrl ?? undefined;
 
-      const updated = await storage.updateSalesRepProfile(actor!.rep.id, data);
-      res.json({ rep: updated });
+      const userPatch: { firstName?: string | null; lastName?: string | null } = {};
+      if (firstName !== undefined) userPatch.firstName = firstName;
+      if (lastName !== undefined) userPatch.lastName = lastName;
+
+      // Auto-update rep.displayName from firstName/lastName when displayName isn't explicitly sent.
+      if (repData.displayName === undefined && (firstName !== undefined || lastName !== undefined)) {
+        const fullName = [firstName ?? actor!.user.firstName, lastName ?? actor!.user.lastName]
+          .filter(Boolean).join(" ").trim() || actor!.rep.displayName;
+        if (fullName) repPatch.displayName = fullName;
+      }
+
+      const [updatedRep, _updatedUser] = await Promise.all([
+        Object.keys(repPatch).length ? storage.updateSalesRepProfile(actor!.rep.id, repPatch) : Promise.resolve(actor!.rep),
+        Object.keys(userPatch).length ? storage.updateUserProfile(actor!.user.userId, userPatch) : Promise.resolve(actor!.user),
+      ]);
+
+      if (Object.keys(userPatch).length) {
+        const sess = req.session as any;
+        if (firstName !== undefined) sess.firstName = firstName;
+        if (lastName !== undefined) sess.lastName = lastName;
+      }
+
+      res.json({ rep: updatedRep, user: { ...actor!.user, ...userPatch } });
     } catch (err) {
       console.error("[PATCH /api/xpot/me]", err);
       res.status(500).json({ message: (err as Error).message || "Internal server error" });
@@ -91,11 +116,63 @@ export function createAuthRouter() {
       const { data: urlData } = supabase.storage.from("uploads").getPublicUrl(filename);
       const avatarUrl = urlData.publicUrl;
 
-      const updated = await storage.updateSalesRepProfile(actor!.rep.id, { avatarUrl });
+      const [updated] = await Promise.all([
+        storage.updateSalesRepProfile(actor!.rep.id, { avatarUrl }),
+        storage.updateUserProfile(actor!.user.userId, { profileImageUrl: avatarUrl }),
+      ]);
       res.json({ avatarUrl, rep: updated });
     } catch (err) {
       console.error("[POST /api/xpot/me/avatar]", err);
       res.status(500).json({ message: (err as Error).message || "Failed to upload avatar" });
+    }
+  });
+
+  router.post("/me/change-password", async (req, res) => {
+    try {
+      const actor = (req as any).xpotActor as Awaited<ReturnType<typeof ensureXpotRep>>;
+      const parsed = z.object({
+        currentPassword: z.string().min(1),
+        newPassword: z.string().min(8).max(128),
+      }).safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid input", errors: parsed.error.flatten() });
+      }
+      const { currentPassword, newPassword } = parsed.data;
+
+      if (!actor!.user.email) {
+        return res.status(400).json({ message: "No email on file for password reset" });
+      }
+
+      if (currentPassword === newPassword) {
+        return res.status(400).json({ message: "New password must differ from current password" });
+      }
+
+      const anonClient = createClient(
+        process.env.SUPABASE_URL!,
+        process.env.SUPABASE_ANON_KEY!,
+        { auth: { autoRefreshToken: false, persistSession: false } },
+      );
+
+      const { error: signInError } = await anonClient.auth.signInWithPassword({
+        email: actor!.user.email,
+        password: currentPassword,
+      });
+
+      if (signInError) {
+        return res.status(401).json({ message: "Current password is incorrect" });
+      }
+
+      const admin = getSupabaseAdmin();
+      const { error: updateError } = await admin.auth.admin.updateUserById(actor!.user.userId, { password: newPassword });
+
+      if (updateError) {
+        return res.status(500).json({ message: "Failed to update password" });
+      }
+
+      res.json({ success: true });
+    } catch (err) {
+      console.error("[POST /api/xpot/me/change-password]", err);
+      res.status(500).json({ message: (err as Error).message || "Internal server error" });
     }
   });
 

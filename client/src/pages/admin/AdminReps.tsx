@@ -27,15 +27,15 @@ export function AdminReps() {
     );
   }
   if (query.isError || !query.data) {
-    return <p className="text-sm text-red-400">Falha ao carregar reps.</p>;
+    return <p className="text-sm text-red-400">Failed to load reps.</p>;
   }
 
   return (
     <div className="space-y-3">
       <p className="text-sm text-white/50">
-        Gerencie papel, equipe e status dos representantes. Reps são criados automaticamente no primeiro login.
+        Manage reps' role, team and status. Reps are created automatically on first login.
       </p>
-      {query.data.length === 0 && <p className="text-sm text-white/40">Nenhum representante ainda.</p>}
+      {query.data.length === 0 && <p className="text-sm text-white/40">No reps yet.</p>}
       {query.data.map((rep) => (
         <RepRow key={rep.id} rep={rep} />
       ))}
@@ -54,7 +54,7 @@ function RepRow({ rep }: { rep: Rep }) {
 
   const save = useMutation({
     mutationFn: async () => {
-      if (!rep.userId) throw new Error("Rep sem usuário vinculado.");
+      if (!rep.userId) throw new Error("Rep has no linked user.");
       const res = await apiRequest("POST", "/api/xpot/admin/reps", {
         userId: rep.userId,
         displayName: rep.displayName,
@@ -66,10 +66,10 @@ function RepRow({ rep }: { rep: Rep }) {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: `${rep.displayName} atualizado` });
+      toast({ title: `${rep.displayName} updated` });
       queryClient.invalidateQueries({ queryKey: ["/api/xpot/admin/reps"] });
     },
-    onError: (e: Error) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
   return (
@@ -94,13 +94,13 @@ function RepRow({ rep }: { rep: Rep }) {
       <input
         value={team}
         onChange={(e) => setTeam(e.target.value)}
-        placeholder="equipe"
+        placeholder="team"
         className="w-28 rounded-lg border border-white/10 bg-[#0a0f1e] px-2 py-1.5 text-sm text-white placeholder-white/25 outline-none focus:border-blue-500/50"
       />
 
       <label className="flex cursor-pointer items-center gap-1.5 text-sm text-white/70">
         <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} className="h-4 w-4 accent-blue-500" />
-        ativo
+        active
       </label>
 
       <button
@@ -109,7 +109,7 @@ function RepRow({ rep }: { rep: Rep }) {
         className="inline-flex items-center gap-2 rounded-lg bg-blue-500 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-600 disabled:opacity-40"
       >
         {save.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-        Salvar
+        Save
       </button>
     </div>
   );

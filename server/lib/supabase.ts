@@ -23,3 +23,15 @@ export function getSupabaseAdmin(): SupabaseClient {
 
   return supabaseAdmin;
 }
+
+/** Ensure the "uploads" bucket exists in Supabase Storage, creating it if necessary. */
+export async function ensureUploadBucket(): Promise<void> {
+  const supabase = getSupabaseAdmin();
+  const { data: buckets } = await supabase.storage.listBuckets();
+  if (buckets?.some((b) => b.name === "uploads")) return;
+
+  const { error } = await supabase.storage.createBucket("uploads", {
+    public: true,
+  });
+  if (error) throw new Error(`Failed to create "uploads" bucket: ${error.message}`);
+}

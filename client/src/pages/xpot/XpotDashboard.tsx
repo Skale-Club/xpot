@@ -1,11 +1,13 @@
-import { useState } from "react";
-import { MapPinned, DollarSign, Target, Clock3, Footprints, LogOut, Activity, AlertTriangle, RefreshCw } from "lucide-react";
+import { useRef } from "react";
+import { Camera, MapPinned, DollarSign, Target, Clock3, Footprints, LogOut, Activity, AlertTriangle, RefreshCw, Settings } from "lucide-react";
 import { AreaChart, Area, XAxis, Tooltip, ResponsiveContainer, LabelList } from "recharts";
+import { useMutation } from "@tanstack/react-query";
 import { useXpotQueries } from "./hooks/useXpotQueries";
 import { useSyncStatus } from "./hooks/useSyncStatus";
 import { VisitRow } from "./components/VisitRow";
 import { formatCurrency } from "./utils";
-import { XpotProfileEditor } from "./XpotProfileEditor";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 const METRIC_CARDS = [
   {
@@ -46,14 +48,41 @@ function getGreeting() {
 }
 
 export function XpotDashboard() {
-  const { dashboardQuery, repName, me, signOut, isOnline } = useXpotQueries();
+  const { dashboardQuery, repName, me, signOut, isOnline, setLocation } = useXpotQueries();
+  const { toast } = useToast();
   const metrics = dashboardQuery.data?.metrics;
   const firstName = repName?.split(" ")[0] ?? "";
-  const [profileOpen, setProfileOpen] = useState(false);
   const { failedEvents, retryMutation } = useSyncStatus();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const initials = repName.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
   const avatarUrl = me?.rep.avatarUrl;
+
+  const avatarMutation = useMutation({
+    mutationFn: async (imageData: string) => {
+      const res = await apiRequest("POST", "/api/xpot/me/avatar", { imageData });
+      return res.json() as Promise<{ avatarUrl: string }>;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/xpot/me"] });
+      toast({ title: "Photo updated" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const handleAvatarClick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = reader.result as string;
+      avatarMutation.mutate(base64);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
 
   function metricValue(key: typeof METRIC_CARDS[number]["key"]) {
     if (!metrics) return "—";
@@ -63,14 +92,15 @@ export function XpotDashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Hero: avatar + greeting + logout */}
+      {/* Hero: avatar + greeting + actions */}
       <div className="flex items-center justify-between pb-2">
         <div className="flex items-center gap-4">
-          {/* Avatar Button */}
+          {/* Avatar upload */}
           <button
             type="button"
-            onClick={() => setProfileOpen(true)}
-            className="relative shrink-0 transition-transform active:scale-95 touch-manipulation"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={avatarMutation.isPending}
+            className="group relative shrink-0 transition-transform active:scale-95 touch-manipulation"
             style={{ WebkitTapHighlightColor: "transparent" }}
           >
             {avatarUrl ? (
@@ -85,11 +115,19 @@ export function XpotDashboard() {
                 className="flex h-[62px] w-[62px] items-center justify-center rounded-[22px] text-[22px] font-bold tracking-wide text-white"
                 style={{ background: "linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)", boxShadow: "0 8px 24px rgba(59,130,246,0.25)" }}
               >
-                {initials}
+                {avatarMutation.isPending ? (
+                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                ) : (
+                  initials
+                )}
               </div>
             )}
+            <div className="absolute inset-0 flex items-center justify-center rounded-[22px] bg-black/60 opacity-0 transition-opacity group-hover:opacity-100">
+              <Camera className="h-6 w-6 text-white drop-shadow-lg" />
+            </div>
             <div className={`absolute -bottom-0.5 -right-0.5 h-4 w-4 rounded-full border-[3px] border-[#080d1a] ${isOnline ? "bg-emerald-400" : "bg-slate-500"}`} />
           </button>
+          <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarClick} />
 
           {/* Greeting block */}
           <div className="flex-1 min-w-0">
@@ -101,15 +139,25 @@ export function XpotDashboard() {
           </div>
         </div>
 
-        {/* Logout */}
-        <button
-          type="button"
-          onClick={signOut}
-          className="flex h-12 w-12 mt-1 shrink-0 items-center justify-center rounded-[20px] bg-white/[0.03] text-white/30 transition-all hover:bg-red-500/10 hover:text-red-400 active:bg-white/10 active:scale-95 touch-manipulation"
-          style={{ border: "1px solid rgba(255,255,255,0.05)", WebkitTapHighlightColor: "transparent" }}
-        >
-          <LogOut className="h-5 w-5" />
-        </button>
+        {/* Actions */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            type="button"
+            onClick={() => setLocation("/settings")}
+            className="flex h-10 w-10 items-center justify-center rounded-[18px] bg-white/[0.03] text-white/30 transition-all hover:bg-white/10 hover:text-white active:bg-white/10 active:scale-95 touch-manipulation"
+            style={{ border: "1px solid rgba(255,255,255,0.05)", WebkitTapHighlightColor: "transparent" }}
+          >
+            <Settings className="h-[18px] w-[18px]" />
+          </button>
+          <button
+            type="button"
+            onClick={signOut}
+            className="flex h-10 w-10 items-center justify-center rounded-[18px] bg-white/[0.03] text-white/30 transition-all hover:bg-red-500/10 hover:text-red-400 active:bg-white/10 active:scale-95 touch-manipulation"
+            style={{ border: "1px solid rgba(255,255,255,0.05)", WebkitTapHighlightColor: "transparent" }}
+          >
+            <LogOut className="h-[18px] w-[18px]" />
+          </button>
+        </div>
       </div>
 
       {/* Metric cards */}
@@ -272,10 +320,6 @@ export function XpotDashboard() {
           )}
       </div>
 
-      {/* Profile editor */}
-      {profileOpen && me && (
-        <XpotProfileEditor me={me} onClose={() => setProfileOpen(false)} />
-      )}
     </div>
   );
 }

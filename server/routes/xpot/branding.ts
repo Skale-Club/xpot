@@ -97,11 +97,11 @@ export function createBrandingAdminRouter() {
       if (!match) return res.status(400).json({ message: "Invalid image format" });
       const mimeType = match[1];
       const ext = ALLOWED[mimeType];
-      if (!ext) return res.status(400).json({ message: `Tipo não suportado: ${mimeType}. Use PNG, SVG, ICO, JPG ou WEBP.` });
+      if (!ext) return res.status(400).json({ message: `Unsupported type: ${mimeType}. Use PNG, SVG, ICO, JPG or WEBP.` });
 
       const buffer = Buffer.from(match[2], "base64");
       if (buffer.length > 2 * 1024 * 1024) {
-        return res.status(400).json({ message: "Imagem muito grande (máx 2MB)." });
+        return res.status(400).json({ message: "Image too large (max 2MB)." });
       }
 
       const supabase = getSupabaseAdmin();
@@ -119,7 +119,7 @@ export function createBrandingAdminRouter() {
       res.json(present(saved));
     } catch (err) {
       console.error("[POST /admin/branding/favicon]", err);
-      res.status(500).json({ message: (err as Error).message || "Falha no upload" });
+      res.status(500).json({ message: (err as Error).message || "Upload failed" });
     }
   });
 

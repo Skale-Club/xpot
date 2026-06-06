@@ -16,7 +16,14 @@ async function initSupabase(): Promise<SupabaseClient> {
       throw new Error('Supabase configuration not available');
     }
     
-    supabaseInstance = createClient(config.url, config.anonKey);
+    supabaseInstance = createClient(config.url, config.anonKey, {
+      auth: {
+        flowType: 'pkce',
+        detectSessionInUrl: true,
+        persistSession: true,
+        autoRefreshToken: false,
+      },
+    });
     return supabaseInstance;
   })();
   

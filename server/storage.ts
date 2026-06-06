@@ -9,6 +9,7 @@ import {
   // Schema tables
   salesAppSettings,
   salesReps,
+  users,
   salesLeads,
   salesLeadLocations,
   salesLeadContacts,
@@ -34,6 +35,7 @@ import {
   type SalesTask,
   type SalesTaskStatus,
   type SalesSyncEvent,
+  type User,
   type InsertSalesAppSettings,
   type InsertSalesRep,
   type InsertSalesLead,
@@ -93,6 +95,9 @@ export interface IStorage {
   getSalesRepByUserId(userId: string): Promise<SalesRep | undefined>;
   upsertSalesRep(input: InsertSalesRep): Promise<SalesRep>;
   updateSalesRepProfile(id: number, data: { displayName?: string; phone?: string; avatarUrl?: string }): Promise<SalesRep>;
+
+  // Users
+  updateUserProfile(userId: string, data: { firstName?: string | null; lastName?: string | null; profileImageUrl?: string | null }): Promise<User>;
 
   // Leads + child tables
   listSalesLeads(filters?: { ownerRepId?: number; search?: string }): Promise<SalesLead[]>;
@@ -294,6 +299,15 @@ export class DatabaseStorage implements IStorage {
       .update(salesReps)
       .set({ ...data, updatedAt: new Date() })
       .where(eq(salesReps.id, id))
+      .returning();
+    return updated;
+  }
+
+  async updateUserProfile(userId: string, data: { firstName?: string | null; lastName?: string | null; profileImageUrl?: string | null }): Promise<User> {
+    const [updated] = await db
+      .update(users)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(users.id, userId))
       .returning();
     return updated;
   }

@@ -28,6 +28,14 @@ export async function setupVite(app: Express, httpServer: Server): Promise<void>
   // /api/* endpoint or a Vite asset. Registered after registerRoutes(), so the
   // API always wins.
   app.use(async (req, res, next) => {
+    // Only handle real page navigations. Asset-like requests (e.g. Chrome's
+    // /.well-known/appspecific/com.chrome.devtools.json probe) must NOT be run
+    // through transformIndexHtml — Vite keys its transform off the URL's
+    // extension and tries to parse the HTML template as JSON, throwing
+    // "Failed to parse JSON file." Let those fall through to a normal 404.
+    if (req.method !== "GET" && req.method !== "HEAD") return next();
+    if (!req.headers.accept?.includes("text/html")) return next();
+
     try {
       const templatePath = path.resolve(process.cwd(), "client", "index.html");
       const template = await fs.readFile(templatePath, "utf-8");

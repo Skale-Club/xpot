@@ -2,10 +2,16 @@ import "dotenv/config";
 import express from "express";
 import path from "path";
 import { createApp, log } from "./app.js";
+import { ensureUploadBucket } from "./lib/supabase.js";
 
 const PORT = Number(process.env.PORT) || 2110;
 
 (async () => {
+  // Ensure Supabase Storage bucket exists before accepting requests.
+  if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    await ensureUploadBucket();
+  }
+
   const { app, httpServer } = await createApp();
 
   // One port for everything (client + API).

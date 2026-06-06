@@ -16,7 +16,7 @@ export function getXpotPath(path = "/") {
 }
 
 export function getXpotHomePath() {
-  return "/";
+  return "/dashboard";
 }
 
 export function getXpotLoginPath() {

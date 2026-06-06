@@ -23,14 +23,14 @@ type OverviewResponse = {
 };
 
 const CARDS: Array<{ key: keyof OverviewResponse["metrics"]; label: string; money?: boolean }> = [
-  { key: "activeReps", label: "Reps ativos" },
+  { key: "activeReps", label: "Active reps" },
   { key: "leads", label: "Leads" },
-  { key: "visitsInProgress", label: "Visitas em andamento" },
-  { key: "completedVisits", label: "Visitas concluídas" },
-  { key: "openOpportunities", label: "Oportunidades abertas" },
+  { key: "visitsInProgress", label: "Visits in progress" },
+  { key: "completedVisits", label: "Completed visits" },
+  { key: "openOpportunities", label: "Open opportunities" },
   { key: "pipelineValue", label: "Pipeline", money: true },
-  { key: "pendingTasks", label: "Tarefas pendentes" },
-  { key: "syncIssues", label: "Problemas de sync" },
+  { key: "pendingTasks", label: "Pending tasks" },
+  { key: "syncIssues", label: "Sync issues" },
 ];
 
 export function AdminOverview() {
@@ -44,7 +44,7 @@ export function AdminOverview() {
     );
   }
   if (query.isError || !query.data) {
-    return <p className="text-sm text-red-400">Falha ao carregar overview.</p>;
+    return <p className="text-sm text-red-400">Failed to load overview.</p>;
   }
 
   const { metrics, latestSyncEvents } = query.data;
@@ -65,10 +65,10 @@ export function AdminOverview() {
       </div>
 
       <div>
-        <h3 className="mb-3 text-sm font-semibold text-white/70">Sync recente</h3>
+        <h3 className="mb-3 text-sm font-semibold text-white/70">Recent sync</h3>
         <div className="overflow-hidden rounded-2xl border border-white/10">
           {latestSyncEvents.length === 0 ? (
-            <p className="bg-white/[0.03] px-4 py-6 text-center text-sm text-white/40">Nenhum evento de sync.</p>
+            <p className="bg-white/[0.03] px-4 py-6 text-center text-sm text-white/40">No sync events.</p>
           ) : (
             latestSyncEvents.map((ev) => (
               <div key={ev.id} className="flex items-center justify-between gap-3 border-b border-white/5 bg-white/[0.02] px-4 py-3 last:border-0">

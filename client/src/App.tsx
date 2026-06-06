@@ -9,11 +9,12 @@ import { XpotLeads } from "./pages/xpot/XpotLeads";
 import { XpotVisits } from "./pages/xpot/XpotVisits";
 import { XpotSales } from "./pages/xpot/XpotSales";
 import { XpotDashboard } from "./pages/xpot/XpotDashboard";
-import { XpotProfileEditor } from "./pages/xpot/XpotProfileEditor";
+
 import Login from "./pages/Login";
 import { Loader2 } from "@/components/ui/loader";
 import { Shield } from "lucide-react";
 import { AdminApp } from "./pages/admin/AdminApp";
+import { XpotSettings } from "./pages/xpot/XpotSettings";
 
 function XpotAppShell() {
   const { me, xpotMeQuery, isOnline, activeTab } = useXpotQueries();
@@ -31,10 +32,10 @@ function XpotAppShell() {
           <>
             <p className="text-sm text-white/50">Failed to load session</p>
             <button
-              onClick={() => setLocation("/login")}
+              onClick={() => setLocation("/")}
               className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 hover:bg-white/10 transition-colors"
             >
-              Go to Login
+              Go to Sign In
             </button>
           </>
         ) : (
@@ -67,9 +68,6 @@ function XpotAppShell() {
           {activeTab === "check-in" ? <XpotCheckIn /> : null}
           {activeTab === "visits" ? <XpotVisits /> : null}
           {activeTab === "sales" ? <XpotSales /> : null}
-          {activeTab === "profile" && me ? (
-            <XpotProfileEditor me={me} onClose={() => setLocation("/dashboard")} />
-          ) : null}
         </main>
 
         <nav className="fixed inset-x-0 bottom-0 z-50 px-4 pb-4 pt-2">
@@ -119,6 +117,14 @@ function XpotAppShell() {
   );
 }
 
+import { useQuery } from "@tanstack/react-query";
+import { Redirect } from "wouter";
+import { XpotLandingPage } from "./pages/xpot/XpotLandingPage";
+
+function RootRoute() {
+  return <XpotLandingPage />;
+}
+
 export default function App() {
   useEffect(() => {
     document.documentElement.classList.add("dark");
@@ -129,10 +135,12 @@ export default function App() {
   return (
     <Router>
       <Switch>
+        <Route path="/" component={RootRoute} />
         <Route path="/login" component={Login} />
         <Route path="/admin/:section?">
           {(params) => <AdminApp section={params.section ?? "overview"} />}
         </Route>
+        <Route path="/settings" component={XpotSettings} />
         <Route>
           <GeoProvider>
             <XpotAppShell />

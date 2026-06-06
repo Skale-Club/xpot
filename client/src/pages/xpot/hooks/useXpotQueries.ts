@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { getXpotLoginPath, getXpotSection } from "@/lib/xpot";
+import { getXpotSection } from "@/lib/xpot";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { tabs } from "../utils";
@@ -52,10 +52,10 @@ export function useXpotQueries() {
   const xpotMeStatus = getHttpStatus(xpotMeQuery.error);
 
   useEffect(() => {
-    if (xpotMeStatus === 401 || xpotMeStatus === 403) {
-      setLocation(getXpotLoginPath());
+    if ((xpotMeStatus === 401 || xpotMeStatus === 403) && pathname !== "/") {
+      setLocation("/");
     }
-  }, [xpotMeStatus, setLocation]);
+  }, [xpotMeStatus, setLocation, pathname]);
 
   const dashboardQuery = useQuery<DashboardResponse>({ queryKey: ["/api/xpot/dashboard"], enabled: xpotMeQuery.isSuccess });
 
@@ -74,13 +74,25 @@ export function useXpotQueries() {
   });
 
   const signOut = async () => {
+    try {
+      const { initSupabase } = await import("@/lib/supabase");
+      const supabase = await initSupabase();
+      await supabase.auth.signOut();
+    } catch (err) {
+      console.error("Failed to sign out of Supabase:", err);
+    }
     await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
     queryClient.clear();
-    setLocation(getXpotLoginPath());
+    setLocation("/");
   };
 
   const me = xpotMeQuery.data ?? null;
-  const repName = me ? me.rep.displayName || me.user.email || "Xpot Rep" : "Xpot Rep";
+  const repName = me
+    ? me.rep.displayName
+      || [me.user.firstName, me.user.lastName].filter(Boolean).join(" ").trim()
+      || me.user.email
+      || "Xpot Rep"
+    : "Xpot Rep";
 
   return {
     xpotMeQuery,

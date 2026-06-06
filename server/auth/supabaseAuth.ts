@@ -56,6 +56,19 @@ export async function setupSupabaseAuth(app: Express) {
         return res.status(400).json({ message: "Email not available from Supabase" });
       }
 
+      // Normalize profile metadata across providers (email signup, Google, etc.).
+      // Google fills full_name/name/given_name/family_name/picture; email signup
+      // typically sends first_name/last_name. Pick whichever is present.
+      const md = supabaseUser.user_metadata || {};
+      const fullName = (md.full_name || md.name || "").trim();
+      const [firstFromFull, ...restFromFull] = fullName.split(/\s+/);
+      const firstName = md.first_name || md.given_name || firstFromFull || null;
+      const lastName =
+        md.last_name ||
+        md.family_name ||
+        (restFromFull.length ? restFromFull.join(" ") : null);
+      const avatarUrl = md.avatar_url || md.picture || null;
+
       let [dbUser] = await db.select().from(users).where(eq(users.email, email));
 
       if (!dbUser) {
@@ -64,9 +77,9 @@ export async function setupSupabaseAuth(app: Express) {
           .values({
             id: supabaseUser.id,
             email,
-            firstName: supabaseUser.user_metadata?.first_name || null,
-            lastName: supabaseUser.user_metadata?.last_name || null,
-            profileImageUrl: supabaseUser.user_metadata?.avatar_url || null,
+            firstName,
+            lastName,
+            profileImageUrl: avatarUrl,
             isAdmin: false,
           })
           .onConflictDoUpdate({
@@ -74,6 +87,23 @@ export async function setupSupabaseAuth(app: Express) {
             set: { email, updatedAt: new Date() },
           })
           .returning();
+      } else if (
+        (!dbUser.firstName && firstName) ||
+        (!dbUser.lastName && lastName) ||
+        (!dbUser.profileImageUrl && avatarUrl)
+      ) {
+        // Re-login profile sync: only fill NULL fields, never overwrite user edits.
+        const [updated] = await db
+          .update(users)
+          .set({
+            firstName: dbUser.firstName ?? firstName,
+            lastName: dbUser.lastName ?? lastName,
+            profileImageUrl: dbUser.profileImageUrl ?? avatarUrl,
+            updatedAt: new Date(),
+          })
+          .where(eq(users.id, dbUser.id))
+          .returning();
+        dbUser = updated;
       }
 
       (req.session as any).userId = dbUser.id;
@@ -81,6 +111,15 @@ export async function setupSupabaseAuth(app: Express) {
       (req.session as any).isAdmin = dbUser.isAdmin;
       (req.session as any).firstName = dbUser.firstName;
       (req.session as any).lastName = dbUser.lastName;
+
+      // Persist the session to the store BEFORE responding. The client fires an
+      // immediate authenticated request (GET /api/xpot/me) right after this
+      // resolves; without an explicit save the row may not be written yet and
+      // that follow-up races ahead, failing with "Authentication required"
+      // even though login succeeded.
+      await new Promise<void>((resolve, reject) => {
+        req.session.save((err) => (err ? reject(err) : resolve()));
+      });
 
       res.json({
         isAdmin: dbUser.isAdmin || false,
