@@ -3,7 +3,7 @@ import { z } from "zod";
 import { storage } from "../../storage.js";
 import { requireXpotUser, ensureXpotRep, isManagerOrAdmin } from "./middleware.js";
 import { xpotLeadCreateSchema, xpotLeadUpdateSchema, xpotLeadContactCreateSchema } from "#shared/xpot.js";
-import { syncLeadToGhl } from "./helpers.js";
+import { syncLeadToGhl, syncLeadToXphere } from "./helpers.js";
 
 export function createLeadsRouter() {
   const router = Router();
@@ -91,6 +91,8 @@ export function createLeadsRouter() {
         isPrimary: input.primaryLocation.isPrimary ?? true,
       });
     }
+
+    syncLeadToXphere(lead.id).catch((err) => console.error("[leads] xphere sync failed:", err));
 
     const fullLead = await storage.getSalesLead(lead.id);
     res.status(201).json({ lead: fullLead });

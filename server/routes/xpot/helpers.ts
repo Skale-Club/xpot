@@ -315,6 +315,77 @@ export async function syncVisitToGhl(visitId: number): Promise<{ synced: boolean
   return { synced: true };
 }
 
+// Push a newly-created Xpot lead to Xphere as a contact.
+// Fire-and-forget — failures are logged and tracked but never surfaced to the caller.
+// Guards: integration must be enabled for the lead's owner rep; leads that
+// originated FROM Xphere (source='xphere') are skipped to prevent loops.
+export async function syncLeadToXphere(leadId: number): Promise<{ synced: boolean; message?: string }> {
+  const lead = await storage.getSalesLead(leadId);
+  if (!lead) return { synced: false, message: "Lead not found" };
+
+  if (lead.source === "xphere") {
+    return { synced: false, message: "xphere source — skip to prevent loop" };
+  }
+
+  if (!lead.ownerRepId) return { synced: false, message: "Lead has no owner" };
+  const ownerRep = await storage.getSalesRep(lead.ownerRepId);
+  if (!ownerRep) return { synced: false, message: "Owner rep not found" };
+
+  const integration = await storage.getXphereIntegrationByUserId(ownerRep.userId);
+  if (!integration || !integration.isEnabled || !integration.apiKey) {
+    return { synced: false, message: "Xphere not configured or disabled" };
+  }
+
+  const apiUrl = (integration.apiUrl || "https://xphere.app").replace(/\/$/, "");
+
+  try {
+    const res = await fetch(`${apiUrl}/api/v1/contacts`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${integration.apiKey}` },
+      body: JSON.stringify({
+        name: lead.name,
+        email: lead.email || undefined,
+        phone: lead.phone || undefined,
+        company: lead.legalName || undefined,
+        source_label: "xpot",
+      }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      await storage.createSalesSyncEvent({
+        entityType: "sales_lead",
+        entityId: String(leadId),
+        status: "failed",
+        lastError: `Xphere returned HTTP ${res.status}: ${errText}`.slice(0, 500),
+        lastAttemptAt: new Date(),
+      });
+      return { synced: false, message: `Xphere HTTP ${res.status}` };
+    }
+
+    const { id: xphereContactId } = (await res.json()) as { id: string; action: string };
+    await storage.updateSalesLead(lead.id, { xphereRef: `contact:${xphereContactId}` });
+    await storage.createSalesSyncEvent({
+      entityType: "sales_lead",
+      entityId: String(leadId),
+      status: "synced",
+      payload: { xphereContactId },
+      lastAttemptAt: new Date(),
+    });
+    return { synced: true };
+  } catch (err) {
+    console.error("[syncLeadToXphere] failed:", err);
+    await storage.createSalesSyncEvent({
+      entityType: "sales_lead",
+      entityId: String(leadId),
+      status: "failed",
+      lastError: (err as Error).message || "Request failed",
+      lastAttemptAt: new Date(),
+    });
+    return { synced: false, message: "Request failed" };
+  }
+}
+
 // Sync a completed visit back to Xphere's prospect timeline. Mirrors the GHL
 // sync but targets the originating Xphere prospect via the lead's xphereRef.
 // Unlike GHL, prospect-stage leads ARE synced (that is the whole point here).
