@@ -1,11 +1,19 @@
 import { useState, useRef, useEffect } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { ArrowLeft, Eye, EyeOff, Loader2, Save, ChevronDown } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, Loader2, Save, ChevronDown, Webhook, Copy, Check, RefreshCw } from "lucide-react";
 import ReactCountryFlag from "react-country-flag";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { Switch } from "@/components/ui/switch";
 import type { XpotMeResponse } from "./types";
+
+type XphereConfig = {
+  inboundApiKey: string | null;
+  apiUrl: string;
+  apiKeySet: boolean;
+  isEnabled: boolean;
+};
 
 const COUNTRIES = [
   { code: "BR", dial: "+55", name: "Brazil" },
@@ -123,6 +131,144 @@ function CountryPhoneInput({
         </div>
       )}
     </div>
+  );
+}
+
+function XphereIntegrationSection() {
+  const { toast } = useToast();
+  const [copied, setCopied] = useState(false);
+
+  const configQuery = useQuery<XphereConfig>({ queryKey: ["/api/xpot/xphere/config"], retry: false });
+  const config = configQuery.data;
+
+  const [initialized, setInitialized] = useState(false);
+  const [apiKey, setApiKey] = useState("");
+  const [apiUrl, setApiUrl] = useState("https://xphere.app");
+  const [isEnabled, setIsEnabled] = useState(false);
+
+  if (config && !initialized) {
+    setInitialized(true);
+    setApiUrl(config.apiUrl);
+    setIsEnabled(config.isEnabled);
+  }
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const body: Record<string, unknown> = { isEnabled, apiUrl };
+      if (apiKey) body.apiKey = apiKey;
+      const res = await apiRequest("PUT", "/api/xpot/xphere/config", body);
+      return res.json() as Promise<XphereConfig>;
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/xpot/xphere/config"], data);
+      setApiKey("");
+      toast({ title: "Xphere integration saved" });
+    },
+    onError: (err: Error) => toast({ title: "Failed to save", description: err.message, variant: "destructive" }),
+  });
+
+  const rotateMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/xpot/xphere/config/rotate-inbound-key", {});
+      return res.json() as Promise<XphereConfig>;
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/xpot/xphere/config"], data);
+      toast({ title: "Inbound key rotated" });
+    },
+    onError: (err: Error) => toast({ title: "Failed to rotate key", description: err.message, variant: "destructive" }),
+  });
+
+  const handleCopy = async () => {
+    if (!config?.inboundApiKey) return;
+    await navigator.clipboard.writeText(config.inboundApiKey);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  if (configQuery.isLoading) {
+    return (
+      <Section title="Xphere Integration">
+        <div className="flex justify-center py-4">
+          <Loader2 className="h-5 w-5 animate-spin text-white/30" />
+        </div>
+      </Section>
+    );
+  }
+
+  return (
+    <Section title="Xphere Integration">
+      <div className="flex items-start gap-2 text-xs text-white/40">
+        <Webhook className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+        <span>Connect your Xpot account to Xphere so new leads sync automatically and field visits show up on the prospect timeline.</span>
+      </div>
+
+      <label className="flex cursor-pointer items-center justify-between rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-3">
+        <span className="text-sm font-medium text-white/80">Enabled</span>
+        <Switch checked={isEnabled} onCheckedChange={setIsEnabled} />
+      </label>
+
+      {config?.inboundApiKey && (
+        <Field label="Inbound key (give this to Xphere)">
+          <div className="flex items-center gap-2">
+            <code className="block flex-1 break-all rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-3 text-xs text-white/60">
+              {config.inboundApiKey}
+            </code>
+            <button
+              type="button"
+              onClick={handleCopy}
+              className="shrink-0 rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-white/60 transition-colors hover:bg-white/[0.08]"
+              title="Copy"
+            >
+              {copied ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
+            </button>
+          </div>
+        </Field>
+      )}
+
+      <Field label="Outbound token (xph_...)">
+        <input
+          type="password"
+          autoComplete="off"
+          value={apiKey}
+          onChange={(e) => setApiKey(e.target.value)}
+          placeholder={config?.apiKeySet ? "•••••••• (keep current)" : "xph_..."}
+          className="w-full rounded-2xl border border-white/5 bg-white/[0.03] px-4 py-3 text-[15px] font-medium text-white placeholder-white/20 outline-none focus:border-indigo-500/50 focus:bg-white/[0.05] transition-all"
+        />
+      </Field>
+
+      <Field label="Xphere API URL">
+        <input
+          type="text"
+          value={apiUrl}
+          onChange={(e) => setApiUrl(e.target.value)}
+          placeholder="https://xphere.app"
+          className="w-full rounded-2xl border border-white/5 bg-white/[0.03] px-4 py-3 text-[15px] font-medium text-white placeholder-white/20 outline-none focus:border-indigo-500/50 focus:bg-white/[0.05] transition-all"
+        />
+      </Field>
+
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => saveMutation.mutate()}
+          disabled={saveMutation.isPending}
+          className="flex flex-1 items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-bold text-white transition-all disabled:opacity-40 active:scale-[0.98] touch-manipulation"
+          style={{ background: "linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)", boxShadow: "0 8px 24px rgba(99,102,241,0.25)" }}
+        >
+          {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          <span>{saveMutation.isPending ? "Saving…" : "Save"}</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => rotateMutation.mutate()}
+          disabled={rotateMutation.isPending}
+          title="Rotate inbound key"
+          className="flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3.5 text-sm font-medium text-white/70 transition-colors disabled:opacity-40 hover:bg-white/[0.06]"
+        >
+          {rotateMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+        </button>
+      </div>
+    </Section>
   );
 }
 
@@ -385,6 +531,9 @@ export function XpotSettings() {
               </Field>
             </div>
           </Section>
+
+          {/* Xphere Integration (self-service) */}
+          <XphereIntegrationSection />
         </div>
       </div>
     </div>

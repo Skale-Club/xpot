@@ -315,10 +315,17 @@ export async function syncVisitToGhl(visitId: number): Promise<{ synced: boolean
   return { synced: true };
 }
 
-// Push a newly-created Xpot lead to Xphere as a contact.
+// Push a newly-created Xpot lead into Xphere's Prospects module as a
+// company-stage prospect (a sales lead is a business, not a person — it
+// carries legalName/industry, never a personal name).
 // Fire-and-forget — failures are logged and tracked but never surfaced to the caller.
 // Guards: integration must be enabled for the lead's owner rep; leads that
 // originated FROM Xphere (source='xphere') are skipped to prevent loops.
+//
+// Uses POST /api/v1/prospects (not /api/v1/contacts) so leads land in the
+// Prospects lifecycle rather than mixing into the regular CRM contact list.
+// Requires the configured Xphere API key to hold the `prospects:write` scope
+// (older keys created only for `contacts:write` must be updated).
 export async function syncLeadToXphere(leadId: number): Promise<{ synced: boolean; message?: string }> {
   const lead = await storage.getSalesLead(leadId);
   if (!lead) return { synced: false, message: "Lead not found" };
@@ -338,16 +345,30 @@ export async function syncLeadToXphere(leadId: number): Promise<{ synced: boolea
 
   const apiUrl = (integration.apiUrl || "https://xphere.app").replace(/\/$/, "");
 
+  // Xphere's /api/v1/prospects "company" ingestion has no first-class email
+  // column (accounts don't carry one) — it's tucked into custom_fields, which
+  // Xphere persists verbatim on create. Same escape hatch for legalName/industry,
+  // which also have no dedicated field on a company-kind prospect.
+  const customFields: Record<string, unknown> = {};
+  if (lead.email) customFields.email = lead.email;
+  if (lead.legalName) customFields.legal_name = lead.legalName;
+  if (lead.industry) customFields.industry = lead.industry;
+
   try {
-    const res = await fetch(`${apiUrl}/api/v1/contacts`, {
+    const res = await fetch(`${apiUrl}/api/v1/prospects`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${integration.apiKey}` },
       body: JSON.stringify({
-        name: lead.name,
-        email: lead.email || undefined,
-        phone: lead.phone || undefined,
-        company: lead.legalName || undefined,
-        source_label: "xpot",
+        source: { type: "xpot" },
+        prospects: [
+          {
+            kind: "company",
+            name: lead.name,
+            phone: lead.phone || undefined,
+            source_id: String(lead.id),
+            ...(Object.keys(customFields).length ? { custom_fields: customFields } : {}),
+          },
+        ],
       }),
     });
 
@@ -363,13 +384,26 @@ export async function syncLeadToXphere(leadId: number): Promise<{ synced: boolea
       return { synced: false, message: `Xphere HTTP ${res.status}` };
     }
 
-    const { id: xphereContactId } = (await res.json()) as { id: string; action: string };
-    await storage.updateSalesLead(lead.id, { xphereRef: `contact:${xphereContactId}` });
+    const body = (await res.json()) as { results?: { id: string; kind: "person" | "company"; action: string }[] };
+    const result = body.results?.[0];
+    if (!result) {
+      await storage.createSalesSyncEvent({
+        entityType: "sales_lead",
+        entityId: String(leadId),
+        status: "failed",
+        lastError: "Xphere response missing result",
+        lastAttemptAt: new Date(),
+      });
+      return { synced: false, message: "Xphere response missing result" };
+    }
+
+    const xphereRef = `${result.kind === "company" ? "account" : "contact"}:${result.id}`;
+    await storage.updateSalesLead(lead.id, { xphereRef });
     await storage.createSalesSyncEvent({
       entityType: "sales_lead",
       entityId: String(leadId),
       status: "synced",
-      payload: { xphereContactId },
+      payload: { xphereRef, action: result.action },
       lastAttemptAt: new Date(),
     });
     return { synced: true };
