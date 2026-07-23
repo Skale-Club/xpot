@@ -12,6 +12,7 @@ interface GeoContextValue {
   permission: GeoPermission;
   isLocating: boolean;
   hasLocation: boolean;
+  setLiveTracking: Dispatch<SetStateAction<boolean>>;
 }
 
 const GeoContext = createContext<GeoContextValue | null>(null);
@@ -20,6 +21,7 @@ export function GeoProvider({ children }: { children: ReactNode }) {
   const [geoState, setGeoState] = useState<GeoState>({});
   const [permission, setPermission] = useState<GeoPermission>("unknown");
   const [isLocating, setIsLocating] = useState(false);
+  const [liveTracking, setLiveTracking] = useState(false);
 
   const loadCurrentLocation = useCallback(async () => {
     if (!navigator.geolocation) {
@@ -40,7 +42,9 @@ export function GeoProvider({ children }: { children: ReactNode }) {
           resolve();
         },
         (error) => {
-          setGeoState({ error: error.message });
+          // Keep the last known fix: dropping it would bounce a rep who is
+          // mid-search back to the "location required" gate over one timeout.
+          setGeoState((prev) => ({ ...prev, error: error.message }));
           // A timeout or a lost fix is not a refusal — only code 1 is, and
           // conflating them would send the rep off to fix their iOS settings
           // when all they need is a clearer patch of sky.
@@ -80,11 +84,32 @@ export function GeoProvider({ children }: { children: ReactNode }) {
     }
   }, [permission, geoState.lat, geoState.error, isLocating, loadCurrentLocation]);
 
+  // Continuous tracking is opt-in per screen (the check-in map turns it on)
+  // rather than app-wide, because watchPosition keeps the GPS radio busy.
+  useEffect(() => {
+    if (!liveTracking || permission !== "granted" || !navigator.geolocation) return;
+    const id = navigator.geolocation.watchPosition(
+      (position) => {
+        setGeoState({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          accuracy: Math.round(position.coords.accuracy),
+        });
+      },
+      (error) => {
+        setGeoState((prev) => ({ ...prev, error: error.message }));
+        if (error.code === error.PERMISSION_DENIED) setPermission("denied");
+      },
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 },
+    );
+    return () => navigator.geolocation.clearWatch(id);
+  }, [liveTracking, permission]);
+
   const hasLocation = geoState.lat != null && geoState.lng != null;
 
   return (
     <GeoContext.Provider
-      value={{ geoState, setGeoState, loadCurrentLocation, permission, isLocating, hasLocation }}
+      value={{ geoState, setGeoState, loadCurrentLocation, permission, isLocating, hasLocation, setLiveTracking }}
     >
       {children}
     </GeoContext.Provider>

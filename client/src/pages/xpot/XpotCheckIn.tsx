@@ -34,6 +34,7 @@ import { GoogleLogo } from "@/components/ui/google-logo";
 import { EditLeadDialog } from "./components/EditLeadDialog";
 import { VoiceRecorder } from "./components/VoiceRecorder";
 import { VisitRow } from "./components/VisitRow";
+import { LiveMap } from "./components/LiveMap";
 import { InlineField } from "./components/InlineField";
 import { StatusPicker } from "./components/VisitStatus";
 import type { VisitStatus } from "./components/VisitStatus";
@@ -356,7 +357,7 @@ function LocationGate({
 }
 
 export function XpotCheckIn() {
-  const { geoState, loadCurrentLocation, invalidateXpotData, permission, isLocating, hasLocation } = useXpotShared();
+  const { geoState, loadCurrentLocation, invalidateXpotData, permission, isLocating, hasLocation, setLiveTracking } = useXpotShared();
   const {
     selectedLeadId,
     setSelectedLeadId,
@@ -386,6 +387,20 @@ export function XpotCheckIn() {
   } = useCheckIn();
   const { leadsQuery } = useLeads();
   const { activeVisit, checkOutMutation, cancelVisitMutation, visitsQuery } = useVisits();
+
+  // Follow the rep while this screen is open; the provider stops the watch on
+  // unmount so the GPS radio isn't pinned on the other tabs.
+  useEffect(() => {
+    setLiveTracking(true);
+    return () => setLiveTracking(false);
+  }, [setLiveTracking]);
+
+  // Only a lead with real coordinates can be pinned on the map.
+  const selectedLeadLocation = (() => {
+    const loc = selectedLead?.locations?.[0];
+    if (!loc?.lat || !loc?.lng) return null;
+    return Number.isFinite(Number(loc.lat)) && Number.isFinite(Number(loc.lng)) ? loc : null;
+  })();
 
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [editLeadOpen, setEditLeadOpen] = useState(false);
@@ -780,6 +795,19 @@ export function XpotCheckIn() {
           </div>
         </div>
       </div>
+
+      {/* Live position — with the selected lead's pin once there is one, so the
+          rep can see how far they still are from the door. */}
+      {geoState.lat != null && geoState.lng != null ? (
+        <LiveMap
+          lat={geoState.lat}
+          lng={geoState.lng}
+          accuracy={geoState.accuracy}
+          leadLat={selectedLeadLocation ? Number(selectedLeadLocation.lat) : null}
+          leadLng={selectedLeadLocation ? Number(selectedLeadLocation.lng) : null}
+          leadName={selectedLeadLocation ? selectedLead?.name : undefined}
+        />
+      ) : null}
 
       {/* Recent visits */}
       {(() => {

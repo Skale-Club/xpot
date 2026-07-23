@@ -8,6 +8,7 @@ import { createOpportunitiesRouter } from "./opportunities.js";
 import { createTasksRouter } from "./tasks.js";
 import { createSyncRouter } from "./sync.js";
 import { createPlaceSearchRouter } from "./place-search.js";
+import { createMapRouter } from "./map.js";
 import { createAdminRouter } from "./admin.js";
 import { createAdminIntegrationsRouter } from "./admin-integrations.js";
 import { createBrandingPublicRouter, createBrandingAdminRouter } from "./branding.js";
@@ -28,6 +29,7 @@ export function registerXpotRoutes(app: Express) {
   app.use("/api/xpot", createTasksRouter());
   app.use("/api/xpot", createSyncRouter());
   app.use("/api/xpot", createPlaceSearchRouter());
+  app.use("/api/xpot", createMapRouter());
   app.use("/api/xpot", createAdminRouter());
   app.use("/api/xpot", createAdminIntegrationsRouter());
   app.use("/api/xpot", createBrandingAdminRouter());

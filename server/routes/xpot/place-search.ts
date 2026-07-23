@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { storage } from "../../storage.js";
 import { requireXpotUser } from "./middleware.js";
+import { resolveGoogleApiKey } from "./google.js";
 
 export function createPlaceSearchRouter() {
   const router = Router();
@@ -12,15 +12,8 @@ export function createPlaceSearchRouter() {
       return res.json({ results: [] });
     }
 
-    const googlePlacesSettings = await storage.getIntegrationSettings("google_places");
-    let apiKey: string | null = googlePlacesSettings?.isEnabled && googlePlacesSettings.apiKey 
-      ? googlePlacesSettings.apiKey 
-      : null;
-    
-    if (!apiKey) {
-      apiKey = process.env.GOOGLE_PLACES_API_KEY || process.env.GOOGLE_MAPS_API_KEY || null;
-    }
-    
+    const apiKey = await resolveGoogleApiKey();
+
     if (!apiKey) {
       return res.status(503).json({ message: "Google Places is not configured. Please add API key in Admin > Integrations." });
     }

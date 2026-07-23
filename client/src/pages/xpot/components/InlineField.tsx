@@ -37,7 +37,9 @@ export function InlineField({ label, value, onSave, large, linkable, linkHref, v
   const resolvedHref = linkHref ?? (value.startsWith("http") ? value : `https://${value}`);
 
   return (
-    <div className="relative group py-1.5 rounded-xl">
+    // Nothing about a bare line of text says "tap me to edit" — the hover tint
+    // and the wider hit area do.
+    <div className="relative group -mx-2 px-2 py-1.5 rounded-xl transition-colors hover:bg-white/[0.04]">
       {label ? (
         <div className="flex items-center gap-1.5 mb-0.5">
           <span className="text-[10px] font-semibold uppercase tracking-widest text-white/30">{label}</span>

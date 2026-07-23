@@ -131,7 +131,10 @@ function VisitDetail({ visit, onDelete }: { visit: VisitLike; onDelete: () => vo
   }
 
   return (
-    <div className="space-y-5">
+    // One column on a phone, two side by side once there is room: the details
+    // are long enough that a single narrow column meant scrolling through a
+    // letterbox on desktop.
+    <div className={visit.lead ? "grid gap-5 sm:grid-cols-2 sm:items-start" : "space-y-5"}>
       {/* hidden file input */}
       <input
         ref={photoInputRef}
@@ -259,6 +262,8 @@ function VisitDetail({ visit, onDelete }: { visit: VisitLike; onDelete: () => vo
         </div>
       )}
 
+      {/* Second column: outcome, timings, notes and the destructive action */}
+      <div className="space-y-5">
       <StatusPicker value={status} onChange={handleStatusChange} />
 
       {/* Time metadata */}
@@ -314,6 +319,7 @@ function VisitDetail({ visit, onDelete }: { visit: VisitLike; onDelete: () => vo
         <Trash2 className="h-4 w-4" />
         Delete visit
       </button>
+      </div>
     </div>
   );
 }
@@ -368,7 +374,7 @@ export function VisitRow({ visit }: { visit: VisitLike }) {
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent
-          className="max-w-sm rounded-3xl border-white/10 max-h-[88vh] overflow-y-auto"
+          className="max-w-[calc(100vw-1.5rem)] sm:max-w-3xl rounded-3xl border-white/10 max-h-[88vh] overflow-y-auto"
           style={{ background: "rgba(10,15,30,0.97)", backdropFilter: "blur(20px)" }}
         >
           <DialogHeader>
