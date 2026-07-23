@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { Camera, MapPinned, DollarSign, Target, Clock3, Footprints, LogOut, Activity, AlertTriangle, RefreshCw, Settings } from "lucide-react";
+import { Camera, MapPinned, DollarSign, Target, Clock3, Footprints, LogOut, Activity, AlertTriangle, RefreshCw, Settings, Shield } from "lucide-react";
 import { AreaChart, Area, XAxis, Tooltip, ResponsiveContainer, LabelList } from "recharts";
 import { useMutation } from "@tanstack/react-query";
 import { useXpotQueries } from "./hooks/useXpotQueries";
@@ -141,6 +141,17 @@ export function XpotDashboard() {
 
         {/* Actions */}
         <div className="flex items-center gap-1.5 shrink-0">
+          {me && (me.user.isAdmin || ["admin", "manager"].includes(me.rep.role)) && (
+            <button
+              type="button"
+              onClick={() => setLocation("/admin/overview")}
+              title="Admin"
+              className="flex h-10 w-10 items-center justify-center rounded-[18px] bg-white/[0.03] text-white/30 transition-all hover:bg-white/10 hover:text-white active:bg-white/10 active:scale-95 touch-manipulation"
+              style={{ border: "1px solid rgba(255,255,255,0.05)", WebkitTapHighlightColor: "transparent" }}
+            >
+              <Shield className="h-[18px] w-[18px]" />
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setLocation("/settings")}

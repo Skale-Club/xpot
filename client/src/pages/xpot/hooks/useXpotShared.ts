@@ -2,7 +2,7 @@ import { useGeoContext } from "./GeoProvider";
 import { queryClient } from "@/lib/queryClient";
 
 export function useXpotShared() {
-  const { geoState, loadCurrentLocation } = useGeoContext();
+  const { geoState, loadCurrentLocation, permission, isLocating, hasLocation } = useGeoContext();
 
   const invalidateXpotData = async () => {
     await Promise.all([
@@ -16,5 +16,5 @@ export function useXpotShared() {
     ]);
   };
 
-  return { geoState, loadCurrentLocation, invalidateXpotData };
+  return { geoState, loadCurrentLocation, invalidateXpotData, permission, isLocating, hasLocation };
 }

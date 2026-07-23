@@ -285,8 +285,78 @@ function CreateLeadDialog({ open, onOpenChange, initialName, onCreated }: {
   );
 }
 
+// Check-in is GPS-validated: without a fix there is nothing to validate
+// against, so the page asks for location instead of pretending to work.
+function LocationGate({
+  permission,
+  isLocating,
+  error,
+  onRetry,
+}: {
+  permission: string;
+  isLocating: boolean;
+  error?: string;
+  onRetry: () => void;
+}) {
+  const blocked = permission === "denied";
+
+  return (
+    <div className="space-y-4">
+      <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/30">Check-in</div>
+      <div
+        className="rounded-3xl p-6 text-center space-y-4"
+        style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}
+      >
+        <div
+          className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl"
+          style={{ background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.3)" }}
+        >
+          <MapPinned className="h-6 w-6 text-indigo-300" />
+        </div>
+
+        <div className="space-y-1.5">
+          <div className="text-lg font-bold text-white">Location required</div>
+          <p className="text-sm leading-relaxed text-white/50">
+            {blocked
+              ? "Location is blocked for Xpot. Check-in validates that you are physically at the client, so it cannot run without it."
+              : "Check-in confirms you are inside the client's geofence, so Xpot needs your location before you can start a visit."}
+          </p>
+        </div>
+
+        {blocked ? (
+          <div
+            className="rounded-2xl px-4 py-3 text-left text-xs leading-relaxed text-white/60"
+            style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}
+          >
+            On iPhone: <span className="text-white/80">Settings → Privacy &amp; Security → Location Services</span>, find
+            Xpot (or Safari) and set it to <span className="text-white/80">While Using the App</span>. Then come back and
+            tap below.
+          </div>
+        ) : null}
+
+        {error && !blocked ? (
+          <div className="rounded-2xl px-4 py-3 text-xs text-red-300" style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)" }}>
+            {error}
+          </div>
+        ) : null}
+
+        <button
+          type="button"
+          onClick={onRetry}
+          disabled={isLocating}
+          style={{ WebkitTapHighlightColor: "transparent" }}
+          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-4 py-3.5 text-sm font-semibold text-white transition-all hover:bg-indigo-500 active:scale-[0.98] disabled:opacity-60 touch-manipulation"
+        >
+          {isLocating ? <Loader2 className="h-4 w-4 animate-spin" /> : <MapPinned className="h-4 w-4" />}
+          {isLocating ? "Getting your location…" : blocked ? "I've enabled it — try again" : "Share my location"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function XpotCheckIn() {
-  const { geoState, loadCurrentLocation, invalidateXpotData } = useXpotShared();
+  const { geoState, loadCurrentLocation, invalidateXpotData, permission, isLocating, hasLocation } = useXpotShared();
   const {
     selectedLeadId,
     setSelectedLeadId,
@@ -340,6 +410,19 @@ export function XpotCheckIn() {
   const elapsedDisplay = elapsedHours > 0
     ? `${elapsedHours}:${String(elapsedMins).padStart(2, "0")}:${String(elapsedSecs).padStart(2, "0")}`
     : `${elapsedMins}:${String(elapsedSecs).padStart(2, "0")}`;
+
+  // A visit already in progress stays reachable even if the fix drops — the rep
+  // must always be able to check out. The gate only guards starting one.
+  if (!activeVisit && !hasLocation) {
+    return (
+      <LocationGate
+        permission={permission}
+        isLocating={isLocating}
+        error={geoState.error}
+        onRetry={() => void loadCurrentLocation()}
+      />
+    );
+  }
 
   if (activeVisit) return (
     <div className="space-y-4">
