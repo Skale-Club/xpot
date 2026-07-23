@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { Route, Router, Switch, useLocation } from "wouter";
 import { useXpotQueries } from "./pages/xpot/hooks/useXpotQueries";
 import { useVisits } from "./pages/xpot/hooks/useVisits";
@@ -120,8 +120,42 @@ function XpotAppShell() {
 import { useQuery } from "@tanstack/react-query";
 import { Redirect } from "wouter";
 import { XpotLandingPage } from "./pages/xpot/XpotLandingPage";
+import { isStandaloneDisplay, resolveRootView } from "@/lib/pwa";
+import { getXpotHomePath } from "@/lib/xpot";
+import type { XpotMeResponse } from "./pages/xpot/types";
 
+// "/" is the marketing landing. That is right for a browser visit, but wrong for
+// the installed app: older installs cached start_url "/" at install time, so
+// every launch dropped the user on the landing page — which renders "Sign In"
+// while the session query is still in flight and never navigates away once it
+// resolves. Inside the PWA we therefore resolve the session first and go
+// straight to the workspace when it is valid. Branch logic lives in
+// resolveRootView (lib/pwa.ts) so it can be unit-tested.
 function RootRoute() {
+  const standalone = useMemo(isStandaloneDisplay, []);
+  const { data: me, isLoading, error } = useQuery<XpotMeResponse>({
+    queryKey: ["/api/xpot/me"],
+    retry: false,
+    enabled: standalone,
+  });
+
+  const view = resolveRootView({
+    standalone,
+    isLoading,
+    hasSession: Boolean(me),
+    error,
+  });
+
+  if (view === "loading") {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#060912]">
+        <Loader2 className="h-7 w-7 animate-spin text-blue-400" />
+      </div>
+    );
+  }
+
+  if (view === "workspace") return <Redirect to={getXpotHomePath()} />;
+
   return <XpotLandingPage />;
 }
 

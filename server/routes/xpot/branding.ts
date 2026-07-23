@@ -42,7 +42,13 @@ export function createBrandingPublicRouter() {
     res.json({
       name: b.appName || "Xpot",
       short_name: b.shortName || b.appName || "Xpot",
-      start_url: "/",
+      // Pinned so the app keeps its identity (and the user's existing install)
+      // even though start_url moved from "/" to "/dashboard".
+      id: "/",
+      // Installed app opens straight into the workspace. If there is no session
+      // the dashboard bounces back to "/" (landing) on 401 — so an unauthenticated
+      // launch still lands on the sign-in surface.
+      start_url: "/dashboard",
       scope: "/",
       display: "standalone",
       orientation: "portrait",

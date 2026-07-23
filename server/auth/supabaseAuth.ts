@@ -10,7 +10,10 @@ export async function setupSupabaseAuth(app: Express) {
   app.set("trust proxy", 1);
 
   // Session store — reuses the existing connection pool (SSL pre-configured).
-  const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
+  // Field reps live in the installed PWA, so the window is long and rolling:
+  // every authenticated request pushes the expiry forward. A fixed 1-week window
+  // logged everyone out every Monday regardless of daily use.
+  const sessionTtl = 30 * 24 * 60 * 60 * 1000; // 30 days
   const pgStore = connectPg(session);
   const sessionStore = new pgStore({
     pool: pool,
@@ -24,6 +27,9 @@ export async function setupSupabaseAuth(app: Express) {
       secret: process.env.SESSION_SECRET!,
       store: sessionStore,
       resave: false,
+      // Re-issue the cookie (and touch the store row) on every response so an
+      // active user's session never expires under them.
+      rolling: true,
       saveUninitialized: false,
       cookie: {
         httpOnly: true,
