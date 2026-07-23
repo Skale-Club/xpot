@@ -229,8 +229,9 @@ export function createLeadsRouter() {
       state: req.body.state ?? null,
       postalCode: req.body.postalCode ?? null,
       country: req.body.country || "US",
-      lat: req.body.lat ?? null,
-      lng: req.body.lng ?? null,
+      // Callers send numbers (Google Places, geolocation); the column is text.
+      lat: req.body.lat == null ? null : String(req.body.lat),
+      lng: req.body.lng == null ? null : String(req.body.lng),
       geofenceRadiusMeters: req.body.geofenceRadiusMeters || 150,
       isPrimary: true,
     });

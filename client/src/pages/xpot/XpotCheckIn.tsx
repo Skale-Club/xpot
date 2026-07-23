@@ -30,6 +30,7 @@ import { findMatchingLead, formatDateTime } from "./utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from '@/components/ui/loader';
+import { GoogleLogo } from "@/components/ui/google-logo";
 import { EditLeadDialog } from "./components/EditLeadDialog";
 import { VoiceRecorder } from "./components/VoiceRecorder";
 import { VisitRow } from "./components/VisitRow";
@@ -494,8 +495,12 @@ export function XpotCheckIn() {
                   onClick={() => { setCheckInDropdownOpen(false); setCreateLeadDialogOpen(true); }}
                   className="flex w-full items-center gap-4 px-5 py-4 text-left transition-colors hover:bg-gray-50"
                 >
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-100">
-                    <Plus className="h-5 w-5 text-indigo-500" />
+                  {/* w-14 across every row type so the icons line up: the
+                      "Google" badge below the icon is wider than the icon. */}
+                  <div className="flex w-14 shrink-0 justify-center">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-100">
+                      <Plus className="h-5 w-5 text-indigo-500" />
+                    </div>
                   </div>
                   <div>
                     <div className="text-[15px] font-semibold text-gray-900">
@@ -511,17 +516,22 @@ export function XpotCheckIn() {
                     key={lead.id}
                     type="button"
                     onClick={() => { pickLocalLeadForCheckIn(lead); setCheckInDropdownOpen(false); }}
-                    className="flex w-full items-center gap-4 px-5 py-4 text-left transition-colors hover:bg-gray-50"
+                    className="flex w-full items-start gap-4 px-5 py-4 text-left transition-colors hover:bg-gray-50"
                     style={{ borderTop: "1px solid rgba(0,0,0,0.06)" }}
                   >
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gray-100 border border-gray-200">
-                      <Building2 className="h-5 w-5 text-gray-500" />
+                    {/* Source badge sits under the icon, not beside the text —
+                        as a third column it squeezed the name and address into
+                        an ellipsis on a phone. */}
+                    <div className="flex w-14 shrink-0 flex-col items-center gap-1">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gray-100 border border-gray-200">
+                        <Building2 className="h-5 w-5 text-gray-500" />
+                      </div>
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-600">Local</span>
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-[15px] font-semibold text-gray-900">{lead.name}</div>
-                      <div className="truncate text-xs font-medium text-gray-400">{lead.locations?.[0]?.addressLine1 || lead.industry || "Local lead"}</div>
+                      <div className="text-[15px] font-semibold text-gray-900 break-words">{lead.name}</div>
+                      <div className="text-xs font-medium text-gray-400 break-words">{lead.locations?.[0]?.addressLine1 || lead.industry || "Local lead"}</div>
                     </div>
-                    <span className="shrink-0 rounded-[8px] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-600 bg-emerald-50 border border-emerald-200">Local</span>
                   </button>
                 ))}
 
@@ -547,15 +557,25 @@ export function XpotCheckIn() {
                       key={place.placeId}
                       type="button"
                       onClick={() => { pickGooglePlaceForCheckIn(place); setCheckInDropdownOpen(false); }}
-                      className="flex w-full items-center gap-4 px-5 py-4 text-left transition-colors hover:bg-gray-50"
+                      className="flex w-full items-start gap-4 px-5 py-4 text-left transition-colors hover:bg-gray-50"
                       style={{ borderTop: "1px solid rgba(0,0,0,0.06)" }}
                     >
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 border border-indigo-100">
-                        <Building2 className="h-5 w-5 text-indigo-400" />
+                      <div className="flex w-14 shrink-0 flex-col items-center gap-1">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 border border-indigo-100">
+                          <Building2 className="h-5 w-5 text-indigo-400" />
+                        </div>
+                        {existingLead ? (
+                          <span className="text-[9px] font-bold uppercase tracking-wider text-blue-600">Match</span>
+                        ) : (
+                          <span className="flex items-center gap-0.5 text-[9px] font-bold uppercase tracking-wider text-gray-500">
+                            <GoogleLogo className="h-2.5 w-2.5" />
+                            Google
+                          </span>
+                        )}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="truncate text-[15px] font-semibold text-gray-900">{place.name}</div>
-                        <div className="truncate text-[11px] font-medium text-gray-400">{place.address}</div>
+                        <div className="text-[15px] font-semibold text-gray-900 break-words">{place.name}</div>
+                        <div className="text-[11px] font-medium text-gray-400 break-words">{place.address}</div>
                         {(place.primaryType || place.phone) && (
                           <div className="mt-1 flex flex-wrap gap-2 text-[10px] font-medium uppercase tracking-wider text-gray-400">
                             {place.primaryType ? <span>{place.primaryType.replace(/_/g, " ")}</span> : null}
@@ -563,9 +583,6 @@ export function XpotCheckIn() {
                           </div>
                         )}
                       </div>
-                      <span className={`shrink-0 rounded-[8px] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${existingLead ? "text-blue-600 bg-blue-50 border-blue-200" : "text-indigo-600 bg-indigo-50 border-indigo-200"} border`}>
-                        {existingLead ? "Match" : "Google"}
-                      </span>
                     </button>
                   );
                 })}

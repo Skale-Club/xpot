@@ -28,6 +28,15 @@ export const xpotVisitNoteUpsertSchema = z.object({
   audioDurationSeconds: z.number().int().nullable().optional(),
 });
 
+// lat/lng live in text columns, but every producer hands us numbers: Google
+// Places returns them as numbers and so does the browser's geolocation API.
+// Rejecting those was failing every "create lead from a place" check-in, so the
+// boundary accepts either shape and normalizes to the stored one.
+const coordinate = z
+  .union([z.string(), z.number().transform(String)])
+  .nullable()
+  .optional();
+
 export const xpotLeadCreateSchema = z.object({
   name: z.string().min(1),
   legalName: z.string().nullable().optional(),
@@ -52,8 +61,8 @@ export const xpotLeadCreateSchema = z.object({
     state: z.string().nullable().optional(),
     postalCode: z.string().nullable().optional(),
     country: z.string().optional(),
-    lat: z.string().nullable().optional(),
-    lng: z.string().nullable().optional(),
+    lat: coordinate,
+    lng: coordinate,
     geofenceRadiusMeters: z.number().int().optional(),
     isPrimary: z.boolean().optional(),
   }).optional(),

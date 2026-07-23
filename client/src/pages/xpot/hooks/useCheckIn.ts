@@ -256,15 +256,8 @@ export function useCheckIn() {
       source: "manual",
       status: "lead",
       notes: "Created manually during check-in",
-      primaryLocation: {
-        label: "Main",
-        addressLine1: "",
-        country: "US",
-        lat: geoState.lat ?? undefined,
-        lng: geoState.lng ?? undefined,
-        geofenceRadiusMeters: 150,
-        isPrimary: true,
-      },
+      // No address to send: the empty addressLine1 this used to pass failed
+      // validation, and the server skips the location row without one anyway.
     });
 
     setSelectedLeadId(createdLead.lead.id);

@@ -327,8 +327,10 @@ export const insertSalesLeadLocationSchema = z.object({
   state: z.string().nullable().optional(),
   postalCode: z.string().nullable().optional(),
   country: z.string().default("US"),
-  lat: z.string().nullable().optional(),
-  lng: z.string().nullable().optional(),
+  // Numbers accepted and normalized — see the note on `coordinate` in
+  // shared/xpot.ts; the column is text but callers hand us numbers.
+  lat: z.union([z.string(), z.number().transform(String)]).nullable().optional(),
+  lng: z.union([z.string(), z.number().transform(String)]).nullable().optional(),
   geofenceRadiusMeters: z.number().int().default(150),
   isPrimary: z.boolean().default(true),
 });

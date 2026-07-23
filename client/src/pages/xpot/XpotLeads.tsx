@@ -32,6 +32,7 @@ import { usePlaceSearch } from "./usePlaceSearch";
 import { useXpotShared } from "./hooks/useXpotShared";
 import { apiRequest } from "@/lib/queryClient";
 import { Loader2 } from '@/components/ui/loader';
+import { GoogleLogo } from "@/components/ui/google-logo";
 import { parseAddress, findMatchingLead } from "./utils";
 import type { FullSalesLead, GooglePlaceResult } from "./types";
 
@@ -235,19 +236,28 @@ function AddCompanyDialog({
                         key={place.placeId}
                         type="button"
                         onClick={() => pickPlace(place)}
-                        className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-slate-50 transition-colors"
+                        className="flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-slate-50 transition-colors"
                         style={{ borderTop: "1px solid #f1f5f9" }}
                       >
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-indigo-50">
-                          <Building2 className="h-4 w-4 text-indigo-500" />
+                        {/* Badge under the icon — beside the text it pushed the
+                            name and address into an ellipsis. */}
+                        <div className="flex w-14 shrink-0 flex-col items-center gap-1">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-50">
+                            <Building2 className="h-4 w-4 text-indigo-500" />
+                          </div>
+                          {existing ? (
+                            <span className="text-[9px] font-bold uppercase tracking-wider text-blue-600">Exists</span>
+                          ) : (
+                            <span className="flex items-center gap-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-500">
+                              <GoogleLogo className="h-2.5 w-2.5" />
+                              Google
+                            </span>
+                          )}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <div className="truncate text-sm font-medium text-slate-900">{place.name}</div>
-                          <div className="truncate text-xs text-slate-500">{place.address}</div>
+                          <div className="text-sm font-medium text-slate-900 break-words">{place.name}</div>
+                          <div className="text-xs text-slate-500 break-words">{place.address}</div>
                         </div>
-                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium border ${existing ? "text-blue-600 bg-blue-50 border-blue-200" : "text-indigo-600 bg-indigo-50 border-indigo-200"}`}>
-                          {existing ? "Exists" : "Google"}
-                        </span>
                       </button>
                     );
                   })}
