@@ -6,6 +6,13 @@ import { queryClient } from "./lib/queryClient";
 import { Toaster } from "./components/ui/toaster";
 import "./index.css";
 
+declare global {
+  interface Window {
+    // Set once React paints; read by the boot watchdog in index.html.
+    __XPOT_BOOTED?: boolean;
+  }
+}
+
 const root = createRoot(document.getElementById("root")!);
 
 root.render(
@@ -35,8 +42,11 @@ if ("serviceWorker" in navigator) {
   }
 }
 
-// Remove the pre-React loader once React has painted its first frame.
+// Remove the pre-React loader once React has painted its first frame. Setting
+// __XPOT_BOOTED here disarms the boot watchdog in index.html — if this never
+// runs, the watchdog swaps the loader for a retry screen.
 requestAnimationFrame(() => {
+  window.__XPOT_BOOTED = true;
   const loader = document.getElementById("initial-loader");
   if (loader) {
     loader.classList.add("loader-fade-out");

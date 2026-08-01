@@ -52,6 +52,41 @@
         40%           { transform: scale(1)   translateY(-8px); opacity: 1; }
       }
     </style>
+    <script>
+      // Boot watchdog: if the bundle hasn't run within 12s (stale cache, a
+      // half-downloaded asset, a WebView that resumed badly), the loader turns
+      // into a retry screen instead of bouncing forever. main.tsx sets
+      // __XPOT_BOOTED once React has painted, which disarms this. A hidden
+      // page never fails the check — rAF (and thus the boot flag) only fires
+      // once the page composites, so a launch into a background tab would
+      // otherwise be misread as a hang.
+      (function () {
+        var TIMEOUT_MS = 12000;
+        var VISIBLE_GRACE_MS = 2000;
+        function fail() {
+          if (window.__XPOT_BOOTED) return;
+          var loader = document.getElementById("initial-loader");
+          if (!loader) return;
+          loader.innerHTML =
+            '<div style="text-align:center;color:#e4e4e7;font-family:system-ui,sans-serif;padding:0 24px">' +
+            '<p style="margin:0 0 16px">The app is taking too long to load.</p>' +
+            '<button onclick="location.reload()" style="padding:10px 24px;border-radius:8px;border:0;background:#406EF1;color:#fff;font-size:15px">Try again</button>' +
+            "</div>";
+        }
+        function check() {
+          if (window.__XPOT_BOOTED) return;
+          if (document.hidden) {
+            document.addEventListener("visibilitychange", function onVis() {
+              document.removeEventListener("visibilitychange", onVis);
+              setTimeout(check, VISIBLE_GRACE_MS);
+            });
+            return;
+          }
+          fail();
+        }
+        setTimeout(check, TIMEOUT_MS);
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
