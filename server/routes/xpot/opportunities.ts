@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { storage } from "../../storage.js";
-import { requireXpotUser, ensureXpotRep } from "./middleware.js";
+import { requireXpotUser, ensureXpotRep, isManagerOrAdmin } from "./middleware.js";
 import { syncOpportunityToGhl } from "./helpers.js";
 import { xpotOpportunityCreateSchema, xpotOpportunityUpdateSchema } from "#shared/xpot.js";
 import { getGHLPipelines } from "../../integrations/ghl.js";
@@ -11,13 +11,13 @@ export function createOpportunitiesRouter() {
   router.use(requireXpotUser);
 
   router.get("/opportunities/pipelines", async (_req, res) => {
+    // SEG-10: this used to log whether a key/locationId was configured on every
+    // call. It leaked configuration posture into production logs for no gain.
     const integration = await storage.getIntegrationSettings("gohighlevel");
-    console.log("[pipelines] integration:", JSON.stringify({ isEnabled: integration?.isEnabled, hasKey: !!integration?.apiKey, hasLocation: !!integration?.locationId }));
     if (!integration?.isEnabled || !integration.apiKey || !integration.locationId) {
       return res.json({ pipelines: [], _reason: !integration ? "not found" : !integration.isEnabled ? "disabled" : !integration.apiKey ? "no apiKey" : "no locationId" });
     }
     const result = await getGHLPipelines(integration.apiKey, integration.locationId);
-    console.log("[pipelines] GHL result:", JSON.stringify({ success: result.success, count: result.pipelines?.length, message: result.message }));
     res.json({ pipelines: result.pipelines ?? [], _error: result.success ? undefined : result.message });
   });
 
@@ -27,7 +27,8 @@ export function createOpportunitiesRouter() {
       ? z.enum(["open", "won", "lost", "archived"]).parse(req.query.status)
       : undefined;
     const opportunities = await storage.listSalesOpportunities({
-      repId: actor!.user.isAdmin && req.query.all === "true" ? undefined : actor!.rep.id,
+      // SEG-08: same "who sees everything" rule as leads/visits/tasks.
+      repId: isManagerOrAdmin(actor!) && req.query.all === "true" ? undefined : actor!.rep.id,
       status,
     });
 
@@ -72,8 +73,24 @@ export function createOpportunitiesRouter() {
   });
 
   router.patch("/opportunities/:id", async (req, res) => {
+    const actor = (req as any).xpotActor as Awaited<ReturnType<typeof ensureXpotRep>>;
     const opportunityId = Number(req.params.id);
+    if (!Number.isFinite(opportunityId) || opportunityId <= 0) {
+      return res.status(400).json({ message: "Invalid opportunity id" });
+    }
     const input = xpotOpportunityUpdateSchema.parse(req.body);
+
+    // SEG-03: no ownership check here meant any rep could rewrite another
+    // rep's deal — value, stage, status — and the handler then pushed that
+    // unauthorised edit straight to GoHighLevel.
+    const existing = (await storage.listSalesOpportunities()).find((o) => o.id === opportunityId);
+    if (!existing) {
+      return res.status(404).json({ message: "Opportunity not found" });
+    }
+    if (!isManagerOrAdmin(actor!) && existing.repId !== actor!.rep.id) {
+      return res.status(403).json({ message: "Access denied" });
+    }
+
     const updated = await storage.updateSalesOpportunity(opportunityId, {
       ...input,
       syncStatus: "pending",

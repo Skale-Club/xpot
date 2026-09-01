@@ -95,6 +95,7 @@ export interface IStorage {
   getSalesRepByUserId(userId: string): Promise<SalesRep | undefined>;
   upsertSalesRep(input: InsertSalesRep): Promise<SalesRep>;
   updateSalesRepProfile(id: number, data: { displayName?: string; phone?: string; avatarUrl?: string }): Promise<SalesRep>;
+  updateSalesRepFields(id: number, data: Partial<Pick<InsertSalesRep, "displayName" | "email" | "phone" | "team" | "role" | "isActive">>): Promise<SalesRep | undefined>;
 
   // Users
   updateUserProfile(userId: string, data: { firstName?: string | null; lastName?: string | null; profileImageUrl?: string | null }): Promise<User>;
@@ -298,6 +299,25 @@ export class DatabaseStorage implements IStorage {
     const [updated] = await db
       .update(salesReps)
       .set({ ...data, updatedAt: new Date() })
+      .where(eq(salesReps.id, id))
+      .returning();
+    return updated;
+  }
+
+  /**
+   * Admin-side rep edit. Unlike upsertSalesRep this only writes the fields it
+   * is given, so a partial update can never blank out a column it did not
+   * mention (SEG-07).
+   */
+  async updateSalesRepFields(
+    id: number,
+    data: Partial<Pick<InsertSalesRep, "displayName" | "email" | "phone" | "team" | "role" | "isActive">>,
+  ): Promise<SalesRep | undefined> {
+    const patch = Object.fromEntries(Object.entries(data).filter(([, v]) => v !== undefined));
+    if (!Object.keys(patch).length) return await this.getSalesRep(id);
+    const [updated] = await db
+      .update(salesReps)
+      .set({ ...patch, updatedAt: new Date() })
       .where(eq(salesReps.id, id))
       .returning();
     return updated;
@@ -591,9 +611,20 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
+  /**
+   * DAT-01: this used to delete the note and the visit only, leaving any
+   * sales_tasks row that referenced the visit behind — and the app creates
+   * exactly those tasks during a visit, so DELETE /visits/:id failed with a
+   * foreign-key violation whenever the visit had one. Tasks are detached
+   * rather than deleted: a follow-up outlives the visit that produced it.
+   */
   async deleteSalesVisit(id: number): Promise<void> {
-    await db.delete(salesVisitNotes).where(eq(salesVisitNotes.visitId, id));
-    await db.delete(salesVisits).where(eq(salesVisits.id, id));
+    await db.transaction(async (tx) => {
+      await tx.update(salesTasks).set({ visitId: null }).where(eq(salesTasks.visitId, id));
+      await tx.update(salesOpportunitiesLocal).set({ visitId: null }).where(eq(salesOpportunitiesLocal.visitId, id));
+      await tx.delete(salesVisitNotes).where(eq(salesVisitNotes.visitId, id));
+      await tx.delete(salesVisits).where(eq(salesVisits.id, id));
+    });
   }
 
   async getSalesVisitNote(visitId: number): Promise<SalesVisitNote | undefined> {
