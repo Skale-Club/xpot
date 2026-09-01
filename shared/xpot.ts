@@ -129,3 +129,123 @@ export type XpotOpportunityCreateInput = z.infer<typeof xpotOpportunityCreateSch
 export type XpotOpportunityUpdateInput = z.infer<typeof xpotOpportunityUpdateSchema>;
 export type XpotTaskCreateInput = z.infer<typeof xpotTaskCreateSchema>;
 export type XpotTaskUpdateInput = z.infer<typeof xpotTaskUpdateSchema>;
+
+// ─── Sales module ────────────────────────────────────────────────────────────
+
+const cents = z.number().int().nonnegative();
+const positiveInt = z.number().int().positive();
+
+export const xpotProductUpsertSchema = z.object({
+  sku: z.string().trim().max(60).nullable().optional(),
+  name: z.string().trim().min(1).max(160),
+  description: z.string().trim().max(2000).nullable().optional(),
+  kind: z.enum(["digital", "physical"]).optional(),
+  category: z.string().trim().max(60).nullable().optional(),
+  unitLabel: z.string().trim().min(1).max(30).optional(),
+  basePriceCents: cents.optional(),
+  suggestedRetailCents: cents.nullable().optional(),
+  costCents: cents.nullable().optional(),
+  currency: z.string().trim().length(3).optional(),
+  consignable: z.boolean().optional(),
+  isActive: z.boolean().optional(),
+  sortOrder: z.number().int().optional(),
+});
+
+export const xpotPriceTiersReplaceSchema = z.object({
+  tiers: z.array(z.object({
+    label: z.string().trim().max(60).nullable().optional(),
+    minQuantity: positiveInt,
+    unitPriceCents: cents,
+  })).max(20),
+});
+
+export const xpotPaymentMethodSchema = z.enum(["cash", "card", "pix", "transfer", "invoice", "other"]);
+
+export const xpotSaleItemInputSchema = z.object({
+  productId: positiveInt.nullable().optional(),
+  description: z.string().trim().max(200).optional(),
+  quantity: positiveInt,
+  // Omit to let the server price from the catalog (tiers by quantity).
+  unitPriceCents: cents.optional(),
+}).refine((item) => item.productId || (item.description && item.description.length > 0), {
+  message: "Each item needs a product or a description",
+});
+
+export const xpotSaleCreateSchema = z.object({
+  leadId: positiveInt,
+  visitId: positiveInt.nullable().optional(),
+  items: z.array(xpotSaleItemInputSchema).min(1).max(50),
+  discountCents: cents.optional(),
+  paymentStatus: z.enum(["unpaid", "partial", "paid"]).optional(),
+  paymentMethod: xpotPaymentMethodSchema.nullable().optional(),
+  paidCents: cents.optional(),
+  soldAt: z.string().datetime().optional(),
+  notes: z.string().trim().max(2000).nullable().optional(),
+});
+
+export const xpotSalePaymentSchema = z.object({
+  paymentStatus: z.enum(["unpaid", "partial", "paid"]).optional(),
+  paymentMethod: xpotPaymentMethodSchema.nullable().optional(),
+  paidCents: cents.optional(),
+});
+
+export const xpotSaleCancelSchema = z.object({
+  reason: z.string().trim().max(500).nullable().optional(),
+});
+
+export const xpotConsignmentDepositSchema = z.object({
+  leadId: positiveInt,
+  productId: positiveInt,
+  quantity: positiveInt,
+  // Agreed B2B unit price; omit to price from the catalog for this quantity.
+  unitPriceCents: cents.optional(),
+  settlementIntervalDays: z.number().int().min(1).max(365).optional(),
+  visitId: positiveInt.nullable().optional(),
+  notes: z.string().trim().max(2000).nullable().optional(),
+});
+
+export const xpotConsignmentSettleSchema = z.object({
+  // What the rep physically counted on the shelf.
+  countedRemaining: z.number().int().nonnegative(),
+  // Units left behind after the count (new stock for the next cycle).
+  restockQuantity: z.number().int().nonnegative().optional(),
+  // Override the agreed price for this settlement only.
+  unitPriceCents: cents.optional(),
+  paymentStatus: z.enum(["unpaid", "partial", "paid"]).optional(),
+  paymentMethod: xpotPaymentMethodSchema.nullable().optional(),
+  paidCents: cents.optional(),
+  visitId: positiveInt.nullable().optional(),
+  notes: z.string().trim().max(2000).nullable().optional(),
+});
+
+export const xpotConsignmentReturnSchema = z.object({
+  quantity: positiveInt,
+  // Close the agreement once the stock is picked up.
+  close: z.boolean().optional(),
+  visitId: positiveInt.nullable().optional(),
+  notes: z.string().trim().max(2000).nullable().optional(),
+});
+
+export const xpotConsignmentAdjustSchema = z.object({
+  // Signed: +N found extra, -N lost/damaged.
+  delta: z.number().int().refine((n) => n !== 0, { message: "delta must be non-zero" }),
+  visitId: positiveInt.nullable().optional(),
+  notes: z.string().trim().max(2000).nullable().optional(),
+});
+
+export const xpotConsignmentUpdateSchema = z.object({
+  unitPriceCents: cents.optional(),
+  settlementIntervalDays: z.number().int().min(1).max(365).optional(),
+  nextVisitDueAt: z.string().datetime().nullable().optional(),
+  notes: z.string().trim().max(2000).nullable().optional(),
+});
+
+export type XpotProductUpsertInput = z.infer<typeof xpotProductUpsertSchema>;
+export type XpotPriceTiersReplaceInput = z.infer<typeof xpotPriceTiersReplaceSchema>;
+export type XpotSaleCreateInput = z.infer<typeof xpotSaleCreateSchema>;
+export type XpotSalePaymentInput = z.infer<typeof xpotSalePaymentSchema>;
+export type XpotConsignmentDepositInput = z.infer<typeof xpotConsignmentDepositSchema>;
+export type XpotConsignmentSettleInput = z.infer<typeof xpotConsignmentSettleSchema>;
+export type XpotConsignmentReturnInput = z.infer<typeof xpotConsignmentReturnSchema>;
+export type XpotConsignmentAdjustInput = z.infer<typeof xpotConsignmentAdjustSchema>;
+export type XpotConsignmentUpdateInput = z.infer<typeof xpotConsignmentUpdateSchema>;

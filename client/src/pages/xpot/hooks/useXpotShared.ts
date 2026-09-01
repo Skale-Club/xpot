@@ -13,6 +13,9 @@ export function useXpotShared() {
       queryClient.invalidateQueries({ queryKey: ["/api/xpot/opportunities"] }),
       queryClient.invalidateQueries({ queryKey: ["/api/xpot/tasks"] }),
       queryClient.invalidateQueries({ queryKey: ["/api/xpot/admin/overview"] }),
+      queryClient.invalidateQueries({ queryKey: ["/api/xpot/sales"] }),
+      queryClient.invalidateQueries({ queryKey: ["/api/xpot/consignments"] }),
+      queryClient.invalidateQueries({ queryKey: ["/api/xpot/products"] }),
     ]);
   };
 

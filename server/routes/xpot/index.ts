@@ -14,6 +14,9 @@ import { createAdminIntegrationsRouter } from "./admin-integrations.js";
 import { createBrandingPublicRouter, createBrandingAdminRouter } from "./branding.js";
 import { createInboundRouter } from "./inbound.js";
 import { createXphereRouter } from "./xphere.js";
+import { createProductsRouter } from "./products.js";
+import { createSalesRouter } from "./sales.js";
+import { createConsignmentsRouter } from "./consignments.js";
 
 export function registerXpotRoutes(app: Express) {
   // Public branding (favicon / manifest / apple-touch) — no auth.
@@ -34,4 +37,8 @@ export function registerXpotRoutes(app: Express) {
   app.use("/api/xpot", createAdminIntegrationsRouter());
   app.use("/api/xpot", createBrandingAdminRouter());
   app.use("/api/xpot", createXphereRouter());
+  // Sales module: catalog, direct sales, consigned stock.
+  app.use("/api/xpot", createProductsRouter());
+  app.use("/api/xpot", createSalesRouter());
+  app.use("/api/xpot", createConsignmentsRouter());
 }

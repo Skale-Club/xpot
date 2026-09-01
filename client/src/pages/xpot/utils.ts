@@ -71,3 +71,37 @@ export function findMatchingLead(place: GooglePlaceResult, leads: FullSalesLead[
     );
   });
 }
+
+// ─── Money (integer cents) ───────────────────────────────────────────────────
+
+export function formatCents(cents: number | null | undefined, currency = "USD") {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: currency || "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format((cents || 0) / 100);
+}
+
+/** "4.5" / "4,50" / "$4.50" → 450. Empty or unparsable → 0. */
+export function inputToCents(raw: string): number {
+  const cleaned = raw.replace(/[^0-9.,-]/g, "").replace(",", ".");
+  const n = Number(cleaned);
+  return Number.isFinite(n) ? Math.round(n * 100) : 0;
+}
+
+export function centsToInput(cents: number | null | undefined): string {
+  if (cents == null) return "";
+  return (cents / 100).toFixed(2);
+}
+
+export function formatShortDate(value?: string | Date | null) {
+  if (!value) return "—";
+  return new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+/** Days from now (negative = overdue). */
+export function daysUntil(value?: string | Date | null): number | null {
+  if (!value) return null;
+  return Math.round((new Date(value).getTime() - Date.now()) / (24 * 60 * 60 * 1000));
+}
