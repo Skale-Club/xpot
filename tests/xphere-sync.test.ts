@@ -151,8 +151,15 @@ describe("syncVisitToXphere", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("splits the stored contact:{id} ref into xphere_id/xphere_kind on the outbound payload", async () => {
-    getSalesVisit.mockResolvedValue({ id: 2, leadId: 6, checkedOutAt: "2026-07-01T18:30:00.000Z" });
+  it("sends the visit STATUS as the outcome, not the AI's prose", async () => {
+    // The receiver on the Xphere side maps an outcome onto engagement_status by
+    // looking for "sale" / "interested" / "follow" / "not_interested" in the
+    // string. We used to send note.outcome — free text from the LLM, in the
+    // rep's own language — so a Portuguese note matched nothing, and a visit
+    // with no audio sent null. visit.status is the controlled vocabulary and
+    // lines up with those keys exactly. The prose still travels as
+    // outcome_detail. Mirrored in the xphere repo's contract test.
+    getSalesVisit.mockResolvedValue({ id: 2, leadId: 6, status: "sale_made", checkedOutAt: "2026-07-01T18:30:00.000Z" });
     getSalesLead.mockResolvedValue({ id: 6, ownerRepId: 10, xphereRef: "contact:contact-1" });
     getSalesRep.mockResolvedValue({ id: 10, userId: "user-1" });
     getXphereIntegrationByUserId.mockResolvedValue({
@@ -173,7 +180,8 @@ describe("syncVisitToXphere", () => {
         body: JSON.stringify({
           xphere_id: "contact-1",
           xphere_kind: "contact",
-          outcome: "interested",
+          outcome: "sale_made",
+          outcome_detail: "interested",
           summary: "Follow up next week",
           sentiment: "positive",
           occurred_at: "2026-07-01T18:30:00.000Z",
@@ -181,5 +189,44 @@ describe("syncVisitToXphere", () => {
       }),
     );
     expect(result).toEqual({ synced: true });
+  });
+});
+
+describe("the visit outcome vocabulary reaches Xphere's mapping intact", () => {
+  // Xphere's engagementForOutcome() substring-matches these keys. Each status
+  // below is what the rep taps in the app; the comment is what it becomes.
+  it.each([
+    ["sale_made", "sale"],
+    ["not_interested", "not_interested"],
+    ["follow_up", "follow"],
+  ])("%s carries the token Xphere looks for (%s)", async (status, token) => {
+    getSalesVisit.mockResolvedValue({ id: 3, leadId: 6, status, checkedOutAt: "2026-07-01T18:30:00.000Z" });
+    getSalesLead.mockResolvedValue({ id: 6, ownerRepId: 10, xphereRef: "account:acc-1" });
+    getSalesRep.mockResolvedValue({ id: 10, userId: "user-1" });
+    getXphereIntegrationByUserId.mockResolvedValue({ isEnabled: true, apiKey: "xph_test", apiUrl: "https://xphere.app" });
+    getSalesVisitNote.mockResolvedValue(null);
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ ok: true }) });
+
+    await syncVisitToXphere(3);
+
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as { body: string }).body);
+    expect(body.outcome).toBe(status);
+    expect(String(body.outcome).includes(token)).toBe(true);
+  });
+
+  it("still sends an outcome when the rep recorded no audio at all", async () => {
+    // The common case for a quick visit — and the one that used to send null.
+    getSalesVisit.mockResolvedValue({ id: 4, leadId: 6, status: "no_answer", checkedOutAt: "2026-07-01T18:30:00.000Z" });
+    getSalesLead.mockResolvedValue({ id: 6, ownerRepId: 10, xphereRef: "contact:c-1" });
+    getSalesRep.mockResolvedValue({ id: 10, userId: "user-1" });
+    getXphereIntegrationByUserId.mockResolvedValue({ isEnabled: true, apiKey: "xph_test", apiUrl: "https://xphere.app" });
+    getSalesVisitNote.mockResolvedValue(undefined);
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ ok: true }) });
+
+    await syncVisitToXphere(4);
+
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as { body: string }).body);
+    expect(body.outcome).toBe("no_answer");
+    expect(body.outcome_detail).toBeNull();
   });
 });

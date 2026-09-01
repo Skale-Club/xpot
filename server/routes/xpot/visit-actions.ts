@@ -6,6 +6,7 @@ import { storage } from "../../storage.js";
 import { salesStorage } from "../../storage-sales.js";
 import { getLLMClient } from "../../lib/ai.js";
 import { requireXpotUser, isManagerOrAdmin, type XpotActor } from "./middleware.js";
+import { syncInterestToXphere } from "./xphere-sync.js";
 import {
   salesVisitActions,
   type SalesVisitAction,
@@ -371,6 +372,17 @@ async function applyAction(row: SalesVisitAction, ctx: ApplyCtx): Promise<string
         status: "pending",
       });
       if (dueAt) await storage.updateSalesLead(ctx.leadId, { nextVisitDueAt: dueAt });
+
+      // Interest belongs in the CRM pipeline, not only in Xpot's task list.
+      syncInterestToXphere({
+        leadId: ctx.leadId,
+        title: action.title,
+        interest: action.interest ?? null,
+        estimatedValueCents: action.estimatedValueCents ?? null,
+        dueAt,
+        evidence: action.evidence ?? null,
+      }).catch((err: unknown) => console.error("[follow-up] xphere mirror:", err));
+
       return `task:${task.id}`;
     }
   }

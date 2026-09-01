@@ -11,6 +11,7 @@ import {
   xpotConsignmentUpdateSchema,
 } from "#shared/xpot.js";
 import { computeSettlement } from "#shared/pricing.js";
+import { syncSaleToXphere } from "./xphere-sync.js";
 
 // Consigned stock: physical goods left at an establishment, resold by them, and
 // settled when the rep comes back. Every stock change is a ledger movement.
@@ -148,6 +149,11 @@ export function createConsignmentsRouter() {
         soldQuantity: result.soldQuantity,
         amountCents: result.amountCents,
       });
+
+      // A settlement that billed something is a sale like any other.
+      if (result.sale) {
+        syncSaleToXphere(result.sale.sale.id).catch((err) => console.error("[settle] xphere mirror:", err));
+      }
     } catch (err) {
       res.status(400).json({ message: (err as Error).message });
     }

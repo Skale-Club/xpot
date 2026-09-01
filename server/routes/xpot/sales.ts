@@ -5,6 +5,7 @@ import { salesStorage } from "../../storage-sales.js";
 import { requireXpotUser, isManagerOrAdmin, loadAccessibleLead, type XpotActor } from "./middleware.js";
 import { xpotSaleCreateSchema, xpotSalePaymentSchema, xpotSaleCancelSchema } from "#shared/xpot.js";
 import { computeSaleTotals, paymentStatusFor } from "#shared/pricing.js";
+import { syncSaleToXphere } from "./xphere-sync.js";
 
 // Direct sales: what the rep closes on the spot (a website, a marketing plan,
 // a handful of keychains sold outright). Consignment settlements also land
@@ -146,6 +147,11 @@ export function createSalesRouter() {
     }
 
     res.status(201).json(sale);
+
+    // Mirror into the CRM after responding — the rep should not wait on it, and
+    // a failure is recorded in sales_sync_events with the retry path already in
+    // place on the dashboard.
+    syncSaleToXphere(sale.sale.id).catch((err) => console.error("[sale] xphere mirror:", err));
   });
 
   router.patch("/sales/:id/payment", async (req, res) => {

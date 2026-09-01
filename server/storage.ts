@@ -103,6 +103,7 @@ export interface IStorage {
   // Leads + child tables
   listSalesLeads(filters?: { ownerRepId?: number; search?: string }): Promise<SalesLead[]>;
   getSalesLead(id: number): Promise<SalesLead | undefined>;
+  getSalesLeadByXphereRef(ref: string): Promise<SalesLead | undefined>;
   createSalesLead(input: InsertSalesLead): Promise<SalesLead>;
   updateSalesLead(id: number, input: Partial<InsertSalesLead>): Promise<SalesLead | undefined>;
   deleteSalesLead(id: number): Promise<void>;
@@ -356,6 +357,12 @@ export class DatabaseStorage implements IStorage {
 
   async getSalesLead(id: number): Promise<SalesLead | undefined> {
     const [lead] = await db.select().from(salesLeads).where(eq(salesLeads.id, id));
+    return lead;
+  }
+
+  /** Idempotency key for prospects pushed in from Xphere (DAT-02). */
+  async getSalesLeadByXphereRef(ref: string): Promise<SalesLead | undefined> {
+    const [lead] = await db.select().from(salesLeads).where(eq(salesLeads.xphereRef, ref));
     return lead;
   }
 

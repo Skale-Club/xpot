@@ -274,3 +274,11 @@ CREATE INDEX IF NOT EXISTS "sales_visit_actions_visit_idx" ON "sales_visit_actio
 CREATE INDEX IF NOT EXISTS "sales_visit_actions_status_idx" ON "sales_visit_actions" ("status");
 
 ALTER TABLE "sales_visit_actions" ENABLE ROW LEVEL SECURITY;
+
+-- ── DAT-02: make the Xphere inbound idempotent ───────────────────────────────
+-- POST /api/xpot/inbound/prospects always inserted, so a retry (or a resent
+-- batch) silently duplicated every lead. One lead per originating Xphere record.
+-- Partial: leads not created from Xphere carry a NULL ref and are unaffected.
+
+CREATE UNIQUE INDEX IF NOT EXISTS "sales_leads_xphere_ref_unique"
+  ON "sales_leads" ("xphere_ref") WHERE "xphere_ref" IS NOT NULL;
