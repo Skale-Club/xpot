@@ -1,6 +1,13 @@
 # Backlog Xpot
 
-**Rev. 1** · base `27d2cc1` · 49 itens · foco atual: sistema de vendas
+**Rev. 2** · base `07f640d` · 49 itens · **21 concluídos** · foco: módulo de vendas
+
+> **Rev. 2 (execução):** o módulo de vendas foi construído — catálogo, venda
+> direta, consignação com acerto, captura por voz e espelho no Xphere — e a
+> Fase 0 fechou as falhas de autorização antes disso. Itens resolvidos estão
+> marcados ✅ com o commit. Suíte: 93 testes, typecheck limpo, build de produção
+> passando. **Pendente de você:** aplicar a migration `0009` no Supabase de
+> produção (`npm run migrate`) — não tenho conexão com o banco neste ambiente.
 
 Registro do que está pendente no projeto. Cada item tem código estável (`VND-04`, `SEG-02`)
 para referência em conversa. Estados: **Agora** (bloqueia outras coisas) · **A fazer** ·
@@ -8,14 +15,27 @@ para referência em conversa. Estados: **Agora** (bloqueia outras coisas) · **A
 
 Detalhamento e referências completas de arquivo:linha em [`AUDITORIA.md`](./AUDITORIA.md).
 
-| Área | Itens | Agora |
-|---|---|---|
-| VND — sistema de vendas | 18 | 6 |
-| SEG — segurança/autorização | 10 | 7 |
-| PLT — plataforma | 5 | 0 |
-| DAT — integridade de dados | 6 | 1 |
-| PRF — performance | 5 | 0 |
-| DOC — testes e documentação | 5 | 0 |
+| Área | Itens | Concluídos | Restantes |
+|---|---|---|---|
+| VND — sistema de vendas | 18 | 6 | 12 |
+| SEG — segurança/autorização | 10 | 9 | 1 |
+| PLT — plataforma | 5 | 1 | 4 |
+| DAT — integridade de dados | 6 | 4 | 2 |
+| PRF — performance | 5 | 0 | 5 |
+| DOC — testes e documentação | 5 | 4 | 1 |
+
+### Novidades desta revisão
+
+O módulo de vendas não estava no backlog original — ele é a estrutura nova.
+Entregue em `e887a70`, `f70fcab`, `3327bb0`, `07f640d`:
+
+- **Catálogo** com preço B2B, custo, margem ao vivo e faixas por quantidade
+- **Venda direta** com itens, desconto e pagamento, a partir do check-in, do
+  card da empresa ou da aba Sales
+- **Consignação**: depósito, acerto por contagem, devolução, ajuste, com livro-razão
+- **Ganho** = preço − custo, congelado por venda
+- **Captura por voz**: o áudio vira ações propostas que você confirma
+- **Espelho no Xphere**: venda vira oportunidade ganha, interesse vira aberta
 
 ---
 
@@ -31,7 +51,7 @@ mais tocada — sem mudar estágio, corrigir valor, marcar ganha/perdida ou arqu
 |---|---|---|---|
 | VND-01 | Alto | **Oportunidade não pode ser editada depois de criada.** `status`, `lossReason`, `closeDate`, `notes` nunca são escritos após a criação. `PATCH /opportunities/:id` sem chamadores. — `client/…/XpotSales.tsx`, `server/routes/xpot/opportunities.ts:74` | Agora |
 | VND-02 | Alto | **Métrica de negócios ganhados é sempre zero.** `metrics.ts:50` conta `status === "won"`; nenhum caminho consegue atribuir esse valor. Consequência direta de VND-01. | Agora |
-| VND-03 | Alto | **“Venda feita” na visita não cria oportunidade.** `sale_made` grava na visita e o pipeline não sabe. Não há ponte entre desfecho e funil. — `client/…/VisitStatus.tsx:21` | Agora |
+| ✅ VND-03 | Alto | **“Venda feita” na visita não cria oportunidade.** `sale_made` grava na visita e o pipeline não sabe. Não há ponte entre desfecho e funil. — `client/…/VisitStatus.tsx:21` | ✅ feito |
 | VND-04 | Alto | **Falha de sync com o CRM é invisível na criação.** O servidor devolve `{ghl, message}` e marca `needs_review`; o cliente mostra “Opportunity created”. — `client/…/useSales.ts:35-38` | Agora |
 | VND-05 | Alto | **Ordem de dependência com o CRM não é guiada.** A oportunidade só sincroniza se o lead tiver `ghlContactId`, e o sync do lead é manual em outra tela. — `helpers.ts:156-159` | A fazer |
 | VND-06 | Médio | **Não há pipeline padrão configurável.** `defaultPipelineKey`/`defaultStageKey` são lidos no fallback mas nenhuma rota os escreve. — `helpers.ts:161-165` | A fazer |
@@ -49,7 +69,7 @@ mais tocada — sem mudar estágio, corrigir valor, marcar ganha/perdida ou arqu
 
 | ID | Sev | Item | Estado |
 |---|---|---|---|
-| VND-11 | Alto | **Mudar o desfecho depois do check-out não chega ao CRM.** `PATCH /visits/:id` grava só o status e não redispara `syncVisitToGhl`/`syncVisitToXphere`. — `visits.ts:173-183` | Agora |
+| ✅ VND-11 | Alto | **Mudar o desfecho depois do check-out não chega ao CRM.** `PATCH /visits/:id` grava só o status e não redispara `syncVisitToGhl`/`syncVisitToXphere`. — `visits.ts:173-183` | ✅ feito |
 | VND-12 | Médio | **Não dá para filtrar visitas pelos desfechos comerciais.** `sale_made`, `follow_up`, `no_answer`, `not_interested`, `came_back_later` são setáveis e não filtráveis. — `XpotVisits.tsx:43` | A fazer |
 | VND-13 | Baixo | **Dois conceitos de “hoje”.** Dashboard conta por `createdAt`, tela de visitas filtra por `checkedInAt`. — `dashboard.ts:25-32` | A fazer |
 
@@ -57,7 +77,7 @@ mais tocada — sem mudar estágio, corrigir valor, marcar ganha/perdida ou arqu
 
 | ID | Sev | Item | Estado |
 |---|---|---|---|
-| VND-14 | Alto | **O gráfico do dashboard mostra dados inventados.** “Visit Activity — Last 7 Days” gera os 6 dias anteriores com `Math.random()`, re-sorteando a cada render. `GET /metrics`, que calcula a série real, não tem chamadores. — `XpotDashboard.tsx:239-252` | Agora |
+| ✅ VND-14 | Alto | **O gráfico do dashboard mostra dados inventados.** “Visit Activity — Last 7 Days” gera os 6 dias anteriores com `Math.random()`, re-sorteando a cada render. `GET /metrics`, que calcula a série real, não tem chamadores. — `XpotDashboard.tsx:239-252` | ✅ feito |
 | VND-15 | Médio | **Nenhum relatório de conversão existe.** Sem taxa visita→oportunidade, ciclo de fechamento, motivo de perda ou desempenho por rep. Dados brutos já no banco. | Decidir |
 
 ### Cadastro comercial
@@ -92,16 +112,16 @@ Bloqueiam a refatoração: não faz sentido reestruturar sobre autorização que
 
 | ID | Sev | Item | Estado |
 |---|---|---|---|
-| SEG-01 | Alto | Qualquer conta autenticada vira vendedor ativo — sem convite nem aprovação. `middleware.ts:27-48` | Agora |
-| SEG-02 | Alto | Qualquer rep edita a tarefa de qualquer outro. `tasks.ts:41-49` | Agora |
-| SEG-03 | Alto | Qualquer rep edita a oportunidade de qualquer outro — e propaga ao CRM. `opportunities.ts:74-103` | Agora |
-| SEG-04 | Alto | Contatos de lead sem nenhuma verificação. `leads.ts:364-374` | Agora |
-| SEG-05 | Alto | Check-in aceita lead de outro rep, promove e sobrescreve `lastVisitAt`. `visits.ts:32-107` | Agora |
-| SEG-06 | Alto | Detalhe do lead vaza oportunidades e tarefas de outros reps. `leads.ts:176-192` | Agora |
-| SEG-07 | Alto | Manager pode se promover a admin via `upsertSalesRep`. `admin.ts:51-66` | Agora |
-| SEG-08 | Médio | Regra de “quem vê tudo” inconsistente entre rotas. `opportunities.ts:30`, `tasks.ts:18` | A fazer |
-| SEG-09 | Alto | Extrair autorização para middleware antes de refatorar — fecha a classe inteira, não os 5 casos. | A fazer |
-| SEG-10 | Baixo | Estado das credenciais impresso no log. `opportunities.ts:15,20` | A fazer |
+| ✅ SEG-01 | Alto | Qualquer conta autenticada vira vendedor ativo — sem convite nem aprovação. `middleware.ts:27-48` | ✅ feito |
+| ✅ SEG-02 | Alto | Qualquer rep edita a tarefa de qualquer outro. `tasks.ts:41-49` | ✅ feito |
+| ✅ SEG-03 | Alto | Qualquer rep edita a oportunidade de qualquer outro — e propaga ao CRM. `opportunities.ts:74-103` | ✅ feito |
+| ✅ SEG-04 | Alto | Contatos de lead sem nenhuma verificação. `leads.ts:364-374` | ✅ feito |
+| ✅ SEG-05 | Alto | Check-in aceita lead de outro rep, promove e sobrescreve `lastVisitAt`. `visits.ts:32-107` | ✅ feito |
+| ✅ SEG-06 | Alto | Detalhe do lead vaza oportunidades e tarefas de outros reps. `leads.ts:176-192` | ✅ feito |
+| ✅ SEG-07 | Alto | Manager pode se promover a admin via `upsertSalesRep`. `admin.ts:51-66` | ✅ feito |
+| ✅ SEG-08 | Médio | Regra de “quem vê tudo” inconsistente entre rotas. `opportunities.ts:30`, `tasks.ts:18` | ✅ feito |
+| ✅ SEG-09 | Alto | Extrair autorização para middleware antes de refatorar — fecha a classe inteira, não os 5 casos. | ✅ feito |
+| ✅ SEG-10 | Baixo | Estado das credenciais impresso no log. `opportunities.ts:15,20` | ✅ feito |
 
 ---
 
@@ -111,7 +131,7 @@ Bloqueiam a refatoração: não faz sentido reestruturar sobre autorização que
 |---|---|---|---|
 | PLT-01 | Médio | Bucket de storage nunca criado em produção (Vercel pula `ensureUploadBucket`). `api/index.ts:16-33` | A fazer |
 | PLT-02 | Médio | Limite de upload de 50 MB contra teto de 4,5 MB da Vercel. `app.ts:26-34` | A fazer |
-| PLT-03 | Médio | Pipeline de áudio síncrono dentro de 30 s (upload + Whisper + LLM). `visits.ts:214-320` | A fazer |
+| ✅ PLT-03 | Médio | Pipeline de áudio síncrono dentro de 30 s (upload + Whisper + LLM). `visits.ts:214-320` | ✅ feito |
 | PLT-04 | Médio | Nenhuma validação de ambiente no boot além de `DATABASE_URL`. `db.ts:9-13` | A fazer |
 | PLT-05 | Baixo | RLS depende de `BYPASSRLS` sem estar documentado. `migrations/0004, 0007` | A fazer |
 
@@ -119,10 +139,10 @@ Bloqueiam a refatoração: não faz sentido reestruturar sobre autorização que
 
 | ID | Sev | Item | Estado |
 |---|---|---|---|
-| DAT-01 | Médio | Excluir visita quebra em violação de FK (tarefas vinculadas). `storage.ts:594-597` | A fazer |
-| DAT-02 | Médio | Entrada do Xphere não é idempotente — retry duplica leads. `inbound.ts:30-73` | A fazer |
+| ✅ DAT-01 | Médio | Excluir visita quebra em violação de FK (tarefas vinculadas). `storage.ts:594-597` | ✅ feito |
+| ✅ DAT-02 | Médio | Entrada do Xphere não é idempotente — retry duplica leads. `inbound.ts:30-73` | ✅ feito |
 | DAT-03 | Médio | Configurações de check-in inalcançáveis pela aplicação. `storage.ts:155-163` | A fazer |
-| DAT-04 | Baixo | Check-in faz dois UPDATEs no lead, fora de transação. `visits.ts:97-104` | A fazer |
+| ✅ DAT-04 | Baixo | Check-in faz dois UPDATEs no lead, fora de transação. `visits.ts:97-104` | ✅ feito |
 | DAT-05 | Baixo | `upsertPrimaryLocation` não atualiza `updatedAt`. `storage.ts:427-448` | A fazer |
 | DAT-06 | Alto | Verificar o schema de produção contra o Drizzle — baseline antes de qualquer migration estrutural. | Agora |
 
@@ -140,8 +160,32 @@ Bloqueiam a refatoração: não faz sentido reestruturar sobre autorização que
 
 | ID | Sev | Item | Estado |
 |---|---|---|---|
-| DOC-01 | Médio | Testes de rota para os fluxos que a mudança vai tocar — hoje zero cobertura de rotas/auth/storage. | A fazer |
-| DOC-02 | Baixo | `.env.example` descreve arquitetura que não existe mais. `.env.example:1-7` | A fazer |
-| DOC-03 | Baixo | README desatualizado em números e referências. | A fazer |
-| DOC-04 | Baixo | Dois módulos de tipos concorrentes no cliente. `hooks/types.ts` | A fazer |
+| ✅ DOC-01 | Médio | Testes de rota para os fluxos que a mudança vai tocar — hoje zero cobertura de rotas/auth/storage. | ✅ feito |
+| ✅ DOC-02 | Baixo | `.env.example` descreve arquitetura que não existe mais. `.env.example:1-7` | ✅ feito |
+| ✅ DOC-03 | Baixo | README desatualizado em números e referências. | ✅ feito |
+| ✅ DOC-04 | Baixo | Dois módulos de tipos concorrentes no cliente. `hooks/types.ts` | ✅ feito |
 | DOC-05 | Baixo | Endpoints admin sem consumidor (`/admin/sync-events`, `/admin/ghl/pipelines`). | A fazer |
+
+
+---
+
+## Fora do backlog original — decisões pendentes
+
+Coisas que a execução revelou e que precisam de você:
+
+1. **Aplicar a migration 0009** no Supabase de produção. Sete tabelas novas, um
+   índice único em `xphere_ref` e o catálogo inicial. Idempotente.
+2. **Pipeline "Xpot Field Sales" no Xphere.** O espelho procura um pipeline com
+   esse nome e os estágios `Interested` e `Customer`. Sem eles o Xphere responde
+   `skipped: no_pipeline` — a venda fica registrada no Xpot e o espelho falha em
+   silêncio (visível em `sales_sync_events`). Crie-os no painel do Xphere.
+3. **Uma oportunidade por venda exige mudança no Xphere.** O `/api/v1/sync`
+   deduplica a oportunidade por `(org, source, external_id)` usando o id da
+   empresa, então cada loja tem uma oportunidade só. Hoje o espelho carrega o
+   relacionamento (total acumulado) e uma nota por venda. Para ter uma
+   oportunidade por venda, o endpoint precisa aceitar um `external_id` de
+   oportunidade — mudança pequena e aditiva, mas no repositório do Xphere.
+4. **Modelo de IA para a extração.** O configurado hoje é `gpt-4o-mini`. Para
+   números falados em português recomendo um modelo mais forte; trocável no
+   admin sem código.
+5. **Preços do catálogo inicial** são estimativas minhas — edite em Admin › Products.

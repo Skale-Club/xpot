@@ -8,7 +8,7 @@ import { useXpotShared } from "./useXpotShared";
 import { useXpotQueries } from "./useXpotQueries";
 import { useLeads } from "./useLeads";
 import { useVisits } from "./useVisits";
-import type { GooglePlaceResult, FullSalesLead, SalesLeadPayload, SalesVisitNote } from "./types";
+import type { GooglePlaceResult, FullSalesLead, SalesLeadPayload, SalesVisitNote } from "../types";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyMutation = ReturnType<typeof useMutation<any, any, any, any>>;

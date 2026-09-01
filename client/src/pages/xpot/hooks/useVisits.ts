@@ -4,7 +4,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useXpotShared } from "./useXpotShared";
 import { useXpotQueries } from "./useXpotQueries";
-import type { EnrichedSalesVisit } from "./types";
+import type { EnrichedSalesVisit } from "../types";
 
 export function useVisits() {
   const { toast } = useToast();

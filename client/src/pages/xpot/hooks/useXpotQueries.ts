@@ -6,7 +6,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { tabs } from "../utils";
 import { useXpotShared } from "./useXpotShared";
-import type { DashboardResponse, FullSalesLead, EnrichedSalesVisit, XpotMeResponse } from "./types";
+import type { DashboardResponse, FullSalesLead, EnrichedSalesVisit, XpotMeResponse } from "../types";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyMutation = ReturnType<typeof useMutation<any, any, any, any>>;

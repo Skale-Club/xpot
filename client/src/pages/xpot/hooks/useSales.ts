@@ -5,7 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useXpotShared } from "./useXpotShared";
 import { useXpotQueries } from "./useXpotQueries";
 import { useVisits } from "./useVisits";
-import type { SalesOpportunity, SalesTask } from "./types";
+import type { SalesOpportunity, SalesTask } from "../types";
 
 export function useSales() {
   const { toast } = useToast();

@@ -1,5 +1,5 @@
 // Auth schema — users + sessions (Express session store).
-// Shared with Skale Club via the same Postgres DB until Xpot migrates to its own Supabase project.
+// Xpot has its own dedicated Supabase project; nothing here is shared.
 
 import { sql } from "drizzle-orm";
 import { boolean, index, jsonb, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
@@ -17,7 +17,7 @@ export const sessions = pgTable(
   (table) => [index("IDX_session_expire").on(table.expire)]
 );
 
-// Supabase Auth users (read-only from Xpot's perspective — managed by skaleclub's auth flow)
+// Supabase Auth users, mirrored into this table on every server-side login.
 export const users = pgTable("users", {
   id: text("id").primaryKey().default(sql`gen_random_uuid()`),
   email: text("email").unique(),
