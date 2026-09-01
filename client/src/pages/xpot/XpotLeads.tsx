@@ -31,6 +31,9 @@ import { useToast } from "@/hooks/use-toast";
 import { usePlaceSearch } from "./usePlaceSearch";
 import { useXpotShared } from "./hooks/useXpotShared";
 import { apiRequest } from "@/lib/queryClient";
+import { DollarSign } from "lucide-react";
+import { LeadSalesPanel } from "./components/sales/LeadSalesPanel";
+import { SheetDialog } from "./components/sales/ui";
 import { Loader2 } from '@/components/ui/loader';
 import { GoogleLogo } from "@/components/ui/google-logo";
 import { parseAddress, findMatchingLead } from "./utils";
@@ -310,12 +313,13 @@ function AddCompanyDialog({
 // ─── Lead Card ────────────────────────────────────────────────────────────────
 
 function LeadCard({
-  lead, onEdit, onDelete, onCheckIn, onSyncGhl, onPromote, isSyncing, isProspect,
+  lead, onEdit, onDelete, onCheckIn, onSell, onSyncGhl, onPromote, isSyncing, isProspect,
 }: {
   lead: FullSalesLead;
   onEdit: () => void;
   onDelete: () => void;
   onCheckIn: () => void;
+  onSell: () => void;
   onSyncGhl?: () => void;
   onPromote?: () => void;
   isSyncing?: boolean;
@@ -355,6 +359,14 @@ function LeadCard({
             )}
             <button
               type="button"
+              title="Sales & consignment"
+              className="flex h-8 w-8 items-center justify-center rounded-xl text-white/40 transition-colors hover:bg-emerald-500/20 hover:text-emerald-400"
+              onClick={(e) => { e.stopPropagation(); onSell(); }}
+            >
+              <DollarSign className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
               title="Check in"
               className="flex h-8 w-8 items-center justify-center rounded-xl text-white/40 transition-colors hover:bg-blue-500/20 hover:text-blue-400"
               onClick={(e) => { e.stopPropagation(); onCheckIn(); }}
@@ -381,6 +393,8 @@ function LeadCard({
 export function XpotLeads() {
   const { setLocation } = useXpotQueries();
   const [tab, setTab] = useState<"leads" | "prospects">("leads");
+  // Selling from the company card, outside any visit — the second entry point.
+  const [salesLead, setSalesLead] = useState<FullSalesLead | null>(null);
   const [leadPendingDelete, setLeadPendingDelete] = useState<FullSalesLead | null>(null);
   const [editLead, setEditLead] = useState<FullSalesLead | null>(null);
   const [addOpen, setAddOpen] = useState(false);
@@ -562,11 +576,21 @@ export function XpotLeads() {
             onEdit={() => setEditLead(lead)}
             onDelete={() => setLeadPendingDelete(lead)}
             onCheckIn={() => setLocation(`/check-in?leadId=${lead.id}`)}
+            onSell={() => setSalesLead(lead)}
             onSyncGhl={() => handleSyncGhl(lead)}
             onPromote={() => handlePromote(lead)}
           />
         ))}
       </div>
+
+      {/* Sales & consignment for one company, with no visit attached. */}
+      <SheetDialog
+        open={Boolean(salesLead)}
+        onOpenChange={(o) => { if (!o) setSalesLead(null); }}
+        title={salesLead?.name ?? "Sales"}
+      >
+        {salesLead && <LeadSalesPanel leadId={salesLead.id} leadName={salesLead.name} compact />}
+      </SheetDialog>
 
       {/* Add dialog — shared, status-aware */}
       <AddCompanyDialog

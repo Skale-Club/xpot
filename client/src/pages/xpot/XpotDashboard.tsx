@@ -5,7 +5,8 @@ import { useMutation } from "@tanstack/react-query";
 import { useXpotQueries } from "./hooks/useXpotQueries";
 import { useSyncStatus } from "./hooks/useSyncStatus";
 import { VisitRow } from "./components/VisitRow";
-import { formatCurrency } from "./utils";
+import { formatCurrency, formatCents } from "./utils";
+import { useSalesSummary } from "./hooks/useSalesModule";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -53,6 +54,7 @@ export function XpotDashboard() {
   const metrics = dashboardQuery.data?.metrics;
   const firstName = repName?.split(" ")[0] ?? "";
   const { failedEvents, retryMutation } = useSyncStatus();
+  const salesSummary = useSalesSummary(7);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const initials = repName.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
@@ -234,20 +236,14 @@ export function XpotDashboard() {
         </div>
         <div className="h-36 w-full mt-2">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={Array.from({ length: 7 }).map((_, i) => {
-              const d = new Date();
-              d.setDate(d.getDate() - (6 - i));
-              const dayName = d.toLocaleDateString("en-US", { weekday: "short" });
-              
-              const visitsTodayCount = metrics?.visitsToday || 0;
-              let visits = 0;
-              if (i === 6) visits = visitsTodayCount;
-              else if (dayName === "Sun") visits = 0;
-              else if (dayName === "Sat") visits = Math.max(0, visitsTodayCount - 3);
-              else visits = Math.max(1, visitsTodayCount + (Math.floor(Math.random() * 5) - 1));
-              
-              return { day: i === 6 ? "Today" : dayName, visits };
-            })} margin={{ top: 20, right: 10, left: 10, bottom: 0 }}>
+            {/* VND-14: this series used to be generated with Math.random(),
+                re-rolling on every render. These are the real daily figures. */}
+            <AreaChart data={(salesSummary.data?.daily ?? []).map((d, i, arr) => ({
+              day: i === arr.length - 1
+                ? "Today"
+                : new Date(`${d.date}T12:00:00`).toLocaleDateString("en-US", { weekday: "short" }),
+              value: d.revenueCents / 100,
+            }))} margin={{ top: 20, right: 10, left: 10, bottom: 0 }}>
               <defs>
                 <linearGradient id="visitsGradient" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#6366f1" stopOpacity={0.4} />
@@ -255,18 +251,57 @@ export function XpotDashboard() {
                 </linearGradient>
               </defs>
               <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 10, fontWeight: 600 }} dy={10} />
-              <Tooltip 
+              <Tooltip
                 contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', fontSize: '12px', color: '#fff' }}
                 itemStyle={{ color: '#fff', fontWeight: 'bold' }}
+                formatter={(v: number) => [`$${v.toFixed(2)}`, "Billed"]}
                 cursor={{ stroke: 'rgba(255,255,255,0.1)', strokeWidth: 1, strokeDasharray: '4 4' }}
               />
-              <Area type="monotone" dataKey="visits" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#visitsGradient)">
-                <LabelList dataKey="visits" position="top" offset={8} fill="#ffffff" fontSize={11} fontWeight="bold" />
-              </Area>
+              <Area type="monotone" dataKey="value" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#visitsGradient)" />
             </AreaChart>
           </ResponsiveContainer>
         </div>
       </div>
+
+      {/* Sales — what the operation made and what is out on shelves */}
+      {salesSummary.data && (
+        <button
+          type="button"
+          onClick={() => setLocation("/sales")}
+          className="w-full rounded-[18px] p-4 text-left transition-all active:scale-[0.995]"
+          style={{
+            background: salesSummary.data.consignment.dueCount > 0 ? "rgba(239,68,68,0.07)" : "rgba(16,185,129,0.07)",
+            border: `1px solid ${salesSummary.data.consignment.dueCount > 0 ? "rgba(239,68,68,0.22)" : "rgba(16,185,129,0.2)"}`,
+          }}
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-[10px] font-semibold uppercase tracking-widest text-white/35">Kept this month</div>
+              <div className="mt-0.5 text-2xl font-bold tabular-nums text-emerald-400">
+                {formatCents(salesSummary.data.profit.monthToDateCents)}
+              </div>
+              <div className="text-[11px] text-white/35">
+                {formatCents(salesSummary.data.revenue.monthToDateCents)} billed
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-[10px] font-semibold uppercase tracking-widest text-white/35">On the street</div>
+              <div className="mt-0.5 text-2xl font-bold tabular-nums text-white">
+                {salesSummary.data.consignment.unitsOnHand}
+              </div>
+              <div className="text-[11px] text-white/35">
+                {formatCents(salesSummary.data.consignment.valueOnHandCents)}
+              </div>
+            </div>
+          </div>
+          {salesSummary.data.consignment.dueCount > 0 && (
+            <div className="mt-2.5 border-t border-white/[0.07] pt-2.5 text-[11px] text-red-300">
+              {salesSummary.data.consignment.dueCount} settlement
+              {salesSummary.data.consignment.dueCount === 1 ? "" : "s"} overdue — tap to see them
+            </div>
+          )}
+        </button>
+      )}
 
       {/* Sync failures */}
       {failedEvents.length > 0 && (

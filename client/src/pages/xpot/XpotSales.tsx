@@ -15,6 +15,8 @@ import { useLeads } from "./hooks/useLeads";
 import { useSales } from "./hooks/useSales";
 import { useXpotQueries } from "./hooks/useXpotQueries";
 import { formatCurrency, formatDateTime } from "./utils";
+import { SalesOverview } from "./components/sales/SalesOverview";
+import { SalesList, ConsignmentsList } from "./components/sales/SalesLists";
 import type { EnrichedSalesOpportunity } from "./types";
 
 const GLASS = {
@@ -166,7 +168,44 @@ function PipelinePicker({ pipelines, pipelineId, stageId, onPipelineChange, onSt
   );
 }
 
+type SalesTab = "overview" | "sales" | "consignments" | "pipeline";
+
+const SALES_TABS: { id: SalesTab; label: string }[] = [
+  { id: "overview", label: "Overview" },
+  { id: "sales", label: "Sales" },
+  { id: "consignments", label: "Stock" },
+  { id: "pipeline", label: "Pipeline" },
+];
+
 export function XpotSales() {
+  const [tab, setTab] = useState<SalesTab>("overview");
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-1 rounded-xl p-1"
+        style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}>
+        {SALES_TABS.map(({ id, label }) => (
+          <button key={id} type="button" onClick={() => setTab(id)}
+            className="relative flex-1 rounded-lg py-2 text-xs font-semibold transition-all"
+            style={tab === id
+              ? { background: "linear-gradient(135deg, rgba(59,130,246,0.3), rgba(99,102,241,0.3))", color: "white" }
+              : { color: "rgba(255,255,255,0.35)" }}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "overview" && <SalesOverview onGoToConsignments={() => setTab("consignments")} />}
+      {tab === "sales" && <SalesList />}
+      {tab === "consignments" && <ConsignmentsList />}
+      {tab === "pipeline" && <PipelineTab />}
+    </div>
+  );
+}
+
+// The original CRM pipeline (GoHighLevel opportunities + follow-up tasks),
+// moved into its own tab. Unchanged — its fate is a separate decision.
+function PipelineTab() {
   const { leadsQuery } = useLeads();
   const { xpotMeQuery } = useXpotQueries();
   const {

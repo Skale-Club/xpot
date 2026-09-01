@@ -39,6 +39,7 @@ import { InlineField } from "./components/InlineField";
 import { StatusPicker } from "./components/VisitStatus";
 import type { VisitStatus } from "./components/VisitStatus";
 import type { FullSalesLead, SalesLead } from "./types";
+import { LeadSalesPanel } from "./components/sales/LeadSalesPanel";
 
 function ActiveLeadInfo({ lead, onSaved }: { lead: SalesLead; onSaved: () => void }) {
   const { toast } = useToast();
@@ -496,6 +497,20 @@ export function XpotCheckIn() {
             <div className="text-center text-base font-semibold text-white">{`Lead #${activeVisit.leadId}`}</div>
           )}
         </div>
+
+        {/* Sales — the point of the visit. Everything created here is linked
+            to this visit, so a sale or a settlement carries its own evidence. */}
+        {activeVisit.lead && (
+          <div className="relative rounded-2xl p-4"
+            style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+            <LeadSalesPanel
+              leadId={activeVisit.lead.id}
+              leadName={activeVisit.lead.name}
+              visitId={activeVisit.id}
+              compact
+            />
+          </div>
+        )}
 
         {/* Voice recorder */}
         <VoiceRecorder
