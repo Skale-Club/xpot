@@ -40,6 +40,7 @@ import { StatusPicker } from "./components/VisitStatus";
 import type { VisitStatus } from "./components/VisitStatus";
 import type { FullSalesLead, SalesLead } from "./types";
 import { LeadSalesPanel } from "./components/sales/LeadSalesPanel";
+import { VisitActionsPanel } from "./components/sales/VisitActions";
 
 function ActiveLeadInfo({ lead, onSaved }: { lead: SalesLead; onSaved: () => void }) {
   const { toast } = useToast();
@@ -523,6 +524,9 @@ export function XpotCheckIn() {
             await uploadAudioMutation.mutateAsync({ audioData, durationSeconds } as any);
           }}
         />
+
+        {/* Proposals from the voice note — confirm before they are recorded. */}
+        <VisitActionsPanel visitId={activeVisit.id} onApplied={() => invalidateXpotData()} />
 
         <StatusPicker value={checkoutStatus} onChange={setCheckoutStatus} />
 

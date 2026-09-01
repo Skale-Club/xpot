@@ -123,19 +123,37 @@ export function useCheckIn() {
         audioData,
         durationSeconds: recordingTime,
       });
-      return response.json() as Promise<{
+      const uploaded = await response.json() as {
         note: SalesVisitNote;
         transcriptionAvailable: boolean;
-        analysisApplied: boolean;
-      }>;
+        readyToAnalyze: boolean;
+      };
+
+      // Step two, now a separate request: read the transcript against the
+      // catalog and this shop's stock, and propose what to record.
+      if (!uploaded.readyToAnalyze) return { ...uploaded, analysisApplied: false, actionCount: 0 };
+      try {
+        const analyzed = await apiRequest("POST", `/api/xpot/visits/${activeVisit.id}/analyze`, {});
+        const result = await analyzed.json() as { actions: unknown[] };
+        return { ...uploaded, analysisApplied: true, actionCount: result.actions?.length ?? 0 };
+      } catch {
+        // The note and its transcript are already saved; analysis can be
+        // retried without re-recording, so this is not a failed upload.
+        return { ...uploaded, analysisApplied: false, actionCount: 0 };
+      }
     },
     onSuccess: async (result) => {
+      const count = result?.actionCount ?? 0;
       toast({
-        title: result?.analysisApplied ? "Audio analyzed successfully" : "Audio uploaded successfully",
-        description: result?.analysisApplied
-          ? "The transcription was analyzed and the visit note was updated."
+        title: count > 0
+          ? `${count} action${count === 1 ? "" : "s"} detected`
+          : result?.analysisApplied
+            ? "Note analyzed"
+            : "Audio saved",
+        description: count > 0
+          ? "Check them below before they are recorded."
           : result?.transcriptionAvailable
-            ? "The audio was transcribed and saved."
+            ? "Transcribed and saved to the visit."
             : "The audio was saved.",
         variant: "success",
       });

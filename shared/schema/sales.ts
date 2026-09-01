@@ -632,3 +632,44 @@ export type InsertSalesSaleItem = typeof salesSaleItems.$inferInsert;
 export type SalesConsignmentMovement = typeof salesConsignmentMovements.$inferSelect;
 export type InsertSalesConsignmentMovement = typeof salesConsignmentMovements.$inferInsert;
 export type SalesConsignmentMovementType = typeof salesConsignmentMovementTypeEnum.enumValues[number];
+
+// ─── Voice-captured actions ──────────────────────────────────────────────────
+
+export const salesVisitActionTypeEnum = pgEnum("sales_visit_action_type", [
+  "deposit",
+  "settlement",
+  "sale",
+  "follow_up",
+]);
+
+export const salesVisitActionStatusEnum = pgEnum("sales_visit_action_status", [
+  "proposed",
+  "applied",
+  "dismissed",
+  "failed",
+]);
+
+export const salesVisitActions = pgTable("sales_visit_actions", {
+  id: serial("id").primaryKey(),
+  visitId: integer("visit_id").references(() => salesVisits.id, { onDelete: "cascade" }).notNull(),
+  leadId: integer("lead_id").references(() => salesLeads.id).notNull(),
+  repId: integer("rep_id").references(() => salesReps.id).notNull(),
+  type: salesVisitActionTypeEnum("type").notNull(),
+  status: salesVisitActionStatusEnum("status").notNull().default("proposed"),
+  payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default({}),
+  evidence: text("evidence"),
+  confidence: integer("confidence"),
+  resultRef: text("result_ref"),
+  error: text("error"),
+  appliedAt: timestamp("applied_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  visitIdx: index("sales_visit_actions_visit_idx").on(table.visitId),
+  statusIdx: index("sales_visit_actions_status_idx").on(table.status),
+}));
+
+export type SalesVisitAction = typeof salesVisitActions.$inferSelect;
+export type InsertSalesVisitAction = typeof salesVisitActions.$inferInsert;
+export type SalesVisitActionType = typeof salesVisitActionTypeEnum.enumValues[number];
+export type SalesVisitActionStatus = typeof salesVisitActionStatusEnum.enumValues[number];

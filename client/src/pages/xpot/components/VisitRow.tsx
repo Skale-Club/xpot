@@ -11,6 +11,7 @@ import { formatDateTime, formatDuration } from "../utils";
 import type { SalesLead, SalesVisitNote } from "../types";
 import { Trash2, Plus, X, Camera } from "lucide-react";
 import { LeadCardBody } from "./LeadCardBody";
+import { VisitActionsPanel } from "./sales/VisitActions";
 
 type VisitLike = {
   id: number;
@@ -125,9 +126,24 @@ function VisitDetail({ visit, onDelete }: { visit: VisitLike; onDelete: () => vo
       reader.readAsDataURL(audioBlob);
     });
     const response = await apiRequest("POST", `/api/xpot/visits/${visit.id}/audio`, { audioData, durationSeconds });
-    const result = await response.json() as { note: SalesVisitNote; transcriptionAvailable: boolean; analysisApplied: boolean };
-    toast({ variant: "success", title: result.analysisApplied ? "Audio analyzed" : "Audio note saved" });
+    const result = await response.json() as { note: SalesVisitNote; transcriptionAvailable: boolean; readyToAnalyze: boolean };
+
+    let detected = 0;
+    if (result.readyToAnalyze) {
+      try {
+        const analyzed = await apiRequest("POST", `/api/xpot/visits/${visit.id}/analyze`, {});
+        detected = ((await analyzed.json()) as { actions?: unknown[] }).actions?.length ?? 0;
+      } catch {
+        // Transcript is saved; analysis can be retried without re-recording.
+      }
+    }
+    toast({
+      variant: "success",
+      title: detected > 0 ? `${detected} action${detected === 1 ? "" : "s"} detected` : "Audio note saved",
+      description: detected > 0 ? "Review them below." : undefined,
+    });
     queryClient.invalidateQueries({ queryKey: ["/api/xpot/visits"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/xpot/visits", visit.id, "actions"] });
   }
 
   return (
@@ -295,6 +311,9 @@ function VisitDetail({ visit, onDelete }: { visit: VisitLike; onDelete: () => vo
           <p className="text-sm text-white/70 leading-relaxed">{visit.note.summary}</p>
         </div>
       ) : null}
+
+      {/* What the note asked us to record */}
+      <VisitActionsPanel visitId={visit.id} />
 
       {/* Voice recorder */}
       <div

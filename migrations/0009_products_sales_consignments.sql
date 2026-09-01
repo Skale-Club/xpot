@@ -233,3 +233,44 @@ SELECT p."id", 'Bulk 100+', 100, 450
 FROM "sales_products" p
 WHERE p."sku" = 'KEY-3D'
 ON CONFLICT ("product_id", "min_quantity") DO NOTHING;
+
+-- ── Voice-captured actions ───────────────────────────────────────────────────
+-- What the LLM understood from a visit's audio, as reviewable proposals. The
+-- rep confirms (or edits, or discards) before anything touches stock or money:
+-- Whisper hearing "thirteen" for "thirty" would otherwise become a wrong bill a
+-- month later. Each row keeps the sentence it came from, so a decision made in
+-- the field can be re-read afterwards.
+
+DO $$ BEGIN
+  CREATE TYPE "sales_visit_action_type" AS ENUM ('deposit', 'settlement', 'sale', 'follow_up');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+  CREATE TYPE "sales_visit_action_status" AS ENUM ('proposed', 'applied', 'dismissed', 'failed');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE TABLE IF NOT EXISTS "sales_visit_actions" (
+  "id" SERIAL PRIMARY KEY,
+  "visit_id" INTEGER NOT NULL REFERENCES "sales_visits"("id") ON DELETE CASCADE,
+  "lead_id" INTEGER NOT NULL REFERENCES "sales_leads"("id"),
+  "rep_id" INTEGER NOT NULL REFERENCES "sales_reps"("id"),
+  "type" "sales_visit_action_type" NOT NULL,
+  "status" "sales_visit_action_status" NOT NULL DEFAULT 'proposed',
+  -- What the model understood, in the shape the apply step needs. Editable by
+  -- the rep before applying, which is why it is jsonb and not columns.
+  "payload" JSONB NOT NULL DEFAULT '{}'::jsonb,
+  -- The sentence that produced it — shown under the proposal.
+  "evidence" TEXT,
+  "confidence" INTEGER,
+  -- What applying it created: "sale:12", "consignment:3".
+  "result_ref" TEXT,
+  "error" TEXT,
+  "applied_at" TIMESTAMP,
+  "created_at" TIMESTAMP DEFAULT NOW(),
+  "updated_at" TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS "sales_visit_actions_visit_idx" ON "sales_visit_actions" ("visit_id");
+CREATE INDEX IF NOT EXISTS "sales_visit_actions_status_idx" ON "sales_visit_actions" ("status");
+
+ALTER TABLE "sales_visit_actions" ENABLE ROW LEVEL SECURITY;
