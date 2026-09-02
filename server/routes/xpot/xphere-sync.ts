@@ -4,29 +4,25 @@
 // (Xtimator, XmartMenu, Xkedule) uses to project one of its tenants into the
 // caller org's CRM as Account + Contact + Opportunity + Note.
 //
-// ── A constraint worth knowing before reading further ────────────────────────
-// runCrmMirror dedups the opportunity on (org_id, external_source, external_id),
-// and the route passes company.id as BOTH the account key and the opportunity
-// key. One company therefore gets exactly ONE opportunity per source, forever.
-// That fits the app it was written for (Xtimator: one subscription lifecycle per
-// customer). It does not fit "every sale is its own deal": a second sale to the
-// same barbershop would overwrite the first, and using a per-sale id instead
-// would create a duplicate ACCOUNT for every sale, which is worse.
+// ── One opportunity per sale ──────────────────────────────────────────────────
+// runCrmMirror originally keyed the opportunity on company.id, so a company had
+// exactly one deal per source — the Xtimator shape. The Xphere branch
+// claude/xpot-mirror-per-sale adds an optional opportunity.external_id; with it
+// each field sale is its own won opportunity under the same account. Until that
+// ships, Xphere's schema strips the unknown key and this degrades to the old
+// one-per-company behaviour rather than failing.
 //
-// So, with the contract as it stands today, this module mirrors the RELATIONSHIP
-// and not the individual deal:
-//   • one opportunity per shop, carrying the running total and won once they buy
-//   • one note per sale or settlement, with the itemised detail — notes are not
-//     deduped upstream, so the timeline keeps every one of them
-// Per-sale opportunities need a small additive change on the Xphere side
-// (accepting an opportunity-level external_id); until then this is the honest
-// projection rather than a lossy one.
+// Interest converts. "He wants to know more, come back next week" opens ONE
+// opportunity per lead (key lead-<id>-interest). The first sale to that lead
+// takes over that same key — Interested → Customer, open → won — so the pipeline
+// shows one deal that progressed, not an abandoned open one beside a won one.
+// Later sales get their own key (sale-<id>).
 
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "../../db.js";
 import { storage } from "../../storage.js";
 import { salesStorage } from "../../storage-sales.js";
-import { salesSales, salesSaleItems, salesLeadLocations } from "#shared/schema.js";
+import { salesSales, salesSaleItems, salesLeadLocations, salesSyncEvents } from "#shared/schema.js";
 
 const money = (cents: number, currency: string) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: currency || "USD" }).format(cents / 100);
@@ -50,7 +46,7 @@ async function tenantFor(leadId: number) {
   };
 }
 
-/** Lifetime figures — the mirrored opportunity carries the relationship, not one deal. */
+/** Lifetime figures, for the interest opportunity's value and the customer check. */
 async function lifetimeFor(leadId: number) {
   const [row] = await db
     .select({
@@ -61,6 +57,26 @@ async function lifetimeFor(leadId: number) {
     .from(salesSales)
     .where(and(eq(salesSales.leadId, leadId), eq(salesSales.status, "completed")));
   return { totalCents: row?.totalCents ?? 0, count: row?.count ?? 0, currency: row?.currency ?? "USD" };
+}
+
+const interestKey = (leadId: number) => `lead-${leadId}-interest`
+
+/**
+ * True when an interest opportunity was mirrored for this lead and no sale has
+ * converted it yet — the first sale then takes its key instead of a new one.
+ */
+async function hasUnconvertedInterest(leadId: number): Promise<boolean> {
+  const rows = await db
+    .select({ entityType: salesSyncEvents.entityType, payload: salesSyncEvents.payload })
+    .from(salesSyncEvents)
+    .where(and(eq(salesSyncEvents.provider, "xphere"), eq(salesSyncEvents.status, "synced")));
+  let interest = false;
+  for (const r of rows) {
+    const p = (r.payload ?? {}) as Record<string, unknown>;
+    if (r.entityType === "sales_lead" && p.leadId === leadId && p.interest !== undefined) interest = true;
+    if (r.entityType === "sales_sale" && p.leadId === leadId && p.convertedInterest === true) return false;
+  }
+  return interest;
 }
 
 async function postMirror(
@@ -94,10 +110,7 @@ export async function syncSaleToXphere(saleId: number): Promise<Outcome> {
   if ("error" in tenant) return { synced: false, message: tenant.error };
   const { lead, apiUrl, apiKey } = tenant;
 
-  const [lifetime, locations] = await Promise.all([
-    lifetimeFor(lead.id),
-    db.select().from(salesLeadLocations).where(eq(salesLeadLocations.leadId, lead.id)).limit(1),
-  ]);
+  const locations = await db.select().from(salesLeadLocations).where(eq(salesLeadLocations.leadId, lead.id)).limit(1);
 
   const lines = sale.items
     .map((i) => `• ${i.quantity} × ${i.description} — ${money(i.totalCents, sale.sale.currency)}`)
@@ -108,6 +121,9 @@ export async function syncSaleToXphere(saleId: number): Promise<Outcome> {
     lines,
     sale.sale.notes ? `\n${sale.sale.notes}` : null,
   ].filter(Boolean).join("\n");
+
+  const convertsInterest = await hasUnconvertedInterest(lead.id);
+  const summary = sale.items.map((i) => `${i.quantity}× ${i.description}`).join(", ");
 
   const result = await postMirror(apiUrl, apiKey, {
     source: "xpot",
@@ -126,13 +142,13 @@ export async function syncSaleToXphere(saleId: number): Promise<Outcome> {
     },
     opportunity: {
       pipeline: "Xpot Field Sales",
-      // A shop that has bought is won. The value is the running total, because
-      // upstream keeps one opportunity per company (see the header note).
+      // This sale, as its own won deal — or the interest deal it converts.
+      external_id: convertsInterest ? interestKey(lead.id) : `sale-${sale.sale.id}`,
       stage: "Customer",
       status: "won",
-      value: lifetime.totalCents / 100,
+      value: sale.sale.totalCents / 100,
       currency: sale.sale.currency,
-      title: `${lead.name} — Field sales`,
+      title: `${lead.name} — ${summary}`.slice(0, 200),
     },
     note: { title: kind, content, dedup_id: `xpot-sale-${sale.sale.id}` },
   });
@@ -142,7 +158,7 @@ export async function syncSaleToXphere(saleId: number): Promise<Outcome> {
     entityType: "sales_sale",
     entityId: String(saleId),
     status: result.ok ? "synced" : "failed",
-    payload: { leadId: lead.id, totalCents: sale.sale.totalCents },
+    payload: { leadId: lead.id, totalCents: sale.sale.totalCents, convertedInterest: convertsInterest },
     lastError: result.ok ? null : result.message,
     lastAttemptAt: new Date(),
   });
@@ -190,14 +206,16 @@ export async function syncInterestToXphere(input: {
       website: lead.website ?? null,
       address: locations[0]?.addressLine1 ?? null,
     },
+    // A customer expressing new interest is a new prospective deal, not a
+    // reopening of what they already bought.
     opportunity: {
       pipeline: "Xpot Field Sales",
-      // Never walk a paying customer back to Interested.
-      stage: alreadyCustomer ? "Customer" : "Interested",
-      status: alreadyCustomer ? "won" : "open",
-      value: (alreadyCustomer ? lifetime.totalCents : (input.estimatedValueCents ?? 0)) / 100,
+      external_id: alreadyCustomer ? `${interestKey(lead.id)}-${Date.now()}` : interestKey(lead.id),
+      stage: "Interested",
+      status: "open",
+      value: (input.estimatedValueCents ?? 0) / 100,
       currency: lifetime.currency,
-      title: `${lead.name} — Field sales`,
+      title: `${lead.name} — ${input.interest ?? input.title}`.slice(0, 200),
     },
     note: { title: "Field visit — interest", content },
   });
@@ -207,7 +225,7 @@ export async function syncInterestToXphere(input: {
     entityType: "sales_lead",
     entityId: String(lead.id),
     status: result.ok ? "synced" : "failed",
-    payload: { interest: input.interest ?? null },
+    payload: { leadId: lead.id, interest: input.interest ?? null },
     lastError: result.ok ? null : result.message,
     lastAttemptAt: new Date(),
   });
