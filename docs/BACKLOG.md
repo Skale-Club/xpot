@@ -8,6 +8,10 @@
 > marcados ✅ com o commit. Suíte: 93 testes, typecheck limpo, build de produção
 > passando. **Pendente de você:** aplicar a migration `0009` no Supabase de
 > produção (`npm run migrate`) — não tenho conexão com o banco neste ambiente.
+>
+> **Não verificado por falta de acesso:** a extração por voz nunca rodou contra
+> um modelo real — o contrato e o parser estão testados com as saídas esperadas,
+> o prompt não. O primeiro áudio de verdade é o teste que falta.
 
 Registro do que está pendente no projeto. Cada item tem código estável (`VND-04`, `SEG-02`)
 para referência em conversa. Estados: **Agora** (bloqueia outras coisas) · **A fazer** ·
@@ -185,7 +189,16 @@ Coisas que a execução revelou e que precisam de você:
    relacionamento (total acumulado) e uma nota por venda. Para ter uma
    oportunidade por venda, o endpoint precisa aceitar um `external_id` de
    oportunidade — mudança pequena e aditiva, mas no repositório do Xphere.
-4. **Modelo de IA para a extração.** O configurado hoje é `gpt-4o-mini`. Para
+4. **Conta duplicada no Xphere — confirmado lendo o código, não é mais
+   hipótese.** O caminho antigo (`syncLeadToXphere` → `/api/v1/prospects`)
+   grava a conta com `source_id = lead.id`. O espelho novo (`/api/v1/sync`)
+   procura a conta por `external_source = 'xpot'` + `external_id = lead.id` e,
+   não achando, **cria outra**. Um lead que passou pelos dois caminhos vira
+   duas contas no CRM. Correção é no Xphere: o `/api/v1/prospects` gravar
+   também `external_source`/`external_id`, ou o `upsertAccount` do espelho
+   cair para `source_id` quando não achar pelo par externo. Até lá, as duas
+   contas coexistem; os dados não se perdem, só ficam separados.
+5. **Modelo de IA para a extração.** O configurado hoje é `gpt-4o-mini`. Para
    números falados em português recomendo um modelo mais forte; trocável no
    admin sem código.
-5. **Preços do catálogo inicial** são estimativas minhas — edite em Admin › Products.
+6. **Preços do catálogo inicial** são estimativas minhas — edite em Admin › Products.

@@ -160,7 +160,10 @@ export function SalesOverview({ onGoToConsignments }: { onGoToConsignments?: () 
                   </div>
                   <div className="shrink-0 text-right">
                     <div className="text-sm font-semibold tabular-nums text-white">{formatCents(p.revenueCents)}</div>
-                    <div className="text-[10px] tabular-nums text-emerald-400/70">{formatCents(p.profitCents)} kept</div>
+                    <div className="text-[10px] tabular-nums text-emerald-400/70">
+                      {formatCents(p.profitCents)} kept
+                      {p.quantity > 0 ? ` · ${formatCents(Math.round(p.profitCents / p.quantity))}/unit` : ""}
+                    </div>
                   </div>
                 </div>
               </div>

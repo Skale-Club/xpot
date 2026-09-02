@@ -521,7 +521,12 @@ export function XpotCheckIn() {
               reader.onloadend = () => resolve(reader.result as string);
               reader.readAsDataURL(audioBlob);
             });
-            await uploadAudioMutation.mutateAsync({ audioData, durationSeconds } as any);
+            const result = await uploadAudioMutation.mutateAsync({ audioData, durationSeconds } as any);
+            // Pre-select what the note said happened; the rep still confirms at
+            // check-out. "completed" is the default, so only a specific outcome
+            // moves the picker.
+            const heard = (result as { visitStatus?: string | null } | undefined)?.visitStatus;
+            if (heard && heard !== "completed") setCheckoutStatus(heard as VisitStatus);
           }}
         />
 

@@ -834,6 +834,27 @@ export async function leadSalesSnapshot(leadId: number): Promise<{
   };
 }
 
+/** Lifetime sold + units on the shelf for many leads at once (the Leads list). */
+export async function leadSalesBatch(leadIds: number[]): Promise<Map<number, { lifetimeCents: number; unitsOnShelf: number }>> {
+  const out = new Map<number, { lifetimeCents: number; unitsOnShelf: number }>();
+  if (!leadIds.length) return out;
+  const [sold, shelf] = await Promise.all([
+    db
+      .select({ leadId: salesSales.leadId, cents: sql<number>`coalesce(sum(${salesSales.totalCents}), 0)::int` })
+      .from(salesSales)
+      .where(and(inArray(salesSales.leadId, leadIds), eq(salesSales.status, "completed")))
+      .groupBy(salesSales.leadId),
+    db
+      .select({ leadId: salesConsignments.leadId, units: sql<number>`coalesce(sum(${salesConsignments.quantityOnHand}), 0)::int` })
+      .from(salesConsignments)
+      .where(and(inArray(salesConsignments.leadId, leadIds), eq(salesConsignments.status, "active")))
+      .groupBy(salesConsignments.leadId),
+  ]);
+  for (const r of sold) out.set(r.leadId, { lifetimeCents: r.cents, unitsOnShelf: 0 });
+  for (const r of shelf) out.set(r.leadId, { ...(out.get(r.leadId) ?? { lifetimeCents: 0, unitsOnShelf: 0 }), unitsOnShelf: r.units });
+  return out;
+}
+
 export const salesStorage = {
   listProducts,
   getProduct,
@@ -859,4 +880,5 @@ export const salesStorage = {
   closeConsignment,
   salesSummary,
   leadSalesSnapshot,
+  leadSalesBatch,
 };

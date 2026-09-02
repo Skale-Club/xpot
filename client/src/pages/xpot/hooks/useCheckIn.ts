@@ -131,15 +131,22 @@ export function useCheckIn() {
 
       // Step two, now a separate request: read the transcript against the
       // catalog and this shop's stock, and propose what to record.
-      if (!uploaded.readyToAnalyze) return { ...uploaded, analysisApplied: false, actionCount: 0 };
+      if (!uploaded.readyToAnalyze) return { ...uploaded, analysisApplied: false, actionCount: 0, visitStatus: null };
       try {
         const analyzed = await apiRequest("POST", `/api/xpot/visits/${activeVisit.id}/analyze`, {});
-        const result = await analyzed.json() as { actions: unknown[] };
-        return { ...uploaded, analysisApplied: true, actionCount: result.actions?.length ?? 0 };
+        const result = await analyzed.json() as { actions: unknown[]; visitStatus: string | null };
+        return {
+          ...uploaded,
+          analysisApplied: true,
+          actionCount: result.actions?.length ?? 0,
+          // The outcome the model heard ("nobody was there") — offered to the
+          // check-out picker, never applied on its own.
+          visitStatus: result.visitStatus ?? null,
+        };
       } catch {
         // The note and its transcript are already saved; analysis can be
         // retried without re-recording, so this is not a failed upload.
-        return { ...uploaded, analysisApplied: false, actionCount: 0 };
+        return { ...uploaded, analysisApplied: false, actionCount: 0, visitStatus: null };
       }
     },
     onSuccess: async (result) => {

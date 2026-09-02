@@ -14,7 +14,8 @@ import { useToast } from "@/hooks/use-toast";
 import type { SalesVisitAction } from "#shared/schema.js";
 import { describeAction, type VisitAction } from "#shared/visit-actions.js";
 import { centsToInput, inputToCents } from "../../utils";
-import { Chip, GhostButton, PrimaryButton, inputCls, inputStyle } from "./ui";
+import { useProducts } from "../../hooks/useSalesModule";
+import { Chip, GhostButton, PrimaryButton, Select, inputCls, inputStyle } from "./ui";
 
 const TYPE_TONE: Record<string, "blue" | "green" | "amber" | "purple"> = {
   deposit: "blue",
@@ -146,6 +147,11 @@ function ActionRow({
   const isApplied = action.status === "applied";
   const isFailed = action.status === "failed";
   const lowConfidence = action.confidence != null && action.confidence < 60;
+  // "Vendi um site" with no amount: the row asks for it before Record, rather
+  // than failing on apply.
+  const needsPrice = isProposed && payload.type === "sale"
+    && payload.items.some((i) => i.unitPriceCents == null && !i.productId);
+  const needsProduct = isProposed && payload.type === "deposit" && !payload.productId;
 
   return (
     <div className="rounded-xl px-3 py-2.5"
@@ -161,6 +167,8 @@ function ActionRow({
             {isApplied && <Chip tone="green">Recorded</Chip>}
             {action.status === "dismissed" && <Chip tone="neutral">Discarded</Chip>}
             {isProposed && lowConfidence && <Chip tone="amber">Check this</Chip>}
+            {needsPrice && <Chip tone="red">Needs a price</Chip>}
+            {needsProduct && <Chip tone="red">Pick the product</Chip>}
           </div>
           <div className={`mt-1 text-sm ${action.status === "dismissed" ? "text-white/40 line-through" : "text-white/90"}`}>
             {describeAction(payload)}
@@ -230,10 +238,28 @@ function ActionEditor({
   const num = (v: string) => (v.trim() === "" ? null : Math.max(0, Math.floor(Number(v) || 0)));
   const set = (k: string, v: string) => setDraft((d) => ({ ...d, [k]: v }));
 
+  // The model may have matched "site" to the wrong product, or none. The
+  // catalog is the rep's to correct.
+  const products = useProducts({ enabled: payload.type === "deposit" || payload.type === "sale" }).data ?? [];
+  const [productId, setProductId] = useState<string>(() =>
+    payload.type === "deposit" ? String(payload.productId ?? "")
+    : payload.type === "sale" ? String(payload.items[0]?.productId ?? "")
+    : "");
+  const productOptions = products
+    .filter((p) => payload.type !== "deposit" || p.consignable)
+    .map((p) => ({ value: String(p.id), label: p.name }));
+
   function build(): Record<string, unknown> {
+    const pickedId = productId ? Number(productId) : null;
+    const picked = products.find((p) => p.id === pickedId);
     switch (payload.type) {
       case "deposit":
-        return { quantity: num(draft.quantity) ?? payload.quantity, unitPriceCents: draft.unitPrice ? inputToCents(draft.unitPrice) : null };
+        return {
+          productId: pickedId,
+          productName: picked?.name ?? payload.productName,
+          quantity: num(draft.quantity) ?? payload.quantity,
+          unitPriceCents: draft.unitPrice ? inputToCents(draft.unitPrice) : null,
+        };
       case "settlement":
         return {
           soldQuantity: num(draft.soldQuantity),
@@ -243,7 +269,13 @@ function ActionEditor({
       case "sale":
         return {
           items: payload.items.map((item, i) => i === 0
-            ? { ...item, quantity: num(draft.quantity) ?? 1, unitPriceCents: inputToCents(draft.unitPrice) }
+            ? {
+                ...item,
+                productId: pickedId,
+                description: picked?.name ?? item.description,
+                quantity: num(draft.quantity) ?? 1,
+                unitPriceCents: draft.unitPrice ? inputToCents(draft.unitPrice) : (picked ? null : item.unitPriceCents ?? null),
+              }
             : item),
         };
       case "follow_up":
@@ -259,6 +291,17 @@ function ActionEditor({
 
   return (
     <div className="mt-2.5 space-y-2 border-t border-white/[0.08] pt-2.5">
+      {(payload.type === "deposit" || payload.type === "sale") && (
+        <label className="block space-y-1">
+          <span className="text-[9px] font-semibold uppercase tracking-widest text-white/35">Product</span>
+          <Select
+            value={productId}
+            onChange={setProductId}
+            placeholder={payload.type === "sale" ? "Custom item (keep description)" : "Pick a product"}
+            options={productOptions}
+          />
+        </label>
+      )}
       <div className={`grid gap-2 ${fields.length === 3 ? "grid-cols-3" : "grid-cols-2"}`}>
         {fields.map((f) => (
           <label key={f.key} className="block space-y-1">

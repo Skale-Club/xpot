@@ -4,6 +4,7 @@ import { storage } from "../../storage.js";
 import { requireXpotUser, ensureXpotRep, isManagerOrAdmin, loadAccessibleLead } from "./middleware.js";
 import { xpotLeadCreateSchema, xpotLeadUpdateSchema, xpotLeadContactCreateSchema } from "#shared/xpot.js";
 import { syncLeadToGhl, syncLeadToXphere } from "./helpers.js";
+import { salesStorage } from "../../storage-sales.js";
 
 export function createLeadsRouter() {
   const router = Router();
@@ -27,10 +28,11 @@ export function createLeadsRouter() {
     if (!leads.length) return res.json([]);
 
     const leadIds = leads.map((l) => l.id);
-    const [allLocations, allContacts, openOpportunitiesMap] = await Promise.all([
+    const [allLocations, allContacts, openOpportunitiesMap, salesByLead] = await Promise.all([
       storage.listSalesLeadLocationsBatch(leadIds),
       storage.listSalesLeadContactsBatch(leadIds),
       storage.countOpenOpportunitiesByLeadIds(leadIds),
+      salesStorage.leadSalesBatch(leadIds),
     ]);
 
     const locationsByLead = new Map<number, typeof allLocations>();
@@ -49,6 +51,9 @@ export function createLeadsRouter() {
       locations: locationsByLead.get(lead.id) ?? [],
       contacts: contactsByLead.get(lead.id) ?? [],
       openOpportunities: openOpportunitiesMap[lead.id] ?? 0,
+      // What the company card shows at a glance: sold here, and stock on their shelf.
+      salesLifetimeCents: salesByLead.get(lead.id)?.lifetimeCents ?? 0,
+      unitsOnShelf: salesByLead.get(lead.id)?.unitsOnShelf ?? 0,
     }));
 
     res.json(enriched);

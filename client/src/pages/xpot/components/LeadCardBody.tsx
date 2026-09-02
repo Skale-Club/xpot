@@ -1,4 +1,5 @@
-import { Building2, MapPinned } from "lucide-react";
+import { Building2, MapPinned, Package, Boxes } from "lucide-react";
+import { formatCents } from "../utils";
 
 type LeadLike = {
   name: string;
@@ -7,6 +8,8 @@ type LeadLike = {
   industry?: string | null;
   ghlContactId?: string | null;
   photos?: string[] | null;
+  salesLifetimeCents?: number;
+  unitsOnShelf?: number;
   locations?: {
     addressLine1?: string | null;
     city?: string | null;
@@ -107,6 +110,20 @@ export function LeadCardBody({
             {lead.industry && <span>{lead.industry}</span>}
           </div>
         </div>
+        {(lead.salesLifetimeCents || lead.unitsOnShelf) ? (
+          <div className="mt-1 flex flex-wrap items-center gap-x-2.5 text-[11px] font-medium">
+            {lead.salesLifetimeCents ? (
+              <span className="inline-flex items-center gap-1 text-emerald-400/80">
+                <Package className="h-3 w-3" /> {formatCents(lead.salesLifetimeCents)} sold
+              </span>
+            ) : null}
+            {lead.unitsOnShelf ? (
+              <span className="inline-flex items-center gap-1 text-indigo-300/80">
+                <Boxes className="h-3 w-3" /> {lead.unitsOnShelf} on shelf
+              </span>
+            ) : null}
+          </div>
+        ) : null}
         {subtitle && <div className="mt-1">{subtitle}</div>}
       </div>
 

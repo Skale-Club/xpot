@@ -28,6 +28,8 @@ export type FullSalesLead = SalesLead & {
   locations: SalesLeadLocation[];
   contacts: SalesLeadContact[];
   openOpportunities?: number;
+  salesLifetimeCents?: number;
+  unitsOnShelf?: number;
 };
 
 export type EnrichedSalesVisit = SalesVisit & {

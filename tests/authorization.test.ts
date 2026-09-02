@@ -79,6 +79,11 @@ const storage = {
 };
 
 vi.mock("../server/storage.js", () => ({ storage }));
+// leads.ts now enriches the list with sales totals; that module reaches db.ts,
+// which refuses to load without a database. None of these cases need it.
+vi.mock("../server/storage-sales.js", () => ({
+  salesStorage: { leadSalesBatch: vi.fn(async () => new Map()) },
+}));
 vi.mock("../server/integrations/ghl.js", () => ({ getGHLPipelines: vi.fn() }));
 vi.mock("../server/routes/xpot/helpers.js", () => ({
   // The sync helpers are fire-and-forget in the handlers; they only need to
