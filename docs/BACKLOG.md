@@ -1,6 +1,6 @@
 # Backlog Xpot
 
-**Rev. 2** · base `07f640d` · 49 itens · **21 concluídos** · foco: módulo de vendas
+**Rev. 3** · base `07f640d` · 49 itens · **30 concluídos** · foco: módulo de vendas
 
 > **Rev. 2 (execução):** o módulo de vendas foi construído — catálogo, venda
 > direta, consignação com acerto, captura por voz e espelho no Xphere — e a
@@ -74,7 +74,7 @@ mais tocada — sem mudar estágio, corrigir valor, marcar ganha/perdida ou arqu
 | ID | Sev | Item | Estado |
 |---|---|---|---|
 | ✅ VND-11 | Alto | **Mudar o desfecho depois do check-out não chega ao CRM.** `PATCH /visits/:id` grava só o status e não redispara `syncVisitToGhl`/`syncVisitToXphere`. — `visits.ts:173-183` | ✅ feito |
-| VND-12 | Médio | **Não dá para filtrar visitas pelos desfechos comerciais.** `sale_made`, `follow_up`, `no_answer`, `not_interested`, `came_back_later` são setáveis e não filtráveis. — `XpotVisits.tsx:43` | A fazer |
+| ✅ VND-12 | Médio | **Não dá para filtrar visitas pelos desfechos comerciais.** `sale_made`, `follow_up`, `no_answer`, `not_interested`, `came_back_later` são setáveis e não filtráveis. — `XpotVisits.tsx:43` | ✅ feito |
 | VND-13 | Baixo | **Dois conceitos de “hoje”.** Dashboard conta por `createdAt`, tela de visitas filtra por `checkedInAt`. — `dashboard.ts:25-32` | A fazer |
 
 ### Dashboard e relatórios
@@ -133,10 +133,10 @@ Bloqueiam a refatoração: não faz sentido reestruturar sobre autorização que
 
 | ID | Sev | Item | Estado |
 |---|---|---|---|
-| PLT-01 | Médio | Bucket de storage nunca criado em produção (Vercel pula `ensureUploadBucket`). `api/index.ts:16-33` | A fazer |
-| PLT-02 | Médio | Limite de upload de 50 MB contra teto de 4,5 MB da Vercel. `app.ts:26-34` | A fazer |
+| ✅ PLT-01 | Médio | Bucket de storage nunca criado em produção (Vercel pula `ensureUploadBucket`). `api/index.ts:16-33` | ✅ feito |
+| ✅ PLT-02 | Médio | Limite de upload de 50 MB contra teto de 4,5 MB da Vercel. `app.ts:26-34` | ✅ feito |
 | ✅ PLT-03 | Médio | Pipeline de áudio síncrono dentro de 30 s (upload + Whisper + LLM). `visits.ts:214-320` | ✅ feito |
-| PLT-04 | Médio | Nenhuma validação de ambiente no boot além de `DATABASE_URL`. `db.ts:9-13` | A fazer |
+| ✅ PLT-04 | Médio | Nenhuma validação de ambiente no boot além de `DATABASE_URL`. `db.ts:9-13` | ✅ feito |
 | PLT-05 | Baixo | RLS depende de `BYPASSRLS` sem estar documentado. `migrations/0004, 0007` | A fazer |
 
 ## DAT — Integridade de dados
@@ -147,7 +147,7 @@ Bloqueiam a refatoração: não faz sentido reestruturar sobre autorização que
 | ✅ DAT-02 | Médio | Entrada do Xphere não é idempotente — retry duplica leads. `inbound.ts:30-73` | ✅ feito |
 | DAT-03 | Médio | Configurações de check-in inalcançáveis pela aplicação. `storage.ts:155-163` | A fazer |
 | ✅ DAT-04 | Baixo | Check-in faz dois UPDATEs no lead, fora de transação. `visits.ts:97-104` | ✅ feito |
-| DAT-05 | Baixo | `upsertPrimaryLocation` não atualiza `updatedAt`. `storage.ts:427-448` | A fazer |
+| ✅ DAT-05 | Baixo | `upsertPrimaryLocation` não atualiza `updatedAt`. `storage.ts:427-448` | ✅ feito |
 | DAT-06 | Alto | Verificar o schema de produção contra o Drizzle — baseline antes de qualquer migration estrutural. | Agora |
 
 ## PRF — Performance
@@ -156,7 +156,7 @@ Bloqueiam a refatoração: não faz sentido reestruturar sobre autorização que
 |---|---|---|---|
 | PRF-01 | Médio | N+1 nas quatro telas principais; o batch correto já existe em `/leads`. `visits.ts:19-27` | A fazer |
 | PRF-02 | Médio | Nenhuma rota de listagem tem paginação — teto funcional, não só de desempenho. | A fazer |
-| PRF-03 | Médio | Sync carrega tabelas inteiras para achar uma linha; faltam `getSalesOpportunity/Task(id)`. | A fazer |
+| ✅ PRF-03 | Médio | Sync carrega tabelas inteiras para achar uma linha; faltam `getSalesOpportunity/Task(id)`. | ✅ feito |
 | PRF-04 | Médio | Flush de sincronização sem limite de concorrência. `sync.ts:29-33` | A fazer |
 | PRF-05 | Baixo | Cache do cliente permanente, invalidado à mão. `queryClient.ts:76-88` | A fazer |
 
@@ -168,7 +168,7 @@ Bloqueiam a refatoração: não faz sentido reestruturar sobre autorização que
 | ✅ DOC-02 | Baixo | `.env.example` descreve arquitetura que não existe mais. `.env.example:1-7` | ✅ feito |
 | ✅ DOC-03 | Baixo | README desatualizado em números e referências. | ✅ feito |
 | ✅ DOC-04 | Baixo | Dois módulos de tipos concorrentes no cliente. `hooks/types.ts` | ✅ feito |
-| DOC-05 | Baixo | Endpoints admin sem consumidor (`/admin/sync-events`, `/admin/ghl/pipelines`). | A fazer |
+| ✅ DOC-05 | Baixo | Endpoints admin sem consumidor (`/admin/sync-events`, `/admin/ghl/pipelines`). | ✅ feito |
 
 
 ---
@@ -183,21 +183,17 @@ Coisas que a execução revelou e que precisam de você:
    esse nome e os estágios `Interested` e `Customer`. Sem eles o Xphere responde
    `skipped: no_pipeline` — a venda fica registrada no Xpot e o espelho falha em
    silêncio (visível em `sales_sync_events`). Crie-os no painel do Xphere.
-3. **Uma oportunidade por venda exige mudança no Xphere.** O `/api/v1/sync`
-   deduplica a oportunidade por `(org, source, external_id)` usando o id da
-   empresa, então cada loja tem uma oportunidade só. Hoje o espelho carrega o
-   relacionamento (total acumulado) e uma nota por venda. Para ter uma
-   oportunidade por venda, o endpoint precisa aceitar um `external_id` de
-   oportunidade — mudança pequena e aditiva, mas no repositório do Xphere.
-4. **Conta duplicada no Xphere — confirmado lendo o código, não é mais
-   hipótese.** O caminho antigo (`syncLeadToXphere` → `/api/v1/prospects`)
-   grava a conta com `source_id = lead.id`. O espelho novo (`/api/v1/sync`)
-   procura a conta por `external_source = 'xpot'` + `external_id = lead.id` e,
-   não achando, **cria outra**. Um lead que passou pelos dois caminhos vira
-   duas contas no CRM. Correção é no Xphere: o `/api/v1/prospects` gravar
-   também `external_source`/`external_id`, ou o `upsertAccount` do espelho
-   cair para `source_id` quando não achar pelo par externo. Até lá, as duas
-   contas coexistem; os dados não se perdem, só ficam separados.
+3. ✅ **Uma oportunidade por venda** — resolvido nos dois lados. Xphere: branch
+   `claude/xpot-mirror-per-sale` adiciona `opportunity.external_id` opcional ao
+   `/api/v1/sync` (Xtimator/XmartMenu/Xkedule não mudam). Xpot: cada venda vira
+   uma oportunidade ganha própria; interesse abre uma por lead e a primeira
+   venda a converte. **Falta:** revisar e mesclar a branch do Xphere — não abri
+   PR porque você não pediu; a branch está no remoto.
+4. ✅ **Conta duplicada no Xphere** — resolvido na mesma branch, dos dois lados:
+   o espelho adota a conta criada via prospects (`source_type` + `source_id`) em
+   vez de criar outra, e o `/api/v1/prospects` passa a carimbar
+   `external_source`/`external_id` na inserção. Bônus: nota de venda em empresa
+   sem telefone/e-mail ia para o lixo (sem contato); agora vai na conta.
 5. **Modelo de IA para a extração.** O configurado hoje é `gpt-4o-mini`. Para
    números falados em português recomendo um modelo mais forte; trocável no
    admin sem código.
