@@ -40,7 +40,10 @@ export function XpotVisits() {
     setDayOffset(Math.min(0, diff));
   }, []);
 
-  const [statusFilter, setStatusFilter] = useState<"all" | "completed" | "in_progress" | "cancelled">("all");
+  // VND-12: the picker could set sale_made / follow_up / no_answer /
+  // not_interested / came_back_later, and none were filterable — a rep could
+  // not list where they sold or where they need to go back.
+  const [statusFilter, setStatusFilter] = useState<string>("all");
 
   const allVisits = visitsQuery.data || [];
 
@@ -85,13 +88,18 @@ export function XpotVisits() {
         </div>
 
         {viewMode === "all" ? (
-          <div className="flex justify-center gap-1.5">
+          <div className="flex gap-1.5 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none]">
             {([
-              { id: "all",         label: "All",         active: "rgba(99,102,241,0.25)",  border: "rgba(99,102,241,0.4)",  text: "white" },
-              { id: "completed",   label: "Completed",   active: "rgba(16,185,129,0.2)",   border: "rgba(16,185,129,0.4)",  text: "#34d399" },
-              { id: "in_progress", label: "In Progress", active: "rgba(59,130,246,0.2)",   border: "rgba(59,130,246,0.4)",  text: "#60a5fa" },
-              { id: "cancelled",   label: "Cancelled",   active: "rgba(239,68,68,0.2)",    border: "rgba(239,68,68,0.4)",   text: "#f87171" },
-            ] as const).map(({ id, label, active, border, text }) => (
+              { id: "all",             label: "All",          active: "rgba(99,102,241,0.25)",  border: "rgba(99,102,241,0.4)",  text: "white" },
+              { id: "sale_made",       label: "Sold",         active: "rgba(16,185,129,0.2)",   border: "rgba(16,185,129,0.4)",  text: "#34d399" },
+              { id: "follow_up",       label: "Follow up",    active: "rgba(167,139,250,0.2)",  border: "rgba(167,139,250,0.4)", text: "#c4b5fd" },
+              { id: "came_back_later", label: "Come back",    active: "rgba(251,191,36,0.2)",   border: "rgba(251,191,36,0.4)",  text: "#fde68a" },
+              { id: "no_answer",       label: "No answer",    active: "rgba(251,146,60,0.2)",   border: "rgba(251,146,60,0.4)",  text: "#fdba74" },
+              { id: "not_interested",  label: "Not interested", active: "rgba(248,113,113,0.2)", border: "rgba(248,113,113,0.4)", text: "#fca5a5" },
+              { id: "completed",       label: "Completed",    active: "rgba(56,189,248,0.2)",   border: "rgba(56,189,248,0.4)",  text: "#7dd3fc" },
+              { id: "in_progress",     label: "In progress",  active: "rgba(59,130,246,0.2)",   border: "rgba(59,130,246,0.4)",  text: "#60a5fa" },
+              { id: "cancelled",       label: "Cancelled",    active: "rgba(239,68,68,0.2)",    border: "rgba(239,68,68,0.4)",   text: "#f87171" },
+            ]).map(({ id, label, active, border, text }) => (
               <button
                 key={id}
                 type="button"

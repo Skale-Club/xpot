@@ -13,6 +13,9 @@ import type { GooglePlaceResult, FullSalesLead, SalesLeadPayload, SalesVisitNote
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyMutation = ReturnType<typeof useMutation<any, any, any, any>>;
 
+// Base64 adds a third; 3 MB raw stays under the platform's 4.5 MB request cap.
+const MAX_AUDIO_BYTES = 3 * 1024 * 1024;
+
 export function useCheckIn() {
   const { toast } = useToast();
   const { geoState, invalidateXpotData } = useXpotShared();
@@ -113,6 +116,9 @@ export function useCheckIn() {
   const uploadAudioMutation = useMutation({
     mutationFn: async () => {
       if (!audioBlob || !activeVisit?.id) return;
+      if (audioBlob.size > MAX_AUDIO_BYTES) {
+        throw new Error("That recording is too large to send. Keep voice notes under five minutes.");
+      }
       const reader = new FileReader();
       const audioData = await new Promise<string>((resolve) => {
         reader.onloadend = () => resolve(reader.result as string);
@@ -176,7 +182,12 @@ export function useCheckIn() {
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
+      const mediaRecorder = new MediaRecorder(stream, {
+        audioBitsPerSecond: 32_000,
+        ...(typeof MediaRecorder.isTypeSupported === "function" && MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+          ? { mimeType: "audio/webm;codecs=opus" }
+          : {}),
+      });
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
 

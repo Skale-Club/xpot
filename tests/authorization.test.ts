@@ -61,10 +61,12 @@ const storage = {
   listSalesTasks: vi.fn(async (filters: any = {}) =>
     store.tasks.filter((t) => (filters.repId ? t.repId === filters.repId : true)),
   ),
+  getSalesTask: vi.fn(async (id: number) => store.tasks.find((t) => t.id === id)),
   updateSalesTask: vi.fn(async (id: number, data: any) => ({ id, ...data })),
   listSalesOpportunities: vi.fn(async (filters: any = {}) =>
     store.opportunities.filter((o) => (filters.repId ? o.repId === filters.repId : true)),
   ),
+  getSalesOpportunity: vi.fn(async (id: number) => store.opportunities.find((o) => o.id === id)),
   updateSalesOpportunity: vi.fn(async (id: number, data: any) => ({ id, ...data })),
   listSalesVisits: vi.fn(async () => []),
   listSalesReps: vi.fn(async () => [...store.reps.values()]),

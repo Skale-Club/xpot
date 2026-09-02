@@ -66,7 +66,7 @@ export function createOpportunitiesRouter() {
     }
 
     res.status(201).json({
-      opportunity: (await storage.listSalesOpportunities()).find((item) => item.id === opportunity.id),
+      opportunity: await storage.getSalesOpportunity(opportunity.id),
       ghl: syncResult,
       message: syncMessage,
     });
@@ -83,7 +83,7 @@ export function createOpportunitiesRouter() {
     // SEG-03: no ownership check here meant any rep could rewrite another
     // rep's deal — value, stage, status — and the handler then pushed that
     // unauthorised edit straight to GoHighLevel.
-    const existing = (await storage.listSalesOpportunities()).find((o) => o.id === opportunityId);
+    const existing = await storage.getSalesOpportunity(opportunityId);
     if (!existing) {
       return res.status(404).json({ message: "Opportunity not found" });
     }
@@ -114,7 +114,7 @@ export function createOpportunitiesRouter() {
     }
 
     res.json({
-      opportunity: (await storage.listSalesOpportunities()).find((item) => item.id === opportunityId),
+      opportunity: await storage.getSalesOpportunity(opportunityId),
       ghl: syncResult,
     });
   });

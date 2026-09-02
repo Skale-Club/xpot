@@ -66,7 +66,12 @@ export function VoiceRecorder({
       analyserRef.current = analyser;
       animFrameRef.current = requestAnimationFrame(drawLoop);
 
-      const mediaRecorder = new MediaRecorder(stream);
+      const mediaRecorder = new MediaRecorder(stream, {
+        audioBitsPerSecond: 32_000,
+        ...(typeof MediaRecorder.isTypeSupported === "function" && MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+          ? { mimeType: "audio/webm;codecs=opus" }
+          : {}),
+      });
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
       mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };

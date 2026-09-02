@@ -129,9 +129,11 @@ export interface IStorage {
 
   // Opportunities + tasks
   listSalesOpportunities(filters?: { repId?: number; leadId?: number; status?: SalesOpportunityStatus }): Promise<SalesOpportunity[]>;
+  getSalesOpportunity(id: number): Promise<SalesOpportunity | undefined>;
   createSalesOpportunity(input: InsertSalesOpportunity): Promise<SalesOpportunity>;
   updateSalesOpportunity(id: number, input: Partial<InsertSalesOpportunity>): Promise<SalesOpportunity | undefined>;
   listSalesTasks(filters?: { repId?: number; status?: SalesTaskStatus }): Promise<SalesTask[]>;
+  getSalesTask(id: number): Promise<SalesTask | undefined>;
   createSalesTask(input: InsertSalesTask): Promise<SalesTask>;
   updateSalesTask(id: number, input: Partial<InsertSalesTask>): Promise<SalesTask | undefined>;
 
@@ -459,7 +461,7 @@ export class DatabaseStorage implements IStorage {
     if (existing.length > 0) {
       const [updated] = await db
         .update(salesLeadLocations)
-        .set({ ...data })
+        .set({ ...data, updatedAt: new Date() })
         .where(eq(salesLeadLocations.id, existing[0].id))
         .returning();
       return updated;
@@ -666,6 +668,11 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(salesOpportunitiesLocal).orderBy(desc(salesOpportunitiesLocal.updatedAt));
   }
 
+  async getSalesOpportunity(id: number): Promise<SalesOpportunity | undefined> {
+    const [row] = await db.select().from(salesOpportunitiesLocal).where(eq(salesOpportunitiesLocal.id, id));
+    return row;
+  }
+
   async createSalesOpportunity(input: InsertSalesOpportunity): Promise<SalesOpportunity> {
     const [created] = await db.insert(salesOpportunitiesLocal).values(input).returning();
     return created;
@@ -688,6 +695,11 @@ export class DatabaseStorage implements IStorage {
       return await db.select().from(salesTasks).where(and(...conditions)).orderBy(asc(salesTasks.dueAt), desc(salesTasks.createdAt));
     }
     return await db.select().from(salesTasks).orderBy(asc(salesTasks.dueAt), desc(salesTasks.createdAt));
+  }
+
+  async getSalesTask(id: number): Promise<SalesTask | undefined> {
+    const [row] = await db.select().from(salesTasks).where(eq(salesTasks.id, id));
+    return row;
   }
 
   async createSalesTask(input: InsertSalesTask): Promise<SalesTask> {

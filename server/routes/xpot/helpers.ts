@@ -148,7 +148,7 @@ export async function syncOpportunityToGhl(opportunityId: number) {
     return { synced: false, message: "GHL not configured" };
   }
 
-  const opportunity = (await storage.listSalesOpportunities()).find((item) => item.id === opportunityId);
+  const opportunity = await storage.getSalesOpportunity(opportunityId);
   if (!opportunity) {
     return { synced: false, message: "Opportunity not found" };
   }
@@ -208,7 +208,7 @@ export async function syncTaskToGhl(taskId: number) {
     return { synced: false, message: "GHL not configured" };
   }
 
-  const task = (await storage.listSalesTasks()).find((t) => t.id === taskId);
+  const task = await storage.getSalesTask(taskId);
   if (!task) {
     return { synced: false, message: "Task not found" };
   }

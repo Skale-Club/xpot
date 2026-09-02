@@ -51,7 +51,7 @@ export function createTasksRouter() {
 
     // SEG-02: this route used to patch by id with no ownership check — any rep
     // could retitle, reschedule or complete any other rep's task.
-    const existing = (await storage.listSalesTasks()).find((t) => t.id === taskId);
+    const existing = await storage.getSalesTask(taskId);
     if (!existing) {
       return res.status(404).json({ message: "Task not found" });
     }

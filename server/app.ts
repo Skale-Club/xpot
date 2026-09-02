@@ -20,18 +20,37 @@ export function log(message: string, source = "express") {
   console.log(`${formattedTime} [${source}] ${message}`);
 }
 
+/**
+ * PLT-04: only DATABASE_URL used to be checked; SESSION_SECRET was used with a
+ * non-null assertion and the Supabase keys failed on the first request that
+ * needed them, so a deploy with an incomplete environment came up green.
+ */
+export function assertRequiredEnv(env: NodeJS.ProcessEnv = process.env): void {
+  const required = ["SESSION_SECRET", "SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY"];
+  if (!env.DATABASE_URL && !env.POSTGRES_URL) required.unshift("DATABASE_URL (or POSTGRES_URL)");
+  const missing = required.filter((name) => name.startsWith("DATABASE_URL") || !env[name]);
+  if (missing.length) {
+    throw new Error(`Missing required environment: ${missing.join(", ")}`);
+  }
+}
+
 export async function createApp(): Promise<{ app: express.Express; httpServer: Server }> {
+  assertRequiredEnv();
   const app = express();
 
+  // PLT-02: 50 MB here was fiction — the serverless platform rejects bodies
+  // over 4.5 MB before this middleware runs. Voice notes are encoded at 32 kbps
+  // and capped at five minutes (~1.6 MB as base64), so 8 MB leaves room and
+  // still fails here, with a JSON error, rather than at the edge with none.
   app.use(
     express.json({
-      limit: "50mb",
+      limit: "8mb",
       verify: (req, _res, buf) => {
         req.rawBody = buf;
       },
     })
   );
-  app.use(express.urlencoded({ extended: false, limit: "50mb" }));
+  app.use(express.urlencoded({ extended: false, limit: "8mb" }));
 
   app.use((req, res, next) => {
     const start = Date.now();

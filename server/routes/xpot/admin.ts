@@ -3,7 +3,6 @@ import { z } from "zod";
 import { randomBytes } from "crypto";
 import { storage } from "../../storage.js";
 import { requireXpotManager } from "./middleware.js";
-import { getGHLPipelines } from "../../integrations/ghl.js";
 
 /** Platform admin: the only authority that may grant or change roles. */
 function isPlatformAdmin(actor: { user: { isAdmin: boolean }; rep: { role: string } }): boolean {
@@ -137,18 +136,22 @@ export function createAdminRouter() {
     res.json({ ...result, page, pageSize });
   });
 
-  router.get("/admin/ghl/pipelines", async (_req, res) => {
-    const integration = await storage.getIntegrationSettings("gohighlevel");
-    if (!integration?.isEnabled || !integration.apiKey || !integration.locationId) {
-      return res.status(400).json({ message: "GHL integration not configured" });
-    }
+  // ── App settings (DAT-03) ──
+  // updateSalesAppSettings existed in storage with no route calling it, so the
+  // geofence radius, the GPS requirement and manual override could only be
+  // changed by SQL. Manager-level, like the rest of this router.
 
-    const result = await getGHLPipelines(integration.apiKey, integration.locationId);
-    if (!result.success) {
-      return res.status(502).json({ message: result.message || "Failed to fetch pipelines" });
-    }
+  router.get("/admin/settings", async (_req, res) => {
+    res.json(await storage.getSalesAppSettings());
+  });
 
-    res.json(result);
+  router.put("/admin/settings", async (req, res) => {
+    const input = z.object({
+      checkInRequiresGps: z.boolean().optional(),
+      defaultGeofenceRadiusMeters: z.number().int().min(10).max(5000).optional(),
+      allowManualOverride: z.boolean().optional(),
+    }).parse(req.body);
+    res.json(await storage.updateSalesAppSettings(input));
   });
 
   // ── Xphere per-user config, managed by the admin across all reps ──

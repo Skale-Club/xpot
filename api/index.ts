@@ -8,6 +8,7 @@
 import "dotenv/config";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createApp } from "../server/app.js";
+import { ensureUploadBucket } from "../server/lib/supabase.js";
 import type express from "express";
 
 let app: express.Express | null = null;
@@ -17,7 +18,15 @@ async function getApp() {
   if (app) return app;
 
   if (!initPromise) {
-    initPromise = createApp()
+    // PLT-01: server/index.ts created the "uploads" bucket at boot; this
+    // entrypoint skipped it, so on Vercel every avatar, photo and voice note
+    // failed until someone made the bucket by hand. Once per cold start, and a
+    // failure here must not take the API down — uploads will report it.
+    const bucket = process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY
+      ? ensureUploadBucket().catch((err) => console.error("[boot] uploads bucket:", err))
+      : Promise.resolve();
+    initPromise = bucket
+      .then(() => createApp())
       .then((result) => {
         app = result.app;
         return app;

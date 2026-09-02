@@ -120,6 +120,10 @@ function VisitDetail({ visit, onDelete }: { visit: VisitLike; onDelete: () => vo
   }
 
   async function handleAudioUpload({ audioBlob, durationSeconds }: { audioBlob: Blob; durationSeconds: number }) {
+    if (audioBlob.size > 3 * 1024 * 1024) {
+      toast({ title: "Recording too large", description: "Keep voice notes under five minutes.", variant: "destructive" });
+      return;
+    }
     const reader = new FileReader();
     const audioData = await new Promise<string>((resolve) => {
       reader.onloadend = () => resolve(reader.result as string);
