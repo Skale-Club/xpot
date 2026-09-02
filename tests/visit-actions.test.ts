@@ -12,6 +12,7 @@ import {
   describeAction,
   extractJson,
   parseActions,
+  visitActionSchema,
   visitAnalysisSchema,
   type ActionContext,
   type SettlementAction,
@@ -183,5 +184,43 @@ describe("the analysis envelope", () => {
 
   it("defaults actions to empty so a note-only reply is still valid", () => {
     expect(visitAnalysisSchema.parse({ summary: "Ninguém no local" }).actions).toEqual([]);
+  });
+});
+
+describe("a hand-edited proposal goes through the same gate", () => {
+  // The edit route merged a free-form object into the stored payload and
+  // nothing re-checked it: validation only ever ran on the model's output. An
+  // edited row could carry a negative price or quantity into the apply step,
+  // which trusted it. Both the edit and the apply now parse against this
+  // contract, so these are the cases that must be refused either way.
+  const merge = (base: Record<string, unknown>, edit: Record<string, unknown>) =>
+    visitActionSchema.safeParse({ ...base, ...edit });
+
+  const deposit = { type: "deposit", productId: 1, quantity: 30, unitPriceCents: 500 };
+  const sale = { type: "sale", items: [{ description: "site", quantity: 1, unitPriceCents: 60000 }] };
+
+  it("accepts a plausible correction — thirty was really thirteen", () => {
+    const result = merge(deposit, { quantity: 13 });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data).toMatchObject({ quantity: 13 });
+  });
+
+  it("refuses a negative or zero quantity", () => {
+    expect(merge(deposit, { quantity: -500 }).success).toBe(false);
+    expect(merge(deposit, { quantity: 0 }).success).toBe(false);
+  });
+
+  it("refuses a negative price on a deposit or a sale line", () => {
+    expect(merge(deposit, { unitPriceCents: -100 }).success).toBe(false);
+    expect(merge(sale, { items: [{ description: "site", quantity: 1, unitPriceCents: -100 }] }).success).toBe(false);
+  });
+
+  it("refuses emptying a sale of its items", () => {
+    expect(merge(sale, { items: [] }).success).toBe(false);
+  });
+
+  it("refuses a settlement edited into saying nothing about the stock", () => {
+    const settlement = { type: "settlement", consignmentId: 7, soldQuantity: 10 };
+    expect(merge(settlement, { soldQuantity: null }).success).toBe(false);
   });
 });

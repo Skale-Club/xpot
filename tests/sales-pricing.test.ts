@@ -150,3 +150,42 @@ describe("profit — what we keep, not what the shop charges", () => {
     expect(t.profitCents).toBe(-400); // sold below cost: a real loss, reported as one
   });
 });
+
+describe("a restock must never silently reprice the shelf", () => {
+  // The bug this pins: runDeposit took a required unitPriceCents and let any
+  // truthy value win on a top-up. Every caller passes the catalog price, so
+  // "I left a hundred more" crossed the 100-unit tier and repriced the WHOLE
+  // shelf to $4.50 — including the 30 units already there under a $5 deal,
+  // which the next settlement would then bill at the lower price.
+  const tiers = [{ minQuantity: 100, unitPriceCents: 450 }];
+
+  it("the tier price is what a top-up would have been repriced to", () => {
+    expect(resolveUnitPriceCents(500, tiers, 100)).toBe(450);
+  });
+
+  it("the shelf is billed at one price, which is why repricing it is wrong", () => {
+    // 30 units left at $5, then 100 more added. If the restock repriced the
+    // agreement, settling all 130 would bill $585 instead of $650 — the shop
+    // gets a retroactive discount on stock it already held.
+    const atAgreed = computeSettlement({ onHand: 130, countedRemaining: 0, unitPriceCents: 500 });
+    const atRepriced = computeSettlement({ onHand: 130, countedRemaining: 0, unitPriceCents: 450 });
+    expect(atAgreed.amountCents).toBe(65000);
+    expect(atRepriced.amountCents).toBe(58500);
+    expect(atAgreed.amountCents - atRepriced.amountCents).toBe(6500);
+  });
+});
+
+describe("a one-off settlement price stays one-off", () => {
+  // xpotConsignmentSettleSchema documents unitPriceCents as "override the
+  // agreed price for this settlement only", but runSettlement was writing it
+  // back onto the agreement — so a single discount at the counter silently
+  // became the standing price for every cycle after it.
+  it("a discounted settlement bills less without changing what comes next", () => {
+    const discounted = computeSettlement({ onHand: 30, countedRemaining: 10, unitPriceCents: 400 });
+    expect(discounted.amountCents).toBe(8000); // 20 x $4.00, this time only
+
+    // Next cycle, same shelf, the agreed $5 still applies.
+    const nextCycle = computeSettlement({ onHand: 20, countedRemaining: 0, unitPriceCents: 500 });
+    expect(nextCycle.amountCents).toBe(10000);
+  });
+});

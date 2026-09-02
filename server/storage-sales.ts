@@ -5,7 +5,7 @@
 // transaction: the consignment's cached on-hand figure and the movement ledger
 // must never disagree.
 
-import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { db } from "./db.js";
 import {
   salesLeads,
@@ -314,7 +314,11 @@ export async function runDeposit(input: {
   productId: number;
   repId: number;
   quantity: number;
+  /** Price for a NEW agreement. On a top-up the agreed price is kept unless
+   *  `repriceExisting` says otherwise — see the note in runDeposit. */
   unitPriceCents: number;
+  /** Explicit intent to renegotiate an open agreement's unit price. */
+  repriceExisting?: boolean;
   currency: string;
   settlementIntervalDays?: number;
   visitId?: number | null;
@@ -351,6 +355,10 @@ export async function runDeposit(input: {
     const onHandBefore = existing.quantityOnHand;
     const onHandAfter = onHandBefore + input.quantity;
 
+    const effectivePriceCents = opened || input.repriceExisting
+      ? input.unitPriceCents
+      : existing.unitPriceCents;
+
     const [movement] = await tx
       .insert(salesConsignmentMovements)
       .values({
@@ -361,7 +369,7 @@ export async function runDeposit(input: {
         quantity: input.quantity,
         onHandBefore,
         onHandAfter,
-        unitPriceCents: input.unitPriceCents,
+        unitPriceCents: effectivePriceCents,
         occurredAt: now,
         notes: input.notes ?? null,
       })
@@ -372,8 +380,12 @@ export async function runDeposit(input: {
       .set({
         quantityOnHand: onHandAfter,
         totalDeposited: existing.totalDeposited + input.quantity,
-        // A top-up on an existing agreement keeps its price unless one was given.
-        unitPriceCents: opened ? input.unitPriceCents : (input.unitPriceCents || existing.unitPriceCents),
+        // A top-up NEVER silently reprices. The shelf holds units left under the
+        // agreed price, and the settlement bills the whole shelf at one price —
+        // so letting a restock quantity cross a volume tier would retroactively
+        // change what the shop owes for stock it already has. Renegotiating is
+        // an explicit act.
+        unitPriceCents: opened || input.repriceExisting ? input.unitPriceCents : existing.unitPriceCents,
         nextVisitDueAt: existing.nextVisitDueAt ?? nextDueDate(existing.settlementIntervalDays, now),
         updatedAt: now,
       })
@@ -516,7 +528,10 @@ export async function runSettlement(input: {
         totalSold: current.totalSold + result.soldQuantity,
         totalDeposited: current.totalDeposited + restockQty,
         totalSettledCents: current.totalSettledCents + result.amountCents,
-        unitPriceCents,
+        // The per-settlement price is a one-off (a discount at the counter, a
+        // correction), documented as such on xpotConsignmentSettleSchema. It
+        // must not become the agreement's price — the next cycle's stock was
+        // left under the agreed one. Renegotiating is PATCH /consignments/:id.
         lastSettlementAt: now,
         nextVisitDueAt: nextDueDate(current.settlementIntervalDays, now),
         updatedAt: now,

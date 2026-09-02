@@ -10,7 +10,6 @@ import {
   xpotConsignmentAdjustSchema,
   xpotConsignmentUpdateSchema,
 } from "#shared/xpot.js";
-import { computeSettlement } from "#shared/pricing.js";
 import { syncSaleToXphere } from "./xphere-sync.js";
 
 // Consigned stock: physical goods left at an establishment, resold by them, and
@@ -85,6 +84,9 @@ export function createConsignmentsRouter() {
       repId: actor.rep.id,
       quantity: input.quantity,
       unitPriceCents: input.unitPriceCents ?? priced.unitPriceCents,
+      // Only an explicit price in the request renegotiates an open agreement;
+      // the catalog fallback above is for opening a new one.
+      repriceExisting: input.unitPriceCents !== undefined,
       currency: priced.product.currency,
       settlementIntervalDays: input.settlementIntervalDays,
       visitId: input.visitId ?? null,
@@ -96,24 +98,6 @@ export function createConsignmentsRouter() {
     }
 
     res.status(201).json({ ...(await salesStorage.getConsignment(result.consignment.id)), movement: result.movement, opened: result.opened });
-  });
-
-  // GET /consignments/:id/settle/preview?countedRemaining=N[&restockQuantity=M][&unitPriceCents=P]
-  // Same arithmetic the settle call will apply — for the dialog to show live.
-  router.get("/consignments/:id/settle/preview", async (req, res) => {
-    const row = await loadOwnConsignment(req, res, Number(req.params.id));
-    if (!row) return;
-    const counted = Math.max(0, Number(req.query.countedRemaining) || 0);
-    const restock = Math.max(0, Number(req.query.restockQuantity) || 0);
-    const unitPriceCents = req.query.unitPriceCents ? Number(req.query.unitPriceCents) : row.consignment.unitPriceCents;
-    const product = await salesStorage.getProduct(row.consignment.productId);
-    res.json(computeSettlement({
-      onHand: row.consignment.quantityOnHand,
-      countedRemaining: counted,
-      unitPriceCents,
-      unitCostCents: product?.costCents ?? 0,
-      restockQuantity: restock,
-    }));
   });
 
   // POST /consignments/:id/settle — the "acerto": count, bill, restock.

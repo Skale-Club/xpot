@@ -279,6 +279,24 @@ ALTER TABLE "sales_visit_actions" ENABLE ROW LEVEL SECURITY;
 -- POST /api/xpot/inbound/prospects always inserted, so a retry (or a resent
 -- batch) silently duplicated every lead. One lead per originating Xphere record.
 -- Partial: leads not created from Xphere carry a NULL ref and are unaffected.
+--
+-- The route was non-idempotent for its whole life, so this database may already
+-- hold duplicates. A bare CREATE UNIQUE INDEX would fail on them and roll back
+-- this entire migration, taking the six sales tables with it. Detach the
+-- duplicates first, keeping the OLDEST row of each group — that is the one any
+-- existing visit, sale or consignment already references. The later copies keep
+-- all their data and simply stop claiming the Xphere identity; they show up as
+-- ordinary leads for a human to merge or delete.
+
+UPDATE "sales_leads" SET "xphere_ref" = NULL
+WHERE "id" IN (
+  SELECT "id" FROM (
+    SELECT "id", ROW_NUMBER() OVER (PARTITION BY "xphere_ref" ORDER BY "id") AS rn
+    FROM "sales_leads"
+    WHERE "xphere_ref" IS NOT NULL
+  ) ranked
+  WHERE rn > 1
+);
 
 CREATE UNIQUE INDEX IF NOT EXISTS "sales_leads_xphere_ref_unique"
   ON "sales_leads" ("xphere_ref") WHERE "xphere_ref" IS NOT NULL;

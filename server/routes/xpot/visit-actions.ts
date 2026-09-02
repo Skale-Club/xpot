@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { db } from "../../db.js";
 import { storage } from "../../storage.js";
 import { salesStorage } from "../../storage-sales.js";
@@ -17,6 +17,7 @@ import {
   describeAction,
   extractJson,
   parseActions,
+  visitActionSchema,
   visitAnalysisSchema,
   type ActionContext,
   type VisitAction,
@@ -175,10 +176,26 @@ export function createVisitActionsRouter() {
       return res.status(400).json({ message: "This action was already applied." });
     }
 
+    // A hand-edited proposal goes through the same contract the model's output
+    // does. Without this a PATCH could put a negative price or quantity on the
+    // row and apply would trust it — the validation only ever ran on extraction.
+    let payload = action.payload;
+    if (input.payload) {
+      const merged = { ...action.payload, ...input.payload, type: action.type };
+      const parsed = visitActionSchema.safeParse(merged);
+      if (!parsed.success) {
+        return res.status(400).json({
+          message: "Those values do not make a valid action.",
+          errors: parsed.error.flatten(),
+        });
+      }
+      payload = parsed.data as unknown as Record<string, unknown>;
+    }
+
     const [updated] = await db
       .update(salesVisitActions)
       .set({
-        ...(input.payload ? { payload: { ...action.payload, ...input.payload } } : {}),
+        ...(input.payload ? { payload } : {}),
         ...(input.status ? { status: input.status } : {}),
         error: null,
         updatedAt: new Date(),
@@ -251,7 +268,11 @@ type ApplyCtx = { repId: number; visitId: number; leadId: number };
  * into the arguments those operations already take.
  */
 async function applyAction(row: SalesVisitAction, ctx: ApplyCtx): Promise<string> {
-  const action = row.payload as unknown as VisitAction;
+  const parsed = visitActionSchema.safeParse({ ...row.payload, type: row.type });
+  if (!parsed.success) {
+    throw new Error("This action's values are no longer valid. Edit it and try again.");
+  }
+  const action = parsed.data as VisitAction;
 
   switch (action.type) {
     case "deposit": {
@@ -266,6 +287,9 @@ async function applyAction(row: SalesVisitAction, ctx: ApplyCtx): Promise<string
         repId: ctx.repId,
         quantity: action.quantity,
         unitPriceCents: action.unitPriceCents ?? priced.unitPriceCents,
+        // A spoken "I left a hundred more" must not reprice the shelf just
+        // because the quantity crosses a volume tier.
+        repriceExisting: action.unitPriceCents != null,
         currency: priced.product.currency,
         visitId: ctx.visitId,
         notes: action.evidence ?? null,

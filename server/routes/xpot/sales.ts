@@ -142,7 +142,9 @@ export function createSalesRouter() {
     );
 
     // A sale is the strongest signal a lead can send — promote and mark customer.
-    if (lead.status === "prospect" || lead.status === "lead" || lead.status === "active") {
+    // Any status other than customer moves — including inactive: a shop that
+    // just bought is not inactive.
+    if (lead.status !== "customer") {
       await storage.updateSalesLead(lead.id, { status: "customer" });
     }
 
