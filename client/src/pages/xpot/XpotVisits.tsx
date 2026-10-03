@@ -2,6 +2,11 @@ import { useRef, useState, useCallback } from "react";
 import { ChevronLeft, ChevronRight, CalendarDays, RefreshCw } from "lucide-react";
 import { useVisits } from "./hooks/useVisits";
 import { VisitRow } from "./components/VisitRow";
+import { useT, type Translate } from "@/i18n";
+import { commonMessages } from "@/i18n/messages/common";
+import { visitsMessages } from "@/i18n/messages/visits";
+
+type VisitsT = Translate<(typeof visitsMessages)["en"]>;
 
 function isSameDay(a: Date, b: Date) {
   return a.getFullYear() === b.getFullYear() &&
@@ -9,13 +14,16 @@ function isSameDay(a: Date, b: Date) {
     a.getDate() === b.getDate();
 }
 
-function formatDayLabel(date: Date) {
-  const today = new Date();
-  const yesterday = new Date(today);
-  yesterday.setDate(today.getDate() - 1);
-  if (isSameDay(date, today)) return "Today";
-  if (isSameDay(date, yesterday)) return "Yesterday";
-  return date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+function isYesterday(date: Date) {
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  return isSameDay(date, yesterday);
+}
+
+function formatDayLabel(date: Date, t: VisitsT) {
+  if (isSameDay(date, new Date())) return t("today");
+  if (isYesterday(date)) return t("yesterday");
+  return date.toLocaleDateString(t.locale, { weekday: "short", month: "short", day: "numeric" });
 }
 
 function toLocalDateString(date: Date) {
@@ -23,6 +31,8 @@ function toLocalDateString(date: Date) {
 }
 
 export function XpotVisits() {
+  const t = useT(visitsMessages);
+  const tc = useT(commonMessages);
   const { visitsQuery } = useVisits();
   const [viewMode, setViewMode] = useState<"all" | "day">("all");
   const [dayOffset, setDayOffset] = useState(0);
@@ -76,9 +86,9 @@ export function XpotVisits() {
               }
             >
               {mode === "all" ? (
-                <>All Visits{allVisits.length > 0 && <span className="ml-1.5 rounded-full px-1.5 py-0.5 text-[10px]" style={{ background: "rgba(255,255,255,0.1)" }}>{allVisits.length}</span>}</>
+                <>{t("allVisits")}{allVisits.length > 0 && <span className="ml-1.5 rounded-full px-1.5 py-0.5 text-[10px]" style={{ background: "rgba(255,255,255,0.1)" }}>{allVisits.length}</span>}</>
               ) : (
-                <>By Day{visitsForDay.length > 0 && <span className="ml-1.5 rounded-full px-1.5 py-0.5 text-[10px]" style={{ background: "rgba(255,255,255,0.1)" }}>{visitsForDay.length}</span>}</>
+                <>{t("byDay")}{visitsForDay.length > 0 && <span className="ml-1.5 rounded-full px-1.5 py-0.5 text-[10px]" style={{ background: "rgba(255,255,255,0.1)" }}>{visitsForDay.length}</span>}</>
               )}
             </button>
           ))}
@@ -87,10 +97,10 @@ export function XpotVisits() {
         {viewMode === "all" ? (
           <div className="flex justify-center gap-1.5">
             {([
-              { id: "all",         label: "All",         active: "rgba(99,102,241,0.25)",  border: "rgba(99,102,241,0.4)",  text: "white" },
-              { id: "completed",   label: "Completed",   active: "rgba(16,185,129,0.2)",   border: "rgba(16,185,129,0.4)",  text: "#34d399" },
-              { id: "in_progress", label: "In Progress", active: "rgba(59,130,246,0.2)",   border: "rgba(59,130,246,0.4)",  text: "#60a5fa" },
-              { id: "cancelled",   label: "Cancelled",   active: "rgba(239,68,68,0.2)",    border: "rgba(239,68,68,0.4)",   text: "#f87171" },
+              { id: "all",         label: t("filterAll"),         active: "rgba(99,102,241,0.25)",  border: "rgba(99,102,241,0.4)",  text: "white" },
+              { id: "completed",   label: t("filterCompleted"),   active: "rgba(16,185,129,0.2)",   border: "rgba(16,185,129,0.4)",  text: "#34d399" },
+              { id: "in_progress", label: t("filterInProgress"), active: "rgba(59,130,246,0.2)",   border: "rgba(59,130,246,0.4)",  text: "#60a5fa" },
+              { id: "cancelled",   label: t("filterCancelled"),   active: "rgba(239,68,68,0.2)",    border: "rgba(239,68,68,0.4)",   text: "#f87171" },
             ] as const).map(({ id, label, active, border, text }) => (
               <button
                 key={id}
@@ -121,9 +131,9 @@ export function XpotVisits() {
               onClick={() => dateInputRef.current?.showPicker()}
               className="relative flex flex-col items-center gap-0.5"
             >
-              <span className="text-sm font-semibold text-white">{formatDayLabel(selectedDate)}</span>
+              <span className="text-sm font-semibold text-white">{formatDayLabel(selectedDate, t)}</span>
               <span className="text-[11px] text-white/35">
-                {visitsForDay.length} visit{visitsForDay.length !== 1 ? "s" : ""}
+                {t.plural("visitCount", visitsForDay.length)}
               </span>
               <input
                 ref={dateInputRef}
@@ -166,9 +176,9 @@ export function XpotVisits() {
             <CalendarDays className="h-5 w-5 text-red-400" />
           </div>
           <div>
-            <div className="text-sm font-medium text-white/70">Failed to load visits</div>
+            <div className="text-sm font-medium text-white/70">{t("loadFailed")}</div>
             <div className="mt-0.5 text-xs text-white/35">
-              {(visitsQuery.error as Error).message || "The visits request did not complete successfully."}
+              {(visitsQuery.error as Error).message || t("loadFailedDesc")}
             </div>
           </div>
           <button
@@ -178,7 +188,7 @@ export function XpotVisits() {
             style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)" }}
           >
             <RefreshCw className="h-4 w-4" />
-            Try Again
+            {tc("retry")}
           </button>
         </div>
       ) : null}
@@ -199,15 +209,19 @@ export function XpotVisits() {
           <div>
             <div className="text-sm font-medium text-white/60">
               {viewMode === "all"
-                ? "No visits registered yet"
-                : `No visits ${isToday ? "today" : `on ${formatDayLabel(selectedDate).toLowerCase()}`}`}
+                ? t("noVisitsYet")
+                : isToday
+                  ? t("noVisitsToday")
+                  : isYesterday(selectedDate)
+                    ? t("noVisitsYesterday")
+                    : t("noVisitsOn", { day: formatDayLabel(selectedDate, t).toLowerCase() })}
             </div>
             <div className="mt-0.5 text-xs text-white/30">
               {viewMode === "all"
-                ? "Go to Check-In to create the first visit"
+                ? t("firstVisitHint")
                 : isToday
-                  ? "Go to Check-In to start a visit"
-                  : "Nothing recorded for this day"}
+                  ? t("startVisitHint")
+                  : t("nothingThisDay")}
             </div>
           </div>
         </div>

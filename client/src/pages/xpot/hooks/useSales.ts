@@ -6,9 +6,12 @@ import { useXpotShared } from "./useXpotShared";
 import { useXpotQueries } from "./useXpotQueries";
 import { useVisits } from "./useVisits";
 import type { SalesOpportunity, SalesTask } from "./types";
+import { useT } from "@/i18n";
+import { salesMessages } from "@/i18n/messages/sales";
 
 export function useSales() {
   const { toast } = useToast();
+  const t = useT(salesMessages);
   const { invalidateXpotData } = useXpotShared();
   const { xpotMeQuery } = useXpotQueries();
   const { activeVisit } = useVisits();
@@ -33,12 +36,12 @@ export function useSales() {
       return response.json();
     },
     onSuccess: async () => {
-      toast({ title: "Opportunity created" });
+      toast({ title: t("oppCreated") });
       setOpportunityForm({ leadId: "", title: "", value: "", pipelineKey: "", stageKey: "" });
       await invalidateXpotData();
     },
     onError: (error: Error) => {
-      toast({ title: "Failed to create opportunity", description: error.message, variant: "destructive" });
+      toast({ title: t("oppCreateFailed"), description: error.message, variant: "destructive" });
     },
   });
 
@@ -54,12 +57,12 @@ export function useSales() {
       return response.json();
     },
     onSuccess: async () => {
-      toast({ title: "Task created" });
+      toast({ title: t("taskCreated") });
       setTaskForm({ title: "", dueAt: "" });
       await invalidateXpotData();
     },
     onError: (error: Error) => {
-      toast({ title: "Failed to create task", description: error.message, variant: "destructive" });
+      toast({ title: t("taskCreateFailed"), description: error.message, variant: "destructive" });
     },
   });
 
@@ -67,9 +70,9 @@ export function useSales() {
     try {
       await apiRequest("PATCH", `/api/xpot/tasks/${taskId}`, { status });
       await invalidateXpotData();
-      toast({ title: "Task updated" });
+      toast({ title: t("taskUpdated") });
     } catch (error: any) {
-      toast({ title: "Failed to update task", description: error.message, variant: "destructive" });
+      toast({ title: t("taskUpdateFailed"), description: error.message, variant: "destructive" });
     }
   };
 

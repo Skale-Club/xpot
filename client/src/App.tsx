@@ -18,11 +18,13 @@ import { TagsApp } from "./pages/tags/TagsApp";
 import { ModuleSwitch, rememberModule, useXpotModules } from "@/components/ModuleSwitch";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
+import { shellMessages } from "@/i18n/messages/shell";
 
 function XpotAppShell() {
   const { me, xpotMeQuery, isOnline, activeTab } = useXpotQueries();
   const [, setLocation] = useLocation();
   const t = useT(commonMessages);
+  const tShell = useT(shellMessages);
   const modules = useXpotModules();
   const visitsAllowed = modules.includes("visits");
   useVisits();
@@ -93,7 +95,7 @@ function XpotAppShell() {
             className="mx-auto flex max-w-md items-center gap-1 rounded-2xl border border-white/10 px-2 py-1.5"
             style={{ background: "rgba(15, 23, 42, 0.85)", backdropFilter: "blur(20px)" }}
           >
-            {tabs.map(({ id, label, icon: Icon }) => {
+            {tabs.map(({ id, labelKey, icon: Icon }) => {
               const isActive = activeTab === id;
               return (
                 <button
@@ -112,7 +114,7 @@ function XpotAppShell() {
                     />
                   )}
                   <Icon className={`relative h-[18px] w-[18px] transition-all ${isActive ? "drop-shadow-[0_0_6px_rgba(99,102,241,0.8)]" : ""}`} />
-                  <span className="relative truncate">{label}</span>
+                  <span className="relative truncate">{tShell(labelKey)}</span>
                 </button>
               );
             })}

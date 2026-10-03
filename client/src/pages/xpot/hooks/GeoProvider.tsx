@@ -1,4 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode, type Dispatch, type SetStateAction } from "react";
+import { translate } from "@/i18n";
+import { checkinMessages } from "@/i18n/messages/checkin";
 import type { GeoState } from "./types";
 
 // "unknown" = the Permissions API could not tell us (older Safari); we only
@@ -25,7 +27,7 @@ export function GeoProvider({ children }: { children: ReactNode }) {
 
   const loadCurrentLocation = useCallback(async () => {
     if (!navigator.geolocation) {
-      setGeoState({ error: "Geolocation is not supported on this device." });
+      setGeoState({ error: translate(checkinMessages, "geoUnsupported") });
       setPermission("denied");
       return;
     }

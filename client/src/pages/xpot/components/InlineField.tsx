@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { ExternalLink, Phone, Mail, MapPinned } from "lucide-react";
+import { translate } from "@/i18n";
+import { leadsMessages } from "@/i18n/messages/leads";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -98,5 +100,5 @@ export function InlineField({ label, value, onSave, large, linkable, linkHref, v
 
 export function validateEmail(v: string): string | null {
   if (!v) return null; // campo vazio é permitido
-  return EMAIL_RE.test(v) ? null : "Invalid email address";
+  return EMAIL_RE.test(v) ? null : translate(leadsMessages, "invalidEmail");
 }

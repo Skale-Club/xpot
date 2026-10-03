@@ -11,6 +11,10 @@ import { formatDateTime, formatDuration } from "../utils";
 import type { SalesLead, SalesVisitNote } from "../types";
 import { Trash2, Plus, X, Camera } from "lucide-react";
 import { LeadCardBody } from "./LeadCardBody";
+import { useT } from "@/i18n";
+import { commonMessages } from "@/i18n/messages/common";
+import { leadsMessages } from "@/i18n/messages/leads";
+import { visitsMessages } from "@/i18n/messages/visits";
 
 type VisitLike = {
   id: number;
@@ -26,6 +30,8 @@ type VisitLike = {
 
 function VisitDetail({ visit, onDelete }: { visit: VisitLike; onDelete: () => void }) {
   const { toast } = useToast();
+  const t = useT(visitsMessages);
+  const tl = useT(leadsMessages);
   const [status, setStatus] = useState(visit.status);
   const [fields, setFields] = useState({
     name: visit.lead?.name || "",
@@ -57,9 +63,9 @@ function VisitDetail({ visit, onDelete }: { visit: VisitLike; onDelete: () => vo
       setPhotos((prev) => [result.photoUrl, ...prev]);
       queryClient.invalidateQueries({ queryKey: ["/api/xpot/visits"] });
       queryClient.invalidateQueries({ queryKey: ["/api/xpot/leads"] });
-      toast({ title: "Photo added", variant: "success" });
+      toast({ title: t("photoAdded"), variant: "success" });
     } catch (err: any) {
-      toast({ title: "Failed to upload photo", description: err.message, variant: "destructive" });
+      toast({ title: t("photoUploadFailed"), description: err.message, variant: "destructive" });
     } finally {
       setUploadingPhoto(false);
     }
@@ -70,18 +76,18 @@ function VisitDetail({ visit, onDelete }: { visit: VisitLike; onDelete: () => vo
     setPhotos((prev) => prev.filter((u) => u !== url));
     apiRequest("DELETE", `/api/xpot/leads/${visit.lead.id}/photos`, { photoUrl: url })
       .then(() => queryClient.invalidateQueries({ queryKey: ["/api/xpot/visits"] }))
-      .catch((err: Error) => toast({ title: "Failed to remove photo", description: err.message, variant: "destructive" }));
+      .catch((err: Error) => toast({ title: t("photoRemoveFailed"), description: err.message, variant: "destructive" }));
   }
 
   async function handleStatusChange(newStatus: VisitStatus) {
     setStatus(newStatus);
     try {
       await apiRequest("PATCH", `/api/xpot/visits/${visit.id}`, { status: newStatus });
-      toast({ title: "Status updated", variant: "success" });
+      toast({ title: t("statusUpdated"), variant: "success" });
       queryClient.invalidateQueries({ queryKey: ["/api/xpot/visits"] });
       queryClient.invalidateQueries({ queryKey: ["/api/xpot/dashboard"] });
     } catch (err: any) {
-      toast({ title: "Failed to update status", description: err.message, variant: "destructive" });
+      toast({ title: t("statusUpdateFailed"), description: err.message, variant: "destructive" });
     }
   }
 
@@ -90,11 +96,11 @@ function VisitDetail({ visit, onDelete }: { visit: VisitLike; onDelete: () => vo
     setFields((prev) => ({ ...prev, [key]: value }));
     apiRequest("PATCH", `/api/xpot/leads/${visit.lead!.id}`, { [key]: value || undefined })
       .then(() => {
-        toast({ title: "Saved", variant: "success" });
+        toast({ title: t("saved"), variant: "success" });
         queryClient.invalidateQueries({ queryKey: ["/api/xpot/visits"] });
         queryClient.invalidateQueries({ queryKey: ["/api/xpot/dashboard"] });
       })
-      .catch((err: Error) => toast({ title: "Failed to save", description: err.message, variant: "destructive" }));
+      .catch((err: Error) => toast({ title: t("saveFailed"), description: err.message, variant: "destructive" }));
   }
 
   function saveSocials(updated: { platform: string; url: string }[]) {
@@ -102,7 +108,7 @@ function VisitDetail({ visit, onDelete }: { visit: VisitLike; onDelete: () => vo
     setSocials(updated);
     apiRequest("PATCH", `/api/xpot/leads/${visit.lead.id}`, { socialUrls: updated })
       .then(() => queryClient.invalidateQueries({ queryKey: ["/api/xpot/visits"] }))
-      .catch((err: Error) => toast({ title: "Failed to save", description: err.message, variant: "destructive" }));
+      .catch((err: Error) => toast({ title: t("saveFailed"), description: err.message, variant: "destructive" }));
   }
 
   function saveLocation(value: string) {
@@ -111,11 +117,11 @@ function VisitDetail({ visit, onDelete }: { visit: VisitLike; onDelete: () => vo
     // but if we had a local 'locations' state we'd update it here.
     apiRequest("PATCH", `/api/xpot/leads/${visit.lead.id}/location`, { addressLine1: value, label: "Main" })
       .then(() => {
-        toast({ title: "Address saved", variant: "success" });
+        toast({ title: t("addressSaved"), variant: "success" });
         queryClient.invalidateQueries({ queryKey: ["/api/xpot/visits"] });
         queryClient.invalidateQueries({ queryKey: ["/api/xpot/dashboard"] });
       })
-      .catch((err: Error) => toast({ title: "Failed to save address", description: err.message, variant: "destructive" }));
+      .catch((err: Error) => toast({ title: t("addressSaveFailed"), description: err.message, variant: "destructive" }));
   }
 
   async function handleAudioUpload({ audioBlob, durationSeconds }: { audioBlob: Blob; durationSeconds: number }) {
@@ -126,7 +132,7 @@ function VisitDetail({ visit, onDelete }: { visit: VisitLike; onDelete: () => vo
     });
     const response = await apiRequest("POST", `/api/xpot/visits/${visit.id}/audio`, { audioData, durationSeconds });
     const result = await response.json() as { note: SalesVisitNote; transcriptionAvailable: boolean; analysisApplied: boolean };
-    toast({ variant: "success", title: result.analysisApplied ? "Audio analyzed" : "Audio note saved" });
+    toast({ variant: "success", title: result.analysisApplied ? t("audioAnalyzed") : t("audioSaved") });
     queryClient.invalidateQueries({ queryKey: ["/api/xpot/visits"] });
   }
 
@@ -148,10 +154,10 @@ function VisitDetail({ visit, onDelete }: { visit: VisitLike; onDelete: () => vo
       {visit.lead && (
         <div className="space-y-2.5">
           <InlineField label="" large value={fields.name} onSave={(v) => saveField("name", v)} />
-          <InlineField label="Phone" value={fields.phone} onSave={(v) => saveField("phone", v)} linkable linkHref={fields.phone ? `tel:${fields.phone}` : undefined} />
+          <InlineField label={tl("fieldPhone")} value={fields.phone} onSave={(v) => saveField("phone", v)} linkable linkHref={fields.phone ? `tel:${fields.phone}` : undefined} />
           
           <InlineField 
-            label="Address" 
+            label={tl("fieldAddress")} 
             value={visit.lead.locations?.[0]?.addressLine1 || ""} 
             onSave={(v) => saveLocation(v)} 
             linkable={!!visit.lead.locations?.[0]?.addressLine1} 
@@ -159,15 +165,15 @@ function VisitDetail({ visit, onDelete }: { visit: VisitLike; onDelete: () => vo
           />
 
           <div className="my-1.5 h-px bg-white/[0.04]" />
-          <InlineField label="Website" value={fields.website} onSave={(v) => saveField("website", v)} linkable />
-          <InlineField label="Email" value={fields.email} onSave={(v) => saveField("email", v)} linkable linkHref={fields.email ? `mailto:${fields.email}` : undefined} validate={validateEmail} />
-          <InlineField label="Industry" value={fields.industry} onSave={(v) => saveField("industry", v)} />
+          <InlineField label={tl("fieldWebsite")} value={fields.website} onSave={(v) => saveField("website", v)} linkable />
+          <InlineField label={tl("fieldEmail")} value={fields.email} onSave={(v) => saveField("email", v)} linkable linkHref={fields.email ? `mailto:${fields.email}` : undefined} validate={validateEmail} />
+          <InlineField label={tl("fieldIndustry")} value={fields.industry} onSave={(v) => saveField("industry", v)} />
 
           <div className="my-1.5 h-px bg-white/[0.04]" />
 
           {/* Social networks */}
           <div className="space-y-1.5">
-            <div className="text-[10px] font-semibold uppercase tracking-widest text-white/30">Social Networks</div>
+            <div className="text-[10px] font-semibold uppercase tracking-widest text-white/30">{t("socialNetworks")}</div>
             {socials.map((s, i) => (
               <div key={i} className="flex items-center gap-2">
                 <select
@@ -180,7 +186,7 @@ function VisitDetail({ visit, onDelete }: { visit: VisitLike; onDelete: () => vo
                   style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.09)" }}
                 >
                   {["instagram","linkedin","facebook","twitter","youtube","tiktok","other"].map((p) => (
-                    <option key={p} value={p} className="bg-[#0e1117] capitalize">{p.charAt(0).toUpperCase() + p.slice(1)}</option>
+                    <option key={p} value={p} className="bg-[#0e1117] capitalize">{p === "other" ? tl("socialOther") : p.charAt(0).toUpperCase() + p.slice(1)}</option>
                   ))}
                 </select>
                 <input
@@ -191,7 +197,7 @@ function VisitDetail({ visit, onDelete }: { visit: VisitLike; onDelete: () => vo
                   }}
                   onBlur={() => saveSocials(socials)}
                   onKeyDown={(e) => { if (e.key === "Enter") saveSocials(socials); }}
-                  placeholder="URL or handle"
+                  placeholder={tl("socialPlaceholder")}
                   className="flex-1 min-w-0 h-8 rounded-lg px-2 text-xs text-white/80 outline-none placeholder:text-white/25"
                   style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.09)" }}
                 />
@@ -209,7 +215,7 @@ function VisitDetail({ visit, onDelete }: { visit: VisitLike; onDelete: () => vo
               onClick={() => saveSocials([...socials, { platform: "instagram", url: "" }])}
               className="flex items-center gap-1.5 text-[11px] font-semibold text-indigo-400 hover:text-indigo-300 transition-colors pt-0.5"
             >
-              <Plus className="h-3 w-3" /> Add Social
+              <Plus className="h-3 w-3" /> {t("addSocial")}
             </button>
           </div>
 
@@ -217,11 +223,11 @@ function VisitDetail({ visit, onDelete }: { visit: VisitLike; onDelete: () => vo
 
           {/* Photos */}
           <div className="space-y-1.5">
-            <div className="text-[10px] font-semibold uppercase tracking-widest text-white/30">Photos</div>
+            <div className="text-[10px] font-semibold uppercase tracking-widest text-white/30">{t("photos")}</div>
             {photos.length > 0 && (
               <div className="space-y-2">
                 <div className="relative w-full aspect-video rounded-2xl overflow-hidden">
-                  <img src={photos[0]} alt="Cover" className="w-full h-full object-cover" />
+                  <img src={photos[0]} alt={t("coverAlt")} className="w-full h-full object-cover" />
                   <button
                     type="button"
                     onClick={() => handleRemovePhoto(photos[0])}
@@ -256,7 +262,7 @@ function VisitDetail({ visit, onDelete }: { visit: VisitLike; onDelete: () => vo
               style={{ border: "1.5px dashed rgba(255,255,255,0.1)" }}
             >
               <Camera className="h-3.5 w-3.5" />
-              {uploadingPhoto ? "Uploading..." : "Add photo"}
+              {uploadingPhoto ? t("uploading") : t("addPhoto")}
             </button>
           </div>
         </div>
@@ -272,15 +278,15 @@ function VisitDetail({ visit, onDelete }: { visit: VisitLike; onDelete: () => vo
         style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}
       >
         <div>
-          <div className="text-[10px] font-semibold uppercase tracking-widest text-white/30 mb-1">Check-in</div>
+          <div className="text-[10px] font-semibold uppercase tracking-widest text-white/30 mb-1">{t("checkIn")}</div>
           <div className="text-xs text-white/70">{formatDateTime(visit.checkedInAt)}</div>
         </div>
         <div>
-          <div className="text-[10px] font-semibold uppercase tracking-widest text-white/30 mb-1">Check-out</div>
+          <div className="text-[10px] font-semibold uppercase tracking-widest text-white/30 mb-1">{t("checkOut")}</div>
           <div className="text-xs text-white/70">{formatDateTime(visit.checkedOutAt)}</div>
         </div>
         <div>
-          <div className="text-[10px] font-semibold uppercase tracking-widest text-white/30 mb-1">Duration</div>
+          <div className="text-[10px] font-semibold uppercase tracking-widest text-white/30 mb-1">{t("duration")}</div>
           <div className="text-xs text-white/70">{formatDuration(visit.durationSeconds)}</div>
         </div>
       </div>
@@ -291,7 +297,7 @@ function VisitDetail({ visit, onDelete }: { visit: VisitLike; onDelete: () => vo
           className="rounded-2xl p-4"
           style={{ background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.2)" }}
         >
-          <div className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-indigo-400/70">AI Summary</div>
+          <div className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-indigo-400/70">{t("aiSummary")}</div>
           <p className="text-sm text-white/70 leading-relaxed">{visit.note.summary}</p>
         </div>
       ) : null}
@@ -317,7 +323,7 @@ function VisitDetail({ visit, onDelete }: { visit: VisitLike; onDelete: () => vo
         style={{ border: "1px solid rgba(255,255,255,0.05)" }}
       >
         <Trash2 className="h-4 w-4" />
-        Delete visit
+        {t("deleteVisit")}
       </button>
       </div>
     </div>
@@ -328,16 +334,19 @@ export function VisitRow({ visit }: { visit: VisitLike }) {
   const [open, setOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const { toast } = useToast();
+  const t = useT(visitsMessages);
+  const tl = useT(leadsMessages);
+  const tc = useT(commonMessages);
 
   async function handleDelete() {
     try {
       await apiRequest("DELETE", `/api/xpot/visits/${visit.id}`);
-      toast({ title: "Visit deleted", variant: "success" });
+      toast({ title: t("visitDeleted"), variant: "success" });
       setOpen(false);
       queryClient.invalidateQueries({ queryKey: ["/api/xpot/visits"] });
       queryClient.invalidateQueries({ queryKey: ["/api/xpot/dashboard"] });
     } catch (err: any) {
-      toast({ title: "Failed to delete", description: err.message, variant: "destructive" });
+      toast({ title: t("deleteFailed"), description: err.message, variant: "destructive" });
     }
   }
 
@@ -355,7 +364,7 @@ export function VisitRow({ visit }: { visit: VisitLike }) {
       >
         <LeadCardBody
           lead={{
-            name: visit.lead?.name || `Lead #${visit.leadId}`,
+            name: visit.lead?.name || tl("leadNumber", { id: visit.leadId }),
             phone: visit.lead?.phone,
             website: visit.lead?.website,
             industry: visit.lead?.industry,
@@ -378,7 +387,7 @@ export function VisitRow({ visit }: { visit: VisitLike }) {
           style={{ background: "rgba(10,15,30,0.97)", backdropFilter: "blur(20px)" }}
         >
           <DialogHeader>
-            <DialogTitle className="sr-only">{visit.lead?.name || `Lead #${visit.leadId}`}</DialogTitle>
+            <DialogTitle className="sr-only">{visit.lead?.name || tl("leadNumber", { id: visit.leadId })}</DialogTitle>
           </DialogHeader>
           <VisitDetail visit={visit} onDelete={() => { setOpen(false); setConfirmDelete(true); }} />
         </DialogContent>
@@ -390,9 +399,9 @@ export function VisitRow({ visit }: { visit: VisitLike }) {
           style={{ background: "#0e1117", boxShadow: "0 24px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.07)" }}
         >
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-base font-semibold text-white">Delete visit?</AlertDialogTitle>
+            <AlertDialogTitle className="text-base font-semibold text-white">{t("deleteVisitTitle")}</AlertDialogTitle>
             <AlertDialogDescription className="text-sm text-white/45">
-              This will permanently delete this visit record and cannot be undone.
+              {t("deleteVisitDesc")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="mt-2 flex-row gap-2 sm:space-x-0">
@@ -400,14 +409,14 @@ export function VisitRow({ visit }: { visit: VisitLike }) {
               className="flex-1 rounded-xl border-0 text-sm font-medium text-white/60 hover:text-white transition-colors"
               style={{ background: "rgba(255,255,255,0.07)" }}
             >
-              Cancel
+              {tc("cancel")}
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
               className="flex-1 rounded-xl border-0 text-sm font-medium text-white"
               style={{ background: "rgba(239,68,68,0.85)" }}
             >
-              Delete
+              {t("delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

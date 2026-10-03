@@ -4,6 +4,8 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from '@/components/ui/loader';
+import { useT } from "@/i18n";
+import { checkinMessages } from "@/i18n/messages/checkin";
 
 const MAX_SECONDS = 300;
 const BAR_COUNT = 24;
@@ -20,6 +22,7 @@ export function VoiceRecorder({
   existingTranscription?: string | null;
 }) {
   const { toast } = useToast();
+  const t = useT(checkinMessages);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
@@ -84,7 +87,7 @@ export function VoiceRecorder({
         });
       }, 1000);
     } catch {
-      toast({ title: "Microphone access denied", variant: "destructive" });
+      toast({ title: t("micDenied"), variant: "destructive" });
     }
   }
 
@@ -109,7 +112,7 @@ export function VoiceRecorder({
       setAudioBlob(null);
       setRecordingTime(0);
     } catch (err: any) {
-      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+      toast({ title: t("uploadFailed"), description: err.message, variant: "destructive" });
     } finally {
       setIsUploading(false);
     }
@@ -130,7 +133,7 @@ export function VoiceRecorder({
           </div>
           {existingTranscription ? (
             <div className="rounded-xl p-3 text-sm text-white/60" style={{ background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.2)" }}>
-              <div className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-indigo-400/70">Transcription</div>
+              <div className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-indigo-400/70">{t("transcription")}</div>
               {existingTranscription}
             </div>
           ) : null}
@@ -182,18 +185,18 @@ export function VoiceRecorder({
             </div>
           ) : audioBlob ? (
             <div className="flex items-center gap-2">
-              <span className="text-sm text-indigo-400 flex-1">Recorded ({recordingTime}s)</span>
+              <span className="text-sm text-indigo-400 flex-1">{t("recordedSeconds", { seconds: recordingTime })}</span>
               <button
                 type="button"
                 className="text-xs text-white/30 hover:text-white/60 transition-colors"
                 onClick={() => { setAudioBlob(null); setRecordingTime(0); }}
               >
-                Clear
+                {t("clear")}
               </button>
             </div>
           ) : (
             <span className="text-sm text-white/30">
-              {existingAudio ? "Re-record voice note" : "Tap to record voice notes"}
+              {existingAudio ? t("reRecord") : t("tapToRecord")}
             </span>
           )}
         </div>
@@ -206,7 +209,7 @@ export function VoiceRecorder({
             className="rounded-xl px-3 py-1.5 text-sm font-medium text-white transition-all disabled:opacity-40"
             style={{ background: "linear-gradient(135deg, #3b82f6, #6366f1)" }}
           >
-            {isUploading ? <Loader2 className="inline h-4 w-4 animate-spin" /> : "Upload"}
+            {isUploading ? <Loader2 className="inline h-4 w-4 animate-spin" /> : t("upload")}
           </button>
         )}
       </div>
@@ -220,7 +223,7 @@ export function VoiceRecorder({
               style={{ width: `${progress}%`, background: "linear-gradient(90deg, #f87171, #ef4444)" }}
             />
           </div>
-          <div className="text-right text-[10px] text-white/25">{MAX_SECONDS - recordingTime}s left</div>
+          <div className="text-right text-[10px] text-white/25">{t("secondsLeft", { seconds: MAX_SECONDS - recordingTime })}</div>
         </div>
       )}
     </div>

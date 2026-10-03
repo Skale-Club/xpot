@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useT } from "@/i18n";
+import { checkinMessages } from "@/i18n/messages/checkin";
 import { usePlaceSearch } from "../usePlaceSearch";
 import { findMatchingLead, parseAddress } from "../utils";
 import { useXpotShared } from "./useXpotShared";
@@ -15,6 +17,7 @@ type AnyMutation = ReturnType<typeof useMutation<any, any, any, any>>;
 
 export function useCheckIn() {
   const { toast } = useToast();
+  const t = useT(checkinMessages);
   const { geoState, invalidateXpotData } = useXpotShared();
   const { xpotMeQuery, activeTab, isOnline } = useXpotQueries();
   const { leadsQuery, createLeadMutation } = useLeads();
@@ -79,34 +82,34 @@ export function useCheckIn() {
 
   const checkInMutation = useMutation({
     mutationFn: async (input: { leadId: number; lat?: number; lng?: number; gpsAccuracyMeters?: number | null }) => {
-      if (!isOnline) throw new Error("You are offline. Please check your connection.");
+      if (!isOnline) throw new Error(t("offlineError"));
       checkingInRef.current = true;
       const response = await apiRequest("POST", "/api/xpot/visits/check-in", input);
       return response.json();
     },
     onSuccess: async () => {
-      toast({ title: "Checked in successfully", variant: "success" });
+      toast({ title: t("checkedIn"), variant: "success" });
       await invalidateXpotData();
       setTimeout(() => { checkingInRef.current = false; }, 2000);
     },
     onError: (error: Error) => {
       checkingInRef.current = false;
-      toast({ title: "Check-in failed", description: error.message, variant: "destructive" });
+      toast({ title: t("checkInFailed"), description: error.message, variant: "destructive" });
     },
   });
 
   const saveNoteMutation = useMutation({
     mutationFn: async () => {
-      if (!activeVisit?.id) throw new Error("No active visit to save note for.");
+      if (!activeVisit?.id) throw new Error(t("noActiveVisitNote"));
       const response = await apiRequest("PATCH", `/api/xpot/visits/${activeVisit.id}/note`, visitNoteForm);
       return response.json();
     },
     onSuccess: async () => {
-      toast({ title: "Visit note saved", variant: "success" });
+      toast({ title: t("noteSaved"), variant: "success" });
       await invalidateXpotData();
     },
     onError: (error: Error) => {
-      toast({ title: "Failed to save note", description: error.message, variant: "destructive" });
+      toast({ title: t("noteSaveFailed"), description: error.message, variant: "destructive" });
     },
   });
 
@@ -131,12 +134,12 @@ export function useCheckIn() {
     },
     onSuccess: async (result) => {
       toast({
-        title: result?.analysisApplied ? "Audio analyzed successfully" : "Audio uploaded successfully",
+        title: result?.analysisApplied ? t("audioAnalyzed") : t("audioUploaded"),
         description: result?.analysisApplied
-          ? "The transcription was analyzed and the visit note was updated."
+          ? t("audioAnalyzedDesc")
           : result?.transcriptionAvailable
-            ? "The audio was transcribed and saved."
-            : "The audio was saved.",
+            ? t("audioTranscribedDesc")
+            : t("audioSavedDesc"),
         variant: "success",
       });
       setAudioBlob(null);
@@ -144,7 +147,7 @@ export function useCheckIn() {
       await invalidateXpotData();
     },
     onError: (error: Error) => {
-      toast({ title: "Failed to upload audio", description: error.message, variant: "destructive" });
+      toast({ title: t("audioUploadFailed"), description: error.message, variant: "destructive" });
     },
   });
 
@@ -178,7 +181,7 @@ export function useCheckIn() {
 
       (mediaRecorder as any).intervalId = interval;
     } catch (error) {
-      toast({ title: "Failed to start recording", description: "Please grant microphone permission", variant: "destructive" });
+      toast({ title: t("recordStartFailed"), description: t("grantMic"), variant: "destructive" });
     }
   };
 
@@ -215,7 +218,7 @@ export function useCheckIn() {
           geofenceRadiusMeters: 150,
         }).then(() => invalidateXpotData()).catch(() => {});
       }
-      toast({ title: "Local lead selected", description: existingLead.name, variant: "success" });
+      toast({ title: t("localLeadSelected"), description: existingLead.name, variant: "success" });
       return;
     }
 
@@ -243,7 +246,7 @@ export function useCheckIn() {
 
     setSelectedLeadId(createdLead.lead.id);
     setCheckInSearch(place.name);
-    toast({ title: "Business imported for check-in", description: place.name, variant: "success" });
+    toast({ title: t("businessImported"), description: place.name, variant: "success" });
     await invalidateXpotData();
   };
 
@@ -263,7 +266,7 @@ export function useCheckIn() {
     setSelectedLeadId(createdLead.lead.id);
     setCheckInSearch(createdLead.lead.name);
     setCheckInDropdownOpen(false);
-    toast({ title: "Company created", description: createdLead.lead.name, variant: "success" });
+    toast({ title: t("companyCreated"), description: createdLead.lead.name, variant: "success" });
     await invalidateXpotData();
   };
 

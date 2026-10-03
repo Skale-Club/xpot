@@ -6,6 +6,10 @@ import ReactCountryFlag from "react-country-flag";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
+import { LanguagePicker } from "@/components/LanguagePicker";
+import { useT } from "@/i18n";
+import { commonMessages } from "@/i18n/messages/common";
+import { settingsMessages } from "@/i18n/messages/settings";
 import type { XpotMeResponse } from "./types";
 
 type XphereConfig = {
@@ -35,6 +39,20 @@ const COUNTRIES = [
   { code: "CN", dial: "+86", name: "China" },
 ];
 
+/** Country name in the app's language; falls back to the English name. */
+function countryName(code: string, fallback: string, locale: string): string {
+  try {
+    return new Intl.DisplayNames([locale], { type: "region" }).of(code) ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+/** Translated role label; unknown roles show as stored. */
+function roleLabel(role: string, t: (key: "role_rep" | "role_manager" | "role_admin") => string): string {
+  return role === "rep" || role === "manager" || role === "admin" ? t(`role_${role}`) : role;
+}
+
 function parsePhone(phone: string): { dial: string; local: string } {
   for (const c of COUNTRIES) {
     if (phone.startsWith(c.dial)) return { dial: c.dial, local: phone.slice(c.dial.length).trim() };
@@ -62,6 +80,7 @@ function CountryPhoneInput({
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const t = useT(settingsMessages);
   const parsed = parsePhone(value);
   const active = COUNTRIES.find((c) => c.dial === parsed.dial) ?? COUNTRIES[1];
   const [local, setLocal] = useState(parsed.local);
@@ -125,7 +144,7 @@ function CountryPhoneInput({
             >
               <ReactCountryFlag countryCode={c.code} svg className="h-4 w-5 rounded-sm object-cover" />
               <span className="text-white/50 text-xs w-10 shrink-0">{c.dial}</span>
-              <span className="truncate">{c.name}</span>
+              <span className="truncate">{countryName(c.code, c.name, t.locale)}</span>
             </button>
           ))}
         </div>
@@ -136,6 +155,8 @@ function CountryPhoneInput({
 
 function XphereIntegrationSection() {
   const { toast } = useToast();
+  const t = useT(settingsMessages);
+  const tc = useT(commonMessages);
   const [copied, setCopied] = useState(false);
 
   const configQuery = useQuery<XphereConfig>({ queryKey: ["/api/xpot/xphere/config"], retry: false });
@@ -162,9 +183,9 @@ function XphereIntegrationSection() {
     onSuccess: (data) => {
       queryClient.setQueryData(["/api/xpot/xphere/config"], data);
       setApiKey("");
-      toast({ title: "Xphere integration saved" });
+      toast({ title: t("xphereSaved") });
     },
-    onError: (err: Error) => toast({ title: "Failed to save", description: err.message, variant: "destructive" }),
+    onError: (err: Error) => toast({ title: t("saveFailed"), description: err.message, variant: "destructive" }),
   });
 
   const rotateMutation = useMutation({
@@ -174,9 +195,9 @@ function XphereIntegrationSection() {
     },
     onSuccess: (data) => {
       queryClient.setQueryData(["/api/xpot/xphere/config"], data);
-      toast({ title: "Inbound key rotated" });
+      toast({ title: t("keyRotated") });
     },
-    onError: (err: Error) => toast({ title: "Failed to rotate key", description: err.message, variant: "destructive" }),
+    onError: (err: Error) => toast({ title: t("rotateFailed"), description: err.message, variant: "destructive" }),
   });
 
   const handleCopy = async () => {
@@ -188,7 +209,7 @@ function XphereIntegrationSection() {
 
   if (configQuery.isLoading) {
     return (
-      <Section title="Xphere Integration">
+      <Section title={t("xphereTitle")}>
         <div className="flex justify-center py-4">
           <Loader2 className="h-5 w-5 animate-spin text-white/30" />
         </div>
@@ -197,19 +218,19 @@ function XphereIntegrationSection() {
   }
 
   return (
-    <Section title="Xphere Integration">
+    <Section title={t("xphereTitle")}>
       <div className="flex items-start gap-2 text-xs text-white/40">
         <Webhook className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-        <span>Connect your Xpot account to Xphere so new leads sync automatically and field visits show up on the prospect timeline.</span>
+        <span>{t("xphereIntro")}</span>
       </div>
 
       <label className="flex cursor-pointer items-center justify-between rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-3">
-        <span className="text-sm font-medium text-white/80">Enabled</span>
+        <span className="text-sm font-medium text-white/80">{t("enabled")}</span>
         <Switch checked={isEnabled} onCheckedChange={setIsEnabled} />
       </label>
 
       {config?.inboundApiKey && (
-        <Field label="Inbound key (give this to Xphere)">
+        <Field label={t("inboundKey")}>
           <div className="flex items-center gap-2">
             <code className="block flex-1 break-all rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-3 text-xs text-white/60">
               {config.inboundApiKey}
@@ -218,7 +239,7 @@ function XphereIntegrationSection() {
               type="button"
               onClick={handleCopy}
               className="shrink-0 rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-white/60 transition-colors hover:bg-white/[0.08]"
-              title="Copy"
+              title={tc("copy")}
             >
               {copied ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
             </button>
@@ -226,18 +247,18 @@ function XphereIntegrationSection() {
         </Field>
       )}
 
-      <Field label="Outbound token (xph_...)">
+      <Field label={t("outboundToken")}>
         <input
           type="password"
           autoComplete="off"
           value={apiKey}
           onChange={(e) => setApiKey(e.target.value)}
-          placeholder={config?.apiKeySet ? "•••••••• (keep current)" : "xph_..."}
+          placeholder={config?.apiKeySet ? t("keepCurrentKey") : "xph_..."}
           className="w-full rounded-2xl border border-white/5 bg-white/[0.03] px-4 py-3 text-[15px] font-medium text-white placeholder-white/20 outline-none focus:border-indigo-500/50 focus:bg-white/[0.05] transition-all"
         />
       </Field>
 
-      <Field label="Xphere API URL">
+      <Field label={t("xphereApiUrl")}>
         <input
           type="text"
           value={apiUrl}
@@ -256,13 +277,13 @@ function XphereIntegrationSection() {
           style={{ background: "linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)", boxShadow: "0 8px 24px rgba(99,102,241,0.25)" }}
         >
           {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-          <span>{saveMutation.isPending ? "Saving…" : "Save"}</span>
+          <span>{saveMutation.isPending ? t("saving") : tc("save")}</span>
         </button>
         <button
           type="button"
           onClick={() => rotateMutation.mutate()}
           disabled={rotateMutation.isPending}
-          title="Rotate inbound key"
+          title={t("rotateKey")}
           className="flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3.5 text-sm font-medium text-white/70 transition-colors disabled:opacity-40 hover:bg-white/[0.06]"
         >
           {rotateMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
@@ -295,6 +316,8 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 export function XpotSettings() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const t = useT(settingsMessages);
+  const tc = useT(commonMessages);
   const [initialized, setInitialized] = useState(false);
 
   const meQuery = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
@@ -325,10 +348,10 @@ export function XpotSettings() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/xpot/me"] });
-      toast({ title: "Profile saved" });
+      toast({ title: t("profileSaved") });
     },
     onError: (err: Error) => {
-      toast({ title: "Failed to save profile", description: err.message, variant: "destructive" });
+      toast({ title: t("profileSaveFailed"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -338,13 +361,13 @@ export function XpotSettings() {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "Password changed" });
+      toast({ title: t("passwordChanged") });
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
     },
     onError: (err: Error) => {
-      toast({ title: "Failed to change password", description: err.message, variant: "destructive" });
+      toast({ title: t("passwordChangeFailed"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -358,7 +381,7 @@ export function XpotSettings() {
     if (lastName !== (me.user.lastName ?? "")) patch.lastName = lastName || null;
 
     if (Object.keys(patch).length === 0) {
-      toast({ title: "No changes to save" });
+      toast({ title: t("noChanges") });
       return;
     }
 
@@ -367,15 +390,15 @@ export function XpotSettings() {
 
   const handleChangePassword = async () => {
     if (!newPassword) {
-      toast({ title: "Enter a new password", variant: "destructive" });
+      toast({ title: t("passwordRequired"), variant: "destructive" });
       return;
     }
     if (newPassword.length < 8) {
-      toast({ title: "Password must be at least 8 characters", variant: "destructive" });
+      toast({ title: t("passwordTooShort"), variant: "destructive" });
       return;
     }
     if (newPassword !== confirmPassword) {
-      toast({ title: "Passwords do not match", variant: "destructive" });
+      toast({ title: t("passwordsMismatch"), variant: "destructive" });
       return;
     }
     passwordMutation.mutate({ currentPassword, newPassword });
@@ -407,7 +430,7 @@ export function XpotSettings() {
             <ArrowLeft className="h-4 w-4" />
           </button>
           <div>
-            <h1 className="text-xl font-bold tracking-tight">Settings</h1>
+            <h1 className="text-xl font-bold tracking-tight">{t("title")}</h1>
             <p className="text-xs text-white/40">
               {me ? [me.user.firstName, me.user.lastName].filter(Boolean).join(" ") || me.user.email : ""}
             </p>
@@ -415,41 +438,47 @@ export function XpotSettings() {
         </div>
 
         <div className="space-y-8">
+          {/* Language */}
+          <Section title={tc("language")}>
+            <p className="text-xs text-white/40">{t("languageHint")}</p>
+            <LanguagePicker />
+          </Section>
+
           {/* Profile */}
-          <Section title="Profile">
-            <Field label="First Name">
+          <Section title={t("sectionProfile")}>
+            <Field label={t("firstName")}>
               <input
                 type="text"
                 value={firstName}
                 onChange={(e) => setFirstName(e.target.value)}
-                placeholder="First name"
+                placeholder={t("firstNamePlaceholder")}
                 className="w-full rounded-2xl border border-white/5 bg-white/[0.03] px-4 py-3 text-[15px] font-medium text-white placeholder-white/20 outline-none focus:border-indigo-500/50 focus:bg-white/[0.05] transition-all"
               />
             </Field>
-            <Field label="Last Name">
+            <Field label={t("lastName")}>
               <input
                 type="text"
                 value={lastName}
                 onChange={(e) => setLastName(e.target.value)}
-                placeholder="Last name"
+                placeholder={t("lastNamePlaceholder")}
                 className="w-full rounded-2xl border border-white/5 bg-white/[0.03] px-4 py-3 text-[15px] font-medium text-white placeholder-white/20 outline-none focus:border-indigo-500/50 focus:bg-white/[0.05] transition-all"
               />
             </Field>
-            <Field label="Display Name">
+            <Field label={t("displayName")}>
               <input
                 type="text"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
-                placeholder="Display name"
+                placeholder={t("displayNamePlaceholder")}
                 className="w-full rounded-2xl border border-white/5 bg-white/[0.03] px-4 py-3 text-[15px] font-medium text-white placeholder-white/20 outline-none focus:border-indigo-500/50 focus:bg-white/[0.05] transition-all"
               />
             </Field>
-            <Field label="Email">
+            <Field label={t("email")}>
               <div className="rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-3 text-[15px] font-medium text-white/40">
                 {me?.user.email ?? "—"}
               </div>
             </Field>
-            <Field label="Phone">
+            <Field label={t("phone")}>
               <CountryPhoneInput value={phone} onChange={setPhone} />
             </Field>
             <button
@@ -460,19 +489,19 @@ export function XpotSettings() {
               style={{ background: "linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)", boxShadow: "0 8px 24px rgba(99,102,241,0.25)" }}
             >
               {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              <span>{isSaving ? "Saving…" : "Save Profile"}</span>
+              <span>{isSaving ? t("saving") : t("saveProfile")}</span>
             </button>
           </Section>
 
           {/* Password */}
-          <Section title="Security">
-            <Field label="Current Password">
+          <Section title={t("sectionSecurity")}>
+            <Field label={t("currentPassword")}>
               <div className="relative">
                 <input
                   type={showPwd ? "text" : "password"}
                   value={currentPassword}
                   onChange={(e) => setCurrentPassword(e.target.value)}
-                  placeholder="Enter current password"
+                  placeholder={t("currentPasswordPlaceholder")}
                   className="w-full rounded-2xl border border-white/5 bg-white/[0.03] px-4 py-3 pr-11 text-[15px] font-medium text-white placeholder-white/20 outline-none focus:border-indigo-500/50 focus:bg-white/[0.05] transition-all"
                 />
                 <button
@@ -484,26 +513,26 @@ export function XpotSettings() {
                 </button>
               </div>
             </Field>
-            <Field label="New Password">
+            <Field label={t("newPassword")}>
               <input
                 type="password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="At least 8 characters"
+                placeholder={t("newPasswordPlaceholder")}
                 className="w-full rounded-2xl border border-white/5 bg-white/[0.03] px-4 py-3 text-[15px] font-medium text-white placeholder-white/20 outline-none focus:border-indigo-500/50 focus:bg-white/[0.05] transition-all"
               />
             </Field>
-            <Field label="Confirm New Password">
+            <Field label={t("confirmPassword")}>
               <input
                 type="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Re-enter new password"
+                placeholder={t("confirmPasswordPlaceholder")}
                 className="w-full rounded-2xl border border-white/5 bg-white/[0.03] px-4 py-3 text-[15px] font-medium text-white placeholder-white/20 outline-none focus:border-indigo-500/50 focus:bg-white/[0.05] transition-all"
               />
             </Field>
             {newPassword && confirmPassword && newPassword !== confirmPassword && (
-              <p className="text-xs text-red-400">Passwords do not match</p>
+              <p className="text-xs text-red-400">{t("passwordsMismatch")}</p>
             )}
             <button
               type="button"
@@ -512,19 +541,19 @@ export function XpotSettings() {
               className="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] py-3.5 text-sm font-bold text-white transition-all disabled:opacity-40 active:scale-[0.98] hover:bg-white/[0.06] touch-manipulation"
             >
               {passwordMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              <span>{passwordMutation.isPending ? "Changing…" : "Change Password"}</span>
+              <span>{passwordMutation.isPending ? t("changing") : t("changePassword")}</span>
             </button>
           </Section>
 
           {/* Account Info */}
-          <Section title="Account Info">
+          <Section title={t("sectionAccount")}>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Role">
+              <Field label={t("role")}>
                 <div className="rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-3 text-[15px] font-medium text-white/40">
-                  {me?.rep.role ?? "—"}
+                  {me?.rep.role ? roleLabel(me.rep.role, t) : "—"}
                 </div>
               </Field>
-              <Field label="Team">
+              <Field label={t("team")}>
                 <div className="rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-3 text-[15px] font-medium text-white/40">
                   {me?.rep.team ?? "—"}
                 </div>

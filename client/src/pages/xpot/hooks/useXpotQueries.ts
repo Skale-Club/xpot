@@ -4,6 +4,8 @@ import { useLocation } from "wouter";
 import { getXpotSection } from "@/lib/xpot";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useT } from "@/i18n";
+import { checkinMessages } from "@/i18n/messages/checkin";
 import { tabs } from "../utils";
 import { useXpotShared } from "./useXpotShared";
 import type { DashboardResponse, FullSalesLead, EnrichedSalesVisit, XpotMeResponse } from "./types";
@@ -23,6 +25,7 @@ function getHttpStatus(error: unknown) {
 export function useXpotQueries() {
   const [pathname, setLocation] = useLocation();
   const { toast } = useToast();
+  const t = useT(checkinMessages);
   const { invalidateXpotData } = useXpotShared();
   const [isOnline, setIsOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
 
@@ -65,11 +68,17 @@ export function useXpotQueries() {
       return response.json();
     },
     onSuccess: async (data) => {
-      toast({ title: "Sync completed", description: `${data.leadsSynced} leads and ${data.opportunitiesSynced} opportunities synced.` });
+      toast({
+        title: t("syncCompleted"),
+        description: t("syncSummary", {
+          leads: t.plural("syncLeads", Number(data.leadsSynced) || 0),
+          opportunities: t.plural("syncOpportunities", Number(data.opportunitiesSynced) || 0),
+        }),
+      });
       await invalidateXpotData();
     },
     onError: (error: Error) => {
-      toast({ title: "Sync failed", description: error.message, variant: "destructive" });
+      toast({ title: t("syncFailed"), description: error.message, variant: "destructive" });
     },
   });
 
@@ -91,8 +100,8 @@ export function useXpotQueries() {
     ? me.rep.displayName
       || [me.user.firstName, me.user.lastName].filter(Boolean).join(" ").trim()
       || me.user.email
-      || "Xpot Rep"
-    : "Xpot Rep";
+      || t("defaultRepName")
+    : t("defaultRepName");
 
   return {
     xpotMeQuery,

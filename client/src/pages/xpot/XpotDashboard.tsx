@@ -8,31 +8,33 @@ import { VisitRow } from "./components/VisitRow";
 import { formatCurrency } from "./utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useT } from "@/i18n";
+import { dashboardMessages } from "@/i18n/messages/dashboard";
 
 const METRIC_CARDS = [
   {
-    label: "Visits Today",
+    labelKey: "metricVisitsToday" as const,
     key: "visitsToday" as const,
     icon: MapPinned,
     gradient: "linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%)",
     glow: "rgba(99,102,241,0.35)",
   },
   {
-    label: "Pipeline Value",
+    labelKey: "metricPipelineValue" as const,
     key: "pipelineValue" as const,
     icon: DollarSign,
     gradient: "linear-gradient(135deg, #10b981 0%, #06b6d4 100%)",
     glow: "rgba(16,185,129,0.35)",
   },
   {
-    label: "Opportunities",
+    labelKey: "metricOpportunities" as const,
     key: "openOpportunities" as const,
     icon: Target,
     gradient: "linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%)",
     glow: "rgba(139,92,246,0.35)",
   },
   {
-    label: "Pending Tasks",
+    labelKey: "metricPendingTasks" as const,
     key: "pendingTasks" as const,
     icon: Clock3,
     gradient: "linear-gradient(135deg, #f59e0b 0%, #ef4444 100%)",
@@ -40,16 +42,17 @@ const METRIC_CARDS = [
   },
 ] as const;
 
-function getGreeting() {
+function getGreetingKey() {
   const h = new Date().getHours();
-  if (h < 12) return "Good morning";
-  if (h < 18) return "Good afternoon";
-  return "Good evening";
+  if (h < 12) return "greetingMorning" as const;
+  if (h < 18) return "greetingAfternoon" as const;
+  return "greetingEvening" as const;
 }
 
 export function XpotDashboard() {
   const { dashboardQuery, repName, me, signOut, isOnline, setLocation } = useXpotQueries();
   const { toast } = useToast();
+  const t = useT(dashboardMessages);
   const metrics = dashboardQuery.data?.metrics;
   const firstName = repName?.split(" ")[0] ?? "";
   const { failedEvents, retryMutation } = useSyncStatus();
@@ -65,10 +68,10 @@ export function XpotDashboard() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/xpot/me"] });
-      toast({ title: "Photo updated" });
+      toast({ title: t("photoUpdated") });
     },
     onError: (err: Error) => {
-      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+      toast({ title: t("uploadFailed"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -131,10 +134,10 @@ export function XpotDashboard() {
 
           {/* Greeting block */}
           <div className="flex-1 min-w-0">
-            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-400/80 mb-1">{getGreeting()}</div>
+            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-400/80 mb-1">{t(getGreetingKey())}</div>
             <div className="text-[26px] font-extrabold text-white tracking-tight leading-none mb-1.5">{firstName} 👋</div>
             <div className="text-xs font-medium text-white/40">
-              {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+              {new Date().toLocaleDateString(t.locale, { weekday: "long", month: "long", day: "numeric" })}
             </div>
           </div>
         </div>
@@ -145,7 +148,7 @@ export function XpotDashboard() {
             <button
               type="button"
               onClick={() => setLocation("/admin/overview")}
-              title="Admin"
+              title={t("admin")}
               className="flex h-10 w-10 items-center justify-center rounded-[18px] bg-white/[0.03] text-white/30 transition-all hover:bg-white/10 hover:text-white active:bg-white/10 active:scale-95 touch-manipulation"
               style={{ border: "1px solid rgba(255,255,255,0.05)", WebkitTapHighlightColor: "transparent" }}
             >
@@ -173,45 +176,48 @@ export function XpotDashboard() {
 
       {/* Metric cards */}
       <div className="grid grid-cols-4 gap-2">
-        {METRIC_CARDS.map(({ label, key, icon: Icon, gradient, glow }) => (
-          <div
-            key={label}
-            className="relative overflow-hidden rounded-[14px] px-2 py-3 flex flex-col items-center justify-center text-center"
-            style={{
-              background: "rgba(255,255,255,0.04)",
-              border: "1px solid rgba(255,255,255,0.08)",
-              boxShadow: `0 0 0 1px rgba(255,255,255,0.04), 0 8px 32px rgba(0,0,0,0.3)`,
-            }}
-          >
+        {METRIC_CARDS.map(({ labelKey, key, icon: Icon, gradient, glow }) => {
+          const label = t(labelKey);
+          return (
             <div
-              className="pointer-events-none absolute -right-2 -top-2 h-16 w-16 rounded-full opacity-40 blur-[20px]"
-              style={{ background: glow }}
-            />
-            <div className="relative flex flex-col items-center w-full">
+              key={key}
+              className="relative overflow-hidden rounded-[14px] px-2 py-3 flex flex-col items-center justify-center text-center"
+              style={{
+                background: "rgba(255,255,255,0.04)",
+                border: "1px solid rgba(255,255,255,0.08)",
+                boxShadow: `0 0 0 1px rgba(255,255,255,0.04), 0 8px 32px rgba(0,0,0,0.3)`,
+              }}
+            >
               <div
-                className="mb-2.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl"
-                style={{ background: gradient, boxShadow: `0 4px 12px ${glow}` }}
-              >
-                <Icon className="h-4 w-4 text-white" />
-              </div>
-              {dashboardQuery.isLoading ? (
-                <div className="h-5 w-8 rounded-md mb-1.5 animate-pulse" style={{ background: "rgba(255,255,255,0.12)" }} />
-              ) : (
-                <div className="text-lg font-extrabold text-white tabular-nums leading-none tracking-tight mb-1.5">{metricValue(key)}</div>
-              )}
-              <div className="text-[8px] font-bold text-white/40 uppercase tracking-widest leading-[1.2] w-full break-words">
-                {label.includes(" ") ? (
-                  <>
-                    <span className="block">{label.split(" ")[0]}</span>
-                    <span className="block">{label.substring(label.indexOf(" ") + 1)}</span>
-                  </>
+                className="pointer-events-none absolute -right-2 -top-2 h-16 w-16 rounded-full opacity-40 blur-[20px]"
+                style={{ background: glow }}
+              />
+              <div className="relative flex flex-col items-center w-full">
+                <div
+                  className="mb-2.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl"
+                  style={{ background: gradient, boxShadow: `0 4px 12px ${glow}` }}
+                >
+                  <Icon className="h-4 w-4 text-white" />
+                </div>
+                {dashboardQuery.isLoading ? (
+                  <div className="h-5 w-8 rounded-md mb-1.5 animate-pulse" style={{ background: "rgba(255,255,255,0.12)" }} />
                 ) : (
-                  label
+                  <div className="text-lg font-extrabold text-white tabular-nums leading-none tracking-tight mb-1.5">{metricValue(key)}</div>
                 )}
+                <div className="text-[8px] font-bold text-white/40 uppercase tracking-widest leading-[1.2] w-full break-words">
+                  {label.includes(" ") ? (
+                    <>
+                      <span className="block">{label.split(" ")[0]}</span>
+                      <span className="block">{label.substring(label.indexOf(" ") + 1)}</span>
+                    </>
+                  ) : (
+                    label
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Timeline Chart */}
@@ -228,25 +234,26 @@ export function XpotDashboard() {
             <div className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-indigo-500/20 text-indigo-400">
               <Activity className="h-4 w-4" />
             </div>
-            <div className="text-sm font-bold text-white">Visit Activity</div>
+            <div className="text-sm font-bold text-white">{t("visitActivity")}</div>
           </div>
-          <div className="text-[10px] font-semibold uppercase tracking-widest text-white/30">Last 7 Days</div>
+          <div className="text-[10px] font-semibold uppercase tracking-widest text-white/30">{t("last7Days")}</div>
         </div>
         <div className="h-36 w-full mt-2">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={Array.from({ length: 7 }).map((_, i) => {
               const d = new Date();
               d.setDate(d.getDate() - (6 - i));
-              const dayName = d.toLocaleDateString("en-US", { weekday: "short" });
+              const dayName = d.toLocaleDateString(t.locale, { weekday: "short" });
+              const weekday = d.getDay();
               
               const visitsTodayCount = metrics?.visitsToday || 0;
               let visits = 0;
               if (i === 6) visits = visitsTodayCount;
-              else if (dayName === "Sun") visits = 0;
-              else if (dayName === "Sat") visits = Math.max(0, visitsTodayCount - 3);
+              else if (weekday === 0) visits = 0;
+              else if (weekday === 6) visits = Math.max(0, visitsTodayCount - 3);
               else visits = Math.max(1, visitsTodayCount + (Math.floor(Math.random() * 5) - 1));
               
-              return { day: i === 6 ? "Today" : dayName, visits };
+              return { day: i === 6 ? t("today") : dayName, visits };
             })} margin={{ top: 20, right: 10, left: 10, bottom: 0 }}>
               <defs>
                 <linearGradient id="visitsGradient" x1="0" y1="0" x2="0" y2="1">
@@ -277,7 +284,7 @@ export function XpotDashboard() {
           <div className="flex items-center gap-2 mb-3">
             <AlertTriangle className="h-4 w-4 text-red-400 shrink-0" />
             <div className="text-xs font-bold uppercase tracking-widest text-red-400">
-              {failedEvents.length} Sync {failedEvents.length === 1 ? "Failure" : "Failures"}
+              {t.plural("syncFailures", failedEvents.length)}
             </div>
           </div>
           {failedEvents.slice(0, 3).map((event) => (
@@ -290,7 +297,7 @@ export function XpotDashboard() {
                 <div className="text-xs font-semibold text-white/80 truncate">
                   {event.entityType.replace("sales_", "").replace("_", " ")} #{event.entityId}
                 </div>
-                <div className="text-[10px] text-red-400/70 truncate">{event.lastError ?? "Unknown error"}</div>
+                <div className="text-[10px] text-red-400/70 truncate">{event.lastError ?? t("unknownError")}</div>
               </div>
               <button
                 type="button"
@@ -308,7 +315,7 @@ export function XpotDashboard() {
       {/* Recent visits */}
       <div className="space-y-3">
         <div className="flex items-center justify-between px-1">
-          <div className="text-xs font-semibold uppercase tracking-widest text-white/30">Recent Visits</div>
+          <div className="text-xs font-semibold uppercase tracking-widest text-white/30">{t("recentVisits")}</div>
         </div>
         {dashboardQuery.data?.recentVisits?.length
           ? dashboardQuery.data.recentVisits.map((visit) => <VisitRow key={visit.id} visit={visit} />)
@@ -324,8 +331,8 @@ export function XpotDashboard() {
                 <Footprints className="h-5 w-5 text-indigo-400" />
               </div>
               <div>
-                <div className="text-sm font-medium text-white/60">No visits today</div>
-                <div className="mt-0.5 text-xs text-white/30">Go to Check-In to start your day</div>
+                <div className="text-sm font-medium text-white/60">{t("noVisitsToday")}</div>
+                <div className="mt-0.5 text-xs text-white/30">{t("goToCheckIn")}</div>
               </div>
             </div>
           )}

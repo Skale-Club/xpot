@@ -4,6 +4,8 @@ import { initSupabase } from "@/lib/supabase";
 import { queryClient } from "@/lib/queryClient";
 import { getXpotHomePath } from "@/lib/xpot";
 import { Loader2 } from "@/components/ui/loader";
+import { translate, useT } from "@/i18n";
+import { landingMessages } from "@/i18n/messages/landing";
 import type { XpotMeResponse } from "./xpot/types";
 
 // /login is a thin OAuth callback handler. The actual sign-in UI lives in the
@@ -51,6 +53,7 @@ function cleanUrl() {
 
 export default function Login() {
   const [, setLocation] = useLocation();
+  const t = useT(landingMessages);
   const [status, setStatus] = useState<"working" | "error">("working");
   const [errorMsg, setErrorMsg] = useState<string>("");
 
@@ -76,8 +79,8 @@ export default function Login() {
       const reason =
         result.message ||
         (result.status === 403
-          ? "Your Xpot access is disabled."
-          : "Sign-in failed. Please try again.");
+          ? translate(landingMessages, "accessDisabled")
+          : translate(landingMessages, "signInFailed"));
       setErrorMsg(reason);
       setStatus("error");
       setTimeout(() => goLanding(reason), 1500);
@@ -115,7 +118,7 @@ export default function Login() {
         const config = await configResponse.json();
         const hasSupabase = Boolean(config.url && config.anonKey);
         if (!hasSupabase) {
-          if (mounted) goLanding("Authentication is not configured.");
+          if (mounted) goLanding(translate(landingMessages, "authNotConfigured"));
           return;
         }
 
@@ -140,13 +143,13 @@ export default function Login() {
 
         if (!loginResponse.ok) {
           const result = await loginResponse.json().catch(() => ({}));
-          goLanding(result.message || "Sign-in failed. Please try again.");
+          goLanding(result.message || translate(landingMessages, "signInFailed"));
           return;
         }
 
         await goDashboard();
       } catch (err: any) {
-        if (mounted) goLanding(err?.message || "Sign-in failed. Please try again.");
+        if (mounted) goLanding(err?.message || translate(landingMessages, "signInFailed"));
       }
     }
 
@@ -164,7 +167,7 @@ export default function Login() {
       {status === "working" ? (
         <>
           <Loader2 className="h-8 w-8 animate-spin text-blue-400" />
-          <p className="text-sm text-white/40">Finishing sign-in…</p>
+          <p className="text-sm text-white/40">{t("finishingSignIn")}</p>
         </>
       ) : (
         <p className="max-w-sm rounded-md bg-red-500/10 px-4 py-3 text-center text-sm text-red-300">

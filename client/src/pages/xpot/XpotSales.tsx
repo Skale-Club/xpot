@@ -16,6 +16,15 @@ import { useSales } from "./hooks/useSales";
 import { useXpotQueries } from "./hooks/useXpotQueries";
 import { formatCurrency, formatDateTime } from "./utils";
 import type { EnrichedSalesOpportunity } from "./types";
+import { useT } from "@/i18n";
+import { salesMessages } from "@/i18n/messages/sales";
+
+const SYNC_STATUS_KEYS: Record<string, "sync_pending" | "sync_synced" | "sync_failed" | "sync_needs_review"> = {
+  pending: "sync_pending",
+  synced: "sync_synced",
+  failed: "sync_failed",
+  needs_review: "sync_needs_review",
+};
 
 const GLASS = {
   background: "rgba(255,255,255,0.04)",
@@ -38,6 +47,7 @@ function LeadPicker({ leads, value, onChange }: {
   value: string;
   onChange: (id: string) => void;
 }) {
+  const t = useT(salesMessages);
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const ref = useRef<HTMLDivElement>(null);
@@ -67,7 +77,7 @@ function LeadPicker({ leads, value, onChange }: {
         {selected ? (
           <span className="text-white truncate">{selected.name}</span>
         ) : (
-          <span className="text-white/25">Choose a lead</span>
+          <span className="text-white/25">{t("chooseLead")}</span>
         )}
         <ChevronDown className={`h-4 w-4 text-white/30 shrink-0 ml-2 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
@@ -84,7 +94,7 @@ function LeadPicker({ leads, value, onChange }: {
                 autoFocus
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search leads..."
+                placeholder={t("searchLeads")}
                 className="w-full h-8 rounded-lg pl-8 pr-3 text-xs text-white placeholder:text-white/25 focus:outline-none"
                 style={{ background: "rgba(255,255,255,0.06)" }}
               />
@@ -92,7 +102,7 @@ function LeadPicker({ leads, value, onChange }: {
           </div>
           <div className="max-h-48 overflow-y-auto">
             {filtered.length === 0 && (
-              <div className="px-4 py-3 text-xs text-white/30">No leads found</div>
+              <div className="px-4 py-3 text-xs text-white/30">{t("noLeadsFound")}</div>
             )}
             {filtered.map((lead) => (
               <button
@@ -129,6 +139,7 @@ function PipelinePicker({ pipelines, pipelineId, stageId, onPipelineChange, onSt
   onPipelineChange: (id: string) => void;
   onStageChange: (id: string) => void;
 }) {
+  const t = useT(salesMessages);
   const selectedPipeline = pipelines.find((p) => p.id === pipelineId);
   const stages = selectedPipeline?.stages ?? [];
 
@@ -142,7 +153,7 @@ function PipelinePicker({ pipelines, pipelineId, stageId, onPipelineChange, onSt
           className="w-full h-10 appearance-none rounded-xl pl-3 pr-8 text-sm focus:outline-none"
           style={{ ...inputStyle, color: pipelineId ? "white" : "rgba(255,255,255,0.25)" }}
         >
-          <option value="">Pipeline</option>
+          <option value="">{t("pipeline")}</option>
           {pipelines.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
         <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/30" />
@@ -157,7 +168,7 @@ function PipelinePicker({ pipelines, pipelineId, stageId, onPipelineChange, onSt
           className="w-full h-10 appearance-none rounded-xl pl-3 pr-8 text-sm focus:outline-none disabled:opacity-40"
           style={{ ...inputStyle, color: stageId ? "white" : "rgba(255,255,255,0.25)" }}
         >
-          <option value="">Stage</option>
+          <option value="">{t("stage")}</option>
           {stages.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
         <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/30" />
@@ -167,6 +178,7 @@ function PipelinePicker({ pipelines, pipelineId, stageId, onPipelineChange, onSt
 }
 
 export function XpotSales() {
+  const t = useT(salesMessages);
   const { leadsQuery } = useLeads();
   const { xpotMeQuery } = useXpotQueries();
   const {
@@ -200,7 +212,7 @@ export function XpotSales() {
       {/* Opportunities section */}
       <div className="space-y-3">
         <div className="flex items-center justify-between px-1">
-          <SectionLabel>Opportunities</SectionLabel>
+          <SectionLabel>{t("opportunities")}</SectionLabel>
           <button
             onClick={() => setOppExpanded((v) => !v)}
             className="flex h-7 w-7 items-center justify-center rounded-lg text-white/40 transition-colors hover:bg-white/8 hover:text-white/70"
@@ -220,14 +232,14 @@ export function XpotSales() {
             <input
               value={opportunityForm.title}
               onChange={(e) => setOpportunityForm((prev) => ({ ...prev, title: e.target.value }))}
-              placeholder="Opportunity title"
+              placeholder={t("oppTitle")}
               className={inputCls}
               style={inputStyle}
             />
             <input
               value={opportunityForm.value}
               onChange={(e) => setOpportunityForm((prev) => ({ ...prev, value: e.target.value }))}
-              placeholder="Value ($)"
+              placeholder={t("oppValue")}
               inputMode="decimal"
               className={inputCls}
               style={inputStyle}
@@ -235,7 +247,7 @@ export function XpotSales() {
             {pipelinesQuery.isLoading ? (
               <div className="flex items-center gap-2 text-xs text-white/30">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                Loading pipelines...
+                {t("loadingPipelines")}
               </div>
             ) : pipelines.length > 0 ? (
               <PipelinePicker
@@ -246,7 +258,7 @@ export function XpotSales() {
                 onStageChange={(id) => setOpportunityForm((prev) => ({ ...prev, stageKey: id }))}
               />
             ) : (
-              <div className="text-xs text-white/25 px-0.5">No pipelines configured in GHL</div>
+              <div className="text-xs text-white/25 px-0.5">{t("noPipelines")}</div>
             )}
             <button
               disabled={createOpportunityMutation.isPending || !opportunityForm.leadId || !opportunityForm.title.trim()}
@@ -255,7 +267,7 @@ export function XpotSales() {
               style={{ background: "linear-gradient(135deg, #10b981, #06b6d4)" }}
             >
               {createOpportunityMutation.isPending ? <Loader2 className="inline mr-2 h-4 w-4 animate-spin" /> : null}
-              Create Opportunity
+              {t("createOpp")}
             </button>
           </div>
         )}
@@ -277,7 +289,7 @@ export function XpotSales() {
                 <div className="relative flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-semibold text-white">{opp.title}</div>
-                    <div className="text-xs text-white/40">{opp.lead?.name || `Lead #${opp.leadId}`}</div>
+                    <div className="text-xs text-white/40">{opp.lead?.name || t("leadNumber", { id: opp.leadId })}</div>
                     {opp.pipelineKey && (
                       <div className="mt-1 text-[11px] text-white/25">
                         {pipelines.find((p) => p.id === opp.pipelineKey)?.name ?? opp.pipelineKey}
@@ -289,7 +301,7 @@ export function XpotSales() {
                     <div className="text-base font-bold text-emerald-400">{formatCurrency(opp.value, opp.currency)}</div>
                     <div className="flex items-center gap-1 justify-end mt-0.5">
                       <TrendingUp className="h-3 w-3 text-white/25" />
-                      <span className="text-[10px] text-white/30">{opp.syncStatus}</span>
+                      <span className="text-[10px] text-white/30">{SYNC_STATUS_KEYS[opp.syncStatus] ? t(SYNC_STATUS_KEYS[opp.syncStatus]) : opp.syncStatus}</span>
                     </div>
                   </div>
                 </div>
@@ -299,7 +311,7 @@ export function XpotSales() {
         ) : !oppExpanded ? (
           <div className="flex flex-col items-center gap-2 rounded-2xl py-8 text-center" style={GLASS}>
             <TrendingUp className="h-6 w-6 text-white/20" />
-            <div className="text-xs text-white/30">No opportunities yet — tap + to create one</div>
+            <div className="text-xs text-white/30">{t("noOpps")}</div>
           </div>
         ) : null}
       </div>
@@ -307,7 +319,7 @@ export function XpotSales() {
       {/* Tasks section */}
       <div className="space-y-3">
         <div className="flex items-center justify-between px-1">
-          <SectionLabel>Follow-Up Tasks</SectionLabel>
+          <SectionLabel>{t("followUpTasks")}</SectionLabel>
           <button
             onClick={() => setTaskExpanded((v) => !v)}
             className="flex h-7 w-7 items-center justify-center rounded-lg text-white/40 transition-colors hover:bg-white/8 hover:text-white/70"
@@ -327,7 +339,7 @@ export function XpotSales() {
             <input
               value={taskForm.title}
               onChange={(e) => setTaskForm((prev) => ({ ...prev, title: e.target.value }))}
-              placeholder="Task title"
+              placeholder={t("taskTitle")}
               className={inputCls}
               style={inputStyle}
             />
@@ -345,7 +357,7 @@ export function XpotSales() {
               style={{ background: "linear-gradient(135deg, #f59e0b, #ef4444)" }}
             >
               {createTaskMutation.isPending ? <Loader2 className="inline mr-2 h-4 w-4 animate-spin" /> : null}
-              Create Task
+              {t("createTask")}
             </button>
           </div>
         )}
@@ -369,7 +381,7 @@ export function XpotSales() {
                     <div className={`text-sm font-medium text-white ${done ? "line-through" : ""}`}>{task.title}</div>
                     <div className="flex items-center gap-1.5 mt-0.5">
                       <ListTodo className="h-3 w-3 text-white/25" />
-                      <span className="text-xs text-white/35">{task.dueAt ? formatDateTime(task.dueAt) : "No due date"}</span>
+                      <span className="text-xs text-white/35">{task.dueAt ? formatDateTime(task.dueAt) : t("noDueDate")}</span>
                     </div>
                   </div>
                   {!done && (
@@ -388,7 +400,7 @@ export function XpotSales() {
         ) : !taskExpanded ? (
           <div className="flex flex-col items-center gap-2 rounded-2xl py-8 text-center" style={GLASS}>
             <ListTodo className="h-6 w-6 text-white/20" />
-            <div className="text-xs text-white/30">No tasks yet — tap + to add a follow-up</div>
+            <div className="text-xs text-white/30">{t("noTasks")}</div>
           </div>
         ) : null}
       </div>

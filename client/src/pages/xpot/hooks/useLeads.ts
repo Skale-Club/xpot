@@ -7,9 +7,12 @@ import { parseAddress } from "../utils";
 import { useXpotShared } from "./useXpotShared";
 import { useXpotQueries } from "./useXpotQueries";
 import type { GooglePlaceResult, FullSalesLead, SalesLeadPayload } from "./types";
+import { useT } from "@/i18n";
+import { leadsMessages } from "@/i18n/messages/leads";
 
 export function useLeads() {
   const { toast } = useToast();
+  const t = useT(leadsMessages);
   const { geoState, loadCurrentLocation, invalidateXpotData } = useXpotShared();
   const { xpotMeQuery, activeTab } = useXpotQueries();
 
@@ -51,7 +54,7 @@ export function useLeads() {
       return response.json() as Promise<{ lead: FullSalesLead }>;
     },
     onError: (error: Error) => {
-      toast({ title: "Failed to create lead", description: error.message, variant: "destructive" });
+      toast({ title: t("leadCreateFailed"), description: error.message, variant: "destructive" });
     },
   });
 
@@ -61,11 +64,11 @@ export function useLeads() {
       return leadId;
     },
     onSuccess: async () => {
-      toast({ title: "Lead deleted", variant: "success" });
+      toast({ title: t("leadDeleted"), variant: "success" });
       await invalidateXpotData();
     },
     onError: (error: Error) => {
-      toast({ title: "Failed to delete lead", description: error.message, variant: "destructive" });
+      toast({ title: t("leadDeleteFailed"), description: error.message, variant: "destructive" });
     },
   });
 
@@ -76,14 +79,14 @@ export function useLeads() {
     },
     onSuccess: async (data) => {
       if (data.ghl.synced) {
-        toast({ title: "Sent to GHL", description: "Synced successfully.", variant: "success" });
+        toast({ title: t("ghlSent"), description: t("ghlSentDesc"), variant: "success" });
       } else {
-        toast({ title: "GHL sync failed", description: data.ghl.message || "Check your GoHighLevel integration settings.", variant: "destructive" });
+        toast({ title: t("ghlFailed"), description: data.ghl.message || t("ghlFailedDesc"), variant: "destructive" });
       }
       await invalidateXpotData();
     },
     onError: (error: Error) => {
-      toast({ title: "Sync failed", description: error.message, variant: "destructive" });
+      toast({ title: t("syncFailed"), description: error.message, variant: "destructive" });
     },
   });
 
@@ -93,11 +96,11 @@ export function useLeads() {
       return res.json() as Promise<{ lead: FullSalesLead }>;
     },
     onSuccess: async () => {
-      toast({ title: "Promoted to Lead", variant: "success" });
+      toast({ title: t("promoted"), variant: "success" });
       await invalidateXpotData();
     },
     onError: (error: Error) => {
-      toast({ title: "Promotion failed", description: error.message, variant: "destructive" });
+      toast({ title: t("promoteFailed"), description: error.message, variant: "destructive" });
     },
   });
 
@@ -110,11 +113,11 @@ export function useLeads() {
       return res.json() as Promise<{ created: number; errors: { row: number; message: string }[] }>;
     },
     onSuccess: async (data) => {
-      toast({ title: `${data.created} prospect(s) imported`, variant: "success" });
+      toast({ title: t.plural("imported", data.created), variant: "success" });
       await invalidateXpotData();
     },
     onError: (error: Error) => {
-      toast({ title: "Import failed", description: error.message, variant: "destructive" });
+      toast({ title: t("importFailed"), description: error.message, variant: "destructive" });
     },
   });
 
@@ -160,7 +163,7 @@ export function useLeads() {
     };
 
     const result = await createLeadMutation.mutateAsync(payload);
-    toast({ title: selectedLeadPlace ? "Business imported" : "Lead created", variant: "success" });
+    toast({ title: selectedLeadPlace ? t("businessImported") : t("leadCreated"), variant: "success" });
     setLeadForm({ name: "", phone: "", email: "", website: "", industry: "", addressLine1: "", city: "", state: "" });
     setSelectedLeadPlace(null);
     await invalidateXpotData();
