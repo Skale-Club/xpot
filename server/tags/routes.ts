@@ -522,8 +522,12 @@ export function registerTagRoutes(app: Express) {
     const id = idParam(req, res);
     if (!id) return;
     try {
-      const { leadId } = z.object({ leadId: z.number().int().positive() }).strict().parse(req.body);
-      await repo.assignTag(id, leadId, userIdOf(req));
+      const target = z
+        .object({ leadId: z.number().int().positive().optional(), leadName: optionalText(200) })
+        .strict()
+        .refine((v) => !!v.leadId !== !!v.leadName, "Send either leadId or leadName")
+        .parse(req.body);
+      await repo.assignTag(id, { leadId: target.leadId, leadName: target.leadName ?? undefined }, userIdOf(req), actorOf(req).repId);
       res.json(await repo.getTagDetail(id, tagBaseUrl()));
     } catch (err) {
       fail(res, err, "Failed to assign tag");

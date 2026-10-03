@@ -223,6 +223,14 @@ test.skipIf(!enabled)("tags: kits, reseller isolation, sales, scans, report, pro
     assert.equal(unassigned.json.soldAt, null);
     assert.equal(unassigned.json.repId, repId["it-ana"]);
 
+    // The admin gives it to a new business by name: the lead belongs to Ana, who holds the piece.
+    const reassigned = await api("POST", `/api/xpot/admin/tags/${a2.id}/assign`, "it-admin", { leadName: "Cafe Nuevo" });
+    assert.equal(reassigned.status, 200, reassigned.text);
+    assert.equal(reassigned.json.leadName, "Cafe Nuevo");
+    const [cafe] = (await db.execute(sql`SELECT owner_rep_id, status FROM sales_leads WHERE id = ${reassigned.json.leadId}`)).rows as any[];
+    assert.deepEqual(cafe, { owner_rep_id: repId["it-ana"], status: "customer" });
+    assert.equal((await api("POST", `/api/xpot/admin/tags/${a2.id}/assign`, "it-admin", { leadId, leadName: "Both" })).status, 400);
+
     // Manufacturing export.
     const csv = await api("GET", `/api/xpot/admin/tag-batches/${batch.json.id}/export.csv`, "it-admin");
     const lines = csv.text.trim().split("\r\n");

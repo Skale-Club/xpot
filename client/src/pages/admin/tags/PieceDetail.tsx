@@ -65,7 +65,6 @@ function CustomerStep({ tag }: { tag: TagDetail }) {
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
   const assign = usePieceMutation(tag.id, "Customer assigned");
-  const [creatingLead, setCreatingLead] = useState(false);
   const locked = tag.status === "retired";
 
   const options = useMemo(() => {
@@ -91,19 +90,10 @@ function CustomerStep({ tag }: { tag: TagDetail }) {
     if (creating) {
       const name = newName.trim();
       if (!name || !confirmMove()) return;
-      // The admin assign endpoint takes an existing lead only: create the lead first.
-      setCreatingLead(true);
-      try {
-        const res = await sendJson<{ lead: { id: number } }>("POST", "/api/xpot/leads", { name, source: "tag_sale", status: "customer" });
-        setNewName("");
-        setCreating(false);
-        setLeadId(String(res.lead.id));
-        assign.mutate({ url: `/api/xpot/admin/tags/${tag.id}/assign`, body: { leadId: res.lead.id } });
-      } catch (err) {
-        toast({ title: "Could not create the customer", description: errorMessage(err), variant: "destructive" });
-      } finally {
-        setCreatingLead(false);
-      }
+      // The server creates the lead, owned by the reseller holding the piece.
+      setNewName("");
+      setCreating(false);
+      assign.mutate({ url: `/api/xpot/admin/tags/${tag.id}/assign`, body: { leadName: name } });
       return;
     }
     if (!leadId || Number(leadId) === tag.leadId) return;
@@ -113,7 +103,7 @@ function CustomerStep({ tag }: { tag: TagDetail }) {
 
   // The server refuses to move a live piece; don't create a lead that would be left orphaned.
   const liveWithCustomer = tag.status === "active" && !!tag.leadId;
-  const busy = assign.isPending || creatingLead;
+  const busy = assign.isPending;
 
   return (
     <div className="space-y-3">

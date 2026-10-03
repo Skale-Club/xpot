@@ -345,13 +345,32 @@ export async function transitionTag(
 }
 
 /** Admin: link a piece to a customer (lead) without activating it. */
-export async function assignTag(id: string, leadId: number, userId: string | null): Promise<Tag> {
+/**
+ * Admin: give a piece to a customer, an existing lead or a new business by
+ * name. A new lead belongs to the reseller holding the piece (else the admin).
+ */
+export async function assignTag(
+  id: string,
+  target: { leadId?: number; leadName?: string },
+  userId: string | null,
+  actorRepId: number,
+): Promise<Tag> {
   return db.transaction(async (tx) => {
     const tag = await lockTag(tx, id);
     const plan = planTransition(tag, "assign");
     if (!plan.ok) throw new TagError(plan.error, 409);
-    const [lead] = await tx.select({ id: salesLeads.id }).from(salesLeads).where(eq(salesLeads.id, leadId));
-    if (!lead) throw new TagError("Customer not found", 404);
+    let leadId: number;
+    if (target.leadId) {
+      const [lead] = await tx.select({ id: salesLeads.id }).from(salesLeads).where(eq(salesLeads.id, target.leadId));
+      if (!lead) throw new TagError("Customer not found", 404);
+      leadId = lead.id;
+    } else if (target.leadName?.trim()) {
+      // Checked before creating anything, so a refused move leaves no orphan lead.
+      if (tag.leadId && tag.status === "active") throw new TagError("Disable the tag before moving it to another customer", 409);
+      leadId = await createLeadForSale(tx, target.leadName.trim(), tag.repId ?? actorRepId);
+    } else {
+      throw new TagError("Choose the customer", 400);
+    }
     const changingOwner = tag.leadId !== leadId;
     const set: Partial<Tag> = {
       leadId,
