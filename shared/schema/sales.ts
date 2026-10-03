@@ -82,6 +82,8 @@ export const salesReps = pgTable("sales_reps", {
   // Set when an admin blocks the rep (partnership ended); null = pending or active.
   blockedAt: timestamp("blocked_at"),
   blockedReason: text("blocked_reason"),
+  // Personal code for wholesale prices in the Stuscle store (shared/wholesale.ts).
+  wholesaleCode: text("wholesale_code"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => ({

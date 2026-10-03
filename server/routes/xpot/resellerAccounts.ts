@@ -5,6 +5,8 @@ import { salesReps, users, type SalesRep } from "#shared/schema.js";
 import { XPOT_MODULES } from "#shared/modules.js";
 import { normalizePhone } from "#shared/phone.js";
 import { storage } from "../../storage.js";
+import { ensureWholesaleCode } from "../../wholesale/index.js";
+import { formatWholesaleCode } from "#shared/wholesale.js";
 
 // Who may use Xpot is decided by Skale Club. People sign up themselves (by
 // phone) and wait for approval, or an admin creates their access directly;
@@ -65,7 +67,7 @@ export async function createResellerAccount(input: ResellerAccountInput, actor: 
   await assertPhoneFree(phone);
   const { firstName, lastName } = splitName(input.displayName);
   const [user] = await db.insert(users).values({ phone, firstName, lastName, isAdmin: input.role === "admin" }).returning();
-  return storage.upsertSalesRep({
+  const rep = await storage.upsertSalesRep({
     userId: user.id,
     displayName: input.displayName,
     phone,
@@ -74,6 +76,8 @@ export async function createResellerAccount(input: ResellerAccountInput, actor: 
     isActive: true,
     modules: input.modules,
   });
+  const wholesaleCode = await ensureWholesaleCode(rep.id);
+  return { ...rep, wholesaleCode };
 }
 
 async function repOr404(repId: number): Promise<SalesRep> {
@@ -98,7 +102,9 @@ export async function approveRep(repId: number, modules: string[] | undefined, a
   const rep = await repOr404(repId);
   assertMayManage(rep, actor);
   if (rep.blockedAt) throw new AccountError("This rep is blocked. Unblock them instead.", 409);
-  return setAccess(repId, { isActive: true, ...(modules ? { modules } : {}) });
+  const updated = await setAccess(repId, { isActive: true, ...(modules ? { modules } : {}) });
+  // Approved partners buy kits at wholesale with their own code.
+  return { ...updated, wholesaleCode: await ensureWholesaleCode(repId) };
 }
 
 /** Partnership ended (or sign-up refused): no access, and every open session ends now. */
@@ -114,7 +120,8 @@ export async function blockRep(repId: number, reason: string | null | undefined,
 export async function unblockRep(repId: number, actor: Actor) {
   const rep = await repOr404(repId);
   assertMayManage(rep, actor);
-  return setAccess(repId, { isActive: true, blockedAt: null, blockedReason: null });
+  const updated = await setAccess(repId, { isActive: true, blockedAt: null, blockedReason: null });
+  return { ...updated, wholesaleCode: await ensureWholesaleCode(repId) };
 }
 
 /** The number the rep signs in with (e.g. they changed phones). */
@@ -139,9 +146,16 @@ export async function listRepsWithAccess() {
     .from(salesReps)
     .leftJoin(users, eq(users.id, salesReps.userId))
     .orderBy(salesReps.createdAt);
+  // Reps approved before wholesale codes existed get theirs now.
+  for (const row of list) {
+    if (row.rep.isActive && !row.rep.blockedAt && !row.rep.wholesaleCode) {
+      row.rep = { ...row.rep, wholesaleCode: await ensureWholesaleCode(row.rep.id) };
+    }
+  }
   return list.map(({ rep, loginPhone }) => ({
     ...rep,
     loginPhone,
+    wholesaleCode: rep.wholesaleCode ? formatWholesaleCode(rep.wholesaleCode) : null,
     access: (rep.blockedAt ? "blocked" : rep.isActive ? "active" : "pending") as RepAccess,
   }));
 }

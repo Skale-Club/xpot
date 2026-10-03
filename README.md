@@ -79,6 +79,22 @@ Everyone signs in with their **phone**: a 6-digit code goes out by SMS
 - `requireXpotUser` / `requireXpotManager` check session, approval and blocking
   on every `/api/xpot/*` request.
 
+## Wholesale (Stuscle)
+
+Kits and other products are sold through the **Stuscle** store, not inside
+Xpot. Approved reps buy at wholesale with a personal code:
+- Every rep gets a code (`XP-XXXX-XXXX`, `salesReps.wholesaleCode`) when they're
+  approved or created by an admin. It shows on Tags → home with a link to
+  `{STUSCLE_PUBLIC_URL}/wholesale?code=…`; Admin → Reps shows it and can issue a
+  new one (the old one stops working).
+- Stuscle asks `POST /api/integrations/stuscle/wholesale/verify`
+  (`Authorization: Bearer $XPOT_WHOLESALE_SECRET`, body `{code}`) when the code
+  is entered and again at checkout. Answer: `{valid:true, reseller:{id,name}}`
+  or `{valid:false, reason:"unknown"|"inactive"}`. Pending or blocked reps get
+  `inactive`, so blocking someone closes wholesale at once.
+- Without `XPOT_WHOLESALE_SECRET` the endpoint answers 503 and the store sells
+  retail only. Code in `server/wholesale/`, `shared/wholesale.ts`.
+
 **Switching an existing install to phone sign-in.** Migration `0012` copies
 each rep's profile phone into `users.phone` when it is a full, unique number.
 Admin → Reps flags anyone left without a sign-in phone; set it with the phone

@@ -8,6 +8,7 @@ import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
 import type { XpotMeResponse } from "@/pages/xpot/types";
 import QrScanner from "./QrScanner";
+import { WholesaleCard } from "./WholesaleCard";
 import {
   ageOf,
   APP_BASE,
@@ -253,6 +254,8 @@ export default function HomeScreen() {
           </button>
         </div>
       </form>
+
+      <WholesaleCard />
 
       <section>
         <div className="mb-2 flex items-center justify-between px-1">
