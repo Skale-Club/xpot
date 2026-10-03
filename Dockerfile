@@ -32,8 +32,11 @@ USER node
 COPY --chown=node:node package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
 COPY --from=builder --chown=node:node /app/dist ./dist
-# Migrations are not run here: apply them with `npm run migrate` (README → Deploy).
+COPY --from=builder --chown=node:node /app/migrations ./migrations
 EXPOSE 8888
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
   CMD wget -qO- http://127.0.0.1:8888/api/health || exit 1
-CMD ["node", "dist/index.cjs"]
+# Pending migrations run first (idempotent, under an advisory lock); the server
+# only starts once they succeed, so a bad migration fails the deploy instead of
+# serving against a half-migrated schema.
+CMD ["sh", "-c", "node dist/migrate.cjs && exec node dist/index.cjs"]
