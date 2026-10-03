@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import type { TagActor } from "#shared/tagAccess.js";
+import { repModules } from "#shared/modules.js";
 import { ensureXpotRep, isManagerOrAdmin } from "../routes/xpot/middleware.js";
 
 // Who is acting on the Tags API. Built from Xpot's own rep identity, read from
@@ -18,7 +19,12 @@ async function loadActor(req: Request, res: Response): Promise<TagActor | null> 
     res.status(403).json({ message: "Your Xpot access is not active yet. Ask an administrator to enable it." });
     return null;
   }
-  return { userId: found.user.userId, repId: found.rep.id, isManager: isManagerOrAdmin(found) };
+  const isManager = isManagerOrAdmin(found);
+  if (!isManager && !repModules(found.rep).includes("tags")) {
+    res.status(403).json({ message: "Tags are not enabled for your account." });
+    return null;
+  }
+  return { userId: found.user.userId, repId: found.rep.id, isManager };
 }
 
 /** Any active rep (reseller, manager or admin); the actor is then `actorOf(req)`. */

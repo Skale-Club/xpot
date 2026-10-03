@@ -1,0 +1,296 @@
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Link } from "wouter";
+import { AlertCircle, ArrowLeft, ArrowRight, Check, ClipboardPaste, Copy, Loader2, type LucideIcon } from "lucide-react";
+import { useT } from "@/i18n";
+import { commonMessages } from "@/i18n/messages/common";
+import { copyToClipboard, haptic, readClipboard, type BannerState } from "./lib";
+
+// Class kit for the Tags screens, in Xpot's dark glass style. Blue/indigo is an
+// Xpot piece; emerald is a chip holding the customer's own link.
+
+export type Identity = "xpot" | "direct";
+
+export const CARD = "rounded-[20px] border border-white/10 bg-white/[0.04]";
+export const INPUT =
+  "w-full min-h-[48px] rounded-2xl border border-white/10 bg-white/[0.05] px-4 text-base text-white placeholder:text-white/30 [color-scheme:dark] focus:border-blue-400/60 focus:outline-none";
+export const OPTION = "bg-[#0d1424] text-white";
+export const BTN_PRIMARY =
+  "flex min-h-[52px] w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-500 px-6 text-base font-bold text-white shadow-[0_8px_24px_rgba(59,130,246,0.25)] transition-transform active:scale-[0.98] disabled:opacity-50";
+export const BTN_SECONDARY =
+  "flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl bg-white px-5 text-base font-semibold text-slate-900 transition-transform active:scale-[0.98] disabled:opacity-50";
+export const BTN_TERTIARY =
+  "flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-5 text-base font-semibold text-white/85 transition-colors active:bg-white/10 disabled:opacity-50";
+export const BTN_DIRECT =
+  "flex min-h-[52px] w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-6 text-base font-bold text-white transition-transform active:scale-[0.98] disabled:opacity-50";
+export const EYEBROW = "text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-300/80";
+export const EYEBROW_MUTED = "text-[10px] font-semibold uppercase tracking-widest text-white/40";
+export const SHEET_TITLE = "text-xl font-bold tracking-tight text-white";
+export const ICON_BLOCK_XPOT = "flex shrink-0 items-center justify-center rounded-xl bg-blue-500/15 text-blue-300";
+export const ICON_BLOCK_DIRECT = "flex shrink-0 items-center justify-center rounded-xl bg-emerald-400/10 text-emerald-300";
+
+/** Title row for a screen: optional back arrow, eyebrow and a large title. */
+export function TopBar({
+  title,
+  back,
+  eyebrow,
+  identity = "xpot",
+  right,
+}: {
+  title: string;
+  back?: string;
+  eyebrow?: string;
+  identity?: Identity;
+  right?: ReactNode;
+}) {
+  const t = useT(commonMessages);
+  return (
+    <header className="mb-4">
+      {(back || right) && (
+        <div className="mb-1 flex min-h-[48px] items-center gap-2">
+          {back && (
+            <Link
+              href={back}
+              aria-label={t("back")}
+              className="-ml-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/80 active:bg-white/10"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
+          )}
+          <div className="flex-1" />
+          {right}
+        </div>
+      )}
+      {eyebrow && <p className={identity === "direct" ? EYEBROW.replace("text-indigo-300/80", "text-emerald-300/80") : EYEBROW}>{eyebrow}</p>}
+      <h1 className="mt-1 break-words text-[26px] font-extrabold leading-tight tracking-tight text-white">{title}</h1>
+    </header>
+  );
+}
+
+/** Big home action: icon, title, one line, arrow. */
+export function ActionTile({
+  icon: Icon,
+  title,
+  description,
+  onClick,
+  disabled,
+  primary,
+  iconClassName,
+  testId,
+}: {
+  icon: LucideIcon;
+  title: string;
+  description: string;
+  onClick: () => void;
+  disabled?: boolean;
+  primary?: boolean;
+  iconClassName?: string;
+  testId?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      data-testid={testId}
+      style={{ WebkitTapHighlightColor: "transparent" }}
+      className={`flex min-h-[80px] w-full items-center gap-4 rounded-[20px] p-4 text-left transition-transform active:scale-[0.98] disabled:opacity-60 ${
+        primary
+          ? "bg-gradient-to-br from-blue-500 to-indigo-500 text-white shadow-[0_8px_24px_rgba(59,130,246,0.25)]"
+          : "border border-white/10 bg-white/[0.04] text-white"
+      }`}
+    >
+      <span
+        className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${
+          primary ? "bg-white/15 text-white" : `bg-white/[0.05] ${iconClassName ?? "text-blue-300"}`
+        }`}
+      >
+        <Icon className="h-6 w-6" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-lg font-bold tracking-tight">{title}</span>
+        <span className={`block text-sm ${primary ? "text-white/80" : "text-white/45"}`}>{description}</span>
+      </span>
+      <ArrowRight className={`h-5 w-5 shrink-0 ${primary ? "text-white" : "text-white/30"}`} />
+    </button>
+  );
+}
+
+export function Banner({ banner }: { banner: BannerState }) {
+  if (!banner) return null;
+  const ok = banner.tone === "ok";
+  return (
+    <div
+      role="status"
+      className={`mb-4 flex items-start gap-2 rounded-2xl border px-4 py-3 text-sm font-medium ${
+        ok ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-100" : "border-red-400/30 bg-red-400/10 text-red-100"
+      }`}
+    >
+      {ok ? <Check className="mt-0.5 h-4 w-4 shrink-0" /> : <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />}
+      <span className="min-w-0 break-words">{banner.text}</span>
+    </div>
+  );
+}
+
+export function Spinner({ className = "h-5 w-5" }: { className?: string }) {
+  return <Loader2 className={`animate-spin ${className}`} />;
+}
+
+export type PillTone = "green" | "amber" | "red" | "slate" | "blue";
+
+export function Pill({ tone, children }: { tone: PillTone; children: ReactNode }) {
+  const tones = {
+    green: "bg-emerald-400/10 text-emerald-300",
+    amber: "bg-amber-400/10 text-amber-300",
+    red: "bg-red-400/10 text-red-300",
+    slate: "bg-white/10 text-white/60",
+    blue: "bg-blue-500/15 text-blue-300",
+  } as const;
+  return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${tones[tone]}`}>{children}</span>;
+}
+
+export const STATUS_TONE: Record<string, PillTone> = {
+  active: "green",
+  disabled: "red",
+  assigned: "amber",
+  inventory: "slate",
+  retired: "slate",
+};
+
+export const CHIP_TONE: Record<string, PillTone> = {
+  verified: "green",
+  programmed: "blue",
+  failed: "red",
+  locked: "slate",
+  not_programmed: "amber",
+};
+
+export function CopyButton({ text, label, large = false }: { text: string; label: string; large?: boolean }) {
+  const t = useT(commonMessages);
+  const [copied, setCopied] = useState(false);
+  const timer = useRef<number>();
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+  const onCopy = async () => {
+    if (!(await copyToClipboard(text))) return;
+    haptic(30);
+    setCopied(true);
+    window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => setCopied(false), 2000);
+  };
+  if (!large) {
+    return (
+      <button
+        type="button"
+        onClick={() => void onCopy()}
+        aria-label={label}
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/10 text-white/80 active:bg-white/10"
+      >
+        {copied ? <Check className="h-5 w-5 text-emerald-400" /> : <Copy className="h-5 w-5" />}
+      </button>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => void onCopy()}
+      className={`flex min-h-[52px] w-full items-center justify-center gap-2 rounded-2xl text-base font-bold text-white transition-colors ${
+        copied ? "bg-emerald-500" : "border border-white/10 bg-white/[0.06] active:bg-white/10"
+      }`}
+    >
+      {copied ? <Check className="h-5 w-5" /> : <Copy className="h-5 w-5" />}
+      {copied ? t("copied") : label}
+    </button>
+  );
+}
+
+/** URL input with a Paste button that reads the clipboard. */
+export function LinkInput({
+  value,
+  onChange,
+  placeholder,
+  onPasteFailed,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  onPasteFailed?: () => void;
+}) {
+  const t = useT(commonMessages);
+  return (
+    <div className="flex gap-2">
+      <input
+        type="url"
+        inputMode="url"
+        autoCapitalize="none"
+        autoCorrect="off"
+        spellCheck={false}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className={INPUT}
+        data-testid="input-destination"
+      />
+      <button
+        type="button"
+        onClick={async () => {
+          const text = await readClipboard();
+          if (text) {
+            onChange(text);
+            haptic(20);
+          } else onPasteFailed?.();
+        }}
+        className="flex min-h-[48px] shrink-0 items-center gap-1.5 rounded-2xl border border-white/10 px-3.5 text-sm font-semibold text-white/80 active:bg-white/10"
+      >
+        <ClipboardPaste className="h-4 w-4" />
+        {t("paste")}
+      </button>
+    </div>
+  );
+}
+
+export function FieldLabel({ children }: { children: ReactNode }) {
+  return <span className={`mb-1.5 block ${EYEBROW_MUTED}`}>{children}</span>;
+}
+
+/** Slide-up sheet with a dimmed backdrop. */
+export function BottomSheet({ open, onClose, children, title }: { open: boolean; onClose: () => void; children: ReactNode; title?: string }) {
+  const t = useT(commonMessages);
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [open]);
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end justify-center" role="dialog" aria-modal="true" aria-label={title}>
+      <button type="button" aria-label={t("close")} onClick={onClose} className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+      <div
+        className="relative max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-t-[28px] border border-b-0 border-white/10 px-5 pt-3"
+        style={{ background: "#0d1424", paddingBottom: "calc(env(safe-area-inset-bottom) + 20px)" }}
+      >
+        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20" />
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/** Pulsing "hold the chip to the phone" animation. */
+export function TapAnimation({ identity, label, sub, icon: Icon }: { identity: Identity; label: string; sub: string; icon: LucideIcon }) {
+  const color = identity === "xpot" ? "bg-blue-500" : "bg-emerald-500";
+  return (
+    <div className="flex flex-col items-center py-6 text-center">
+      <div className="relative flex h-36 w-36 items-center justify-center">
+        <span className={`absolute inset-0 animate-ping rounded-full opacity-20 ${color}`} />
+        <span className={`absolute inset-4 animate-pulse rounded-full opacity-30 ${color}`} />
+        <span className={`relative flex h-20 w-20 items-center justify-center rounded-full text-white ${color}`}>
+          <Icon className="h-10 w-10" />
+        </span>
+      </div>
+      <p className={`mt-4 ${SHEET_TITLE}`}>{label}</p>
+      <p className="mt-1 text-sm text-white/50">{sub}</p>
+    </div>
+  );
+}

@@ -15,7 +15,13 @@ export function getXpotPath(path = "/") {
   return normalizePath(path);
 }
 
+/** Where a signed-in rep lands: the Tags module if that was the last one used. */
 export function getXpotHomePath() {
+  try {
+    if (window.localStorage.getItem("xpot.module") === "tags") return "/tags";
+  } catch {
+    // Storage blocked: default to Visits.
+  }
   return "/dashboard";
 }
 

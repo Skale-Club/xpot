@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { pgTable, text, serial, integer, timestamp, boolean, jsonb, pgEnum, uniqueIndex, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -76,6 +77,8 @@ export const salesReps = pgTable("sales_reps", {
   avatarUrl: text("avatar_url"),
   ghlUserId: text("ghl_user_id"),
   isActive: boolean("is_active").notNull().default(true),
+  // App sides this rep may use (shared/modules.ts); migrations/0010_rep_modules.sql.
+  modules: text("modules").array().notNull().default(sql`'{visits,tags}'`),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => ({
@@ -293,6 +296,7 @@ export const insertSalesRepSchema = z.object({
   avatarUrl: z.string().nullable().optional(),
   ghlUserId: z.string().nullable().optional(),
   isActive: z.boolean().default(true),
+  modules: z.array(z.enum(["visits", "tags"])).optional(),
 });
 
 export const insertSalesLeadSchema = z.object({
