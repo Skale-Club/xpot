@@ -62,11 +62,30 @@ All tables RLS-protected. Reps see only their own data; managers/admins see all.
 
 ## Auth model
 
-Supabase Auth on the project's own Auth instance:
-- User signs in → session stored in `sessions` table (`connect-pg-simple`)
-- `salesReps.userId` FK → `users.id` links the auth user to a rep profile
-- Role hierarchy: `rep` < `manager` < `admin`
-- Middleware `requireXpotUser` enforces session + rep existence on all `/api/xpot/*` routes
+Everyone signs in with their **phone**: a 6-digit code goes out by SMS
+(Twilio, `server/auth/phoneAuth.ts`), no email and no password.
+- `users.phone` (E.164) is the sign-in identity; `salesReps.userId` → `users.id`
+  links it to the rep profile. Sessions live in the `sessions` table.
+- **Approval:** a new number asks for a name and becomes a *pending* rep. It
+  can't sign in until a manager approves it in Admin → Reps; meanwhile the
+  sign-in screen says it's under review and offers WhatsApp
+  (`XPOT_SUPPORT_WHATSAPP`). `XPOT_SIGNUP_NOTIFY_PHONES` get a text per sign-up.
+  Admins can also create someone's access directly (active right away).
+- **Blocking:** Admin → Reps → Block turns the rep off and deletes their
+  sessions, so they're out immediately; their sign-in screen says access is off.
+- Codes: 10 minutes, 5 tries, one resend per 30 s, 5 per number and 20 per
+  network per hour, stored hashed in `auth_phone_codes`.
+- Role hierarchy: `rep` < `manager` < `admin`. Only admins act on managers/admins.
+- `requireXpotUser` / `requireXpotManager` check session, approval and blocking
+  on every `/api/xpot/*` request.
+
+**Switching an existing install to phone sign-in.** Migration `0012` copies
+each rep's profile phone into `users.phone` when it is a full, unique number.
+Admin → Reps flags anyone left without a sign-in phone; set it with the phone
+button on their row (an admin can set their own, while still signed in). In an
+emergency: `UPDATE users SET phone = '+1XXXXXXXXXX' WHERE email = 'you@…';`.
+The old Supabase email sign-in endpoint (`POST /api/auth/login`) still exists
+but has no screen; new accounts it creates wait for approval like any sign-up.
 
 ## Supabase project
 

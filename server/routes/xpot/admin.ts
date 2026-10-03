@@ -4,7 +4,20 @@ import { randomBytes } from "crypto";
 import { storage } from "../../storage.js";
 import { requireXpotManager } from "./middleware.js";
 import { getGHLPipelines } from "../../integrations/ghl.js";
-import { AccountError, createResellerAccount, passwordResetSchema, resellerAccountSchema, resetRepPassword } from "./resellerAccounts.js";
+import {
+  AccountError,
+  approveRep,
+  approveSchema,
+  blockRep,
+  blockSchema,
+  changeRepPhone,
+  createResellerAccount,
+  listRepsWithAccess,
+  phoneChangeSchema,
+  resellerAccountSchema,
+  unblockRep,
+  type Actor,
+} from "./resellerAccounts.js";
 
 export function createAdminRouter() {
   const router = Router();
@@ -46,10 +59,34 @@ export function createAdminRouter() {
   });
 
   router.get("/admin/reps", async (_req, res) => {
-    res.json(await storage.listSalesReps());
+    res.json(await listRepsWithAccess());
   });
 
-  router.post("/admin/reps", async (req, res) => {
+  const actorOf = (req: any): Actor => ({ userId: req.xpotActor.user.userId, isAdmin: !!req.xpotActor.user.isAdmin });
+  const repIdOf = (req: any): number | null => {
+    const id = Number(req.params.id);
+    return Number.isInteger(id) && id > 0 ? id : null;
+  };
+  const accountRoute = (handler: (req: any) => Promise<unknown>, status = 200) => async (req: any, res: any) => {
+    try {
+      res.status(status).json(await handler(req));
+    } catch (err) {
+      if (err instanceof AccountError) return res.status(err.status).json({ message: err.message });
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.issues[0]?.message ?? "Invalid input" });
+      console.error(`[${req.method} ${req.path}]`, err);
+      res.status(500).json({ message: "Something went wrong" });
+    }
+  };
+  const withRep = (fn: (repId: number, req: any) => Promise<unknown>) =>
+    accountRoute(async (req) => {
+      const repId = repIdOf(req);
+      if (!repId) throw new AccountError("Invalid rep id", 400);
+      return fn(repId, req);
+    });
+
+  // Edit an existing rep's profile, role, team and modules. Access (approve,
+  // block) has its own routes below, so this never turns anyone on or off.
+  router.post("/admin/reps", accountRoute(async (req) => {
     const input = z.object({
       userId: z.string().min(1),
       displayName: z.string().min(1),
@@ -59,43 +96,23 @@ export function createAdminRouter() {
       role: z.enum(["rep", "manager", "admin"]).default("rep"),
       vcardId: z.number().int().positive().optional().nullable(),
       ghlUserId: z.string().optional().nullable(),
-      isActive: z.boolean().default(true),
       modules: z.array(z.enum(["visits", "tags"])).min(1).optional(),
     }).parse(req.body);
-
-    const rep = await storage.upsertSalesRep(input);
-    res.status(201).json(rep);
-  });
-
-  // Create a reseller's login (email + password) with an active rep.
-  router.post("/admin/reps/accounts", async (req, res) => {
-    const actor = (req as any).xpotActor;
-    const parsed = resellerAccountSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid input" });
-    try {
-      res.status(201).json(await createResellerAccount(parsed.data, !!actor?.user?.isAdmin));
-    } catch (err) {
-      if (err instanceof AccountError) return res.status(err.status).json({ message: err.message });
-      console.error("[POST /admin/reps/accounts]", err);
-      res.status(500).json({ message: "Could not create the account" });
+    const actor = actorOf(req);
+    const existing = await storage.getSalesRepByUserId(input.userId);
+    if (!existing) throw new AccountError("Rep not found", 404);
+    if (!actor.isAdmin && (input.role !== "rep" || existing.role !== "rep")) {
+      throw new AccountError("Only an admin can change a manager's or admin's role.", 403);
     }
-  });
+    return storage.upsertSalesRep({ ...input, isActive: existing.isActive });
+  }));
 
-  router.post("/admin/reps/:id/password", async (req, res) => {
-    const actor = (req as any).xpotActor;
-    const repId = Number(req.params.id);
-    if (!Number.isInteger(repId) || repId <= 0) return res.status(400).json({ message: "Invalid rep id" });
-    const parsed = passwordResetSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid input" });
-    try {
-      await resetRepPassword(repId, parsed.data.password, !!actor?.user?.isAdmin);
-      res.json({ ok: true });
-    } catch (err) {
-      if (err instanceof AccountError) return res.status(err.status).json({ message: err.message });
-      console.error("[POST /admin/reps/:id/password]", err);
-      res.status(500).json({ message: "Could not change the password" });
-    }
-  });
+  // Create someone's access directly (active; they sign in with a code sent to this phone).
+  router.post("/admin/reps/accounts", accountRoute((req) => createResellerAccount(resellerAccountSchema.parse(req.body), actorOf(req)), 201));
+  router.post("/admin/reps/:id/approve", withRep((id, req) => approveRep(id, approveSchema.parse(req.body ?? {}).modules, actorOf(req))));
+  router.post("/admin/reps/:id/block", withRep((id, req) => blockRep(id, blockSchema.parse(req.body ?? {}).reason, actorOf(req))));
+  router.post("/admin/reps/:id/unblock", withRep((id, req) => unblockRep(id, actorOf(req))));
+  router.post("/admin/reps/:id/phone", withRep((id, req) => changeRepPhone(id, phoneChangeSchema.parse(req.body), actorOf(req))));
 
   router.get("/admin/sync-events", async (_req, res) => {
     res.json(await storage.listSalesSyncEvents());

@@ -1,27 +1,15 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db.js";
-import { users } from "#shared/schema.js";
+import { salesReps, users, type SalesRep } from "#shared/schema.js";
 import { XPOT_MODULES } from "#shared/modules.js";
+import { normalizePhone } from "#shared/phone.js";
 import { storage } from "../../storage.js";
-import { getSupabaseAdmin } from "../../lib/supabase.js";
 
-// Resellers don't sign themselves up: the admin creates their login (email +
-// password, shared over WhatsApp) and picks which modules they get. The login
-// lives in Supabase Auth; the users row and the active rep are created here so
-// the first sign-in lands straight in the app.
-
-export const resellerAccountSchema = z.object({
-  email: z.string().trim().toLowerCase().email().max(200),
-  password: z.string().min(8, "Password must have at least 8 characters").max(72),
-  displayName: z.string().trim().min(1).max(100),
-  phone: z.string().trim().max(30).optional().nullable(),
-  team: z.string().trim().max(60).optional().nullable(),
-  role: z.enum(["rep", "manager", "admin"]).default("rep"),
-  modules: z.array(z.enum(XPOT_MODULES)).min(1).default([...XPOT_MODULES]),
-}).strict();
-
-export type ResellerAccountInput = z.infer<typeof resellerAccountSchema>;
+// Who may use Xpot is decided by Skale Club. People sign up themselves (by
+// phone) and wait for approval, or an admin creates their access directly;
+// either way they sign in with a code sent to that phone. Ending a
+// partnership blocks the rep and logs them out everywhere.
 
 export class AccountError extends Error {
   status: number;
@@ -31,58 +19,56 @@ export class AccountError extends Error {
   }
 }
 
-export interface AuthAdmin {
-  createUser(email: string, password: string, metadata: Record<string, string>): Promise<{ id: string }>;
-  setPassword(userId: string, password: string): Promise<void>;
+const phoneField = z.string().trim().min(4).max(40);
+const countryCodeField = z.string().regex(/^\d{1,4}$/).optional();
+
+export const resellerAccountSchema = z.object({
+  displayName: z.string().trim().min(1).max(100),
+  phone: phoneField,
+  countryCode: countryCodeField,
+  team: z.string().trim().max(60).optional().nullable(),
+  role: z.enum(["rep", "manager", "admin"]).default("rep"),
+  modules: z.array(z.enum(XPOT_MODULES)).min(1).default([...XPOT_MODULES]),
+}).strict();
+
+export type ResellerAccountInput = z.infer<typeof resellerAccountSchema>;
+
+export const approveSchema = z.object({ modules: z.array(z.enum(XPOT_MODULES)).min(1).optional() }).strict();
+export const blockSchema = z.object({ reason: z.string().trim().max(300).optional().nullable() }).strict();
+export const phoneChangeSchema = z.object({ phone: phoneField, countryCode: countryCodeField }).strict();
+
+export interface Actor {
+  userId: string;
+  isAdmin: boolean;
 }
 
-/** Supabase Auth admin API (service role). */
-export function supabaseAuthAdmin(): AuthAdmin {
-  return {
-    async createUser(email, password, metadata) {
-      const { data, error } = await getSupabaseAdmin().auth.admin.createUser({
-        email,
-        password,
-        email_confirm: true,
-        user_metadata: metadata,
-      });
-      if (error || !data.user) {
-        const taken = /already|registered|exists/i.test(error?.message ?? "");
-        throw new AccountError(taken ? "This email already has a login." : error?.message || "Could not create the login", taken ? 409 : 502);
-      }
-      return { id: data.user.id };
-    },
-    async setPassword(userId, password) {
-      const { error } = await getSupabaseAdmin().auth.admin.updateUserById(userId, { password });
-      if (error) throw new AccountError(error.message || "Could not change the password", 502);
-    },
-  };
+function parsePhone(input: string, countryCode?: string): string {
+  const phone = normalizePhone(input, countryCode);
+  if (!phone) throw new AccountError("Enter a valid phone number, with the country code if it isn't a US number.", 400);
+  return phone;
+}
+
+async function assertPhoneFree(phone: string, exceptUserId?: string) {
+  const [taken] = await db.select({ id: users.id }).from(users).where(eq(users.phone, phone)).limit(1);
+  if (taken && taken.id !== exceptUserId) throw new AccountError("This phone already has an Xpot account. Find it in the list below.", 409);
 }
 
 function splitName(displayName: string): { firstName: string; lastName: string | null } {
-  const [first, ...rest] = displayName.split(/\s+/);
+  const [first, ...rest] = displayName.trim().split(/\s+/);
   return { firstName: first, lastName: rest.length ? rest.join(" ") : null };
 }
 
-/**
- * Creates the login, the users row and an active rep. Only a global admin may
- * create another admin.
- */
-export async function createResellerAccount(input: ResellerAccountInput, actorIsAdmin: boolean, auth: AuthAdmin = supabaseAuthAdmin()) {
-  if (input.role === "admin" && !actorIsAdmin) throw new AccountError("Only an admin can create another admin.", 403);
-
-  const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, input.email)).limit(1);
-  if (existing) throw new AccountError("This email already has an account. Find it in the list below and turn it on.", 409);
-
+/** The admin creates someone's access: active straight away, signs in with their phone. */
+export async function createResellerAccount(input: ResellerAccountInput, actor: Actor): Promise<SalesRep> {
+  if (input.role === "admin" && !actor.isAdmin) throw new AccountError("Only an admin can create another admin.", 403);
+  const phone = parsePhone(input.phone, input.countryCode);
+  await assertPhoneFree(phone);
   const { firstName, lastName } = splitName(input.displayName);
-  const authUser = await auth.createUser(input.email, input.password, { first_name: firstName, last_name: lastName ?? "" });
-
-  await db.insert(users).values({ id: authUser.id, email: input.email, firstName, lastName, isAdmin: input.role === "admin" });
+  const [user] = await db.insert(users).values({ phone, firstName, lastName, isAdmin: input.role === "admin" }).returning();
   return storage.upsertSalesRep({
-    userId: authUser.id,
+    userId: user.id,
     displayName: input.displayName,
-    email: input.email,
-    phone: input.phone ?? null,
+    phone,
     team: input.team ?? null,
     role: input.role,
     isActive: true,
@@ -90,14 +76,72 @@ export async function createResellerAccount(input: ResellerAccountInput, actorIs
   });
 }
 
-export const passwordResetSchema = z.object({
-  password: resellerAccountSchema.shape.password,
-}).strict();
-
-/** The admin sets a new password for a rep (e.g. a reseller who forgot theirs). */
-export async function resetRepPassword(repId: number, password: string, actorIsAdmin: boolean, auth: AuthAdmin = supabaseAuthAdmin()) {
+async function repOr404(repId: number): Promise<SalesRep> {
   const rep = await storage.getSalesRep(repId);
-  if (!rep?.userId) throw new AccountError("Rep not found", 404);
-  if (rep.role === "admin" && !actorIsAdmin) throw new AccountError("Only an admin can change an admin's password.", 403);
-  await auth.setPassword(rep.userId, password);
+  if (!rep) throw new AccountError("Rep not found", 404);
+  return rep;
+}
+
+/** Managers handle reps; only an admin may act on a manager or an admin. */
+function assertMayManage(rep: SalesRep, actor: Actor) {
+  if (rep.userId === actor.userId) throw new AccountError("You can't change your own access.", 400);
+  if (rep.role !== "rep" && !actor.isAdmin) throw new AccountError("Only an admin can change a manager's or admin's access.", 403);
+}
+
+async function setAccess(repId: number, patch: Partial<Pick<SalesRep, "isActive" | "blockedAt" | "blockedReason" | "modules">>) {
+  const [updated] = await db.update(salesReps).set({ ...patch, updatedAt: new Date() }).where(eq(salesReps.id, repId)).returning();
+  return updated;
+}
+
+/** Sign-up reviewed and accepted. */
+export async function approveRep(repId: number, modules: string[] | undefined, actor: Actor) {
+  const rep = await repOr404(repId);
+  assertMayManage(rep, actor);
+  if (rep.blockedAt) throw new AccountError("This rep is blocked. Unblock them instead.", 409);
+  return setAccess(repId, { isActive: true, ...(modules ? { modules } : {}) });
+}
+
+/** Partnership ended (or sign-up refused): no access, and every open session ends now. */
+export async function blockRep(repId: number, reason: string | null | undefined, actor: Actor) {
+  const rep = await repOr404(repId);
+  assertMayManage(rep, actor);
+  const updated = await setAccess(repId, { isActive: false, blockedAt: new Date(), blockedReason: reason?.trim() || null });
+  const ended = await db.execute(sql`DELETE FROM sessions WHERE sess->>'userId' = ${rep.userId}`);
+  console.log(`[reps] ${rep.displayName} (#${rep.id}) blocked by ${actor.userId}; ${ended.rowCount ?? 0} session(s) ended`);
+  return updated;
+}
+
+export async function unblockRep(repId: number, actor: Actor) {
+  const rep = await repOr404(repId);
+  assertMayManage(rep, actor);
+  return setAccess(repId, { isActive: true, blockedAt: null, blockedReason: null });
+}
+
+/** The number the rep signs in with (e.g. they changed phones). */
+export async function changeRepPhone(repId: number, input: z.infer<typeof phoneChangeSchema>, actor: Actor) {
+  const rep = await repOr404(repId);
+  if (rep.role !== "rep" && !actor.isAdmin && rep.userId !== actor.userId) {
+    throw new AccountError("Only an admin can change a manager's or admin's phone.", 403);
+  }
+  const phone = parsePhone(input.phone, input.countryCode);
+  await assertPhoneFree(phone, rep.userId);
+  await db.update(users).set({ phone, updatedAt: new Date() }).where(eq(users.id, rep.userId));
+  const [updated] = await db.update(salesReps).set({ phone, updatedAt: new Date() }).where(eq(salesReps.id, repId)).returning();
+  return updated;
+}
+
+export type RepAccess = "active" | "pending" | "blocked";
+
+/** Reps for Admin → Reps, with the phone they sign in with and where they stand. */
+export async function listRepsWithAccess() {
+  const list = await db
+    .select({ rep: salesReps, loginPhone: users.phone })
+    .from(salesReps)
+    .leftJoin(users, eq(users.id, salesReps.userId))
+    .orderBy(salesReps.createdAt);
+  return list.map(({ rep, loginPhone }) => ({
+    ...rep,
+    loginPhone,
+    access: (rep.blockedAt ? "blocked" : rep.isActive ? "active" : "pending") as RepAccess,
+  }));
 }
