@@ -2,6 +2,7 @@ import "dotenv/config";
 import express from "express";
 import path from "path";
 import { createApp, log } from "./app.js";
+import { pool } from "./db.js";
 import { ensureUploadBucket } from "./lib/supabase.js";
 
 const PORT = Number(process.env.PORT) || 2110;
@@ -36,6 +37,20 @@ const PORT = Number(process.env.PORT) || 2110;
   httpServer.listen(PORT, () => {
     log(`Xpot server listening on http://localhost:${PORT}`);
   });
+
+  // Coolify sends SIGTERM on every redeploy. Stop accepting connections, let
+  // in-flight requests finish, drain the pool, then exit.
+  const shutdown = (signal: string) => {
+    log(`${signal} received, shutting down`);
+    httpServer.close(() => {
+      pool.end().catch(() => undefined).finally(() => process.exit(0));
+    });
+    // Keep-alive sockets would otherwise hold close() open until they time out.
+    httpServer.closeIdleConnections();
+    setTimeout(() => process.exit(1), 10_000).unref();
+  };
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
 })().catch((err) => {
   console.error("Failed to start server:", err);
   process.exit(1);

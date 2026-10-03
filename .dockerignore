@@ -1,0 +1,14 @@
+node_modules
+dist
+.git
+.github
+.planning
+.claude
+.vercel
+.cache
+tests
+*.log
+
+.env
+.env.*
+!.env.example

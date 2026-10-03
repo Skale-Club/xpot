@@ -75,3 +75,31 @@ Xpot runs on its **own** dedicated Supabase project (`Xpot`, ref `swqxxeivetzakg
 the migrations in `migrations/` (run `npm run migrate`); nothing is shared with the
 Skale Club project. The split from Skale Club (see the extraction note above) is
 complete — this section previously described it as TBD, which was stale.
+
+## Deploy (Coolify)
+
+Production runs as one always-on Docker container on Coolify (the same Hetzner
+host as Skale Club), built from `Dockerfile`. The QR/NFC redirects printed on
+physical pieces must answer instantly, which rules out cold serverless starts.
+
+- `.github/workflows/ci.yml` runs type check, tests and build on every PR and push to `main`.
+- `.github/workflows/deploy.yml` runs after CI succeeds on `main`: it triggers the
+  Coolify deployment, waits for it, then checks `/api/health` and `/api/version`
+  (the deployed commit, from `SOURCE_COMMIT`).
+- GitHub settings it needs: secret `COOLIFY_TOKEN`; repo variables
+  `COOLIFY_APP_UUID` (the Coolify app's uuid) and `XPOT_PUBLIC_URL`
+  (e.g. `https://xpot.place`). Until both variables exist the deploy job only
+  prints a notice. Leave Coolify's own "Automatic Deployment" off.
+
+Coolify app settings:
+- Build pack: Dockerfile. Port: `8888`. Health check: `/api/health` (also in the Dockerfile).
+- Turn on "Include Source Commit in Build" so `/api/version` reports the commit.
+- Runtime environment variables: `POSTGRES_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`,
+  `SUPABASE_SERVICE_ROLE_KEY`, `SESSION_SECRET`, `GOOGLE_PLACES_API_KEY` (optional).
+  No build-time variables are needed.
+
+Migrations are not applied by the deploy: run `npm run migrate` against the
+production `POSTGRES_URL` before deploying code that needs them.
+
+The Vercel setup (`vercel.json`, `api/`, `npm run build:vercel`) stays until the
+domain moves to Coolify, then it is removed.
