@@ -19,6 +19,20 @@ jobs:
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Disposable Postgres for the tags integration test (tests/tags/tags.integration.test.ts).
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: xpot_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -37,6 +51,14 @@ jobs:
 
       - name: Unit tests
         run: npm test
+
+      - name: Integration tests (real Postgres)
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/xpot_ci?sslmode=disable
+          TAGS_INTEGRATION: "1"
+        run: |
+          npm run migrate
+          npx vitest run tests/tags/tags.integration.test.ts
 
       - name: Build
         run: npm run build
