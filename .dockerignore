@@ -7,6 +7,7 @@ dist
 .vercel
 .cache
 tests
+nfc-provisioner
 *.log
 
 .env

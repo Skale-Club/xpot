@@ -1,0 +1,38 @@
+{
+  "name": "xpot-nfc-writer",
+  "productName": "Xpot NFC Writer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Xpot NFC Writer: desktop companion for Xpot Tags that programs and verifies NFC chips through a USB PC/SC reader.",
+  "license": "UNLICENSED",
+  "main": "dist/main/main.js",
+  "scripts": {
+    "postinstall": "electron-rebuild -f -w @pokusew/pcsclite",
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.renderer.json && node scripts/copy-assets.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.renderer.json --noEmit",
+    "start": "npm run build && electron .",
+    "simulate": "npm run build && electron . --simulator",
+    "test": "tsx --test test/*.test.ts",
+    "dist": "npm run build && electron-builder"
+  },
+  "dependencies": {
+    "nfc-pcsc": "^0.8.1"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^4.2.0",
+    "@types/node": "^22.10.0",
+    "electron": "^44.5.1",
+    "electron-builder": "^26.15.3",
+    "tsx": "^4.20.5",
+    "typescript": "5.6.3"
+  },
+  "build": {
+    "appId": "place.xpot.nfc-writer",
+    "productName": "Xpot NFC Writer",
+    "files": ["dist/**/*", "package.json"],
+    "directories": { "output": "release" },
+    "win": { "target": "nsis" },
+    "mac": { "target": "dmg", "category": "public.app-category.business" },
+    "linux": { "target": "AppImage", "category": "Utility" }
+  }
+}
