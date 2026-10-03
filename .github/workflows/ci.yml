@@ -59,7 +59,7 @@ jobs:
           TAGS_INTEGRATION: "1"
         run: |
           npm run migrate
-          npx vitest run tests/tags/tags.integration.test.ts
+          npx vitest run tests/tags/tags.integration.test.ts tests/resellerAccounts.integration.test.ts
 
       - name: Build
         run: npm run build
