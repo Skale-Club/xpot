@@ -181,6 +181,7 @@ export default function App() {
       <Switch>
         <Route path="/" component={RootRoute} />
         <Route path="/login" component={Login} />
+        <Route path="/admin/tags/*?">{() => <AdminApp section="tags" />}</Route>
         <Route path="/admin/:section?">
           {(params) => <AdminApp section={params.section ?? "overview"} />}
         </Route>
