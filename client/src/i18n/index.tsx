@@ -49,6 +49,26 @@ export function interpolate(template: string, vars?: Record<string, string | num
   return template.replace(/\{(\w+)\}/g, (match, key: string) => (key in vars ? String(vars[key]) : match));
 }
 
+// Mirrors the provider's language for code outside React (formatters in
+// utils.ts, toasts in hooks). Updated as soon as the language changes.
+let activeLang: Lang = "en";
+
+/** The language in use, for non-component code. Components use useI18n/useT. */
+export function currentLang(): Lang {
+  return activeLang;
+}
+
+/** BCP 47 locale for the language in use, for Intl formatters. */
+export function currentLocale(): string {
+  return LOCALES[activeLang];
+}
+
+/** Look up a message outside React, in the language in use. */
+export function translate<T extends Record<string, string>>(dict: Dictionary<T>, key: keyof T & string, vars?: Record<string, string | number>): string {
+  const table = dict[activeLang] as Record<string, string>;
+  return interpolate(table[key] ?? (dict.en as Record<string, string>)[key] ?? key, vars);
+}
+
 interface I18nState {
   lang: Lang;
   locale: string;
@@ -58,9 +78,13 @@ interface I18nState {
 const I18nContext = createContext<I18nState | null>(null);
 
 export function I18nProvider({ children }: { children: ReactNode }) {
-  const [lang, setLangState] = useState<Lang>(detectLang);
+  const [lang, setLangState] = useState<Lang>(() => {
+    activeLang = detectLang();
+    return activeLang;
+  });
 
   const setLang = useCallback((next: Lang) => {
+    activeLang = next;
     setLangState(next);
     try {
       window.localStorage.setItem(STORAGE_KEY, next);
