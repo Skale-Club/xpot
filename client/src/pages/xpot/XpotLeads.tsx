@@ -11,7 +11,11 @@ import {
   UserCheck,
   MapPinned,
   Building2,
+  Nfc,
 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import type { LeadTagSummary } from "@shared/tagsApi";
+import { useXpotModules } from "@/components/ModuleSwitch";
 import { EditLeadDialog } from "./components/EditLeadDialog";
 import { LeadCardBody } from "./components/LeadCardBody";
 import {
@@ -325,10 +329,32 @@ function AddCompanyDialog({
 
 // ─── Lead Card ────────────────────────────────────────────────────────────────
 
+/** "2 pieces · 1 live · 14 scans in 30 days", opening the customer's pieces in Tags. */
+function LeadPiecesChip({ lead, summary, onOpen }: { lead: FullSalesLead; summary: LeadTagSummary; onOpen: () => void }) {
+  const t = useT(leadsMessages);
+  return (
+    <span
+      role="link"
+      tabIndex={0}
+      onClick={(e) => { e.stopPropagation(); onOpen(); }}
+      onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); onOpen(); } }}
+      className="inline-flex max-w-full items-center gap-1.5 rounded-xl bg-emerald-400/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-300 hover:bg-emerald-400/20"
+      data-testid={`lead-${lead.id}-pieces`}
+    >
+      <Nfc className="h-3 w-3 shrink-0" />
+      <span>
+        {[t.plural("piecesCount", summary.pieces), t("piecesLive", { n: summary.live }), t("piecesScans", { n: summary.scansLast30 })].join(" · ")}
+      </span>
+    </span>
+  );
+}
+
 function LeadCard({
-  lead, onEdit, onDelete, onCheckIn, onSyncGhl, onPromote, isSyncing, isProspect,
+  lead, onEdit, onDelete, onCheckIn, onSyncGhl, onPromote, isSyncing, isProspect, pieces, onOpenPieces,
 }: {
   lead: FullSalesLead;
+  pieces?: LeadTagSummary;
+  onOpenPieces?: () => void;
   onEdit: () => void;
   onDelete: () => void;
   onCheckIn: () => void;
@@ -347,6 +373,7 @@ function LeadCard({
     >
       <LeadCardBody
         lead={lead}
+        subtitle={pieces && onOpenPieces ? <LeadPiecesChip lead={lead} summary={pieces} onOpen={onOpenPieces} /> : undefined}
         right={
           <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
             {isProspect && onPromote && (
@@ -417,6 +444,14 @@ export function XpotLeads() {
   } = useLeads();
 
   const allLeads = leadsQuery.data ?? [];
+  // Pieces sold to each customer, when this rep sells tags.
+  const canSellTags = useXpotModules().includes("tags");
+  const { data: piecesByLead } = useQuery<LeadTagSummary[]>({
+    queryKey: ["/api/xpot/tags/by-lead"],
+    enabled: canSellTags,
+    staleTime: 60_000,
+  });
+  const piecesFor = (leadId: number) => piecesByLead?.find((p) => p.leadId === leadId);
   const prospects = allLeads.filter((l) => l.status === "prospect");
   const leads = allLeads.filter((l) => l.status !== "prospect");
 
@@ -582,6 +617,8 @@ export function XpotLeads() {
             onCheckIn={() => setLocation(`/check-in?leadId=${lead.id}`)}
             onSyncGhl={() => handleSyncGhl(lead)}
             onPromote={() => handlePromote(lead)}
+            pieces={piecesFor(lead.id)}
+            onOpenPieces={() => setLocation(`/tags/pieces?lead=${lead.id}&name=${encodeURIComponent(lead.name)}`)}
           />
         ))}
       </div>

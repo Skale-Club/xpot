@@ -147,6 +147,7 @@ export function useLeads() {
       source: selectedLeadPlace ? "google_places" : "xpot",
       status: "lead",
       notes: selectedLeadPlace ? `Imported from Google Places (${selectedLeadPlace.placeId})` : undefined,
+      googlePlaceId: selectedLeadPlace?.placeId,
       primaryLocation: leadForm.addressLine1
         ? {
             label: "Main",

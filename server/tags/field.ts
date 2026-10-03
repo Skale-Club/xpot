@@ -5,7 +5,8 @@ import { buildTagUrls, defaultUtmEnabled } from "#shared/tags.js";
 import { canWorkOnTag, saleCredit, type TagActor } from "#shared/tagAccess.js";
 import { decidePhoneWrite, type DirectWriteMethod } from "#shared/tagApp.js";
 import type { DirectWriteItem } from "#shared/tagsApi.js";
-import { createLeadForSale, leadUsableBy, markLeadCustomer, TagError, type Tx } from "./repository.js";
+import { createLeadForSale, leadUsableBy, markLeadCustomer, rememberLeadPlace, TagError, type Tx } from "./repository.js";
+import { placeIdFromReviewUrl } from "#shared/reviewLink.js";
 
 // Server side of the Tags field app: the one-shot operations behind "tap the
 // piece, pick the customer, paste the link, done". Same rules as the admin
@@ -94,6 +95,7 @@ export async function quickActivateTag(id: string, input: QuickActivateInput, ac
       .where(eq(tags.id, id))
       .returning();
     await markLeadCustomer(tx, leadId);
+    if (input.destinationType === "google_review") await rememberLeadPlace(tx, leadId, placeIdFromReviewUrl(input.destinationUrl));
     console.log(`[tags] quick-activate ${tag.publicCode}: ${tag.status} → active (rep ${actor.repId})`);
     return updated;
   });
@@ -168,6 +170,7 @@ export async function recordDirectWrite(input: DirectWriteInput, actor: TagActor
         writtenByUserId: actor.userId,
       })
       .returning({ id: tagDirectWrites.id });
+    if (leadId) await rememberLeadPlace(tx, leadId, placeIdFromReviewUrl(input.url));
     return row;
   });
 }

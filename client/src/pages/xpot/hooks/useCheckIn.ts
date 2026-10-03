@@ -204,6 +204,12 @@ export function useCheckIn() {
     if (existingLead) {
       setSelectedLeadId(existingLead.id);
       setCheckInSearch(existingLead.name);
+      // Matched to Google: keep the Place ID so Tags can build its review link.
+      if (!existingLead.googlePlaceId && place.placeId) {
+        apiRequest("PATCH", `/api/xpot/leads/${existingLead.id}`, { googlePlaceId: place.placeId })
+          .then(() => invalidateXpotData())
+          .catch(() => {});
+      }
       // If the existing lead has no address, save the one from Google Places
       const hasAddress = existingLead.locations && existingLead.locations.length > 0 && existingLead.locations[0]?.addressLine1;
       if (!hasAddress && place.address) {
@@ -231,6 +237,7 @@ export function useCheckIn() {
       source: "google_places",
       status: "lead",
       notes: `Imported from Google Places (${place.placeId})`,
+      googlePlaceId: place.placeId,
       primaryLocation: {
         label: "Main",
         addressLine1: parsedAddress.addressLine1 || place.address,

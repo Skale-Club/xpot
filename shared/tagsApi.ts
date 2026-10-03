@@ -127,6 +127,14 @@ export interface TagKitItem {
   unsoldCount: number;
 }
 
+/** Pieces sold to one customer (lead), for the Visits side. */
+export interface LeadTagSummary {
+  leadId: number;
+  pieces: number;
+  live: number;
+  scansLast30: number;
+}
+
 /** The field app's home numbers for the signed-in reseller. */
 export interface TagRepSummary {
   /** Pieces in hand, not sold yet. */

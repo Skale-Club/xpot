@@ -28,6 +28,11 @@ const en = {
   recentVisits: "Recent Visits",
   noVisitsToday: "No visits today",
   goToCheckIn: "Go to Check-In to start your day",
+  tagsTitle: "Your tags",
+  tagsInKit: "In your kit",
+  tagsLive: "Live",
+  tagsScans: "Scans (30 days)",
+  tagsOpen: "Open Tags",
 };
 
 export const dashboardMessages: Dictionary<typeof en> = {
@@ -57,6 +62,11 @@ export const dashboardMessages: Dictionary<typeof en> = {
     recentVisits: "Visitas recentes",
     noVisitsToday: "Nenhuma visita hoje",
     goToCheckIn: "Vá para Check-in para começar o dia",
+    tagsTitle: "Suas tags",
+    tagsInKit: "No seu kit",
+    tagsLive: "No ar",
+    tagsScans: "Scans (30 dias)",
+    tagsOpen: "Abrir Tags",
   },
   es: {
     greetingMorning: "Buenos días",
@@ -83,5 +93,10 @@ export const dashboardMessages: Dictionary<typeof en> = {
     recentVisits: "Visitas recientes",
     noVisitsToday: "No hay visitas hoy",
     goToCheckIn: "Ve a Check-in para empezar el día",
+    tagsTitle: "Tus etiquetas",
+    tagsInKit: "En tu kit",
+    tagsLive: "Activas",
+    tagsScans: "Escaneos (30 días)",
+    tagsOpen: "Abrir Etiquetas",
   },
 };

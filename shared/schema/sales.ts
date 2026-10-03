@@ -108,6 +108,8 @@ export const salesLeads = pgTable("sales_leads", {
   // Round-trip reference to the originating Xphere prospect ("contact:uuid" or
   // "account:uuid"), set when a lead is pushed in from Xphere for a field visit.
   xphereRef: text("xphere_ref"),
+  // Google Places ID of the business, when it came from (or was matched to) Google.
+  googlePlaceId: text("google_place_id"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => ({
@@ -320,6 +322,7 @@ export const insertSalesLeadSchema = z.object({
   lastVisitAt: z.union([z.string(), z.date(), z.null()]).optional(),
   nextVisitDueAt: z.union([z.string(), z.date(), z.null()]).optional(),
   notes: z.string().nullable().optional(),
+  googlePlaceId: z.string().max(300).nullable().optional(),
 });
 
 export const insertSalesLeadLocationSchema = z.object({

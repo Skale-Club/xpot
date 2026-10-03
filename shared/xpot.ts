@@ -53,6 +53,8 @@ export const xpotLeadCreateSchema = z.object({
   })).optional(),
   ownerRepId: z.number().int().nullable().optional(),
   territoryName: z.string().nullable().optional(),
+  /** Google Places ID, when the business came from a Google search. */
+  googlePlaceId: z.string().regex(/^[A-Za-z0-9_-]{10,300}$/).nullable().optional(),
   primaryLocation: z.object({
     label: z.string().optional(),
     addressLine1: z.string().min(1),

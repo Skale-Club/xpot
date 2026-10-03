@@ -1,7 +1,10 @@
 import { useRef } from "react";
 import { Camera, MapPinned, DollarSign, Target, Clock3, Footprints, LogOut, Activity, AlertTriangle, RefreshCw, Settings, Shield } from "lucide-react";
 import { AreaChart, Area, XAxis, Tooltip, ResponsiveContainer, LabelList } from "recharts";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { ChevronRight, Nfc } from "lucide-react";
+import type { TagRepSummary } from "@shared/tagsApi";
+import { useXpotModules } from "@/components/ModuleSwitch";
 import { useXpotQueries } from "./hooks/useXpotQueries";
 import { useSyncStatus } from "./hooks/useSyncStatus";
 import { VisitRow } from "./components/VisitRow";
@@ -57,6 +60,12 @@ export function XpotDashboard() {
   const firstName = repName?.split(" ")[0] ?? "";
   const { failedEvents, retryMutation } = useSyncStatus();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const canSellTags = useXpotModules().includes("tags");
+  const { data: tagSummary } = useQuery<TagRepSummary>({
+    queryKey: ["/api/xpot/tags/summary"],
+    enabled: canSellTags,
+    staleTime: 30_000,
+  });
 
   const initials = repName.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
   const avatarUrl = me?.rep.avatarUrl;
@@ -219,6 +228,37 @@ export function XpotDashboard() {
           );
         })}
       </div>
+
+      {/* Tags at a glance, for reps who sell QR/NFC pieces */}
+      {tagSummary && (
+        <button
+          type="button"
+          onClick={() => setLocation("/tags")}
+          className="flex w-full items-center gap-3 rounded-[20px] p-4 text-left transition-transform active:scale-[0.98]"
+          style={{ background: "rgba(16,185,129,0.06)", border: "1px solid rgba(16,185,129,0.18)", WebkitTapHighlightColor: "transparent" }}
+          data-testid="dashboard-tags"
+        >
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-400/15 text-emerald-300">
+            <Nfc className="h-5 w-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-bold text-white">{t("tagsTitle")}</div>
+            <div className="mt-1 grid grid-cols-3 gap-2">
+              {([
+                ["tagsInKit", tagSummary.inStock],
+                ["tagsLive", tagSummary.active],
+                ["tagsScans", tagSummary.scansLast30.qr + tagSummary.scansLast30.nfc],
+              ] as const).map(([key, value]) => (
+                <div key={key} className="min-w-0">
+                  <div className="text-lg font-extrabold leading-none text-white tabular-nums">{value}</div>
+                  <div className="mt-1 truncate text-[9px] font-semibold uppercase tracking-wider text-white/40">{t(key)}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <ChevronRight className="h-4 w-4 shrink-0 text-white/30" aria-label={t("tagsOpen")} />
+        </button>
+      )}
 
       {/* Timeline Chart */}
       <div
