@@ -206,6 +206,13 @@ test.skipIf(!enabled)("tags: kits, reseller isolation, sales, scans, report, pro
     assert.equal((await api("POST", "/api/xpot/admin/tag-kits/return", "it-admin", { codes: brunoCodes })).json.returned, 2);
     assert.equal((await api("GET", "/api/xpot/tags/summary", "it-bruno")).json.inStock, 0);
     assert.equal((await api("POST", "/api/xpot/admin/tag-kits/return", "it-admin", { codes: [a1.publicCode] })).status, 409);
+    // A typo is refused; a piece already home is reported, not counted.
+    const typo = await api("POST", "/api/xpot/admin/tag-kits/return", "it-admin", { codes: ["ZZZZZZZZ"] });
+    assert.equal(typo.status, 404);
+    assert.match(typo.json.message, /Unknown codes: ZZZZZZZZ/);
+    const again = (await api("POST", "/api/xpot/admin/tag-kits/return", "it-admin", { codes: brunoCodes })).json;
+    assert.equal(again.returned, 0);
+    assert.deepEqual([...again.alreadyInHouse].sort(), brunoCodes.map((c: string) => c.toUpperCase()).sort());
     const kits = await api("GET", `/api/xpot/admin/tag-kits?repId=${repId["it-ana"]}`, "it-admin");
     assert.deepEqual(kits.json.map((k: any) => [k.pieceCount, k.unsoldCount, k.note]), [[3, 1, "WhatsApp order #1"]]);
 

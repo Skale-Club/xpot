@@ -527,22 +527,33 @@ export async function listKits(filter: { repId?: number; kitId?: string } = {}):
 }
 
 /** Admin: unsold pieces back from a reseller to house stock (kit returned, reseller left). */
-export async function returnToHouse(codes: string[], userId: string | null): Promise<number> {
+/**
+ * Unsold pieces a reseller hands back go to house stock. A typo must not pass
+ * silently: unknown codes are refused, and pieces already in house stock are
+ * reported instead of counted.
+ */
+export async function returnToHouse(codes: string[], userId: string | null): Promise<{ returned: number; alreadyInHouse: string[] }> {
   return db.transaction(async (tx) => {
     const picked = await tx
-      .select({ id: tags.id, publicCode: tags.publicCode, status: tags.status })
+      .select({ id: tags.id, publicCode: tags.publicCode, status: tags.status, repId: tags.repId })
       .from(tags)
       .where(inArray(tags.publicCode, codes))
       .for("update");
+    const found = new Set(picked.map((t) => t.publicCode));
+    const missing = codes.filter((c) => !found.has(c));
+    if (missing.length) throw new TagError(`Unknown codes: ${missing.join(", ")}`, 404);
     const sold = picked.filter((t) => t.status !== "inventory").map((t) => t.publicCode);
     if (sold.length) throw new TagError(`Already sold, cannot return: ${sold.join(", ")}`, 409);
-    if (picked.length === 0) return 0;
-    await tx
-      .update(tags)
-      .set({ repId: null, kitId: null, updatedAt: new Date() })
-      .where(inArray(tags.id, picked.map((t) => t.id)));
-    console.log(`[tags] ${picked.length} pieces returned to house stock (user ${userId ?? "?"})`);
-    return picked.length;
+    const alreadyInHouse = picked.filter((t) => t.repId === null).map((t) => t.publicCode);
+    const moving = picked.filter((t) => t.repId !== null);
+    if (moving.length) {
+      await tx
+        .update(tags)
+        .set({ repId: null, kitId: null, updatedAt: new Date() })
+        .where(inArray(tags.id, moving.map((t) => t.id)));
+      console.log(`[tags] ${moving.length} pieces returned to house stock (user ${userId ?? "?"})`);
+    }
+    return { returned: moving.length, alreadyInHouse };
   });
 }
 
