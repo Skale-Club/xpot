@@ -2,6 +2,7 @@ import "express-async-errors";
 import { ZodError } from "zod";
 import express, { type Request, type Response, type NextFunction } from "express";
 import { createServer, type Server } from "http";
+import { legacyHostRedirect } from "./canonicalHost.js";
 import { registerRoutes } from "./routes.js";
 
 declare module "http" {
@@ -37,6 +38,9 @@ export function assertRequiredEnv(env: NodeJS.ProcessEnv = process.env): void {
 export async function createApp(): Promise<{ app: express.Express; httpServer: Server }> {
   assertRequiredEnv();
   const app = express();
+
+  // Before anything else: the legacy domain goes to xpot.place.
+  app.use(legacyHostRedirect);
 
   // PLT-02: 50 MB here was fiction — the serverless platform rejects bodies
   // over 4.5 MB before this middleware runs. Voice notes are encoded at 32 kbps

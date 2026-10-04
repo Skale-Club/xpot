@@ -198,6 +198,12 @@ Environment:
 
 ## Deploy (Coolify)
 
+**Domain: `https://xpot.place`, only.** It is printed on every QR code and NFC
+chip. `xpot.skale.club` is the legacy domain: the server answers it with a 301
+to the same path on xpot.place (`server/canonicalHost.ts`). `/api/*` still
+answers there so pinned integrations keep working; each such call is logged
+as `[legacy-host]` so it can be moved before the old domain is retired.
+
 Production runs as one always-on Docker container on Coolify (the same Hetzner
 host as Skale Club), built from `Dockerfile`. The QR/NFC redirects printed on
 physical pieces must answer instantly, which rules out cold serverless starts.
