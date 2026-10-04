@@ -724,6 +724,8 @@ export interface BatchInput {
   vendor?: string | null;
   quantity: number;
   notes?: string | null;
+  /** Exact codes from already-printed legacy pieces; admin API validates them. */
+  publicCodes?: string[];
 }
 
 /**
@@ -734,7 +736,13 @@ export interface BatchInput {
 export async function createBatch(input: BatchInput, userId: string | null, source: JourneySource = "admin") {
   const batchCode = input.batchCode?.trim() || (await nextBatchCode(input.productType));
   for (let attempt = 1; ; attempt++) {
-    const codes = await generateUniqueCodes(input.quantity, findExistingCodes);
+    const codes = input.publicCodes ?? (await generateUniqueCodes(input.quantity, findExistingCodes));
+    if (input.publicCodes) {
+      const existing = await findExistingCodes(codes);
+      if (existing.size > 0) {
+        throw new TagError(`Public codes already exist: ${Array.from(existing).sort().join(", ")}`, 409);
+      }
+    }
     try {
       const batch = await db.transaction(async (tx) => {
         const [batch] = await tx

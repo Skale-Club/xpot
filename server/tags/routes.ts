@@ -139,7 +139,12 @@ const tagPatchSchema = z.object({
 
 const actionSchema = z.object({ reason: optionalText(300) }).strict();
 
-const batchCreateSchema = z.object({
+const legacyPublicCode = z
+  .string()
+  .refine((value) => normalizeTagCode(value) !== null, "Invalid public code")
+  .transform((value) => normalizeTagCode(value)!);
+
+export const batchCreateSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(120),
   batchCode: z.preprocess(
     (v) => (typeof v === "string" ? v.trim().toUpperCase() || undefined : v),
@@ -149,7 +154,27 @@ const batchCreateSchema = z.object({
   vendor: optionalText(120),
   quantity: z.coerce.number().int().min(1).max(TAG_MAX_BATCH_QUANTITY),
   notes: optionalText(2000),
-}).strict();
+  // Admin-only escape hatch for already-manufactured pieces whose printed QR
+  // codes must be preserved during a migration. Normal batches omit this and
+  // keep using cryptographically random codes.
+  publicCodes: z.array(legacyPublicCode).min(1).max(TAG_MAX_BATCH_QUANTITY).optional(),
+}).strict().superRefine((value, ctx) => {
+  if (!value.publicCodes) return;
+  if (value.publicCodes.length !== value.quantity) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["publicCodes"],
+      message: "publicCodes must contain exactly quantity codes",
+    });
+  }
+  if (new Set(value.publicCodes).size !== value.publicCodes.length) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["publicCodes"],
+      message: "publicCodes must not contain duplicates",
+    });
+  }
+});
 
 const batchPatchSchema = z.object({
   name: z.string().trim().min(1).max(120).optional(),
