@@ -207,6 +207,10 @@ const en = {
   reviewFromLeadDone: "Google review link of {name} filled in. Check it and save.",
   piecesOf: "Pieces of {name}",
   clearFilter: "Show all",
+  wholesaleTitle: "Buy kits at wholesale",
+  wholesaleText: "Order plaques, keychains and more from the Stuscle store at partner prices. Your code unlocks them.",
+  wholesaleCode: "Your wholesale code",
+  wholesaleOpen: "Open the wholesale store",
 };
 
 export const tagsMessages: Dictionary<typeof en> = {
@@ -402,6 +406,10 @@ export const tagsMessages: Dictionary<typeof en> = {
     reviewFromLeadDone: "Link de avaliação de {name} preenchido. Confira e salve.",
     piecesOf: "Peças de {name}",
     clearFilter: "Ver todas",
+    wholesaleTitle: "Comprar kits no atacado",
+    wholesaleText: "Peça plaquinhas, chaveiros e mais na loja Stuscle com preço de parceiro. O seu código libera.",
+    wholesaleCode: "Seu código de atacado",
+    wholesaleOpen: "Abrir a loja de atacado",
   },
   es: {
     navHome: "Inicio",
@@ -594,5 +602,9 @@ export const tagsMessages: Dictionary<typeof en> = {
     reviewFromLeadDone: "Enlace de reseña de {name} listo. Revísalo y guarda.",
     piecesOf: "Piezas de {name}",
     clearFilter: "Ver todas",
+    wholesaleTitle: "Comprar kits al por mayor",
+    wholesaleText: "Pide placas, llaveros y más en la tienda Stuscle con precio de socio. Tu código los desbloquea.",
+    wholesaleCode: "Tu código de mayorista",
+    wholesaleOpen: "Abrir la tienda mayorista",
   },
 };

@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Ban, Check, Copy, Phone, RotateCcw, UserPlus } from "lucide-react";
+import { Ban, Check, Copy, KeyRound, Phone, RotateCcw, UserPlus } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "@/components/ui/loader";
@@ -20,6 +20,7 @@ type Rep = {
   email: string | null;
   phone: string | null;
   loginPhone: string | null;
+  wholesaleCode: string | null;
   team: string | null;
   role: string;
   isActive: boolean;
@@ -210,6 +211,7 @@ function ActiveRow({ rep }: { rep: Rep }) {
   });
   const block = useRepAction((r) => `${r.displayName} blocked and signed out`);
   const phone = useRepAction((r) => `${r.displayName}'s sign-in phone changed`);
+  const newCode = useRepAction((r) => `New wholesale code for ${r.displayName}; the old one no longer works`);
 
   return (
     <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4" data-testid={`rep-${rep.id}`}>
@@ -233,6 +235,21 @@ function ActiveRow({ rep }: { rep: Rep }) {
       >
         {save.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
         Save
+      </button>
+      <button
+        type="button"
+        title={rep.wholesaleCode ? `Wholesale code ${rep.wholesaleCode}: issue a new one` : "Issue a wholesale code"}
+        disabled={newCode.isPending}
+        onClick={() => {
+          if (!rep.wholesaleCode || window.confirm(`Issue a new wholesale code for ${rep.displayName}? ${rep.wholesaleCode} stops working in the Stuscle store.`)) {
+            newCode.mutate({ url: `/api/xpot/admin/reps/${rep.id}/wholesale-code`, rep });
+          }
+        }}
+        className={`${BTN} border border-white/10 font-mono text-xs text-white/60 hover:bg-white/5`}
+        data-testid={`wholesale-${rep.id}`}
+      >
+        <KeyRound className="h-4 w-4" />
+        {rep.wholesaleCode ?? "code"}
       </button>
       <button
         type="button"
