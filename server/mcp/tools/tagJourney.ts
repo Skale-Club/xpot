@@ -22,6 +22,7 @@ import {
 import * as repo from "../../tags/repository.js";
 import { batchCreateSchema, tagBaseUrl } from "../../tags/routes.js";
 import type { McpCaller } from "../server.js";
+import { mergeReadScope, readScopeParams } from "../readScope.js";
 
 // Tags Journey tools for an AI session. Everything goes through the same
 // journey / repository functions and zod schemas as the admin API; entries
@@ -84,10 +85,10 @@ export function registerTagJourneyTools(server: McpServer, caller: McpCaller) {
   server.tool(
     "tags_journey_get",
     `The story of the Tags: the journey timeline (executions with before → after, decisions, insights, observations, risks, results) and the plans. Scope with ${scope}; a tag's story includes its batch's batch-wide entries and the kit deliveries that listed its code. Optional: kind (${JOURNEY_ENTRY_KINDS.join("|")}), planId, includeArchived, limit (1-500), planStatus (open|closed|all|<status>, default all), order (asc = oldest first, the default, to read it as a story; desc = newest first). Reseller-scoped (repId) reads return entries only.`,
-    { filters: objectParam.optional() },
-    async ({ filters }) =>
+    { filters: objectParam.optional(), ...readScopeParams },
+    async (args) =>
       run("tags_journey_get", async () => {
-        const { order, planStatus, ...rest } = (filters ?? {}) as Record<string, unknown>;
+        const { order, planStatus, ...rest } = mergeReadScope(args);
         const query = journeyQuerySchema.parse(await withScopeRefs(rest));
         const status = planQuerySchema.shape.status.parse(planStatus);
         const result = await journey.getJourney({ ...query, planStatus: status ?? "all" });
@@ -119,10 +120,12 @@ export function registerTagJourneyTools(server: McpServer, caller: McpCaller) {
   server.tool(
     "tags_plans_list",
     `List plans. Optional filters: status (open = draft|active|paused, the default; closed; all; or one of ${PLAN_STATUSES.join("|")}), ${planScope}, limit.`,
-    { filters: objectParam.optional() },
-    async ({ filters }) =>
-      run("tags_plans_list", async () =>
-        journey.listPlans(planQuerySchema.parse(await withScopeRefs(filters ?? {})))),
+    { filters: objectParam.optional(), ...readScopeParams },
+    async (args) =>
+      run("tags_plans_list", async () => {
+        const { order: _o, planStatus: _p, kind: _k, includeArchived: _i, before: _b, ...rest } = mergeReadScope(args);
+        return journey.listPlans(planQuerySchema.parse(await withScopeRefs(rest)));
+      }),
   );
 
   server.tool(

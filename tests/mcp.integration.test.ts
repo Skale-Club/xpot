@@ -139,6 +139,13 @@ test.skipIf(!enabled)("mcp: token via admin API, tools over Streamable HTTP, rev
       const pinned = await call(client, "tags_batch_create", { batch: { name: "x", productType: "keychain", quantity: 1, publicCodes: ["A7K3P9X2"] } });
       assert.equal(pinned.isError, true);
 
+      // The journey scope also works at the top level (it used to be dropped silently, returning everything).
+      const scopedTop = await call(client, "tags_journey_get", { batch: "IG-MCP-001" });
+      const scopedIn = await call(client, "tags_journey_get", { filters: { batch: "IG-MCP-001" } });
+      assert.equal(scopedTop.isError, false);
+      assert.deepEqual(scopedTop.json.entries.map((e: { id: string }) => e.id), scopedIn.json.entries.map((e: { id: string }) => e.id));
+      assert.ok(scopedTop.json.entries.every((e: { title: string }) => !e.title.includes(batch.batchCode)));
+
       // Record by batch code; object params also arrive as JSON strings.
       const recorded = await call(client, "tags_journey_record", {
         entry: { kind: "execution", action: "printed", title: "Plate printed", content: "163 min, PLA", batch: batch.batchCode.toLowerCase(), metadata: { minutes: 163 } },
