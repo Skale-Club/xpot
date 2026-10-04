@@ -2,7 +2,8 @@
 //
 // Each provider maps to one row (keyed by `provider`) in either `chat_integrations`
 // (AI/voice providers — column set: enabled, model, api_key) or `integration_settings`
-// (external services — column set: is_enabled, api_key, location_id, calendar_id).
+// (external services — column set: is_enabled, api_key, location_id, calendar_id,
+// plus a free-form `config` jsonb for provider-specific, non-secret settings).
 //
 // The backend uses this to mask secrets on read, validate writes, and route the
 // upsert to the right table. The frontend uses the same list to render forms
@@ -10,9 +11,17 @@
 
 export type IntegrationTable = "chat" | "settings";
 
+/** Field keys stored in the `config` jsonb column of integration_settings (no dedicated column). */
+export const CONFIG_FIELD_KEYS = ["accountSid", "fromNumber", "messagingServiceSid"] as const;
+export type ConfigFieldKey = (typeof CONFIG_FIELD_KEYS)[number];
+
+export function isConfigFieldKey(key: string): key is ConfigFieldKey {
+  return (CONFIG_FIELD_KEYS as readonly string[]).includes(key);
+}
+
 export interface IntegrationFieldDef {
-  /** Maps to a real column on the target table. */
-  key: "apiKey" | "model" | "locationId" | "calendarId";
+  /** A real column on the target table, or a ConfigFieldKey (stored in `config`). */
+  key: "apiKey" | "model" | "locationId" | "calendarId" | ConfigFieldKey;
   label: string;
   /** Render as a password input and mask on read. */
   secret?: boolean;
@@ -28,7 +37,7 @@ export interface IntegrationProviderDef {
   description: string;
   table: IntegrationTable;
   /** "Used for" badge in the UI. */
-  category: "Maps" | "Voice" | "AI" | "Pipeline";
+  category: "Maps" | "Voice" | "AI" | "Pipeline" | "Messaging";
   fields: IntegrationFieldDef[];
   /**
    * Optional group id — only one provider in a group can be enabled at a time.
@@ -130,6 +139,19 @@ export const INTEGRATION_PROVIDERS: IntegrationProviderDef[] = [
       { key: "calendarId", label: "Calendar ID", optional: true },
     ],
   },
+  {
+    provider: "twilio",
+    label: "Twilio | SMS",
+    description: "Sign-in codes and team notices by SMS. Needs the Account SID, the Auth Token and a From number or a Messaging Service.",
+    table: "settings",
+    category: "Messaging",
+    fields: [
+      { key: "accountSid", label: "Account SID", placeholder: "AC..." },
+      { key: "apiKey", label: "Auth Token", secret: true },
+      { key: "fromNumber", label: "From number (E.164)", placeholder: "+15085550100", optional: true },
+      { key: "messagingServiceSid", label: "Messaging Service SID", placeholder: "MG...", optional: true },
+    ],
+  },
 ];
 
 export function getProviderDef(provider: string): IntegrationProviderDef | undefined {
@@ -154,5 +176,25 @@ export interface IntegrationStatus {
   calendarId: string | null;
   hasApiKey: boolean;
   apiKeyLast4: string | null;
+  /** Non-secret provider-specific values (ConfigFieldKey), only the ones that are filled. */
+  config: Partial<Record<ConfigFieldKey, string>>;
+  /** What is still missing for the provider to work, or null when it is ready. */
+  problem: string | null;
   updatedAt: string | null;
+}
+
+/** Setup gaps for a provider given what is saved. Null means it has everything it needs. */
+export function integrationProblem(
+  provider: string,
+  state: { hasApiKey: boolean; config: Partial<Record<ConfigFieldKey, string>> }
+): string | null {
+  if (provider === "twilio") {
+    if (!state.config.accountSid) return "Account SID is missing.";
+    if (!state.hasApiKey) return "Auth Token is missing.";
+    if (!state.config.fromNumber && !state.config.messagingServiceSid) {
+      return "Set a From number or a Messaging Service SID.";
+    }
+    return null;
+  }
+  return state.hasApiKey ? null : "No API key on file, so calls will fail. Paste a key and click Save.";
 }

@@ -2,7 +2,7 @@
 // chat_integrations is read for AI-related toggles (not used yet but kept for parity).
 // integration_settings holds the GoHighLevel apiKey + locationId.
 
-import { boolean, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { boolean, jsonb, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
 
 export const chatIntegrations = pgTable("chat_integrations", {
   id: serial("id").primaryKey(),
@@ -24,6 +24,8 @@ export const integrationSettings = pgTable("integration_settings", {
   locationId: text("location_id"),
   calendarId: text("calendar_id").default("2irhr47AR6K0AQkFqEQl"),
   isEnabled: boolean("is_enabled").default(false),
+  /** Provider-specific, non-secret settings (Twilio: accountSid, fromNumber, messagingServiceSid). Secrets stay in api_key. */
+  config: jsonb("config").$type<Record<string, string>>(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

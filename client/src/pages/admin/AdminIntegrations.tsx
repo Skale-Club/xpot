@@ -18,6 +18,7 @@ import {
 import {
   INTEGRATION_PROVIDERS,
   getMutexSiblings,
+  isConfigFieldKey,
   type IntegrationProviderDef,
   type IntegrationStatus,
 } from "#shared/integrations-registry.js";
@@ -29,20 +30,21 @@ const CATEGORY_COLORS: Record<string, string> = {
   Voice: "bg-violet-500/15 text-violet-300 border-violet-500/20",
   AI: "bg-blue-500/15 text-blue-300 border-blue-500/20",
   Pipeline: "bg-amber-500/15 text-amber-300 border-amber-500/20",
+  Messaging: "bg-sky-500/15 text-sky-300 border-sky-500/20",
 };
 
 /**
  * Sidebar item health colors based on saved state.
- *   green  = enabled AND has key (live)
- *   red    = enabled but no key (broken / misconfigured)
+ *   green  = enabled AND complete (live)
+ *   red    = enabled but something is missing (broken / misconfigured)
  *   amber  = disabled but has key (idle — turn on to activate)
  *   muted  = disabled and no key (off)
  */
 type StatusKey = "live" | "broken" | "idle" | "off";
 function statusKey(s: IntegrationStatus | undefined): StatusKey {
   if (!s) return "off";
-  if (s.enabled && s.hasApiKey) return "live";
-  if (s.enabled && !s.hasApiKey) return "broken";
+  if (s.enabled && !s.problem) return "live";
+  if (s.enabled) return "broken";
   if (!s.enabled && s.hasApiKey) return "idle";
   return "off";
 }
@@ -75,6 +77,7 @@ function displayFieldValue(
   if (key === "model") return status.model ?? "";
   if (key === "locationId") return status.locationId ?? "";
   if (key === "calendarId") return status.calendarId ?? "";
+  if (isConfigFieldKey(key)) return status.config?.[key] ?? "";
   return "";
 }
 
@@ -139,7 +142,7 @@ export function AdminIntegrations() {
                           className={`hidden shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide sm:inline-flex ${STATUS_CHIP[sk]}`}
                         >
                           {sk === "live" && "Live"}
-                          {sk === "broken" && "Needs key"}
+                          {sk === "broken" && "Incomplete"}
                           {sk === "idle" && "Idle"}
                           {sk === "off" && "Off"}
                         </span>
@@ -210,7 +213,9 @@ function ProviderDetail({
       const body: Record<string, unknown> = { enabled };
       for (const f of def.fields) {
         const v = fields[f.key];
-        if (v !== undefined && v !== "" && v !== SAVED_SECRET_MASK) body[f.key] = v;
+        if (v === undefined || v === SAVED_SECRET_MASK) continue;
+        // Provider settings can be cleared (empty string); the older columns keep ignoring empties.
+        if (v !== "" || (isConfigFieldKey(f.key) && !f.secret)) body[f.key] = v;
       }
       const res = await apiRequest("PUT", `/api/xpot/admin/integrations/${def.provider}`, body);
       return res.json() as Promise<IntegrationStatus>;
@@ -293,13 +298,13 @@ function ProviderDetail({
         </label>
       </div>
 
-      {/* Broken-state warning — enabled but no key saved */}
-      {status.enabled && !status.hasApiKey && (
+      {/* Broken-state warning — enabled but something is missing */}
+      {status.enabled && status.problem && (
         <div className="mt-4 flex items-start gap-2.5 rounded-lg border border-red-500/30 bg-red-500/10 px-3.5 py-3 text-sm text-red-200">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <div className="min-w-0 flex-1">
-            <div className="font-medium">Missing API key</div>
-            <div className="text-red-200/80">This provider is enabled but has no key on file — calls will fail. Paste a key and click Save.</div>
+            <div className="font-medium">Setup incomplete</div>
+            <div className="text-red-200/80">{status.problem}</div>
           </div>
         </div>
       )}

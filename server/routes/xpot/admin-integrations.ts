@@ -6,8 +6,12 @@ import {
   INTEGRATION_PROVIDERS,
   getProviderDef,
   getMutexSiblings,
-  type IntegrationStatus,
+  isConfigFieldKey,
+  type ConfigFieldKey,
 } from "#shared/integrations-registry.js";
+import { invalidateSmsConfig } from "../../auth/sms.js";
+import { checkTwilioConfig } from "../../auth/twilioCheck.js";
+import { maskIntegration, mergeConfigPatch, readConfig } from "./integrationStatus.js";
 
 const TEST_TIMEOUT_MS = 15000;
 const GHL_BASE_URL = "https://services.leadconnectorhq.com";
@@ -17,30 +21,13 @@ const putSchema = z.object({
   model: z.string().trim().max(120).optional().nullable(),
   locationId: z.string().trim().max(120).optional().nullable(),
   calendarId: z.string().trim().max(120).optional().nullable(),
+  // Twilio, kept in integration_settings.config. "" clears a value.
+  accountSid: z.string().trim().regex(/^(AC[0-9a-zA-Z]{32})?$/, "Account SID starts with AC and has 34 characters").optional(),
+  fromNumber: z.string().trim().regex(/^(\+[1-9]\d{6,14})?$/, "From number must be in E.164 format, e.g. +15085550100").optional(),
+  messagingServiceSid: z.string().trim().regex(/^(MG[0-9a-zA-Z]{32})?$/, "Messaging Service SID starts with MG and has 34 characters").optional(),
   enabled: z.boolean().optional(),
 });
 const testSchema = putSchema.omit({ enabled: true });
-
-function last4(key: string | null | undefined): string | null {
-  if (!key) return null;
-  const k = key.trim();
-  return k.length >= 4 ? k.slice(-4) : "••••";
-}
-
-function mask(provider: string, row: any | undefined): IntegrationStatus {
-  const def = getProviderDef(provider)!;
-  const enabled = def.table === "chat" ? Boolean(row?.enabled) : Boolean(row?.isEnabled);
-  return {
-    provider,
-    enabled,
-    model: row?.model ?? null,
-    locationId: row?.locationId ?? null,
-    calendarId: row?.calendarId ?? null,
-    hasApiKey: Boolean(row?.apiKey),
-    apiKeyLast4: last4(row?.apiKey),
-    updatedAt: row?.updatedAt ? new Date(row.updatedAt).toISOString() : null,
-  };
-}
 
 export function createAdminIntegrationsRouter() {
   const router = Router();
@@ -57,7 +44,7 @@ export function createAdminIntegrationsRouter() {
 
     const items = INTEGRATION_PROVIDERS.map((def) => {
       const row = def.table === "chat" ? chatByProvider.get(def.provider) : settingsByProvider.get(def.provider);
-      return mask(def.provider, row);
+      return maskIntegration(def.provider, row);
     });
 
     res.json({ providers: INTEGRATION_PROVIDERS, status: items });
@@ -90,13 +77,18 @@ export function createAdminIntegrationsRouter() {
           }
         }
       }
-      return res.json(mask(def.provider, saved));
+      return res.json(maskIntegration(def.provider, saved));
     } else {
       const data: Record<string, unknown> = {};
       if (body.apiKey) data.apiKey = body.apiKey;
       if (body.locationId !== undefined) data.locationId = body.locationId;
       if (body.calendarId !== undefined) data.calendarId = body.calendarId;
       if (body.enabled !== undefined) data.isEnabled = body.enabled;
+      const configPatch = pickConfig(body);
+      if (Object.keys(configPatch).length) {
+        const existing = await storage.getIntegrationSettings(def.provider);
+        data.config = mergeConfigPatch(def.provider, existing?.config, configPatch);
+      }
       const saved = await storage.upsertIntegrationSettings(def.provider, data);
       if (body.enabled === true) {
         for (const sibling of getMutexSiblings(def.provider)) {
@@ -107,7 +99,8 @@ export function createAdminIntegrationsRouter() {
           }
         }
       }
-      return res.json(mask(def.provider, saved));
+      if (def.provider === "twilio") invalidateSmsConfig();
+      return res.json(maskIntegration(def.provider, saved));
     }
   });
 
@@ -134,7 +127,8 @@ export function createAdminIntegrationsRouter() {
 
       if (!config.apiKey) {
         console.warn(`[admin-integrations] No API key available for ${def.provider}`, { rowId: (row as any)?.id });
-        return res.json({ ok: false, message: "Paste an API key or save one before testing." });
+        const secretLabel = def.fields.find((f) => f.secret)?.label ?? "API Key";
+        return res.json({ ok: false, message: `Paste the ${secretLabel} or save one before testing.` });
       }
 
       console.log(`[admin-integrations] Calling provider ${def.provider} (key length ${config.apiKey.length})`);
@@ -153,7 +147,18 @@ export function createAdminIntegrationsRouter() {
   return router;
 }
 
+/** The ConfigFieldKey values present in a request body. */
+function pickConfig(body: Record<string, unknown>): Partial<Record<ConfigFieldKey, string>> {
+  const out: Partial<Record<ConfigFieldKey, string>> = {};
+  for (const key of Object.keys(body)) {
+    const value = body[key];
+    if (isConfigFieldKey(key) && typeof value === "string") out[key] = value;
+  }
+  return out;
+}
+
 type TestConfig = {
+  config: Partial<Record<ConfigFieldKey, string>>;
   apiKey: string;
   model: string | null;
   locationId: string | null;
@@ -167,7 +172,12 @@ function filled(value: unknown): string | null {
 }
 
 function mergeTestConfig(row: any | undefined, input: z.infer<typeof testSchema>): TestConfig {
+  const config: Partial<Record<ConfigFieldKey, string>> = { ...readConfig(row?.config) };
+  for (const [key, value] of Object.entries(pickConfig(input))) {
+    if (value.trim()) config[key as ConfigFieldKey] = value.trim();
+  }
   return {
+    config,
     apiKey: filled(input.apiKey) ?? filled(row?.apiKey) ?? "",
     model: filled(input.model) ?? filled(row?.model),
     locationId: filled(input.locationId) ?? filled(row?.locationId),
@@ -271,6 +281,17 @@ async function testProvider(
       const detail = await readErrorBody(r);
       return { ok: false, message: `GHL returned ${r.status}. ${detail}`.trim() };
     }
+    case "twilio":
+      // Read-only calls: the test must never send an SMS.
+      return checkTwilioConfig(
+        {
+          accountSid: config.config.accountSid ?? "",
+          authToken: apiKey,
+          fromNumber: config.config.fromNumber,
+          messagingServiceSid: config.config.messagingServiceSid,
+        },
+        fetchWithTimeout,
+      );
     default:
       return { ok: false, message: "No test implemented for this provider." };
   }
