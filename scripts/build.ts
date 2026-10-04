@@ -3,6 +3,7 @@
 // Output layout:
 //   dist/
 //     index.cjs        — server entry point
+//     migrate.cjs      — migration runner (the Docker image runs it before the server)
 //     public/          — Vite-built static client (served by server in production)
 
 import { build as esbuild } from "esbuild";
@@ -12,6 +13,20 @@ import { fileURLToPath } from "url";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const ROOT = resolve(__dirname, "..");
+
+async function buildMigrate() {
+  console.log("→ Building migration runner (esbuild) ...");
+  await esbuild({
+    entryPoints: [resolve(ROOT, "scripts/migrate.ts")],
+    bundle: true,
+    platform: "node",
+    target: "node20",
+    format: "cjs",
+    outfile: resolve(ROOT, "dist/migrate.cjs"),
+    packages: "external",
+    logLevel: "info",
+  });
+}
 
 async function buildServer() {
   console.log("→ Building server (esbuild) ...");
@@ -47,8 +62,9 @@ function buildClient() {
 
 async function main() {
   await buildServer();
+  await buildMigrate();
   buildClient();
-  console.log("\n✓ Build complete: dist/index.cjs + dist/public/");
+  console.log("\n✓ Build complete: dist/index.cjs + dist/migrate.cjs + dist/public/");
 }
 
 main().catch((err) => {
