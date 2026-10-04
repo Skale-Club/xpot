@@ -7,6 +7,7 @@ import {
   PLAN_KINDS,
   PLAN_STATUSES,
 } from "#shared/tagJourney.js";
+import { TAG_PRODUCT_TYPES } from "#shared/tags.js";
 import { TagError } from "../../tags/errors.js";
 import * as journey from "../../tags/journey.js";
 import {
@@ -19,7 +20,7 @@ import {
   toEntryInput,
 } from "../../tags/journeyRoutes.js";
 import * as repo from "../../tags/repository.js";
-import { tagBaseUrl } from "../../tags/routes.js";
+import { batchCreateSchema, tagBaseUrl } from "../../tags/routes.js";
 import type { McpCaller } from "../server.js";
 
 // Tags Journey tools for an AI session. Everything goes through the same
@@ -139,6 +140,30 @@ export function registerTagJourneyTools(server: McpServer, caller: McpCaller) {
     { planId: z.string().uuid(), patch: objectParam },
     async ({ planId, patch }) =>
       run("tags_plan_update", () => journey.updatePlan(planId, planPatchSchema.parse(patch), ctx)),
+  );
+
+  // Production: a new batch of pieces with fresh random codes, the same validation and repository call as
+  // POST /api/xpot/admin/tag-batches (so the site journals "batch created" itself, with source "mcp").
+  // Returns the batch and its codes with the URLs to print (QR) and program (NFC). Pinned codes for
+  // already-manufactured pieces (publicCodes) stay an admin-UI-only escape hatch.
+  server.tool(
+    "tags_batch_create",
+    `Create a production batch of new pieces in house stock, each with a fresh random public code. \`batch\`: { name, productType (${TAG_PRODUCT_TYPES.join("|")}), quantity (1-1000), batchCode? (A-Z 0-9 . _ -, automatic if omitted, e.g. REV-2026-003), vendor?, notes? }. Returns { batch, tags: [{ serialNumber, publicCode, qrUrl, nfcUrl }] } — qrUrl goes in the printed QR, nfcUrl is written to the chip.`,
+    { batch: objectParam },
+    async ({ batch }) =>
+      run("tags_batch_create", async () => {
+        const raw = batch as Record<string, unknown>;
+        if ("publicCodes" in raw) throw new TagError("publicCodes is not accepted over MCP; use the admin UI for pinned codes", 400);
+        const created = await repo.createBatch(batchCreateSchema.parse(raw), null, "mcp");
+        const base = tagBaseUrl();
+        const tags = (await repo.getBatchTagsForExport(created.id)).map((t: { serialNumber: number | null; publicCode: string }) => ({
+          serialNumber: t.serialNumber,
+          publicCode: t.publicCode,
+          qrUrl: `${base}/q/${t.publicCode}`,
+          nfcUrl: `${base}/n/${t.publicCode}`,
+        }));
+        return { batch: created, tags };
+      }),
   );
 
   // Read-only helpers: find what a session wants to document.
