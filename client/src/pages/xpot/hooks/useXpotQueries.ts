@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { getXpotSection } from "@/lib/xpot";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { DESKTOP_QUERY } from "@/hooks/use-is-desktop";
+import { apiRequest } from "@/lib/queryClient";
+import { signOut as signOutAndLeave } from "@/lib/signOut";
 import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/i18n";
 import { checkinMessages } from "@/i18n/messages/checkin";
@@ -41,9 +43,12 @@ export function useXpotQueries() {
   }, []);
 
   const activeTab = useMemo(() => {
+    // Unknown paths fall back to the device's home: check-in on the phone,
+    // the dashboard on a desktop (where check-ins are not started).
+    const fallback = typeof window !== "undefined" && window.matchMedia(DESKTOP_QUERY).matches ? "dashboard" : "check-in";
     const section = getXpotSection(pathname);
-    if (!section) return "check-in";
-    return tabs.some((tab) => tab.id === section) ? section : "check-in";
+    if (!section) return fallback;
+    return tabs.some((tab) => tab.id === section) ? section : fallback;
   }, [pathname]);
 
   const xpotMeQuery = useQuery<XpotMeResponse>({
@@ -82,18 +87,7 @@ export function useXpotQueries() {
     },
   });
 
-  const signOut = async () => {
-    try {
-      const { initSupabase } = await import("@/lib/supabase");
-      const supabase = await initSupabase();
-      await supabase.auth.signOut();
-    } catch (err) {
-      console.error("Failed to sign out of Supabase:", err);
-    }
-    await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
-    queryClient.clear();
-    setLocation("/");
-  };
+  const signOut = () => signOutAndLeave(setLocation);
 
   const me = xpotMeQuery.data ?? null;
   const repName = me
