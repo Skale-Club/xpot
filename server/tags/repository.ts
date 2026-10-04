@@ -2,6 +2,7 @@ import { and, eq, inArray, isNull, sql, type SQL } from "drizzle-orm";
 import { db } from "../db.js";
 import {
   salesLeads,
+  salesReps,
   tagBatches,
   tagDestinationHistory,
   tagEvents,
@@ -23,15 +24,15 @@ import type {
   TagOverview,
   TagRepSummary,
 } from "#shared/tagsApi.js";
+import { JOURNEY_PRODUCT_LABELS, tagActionEntry, type JourneySource } from "#shared/tagJourney.js";
 import { generateUniqueCodes } from "./codes.js";
+import { TagError, pgError } from "./errors.js";
+import { journeyContext, recordJourney } from "./journey.js";
 import type { PublicTag } from "./publicHandler.js";
 
-/** A 4xx the routes pass straight to the client. */
-export class TagError extends Error {
-  constructor(message: string, public status = 400) {
-    super(message);
-  }
-}
+// TagError and pgError live in ./errors.ts (journey.ts needs them too, and
+// the repository imports journey.ts); re-exported so existing imports work.
+export { TagError, pgError };
 
 export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -276,9 +277,11 @@ export interface TagUpdate {
 }
 
 /** Edits a tag (admin); any destination change is written to the immutable history. */
-export async function updateTag(id: string, patch: TagUpdate, userId: string | null): Promise<Tag> {
-  return db.transaction(async (tx) => {
+export async function updateTag(id: string, patch: TagUpdate, userId: string | null, source: JourneySource = "admin"): Promise<Tag> {
+  let before: Tag | null = null;
+  const updated = await db.transaction(async (tx) => {
     const tag = await lockTag(tx, id);
+    before = tag;
     if (tag.status === "retired") throw new TagError("A retired tag cannot be edited");
     const next = {
       destinationUrl: patch.destinationUrl !== undefined ? patch.destinationUrl : tag.destinationUrl,
@@ -306,6 +309,20 @@ export async function updateTag(id: string, patch: TagUpdate, userId: string | n
       .returning();
     return updated;
   });
+  const old = before as Tag | null;
+  if (old && (old.destinationUrl !== updated.destinationUrl || old.destinationType !== updated.destinationType)) {
+    await recordJourney({
+      kind: "execution",
+      action: "destination_changed",
+      title: `Destination of ${updated.publicCode} changed`,
+      content: patch.reason ?? null,
+      tagId: id,
+      beforeValue: old.destinationUrl,
+      afterValue: updated.destinationUrl,
+      metadata: { previousType: old.destinationType, newType: updated.destinationType },
+    }, journeyContext(userId, source));
+  }
+  return updated;
 }
 
 /**
@@ -317,9 +334,12 @@ export async function transitionTag(
   action: Exclude<TagAction, "assign">,
   actor: Pick<TagActor, "userId" | "repId">,
   reason?: string | null,
+  source: JourneySource = "admin",
 ): Promise<Tag> {
-  return db.transaction(async (tx) => {
+  let fromStatus = "";
+  const updated = await db.transaction(async (tx) => {
     const tag = await lockTag(tx, id);
+    fromStatus = tag.status;
     const plan = planTransition(tag, action);
     if (!plan.ok) throw new TagError(plan.error, 409);
     const now = new Date();
@@ -342,6 +362,17 @@ export async function transitionTag(
     console.log(`[tags] ${action} ${tag.publicCode}: ${tag.status} → ${plan.status} (user ${actor.userId})`);
     return updated;
   });
+  const entry = tagActionEntry(action, updated.publicCode, fromStatus, updated.status);
+  await recordJourney({
+    kind: "execution",
+    action: entry.action,
+    title: entry.title,
+    content: reason ?? null,
+    tagId: id,
+    beforeValue: entry.before,
+    afterValue: entry.after,
+  }, journeyContext(actor.userId, source, actor.repId));
+  return updated;
 }
 
 /** Admin: link a piece to a customer (lead) without activating it. */
@@ -354,20 +385,28 @@ export async function assignTag(
   target: { leadId?: number; leadName?: string },
   userId: string | null,
   actorRepId: number,
+  source: JourneySource = "admin",
 ): Promise<Tag> {
-  return db.transaction(async (tx) => {
+  let fromStatus = "";
+  let leadLabel = "";
+  let newLead = false;
+  const updated = await db.transaction(async (tx) => {
     const tag = await lockTag(tx, id);
+    fromStatus = tag.status;
     const plan = planTransition(tag, "assign");
     if (!plan.ok) throw new TagError(plan.error, 409);
     let leadId: number;
     if (target.leadId) {
-      const [lead] = await tx.select({ id: salesLeads.id }).from(salesLeads).where(eq(salesLeads.id, target.leadId));
+      const [lead] = await tx.select({ id: salesLeads.id, name: salesLeads.name }).from(salesLeads).where(eq(salesLeads.id, target.leadId));
       if (!lead) throw new TagError("Customer not found", 404);
       leadId = lead.id;
+      leadLabel = lead.name;
     } else if (target.leadName?.trim()) {
       // Checked before creating anything, so a refused move leaves no orphan lead.
       if (tag.leadId && tag.status === "active") throw new TagError("Disable the tag before moving it to another customer", 409);
       leadId = await createLeadForSale(tx, target.leadName.trim(), tag.repId ?? actorRepId);
+      leadLabel = target.leadName.trim();
+      newLead = true;
     } else {
       throw new TagError("Choose the customer", 400);
     }
@@ -388,16 +427,41 @@ export async function assignTag(
     console.log(`[tags] assign ${tag.publicCode} → lead ${leadId} (user ${userId ?? "?"})`);
     return updated;
   });
+  const entry = tagActionEntry("assign", updated.publicCode, fromStatus, updated.status, `to ${leadLabel}`);
+  await recordJourney({
+    kind: "execution",
+    action: entry.action,
+    title: entry.title,
+    tagId: id,
+    leadId: updated.leadId,
+    beforeValue: entry.before,
+    afterValue: entry.after,
+    metadata: newLead ? { newLead: true } : {},
+  }, journeyContext(userId, source, actorRepId));
+  return updated;
 }
 
 /** Admin: one standalone piece (not part of a manufacturing batch), in house stock. */
-export async function createSingleTag(input: { productType: string; label?: string | null }): Promise<Tag> {
+export async function createSingleTag(
+  input: { productType: string; label?: string | null },
+  userId: string | null = null,
+  source: JourneySource = "admin",
+): Promise<Tag> {
   const [code] = await generateUniqueCodes(1, findExistingCodes);
   const [tag] = await db
     .insert(tags)
     .values({ publicCode: code, productType: input.productType, label: input.label ?? null, status: "inventory" })
     .returning();
   console.log(`[tags] created standalone tag ${code}`);
+  await recordJourney({
+    kind: "execution",
+    action: "tag_created",
+    title: `Tag ${code} created (${JOURNEY_PRODUCT_LABELS[input.productType] ?? input.productType})`,
+    content: input.label ?? null,
+    tagId: tag.id,
+    afterValue: tag.status,
+    metadata: { productType: input.productType },
+  }, journeyContext(userId, source));
   return tag;
 }
 
@@ -408,9 +472,15 @@ async function findExistingCodes(codes: string[]): Promise<Set<string>> {
 }
 
 /** Admin: move a piece (and, if sold, its sale credit) to another reseller or back to the house. */
-export async function setTagRep(id: string, repId: number | null, userId: string | null): Promise<Tag> {
-  return db.transaction(async (tx) => {
+export async function setTagRep(id: string, repId: number | null, userId: string | null, source: JourneySource = "admin"): Promise<Tag> {
+  let previous: { repId: number | null; name: string } = { repId: null, name: "house" };
+  let next = "house";
+  const updated = await db.transaction(async (tx) => {
     const tag = await lockTag(tx, id);
+    const names = async (rid: number | null) =>
+      rid === null ? "house" : (await tx.select({ n: salesReps.displayName }).from(salesReps).where(eq(salesReps.id, rid)))[0]?.n ?? `rep ${rid}`;
+    previous = { repId: tag.repId, name: await names(tag.repId) };
+    next = await names(repId);
     const [updated] = await tx
       .update(tags)
       .set({ repId, kitId: repId === tag.repId ? tag.kitId : null, updatedAt: new Date() })
@@ -419,6 +489,18 @@ export async function setTagRep(id: string, repId: number | null, userId: string
     console.log(`[tags] ${tag.publicCode} reseller ${tag.repId ?? "house"} → ${repId ?? "house"} (user ${userId ?? "?"})`);
     return updated;
   });
+  if (previous.repId !== repId) {
+    await recordJourney({
+      kind: "execution",
+      action: "reseller_changed",
+      title: `Tag ${updated.publicCode} moved from ${previous.name} to ${next}`,
+      tagId: id,
+      repId,
+      beforeValue: previous.name,
+      afterValue: next,
+    }, journeyContext(userId, source));
+  }
+  return updated;
 }
 
 // ─── Leads (the businesses pieces are sold to) ────────────────────────────────
@@ -472,13 +554,14 @@ export interface KitInput {
  * (inventory, no reseller) can go into a kit; anything else is refused with
  * the offending codes, and nothing is moved.
  */
-export async function deliverKit(input: KitInput, userId: string | null): Promise<TagKitItem> {
+export async function deliverKit(input: KitInput, userId: string | null, source: JourneySource = "admin"): Promise<TagKitItem> {
+  let delivered: Array<{ publicCode: string; batchId: string | null }> = [];
   const kitId = await db.transaction(async (tx) => {
-    let picked: Array<{ id: string; publicCode: string; status: string; repId: number | null }>;
+    let picked: Array<{ id: string; publicCode: string; status: string; repId: number | null; batchId: string | null }>;
     if (input.codes?.length) {
       const codes = Array.from(new Set(input.codes));
       picked = await tx
-        .select({ id: tags.id, publicCode: tags.publicCode, status: tags.status, repId: tags.repId })
+        .select({ id: tags.id, publicCode: tags.publicCode, status: tags.status, repId: tags.repId, batchId: tags.batchId })
         .from(tags)
         .where(inArray(tags.publicCode, codes))
         .for("update");
@@ -489,7 +572,7 @@ export async function deliverKit(input: KitInput, userId: string | null): Promis
       if (unavailable.length) throw new TagError(`Not in house stock: ${unavailable.join(", ")}`, 409);
     } else if (input.batchId && input.quantity) {
       picked = await tx
-        .select({ id: tags.id, publicCode: tags.publicCode, status: tags.status, repId: tags.repId })
+        .select({ id: tags.id, publicCode: tags.publicCode, status: tags.status, repId: tags.repId, batchId: tags.batchId })
         .from(tags)
         .where(and(eq(tags.batchId, input.batchId), eq(tags.status, "inventory"), isNull(tags.repId)))
         .orderBy(tags.serialNumber, tags.publicCode)
@@ -511,9 +594,24 @@ export async function deliverKit(input: KitInput, userId: string | null): Promis
       .set({ repId: input.repId, kitId: kit.id, updatedAt: new Date() })
       .where(inArray(tags.id, picked.map((t) => t.id)));
     console.log(`[tags] kit ${kit.id}: ${picked.length} pieces → rep ${input.repId} (user ${userId ?? "?"})`);
+    delivered = picked.map((t) => ({ publicCode: t.publicCode, batchId: t.batchId }));
     return kit.id;
   });
   const [kit] = await listKits({ kitId });
+  // One entry for the whole hand-over. It carries the codes it moved, so each
+  // piece's own story includes it even after the piece leaves the kit.
+  const batchIds = new Set(delivered.map((t) => t.batchId));
+  const count = delivered.length;
+  await recordJourney({
+    kind: "execution",
+    action: "kit_delivered",
+    title: `Kit of ${count} ${count === 1 ? "piece" : "pieces"} delivered to ${kit.repName ?? `rep ${input.repId}`}`,
+    content: input.note ?? null,
+    kitId,
+    repId: input.repId,
+    batchId: batchIds.size === 1 ? Array.from(batchIds)[0] : null,
+    metadata: { codes: delivered.map((t) => t.publicCode), count },
+  }, journeyContext(userId, source));
   return kit;
 }
 
@@ -551,10 +649,15 @@ export async function listKits(filter: { repId?: number; kitId?: string } = {}):
  * silently: unknown codes are refused, and pieces already in house stock are
  * reported instead of counted.
  */
-export async function returnToHouse(codes: string[], userId: string | null): Promise<{ returned: number; alreadyInHouse: string[] }> {
-  return db.transaction(async (tx) => {
+export async function returnToHouse(
+  codes: string[],
+  userId: string | null,
+  source: JourneySource = "admin",
+): Promise<{ returned: number; alreadyInHouse: string[] }> {
+  let moved: Array<{ publicCode: string; repId: number | null; kitId: string | null }> = [];
+  const result = await db.transaction(async (tx) => {
     const picked = await tx
-      .select({ id: tags.id, publicCode: tags.publicCode, status: tags.status, repId: tags.repId })
+      .select({ id: tags.id, publicCode: tags.publicCode, status: tags.status, repId: tags.repId, kitId: tags.kitId })
       .from(tags)
       .where(inArray(tags.publicCode, codes))
       .for("update");
@@ -571,9 +674,27 @@ export async function returnToHouse(codes: string[], userId: string | null): Pro
         .set({ repId: null, kitId: null, updatedAt: new Date() })
         .where(inArray(tags.id, moving.map((t) => t.id)));
       console.log(`[tags] ${moving.length} pieces returned to house stock (user ${userId ?? "?"})`);
+      moved = moving.map((t) => ({ publicCode: t.publicCode, repId: t.repId, kitId: t.kitId }));
     }
     return { returned: moving.length, alreadyInHouse };
   });
+  if (moved.length) {
+    const reps = new Set(moved.map((t) => t.repId));
+    const kits = new Set(moved.map((t) => t.kitId));
+    const repId = reps.size === 1 ? Array.from(reps)[0] : null;
+    const [rep] = repId === null ? [] : await db.select({ name: salesReps.displayName }).from(salesReps).where(eq(salesReps.id, repId));
+    await recordJourney({
+      kind: "execution",
+      action: "returned_to_house",
+      title: `${moved.length} ${moved.length === 1 ? "piece" : "pieces"} returned to house stock${rep ? ` by ${rep.name}` : ""}`,
+      repId,
+      // Only a single kit: a batch id here would also make the entry
+      // batch-wide for every piece of the batch.
+      kitId: kits.size === 1 ? Array.from(kits)[0] : null,
+      metadata: { codes: moved.map((t) => t.publicCode), count: moved.length },
+    }, journeyContext(userId, source));
+  }
+  return result;
 }
 
 // ─── Batches ──────────────────────────────────────────────────────────────────
@@ -605,18 +726,12 @@ export interface BatchInput {
   notes?: string | null;
 }
 
-/** Postgres unique-violation details, whether thrown directly or wrapped by drizzle. */
-function pgError(err: unknown): { code?: string; constraint?: string } {
-  const e = err as { code?: string; constraint?: string; cause?: { code?: string; constraint?: string } };
-  return e?.code ? e : e?.cause ?? {};
-}
-
 /**
  * Creates the batch and its N house-stock tags in one transaction. Codes are
  * checked against the database before insert; a race that still collides on
  * the unique index rolls the whole batch back and is retried.
  */
-export async function createBatch(input: BatchInput, userId: string | null) {
+export async function createBatch(input: BatchInput, userId: string | null, source: JourneySource = "admin") {
   const batchCode = input.batchCode?.trim() || (await nextBatchCode(input.productType));
   for (let attempt = 1; ; attempt++) {
     const codes = await generateUniqueCodes(input.quantity, findExistingCodes);
@@ -647,6 +762,15 @@ export async function createBatch(input: BatchInput, userId: string | null) {
         return batch;
       });
       console.log(`[tags] batch ${batch.batchCode} created with ${input.quantity} tags (user ${userId ?? "?"})`);
+      await recordJourney({
+        kind: "execution",
+        action: "batch_created",
+        title: `Batch ${batch.batchCode} created: ${input.quantity} × ${JOURNEY_PRODUCT_LABELS[input.productType] ?? input.productType}`,
+        content: batch.name,
+        batchId: batch.id,
+        afterValue: batch.status,
+        metadata: { quantity: input.quantity, productType: input.productType, vendor: batch.vendor },
+      }, journeyContext(userId, source));
       return batch;
     } catch (err) {
       const pg = pgError(err);
@@ -657,13 +781,30 @@ export async function createBatch(input: BatchInput, userId: string | null) {
   }
 }
 
-export async function updateBatch(id: string, input: Partial<Pick<BatchInput, "name" | "vendor" | "notes">> & { status?: string }) {
+export async function updateBatch(
+  id: string,
+  input: Partial<Pick<BatchInput, "name" | "vendor" | "notes">> & { status?: string },
+  userId: string | null = null,
+  source: JourneySource = "admin",
+) {
+  const [previous] = await db.select({ status: tagBatches.status }).from(tagBatches).where(eq(tagBatches.id, id)).limit(1);
+  if (!previous) throw new TagError("Batch not found", 404);
   const [batch] = await db
     .update(tagBatches)
     .set({ ...input, updatedAt: new Date() })
     .where(eq(tagBatches.id, id))
     .returning();
   if (!batch) throw new TagError("Batch not found", 404);
+  if (input.status && input.status !== previous.status) {
+    await recordJourney({
+      kind: "execution",
+      action: "batch_status_changed",
+      title: `Batch ${batch.batchCode} ${input.status}`,
+      batchId: id,
+      beforeValue: previous.status,
+      afterValue: batch.status,
+    }, journeyContext(userId, source));
+  }
   return batch;
 }
 

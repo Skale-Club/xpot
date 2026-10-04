@@ -50,6 +50,13 @@ test("tag endpoints refuse anonymous callers", async () => {
       ["GET", "/api/xpot/admin/tag-provisioners"],
       ["POST", "/api/xpot/admin/tag-provisioners"],
       ["POST", `/api/xpot/admin/tags/${ID}/provisioning-jobs`],
+      // Journey (admins only).
+      ["GET", "/api/xpot/admin/tag-journey"],
+      ["POST", "/api/xpot/admin/tag-journey"],
+      ["PATCH", `/api/xpot/admin/tag-journey/${ID}`],
+      ["GET", "/api/xpot/admin/tag-plans"],
+      ["POST", "/api/xpot/admin/tag-plans"],
+      ["PATCH", `/api/xpot/admin/tag-plans/${ID}`],
     ];
     for (const [method, path] of calls) {
       const res = await fetch(`${base}${path}`, {

@@ -4,6 +4,7 @@ import { ArrowLeft, ArrowRight, Clock3, Loader2, MessageCircle, Phone, ShieldOff
 import { PHONE_COUNTRIES, formatPhone, normalizePhone } from "@shared/phone";
 import { useT } from "@/i18n";
 import { signinMessages } from "@/i18n/messages/signin";
+import { initSupabase } from "@/lib/supabase";
 
 // Sign in (or sign up) with a code texted to the phone. Only an approved rep
 // gets in; a new number asks for access and waits for Skale Club.
@@ -38,6 +39,12 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
     queryKey: ["/api/auth/phone/config"],
     staleTime: Infinity,
   });
+  // Secondary way in (for when SMS is down): only offered when Supabase auth is configured.
+  const { data: supabaseConfig } = useQuery<{ url?: string; anonKey?: string }>({
+    queryKey: ["/api/supabase-config"],
+    staleTime: Infinity,
+  });
+  const googleAvailable = Boolean(supabaseConfig?.url && supabaseConfig?.anonKey);
   const [step, setStep] = useState<Step>("phone");
   const [countryCode, setCountryCode] = useState<string>("1");
   const [phoneInput, setPhoneInput] = useState("");
@@ -124,6 +131,23 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
     } catch {
       setError(t("err_generic"));
     } finally {
+      setBusy(false);
+    }
+  };
+
+  // /login finishes the job: it exchanges the PKCE code and opens the Express session.
+  const signInWithGoogle = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const supabase = await initSupabase();
+      const { error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: `${window.location.origin}/login` },
+      });
+      if (oauthError) throw oauthError;
+    } catch {
+      setError(t("err_google"));
       setBusy(false);
     }
   };
@@ -254,46 +278,59 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
   }
 
   return (
-    <form onSubmit={submitPhone} className="space-y-4" data-testid="signin-phone">
-      <p className="text-center text-sm text-white/60">{t("subtitle")}</p>
-      {errorBox}
-      <label className="block space-y-2">
-        <span className="text-sm font-medium text-white/80">{t("phoneLabel")}</span>
-        <div className="flex gap-2">
-          <select
-            value={countryCode}
-            onChange={(e) => setCountryCode(e.target.value)}
-            aria-label={t("country")}
-            className="h-12 shrink-0 rounded-xl border border-white/10 bg-white/5 px-2 text-base text-white outline-none [color-scheme:dark] focus:border-blue-500/50"
-          >
-            {PHONE_COUNTRIES.map((c) => (
-              <option key={c.code} value={c.code} className="bg-[#0d1424]">
-                {c.flag} +{c.code}
-              </option>
-            ))}
-          </select>
-          <div className="relative flex-1">
-            <Phone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
-            <input
-              value={phoneInput}
-              onChange={(e) => setPhoneInput(e.target.value)}
-              type="tel"
-              inputMode="tel"
-              autoComplete="tel-national"
-              placeholder={t("phonePlaceholder")}
-              autoFocus
-              required
-              className={`${FIELD} pl-10`}
-              data-testid="input-phone"
-            />
+    <div className="space-y-4">
+      <form onSubmit={submitPhone} className="space-y-4" data-testid="signin-phone">
+        <p className="text-center text-sm text-white/60">{t("subtitle")}</p>
+        {errorBox}
+        <label className="block space-y-2">
+          <span className="text-sm font-medium text-white/80">{t("phoneLabel")}</span>
+          <div className="flex gap-2">
+            <select
+              value={countryCode}
+              onChange={(e) => setCountryCode(e.target.value)}
+              aria-label={t("country")}
+              className="h-12 shrink-0 rounded-xl border border-white/10 bg-white/5 px-2 text-base text-white outline-none [color-scheme:dark] focus:border-blue-500/50"
+            >
+              {PHONE_COUNTRIES.map((c) => (
+                <option key={c.code} value={c.code} className="bg-[#0d1424]">
+                  {c.flag} +{c.code}
+                </option>
+              ))}
+            </select>
+            <div className="relative flex-1">
+              <Phone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
+              <input
+                value={phoneInput}
+                onChange={(e) => setPhoneInput(e.target.value)}
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel-national"
+                placeholder={t("phonePlaceholder")}
+                autoFocus
+                required
+                className={`${FIELD} pl-10`}
+                data-testid="input-phone"
+              />
+            </div>
           </div>
-        </div>
-      </label>
-      <button type="submit" disabled={busy || phoneInput.replace(/\D/g, "").length < 7} className={PRIMARY} data-testid="button-send-code">
-        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-        {t("sendCode")}
-        {!busy && <ArrowRight className="h-4 w-4" />}
+        </label>
+        <button type="submit" disabled={busy || phoneInput.replace(/\D/g, "").length < 7} className={PRIMARY} data-testid="button-send-code">
+          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+          {t("sendCode")}
+          {!busy && <ArrowRight className="h-4 w-4" />}
+        </button>
+      </form>
+    {googleAvailable && (
+      <button
+        type="button"
+        onClick={() => void signInWithGoogle()}
+        disabled={busy}
+        className="block w-full text-center text-sm text-white/50 transition-colors hover:text-white disabled:opacity-50"
+        data-testid="button-google-signin"
+      >
+        {t("googleSignIn")}
       </button>
-    </form>
+    )}
+    </div>
   );
 }

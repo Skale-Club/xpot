@@ -7,6 +7,7 @@ import { authPhoneCodes, users, type User } from "#shared/schema.js";
 import { normalizePhone } from "#shared/phone.js";
 import { storage } from "../storage.js";
 import { defaultSmsSender, SmsError, type SmsSender } from "./sms.js";
+import { loadTwilioConfigFromDb } from "./smsConfigDb.js";
 
 // Sign-in by phone: a 6-digit code goes out by SMS, the person types it back.
 // No email, no password. What happens next depends on the person:
@@ -222,11 +223,12 @@ function fail(res: Response, err: unknown) {
   res.status(500).json({ message: "Sign-in failed. Try again." });
 }
 
-export function registerPhoneAuthRoutes(app: Express, sms: SmsSender = defaultSmsSender()) {
+export function registerPhoneAuthRoutes(app: Express, sms: SmsSender = defaultSmsSender({ loadDbConfig: loadTwilioConfigFromDb })) {
   // What the sign-in screen needs to know.
-  app.get("/api/auth/phone/config", (_req, res) => {
+  app.get("/api/auth/phone/config", async (_req, res) => {
+    const smsLive = sms.resolveLive ? await sms.resolveLive().catch(() => sms.live) : sms.live;
     res.json({
-      smsLive: sms.live,
+      smsLive,
       supportWhatsapp: normalizePhone(process.env.XPOT_SUPPORT_WHATSAPP ?? "") ?? null,
     });
   });
