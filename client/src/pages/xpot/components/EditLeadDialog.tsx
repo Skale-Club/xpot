@@ -11,6 +11,8 @@ import { Loader2 } from '@/components/ui/loader';
 import type { SalesLead, FullSalesLead } from "../types";
 import { useT } from "@/i18n";
 import { leadsMessages } from "@/i18n/messages/leads";
+import { commonMessages } from "@/i18n/messages/common";
+import { BRAND_GRADIENT } from "@/components/xpot/surface";
 
 type LeadLike = SalesLead | FullSalesLead;
 
@@ -46,14 +48,16 @@ function Field({ value, onChange, placeholder, type, inputMode }: {
   );
 }
 
-export function EditLeadDialog({ lead, open, onOpenChange, onSaved }: {
+/** The lead's editable fields; used in the phone dialog and the desktop pane. */
+export function EditLeadForm({ lead, onSaved, onCancel }: {
   lead: LeadLike;
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
   onSaved?: () => void;
+  /** Shows a Cancel button next to Save (the desktop pane). */
+  onCancel?: () => void;
 }) {
   const { toast } = useToast();
   const t = useT(leadsMessages);
+  const tc = useT(commonMessages);
   const loc = (lead as FullSalesLead).locations?.[0];
   const [form, setForm] = useState({
     name: lead.name || "",
@@ -94,7 +98,6 @@ export function EditLeadDialog({ lead, open, onOpenChange, onSaved }: {
       queryClient.invalidateQueries({ queryKey: ["/api/xpot/visits"] });
       queryClient.invalidateQueries({ queryKey: ["/api/xpot/leads"] });
       onSaved?.();
-      onOpenChange(false);
     },
     onError: (error: Error) => {
       toast({ title: t("leadUpdateFailed"), description: error.message, variant: "destructive" });
@@ -105,15 +108,6 @@ export function EditLeadDialog({ lead, open, onOpenChange, onSaved }: {
     setForm((prev) => ({ ...prev, [key]: e.target.value }));
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className="max-w-sm rounded-2xl border-0 p-6"
-        style={{ background: "#0e1117", boxShadow: "0 24px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.07)" }}
-      >
-        <DialogHeader>
-          <DialogTitle className="text-base font-semibold text-white">{t("editTitle")}</DialogTitle>
-        </DialogHeader>
-
         <div className="space-y-4 mt-1">
           <FieldGroup label={t("groupBusiness")}>
             <Field value={form.name} onChange={f("name")} placeholder={t("fieldBusiness")} />
@@ -184,16 +178,48 @@ export function EditLeadDialog({ lead, open, onOpenChange, onSaved }: {
             <Field value={form.postalCode} onChange={f("postalCode")} placeholder={t("fieldPostal")} />
           </FieldGroup>
 
-          <button
-            disabled={updateMutation.isPending}
-            onClick={() => updateMutation.mutate()}
-            className="w-full rounded-xl py-2.5 text-sm font-semibold text-white transition-all disabled:opacity-40"
-            style={{ background: "linear-gradient(135deg, #3b82f6, #6366f1)" }}
-          >
-            {updateMutation.isPending ? <Loader2 className="inline mr-2 h-4 w-4 animate-spin" /> : null}
-            {t("saveChanges")}
-          </button>
+          <div className="flex gap-2">
+            {onCancel && (
+              <button
+                type="button"
+                onClick={onCancel}
+                className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white/60 transition-colors hover:text-white"
+                style={{ background: "rgba(255,255,255,0.07)" }}
+              >
+                {tc("cancel")}
+              </button>
+            )}
+            <button
+              disabled={updateMutation.isPending}
+              onClick={() => updateMutation.mutate()}
+              className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white transition-all disabled:opacity-40"
+              style={{ background: BRAND_GRADIENT }}
+            >
+              {updateMutation.isPending ? <Loader2 className="inline mr-2 h-4 w-4 animate-spin" /> : null}
+              {t("saveChanges")}
+            </button>
+          </div>
         </div>
+  );
+}
+
+export function EditLeadDialog({ lead, open, onOpenChange, onSaved }: {
+  lead: LeadLike;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  onSaved?: () => void;
+}) {
+  const t = useT(leadsMessages);
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        className="max-w-sm rounded-2xl border-0 p-6"
+        style={{ background: "#0e1117", boxShadow: "0 24px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.07)" }}
+      >
+        <DialogHeader>
+          <DialogTitle className="text-base font-semibold text-white">{t("editTitle")}</DialogTitle>
+        </DialogHeader>
+        <EditLeadForm lead={lead} onSaved={() => { onSaved?.(); onOpenChange(false); }} />
       </DialogContent>
     </Dialog>
   );
