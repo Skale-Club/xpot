@@ -10,3 +10,6 @@ tsbuildinfo
 
 # Claude Code local (per-machine) settings
 .claude/settings.local.json
+
+# Vercel CLI link (Xpot no longer deploys there)
+.vercel/
