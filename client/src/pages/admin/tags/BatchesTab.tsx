@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Plus, X } from "lucide-react";
-import { TAG_MAX_BATCH_QUANTITY, TAG_PRODUCT_TYPES } from "@shared/tags";
+import { TAG_MAX_BATCH_QUANTITY, TAG_PRODUCT_TYPES, normalizeTagCode } from "@shared/tags";
 import { useToast } from "@/hooks/use-toast";
 import { errorMessage, formatDate, invalidateAdminTags, sendJson } from "./api";
 import { BTN, BTN_GHOST, CARD, Empty, INPUT, SectionTitle, Stat, TD, TH } from "./ui";
@@ -14,6 +14,7 @@ const EMPTY_FORM = {
   vendor: "",
   quantity: "100",
   notes: "",
+  publicCodes: "",
 };
 
 function NewBatchForm({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
@@ -22,7 +23,14 @@ function NewBatchForm({ onClose, onCreated }: { onClose: () => void; onCreated: 
   const set = (patch: Partial<typeof EMPTY_FORM>) => setForm((f) => ({ ...f, ...patch }));
   const quantity = Number(form.quantity);
   const validQuantity = Number.isInteger(quantity) && quantity >= 1 && quantity <= TAG_MAX_BATCH_QUANTITY;
-  const ready = form.name.trim().length > 0 && validQuantity;
+  const publicCodes = form.publicCodes.trim()
+    ? form.publicCodes.split(/[\s,;]+/).filter(Boolean).map((code) => normalizeTagCode(code))
+    : undefined;
+  const validPublicCodes =
+    !publicCodes ||
+    (publicCodes.length === quantity && publicCodes.every((code): code is string => code !== null) && new Set(publicCodes).size === publicCodes.length);
+  const importing = !!publicCodes;
+  const ready = form.name.trim().length > 0 && validQuantity && validPublicCodes;
 
   const create = useMutation({
     mutationFn: () =>
@@ -33,10 +41,11 @@ function NewBatchForm({ onClose, onCreated }: { onClose: () => void; onCreated: 
         vendor: form.vendor || null,
         quantity,
         notes: form.notes || null,
+        publicCodes: publicCodes || undefined,
       }),
     onSuccess: (batch) => {
       void invalidateAdminTags();
-      toast({ title: `Batch ${batch.batchCode} created`, description: `${quantity} new pieces are in house stock.` });
+      toast({ title: `Batch ${batch.batchCode} created`, description: `${quantity} pieces are in house stock.` });
       onCreated(batch.id);
     },
     onError: (err) => toast({ title: "Could not create batch", description: errorMessage(err), variant: "destructive" }),
@@ -53,8 +62,8 @@ function NewBatchForm({ onClose, onCreated }: { onClose: () => void; onCreated: 
         <div>
           <p className="text-sm font-semibold text-white">New production batch</p>
           <p className="text-xs text-white/40">
-            Generates N pieces in house stock, each with its own permanent code, QR and NFC link. Then download the CSV and QR
-            artwork for the factory.
+            Generate new permanent codes, or import the exact codes from pieces that were already printed. Then download the CSV
+            and QR artwork for the factory.
           </p>
         </div>
         <button type="button" onClick={onClose} className="rounded-lg p-1 text-white/40 hover:bg-white/5 hover:text-white" aria-label="Close">
@@ -99,13 +108,34 @@ function NewBatchForm({ onClose, onCreated }: { onClose: () => void; onCreated: 
         <Field label="Notes" className="sm:col-span-2">
           <textarea value={form.notes} onChange={(e) => set({ notes: e.target.value })} maxLength={2000} rows={2} className={`${INPUT} resize-y`} />
         </Field>
+        <Field
+          label="Already-printed codes (optional)"
+          hint={
+            importing
+              ? validPublicCodes
+                ? `${publicCodes.length} valid unique codes — these will be preserved exactly.`
+                : `Enter exactly ${validQuantity ? quantity : "the quantity"} valid unique codes.`
+              : "Migration only. One code per line; leave empty to generate new codes."
+          }
+          className="sm:col-span-2"
+        >
+          <textarea
+            value={form.publicCodes}
+            onChange={(e) => set({ publicCodes: e.target.value })}
+            rows={4}
+            spellCheck={false}
+            placeholder={"Z8MEZP0X\n7414WRMT"}
+            className={`${INPUT} resize-y font-mono uppercase`}
+            data-testid="admin-tags-legacy-public-codes"
+          />
+        </Field>
       </div>
       <div className="flex justify-end gap-2">
         <button type="button" onClick={onClose} className={BTN_GHOST}>
           Cancel
         </button>
         <button type="submit" disabled={!ready || create.isPending} className={BTN} data-testid="admin-tags-new-batch-submit">
-          {create.isPending ? "Generating…" : `Generate ${validQuantity ? quantity : ""} pieces`}
+          {create.isPending ? (importing ? "Importing…" : "Generating…") : `${importing ? "Import" : "Generate"} ${validQuantity ? quantity : ""} pieces`}
         </button>
       </div>
     </form>
