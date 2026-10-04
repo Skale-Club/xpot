@@ -12,6 +12,8 @@ import {
 } from "../../hooks/useSalesModule";
 import { SaleCard, ConsignmentCard, MovementLedger, SaleDetail } from "./cards";
 import { SaleDialog } from "./SaleDialog";
+import { Segmented } from "@/components/xpot/Segmented";
+import { EmptyState } from "@/components/xpot/EmptyState";
 import { DepositDialog, SettleDialog, ReturnDialog, AdjustDialog } from "./ConsignmentDialogs";
 import { Field, GhostButton, MoneyInput, PrimaryButton, Select, SheetDialog, StatTile } from "./ui";
 
@@ -57,17 +59,13 @@ export function SalesList() {
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <div className="flex flex-1 gap-1.5">
-          {[{ v: 30, l: "30d" }, { v: 90, l: "90d" }, { v: undefined, l: "All" }].map(({ v, l }) => (
-            <button key={l} type="button" onClick={() => setDays(v)}
-              className="flex-1 rounded-xl py-1.5 text-xs font-semibold transition-all"
-              style={days === v
-                ? { background: "rgba(99,102,241,0.25)", color: "white", border: "1px solid rgba(99,102,241,0.4)" }
-                : { background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.35)", border: "1px solid rgba(255,255,255,0.08)" }}>
-              {l}
-            </button>
-          ))}
-        </div>
+        <Segmented
+          variant="chips"
+          className="flex-1"
+          items={[{ id: 30, label: "30d" }, { id: 90, label: "90d" }, { id: undefined, label: "All" }]}
+          value={days}
+          onChange={setDays}
+        />
         <GhostButton onClick={() => setPickerOpen(true)}>
           <Package className="h-3.5 w-3.5" /> New
         </GhostButton>
@@ -76,11 +74,7 @@ export function SalesList() {
       {query.isLoading && <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-blue-400" /></div>}
 
       {query.data?.length === 0 && !query.isLoading && (
-        <div className="flex flex-col items-center gap-2 rounded-2xl py-10 text-center"
-          style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)" }}>
-          <Package className="h-6 w-6 text-white/20" />
-          <div className="text-xs text-white/30">No sales recorded yet.</div>
-        </div>
+        <EmptyState compact icon={Package} title="No sales recorded yet." />
       )}
 
       <div className="space-y-2">
@@ -190,17 +184,14 @@ export function ConsignmentsList() {
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <div className="flex flex-1 gap-1.5">
-          {(["active", "closed"] as const).map((v) => (
-            <button key={v} type="button" onClick={() => setStatus(v)}
-              className="flex-1 rounded-xl py-1.5 text-xs font-semibold capitalize transition-all"
-              style={status === v
-                ? { background: "rgba(99,102,241,0.25)", color: "white", border: "1px solid rgba(99,102,241,0.4)" }
-                : { background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.35)", border: "1px solid rgba(255,255,255,0.08)" }}>
-              {v}
-            </button>
-          ))}
-        </div>
+        <Segmented
+          variant="chips"
+          className="flex-1"
+          itemClassName="capitalize"
+          items={(["active", "closed"] as const).map((v) => ({ id: v, label: v }))}
+          value={status}
+          onChange={setStatus}
+        />
         <GhostButton onClick={() => setPickerOpen(true)}>
           <PackagePlus className="h-3.5 w-3.5" /> Leave
         </GhostButton>
@@ -216,13 +207,7 @@ export function ConsignmentsList() {
       {query.isLoading && <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-blue-400" /></div>}
 
       {rows.length === 0 && !query.isLoading && (
-        <div className="flex flex-col items-center gap-2 rounded-2xl py-10 text-center"
-          style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)" }}>
-          <PackagePlus className="h-6 w-6 text-white/20" />
-          <div className="text-xs text-white/30">
-            {status === "active" ? "No stock out on consignment." : "Nothing closed yet."}
-          </div>
-        </div>
+        <EmptyState compact icon={PackagePlus} title={status === "active" ? "No stock out on consignment." : "Nothing closed yet."} />
       )}
 
       {/* Overdue first — that is the reason to open this screen. */}

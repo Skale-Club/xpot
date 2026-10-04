@@ -14,6 +14,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/i18n";
 import { dashboardMessages } from "@/i18n/messages/dashboard";
+import { EmptyState } from "@/components/xpot/EmptyState";
 
 const METRIC_CARDS = [
   {
@@ -394,21 +395,7 @@ export function XpotDashboard() {
         {dashboardQuery.data?.recentVisits?.length
           ? dashboardQuery.data.recentVisits.map((visit) => <VisitRow key={visit.id} visit={visit} />)
           : (
-            <div
-              className="flex flex-col items-center gap-3 rounded-2xl py-10 text-center"
-              style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}
-            >
-              <div
-                className="flex h-12 w-12 items-center justify-center rounded-2xl"
-                style={{ background: "rgba(99,102,241,0.15)" }}
-              >
-                <Footprints className="h-5 w-5 text-indigo-400" />
-              </div>
-              <div>
-                <div className="text-sm font-medium text-white/60">{t("noVisitsToday")}</div>
-                <div className="mt-0.5 text-xs text-white/30">{t("goToCheckIn")}</div>
-              </div>
-            </div>
+            <EmptyState icon={Footprints} title={t("noVisitsToday")} hint={t("goToCheckIn")} />
           )}
       </div>
 

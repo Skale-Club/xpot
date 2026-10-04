@@ -7,6 +7,8 @@ import { formatCents } from "../../utils";
 import { useSalesSummary } from "../../hooks/useSalesModule";
 import { Loader2 } from "@/components/ui/loader";
 import { StatTile } from "./ui";
+import { Segmented } from "@/components/xpot/Segmented";
+import { EmptyState } from "@/components/xpot/EmptyState";
 
 const RANGES = [7, 30, 90] as const;
 
@@ -38,17 +40,7 @@ export function SalesOverview({ onGoToConsignments }: { onGoToConsignments?: () 
   return (
     <div className="space-y-4">
       {/* Range */}
-      <div className="flex gap-1.5">
-        {RANGES.map((r) => (
-          <button key={r} type="button" onClick={() => setDays(r)}
-            className="flex-1 rounded-xl py-1.5 text-xs font-semibold transition-all"
-            style={days === r
-              ? { background: "rgba(99,102,241,0.25)", color: "white", border: "1px solid rgba(99,102,241,0.4)" }
-              : { background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.35)", border: "1px solid rgba(255,255,255,0.08)" }}>
-            {r} days
-          </button>
-        ))}
-      </div>
+      <Segmented variant="chips" items={RANGES.map((r) => ({ id: r as number, label: `${r} days` }))} value={days} onChange={setDays} />
 
       {/* Profit is the headline; revenue sits beside it. */}
       <div className="grid grid-cols-2 gap-2">
@@ -178,12 +170,7 @@ export function SalesOverview({ onGoToConsignments }: { onGoToConsignments?: () 
       )}
 
       {s.sales.periodCount === 0 && (
-        <div className="flex flex-col items-center gap-2 rounded-2xl py-10 text-center"
-          style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)" }}>
-          <Boxes className="h-6 w-6 text-white/20" />
-          <div className="text-xs text-white/30">No sales in this period yet.</div>
-          <div className="text-[11px] text-white/20">Sell from a company card or during a check-in.</div>
-        </div>
+        <EmptyState compact icon={Boxes} title="No sales in this period yet." hint="Sell from a company card or during a check-in." />
       )}
     </div>
   );

@@ -251,7 +251,7 @@ export function FieldLabel({ children }: { children: ReactNode }) {
   return <span className={`mb-1.5 block ${EYEBROW_MUTED}`}>{children}</span>;
 }
 
-/** Slide-up sheet with a dimmed backdrop. */
+/** Slide-up sheet with a dimmed backdrop; a centred dialog from `lg` up. */
 export function BottomSheet({ open, onClose, children, title }: { open: boolean; onClose: () => void; children: ReactNode; title?: string }) {
   const t = useT(commonMessages);
   useEffect(() => {
@@ -264,13 +264,13 @@ export function BottomSheet({ open, onClose, children, title }: { open: boolean;
   }, [open]);
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-[60] flex items-end justify-center" role="dialog" aria-modal="true" aria-label={title}>
+    <div className="fixed inset-0 z-[60] flex items-end justify-center lg:items-center lg:p-6" role="dialog" aria-modal="true" aria-label={title}>
       <button type="button" aria-label={t("close")} onClick={onClose} className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
       <div
-        className="relative max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-t-[28px] border border-b-0 border-white/10 px-5 pt-3"
+        className="relative max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-t-[28px] border border-b-0 border-white/10 px-5 pt-3 lg:max-w-lg lg:rounded-[28px] lg:border-b lg:pt-6"
         style={{ background: "#0d1424", paddingBottom: "calc(env(safe-area-inset-bottom) + 20px)" }}
       >
-        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20" />
+        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20 lg:hidden" />
         {children}
       </div>
     </div>
