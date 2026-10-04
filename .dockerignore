@@ -4,7 +4,6 @@ dist
 .github
 .planning
 .claude
-.vercel
 .cache
 tests
 nfc-provisioner

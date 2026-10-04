@@ -12,7 +12,6 @@ if (!rawDatabaseUrl) {
   );
 }
 
-const isServerless = !!process.env.VERCEL;
 const sslExplicitlyDisabled =
   rawDatabaseUrl.includes('sslmode=disable') ||
   process.env.PGSSLMODE === "disable";
@@ -24,8 +23,7 @@ export const shouldUseSsl =
   !sslExplicitlyDisabled &&
   (isCloudDb ||
   process.env.PGSSLMODE === "require" ||
-  process.env.POSTGRES_SSL === "true" ||
-  Boolean(process.env.VERCEL || process.env.VERCEL_ENV));
+  process.env.POSTGRES_SSL === "true");
 
 // Strip sslmode from URL so pg doesn't override our ssl config
 export const databaseUrl = shouldUseSsl
@@ -40,12 +38,10 @@ export const pool = new Pool({
   ssl: shouldUseSsl
     ? {
         rejectUnauthorized: false,
-        // Handle self-signed certificates in Vercel and other serverless environments
+        // Managed Postgres (Supabase pooler etc.) presents certificates pg can't verify.
         checkServerIdentity: () => undefined,
       }
     : false,
-  max: isServerless ? 5 : 20,
-  idleTimeoutMillis: isServerless ? 30000 : undefined,
-  connectionTimeoutMillis: isServerless ? 10000 : undefined,
+  max: 20,
 });
 export const db = drizzle(pool, { schema });

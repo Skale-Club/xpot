@@ -201,5 +201,4 @@ Moving the existing data off Supabase (one time, a few minutes of downtime):
    `/api/health`, log in, open a lead.
 5. Leave the Supabase tables untouched for a couple of weeks as a fallback.
 
-The Vercel setup (`vercel.json`, `api/`, `npm run build:vercel`) stays until the
-domain moves to Coolify, then it is removed.
+Xpot runs only on Coolify; the old Vercel setup is gone.
