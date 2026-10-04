@@ -25,6 +25,7 @@ import {
 import { AnalyticsPanel, RangePicker, type AnalyticsRange } from "./pieces-analytics";
 import { NfcProvisioningCard } from "./pieces-NfcProvisioningCard";
 import { ReviewLinkFinder } from "./pieces-ReviewLinkFinder";
+import { JourneyPanel } from "./JourneyPanel";
 
 type Go = (path: string) => void;
 
@@ -545,6 +546,9 @@ export function PieceDetail({ id, go }: { id: string; go: Go }) {
       </div>
 
       <NfcProvisioningCard tagId={tag.id} publicCode={tag.publicCode} nfcUrl={tag.nfcUrl} retired={tag.status === "retired"} onOpenWriters={() => go("/provisioners")} />
+
+      {/* Admin only: renders nothing (and sends no request) for managers. */}
+      <JourneyPanel scope={{ tagId: tag.id }} title="Piece journey" />
 
       <section className={`${CARD} p-4`}>
         <p className="mb-3 text-sm font-semibold text-white">Destination history</p>

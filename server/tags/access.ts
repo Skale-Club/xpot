@@ -9,7 +9,7 @@ import { accessDenial, ensureXpotRep, isManagerOrAdmin } from "../routes/xpot/mi
 
 export type { TagActor };
 
-async function loadActor(req: Request, res: Response): Promise<TagActor | null> {
+async function loadActor(req: Request, res: Response): Promise<(TagActor & { isAdmin: boolean }) | null> {
   const found = await ensureXpotRep(req);
   if (!found) {
     res.status(401).json({ message: "Authentication required" });
@@ -25,15 +25,17 @@ async function loadActor(req: Request, res: Response): Promise<TagActor | null> 
     res.status(403).json({ message: "Tags are not enabled for your account." });
     return null;
   }
-  return { userId: found.user.userId, repId: found.rep.id, isManager };
+  return { userId: found.user.userId, repId: found.rep.id, isManager, isAdmin: found.user.isAdmin || found.rep.role === "admin" };
 }
+
+const asActor = ({ userId, repId, isManager }: TagActor & { isAdmin: boolean }): TagActor => ({ userId, repId, isManager });
 
 /** Any active rep (reseller, manager or admin); the actor is then `actorOf(req)`. */
 export async function requireTagUser(req: Request, res: Response, next: NextFunction) {
   try {
     const actor = await loadActor(req, res);
     if (!actor) return;
-    (req as Request & { tagActor?: TagActor }).tagActor = actor;
+    (req as Request & { tagActor?: TagActor }).tagActor = asActor(actor);
     next();
   } catch (err) {
     console.error("[tags] requireTagUser", err);
@@ -47,7 +49,7 @@ export async function requireTagManager(req: Request, res: Response, next: NextF
     const actor = await loadActor(req, res);
     if (!actor) return;
     if (!actor.isManager) return res.status(403).json({ message: "Manager access required" });
-    (req as Request & { tagActor?: TagActor }).tagActor = actor;
+    (req as Request & { tagActor?: TagActor }).tagActor = asActor(actor);
     next();
   } catch (err) {
     console.error("[tags] requireTagManager", err);
@@ -55,8 +57,26 @@ export async function requireTagManager(req: Request, res: Response, next: NextF
   }
 }
 
+/**
+ * Active admin only (a global admin or a rep with the admin role): the
+ * Journey is Skale Club's internal production story, not for resellers and
+ * not for reseller managers.
+ */
+export async function requireTagAdmin(req: Request, res: Response, next: NextFunction) {
+  try {
+    const actor = await loadActor(req, res);
+    if (!actor) return;
+    if (!actor.isAdmin) return res.status(403).json({ message: "Admin access required" });
+    (req as Request & { tagActor?: TagActor }).tagActor = asActor(actor);
+    next();
+  } catch (err) {
+    console.error("[tags] requireTagAdmin", err);
+    res.status(500).json({ message: "Failed to verify access" });
+  }
+}
+
 export function actorOf(req: Request): TagActor {
   const actor = (req as Request & { tagActor?: TagActor }).tagActor;
-  if (!actor) throw new Error("requireTagUser/requireTagManager must run before actorOf");
+  if (!actor) throw new Error("requireTagUser/requireTagManager/requireTagAdmin must run before actorOf");
   return actor;
 }

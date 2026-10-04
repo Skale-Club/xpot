@@ -13,15 +13,18 @@ import { BatchesTab } from "./BatchesTab";
 import { BatchDetail } from "./BatchDetail";
 import { TeamTab } from "./TeamTab";
 import { ProvisionersTab } from "./ProvisionersTab";
+import { JourneyTab } from "./JourneyTab";
+import { useIsTagAdmin } from "./journey-shared";
 
 const TABS = [
   { id: "overview", label: "Overview" },
   { id: "pieces", label: "Pieces" },
   { id: "kits", label: "Kits" },
   { id: "batches", label: "Batches" },
+  { id: "journey", label: "Journey", adminOnly: true },
   { id: "team", label: "Team" },
   { id: "provisioners", label: "NFC writers" },
-] as const;
+] as const satisfies ReadonlyArray<{ id: string; label: string; adminOnly?: boolean }>;
 type TabId = (typeof TABS)[number]["id"];
 
 export const ADMIN_TAGS_BASE = "/admin/tags";
@@ -70,13 +73,16 @@ function CodeLookup({ onFound }: { onFound: (id: string) => void }) {
 }
 
 /**
- * Admin → Tags: stock, resellers' kits, batches from the factory, the team
- * report and the desktop NFC writers. Paths: /admin/tags/<tab>[/<id>].
+ * Admin → Tags: stock, resellers' kits, batches from the factory, the admin-only
+ * Journey, the team report and the desktop NFC writers. Paths: /admin/tags/<tab>[/<id>].
  */
 export function AdminTags() {
   const [location, setLocation] = useLocation();
   const [tabSegment, idSegment] = location.replace(/^\/admin\/tags\/?/, "").split("/");
-  const tab: TabId = TABS.find((t) => t.id === tabSegment)?.id ?? "overview";
+  // The Journey is for admins only: managers neither see its tab nor reach it by URL.
+  const isAdmin = useIsTagAdmin();
+  const tabs = TABS.filter((t) => isAdmin || !("adminOnly" in t));
+  const tab: TabId = tabs.find((t) => t.id === tabSegment)?.id ?? "overview";
   const id = idSegment ? decodeURIComponent(idSegment) : null;
   const go = (path: string) => setLocation(`${ADMIN_TAGS_BASE}${path}`);
 
@@ -84,7 +90,7 @@ export function AdminTags() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <nav className="flex gap-1 overflow-x-auto rounded-xl border border-white/10 bg-white/[0.02] p-1">
-          {TABS.map((t) => (
+          {tabs.map((t) => (
             <button
               key={t.id}
               type="button"
@@ -105,6 +111,7 @@ export function AdminTags() {
       {tab === "pieces" && (id ? <PieceDetail id={id} go={go} /> : <PiecesTab go={go} />)}
       {tab === "kits" && <KitsTab go={go} />}
       {tab === "batches" && (id ? <BatchDetail id={id} go={go} /> : <BatchesTab go={go} />)}
+      {tab === "journey" && isAdmin && <JourneyTab />}
       {tab === "team" && <TeamTab go={go} />}
       {tab === "provisioners" && <ProvisionersTab go={go} />}
     </div>

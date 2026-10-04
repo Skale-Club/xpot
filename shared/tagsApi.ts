@@ -246,3 +246,83 @@ export interface TagProvisioningState {
   qrTestAt: string | null;
   jobs: ProvisioningJobItem[];
 }
+
+// ─── Journey (server/tags/journeyRoutes.ts, admin only) ──────────────────────
+
+export interface TagJourneyEntryItem {
+  id: string;
+  kind: string;
+  action: string | null;
+  title: string;
+  content: string | null;
+  batchId: string | null;
+  batchCode: string | null;
+  tagId: string | null;
+  publicCode: string | null;
+  serialNumber: number | null;
+  kitId: string | null;
+  repId: number | null;
+  repName: string | null;
+  leadId: number | null;
+  leadName: string | null;
+  planId: string | null;
+  planTitle: string | null;
+  beforeValue: string | null;
+  afterValue: string | null;
+  source: string;
+  actor: string;
+  actorUserId: string | null;
+  actorEmail: string | null;
+  actorRepId: number | null;
+  /** sales_reps.display_name of actorRepId. */
+  actorName: string | null;
+  status: string;
+  metadata: Record<string, unknown>;
+  occurredAt: string;
+  createdAt: string;
+}
+
+export interface TagPlanItem {
+  id: string;
+  kind: string;
+  title: string;
+  description: string | null;
+  batchId: string | null;
+  batchCode: string | null;
+  tagId: string | null;
+  publicCode: string | null;
+  kitId: string | null;
+  leadId: number | null;
+  leadName: string | null;
+  status: string;
+  outcome: string | null;
+  dueDate: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  closedAt: string | null;
+}
+
+/** One scope's story: its timeline (newest first) and its plans. */
+export interface TagJourney {
+  entries: TagJourneyEntryItem[];
+  plans: TagPlanItem[];
+}
+
+// ─── MCP access tokens (server/mcp) ──────────────────────────────────────────
+
+/** A token an AI session uses on /mcp. Only its hash is stored; the secret is shown once. */
+export interface McpTokenItem {
+  id: string;
+  name: string;
+  tokenPrefix: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+}
+
+/** POST /api/xpot/admin/mcp-tokens: the new token and its secret (never returned again). */
+export interface McpTokenCreated {
+  token: McpTokenItem;
+  secret: string;
+}
