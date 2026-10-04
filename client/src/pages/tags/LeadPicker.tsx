@@ -7,7 +7,7 @@ import type { FullSalesLead } from "@/pages/xpot/types";
 import { INPUT } from "./ui";
 
 /** An existing lead, or a new business name the server creates as a lead on save. */
-export type LeadChoice = { leadId: number; name: string } | { leadId: null; name: string } | null;
+export type LeadChoice = { leadId: number; name: string; placeId?: string | null } | { leadId: null; name: string; placeId?: null } | null;
 
 /** Pick one of the rep's leads (the same list as the Leads tab) or type a new business. */
 export default function LeadPicker({ value, onChange }: { value: LeadChoice; onChange: (v: LeadChoice) => void }) {
@@ -61,7 +61,7 @@ export default function LeadPicker({ value, onChange }: { value: LeadChoice; onC
             <li key={lead.id}>
               <button
                 type="button"
-                onClick={() => onChange({ leadId: lead.id, name: lead.name })}
+                onClick={() => onChange({ leadId: lead.id, name: lead.name, placeId: lead.googlePlaceId ?? null })}
                 className="flex min-h-[48px] w-full items-center justify-between gap-3 px-4 py-2 text-left active:bg-white/10"
               >
                 <span className="truncate text-base text-white">{lead.name}</span>

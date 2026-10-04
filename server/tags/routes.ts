@@ -348,6 +348,15 @@ export function registerTagRoutes(app: Express) {
     }
   });
 
+  // Pieces per customer, for the customer cards on the Visits side.
+  app.get(`${fieldBase}/by-lead`, requireTagUser, async (req, res) => {
+    try {
+      res.json(await repo.getLeadTagSummaries(actorOf(req)));
+    } catch (err) {
+      fail(res, err, "Failed to load customer pieces");
+    }
+  });
+
   // Type the code printed on the piece, get its record.
   app.get(`${fieldBase}/lookup/:code`, requireTagUser, async (req, res) => {
     try {

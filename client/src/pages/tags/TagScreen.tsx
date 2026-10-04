@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, Nfc, Power, QrCode, ScanLine, Search } from "lucide-react";
+import { ExternalLink, Nfc, Power, QrCode, ScanLine, Search, Star } from "lucide-react";
 import type { TagDetail } from "@shared/tagsApi";
 import { TAG_DESTINATION_TYPES, validateDestinationUrl, type TagDestinationType } from "@shared/tags";
 import { guessDestinationType, normalizeUrlInput } from "@shared/tagApp";
+import { buildReviewUrl } from "@shared/reviewLink";
+import type { FullSalesLead } from "@/pages/xpot/types";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
 import LeadPicker, { leadPayload, type LeadChoice } from "./LeadPicker";
 import { ReviewLinkAssist } from "./ReviewLinkSheet";
 import WriteSheet, { type WriteResult } from "./WriteSheet";
-import { APP_BASE, errorText, haptic, lookupTag, pushRecent, shortUrl, tagPath, tagsGet, tagsPost, useBanner } from "./lib";
+import { APP_BASE, errorText, getSellTo, haptic, lookupTag, pushRecent, shortUrl, tagPath, tagsGet, tagsPost, useBanner } from "./lib";
 import {
   BTN_PRIMARY,
   BTN_SECONDARY,
@@ -49,6 +51,7 @@ export default function TagScreen({ code }: { code: string }) {
   const queryKey = ["tags", "piece", code];
   const { data, isLoading, error } = useQuery({ queryKey, queryFn: () => fetchTag(code), staleTime: 0 });
   const tag = data?.kind === "ok" ? data.tag : null;
+  const { data: leads } = useQuery<FullSalesLead[]>({ queryKey: ["/api/xpot/leads"], staleTime: 60_000 });
 
   const [link, setLink] = useState("");
   const [type, setType] = useState<TagDestinationType>("website");
@@ -70,6 +73,16 @@ export default function TagScreen({ code }: { code: string }) {
       setTypeTouched(true);
     }
     pushRecent({ kind: "xpot", value: tag.publicCode });
+    // Selling during a visit: an unsold piece goes to the visit's customer.
+    const sellTo = getSellTo();
+    if (!tag.leadId && sellTo) {
+      setLead({ leadId: sellTo.leadId, name: sellTo.name, placeId: sellTo.placeId });
+      if (sellTo.placeId && !tag.destinationUrl) {
+        setLink(buildReviewUrl(sellTo.placeId));
+        setType("google_review");
+        setTypeTouched(true);
+      }
+    }
     if (new URLSearchParams(window.location.search).get("write") === "1") {
       window.history.replaceState(null, "", tagPath(tag.publicCode));
       setWriteOpen(true);
@@ -122,6 +135,27 @@ export default function TagScreen({ code }: { code: string }) {
   }
 
   const needsLead = !tag.leadId;
+  // The customer's Google Place, when known, gives its review link for free.
+  const ownLead = tag.leadId ? leads?.find((l) => l.id === tag.leadId) : undefined;
+  const leadPlace = needsLead ? lead?.placeId ?? null : ownLead?.googlePlaceId ?? null;
+  const leadPlaceName = needsLead ? lead?.name ?? "" : tag.leadName ?? "";
+  const leadReviewUrl = leadPlace ? buildReviewUrl(leadPlace) : null;
+  const useLeadReview = () => {
+    if (!leadReviewUrl) return;
+    setLink(leadReviewUrl);
+    setType("google_review");
+    setTypeTouched(true);
+    show({ tone: "ok", text: t("reviewFromLeadDone", { name: leadPlaceName }) });
+  };
+  const pickLead = (choice: LeadChoice) => {
+    setLead(choice);
+    // An empty link fills itself with the customer's review link.
+    if (choice?.placeId && !link.trim()) {
+      setLink(buildReviewUrl(choice.placeId));
+      setType("google_review");
+      setTypeTouched(true);
+    }
+  };
   const disabled = tag.status === "disabled";
   const destinationLabel = (value: string) => (isDestinationType(value) ? t(`dest_${value}`) : value);
 
@@ -233,12 +267,23 @@ export default function TagScreen({ code }: { code: string }) {
         {needsLead && (
           <div>
             <FieldLabel>{t("customerField")}</FieldLabel>
-            <LeadPicker value={lead} onChange={setLead} />
+            <LeadPicker value={lead} onChange={pickLead} />
           </div>
         )}
         <div>
           <FieldLabel>{t("linkField")}</FieldLabel>
           <LinkInput value={link} onChange={onLink} placeholder={t("linkPlaceholder")} onPasteFailed={() => show({ tone: "error", text: tc("pasteFailed") })} />
+          {leadReviewUrl && normalizeUrlInput(link) !== leadReviewUrl && (
+            <button
+              type="button"
+              onClick={useLeadReview}
+              className="mt-2 flex min-h-[44px] w-full items-center gap-2 rounded-2xl border border-amber-400/25 bg-amber-400/10 px-3 text-left text-sm font-semibold text-amber-100 active:bg-amber-400/20"
+              data-testid="button-lead-review"
+            >
+              <Star className="h-4 w-4 shrink-0 fill-amber-400 text-amber-400" />
+              <span className="min-w-0 truncate">{t("reviewFromLead", { name: leadPlaceName })}</span>
+            </button>
+          )}
           <ReviewLinkAssist
             link={link}
             isReview={type === "google_review"}

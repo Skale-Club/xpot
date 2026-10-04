@@ -1,6 +1,6 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
-import { buildReviewUrl, extractFirstUrl, fidToPlaceId, isGoogleHost, isReviewFormUrl, parseGoogleUrl } from "../../shared/reviewLink.js";
+import { buildReviewUrl, extractFirstUrl, fidToPlaceId, isGoogleHost, isReviewFormUrl, parseGoogleUrl, placeIdFromReviewUrl } from "../../shared/reviewLink.js";
 
 // Google Sydney: a published Place ID / feature id / CID triple.
 const SYDNEY_PLACE_ID = "ChIJN1t_tDeuEmsRUsoyG83frY4";
@@ -87,4 +87,16 @@ test("isReviewFormUrl: only links that open the review form", () => {
   assert.equal(isReviewFormUrl("https://maps.app.goo.gl/AbCdEf123"), false);
   assert.equal(isReviewFormUrl("https://www.google.com/maps/place/Google+Sydney"), false);
   assert.equal(isReviewFormUrl("not a url"), false);
+});
+
+test("placeIdFromReviewUrl reads the place id from a writereview link", () => {
+  assert.equal(placeIdFromReviewUrl("https://search.google.com/local/writereview?placeid=ChIJN1t_tDeuEmsRUsoyG83frY4"), "ChIJN1t_tDeuEmsRUsoyG83frY4");
+});
+
+test("placeIdFromReviewUrl ignores other links and junk", () => {
+  assert.equal(placeIdFromReviewUrl("https://maps.app.goo.gl/abc"), null);
+  assert.equal(placeIdFromReviewUrl("https://evil.com/local/writereview?placeid=ChIJN1t_tDeuEmsRUsoyG83frY4"), null);
+  assert.equal(placeIdFromReviewUrl("https://search.google.com/local/writereview?placeid=<script>"), null);
+  assert.equal(placeIdFromReviewUrl(null), null);
+  assert.equal(placeIdFromReviewUrl("not a url"), null);
 });

@@ -17,7 +17,11 @@ import {
   Instagram,
   Youtube,
   Link2,
+  Nfc,
 } from "lucide-react";
+import { useLocation } from "wouter";
+import { useXpotModules } from "@/components/ModuleSwitch";
+import { setSellTo } from "@/pages/tags/lib";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useXpotShared } from "./hooks/useXpotShared";
 import { useXpotQueries } from "./hooks/useXpotQueries";
@@ -392,6 +396,8 @@ export function XpotCheckIn() {
   } = useCheckIn();
   const { leadsQuery } = useLeads();
   const { activeVisit, checkOutMutation, cancelVisitMutation, visitsQuery } = useVisits();
+  const [, navigate] = useLocation();
+  const canSellTags = useXpotModules().includes("tags");
 
   // Follow the rep while this screen is open; the provider stops the watch on
   // unmount so the GPS radio isn't pinned on the other tabs.
@@ -501,6 +507,29 @@ export function XpotCheckIn() {
             <div className="text-center text-base font-semibold text-white">{t("leadNumber", { id: activeVisit.leadId })}</div>
           )}
         </div>
+
+        {/* Sell a QR/NFC piece to the business being visited */}
+        {canSellTags && activeVisit.lead && (
+          <button
+            type="button"
+            onClick={() => {
+              const lead = activeVisit.lead!;
+              setSellTo({ leadId: lead.id, name: lead.name, placeId: lead.googlePlaceId ?? null });
+              navigate("/tags");
+            }}
+            className="relative flex w-full items-center gap-3 rounded-2xl border border-emerald-400/25 bg-emerald-400/[0.08] p-3 text-left transition-transform active:scale-[0.98]"
+            style={{ WebkitTapHighlightColor: "transparent" }}
+            data-testid="button-sell-piece"
+          >
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-400/15 text-emerald-300">
+              <Nfc className="h-5 w-5" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-bold text-white">{t("sellPiece")}</span>
+              <span className="block text-xs text-white/45">{t("sellPieceHint")}</span>
+            </span>
+          </button>
+        )}
 
         {/* Voice recorder */}
         <VoiceRecorder

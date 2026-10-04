@@ -134,6 +134,8 @@ const en = {
   syncOpportunities_other: "{count} opportunities",
   syncFailed: "Sync failed",
   defaultRepName: "Xpot Rep",
+  sellPiece: "Sell a piece to this customer",
+  sellPieceHint: "Opens Tags with this customer ready",
 };
 
 export const checkinMessages: Dictionary<typeof en> = {
@@ -256,6 +258,8 @@ export const checkinMessages: Dictionary<typeof en> = {
     syncOpportunities_other: "{count} oportunidades",
     syncFailed: "A sincronização falhou",
     defaultRepName: "Representante Xpot",
+    sellPiece: "Vender uma peça para este cliente",
+    sellPieceHint: "Abre as Tags com este cliente já escolhido",
   },
   es: {
     saved: "Guardado",
@@ -375,5 +379,7 @@ export const checkinMessages: Dictionary<typeof en> = {
     syncOpportunities_other: "{count} oportunidades",
     syncFailed: "La sincronización falló",
     defaultRepName: "Representante Xpot",
+    sellPiece: "Vender una pieza a este cliente",
+    sellPieceHint: "Abre Etiquetas con este cliente ya elegido",
   },
 };

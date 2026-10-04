@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, Link2, Nfc, QrCode, ScanLine, Tag } from "lucide-react";
+import { ArrowRight, Building2, Link2, Nfc, QrCode, ScanLine, Tag, X } from "lucide-react";
 import type { TagRepSummary } from "@shared/tagsApi";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
@@ -13,6 +13,8 @@ import {
   APP_BASE,
   classify,
   clearRecents,
+  clearSellTo,
+  getSellTo,
   directPath,
   errorText,
   getRecents,
@@ -65,6 +67,7 @@ export default function HomeScreen() {
   const [qrOpen, setQrOpen] = useState(false);
   const [sheet, setSheet] = useState<Sheet>(null);
   const [code, setCode] = useState("");
+  const [sellTo, setSellToState] = useState(getSellTo);
   const nfcAbort = useRef<AbortController | null>(null);
   const nfcSupported = isWebNfcSupported();
   const ios = isIos();
@@ -163,6 +166,30 @@ export default function HomeScreen() {
         <Stat label={t("statSold30")} value={summary?.soldLast30} />
         <Stat label={t("statScans30")} value={scans} />
       </div>
+
+      {sellTo && (
+        <div className="flex items-center gap-3 rounded-[20px] border border-emerald-400/25 bg-emerald-400/[0.08] p-4" data-testid="selling-to">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-400/15 text-emerald-300">
+            <Building2 className="h-5 w-5" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-base font-bold text-white">{t("sellingTo", { name: sellTo.name })}</span>
+            <span className="block text-xs text-white/50">{t("sellingToHint")}</span>
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              clearSellTo();
+              setSellToState(null);
+            }}
+            aria-label={t("stopSelling")}
+            className="flex h-10 shrink-0 items-center gap-1 rounded-xl border border-white/10 px-3 text-xs font-semibold text-white/70 active:bg-white/10"
+          >
+            <X className="h-4 w-4" />
+            {t("stopSelling")}
+          </button>
+        </div>
+      )}
 
       <Banner banner={banner} />
 

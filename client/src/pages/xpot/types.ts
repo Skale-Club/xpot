@@ -72,6 +72,7 @@ export type SalesLeadPayload = {
   source?: string;
   status?: string;
   notes?: string;
+  googlePlaceId?: string;
   primaryLocation?: {
     label?: string;
     addressLine1?: string;

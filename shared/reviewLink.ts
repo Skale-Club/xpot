@@ -10,6 +10,19 @@ export function buildReviewUrl(placeId: string): string {
   return REVIEW_URL_BASE + encodeURIComponent(placeId);
 }
 
+/** The Place ID inside a writereview link, or null for any other link. */
+export function placeIdFromReviewUrl(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  try {
+    const url = new URL(raw);
+    if (url.hostname.toLowerCase() !== "search.google.com" || url.pathname !== "/local/writereview") return null;
+    const placeId = url.searchParams.get("placeid")?.trim();
+    return placeId && /^[A-Za-z0-9_-]{10,300}$/.test(placeId) ? placeId : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * True when the link already opens Google's "write a review" form. A Maps or
  * share link only shows the business, so a piece pointing at it makes the

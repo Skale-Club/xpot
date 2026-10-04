@@ -45,6 +45,33 @@ export function clearRecents() {
   writeStorage(RECENTS_KEY, []);
 }
 
+// ─── Selling during a visit ───────────────────────────────────────────────────
+
+const SELL_TO_KEY = "xpot.tags.sellTo";
+const SELL_TO_TTL_MS = 3 * 60 * 60 * 1000;
+
+/** The customer a reseller is selling to right now (set from an active visit). */
+export interface SellTo {
+  leadId: number;
+  name: string;
+  placeId: string | null;
+  at: number;
+}
+
+export function getSellTo(): SellTo | null {
+  const value = readStorage<SellTo | null>(SELL_TO_KEY, null);
+  if (!value || typeof value.leadId !== "number" || Date.now() - value.at > SELL_TO_TTL_MS) return null;
+  return value;
+}
+
+export function setSellTo(value: Omit<SellTo, "at">) {
+  writeStorage(SELL_TO_KEY, { ...value, at: Date.now() });
+}
+
+export function clearSellTo() {
+  writeStorage(SELL_TO_KEY, null);
+}
+
 // ─── Device helpers ───────────────────────────────────────────────────────────
 
 export async function copyToClipboard(text: string): Promise<boolean> {

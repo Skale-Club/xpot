@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRight, Package, Search } from "lucide-react";
+import { ChevronRight, Package, Search, X } from "lucide-react";
 import type { TagListItem } from "@shared/tagsApi";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
@@ -26,10 +26,22 @@ export default function PiecesScreen() {
   const [filter, setFilter] = useState<FilterId>("all");
   const [search, setSearch] = useState("");
   const status = FILTERS.find((f) => f.id === filter)?.status ?? null;
+  // ?lead=<id>&name=<name>: one customer's pieces, opened from a customer card.
+  const [leadFilter, setLeadFilter] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    const id = Number(params.get("lead"));
+    return Number.isInteger(id) && id > 0 ? { id, name: params.get("name") ?? "" } : null;
+  });
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["tags", "list", status],
-    queryFn: () => tagsGet<TagListItem[]>(`/api/xpot/tags${status ? `?status=${status}` : ""}`),
+    queryKey: ["tags", "list", status, leadFilter?.id ?? null],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (status) params.set("status", status);
+      if (leadFilter) params.set("leadId", String(leadFilter.id));
+      const qs = params.toString();
+      return tagsGet<TagListItem[]>(`/api/xpot/tags${qs ? `?${qs}` : ""}`);
+    },
     staleTime: 15_000,
   });
 
@@ -43,6 +55,23 @@ export default function PiecesScreen() {
   return (
     <>
       <TopBar title={t("piecesTitle")} eyebrow={data ? t.plural("pieces", data.length) : undefined} />
+
+      {leadFilter && (
+        <div className="mb-3 flex items-center gap-2 rounded-2xl border border-blue-400/20 bg-blue-500/10 py-2 pl-4 pr-2" data-testid="lead-filter">
+          <span className="min-w-0 flex-1 truncate text-sm font-semibold text-white">{t("piecesOf", { name: leadFilter.name || `#${leadFilter.id}` })}</span>
+          <button
+            type="button"
+            onClick={() => {
+              setLeadFilter(null);
+              window.history.replaceState(null, "", window.location.pathname);
+            }}
+            className="flex h-9 shrink-0 items-center gap-1 rounded-xl px-2 text-xs font-semibold text-white/60 active:bg-white/10"
+          >
+            <X className="h-4 w-4" />
+            {t("clearFilter")}
+          </button>
+        </div>
+      )}
 
       <div className="relative">
         <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />

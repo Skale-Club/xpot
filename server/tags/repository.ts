@@ -13,6 +13,7 @@ import {
 import { buildTagUrls, planTransition, type TagAction, type TagStatus } from "#shared/tags.js";
 import { canUseLead, saleCredit, type TagActor } from "#shared/tagAccess.js";
 import type {
+  LeadTagSummary,
   TagAnalytics,
   TagBatchItem,
   TagDetail,
@@ -416,6 +417,15 @@ export async function createLeadForSale(tx: Tx, name: string, ownerRepId: number
     .values({ name, ownerRepId, source: "tag_sale", status: "customer" })
     .returning({ id: salesLeads.id });
   return lead.id;
+}
+
+/** Keep the business's Google Place on the lead the first time a review link reveals it. */
+export async function rememberLeadPlace(tx: Tx, leadId: number, placeId: string | null) {
+  if (!placeId) return;
+  await tx
+    .update(salesLeads)
+    .set({ googlePlaceId: placeId, updatedAt: new Date() })
+    .where(and(eq(salesLeads.id, leadId), isNull(salesLeads.googlePlaceId)));
 }
 
 /** A lead that bought a piece is a customer. */
@@ -856,6 +866,29 @@ export async function getOverview(now: Date = new Date()): Promise<TagOverview> 
 }
 
 /** The field app's home numbers for one reseller. */
+/**
+ * Pieces per customer, for the Visits side's customer cards. A reseller counts
+ * only the pieces they hold; managers count every piece.
+ */
+export async function getLeadTagSummaries(actor: TagActor, now: Date = new Date()): Promise<LeadTagSummary[]> {
+  const since30 = new Date(now.getTime() - 30 * 86_400_000);
+  const scope = actor.isManager ? sql`true` : sql`t.rep_id = ${actor.repId}`;
+  const list = await rows<{ lead_id: number; pieces: number; live: number; scans30: number }>(sql`
+    SELECT t.lead_id,
+           count(*)::int AS pieces,
+           count(*) FILTER (WHERE t.status = 'active')::int AS live,
+           COALESCE(sum(s.n), 0)::int AS scans30
+    FROM tags t
+    LEFT JOIN LATERAL (
+      SELECT count(*) AS n FROM tag_events e
+      WHERE e.tag_id = t.id AND e.occurred_at >= ${since30} AND ${COUNTABLE}
+    ) s ON true
+    WHERE t.lead_id IS NOT NULL AND ${scope}
+    GROUP BY t.lead_id
+  `);
+  return list.map((r) => ({ leadId: r.lead_id, pieces: r.pieces, live: r.live, scansLast30: r.scans30 }));
+}
+
 export async function getRepSummary(repId: number, now: Date = new Date()): Promise<TagRepSummary> {
   const since30 = new Date(now.getTime() - 30 * 86_400_000);
   const [t] = await rows<{ in_stock: number; active: number; sold30: number }>(sql`

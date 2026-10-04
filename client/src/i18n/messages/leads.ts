@@ -95,6 +95,10 @@ const en = {
   importFailed: "Import failed",
   businessImported: "Business imported",
   leadCreated: "Lead created",
+  piecesCount_one: "{count} piece",
+  piecesCount_other: "{count} pieces",
+  piecesLive: "{n} live",
+  piecesScans: "{n} scans (30d)",
 };
 
 export const leadsMessages: Dictionary<typeof en> = {
@@ -183,6 +187,10 @@ export const leadsMessages: Dictionary<typeof en> = {
     importFailed: "Falha na importação",
     businessImported: "Empresa importada",
     leadCreated: "Cliente criado",
+    piecesCount_one: "{count} peça",
+    piecesCount_other: "{count} peças",
+    piecesLive: "{n} no ar",
+    piecesScans: "{n} scans (30d)",
   },
   es: {
     tabLeads: "Clientes",
@@ -268,5 +276,9 @@ export const leadsMessages: Dictionary<typeof en> = {
     importFailed: "Falló la importación",
     businessImported: "Negocio importado",
     leadCreated: "Cliente creado",
+    piecesCount_one: "{count} pieza",
+    piecesCount_other: "{count} piezas",
+    piecesLive: "{n} activas",
+    piecesScans: "{n} escaneos (30d)",
   },
 };

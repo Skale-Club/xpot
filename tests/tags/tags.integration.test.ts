@@ -169,6 +169,13 @@ test.skipIf(!enabled)("tags: kits, reseller isolation, sales, scans, report, pro
     // Ana's home numbers.
     assert.deepEqual((await api("GET", "/api/xpot/tags/summary", "it-ana")).json, { inStock: 1, active: 2, soldLast30: 2, scansLast30: { qr: 2, nfc: 2 } });
 
+    // Pieces per customer for the Visits side: Ana sees her customer, Bruno nothing.
+    assert.deepEqual((await api("GET", "/api/xpot/tags/by-lead", "it-ana")).json, [{ leadId, pieces: 2, live: 2, scansLast30: 4 }]);
+    assert.deepEqual((await api("GET", "/api/xpot/tags/by-lead", "it-bruno")).json, []);
+    // Selling a Google review piece kept the business's Place ID on the lead.
+    const [place] = (await db.execute(sql`SELECT google_place_id FROM sales_leads WHERE id = ${leadId}`)).rows as any[];
+    assert.equal(place.google_place_id, new URL(REVIEW).searchParams.get("placeid"));
+
     // Admin report and overview.
     const report = await api("GET", "/api/xpot/admin/tags/report?range=7d", "it-admin");
     assert.equal(report.status, 200, report.text);

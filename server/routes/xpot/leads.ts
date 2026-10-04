@@ -73,6 +73,7 @@ export function createLeadsRouter() {
       territoryName: input.territoryName,
       notes: input.notes,
       socialUrls: input.socialUrls,
+      googlePlaceId: input.googlePlaceId,
     });
 
     if (input.primaryLocation?.addressLine1) {

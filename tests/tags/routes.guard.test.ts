@@ -21,6 +21,7 @@ test("tag endpoints refuse anonymous callers", async () => {
     const calls: Array<[string, string]> = [
       ["GET", "/api/xpot/tags"],
       ["GET", "/api/xpot/tags/summary"],
+      ["GET", "/api/xpot/tags/by-lead"],
       ["GET", "/api/xpot/tags/lookup/A7K3P9X2"],
       ["GET", `/api/xpot/tags/${ID}`],
       ["POST", `/api/xpot/tags/${ID}/quick-activate`],

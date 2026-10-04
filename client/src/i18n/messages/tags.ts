@@ -198,6 +198,15 @@ const en = {
   minutesAgo: "{n} min",
   hoursAgo: "{n} h",
   daysAgo: "{n} d",
+
+  // Selling during a visit / customer context
+  sellingTo: "Selling to {name}",
+  sellingToHint: "Pieces you open now go to this customer.",
+  stopSelling: "Stop",
+  reviewFromLead: "Use the Google review link of {name}",
+  reviewFromLeadDone: "Google review link of {name} filled in. Check it and save.",
+  piecesOf: "Pieces of {name}",
+  clearFilter: "Show all",
 };
 
 export const tagsMessages: Dictionary<typeof en> = {
@@ -385,6 +394,14 @@ export const tagsMessages: Dictionary<typeof en> = {
     minutesAgo: "{n} min",
     hoursAgo: "{n} h",
     daysAgo: "{n} d",
+
+    sellingTo: "Vendendo para {name}",
+    sellingToHint: "As peças que você abrir agora vão para este cliente.",
+    stopSelling: "Parar",
+    reviewFromLead: "Usar o link de avaliação do Google de {name}",
+    reviewFromLeadDone: "Link de avaliação de {name} preenchido. Confira e salve.",
+    piecesOf: "Peças de {name}",
+    clearFilter: "Ver todas",
   },
   es: {
     navHome: "Inicio",
@@ -569,5 +586,13 @@ export const tagsMessages: Dictionary<typeof en> = {
     minutesAgo: "{n} min",
     hoursAgo: "{n} h",
     daysAgo: "{n} d",
+
+    sellingTo: "Vendiendo a {name}",
+    sellingToHint: "Las piezas que abras ahora van a este cliente.",
+    stopSelling: "Parar",
+    reviewFromLead: "Usar el enlace de reseña de Google de {name}",
+    reviewFromLeadDone: "Enlace de reseña de {name} listo. Revísalo y guarda.",
+    piecesOf: "Piezas de {name}",
+    clearFilter: "Ver todas",
   },
 };
