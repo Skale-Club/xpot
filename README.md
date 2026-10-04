@@ -79,6 +79,34 @@ complete — this section previously described it as TBD, which was stale.
 The database itself is moving to the Hetzner host (see "Database on the Hetzner
 host" below); Auth and Storage stay on this project.
 
+## Tags (QR/NFC pieces)
+
+Skale Club supplies physical pieces (Google Review signs, NFC keychains, cards);
+resellers sell them to businesses with the Tags side of the app. Code:
+`server/tags/`, `shared/tags*.ts`, `shared/schema/tags.ts`, `migrations/0009_tags.sql`.
+
+- Each piece has a permanent public code: the QR holds `<TAG_PUBLIC_BASE_URL>/q/<code>`
+  and the NFC chip `/n/<code>`. Those routes redirect to the piece's current
+  destination and record one anonymous scan (no IP stored).
+- Pieces live in house stock until an admin hands them to a reseller in a kit
+  (`POST /api/xpot/admin/tag-kits`). A reseller only reaches the pieces in their
+  own kit and the leads they own; managers and admins reach everything.
+- Selling a piece (`POST /api/xpot/tags/:id/quick-activate`) links it to a lead
+  (created on the spot if new), sets the destination, makes it live and credits
+  the sale to the reseller holding it.
+- Admin: batches + manufacturing CSV/QR ZIP, kits, returns, per-reseller report,
+  analytics and the desktop NFC provisioner (`/api/provisioner/*`, device token).
+- New accounts start switched off: signing up no longer grants access. An admin
+  enables reps in Admin → Reps.
+
+Environment:
+- `TAG_PUBLIC_BASE_URL` — domain printed on pieces (default `https://xpot.place`).
+  Never change it once pieces are printed.
+- `TAG_HASH_SECRET` — key for the daily anonymous visitor hash (falls back to one
+  derived from `SESSION_SECRET`).
+- `TAG_COUNTRY_HEADER` — optional; only if a trusted edge (e.g. Cloudflare's
+  `CF-IPCountry`) sets the scanner's country.
+
 ## Deploy (Coolify)
 
 Production runs as one always-on Docker container on Coolify (the same Hetzner
@@ -98,7 +126,8 @@ Coolify app settings:
 - Build pack: Dockerfile. Port: `8888`. Health check: `/api/health` (also in the Dockerfile).
 - Turn on "Include Source Commit in Build" so `/api/version` reports the commit.
 - Runtime environment variables: `POSTGRES_URL` (the Coolify database, see below), `SUPABASE_URL`, `SUPABASE_ANON_KEY`,
-  `SUPABASE_SERVICE_ROLE_KEY`, `SESSION_SECRET`, `GOOGLE_PLACES_API_KEY` (optional).
+  `SUPABASE_SERVICE_ROLE_KEY`, `SESSION_SECRET`, `GOOGLE_PLACES_API_KEY` (optional),
+  `TAG_PUBLIC_BASE_URL` and `TAG_HASH_SECRET` (see "Tags").
   No build-time variables are needed.
 
 Migrations run automatically: the container starts with `node dist/migrate.cjs`

@@ -36,12 +36,15 @@ export async function ensureXpotRep(req: Request) {
   }
 
   const displayName = [user.firstName, user.lastName].filter(Boolean).join(" ").trim() || user.email || "Xpot Rep";
+  // Resellers sell Skale Club's pieces under Xpot, so signing up alone grants
+  // nothing: a new account starts switched off until an admin enables it in
+  // Admin → Reps. Global admins are the exception.
   const rep = await storage.upsertSalesRep({
     userId: user.userId,
     displayName,
     email: user.email,
     role: user.isAdmin ? "admin" : "rep",
-    isActive: true,
+    isActive: user.isAdmin,
   });
 
   return { user, rep };
@@ -54,7 +57,7 @@ export async function requireXpotUser(req: Request, res: Response, next: NextFun
       return res.status(401).json({ message: "Authentication required" });
     }
     if (!actor.rep.isActive) {
-      return res.status(403).json({ message: "Xpot access disabled" });
+      return res.status(403).json({ message: "Your Xpot access is not active yet. Ask an administrator to enable it." });
     }
     (req as any).xpotActor = actor;
     next();
