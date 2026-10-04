@@ -6,6 +6,7 @@ import { canWorkOnTag, saleCredit, type TagActor } from "#shared/tagAccess.js";
 import { decidePhoneWrite, type DirectWriteMethod } from "#shared/tagApp.js";
 import type { DirectWriteItem } from "#shared/tagsApi.js";
 import { createLeadForSale, leadUsableBy, markLeadCustomer, rememberLeadPlace, TagError, type Tx } from "./repository.js";
+import { journeyContext, recordJourney } from "./journey.js";
 import { placeIdFromReviewUrl } from "#shared/reviewLink.js";
 
 // Server side of the Tags field app: the one-shot operations behind "tap the
@@ -38,10 +39,12 @@ export interface QuickActivateInput {
  * stays retired) and credits the sale to the reseller holding the piece.
  */
 export async function quickActivateTag(id: string, input: QuickActivateInput, actor: TagActor): Promise<Tag> {
-  return db.transaction(async (tx) => {
+  let before: Tag | null = null;
+  const updated = await db.transaction(async (tx) => {
     const [tag] = await tx.select().from(tags).where(eq(tags.id, id)).for("update");
     if (!tag) throw new TagError("Tag not found", 404);
     assertCanWork(actor, tag);
+    before = tag;
     if (tag.status === "retired") throw new TagError("A retired tag cannot be edited", 409);
 
     let leadId = tag.leadId;
@@ -99,6 +102,34 @@ export async function quickActivateTag(id: string, input: QuickActivateInput, ac
     console.log(`[tags] quick-activate ${tag.publicCode}: ${tag.status} → active (rep ${actor.repId})`);
     return updated;
   });
+  const old = before as Tag | null;
+  const ctx = journeyContext(actor.userId, "field", actor.repId);
+  if (old?.status === "active") {
+    // Already live: only a changed destination is worth a line.
+    if (old.destinationUrl !== updated.destinationUrl || old.destinationType !== updated.destinationType) {
+      await recordJourney({
+        kind: "execution",
+        action: "destination_changed",
+        title: `Destination of ${updated.publicCode} changed in the app`,
+        tagId: id,
+        beforeValue: old.destinationUrl,
+        afterValue: updated.destinationUrl,
+        metadata: { previousType: old.destinationType, newType: updated.destinationType },
+      }, ctx);
+    }
+  } else if (old) {
+    await recordJourney({
+      kind: "execution",
+      action: "tag_activated",
+      title: `Tag ${updated.publicCode} activated in the app`,
+      tagId: id,
+      leadId: updated.leadId,
+      beforeValue: old.status,
+      afterValue: updated.status,
+      metadata: { destinationType: updated.destinationType, destinationUrl: updated.destinationUrl },
+    }, ctx);
+  }
+  return updated;
 }
 
 /**
@@ -111,10 +142,12 @@ export async function recordPhoneWrite(
   baseUrl: string,
   actor: TagActor,
 ) {
-  return db.transaction(async (tx) => {
+  let publicCode = "";
+  const result = await db.transaction(async (tx) => {
     const [tag] = await tx.select().from(tags).where(eq(tags.id, id)).for("update");
     if (!tag) throw new TagError("Tag not found", 404);
     assertCanWork(actor, tag);
+    publicCode = tag.publicCode;
     const { nfcUrl } = buildTagUrls(baseUrl, tag.publicCode);
     const decision = decidePhoneWrite(nfcUrl, report.readbackUrl);
     const now = new Date();
@@ -139,6 +172,18 @@ export async function recordPhoneWrite(
     if (!decision.ok) throw new TagError(decision.error, 409);
     return { status: decision.status, expectedUrl: nfcUrl };
   });
+  // Only a successful write is a milestone; a refused one threw above.
+  await recordJourney({
+    kind: "execution",
+    action: result.status === "verified" ? "nfc_verified" : "nfc_written",
+    title: result.status === "verified"
+      ? `NFC chip of ${publicCode} written and verified (phone)`
+      : `NFC chip of ${publicCode} written, not read back (phone)`,
+    tagId: id,
+    afterValue: result.expectedUrl,
+    metadata: { method: report.method },
+  }, journeyContext(actor.userId, "field", actor.repId));
+  return result;
 }
 
 // ─── Direct pieces ────────────────────────────────────────────────────────────
@@ -153,7 +198,8 @@ export interface DirectWriteInput {
 }
 
 export async function recordDirectWrite(input: DirectWriteInput, actor: TagActor): Promise<{ id: string }> {
-  return db.transaction(async (tx) => {
+  let ownerId: number | null = null;
+  const written = await db.transaction(async (tx) => {
     let leadId: number | null = null;
     const newName = input.leadName?.trim();
     if (input.leadId) leadId = await pickLead(tx, actor, input.leadId);
@@ -171,8 +217,18 @@ export async function recordDirectWrite(input: DirectWriteInput, actor: TagActor
       })
       .returning({ id: tagDirectWrites.id });
     if (leadId) await rememberLeadPlace(tx, leadId, placeIdFromReviewUrl(input.url));
+    ownerId = leadId;
     return row;
   });
+  await recordJourney({
+    kind: "execution",
+    action: "direct_write",
+    title: `Direct NFC piece written${input.label ? `: ${input.label}` : ""}`,
+    leadId: ownerId,
+    afterValue: input.url,
+    metadata: { directWriteId: written.id, method: input.method, verified: input.verified },
+  }, journeyContext(actor.userId, "field", actor.repId));
+  return written;
 }
 
 /** A reseller sees only the direct pieces they wrote; managers see all. */

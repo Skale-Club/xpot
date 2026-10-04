@@ -24,6 +24,7 @@ import type { TagProvisioningDevice } from "#shared/schema.js";
 import { storage } from "../storage.js";
 import { resolveGoogleApiKey } from "../routes/xpot/google.js";
 import { actorOf, requireTagManager, requireTagUser } from "./access.js";
+import { registerJourneyRoutes } from "./journeyRoutes.js";
 import { createTagRedirectHandler, type PublicTag } from "./publicHandler.js";
 import { buildBatchZip, qrPng, qrSvg } from "./qrAssets.js";
 import { normalizeIpKey, rateLimit } from "./rateLimit.js";
@@ -37,7 +38,7 @@ import { ReviewLinkError, resolveReviewLink } from "./reviewLink.js";
 //   /q/:code, /n/:code           — public redirects printed/programmed on pieces
 //   /api/xpot/tags*, …           — any active rep; a reseller only reaches the
 //                                  pieces in their kit and their own customers
-//   /api/xpot/admin/tag*         — active managers/admins
+//   /api/xpot/admin/tag*         — active managers/admins (the journey: admins only)
 //   /api/provisioner/*           — the paired desktop NFC provisioner (device token)
 // Registered before the Xpot routers, whose admin router guards every path it sees.
 
@@ -412,7 +413,7 @@ export function registerTagRoutes(app: Express) {
       try {
         if (!(await tagForActor(req, res, id))) return;
         const { reason } = actionSchema.parse(req.body ?? {});
-        await repo.transitionTag(id, action, actorOf(req), reason);
+        await repo.transitionTag(id, action, actorOf(req), reason, "field");
         res.json(await repo.getTagDetail(id, tagBaseUrl()));
       } catch (err) {
         fail(res, err, `Failed to ${action} tag`);
@@ -469,6 +470,9 @@ export function registerTagRoutes(app: Express) {
 
   const adminBase = "/api/xpot/admin/tags";
 
+  // Journey and plans: admins only (see journeyRoutes.ts).
+  registerJourneyRoutes(app);
+
   app.get(`${adminBase}/overview`, requireTagManager, async (_req, res) => {
     try {
       res.json(await repo.getOverview());
@@ -500,7 +504,7 @@ export function registerTagRoutes(app: Express) {
 
   app.post(adminBase, requireTagManager, async (req, res) => {
     try {
-      const tag = await repo.createSingleTag(tagCreateSchema.parse(req.body));
+      const tag = await repo.createSingleTag(tagCreateSchema.parse(req.body), userIdOf(req));
       res.status(201).json(await repo.getTagDetail(tag.id, tagBaseUrl()));
     } catch (err) {
       fail(res, err, "Failed to create tag");
@@ -654,7 +658,7 @@ export function registerTagRoutes(app: Express) {
     const id = idParam(req, res);
     if (!id) return;
     try {
-      res.json(await repo.updateBatch(id, batchPatchSchema.parse(req.body)));
+      res.json(await repo.updateBatch(id, batchPatchSchema.parse(req.body), userIdOf(req)));
     } catch (err) {
       fail(res, err, "Failed to update batch");
     }

@@ -8,7 +8,7 @@
 // guarded by CHECK constraints there; the allowed values are in shared/tags.ts.
 
 import { sql } from "drizzle-orm";
-import { bigserial, boolean, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { bigserial, boolean, date, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { salesLeads, salesReps } from "./sales.js";
 
 export const tagBatches = pgTable("tag_batches", {
@@ -182,6 +182,60 @@ export const tagDirectWrites = pgTable("tag_direct_writes", {
   repIdx: index("tag_direct_writes_rep_idx").on(table.repId, table.createdAt.desc()),
 }));
 
+// ─── Journey (story, planning, execution) ────────────────────────────────────
+// SQL: migrations/0014_tag_journey.sql. Allowed values: shared/tagJourney.ts.
+// Admin-only; resellers never read these tables through the API.
+
+export const tagPlans = pgTable("tag_plans", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  kind: text("kind").notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  batchId: uuid("batch_id").references(() => tagBatches.id, { onDelete: "set null" }),
+  tagId: uuid("tag_id").references(() => tags.id, { onDelete: "set null" }),
+  kitId: uuid("kit_id").references(() => tagKits.id, { onDelete: "set null" }),
+  leadId: integer("lead_id").references(() => salesLeads.id, { onDelete: "set null" }),
+  status: text("status").notNull().default("active"),
+  outcome: text("outcome"),
+  dueDate: date("due_date", { mode: "string" }),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
+  createdByUserId: text("created_by_user_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  closedAt: timestamp("closed_at", { withTimezone: true }),
+}, (table) => ({
+  statusIdx: index("tag_plans_status_idx").on(table.status, table.createdAt.desc()),
+}));
+
+// Append-only timeline; a DB trigger lets UPDATE change `status` only.
+export const tagJourneyEntries = pgTable("tag_journey_entries", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  kind: text("kind").notNull(),
+  action: text("action"),
+  title: text("title").notNull(),
+  content: text("content"),
+  batchId: uuid("batch_id").references(() => tagBatches.id, { onDelete: "set null" }),
+  tagId: uuid("tag_id").references(() => tags.id, { onDelete: "set null" }),
+  kitId: uuid("kit_id").references(() => tagKits.id, { onDelete: "set null" }),
+  // The reseller the entry is about.
+  repId: integer("rep_id").references(() => salesReps.id, { onDelete: "set null" }),
+  leadId: integer("lead_id").references(() => salesLeads.id, { onDelete: "set null" }),
+  planId: uuid("plan_id").references(() => tagPlans.id, { onDelete: "set null" }),
+  beforeValue: text("before_value"),
+  afterValue: text("after_value"),
+  source: text("source").notNull(),
+  actor: text("actor").notNull(),
+  actorUserId: text("actor_user_id"),
+  // Who acted, when it was a reseller in the field app.
+  actorRepId: integer("actor_rep_id").references(() => salesReps.id, { onDelete: "set null" }),
+  status: text("status").notNull().default("active"),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  occurredIdx: index("tag_journey_entries_occurred_idx").on(table.occurredAt.desc()),
+}));
+
 export type TagBatch = typeof tagBatches.$inferSelect;
 export type TagKit = typeof tagKits.$inferSelect;
 export type Tag = typeof tags.$inferSelect;
@@ -191,3 +245,6 @@ export type InsertTagEvent = typeof tagEvents.$inferInsert;
 export type TagProvisioningDevice = typeof tagProvisioningDevices.$inferSelect;
 export type TagProvisioningJob = typeof tagProvisioningJobs.$inferSelect;
 export type TagDirectWrite = typeof tagDirectWrites.$inferSelect;
+export type TagPlan = typeof tagPlans.$inferSelect;
+export type TagJourneyEntry = typeof tagJourneyEntries.$inferSelect;
+export type InsertTagJourneyEntry = typeof tagJourneyEntries.$inferInsert;

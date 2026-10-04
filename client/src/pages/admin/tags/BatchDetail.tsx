@@ -19,6 +19,7 @@ import {
   productLabel,
 } from "./batches-shared";
 import { GiveKitForm } from "./kits-give-form";
+import { JourneyPanel } from "./JourneyPanel";
 
 interface BatchDetailData {
   id: string;
@@ -257,6 +258,9 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
           <PieceTable pieces={shown} go={go} showBatch={false} empty="No pieces match this filter." />
         </div>
       </section>
+
+      {/* Admin only: renders nothing (and sends no request) for managers. */}
+      <JourneyPanel scope={{ batchId: batch.id }} filters={{}} title="Batch journey" />
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import type { Express } from "express";
+import { registerMcpRoutes } from "./mcp/routes.js";
 import { registerXpotRoutes } from "./routes/xpot/index.js";
 import { registerTagRoutes } from "./tags/routes.js";
 import { registerWholesaleRoutes } from "./wholesale/index.js";
@@ -7,6 +8,9 @@ export async function registerRoutes(app: Express) {
   // Tags first: public /q and /n redirects, and /api/xpot/tags* / /api/xpot/admin/tag*
   // must be matched before the Xpot admin router, which guards every path it sees.
   registerTagRoutes(app);
+  // MCP endpoint (/mcp) and its token admin API (/api/xpot/admin/mcp-tokens):
+  // same ordering reason, and /mcp must beat the SPA catch-all added in index.ts.
+  registerMcpRoutes(app);
   // Same reason: /api/xpot/wholesale and its admin route sit under those prefixes.
   registerWholesaleRoutes(app);
 

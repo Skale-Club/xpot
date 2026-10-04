@@ -6,3 +6,4 @@ export * from "./sales.js";
 export * from "./integrations.js";
 export * from "./branding.js";
 export * from "./tags.js";
+export * from "./mcp.js";
