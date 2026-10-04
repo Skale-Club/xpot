@@ -4,6 +4,7 @@ import { randomBytes } from "crypto";
 import { storage } from "../../storage.js";
 import { requireXpotManager } from "./middleware.js";
 import { getGHLPipelines } from "../../integrations/ghl.js";
+import { AccountError, createResellerAccount, passwordResetSchema, resellerAccountSchema, resetRepPassword } from "./resellerAccounts.js";
 
 export function createAdminRouter() {
   const router = Router();
@@ -64,6 +65,36 @@ export function createAdminRouter() {
 
     const rep = await storage.upsertSalesRep(input);
     res.status(201).json(rep);
+  });
+
+  // Create a reseller's login (email + password) with an active rep.
+  router.post("/admin/reps/accounts", async (req, res) => {
+    const actor = (req as any).xpotActor;
+    const parsed = resellerAccountSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid input" });
+    try {
+      res.status(201).json(await createResellerAccount(parsed.data, !!actor?.user?.isAdmin));
+    } catch (err) {
+      if (err instanceof AccountError) return res.status(err.status).json({ message: err.message });
+      console.error("[POST /admin/reps/accounts]", err);
+      res.status(500).json({ message: "Could not create the account" });
+    }
+  });
+
+  router.post("/admin/reps/:id/password", async (req, res) => {
+    const actor = (req as any).xpotActor;
+    const repId = Number(req.params.id);
+    if (!Number.isInteger(repId) || repId <= 0) return res.status(400).json({ message: "Invalid rep id" });
+    const parsed = passwordResetSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid input" });
+    try {
+      await resetRepPassword(repId, parsed.data.password, !!actor?.user?.isAdmin);
+      res.json({ ok: true });
+    } catch (err) {
+      if (err instanceof AccountError) return res.status(err.status).json({ message: err.message });
+      console.error("[POST /admin/reps/:id/password]", err);
+      res.status(500).json({ message: "Could not change the password" });
+    }
   });
 
   router.get("/admin/sync-events", async (_req, res) => {

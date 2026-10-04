@@ -1,5 +1,5 @@
 // NFC provisioning protocol between Xpot (system of record) and the
-// "Xpot NFC Provisioner" desktop app (nfc-provisioner/). Pure rules only.
+// "Xpot NFC Writer" desktop app (nfc-provisioner/). Pure rules only.
 //
 // The app keeps its own copy of the wire constants (it ships separately); bump
 // PROVISIONER_PROTOCOL_VERSION on any breaking change so old apps get a clear

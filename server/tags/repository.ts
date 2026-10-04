@@ -345,13 +345,32 @@ export async function transitionTag(
 }
 
 /** Admin: link a piece to a customer (lead) without activating it. */
-export async function assignTag(id: string, leadId: number, userId: string | null): Promise<Tag> {
+/**
+ * Admin: give a piece to a customer, an existing lead or a new business by
+ * name. A new lead belongs to the reseller holding the piece (else the admin).
+ */
+export async function assignTag(
+  id: string,
+  target: { leadId?: number; leadName?: string },
+  userId: string | null,
+  actorRepId: number,
+): Promise<Tag> {
   return db.transaction(async (tx) => {
     const tag = await lockTag(tx, id);
     const plan = planTransition(tag, "assign");
     if (!plan.ok) throw new TagError(plan.error, 409);
-    const [lead] = await tx.select({ id: salesLeads.id }).from(salesLeads).where(eq(salesLeads.id, leadId));
-    if (!lead) throw new TagError("Customer not found", 404);
+    let leadId: number;
+    if (target.leadId) {
+      const [lead] = await tx.select({ id: salesLeads.id }).from(salesLeads).where(eq(salesLeads.id, target.leadId));
+      if (!lead) throw new TagError("Customer not found", 404);
+      leadId = lead.id;
+    } else if (target.leadName?.trim()) {
+      // Checked before creating anything, so a refused move leaves no orphan lead.
+      if (tag.leadId && tag.status === "active") throw new TagError("Disable the tag before moving it to another customer", 409);
+      leadId = await createLeadForSale(tx, target.leadName.trim(), tag.repId ?? actorRepId);
+    } else {
+      throw new TagError("Choose the customer", 400);
+    }
     const changingOwner = tag.leadId !== leadId;
     const set: Partial<Tag> = {
       leadId,
@@ -527,22 +546,33 @@ export async function listKits(filter: { repId?: number; kitId?: string } = {}):
 }
 
 /** Admin: unsold pieces back from a reseller to house stock (kit returned, reseller left). */
-export async function returnToHouse(codes: string[], userId: string | null): Promise<number> {
+/**
+ * Unsold pieces a reseller hands back go to house stock. A typo must not pass
+ * silently: unknown codes are refused, and pieces already in house stock are
+ * reported instead of counted.
+ */
+export async function returnToHouse(codes: string[], userId: string | null): Promise<{ returned: number; alreadyInHouse: string[] }> {
   return db.transaction(async (tx) => {
     const picked = await tx
-      .select({ id: tags.id, publicCode: tags.publicCode, status: tags.status })
+      .select({ id: tags.id, publicCode: tags.publicCode, status: tags.status, repId: tags.repId })
       .from(tags)
       .where(inArray(tags.publicCode, codes))
       .for("update");
+    const found = new Set(picked.map((t) => t.publicCode));
+    const missing = codes.filter((c) => !found.has(c));
+    if (missing.length) throw new TagError(`Unknown codes: ${missing.join(", ")}`, 404);
     const sold = picked.filter((t) => t.status !== "inventory").map((t) => t.publicCode);
     if (sold.length) throw new TagError(`Already sold, cannot return: ${sold.join(", ")}`, 409);
-    if (picked.length === 0) return 0;
-    await tx
-      .update(tags)
-      .set({ repId: null, kitId: null, updatedAt: new Date() })
-      .where(inArray(tags.id, picked.map((t) => t.id)));
-    console.log(`[tags] ${picked.length} pieces returned to house stock (user ${userId ?? "?"})`);
-    return picked.length;
+    const alreadyInHouse = picked.filter((t) => t.repId === null).map((t) => t.publicCode);
+    const moving = picked.filter((t) => t.repId !== null);
+    if (moving.length) {
+      await tx
+        .update(tags)
+        .set({ repId: null, kitId: null, updatedAt: new Date() })
+        .where(inArray(tags.id, moving.map((t) => t.id)));
+      console.log(`[tags] ${moving.length} pieces returned to house stock (user ${userId ?? "?"})`);
+    }
+    return { returned: moving.length, alreadyInHouse };
   });
 }
 

@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Xpot NFC Writer</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header>
+  <div class="brand">Xpot NFC Writer</div>
+  <div id="connection" class="pill">…</div>
+</header>
+
+<main>
+  <section id="pair-view" hidden>
+    <h1>Pair this computer</h1>
+    <p class="muted">In Xpot go to <strong>Admin → Tags → NFC writers</strong>, create a pairing code and type it here.</p>
+    <form id="pair-form">
+      <label>Xpot server<input id="server" type="url" value="https://xpot.place" autocomplete="off" spellcheck="false" required></label>
+      <label>Pairing code<input id="code" placeholder="XXXX-XXXX" maxlength="9" autocomplete="off" spellcheck="false" required></label>
+      <button type="submit" id="pair-btn">Pair</button>
+    </form>
+    <p id="pair-error" class="error" hidden></p>
+  </section>
+
+  <section id="work-view" hidden>
+    <div class="row status-row">
+      <div class="status"><span class="label">Reader</span><span id="reader"></span></div>
+      <div class="status"><span class="label">Tag</span><span id="tag"></span></div>
+    </div>
+
+    <div id="job" class="card">
+      <span class="label">Current job</span>
+      <div id="job-empty" class="muted">Waiting for a job — open a tag in Xpot Admin → Tags and send it to the NFC writer.</div>
+      <div id="job-body" hidden>
+        <div class="code" id="job-code"></div>
+        <div class="muted" id="job-product"></div>
+        <span class="label">Will write</span>
+        <code id="job-url"></code>
+        <p class="hint">Check the code printed on the piece matches <strong id="job-code-2"></strong> before programming.</p>
+      </div>
+    </div>
+
+    <button id="program" class="primary" disabled>Program NFC</button>
+    <p id="blocked" class="muted center"></p>
+
+    <div id="result" class="result" hidden></div>
+
+    <div class="row actions">
+      <button id="give-up" class="ghost" hidden>Give up on this piece</button>
+      <button id="refresh" class="ghost">Check for jobs</button>
+    </div>
+  </section>
+
+  <section id="update-view" hidden>
+    <h1>Update required</h1>
+    <p id="update-message" class="muted"></p>
+  </section>
+</main>
+
+<footer>
+  <span id="device"></span>
+  <span class="spacer"></span>
+  <button id="open-website" class="link">Open Xpot</button>
+  <button id="unpair" class="link" hidden>Unpair</button>
+  <span id="version" class="muted"></span>
+</footer>
+<script src="renderer.js"></script>
+</body>
+</html>

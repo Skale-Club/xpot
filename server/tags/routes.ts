@@ -282,7 +282,7 @@ function requireProtocol(req: Request, res: Response, next: NextFunction) {
   const sent = Number(req.get(PROVISIONER_PROTOCOL_HEADER));
   if (sent !== PROVISIONER_PROTOCOL_VERSION) {
     return res.status(426).json({
-      message: "This NFC Provisioner version is not compatible with Xpot. Install the current version.",
+      message: "This Xpot NFC Writer version is not compatible with the server. Install the current version.",
       protocolVersion: PROVISIONER_PROTOCOL_VERSION,
     });
   }
@@ -522,8 +522,12 @@ export function registerTagRoutes(app: Express) {
     const id = idParam(req, res);
     if (!id) return;
     try {
-      const { leadId } = z.object({ leadId: z.number().int().positive() }).strict().parse(req.body);
-      await repo.assignTag(id, leadId, userIdOf(req));
+      const target = z
+        .object({ leadId: z.number().int().positive().optional(), leadName: optionalText(200) })
+        .strict()
+        .refine((v) => !!v.leadId !== !!v.leadName, "Send either leadId or leadName")
+        .parse(req.body);
+      await repo.assignTag(id, { leadId: target.leadId, leadName: target.leadName ?? undefined }, userIdOf(req), actorOf(req).repId);
       res.json(await repo.getTagDetail(id, tagBaseUrl()));
     } catch (err) {
       fail(res, err, "Failed to assign tag");
@@ -611,7 +615,7 @@ export function registerTagRoutes(app: Express) {
   app.post("/api/xpot/admin/tag-kits/return", requireTagManager, async (req, res) => {
     try {
       const { codes } = z.object({ codes: codeList }).strict().parse(req.body);
-      res.json({ returned: await repo.returnToHouse(codes, userIdOf(req)) });
+      res.json(await repo.returnToHouse(codes, userIdOf(req)));
     } catch (err) {
       fail(res, err, "Failed to return pieces");
     }
