@@ -114,7 +114,7 @@ test.skipIf(!enabled)("mcp: token via admin API, tools over Streamable HTTP, rev
     try {
       const tools = (await client.listTools()).tools.map((t) => t.name).sort();
       assert.deepEqual(tools, [
-        "tags_batches_list", "tags_get", "tags_journey_get", "tags_journey_record", "tags_journey_review",
+        "tags_batch_create", "tags_batches_list", "tags_get", "tags_journey_get", "tags_journey_record", "tags_journey_review",
         "tags_plan_create", "tags_plan_update", "tags_plans_list",
       ]);
 
@@ -128,6 +128,16 @@ test.skipIf(!enabled)("mcp: token via admin API, tools over Streamable HTTP, rev
       const tagDetail = await call(client, "tags_get", { tag: first.publicCode.toLowerCase() });
       assert.equal(tagDetail.json.id, first.id);
       assert.equal(tagDetail.json.publicCode, first.publicCode);
+
+      // Create a batch over MCP: fresh codes, journaled by the site itself, pinned codes refused.
+      const made = await call(client, "tags_batch_create", { batch: { name: "MCP batch", productType: "google_review_sign", quantity: 3, batchCode: "ig-mcp-001" } });
+      assert.equal(made.isError, false);
+      assert.equal(made.json.batch.batchCode, "IG-MCP-001");
+      assert.equal(made.json.tags.length, 3);
+      assert.match(made.json.tags[0].qrUrl, /^https:\/\/xpot\.place\/q\/[0-9A-Z]{8,10}$/);
+      assert.equal(made.json.tags[0].nfcUrl, made.json.tags[0].qrUrl.replace("/q/", "/n/"));
+      const pinned = await call(client, "tags_batch_create", { batch: { name: "x", productType: "keychain", quantity: 1, publicCodes: ["A7K3P9X2"] } });
+      assert.equal(pinned.isError, true);
 
       // Record by batch code; object params also arrive as JSON strings.
       const recorded = await call(client, "tags_journey_record", {
