@@ -125,7 +125,7 @@ test("unknown and malformed codes get a safe 404 page", async () => {
       const res = await get(`${base}${path}`);
       assert.equal(res.status, 404, path);
       assert.equal(res.headers.get("cache-control"), "no-store");
-      assert.match(await res.text(), /Tag not found/);
+      assert.match(await res.text(), /We could not find this Xpot/);
     }
     await settle();
     assert.equal(events.length, 0);
@@ -138,8 +138,9 @@ test("inventory tag shows the activation page, never a destination", async () =>
     const res = await get(`${base}/q/A7K3P9X2`);
     assert.equal(res.status, 200);
     const html = await res.text();
-    assert.match(html, /has not been activated yet/);
-    assert.doesNotMatch(html, /Configure this tag/);
+    assert.match(html, /ready to come alive/);
+    assert.match(html, /Discover Xpot/);
+    assert.doesNotMatch(html, /Activate this piece/);
     await settle();
     assert.equal(events[0].eventType, "inventory_scan");
   });
@@ -150,6 +151,16 @@ test("admins scanning an unassigned tag get a configure shortcut", async () => {
   await withServer({ tags, configureUrlFor: async () => "/tags/t/A7K3P9X2" }, async ({ base }) => {
     const html = await (await get(`${base}/q/A7K3P9X2`)).text();
     assert.match(html, /href="\/tags\/t\/A7K3P9X2"/);
+    assert.match(html, /Activate this piece/);
+  });
+});
+
+test("assigned tag has reassuring setup-in-progress copy", async () => {
+  const tags = new Map([["A7K3P9X2", makeTag({ status: "assigned", destinationUrl: null })]]);
+  await withServer({ tags }, async ({ base }) => {
+    const res = await get(`${base}/q/A7K3P9X2`);
+    assert.equal(res.status, 200);
+    assert.match(await res.text(), /experience is almost ready/);
   });
 });
 

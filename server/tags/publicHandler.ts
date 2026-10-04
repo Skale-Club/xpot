@@ -148,7 +148,8 @@ export function createTagRedirectHandler(method: TagAccessMethod, deps: PublicTa
         configureUrl = undefined;
       }
       // Scan → configure → live, straight from the piece in the reseller's hand.
-      res.status(200).type("html").send(renderTagPage("inactive", { code: tag.publicCode, configureUrl, lang }));
+      const page = tag.status === "assigned" ? "assigned" : "inventory";
+      res.status(200).type("html").send(renderTagPage(page, { code: tag.publicCode, configureUrl, lang }));
       await record(deps, req, tag, method, "inventory_scan");
       return;
     }
