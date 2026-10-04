@@ -15,6 +15,7 @@ import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { leadsMessages } from "@/i18n/messages/leads";
 import { visitsMessages } from "@/i18n/messages/visits";
+import { VisitActionsPanel } from "./sales/VisitActions";
 
 type VisitLike = {
   id: number;
@@ -125,15 +126,34 @@ function VisitDetail({ visit, onDelete }: { visit: VisitLike; onDelete: () => vo
   }
 
   async function handleAudioUpload({ audioBlob, durationSeconds }: { audioBlob: Blob; durationSeconds: number }) {
+    if (audioBlob.size > 3 * 1024 * 1024) {
+      toast({ title: "Recording too large", description: "Keep voice notes under five minutes.", variant: "destructive" });
+      return;
+    }
     const reader = new FileReader();
     const audioData = await new Promise<string>((resolve) => {
       reader.onloadend = () => resolve(reader.result as string);
       reader.readAsDataURL(audioBlob);
     });
     const response = await apiRequest("POST", `/api/xpot/visits/${visit.id}/audio`, { audioData, durationSeconds });
-    const result = await response.json() as { note: SalesVisitNote; transcriptionAvailable: boolean; analysisApplied: boolean };
-    toast({ variant: "success", title: result.analysisApplied ? t("audioAnalyzed") : t("audioSaved") });
+    const result = await response.json() as { note: SalesVisitNote; transcriptionAvailable: boolean; readyToAnalyze: boolean };
+
+    let detected = 0;
+    if (result.readyToAnalyze) {
+      try {
+        const analyzed = await apiRequest("POST", `/api/xpot/visits/${visit.id}/analyze`, {});
+        detected = ((await analyzed.json()) as { actions?: unknown[] }).actions?.length ?? 0;
+      } catch {
+        // Transcript is saved; analysis can be retried without re-recording.
+      }
+    }
+    toast({
+      variant: "success",
+      title: detected > 0 ? t.plural("actionsDetected", detected) : t("audioSaved"),
+      description: detected > 0 ? t("actionsReviewBelow") : undefined,
+    });
     queryClient.invalidateQueries({ queryKey: ["/api/xpot/visits"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/xpot/visits", visit.id, "actions"] });
   }
 
   return (
@@ -301,6 +321,9 @@ function VisitDetail({ visit, onDelete }: { visit: VisitLike; onDelete: () => vo
           <p className="text-sm text-white/70 leading-relaxed">{visit.note.summary}</p>
         </div>
       ) : null}
+
+      {/* What the note asked us to record */}
+      <VisitActionsPanel visitId={visit.id} />
 
       {/* Voice recorder */}
       <div

@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "@/components/ui/loader";
-import { ShieldAlert, ArrowLeft, LayoutDashboard, Users, Plug, Webhook, Palette, Nfc } from "lucide-react";
+import { ShieldAlert, ArrowLeft, LayoutDashboard, Users, Plug, Webhook, Palette, Nfc, Boxes, SlidersHorizontal } from "lucide-react";
 import type { XpotMeResponse } from "@/pages/xpot/types";
 import { AdminOverview } from "./AdminOverview";
 import { AdminReps } from "./AdminReps";
@@ -10,14 +10,18 @@ import { AdminIntegrations } from "./AdminIntegrations";
 import { AdminXphere } from "./AdminXphere";
 import { AdminBranding } from "./AdminBranding";
 import { AdminTags } from "./tags/AdminTags";
+import { AdminProducts } from "./AdminProducts";
+import { AdminSettings } from "./AdminSettings";
 
 const SECTIONS = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
   { id: "tags", label: "Tags", icon: Nfc },
+  { id: "products", label: "Products", icon: Boxes },
   { id: "integrations", label: "Integrations", icon: Plug },
   { id: "branding", label: "Branding", icon: Palette },
   { id: "xphere", label: "Xphere", icon: Webhook },
   { id: "reps", label: "Reps", icon: Users },
+  { id: "settings", label: "Settings", icon: SlidersHorizontal },
 ] as const;
 
 type SectionId = (typeof SECTIONS)[number]["id"];
@@ -109,11 +113,13 @@ export function AdminApp({ section }: { section: string }) {
         {/* Content */}
         <main>
           {active === "overview" && <AdminOverview />}
+          {active === "products" && <AdminProducts />}
           {active === "integrations" && <AdminIntegrations />}
           {active === "branding" && <AdminBranding />}
           {active === "xphere" && <AdminXphere />}
           {active === "reps" && <AdminReps />}
           {active === "tags" && <AdminTags />}
+          {active === "settings" && <AdminSettings />}
         </main>
       </div>
     </div>

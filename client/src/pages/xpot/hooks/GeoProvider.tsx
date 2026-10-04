@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode, type Dispatch, type SetStateAction } from "react";
 import { translate } from "@/i18n";
 import { checkinMessages } from "@/i18n/messages/checkin";
-import type { GeoState } from "./types";
+import type { GeoState } from "../types";
 
 // "unknown" = the Permissions API could not tell us (older Safari); we only
 // learn the truth once getCurrentPosition either resolves or is refused.

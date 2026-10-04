@@ -35,13 +35,24 @@ export function createInboundRouter() {
     }
 
     let sent = 0;
+    let skipped = 0;
     for (const l of leads) {
       const name = typeof l?.name === "string" && l.name.trim() ? l.name.trim() : null;
       const xphereId = typeof l?.xphereId === "string" ? l.xphereId : null;
       if (!name || !xphereId) continue;
       const xphereKind = l?.xphereKind === "account" ? "account" : "contact";
 
+      const xphereRef = `${xphereKind}:${xphereId}`;
+
       try {
+        // DAT-02: a retry from Xphere used to create a second copy of the same
+        // prospect, and `sent` reported it as a success either way.
+        const existing = await storage.getSalesLeadByXphereRef(xphereRef);
+        if (existing) {
+          skipped += 1;
+          continue;
+        }
+
         const lead = await storage.createSalesLead({
           name,
           email: typeof l?.email === "string" ? l.email : null,
@@ -49,7 +60,7 @@ export function createInboundRouter() {
           source: "xphere",
           status: "prospect",
           ownerRepId: rep.id,
-          xphereRef: `${xphereKind}:${xphereId}`,
+          xphereRef,
         } as Parameters<typeof storage.createSalesLead>[0]);
 
         const address =
@@ -69,7 +80,7 @@ export function createInboundRouter() {
       }
     }
 
-    res.json({ sent });
+    res.json({ sent, skipped });
   });
 
   return router;

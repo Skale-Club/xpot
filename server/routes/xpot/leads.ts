@@ -1,9 +1,10 @@
 import { Router } from "express";
 import { z } from "zod";
 import { storage } from "../../storage.js";
-import { requireXpotUser, ensureXpotRep, isManagerOrAdmin } from "./middleware.js";
+import { requireXpotUser, ensureXpotRep, isManagerOrAdmin, loadAccessibleLead } from "./middleware.js";
 import { xpotLeadCreateSchema, xpotLeadUpdateSchema, xpotLeadContactCreateSchema } from "#shared/xpot.js";
 import { syncLeadToGhl, syncLeadToXphere } from "./helpers.js";
+import { salesStorage } from "../../storage-sales.js";
 
 export function createLeadsRouter() {
   const router = Router();
@@ -27,10 +28,11 @@ export function createLeadsRouter() {
     if (!leads.length) return res.json([]);
 
     const leadIds = leads.map((l) => l.id);
-    const [allLocations, allContacts, openOpportunitiesMap] = await Promise.all([
+    const [allLocations, allContacts, openOpportunitiesMap, salesByLead] = await Promise.all([
       storage.listSalesLeadLocationsBatch(leadIds),
       storage.listSalesLeadContactsBatch(leadIds),
       storage.countOpenOpportunitiesByLeadIds(leadIds),
+      salesStorage.leadSalesBatch(leadIds),
     ]);
 
     const locationsByLead = new Map<number, typeof allLocations>();
@@ -49,6 +51,9 @@ export function createLeadsRouter() {
       locations: locationsByLead.get(lead.id) ?? [],
       contacts: contactsByLead.get(lead.id) ?? [],
       openOpportunities: openOpportunitiesMap[lead.id] ?? 0,
+      // What the company card shows at a glance: sold here, and stock on their shelf.
+      salesLifetimeCents: salesByLead.get(lead.id)?.lifetimeCents ?? 0,
+      unitsOnShelf: salesByLead.get(lead.id)?.unitsOnShelf ?? 0,
     }));
 
     res.json(enriched);
@@ -174,12 +179,18 @@ export function createLeadsRouter() {
       return res.status(403).json({ message: "Access denied" });
     }
 
+    // SEG-06: the lead check above is right, but these collections were not
+    // scoped — listSalesOpportunities({ leadId }) returned every rep's deals on
+    // the lead, and listSalesTasks() loaded the whole table before filtering in
+    // memory. A manager sharing a lead with a rep exposed both pipelines.
+    const seesAll = isManagerOrAdmin(actor!);
+    const scope = seesAll ? undefined : actor!.rep.id;
     const [locations, contacts, visits, opportunities, tasks] = await Promise.all([
       storage.listSalesLeadLocations(leadId),
       storage.listSalesLeadContacts(leadId),
-      storage.listSalesVisits({ leadId }),
-      storage.listSalesOpportunities({ leadId }),
-      storage.listSalesTasks(),
+      storage.listSalesVisits({ leadId, repId: scope }),
+      storage.listSalesOpportunities({ leadId, repId: scope }),
+      storage.listSalesTasks({ repId: scope }),
     ]);
 
     res.json({
@@ -362,15 +373,19 @@ export function createLeadsRouter() {
     res.json({ lead: updated });
   });
 
+  // SEG-04: these two were the only routes in this file with no ownership
+  // check — any rep could list or inject contacts on any lead by walking ids.
   router.get("/leads/:id/contacts", async (req, res) => {
-    const leadId = Number(req.params.id);
-    res.json(await storage.listSalesLeadContacts(leadId));
+    const lead = await loadAccessibleLead(req, res, Number(req.params.id));
+    if (!lead) return;
+    res.json(await storage.listSalesLeadContacts(lead.id));
   });
 
   router.post("/leads/:id/contacts", async (req, res) => {
-    const leadId = Number(req.params.id);
+    const lead = await loadAccessibleLead(req, res, Number(req.params.id));
+    if (!lead) return;
     const input = xpotLeadContactCreateSchema.parse(req.body);
-    const contact = await storage.createSalesLeadContact({ ...input, leadId });
+    const contact = await storage.createSalesLeadContact({ ...input, leadId: lead.id });
     res.status(201).json(contact);
   });
 

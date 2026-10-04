@@ -28,6 +28,8 @@ export type FullSalesLead = SalesLead & {
   locations: SalesLeadLocation[];
   contacts: SalesLeadContact[];
   openOpportunities?: number;
+  salesLifetimeCents?: number;
+  unitsOnShelf?: number;
 };
 
 export type EnrichedSalesVisit = SalesVisit & {
@@ -108,3 +110,6 @@ export type DashboardResponse = {
   openOpportunities: (SalesOpportunity & { lead?: SalesLead })[];
   pendingTasks: SalesTask[];
 };
+
+/** Browser geolocation state, shared by GeoProvider and everything that reads a fix. */
+export type GeoState = { lat?: number; lng?: number; accuracy?: number; error?: string };

@@ -136,6 +136,10 @@ const en = {
   defaultRepName: "Xpot Rep",
   sellPiece: "Sell a piece to this customer",
   sellPieceHint: "Opens Tags with this customer ready",
+  actionsDetected_one: "{count} action detected",
+  actionsDetected_other: "{count} actions detected",
+  noteAnalyzed: "Note analyzed",
+  actionsReviewBefore: "Check them below before they are recorded.",
 };
 
 export const checkinMessages: Dictionary<typeof en> = {
@@ -260,6 +264,10 @@ export const checkinMessages: Dictionary<typeof en> = {
     defaultRepName: "Representante Xpot",
     sellPiece: "Vender uma peça para este cliente",
     sellPieceHint: "Abre as Tags com este cliente já escolhido",
+    actionsDetected_one: "{count} ação detectada",
+    actionsDetected_other: "{count} ações detectadas",
+    noteAnalyzed: "Nota analisada",
+    actionsReviewBefore: "Confira abaixo antes de serem registradas.",
   },
   es: {
     saved: "Guardado",
@@ -381,5 +389,9 @@ export const checkinMessages: Dictionary<typeof en> = {
     defaultRepName: "Representante Xpot",
     sellPiece: "Vender una pieza a este cliente",
     sellPieceHint: "Abre Etiquetas con este cliente ya elegido",
+    actionsDetected_one: "{count} acción detectada",
+    actionsDetected_other: "{count} acciones detectadas",
+    noteAnalyzed: "Nota analizada",
+    actionsReviewBefore: "Revísalas abajo antes de que se registren.",
   },
 };

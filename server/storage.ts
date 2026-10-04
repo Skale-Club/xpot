@@ -102,6 +102,7 @@ export interface IStorage {
   // Leads + child tables
   listSalesLeads(filters?: { ownerRepId?: number; search?: string }): Promise<SalesLead[]>;
   getSalesLead(id: number): Promise<SalesLead | undefined>;
+  getSalesLeadByXphereRef(ref: string): Promise<SalesLead | undefined>;
   createSalesLead(input: InsertSalesLead): Promise<SalesLead>;
   updateSalesLead(id: number, input: Partial<InsertSalesLead>): Promise<SalesLead | undefined>;
   deleteSalesLead(id: number): Promise<void>;
@@ -127,9 +128,11 @@ export interface IStorage {
 
   // Opportunities + tasks
   listSalesOpportunities(filters?: { repId?: number; leadId?: number; status?: SalesOpportunityStatus }): Promise<SalesOpportunity[]>;
+  getSalesOpportunity(id: number): Promise<SalesOpportunity | undefined>;
   createSalesOpportunity(input: InsertSalesOpportunity): Promise<SalesOpportunity>;
   updateSalesOpportunity(id: number, input: Partial<InsertSalesOpportunity>): Promise<SalesOpportunity | undefined>;
   listSalesTasks(filters?: { repId?: number; status?: SalesTaskStatus }): Promise<SalesTask[]>;
+  getSalesTask(id: number): Promise<SalesTask | undefined>;
   createSalesTask(input: InsertSalesTask): Promise<SalesTask>;
   updateSalesTask(id: number, input: Partial<InsertSalesTask>): Promise<SalesTask | undefined>;
 
@@ -339,6 +342,12 @@ export class DatabaseStorage implements IStorage {
     return lead;
   }
 
+  /** Idempotency key for prospects pushed in from Xphere (DAT-02). */
+  async getSalesLeadByXphereRef(ref: string): Promise<SalesLead | undefined> {
+    const [lead] = await db.select().from(salesLeads).where(eq(salesLeads.xphereRef, ref));
+    return lead;
+  }
+
   async createSalesLead(input: InsertSalesLead): Promise<SalesLead> {
     const [created] = await db.insert(salesLeads).values(input as any).returning();
     return created;
@@ -432,7 +441,7 @@ export class DatabaseStorage implements IStorage {
     if (existing.length > 0) {
       const [updated] = await db
         .update(salesLeadLocations)
-        .set({ ...data })
+        .set({ ...data, updatedAt: new Date() })
         .where(eq(salesLeadLocations.id, existing[0].id))
         .returning();
       return updated;
@@ -591,9 +600,20 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
+  /**
+   * DAT-01: this used to delete the note and the visit only, leaving any
+   * sales_tasks row that referenced the visit behind — and the app creates
+   * exactly those tasks during a visit, so DELETE /visits/:id failed with a
+   * foreign-key violation whenever the visit had one. Tasks are detached
+   * rather than deleted: a follow-up outlives the visit that produced it.
+   */
   async deleteSalesVisit(id: number): Promise<void> {
-    await db.delete(salesVisitNotes).where(eq(salesVisitNotes.visitId, id));
-    await db.delete(salesVisits).where(eq(salesVisits.id, id));
+    await db.transaction(async (tx) => {
+      await tx.update(salesTasks).set({ visitId: null }).where(eq(salesTasks.visitId, id));
+      await tx.update(salesOpportunitiesLocal).set({ visitId: null }).where(eq(salesOpportunitiesLocal.visitId, id));
+      await tx.delete(salesVisitNotes).where(eq(salesVisitNotes.visitId, id));
+      await tx.delete(salesVisits).where(eq(salesVisits.id, id));
+    });
   }
 
   async getSalesVisitNote(visitId: number): Promise<SalesVisitNote | undefined> {
@@ -628,6 +648,11 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(salesOpportunitiesLocal).orderBy(desc(salesOpportunitiesLocal.updatedAt));
   }
 
+  async getSalesOpportunity(id: number): Promise<SalesOpportunity | undefined> {
+    const [row] = await db.select().from(salesOpportunitiesLocal).where(eq(salesOpportunitiesLocal.id, id));
+    return row;
+  }
+
   async createSalesOpportunity(input: InsertSalesOpportunity): Promise<SalesOpportunity> {
     const [created] = await db.insert(salesOpportunitiesLocal).values(input).returning();
     return created;
@@ -650,6 +675,11 @@ export class DatabaseStorage implements IStorage {
       return await db.select().from(salesTasks).where(and(...conditions)).orderBy(asc(salesTasks.dueAt), desc(salesTasks.createdAt));
     }
     return await db.select().from(salesTasks).orderBy(asc(salesTasks.dueAt), desc(salesTasks.createdAt));
+  }
+
+  async getSalesTask(id: number): Promise<SalesTask | undefined> {
+    const [row] = await db.select().from(salesTasks).where(eq(salesTasks.id, id));
+    return row;
   }
 
   async createSalesTask(input: InsertSalesTask): Promise<SalesTask> {

@@ -10,10 +10,13 @@ import { useXpotShared } from "./useXpotShared";
 import { useXpotQueries } from "./useXpotQueries";
 import { useLeads } from "./useLeads";
 import { useVisits } from "./useVisits";
-import type { GooglePlaceResult, FullSalesLead, SalesLeadPayload, SalesVisitNote } from "./types";
+import type { GooglePlaceResult, FullSalesLead, SalesLeadPayload, SalesVisitNote } from "../types";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyMutation = ReturnType<typeof useMutation<any, any, any, any>>;
+
+// Base64 adds a third; 3 MB raw stays under the platform's 4.5 MB request cap.
+const MAX_AUDIO_BYTES = 3 * 1024 * 1024;
 
 export function useCheckIn() {
   const { toast } = useToast();
@@ -116,6 +119,9 @@ export function useCheckIn() {
   const uploadAudioMutation = useMutation({
     mutationFn: async () => {
       if (!audioBlob || !activeVisit?.id) return;
+      if (audioBlob.size > MAX_AUDIO_BYTES) {
+        throw new Error("That recording is too large to send. Keep voice notes under five minutes.");
+      }
       const reader = new FileReader();
       const audioData = await new Promise<string>((resolve) => {
         reader.onloadend = () => resolve(reader.result as string);
@@ -126,17 +132,42 @@ export function useCheckIn() {
         audioData,
         durationSeconds: recordingTime,
       });
-      return response.json() as Promise<{
+      const uploaded = await response.json() as {
         note: SalesVisitNote;
         transcriptionAvailable: boolean;
-        analysisApplied: boolean;
-      }>;
+        readyToAnalyze: boolean;
+      };
+
+      // Step two, now a separate request: read the transcript against the
+      // catalog and this shop's stock, and propose what to record.
+      if (!uploaded.readyToAnalyze) return { ...uploaded, analysisApplied: false, actionCount: 0, visitStatus: null };
+      try {
+        const analyzed = await apiRequest("POST", `/api/xpot/visits/${activeVisit.id}/analyze`, {});
+        const result = await analyzed.json() as { actions: unknown[]; visitStatus: string | null };
+        return {
+          ...uploaded,
+          analysisApplied: true,
+          actionCount: result.actions?.length ?? 0,
+          // The outcome the model heard ("nobody was there") — offered to the
+          // check-out picker, never applied on its own.
+          visitStatus: result.visitStatus ?? null,
+        };
+      } catch {
+        // The note and its transcript are already saved; analysis can be
+        // retried without re-recording, so this is not a failed upload.
+        return { ...uploaded, analysisApplied: false, actionCount: 0, visitStatus: null };
+      }
     },
     onSuccess: async (result) => {
+      const count = result?.actionCount ?? 0;
       toast({
-        title: result?.analysisApplied ? t("audioAnalyzed") : t("audioUploaded"),
-        description: result?.analysisApplied
-          ? t("audioAnalyzedDesc")
+        title: count > 0
+          ? t.plural("actionsDetected", count)
+          : result?.analysisApplied
+            ? t("noteAnalyzed")
+            : t("audioUploaded"),
+        description: count > 0
+          ? t("actionsReviewBefore")
           : result?.transcriptionAvailable
             ? t("audioTranscribedDesc")
             : t("audioSavedDesc"),
@@ -154,7 +185,12 @@ export function useCheckIn() {
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
+      const mediaRecorder = new MediaRecorder(stream, {
+        audioBitsPerSecond: 32_000,
+        ...(typeof MediaRecorder.isTypeSupported === "function" && MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+          ? { mimeType: "audio/webm;codecs=opus" }
+          : {}),
+      });
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
 

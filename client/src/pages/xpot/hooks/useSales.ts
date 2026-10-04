@@ -5,7 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useXpotShared } from "./useXpotShared";
 import { useXpotQueries } from "./useXpotQueries";
 import { useVisits } from "./useVisits";
-import type { SalesOpportunity, SalesTask } from "./types";
+import type { SalesOpportunity, SalesTask } from "../types";
 import { useT } from "@/i18n";
 import { salesMessages } from "@/i18n/messages/sales";
 

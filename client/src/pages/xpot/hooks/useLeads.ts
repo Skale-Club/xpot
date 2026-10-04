@@ -6,7 +6,7 @@ import { usePlaceSearch } from "../usePlaceSearch";
 import { parseAddress } from "../utils";
 import { useXpotShared } from "./useXpotShared";
 import { useXpotQueries } from "./useXpotQueries";
-import type { GooglePlaceResult, FullSalesLead, SalesLeadPayload } from "./types";
+import type { GooglePlaceResult, FullSalesLead, SalesLeadPayload } from "../types";
 import { useT } from "@/i18n";
 import { leadsMessages } from "@/i18n/messages/leads";
 

@@ -45,6 +45,8 @@ import { InlineField } from "./components/InlineField";
 import { StatusPicker } from "./components/VisitStatus";
 import type { VisitStatus } from "./components/VisitStatus";
 import type { FullSalesLead, SalesLead } from "./types";
+import { LeadSalesPanel } from "./components/sales/LeadSalesPanel";
+import { VisitActionsPanel } from "./components/sales/VisitActions";
 
 function ActiveLeadInfo({ lead, onSaved }: { lead: SalesLead; onSaved: () => void }) {
   const { toast } = useToast();
@@ -531,6 +533,20 @@ export function XpotCheckIn() {
           </button>
         )}
 
+        {/* Sales — the point of the visit. Everything created here is linked
+            to this visit, so a sale or a settlement carries its own evidence. */}
+        {activeVisit.lead && (
+          <div className="relative rounded-2xl p-4"
+            style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+            <LeadSalesPanel
+              leadId={activeVisit.lead.id}
+              leadName={activeVisit.lead.name}
+              visitId={activeVisit.id}
+              compact
+            />
+          </div>
+        )}
+
         {/* Voice recorder */}
         <VoiceRecorder
           onUpload={async ({ audioBlob, durationSeconds }) => {
@@ -539,9 +555,17 @@ export function XpotCheckIn() {
               reader.onloadend = () => resolve(reader.result as string);
               reader.readAsDataURL(audioBlob);
             });
-            await uploadAudioMutation.mutateAsync({ audioData, durationSeconds } as any);
+            const result = await uploadAudioMutation.mutateAsync({ audioData, durationSeconds } as any);
+            // Pre-select what the note said happened; the rep still confirms at
+            // check-out. "completed" is the default, so only a specific outcome
+            // moves the picker.
+            const heard = (result as { visitStatus?: string | null } | undefined)?.visitStatus;
+            if (heard && heard !== "completed") setCheckoutStatus(heard as VisitStatus);
           }}
         />
+
+        {/* Proposals from the voice note — confirm before they are recorded. */}
+        <VisitActionsPanel visitId={activeVisit.id} onApplied={() => invalidateXpotData()} />
 
         <StatusPicker value={checkoutStatus} onChange={setCheckoutStatus} />
 

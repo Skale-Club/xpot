@@ -6,7 +6,7 @@ import { useT } from "@/i18n";
 import { checkinMessages } from "@/i18n/messages/checkin";
 import { useXpotShared } from "./useXpotShared";
 import { useXpotQueries } from "./useXpotQueries";
-import type { EnrichedSalesVisit } from "./types";
+import type { EnrichedSalesVisit } from "../types";
 
 export function useVisits() {
   const { toast } = useToast();
