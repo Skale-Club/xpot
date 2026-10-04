@@ -170,7 +170,7 @@ describe("integrations routes (twilio)", () => {
       fromNumber: "+15550000001",
     });
     expect(saved.status).toBe(200);
-    expect(saved.json).toMatchObject({ enabled: true, hasApiKey: true, apiKeyLast4: "abcd", problem: null });
+    expect(saved.json).toMatchObject({ enabled: true, hasApiKey: true, apiKeyLast4: "oken", problem: null });
     expect(rows.twilio.config).toEqual({ accountSid: SID, fromNumber: "+15550000001" });
     expect(rows.twilio.apiKey).toBe(TOKEN);
 
@@ -183,7 +183,7 @@ describe("integrations routes (twilio)", () => {
     const list = await call("GET", "/admin/integrations");
     expect(JSON.stringify(list.json)).not.toContain(TOKEN);
     expect(list.json.status.find((s: any) => s.provider === "twilio")).toMatchObject({
-      apiKeyLast4: "abcd",
+      apiKeyLast4: "oken",
       config: { accountSid: SID, messagingServiceSid: MG },
     });
   });
