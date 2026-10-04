@@ -19,7 +19,8 @@ import { ModuleSwitch, rememberModule, useXpotModules } from "@/components/Modul
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { shellMessages } from "@/i18n/messages/shell";
-import { AppBackground } from "@/components/xpot/AppBackground";
+import { AppLayout } from "@/components/xpot/AppLayout";
+import { MobileTabBar } from "@/components/xpot/MobileTabBar";
 
 function XpotAppShell() {
   const { me, xpotMeQuery, isOnline, activeTab } = useXpotQueries();
@@ -60,63 +61,41 @@ function XpotAppShell() {
   // A Tags-only reseller has no Visits screens.
   if (!visitsAllowed && modules.includes("tags")) return <Redirect to="/tags" />;
 
+  const current = tabs.find((tab) => tab.id === activeTab);
+
   return (
-    <AppBackground>
-      <div className="relative mx-auto flex min-h-screen w-full max-w-md flex-col px-4 pb-28 pt-5">
-        {!isOnline && (
-          <div className="mb-4 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-            {t("offline")}
-          </div>
-        )}
-
-        {modules.length > 1 && (
-          <div className="mb-4">
-            <ModuleSwitch current="visits" />
-          </div>
-        )}
-
-        <main className="flex-1 space-y-4">
-          {activeTab === "dashboard" ? <XpotDashboard /> : null}
-          {activeTab === "leads" ? <XpotLeads /> : null}
-          {activeTab === "check-in" ? <XpotCheckIn /> : null}
-          {activeTab === "visits" ? <XpotVisits /> : null}
-          {activeTab === "sales" ? <XpotSales /> : null}
-        </main>
-
-        <nav className="fixed inset-x-0 bottom-0 z-50 px-4 pb-4 pt-2">
-          <div
-            className="mx-auto flex max-w-md items-center gap-1 rounded-2xl border border-white/10 px-2 py-1.5"
-            style={{ background: "rgba(15, 23, 42, 0.85)", backdropFilter: "blur(20px)" }}
-          >
-            {tabs.map(({ id, labelKey, icon: Icon }) => {
-              const isActive = activeTab === id;
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => setLocation(`/${id}`)}
-                  style={{ WebkitTapHighlightColor: "transparent" }}
-                  className={`relative flex min-w-0 flex-1 flex-col items-center gap-1 rounded-xl px-2 py-2 text-[11px] font-medium transition-all touch-manipulation ${
-                    isActive ? "text-white" : "text-white/35 hover:text-white/60"
-                  }`}
-                >
-                  {isActive && (
-                    <span
-                      className="absolute inset-0 rounded-xl"
-                      style={{ background: "linear-gradient(135deg, rgba(59,130,246,0.25) 0%, rgba(99,102,241,0.25) 100%)" }}
-                    />
-                  )}
-                  <Icon className={`relative h-[18px] w-[18px] transition-all ${isActive ? "drop-shadow-[0_0_6px_rgba(99,102,241,0.8)]" : ""}`} />
-                  <span className="relative truncate">{tShell(labelKey)}</span>
-                </button>
-              );
-            })}
-            {/* Admin lives next to the settings gear in the dashboard header,
-                not here — the bottom bar is for the rep's daily tabs. */}
-          </div>
-        </nav>
+    <AppLayout
+      title={current ? tShell(current.labelKey) : "Xpot"}
+      mobileHeader={
+        <>
+          {!isOnline && (
+            <div className="mb-4 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+              {t("offline")}
+            </div>
+          )}
+          {modules.length > 1 && (
+            <div className="mb-4">
+              <ModuleSwitch current="visits" />
+            </div>
+          )}
+        </>
+      }
+      mobileNav={
+        <MobileTabBar
+          tabs={tabs.map(({ id, labelKey, icon }) => ({ id, label: tShell(labelKey), icon }))}
+          activeId={activeTab}
+          onSelect={(id) => setLocation(`/${id}`)}
+        />
+      }
+    >
+      <div className="space-y-4">
+        {activeTab === "dashboard" ? <XpotDashboard /> : null}
+        {activeTab === "leads" ? <XpotLeads /> : null}
+        {activeTab === "check-in" ? <XpotCheckIn /> : null}
+        {activeTab === "visits" ? <XpotVisits /> : null}
+        {activeTab === "sales" ? <XpotSales /> : null}
       </div>
-    </AppBackground>
+    </AppLayout>
   );
 }
 

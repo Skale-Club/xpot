@@ -11,7 +11,7 @@ import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { settingsMessages } from "@/i18n/messages/settings";
 import type { XpotMeResponse } from "./types";
-import { AppBackground } from "@/components/xpot/AppBackground";
+import { AppLayout } from "@/components/xpot/AppLayout";
 
 type XphereConfig = {
   inboundApiKey: string | null;
@@ -416,10 +416,10 @@ export function XpotSettings() {
   const isSaving = profileMutation.isPending;
 
   return (
-    <AppBackground>
-      <div className="relative mx-auto w-full max-w-lg px-4 pb-20 pt-6">
-        {/* Header */}
-        <div className="mb-6 flex items-center gap-3">
+    <AppLayout title={t("title")} mobileColumnClassName="pb-20 pt-6">
+      <div>
+        {/* Header (phone only; the desktop top bar shows the title) */}
+        <div className="mb-6 flex items-center gap-3 lg:hidden">
           <button
             onClick={() => setLocation("/dashboard")}
             className="rounded-lg border border-white/10 bg-white/5 p-2 text-white/70 transition-colors hover:bg-white/10"
@@ -562,6 +562,6 @@ export function XpotSettings() {
           <XphereIntegrationSection />
         </div>
       </div>
-    </AppBackground>
+    </AppLayout>
   );
 }

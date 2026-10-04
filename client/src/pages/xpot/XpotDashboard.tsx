@@ -155,7 +155,8 @@ export function XpotDashboard() {
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-1.5 shrink-0">
+        {/* The desktop sidebar has these; the phone keeps them here. */}
+        <div className="flex items-center gap-1.5 shrink-0 lg:hidden">
           {me && (me.user.isAdmin || ["admin", "manager"].includes(me.rep.role)) && (
             <button
               type="button"

@@ -14,7 +14,8 @@ import HomeScreen from "./HomeScreen";
 import PiecesScreen from "./PiecesScreen";
 import TagScreen from "./TagScreen";
 import { APP_BASE } from "./lib";
-import { AppBackground } from "@/components/xpot/AppBackground";
+import { AppLayout } from "@/components/xpot/AppLayout";
+import { MobileTabBar } from "@/components/xpot/MobileTabBar";
 
 const NAV = [
   { href: APP_BASE, key: "navHome", icon: Home },
@@ -70,60 +71,39 @@ export function TagsApp() {
 
   const current = activeNav(location);
 
+  const currentNav = NAV.find((n) => n.href === current) ?? NAV[0];
+  const pieceCode = location.startsWith(`${APP_BASE}/t/`) ? decodeURIComponent(location.slice(`${APP_BASE}/t/`.length)) : null;
+
   return (
-    <AppBackground>
-      <div className="relative mx-auto flex min-h-screen w-full max-w-md flex-col px-4 pb-28" style={{ paddingTop: "calc(env(safe-area-inset-top) + 16px)" }}>
+    <AppLayout
+      title={pieceCode ?? t(currentNav.key)}
+      mobileColumnClassName="pb-28"
+      mobileColumnStyle={{ paddingTop: "calc(env(safe-area-inset-top) + 16px)" }}
+      mobileHeader={
         <div className="mb-5 flex items-center gap-2">
           <div className="min-w-0 flex-1">
             {modules.length > 1 ? <ModuleSwitch current="tags" /> : <span className="text-lg font-extrabold tracking-tight text-white">Xpot</span>}
           </div>
           <LanguagePicker compact />
         </div>
-
-        <main className="flex-1">
-          <Switch>
-            <Route path={`${APP_BASE}/t/:code`}>{(params) => <TagScreen key={params.code} code={decodeURIComponent(params.code)} />}</Route>
-            <Route path={`${APP_BASE}/pieces`} component={PiecesScreen} />
-            <Route path={`${APP_BASE}/direct`} component={DirectScreen} />
-            <Route path={APP_BASE} component={HomeScreen} />
-            <Route>
-              <Redirect to={APP_BASE} />
-            </Route>
-          </Switch>
-        </main>
-
-        <nav className="fixed inset-x-0 bottom-0 z-50 px-4 pt-2" style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 16px)" }}>
-          <div
-            className="mx-auto flex max-w-md items-center gap-1 rounded-2xl border border-white/10 px-2 py-1.5"
-            style={{ background: "rgba(15, 23, 42, 0.85)", backdropFilter: "blur(20px)" }}
-          >
-            {NAV.map(({ href, key, icon: Icon }) => {
-              const isActive = current === href;
-              return (
-                <button
-                  key={href}
-                  type="button"
-                  onClick={() => navigate(href)}
-                  style={{ WebkitTapHighlightColor: "transparent" }}
-                  data-testid={`tags-nav-${key}`}
-                  className={`relative flex min-w-0 flex-1 touch-manipulation flex-col items-center gap-1 rounded-xl px-2 py-2 text-[11px] font-medium transition-all ${
-                    isActive ? "text-white" : "text-white/35 hover:text-white/60"
-                  }`}
-                >
-                  {isActive && (
-                    <span
-                      className="absolute inset-0 rounded-xl"
-                      style={{ background: "linear-gradient(135deg, rgba(59,130,246,0.25) 0%, rgba(99,102,241,0.25) 100%)" }}
-                    />
-                  )}
-                  <Icon className={`relative h-[18px] w-[18px] ${isActive ? "drop-shadow-[0_0_6px_rgba(99,102,241,0.8)]" : ""}`} />
-                  <span className="relative truncate">{t(key)}</span>
-                </button>
-              );
-            })}
-          </div>
-        </nav>
-      </div>
-    </AppBackground>
+      }
+      mobileNav={
+        <MobileTabBar
+          tabs={NAV.map(({ href, key, icon }) => ({ id: href, label: t(key), icon, testId: `tags-nav-${key}` }))}
+          activeId={current}
+          onSelect={navigate}
+        />
+      }
+    >
+      <Switch>
+        <Route path={`${APP_BASE}/t/:code`}>{(params) => <TagScreen key={params.code} code={decodeURIComponent(params.code)} />}</Route>
+        <Route path={`${APP_BASE}/pieces`} component={PiecesScreen} />
+        <Route path={`${APP_BASE}/direct`} component={DirectScreen} />
+        <Route path={APP_BASE} component={HomeScreen} />
+        <Route>
+          <Redirect to={APP_BASE} />
+        </Route>
+      </Switch>
+    </AppLayout>
   );
 }

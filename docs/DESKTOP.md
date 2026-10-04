@@ -138,12 +138,12 @@ nenhuma cópia de `GLASS`.
 | ID | Item |
 |---|---|
 | DSK-05 | **`AppLayout` único** para Visitas, Tags e Configurações. Abaixo de `lg`, a barra inferior atual; acima, barra lateral + barra superior. `App.tsx` e `TagsApp.tsx` deixam de ter shell próprio. |
-| DSK-06 | **Rotas de detalhe:** `/leads/:id`, `/visits/:id`, `/sales/:tab/:id`, `/tags/pieces/:code` (esta já existe como `/tags/t/:code`). No celular, mantêm o diálogo atual; no desktop, o painel lateral. |
+| DSK-06 | **Rotas de detalhe** (entram junto com o painel de cada tela, Fases 2–5, porque uma rota sem painel não tem quem a use): `/leads/:id`, `/visits/:id`, `/sales/:tab/:id`, `/tags/pieces/:code` (esta já existe como `/tags/t/:code`). No celular, mantêm o diálogo atual; no desktop, o painel lateral. |
 | DSK-07 | **Destino inicial por dispositivo:** desktop abre no Painel; celular segue como hoje (último módulo usado, `homeForModules`). |
 | DSK-08 | **Faixa de visita ativa** no topo do desktop. |
 
 **Pronto quando:** em 1280px todas as telas atuais renderizam dentro do novo shell
-(ainda na coluna estreita) e a navegação funciona por URL.
+(ainda na coluna estreita, até `lg:max-w-2xl`) e a navegação funciona por URL.
 
 ### Fase 2 — Leads (a de maior ganho)
 
