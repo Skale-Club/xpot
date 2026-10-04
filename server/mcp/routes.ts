@@ -1,13 +1,17 @@
-import type { Express, Request, Response } from "express";
+import type { Express, NextFunction, Request, Response } from "express";
 import { z } from "zod";
 import { requireTagAdmin } from "../tags/access.js";
 import { TagError } from "../tags/errors.js";
-import { handleMcpRequest } from "./server.js";
+import { authenticateOauthAccess, createMcpOauthRouter, protectedResourceMetadataUrl } from "./oauth.js";
+import { listConnections, looksLikeOauthAccessToken, revokeClientTokens } from "./oauthStore.js";
+import { handleMcpRequest, type McpCaller } from "./server.js";
 import { bearerSecret, createMcpToken, findActiveMcpToken, looksLikeMcpSecret, listMcpTokens, revokeMcpToken, touchMcpToken } from "./tokens.js";
 
-// POST /mcp (the MCP endpoint, Bearer token) and the admin API that issues
-// the tokens: /api/xpot/admin/mcp-tokens*. Registered before the Xpot routers
-// (see server/routes.ts), whose admin router guards every path it sees.
+// POST /mcp (the MCP endpoint), the OAuth server that lets hosts connect to it
+// (/.well-known/*, /oauth/*), and the admin API for both kinds of access:
+// static tokens (/api/xpot/admin/mcp-tokens*) and OAuth connections
+// (/api/xpot/admin/mcp-connections*). Registered before the Xpot routers (see
+// server/routes.ts), whose admin router guards every path it sees.
 
 const tokenCreateSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(80),
@@ -26,7 +30,28 @@ function fail(res: Response, err: unknown, fallback: string) {
   return res.status(500).json({ message: fallback });
 }
 
+/**
+ * Permissive CORS on /mcp. Claude and ChatGPT call from their backends, but
+ * browser clients (MCP Inspector) preflight and need the challenge header
+ * exposed to start the OAuth flow. Credentials are bearer tokens, never cookies.
+ */
+function mcpCors(req: Request, res: Response, next: NextFunction) {
+  res.set({
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "POST, GET, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Authorization, Content-Type, Mcp-Protocol-Version, Mcp-Session-Id, Last-Event-ID",
+    "Access-Control-Expose-Headers": "WWW-Authenticate, Mcp-Protocol-Version, Mcp-Session-Id",
+    "Access-Control-Max-Age": "86400",
+  });
+  if (req.method === "OPTIONS") return res.status(204).end();
+  next();
+}
+
+const clientIdParam = z.string().regex(/^xpot_client_[A-Za-z0-9_-]{43}$/);
+
 export function registerMcpRoutes(app: Express) {
+  app.use(createMcpOauthRouter());
+
   const tokens = "/api/xpot/admin/mcp-tokens";
 
   app.get(tokens, requireTagAdmin, async (_req, res) => {
@@ -57,29 +82,66 @@ export function registerMcpRoutes(app: Express) {
     }
   });
 
+  // OAuth connections: apps that connected themselves, one row per client
+  // and approving admin. Revoking cuts every token the client holds.
+  const connections = "/api/xpot/admin/mcp-connections";
+
+  app.get(connections, requireTagAdmin, async (_req, res) => {
+    try {
+      res.json(await listConnections());
+    } catch (err) {
+      fail(res, err, "Failed to load connections");
+    }
+  });
+
+  app.post(`${connections}/:clientId/revoke`, requireTagAdmin, async (req, res) => {
+    const clientId = clientIdParam.safeParse(req.params.clientId);
+    if (!clientId.success) return res.status(404).json({ message: "Not found" });
+    try {
+      res.json({ revoked: await revokeClientTokens(clientId.data) });
+    } catch (err) {
+      fail(res, err, "Failed to revoke connection");
+    }
+  });
+
   // ─── MCP endpoint ───────────────────────────────────────────────────────────
   // Stateless: only POST carries a conversation. GET (a standalone SSE stream)
   // and DELETE (ending a session) have nothing to serve, so they answer 405.
-  const unauthorized = (res: Response, message: string) =>
-    res.set("WWW-Authenticate", "Bearer").status(401).json({ message });
+  // A 401 carries resource_metadata (RFC 9728): that pointer is what makes
+  // Claude / ChatGPT start the OAuth flow instead of failing.
+  const unauthorized = (req: Request, res: Response, error: "invalid_request" | "invalid_token", message: string) =>
+    res
+      .set("WWW-Authenticate", `Bearer resource_metadata="${protectedResourceMetadataUrl(req)}", error="${error}"`)
+      .status(401)
+      .json({ message });
 
-  app.post("/mcp", async (req, res) => {
+  app.options("/mcp", mcpCors);
+
+  app.post("/mcp", mcpCors, async (req, res) => {
     const secret = bearerSecret(req.headers.authorization);
-    if (!secret) return unauthorized(res, "Authorization: Bearer <token> required");
-    if (!looksLikeMcpSecret(secret)) return unauthorized(res, "Invalid or revoked MCP token");
-    let token;
+    if (!secret) return unauthorized(req, res, "invalid_request", "Authorization: Bearer <token> required");
+
+    let caller: McpCaller | null = null;
     try {
-      token = await findActiveMcpToken(secret);
+      if (looksLikeMcpSecret(secret)) {
+        const token = await findActiveMcpToken(secret);
+        if (token) {
+          caller = { kind: "token", id: token.id, label: token.tokenPrefix };
+          // Fire-and-forget: a failed timestamp must not fail the call.
+          touchMcpToken(token.id).catch((err) => console.error("[mcp] touch token:", err instanceof Error ? err.message : err));
+        }
+      } else if (looksLikeOauthAccessToken(secret)) {
+        const result = await authenticateOauthAccess(secret);
+        if (result && "denied" in result) return res.status(403).json({ message: result.denied });
+        caller = result?.caller ?? null;
+      }
     } catch (err) {
       return fail(res, err, "Failed to verify token");
     }
-    if (!token) return unauthorized(res, "Invalid or revoked MCP token");
-
-    // Fire-and-forget: a failed timestamp must not fail the call.
-    touchMcpToken(token.id).catch((err) => console.error("[mcp] touch token:", err instanceof Error ? err.message : err));
+    if (!caller) return unauthorized(req, res, "invalid_token", "Invalid, expired or revoked MCP token");
 
     try {
-      await handleMcpRequest(req, res, { tokenId: token.id, tokenPrefix: token.tokenPrefix });
+      await handleMcpRequest(req, res, caller);
     } catch (err) {
       console.error("[mcp] request failed:", err);
       if (!res.headersSent) {
@@ -88,7 +150,7 @@ export function registerMcpRoutes(app: Express) {
     }
   });
 
-  app.all("/mcp", (_req, res) => {
+  app.all("/mcp", mcpCors, (_req, res) => {
     res.set("Allow", "POST").status(405).json({
       jsonrpc: "2.0",
       error: { code: -32000, message: "Method not allowed: use POST" },

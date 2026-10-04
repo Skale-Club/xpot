@@ -3,10 +3,13 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import type { Request, Response } from "express";
 import { registerTagJourneyTools } from "./tools/tagJourney.js";
 
-/** The token a request was authorised with (for the call log). */
+/** What a request was authorised with, for the call log. */
 export interface McpCaller {
-  tokenId: string;
-  tokenPrefix: string;
+  /** A static admin token (mcp_tokens) or an OAuth access token (mcp_oauth_tokens). */
+  kind: "token" | "oauth";
+  id: string;
+  /** Token prefix, or "oauth:<client>/user:<id>"; never the secret. */
+  label: string;
 }
 
 function buildMcpServer(caller: McpCaller): McpServer {

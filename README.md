@@ -170,6 +170,32 @@ Environment:
 - `TAG_COUNTRY_HEADER` — optional; only if a trusted edge (e.g. Cloudflare's
   `CF-IPCountry`) sets the scanner's country.
 
+## AI access (MCP)
+
+`POST /mcp` is an MCP server (Streamable HTTP, stateless) with the Tags Journey
+tools: read the timeline and plans, record entries, create plans and batches.
+Admin only. Code: `server/mcp/`, `shared/schema/mcp.ts`. Two ways in:
+
+- **OAuth 2.1** for apps that connect themselves (Claude, ChatGPT): add a custom
+  connector with `<origin>/mcp`. The app registers itself (`/oauth/register`),
+  sends you to sign in and approve on `/oauth/authorize`, then holds a 1-hour
+  access token and a rotating 90-day refresh token. Only active admins can
+  approve, and a token stops working as soon as its approver loses admin or is
+  blocked. Discovery: `/.well-known/oauth-protected-resource` and
+  `/.well-known/oauth-authorization-server`. Tables: `migrations/0018_mcp_oauth.sql`.
+- **Static tokens** for clients that take a header (Claude Code): created in
+  Admin › Tags › Journey › AI access; the secret is shown once
+  (`migrations/0015_mcp_tokens.sql`).
+
+Both are listed and revocable in that same card. Codes, tokens and client
+secrets are stored as SHA-256 hashes only.
+
+Environment:
+- `PUBLIC_BASE_URL` — optional. Unset, the OAuth issuer and endpoints are
+  advertised from the request's own origin (the `Host` the proxy routed on),
+  which is what lets both production domains work. Set it only to force a
+  single origin; a client connecting through another domain will then fail.
+
 ## Deploy (Coolify)
 
 Production runs as one always-on Docker container on Coolify (the same Hetzner

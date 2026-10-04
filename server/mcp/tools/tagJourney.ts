@@ -56,16 +56,16 @@ function errorMessage(err: unknown): string {
 export function registerTagJourneyTools(server: McpServer, caller: McpCaller) {
   const ctx = journey.journeyContext(null, "mcp");
 
-  /** Runs a tool body, logs the call with the token prefix, turns errors into isError results. */
+  /** Runs a tool body, logs the call with the caller label, turns errors into isError results. */
   async function run(tool: string, body: () => Promise<unknown>) {
     const started = Date.now();
     try {
       const result = await body();
-      console.log(`[mcp] ${tool} token=${caller.tokenPrefix} ok ${Date.now() - started}ms`);
+      console.log(`[mcp] ${tool} caller=${caller.label} ok ${Date.now() - started}ms`);
       return text(result);
     } catch (err) {
       const message = errorMessage(err);
-      console.log(`[mcp] ${tool} token=${caller.tokenPrefix} error "${message}" ${Date.now() - started}ms`);
+      console.log(`[mcp] ${tool} caller=${caller.label} error "${message}" ${Date.now() - started}ms`);
       if (!(err instanceof TagError) && !(err instanceof z.ZodError)) console.error(`[mcp] ${tool} failed:`, err);
       return failure(message);
     }
