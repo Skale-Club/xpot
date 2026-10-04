@@ -2,7 +2,7 @@
 // Shared with Skale Club via the same Postgres DB until Xpot migrates to its own Supabase project.
 
 import { sql } from "drizzle-orm";
-import { boolean, index, jsonb, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { boolean, index, integer, jsonb, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -21,6 +21,8 @@ export const sessions = pgTable(
 export const users = pgTable("users", {
   id: text("id").primaryKey().default(sql`gen_random_uuid()`),
   email: text("email").unique(),
+  // Sign-in identity, E.164 ("+15085550100"); migrations/0012_phone_login.sql.
+  phone: text("phone"),
   firstName: text("first_name"),
   lastName: text("last_name"),
   profileImageUrl: text("profile_image_url"),
@@ -33,3 +35,14 @@ export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
 
 export const upsertUserSchema = createInsertSchema(users);
+
+// One-time sign-in codes sent by SMS (hashed, short-lived).
+export const authPhoneCodes = pgTable("auth_phone_codes", {
+  id: serial("id").primaryKey(),
+  phone: text("phone").notNull(),
+  codeHash: text("code_hash").notNull(),
+  attempts: integer("attempts").notNull().default(0),
+  ip: text("ip"),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});

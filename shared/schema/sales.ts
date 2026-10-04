@@ -79,6 +79,9 @@ export const salesReps = pgTable("sales_reps", {
   isActive: boolean("is_active").notNull().default(true),
   // App sides this rep may use (shared/modules.ts); migrations/0010_rep_modules.sql.
   modules: text("modules").array().notNull().default(sql`'{visits,tags}'`),
+  // Set when an admin blocks the rep (partnership ended); null = pending or active.
+  blockedAt: timestamp("blocked_at"),
+  blockedReason: text("blocked_reason"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => ({

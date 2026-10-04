@@ -1,67 +1,81 @@
-// Admin-created reseller logins against a real Postgres, with the Supabase
-// Auth admin API replaced by an in-memory fake. Skipped unless
-// TAGS_INTEGRATION=1 and DATABASE_URL points at a disposable, migrated database.
+// Admin-managed access against a real Postgres: create by phone, approve,
+// block (ends sessions), unblock, change phone, and who may do what.
+// Skipped unless TAGS_INTEGRATION=1 and DATABASE_URL points at a disposable,
+// migrated database.
 import { test } from "vitest";
 import assert from "node:assert/strict";
 
 const enabled = process.env.TAGS_INTEGRATION === "1";
 
-test.skipIf(!enabled)("reseller accounts: create, duplicates, roles, password reset", async () => {
-  const { createResellerAccount, resetRepPassword, resellerAccountSchema, AccountError } = await import("../server/routes/xpot/resellerAccounts.js");
+test.skipIf(!enabled)("reseller access: create, approve, block, unblock, phone", async () => {
+  const accounts = await import("../server/routes/xpot/resellerAccounts.js");
   const { db, pool } = await import("../server/db.js");
   const { sql } = await import("drizzle-orm");
+  const { storage } = await import("../server/storage.js");
 
   const clean = async () => {
-    await db.execute(sql`DELETE FROM sales_reps WHERE user_id LIKE 'ra-%'`);
-    await db.execute(sql`DELETE FROM users WHERE id LIKE 'ra-%'`);
+    await db.execute(sql`DELETE FROM sessions WHERE sess->>'userId' IN (SELECT id FROM users WHERE phone LIKE '+1555011%')`);
+    await db.execute(sql`DELETE FROM sales_reps WHERE user_id IN (SELECT id FROM users WHERE phone LIKE '+1555011%')`);
+    await db.execute(sql`DELETE FROM users WHERE phone LIKE '+1555011%'`);
   };
   await clean();
-
-  const logins = new Map<string, string>();
-  const passwords = new Map<string, string>();
-  const auth = {
-    async createUser(email: string, password: string) {
-      if (logins.has(email)) throw new AccountError("This email already has a login.", 409);
-      const id = `ra-${logins.size + 1}`;
-      logins.set(email, id);
-      passwords.set(id, password);
-      return { id };
-    },
-    async setPassword(userId: string, password: string) {
-      passwords.set(userId, password);
-    },
-  };
+  const admin = { userId: "ra-admin", isAdmin: true };
+  const manager = { userId: "ra-manager", isAdmin: false };
 
   try {
-    const input = resellerAccountSchema.parse({ email: " Joao@Example.com ", password: "s3cret-pass", displayName: "João Silva", modules: ["tags"] });
-    const rep = await createResellerAccount(input, false, auth);
+    const input = accounts.resellerAccountSchema.parse({ displayName: "João Silva", phone: "(555) 011-0001", modules: ["tags"] });
+    const rep = await accounts.createResellerAccount(input, manager);
     assert.equal(rep.isActive, true);
     assert.deepEqual(rep.modules, ["tags"]);
-    assert.equal(rep.role, "rep");
-    assert.equal(rep.email, "joao@example.com");
-    const [user] = (await db.execute(sql`SELECT email, first_name, last_name, is_admin FROM users WHERE id = ${rep.userId}`)).rows as any[];
-    assert.deepEqual(user, { email: "joao@example.com", first_name: "João", last_name: "Silva", is_admin: false });
+    assert.equal(rep.phone, "+15550110001");
+    const [user] = (await db.execute(sql`SELECT phone, first_name, last_name, is_admin FROM users WHERE id = ${rep.userId}`)).rows as any[];
+    assert.deepEqual(user, { phone: "+15550110001", first_name: "João", last_name: "Silva", is_admin: false });
 
-    // Same email again: refused before touching Supabase.
-    await assert.rejects(createResellerAccount(input, false, auth), (err: any) => err.status === 409);
-    assert.equal(logins.size, 1);
+    // Same phone again, written differently: refused.
+    await assert.rejects(accounts.createResellerAccount({ ...input, phone: "+1 555 011 0001" }, admin), (err: any) => err.status === 409);
+    // Not a phone.
+    await assert.rejects(accounts.createResellerAccount({ ...input, phone: "12345" }, admin), (err: any) => err.status === 400);
+    // Managers can't mint admins.
+    const adminInput = accounts.resellerAccountSchema.parse({ displayName: "Boss", phone: "5550110002", role: "admin" });
+    await assert.rejects(accounts.createResellerAccount(adminInput, manager), (err: any) => err.status === 403);
+    const boss = await accounts.createResellerAccount(adminInput, admin);
 
-    // Managers can't mint admins; admins can.
-    const adminInput = resellerAccountSchema.parse({ email: "boss@example.com", password: "s3cret-pass", displayName: "Boss", role: "admin" });
-    await assert.rejects(createResellerAccount(adminInput, false, auth), (err: any) => err.status === 403);
-    const admin = await createResellerAccount(adminInput, true, auth);
-    const [adminUser] = (await db.execute(sql`SELECT is_admin FROM users WHERE id = ${admin.userId}`)).rows as any[];
-    assert.equal(adminUser.is_admin, true);
+    // A self sign-up waits for approval.
+    const [pendingUser] = (await db.execute(sql`INSERT INTO users (phone, first_name) VALUES ('+15550110003', 'Maria') RETURNING id`)).rows as any[];
+    const pending = await storage.upsertSalesRep({ userId: pendingUser.id, displayName: "Maria", phone: "+15550110003", isActive: false });
+    let list = await accounts.listRepsWithAccess();
+    assert.equal(list.find((r) => r.id === pending.id)?.access, "pending");
+    assert.equal(list.find((r) => r.id === pending.id)?.loginPhone, "+15550110003");
+    const approved = await accounts.approveRep(pending.id, ["tags"], manager);
+    assert.equal(approved.isActive, true);
+    assert.deepEqual(approved.modules, ["tags"]);
 
-    // Password reset: any rep by a manager, an admin only by an admin.
-    await resetRepPassword(rep.id, "new-pass-123", false, auth);
-    assert.equal(passwords.get(rep.userId!), "new-pass-123");
-    await assert.rejects(resetRepPassword(admin.id, "x-pass-1234", false, auth), (err: any) => err.status === 403);
-    await assert.rejects(resetRepPassword(999_999, "x-pass-1234", true, auth), (err: any) => err.status === 404);
+    // Blocking ends the rep's sessions right away.
+    await db.execute(sql`INSERT INTO sessions (sid, sess, expire) VALUES ('ra-sess-1', ${JSON.stringify({ userId: pendingUser.id })}::jsonb, now() + interval '1 day')`);
+    const blocked = await accounts.blockRep(pending.id, "Partnership ended", manager);
+    assert.equal(blocked.isActive, false);
+    assert.ok(blocked.blockedAt);
+    assert.equal(blocked.blockedReason, "Partnership ended");
+    const [{ n }] = (await db.execute(sql`SELECT count(*)::int AS n FROM sessions WHERE sid = 'ra-sess-1'`)).rows as any[];
+    assert.equal(n, 0);
+    list = await accounts.listRepsWithAccess();
+    assert.equal(list.find((r) => r.id === pending.id)?.access, "blocked");
+    // A blocked rep is unblocked, not approved.
+    await assert.rejects(accounts.approveRep(pending.id, undefined, manager), (err: any) => err.status === 409);
+    const back = await accounts.unblockRep(pending.id, manager);
+    assert.equal(back.isActive, true);
+    assert.equal(back.blockedAt, null);
 
-    // Validation.
-    assert.equal(resellerAccountSchema.safeParse({ email: "a@b.co", password: "short", displayName: "A" }).success, false);
-    assert.equal(resellerAccountSchema.safeParse({ email: "a@b.co", password: "long-enough", displayName: "A", modules: [] }).success, false);
+    // Managers can't touch admins; nobody can block themselves.
+    await assert.rejects(accounts.blockRep(boss.id, null, manager), (err: any) => err.status === 403);
+    await assert.rejects(accounts.blockRep(boss.id, null, { userId: boss.userId, isAdmin: true }), (err: any) => err.status === 400);
+
+    // New phone for a rep: login and profile both move; a taken number is refused.
+    const moved = await accounts.changeRepPhone(rep.id, { phone: "555 011 0009" }, manager);
+    assert.equal(moved.phone, "+15550110009");
+    const [movedUser] = (await db.execute(sql`SELECT phone FROM users WHERE id = ${rep.userId}`)).rows as any[];
+    assert.equal(movedUser.phone, "+15550110009");
+    await assert.rejects(accounts.changeRepPhone(rep.id, { phone: "+15550110003" }, manager), (err: any) => err.status === 409);
   } finally {
     await clean();
     await pool.end();

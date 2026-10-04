@@ -46,6 +46,8 @@ export async function createApp(): Promise<{ app: express.Express; httpServer: S
 
   const { setupSupabaseAuth } = await import("./auth/supabaseAuth.js");
   await setupSupabaseAuth(app);
+  const { registerPhoneAuthRoutes } = await import("./auth/phoneAuth.js");
+  registerPhoneAuthRoutes(app);
 
   const httpServer = createServer(app);
   await registerRoutes(app);

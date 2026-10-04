@@ -29,10 +29,24 @@
   "build": {
     "appId": "place.xpot.nfc-writer",
     "productName": "Xpot NFC Writer",
-    "files": ["dist/**/*", "package.json"],
-    "directories": { "output": "release" },
-    "win": { "target": "nsis" },
-    "mac": { "target": "dmg", "category": "public.app-category.business" },
-    "linux": { "target": "AppImage", "category": "Utility" }
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.business"
+    },
+    "linux": {
+      "target": "AppImage",
+      "category": "Utility"
+    }
   }
 }

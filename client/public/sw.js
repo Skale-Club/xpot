@@ -22,7 +22,7 @@
 //     first-launch-offline pointing at scripts that were never cached — an
 //     infinite loader.
 
-const VERSION = "xpot-v2";
+const VERSION = "xpot-v3";
 const SHELL_CACHE = `${VERSION}-shell`;
 const ASSET_CACHE = `${VERSION}-assets`;
 const SHELL_URL = "/";

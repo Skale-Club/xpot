@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import type { TagActor } from "#shared/tagAccess.js";
 import { repModules } from "#shared/modules.js";
-import { ensureXpotRep, isManagerOrAdmin } from "../routes/xpot/middleware.js";
+import { accessDenial, ensureXpotRep, isManagerOrAdmin } from "../routes/xpot/middleware.js";
 
 // Who is acting on the Tags API. Built from Xpot's own rep identity, read from
 // the database on every request, so switching a reseller off takes effect at
@@ -15,8 +15,9 @@ async function loadActor(req: Request, res: Response): Promise<TagActor | null> 
     res.status(401).json({ message: "Authentication required" });
     return null;
   }
-  if (!found.rep.isActive) {
-    res.status(403).json({ message: "Your Xpot access is not active yet. Ask an administrator to enable it." });
+  const denial = accessDenial(found.rep);
+  if (denial) {
+    res.status(403).json(denial);
     return null;
   }
   const isManager = isManagerOrAdmin(found);

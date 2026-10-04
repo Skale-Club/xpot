@@ -50,15 +50,21 @@ export async function ensureXpotRep(req: Request) {
   return { user, rep };
 }
 
+/** Why a rep can't use the app yet (or anymore), for the 403 the client shows. */
+export function accessDenial(rep: { isActive: boolean; blockedAt?: Date | null }): { code: "pending" | "blocked"; message: string } | null {
+  if (rep.blockedAt) return { code: "blocked", message: "Your Xpot access is turned off. Contact Skale Club." };
+  if (!rep.isActive) return { code: "pending", message: "Your sign-up is being reviewed. Skale Club will turn on your access." };
+  return null;
+}
+
 export async function requireXpotUser(req: Request, res: Response, next: NextFunction) {
   try {
     const actor = await ensureXpotRep(req);
     if (!actor) {
       return res.status(401).json({ message: "Authentication required" });
     }
-    if (!actor.rep.isActive) {
-      return res.status(403).json({ message: "Your Xpot access is not active yet. Ask an administrator to enable it." });
-    }
+    const denial = accessDenial(actor.rep);
+    if (denial) return res.status(403).json(denial);
     (req as any).xpotActor = actor;
     next();
   } catch (err) {
@@ -80,6 +86,10 @@ export async function requireXpotManager(req: Request, res: Response, next: Next
     if (!actor.user.isAdmin && !["manager", "admin"].includes(actor.rep.role)) {
       return res.status(403).json({ message: "Manager access required" });
     }
+    // A blocked or not-yet-approved manager is out like anyone else
+    // (global admins excepted, so the owner can't lock themselves out).
+    const denial = actor.user.isAdmin ? null : accessDenial(actor.rep);
+    if (denial) return res.status(403).json(denial);
     (req as any).xpotActor = actor;
     next();
   } catch (err) {

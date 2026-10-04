@@ -1,32 +1,25 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { 
   MapPinned, 
   Mic, 
   RefreshCw, 
   DollarSign, 
   ArrowRight, 
-  ArrowLeft,
   ShieldCheck, 
   Zap, 
   Phone, 
-  Mail, 
-  Lock,
   Loader2,
   ChevronRight,
   Sparkles,
   UserCheck,
   Building2
 } from "lucide-react";
-import { initSupabase } from "@/lib/supabase";
 import { queryClient } from "@/lib/queryClient";
-import { getXpotHomePath, getXpotLoginPath } from "@/lib/xpot";
+import { getXpotHomePath } from "@/lib/xpot";
 import { Button } from "@/components/ui/button";
-import { GoogleLogo } from "@/components/ui/google-logo";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -36,6 +29,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { LanguagePicker } from "@/components/LanguagePicker";
+import { PhoneSignIn } from "@/components/PhoneSignIn";
 import { translate, useT } from "@/i18n";
 import { landingMessages } from "@/i18n/messages/landing";
 
@@ -64,60 +58,12 @@ export function XpotLandingPage() {
   const [, setLocation] = useLocation();
   const t = useT(landingMessages);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [googleSubmitting, setGoogleSubmitting] = useState(false);
-  const [isSupabaseAuth, setIsSupabaseAuth] = useState(false);
-  const [isInitializing, setIsInitializing] = useState(true);
-  const [activeFormTab, setActiveFormTab] = useState<"signin" | "signup">("signin");
-  const [authStep, setAuthStep] = useState<1 | 2>(1);
-  const passwordInputRef = useRef<HTMLInputElement>(null);
-
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  const isEmailValid = emailRegex.test(email.trim());
-
-  const resetAuthFlow = useCallback(() => {
-    setAuthStep(1);
-    setPassword("");
-    setError("");
-  }, []);
 
   const handleDialogChange = (open: boolean) => {
     setIsLoginOpen(open);
-    if (!open) {
-      resetAuthFlow();
-    }
+    if (!open) setError("");
   };
-
-  const handleTabChange = (tab: "signin" | "signup") => {
-    setActiveFormTab(tab);
-    resetAuthFlow();
-  };
-
-  const handleContinueToPassword = (event: React.FormEvent) => {
-    event.preventDefault();
-    setError("");
-    if (!isEmailValid) {
-      setError(t("invalidEmail"));
-      return;
-    }
-    setAuthStep(2);
-  };
-
-  const handleBackToEmail = () => {
-    setAuthStep(1);
-    setPassword("");
-    setError("");
-  };
-
-  useEffect(() => {
-    if (authStep === 2) {
-      const timer = setTimeout(() => passwordInputRef.current?.focus(), 50);
-      return () => clearTimeout(timer);
-    }
-  }, [authStep]);
 
   const { data: me } = useQuery<any>({
     queryKey: ["/api/xpot/me"],
@@ -151,118 +97,6 @@ export function XpotLandingPage() {
       // sessionStorage can throw in private mode — ignore.
     }
   }, []);
-
-  useEffect(() => {
-    let mounted = true;
-    async function checkAuthSettings() {
-      try {
-        const response = await fetch("/api/supabase-config");
-        const config = await response.json();
-        if (mounted) {
-          setIsSupabaseAuth(Boolean(config.url && config.anonKey));
-          setIsInitializing(false);
-        }
-      } catch {
-        if (mounted) setIsInitializing(false);
-      }
-    }
-    void checkAuthSettings();
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  const handleEmailAuth = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setError("");
-    setSubmitting(true);
-
-    try {
-      if (!isSupabaseAuth) {
-        throw new Error(t("supabaseNotConfigured"));
-      }
-
-      const supabase = await initSupabase();
-      
-      if (activeFormTab === "signin") {
-        const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-        if (signInError) throw signInError;
-
-        const accessToken = data.session?.access_token;
-        if (!accessToken) throw new Error(t("noAccessToken"));
-
-        const response = await fetch("/api/auth/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ accessToken }),
-        });
-
-        if (!response.ok) {
-          const result = await response.json().catch(() => ({ message: t("serverError") }));
-          throw new Error(result.message || t("serverAuthFailed"));
-        }
-
-        await openXpotWorkspace();
-      } else {
-        // Sign up flow
-        const { data, error: signUpError } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: {
-              first_name: "Rep",
-              last_name: "",
-            }
-          }
-        });
-        if (signUpError) throw signUpError;
-
-        if (data.session) {
-          const accessToken = data.session.access_token;
-          const response = await fetch("/api/auth/login", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include",
-            body: JSON.stringify({ accessToken }),
-          });
-          if (response.ok) {
-            await openXpotWorkspace();
-          } else {
-            setError(t("accountCreated"));
-            setActiveFormTab("signin");
-          }
-        } else {
-          setError(t("confirmEmail"));
-          setActiveFormTab("signin");
-        }
-      }
-    } catch (err: any) {
-      setError(err.message || t("authFailed"));
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleGoogleLogin = async () => {
-    setError("");
-    setGoogleSubmitting(true);
-
-    try {
-      if (!isSupabaseAuth) {
-        throw new Error(t("supabaseNotConfigured"));
-      }
-      const supabase = await initSupabase();
-      const { error: oauthError } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: { redirectTo: `${window.location.origin}${getXpotLoginPath()}` },
-      });
-      if (oauthError) throw oauthError;
-    } catch (loginError: any) {
-      setError(loginError.message || t("oauthError"));
-      setGoogleSubmitting(false);
-    }
-  };
 
   return (
     <div className="relative min-h-screen overflow-x-hidden text-white selection:bg-blue-500/30" style={{ background: "linear-gradient(160deg, #05070f 0%, #080c18 50%, #040810 100%)" }}>
@@ -326,151 +160,10 @@ export function XpotLandingPage() {
                   </DialogDescription>
                 </DialogHeader>
 
-                {isInitializing ? (
-                  <div className="flex flex-col items-center justify-center py-8 gap-3">
-                    <Loader2 className="h-7 w-7 animate-spin text-blue-500" />
-                    <p className="text-base text-white/40">{t("initializing")}</p>
-                  </div>
-                ) : !isSupabaseAuth ? (
-                  <div className="rounded-xl bg-white/5 border border-white/10 p-4 text-base text-white/60 text-center">
-                    {t("authNotConfiguredServer")}
-                  </div>
-                ) : (
-                  <>
-                    {/* Tab selector — only on step 1 */}
-                    {authStep === 1 && (
-                      <div className="grid grid-cols-2 p-1 bg-white/5 border border-white/5 rounded-xl mb-4">
-                        <button
-                          type="button"
-                          onClick={() => handleTabChange("signin")}
-                          className={`py-2 text-sm font-semibold rounded-lg transition-all ${
-                            activeFormTab === "signin"
-                              ? "bg-blue-600 text-white shadow-sm"
-                              : "text-white/55 hover:text-white/80"
-                          }`}
-                        >
-                          {t("signIn")}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleTabChange("signup")}
-                          className={`py-2 text-sm font-semibold rounded-lg transition-all ${
-                            activeFormTab === "signup"
-                              ? "bg-blue-600 text-white shadow-sm"
-                              : "text-white/55 hover:text-white/80"
-                          }`}
-                        >
-                          {t("register")}
-                        </button>
-                      </div>
-                    )}
-
-                    <AnimatePresence mode="wait">
-                      <motion.div
-                        key={`${activeFormTab}-${authStep}`}
-                        initial={{ opacity: 0, x: authStep === 1 ? -20 : 20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: authStep === 1 ? 20 : -20 }}
-                        transition={{ duration: 0.2 }}
-                        className="space-y-4"
-                      >
-                        {error && (
-                          <div className="rounded-xl bg-red-500/10 border border-red-500/20 p-3 text-base text-red-400 text-center">
-                            {error}
-                          </div>
-                        )}
-
-                        {authStep === 1 ? (
-                          <>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              onClick={handleGoogleLogin}
-                              disabled={googleSubmitting}
-                              className="h-12 w-full rounded-xl border-white/10 bg-white/5 text-base font-semibold text-white hover:bg-white/10 hover:border-white/20 transition-all flex items-center justify-center gap-2.5"
-                            >
-                              {googleSubmitting ? (
-                                <Loader2 className="h-5 w-5 animate-spin text-white" />
-                              ) : (
-                                <GoogleLogo />
-                              )}
-                              {t("continueWithGoogle")}
-                            </Button>
-
-                            <div className="flex items-center gap-3 py-1">
-                              <div className="h-px flex-1 bg-white/5" />
-                              <div className="text-xs uppercase tracking-wider text-white/40 font-medium">{t("orContinueWithEmail")}</div>
-                              <div className="h-px flex-1 bg-white/5" />
-                            </div>
-
-                            <form onSubmit={handleContinueToPassword} className="space-y-3.5">
-                              <div className="space-y-2">
-                                <Label htmlFor="login-email" className="text-base font-medium text-white/80">{t("emailLabel")}</Label>
-                                <div className="relative">
-                                  <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
-                                  <Input
-                                    id="login-email"
-                                    type="email"
-                                    value={email}
-                                    onChange={(e) => setEmail(e.target.value)}
-                                    placeholder="rep@example.com"
-                                    className="h-12 rounded-xl border-white/10 bg-white/5 pl-10 text-base text-white placeholder:text-white/30 focus:border-blue-500/50 focus:bg-white/10 transition-all"
-                                    autoFocus
-                                    required
-                                  />
-                                </div>
-                              </div>
-
-                              <Button
-                                type="submit"
-                                disabled={!isEmailValid}
-                                className="h-12 w-full rounded-xl bg-blue-600 hover:bg-blue-500 text-base font-semibold text-white transition-all shadow-[0_4px_15px_rgba(37,99,235,0.3)] mt-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                              >
-                                {t("continue")}
-                                <ArrowRight className="h-4 w-4" />
-                              </Button>
-                            </form>
-                          </>
-                        ) : (
-                          <form onSubmit={handleEmailAuth} className="space-y-3.5">
-                            <button
-                              type="button"
-                              onClick={handleBackToEmail}
-                              className="flex items-center gap-2 text-sm text-white/60 hover:text-white transition-colors group"
-                            >
-                              <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
-                              <span className="truncate max-w-[220px]">{email}</span>
-                            </button>
-
-                            <div className="space-y-1.5">
-                              <Label htmlFor="login-password" className="text-sm font-medium text-white/80">
-                                {activeFormTab === "signin" ? t("enterPassword") : t("createPassword")}
-                              </Label>
-                              <div className="relative">
-                                <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
-                                <Input
-                                  ref={passwordInputRef}
-                                  id="login-password"
-                                  type="password"
-                                  value={password}
-                                  onChange={(e) => setPassword(e.target.value)}
-                                  placeholder="••••••••"
-                                  className="h-11 rounded-xl border-white/10 bg-white/5 pl-10 text-sm text-white placeholder:text-white/30 focus:border-blue-500/50 focus:bg-white/10 transition-all"
-                                  required
-                                />
-                              </div>
-                            </div>
-
-                            <Button type="submit" disabled={submitting} className="h-12 w-full rounded-xl bg-blue-600 hover:bg-blue-500 text-sm font-semibold text-white transition-all shadow-[0_4px_15px_rgba(37,99,235,0.3)] mt-2">
-                              {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin text-white" /> : null}
-                              {activeFormTab === "signin" ? t("signInToWorkspace") : t("createAccount")}
-                            </Button>
-                          </form>
-                        )}
-                      </motion.div>
-                    </AnimatePresence>
-                  </>
+                {error && (
+                  <div className="mb-4 rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-center text-sm text-red-300">{error}</div>
                 )}
+                <PhoneSignIn onSignedIn={openXpotWorkspace} />
               </DialogContent>
             </Dialog>
           )}
