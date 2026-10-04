@@ -326,3 +326,20 @@ export interface McpTokenCreated {
   token: McpTokenItem;
   secret: string;
 }
+
+/**
+ * An app connected over OAuth (Claude, ChatGPT…): one per client and approving
+ * user that still holds a live token. GET /api/xpot/admin/mcp-connections.
+ */
+export interface McpConnectionItem {
+  clientId: string;
+  /** Self-declared at registration, so not proof of who the client is. */
+  clientName: string | null;
+  /** Where the client receives its codes: the trustworthy part of its identity. */
+  redirectHost: string | null;
+  userId: string;
+  /** Email, or phone for phone-only accounts. */
+  userLabel: string | null;
+  connectedAt: string;
+  lastUsedAt: string | null;
+}

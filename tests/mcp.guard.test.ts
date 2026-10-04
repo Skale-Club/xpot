@@ -24,7 +24,11 @@ test("/mcp refuses calls without a token or with a bad one; GET/DELETE are 405",
 
     const none = await post({});
     assert.equal(none.status, 401);
-    assert.equal(none.headers.get("www-authenticate"), "Bearer");
+    // The challenge points at the OAuth metadata, so hosts can start sign-in.
+    assert.match(
+      none.headers.get("www-authenticate") ?? "",
+      /^Bearer resource_metadata="http:\/\/127\.0\.0\.1:\d+\/\.well-known\/oauth-protected-resource", error="invalid_request"$/,
+    );
     for (const authorization of [
       "Bearer not-a-token",
       "Bearer xpot_mcp_short",
@@ -57,6 +61,8 @@ test("mcp-token admin endpoints refuse anonymous callers", async () => {
       ["GET", "/api/xpot/admin/mcp-tokens"],
       ["POST", "/api/xpot/admin/mcp-tokens"],
       ["POST", `/api/xpot/admin/mcp-tokens/${ID}/revoke`],
+      ["GET", "/api/xpot/admin/mcp-connections"],
+      ["POST", `/api/xpot/admin/mcp-connections/xpot_client_${"a".repeat(43)}/revoke`],
     ];
     for (const [method, path] of calls) {
       const res = await fetch(`${base}${path}`, {

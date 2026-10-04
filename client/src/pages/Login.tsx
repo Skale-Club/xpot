@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { initSupabase } from "@/lib/supabase";
 import { queryClient } from "@/lib/queryClient";
-import { getXpotHomePath } from "@/lib/xpot";
+import { consumePostLoginRedirect, getXpotHomePath } from "@/lib/xpot";
 import { Loader2 } from "@/components/ui/loader";
 import { translate, useT } from "@/i18n";
 import { landingMessages } from "@/i18n/messages/landing";
@@ -88,6 +88,13 @@ export default function Login() {
     }
     queryClient.setQueryData(["/api/xpot/me"], result.data);
     cleanUrl();
+    // An AI app's authorization waiting on this sign-in wins over the
+    // dashboard. Full load: /oauth/authorize is served by the API.
+    const pending = consumePostLoginRedirect();
+    if (pending) {
+      window.location.assign(pending);
+      return;
+    }
     setLocation(getXpotHomePath());
   }, [goLanding, setLocation]);
 

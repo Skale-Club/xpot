@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Bot, Check, Copy, KeyRound, X } from "lucide-react";
-import type { McpTokenCreated, McpTokenItem } from "@shared/tagsApi";
+import { Bot, Check, Copy, KeyRound, Link2, X } from "lucide-react";
+import type { McpConnectionItem, McpTokenCreated, McpTokenItem } from "@shared/tagsApi";
 import { useToast } from "@/hooks/use-toast";
 import { ADMIN_TAGS_KEY, STALE_MS, errorMessage, formatDateTime, getJson, sendJson } from "./api";
 import { BTN, BTN_DANGER, CARD, INPUT } from "./ui";
@@ -9,10 +9,13 @@ import { ConfirmDialog, ErrorLine } from "./batches-shared";
 import { Loading } from "./pieces-shared";
 import { queryClient } from "@/lib/queryClient";
 
-// "AI access (MCP)": tokens an AI session uses on /mcp to read the journey
-// and record into it. The secret is shown once, right after creating it.
+// "AI access (MCP)": two ways for an AI session to reach /mcp and read and
+// record the journey. Apps that connect themselves (Claude, ChatGPT) sign in
+// over OAuth and show up under "Connected apps"; clients that take a pasted
+// header (Claude Code) use a token, whose secret is shown once.
 
 const TOKENS_KEY = [ADMIN_TAGS_KEY, "mcp-tokens"];
+const CONNECTIONS_KEY = [ADMIN_TAGS_KEY, "mcp-connections"];
 
 function CopyField({ label, value }: { label: string; value: string }) {
   const { toast } = useToast();
@@ -96,6 +99,77 @@ function CreateForm({ onCreated }: { onCreated: (created: McpTokenCreated) => vo
   );
 }
 
+/** Apps connected over OAuth, with the endpoint to paste into a new one. */
+function ConnectedApps() {
+  const { toast } = useToast();
+  const [revoking, setRevoking] = useState<McpConnectionItem | null>(null);
+  const { data: connections, isLoading, isError, error } = useQuery<McpConnectionItem[]>({
+    queryKey: CONNECTIONS_KEY,
+    queryFn: () => getJson("/api/xpot/admin/mcp-connections"),
+    staleTime: STALE_MS,
+  });
+  const revoke = useMutation({
+    mutationFn: (clientId: string) => sendJson<{ revoked: number }>("POST", `/api/xpot/admin/mcp-connections/${clientId}/revoke`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: CONNECTIONS_KEY });
+      setRevoking(null);
+      toast({ title: "Connection revoked" });
+    },
+    onError: (err) => toast({ title: "Could not revoke the connection", description: errorMessage(err), variant: "destructive" }),
+  });
+  const appName = (c: McpConnectionItem) => c.clientName || c.redirectHost || "Unnamed app";
+
+  return (
+    <div className="min-w-0 space-y-3" data-testid="journey-mcp-connections">
+      <div>
+        <h4 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-white/50">
+          <Link2 className="h-3.5 w-3.5" />
+          Connected apps
+        </h4>
+        <p className="mt-1 text-xs text-white/40">
+          In Claude or ChatGPT, add a custom connector with this URL. It asks you to sign in to Xpot and approve; only admins can.
+        </p>
+      </div>
+      <CopyField label="Connector URL" value={`${window.location.origin}/mcp`} />
+      {isLoading ? (
+        <Loading className="py-4" />
+      ) : isError ? (
+        <ErrorLine>Could not load the connected apps. {errorMessage(error)}</ErrorLine>
+      ) : !connections || connections.length === 0 ? (
+        <p className="text-sm text-white/40">No apps connected.</p>
+      ) : (
+        <ul className="divide-y divide-white/5">
+          {connections.map((c) => (
+            <li key={`${c.clientId}:${c.userId}`} className="flex flex-wrap items-center justify-between gap-2 py-2.5" data-testid="journey-mcp-connection">
+              <div className="min-w-0">
+                <p className="break-words text-sm font-medium text-white">{appName(c)}</p>
+                {c.redirectHost && <p className="break-all font-mono text-[11px] text-white/45">{c.redirectHost}</p>}
+                <p className="text-[11px] text-white/40">
+                  Approved by {c.userLabel ?? "a deleted user"} · connected {formatDateTime(c.connectedAt)} ·{" "}
+                  {c.lastUsedAt ? `last used ${formatDateTime(c.lastUsedAt)}` : "never used"}
+                </p>
+              </div>
+              <button type="button" className={BTN_DANGER} onClick={() => setRevoking(c)} data-testid="journey-mcp-connection-revoke">
+                Revoke
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <ConfirmDialog
+        open={!!revoking}
+        onOpenChange={(open) => !open && setRevoking(null)}
+        title={`Revoke "${revoking ? appName(revoking) : ""}"?`}
+        description="The app loses access immediately and has to be connected and approved again."
+        confirmLabel="Revoke"
+        destructive
+        busy={revoke.isPending}
+        onConfirm={() => revoking && revoke.mutate(revoking.clientId)}
+      />
+    </div>
+  );
+}
+
 export function JourneyMcpCard() {
   const { toast } = useToast();
   const [created, setCreated] = useState<McpTokenCreated | null>(null);
@@ -123,11 +197,20 @@ export function JourneyMcpCard() {
           AI access (MCP)
         </h3>
         <p className="mt-1 text-xs text-white/40">
-          An AI session with a token can read the journey and plans and record what it does (art, slicing, printing, decisions). Entries it
-          marks as proposed wait for your approval. Tokens only work on /mcp, never on this admin.
+          An AI session with access can read the journey and plans and record what it does (art, slicing, printing, decisions). Entries it
+          marks as proposed wait for your approval. This access only works on /mcp, never on this admin.
         </p>
       </div>
 
+      <ConnectedApps />
+
+      <div className="border-t border-white/5 pt-4">
+        <h4 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-white/50">
+          <KeyRound className="h-3.5 w-3.5" />
+          Tokens
+        </h4>
+        <p className="mt-1 text-xs text-white/40">For clients that take a header instead of signing in, such as Claude Code.</p>
+      </div>
       {created && <SecretPanel created={created} onClose={() => setCreated(null)} />}
       <CreateForm onCreated={setCreated} />
 

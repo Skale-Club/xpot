@@ -18,7 +18,7 @@ import {
   Building2
 } from "lucide-react";
 import { queryClient } from "@/lib/queryClient";
-import { getXpotHomePath } from "@/lib/xpot";
+import { consumePostLoginRedirect, getXpotHomePath, rememberPostLoginRedirect } from "@/lib/xpot";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -77,10 +77,26 @@ export function XpotLandingPage() {
       return false;
     }
     queryClient.setQueryData(["/api/xpot/me"], result.data);
+    // An AI app sent the user here to sign in before approving it: hand them
+    // back to the consent screen (served by the API, so a full load).
+    const pending = consumePostLoginRedirect();
+    if (pending) {
+      window.location.assign(pending);
+      return true;
+    }
     setLocation(getXpotHomePath());
     setIsLoginOpen(false);
     return true;
   }, [setLocation]);
+
+  useEffect(() => {
+    // ?next= comes from /oauth/authorize when there is no session: keep it
+    // across the sign-in and open the dialog straight away.
+    if (rememberPostLoginRedirect()) {
+      window.history.replaceState(null, "", window.location.pathname);
+      setIsLoginOpen(true);
+    }
+  }, []);
 
   useEffect(() => {
     // If /login bounced us back here with an auth error stashed in
