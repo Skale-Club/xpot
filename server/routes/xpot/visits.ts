@@ -1,8 +1,8 @@
 import { Router } from "express";
 import { storage } from "../../storage.js";
-import { requireXpotUser, ensureXpotRep, isManagerOrAdmin } from "./middleware.js";
+import { requireXpotUser, ensureXpotRep, isManagerOrAdmin, loadAccessibleLead } from "./middleware.js";
 import type { SalesVisitStatus } from "#shared/schema/sales.js";
-import { analyzeVisitTranscript, getDistanceMeters, syncVisitToGhl, syncVisitToXphere } from "./helpers.js";
+import { getDistanceMeters, syncVisitToGhl, syncVisitToXphere } from "./helpers.js";
 import { xpotCheckInSchema, xpotCheckOutSchema, xpotVisitNoteUpsertSchema } from "#shared/xpot.js";
 
 export function createVisitsRouter() {
@@ -38,10 +38,11 @@ export function createVisitsRouter() {
     }
 
     const appSettings = await storage.getSalesAppSettings();
-    const lead = await storage.getSalesLead(input.leadId);
-    if (!lead) {
-      return res.status(404).json({ message: "Lead not found" });
-    }
+    // SEG-05: this only checked that the lead existed, not that it belonged to
+    // the rep checking in. Beyond the visit itself the handler promotes the
+    // lead and overwrites lastVisitAt/nextVisitDueAt — another rep's pipeline.
+    const lead = await loadAccessibleLead(req, res, input.leadId);
+    if (!lead) return;
 
     const locations = await storage.listSalesLeadLocations(input.leadId);
     const selectedLocation = input.locationId
@@ -94,11 +95,9 @@ export function createVisitsRouter() {
       source: "field-mobile",
     });
 
-    if (lead.status === "prospect") {
-      await storage.updateSalesLead(lead.id, { status: "lead" });
-    }
-
+    // DAT-04: this used to be two sequential UPDATEs on the same row.
     await storage.updateSalesLead(lead.id, {
+      ...(lead.status === "prospect" ? { status: "lead" as const } : {}),
       lastVisitAt: visit.checkedInAt,
       nextVisitDueAt: null,
     });
@@ -180,6 +179,14 @@ export function createVisitsRouter() {
     const { status } = req.body as { status?: SalesVisitStatus };
     const updated = await storage.updateSalesVisit(visitId, { ...(status ? { status } : {}) });
     res.json(updated);
+
+    // VND-11: this used to write the status and stop, so a rep correcting
+    // "Completed" to "Sale Made" after check-out never reached the CRM — the
+    // note there kept whatever the status was at check-out.
+    if (status && visit.checkedOutAt) {
+      syncVisitToGhl(visitId).catch((err) => console.error("[visit status] syncVisitToGhl:", err));
+      syncVisitToXphere(visitId).catch((err) => console.error("[visit status] syncVisitToXphere:", err));
+    }
   });
 
   router.delete("/visits/:id", async (req, res) => {
@@ -287,31 +294,22 @@ export function createVisitsRouter() {
         }
       }
 
-      const existingNote = await storage.getSalesVisitNote(visitId);
-      const analysis = audioTranscription ? await analyzeVisitTranscript(audioTranscription) : null;
-
+      // PLT-03: analysis used to run here too, inside the same request, under
+      // the platform's 30s cap with recordings up to five minutes. This half
+      // now stops at the transcript; the client calls POST /visits/:id/analyze
+      // for the rest, which is also where sales actions are extracted.
       const note = await storage.upsertSalesVisitNote({
         visitId,
         createdByRepId: actor!.rep.id,
         audioUrl,
         audioDurationSeconds: durationSeconds || null,
         ...(audioTranscription !== null && { audioTranscription }),
-        ...(analysis?.summary ? { summary: analysis.summary } : {}),
-        ...(analysis?.outcome ? { outcome: analysis.outcome } : {}),
-        ...(analysis?.nextStep ? { nextStep: analysis.nextStep } : {}),
-        ...(analysis?.sentiment ? { sentiment: analysis.sentiment } : {}),
-        ...(analysis?.objections ? { objections: analysis.objections } : {}),
-        ...(analysis?.competitorMentioned ? { competitorMentioned: analysis.competitorMentioned } : {}),
-        ...(analysis?.followUpRequired !== undefined
-          ? { followUpRequired: analysis.followUpRequired }
-          : existingNote
-            ? { followUpRequired: existingNote.followUpRequired }
-            : {}),
       });
       return res.json({
         note,
         transcriptionAvailable: Boolean(audioTranscription),
-        analysisApplied: Boolean(analysis),
+        // The client chains straight into /analyze when this is true.
+        readyToAnalyze: Boolean(audioTranscription),
       });
     } catch (error: any) {
       console.error("Audio upload error:", error);

@@ -2,6 +2,8 @@ import { Router } from "express";
 import { storage } from "../../storage.js";
 import { requireXpotUser, ensureXpotRep, isManagerOrAdmin } from "./middleware.js";
 import { syncLeadToGhl, syncOpportunityToGhl, syncTaskToGhl, syncVisitToGhl } from "./helpers.js";
+import { syncSaleToXphere } from "./xphere-sync.js";
+import { salesStorage } from "../../storage-sales.js";
 
 export function createSyncRouter() {
   const router = Router();
@@ -76,6 +78,16 @@ export function createSyncRouter() {
           return res.status(403).json({ message: "Access denied" });
         }
         const result = await syncLeadToGhl(Number(entityId));
+        return res.json(result);
+      }
+      case "sales_sale": {
+        // Sales reach the CRM through the Xphere mirror; a failure lands in
+        // sales_sync_events like any other and the dashboard offers a retry.
+        const sale = await salesStorage.getSale(Number(entityId));
+        if (!sale || (!isManagerOrAdmin(actor!) && sale.sale.repId !== actor!.rep.id)) {
+          return res.status(403).json({ message: "Access denied" });
+        }
+        const result = await syncSaleToXphere(Number(entityId));
         return res.json(result);
       }
       default:

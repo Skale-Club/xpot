@@ -99,6 +99,7 @@ const en = {
   piecesCount_other: "{count} pieces",
   piecesLive: "{n} live",
   piecesScans: "{n} scans (30d)",
+  salesAndConsignment: "Sales & consignment",
 };
 
 export const leadsMessages: Dictionary<typeof en> = {
@@ -191,6 +192,7 @@ export const leadsMessages: Dictionary<typeof en> = {
     piecesCount_other: "{count} peças",
     piecesLive: "{n} no ar",
     piecesScans: "{n} scans (30d)",
+    salesAndConsignment: "Vendas e consignação",
   },
   es: {
     tabLeads: "Clientes",
@@ -280,5 +282,6 @@ export const leadsMessages: Dictionary<typeof en> = {
     piecesCount_other: "{count} piezas",
     piecesLive: "{n} activas",
     piecesScans: "{n} escaneos (30d)",
+    salesAndConsignment: "Ventas y consignación",
   },
 };

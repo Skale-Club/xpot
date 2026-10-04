@@ -482,3 +482,206 @@ export type InsertSalesAppSettings = typeof salesAppSettings.$inferInsert;
 
 export type XphereIntegration = typeof xphereIntegrations.$inferSelect;
 export type InsertXphereIntegration = typeof xphereIntegrations.$inferInsert;
+
+// ─── Sales module: catalog, direct sales, consigned stock ────────────────────
+//
+// Money is integer minor units (cents). See migrations/0017 for the model.
+
+export const salesProductKindEnum = pgEnum("sales_product_kind", ["digital", "physical"]);
+export const salesSaleKindEnum = pgEnum("sales_sale_kind", ["direct", "consignment_settlement"]);
+export const salesSaleStatusEnum = pgEnum("sales_sale_status", ["completed", "cancelled"]);
+export const salesPaymentStatusEnum = pgEnum("sales_payment_status", ["unpaid", "partial", "paid"]);
+export const salesConsignmentStatusEnum = pgEnum("sales_consignment_status", ["active", "closed"]);
+export const salesConsignmentMovementTypeEnum = pgEnum("sales_consignment_movement_type", [
+  "deposit",
+  "settlement",
+  "return",
+  "adjustment",
+]);
+
+export const salesProducts = pgTable("sales_products", {
+  id: serial("id").primaryKey(),
+  sku: text("sku").unique(),
+  name: text("name").notNull(),
+  description: text("description"),
+  kind: salesProductKindEnum("kind").notNull().default("physical"),
+  category: text("category"),
+  unitLabel: text("unit_label").notNull().default("unit"),
+  basePriceCents: integer("base_price_cents").notNull().default(0),
+  suggestedRetailCents: integer("suggested_retail_cents"),
+  costCents: integer("cost_cents"),
+  currency: text("currency").notNull().default("USD"),
+  consignable: boolean("consignable").notNull().default(false),
+  isActive: boolean("is_active").notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const salesProductPriceTiers = pgTable("sales_product_price_tiers", {
+  id: serial("id").primaryKey(),
+  productId: integer("product_id").references(() => salesProducts.id, { onDelete: "cascade" }).notNull(),
+  label: text("label"),
+  minQuantity: integer("min_quantity").notNull(),
+  unitPriceCents: integer("unit_price_cents").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => ({
+  productQtyIdx: uniqueIndex("sales_product_price_tiers_unique_qty").on(table.productId, table.minQuantity),
+}));
+
+export const salesConsignments = pgTable("sales_consignments", {
+  id: serial("id").primaryKey(),
+  leadId: integer("lead_id").references(() => salesLeads.id).notNull(),
+  productId: integer("product_id").references(() => salesProducts.id).notNull(),
+  repId: integer("rep_id").references(() => salesReps.id).notNull(),
+  status: salesConsignmentStatusEnum("status").notNull().default("active"),
+  unitPriceCents: integer("unit_price_cents").notNull(),
+  currency: text("currency").notNull().default("USD"),
+  quantityOnHand: integer("quantity_on_hand").notNull().default(0),
+  totalDeposited: integer("total_deposited").notNull().default(0),
+  totalSold: integer("total_sold").notNull().default(0),
+  totalReturned: integer("total_returned").notNull().default(0),
+  totalSettledCents: integer("total_settled_cents").notNull().default(0),
+  settlementIntervalDays: integer("settlement_interval_days").notNull().default(30),
+  openedAt: timestamp("opened_at").notNull().defaultNow(),
+  lastSettlementAt: timestamp("last_settlement_at"),
+  nextVisitDueAt: timestamp("next_visit_due_at"),
+  closedAt: timestamp("closed_at"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  leadIdx: index("sales_consignments_lead_idx").on(table.leadId),
+  repIdx: index("sales_consignments_rep_idx").on(table.repId),
+}));
+
+export const salesSales = pgTable("sales_sales", {
+  id: serial("id").primaryKey(),
+  leadId: integer("lead_id").references(() => salesLeads.id).notNull(),
+  repId: integer("rep_id").references(() => salesReps.id).notNull(),
+  visitId: integer("visit_id").references(() => salesVisits.id, { onDelete: "set null" }),
+  consignmentId: integer("consignment_id").references(() => salesConsignments.id),
+  kind: salesSaleKindEnum("kind").notNull().default("direct"),
+  status: salesSaleStatusEnum("status").notNull().default("completed"),
+  currency: text("currency").notNull().default("USD"),
+  subtotalCents: integer("subtotal_cents").notNull().default(0),
+  discountCents: integer("discount_cents").notNull().default(0),
+  totalCents: integer("total_cents").notNull().default(0),
+  paymentStatus: salesPaymentStatusEnum("payment_status").notNull().default("paid"),
+  paymentMethod: text("payment_method"),
+  paidCents: integer("paid_cents").notNull().default(0),
+  paidAt: timestamp("paid_at"),
+  soldAt: timestamp("sold_at").notNull().defaultNow(),
+  notes: text("notes"),
+  cancelledAt: timestamp("cancelled_at"),
+  cancelReason: text("cancel_reason"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  leadIdx: index("sales_sales_lead_idx").on(table.leadId),
+  repIdx: index("sales_sales_rep_idx").on(table.repId),
+  visitIdx: index("sales_sales_visit_idx").on(table.visitId),
+  soldAtIdx: index("sales_sales_sold_at_idx").on(table.soldAt),
+  statusIdx: index("sales_sales_status_idx").on(table.status),
+}));
+
+export const salesSaleItems = pgTable("sales_sale_items", {
+  id: serial("id").primaryKey(),
+  saleId: integer("sale_id").references(() => salesSales.id, { onDelete: "cascade" }).notNull(),
+  productId: integer("product_id").references(() => salesProducts.id),
+  description: text("description").notNull(),
+  quantity: integer("quantity").notNull().default(1),
+  unitPriceCents: integer("unit_price_cents").notNull().default(0),
+  // Frozen at sale time — see the column comment in migrations/0017.
+  unitCostCents: integer("unit_cost_cents").notNull().default(0),
+  totalCents: integer("total_cents").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => ({
+  saleIdx: index("sales_sale_items_sale_idx").on(table.saleId),
+  productIdx: index("sales_sale_items_product_idx").on(table.productId),
+}));
+
+export const salesConsignmentMovements = pgTable("sales_consignment_movements", {
+  id: serial("id").primaryKey(),
+  consignmentId: integer("consignment_id").references(() => salesConsignments.id, { onDelete: "cascade" }).notNull(),
+  repId: integer("rep_id").references(() => salesReps.id).notNull(),
+  visitId: integer("visit_id").references(() => salesVisits.id, { onDelete: "set null" }),
+  saleId: integer("sale_id").references(() => salesSales.id, { onDelete: "set null" }),
+  type: salesConsignmentMovementTypeEnum("type").notNull(),
+  quantity: integer("quantity").notNull().default(0),
+  countedRemaining: integer("counted_remaining"),
+  onHandBefore: integer("on_hand_before").notNull(),
+  onHandAfter: integer("on_hand_after").notNull(),
+  unitPriceCents: integer("unit_price_cents"),
+  amountCents: integer("amount_cents"),
+  occurredAt: timestamp("occurred_at").notNull().defaultNow(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => ({
+  consignmentIdx: index("sales_consignment_movements_consignment_idx").on(table.consignmentId, table.occurredAt),
+}));
+
+export type SalesProduct = typeof salesProducts.$inferSelect;
+export type InsertSalesProduct = typeof salesProducts.$inferInsert;
+export type SalesProductKind = typeof salesProductKindEnum.enumValues[number];
+
+export type SalesProductPriceTier = typeof salesProductPriceTiers.$inferSelect;
+export type InsertSalesProductPriceTier = typeof salesProductPriceTiers.$inferInsert;
+
+export type SalesConsignment = typeof salesConsignments.$inferSelect;
+export type InsertSalesConsignment = typeof salesConsignments.$inferInsert;
+export type SalesConsignmentStatus = typeof salesConsignmentStatusEnum.enumValues[number];
+
+export type SalesSale = typeof salesSales.$inferSelect;
+export type InsertSalesSale = typeof salesSales.$inferInsert;
+export type SalesSaleKind = typeof salesSaleKindEnum.enumValues[number];
+export type SalesSaleStatus = typeof salesSaleStatusEnum.enumValues[number];
+export type SalesPaymentStatus = typeof salesPaymentStatusEnum.enumValues[number];
+
+export type SalesSaleItem = typeof salesSaleItems.$inferSelect;
+export type InsertSalesSaleItem = typeof salesSaleItems.$inferInsert;
+
+export type SalesConsignmentMovement = typeof salesConsignmentMovements.$inferSelect;
+export type InsertSalesConsignmentMovement = typeof salesConsignmentMovements.$inferInsert;
+export type SalesConsignmentMovementType = typeof salesConsignmentMovementTypeEnum.enumValues[number];
+
+// ─── Voice-captured actions ──────────────────────────────────────────────────
+
+export const salesVisitActionTypeEnum = pgEnum("sales_visit_action_type", [
+  "deposit",
+  "settlement",
+  "sale",
+  "follow_up",
+]);
+
+export const salesVisitActionStatusEnum = pgEnum("sales_visit_action_status", [
+  "proposed",
+  "applied",
+  "dismissed",
+  "failed",
+]);
+
+export const salesVisitActions = pgTable("sales_visit_actions", {
+  id: serial("id").primaryKey(),
+  visitId: integer("visit_id").references(() => salesVisits.id, { onDelete: "cascade" }).notNull(),
+  leadId: integer("lead_id").references(() => salesLeads.id).notNull(),
+  repId: integer("rep_id").references(() => salesReps.id).notNull(),
+  type: salesVisitActionTypeEnum("type").notNull(),
+  status: salesVisitActionStatusEnum("status").notNull().default("proposed"),
+  payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default({}),
+  evidence: text("evidence"),
+  confidence: integer("confidence"),
+  resultRef: text("result_ref"),
+  error: text("error"),
+  appliedAt: timestamp("applied_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  visitIdx: index("sales_visit_actions_visit_idx").on(table.visitId),
+  statusIdx: index("sales_visit_actions_status_idx").on(table.status),
+}));
+
+export type SalesVisitAction = typeof salesVisitActions.$inferSelect;
+export type InsertSalesVisitAction = typeof salesVisitActions.$inferInsert;
+export type SalesVisitActionType = typeof salesVisitActionTypeEnum.enumValues[number];
+export type SalesVisitActionStatus = typeof salesVisitActionStatusEnum.enumValues[number];

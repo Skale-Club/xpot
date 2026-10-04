@@ -55,6 +55,14 @@ const en = {
   audioSaved: "Audio note saved",
   visitDeleted: "Visit deleted",
   deleteFailed: "Failed to delete",
+  filterSold: "Sold",
+  filterFollowUp: "Follow up",
+  filterComeBack: "Come back",
+  filterNoAnswer: "No answer",
+  filterNotInterested: "Not interested",
+  actionsDetected_one: "{count} action detected",
+  actionsDetected_other: "{count} actions detected",
+  actionsReviewBelow: "Review them below.",
 };
 
 export const visitsMessages: Dictionary<typeof en> = {
@@ -108,6 +116,14 @@ export const visitsMessages: Dictionary<typeof en> = {
     audioSaved: "Áudio salvo",
     visitDeleted: "Visita excluída",
     deleteFailed: "Não foi possível excluir",
+    filterSold: "Vendidas",
+    filterFollowUp: "Retorno",
+    filterComeBack: "Voltar depois",
+    filterNoAnswer: "Sem resposta",
+    filterNotInterested: "Sem interesse",
+    actionsDetected_one: "{count} ação detectada",
+    actionsDetected_other: "{count} ações detectadas",
+    actionsReviewBelow: "Confira abaixo.",
   },
   es: {
     allVisits: "Todas las visitas",
@@ -158,5 +174,13 @@ export const visitsMessages: Dictionary<typeof en> = {
     audioSaved: "Nota de voz guardada",
     visitDeleted: "Visita eliminada",
     deleteFailed: "No se pudo eliminar",
+    filterSold: "Vendidas",
+    filterFollowUp: "Seguimiento",
+    filterComeBack: "Volver luego",
+    filterNoAnswer: "Sin respuesta",
+    filterNotInterested: "Sin interés",
+    actionsDetected_one: "{count} acción detectada",
+    actionsDetected_other: "{count} acciones detectadas",
+    actionsReviewBelow: "Revísalas abajo.",
   },
 };

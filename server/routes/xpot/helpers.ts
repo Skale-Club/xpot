@@ -148,7 +148,7 @@ export async function syncOpportunityToGhl(opportunityId: number) {
     return { synced: false, message: "GHL not configured" };
   }
 
-  const opportunity = (await storage.listSalesOpportunities()).find((item) => item.id === opportunityId);
+  const opportunity = await storage.getSalesOpportunity(opportunityId);
   if (!opportunity) {
     return { synced: false, message: "Opportunity not found" };
   }
@@ -208,7 +208,7 @@ export async function syncTaskToGhl(taskId: number) {
     return { synced: false, message: "GHL not configured" };
   }
 
-  const task = (await storage.listSalesTasks()).find((t) => t.id === taskId);
+  const task = await storage.getSalesTask(taskId);
   if (!task) {
     return { synced: false, message: "Task not found" };
   }
@@ -448,6 +448,14 @@ export async function syncVisitToXphere(visitId: number): Promise<{ synced: bool
   const note = await storage.getSalesVisitNote(visitId);
   const occurredAt = (visit.checkedOutAt ? new Date(visit.checkedOutAt) : new Date()).toISOString();
 
+  // The receiver on the Xphere side maps an outcome onto engagement_status by
+  // matching "sale" / "interested" / "follow" / "not_interested" in the string.
+  // We used to send note.outcome — the LLM's free prose, in whatever language
+  // the rep spoke — so a Portuguese note never matched, and a visit with no
+  // audio sent null and matched nothing at all. visit.status is the controlled
+  // vocabulary and lines up with those keys exactly; the prose still travels,
+  // as detail.
+
   try {
     const res = await fetch(`${apiUrl}/api/integrations/xpot/visits`, {
       method: "POST",
@@ -455,7 +463,8 @@ export async function syncVisitToXphere(visitId: number): Promise<{ synced: bool
       body: JSON.stringify({
         xphere_id: id,
         xphere_kind: kind,
-        outcome: note?.outcome ?? null,
+        outcome: visit.status,
+        outcome_detail: note?.outcome ?? null,
         summary: note?.summary ?? null,
         sentiment: note?.sentiment ?? null,
         occurred_at: occurredAt,

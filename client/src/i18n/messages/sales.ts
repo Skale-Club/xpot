@@ -40,6 +40,10 @@ const en = {
   taskCreateFailed: "Failed to create task",
   taskUpdated: "Task updated",
   taskUpdateFailed: "Failed to update task",
+  tabOverview: "Overview",
+  tabSales: "Sales",
+  tabStock: "Stock",
+  tabPipeline: "Pipeline",
 };
 
 export const salesMessages: Dictionary<typeof en> = {
@@ -76,6 +80,10 @@ export const salesMessages: Dictionary<typeof en> = {
     taskCreateFailed: "Não foi possível criar a tarefa",
     taskUpdated: "Tarefa atualizada",
     taskUpdateFailed: "Não foi possível atualizar a tarefa",
+    tabOverview: "Resumo",
+    tabSales: "Vendas",
+    tabStock: "Estoque",
+    tabPipeline: "Pipeline",
   },
   es: {
     chooseLead: "Elige el cliente",
@@ -109,5 +117,9 @@ export const salesMessages: Dictionary<typeof en> = {
     taskCreateFailed: "No se pudo crear la tarea",
     taskUpdated: "Tarea actualizada",
     taskUpdateFailed: "No se pudo actualizar la tarea",
+    tabOverview: "Resumen",
+    tabSales: "Ventas",
+    tabStock: "Inventario",
+    tabPipeline: "Pipeline",
   },
 };
