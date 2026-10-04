@@ -12,6 +12,7 @@ import { AdminBranding } from "./AdminBranding";
 import { AdminTags } from "./tags/AdminTags";
 import { AdminProducts } from "./AdminProducts";
 import { AdminSettings } from "./AdminSettings";
+import { AppBackground } from "@/components/xpot/AppBackground";
 
 const SECTIONS = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
@@ -68,11 +69,7 @@ export function AdminApp({ section }: { section: string }) {
   }
 
   return (
-    <div className="min-h-screen text-white" style={{ background: "linear-gradient(160deg, #060912 0%, #090f1c 50%, #060c14 100%)" }}>
-      <div
-        className="pointer-events-none fixed inset-0 opacity-[0.03]"
-        style={{ backgroundImage: "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.8) 1px, transparent 0)", backgroundSize: "32px 32px" }}
-      />
+    <AppBackground>
       <div className="relative mx-auto w-full max-w-5xl px-4 pb-20 pt-6">
         {/* Header */}
         <div className="mb-6 flex items-center justify-between">
@@ -122,6 +119,6 @@ export function AdminApp({ section }: { section: string }) {
           {active === "settings" && <AdminSettings />}
         </main>
       </div>
-    </div>
+    </AppBackground>
   );
 }

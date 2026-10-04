@@ -20,6 +20,9 @@ import { SalesList, ConsignmentsList } from "./components/sales/SalesLists";
 import type { EnrichedSalesOpportunity } from "./types";
 import { useT } from "@/i18n";
 import { salesMessages } from "@/i18n/messages/sales";
+import { GLASS } from "@/components/xpot/surface";
+import { Segmented } from "@/components/xpot/Segmented";
+import { EmptyState } from "@/components/xpot/EmptyState";
 
 const SYNC_STATUS_KEYS: Record<string, "sync_pending" | "sync_synced" | "sync_failed" | "sync_needs_review"> = {
   pending: "sync_pending",
@@ -28,10 +31,6 @@ const SYNC_STATUS_KEYS: Record<string, "sync_pending" | "sync_synced" | "sync_fa
   needs_review: "sync_needs_review",
 };
 
-const GLASS = {
-  background: "rgba(255,255,255,0.04)",
-  border: "1px solid rgba(255,255,255,0.09)",
-} as const;
 
 const inputCls = "w-full h-10 rounded-xl px-3 text-sm text-white placeholder:text-white/25 focus:outline-none transition-colors";
 const inputStyle = { background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.09)", colorScheme: "dark" as const };
@@ -194,18 +193,7 @@ export function XpotSales() {
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-1 rounded-xl p-1"
-        style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}>
-        {SALES_TABS.map(({ id, labelKey }) => (
-          <button key={id} type="button" onClick={() => setTab(id)}
-            className="relative flex-1 rounded-lg py-2 text-xs font-semibold transition-all"
-            style={tab === id
-              ? { background: "linear-gradient(135deg, rgba(59,130,246,0.3), rgba(99,102,241,0.3))", color: "white" }
-              : { color: "rgba(255,255,255,0.35)" }}>
-            {t(labelKey)}
-          </button>
-        ))}
-      </div>
+      <Segmented items={SALES_TABS.map(({ id, labelKey }) => ({ id, label: t(labelKey) }))} value={tab} onChange={setTab} />
 
       {tab === "overview" && <SalesOverview onGoToConsignments={() => setTab("consignments")} />}
       {tab === "sales" && <SalesList />}
@@ -349,10 +337,7 @@ function PipelineTab() {
             ))}
           </div>
         ) : !oppExpanded ? (
-          <div className="flex flex-col items-center gap-2 rounded-2xl py-8 text-center" style={GLASS}>
-            <TrendingUp className="h-6 w-6 text-white/20" />
-            <div className="text-xs text-white/30">{t("noOpps")}</div>
-          </div>
+          <EmptyState compact dense icon={TrendingUp} title={t("noOpps")} cardStyle={GLASS} />
         ) : null}
       </div>
 
@@ -438,10 +423,7 @@ function PipelineTab() {
             })}
           </div>
         ) : !taskExpanded ? (
-          <div className="flex flex-col items-center gap-2 rounded-2xl py-8 text-center" style={GLASS}>
-            <ListTodo className="h-6 w-6 text-white/20" />
-            <div className="text-xs text-white/30">{t("noTasks")}</div>
-          </div>
+          <EmptyState compact dense icon={ListTodo} title={t("noTasks")} cardStyle={GLASS} />
         ) : null}
       </div>
     </div>

@@ -126,8 +126,8 @@ no meio do caminho.
 | ID | Item |
 |---|---|
 | DSK-01 | **Primitivos de UI.** Extrair `GlassCard`, `Segmented` (substitui as 4 cópias + os chips de período), `EmptyState`, `DarkDialog`, `GradientButton` e o fundo com grade de pontos para `components/xpot/`. Juntar `sales/ui.tsx` e `tags/ui.tsx` num kit só. |
-| DSK-02 | **Tokens de cor.** Levar os `rgba(…)`/hex repetidos para variáveis em `index.css` e cores no `tailwind.config.ts` (`surface`, `surface-border`, `brand-from/to`, `ink-muted`…). Trocar arquivo por arquivo, sem alterar aparência. |
-| DSK-03 | **`useIsDesktop()`** (via `matchMedia('(min-width:1024px)')`) e **`ResponsiveSheet`**: `BottomSheet` no celular, `Dialog` ou drawer lateral no desktop. É a base de tudo que hoje sobe do rodapé. |
+| DSK-02 | **Superfícies em um lugar só.** `components/xpot/surface.ts` (`GLASS`, `GLASS_RAISED`, `BRAND_GRADIENT`, `PAGE_GRADIENT`) substitui as cópias locais. Os `rgba(…)` restantes migram conforme cada tela é redesenhada nas fases seguintes, sem uma troca em massa que mudaria a aparência sem querer. |
+| DSK-03 | **`useIsDesktop()`** (`hooks/use-is-desktop.ts`, via `matchMedia` no breakpoint `lg`) e **`BottomSheet` responsivo**: sobe do rodapé no celular e vira diálogo centralizado a partir de `lg`, só com classes, sem componente novo. |
 | DSK-04 | **Remover código morto:** `XpotProfileEditor.tsx` não é importado em lugar nenhum. |
 
 **Pronto quando:** o app está pixel-idêntico em 390px, o typecheck passa e não sobra

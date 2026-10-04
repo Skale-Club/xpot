@@ -5,6 +5,8 @@ import { VisitRow } from "./components/VisitRow";
 import { useT, type Translate } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { visitsMessages } from "@/i18n/messages/visits";
+import { Segmented } from "@/components/xpot/Segmented";
+import { EmptyState } from "@/components/xpot/EmptyState";
 
 type VisitsT = Translate<(typeof visitsMessages)["en"]>;
 
@@ -76,26 +78,14 @@ export function XpotVisits() {
         className="space-y-3 rounded-2xl px-3 py-3"
         style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
       >
-        <div className="flex gap-1 rounded-xl p-1" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}>
-          {(["all", "day"] as const).map((mode) => (
-            <button
-              key={mode}
-              type="button"
-              onClick={() => setViewMode(mode)}
-              className="relative flex-1 rounded-lg py-2 text-xs font-semibold transition-all"
-              style={viewMode === mode
-                ? { background: "linear-gradient(135deg, rgba(59,130,246,0.3), rgba(99,102,241,0.3))", color: "white" }
-                : { color: "rgba(255,255,255,0.35)" }
-              }
-            >
-              {mode === "all" ? (
-                <>{t("allVisits")}{allVisits.length > 0 && <span className="ml-1.5 rounded-full px-1.5 py-0.5 text-[10px]" style={{ background: "rgba(255,255,255,0.1)" }}>{allVisits.length}</span>}</>
-              ) : (
-                <>{t("byDay")}{visitsForDay.length > 0 && <span className="ml-1.5 rounded-full px-1.5 py-0.5 text-[10px]" style={{ background: "rgba(255,255,255,0.1)" }}>{visitsForDay.length}</span>}</>
-              )}
-            </button>
-          ))}
-        </div>
+        <Segmented
+          items={[
+            { id: "all" as const, label: t("allVisits"), count: allVisits.length },
+            { id: "day" as const, label: t("byDay"), count: visitsForDay.length },
+          ]}
+          value={viewMode}
+          onChange={setViewMode}
+        />
 
         {viewMode === "all" ? (
           <div className="flex gap-1.5 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none]">
@@ -176,19 +166,12 @@ export function XpotVisits() {
           ))}
         </div>
       ) : visitsQuery.isError ? (
-        <div
-          className="flex flex-col items-center gap-3 rounded-2xl py-10 text-center"
-          style={{ background: "rgba(239,68,68,0.05)", border: "1px solid rgba(239,68,68,0.18)" }}
+        <EmptyState
+          tone="red"
+          icon={CalendarDays}
+          title={t("loadFailed")}
+          hint={(visitsQuery.error as Error).message || t("loadFailedDesc")}
         >
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl" style={{ background: "rgba(239,68,68,0.12)" }}>
-            <CalendarDays className="h-5 w-5 text-red-400" />
-          </div>
-          <div>
-            <div className="text-sm font-medium text-white/70">{t("loadFailed")}</div>
-            <div className="mt-0.5 text-xs text-white/35">
-              {(visitsQuery.error as Error).message || t("loadFailedDesc")}
-            </div>
-          </div>
           <button
             type="button"
             onClick={() => void visitsQuery.refetch()}
@@ -198,7 +181,7 @@ export function XpotVisits() {
             <RefreshCw className="h-4 w-4" />
             {tc("retry")}
           </button>
-        </div>
+        </EmptyState>
       ) : null}
 
       {/* Visit list */}
@@ -207,32 +190,21 @@ export function XpotVisits() {
           {visitsToRender.map((visit) => <VisitRow key={visit.id} visit={visit} />)}
         </div>
       ) : !visitsQuery.isLoading && !visitsQuery.isError ? (
-        <div
-          className="flex flex-col items-center gap-3 rounded-2xl py-10 text-center"
-          style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}
-        >
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl" style={{ background: "rgba(99,102,241,0.12)" }}>
-            <CalendarDays className="h-5 w-5 text-indigo-400" />
-          </div>
-          <div>
-            <div className="text-sm font-medium text-white/60">
-              {viewMode === "all"
-                ? t("noVisitsYet")
-                : isToday
-                  ? t("noVisitsToday")
-                  : isYesterday(selectedDate)
-                    ? t("noVisitsYesterday")
-                    : t("noVisitsOn", { day: formatDayLabel(selectedDate, t).toLowerCase() })}
-            </div>
-            <div className="mt-0.5 text-xs text-white/30">
-              {viewMode === "all"
-                ? t("firstVisitHint")
-                : isToday
-                  ? t("startVisitHint")
-                  : t("nothingThisDay")}
-            </div>
-          </div>
-        </div>
+        <EmptyState
+          icon={CalendarDays}
+          title={viewMode === "all"
+            ? t("noVisitsYet")
+            : isToday
+              ? t("noVisitsToday")
+              : isYesterday(selectedDate)
+                ? t("noVisitsYesterday")
+                : t("noVisitsOn", { day: formatDayLabel(selectedDate, t).toLowerCase() })}
+          hint={viewMode === "all"
+            ? t("firstVisitHint")
+            : isToday
+              ? t("startVisitHint")
+              : t("nothingThisDay")}
+        />
       ) : null}
     </div>
   );

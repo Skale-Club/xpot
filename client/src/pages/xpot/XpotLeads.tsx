@@ -45,11 +45,9 @@ import type { FullSalesLead, GooglePlaceResult } from "./types";
 import { useT } from "@/i18n";
 import { leadsMessages } from "@/i18n/messages/leads";
 import { checkinMessages } from "@/i18n/messages/checkin";
-
-const GLASS = {
-  background: "rgba(255,255,255,0.04)",
-  border: "1px solid rgba(255,255,255,0.09)",
-} as const;
+import { BRAND_GRADIENT, GLASS } from "@/components/xpot/surface";
+import { Segmented } from "@/components/xpot/Segmented";
+import { EmptyState } from "@/components/xpot/EmptyState";
 
 
 function parseCsvText(text: string) {
@@ -508,27 +506,7 @@ export function XpotLeads() {
   return (
     <>
       {/* Sub-tabs */}
-      <div className="flex gap-1 rounded-xl p-1" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}>
-        {TABS.map(({ id, label, count }) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => setTab(id)}
-            className="relative flex-1 rounded-lg py-2 text-xs font-semibold transition-all"
-            style={tab === id
-              ? { background: "linear-gradient(135deg, rgba(59,130,246,0.3), rgba(99,102,241,0.3))", color: "white" }
-              : { color: "rgba(255,255,255,0.35)" }
-            }
-          >
-            {label}
-            {count > 0 && (
-              <span className="ml-1.5 rounded-full px-1.5 py-0.5 text-[10px]" style={{ background: "rgba(255,255,255,0.1)" }}>
-                {count}
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
+      <Segmented items={TABS} value={tab} onChange={setTab} />
 
       {/* Search + actions */}
       <div className="flex gap-2">
@@ -571,54 +549,35 @@ export function XpotLeads() {
 
       {/* Empty state for prospects */}
       {tab === "prospects" && prospects.length === 0 && !leadLookupSearch && (
-        <div className="flex flex-col items-center gap-3 rounded-2xl py-10 text-center" style={GLASS}>
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl" style={{ background: "rgba(99,102,241,0.15)" }}>
-            <Upload className="h-5 w-5 text-indigo-400" />
-          </div>
-          <div>
-            <div className="text-sm font-medium text-white/60">{t("noProspects")}</div>
-            <div className="mt-0.5 text-xs text-white/30">{t("noProspectsHint")}</div>
-          </div>
+        <EmptyState icon={Upload} title={t("noProspects")} hint={t("noProspectsHint")} cardStyle={GLASS}>
           <div className="flex gap-2 mt-1">
-            <button onClick={() => setAddOpen(true)} className="rounded-xl px-4 py-2 text-xs font-semibold text-white hover:opacity-80" style={{ background: "linear-gradient(135deg, #3b82f6, #6366f1)" }}>
+            <button onClick={() => setAddOpen(true)} className="rounded-xl px-4 py-2 text-xs font-semibold text-white hover:opacity-80" style={{ background: BRAND_GRADIENT }}>
               {t("addProspect")}
             </button>
             <button onClick={() => fileInputRef.current?.click()} className="rounded-xl px-4 py-2 text-xs font-semibold text-white/60 hover:text-white/80 transition-colors" style={{ background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.09)" }}>
               {t("importCsv")}
             </button>
           </div>
-        </div>
+        </EmptyState>
       )}
 
       {/* Lead list */}
       <div className="space-y-2">
         {/* Leads tab — no leads yet */}
         {tab === "leads" && leads.length === 0 && !leadLookupSearch && (
-          <div className="flex flex-col items-center gap-3 rounded-2xl py-10 text-center" style={GLASS}>
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl" style={{ background: "rgba(99,102,241,0.15)" }}>
-              <Building2 className="h-5 w-5 text-indigo-400" />
-            </div>
-            <div>
-              <div className="text-sm font-medium text-white/60">{t("noLeads")}</div>
-              <div className="mt-0.5 text-xs text-white/30">{t("noLeadsHint")}</div>
-            </div>
+          <EmptyState icon={Building2} title={t("noLeads")} hint={t("noLeadsHint")} cardStyle={GLASS}>
             <button
               onClick={() => setAddOpen(true)}
               className="rounded-xl px-4 py-2 text-xs font-semibold text-white hover:opacity-80"
-              style={{ background: "linear-gradient(135deg, #3b82f6, #6366f1)" }}
+              style={{ background: BRAND_GRADIENT }}
             >
               {t("addLead")}
             </button>
-          </div>
+          </EmptyState>
         )}
         {/* Search returned nothing */}
         {displayList.length === 0 && leadLookupSearch && (
-          <div className="flex flex-col items-center gap-3 rounded-2xl py-10 text-center" style={GLASS}>
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl" style={{ background: "rgba(99,102,241,0.15)" }}>
-              <Search className="h-5 w-5 text-indigo-400" />
-            </div>
-            <div className="text-sm font-medium text-white/60">{t("noResults", { query: leadLookupSearch })}</div>
-          </div>
+          <EmptyState icon={Search} title={t("noResults", { query: leadLookupSearch })} cardStyle={GLASS} />
         )}
         {displayList.map((lead) => (
           <LeadCard

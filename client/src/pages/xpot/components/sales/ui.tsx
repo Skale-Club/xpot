@@ -5,12 +5,10 @@ import { useState, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Loader2 } from "@/components/ui/loader";
+import { BRAND_GRADIENT } from "@/components/xpot/surface";
 import { centsToInput, formatCents, inputToCents } from "../../utils";
 
-export const GLASS = {
-  background: "rgba(255,255,255,0.04)",
-  border: "1px solid rgba(255,255,255,0.09)",
-} as const;
+export { GLASS } from "@/components/xpot/surface";
 
 export const inputCls =
   "w-full h-10 rounded-xl px-3 text-sm text-white placeholder:text-white/25 focus:outline-none focus:ring-1 focus:ring-indigo-400/50 transition-colors";
@@ -48,7 +46,7 @@ export function PrimaryButton({
   tone?: "indigo" | "emerald" | "amber" | "red"; type?: "button" | "submit"; className?: string;
 }) {
   const bg = {
-    indigo: "linear-gradient(135deg, #3b82f6, #6366f1)",
+    indigo: BRAND_GRADIENT,
     emerald: "linear-gradient(135deg, #10b981, #06b6d4)",
     amber: "linear-gradient(135deg, #f59e0b, #f97316)",
     red: "linear-gradient(135deg, #ef4444, #dc2626)",

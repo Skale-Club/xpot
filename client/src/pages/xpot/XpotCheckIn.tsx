@@ -47,6 +47,7 @@ import type { VisitStatus } from "./components/VisitStatus";
 import type { FullSalesLead, SalesLead } from "./types";
 import { LeadSalesPanel } from "./components/sales/LeadSalesPanel";
 import { VisitActionsPanel } from "./components/sales/VisitActions";
+import { GLASS_RAISED } from "@/components/xpot/surface";
 
 function ActiveLeadInfo({ lead, onSaved }: { lead: SalesLead; onSaved: () => void }) {
   const { toast } = useToast();
@@ -589,11 +590,7 @@ export function XpotCheckIn() {
     </div>
   );
 
-  const GLASS = {
-    background: "rgba(255,255,255,0.04)",
-    border: "1px solid rgba(255,255,255,0.09)",
-    boxShadow: "0 8px 32px rgba(0,0,0,0.3)",
-  } as const;
+  const GLASS = GLASS_RAISED;
 
   return (
     <>

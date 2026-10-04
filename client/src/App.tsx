@@ -19,6 +19,7 @@ import { ModuleSwitch, rememberModule, useXpotModules } from "@/components/Modul
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { shellMessages } from "@/i18n/messages/shell";
+import { AppBackground } from "@/components/xpot/AppBackground";
 
 function XpotAppShell() {
   const { me, xpotMeQuery, isOnline, activeTab } = useXpotQueries();
@@ -60,15 +61,7 @@ function XpotAppShell() {
   if (!visitsAllowed && modules.includes("tags")) return <Redirect to="/tags" />;
 
   return (
-    <div
-      className="min-h-screen text-white"
-      style={{ background: "linear-gradient(160deg, #060912 0%, #090f1c 50%, #060c14 100%)" }}
-    >
-      <div
-        className="pointer-events-none fixed inset-0 opacity-[0.03]"
-        style={{ backgroundImage: "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.8) 1px, transparent 0)", backgroundSize: "32px 32px" }}
-      />
-
+    <AppBackground>
       <div className="relative mx-auto flex min-h-screen w-full max-w-md flex-col px-4 pb-28 pt-5">
         {!isOnline && (
           <div className="mb-4 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
@@ -123,7 +116,7 @@ function XpotAppShell() {
           </div>
         </nav>
       </div>
-    </div>
+    </AppBackground>
   );
 }
 

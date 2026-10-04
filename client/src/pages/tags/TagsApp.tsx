@@ -14,6 +14,7 @@ import HomeScreen from "./HomeScreen";
 import PiecesScreen from "./PiecesScreen";
 import TagScreen from "./TagScreen";
 import { APP_BASE } from "./lib";
+import { AppBackground } from "@/components/xpot/AppBackground";
 
 const NAV = [
   { href: APP_BASE, key: "navHome", icon: Home },
@@ -70,12 +71,7 @@ export function TagsApp() {
   const current = activeNav(location);
 
   return (
-    <div className="min-h-screen text-white" style={{ background: "linear-gradient(160deg, #060912 0%, #090f1c 50%, #060c14 100%)" }}>
-      <div
-        className="pointer-events-none fixed inset-0 opacity-[0.03]"
-        style={{ backgroundImage: "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.8) 1px, transparent 0)", backgroundSize: "32px 32px" }}
-      />
-
+    <AppBackground>
       <div className="relative mx-auto flex min-h-screen w-full max-w-md flex-col px-4 pb-28" style={{ paddingTop: "calc(env(safe-area-inset-top) + 16px)" }}>
         <div className="mb-5 flex items-center gap-2">
           <div className="min-w-0 flex-1">
@@ -128,6 +124,6 @@ export function TagsApp() {
           </div>
         </nav>
       </div>
-    </div>
+    </AppBackground>
   );
 }
