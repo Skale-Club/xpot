@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Navigation, MapPinned } from "lucide-react";
+import { useT } from "@/i18n";
+import { checkinMessages } from "@/i18n/messages/checkin";
 
 // Live position strip for the check-in screen.
 //
@@ -24,6 +26,7 @@ export function LiveMap({
   leadLng?: number | null;
   leadName?: string;
 }) {
+  const t = useT(checkinMessages);
   const [failed, setFailed] = useState(false);
 
   const src = useMemo(() => {
@@ -53,7 +56,7 @@ export function LiveMap({
     >
       <img
         src={src}
-        alt="Your current location"
+        alt={t("mapAlt")}
         className="block h-[170px] w-full object-cover"
         loading="lazy"
         onError={() => setFailed(true)}
@@ -68,7 +71,7 @@ export function LiveMap({
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
           <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
         </span>
-        <span className="text-[10px] font-bold uppercase tracking-wider text-white/80">Live</span>
+        <span className="text-[10px] font-bold uppercase tracking-wider text-white/80">{t("mapLive")}</span>
         {typeof accuracy === "number" ? (
           <span className="text-[10px] font-medium text-white/40">±{accuracy}m</span>
         ) : null}
@@ -89,7 +92,7 @@ export function LiveMap({
         href={`https://maps.google.com/?q=${lat},${lng}`}
         target="_blank"
         rel="noreferrer"
-        title="Open in Google Maps"
+        title={t("openInMaps")}
         className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full text-white/70 transition-colors hover:text-white"
         style={{ background: "rgba(9,14,26,0.75)", backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.1)" }}
       >

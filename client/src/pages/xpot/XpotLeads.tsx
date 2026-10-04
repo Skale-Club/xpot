@@ -35,6 +35,9 @@ import { Loader2 } from '@/components/ui/loader';
 import { GoogleLogo } from "@/components/ui/google-logo";
 import { parseAddress, findMatchingLead } from "./utils";
 import type { FullSalesLead, GooglePlaceResult } from "./types";
+import { useT } from "@/i18n";
+import { leadsMessages } from "@/i18n/messages/leads";
+import { checkinMessages } from "@/i18n/messages/checkin";
 
 const GLASS = {
   background: "rgba(255,255,255,0.04)",
@@ -68,6 +71,17 @@ function parseCsvText(text: string) {
 
 type AddStatus = "prospect" | "lead";
 
+const MANUAL_FIELD_KEYS = {
+  name: "fieldBusinessRequired",
+  phone: "fieldPhone",
+  email: "fieldEmail",
+  website: "fieldWebsite",
+  industry: "fieldIndustry",
+  address: "fieldAddress",
+  city: "fieldCity",
+  state: "fieldState",
+} as const;
+
 function AddCompanyDialog({
   open,
   onOpenChange,
@@ -80,6 +94,8 @@ function AddCompanyDialog({
   allLeads: FullSalesLead[];
 }) {
   const { toast } = useToast();
+  const t = useT(leadsMessages);
+  const tCheckin = useT(checkinMessages);
   const { geoState, loadCurrentLocation, invalidateXpotData } = useXpotShared();
   const [search, setSearch] = useState("");
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -93,19 +109,19 @@ function AddCompanyDialog({
 
   const inputCls = "w-full h-10 rounded-xl px-3 text-sm text-white placeholder:text-white/25 focus:outline-none transition-colors";
   const inputStyle = { background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.09)" };
-  const label = status === "prospect" ? "prospect" : "lead";
+  const isProspect = status === "prospect";
 
   async function createFromPayload(payload: any) {
     setSaving(true);
     try {
       await apiRequest("POST", "/api/xpot/leads", { ...payload, status, source: payload.source || "manual" });
       await invalidateXpotData();
-      toast({ title: `${status === "prospect" ? "Prospect" : "Lead"} added`, variant: "success" });
+      toast({ title: t(isProspect ? "prospectAdded" : "leadAdded"), variant: "success" });
       onOpenChange(false);
       setSearch("");
       setManualForm(null);
     } catch (err: any) {
-      toast({ title: "Failed to create", description: err.message, variant: "destructive" });
+      toast({ title: t("createFailed"), description: err.message, variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -164,7 +180,7 @@ function AddCompanyDialog({
         style={{ background: "#0e1117", boxShadow: "0 24px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.07)" }}
       >
         <DialogHeader className="px-5 pt-5 pb-0">
-          <DialogTitle className="text-base font-semibold text-white capitalize">Add {label}</DialogTitle>
+          <DialogTitle className="text-base font-semibold text-white capitalize">{t(isProspect ? "addProspectTitle" : "addLeadTitle")}</DialogTitle>
         </DialogHeader>
 
         <div className="p-5 space-y-4">
@@ -178,7 +194,7 @@ function AddCompanyDialog({
                 onChange={(e) => { setSearch(e.target.value); setDropdownOpen(true); }}
                 onFocus={() => setDropdownOpen(true)}
                 onBlur={() => setTimeout(() => setDropdownOpen(false), 150)}
-                placeholder="Search business or address..."
+                placeholder={t("searchBusiness")}
                 className={`w-full h-[52px] bg-white pl-10 pr-12 text-[15px] text-slate-900 placeholder:text-slate-400 focus:outline-none shadow-sm ${dropdownOpen ? "rounded-t-2xl" : "rounded-2xl"}`}
                 style={{ border: "1px solid #e2e8f0" }}
               />
@@ -191,7 +207,7 @@ function AddCompanyDialog({
                 <button
                   type="button"
                   className="p-1.5 text-slate-400 hover:text-blue-500 transition-colors"
-                  onClick={async () => { await loadCurrentLocation(); setSearch("businesses nearby"); setDropdownOpen(true); }}
+                  onClick={async () => { await loadCurrentLocation(); setSearch(tCheckin("nearbyQuery")); setDropdownOpen(true); }}
                 >
                   <MapPinned className="h-4 w-4" />
                 </button>
@@ -215,16 +231,16 @@ function AddCompanyDialog({
                     </div>
                     <div>
                       <div className="text-sm font-medium text-slate-900">
-                        {search.trim().length >= 2 ? `Create "${search.trim()}"` : `Add new ${label}`}
+                        {search.trim().length >= 2 ? t("createNamed", { name: search.trim() }) : t(isProspect ? "addNewProspect" : "addNewLead")}
                       </div>
-                      <div className="text-xs text-slate-500">Fill in details manually</div>
+                      <div className="text-xs text-slate-500">{t("fillManually")}</div>
                     </div>
                   </button>
 
                   {/* Google Places loading */}
                   {placeQuery.isFetching && (
                     <div className="flex items-center gap-2 px-4 py-3 text-sm text-slate-500" style={{ borderTop: "1px solid #f1f5f9" }}>
-                      <Loader2 className="h-4 w-4 animate-spin" />Searching Google Places...
+                      <Loader2 className="h-4 w-4 animate-spin" />{t("searchingPlaces")}
                     </div>
                   )}
 
@@ -246,7 +262,7 @@ function AddCompanyDialog({
                             <Building2 className="h-4 w-4 text-indigo-500" />
                           </div>
                           {existing ? (
-                            <span className="text-[9px] font-bold uppercase tracking-wider text-blue-600">Exists</span>
+                            <span className="text-[9px] font-bold uppercase tracking-wider text-blue-600">{t("exists")}</span>
                           ) : (
                             <span className="flex items-center gap-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-500">
                               <GoogleLogo className="h-2.5 w-2.5" />
@@ -263,7 +279,7 @@ function AddCompanyDialog({
                   })}
 
                   {!placeQuery.isFetching && !placeQuery.data?.results?.length && search.trim().length < 3 && (
-                    <div className="px-4 py-3 text-sm text-slate-400">Type at least 3 characters to search</div>
+                    <div className="px-4 py-3 text-sm text-slate-400">{t("typeMore")}</div>
                   )}
                 </div>
               )}
@@ -278,14 +294,14 @@ function AddCompanyDialog({
                 onClick={() => setManualForm(null)}
                 className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 transition-colors mb-1"
               >
-                ← Back to search
+                {t("backToSearch")}
               </button>
               {(["name", "phone", "email", "website", "industry", "address", "city", "state"] as const).map((key) => (
                 <input
                   key={key}
                   value={manualForm[key]}
                   onChange={mf(key)}
-                  placeholder={key === "name" ? "Business name *" : key.charAt(0).toUpperCase() + key.slice(1)}
+                  placeholder={t(MANUAL_FIELD_KEYS[key])}
                   className={inputCls}
                   style={inputStyle}
                 />
@@ -297,7 +313,7 @@ function AddCompanyDialog({
                 style={{ background: "linear-gradient(135deg, #3b82f6, #6366f1)" }}
               >
                 {saving ? <Loader2 className="inline mr-2 h-4 w-4 animate-spin" /> : null}
-                Save {label.charAt(0).toUpperCase() + label.slice(1)}
+                {t(isProspect ? "saveProspect" : "saveLead")}
               </button>
             </div>
           )}
@@ -321,6 +337,7 @@ function LeadCard({
   isSyncing?: boolean;
   isProspect?: boolean;
 }) {
+  const t = useT(leadsMessages);
   return (
     <button
       type="button"
@@ -335,7 +352,7 @@ function LeadCard({
             {isProspect && onPromote && (
               <button
                 type="button"
-                title="Promote to Lead"
+                title={t("promote")}
                 className="flex h-8 w-8 items-center justify-center rounded-xl text-white/40 transition-colors hover:bg-purple-500/20 hover:text-purple-400"
                 onClick={(e) => { e.stopPropagation(); onPromote(); }}
               >
@@ -345,7 +362,7 @@ function LeadCard({
             {isProspect && onSyncGhl && (
               <button
                 type="button"
-                title="Send to GHL"
+                title={t("sendGhl")}
                 disabled={isSyncing}
                 className="flex h-8 w-8 items-center justify-center rounded-xl text-white/40 transition-colors hover:bg-emerald-500/20 hover:text-emerald-400 disabled:opacity-40"
                 onClick={(e) => { e.stopPropagation(); onSyncGhl(); }}
@@ -355,7 +372,7 @@ function LeadCard({
             )}
             <button
               type="button"
-              title="Check in"
+              title={t("checkIn")}
               className="flex h-8 w-8 items-center justify-center rounded-xl text-white/40 transition-colors hover:bg-blue-500/20 hover:text-blue-400"
               onClick={(e) => { e.stopPropagation(); onCheckIn(); }}
             >
@@ -363,7 +380,7 @@ function LeadCard({
             </button>
             <button
               type="button"
-              title="Delete"
+              title={t("delete")}
               className="flex h-8 w-8 items-center justify-center rounded-xl text-white/40 transition-colors hover:bg-red-500/20 hover:text-red-400"
               onClick={(e) => { e.stopPropagation(); onDelete(); }}
             >
@@ -379,6 +396,7 @@ function LeadCard({
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function XpotLeads() {
+  const t = useT(leadsMessages);
   const { setLocation } = useXpotQueries();
   const [tab, setTab] = useState<"leads" | "prospects">("leads");
   const [leadPendingDelete, setLeadPendingDelete] = useState<FullSalesLead | null>(null);
@@ -434,8 +452,8 @@ export function XpotLeads() {
   };
 
   const TABS = [
-    { id: "leads" as const, label: "Leads", count: leads.length },
-    { id: "prospects" as const, label: "Prospects", count: prospects.length },
+    { id: "leads" as const, label: t("tabLeads"), count: leads.length },
+    { id: "prospects" as const, label: t("tabProspects"), count: prospects.length },
   ];
 
   return (
@@ -470,7 +488,7 @@ export function XpotLeads() {
           <input
             value={leadLookupSearch}
             onChange={(e) => setLeadLookupSearch(e.target.value)}
-            placeholder={tab === "prospects" ? "Search prospects..." : "Search leads..."}
+            placeholder={tab === "prospects" ? t("searchProspects") : t("searchLeads")}
             className="w-full h-11 rounded-xl pl-10 pr-4 text-sm text-white placeholder:text-white/25 focus:outline-none"
             style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.09)" }}
           />
@@ -480,7 +498,7 @@ export function XpotLeads() {
         {tab === "prospects" && (
           <>
             <button
-              title="Import CSV"
+              title={t("importCsv")}
               onClick={() => fileInputRef.current?.click()}
               disabled={importCsvMutation.isPending}
               className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-white/60 transition-all hover:opacity-80 disabled:opacity-40"
@@ -509,15 +527,15 @@ export function XpotLeads() {
             <Upload className="h-5 w-5 text-indigo-400" />
           </div>
           <div>
-            <div className="text-sm font-medium text-white/60">No prospects yet</div>
-            <div className="mt-0.5 text-xs text-white/30">Add one by one or import a CSV</div>
+            <div className="text-sm font-medium text-white/60">{t("noProspects")}</div>
+            <div className="mt-0.5 text-xs text-white/30">{t("noProspectsHint")}</div>
           </div>
           <div className="flex gap-2 mt-1">
             <button onClick={() => setAddOpen(true)} className="rounded-xl px-4 py-2 text-xs font-semibold text-white hover:opacity-80" style={{ background: "linear-gradient(135deg, #3b82f6, #6366f1)" }}>
-              Add Prospect
+              {t("addProspect")}
             </button>
             <button onClick={() => fileInputRef.current?.click()} className="rounded-xl px-4 py-2 text-xs font-semibold text-white/60 hover:text-white/80 transition-colors" style={{ background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.09)" }}>
-              Import CSV
+              {t("importCsv")}
             </button>
           </div>
         </div>
@@ -532,15 +550,15 @@ export function XpotLeads() {
               <Building2 className="h-5 w-5 text-indigo-400" />
             </div>
             <div>
-              <div className="text-sm font-medium text-white/60">No leads yet</div>
-              <div className="mt-0.5 text-xs text-white/30">Add a lead or promote a prospect using the promote button</div>
+              <div className="text-sm font-medium text-white/60">{t("noLeads")}</div>
+              <div className="mt-0.5 text-xs text-white/30">{t("noLeadsHint")}</div>
             </div>
             <button
               onClick={() => setAddOpen(true)}
               className="rounded-xl px-4 py-2 text-xs font-semibold text-white hover:opacity-80"
               style={{ background: "linear-gradient(135deg, #3b82f6, #6366f1)" }}
             >
-              Add Lead
+              {t("addLead")}
             </button>
           </div>
         )}
@@ -550,7 +568,7 @@ export function XpotLeads() {
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl" style={{ background: "rgba(99,102,241,0.15)" }}>
               <Search className="h-5 w-5 text-indigo-400" />
             </div>
-            <div className="text-sm font-medium text-white/60">No results for "{leadLookupSearch}"</div>
+            <div className="text-sm font-medium text-white/60">{t("noResults", { query: leadLookupSearch })}</div>
           </div>
         )}
         {displayList.map((lead) => (
@@ -595,10 +613,10 @@ export function XpotLeads() {
         >
           <AlertDialogHeader>
             <AlertDialogTitle className="text-base font-semibold text-white">
-              Delete this {tab === "prospects" ? "prospect" : "lead"}?
+              {t(tab === "prospects" ? "deleteProspectTitle" : "deleteLeadTitle")}
             </AlertDialogTitle>
             <AlertDialogDescription className="text-sm text-white/45">
-              {leadPendingDelete ? `Permanently removes ${leadPendingDelete.name} and all related data.` : "This will be permanently removed."}
+              {leadPendingDelete ? t("deleteNamed", { name: leadPendingDelete.name }) : t("deleteGeneric")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="mt-2 flex-row gap-2 sm:space-x-0">
@@ -607,7 +625,7 @@ export function XpotLeads() {
               className="flex-1 rounded-xl border-0 text-sm font-medium text-white/60 hover:text-white transition-colors"
               style={{ background: "rgba(255,255,255,0.07)" }}
             >
-              Keep
+              {t("keep")}
             </AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
@@ -617,7 +635,7 @@ export function XpotLeads() {
               style={{ background: "rgba(239,68,68,0.85)" }}
             >
               {deleteLeadMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              Delete
+              {t("delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

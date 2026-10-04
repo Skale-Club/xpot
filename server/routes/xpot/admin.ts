@@ -59,6 +59,7 @@ export function createAdminRouter() {
       vcardId: z.number().int().positive().optional().nullable(),
       ghlUserId: z.string().optional().nullable(),
       isActive: z.boolean().default(true),
+      modules: z.array(z.enum(["visits", "tags"])).min(1).optional(),
     }).parse(req.body);
 
     const rep = await storage.upsertSalesRep(input);

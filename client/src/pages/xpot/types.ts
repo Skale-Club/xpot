@@ -89,7 +89,7 @@ export type SalesLeadPayload = {
 
 export type XpotMeResponse = {
   user: { id: string; email: string; firstName?: string | null; lastName?: string | null; isAdmin: boolean; profileImageUrl?: string | null };
-  rep: { id: number; displayName: string; email?: string; phone?: string; team?: string; role: string; avatarUrl?: string | null };
+  rep: { id: number; displayName: string; email?: string; phone?: string; team?: string; role: string; avatarUrl?: string | null; isActive?: boolean; modules?: string[] };
   activeVisit: (SalesVisit & { lead?: SalesLead; note?: SalesVisitNote }) | null;
 };
 

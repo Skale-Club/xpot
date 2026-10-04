@@ -9,6 +9,8 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from '@/components/ui/loader';
 import type { SalesLead, FullSalesLead } from "../types";
+import { useT } from "@/i18n";
+import { leadsMessages } from "@/i18n/messages/leads";
 
 type LeadLike = SalesLead | FullSalesLead;
 
@@ -51,6 +53,7 @@ export function EditLeadDialog({ lead, open, onOpenChange, onSaved }: {
   onSaved?: () => void;
 }) {
   const { toast } = useToast();
+  const t = useT(leadsMessages);
   const loc = (lead as FullSalesLead).locations?.[0];
   const [form, setForm] = useState({
     name: lead.name || "",
@@ -87,14 +90,14 @@ export function EditLeadDialog({ lead, open, onOpenChange, onSaved }: {
       }
     },
     onSuccess: () => {
-      toast({ title: "Lead updated", variant: "success" });
+      toast({ title: t("leadUpdated"), variant: "success" });
       queryClient.invalidateQueries({ queryKey: ["/api/xpot/visits"] });
       queryClient.invalidateQueries({ queryKey: ["/api/xpot/leads"] });
       onSaved?.();
       onOpenChange(false);
     },
     onError: (error: Error) => {
-      toast({ title: "Failed to update lead", description: error.message, variant: "destructive" });
+      toast({ title: t("leadUpdateFailed"), description: error.message, variant: "destructive" });
     },
   });
 
@@ -108,25 +111,25 @@ export function EditLeadDialog({ lead, open, onOpenChange, onSaved }: {
         style={{ background: "#0e1117", boxShadow: "0 24px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.07)" }}
       >
         <DialogHeader>
-          <DialogTitle className="text-base font-semibold text-white">Edit Lead</DialogTitle>
+          <DialogTitle className="text-base font-semibold text-white">{t("editTitle")}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 mt-1">
-          <FieldGroup label="Business">
-            <Field value={form.name} onChange={f("name")} placeholder="Business name" />
+          <FieldGroup label={t("groupBusiness")}>
+            <Field value={form.name} onChange={f("name")} placeholder={t("fieldBusiness")} />
           </FieldGroup>
 
-          <FieldGroup label="Contact">
-            <Field value={form.phone} onChange={f("phone")} placeholder="Phone" inputMode="tel" />
-            <Field value={form.email} onChange={f("email")} placeholder="Email" type="email" inputMode="email" />
-            <Field value={form.website} onChange={f("website")} placeholder="Website" />
+          <FieldGroup label={t("groupContact")}>
+            <Field value={form.phone} onChange={f("phone")} placeholder={t("fieldPhone")} inputMode="tel" />
+            <Field value={form.email} onChange={f("email")} placeholder={t("fieldEmail")} type="email" inputMode="email" />
+            <Field value={form.website} onChange={f("website")} placeholder={t("fieldWebsite")} />
           </FieldGroup>
 
-          <FieldGroup label="Details">
-            <Field value={form.industry} onChange={f("industry")} placeholder="Industry" />
+          <FieldGroup label={t("groupDetails")}>
+            <Field value={form.industry} onChange={f("industry")} placeholder={t("fieldIndustry")} />
           </FieldGroup>
 
-          <FieldGroup label="Social Networks">
+          <FieldGroup label={t("groupSocial")}>
             {socials.map((s, i) => (
               <div key={i} className="flex gap-2 items-center mb-2">
                 <select 
@@ -145,7 +148,7 @@ export function EditLeadDialog({ lead, open, onOpenChange, onSaved }: {
                   <option value="twitter" className="bg-[#0e1117]">X</option>
                   <option value="youtube" className="bg-[#0e1117]">YouTube</option>
                   <option value="tiktok" className="bg-[#0e1117]">TikTok</option>
-                  <option value="other" className="bg-[#0e1117]">Other</option>
+                  <option value="other" className="bg-[#0e1117]">{t("socialOther")}</option>
                 </select>
                 <input 
                   value={s.url}
@@ -154,7 +157,7 @@ export function EditLeadDialog({ lead, open, onOpenChange, onSaved }: {
                     next[i].url = e.target.value;
                     setSocials(next);
                   }}
-                  placeholder="URL or handle"
+                  placeholder={t("socialPlaceholder")}
                   className={inputCls}
                   style={inputStyle}
                 />
@@ -168,17 +171,17 @@ export function EditLeadDialog({ lead, open, onOpenChange, onSaved }: {
                onClick={() => setSocials([...socials, { platform: "instagram", url: "" }])}
                className="text-xs flex items-center font-semibold text-indigo-400 hover:text-indigo-300"
             >
-              <Plus className="h-3 w-3 mr-1" /> Add Social Network
+              <Plus className="h-3 w-3 mr-1" /> {t("addSocialNetwork")}
             </button>
           </FieldGroup>
 
-          <FieldGroup label="Address">
-            <Field value={form.addressLine1} onChange={f("addressLine1")} placeholder="Street address" />
+          <FieldGroup label={t("groupAddress")}>
+            <Field value={form.addressLine1} onChange={f("addressLine1")} placeholder={t("fieldStreet")} />
             <div className="grid grid-cols-2 gap-2">
-              <Field value={form.city} onChange={f("city")} placeholder="City" />
-              <Field value={form.state} onChange={f("state")} placeholder="State" />
+              <Field value={form.city} onChange={f("city")} placeholder={t("fieldCity")} />
+              <Field value={form.state} onChange={f("state")} placeholder={t("fieldState")} />
             </div>
-            <Field value={form.postalCode} onChange={f("postalCode")} placeholder="Postal code" />
+            <Field value={form.postalCode} onChange={f("postalCode")} placeholder={t("fieldPostal")} />
           </FieldGroup>
 
           <button
@@ -188,7 +191,7 @@ export function EditLeadDialog({ lead, open, onOpenChange, onSaved }: {
             style={{ background: "linear-gradient(135deg, #3b82f6, #6366f1)" }}
           >
             {updateMutation.isPending ? <Loader2 className="inline mr-2 h-4 w-4 animate-spin" /> : null}
-            Save Changes
+            {t("saveChanges")}
           </button>
         </div>
       </DialogContent>

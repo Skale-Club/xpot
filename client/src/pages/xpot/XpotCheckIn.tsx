@@ -29,6 +29,8 @@ import { usePlaceSearch } from "./usePlaceSearch";
 import { findMatchingLead, formatDateTime } from "./utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useT } from "@/i18n";
+import { checkinMessages } from "@/i18n/messages/checkin";
 import { Loader2 } from '@/components/ui/loader';
 import { GoogleLogo } from "@/components/ui/google-logo";
 import { EditLeadDialog } from "./components/EditLeadDialog";
@@ -42,6 +44,7 @@ import type { FullSalesLead, SalesLead } from "./types";
 
 function ActiveLeadInfo({ lead, onSaved }: { lead: SalesLead; onSaved: () => void }) {
   const { toast } = useToast();
+  const t = useT(checkinMessages);
   const [fields, setFields] = useState({
     name: lead.name || "",
     phone: lead.phone || "",
@@ -53,17 +56,17 @@ function ActiveLeadInfo({ lead, onSaved }: { lead: SalesLead; onSaved: () => voi
   function saveField(key: keyof typeof fields, value: string) {
     setFields((prev) => ({ ...prev, [key]: value }));
     apiRequest("PATCH", `/api/xpot/leads/${lead.id}`, { [key]: value || undefined })
-      .then(() => { toast({ title: "Saved", variant: "success" }); onSaved(); queryClient.invalidateQueries({ queryKey: ["/api/xpot/me"] }); })
-      .catch((err: Error) => toast({ title: "Failed to save", description: err.message, variant: "destructive" }));
+      .then(() => { toast({ title: t("saved"), variant: "success" }); onSaved(); queryClient.invalidateQueries({ queryKey: ["/api/xpot/me"] }); })
+      .catch((err: Error) => toast({ title: t("saveFailed"), description: err.message, variant: "destructive" }));
   }
 
   return (
     <div className="space-y-2.5">
       <InlineField label="" large value={fields.name} onSave={(v) => saveField("name", v)} />
-      <InlineField label="Phone" value={fields.phone} onSave={(v) => saveField("phone", v)} />
-      <InlineField label="Email" value={fields.email} onSave={(v) => saveField("email", v)} />
-      <InlineField label="Website" value={fields.website} onSave={(v) => saveField("website", v)} />
-      <InlineField label="Industry" value={fields.industry} onSave={(v) => saveField("industry", v)} />
+      <InlineField label={t("fieldPhone")} value={fields.phone} onSave={(v) => saveField("phone", v)} />
+      <InlineField label={t("fieldEmail")} value={fields.email} onSave={(v) => saveField("email", v)} />
+      <InlineField label={t("fieldWebsite")} value={fields.website} onSave={(v) => saveField("website", v)} />
+      <InlineField label={t("fieldIndustry")} value={fields.industry} onSave={(v) => saveField("industry", v)} />
       {((lead as any).socialUrls as Array<{platform: string, url: string}>)?.length > 0 && (
         <div className="flex items-center gap-2 pt-2 mt-2 border-t border-white/5">
           {((lead as any).socialUrls as Array<{platform: string, url: string}>).map((social, i) => {
@@ -102,6 +105,7 @@ function CreateLeadDialog({ open, onOpenChange, initialName, onCreated }: {
   onCreated: (leadId: number, name: string) => void;
 }) {
   const { toast } = useToast();
+  const t = useT(checkinMessages);
   const { geoState } = useXpotShared();
   const [form, setForm] = useState({ name: initialName, phone: "", email: "", website: "", industry: "", address: "", city: "", state: "" });
   const [placeSearch, setPlaceSearch] = useState(initialName);
@@ -154,11 +158,11 @@ function CreateLeadDialog({ open, onOpenChange, initialName, onCreated }: {
           isPrimary: true,
         } : undefined,
       } as any);
-      toast({ title: "Company created", variant: "success" });
+      toast({ title: t("companyCreated"), variant: "success" });
       onCreated(result.lead.id, form.name.trim());
       onOpenChange(false);
     } catch (err: any) {
-      toast({ title: "Failed to create", description: err.message, variant: "destructive" });
+      toast({ title: t("createFailed"), description: err.message, variant: "destructive" });
     }
   }
 
@@ -169,7 +173,7 @@ function CreateLeadDialog({ open, onOpenChange, initialName, onCreated }: {
         style={{ background: "#0e1117", boxShadow: "0 24px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.07)" }}
       >
         <DialogHeader>
-          <DialogTitle className="text-base font-semibold text-white">New Company</DialogTitle>
+          <DialogTitle className="text-base font-semibold text-white">{t("newCompany")}</DialogTitle>
         </DialogHeader>
         <div className="space-y-2.5 mt-1">
           {/* Place search */}
@@ -180,7 +184,7 @@ function CreateLeadDialog({ open, onOpenChange, initialName, onCreated }: {
               onChange={(e) => { setPlaceSearch(e.target.value); setPlaceDropdownOpen(true); }}
               onFocus={() => setPlaceDropdownOpen(true)}
               onBlur={() => setTimeout(() => setPlaceDropdownOpen(false), 150)}
-              placeholder="Search Google Places to autofill"
+              placeholder={t("placeSearchPlaceholder")}
               className="w-full h-10 rounded-xl pl-9 pr-9 text-[16px] text-white placeholder:text-white/25 focus:outline-none"
               style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.09)" }}
             />
@@ -218,13 +222,13 @@ function CreateLeadDialog({ open, onOpenChange, initialName, onCreated }: {
 
           {/* Fields */}
           {[
-            { value: form.name, onChange: f("name"), placeholder: "Business name *" },
-            { value: form.website, onChange: f("website"), placeholder: "Website" },
-            { value: form.industry, onChange: f("industry"), placeholder: "Industry" },
-            { value: form.address, onChange: f("address"), placeholder: "Street address" },
-          ].map(({ value, onChange, placeholder }) => (
+            { key: "name", value: form.name, onChange: f("name"), placeholder: t("businessNamePlaceholder") },
+            { key: "website", value: form.website, onChange: f("website"), placeholder: t("fieldWebsite") },
+            { key: "industry", value: form.industry, onChange: f("industry"), placeholder: t("fieldIndustry") },
+            { key: "address", value: form.address, onChange: f("address"), placeholder: t("streetPlaceholder") },
+          ].map(({ key, value, onChange, placeholder }) => (
             <input
-              key={placeholder}
+              key={key}
               value={value}
               onChange={onChange}
               placeholder={placeholder}
@@ -235,7 +239,7 @@ function CreateLeadDialog({ open, onOpenChange, initialName, onCreated }: {
           <input
             value={form.phone}
             onChange={(e) => setForm((prev) => ({ ...prev, phone: formatPhone(e.target.value) }))}
-            placeholder="Phone"
+            placeholder={t("fieldPhone")}
             inputMode="tel"
             className="w-full h-10 rounded-xl px-3 text-[16px] text-white placeholder:text-white/25 focus:outline-none"
             style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.09)" }}
@@ -243,7 +247,7 @@ function CreateLeadDialog({ open, onOpenChange, initialName, onCreated }: {
           <input
             value={form.email}
             onChange={f("email")}
-            placeholder="Email"
+            placeholder={t("fieldEmail")}
             type="email"
             inputMode="email"
             className="w-full h-10 rounded-xl px-3 text-[16px] text-white placeholder:text-white/25 focus:outline-none"
@@ -253,7 +257,7 @@ function CreateLeadDialog({ open, onOpenChange, initialName, onCreated }: {
             <input
               value={form.city}
               onChange={f("city")}
-              placeholder="City"
+              placeholder={t("cityPlaceholder")}
               className="w-full h-10 rounded-xl px-3 text-[16px] text-white placeholder:text-white/25 focus:outline-none"
               style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.09)" }}
             />
@@ -264,7 +268,7 @@ function CreateLeadDialog({ open, onOpenChange, initialName, onCreated }: {
                 className="w-full h-10 appearance-none rounded-xl px-3 pr-8 text-[16px] focus:outline-none"
                 style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.09)", color: form.state ? "white" : "rgba(255,255,255,0.25)" }}
               >
-                <option value="">State</option>
+                <option value="">{t("statePlaceholder")}</option>
                 {US_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
               <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/30" />
@@ -278,7 +282,7 @@ function CreateLeadDialog({ open, onOpenChange, initialName, onCreated }: {
             style={{ background: "linear-gradient(135deg, #3b82f6, #6366f1)" }}
           >
             {createLeadMutation.isPending ? <Loader2 className="inline mr-2 h-4 w-4 animate-spin" /> : null}
-            Create Company
+            {t("createCompany")}
           </button>
         </div>
       </DialogContent>
@@ -299,11 +303,12 @@ function LocationGate({
   error?: string;
   onRetry: () => void;
 }) {
+  const t = useT(checkinMessages);
   const blocked = permission === "denied";
 
   return (
     <div className="space-y-4">
-      <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/30">Check-in</div>
+      <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/30">{t("gateHeading")}</div>
       <div
         className="rounded-3xl p-6 text-center space-y-4"
         style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}
@@ -316,11 +321,11 @@ function LocationGate({
         </div>
 
         <div className="space-y-1.5">
-          <div className="text-lg font-bold text-white">Location required</div>
+          <div className="text-lg font-bold text-white">{t("locationRequired")}</div>
           <p className="text-sm leading-relaxed text-white/50">
             {blocked
-              ? "Location is blocked for Xpot. Check-in validates that you are physically at the client, so it cannot run without it."
-              : "Check-in confirms you are inside the client's geofence, so Xpot needs your location before you can start a visit."}
+              ? t("locationBlocked")
+              : t("locationNeeded")}
           </p>
         </div>
 
@@ -329,9 +334,8 @@ function LocationGate({
             className="rounded-2xl px-4 py-3 text-left text-xs leading-relaxed text-white/60"
             style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}
           >
-            On iPhone: <span className="text-white/80">Settings → Privacy &amp; Security → Location Services</span>, find
-            Xpot (or Safari) and set it to <span className="text-white/80">While Using the App</span>. Then come back and
-            tap below.
+            {t("iphoneStep1")} <span className="text-white/80">{t("iphonePath")}</span>{t("iphoneStep2")}{" "}
+            <span className="text-white/80">{t("iphoneOption")}</span>{t("iphoneStep3")}
           </div>
         ) : null}
 
@@ -349,7 +353,7 @@ function LocationGate({
           className="flex w-full items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-4 py-3.5 text-sm font-semibold text-white transition-all hover:bg-indigo-500 active:scale-[0.98] disabled:opacity-60 touch-manipulation"
         >
           {isLocating ? <Loader2 className="h-4 w-4 animate-spin" /> : <MapPinned className="h-4 w-4" />}
-          {isLocating ? "Getting your location…" : blocked ? "I've enabled it — try again" : "Share my location"}
+          {isLocating ? t("gettingLocation") : blocked ? t("enabledRetry") : t("shareLocation")}
         </button>
       </div>
     </div>
@@ -357,6 +361,7 @@ function LocationGate({
 }
 
 export function XpotCheckIn() {
+  const t = useT(checkinMessages);
   const { geoState, loadCurrentLocation, invalidateXpotData, permission, isLocating, hasLocation, setLiveTracking } = useXpotShared();
   const {
     selectedLeadId,
@@ -460,7 +465,7 @@ export function XpotCheckIn() {
         <div className="relative flex flex-col items-center gap-1 pt-1">
           <div className="flex items-center gap-1.5 text-indigo-400/70">
             <Timer className="h-3.5 w-3.5" />
-            <span className="text-[10px] font-medium uppercase tracking-[0.25em]">Visit in Progress</span>
+            <span className="text-[10px] font-medium uppercase tracking-[0.25em]">{t("visitInProgress")}</span>
           </div>
           <div
             className="text-5xl font-mono font-bold tabular-nums text-white"
@@ -470,7 +475,7 @@ export function XpotCheckIn() {
           </div>
           {activeVisit.checkedInAt && (
             <div className="text-[11px] text-white/30">
-              Started · {formatDateTime(activeVisit.checkedInAt)}
+              {t("startedAt", { time: formatDateTime(activeVisit.checkedInAt) })}
             </div>
           )}
         </div>
@@ -493,7 +498,7 @@ export function XpotCheckIn() {
           {activeVisit.lead ? (
             <ActiveLeadInfo lead={activeVisit.lead} onSaved={() => invalidateXpotData()} />
           ) : (
-            <div className="text-center text-base font-semibold text-white">{`Lead #${activeVisit.leadId}`}</div>
+            <div className="text-center text-base font-semibold text-white">{t("leadNumber", { id: activeVisit.leadId })}</div>
           )}
         </div>
 
@@ -512,7 +517,7 @@ export function XpotCheckIn() {
         <StatusPicker value={checkoutStatus} onChange={setCheckoutStatus} />
 
         <ConfirmSlider
-          label={uploadAudioMutation.isPending ? "UPLOAD IN PROGRESS..." : "SLIDE TO CHECK OUT"}
+          label={uploadAudioMutation.isPending ? t("uploadInProgress") : t("slideToCheckOut")}
           helperText=""
           loading={checkOutMutation.isPending || cancelVisitMutation.isPending || uploadAudioMutation.isPending}
           disabled={uploadAudioMutation.isPending}
@@ -542,7 +547,7 @@ export function XpotCheckIn() {
     <div className="space-y-4">
       {/* Search card */}
       <div className="px-1 flex items-center justify-between">
-        <div className="text-xs font-semibold uppercase tracking-widest text-white/30">Check-In</div>
+        <div className="text-xs font-semibold uppercase tracking-widest text-white/30">{t("checkInHeading")}</div>
       </div>
       <div className="rounded-2xl" style={GLASS}>
         <div className="px-6 py-5 space-y-5">
@@ -555,7 +560,7 @@ export function XpotCheckIn() {
               onFocus={() => setCheckInDropdownOpen(true)}
               onBlur={() => setTimeout(() => setCheckInDropdownOpen(false), 150)}
               onKeyDown={(e) => { if (e.key === "Escape") { setCheckInDropdownOpen(false); (e.target as HTMLInputElement).blur(); } }}
-              placeholder="Search places or leads..."
+              placeholder={t("searchPlaceholder")}
               className={`w-full h-[64px] pl-12 pr-24 text-[17px] font-medium text-gray-900 placeholder:text-gray-400 focus:outline-none transition-all ${checkInDropdownOpen ? "rounded-t-[32px]" : "rounded-[32px]"}`}
               style={{ background: "rgba(255,255,255,0.95)", border: "1.5px solid rgba(255,255,255,1)", boxShadow: "0 2px 16px rgba(0,0,0,0.18)" }}
             />
@@ -568,7 +573,7 @@ export function XpotCheckIn() {
               <button
                 type="button"
                 className="flex h-8 w-8 items-center justify-center rounded-full text-indigo-400/60 hover:bg-indigo-50 hover:text-indigo-500 transition-colors"
-                onClick={async () => { await loadCurrentLocation(); setCheckInSearch("businesses nearby"); setCheckInDropdownOpen(true); }}
+                onClick={async () => { await loadCurrentLocation(); setCheckInSearch(t("nearbyQuery")); setCheckInDropdownOpen(true); }}
               >
                 <MapPinned className="h-4 w-4" />
               </button>
@@ -602,9 +607,9 @@ export function XpotCheckIn() {
                   </div>
                   <div>
                     <div className="text-[15px] font-semibold text-gray-900">
-                      {checkInSearch.trim().length >= 2 ? `Create "${checkInSearch.trim()}"` : "Add new lead"}
+                      {checkInSearch.trim().length >= 2 ? t("createNamed", { name: checkInSearch.trim() }) : t("addNewLead")}
                     </div>
-                    <div className="text-xs font-medium text-gray-400">Add as a new company</div>
+                    <div className="text-xs font-medium text-gray-400">{t("addAsCompany")}</div>
                   </div>
                 </button>
 
@@ -624,11 +629,11 @@ export function XpotCheckIn() {
                       <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gray-100 border border-gray-200">
                         <Building2 className="h-5 w-5 text-gray-500" />
                       </div>
-                      <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-600">Local</span>
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-600">{t("badgeLocal")}</span>
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="text-[15px] font-semibold text-gray-900 break-words">{lead.name}</div>
-                      <div className="text-xs font-medium text-gray-400 break-words">{lead.locations?.[0]?.addressLine1 || lead.industry || "Local lead"}</div>
+                      <div className="text-xs font-medium text-gray-400 break-words">{lead.locations?.[0]?.addressLine1 || lead.industry || t("localLead")}</div>
                     </div>
                   </button>
                 ))}
@@ -637,7 +642,7 @@ export function XpotCheckIn() {
                 {checkInPlaceQuery.isFetching ? (
                   <div className="flex items-center gap-3 px-5 py-5 text-[13px] font-medium text-gray-400" style={{ borderTop: "1px solid rgba(0,0,0,0.06)" }}>
                     <Loader2 className="h-4 w-4 animate-spin text-indigo-400" />
-                    Searching Google Places...
+                    {t("searchingPlaces")}
                   </div>
                 ) : null}
 
@@ -663,7 +668,7 @@ export function XpotCheckIn() {
                           <Building2 className="h-5 w-5 text-indigo-400" />
                         </div>
                         {existingLead ? (
-                          <span className="text-[9px] font-bold uppercase tracking-wider text-blue-600">Match</span>
+                          <span className="text-[9px] font-bold uppercase tracking-wider text-blue-600">{t("badgeMatch")}</span>
                         ) : (
                           <span className="flex items-center gap-0.5 text-[9px] font-bold uppercase tracking-wider text-gray-500">
                             <GoogleLogo className="h-2.5 w-2.5" />
@@ -687,7 +692,7 @@ export function XpotCheckIn() {
 
                 {!filteredLeadsForCheckIn.length && !checkInPlaceQuery.isFetching && !checkInPlaceQuery.data?.results?.length && checkInSearch.trim().length < 3 ? (
                   <div className="px-5 py-6 text-center text-[13px] font-medium text-gray-400">
-                    Type at least 3 characters to search...
+                    {t("typeMore")}
                   </div>
                 ) : null}
               </div>
@@ -697,7 +702,7 @@ export function XpotCheckIn() {
           {/* GPS error */}
           {geoState.error ? (
             <div className="rounded-xl px-3 py-2.5 text-sm text-red-300" style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)" }}>
-              GPS unavailable. Visit will be flagged for review.
+              {t("gpsUnavailable")}
             </div>
           ) : null}
 
@@ -715,7 +720,7 @@ export function XpotCheckIn() {
                 >
                   <PencilLine className="h-4 w-4" />
                 </button>
-                <div className="text-[10px] font-semibold uppercase tracking-widest text-indigo-400/70 mb-2">Selected Lead</div>
+                <div className="text-[10px] font-semibold uppercase tracking-widest text-indigo-400/70 mb-2">{t("selectedLead")}</div>
                 <div className="text-lg font-bold text-white pr-10">{selectedLead.name}</div>
                 {selectedLead.locations?.[0]?.addressLine1 ? (
                   <a href={`https://maps.google.com/?q=${encodeURIComponent(selectedLead.locations[0].addressLine1)}`} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="mt-1 flex items-center gap-1.5 text-sm text-indigo-300/80 hover:text-indigo-200 transition-colors w-fit max-w-full">
@@ -725,7 +730,7 @@ export function XpotCheckIn() {
                 ) : (
                   <div className="mt-1 flex items-center gap-1.5 text-sm text-white/40">
                     <MapPinned className="h-3.5 w-3.5 shrink-0" />
-                    <span className="truncate">No address saved yet</span>
+                    <span className="truncate">{t("noAddress")}</span>
                   </div>
                 )}
                 
@@ -786,8 +791,8 @@ export function XpotCheckIn() {
           {/* Slider */}
           <div className={checkInDropdownOpen ? "pointer-events-none" : ""}>
             <ConfirmSlider
-              label={selectedLead ? "SLIDE TO CHECK IN" : "SELECT A LEAD FIRST"}
-              helperText={selectedLead ? `Confirm visit start for ${selectedLead.name}` : "Choose a local lead or Google Place to enable check-in."}
+              label={selectedLead ? t("slideToCheckIn") : t("selectLeadFirst")}
+              helperText={selectedLead ? t("confirmVisitStart", { name: selectedLead.name }) : t("chooseLeadHint")}
               loading={checkInMutation.isPending || createLeadMutation.isPending}
               disabled={!selectedLeadId || createLeadMutation.isPending}
               onConfirm={() => checkInMutation.mutate({ leadId: Number(selectedLeadId), lat: geoState.lat, lng: geoState.lng, gpsAccuracyMeters: geoState.accuracy })}
@@ -815,7 +820,7 @@ export function XpotCheckIn() {
         if (!recent.length) return null;
         return (
           <div className="space-y-2">
-            <div className="px-1 text-xs font-semibold uppercase tracking-widest text-white/30">Recent Visits</div>
+            <div className="px-1 text-xs font-semibold uppercase tracking-widest text-white/30">{t("recentVisits")}</div>
             {recent.map((visit) => <VisitRow key={visit.id} visit={visit} />)}
           </div>
         );
@@ -825,7 +830,7 @@ export function XpotCheckIn() {
     <CreateLeadDialog
       open={createLeadDialogOpen}
       onOpenChange={setCreateLeadDialogOpen}
-      initialName={checkInSearch.trim() === "businesses nearby" ? "" : checkInSearch.trim()}
+      initialName={checkInSearch.trim() === t("nearbyQuery") ? "" : checkInSearch.trim()}
       onCreated={(leadId, name) => {
         setSelectedLeadId(leadId);
         setCheckInSearch(name);

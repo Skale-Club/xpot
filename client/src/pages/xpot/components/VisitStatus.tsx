@@ -1,3 +1,6 @@
+import { useT, type Translate } from "@/i18n";
+import { checkinMessages } from "@/i18n/messages/checkin";
+
 export type VisitStatus =
   | "planned"
   | "in_progress"
@@ -10,6 +13,8 @@ export type VisitStatus =
   | "follow_up"
   | "sale_made";
 
+// `label` is the English name, kept as a fallback; screens show the
+// translated `status_<value>` message from checkinMessages instead.
 export const VISIT_STATUSES: {
   value: VisitStatus;
   label: string;
@@ -37,7 +42,14 @@ export function getStatusMeta(status: string) {
   };
 }
 
+/** The status name in the reader's language; unknown statuses show as-is. */
+function statusLabel(t: Translate<typeof checkinMessages.en>, status: string, fallback: string): string {
+  const key = `status_${status}`;
+  return key in checkinMessages.en ? t(key as keyof typeof checkinMessages.en) : fallback;
+}
+
 export function StatusBadge({ status }: { status: string }) {
+  const t = useT(checkinMessages);
   const meta = getStatusMeta(status);
   return (
     <span
@@ -45,16 +57,17 @@ export function StatusBadge({ status }: { status: string }) {
       style={{ background: meta.bg, border: `1px solid ${meta.border}`, color: meta.text }}
     >
       <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ background: meta.dot }} />
-      {meta.label}
+      {statusLabel(t, meta.value, meta.label)}
     </span>
   );
 }
 
 export function StatusPicker({ value, onChange }: { value: string; onChange: (v: VisitStatus) => void }) {
+  const t = useT(checkinMessages);
   const OUTCOMES = VISIT_STATUSES.filter((s) => !["planned", "in_progress", "invalid", "cancelled"].includes(s.value));
   return (
     <div className="space-y-2">
-      <div className="text-xs font-semibold uppercase tracking-widest text-white/30">Visit Outcome</div>
+      <div className="text-xs font-semibold uppercase tracking-widest text-white/30">{t("visitOutcome")}</div>
       <div className="grid grid-cols-3 gap-2">
         {OUTCOMES.map((s) => {
           const isActive = value === s.value;
@@ -72,7 +85,7 @@ export function StatusPicker({ value, onChange }: { value: string; onChange: (v:
                 transform: isActive ? "scale(1.03)" : "scale(1)",
               }}
             >
-              {s.label}
+              {statusLabel(t, s.value, s.label)}
             </button>
           );
         })}

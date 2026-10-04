@@ -6,22 +6,25 @@ import {
   MapPinned,
 } from "lucide-react";
 import type { GooglePlaceResult, FullSalesLead } from "./types";
+import { currentLocale, translate } from "@/i18n";
+import { shellMessages } from "@/i18n/messages/shell";
 
+/** Bottom-nav tabs; `labelKey` is a key of shellMessages. */
 export const tabs = [
-  { id: "check-in", label: "Check-In", icon: MapPinned },
-  { id: "visits", label: "Visits", icon: Clock3 },
-  { id: "leads", label: "Leads", icon: Building2 },
-  { id: "sales", label: "Sales", icon: DollarSign },
-  { id: "dashboard", label: "Dashboard", icon: Activity },
+  { id: "check-in", labelKey: "tabCheckIn", icon: MapPinned },
+  { id: "visits", labelKey: "tabVisits", icon: Clock3 },
+  { id: "leads", labelKey: "tabLeads", icon: Building2 },
+  { id: "sales", labelKey: "tabSales", icon: DollarSign },
+  { id: "dashboard", labelKey: "tabDashboard", icon: Activity },
 ] as const;
 
 export function formatDateTime(value?: string | Date | null) {
-  if (!value) return "Not set";
-  return new Date(value).toLocaleString();
+  if (!value) return translate(shellMessages, "notSet");
+  return new Date(value).toLocaleString(currentLocale());
 }
 
 export function formatCurrency(value: number, currency: string) {
-  return new Intl.NumberFormat("en-US", {
+  return new Intl.NumberFormat(currentLocale(), {
     style: "currency",
     currency: currency || "USD",
     maximumFractionDigits: 0,
@@ -29,12 +32,12 @@ export function formatCurrency(value: number, currency: string) {
 }
 
 export function formatDuration(seconds?: number | null) {
-  if (!seconds) return "0m";
+  if (!seconds) return translate(shellMessages, "durationMinutes", { minutes: 0 });
   const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `${minutes}m`;
+  if (minutes < 60) return translate(shellMessages, "durationMinutes", { minutes });
   const hours = Math.floor(minutes / 60);
   const remainingMinutes = minutes % 60;
-  return `${hours}h ${remainingMinutes}m`;
+  return translate(shellMessages, "durationHours", { hours, minutes: remainingMinutes });
 }
 
 export function normalizeSearchValue(value?: string | null) {

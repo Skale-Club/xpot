@@ -9,6 +9,8 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Loader2 } from '@/components/ui/loader';
+import { useT } from "@/i18n";
+import { settingsMessages } from "@/i18n/messages/settings";
 import type { XpotMeResponse } from "./types";
 
 interface Props {
@@ -34,6 +36,7 @@ function toBase64(file: File): Promise<string> {
 
 export function XpotProfileEditor({ me, onClose }: Props) {
   const { toast } = useToast();
+  const t = useT(settingsMessages);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [displayName, setDisplayName] = useState(me.rep.displayName);
@@ -55,11 +58,11 @@ export function XpotProfileEditor({ me, onClose }: Props) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/xpot/me"] });
-      toast({ title: "Profile updated" });
+      toast({ title: t("profileUpdated") });
       onClose();
     },
     onError: (err: Error) => {
-      toast({ title: "Failed to update profile", description: err.message, variant: "destructive" });
+      toast({ title: t("profileUpdateFailed"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -79,7 +82,7 @@ export function XpotProfileEditor({ me, onClose }: Props) {
         const result = await avatarMutation.mutateAsync(pendingImageData);
         avatarUrl = result.avatarUrl;
       } catch (err: any) {
-        toast({ title: "Avatar upload failed", description: err.message, variant: "destructive" });
+        toast({ title: t("avatarUploadFailed"), description: err.message, variant: "destructive" });
         return;
       }
     }
@@ -108,7 +111,7 @@ export function XpotProfileEditor({ me, onClose }: Props) {
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-5 pb-2">
-          <span className="text-base font-semibold text-white">Edit Profile</span>
+          <span className="text-base font-semibold text-white">{t("editProfile")}</span>
           <button
             onClick={onClose}
             className="flex h-8 w-8 items-center justify-center rounded-full bg-white/5 text-white/40 hover:bg-white/10 hover:text-white/70 transition-colors touch-manipulation"
@@ -128,7 +131,7 @@ export function XpotProfileEditor({ me, onClose }: Props) {
               {avatarPreview ? (
                 <img
                   src={avatarPreview}
-                  alt="Avatar"
+                  alt={t("avatarAlt")}
                   className="h-20 w-20 rounded-[22px] object-cover"
                 />
               ) : (
@@ -148,7 +151,7 @@ export function XpotProfileEditor({ me, onClose }: Props) {
               onClick={() => fileInputRef.current?.click()}
               className="text-xs font-medium text-indigo-400 hover:text-indigo-300 transition-colors touch-manipulation"
             >
-              Change photo
+              {t("changePhoto")}
             </button>
             <input
               ref={fileInputRef}
@@ -163,20 +166,20 @@ export function XpotProfileEditor({ me, onClose }: Props) {
           <div className="space-y-3">
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold uppercase tracking-widest text-white/40">
-                Display Name
+                {t("displayName")}
               </label>
               <input
                 type="text"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
-                placeholder="Your name"
+                placeholder={t("yourNamePlaceholder")}
                 className="w-full rounded-2xl border border-white/5 bg-white/[0.03] px-4 py-3.5 text-[15px] font-medium text-white placeholder-white/20 outline-none focus:border-indigo-500/50 focus:bg-white/[0.05] transition-all"
               />
             </div>
 
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold uppercase tracking-widest text-white/40">
-                Phone
+                {t("phone")}
               </label>
               <input
                 type="tel"
@@ -189,10 +192,10 @@ export function XpotProfileEditor({ me, onClose }: Props) {
 
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold uppercase tracking-widest text-white/40">
-                Role
+                {t("role")}
               </label>
               <div className="rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-3.5 text-[15px] font-medium text-white/30">
-                {me.rep.role}
+                {me.rep.role === "rep" || me.rep.role === "manager" || me.rep.role === "admin" ? t(`role_${me.rep.role}`) : me.rep.role}
               </div>
             </div>
           </div>
@@ -210,7 +213,7 @@ export function XpotProfileEditor({ me, onClose }: Props) {
             ) : (
               <Check className="h-4 w-4 text-white" />
             )}
-            <span>{isSaving ? "Saving…" : "Save Changes"}</span>
+            <span>{isSaving ? t("saving") : t("saveChanges")}</span>
           </button>
         </div>
       </DialogContent>

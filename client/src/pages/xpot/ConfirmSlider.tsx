@@ -5,6 +5,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Loader2 } from '@/components/ui/loader';
+import { useT } from "@/i18n";
+import { checkinMessages } from "@/i18n/messages/checkin";
 
 /**
  * Two modes:
@@ -31,6 +33,7 @@ export function ConfirmSlider({
   onConfirm: () => void;
   onCancel?: () => void;
 }) {
+  const t = useT(checkinMessages);
   const isCheckOut = Boolean(onCancel);
   const startValue = isCheckOut ? 100 : 0;
   const [value, setValue] = useState(startValue);
@@ -152,7 +155,7 @@ export function ConfirmSlider({
             transition: "opacity 0.1s, color 0.3s",
           }}
         >
-          {loading ? "PROCESSING..." : label}
+          {loading ? t("processing") : label}
         </div>
 
         {/* thumb */}

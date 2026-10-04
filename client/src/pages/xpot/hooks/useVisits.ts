@@ -2,12 +2,15 @@ import { useEffect, useMemo, useRef } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useT } from "@/i18n";
+import { checkinMessages } from "@/i18n/messages/checkin";
 import { useXpotShared } from "./useXpotShared";
 import { useXpotQueries } from "./useXpotQueries";
 import type { EnrichedSalesVisit } from "./types";
 
 export function useVisits() {
   const { toast } = useToast();
+  const t = useT(checkinMessages);
   const { geoState, invalidateXpotData } = useXpotShared();
   const { xpotMeQuery } = useXpotQueries();
 
@@ -29,7 +32,7 @@ export function useVisits() {
 
   const checkOutMutation = useMutation({
     mutationFn: async () => {
-      if (!activeVisitStable?.id) throw new Error("No active visit to check out.");
+      if (!activeVisitStable?.id) throw new Error(t("noActiveVisitCheckOut"));
       const response = await apiRequest("POST", `/api/xpot/visits/${activeVisitStable.id}/check-out`, {
         lat: geoState.lat,
         lng: geoState.lng,
@@ -37,26 +40,26 @@ export function useVisits() {
       return response.json();
     },
     onSuccess: async () => {
-      toast({ title: "Visit completed", variant: "success" });
+      toast({ title: t("visitCompleted"), variant: "success" });
       await invalidateXpotData();
     },
     onError: (error: Error) => {
-      toast({ title: "Check-out failed", description: error.message, variant: "destructive" });
+      toast({ title: t("checkOutFailed"), description: error.message, variant: "destructive" });
     },
   });
 
   const cancelVisitMutation = useMutation({
     mutationFn: async () => {
-      if (!activeVisitStable?.id) throw new Error("No active visit to cancel.");
+      if (!activeVisitStable?.id) throw new Error(t("noActiveVisitCancel"));
       const response = await apiRequest("POST", `/api/xpot/visits/${activeVisitStable.id}/cancel`);
       return response.json();
     },
     onSuccess: async () => {
-      toast({ title: "Visit cancelled" });
+      toast({ title: t("visitCancelled") });
       await invalidateXpotData();
     },
     onError: (error: Error) => {
-      toast({ title: "Failed to cancel visit", description: error.message, variant: "destructive" });
+      toast({ title: t("cancelVisitFailed"), description: error.message, variant: "destructive" });
     },
   });
 
