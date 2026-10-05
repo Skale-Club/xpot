@@ -108,9 +108,9 @@ export function LeadsTable({
               <tr
                 key={lead.id}
                 tabIndex={0}
-                aria-selected={selected}
+                aria-current={selected ? "true" : undefined}
                 onClick={() => onSelect(lead)}
-                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(lead); } }}
+                onKeyDown={(e) => { if (e.target !== e.currentTarget) return; if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(lead); } }}
                 className={`group cursor-pointer outline-none transition-colors focus-visible:bg-white/[0.05] ${
                   selected ? "bg-blue-500/[0.12]" : "hover:bg-white/[0.03]"
                 }`}

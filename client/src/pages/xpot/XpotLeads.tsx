@@ -492,14 +492,17 @@ export function XpotLeads() {
     ? prospects.filter((l) => !leadLookupSearch || l.name.toLowerCase().includes(leadLookupSearch.toLowerCase()))
     : filteredLeadsForList.filter((l) => l.status !== "prospect");
 
-  const openLead = (lead: FullSalesLead) => setLocation(`/leads/${lead.id}`);
-  const closeLead = useCallback(() => setLocation("/leads"), [setLocation]);
+  // Moving between companies and closing replace history; only the first open pushes.
+  const openLead = (lead: FullSalesLead) => setLocation(`/leads/${lead.id}`, { replace: routeId != null });
+  const closeLead = useCallback(() => setLocation("/leads", { replace: true }), [setLocation]);
 
   const handleDeleteLead = async () => {
     if (!leadPendingDelete) return;
     try {
-      await deleteLeadMutation.mutateAsync(leadPendingDelete.id);
+      // Close the pane first: once the list refetches without it, the pane
+      // would flash "not found".
       if (leadPendingDelete.id === routeId) closeLead();
+      await deleteLeadMutation.mutateAsync(leadPendingDelete.id);
       setLeadPendingDelete(null);
     } catch {}
   };
@@ -722,7 +725,7 @@ export function XpotLeads() {
           lead={(editLead ?? selectedLead)!}
           open
           onOpenChange={(v) => { if (!v) { setEditLead(null); if (routeId) closeLead(); } }}
-          onSaved={() => { setEditLead(null); if (routeId) closeLead(); }}
+          onSaved={() => setEditLead(null)}
         />
       )}
 

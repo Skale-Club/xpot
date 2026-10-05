@@ -89,6 +89,8 @@ export function CommandPalette({
   }, [query, pages, leads, pieces, t]);
 
   useEffect(() => setIndex(0), [query]);
+  // Results can shrink or grow while lists load; keep the highlight on a real row.
+  useEffect(() => setIndex((i) => Math.max(0, Math.min(i, entries.length - 1))), [entries.length]);
   useEffect(() => {
     listRef.current?.querySelector<HTMLElement>(`[data-index="${index}"]`)?.scrollIntoView({ block: "nearest" });
   }, [index]);
@@ -114,16 +116,20 @@ export function CommandPalette({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "ArrowDown") { e.preventDefault(); setIndex((i) => Math.min(entries.length - 1, i + 1)); }
+              if (e.key === "ArrowDown") { e.preventDefault(); setIndex((i) => Math.max(0, Math.min(entries.length - 1, i + 1))); }
               else if (e.key === "ArrowUp") { e.preventDefault(); setIndex((i) => Math.max(0, i - 1)); }
               else if (e.key === "Enter") { e.preventDefault(); go(entries[index]); }
             }}
             placeholder={t("palettePlaceholder")}
+            role="combobox"
+            aria-expanded
+            aria-controls="command-palette-list"
+            aria-activedescendant={entries[index] ? `command-palette-${index}` : undefined}
             className="h-14 flex-1 bg-transparent text-[15px] text-white placeholder:text-white/30 focus:outline-none"
             data-testid="command-palette-input"
           />
         </div>
-        <div ref={listRef} className="max-h-[50vh] overflow-y-auto p-2" role="listbox">
+        <div ref={listRef} id="command-palette-list" className="max-h-[50vh] overflow-y-auto p-2" role="listbox">
           {entries.length === 0 ? (
             <p className="px-3 py-8 text-center text-sm text-white/35">{t("paletteEmpty")}</p>
           ) : (
@@ -133,10 +139,11 @@ export function CommandPalette({
               const Icon = entry.icon;
               return (
                 <div key={entry.key}>
-                  {header && <div className="px-3 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-widest text-white/30">{header}</div>}
+                  {header && <div role="presentation" className="px-3 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-widest text-white/30">{header}</div>}
                   <button
                     type="button"
                     role="option"
+                    id={`command-palette-${i}`}
                     aria-selected={i === index}
                     data-index={i}
                     onMouseMove={() => setIndex(i)}

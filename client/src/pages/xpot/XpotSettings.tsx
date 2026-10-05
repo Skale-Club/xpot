@@ -416,7 +416,7 @@ export function XpotSettings() {
   const isSaving = profileMutation.isPending;
 
   return (
-    <AppLayout title={t("title")} size="medium" mobileColumnClassName="pb-20 pt-6">
+    <AppLayout title={t("title")} size="medium" mobileMaxWidth="max-w-lg" mobileColumnClassName="pb-20 pt-6">
       <div>
         {/* Header (phone only; the desktop top bar shows the title) */}
         <div className="mb-6 flex items-center gap-3 lg:hidden">

@@ -25,13 +25,14 @@ interface Props {
   onDone: (result: WriteResult) => Promise<void> | void;
   /** This screen on the phone; desktop shows it as a QR. */
   continueUrl?: string;
+  continueHint?: string;
 }
 
 type Phase = "idle" | "writing" | "verifying" | "saving" | "done" | "error";
 
 const MANUAL_STEPS = ["manual1", "manual2", "manual3", "manual4", "manual5"] as const;
 
-export default function WriteSheet({ open, url, identity, onClose, onDone, continueUrl }: Props) {
+export default function WriteSheet({ open, url, identity, onClose, onDone, continueUrl, continueHint }: Props) {
   const t = useT(tagsMessages);
   const tc = useT(commonMessages);
   const supported = isWebNfcSupported();
@@ -183,7 +184,7 @@ export default function WriteSheet({ open, url, identity, onClose, onDone, conti
       ) : (
         <div className="mt-5">
           {isDesktop && continueUrl ? (
-            <ContinueOnPhone url={continueUrl} />
+            <ContinueOnPhone url={continueUrl} hint={continueHint} />
           ) : (
             <>
               <div className="flex items-center gap-2 text-sm font-bold text-white">

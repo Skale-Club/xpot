@@ -229,7 +229,7 @@ export function XpotDashboard() {
           {salesSummary.data.consignment.dueCount > 0 && (
             <div className="mt-2.5 border-t border-white/[0.07] pt-2.5 text-[11px] text-red-300">
               {salesSummary.data.consignment.dueCount} settlement
-              {salesSummary.data.consignment.dueCount === 1 ? "" : "s"} overdue — open to see them
+              {salesSummary.data.consignment.dueCount === 1 ? "" : "s"} overdue — {isDesktop ? "click" : "tap"} to see them
             </div>
           )}
         </button>

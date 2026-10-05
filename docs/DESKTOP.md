@@ -28,6 +28,18 @@ contra uma API simulada em 375px, 1100px e 1440px.
 | 7 · Config. e Admin | #25 | DSK-25, 26 | ✅ (helpers de Config. não unificados) |
 | 8 · Acabamento | #26 | DSK-27, 29 | ✅ parcial · DSK-28 adiado |
 
+**Revisão pós-entrega** (PR #27): quatro revisões independentes, uma por área,
+acharam ~30 problemas médios e pequenos (painel que sumia ao filtrar, histórico
+do navegador poluído, Esc descartando edição, tablets tratados como computador,
+leitor USB concatenando códigos, entre outros), todos corrigidos. Também apareceu
+um bug anterior a este trabalho: o desfecho escolhido no check-out nunca era
+enviado ao servidor (toda visita virava "completed"); corrigido junto.
+
+Desde a revisão, o que depende do **aparelho** (iniciar check-in, botões de
+câmera/NFC) usa `useIsComputer()` — largura de desktop **e** mouse/trackpad —, e
+não só a largura. Um iPad deitado ganha o layout largo mas continua fazendo
+check-in e lendo peças.
+
 **Pendências conscientes**
 
 - **DSK-02**: as cores repetidas saíram das telas que foram redesenhadas; o

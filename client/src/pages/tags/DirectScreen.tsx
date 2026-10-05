@@ -157,6 +157,7 @@ export default function DirectScreen() {
         onClose={() => setWriteOpen(false)}
         onDone={onWritten}
         continueUrl={`${window.location.origin}${directPath(target)}`}
+        continueHint={t("continueOnPhoneDirectHint")}
       />
     </>
   );

@@ -44,6 +44,10 @@ export function ConfirmSlider({
     const id = window.setTimeout(() => setArmed(false), 4000);
     return () => window.clearTimeout(id);
   }, [armed]);
+  // A busy or disabled button must ask for both clicks again.
+  useEffect(() => {
+    if (disabled || loading) setArmed(false);
+  }, [disabled, loading]);
   const startValue = isCheckOut ? 100 : 0;
   const [value, setValue] = useState(startValue);
   const hasTriggeredRef = useRef(false);
@@ -186,6 +190,14 @@ export function ConfirmSlider({
           if (disabled || loading || hasTriggeredRef.current) return;
           if (e.key !== "Enter" && e.key !== " ") return;
           e.preventDefault();
+          hasTriggeredRef.current = true;
+          setValue(isCheckOut ? 0 : 100);
+          onConfirm();
+        }}
+        // Screen readers activate with a synthetic click (detail 0); a finger
+        // tap (detail ≥ 1) still has to drag.
+        onClick={(e) => {
+          if (e.detail !== 0 || disabled || loading || hasTriggeredRef.current) return;
           hasTriggeredRef.current = true;
           setValue(isCheckOut ? 0 : 100);
           onConfirm();

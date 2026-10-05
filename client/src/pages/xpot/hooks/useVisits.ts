@@ -31,11 +31,14 @@ export function useVisits() {
   }, [activeVisit, xpotMeQuery.data?.activeVisit]);
 
   const checkOutMutation = useMutation({
-    mutationFn: async () => {
+    // The outcome picked on the check-out screen used to be dropped here, so
+    // every visit was recorded as "completed".
+    mutationFn: async (vars?: { status?: string }) => {
       if (!activeVisitStable?.id) throw new Error(t("noActiveVisitCheckOut"));
       const response = await apiRequest("POST", `/api/xpot/visits/${activeVisitStable.id}/check-out`, {
         lat: geoState.lat,
         lng: geoState.lng,
+        status: vars?.status,
       });
       return response.json();
     },

@@ -88,10 +88,11 @@ export default function TagScreen({ code, onClose }: {
       }
     }
     if (new URLSearchParams(window.location.search).get("write") === "1") {
-      window.history.replaceState(null, "", tagPath(tag.publicCode));
+      // In the desktop pane the path is /tags/pieces/<code>; only drop the query.
+      window.history.replaceState(null, "", onClose ? window.location.pathname : tagPath(tag.publicCode));
       setWriteOpen(true);
     }
-  }, [tag, seeded]);
+  }, [tag, seeded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onLink = (value: string) => {
     setLink(value);
@@ -108,10 +109,18 @@ export default function TagScreen({ code, onClose }: {
     [qc, code], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
+  const closeButton = onClose ? (
+    <button type="button" onClick={onClose} aria-label={t("closePane")} title={t("closePane")}
+      className="flex h-9 w-9 items-center justify-center rounded-lg text-white/40 hover:bg-white/10 hover:text-white">
+      <X className="h-4 w-4" />
+    </button>
+  ) : undefined;
+  const back = onClose ? undefined : APP_BASE;
+
   if (isLoading) {
     return (
       <>
-        <TopBar title={code} back={APP_BASE} eyebrow={t("pieceEyebrow")} />
+        <TopBar title={code} back={back} right={closeButton} eyebrow={t("pieceEyebrow")} />
         <div className="flex justify-center py-20 text-white/40">
           <Spinner className="h-8 w-8" />
         </div>
@@ -123,16 +132,18 @@ export default function TagScreen({ code, onClose }: {
     const title = error ? t("loadFailed") : data?.kind === "not_yours" ? t("notYours") : t("notFound", { code });
     return (
       <>
-        <TopBar title={code} back={APP_BASE} eyebrow={t("pieceEyebrow")} />
+        <TopBar title={code} back={back} right={closeButton} eyebrow={t("pieceEyebrow")} />
         <div className={`${CARD} p-6 text-center`}>
           <ScanLine className="mx-auto h-10 w-10 text-white/30" />
           <p className="mt-3 text-lg font-bold text-white" data-testid="text-tag-error">
             {title}
           </p>
           {error && <p className="mt-1 text-sm text-white/45">{errorText(error, tc("requestFailed"))}</p>}
-          <button type="button" onClick={() => navigate(APP_BASE)} className={`${BTN_SECONDARY} mt-5`}>
-            {t("readAnother")}
-          </button>
+          {!onClose && (
+            <button type="button" onClick={() => navigate(APP_BASE)} className={`${BTN_SECONDARY} mt-5`}>
+              {t("readAnother")}
+            </button>
+          )}
         </div>
       </>
     );
@@ -207,17 +218,7 @@ export default function TagScreen({ code, onClose }: {
 
   return (
     <>
-      <TopBar
-        title={tag.leadName ?? t("noCustomer")}
-        back={onClose ? undefined : APP_BASE}
-        eyebrow={t("pieceEyebrow")}
-        right={onClose ? (
-          <button type="button" onClick={onClose} aria-label={t("closePane")} title={t("closePane")}
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-white/40 hover:bg-white/10 hover:text-white">
-            <X className="h-4 w-4" />
-          </button>
-        ) : undefined}
-      />
+      <TopBar title={tag.leadName ?? t("noCustomer")} back={back} eyebrow={t("pieceEyebrow")} right={closeButton} />
       <Banner banner={banner} />
 
       <section className="relative overflow-hidden rounded-[20px] border border-white/10 bg-white/[0.04] p-5">
@@ -348,14 +349,16 @@ export default function TagScreen({ code, onClose }: {
             {disabled ? t("switchOn") : t("switchOff")}
           </button>
         )}
-        <button
-          type="button"
-          onClick={() => navigate(APP_BASE)}
-          className="flex min-h-[48px] w-full items-center justify-center gap-2 text-sm font-semibold text-white/40 active:text-white"
-        >
-          <Search className="h-4 w-4" />
-          {t("readAnother")}
-        </button>
+        {!onClose && (
+          <button
+            type="button"
+            onClick={() => navigate(APP_BASE)}
+            className="flex min-h-[48px] w-full items-center justify-center gap-2 text-sm font-semibold text-white/40 active:text-white"
+          >
+            <Search className="h-4 w-4" />
+            {t("readAnother")}
+          </button>
+        )}
       </div>
 
       <WriteSheet
@@ -364,7 +367,7 @@ export default function TagScreen({ code, onClose }: {
         identity="xpot"
         onClose={() => setWriteOpen(false)}
         onDone={onWritten}
-        continueUrl={`${window.location.origin}${tagPath(tag.publicCode)}`}
+        continueUrl={`${window.location.origin}${tagPath(tag.publicCode)}?write=1`}
       />
     </>
   );

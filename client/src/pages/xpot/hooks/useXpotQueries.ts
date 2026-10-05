@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { getXpotSection } from "@/lib/xpot";
-import { DESKTOP_QUERY } from "@/hooks/use-is-desktop";
+import { COMPUTER_QUERY } from "@/hooks/use-is-desktop";
 import { apiRequest } from "@/lib/queryClient";
 import { signOut as signOutAndLeave } from "@/lib/signOut";
 import { useToast } from "@/hooks/use-toast";
@@ -44,8 +44,8 @@ export function useXpotQueries() {
 
   const activeTab = useMemo(() => {
     // Unknown paths fall back to the device's home: check-in on the phone,
-    // the dashboard on a desktop (where check-ins are not started).
-    const fallback = typeof window !== "undefined" && window.matchMedia(DESKTOP_QUERY).matches ? "dashboard" : "check-in";
+    // the dashboard on a computer (where check-ins are not started).
+    const fallback = typeof window !== "undefined" && window.matchMedia(COMPUTER_QUERY).matches ? "dashboard" : "check-in";
     const section = getXpotSection(pathname);
     if (!section) return fallback;
     return tabs.some((tab) => tab.id === section) ? section : fallback;
