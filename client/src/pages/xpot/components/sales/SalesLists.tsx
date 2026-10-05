@@ -11,7 +11,7 @@ import { formatCents } from "../../utils";
 import { useLeads } from "../../hooks/useLeads";
 import {
   useSalesList, useConsignments, useConsignmentDetail, useSalesMutations,
-  PAYMENT_METHODS, type ConsignmentWithRefs, type PaymentMethod, type PaymentStatus, type SaleWithItems,
+  usePaymentOptions, type ConsignmentWithRefs, type PaymentMethod, type PaymentStatus, type SaleWithItems,
 } from "../../hooks/useSalesModule";
 import { SaleCard, ConsignmentCard, MovementLedger, SaleDetail } from "./cards";
 import { SaleDialog } from "./SaleDialog";
@@ -19,10 +19,14 @@ import { Segmented } from "@/components/xpot/Segmented";
 import { EmptyState } from "@/components/xpot/EmptyState";
 import { DepositDialog, SettleDialog, ReturnDialog, AdjustDialog } from "./ConsignmentDialogs";
 import { Field, GhostButton, MoneyInput, PrimaryButton, Select, SheetDialog, StatTile } from "./ui";
+import { useT } from "@/i18n";
+import { commonMessages } from "@/i18n/messages/common";
+import { salesModuleMessages } from "@/i18n/messages/salesModule";
 
 function LeadPickerDialog({
   open, onOpenChange, onPick, title,
 }: { open: boolean; onOpenChange: (o: boolean) => void; onPick: (lead: { id: number; name: string }) => void; title: string }) {
+  const t = useT(salesModuleMessages);
   const { leadsQuery } = useLeads();
   const [search, setSearch] = useState("");
   const leads = (leadsQuery.data ?? []).filter((l) => l.name.toLowerCase().includes(search.toLowerCase()));
@@ -30,11 +34,11 @@ function LeadPickerDialog({
   return (
     <SheetDialog open={open} onOpenChange={onOpenChange} title={title}>
       <div className="space-y-2">
-        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search companies…"
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("searchCompanies")}
           className="w-full h-10 rounded-xl px-3 text-sm text-white placeholder:text-white/25 focus:outline-none"
           style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.09)" }} autoFocus />
         <div className="max-h-72 space-y-1 overflow-y-auto">
-          {leads.length === 0 && <div className="px-3 py-6 text-center text-xs text-white/30">No companies found.</div>}
+          {leads.length === 0 && <div className="px-3 py-6 text-center text-xs text-white/30">{t("noCompaniesFound")}</div>}
           {leads.slice(0, 40).map((lead) => (
             <button key={lead.id} type="button"
               onClick={() => { onPick({ id: lead.id, name: lead.name }); onOpenChange(false); setSearch(""); }}
@@ -52,11 +56,12 @@ function LeadPickerDialog({
 
 /** The desktop side pane around a sale or a consignment. */
 function DetailCard({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  const tc = useT(commonMessages);
   return (
     <div className="overflow-hidden rounded-2xl" style={{ background: "rgba(255,255,255,0.035)", border: "1px solid rgba(255,255,255,0.08)" }}>
       <div className="flex items-center gap-3 border-b border-white/[0.06] px-5 py-3">
         <h2 className="min-w-0 flex-1 truncate text-sm font-bold text-white">{title}</h2>
-        <button type="button" onClick={onClose} aria-label="Close" title="Close"
+        <button type="button" onClick={onClose} aria-label={tc("close")} title={tc("close")}
           className="flex h-8 w-8 items-center justify-center rounded-lg text-white/35 hover:bg-white/10 hover:text-white">
           <X className="h-4 w-4" />
         </button>
@@ -66,8 +71,9 @@ function DetailCard({ title, onClose, children }: { title: string; onClose: () =
   );
 }
 
-function PickPlaceholder({ what }: { what: string }) {
-  return <EmptyState icon={MousePointerClick} title={`Pick a ${what}`} hint="Its details show up here." cardStyle={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)" }} />;
+function PickPlaceholder({ what }: { what: "sale" | "consignment" }) {
+  const t = useT(salesModuleMessages);
+  return <EmptyState icon={MousePointerClick} title={what === "sale" ? t("pickSale") : t("pickConsignment")} hint={t("pickHint")} cardStyle={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)" }} />;
 }
 
 // ─── Sales list ──────────────────────────────────────────────────────────────
@@ -77,6 +83,8 @@ export function SalesList({ selectedId = null, onSelect }: {
   selectedId?: number | null;
   onSelect?: (id: number | null) => void;
 }) {
+  const t = useT(salesModuleMessages);
+  const tc = useT(commonMessages);
   const [days, setDays] = useState<number | undefined>(90);
   const query = useSalesList({ days, limit: 100 });
   const [detail, setDetail] = useState<SaleWithItems | null>(null);
@@ -91,37 +99,37 @@ export function SalesList({ selectedId = null, onSelect }: {
         <Segmented
           variant="chips"
           className="flex-1 lg:max-w-sm"
-          items={[{ id: 30, label: "30d" }, { id: 90, label: "90d" }, { id: undefined, label: "All" }]}
+          items={[{ id: 30, label: t("daysShort", { days: 30 }) }, { id: 90, label: t("daysShort", { days: 90 }) }, { id: undefined, label: t("rangeAll") }]}
           value={days}
           onChange={setDays}
         />
         <GhostButton onClick={() => setPickerOpen(true)}>
-          <Package className="h-3.5 w-3.5" /> New
+          <Package className="h-3.5 w-3.5" /> {t("newShort")}
         </GhostButton>
       </div>
 
       {query.isLoading && <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-blue-400" /></div>}
 
       {query.data?.length === 0 && !query.isLoading && !(isDesktop && selectedId != null) && (
-        <EmptyState compact icon={Package} title="No sales recorded yet." />
+        <EmptyState compact icon={Package} title={t("noSalesYet")} />
       )}
 
       {isDesktop ? (
         ((query.data?.length ?? 0) > 0 || selectedId != null) && (
           <MasterDetail
-            closeLabel="Close"
+            closeLabel={tc("close")}
             onClose={() => onSelect!(null)}
             list={query.data?.length ? (
               <SalesTable rows={query.data} selectedId={selectedId} onSelect={(row) => onSelect!(row.sale.id)} />
             ) : (
-              <EmptyState compact icon={Package} title="No sales recorded yet." />
+              <EmptyState compact icon={Package} title={t("noSalesYet")} />
             )}
             detail={selectedId == null ? null : selected ? (
-              <DetailCard title={selected.lead?.name ?? "Sale"} onClose={() => onSelect!(null)}>
+              <DetailCard title={selected.lead?.name ?? t("saleFallback")} onClose={() => onSelect!(null)}>
                 <SaleDetailBody key={selected.sale.id} row={selected} onDone={() => onSelect!(null)} />
               </DetailCard>
             ) : query.isLoading ? null : (
-              <EmptyState compact icon={Package} title="This sale is not in the list. Try a longer period." />
+              <EmptyState compact icon={Package} title={t("saleNotInList")} />
             )}
             placeholder={<PickPlaceholder what="sale" />}
           />
@@ -132,7 +140,7 @@ export function SalesList({ selectedId = null, onSelect }: {
         </div>
       )}
 
-      <LeadPickerDialog open={pickerOpen} onOpenChange={setPickerOpen} title="Sell to which company?" onPick={setTarget} />
+      <LeadPickerDialog open={pickerOpen} onOpenChange={setPickerOpen} title={t("sellToWhich")} onPick={setTarget} />
       {target && (
         <SaleDialog open onOpenChange={(o) => { if (!o) setTarget(null); }} leadId={target.id} leadName={target.name} />
       )}
@@ -142,9 +150,10 @@ export function SalesList({ selectedId = null, onSelect }: {
 }
 
 function SaleDetailDialog({ row, onClose }: { row: SaleWithItems | null; onClose: () => void }) {
+  const t = useT(salesModuleMessages);
   if (!row) return null;
   return (
-    <SheetDialog open onOpenChange={(o) => { if (!o) onClose(); }} title={row.lead?.name ?? "Sale"}>
+    <SheetDialog open onOpenChange={(o) => { if (!o) onClose(); }} title={row.lead?.name ?? t("saleFallback")}>
       <SaleDetailBody row={row} onDone={onClose} />
     </SheetDialog>
   );
@@ -153,6 +162,9 @@ function SaleDetailDialog({ row, onClose }: { row: SaleWithItems | null; onClose
 /** A sale's lines and payment, with update/cancel. `onDone` runs after a change that closes it. */
 function SaleDetailBody({ row, onDone }: { row: SaleWithItems; onDone: () => void }) {
   const onClose = onDone;
+  const t = useT(salesModuleMessages);
+  const tc = useT(commonMessages);
+  const { statusOptions, methodOptions } = usePaymentOptions();
   const { cancelSale, updatePayment } = useSalesMutations();
   const [editing, setEditing] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>("paid");
@@ -174,37 +186,35 @@ function SaleDetailBody({ row, onDone }: { row: SaleWithItems; onDone: () => voi
 
         {sale.status === "completed" && !editing && (
           <div className="flex gap-2">
-            <GhostButton onClick={startEditing} className="flex-1">Update payment</GhostButton>
+            <GhostButton onClick={startEditing} className="flex-1">{t("updatePayment")}</GhostButton>
             {sale.kind === "direct" && (
               <GhostButton
                 onClick={async () => { await cancelSale.mutateAsync({ id: sale.id }); onClose(); }}
                 disabled={cancelSale.isPending}>
-                <XCircle className="h-3.5 w-3.5" /> Cancel
+                <XCircle className="h-3.5 w-3.5" /> {tc("cancel")}
               </GhostButton>
             )}
           </div>
         )}
 
         {sale.kind === "consignment_settlement" && !editing && (
-          <p className="text-[11px] text-white/30">
-            This bill came from a stock settlement. To correct it, record an adjustment on the consignment.
-          </p>
+          <p className="text-[11px] text-white/30">{t("settlementBillNote")}</p>
         )}
 
         {editing && (
           <div className="space-y-3 rounded-2xl p-3.5"
             style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
             <div className="grid grid-cols-2 gap-2">
-              <Field label="Payment">
+              <Field label={t("payment")}>
                 <Select value={paymentStatus} onChange={(v) => setPaymentStatus(v as PaymentStatus)}
-                  options={[{ value: "paid", label: "Paid" }, { value: "partial", label: "Partial" }, { value: "unpaid", label: "Unpaid" }]} />
+                  options={statusOptions} />
               </Field>
-              <Field label="Method">
-                <Select value={paymentMethod} onChange={(v) => setPaymentMethod(v as PaymentMethod)} placeholder="—" options={PAYMENT_METHODS} />
+              <Field label={t("method")}>
+                <Select value={paymentMethod} onChange={(v) => setPaymentMethod(v as PaymentMethod)} placeholder="—" options={methodOptions} />
               </Field>
             </div>
             {paymentStatus === "partial" && (
-              <Field label="Amount received"><MoneyInput valueCents={paidCents} onChangeCents={setPaidCents} /></Field>
+              <Field label={t("amountReceived")}><MoneyInput valueCents={paidCents} onChangeCents={setPaidCents} /></Field>
             )}
             <PrimaryButton tone="emerald" loading={updatePayment.isPending}
               onClick={async () => {
@@ -215,7 +225,7 @@ function SaleDetailBody({ row, onDone }: { row: SaleWithItems; onDone: () => voi
                 });
                 setEditing(false); onClose();
               }}>
-              Save payment
+              {t("savePayment")}
             </PrimaryButton>
           </div>
         )}
@@ -230,6 +240,8 @@ export function ConsignmentsList({ selectedId = null, onSelect }: {
   selectedId?: number | null;
   onSelect?: (id: number | null) => void;
 }) {
+  const t = useT(salesModuleMessages);
+  const tc = useT(commonMessages);
   const isDesktop = useIsDesktop() && Boolean(onSelect);
   const [status, setStatus] = useState<"active" | "closed">("active");
   const query = useConsignments({ status });
@@ -251,35 +263,34 @@ export function ConsignmentsList({ selectedId = null, onSelect }: {
         <Segmented
           variant="chips"
           className="flex-1 lg:max-w-sm"
-          itemClassName="capitalize"
-          items={(["active", "closed"] as const).map((v) => ({ id: v, label: v }))}
+          items={(["active", "closed"] as const).map((v) => ({ id: v, label: t(`status_${v}`) }))}
           value={status}
           onChange={setStatus}
         />
         <GhostButton onClick={() => setPickerOpen(true)}>
-          <PackagePlus className="h-3.5 w-3.5" /> Leave
+          <PackagePlus className="h-3.5 w-3.5" /> {t("leaveShort")}
         </GhostButton>
       </div>
 
       {status === "active" && rows.length > 0 && (
         <div className="grid grid-cols-2 gap-2 lg:max-w-xl">
-          <StatTile label="Units out" value={unitsOut} sub={`${rows.length} agreements`} />
-          <StatTile tone="indigo" label="If it all sells" value={formatCents(valueOut)} />
+          <StatTile label={t("unitsOut")} value={unitsOut} sub={t.plural("agreements", rows.length)} />
+          <StatTile tone="indigo" label={t("ifAllSells")} value={formatCents(valueOut)} />
         </div>
       )}
 
       {query.isLoading && <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-blue-400" /></div>}
 
       {rows.length === 0 && !query.isLoading && !(isDesktop && selectedId != null) && (
-        <EmptyState compact icon={PackagePlus} title={status === "active" ? "No stock out on consignment." : "Nothing closed yet."} />
+        <EmptyState compact icon={PackagePlus} title={status === "active" ? t("noStockOut") : t("nothingClosed")} />
       )}
 
       {isDesktop && (rows.length > 0 || selectedId != null) && (
         <MasterDetail
-          closeLabel="Close"
+          closeLabel={tc("close")}
           onClose={() => onSelect!(null)}
           list={rows.length === 0 ? (
-            <EmptyState compact icon={PackagePlus} title={status === "active" ? "No stock out on consignment." : "Nothing closed yet."} />
+            <EmptyState compact icon={PackagePlus} title={status === "active" ? t("noStockOut") : t("nothingClosed")} />
           ) : (
             <ConsignmentsTable
               rows={[...overdue, ...rest]}
@@ -301,7 +312,7 @@ export function ConsignmentsList({ selectedId = null, onSelect }: {
       {!isDesktop && overdue.length > 0 && (
         <div className="space-y-2">
           <div className="px-1 text-xs font-semibold uppercase tracking-widest text-red-400/70">
-            Settlement overdue
+            {t("settlementOverdue")}
           </div>
           {overdue.map((row) => (
             <ConsignmentCard key={row.consignment.id} row={row}
@@ -323,7 +334,7 @@ export function ConsignmentsList({ selectedId = null, onSelect }: {
         ))}
       </div>
 
-      <LeadPickerDialog open={pickerOpen} onOpenChange={setPickerOpen} title="Leave stock where?" onPick={setDepositTarget} />
+      <LeadPickerDialog open={pickerOpen} onOpenChange={setPickerOpen} title={t("leaveStockWhere")} onPick={setDepositTarget} />
       {depositTarget && (
         <DepositDialog open onOpenChange={(o) => { if (!o) setDepositTarget(null); }}
           leadId={depositTarget.id} leadName={depositTarget.name}
@@ -337,12 +348,13 @@ export function ConsignmentsList({ selectedId = null, onSelect }: {
 }
 
 function ConsignmentDetailDialog({ id, onClose }: { id: number | null; onClose: () => void }) {
+  const t = useT(salesModuleMessages);
   const query = useConsignmentDetail(id);
   const data = query.data;
   if (id == null) return null;
   return (
     <SheetDialog open onOpenChange={(o) => { if (!o) onClose(); }}
-      title={data ? `${data.product?.name ?? "Stock"} — ${data.lead?.name ?? ""}` : "Consignment"}>
+      title={data ? t("stockTitle", { product: data.product?.name ?? t("productFallback"), lead: data.lead?.name ?? "" }) : t("consignment")}>
       <ConsignmentDetailBody id={id} onClose={onClose} />
     </SheetDialog>
   );
@@ -350,6 +362,8 @@ function ConsignmentDetailDialog({ id, onClose }: { id: number | null; onClose: 
 
 /** One consignment: the card, corrections and its ledger. `framed` wraps it for the desktop pane. */
 function ConsignmentDetailBody({ id, onClose, framed }: { id: number; onClose: () => void; framed?: boolean }) {
+  const t = useT(salesModuleMessages);
+  const tc = useT(commonMessages);
   const query = useConsignmentDetail(id);
   const { closeConsignment } = useSalesMutations();
   const [adjustOpen, setAdjustOpen] = useState(false);
@@ -358,7 +372,7 @@ function ConsignmentDetailBody({ id, onClose, framed }: { id: number; onClose: (
   const body = (
     <>
         {query.isError ? (
-          <EmptyState compact icon={PackagePlus} title="This consignment was not found." />
+          <EmptyState compact icon={PackagePlus} title={t("consignmentNotFound")} />
         ) : query.isLoading || !data ? (
           <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-blue-400" /></div>
         ) : (
@@ -366,17 +380,17 @@ function ConsignmentDetailBody({ id, onClose, framed }: { id: number; onClose: (
             <ConsignmentCard row={data} />
 
             <div className="flex gap-2">
-              <GhostButton onClick={() => setAdjustOpen(true)} className="flex-1">Correct stock</GhostButton>
+              <GhostButton onClick={() => setAdjustOpen(true)} className="flex-1">{t("correctStock")}</GhostButton>
               {data.consignment.status === "active" && data.consignment.quantityOnHand === 0 && (
                 <GhostButton disabled={closeConsignment.isPending}
                   onClick={async () => { await closeConsignment.mutateAsync(data.consignment.id); onClose(); }}>
-                  Close
+                  {t("closeAgreement")}
                 </GhostButton>
               )}
             </div>
 
             <div className="space-y-2">
-              <div className="px-1 text-xs font-semibold uppercase tracking-widest text-white/30">Ledger</div>
+              <div className="px-1 text-xs font-semibold uppercase tracking-widest text-white/30">{t("ledger")}</div>
               <MovementLedger movements={data.movements} currency={data.consignment.currency} />
             </div>
           </div>
@@ -386,7 +400,7 @@ function ConsignmentDetailBody({ id, onClose, framed }: { id: number; onClose: (
   );
 
   return framed ? (
-    <DetailCard title={data ? `${data.product?.name ?? "Stock"} — ${data.lead?.name ?? ""}` : "Consignment"} onClose={onClose}>
+    <DetailCard title={data ? t("stockTitle", { product: data.product?.name ?? t("productFallback"), lead: data.lead?.name ?? "" }) : t("consignment")} onClose={onClose}>
       {body}
     </DetailCard>
   ) : body;

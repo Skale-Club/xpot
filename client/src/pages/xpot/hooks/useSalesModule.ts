@@ -7,6 +7,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useT } from "@/i18n";
+import { salesModuleMessages } from "@/i18n/messages/salesModule";
+import { formatCents } from "../utils";
 import type {
   SalesProduct,
   SalesProductPriceTier,
@@ -45,14 +48,17 @@ export type LeadSalesSnapshot = {
 export type PaymentMethod = "cash" | "card" | "pix" | "transfer" | "invoice" | "other";
 export type PaymentStatus = "unpaid" | "partial" | "paid";
 
-export const PAYMENT_METHODS: { value: PaymentMethod; label: string }[] = [
-  { value: "cash", label: "Cash" },
-  { value: "card", label: "Card" },
-  { value: "pix", label: "Pix" },
-  { value: "transfer", label: "Transfer" },
-  { value: "invoice", label: "Invoice" },
-  { value: "other", label: "Other" },
-];
+export const PAYMENT_METHODS: readonly PaymentMethod[] = ["cash", "card", "pix", "transfer", "invoice", "other"];
+export const PAYMENT_STATUSES: readonly PaymentStatus[] = ["paid", "partial", "unpaid"];
+
+/** Select options for payment status and method, in the language in use. */
+export function usePaymentOptions() {
+  const t = useT(salesModuleMessages);
+  return {
+    statusOptions: PAYMENT_STATUSES.map((value) => ({ value, label: t(`payment_${value}`) })),
+    methodOptions: PAYMENT_METHODS.map((value) => ({ value, label: t(`method_${value}`) })),
+  };
+}
 
 function qs(params: Record<string, string | number | undefined | null>) {
   const p = new URLSearchParams();
@@ -175,6 +181,7 @@ export type SettleResult = ConsignmentWithRefs & {
 export function useSalesMutations() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const t = useT(salesModuleMessages);
 
   const invalidateSales = async () => {
     await Promise.all([
@@ -189,32 +196,36 @@ export function useSalesMutations() {
 
   const createSale = useMutation({
     mutationFn: async (input: CreateSaleInput) => (await apiRequest("POST", "/api/xpot/sales", input)).json() as Promise<SaleWithItems>,
-    onSuccess: async () => { toast({ title: "Sale recorded", variant: "success" }); await invalidateSales(); },
-    onError: fail("Could not record the sale"),
+    onSuccess: async () => { toast({ title: t("toastSaleRecorded"), variant: "success" }); await invalidateSales(); },
+    onError: fail(t("toastSaleRecordFailed")),
   });
 
   const cancelSale = useMutation({
     mutationFn: async ({ id, reason }: { id: number; reason?: string }) =>
       (await apiRequest("POST", `/api/xpot/sales/${id}/cancel`, { reason })).json() as Promise<SaleWithItems>,
-    onSuccess: async () => { toast({ title: "Sale cancelled" }); await invalidateSales(); },
-    onError: fail("Could not cancel the sale"),
+    onSuccess: async () => { toast({ title: t("toastSaleCancelled") }); await invalidateSales(); },
+    onError: fail(t("toastSaleCancelFailed")),
   });
 
   const updatePayment = useMutation({
     mutationFn: async ({ id, ...body }: { id: number; paymentStatus?: PaymentStatus; paymentMethod?: PaymentMethod | null; paidCents?: number }) =>
       (await apiRequest("PATCH", `/api/xpot/sales/${id}/payment`, body)).json() as Promise<SaleWithItems>,
-    onSuccess: async () => { toast({ title: "Payment updated", variant: "success" }); await invalidateSales(); },
-    onError: fail("Could not update payment"),
+    onSuccess: async () => { toast({ title: t("toastPaymentUpdated"), variant: "success" }); await invalidateSales(); },
+    onError: fail(t("toastPaymentUpdateFailed")),
   });
 
   const deposit = useMutation({
     mutationFn: async (input: DepositInput) =>
       (await apiRequest("POST", "/api/xpot/consignments/deposit", input)).json() as Promise<ConsignmentWithRefs & { opened: boolean }>,
     onSuccess: async (data) => {
-      toast({ title: data.opened ? "Consignment opened" : "Stock added", description: `${data.consignment.quantityOnHand} on shelf`, variant: "success" });
+      toast({
+        title: data.opened ? t("toastConsignmentOpened") : t("toastStockAdded"),
+        description: t("onShelfN", { count: data.consignment.quantityOnHand }),
+        variant: "success",
+      });
       await invalidateSales();
     },
-    onError: fail("Could not leave stock"),
+    onError: fail(t("toastDepositFailed")),
   });
 
   const settle = useMutation({
@@ -222,41 +233,43 @@ export function useSalesMutations() {
       (await apiRequest("POST", `/api/xpot/consignments/${consignmentId}/settle`, body)).json() as Promise<SettleResult>,
     onSuccess: async (data) => {
       toast({
-        title: data.soldQuantity > 0 ? `Settled — ${data.soldQuantity} sold` : "Settled — nothing sold",
-        description: data.soldQuantity > 0 ? `Billed ${(data.amountCents / 100).toFixed(2)} ${data.consignment.currency}` : undefined,
+        title: data.soldQuantity > 0 ? t("toastSettledSold", { count: data.soldQuantity }) : t("toastSettledNothing"),
+        description: data.soldQuantity > 0
+          ? t("toastBilled", { amount: formatCents(data.amountCents, data.consignment.currency) })
+          : undefined,
         variant: "success",
       });
       await invalidateSales();
     },
-    onError: fail("Could not settle"),
+    onError: fail(t("toastSettleFailed")),
   });
 
   const returnStock = useMutation({
     mutationFn: async ({ consignmentId, ...body }: { consignmentId: number; quantity: number; close?: boolean; visitId?: number | null; notes?: string | null }) =>
       (await apiRequest("POST", `/api/xpot/consignments/${consignmentId}/return`, body)).json() as Promise<ConsignmentWithRefs>,
-    onSuccess: async () => { toast({ title: "Stock returned", variant: "success" }); await invalidateSales(); },
-    onError: fail("Could not return stock"),
+    onSuccess: async () => { toast({ title: t("toastStockReturned"), variant: "success" }); await invalidateSales(); },
+    onError: fail(t("toastReturnFailed")),
   });
 
   const adjust = useMutation({
     mutationFn: async ({ consignmentId, ...body }: { consignmentId: number; delta: number; visitId?: number | null; notes?: string | null }) =>
       (await apiRequest("POST", `/api/xpot/consignments/${consignmentId}/adjust`, body)).json() as Promise<ConsignmentWithRefs>,
-    onSuccess: async () => { toast({ title: "Stock adjusted", variant: "success" }); await invalidateSales(); },
-    onError: fail("Could not adjust stock"),
+    onSuccess: async () => { toast({ title: t("toastStockAdjusted"), variant: "success" }); await invalidateSales(); },
+    onError: fail(t("toastAdjustFailed")),
   });
 
   const closeConsignment = useMutation({
     mutationFn: async (consignmentId: number) =>
       (await apiRequest("POST", `/api/xpot/consignments/${consignmentId}/close`, {})).json() as Promise<ConsignmentWithRefs>,
-    onSuccess: async () => { toast({ title: "Consignment closed" }); await invalidateSales(); },
-    onError: fail("Could not close"),
+    onSuccess: async () => { toast({ title: t("toastConsignmentClosed") }); await invalidateSales(); },
+    onError: fail(t("toastCloseFailed")),
   });
 
   const updateConsignment = useMutation({
     mutationFn: async ({ consignmentId, ...body }: { consignmentId: number; unitPriceCents?: number; settlementIntervalDays?: number; nextVisitDueAt?: string | null; notes?: string | null }) =>
       (await apiRequest("PATCH", `/api/xpot/consignments/${consignmentId}`, body)).json() as Promise<ConsignmentWithRefs>,
-    onSuccess: async () => { toast({ title: "Consignment updated", variant: "success" }); await invalidateSales(); },
-    onError: fail("Could not update"),
+    onSuccess: async () => { toast({ title: t("toastConsignmentUpdated"), variant: "success" }); await invalidateSales(); },
+    onError: fail(t("couldNotUpdate")),
   });
 
   return { createSale, cancelSale, updatePayment, deposit, settle, returnStock, adjust, closeConsignment, updateConsignment, invalidateSales };
@@ -281,30 +294,31 @@ export type ProductInput = {
 export function useProductMutations() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const t = useT(salesModuleMessages);
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["/api/xpot/products"] });
   const fail = (title: string) => (error: Error) => toast({ title, description: error.message, variant: "destructive" });
 
   const create = useMutation({
     mutationFn: async (input: ProductInput) => (await apiRequest("POST", "/api/xpot/products", input)).json() as Promise<ProductWithTiers>,
-    onSuccess: async () => { toast({ title: "Product created", variant: "success" }); await invalidate(); },
-    onError: fail("Could not create product"),
+    onSuccess: async () => { toast({ title: t("toastProductCreated"), variant: "success" }); await invalidate(); },
+    onError: fail(t("toastProductCreateFailed")),
   });
   const update = useMutation({
     mutationFn: async ({ id, ...input }: Partial<ProductInput> & { id: number }) =>
       (await apiRequest("PATCH", `/api/xpot/products/${id}`, input)).json() as Promise<ProductWithTiers>,
-    onSuccess: async () => { toast({ title: "Product saved", variant: "success" }); await invalidate(); },
-    onError: fail("Could not save product"),
+    onSuccess: async () => { toast({ title: t("toastProductSaved"), variant: "success" }); await invalidate(); },
+    onError: fail(t("toastProductSaveFailed")),
   });
   const remove = useMutation({
     mutationFn: async (id: number) => { await apiRequest("DELETE", `/api/xpot/products/${id}`); },
-    onSuccess: async () => { toast({ title: "Product archived" }); await invalidate(); },
-    onError: fail("Could not archive product"),
+    onSuccess: async () => { toast({ title: t("toastProductArchived") }); await invalidate(); },
+    onError: fail(t("toastProductArchiveFailed")),
   });
   const replaceTiers = useMutation({
     mutationFn: async ({ id, tiers }: { id: number; tiers: { label?: string | null; minQuantity: number; unitPriceCents: number }[] }) =>
       (await apiRequest("PUT", `/api/xpot/products/${id}/tiers`, { tiers })).json() as Promise<SalesProductPriceTier[]>,
-    onSuccess: async () => { toast({ title: "Volume pricing saved", variant: "success" }); await invalidate(); },
-    onError: fail("Could not save pricing"),
+    onSuccess: async () => { toast({ title: t("toastPricingSaved"), variant: "success" }); await invalidate(); },
+    onError: fail(t("toastPricingSaveFailed")),
   });
 
   return { create, update, remove, replaceTiers };

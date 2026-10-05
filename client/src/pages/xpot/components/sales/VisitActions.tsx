@@ -12,10 +12,15 @@ import { apiRequest } from "@/lib/queryClient";
 import { Loader2 } from "@/components/ui/loader";
 import { useToast } from "@/hooks/use-toast";
 import type { SalesVisitAction } from "#shared/schema.js";
-import { describeAction, type VisitAction } from "#shared/visit-actions.js";
-import { centsToInput, inputToCents } from "../../utils";
+import type { VisitAction } from "#shared/visit-actions.js";
+import { centsToInput, formatCents, inputToCents } from "../../utils";
 import { useProducts } from "../../hooks/useSalesModule";
 import { Chip, GhostButton, PrimaryButton, Select, inputCls, inputStyle } from "./ui";
+import { useT, type Translate } from "@/i18n";
+import { commonMessages } from "@/i18n/messages/common";
+import { salesModuleMessages } from "@/i18n/messages/salesModule";
+
+type SalesModuleT = Translate<(typeof salesModuleMessages)["en"]>;
 
 const TYPE_TONE: Record<string, "blue" | "green" | "amber" | "purple"> = {
   deposit: "blue",
@@ -24,16 +29,46 @@ const TYPE_TONE: Record<string, "blue" | "green" | "amber" | "purple"> = {
   follow_up: "purple",
 };
 
-const TYPE_LABEL: Record<string, string> = {
-  deposit: "Leave stock",
-  settlement: "Settle",
-  sale: "Sale",
-  follow_up: "Follow-up",
-};
+const TYPE_LABEL_KEY = {
+  deposit: "type_deposit",
+  settlement: "type_settlement",
+  sale: "type_sale",
+  follow_up: "type_follow_up",
+} as const;
+
+/**
+ * The action in one line, in the language in use. Mirrors describeAction() in
+ * shared/visit-actions.ts, which stays English for the server and its tests.
+ */
+function describeAction(action: VisitAction, t: SalesModuleT): string {
+  switch (action.type) {
+    case "deposit": {
+      const vars = { quantity: action.quantity, product: action.productName ?? t("productLower") };
+      return action.unitPriceCents
+        ? t("desc_depositPrice", { ...vars, price: formatCents(action.unitPriceCents) })
+        : t("desc_deposit", vars);
+    }
+    case "settlement": {
+      const product = action.productName ?? t("stockFallback");
+      const base = action.soldQuantity != null
+        ? t("desc_settleSold", { product, count: action.soldQuantity })
+        : t("desc_settleLeft", { product, count: action.countedRemaining ?? 0 });
+      return action.restockQuantity ? base + t("desc_restock", { count: action.restockQuantity }) : base;
+    }
+    case "sale": {
+      const total = action.items.reduce((sum, i) => sum + (i.unitPriceCents ?? 0) * (i.quantity ?? 1), 0);
+      const items = action.items.map((i) => `${i.quantity ?? 1}× ${i.description}`).join(", ");
+      return total ? t("desc_saleTotal", { items, total: formatCents(total) }) : t("desc_sale", { items });
+    }
+    case "follow_up":
+      return action.inDays != null ? t("desc_inDays", { title: action.title, days: action.inDays }) : action.title;
+  }
+}
 
 export function VisitActionsPanel({ visitId, onApplied }: { visitId: number; onApplied?: () => void }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const t = useT(salesModuleMessages);
   const [editingId, setEditingId] = useState<number | null>(null);
 
   const query = useQuery<SalesVisitAction[]>({
@@ -59,23 +94,23 @@ export function VisitActionsPanel({ visitId, onApplied }: { visitId: number; onA
     onSuccess: async (data) => {
       if (data.applied > 0) {
         toast({
-          title: `${data.applied} recorded`,
-          description: data.failed > 0 ? `${data.failed} could not be applied — see the details.` : undefined,
+          title: t("recordedN", { count: data.applied }),
+          description: data.failed > 0 ? t("failedN", { count: data.failed }) : undefined,
           variant: data.failed > 0 ? "default" : "success",
         });
       } else if (data.failed > 0) {
-        toast({ title: "Nothing could be applied", variant: "destructive" });
+        toast({ title: t("nothingApplied"), variant: "destructive" });
       }
       await refresh();
     },
-    onError: (err: Error) => toast({ title: "Could not apply", description: err.message, variant: "destructive" }),
+    onError: (err: Error) => toast({ title: t("couldNotApply"), description: err.message, variant: "destructive" }),
   });
 
   const patch = useMutation({
     mutationFn: async ({ id, ...body }: { id: number; payload?: Record<string, unknown>; status?: "proposed" | "dismissed" }) =>
       (await apiRequest("PATCH", `/api/xpot/visits/${visitId}/actions/${id}`, body)).json(),
     onSuccess: () => query.refetch(),
-    onError: (err: Error) => toast({ title: "Could not update", description: err.message, variant: "destructive" }),
+    onError: (err: Error) => toast({ title: t("couldNotUpdate"), description: err.message, variant: "destructive" }),
   });
 
   const actions = query.data ?? [];
@@ -90,14 +125,12 @@ export function VisitActionsPanel({ visitId, onApplied }: { visitId: number; onA
       <div className="flex items-center gap-2">
         <Sparkles className="h-3.5 w-3.5 text-indigo-300" />
         <span className="text-xs font-bold uppercase tracking-widest text-indigo-300">
-          Detected in your note
+          {t("detectedInNote")}
         </span>
       </div>
 
       {proposed.length > 0 && (
-        <p className="text-[11px] text-white/40">
-          Check these before they are recorded — tap to edit or discard.
-        </p>
+        <p className="text-[11px] text-white/40">{t("checkBeforeRecorded")}</p>
       )}
 
       <div className="space-y-2">
@@ -119,12 +152,12 @@ export function VisitActionsPanel({ visitId, onApplied }: { visitId: number; onA
       {proposed.length > 0 && (
         <PrimaryButton onClick={() => apply.mutate(undefined)} loading={apply.isPending}>
           <Check className="h-4 w-4" />
-          Record {proposed.length} {proposed.length === 1 ? "action" : "actions"}
+          {t.plural("recordActions", proposed.length)}
         </PrimaryButton>
       )}
 
       {proposed.length === 0 && settled.length > 0 && (
-        <p className="text-[11px] text-white/30">Nothing left to confirm.</p>
+        <p className="text-[11px] text-white/30">{t("nothingLeft")}</p>
       )}
     </div>
   );
@@ -142,7 +175,9 @@ function ActionRow({
   onApplyOne: () => void;
   busy: boolean;
 }) {
+  const t = useT(salesModuleMessages);
   const payload = action.payload as unknown as VisitAction;
+  const typeKey = TYPE_LABEL_KEY[action.type as keyof typeof TYPE_LABEL_KEY];
   const isProposed = action.status === "proposed";
   const isApplied = action.status === "applied";
   const isFailed = action.status === "failed";
@@ -163,15 +198,15 @@ function ActionRow({
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
-            <Chip tone={TYPE_TONE[action.type] ?? "neutral"}>{TYPE_LABEL[action.type] ?? action.type}</Chip>
-            {isApplied && <Chip tone="green">Recorded</Chip>}
-            {action.status === "dismissed" && <Chip tone="neutral">Discarded</Chip>}
-            {isProposed && lowConfidence && <Chip tone="amber">Check this</Chip>}
-            {needsPrice && <Chip tone="red">Needs a price</Chip>}
-            {needsProduct && <Chip tone="red">Pick the product</Chip>}
+            <Chip tone={TYPE_TONE[action.type] ?? "neutral"}>{typeKey ? t(typeKey) : action.type}</Chip>
+            {isApplied && <Chip tone="green">{t("chipRecorded")}</Chip>}
+            {action.status === "dismissed" && <Chip tone="neutral">{t("chipDiscarded")}</Chip>}
+            {isProposed && lowConfidence && <Chip tone="amber">{t("chipCheckThis")}</Chip>}
+            {needsPrice && <Chip tone="red">{t("chipNeedsPrice")}</Chip>}
+            {needsProduct && <Chip tone="red">{t("chipPickProduct")}</Chip>}
           </div>
           <div className={`mt-1 text-sm ${action.status === "dismissed" ? "text-white/40 line-through" : "text-white/90"}`}>
-            {describeAction(payload)}
+            {describeAction(payload, t)}
           </div>
           {action.evidence ? (
             <div className="mt-1 text-[11px] italic text-white/35">“{action.evidence}”</div>
@@ -186,11 +221,11 @@ function ActionRow({
 
         {(isProposed || isFailed) && !editing && (
           <div className="flex shrink-0 gap-0.5">
-            <button type="button" onClick={onEdit} disabled={busy} title="Edit"
+            <button type="button" onClick={onEdit} disabled={busy} title={t("edit")} aria-label={t("edit")}
               className="flex h-7 w-7 items-center justify-center rounded-lg text-white/35 transition-colors hover:bg-white/10 hover:text-white/70 disabled:opacity-40">
               <Pencil className="h-3 w-3" />
             </button>
-            <button type="button" onClick={onDismiss} disabled={busy} title="Discard"
+            <button type="button" onClick={onDismiss} disabled={busy} title={t("discard")} aria-label={t("discard")}
               className="flex h-7 w-7 items-center justify-center rounded-lg text-white/35 transition-colors hover:bg-red-500/15 hover:text-red-400 disabled:opacity-40">
               <Trash2 className="h-3 w-3" />
             </button>
@@ -215,6 +250,8 @@ function ActionEditor({
   onApplyOne: () => void;
   busy: boolean;
 }) {
+  const t = useT(salesModuleMessages);
+  const tc = useT(commonMessages);
   const [draft, setDraft] = useState<Record<string, string>>((): Record<string, string> => {
     switch (payload.type) {
       case "deposit":
@@ -284,20 +321,20 @@ function ActionEditor({
   }
 
   const fields: { key: string; label: string; money?: boolean; text?: boolean }[] =
-    payload.type === "deposit" ? [{ key: "quantity", label: "Qty" }, { key: "unitPrice", label: "Unit price", money: true }]
-    : payload.type === "settlement" ? [{ key: "soldQuantity", label: "Sold" }, { key: "countedRemaining", label: "Left" }, { key: "restockQuantity", label: "Restock" }]
-    : payload.type === "sale" ? [{ key: "quantity", label: "Qty" }, { key: "unitPrice", label: "Price", money: true }]
-    : [{ key: "title", label: "Task", text: true }, { key: "inDays", label: "In days" }];
+    payload.type === "deposit" ? [{ key: "quantity", label: t("qty") }, { key: "unitPrice", label: t("unitPrice"), money: true }]
+    : payload.type === "settlement" ? [{ key: "soldQuantity", label: t("statSold") }, { key: "countedRemaining", label: t("statLeft") }, { key: "restockQuantity", label: t("actionRestock") }]
+    : payload.type === "sale" ? [{ key: "quantity", label: t("qty") }, { key: "unitPrice", label: t("fieldPrice"), money: true }]
+    : [{ key: "title", label: t("fieldTask"), text: true }, { key: "inDays", label: t("fieldInDays") }];
 
   return (
     <div className="mt-2.5 space-y-2 border-t border-white/[0.08] pt-2.5">
       {(payload.type === "deposit" || payload.type === "sale") && (
         <label className="block space-y-1">
-          <span className="text-[9px] font-semibold uppercase tracking-widest text-white/35">Product</span>
+          <span className="text-[9px] font-semibold uppercase tracking-widest text-white/35">{t("product")}</span>
           <Select
             value={productId}
             onChange={setProductId}
-            placeholder={payload.type === "sale" ? "Custom item (keep description)" : "Pick a product"}
+            placeholder={payload.type === "sale" ? t("customItemKeep") : t("pickProduct")}
             options={productOptions}
           />
         </label>
@@ -317,17 +354,15 @@ function ActionEditor({
         ))}
       </div>
       {payload.type === "settlement" && (
-        <p className="text-[10px] text-white/30">
-          Fill either how many sold or how many are left — whichever you actually counted.
-        </p>
+        <p className="text-[10px] text-white/30">{t("settlementFillHint")}</p>
       )}
       <div className="flex gap-1.5">
-        <GhostButton onClick={onCancel} className="flex-1"><X className="h-3 w-3" /> Cancel</GhostButton>
+        <GhostButton onClick={onCancel} className="flex-1"><X className="h-3 w-3" /> {tc("cancel")}</GhostButton>
         <GhostButton onClick={() => onSave(build())} disabled={busy} className="flex-1">
-          {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />} Save
+          {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />} {tc("save")}
         </GhostButton>
         <GhostButton onClick={async () => { await onSave(build()); onApplyOne(); }} disabled={busy} className="flex-1">
-          Save & record
+          {t("saveAndRecord")}
         </GhostButton>
       </div>
     </div>

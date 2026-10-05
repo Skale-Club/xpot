@@ -10,7 +10,7 @@ import { formatCents } from "../../utils";
 import {
   useProducts,
   useSalesMutations,
-  PAYMENT_METHODS,
+  usePaymentOptions,
   type PaymentMethod,
   type PaymentStatus,
   type ProductWithTiers,
@@ -19,6 +19,8 @@ import {
   Field, GhostButton, Money, MoneyInput, PrimaryButton, QtyInput, Select, SheetDialog,
   inputCls, inputStyle,
 } from "./ui";
+import { useT } from "@/i18n";
+import { salesModuleMessages } from "@/i18n/messages/salesModule";
 
 type Line = {
   key: string;
@@ -60,6 +62,8 @@ export function SaleDialog({
   visitId?: number | null;
   onDone?: () => void;
 }) {
+  const t = useT(salesModuleMessages);
+  const { statusOptions, methodOptions } = usePaymentOptions();
   const productsQuery = useProducts({ enabled: open });
   const { createSale } = useSalesMutations();
 
@@ -140,13 +144,13 @@ export function SaleDialog({
   }
 
   return (
-    <SheetDialog open={open} onOpenChange={onOpenChange} title={leadName ? `New sale — ${leadName}` : "New sale"} wide>
+    <SheetDialog open={open} onOpenChange={onOpenChange} title={leadName ? t("newSaleFor", { name: leadName }) : t("newSale")} wide>
       <div className="space-y-4">
         {visitId ? (
           <div className="flex items-center gap-2 rounded-xl px-3 py-2 text-[11px] text-indigo-300"
             style={{ background: "rgba(99,102,241,0.10)", border: "1px solid rgba(99,102,241,0.25)" }}>
             <Sparkles className="h-3.5 w-3.5 shrink-0" />
-            Linked to this visit
+            {t("linkedToVisit")}
           </div>
         ) : null}
 
@@ -157,10 +161,11 @@ export function SaleDialog({
               style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-semibold uppercase tracking-widest text-white/30">
-                  Item {index + 1}
+                  {t("itemN", { n: index + 1 })}
                 </span>
                 {lines.length > 1 && (
                   <button type="button" onClick={() => setLines((p) => p.filter((l) => l.key !== line.key))}
+                    aria-label={t("removeItem")} title={t("removeItem")}
                     className="flex h-7 w-7 items-center justify-center rounded-lg text-white/30 transition-colors hover:bg-red-500/15 hover:text-red-400">
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
@@ -170,7 +175,7 @@ export function SaleDialog({
               <Select
                 value={line.productId ? String(line.productId) : ""}
                 onChange={(v) => pickProduct(line.key, v)}
-                placeholder={productsQuery.isLoading ? "Loading catalog…" : "Custom item (type below)"}
+                placeholder={productsQuery.isLoading ? t("loadingCatalog") : t("customItemTypeBelow")}
                 options={products.map((p) => ({ value: String(p.id), label: p.name }))}
               />
 
@@ -178,17 +183,17 @@ export function SaleDialog({
                 <input
                   value={line.description}
                   onChange={(e) => patchLine(line.key, { description: e.target.value })}
-                  placeholder="What was sold"
+                  placeholder={t("whatWasSold")}
                   className={inputCls}
                   style={inputStyle}
                 />
               )}
 
               <div className="grid grid-cols-2 gap-2">
-                <Field label="Qty">
+                <Field label={t("qty")}>
                   <QtyInput value={line.quantity} onChange={(n) => setQuantity(line.key, n)} min={1} />
                 </Field>
-                <Field label="Unit price" hint={line.autoPrice && line.productId ? "catalog" : undefined}>
+                <Field label={t("unitPrice")} hint={line.autoPrice && line.productId ? t("hintCatalog") : undefined}>
                   <MoneyInput
                     valueCents={line.unitPriceCents}
                     onChangeCents={(c) => patchLine(line.key, { unitPriceCents: c, autoPrice: false })}
@@ -197,14 +202,14 @@ export function SaleDialog({
               </div>
 
               <div className="flex items-center justify-between text-xs">
-                <span className="text-white/35">Line total</span>
+                <span className="text-white/35">{t("lineTotal")}</span>
                 <Money cents={line.quantity * line.unitPriceCents} className="font-semibold text-white" />
               </div>
             </div>
           ))}
 
           <GhostButton onClick={() => setLines((p) => [...p, newLine()])} className="w-full">
-            <Plus className="h-3.5 w-3.5" /> Add item
+            <Plus className="h-3.5 w-3.5" /> {t("addItem")}
           </GhostButton>
         </div>
 
@@ -212,55 +217,51 @@ export function SaleDialog({
         <div className="rounded-2xl p-3.5 space-y-3"
           style={{ background: "rgba(16,185,129,0.06)", border: "1px solid rgba(16,185,129,0.18)" }}>
           <div className="flex items-center justify-between text-xs text-white/45">
-            <span>Subtotal</span><Money cents={totals.subtotalCents} />
+            <span>{t("subtotal")}</span><Money cents={totals.subtotalCents} />
           </div>
-          <Field label="Discount">
+          <Field label={t("discount")}>
             <MoneyInput valueCents={discountCents} onChangeCents={setDiscountCents} />
           </Field>
           <div className="flex items-center justify-between border-t border-white/10 pt-2.5">
-            <span className="text-sm font-semibold text-white">Total</span>
+            <span className="text-sm font-semibold text-white">{t("total")}</span>
             <Money cents={totals.totalCents} className="text-lg font-bold text-emerald-400" />
           </div>
           <div className="flex items-center justify-between text-[11px] text-white/35">
-            <span>You keep</span>
+            <span>{t("youKeep")}</span>
             <span className="tabular-nums">{formatCents(totals.profitCents)}</span>
           </div>
         </div>
 
         {/* Payment */}
         <div className="grid grid-cols-2 gap-2">
-          <Field label="Payment">
+          <Field label={t("payment")}>
             <Select
               value={paymentStatus}
               onChange={(v) => setPaymentStatus(v as PaymentStatus)}
-              options={[
-                { value: "paid", label: "Paid" },
-                { value: "partial", label: "Partial" },
-                { value: "unpaid", label: "Unpaid" },
-              ]}
+              options={statusOptions}
             />
           </Field>
-          <Field label="Method">
+          <Field label={t("method")}>
             <Select
               value={paymentMethod}
               onChange={(v) => setPaymentMethod(v as PaymentMethod)}
               placeholder="—"
-              options={PAYMENT_METHODS}
+              options={methodOptions}
             />
           </Field>
         </div>
         {paymentStatus === "partial" && (
-          <Field label="Amount received">
+          <Field label={t("amountReceived")}>
             <MoneyInput valueCents={paidCents} onChangeCents={setPaidCents} />
           </Field>
         )}
 
-        <Field label="Notes">
+        <Field label={t("notes")}>
           <textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             rows={2}
-            placeholder="Anything worth remembering"
+            placeholder={t("notesPlaceholder")}
             className="w-full rounded-xl px-3 py-2 text-sm text-white placeholder:text-white/25 focus:outline-none"
             style={inputStyle}
           />
@@ -268,7 +269,7 @@ export function SaleDialog({
 
         <PrimaryButton tone="emerald" onClick={submit} disabled={!canSubmit} loading={createSale.isPending}>
           <Package className="h-4 w-4" />
-          Record {formatCents(totals.totalCents)} sale
+          {t("recordSale", { amount: formatCents(totals.totalCents) })}
         </PrimaryButton>
       </div>
     </SheetDialog>
