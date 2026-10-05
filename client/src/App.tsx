@@ -25,7 +25,7 @@ import { AppLayout } from "@/components/xpot/AppLayout";
 import { MobileTabBar } from "@/components/xpot/MobileTabBar";
 import { SessionGate } from "@/components/xpot/SessionGate";
 import { XpotLandingPage } from "./pages/xpot/XpotLandingPage";
-import { isStandaloneDisplay, resolveRootView } from "@/lib/pwa";
+import { getHttpStatus, isStandaloneDisplay, resolveRootView } from "@/lib/pwa";
 import { getXpotHomePath, MODULE_HOME } from "@/lib/xpot";
 import type { XpotMeResponse } from "./pages/xpot/types";
 
@@ -42,6 +42,10 @@ const WIDE_TABS = new Set<string>(["leads", "visits", "dashboard", "sales"]);
 function VisitsGate() {
   const meQuery = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
   const modules = useXpotModules();
+  // An expired or refused session goes back to sign-in on its own, as XpotAppShell's
+  // useXpotQueries did before this gate stood in front of it (/dashboard is the PWA start_url).
+  const status = getHttpStatus(meQuery.error);
+  if (status === 401 || status === 403) return <Redirect to="/" />;
   if (!meQuery.data) return <SessionGate failed={meQuery.isError} />;
   if (!modules.includes("visits") && modules.includes("tags")) return <Redirect to={MODULE_HOME.tags} />;
   return (

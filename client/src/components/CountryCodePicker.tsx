@@ -36,6 +36,22 @@ export function CountryCodePicker({
     if (open) listRef.current?.focus();
   }, [open]);
 
+  // Escape closes the list, not the dialog around it. Radix dialogs listen for Escape on the
+  // document in the capture phase, before any handler on this element runs, so stopping the
+  // event here is too late; a window capture listener runs first and keeps it.
+  useEffect(() => {
+    if (!open) return;
+    const onEscape = (e: globalThis.KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.stopPropagation();
+      e.preventDefault();
+      setOpen(false);
+      rootRef.current?.querySelector("button")?.focus();
+    };
+    window.addEventListener("keydown", onEscape, { capture: true });
+    return () => window.removeEventListener("keydown", onEscape, { capture: true });
+  }, [open]);
+
   const show = () => {
     setActive(Math.max(0, PHONE_COUNTRIES.findIndex((c) => c.code === current.code)));
     setOpen(true);
@@ -54,11 +70,9 @@ export function CountryCodePicker({
     else if (e.key === "Home") setActive(0);
     else if (e.key === "End") setActive(last);
     else if (e.key === "Enter" || e.key === " ") pick(PHONE_COUNTRIES[active].code);
-    else if (e.key === "Escape" || e.key === "Tab") {
-      // Escape stays inside the picker, so the dialog around it doesn't close.
-      if (e.key === "Escape") e.stopPropagation();
+    else if (e.key === "Tab") {
+      // Escape is handled by the window listener above.
       setOpen(false);
-      if (e.key === "Escape") rootRef.current?.querySelector("button")?.focus();
       return;
     } else return;
     e.preventDefault();

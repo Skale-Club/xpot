@@ -3,7 +3,7 @@ import { Ban, Check, Copy, KeyRound, Phone, RotateCcw, UserPlus } from "lucide-r
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "@/components/ui/loader";
-import { XPOT_MODULES, type XpotModule } from "@shared/modules";
+import { XPOT_MODULES, repModules, type XpotModule } from "@shared/modules";
 import { formatPhone } from "@shared/phone";
 import { CountryCodePicker } from "@/components/CountryCodePicker";
 import { translate, useT, type Translate } from "@/i18n";
@@ -247,21 +247,24 @@ function ActiveRow({ rep }: { rep: Rep }) {
         {save.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
         {tc("save")}
       </button>
-      <button
-        type="button"
-        title={rep.wholesaleCode ? t("wholesaleReissueTitle", { code: rep.wholesaleCode }) : t("wholesaleIssueTitle")}
-        disabled={newCode.isPending}
-        onClick={() => {
-          if (!rep.wholesaleCode || window.confirm(t("wholesaleConfirm", { name: rep.displayName, code: rep.wholesaleCode }))) {
-            newCode.mutate({ url: `/api/xpot/admin/reps/${rep.id}/wholesale-code`, rep });
-          }
-        }}
-        className={`${BTN} border border-white/10 font-mono text-xs text-white/60 hover:bg-white/5`}
-        data-testid={`wholesale-${rep.id}`}
-      >
-        <KeyRound className="h-4 w-4" />
-        {rep.wholesaleCode ?? t("wholesaleButton")}
-      </button>
+      {/* The wholesale code buys Tags kits: only for someone who sells Tags (the server refuses the rest). */}
+      {repModules({ role: rep.role, modules: rep.modules }).includes("tags") && (
+        <button
+          type="button"
+          title={rep.wholesaleCode ? t("wholesaleReissueTitle", { code: rep.wholesaleCode }) : t("wholesaleIssueTitle")}
+          disabled={newCode.isPending}
+          onClick={() => {
+            if (!rep.wholesaleCode || window.confirm(t("wholesaleConfirm", { name: rep.displayName, code: rep.wholesaleCode }))) {
+              newCode.mutate({ url: `/api/xpot/admin/reps/${rep.id}/wholesale-code`, rep });
+            }
+          }}
+          className={`${BTN} border border-white/10 font-mono text-xs text-white/60 hover:bg-white/5`}
+          data-testid={`wholesale-${rep.id}`}
+        >
+          <KeyRound className="h-4 w-4" />
+          {rep.wholesaleCode ?? t("wholesaleButton")}
+        </button>
+      )}
       <button
         type="button"
         title={t("changePhoneTitle")}
