@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { storage } from "../../storage.js";
-import { requireXpotUser, ensureXpotRep, isManagerOrAdmin, loadAccessibleLead } from "./middleware.js";
+import { requireXpotUser, requireVisitsModule, ensureXpotRep, isManagerOrAdmin, loadAccessibleLead } from "./middleware.js";
 import { xpotLeadCreateSchema, xpotLeadUpdateSchema, xpotLeadContactCreateSchema } from "#shared/xpot.js";
 import { syncLeadToGhl, syncLeadToXphere } from "./helpers.js";
 import { salesStorage } from "../../storage-sales.js";
@@ -119,7 +119,9 @@ export function createLeadsRouter() {
     })).min(1).max(500),
   });
 
-  router.post("/leads/import-csv", async (req, res) => {
+  // Leads are the businesses both modules sell to, so the list and create/edit stay open to Tags
+  // resellers; importing, the check-in geofence, the CRM push and promoting a prospect are Visits work.
+  router.post("/leads/import-csv", requireVisitsModule, async (req, res) => {
     const actor = (req as any).xpotActor as Awaited<ReturnType<typeof ensureXpotRep>>;
     const { rows } = csvImportSchema.parse(req.body);
 
@@ -223,7 +225,7 @@ export function createLeadsRouter() {
   });
 
   // PATCH /leads/:id/location — upsert primary location
-  router.patch("/leads/:id/location", async (req, res) => {
+  router.patch("/leads/:id/location", requireVisitsModule, async (req, res) => {
     const actor = (req as any).xpotActor as Awaited<ReturnType<typeof ensureXpotRep>>;
     const leadId = Number(req.params.id);
 
@@ -252,7 +254,7 @@ export function createLeadsRouter() {
   });
 
   // POST /leads/:id/sync-ghl — manual, explicit, promotes prospect → lead
-  router.post("/leads/:id/sync-ghl", async (req, res) => {
+  router.post("/leads/:id/sync-ghl", requireVisitsModule, async (req, res) => {
     const actor = (req as any).xpotActor as Awaited<ReturnType<typeof ensureXpotRep>>;
     const leadId = Number(req.params.id);
     if (!Number.isFinite(leadId)) return res.status(400).json({ message: "Invalid lead id" });
@@ -270,7 +272,7 @@ export function createLeadsRouter() {
   });
 
   // POST /leads/:id/promote — explicitly promote prospect → lead
-  router.post("/leads/:id/promote", async (req, res) => {
+  router.post("/leads/:id/promote", requireVisitsModule, async (req, res) => {
     const actor = (req as any).xpotActor as Awaited<ReturnType<typeof ensureXpotRep>>;
     const leadId = Number(req.params.id);
     if (!Number.isFinite(leadId)) return res.status(400).json({ message: "Invalid lead id" });

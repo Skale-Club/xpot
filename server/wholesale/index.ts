@@ -6,7 +6,8 @@ import { db } from "../db.js";
 import { salesReps } from "#shared/schema.js";
 import { formatWholesaleCode, generateWholesaleCode, normalizeWholesaleCode, wholesaleUrl } from "#shared/wholesale.js";
 import { normalizeIpKey, rateLimit } from "../tags/rateLimit.js";
-import { accessDenial, ensureXpotRep, requireXpotManager } from "../routes/xpot/middleware.js";
+import { accessDenial, ensureXpotRep, isManagerOrAdmin, requireXpotManager } from "../routes/xpot/middleware.js";
+import { repModules } from "#shared/modules.js";
 
 // Wholesale prices live in the Stuscle store; Xpot decides who gets them.
 // Every approved rep has a personal code. Stuscle asks Xpot whether a code is
@@ -100,6 +101,10 @@ export function registerWholesaleRoutes(app: Express) {
       if (!actor) return res.status(401).json({ message: "Authentication required" });
       const denial = accessDenial(actor.rep);
       if (denial) return res.status(403).json(denial);
+      // The code buys Tags kits at wholesale: only for reps who sell Tags (managers always do).
+      if (!isManagerOrAdmin(actor) && !repModules(actor.rep).includes("tags")) {
+        return res.status(403).json({ message: "Tags are not enabled for your account." });
+      }
       const code = await ensureWholesaleCode(actor.rep.id);
       res.json({ code: formatWholesaleCode(code), url: wholesaleUrl(storeBaseUrl(), code) });
     } catch (err) {

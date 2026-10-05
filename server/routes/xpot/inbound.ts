@@ -1,5 +1,6 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
 import { storage } from "../../storage.js";
+import { accessDenial } from "./middleware.js";
 
 // Server-to-server inbound API for Xphere to push prospect records in for field
 // visits. Each tenant (user) has its own inbound key, so the Bearer token both
@@ -18,7 +19,8 @@ export function createInboundRouter() {
       return res.status(401).json({ error: "Unauthorized" });
     }
     const rep = await storage.getSalesRepByUserId(integration.userId);
-    if (!rep || !rep.isActive) {
+    // Same rule as a signed-in rep: blocked or still pending means no access (accessDenial).
+    if (!rep || accessDenial(rep)) {
       return res.status(403).json({ error: "Tenant has no active rep profile" });
     }
     (req as any).xphereTenant = { integration, rep };
