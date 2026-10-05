@@ -106,6 +106,12 @@ async function main() {
     `);
     const twilio = sourceResult.rows[0];
     if (!twilio) throw new Error("Skale Club has no Twilio settings row.");
+    if (twilio.auth_token?.trim().startsWith("v1:")) {
+      // Skale Club encrypts its secrets at rest since 2026-10-05; copying the
+      // envelope would hand Xpot ciphertext it cannot read. Set the token in
+      // Xpot's Admin → Integrations instead.
+      throw new Error("Skale Club's Twilio Auth Token is encrypted (v1:); this script can no longer copy it.");
+    }
     if (!validSource(twilio)) {
       throw new Error(
         "Skale Club Twilio settings are incomplete or invalid; a valid Account SID, Auth Token, and E.164 From number are required.",

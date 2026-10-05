@@ -5,6 +5,7 @@
 
 import { and, asc, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { db } from "./db.js";
+import { decryptSecret, encryptSecret } from "./lib/token-crypto.js";
 import {
   // Schema tables
   salesAppSettings,
@@ -145,6 +146,18 @@ export interface IStorage {
 
 // ─── Implementation ──────────────────────────────────────────────────────────
 
+/** Row as the app uses it: api_key decrypted (legacy plaintext passes through). */
+function withPlainApiKey<T extends { apiKey?: string | null }>(row: T): T;
+function withPlainApiKey<T extends { apiKey?: string | null }>(row: T | undefined): T | undefined;
+function withPlainApiKey<T extends { apiKey?: string | null }>(row: T | undefined): T | undefined {
+  return row && row.apiKey ? { ...row, apiKey: decryptSecret(row.apiKey) } : row;
+}
+
+/** Write payload with api_key encrypted; a payload without apiKey is left alone. */
+function withEncryptedApiKey<T extends { apiKey?: string | null }>(data: T): T {
+  return data.apiKey ? { ...data, apiKey: encryptSecret(data.apiKey) } : data;
+}
+
 export class DatabaseStorage implements IStorage {
   // ── Settings + integrations ──
 
@@ -165,22 +178,25 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
+  // api_key is encrypted at rest (server/lib/token-crypto.ts): every read below
+  // returns it decrypted, every write encrypts it. Nothing else reads these tables.
+
   async getChatIntegration(provider: string): Promise<ChatIntegration | undefined> {
     const [integration] = await db.select().from(chatIntegrations).where(eq(chatIntegrations.provider, provider));
-    return integration;
+    return withPlainApiKey(integration);
   }
 
   async getIntegrationSettings(provider: string): Promise<IntegrationSettings | undefined> {
     const [settings] = await db.select().from(integrationSettings).where(eq(integrationSettings.provider, provider));
-    return settings;
+    return withPlainApiKey(settings);
   }
 
   async listChatIntegrations(): Promise<ChatIntegration[]> {
-    return await db.select().from(chatIntegrations);
+    return (await db.select().from(chatIntegrations)).map((row) => withPlainApiKey(row));
   }
 
   async listIntegrationSettings(): Promise<IntegrationSettings[]> {
-    return await db.select().from(integrationSettings);
+    return (await db.select().from(integrationSettings)).map((row) => withPlainApiKey(row));
   }
 
   async upsertChatIntegration(
@@ -191,13 +207,13 @@ export class DatabaseStorage implements IStorage {
     if (existing) {
       const [updated] = await db
         .update(chatIntegrations)
-        .set({ ...data, updatedAt: new Date() })
+        .set({ ...withEncryptedApiKey(data), updatedAt: new Date() })
         .where(eq(chatIntegrations.id, existing.id))
         .returning();
-      return updated;
+      return withPlainApiKey(updated);
     }
-    const [created] = await db.insert(chatIntegrations).values({ ...data, provider }).returning();
-    return created;
+    const [created] = await db.insert(chatIntegrations).values({ ...withEncryptedApiKey(data), provider }).returning();
+    return withPlainApiKey(created);
   }
 
   async upsertIntegrationSettings(
@@ -208,13 +224,13 @@ export class DatabaseStorage implements IStorage {
     if (existing) {
       const [updated] = await db
         .update(integrationSettings)
-        .set({ ...data, updatedAt: new Date() })
+        .set({ ...withEncryptedApiKey(data), updatedAt: new Date() })
         .where(eq(integrationSettings.id, existing.id))
         .returning();
-      return updated;
+      return withPlainApiKey(updated);
     }
-    const [created] = await db.insert(integrationSettings).values({ ...data, provider }).returning();
-    return created;
+    const [created] = await db.insert(integrationSettings).values({ ...withEncryptedApiKey(data), provider }).returning();
+    return withPlainApiKey(created);
   }
 
   // ── Xphere per-user (tenant) integration config ──
