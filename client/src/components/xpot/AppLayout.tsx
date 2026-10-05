@@ -315,11 +315,11 @@ function DesktopTopBar({ title, crumb, actions, onSearch }: {
         <span className="flex-1 text-left">{t("searchEverything")}</span>
         <kbd className="rounded-md border border-white/10 px-1.5 py-0.5 font-sans text-[10px] text-white/40">{mac ? "⌘" : "Ctrl"} K</kbd>
       </button>
+      <LanguagePicker compact />
       <span className={`flex items-center gap-1.5 text-xs ${online ? "text-white/40" : "text-red-300"}`}>
         <span className={`h-2 w-2 rounded-full ${online ? "bg-emerald-400" : "bg-red-400"}`} />
         {online ? t("online") : t("offline")}
       </span>
-      <LanguagePicker compact />
     </header>
   );
 }
