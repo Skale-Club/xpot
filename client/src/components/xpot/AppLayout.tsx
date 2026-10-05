@@ -438,7 +438,7 @@ export function AppLayout({
         >
           {mobileHeader ? <div className="lg:hidden">{mobileHeader}</div> : null}
           <main className="flex-1">
-            <ScreenErrorBoundary key={location}>{children}</ScreenErrorBoundary>
+            <ScreenErrorBoundary resetKey={location}>{children}</ScreenErrorBoundary>
           </main>
         </div>
         {mobileNav ? <div className="lg:hidden">{mobileNav}</div> : null}
