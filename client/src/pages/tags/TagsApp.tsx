@@ -42,9 +42,6 @@ export function TagsApp() {
   const isDesktop = useIsDesktop();
 
   useEffect(() => {
-    document.title = "Xpot · Tags";
-  }, []);
-  useEffect(() => {
     if (allowed) rememberModule("tags");
   }, [allowed]);
 
@@ -101,6 +98,7 @@ export function TagsApp() {
       }
       mobileNav={
         <MobileTabBar
+          module="tags"
           tabs={NAV.map(({ href, key, icon }) => ({ id: href, label: t(key), icon, testId: `tags-nav-${key}` }))}
           activeId={current}
           onSelect={navigate}

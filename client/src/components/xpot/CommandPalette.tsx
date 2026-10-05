@@ -22,7 +22,8 @@ export function CommandPalette({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  pages: Array<{ href: string; label: string; icon: LucideIcon }>;
+  /** Screens to jump to; `group` names the module they belong to (current module first). */
+  pages: Array<{ href: string; label: string; icon: LucideIcon; group?: string }>;
 }) {
   const t = useT(shellMessages);
   const [, navigate] = useLocation();
@@ -56,7 +57,7 @@ export function CommandPalette({
     const out: Entry[] = [];
     pages
       .filter((p) => hit(p.label))
-      .forEach((p) => out.push({ key: `page:${p.href}`, group: t("groupPages"), label: p.label, icon: p.icon, href: p.href }));
+      .forEach((p) => out.push({ key: `page:${p.href}`, group: p.group ?? t("groupPages"), label: p.label, icon: p.icon, href: p.href }));
     if (q) {
       (leads ?? [])
         .filter((l) => hit(l.name, l.industry, l.phone, l.locations?.[0]?.city))

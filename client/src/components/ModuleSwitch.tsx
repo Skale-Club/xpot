@@ -5,10 +5,12 @@ import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { repModules, type XpotModule } from "@shared/modules";
 import type { XpotMeResponse } from "@/pages/xpot/types";
+import { MODULE_HOME } from "@/lib/xpot";
+import { MODULE_ACCENT } from "@/components/xpot/surface";
 
 const LAST_MODULE_KEY = "xpot.module";
 
-const HOME: Record<XpotModule, string> = { visits: "/check-in", tags: "/tags" };
+const HOME: Record<XpotModule, string> = MODULE_HOME;
 
 /** The module the signed-in rep may use (managers: both). */
 export function useXpotModules(): XpotModule[] {
@@ -78,13 +80,8 @@ export function ModuleSwitch({ current }: { current: XpotModule }) {
               active ? "text-white" : "text-white/45 hover:text-white/75"
             }`}
           >
-            {active && (
-              <span
-                className="absolute inset-0 rounded-xl"
-                style={{ background: "linear-gradient(135deg, rgba(59,130,246,0.35) 0%, rgba(99,102,241,0.35) 100%)" }}
-              />
-            )}
-            <Icon className="relative h-4 w-4" />
+            {active && <span className="absolute inset-0 rounded-xl" style={{ background: MODULE_ACCENT[id].strong }} />}
+            <Icon className={`relative h-4 w-4 ${active ? MODULE_ACCENT[id].text : ""}`} />
             <span className="relative">{label}</span>
           </button>
         );

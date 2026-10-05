@@ -1,42 +1,44 @@
-import { useEffect } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "@/components/ui/loader";
-import { ShieldAlert, ArrowLeft, LayoutDashboard, Users, Plug, Webhook, Palette, Nfc, Boxes, SlidersHorizontal } from "lucide-react";
+import { ShieldAlert, ArrowLeft } from "lucide-react";
 import type { XpotMeResponse } from "@/pages/xpot/types";
 import { AdminOverview } from "./AdminOverview";
 import { AdminReps } from "./AdminReps";
 import { AdminIntegrations } from "./AdminIntegrations";
 import { AdminXphere } from "./AdminXphere";
 import { AdminBranding } from "./AdminBranding";
-import { AdminTags } from "./tags/AdminTags";
+import { AdminTags, CodeLookup } from "./tags/AdminTags";
 import { AdminProducts } from "./AdminProducts";
 import { AdminSettings } from "./AdminSettings";
 import { AppLayout } from "@/components/xpot/AppLayout";
+import { moduleGroups, organizationItems, type NavItem } from "@/components/xpot/moduleNav";
+import { useIsComputer } from "@/hooks/use-is-desktop";
+import { useT } from "@/i18n";
+import { commonMessages } from "@/i18n/messages/common";
+import { shellMessages } from "@/i18n/messages/shell";
+import { tagsMessages } from "@/i18n/messages/tags";
+import { MODULE_HOME } from "@/lib/xpot";
 
-const SECTIONS = [
-  { id: "overview", label: "Overview", icon: LayoutDashboard },
-  { id: "tags", label: "Tags", icon: Nfc },
-  { id: "products", label: "Products", icon: Boxes },
-  { id: "integrations", label: "Integrations", icon: Plug },
-  { id: "branding", label: "Branding", icon: Palette },
-  { id: "xphere", label: "Xphere", icon: Webhook },
-  { id: "reps", label: "Reps", icon: Users },
-  { id: "settings", label: "Settings", icon: SlidersHorizontal },
-] as const;
+// The management screens. They are not a place of their own any more: each one
+// belongs to a module (Visits: team, products, check-in rules, Xphere; Tags: the
+// /admin/tags tabs) or to the account's Organization (people, integrations,
+// branding), and the shell shows it inside that part of the app (moduleNav.ts).
+// The URLs stay /admin/<section> so bookmarks and links keep working.
 
-type SectionId = (typeof SECTIONS)[number]["id"];
+const SECTIONS = ["overview", "tags", "products", "integrations", "branding", "xphere", "reps", "settings"] as const;
+type SectionId = (typeof SECTIONS)[number];
 
 export function AdminApp({ section }: { section: string }) {
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const meQuery = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
-
-  useEffect(() => {
-    document.title = "Xpot | Admin";
-  }, []);
+  const t = useT(shellMessages);
+  const tt = useT(tagsMessages);
+  const tc = useT(commonMessages);
+  const isComputer = useIsComputer();
 
   const me = meQuery.data;
-  const active: SectionId = (SECTIONS.find((s) => s.id === section)?.id ?? "overview") as SectionId;
+  const active: SectionId = SECTIONS.find((s) => s === section) ?? "overview";
 
   if (meQuery.isLoading) {
     return (
@@ -59,7 +61,7 @@ export function AdminApp({ section }: { section: string }) {
           </p>
         </div>
         <button
-          onClick={() => setLocation(me ? "/dashboard" : "/")}
+          onClick={() => setLocation(me ? MODULE_HOME.visits : "/")}
           className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 transition-colors hover:bg-white/10"
         >
           {me ? "Back to app" : "Go to sign in"}
@@ -68,62 +70,65 @@ export function AdminApp({ section }: { section: string }) {
     );
   }
 
-  const activeLabel = SECTIONS.find((s) => s.id === active)?.label ?? "Overview";
+  const viewer = { canManage: true, isAdmin: me.user.isAdmin || me.rep.role === "admin", isComputer };
+  const labels = { shell: t, tags: tt };
+  const organization = organizationItems(labels);
+  const isOrganization = organization.some((i) => i.match(location));
+  // The sibling screens of this one, for the phone's tab strip (the desktop sidebar lists them).
+  const siblings: NavItem[] = active === "tags"
+    ? []
+    : isOrganization
+      ? organization
+      : moduleGroups("visits", viewer, labels)[1]?.items ?? [];
+  const tagsManage = moduleGroups("tags", viewer, labels)[1]?.items ?? [];
+  const current = [...siblings, ...organization, ...tagsManage].find((i) => i.match(location));
+  const title = current?.label ?? t("navManage");
+  const back = active === "tags" ? MODULE_HOME.tags : isOrganization ? "/settings" : MODULE_HOME.visits;
+  const heading = active === "tags" ? `${tc("moduleTags")} · ${t("navManage")}` : isOrganization ? t("navOrganization") : `${tc("moduleVisits")} · ${t("navManage")}`;
 
   return (
     <AppLayout
-      title={`Admin · ${activeLabel}`}
+      title={title}
       size="wide"
       mobileMaxWidth="max-w-5xl"
       mobileColumnClassName="pb-20 pt-6"
-      extraNavGroups={[
-        {
-          label: "Admin",
-          items: SECTIONS.map(({ id, label, icon }) => ({
-            href: `/admin/${id}`,
-            label,
-            icon,
-            match: (path: string) => path === `/admin/${id}` || path.startsWith(`/admin/${id}/`) || (id === "overview" && path === "/admin"),
-          })),
-        },
-      ]}
+      topBarActions={active === "tags" ? <CodeLookup onFound={(id) => setLocation(`/admin/tags/pieces/${id}`)} /> : undefined}
       mobileHeader={
         <>
-          {/* Header */}
-          <div className="mb-6 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setLocation("/dashboard")}
-                className="rounded-lg border border-white/10 bg-white/5 p-2 text-white/70 transition-colors hover:bg-white/10"
-                title="Back to app"
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </button>
-              <div>
-                <h1 className="text-xl font-bold tracking-tight">Xpot Admin</h1>
-                <p className="text-xs text-white/40">{me.user.email}</p>
-              </div>
+          <div className="mb-6 flex items-center gap-3">
+            <button
+              onClick={() => setLocation(back)}
+              className="rounded-lg border border-white/10 bg-white/5 p-2 text-white/70 transition-colors hover:bg-white/10"
+              title={t("backToModule")}
+              aria-label={t("backToModule")}
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </button>
+            <div>
+              <h1 className="text-xl font-bold tracking-tight">{heading}</h1>
+              <p className="text-xs text-white/40">{me.user.email}</p>
             </div>
           </div>
 
-          {/* Tabs (the desktop sidebar lists these) */}
-          <nav className="mb-6 flex gap-1 overflow-x-auto rounded-2xl border border-white/10 bg-white/[0.03] p-1.5">
-            {SECTIONS.map(({ id, label, icon: Icon }) => {
-              const isActive = active === id;
-              return (
-                <button
-                  key={id}
-                  onClick={() => setLocation(`/admin/${id}`)}
-                  className={`relative flex items-center gap-2 whitespace-nowrap rounded-xl px-4 py-2 text-sm font-medium transition-colors ${
-                    isActive ? "bg-blue-500/20 text-white" : "text-white/55 hover:bg-white/5 hover:text-white/80"
-                  }`}
-                >
-                  <Icon className="h-4 w-4" />
-                  {label}
-                </button>
-              );
-            })}
-          </nav>
+          {siblings.length > 0 && (
+            <nav className="mb-6 flex gap-1 overflow-x-auto rounded-2xl border border-white/10 bg-white/[0.03] p-1.5">
+              {siblings.map(({ href, label, icon: Icon, match }) => {
+                const isActive = match(location);
+                return (
+                  <button
+                    key={href}
+                    onClick={() => setLocation(href)}
+                    className={`relative flex items-center gap-2 whitespace-nowrap rounded-xl px-4 py-2 text-sm font-medium transition-colors ${
+                      isActive ? "bg-white/10 text-white" : "text-white/55 hover:bg-white/5 hover:text-white/80"
+                    }`}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {label}
+                  </button>
+                );
+              })}
+            </nav>
+          )}
         </>
       }
     >

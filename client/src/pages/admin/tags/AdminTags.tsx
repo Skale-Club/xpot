@@ -15,22 +15,25 @@ import { TeamTab } from "./TeamTab";
 import { ProvisionersTab } from "./ProvisionersTab";
 import { JourneyTab } from "./JourneyTab";
 import { useIsTagAdmin } from "./journey-shared";
+import { useT } from "@/i18n";
+import { shellMessages } from "@/i18n/messages/shell";
 
+// Same order and names as the Tags "Manage" group in the sidebar (components/xpot/moduleNav.ts).
 const TABS = [
-  { id: "overview", label: "Overview" },
-  { id: "pieces", label: "Pieces" },
-  { id: "kits", label: "Kits" },
-  { id: "batches", label: "Batches" },
-  { id: "journey", label: "Journey", adminOnly: true },
-  { id: "team", label: "Team" },
-  { id: "provisioners", label: "NFC writers" },
-] as const satisfies ReadonlyArray<{ id: string; label: string; adminOnly?: boolean }>;
+  { id: "overview", labelKey: "manageOverview" },
+  { id: "pieces", labelKey: "managePieces" },
+  { id: "batches", labelKey: "manageBatches" },
+  { id: "kits", labelKey: "manageKits" },
+  { id: "team", labelKey: "manageResellers" },
+  { id: "journey", labelKey: "manageJourney", adminOnly: true },
+  { id: "provisioners", labelKey: "manageWriters" },
+] as const satisfies ReadonlyArray<{ id: string; labelKey: string; adminOnly?: boolean }>;
 type TabId = (typeof TABS)[number]["id"];
 
 export const ADMIN_TAGS_BASE = "/admin/tags";
 
-/** Type the code printed on a piece, open its record. */
-function CodeLookup({ onFound }: { onFound: (id: string) => void }) {
+/** Type the code printed on a piece, open its record. On desktop it sits in the top bar (AdminApp). */
+export function CodeLookup({ onFound }: { onFound: (id: string) => void }) {
   const { toast } = useToast();
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
@@ -78,6 +81,7 @@ function CodeLookup({ onFound }: { onFound: (id: string) => void }) {
  */
 export function AdminTags() {
   const [location, setLocation] = useLocation();
+  const ts = useT(shellMessages);
   const [tabSegment, idSegment] = location.replace(/^\/admin\/tags\/?/, "").split("/");
   // The Journey is for admins only: managers neither see its tab nor reach it by URL.
   const isAdmin = useIsTagAdmin();
@@ -88,7 +92,8 @@ export function AdminTags() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 lg:hidden">
+        {/* The desktop sidebar lists these as the Tags "Manage" group; the phone keeps the strip. */}
         <nav className="flex gap-1 overflow-x-auto rounded-xl border border-white/10 bg-white/[0.02] p-1">
           {tabs.map((t) => (
             <button
@@ -100,7 +105,7 @@ export function AdminTags() {
               }`}
               data-testid={`admin-tags-tab-${t.id}`}
             >
-              {t.label}
+              {ts(t.labelKey)}
             </button>
           ))}
         </nav>

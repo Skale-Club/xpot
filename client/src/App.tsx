@@ -37,9 +37,6 @@ function XpotAppShell() {
   useVisits();
 
   useEffect(() => {
-    document.title = "Xpot";
-  }, []);
-  useEffect(() => {
     if (visitsAllowed) rememberModule("visits");
   }, [visitsAllowed]);
 
@@ -88,6 +85,7 @@ function XpotAppShell() {
       }
       mobileNav={
         <MobileTabBar
+          module="visits"
           tabs={tabs.map(({ id, labelKey, icon }) => ({ id, label: tShell(labelKey), icon }))}
           activeId={activeTab}
           onSelect={(id) => setLocation(`/${id}`)}
