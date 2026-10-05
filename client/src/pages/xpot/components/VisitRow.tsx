@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { StatusBadge, StatusPicker } from "./VisitStatus";
@@ -42,6 +42,9 @@ export function VisitDetail({ visit, onDelete, layout = "dialog" }: {
   const t = useT(visitsMessages);
   const tl = useT(leadsMessages);
   const [status, setStatus] = useState(visit.status);
+  // The desktop pane stays open across refetches: follow outcome changes made
+  // elsewhere (e.g. a check-out from the active-visit strip).
+  useEffect(() => setStatus(visit.status), [visit.status]);
   const [fields, setFields] = useState({
     name: visit.lead?.name || "",
     phone: visit.lead?.phone || "",

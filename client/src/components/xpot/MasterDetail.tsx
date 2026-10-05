@@ -1,10 +1,10 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 /**
  * Desktop list + detail. From `xl` the detail is a sticky column beside the
  * list; between `lg` and `xl` it slides over as a drawer. With nothing
  * selected, `placeholder` fills the column (xl only). Escape closes the detail
- * unless a dialog is open on top of it.
+ * unless a dialog is open on top of it or focus is in a form field.
  */
 export function MasterDetail({
   list,
@@ -21,12 +21,28 @@ export function MasterDetail({
   closeLabel: string;
 }) {
   const open = detail != null;
+  const asideRef = useRef<HTMLElement>(null);
+
+  // Between lg and xl the detail is a drawer over the list: stop the page
+  // behind it from scrolling and send keyboard focus into it.
+  useEffect(() => {
+    if (!open || window.matchMedia("(min-width: 1280px)").matches) return;
+    asideRef.current?.focus({ preventScroll: true });
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || e.defaultPrevented) return;
       if (document.querySelector('[role="dialog"], [role="alertdialog"]')) return;
+      // Escape while typing in the pane (an inline edit form) must not close it and drop the edits.
+      const el = e.target as HTMLElement | null;
+      if (el && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName))) return;
       onClose();
     };
     window.addEventListener("keydown", onKey);
@@ -39,7 +55,7 @@ export function MasterDetail({
       {open ? (
         <>
           <button type="button" aria-label={closeLabel} onClick={onClose} className="fixed inset-0 z-40 bg-black/50 xl:hidden" />
-          <aside className="fixed inset-y-0 right-0 z-50 w-[440px] max-w-[90vw] overflow-y-auto border-l border-white/10 bg-[#080c18] p-4 shadow-2xl xl:sticky xl:top-[88px] xl:z-auto xl:max-h-[calc(100vh-112px)] xl:w-auto xl:max-w-none xl:border-0 xl:bg-transparent xl:p-0 xl:shadow-none">
+          <aside ref={asideRef} tabIndex={-1} className="fixed inset-y-0 right-0 z-50 w-[440px] max-w-[90vw] overflow-y-auto border-l border-white/10 bg-[#080c18] p-4 shadow-2xl xl:sticky xl:top-[88px] xl:z-auto xl:max-h-[calc(100vh-112px)] xl:w-auto xl:max-w-none xl:border-0 xl:bg-transparent xl:p-0 xl:shadow-none outline-none">
             {detail}
           </aside>
         </>

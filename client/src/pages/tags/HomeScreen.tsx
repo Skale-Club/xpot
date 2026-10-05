@@ -44,9 +44,18 @@ import {
   TapAnimation,
 } from "./ui";
 import { isWebNfcSupported, mapNfcError, scanOnce } from "./webNfc";
-import { useIsDesktop } from "@/hooks/use-is-desktop";
+import { useIsComputer, useIsDesktop } from "@/hooks/use-is-desktop";
 
 type Sheet = { kind: "empty" } | { kind: "nfc" } | null;
+
+function isOwnHost(url: string) {
+  try {
+    const host = new URL(url).hostname;
+    return host === window.location.hostname || host === "xpot.place" || host === "www.xpot.place";
+  } catch {
+    return false;
+  }
+}
 
 function Stat({ label, value }: { label: string; value: number | undefined }) {
   return (
@@ -76,6 +85,8 @@ export default function HomeScreen() {
   // A computer has no NFC and rarely a usable camera: it types the code, or a
   // USB/Bluetooth scanner "types" the whole QR link followed by Enter.
   const isDesktop = useIsDesktop();
+  // A tablet at desktop width still has a camera and maybe NFC.
+  const isComputer = useIsComputer();
 
   const openCode = useCallback(
     async (tagCode: string) => {
@@ -149,7 +160,15 @@ export default function HomeScreen() {
   };
 
   const submitCode = () => {
-    if (isDesktop) return void handleScan(code.trim());
+    if (isDesktop) {
+      const raw = code.trim();
+      // Clear right away: a scanner types the next code into the same field.
+      setCode("");
+      const result = classify(raw);
+      // A link on our own domain that is not a piece is a misread, not a direct link.
+      if (result.kind === "direct" && isOwnHost(result.url)) return show({ tone: "error", text: t("invalidCode") });
+      return void handleScan(raw);
+    }
     const result = classify(code);
     if (result.kind !== "xpot") return show({ tone: "error", text: t("invalidCode") });
     void openCode(result.code);
@@ -199,7 +218,7 @@ export default function HomeScreen() {
 
       <Banner banner={banner} />
 
-      <div className="space-y-3 lg:hidden">
+      <div className={`space-y-3 ${isComputer ? "hidden" : ""}`}>
         {nfcSupported && (
           <ActionTile
             primary
@@ -239,21 +258,21 @@ export default function HomeScreen() {
             id="tag-code"
             value={code}
             // Scanners send the full link; only a typed code is upper-cased.
-            onChange={(e) => setCode(/[/:.]/.test(e.target.value) ? e.target.value : e.target.value.toUpperCase())}
+            onChange={(e) => setCode(isDesktop && /[/:.]/.test(e.target.value) ? e.target.value : e.target.value.toUpperCase())}
             autoFocus={isDesktop}
             placeholder={t("codePlaceholder")}
             autoCapitalize="characters"
             autoCorrect="off"
             spellCheck={false}
             enterKeyHint="go"
-            maxLength={isDesktop ? 300 : 14}
+            maxLength={isDesktop ? 2048 : 14}
             className={`${INPUT} font-mono tracking-[0.12em] placeholder:font-sans placeholder:tracking-normal`}
             data-testid="input-tag-code"
             data-shortcut="search"
           />
           <button
             type="submit"
-            disabled={busy || code.trim().length < (isDesktop ? 4 : 8)}
+            disabled={busy || code.trim().length < 8}
             aria-label={t("open")}
             className="flex min-h-[48px] min-w-[48px] shrink-0 items-center justify-center rounded-2xl bg-blue-500 text-white disabled:opacity-40"
             data-testid="button-open-code"

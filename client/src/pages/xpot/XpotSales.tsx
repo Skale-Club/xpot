@@ -193,7 +193,10 @@ export function XpotSales() {
   const [location, navigate] = useLocation();
   const { tab, id } = parseSalesPath(location);
   const setTab = (next: SalesTab) => navigate(salesPath(next), { replace: true });
-  const select = (which: SalesTab) => (itemId: number | null) => navigate(salesPath(which, itemId));
+  // Moving between items and closing replace history; only the first open pushes,
+  // so Back leaves the screen instead of replaying every row J/K visited.
+  const select = (which: SalesTab) => (itemId: number | null) =>
+    navigate(salesPath(which, itemId), { replace: id != null });
 
   return (
     <div className="space-y-4">

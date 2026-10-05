@@ -48,7 +48,7 @@ import type { FullSalesLead, SalesLead } from "./types";
 import { LeadSalesPanel } from "./components/sales/LeadSalesPanel";
 import { VisitActionsPanel } from "./components/sales/VisitActions";
 import { GLASS_RAISED } from "@/components/xpot/surface";
-import { useIsDesktop } from "@/hooks/use-is-desktop";
+import { useIsComputer } from "@/hooks/use-is-desktop";
 import { ContinueOnPhone } from "@/pages/tags/ContinueOnPhone";
 
 function ActiveLeadInfo({ lead, onSaved }: { lead: SalesLead; onSaved: () => void }) {
@@ -407,7 +407,7 @@ export function XpotCheckIn() {
   // Follow the rep while this screen is open; the provider stops the watch on
   // unmount so the GPS radio isn't pinned on the other tabs.
   // Not on desktop: it never starts a check-in, so it should not ask for location.
-  const isDesktop = useIsDesktop();
+  const isDesktop = useIsComputer();
   useEffect(() => {
     if (isDesktop) return;
     setLiveTracking(true);
@@ -451,7 +451,7 @@ export function XpotCheckIn() {
     return (
       <div className="rounded-3xl p-6" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)" }} data-testid="desktop-checkin">
         <ContinueOnPhone
-          url={`${window.location.origin}/check-in`}
+          url={`${window.location.origin}/check-in${window.location.search}`}
           title={t("desktopCheckInTitle")}
           hint={t("desktopCheckInHint")}
         />
@@ -592,7 +592,7 @@ export function XpotCheckIn() {
           helperText=""
           loading={checkOutMutation.isPending || cancelVisitMutation.isPending || uploadAudioMutation.isPending}
           disabled={uploadAudioMutation.isPending}
-          onConfirm={() => checkOutMutation.mutate({ status: checkoutStatus } as any)}
+          onConfirm={() => checkOutMutation.mutate({ status: checkoutStatus })}
           onCancel={() => cancelVisitMutation.mutate(undefined as any)}
         />
       </div>

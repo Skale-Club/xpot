@@ -48,7 +48,7 @@ export function SalesTable({ rows, selectedId, onSelect }: {
               <tr
                 key={sale.id}
                 tabIndex={0}
-                aria-selected={selectedId === sale.id}
+                aria-current={selectedId === sale.id ? "true" : undefined}
                 onClick={open}
                 onKeyDown={onRowKey(open)}
                 className={`${rowClass(selectedId === sale.id)} ${cancelled ? "opacity-50" : ""}`}
@@ -111,15 +111,15 @@ export function ConsignmentsTable({ rows, selectedId, onSelect, onSettle, onRest
           {rows.map((row) => {
             const c = row.consignment;
             const due = daysUntil(c.nextVisitDueAt);
-            const overdue = due !== null && due < 0;
-            const dueSoon = due !== null && due >= 0 && due <= 7;
             const closed = c.status === "closed";
+            const overdue = !closed && due !== null && due < 0;
+            const dueSoon = due !== null && due >= 0 && due <= 7;
             const open = () => onSelect(row);
             return (
               <tr
                 key={c.id}
                 tabIndex={0}
-                aria-selected={selectedId === c.id}
+                aria-current={selectedId === c.id ? "true" : undefined}
                 onClick={open}
                 onKeyDown={onRowKey(open)}
                 className={`${rowClass(selectedId === c.id)} ${closed ? "opacity-60" : ""} ${overdue && selectedId !== c.id ? "bg-red-500/[0.05]" : ""}`}

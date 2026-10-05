@@ -27,8 +27,12 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
   const tc = useT(commonMessages);
   const [, navigate] = useLocation();
   const isDesktop = useIsDesktop();
-  const openPiece = (code: string) => navigate(isDesktop ? `${APP_BASE}/pieces/${encodeURIComponent(code)}${window.location.search}` : tagPath(code));
-  const closePiece = useCallback(() => navigate(`${APP_BASE}/pieces${window.location.search}`), [navigate]);
+  // Moving between pieces and closing replace history; only the first open pushes.
+  const openPiece = (code: string) =>
+    isDesktop
+      ? navigate(`${APP_BASE}/pieces/${encodeURIComponent(code)}${window.location.search}`, { replace: selectedCode != null })
+      : navigate(tagPath(code));
+  const closePiece = useCallback(() => navigate(`${APP_BASE}/pieces${window.location.search}`, { replace: true }), [navigate]);
   const [filter, setFilter] = useState<FilterId>("all");
   const [search, setSearch] = useState("");
   const status = FILTERS.find((f) => f.id === filter)?.status ?? null;
@@ -49,6 +53,8 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
       return tagsGet<TagListItem[]>(`/api/xpot/tags${qs ? `?${qs}` : ""}`);
     },
     staleTime: 15_000,
+    // Keep the table while a new filter loads, so the open piece stays put.
+    placeholderData: (previous) => previous,
   });
 
   const query = search.trim().toLowerCase();
@@ -57,6 +63,19 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
     if (!query) return list;
     return list.filter((tag) => [tag.publicCode, tag.leadName, tag.label].some((v) => v?.toLowerCase().includes(query)));
   }, [data, query]);
+
+  const listLoading = (
+    <div className="flex justify-center py-16 text-white/40">
+      <Spinner className="h-7 w-7" />
+    </div>
+  );
+  const listError = <div className={`${CARD} px-6 py-8 text-center text-sm text-red-200`}>{errorText(error, tc("requestFailed"))}</div>;
+  const listEmpty = (
+    <div className={`${CARD} flex flex-col items-center px-6 py-10 text-center`}>
+      <Package className="h-8 w-8 text-white/25" />
+      <p className="mt-2 text-sm text-white/45">{(data ?? []).length === 0 && filter === "all" ? t("piecesEmpty") : t("piecesNoMatch")}</p>
+    </div>
+  );
 
   return (
     <>
@@ -101,7 +120,7 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
             key={f.id}
             type="button"
             role="tab"
-            aria-selected={filter === f.id}
+            aria-current={filter === f.id ? "true" : undefined}
             onClick={() => setFilter(f.id)}
             className={`min-h-[36px] shrink-0 rounded-full px-3.5 text-sm font-semibold transition-colors ${
               filter === f.id ? "bg-blue-500/25 text-white" : "border border-white/10 text-white/50 active:bg-white/10"
@@ -115,22 +134,14 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
       </div>
 
       <div className="mt-4">
-        {isLoading ? (
-          <div className="flex justify-center py-16 text-white/40">
-            <Spinner className="h-7 w-7" />
-          </div>
-        ) : error ? (
-          <div className={`${CARD} px-6 py-8 text-center text-sm text-red-200`}>{errorText(error, tc("requestFailed"))}</div>
-        ) : items.length === 0 ? (
-          <div className={`${CARD} flex flex-col items-center px-6 py-10 text-center`}>
-            <Package className="h-8 w-8 text-white/25" />
-            <p className="mt-2 text-sm text-white/45">{(data ?? []).length === 0 && filter === "all" ? t("piecesEmpty") : t("piecesNoMatch")}</p>
-          </div>
-        ) : isDesktop ? (
+        {isDesktop ? (
+          // The pane stays mounted whatever the list shows (loading, empty, error).
           <MasterDetail
             closeLabel={t("closePane")}
             onClose={closePiece}
-            list={<PiecesTable items={items} selectedCode={selectedCode} onSelect={openPiece} />}
+            list={isLoading ? listLoading : error ? listError : items.length === 0 ? listEmpty : (
+              <PiecesTable items={items} selectedCode={selectedCode} onSelect={openPiece} />
+            )}
             detail={selectedCode ? (
               <div className={`${CARD} p-5`}>
                 <TagScreen key={selectedCode} code={selectedCode} onClose={closePiece} />
@@ -144,6 +155,12 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
               </div>
             }
           />
+        ) : isLoading ? (
+          listLoading
+        ) : error ? (
+          listError
+        ) : items.length === 0 ? (
+          listEmpty
         ) : (
           <ul className={`${CARD} divide-y divide-white/[0.06] overflow-hidden`} data-testid="pieces-list">
             {items.map((tag) => (
@@ -195,14 +212,14 @@ function PiecesTable({ items, selectedCode, onSelect }: { items: TagListItem[]; 
         </thead>
         <tbody className="divide-y divide-white/[0.05]">
           {items.map((tag) => {
-            const selected = selectedCode === tag.publicCode;
+            const selected = selectedCode?.toUpperCase() === tag.publicCode.toUpperCase();
             return (
               <tr
                 key={tag.id}
                 tabIndex={0}
-                aria-selected={selected}
+                aria-current={selected ? "true" : undefined}
                 onClick={() => onSelect(tag.publicCode)}
-                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(tag.publicCode); } }}
+                onKeyDown={(e) => { if (e.target !== e.currentTarget) return; if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(tag.publicCode); } }}
                 className={`cursor-pointer outline-none transition-colors focus-visible:bg-white/[0.05] ${selected ? "bg-blue-500/[0.12]" : "hover:bg-white/[0.03]"}`}
                 data-testid={`piece-row-${tag.publicCode}`}
               >

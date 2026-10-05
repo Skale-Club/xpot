@@ -6,7 +6,9 @@ function isTyping(target: EventTarget | null) {
   return el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName);
 }
 
-const dialogOpen = () => Boolean(document.querySelector('[role="dialog"], [role="alertdialog"]'));
+// Dialogs, menus, select lists and popovers own the keyboard while open.
+const overlayOpen = () =>
+  Boolean(document.querySelector('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"], [data-radix-popper-content-wrapper]'));
 
 /** Rows of the list on screen (the desktop tables mark them with tabIndex). */
 function tableRows(): HTMLElement[] {
@@ -30,8 +32,8 @@ export function useDesktopShortcuts({ enabled, onPalette }: { enabled: boolean; 
         onPalette();
         return;
       }
-      if (e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return;
-      if (isTyping(e.target) || dialogOpen()) return;
+      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || e.defaultPrevented) return;
+      if (isTyping(e.target) || overlayOpen()) return;
 
       const key = e.key.toLowerCase();
       if (key === "/") {
@@ -51,7 +53,7 @@ export function useDesktopShortcuts({ enabled, onPalette }: { enabled: boolean; 
         const rows = tableRows();
         if (!rows.length) return;
         e.preventDefault();
-        const current = rows.findIndex((r) => r.getAttribute("aria-selected") === "true" || r === document.activeElement);
+        const current = rows.findIndex((r) => r.getAttribute("aria-current") === "true" || r === document.activeElement);
         const next = current < 0 ? 0 : Math.min(rows.length - 1, Math.max(0, current + (key === "j" ? 1 : -1)));
         const row = rows[next];
         row.focus();

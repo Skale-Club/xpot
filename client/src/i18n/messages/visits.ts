@@ -78,7 +78,6 @@ const en = {
   prevMonth: "Previous month",
   nextMonth: "Next month",
   pickDay: "Pick a day",
-  showAll: "See all visits",
 };
 
 export const visitsMessages: Dictionary<typeof en> = {
@@ -155,7 +154,6 @@ export const visitsMessages: Dictionary<typeof en> = {
     prevMonth: "Mês anterior",
     nextMonth: "Próximo mês",
     pickDay: "Escolha um dia",
-    showAll: "Ver todas as visitas",
   },
   es: {
     allVisits: "Todas las visitas",
@@ -229,6 +227,5 @@ export const visitsMessages: Dictionary<typeof en> = {
     prevMonth: "Mes anterior",
     nextMonth: "Mes siguiente",
     pickDay: "Elige un día",
-    showAll: "Ver todas las visitas",
   },
 };

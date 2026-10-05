@@ -102,16 +102,20 @@ export function SalesList({ selectedId = null, onSelect }: {
 
       {query.isLoading && <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-blue-400" /></div>}
 
-      {query.data?.length === 0 && !query.isLoading && (
+      {query.data?.length === 0 && !query.isLoading && !(isDesktop && selectedId != null) && (
         <EmptyState compact icon={Package} title="No sales recorded yet." />
       )}
 
       {isDesktop ? (
-        query.data && query.data.length > 0 && (
+        ((query.data?.length ?? 0) > 0 || selectedId != null) && (
           <MasterDetail
             closeLabel="Close"
             onClose={() => onSelect!(null)}
-            list={<SalesTable rows={query.data} selectedId={selectedId} onSelect={(row) => onSelect!(row.sale.id)} />}
+            list={query.data?.length ? (
+              <SalesTable rows={query.data} selectedId={selectedId} onSelect={(row) => onSelect!(row.sale.id)} />
+            ) : (
+              <EmptyState compact icon={Package} title="No sales recorded yet." />
+            )}
             detail={selectedId == null ? null : selected ? (
               <DetailCard title={selected.lead?.name ?? "Sale"} onClose={() => onSelect!(null)}>
                 <SaleDetailBody key={selected.sale.id} row={selected} onDone={() => onSelect!(null)} />
@@ -266,15 +270,17 @@ export function ConsignmentsList({ selectedId = null, onSelect }: {
 
       {query.isLoading && <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-blue-400" /></div>}
 
-      {rows.length === 0 && !query.isLoading && (
+      {rows.length === 0 && !query.isLoading && !(isDesktop && selectedId != null) && (
         <EmptyState compact icon={PackagePlus} title={status === "active" ? "No stock out on consignment." : "Nothing closed yet."} />
       )}
 
-      {isDesktop && rows.length > 0 && (
+      {isDesktop && (rows.length > 0 || selectedId != null) && (
         <MasterDetail
           closeLabel="Close"
           onClose={() => onSelect!(null)}
-          list={
+          list={rows.length === 0 ? (
+            <EmptyState compact icon={PackagePlus} title={status === "active" ? "No stock out on consignment." : "Nothing closed yet."} />
+          ) : (
             <ConsignmentsTable
               rows={[...overdue, ...rest]}
               selectedId={selectedId}
@@ -283,7 +289,7 @@ export function ConsignmentsList({ selectedId = null, onSelect }: {
               onRestock={status === "active" ? (row) => setDepositTarget({ id: row.consignment.leadId, name: row.lead?.name ?? "" }) : undefined}
               onReturn={status === "active" ? setReturnRow : undefined}
             />
-          }
+          )}
           detail={selectedId == null ? null : (
             <ConsignmentDetailBody key={selectedId} id={selectedId} onClose={() => onSelect!(null)} framed />
           )}
@@ -351,7 +357,9 @@ function ConsignmentDetailBody({ id, onClose, framed }: { id: number; onClose: (
 
   const body = (
     <>
-        {query.isLoading || !data ? (
+        {query.isError ? (
+          <EmptyState compact icon={PackagePlus} title="This consignment was not found." />
+        ) : query.isLoading || !data ? (
           <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-blue-400" /></div>
         ) : (
           <div className="space-y-4">

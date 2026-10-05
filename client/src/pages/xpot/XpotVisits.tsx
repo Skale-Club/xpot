@@ -101,16 +101,41 @@ export function XpotVisits() {
   }, [allVisits]);
 
   const selectedVisit = routeId ? allVisits.find((v) => v.id === routeId) ?? null : null;
-  const closeVisit = useCallback(() => navigate("/visits"), [navigate]);
-  const openVisit = (v: EnrichedSalesVisit) => navigate(`/visits/${v.id}`);
+  // Moving between visits and closing replace history; only the first open pushes.
+  const closeVisit = useCallback(() => navigate("/visits", { replace: true }), [navigate]);
+  const openVisit = (v: EnrichedSalesVisit) => navigate(`/visits/${v.id}`, { replace: routeId != null });
 
   // Close the calendar popover on Escape.
   useEffect(() => {
     if (!calendarOpen) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setCalendarOpen(false); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    // Capture phase + preventDefault: MasterDetail skips handled events, so one
+    // Escape closes the popover without also closing the open visit.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      setCalendarOpen(false);
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
   }, [calendarOpen]);
+
+  const emptyVisits = (
+    <EmptyState
+      icon={CalendarDays}
+      title={viewMode === "all"
+        ? t("noVisitsYet")
+        : isToday
+          ? t("noVisitsToday")
+          : isYesterday(selectedDate)
+            ? t("noVisitsYesterday")
+            : t("noVisitsOn", { day: formatDayLabel(selectedDate, t).toLowerCase() })}
+      hint={viewMode === "all"
+        ? t("firstVisitHint")
+        : isToday
+          ? t("startVisitHint")
+          : t("nothingThisDay")}
+    />
+  );
 
   return (
     <div className="space-y-4">
@@ -169,8 +194,8 @@ export function XpotVisits() {
               type="button"
               onClick={() => (isDesktop ? setCalendarOpen((o) => !o) : dateInputRef.current?.showPicker())}
               aria-expanded={isDesktop ? calendarOpen : undefined}
-              aria-label={t("pickDay")}
-              className="relative flex flex-col items-center gap-0.5 rounded-xl px-3 py-1 lg:hover:bg-white/[0.05]"
+              aria-label={isDesktop ? t("pickDay") : undefined}
+              className="relative flex flex-col items-center gap-0.5 lg:rounded-xl lg:px-3 lg:py-1 lg:hover:bg-white/[0.05]"
             >
               <span className="text-sm font-semibold text-white">{formatDayLabel(selectedDate, t)}</span>
               <span className="text-[11px] text-white/35">
@@ -246,13 +271,14 @@ export function XpotVisits() {
         </EmptyState>
       ) : null}
 
-      {/* Visit list */}
-      {!visitsQuery.isLoading && !visitsQuery.isError && visitsToRender.length ? (
+      {/* Visit list. On desktop the open visit stays beside an empty list
+          (a filter or day with nothing in it) instead of disappearing. */}
+      {!visitsQuery.isLoading && !visitsQuery.isError ? (
         isDesktop ? (
           <MasterDetail
             closeLabel={t("closePane")}
             onClose={closeVisit}
-            list={<VisitsTable visits={visitsToRender} selectedId={routeId} onSelect={openVisit} />}
+            list={visitsToRender.length ? <VisitsTable visits={visitsToRender} selectedId={routeId} onSelect={openVisit} /> : emptyVisits}
             detail={routeId == null ? null : selectedVisit ? (
               <div className="overflow-hidden rounded-2xl" style={{ background: "rgba(255,255,255,0.035)", border: "1px solid rgba(255,255,255,0.08)" }} data-testid="visit-detail-pane">
                 <div className="flex items-center gap-3 border-b border-white/[0.06] px-5 py-3">
@@ -272,27 +298,13 @@ export function XpotVisits() {
             )}
             placeholder={<EmptyState icon={MousePointerClick} title={t("selectVisit")} hint={t("selectVisitHint")} cardStyle={GLASS} />}
           />
-        ) : (
+        ) : visitsToRender.length ? (
           <div className="space-y-2">
             {visitsToRender.map((visit) => <VisitRow key={visit.id} visit={visit} />)}
           </div>
+        ) : (
+          emptyVisits
         )
-      ) : !visitsQuery.isLoading && !visitsQuery.isError ? (
-        <EmptyState
-          icon={CalendarDays}
-          title={viewMode === "all"
-            ? t("noVisitsYet")
-            : isToday
-              ? t("noVisitsToday")
-              : isYesterday(selectedDate)
-                ? t("noVisitsYesterday")
-                : t("noVisitsOn", { day: formatDayLabel(selectedDate, t).toLowerCase() })}
-          hint={viewMode === "all"
-            ? t("firstVisitHint")
-            : isToday
-              ? t("startVisitHint")
-              : t("nothingThisDay")}
-        />
       ) : null}
 
       {deleteId != null && (

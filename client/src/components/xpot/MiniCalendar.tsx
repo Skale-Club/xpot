@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 function sameDay(a: Date, b: Date) {
@@ -26,6 +26,11 @@ export function MiniCalendar({
   labels: { prev: string; next: string };
 }) {
   const [month, setMonth] = useState(() => new Date(value.getFullYear(), value.getMonth(), 1));
+  // Show the selected day's month when the selection moves from outside (the day arrows).
+  const valueMonth = value.getFullYear() * 12 + value.getMonth();
+  useEffect(() => {
+    setMonth(new Date(Math.floor(valueMonth / 12), valueMonth % 12, 1));
+  }, [valueMonth]);
   const today = new Date();
 
   const weeks = useMemo(() => {

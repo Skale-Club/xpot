@@ -29,7 +29,7 @@ import type { XpotMeResponse } from "@/pages/xpot/types";
 import { AppBackground } from "./AppBackground";
 import { CommandPalette } from "./CommandPalette";
 import { useDesktopShortcuts } from "./useDesktopShortcuts";
-import { useIsDesktop } from "@/hooks/use-is-desktop";
+import { useIsComputer, useIsDesktop } from "@/hooks/use-is-desktop";
 import { BRAND_GRADIENT } from "./surface";
 
 // The frame around every rep screen. Below `lg` it is the phone column the app
@@ -58,6 +58,8 @@ function useNavGroups(): Array<{ label: string; items: NavItem[] }> {
   const tc = useT(commonMessages);
   const tt = useT(tagsMessages);
   const modules = useXpotModules();
+  // A tablet at desktop width can still check in (decision D1 is about computers).
+  const isComputer = useIsComputer();
   const groups: Array<{ label: string; items: NavItem[] }> = [];
   const starts = (prefix: string) => (path: string) => path === prefix || path.startsWith(`${prefix}/`);
 
@@ -65,6 +67,7 @@ function useNavGroups(): Array<{ label: string; items: NavItem[] }> {
     groups.push({
       label: tc("moduleVisits"),
       items: [
+        ...(isComputer ? [] : [{ href: "/check-in", label: t("tabCheckIn"), icon: MapPinned, match: starts("/check-in") }]),
         { href: "/dashboard", label: t("tabDashboard"), icon: Activity, match: starts("/dashboard") },
         { href: "/visits", label: t("tabVisits"), icon: Clock3, match: starts("/visits") },
         { href: "/leads", label: t("tabLeads"), icon: Building2, match: starts("/leads") },
@@ -122,7 +125,7 @@ function DesktopSidebar({ collapsed, onToggle, extraGroups = [] }: { collapsed: 
   const footer: NavItem[] = [
     { href: "/settings", label: t("navSettings"), icon: Settings, match: (p) => p.startsWith("/settings") },
     ...(canAdminister(me)
-      ? [{ href: "/admin/overview", label: t("navAdmin"), icon: Shield, match: (p: string) => p.startsWith("/admin") }]
+      ? [{ href: "/admin/overview", label: t("navAdmin"), icon: Shield, match: (p: string) => p.startsWith("/admin") && extraGroups.length === 0 }]
       : []),
   ];
 

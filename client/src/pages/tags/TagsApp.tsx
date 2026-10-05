@@ -82,8 +82,7 @@ export function TagsApp() {
     <AppLayout
       title={pieceCode ?? t(currentNav.key)}
       wide={wide}
-      mobileColumnClassName="pb-28"
-      mobileColumnStyle={{ paddingTop: "calc(env(safe-area-inset-top) + 16px)" }}
+      mobileColumnClassName="pb-28 pt-[calc(env(safe-area-inset-top)+16px)]"
       mobileHeader={
         <div className="mb-5 flex items-center gap-2">
           <div className="min-w-0 flex-1">

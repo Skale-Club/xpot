@@ -222,7 +222,8 @@ const en = {
   scannerHint: "A USB or Bluetooth barcode scanner works here: scan the QR on the piece.",
   continueOnPhone: "Write it from your phone",
   continueOnPhoneHint: "A computer cannot write NFC chips. Scan this code with your phone to open the piece there, then tap Write chip.",
-  orCopyLink: "Or copy the link the chip must hold:",
+  qrImageFailed: "QR unavailable. Copy the link above.",
+  continueOnPhoneDirectHint: "A computer cannot write NFC chips. Scan this code with your phone to open this link there, then tap Write chip.",
 };
 
 export const tagsMessages: Dictionary<typeof en> = {
@@ -433,7 +434,8 @@ export const tagsMessages: Dictionary<typeof en> = {
     scannerHint: "Um leitor de código USB ou Bluetooth funciona aqui: leia o QR da peça.",
     continueOnPhone: "Grave pelo celular",
     continueOnPhoneHint: "O computador não grava chips NFC. Leia este código com o celular para abrir a peça lá e toque em Gravar chip.",
-    orCopyLink: "Ou copie o link que o chip deve ter:",
+    qrImageFailed: "QR indisponível. Copie o link acima.",
+    continueOnPhoneDirectHint: "O computador não grava chips NFC. Leia este código com o celular para abrir este link lá e toque em Gravar chip.",
   },
   es: {
     navHome: "Inicio",
@@ -641,6 +643,7 @@ export const tagsMessages: Dictionary<typeof en> = {
     scannerHint: "Aquí funciona un lector de códigos USB o Bluetooth: escanea el QR de la pieza.",
     continueOnPhone: "Grábalo desde tu teléfono",
     continueOnPhoneHint: "Una computadora no puede grabar chips NFC. Escanea este código con tu teléfono para abrir la pieza allí y toca Grabar chip.",
-    orCopyLink: "O copia el enlace que debe tener el chip:",
+    qrImageFailed: "QR no disponible. Copia el enlace de arriba.",
+    continueOnPhoneDirectHint: "Una computadora no puede grabar chips NFC. Escanea este código con tu teléfono para abrir este enlace allí y toca Grabar chip.",
   },
 };

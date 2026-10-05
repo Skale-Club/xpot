@@ -50,7 +50,7 @@ export function Segmented<T extends string | number | undefined>({
 
   return (
     <div
-      role="tablist"
+      role="group"
       className={`flex gap-1 rounded-xl p-1 ${className}`}
       style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}
     >
@@ -58,8 +58,7 @@ export function Segmented<T extends string | number | undefined>({
         <button
           key={String(id)}
           type="button"
-          role="tab"
-          aria-selected={value === id}
+          aria-pressed={value === id}
           onClick={() => onChange(id)}
           className={`relative flex-1 rounded-lg py-2 text-xs font-semibold transition-all ${itemClassName}`}
           style={value === id
