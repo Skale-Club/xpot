@@ -416,7 +416,7 @@ export function XpotSettings() {
   const isSaving = profileMutation.isPending;
 
   return (
-    <AppLayout title={t("title")} mobileColumnClassName="pb-20 pt-6">
+    <AppLayout title={t("title")} size="medium" mobileColumnClassName="pb-20 pt-6">
       <div>
         {/* Header (phone only; the desktop top bar shows the title) */}
         <div className="mb-6 flex items-center gap-3 lg:hidden">
@@ -434,7 +434,7 @@ export function XpotSettings() {
           </div>
         </div>
 
-        <div className="space-y-8">
+        <div className="space-y-8 lg:columns-2 lg:gap-6 lg:space-y-0 lg:[&>*]:mb-6 lg:[&>*]:break-inside-avoid">
           {/* Language */}
           <Section title={tc("language")}>
             <p className="text-xs text-white/40">{t("languageHint")}</p>

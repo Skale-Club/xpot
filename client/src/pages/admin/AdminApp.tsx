@@ -12,7 +12,7 @@ import { AdminBranding } from "./AdminBranding";
 import { AdminTags } from "./tags/AdminTags";
 import { AdminProducts } from "./AdminProducts";
 import { AdminSettings } from "./AdminSettings";
-import { AppBackground } from "@/components/xpot/AppBackground";
+import { AppLayout } from "@/components/xpot/AppLayout";
 
 const SECTIONS = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
@@ -68,57 +68,73 @@ export function AdminApp({ section }: { section: string }) {
     );
   }
 
+  const activeLabel = SECTIONS.find((s) => s.id === active)?.label ?? "Overview";
+
   return (
-    <AppBackground>
-      <div className="relative mx-auto w-full max-w-5xl px-4 pb-20 pt-6">
-        {/* Header */}
-        <div className="mb-6 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setLocation("/dashboard")}
-              className="rounded-lg border border-white/10 bg-white/5 p-2 text-white/70 transition-colors hover:bg-white/10"
-              title="Back to app"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </button>
-            <div>
-              <h1 className="text-xl font-bold tracking-tight">Xpot Admin</h1>
-              <p className="text-xs text-white/40">{me.user.email}</p>
+    <AppLayout
+      title={`Admin · ${activeLabel}`}
+      size="wide"
+      mobileMaxWidth="max-w-5xl"
+      mobileColumnClassName="pb-20 pt-6"
+      extraNavGroups={[
+        {
+          label: "Admin",
+          items: SECTIONS.map(({ id, label, icon }) => ({
+            href: `/admin/${id}`,
+            label,
+            icon,
+            match: (path: string) => path === `/admin/${id}` || path.startsWith(`/admin/${id}/`) || (id === "overview" && path === "/admin"),
+          })),
+        },
+      ]}
+      mobileHeader={
+        <>
+          {/* Header */}
+          <div className="mb-6 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setLocation("/dashboard")}
+                className="rounded-lg border border-white/10 bg-white/5 p-2 text-white/70 transition-colors hover:bg-white/10"
+                title="Back to app"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </button>
+              <div>
+                <h1 className="text-xl font-bold tracking-tight">Xpot Admin</h1>
+                <p className="text-xs text-white/40">{me.user.email}</p>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Tabs */}
-        <nav className="mb-6 flex gap-1 overflow-x-auto rounded-2xl border border-white/10 bg-white/[0.03] p-1.5">
-          {SECTIONS.map(({ id, label, icon: Icon }) => {
-            const isActive = active === id;
-            return (
-              <button
-                key={id}
-                onClick={() => setLocation(`/admin/${id}`)}
-                className={`relative flex items-center gap-2 whitespace-nowrap rounded-xl px-4 py-2 text-sm font-medium transition-colors ${
-                  isActive ? "bg-blue-500/20 text-white" : "text-white/55 hover:bg-white/5 hover:text-white/80"
-                }`}
-              >
-                <Icon className="h-4 w-4" />
-                {label}
-              </button>
-            );
-          })}
-        </nav>
-
-        {/* Content */}
-        <main>
-          {active === "overview" && <AdminOverview />}
-          {active === "products" && <AdminProducts />}
-          {active === "integrations" && <AdminIntegrations />}
-          {active === "branding" && <AdminBranding />}
-          {active === "xphere" && <AdminXphere />}
-          {active === "reps" && <AdminReps />}
-          {active === "tags" && <AdminTags />}
-          {active === "settings" && <AdminSettings />}
-        </main>
-      </div>
-    </AppBackground>
+          {/* Tabs (the desktop sidebar lists these) */}
+          <nav className="mb-6 flex gap-1 overflow-x-auto rounded-2xl border border-white/10 bg-white/[0.03] p-1.5">
+            {SECTIONS.map(({ id, label, icon: Icon }) => {
+              const isActive = active === id;
+              return (
+                <button
+                  key={id}
+                  onClick={() => setLocation(`/admin/${id}`)}
+                  className={`relative flex items-center gap-2 whitespace-nowrap rounded-xl px-4 py-2 text-sm font-medium transition-colors ${
+                    isActive ? "bg-blue-500/20 text-white" : "text-white/55 hover:bg-white/5 hover:text-white/80"
+                  }`}
+                >
+                  <Icon className="h-4 w-4" />
+                  {label}
+                </button>
+              );
+            })}
+          </nav>
+        </>
+      }
+    >
+      {active === "overview" && <AdminOverview />}
+      {active === "products" && <AdminProducts />}
+      {active === "integrations" && <AdminIntegrations />}
+      {active === "branding" && <AdminBranding />}
+      {active === "xphere" && <AdminXphere />}
+      {active === "reps" && <AdminReps />}
+      {active === "tags" && <AdminTags />}
+      {active === "settings" && <AdminSettings />}
+    </AppLayout>
   );
 }
