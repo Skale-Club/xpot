@@ -24,7 +24,7 @@ import {
 import type { TagProvisioningDevice } from "#shared/schema.js";
 import { storage } from "../storage.js";
 import { resolveGoogleApiKey } from "../routes/xpot/google.js";
-import { actorOf, requireTagManager, requireTagUser } from "./access.js";
+import { actorOf, requireTagAdmin, requireTagManager, requireTagUser } from "./access.js";
 import { registerJourneyRoutes } from "./journeyRoutes.js";
 import { createTagRedirectHandler, type PublicTag } from "./publicHandler.js";
 import { buildBatchZip, qrPng, qrSvg } from "./qrAssets.js";
@@ -659,7 +659,7 @@ export function registerTagRoutes(app: Express) {
   });
 
   // Manufacturing batches.
-  app.get("/api/xpot/admin/tag-batches", requireTagManager, async (_req, res) => {
+  app.get("/api/xpot/admin/tag-batches", requireTagAdmin, async (_req, res) => {
     try {
       res.json(await repo.listBatches());
     } catch (err) {
@@ -667,7 +667,7 @@ export function registerTagRoutes(app: Express) {
     }
   });
 
-  app.post("/api/xpot/admin/tag-batches", requireTagManager, async (req, res) => {
+  app.post("/api/xpot/admin/tag-batches", requireTagAdmin, async (req, res) => {
     try {
       res.status(201).json(await repo.createBatch(batchCreateSchema.parse(req.body), userIdOf(req)));
     } catch (err) {
@@ -675,7 +675,7 @@ export function registerTagRoutes(app: Express) {
     }
   });
 
-  app.get("/api/xpot/admin/tag-batches/:id", requireTagManager, async (req, res) => {
+  app.get("/api/xpot/admin/tag-batches/:id", requireTagAdmin, async (req, res) => {
     const id = idParam(req, res);
     if (!id) return;
     try {
@@ -687,7 +687,7 @@ export function registerTagRoutes(app: Express) {
     }
   });
 
-  app.patch("/api/xpot/admin/tag-batches/:id", requireTagManager, async (req, res) => {
+  app.patch("/api/xpot/admin/tag-batches/:id", requireTagAdmin, async (req, res) => {
     const id = idParam(req, res);
     if (!id) return;
     try {
@@ -697,7 +697,7 @@ export function registerTagRoutes(app: Express) {
     }
   });
 
-  app.get("/api/xpot/admin/tag-batches/:id/export.csv", requireTagManager, async (req, res) => {
+  app.get("/api/xpot/admin/tag-batches/:id/export.csv", requireTagAdmin, async (req, res) => {
     const id = idParam(req, res);
     if (!id) return;
     try {
@@ -711,7 +711,7 @@ export function registerTagRoutes(app: Express) {
     }
   });
 
-  app.get("/api/xpot/admin/tag-batches/:id/qr-assets.zip", requireTagManager, async (req, res) => {
+  app.get("/api/xpot/admin/tag-batches/:id/qr-assets.zip", requireTagAdmin, async (req, res) => {
     const id = idParam(req, res);
     if (!id) return;
     try {
@@ -731,7 +731,7 @@ export function registerTagRoutes(app: Express) {
   });
 
   // Desktop NFC provisioners (admin side).
-  app.get("/api/xpot/admin/tag-provisioners", requireTagManager, async (_req, res) => {
+  app.get("/api/xpot/admin/tag-provisioners", requireTagAdmin, async (_req, res) => {
     try {
       res.json(await provisioning.listDevices());
     } catch (err) {
@@ -739,7 +739,7 @@ export function registerTagRoutes(app: Express) {
     }
   });
 
-  app.post("/api/xpot/admin/tag-provisioners", requireTagManager, async (req, res) => {
+  app.post("/api/xpot/admin/tag-provisioners", requireTagAdmin, async (req, res) => {
     try {
       const { deviceName } = z.object({ deviceName: z.string().trim().min(1, "Name the computer").max(80) }).strict().parse(req.body);
       res.status(201).json(await provisioning.createPairing(deviceName, userIdOf(req)));
@@ -748,7 +748,7 @@ export function registerTagRoutes(app: Express) {
     }
   });
 
-  app.post("/api/xpot/admin/tag-provisioners/:id/revoke", requireTagManager, async (req, res) => {
+  app.post("/api/xpot/admin/tag-provisioners/:id/revoke", requireTagAdmin, async (req, res) => {
     const id = idParam(req, res);
     if (!id) return;
     try {
@@ -758,7 +758,7 @@ export function registerTagRoutes(app: Express) {
     }
   });
 
-  app.get(`${adminBase}/:id/provisioning`, requireTagManager, async (req, res) => {
+  app.get(`${adminBase}/:id/provisioning`, requireTagAdmin, async (req, res) => {
     const id = idParam(req, res);
     if (!id) return;
     try {
@@ -770,7 +770,7 @@ export function registerTagRoutes(app: Express) {
     }
   });
 
-  app.post(`${adminBase}/:id/provisioning-jobs`, requireTagManager, async (req, res) => {
+  app.post(`${adminBase}/:id/provisioning-jobs`, requireTagAdmin, async (req, res) => {
     const id = idParam(req, res);
     if (!id) return;
     try {
@@ -782,7 +782,7 @@ export function registerTagRoutes(app: Express) {
     }
   });
 
-  app.post("/api/xpot/admin/tag-provisioning-jobs/:id/cancel", requireTagManager, async (req, res) => {
+  app.post("/api/xpot/admin/tag-provisioning-jobs/:id/cancel", requireTagAdmin, async (req, res) => {
     const id = idParam(req, res);
     if (!id) return;
     try {

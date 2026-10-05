@@ -12,9 +12,13 @@ export function canManage(viewer: Viewer | null | undefined): boolean {
   return !!viewer && (viewer.user.isAdmin || viewer.rep.role === "manager" || viewer.rep.role === "admin");
 }
 
-/** Admin only: a platform admin or a rep with the admin role (Tags Journey, MCP access). */
-export function isAppAdmin(viewer: Viewer | null | undefined): boolean {
-  return !!viewer && (viewer.user.isAdmin || viewer.rep.role === "admin");
+/**
+ * The global admin only (users.is_admin, Skale Club): Tags batches, the Journey,
+ * the NFC writers and MCP, Integrations, Branding and Xphere. A manager never
+ * sees these, and the server refuses them (requireSuperAdmin, requireTagAdmin).
+ */
+export function isSuperAdmin(viewer: Pick<Viewer, "user"> | null | undefined): boolean {
+  return !!viewer?.user.isAdmin;
 }
 
 export function repModules(rep: { role: string; modules?: readonly string[] | null }): XpotModule[] {

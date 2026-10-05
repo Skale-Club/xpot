@@ -11,7 +11,8 @@ import {
   Settings,
   type LucideIcon,
 } from "lucide-react";
-import { canManage, isAppAdmin, type XpotModule } from "@shared/modules";
+import { canManage, isSuperAdmin, type XpotModule } from "@shared/modules";
+import { AdminBadge } from "./AdminBadge";
 import { LanguagePicker } from "@/components/LanguagePicker";
 import { rememberModule, useXpotModules } from "@/components/ModuleSwitch";
 import { MODULE_HOME } from "@/lib/xpot";
@@ -67,13 +68,13 @@ function useShellNav() {
   const { data: me } = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
   const viewer = {
     canManage: canAdminister(me),
-    isAdmin: isAppAdmin(me),
+    isAdmin: isSuperAdmin(me),
     isComputer,
   };
   const labels = { shell: t, tags: tt };
 
   const context = contextOfPath(location);
-  const organization = viewer.canManage ? organizationItems(labels) : [];
+  const organization = viewer.canManage ? organizationItems(labels, viewer) : [];
   const settingsItem: NavItem = { href: "/settings", label: t("navSettings"), icon: Settings, match: starts("/settings") };
   // On an account page no module is current: the sidebar lists the account itself.
   const module: XpotModule | null = context === "account" ? null : modules.includes(context) ? context : modules[0] ?? null;
@@ -111,6 +112,7 @@ function SidebarLink({ item, collapsed, active, accent }: { item: NavItem; colla
       {active && <span className="absolute inset-0 rounded-xl" style={{ background: accent.soft }} />}
       <Icon className={`relative h-[18px] w-[18px] shrink-0 ${active ? accent.text : ""}`} />
       {!collapsed && <span className="relative truncate">{item.label}</span>}
+      {item.adminOnly && (collapsed ? <AdminBadge dot className="absolute right-1.5 top-1.5" /> : <AdminBadge className="relative ml-auto" />)}
     </Link>
   );
 }

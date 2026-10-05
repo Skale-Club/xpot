@@ -13,6 +13,8 @@ import { AdminProducts } from "./AdminProducts";
 import { AdminSettings } from "./AdminSettings";
 import { AppLayout } from "@/components/xpot/AppLayout";
 import { moduleGroups, organizationItems, type NavItem } from "@/components/xpot/moduleNav";
+import { AdminBadge } from "@/components/xpot/AdminBadge";
+import { isSuperAdmin } from "@shared/modules";
 import { useIsComputer } from "@/hooks/use-is-desktop";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
@@ -29,6 +31,8 @@ import { MODULE_HOME } from "@/lib/xpot";
 
 const SECTIONS = ["overview", "tags", "products", "integrations", "branding", "xphere", "reps", "settings"] as const;
 type SectionId = (typeof SECTIONS)[number];
+/** The global admin's sections (moduleNav marks them adminOnly). */
+const SUPER_ADMIN_SECTIONS: readonly SectionId[] = ["integrations", "branding", "xphere"];
 
 export function AdminApp({ section }: { section: string }) {
   const [location, setLocation] = useLocation();
@@ -72,9 +76,9 @@ export function AdminApp({ section }: { section: string }) {
     );
   }
 
-  const viewer = { canManage: true, isAdmin: me.user.isAdmin || me.rep.role === "admin", isComputer };
+  const viewer = { canManage: true, isAdmin: isSuperAdmin(me), isComputer };
   const labels = { shell: t, tags: tt };
-  const organization = organizationItems(labels);
+  const organization = organizationItems(labels, viewer);
   const isOrganization = organization.some((i) => i.match(location));
   // The sibling screens of this one, for the phone's tab strip (the desktop sidebar lists them).
   const siblings: NavItem[] = active === "tags"
@@ -114,7 +118,7 @@ export function AdminApp({ section }: { section: string }) {
 
           {siblings.length > 0 && (
             <nav className="mb-6 flex gap-1 overflow-x-auto rounded-2xl border border-white/10 bg-white/[0.03] p-1.5">
-              {siblings.map(({ href, label, icon: Icon, match }) => {
+              {siblings.map(({ href, label, icon: Icon, match, adminOnly }) => {
                 const isActive = match(location);
                 return (
                   <button
@@ -126,6 +130,7 @@ export function AdminApp({ section }: { section: string }) {
                   >
                     <Icon className="h-4 w-4" />
                     {label}
+                    {adminOnly && <AdminBadge />}
                   </button>
                 );
               })}
@@ -136,9 +141,13 @@ export function AdminApp({ section }: { section: string }) {
     >
       {active === "overview" && <AdminOverview />}
       {active === "products" && <AdminProducts />}
-      {active === "integrations" && <AdminIntegrations />}
-      {active === "branding" && <AdminBranding />}
-      {active === "xphere" && <AdminXphere />}
+      {/* A manager who types one of these URLs gets nothing (and the API answers 403). */}
+      {SUPER_ADMIN_SECTIONS.includes(active) && !viewer.isAdmin && (
+        <p className="py-16 text-center text-sm text-white/50">{tm("noAdminPermission")}</p>
+      )}
+      {active === "integrations" && viewer.isAdmin && <AdminIntegrations />}
+      {active === "branding" && viewer.isAdmin && <AdminBranding />}
+      {active === "xphere" && viewer.isAdmin && <AdminXphere />}
       {active === "reps" && <AdminReps />}
       {active === "tags" && <AdminTags />}
       {active === "settings" && <AdminSettings />}

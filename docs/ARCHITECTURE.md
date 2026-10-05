@@ -30,8 +30,9 @@ The history of this split is in [MODULES.md](./MODULES.md).
 |---|---|---|
 | rep | `sales_reps.role = 'rep'` with `visits` in `modules` | Their own leads, visits, sales |
 | reseller | Not a role: a `rep` whose `modules` is just `{tags}` | The pieces in their own kit and the leads they own |
-| manager | `role = 'manager'` | Everything in both modules, plus each module's Manage group and Organization |
-| admin | `role = 'admin'`, or `users.is_admin` (a global admin) | Everything a manager has, plus acting on managers and admins, the Tags Journey and MCP |
+| manager | `role = 'manager'` | Everything in both modules, plus each module's Manage group and People, minus the global admin's items below |
+| admin | `role = 'admin'` | What a manager has, plus acting on managers and admins |
+| global admin | `users.is_admin` (Skale Club; an admin created in People gets it too) | Everything, plus the items only it sees, each tagged "Admin" in the UI: Tags batches, the Journey, the NFC writers (and writing a piece's chip), MCP, Integrations, Branding and Xphere. Client: `isSuperAdmin()` and `adminOnly` nav items; server: `requireSuperAdmin` and `requireTagAdmin` answer 403 to everyone else |
 
 Every person also needs `is_active` and no `blocked_at`. A phone that signs up
 starts pending; an admin approves it in People (`/admin/reps`).

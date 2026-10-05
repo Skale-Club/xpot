@@ -148,6 +148,17 @@ export async function requireXpotManager(req: Request, res: Response, next: Next
   }
 }
 
+/**
+ * The global admin only (users.is_admin, Skale Club): production, chip writers,
+ * the journey, integrations, branding, Xphere. Runs after requireXpotManager,
+ * which has already loaded the actor; managers get 403 like anyone else.
+ */
+export function requireSuperAdmin(req: Request, res: Response, next: NextFunction) {
+  const actor = (req as any).xpotActor as { user: SessionUser } | undefined;
+  if (!actor?.user.isAdmin) return res.status(403).json({ code: "super_admin_only", message: "Admin access required" });
+  next();
+}
+
 // ─── Resource-level authorization ────────────────────────────────────────────
 //
 // Ownership rule for lead-scoped resources (sales, consignments, visits):

@@ -87,9 +87,18 @@ describe("the composed /api/xpot routers", () => {
   });
 
   it("the admin paths stay manager-only", async () => {
-    for (const path of ["/api/xpot/admin/overview", "/api/xpot/admin/integrations", "/api/xpot/admin/branding"]) {
+    for (const path of ["/api/xpot/admin/overview"]) {
       expect((await get(appFor("rep"), path)).status, path).toBe(403);
       expect((await get(appFor("manager"), path)).status, path).not.toBe(403);
+    }
+  });
+
+  it("integrations, branding and Xphere are the global admin's alone", async () => {
+    for (const path of ["/api/xpot/admin/integrations", "/api/xpot/admin/branding", "/api/xpot/admin/xphere"]) {
+      expect((await get(appFor("rep"), path)).status, path).toBe(403);
+      const manager = await get(appFor("manager"), path);
+      expect([manager.status, manager.code], path).toEqual([403, "super_admin_only"]);
+      expect((await get(appFor("platform-admin"), path)).status, path).not.toBe(403);
     }
   });
 

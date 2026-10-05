@@ -25,7 +25,7 @@ async function loadActor(req: Request, res: Response): Promise<(TagActor & { isA
     res.status(403).json({ message: "Tags are not enabled for your account." });
     return null;
   }
-  return { userId: found.user.userId, repId: found.rep.id, isManager, isAdmin: found.user.isAdmin || found.rep.role === "admin" };
+  return { userId: found.user.userId, repId: found.rep.id, isManager, isAdmin: found.user.isAdmin };
 }
 
 const asActor = ({ userId, repId, isManager }: TagActor & { isAdmin: boolean }): TagActor => ({ userId, repId, isManager });
@@ -58,9 +58,9 @@ export async function requireTagManager(req: Request, res: Response, next: NextF
 }
 
 /**
- * Active admin only (a global admin or a rep with the admin role): the
- * Journey is Skale Club's internal production story, not for resellers and
- * not for reseller managers.
+ * The active global admin only (users.is_admin, Skale Club): the Journey,
+ * batches, chip writers and MCP are Skale Club's production side, not for
+ * resellers and not for reseller managers.
  */
 export async function requireTagAdmin(req: Request, res: Response, next: NextFunction) {
   try {

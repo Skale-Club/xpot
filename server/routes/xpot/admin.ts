@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { randomBytes } from "crypto";
 import { storage } from "../../storage.js";
-import { requireXpotManager } from "./middleware.js";
+import { requireSuperAdmin, requireXpotManager } from "./middleware.js";
 import {
   AccountError,
   approveRep,
@@ -149,7 +149,8 @@ export function createAdminRouter() {
     res.json(await storage.updateSalesAppSettings(input));
   });
 
-  // ── Xphere per-user config, managed by the admin across all reps ──
+  // ── Xphere per-user config, managed by the global admin across all reps ──
+  router.use("/admin/xphere", requireSuperAdmin);
 
   router.get("/admin/xphere", async (_req, res) => {
     const [reps, configs] = await Promise.all([

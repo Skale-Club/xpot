@@ -27,6 +27,7 @@ vi.mock("../server/storage.js", () => ({
 }));
 vi.mock("../server/routes/xpot/middleware.js", () => ({
   requireXpotManager: (_req: any, _res: any, next: any) => next(),
+  requireSuperAdmin: (_req: any, _res: any, next: any) => next(),
 }));
 
 describe("twilio provider in the registry", () => {

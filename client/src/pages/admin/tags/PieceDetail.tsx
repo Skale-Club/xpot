@@ -5,6 +5,7 @@ import { defaultUtmEnabled, planTransition, validateDestinationUrl, type TagActi
 import { isReviewFormUrl } from "@shared/reviewLink";
 import type { TagDetail } from "@shared/tagsApi";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
+import { useIsSuperAdmin } from "@/components/xpot/AdminBadge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
@@ -494,6 +495,7 @@ function Row({ label, value }: { label: string; value: ReactNode }) {
 export function PieceDetail({ id, go }: { id: string; go: Go }) {
   const t = useT(manageTagsPiecesMessages);
   const labels = useTagLabels();
+  const isAdmin = useIsSuperAdmin();
   const [range, setRange] = useState<AnalyticsRange>({ preset: "30d" });
   const { data: tag, isLoading, error } = useQuery<TagDetail>({
     queryKey: [ADMIN_TAGS_KEY, "piece", id],
@@ -529,10 +531,18 @@ export function PieceDetail({ id, go }: { id: string; go: Go }) {
           {tag.batchCode ? (
             <>
               {" · "}
-              <button type="button" className="font-mono hover:text-white hover:underline" onClick={() => tag.batchId && go(`/batches/${tag.batchId}`)}>
-                {tag.batchCode}
-                {tag.serialNumber ? ` #${tag.serialNumber}` : ""}
-              </button>
+              {/* Batches are the global admin's; a manager sees the code without the link. */}
+              {isAdmin ? (
+                <button type="button" className="font-mono hover:text-white hover:underline" onClick={() => tag.batchId && go(`/batches/${tag.batchId}`)}>
+                  {tag.batchCode}
+                  {tag.serialNumber ? ` #${tag.serialNumber}` : ""}
+                </button>
+              ) : (
+                <span className="font-mono">
+                  {tag.batchCode}
+                  {tag.serialNumber ? ` #${tag.serialNumber}` : ""}
+                </span>
+              )}
             </>
           ) : null}
           {tag.label ? ` · ${tag.label}` : ""}
@@ -579,7 +589,10 @@ export function PieceDetail({ id, go }: { id: string; go: Go }) {
         </section>
       </div>
 
-      <NfcProvisioningCard tagId={tag.id} publicCode={tag.publicCode} nfcUrl={tag.nfcUrl} retired={tag.status === "retired"} onOpenWriters={() => go("/provisioners")} />
+      {/* Writing the chip is the global admin's (NFC writers); managers don't get the card. */}
+      {isAdmin && (
+        <NfcProvisioningCard tagId={tag.id} publicCode={tag.publicCode} nfcUrl={tag.nfcUrl} retired={tag.status === "retired"} onOpenWriters={() => go("/provisioners")} />
+      )}
 
       {/* Admin only: renders nothing (and sends no request) for managers. */}
       <JourneyPanel scope={{ tagId: tag.id }} title={t("journeyTitle")} />

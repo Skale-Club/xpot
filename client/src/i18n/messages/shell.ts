@@ -20,6 +20,8 @@ const en = {
   navSettings: "Settings",
   // Module shell: management inside each module, the account outside them
   navManage: "Manage",
+  superAdminTag: "Admin",
+  superAdminHint: "Only the Xpot admin sees this",
   navOrganization: "Organization",
   moduleAccount: "Account",
   manageTeam: "Team",
@@ -70,6 +72,8 @@ export const shellMessages: Dictionary<typeof en> = {
 
     navSettings: "Configurações",
     navManage: "Gestão",
+    superAdminTag: "Admin",
+    superAdminHint: "Só o admin do Xpot vê isto",
     navOrganization: "Organização",
     moduleAccount: "Conta",
     manageTeam: "Equipe",
@@ -117,6 +121,8 @@ export const shellMessages: Dictionary<typeof en> = {
 
     navSettings: "Ajustes",
     navManage: "Gestión",
+    superAdminTag: "Admin",
+    superAdminHint: "Solo el admin de Xpot ve esto",
     navOrganization: "Organización",
     moduleAccount: "Cuenta",
     manageTeam: "Equipo",
