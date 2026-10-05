@@ -78,7 +78,7 @@ export function findMatchingLead(place: GooglePlaceResult, leads: FullSalesLead[
 // ─── Money (integer cents) ───────────────────────────────────────────────────
 
 export function formatCents(cents: number | null | undefined, currency = "USD") {
-  return new Intl.NumberFormat("en-US", {
+  return new Intl.NumberFormat(currentLocale(), {
     style: "currency",
     currency: currency || "USD",
     minimumFractionDigits: 2,
@@ -100,7 +100,7 @@ export function centsToInput(cents: number | null | undefined): string {
 
 export function formatShortDate(value?: string | Date | null) {
   if (!value) return "—";
-  return new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return new Date(value).toLocaleDateString(currentLocale(), { month: "short", day: "numeric" });
 }
 
 /** Days from now (negative = overdue). */

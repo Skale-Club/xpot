@@ -78,6 +78,10 @@ const en = {
   prevMonth: "Previous month",
   nextMonth: "Next month",
   pickDay: "Pick a day",
+  recordingTooLarge: "Recording too large",
+  recordingTooLargeDesc: "Keep voice notes under five minutes.",
+  removePhoto: "Remove photo",
+  removeSocial: "Remove social network",
 };
 
 export const visitsMessages: Dictionary<typeof en> = {
@@ -154,6 +158,10 @@ export const visitsMessages: Dictionary<typeof en> = {
     prevMonth: "Mês anterior",
     nextMonth: "Próximo mês",
     pickDay: "Escolha um dia",
+    recordingTooLarge: "Gravação grande demais",
+    recordingTooLargeDesc: "Mantenha as notas de voz abaixo de cinco minutos.",
+    removePhoto: "Remover foto",
+    removeSocial: "Remover rede social",
   },
   es: {
     allVisits: "Todas las visitas",
@@ -227,5 +235,9 @@ export const visitsMessages: Dictionary<typeof en> = {
     prevMonth: "Mes anterior",
     nextMonth: "Mes siguiente",
     pickDay: "Elige un día",
+    recordingTooLarge: "Grabación demasiado grande",
+    recordingTooLargeDesc: "Mantén las notas de voz por debajo de cinco minutos.",
+    removePhoto: "Quitar foto",
+    removeSocial: "Quitar red social",
   },
 };

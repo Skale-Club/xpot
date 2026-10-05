@@ -3,9 +3,12 @@
 
 import { ArrowDownLeft, Handshake, Package, Undo2 } from "lucide-react";
 import { daysUntil, formatCents, formatShortDate } from "../../utils";
-import type { ConsignmentWithRefs, SaleWithItems } from "../../hooks/useSalesModule";
+import type { ConsignmentWithRefs, PaymentStatus, SaleWithItems } from "../../hooks/useSalesModule";
 import { paymentTone } from "./cards";
 import { Chip, Money } from "./ui";
+import { useT } from "@/i18n";
+import { salesMessages } from "@/i18n/messages/sales";
+import { salesModuleMessages } from "@/i18n/messages/salesModule";
 
 const TABLE_STYLE = { background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" };
 const TH = "whitespace-nowrap px-3 py-2.5 font-semibold";
@@ -26,16 +29,18 @@ export function SalesTable({ rows, selectedId, onSelect }: {
   selectedId: number | null;
   onSelect: (row: SaleWithItems) => void;
 }) {
+  const t = useT(salesModuleMessages);
+  const ts = useT(salesMessages);
   return (
     <div className="overflow-hidden rounded-2xl" style={TABLE_STYLE}>
       <table className="w-full text-left text-sm" data-testid="sales-table">
         <thead className="border-b border-white/[0.07] text-[10px] uppercase tracking-widest text-white/35">
           <tr>
-            <th className={TH}>Date</th>
-            <th className={TH}>Company</th>
-            <th className={`${TH} hidden 2xl:table-cell`}>Items</th>
-            <th className={TH}>Payment</th>
-            <th className={`${TH} text-right`}>Total</th>
+            <th className={TH}>{t("date")}</th>
+            <th className={TH}>{t("colCompany")}</th>
+            <th className={`${TH} hidden 2xl:table-cell`}>{t("colItems")}</th>
+            <th className={TH}>{t("payment")}</th>
+            <th className={`${TH} text-right`}>{t("total")}</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-white/[0.05]">
@@ -60,7 +65,7 @@ export function SalesTable({ rows, selectedId, onSelect }: {
                     {settlement
                       ? <Handshake className="h-3.5 w-3.5 shrink-0 text-emerald-400/70" />
                       : <Package className="h-3.5 w-3.5 shrink-0 text-emerald-400/70" />}
-                    <span className="truncate font-semibold text-white">{lead?.name ?? `Lead #${sale.leadId}`}</span>
+                    <span className="truncate font-semibold text-white">{lead?.name ?? ts("leadNumber", { id: sale.leadId })}</span>
                   </div>
                   <div className="truncate text-[11px] text-white/35 2xl:hidden">
                     {items.map((i) => `${i.quantity}× ${i.description}`).join(" · ") || "—"}
@@ -71,8 +76,10 @@ export function SalesTable({ rows, selectedId, onSelect }: {
                 </td>
                 <td className="whitespace-nowrap px-3 py-2.5">
                   <div className="flex items-center gap-1.5">
-                    {settlement ? <Chip tone="purple">Settlement</Chip> : null}
-                    {cancelled ? <Chip tone="neutral">Cancelled</Chip> : <Chip tone={paymentTone(sale.paymentStatus)}>{sale.paymentStatus}</Chip>}
+                    {settlement ? <Chip tone="purple">{t("chipSettlement")}</Chip> : null}
+                    {cancelled
+                      ? <Chip tone="neutral">{t("chipCancelled")}</Chip>
+                      : <Chip tone={paymentTone(sale.paymentStatus)}>{t(`payment_${sale.paymentStatus as PaymentStatus}`)}</Chip>}
                   </div>
                 </td>
                 <td className="whitespace-nowrap px-3 py-2.5 text-right">
@@ -95,16 +102,18 @@ export function ConsignmentsTable({ rows, selectedId, onSelect, onSettle, onRest
   onRestock?: (row: ConsignmentWithRefs) => void;
   onReturn?: (row: ConsignmentWithRefs) => void;
 }) {
+  const t = useT(salesModuleMessages);
+  const ts = useT(salesMessages);
   return (
     <div className="overflow-hidden rounded-2xl" style={TABLE_STYLE}>
       <table className="w-full text-left text-sm" data-testid="consignments-table">
         <thead className="border-b border-white/[0.07] text-[10px] uppercase tracking-widest text-white/35">
           <tr>
-            <th className={TH}>Shop</th>
-            <th className={TH}>Settle</th>
-            <th className={`${TH} text-right`}>On shelf</th>
-            <th className={`${TH} hidden text-right 2xl:table-cell`}>Billed</th>
-            <th className={TH}><span className="sr-only">Actions</span></th>
+            <th className={TH}>{t("colShop")}</th>
+            <th className={TH}>{t("actionSettle")}</th>
+            <th className={`${TH} text-right`}>{t("colOnShelf")}</th>
+            <th className={`${TH} hidden text-right 2xl:table-cell`}>{t("statBilled")}</th>
+            <th className={TH}><span className="sr-only">{t("colActions")}</span></th>
           </tr>
         </thead>
         <tbody className="divide-y divide-white/[0.05]">
@@ -126,18 +135,18 @@ export function ConsignmentsTable({ rows, selectedId, onSelect, onSettle, onRest
                 data-testid={`consignment-row-${c.id}`}
               >
                 <td className="max-w-0 px-3 py-2.5" style={{ width: "42%" }}>
-                  <div className="truncate font-semibold text-white">{row.lead?.name ?? `Lead #${c.leadId}`}</div>
+                  <div className="truncate font-semibold text-white">{row.lead?.name ?? ts("leadNumber", { id: c.leadId })}</div>
                   <div className="truncate text-[11px] text-white/40">
-                    {row.product?.name ?? "Product"} · {formatCents(c.unitPriceCents, c.currency)} / unit
+                    {row.product?.name ?? t("productFallback")} · {t("pricePerUnit", { price: formatCents(c.unitPriceCents, c.currency) })}
                   </div>
                 </td>
                 <td className="whitespace-nowrap px-3 py-2.5">
                   {closed ? (
-                    <Chip tone="neutral">Closed</Chip>
+                    <Chip tone="neutral">{t("chipClosed")}</Chip>
                   ) : overdue ? (
-                    <Chip tone="red">{`${Math.abs(due!)}d overdue`}</Chip>
+                    <Chip tone="red">{t("daysOverdue", { days: Math.abs(due!) })}</Chip>
                   ) : dueSoon ? (
-                    <Chip tone="amber">{due === 0 ? "Due today" : `Due in ${due}d`}</Chip>
+                    <Chip tone="amber">{due === 0 ? t("dueToday") : t("dueInDays", { days: due! })}</Chip>
                   ) : c.nextVisitDueAt ? (
                     <span className="text-xs text-white/50">{formatShortDate(c.nextVisitDueAt)}</span>
                   ) : (
@@ -155,17 +164,17 @@ export function ConsignmentsTable({ rows, selectedId, onSelect, onSettle, onRest
                         <button type="button" onClick={(e) => { e.stopPropagation(); onSettle(row); }}
                           className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-white"
                           style={{ background: "linear-gradient(135deg, #10b981, #06b6d4)" }}>
-                          <Handshake className="h-3.5 w-3.5" /> Settle
+                          <Handshake className="h-3.5 w-3.5" /> {t("actionSettle")}
                         </button>
                       )}
                       {onRestock && (
-                        <button type="button" title="Restock" aria-label="Restock" onClick={(e) => { e.stopPropagation(); onRestock(row); }}
+                        <button type="button" title={t("actionRestock")} aria-label={t("actionRestock")} onClick={(e) => { e.stopPropagation(); onRestock(row); }}
                           className="flex h-8 w-8 items-center justify-center rounded-lg text-white/45 hover:bg-white/10 hover:text-white">
                           <ArrowDownLeft className="h-3.5 w-3.5" />
                         </button>
                       )}
                       {onReturn && (
-                        <button type="button" title="Take back" aria-label="Take back" onClick={(e) => { e.stopPropagation(); onReturn(row); }}
+                        <button type="button" title={t("actionTakeBack")} aria-label={t("actionTakeBack")} onClick={(e) => { e.stopPropagation(); onReturn(row); }}
                           className="flex h-8 w-8 items-center justify-center rounded-lg text-white/45 hover:bg-white/10 hover:text-white">
                           <Undo2 className="h-3.5 w-3.5" />
                         </button>
