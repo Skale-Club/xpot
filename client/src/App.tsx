@@ -22,6 +22,10 @@ import { shellMessages } from "@/i18n/messages/shell";
 import { AppLayout } from "@/components/xpot/AppLayout";
 import { MobileTabBar } from "@/components/xpot/MobileTabBar";
 
+// Screens redesigned for desktop use the full width there; the rest stay in a
+// narrow column until their turn (docs/DESKTOP.md).
+const WIDE_TABS = new Set<string>(["leads"]);
+
 function XpotAppShell() {
   const { me, xpotMeQuery, isOnline, activeTab } = useXpotQueries();
   const [, setLocation] = useLocation();
@@ -66,6 +70,7 @@ function XpotAppShell() {
   return (
     <AppLayout
       title={current ? tShell(current.labelKey) : "Xpot"}
+      wide={WIDE_TABS.has(activeTab)}
       mobileHeader={
         <>
           {!isOnline && (

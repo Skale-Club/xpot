@@ -1,4 +1,5 @@
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRoute } from "wouter";
 import {
   Plus,
   Search,
@@ -12,6 +13,8 @@ import {
   MapPinned,
   Building2,
   Nfc,
+  MoreVertical,
+  MousePointerClick,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import type { LeadTagSummary } from "@shared/tagsApi";
@@ -41,7 +44,12 @@ import { SheetDialog } from "./components/sales/ui";
 import { Loader2 } from '@/components/ui/loader';
 import { GoogleLogo } from "@/components/ui/google-logo";
 import { parseAddress, findMatchingLead } from "./utils";
-import type { FullSalesLead, GooglePlaceResult } from "./types";
+import type { EnrichedSalesVisit, FullSalesLead, GooglePlaceResult } from "./types";
+import { useIsDesktop } from "@/hooks/use-is-desktop";
+import { BottomSheet } from "@/pages/tags/ui";
+import { LeadsTable } from "./components/leads/LeadsTable";
+import { LeadDetailPane } from "./components/leads/LeadDetailPane";
+import { CsvImportDialog, type CsvLeadRow } from "./components/leads/CsvImportDialog";
 import { useT } from "@/i18n";
 import { leadsMessages } from "@/i18n/messages/leads";
 import { checkinMessages } from "@/i18n/messages/checkin";
@@ -50,7 +58,7 @@ import { Segmented } from "@/components/xpot/Segmented";
 import { EmptyState } from "@/components/xpot/EmptyState";
 
 
-function parseCsvText(text: string) {
+function parseCsvText(text: string): CsvLeadRow[] {
   const lines = text.trim().split(/\r?\n/);
   if (lines.length < 2) return [];
   const headers = lines[0].split(",").map((h) => h.trim().toLowerCase().replace(/\s+/g, "_").replace(/[^a-z_]/g, ""));
@@ -328,7 +336,7 @@ function AddCompanyDialog({
   );
 }
 
-// ─── Lead Card ────────────────────────────────────────────────────────────────
+// ─── Lead Card (phone) ────────────────────────────────────────────────────────
 
 /** "2 pieces · 1 live · 14 scans in 30 days", opening the customer's pieces in Tags. */
 function LeadPiecesChip({ lead, summary, onOpen }: { lead: FullSalesLead; summary: LeadTagSummary; onOpen: () => void }) {
@@ -350,83 +358,85 @@ function LeadPiecesChip({ lead, summary, onOpen }: { lead: FullSalesLead; summar
   );
 }
 
-function LeadCard({
-  lead, onEdit, onDelete, onCheckIn, onSell, onSyncGhl, onPromote, isSyncing, isProspect, pieces, onOpenPieces,
-}: {
+function LeadCard({ lead, onEdit, onMore, pieces, onOpenPieces }: {
   lead: FullSalesLead;
   pieces?: LeadTagSummary;
   onOpenPieces?: () => void;
   onEdit: () => void;
-  onDelete: () => void;
-  onCheckIn: () => void;
-  onSell: () => void;
-  onSyncGhl?: () => void;
-  onPromote?: () => void;
-  isSyncing?: boolean;
-  isProspect?: boolean;
+  /** Opens the action sheet (sell, check in, promote, delete…). */
+  onMore: () => void;
 }) {
   const t = useT(leadsMessages);
   return (
-    <button
-      type="button"
-      className="group w-full rounded-2xl p-4 text-left transition-all"
+    <div
+      role="button"
+      tabIndex={0}
+      className="w-full cursor-pointer rounded-2xl p-4 text-left transition-all"
       style={{ ...GLASS, boxShadow: "0 4px 20px rgba(0,0,0,0.25)" }}
       onClick={onEdit}
+      onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onEdit(); } }}
     >
       <LeadCardBody
         lead={lead}
         subtitle={pieces && onOpenPieces ? <LeadPiecesChip lead={lead} summary={pieces} onOpen={onOpenPieces} /> : undefined}
         right={
-          <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-            {isProspect && onPromote && (
-              <button
-                type="button"
-                title={t("promote")}
-                className="flex h-8 w-8 items-center justify-center rounded-xl text-white/40 transition-colors hover:bg-purple-500/20 hover:text-purple-400"
-                onClick={(e) => { e.stopPropagation(); onPromote(); }}
-              >
-                <UserCheck className="h-3.5 w-3.5" />
-              </button>
-            )}
-            {isProspect && onSyncGhl && (
-              <button
-                type="button"
-                title={t("sendGhl")}
-                disabled={isSyncing}
-                className="flex h-8 w-8 items-center justify-center rounded-xl text-white/40 transition-colors hover:bg-emerald-500/20 hover:text-emerald-400 disabled:opacity-40"
-                onClick={(e) => { e.stopPropagation(); onSyncGhl(); }}
-              >
-                {isSyncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-              </button>
-            )}
-            <button
-              type="button"
-              title={t("salesAndConsignment")}
-              className="flex h-8 w-8 items-center justify-center rounded-xl text-white/40 transition-colors hover:bg-emerald-500/20 hover:text-emerald-400"
-              onClick={(e) => { e.stopPropagation(); onSell(); }}
-            >
-              <DollarSign className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              title={t("checkIn")}
-              className="flex h-8 w-8 items-center justify-center rounded-xl text-white/40 transition-colors hover:bg-blue-500/20 hover:text-blue-400"
-              onClick={(e) => { e.stopPropagation(); onCheckIn(); }}
-            >
-              <LogIn className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              title={t("delete")}
-              className="flex h-8 w-8 items-center justify-center rounded-xl text-white/40 transition-colors hover:bg-red-500/20 hover:text-red-400"
-              onClick={(e) => { e.stopPropagation(); onDelete(); }}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
-          </div>
+          <button
+            type="button"
+            title={t("moreActions")}
+            aria-label={t("moreActions")}
+            className="flex h-9 w-9 items-center justify-center rounded-xl text-white/40 transition-colors hover:bg-white/10 hover:text-white"
+            onClick={(e) => { e.stopPropagation(); onMore(); }}
+            data-testid={`lead-${lead.id}-more`}
+          >
+            <MoreVertical className="h-4 w-4" />
+          </button>
         }
       />
-    </button>
+    </div>
+  );
+}
+
+function LeadActionSheet({ lead, isProspect, onClose, onSell, onCheckIn, onPromote, onSyncGhl, onDelete }: {
+  lead: FullSalesLead | null;
+  isProspect: boolean;
+  onClose: () => void;
+  onSell: () => void;
+  onCheckIn: () => void;
+  onPromote: () => void;
+  onSyncGhl: () => void;
+  onDelete: () => void;
+}) {
+  const t = useT(leadsMessages);
+  const items = [
+    { key: "sell", label: t("salesAndConsignment"), icon: DollarSign, run: onSell, cls: "text-emerald-300" },
+    { key: "checkin", label: t("checkIn"), icon: LogIn, run: onCheckIn, cls: "text-blue-300" },
+    ...(isProspect
+      ? [
+          { key: "promote", label: t("promote"), icon: UserCheck, run: onPromote, cls: "text-purple-300" },
+          { key: "ghl", label: t("sendGhl"), icon: Send, run: onSyncGhl, cls: "text-emerald-300" },
+        ]
+      : []),
+    { key: "delete", label: t("delete"), icon: Trash2, run: onDelete, cls: "text-red-400" },
+  ];
+  return (
+    <BottomSheet open={Boolean(lead)} onClose={onClose} title={lead?.name}>
+      <p className="mb-3 truncate px-1 text-base font-bold text-white">{lead?.name}</p>
+      <div className="space-y-1.5 pb-1">
+        {items.map(({ key, label, icon: Icon, run, cls }) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => { onClose(); run(); }}
+            className="flex min-h-[52px] w-full items-center gap-3 rounded-2xl px-4 text-left text-[15px] font-semibold text-white/85 active:bg-white/10"
+            style={{ background: "rgba(255,255,255,0.04)" }}
+            data-testid={`lead-action-${key}`}
+          >
+            <Icon className={`h-5 w-5 ${cls}`} />
+            {label}
+          </button>
+        ))}
+      </div>
+    </BottomSheet>
   );
 }
 
@@ -435,13 +445,18 @@ function LeadCard({
 export function XpotLeads() {
   const t = useT(leadsMessages);
   const { setLocation } = useXpotQueries();
+  const isDesktop = useIsDesktop();
+  const [routeMatch, routeParams] = useRoute("/leads/:id");
+  const routeId = routeMatch ? Number(routeParams.id) : null;
   const [tab, setTab] = useState<"leads" | "prospects">("leads");
   // Selling from the company card, outside any visit — the second entry point.
   const [salesLead, setSalesLead] = useState<FullSalesLead | null>(null);
   const [leadPendingDelete, setLeadPendingDelete] = useState<FullSalesLead | null>(null);
   const [editLead, setEditLead] = useState<FullSalesLead | null>(null);
+  const [actionLead, setActionLead] = useState<FullSalesLead | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [syncingId, setSyncingId] = useState<number | null>(null);
+  const [csvRows, setCsvRows] = useState<CsvLeadRow[] | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const {
@@ -467,14 +482,44 @@ export function XpotLeads() {
   const prospects = allLeads.filter((l) => l.status === "prospect");
   const leads = allLeads.filter((l) => l.status !== "prospect");
 
+  // Visits are already loaded by the shell; group them per company for the
+  // "last visit" column and the pane's recent visits.
+  const { data: visits } = useQuery<EnrichedSalesVisit[]>({ queryKey: ["/api/xpot/visits"], enabled: isDesktop });
+  const visitsByLead = useMemo(() => {
+    const map = new Map<number, EnrichedSalesVisit[]>();
+    for (const v of visits ?? []) {
+      if (!map.has(v.leadId)) map.set(v.leadId, []);
+      map.get(v.leadId)!.push(v);
+    }
+    const at = (v: EnrichedSalesVisit) => new Date(v.checkedInAt ?? v.createdAt ?? 0).getTime();
+    map.forEach((list) => list.sort((a, b) => at(b) - at(a)));
+    return map;
+  }, [visits]);
+  const lastVisitFor = useCallback((leadId: number) => {
+    const v = visitsByLead.get(leadId)?.[0];
+    const when = v?.checkedInAt ?? v?.createdAt;
+    return when ? new Date(when) : null;
+  }, [visitsByLead]);
+
+  const selectedLead = routeId ? allLeads.find((l) => l.id === routeId) ?? null : null;
+
+  // A link straight to a prospect opens the Prospects tab.
+  useEffect(() => {
+    if (selectedLead) setTab(selectedLead.status === "prospect" ? "prospects" : "leads");
+  }, [selectedLead?.id, selectedLead?.status]);
+
   const displayList = tab === "prospects"
     ? prospects.filter((l) => !leadLookupSearch || l.name.toLowerCase().includes(leadLookupSearch.toLowerCase()))
     : filteredLeadsForList.filter((l) => l.status !== "prospect");
+
+  const openLead = (lead: FullSalesLead) => setLocation(`/leads/${lead.id}`);
+  const closeLead = () => setLocation("/leads");
 
   const handleDeleteLead = async () => {
     if (!leadPendingDelete) return;
     try {
       await deleteLeadMutation.mutateAsync(leadPendingDelete.id);
+      if (leadPendingDelete.id === routeId) closeLead();
       setLeadPendingDelete(null);
     } catch {}
   };
@@ -491,11 +536,19 @@ export function XpotLeads() {
 
   const handleCsvFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-    const rows = parseCsvText(await file.text());
-    if (rows.length === 0) return;
-    await importCsvMutation.mutateAsync(rows);
     e.target.value = "";
+    if (!file) return;
+    setCsvRows(parseCsvText(await file.text()));
+  };
+
+  const confirmCsvImport = async () => {
+    if (!csvRows?.length) return;
+    try {
+      await importCsvMutation.mutateAsync(csvRows);
+      setCsvRows(null);
+    } catch {
+      // The hook shows the error; keep the preview open to retry.
+    }
   };
 
   const TABS = [
@@ -503,50 +556,8 @@ export function XpotLeads() {
     { id: "prospects" as const, label: t("tabProspects"), count: prospects.length },
   ];
 
-  return (
+  const emptyStates = (
     <>
-      {/* Sub-tabs */}
-      <Segmented items={TABS} value={tab} onChange={setTab} />
-
-      {/* Search + actions */}
-      <div className="flex gap-2">
-        <div className="relative flex-1">
-          <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
-          <input
-            value={leadLookupSearch}
-            onChange={(e) => setLeadLookupSearch(e.target.value)}
-            placeholder={tab === "prospects" ? t("searchProspects") : t("searchLeads")}
-            className="w-full h-11 rounded-xl pl-10 pr-4 text-sm text-white placeholder:text-white/25 focus:outline-none"
-            style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.09)" }}
-          />
-        </div>
-
-        {/* CSV import — prospects only */}
-        {tab === "prospects" && (
-          <>
-            <button
-              title={t("importCsv")}
-              onClick={() => fileInputRef.current?.click()}
-              disabled={importCsvMutation.isPending}
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-white/60 transition-all hover:opacity-80 disabled:opacity-40"
-              style={{ background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.09)" }}
-            >
-              {importCsvMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileUp className="h-4 w-4" />}
-            </button>
-            <input ref={fileInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleCsvFile} />
-          </>
-        )}
-
-        {/* Add button — both tabs */}
-        <button
-          onClick={() => setAddOpen(true)}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-white transition-all hover:opacity-80"
-          style={{ background: "linear-gradient(135deg, #3b82f6, #6366f1)" }}
-        >
-          <Plus className="h-4 w-4" />
-        </button>
-      </div>
-
       {/* Empty state for prospects */}
       {tab === "prospects" && prospects.length === 0 && !leadLookupSearch && (
         <EmptyState icon={Upload} title={t("noProspects")} hint={t("noProspectsHint")} cardStyle={GLASS}>
@@ -560,42 +571,151 @@ export function XpotLeads() {
           </div>
         </EmptyState>
       )}
+      {/* Leads tab — no leads yet */}
+      {tab === "leads" && leads.length === 0 && !leadLookupSearch && (
+        <EmptyState icon={Building2} title={t("noLeads")} hint={t("noLeadsHint")} cardStyle={GLASS}>
+          <button
+            onClick={() => setAddOpen(true)}
+            className="rounded-xl px-4 py-2 text-xs font-semibold text-white hover:opacity-80"
+            style={{ background: BRAND_GRADIENT }}
+          >
+            {t("addLead")}
+          </button>
+        </EmptyState>
+      )}
+      {/* Search returned nothing */}
+      {displayList.length === 0 && leadLookupSearch && (
+        <EmptyState icon={Search} title={t("noResults", { query: leadLookupSearch })} cardStyle={GLASS} />
+      )}
+    </>
+  );
 
-      {/* Lead list */}
-      <div className="space-y-2">
-        {/* Leads tab — no leads yet */}
-        {tab === "leads" && leads.length === 0 && !leadLookupSearch && (
-          <EmptyState icon={Building2} title={t("noLeads")} hint={t("noLeadsHint")} cardStyle={GLASS}>
-            <button
-              onClick={() => setAddOpen(true)}
-              className="rounded-xl px-4 py-2 text-xs font-semibold text-white hover:opacity-80"
-              style={{ background: BRAND_GRADIENT }}
-            >
-              {t("addLead")}
-            </button>
-          </EmptyState>
-        )}
-        {/* Search returned nothing */}
-        {displayList.length === 0 && leadLookupSearch && (
-          <EmptyState icon={Search} title={t("noResults", { query: leadLookupSearch })} cardStyle={GLASS} />
-        )}
-        {displayList.map((lead) => (
-          <LeadCard
-            key={lead.id}
-            lead={lead}
-            isProspect={tab === "prospects"}
-            isSyncing={syncingId === lead.id}
-            onEdit={() => setEditLead(lead)}
-            onDelete={() => setLeadPendingDelete(lead)}
-            onCheckIn={() => setLocation(`/check-in?leadId=${lead.id}`)}
-            onSell={() => setSalesLead(lead)}
-            onSyncGhl={() => handleSyncGhl(lead)}
-            onPromote={() => handlePromote(lead)}
-            pieces={piecesFor(lead.id)}
-            onOpenPieces={() => setLocation(`/tags/pieces?lead=${lead.id}&name=${encodeURIComponent(lead.name)}`)}
-          />
-        ))}
+  return (
+    <>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
+        {/* Sub-tabs */}
+        <Segmented items={TABS} value={tab} onChange={setTab} className="lg:w-80 lg:shrink-0" />
+
+        {/* Search + actions */}
+        <div className="flex flex-1 gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
+            <input
+              value={leadLookupSearch}
+              onChange={(e) => setLeadLookupSearch(e.target.value)}
+              placeholder={tab === "prospects" ? t("searchProspects") : t("searchLeads")}
+              className="w-full h-11 rounded-xl pl-10 pr-4 text-sm text-white placeholder:text-white/25 focus:outline-none"
+              style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.09)" }}
+            />
+          </div>
+
+          {/* CSV import — prospects only */}
+          {tab === "prospects" && (
+            <>
+              <button
+                title={t("importCsv")}
+                onClick={() => fileInputRef.current?.click()}
+                disabled={importCsvMutation.isPending}
+                className="flex h-11 w-11 shrink-0 items-center justify-center gap-2 rounded-xl text-sm font-semibold text-white/60 transition-all hover:opacity-80 disabled:opacity-40 lg:w-auto lg:px-4"
+                style={{ background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.09)" }}
+              >
+                {importCsvMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileUp className="h-4 w-4" />}
+                <span className="hidden lg:inline">{t("importCsv")}</span>
+              </button>
+              <input ref={fileInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleCsvFile} />
+            </>
+          )}
+
+          {/* Add button — both tabs */}
+          <button
+            onClick={() => setAddOpen(true)}
+            title={t(tab === "prospects" ? "newProspect" : "newLead")}
+            className="flex h-11 w-11 shrink-0 items-center justify-center gap-2 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-80 lg:w-auto lg:px-4"
+            style={{ background: BRAND_GRADIENT }}
+          >
+            <Plus className="h-4 w-4" />
+            <span className="hidden lg:inline">{t(tab === "prospects" ? "newProspect" : "newLead")}</span>
+          </button>
+        </div>
       </div>
+
+      {isDesktop ? (
+        <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
+          <div className="min-w-0 space-y-2">
+            {emptyStates}
+            {displayList.length > 0 && (
+              <LeadsTable
+                leads={displayList}
+                isProspect={tab === "prospects"}
+                selectedId={routeId}
+                onSelect={openLead}
+                piecesFor={piecesFor}
+                lastVisitFor={lastVisitFor}
+                onDelete={setLeadPendingDelete}
+                onPromote={handlePromote}
+                onSyncGhl={handleSyncGhl}
+                syncingId={syncingId}
+              />
+            )}
+          </div>
+
+          {/* Detail: a column from xl, a drawer between lg and xl. */}
+          {routeId ? (
+            <>
+              <button type="button" aria-label={t("closePane")} onClick={closeLead} className="fixed inset-0 z-40 bg-black/50 xl:hidden" />
+              <aside className="fixed inset-y-0 right-0 z-50 w-[420px] overflow-y-auto border-l border-white/10 bg-[#080c18] p-4 shadow-2xl xl:sticky xl:top-[88px] xl:z-auto xl:max-h-[calc(100vh-112px)] xl:w-auto xl:border-0 xl:bg-transparent xl:p-0 xl:shadow-none">
+                {selectedLead ? (
+                  <LeadDetailPane
+                    key={selectedLead.id}
+                    lead={selectedLead}
+                    isProspect={selectedLead.status === "prospect"}
+                    pieces={piecesFor(selectedLead.id)}
+                    visits={visitsByLead.get(selectedLead.id) ?? []}
+                    onClose={closeLead}
+                    onDelete={() => setLeadPendingDelete(selectedLead)}
+                    onPromote={() => handlePromote(selectedLead)}
+                    onSyncGhl={() => handleSyncGhl(selectedLead)}
+                    isSyncing={syncingId === selectedLead.id}
+                  />
+                ) : leadsQuery.isLoading ? (
+                  <div className="flex justify-center py-16"><Loader2 className="h-5 w-5 animate-spin text-blue-400" /></div>
+                ) : (
+                  <EmptyState icon={Building2} title={t("leadNotFound")} cardStyle={GLASS} />
+                )}
+              </aside>
+            </>
+          ) : (
+            <aside className="sticky top-[88px] hidden xl:block">
+              <EmptyState icon={MousePointerClick} title={t("selectLead")} hint={t("selectLeadHint")} cardStyle={GLASS} />
+            </aside>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {emptyStates}
+          {displayList.map((lead) => (
+            <LeadCard
+              key={lead.id}
+              lead={lead}
+              onEdit={() => setEditLead(lead)}
+              onMore={() => setActionLead(lead)}
+              pieces={piecesFor(lead.id)}
+              onOpenPieces={() => setLocation(`/tags/pieces?lead=${lead.id}&name=${encodeURIComponent(lead.name)}`)}
+            />
+          ))}
+        </div>
+      )}
+
+      <LeadActionSheet
+        lead={actionLead}
+        isProspect={actionLead?.status === "prospect"}
+        onClose={() => setActionLead(null)}
+        onSell={() => actionLead && setSalesLead(actionLead)}
+        onCheckIn={() => actionLead && setLocation(`/check-in?leadId=${actionLead.id}`)}
+        onPromote={() => actionLead && void handlePromote(actionLead)}
+        onSyncGhl={() => actionLead && void handleSyncGhl(actionLead)}
+        onDelete={() => actionLead && setLeadPendingDelete(actionLead)}
+      />
 
       {/* Sales & consignment for one company, with no visit attached. */}
       <SheetDialog
@@ -614,12 +734,21 @@ export function XpotLeads() {
         allLeads={allLeads}
       />
 
-      {editLead && (
+      <CsvImportDialog
+        rows={csvRows}
+        onCancel={() => setCsvRows(null)}
+        onConfirm={() => void confirmCsvImport()}
+        importing={importCsvMutation.isPending}
+      />
+
+      {/* Phone: the card opens the edit form; a /leads/:id link does too. */}
+      {!isDesktop && (editLead || selectedLead) && (
         <EditLeadDialog
-          lead={editLead}
-          open={Boolean(editLead)}
-          onOpenChange={(v) => { if (!v) setEditLead(null); }}
-          onSaved={() => setEditLead(null)}
+          key={(editLead ?? selectedLead)!.id}
+          lead={(editLead ?? selectedLead)!}
+          open
+          onOpenChange={(v) => { if (!v) { setEditLead(null); if (routeId) closeLead(); } }}
+          onSaved={() => { setEditLead(null); if (routeId) closeLead(); }}
         />
       )}
 
@@ -633,7 +762,7 @@ export function XpotLeads() {
         >
           <AlertDialogHeader>
             <AlertDialogTitle className="text-base font-semibold text-white">
-              {t(tab === "prospects" ? "deleteProspectTitle" : "deleteLeadTitle")}
+              {t(leadPendingDelete?.status === "prospect" ? "deleteProspectTitle" : "deleteLeadTitle")}
             </AlertDialogTitle>
             <AlertDialogDescription className="text-sm text-white/45">
               {leadPendingDelete ? t("deleteNamed", { name: leadPendingDelete.name }) : t("deleteGeneric")}
