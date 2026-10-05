@@ -7,7 +7,7 @@ import { commonMessages } from "@/i18n/messages/common";
 // @/i18n): American English, Brazilian Portuguese, Spanish.
 const LANG_FLAG: Record<Lang, string> = { en: "US", pt: "BR", es: "ES" };
 
-/** EN · PT · ES segmented picker with flags; the choice is saved on this device. */
+/** EN · PT · ES segmented picker with flags (flags only when compact); the choice is saved on this device. */
 export function LanguagePicker({ compact = false }: { compact?: boolean }) {
   const { lang, setLang } = useI18n();
   const t = useT(commonMessages);
@@ -35,8 +35,8 @@ export function LanguagePicker({ compact = false }: { compact?: boolean }) {
             }`}
           >
             <CountryFlag iso={LANG_FLAG[l]} className={`h-3.5 w-[17.5px] transition-opacity ${lang === l ? "" : "opacity-60"}`} />
-            {/* Compact (the landing header) keeps only the flag on a phone. */}
-            <span className={compact ? "hidden sm:inline" : ""}>{LANG_SHORT[l]}</span>
+            {/* Compact (app and landing headers) shows only the flag; the name stays in aria-label/title. */}
+            {!compact && <span>{LANG_SHORT[l]}</span>}
           </button>
         ))}
       </div>
