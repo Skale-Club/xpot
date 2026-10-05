@@ -7,6 +7,7 @@ import { TAG_DESTINATION_TYPES, validateDestinationUrl, type TagDestinationType 
 import { guessDestinationType, normalizeUrlInput } from "@shared/tagApp";
 import { buildReviewUrl } from "@shared/reviewLink";
 import type { FullSalesLead } from "@/pages/xpot/types";
+import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
@@ -223,13 +224,17 @@ export default function TagScreen({ code, onClose }: {
 
       <section className="relative overflow-hidden rounded-[20px] border border-white/10 bg-white/[0.04] p-5">
         <div className="pointer-events-none absolute -right-6 -top-6 h-24 w-24 rounded-full bg-indigo-500/30 blur-[30px]" />
-        <p className="relative font-mono text-[34px] font-bold tracking-[0.18em] text-white" data-testid="text-tag-code">
-          {tag.publicCode}
-        </p>
+        <div className="relative flex items-center gap-3">
+          <TagFaceIcon face={tag.face} size="lg" title={t(`face_${tag.face ?? "none"}` as "face_none")} />
+          <p className="font-mono text-[34px] font-bold tracking-[0.18em] text-white" data-testid="text-tag-code">
+            {tag.publicCode}
+          </p>
+        </div>
         <div className="relative mt-3 flex flex-wrap gap-2">
           <Pill tone={STATUS_TONE[tag.status] ?? "slate"}>{t(`status_${tag.status}` as "status_active")}</Pill>
           <Pill tone={CHIP_TONE[tag.nfcStatus] ?? "amber"}>{t(`chip_${tag.nfcStatus}` as "chip_verified")}</Pill>
           <Pill tone="slate">{t(`product_${tag.productType}` as "product_custom")}</Pill>
+          {tag.face && <Pill tone="slate">{t(`face_${tag.face}` as "face_none")}</Pill>}
         </div>
         <dl className="relative mt-4 space-y-2 text-sm">
           <div className="flex justify-between gap-4">

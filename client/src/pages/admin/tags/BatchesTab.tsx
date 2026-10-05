@@ -2,15 +2,18 @@ import { useState, type FormEvent } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Plus, X } from "lucide-react";
 import { TAG_MAX_BATCH_QUANTITY, TAG_PRODUCT_TYPES, normalizeTagCode } from "@shared/tags";
+import { tagFaceLabel } from "@shared/tagFace";
 import { useToast } from "@/hooks/use-toast";
+import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
 import { errorMessage, formatDate, invalidateAdminTags, sendJson } from "./api";
 import { BTN, BTN_GHOST, CARD, Empty, INPUT, SectionTitle, Stat, TD, TH } from "./ui";
-import { BatchStatusPill, ErrorLine, Field, Loading, PRODUCT_OPTIONS, SELECT, productLabel, useBatches } from "./batches-shared";
+import { BatchStatusPill, ErrorLine, FACE_OPTIONS, Field, Loading, PRODUCT_OPTIONS, SELECT, productLabel, useBatches } from "./batches-shared";
 
 const EMPTY_FORM = {
   name: "",
   batchCode: "",
   productType: TAG_PRODUCT_TYPES[0] as string,
+  face: "",
   vendor: "",
   quantity: "100",
   notes: "",
@@ -38,6 +41,7 @@ function NewBatchForm({ onClose, onCreated }: { onClose: () => void; onCreated: 
         name: form.name,
         batchCode: form.batchCode || undefined,
         productType: form.productType,
+        face: form.face || null,
         vendor: form.vendor || null,
         quantity,
         notes: form.notes || null,
@@ -82,6 +86,19 @@ function NewBatchForm({ onClose, onCreated }: { onClose: () => void; onCreated: 
               </option>
             ))}
           </select>
+        </Field>
+        <Field label="Printed on the pieces" hint="The mark on every piece of this run: Instagram, Google, a phone, an envelope…" className="sm:col-span-2">
+          <div className="flex items-center gap-2">
+            <TagFaceIcon face={form.face || (form.productType === "google_review_sign" ? "google_review" : null)} size="md" />
+            <select value={form.face} onChange={(e) => set({ face: e.target.value })} className={SELECT}>
+              <option value="">{form.productType === "google_review_sign" ? "From the product (Google review)" : "Not set"}</option>
+              {FACE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </div>
         </Field>
         <Field label="Quantity *" hint={`1 to ${TAG_MAX_BATCH_QUANTITY}`}>
           <input
@@ -191,6 +208,7 @@ export function BatchesTab({ go }: { go: (path: string) => void }) {
             <table className="w-full min-w-[760px]">
               <thead className="border-b border-white/10">
                 <tr>
+                  <th className={`${TH} w-12 pr-0`}><span className="sr-only">Printed on the pieces</span></th>
                   <th className={TH}>Batch</th>
                   <th className={TH}>Product</th>
                   <th className={TH}>Status</th>
@@ -210,6 +228,9 @@ export function BatchesTab({ go }: { go: (path: string) => void }) {
                     className="cursor-pointer hover:bg-white/[0.03]"
                     data-testid={`admin-tags-batch-${b.batchCode}`}
                   >
+                    <td className={`${TD} pr-0`}>
+                      <TagFaceIcon face={b.face} size="md" />
+                    </td>
                     <td className={TD}>
                       <p className="font-mono font-semibold text-white">{b.batchCode}</p>
                       <p className="max-w-[240px] truncate text-xs text-white/40">
@@ -217,7 +238,10 @@ export function BatchesTab({ go }: { go: (path: string) => void }) {
                         {b.vendor ? ` · ${b.vendor}` : ""}
                       </p>
                     </td>
-                    <td className={TD}>{productLabel(b.productType)}</td>
+                    <td className={TD}>
+                      {productLabel(b.productType)}
+                      {b.face ? <span className="block text-xs text-white/40">{tagFaceLabel(b.face)}</span> : null}
+                    </td>
                     <td className={TD}>
                       <BatchStatusPill status={b.status} />
                     </td>

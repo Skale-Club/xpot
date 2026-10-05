@@ -8,6 +8,7 @@ import {
   PLAN_STATUSES,
 } from "#shared/tagJourney.js";
 import { TAG_PRODUCT_TYPES } from "#shared/tags.js";
+import { TAG_FACES } from "#shared/tagFace.js";
 import { TagError } from "../../tags/errors.js";
 import * as journey from "../../tags/journey.js";
 import {
@@ -151,7 +152,7 @@ export function registerTagJourneyTools(server: McpServer, caller: McpCaller) {
   // already-manufactured pieces (publicCodes) stay an admin-UI-only escape hatch.
   server.tool(
     "tags_batch_create",
-    `Create a production batch of new pieces in house stock, each with a fresh random public code. \`batch\`: { name, productType (${TAG_PRODUCT_TYPES.join("|")}), quantity (1-1000), batchCode? (A-Z 0-9 . _ -, automatic if omitted, e.g. REV-2026-003), vendor?, notes? }. Returns { batch, tags: [{ serialNumber, publicCode, qrUrl, nfcUrl }] } — qrUrl goes in the printed QR, nfcUrl is written to the chip.`,
+    `Create a production batch of new pieces in house stock, each with a fresh random public code. \`batch\`: { name, productType (${TAG_PRODUCT_TYPES.join("|")}), face? (what is printed on every piece: ${TAG_FACES.join("|")}; omit for a Google Review sign, whose face is implied), quantity (1-1000), batchCode? (A-Z 0-9 . _ -, automatic if omitted, e.g. REV-2026-003), vendor?, notes? }. Returns { batch, tags: [{ serialNumber, publicCode, qrUrl, nfcUrl }] } — qrUrl goes in the printed QR, nfcUrl is written to the chip.`,
     { batch: objectParam },
     async ({ batch }) =>
       run("tags_batch_create", async () => {
@@ -172,7 +173,7 @@ export function registerTagJourneyTools(server: McpServer, caller: McpCaller) {
   // Read-only helpers: find what a session wants to document.
   server.tool(
     "tags_batches_list",
-    "List the production batches (id, batchCode, name, productType, vendor, quantity, status, and counts: pieces, at the house, with resellers, active, NFC verified). Use the batchCode or id as `batch` in the journey tools.",
+    "List the production batches (id, batchCode, name, productType, face (what is printed on the pieces), vendor, quantity, status, and counts: pieces, at the house, with resellers, active, NFC verified). Use the batchCode or id as `batch` in the journey tools.",
     {},
     async () => run("tags_batches_list", () => repo.listBatches()),
   );

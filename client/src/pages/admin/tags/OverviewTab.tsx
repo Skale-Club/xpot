@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Activity, ArrowRight, History, Power, Trophy } from "lucide-react";
 import type { TagAnalytics, TagOverview } from "@shared/tagsApi";
+import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
 import { ADMIN_TAGS_KEY, formatDateTime, getJson, percent, STALE_MS } from "./api";
 import { CARD, SectionTitle, Stat } from "./ui";
 import { destinationLabel, EVENT_LABELS, Loading, LoadError, Panel } from "./pieces-shared";
@@ -41,6 +42,7 @@ function TopPieces({ go }: { go: (path: string) => void }) {
             <li key={t.id}>
               <button type="button" onClick={() => go(`/pieces/${t.id}`)} className="flex w-full items-center gap-3 py-2 text-left text-sm hover:bg-white/[0.03]">
                 <span className="w-5 shrink-0 text-right text-xs tabular-nums text-white/30">{i + 1}</span>
+                <TagFaceIcon face={t.face} size="sm" />
                 <span className="min-w-0 flex-1 truncate">
                   <span className="font-mono font-semibold text-white">{t.publicCode}</span>
                   <span className="ml-2 text-white/50">{t.leadName ?? "No customer"}</span>
@@ -116,8 +118,9 @@ export function OverviewTab({ go }: { go: (path: string) => void }) {
             <ul className="divide-y divide-white/5 text-sm">
               {data.recentEvents.map((e) => (
                 <li key={e.id}>
-                  <button type="button" className="flex w-full items-center justify-between gap-2 py-2 text-left hover:bg-white/[0.03]" onClick={() => go(`/pieces/${e.tagId}`)}>
-                    <span className="min-w-0">
+                  <button type="button" className="flex w-full items-center gap-3 py-2 text-left hover:bg-white/[0.03]" onClick={() => go(`/pieces/${e.tagId}`)}>
+                    <TagFaceIcon face={e.face} size="sm" />
+                    <span className="min-w-0 flex-1">
                       <span className="font-mono font-semibold text-white">{e.publicCode}</span>
                       <span className="ml-2 rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-white/60">{e.accessMethod}</span>
                       <span className="block truncate text-xs text-white/40">
@@ -143,8 +146,9 @@ export function OverviewTab({ go }: { go: (path: string) => void }) {
               <ul className="divide-y divide-white/5 text-sm">
                 {data.recentActivations.map((a) => (
                   <li key={a.id}>
-                    <button type="button" className="flex w-full items-center justify-between gap-2 py-2 text-left hover:bg-white/[0.03]" onClick={() => go(`/pieces/${a.id}`)}>
-                      <span className="min-w-0 truncate">
+                    <button type="button" className="flex w-full items-center gap-3 py-2 text-left hover:bg-white/[0.03]" onClick={() => go(`/pieces/${a.id}`)}>
+                      <TagFaceIcon face={a.face} size="sm" />
+                      <span className="min-w-0 flex-1 truncate">
                         <span className="font-mono font-semibold text-white">{a.publicCode}</span>
                         <span className="ml-2 text-white/50">{a.leadName ?? "—"}</span>
                         {a.repName ? <span className="ml-1 text-xs text-white/30">· {a.repName}</span> : null}

@@ -3,6 +3,7 @@ import { useMutation } from "@tanstack/react-query";
 import { PackagePlus } from "lucide-react";
 import type { TagKitItem } from "@shared/tagsApi";
 import { TAG_MAX_BATCH_QUANTITY, normalizeTagCode } from "@shared/tags";
+import { tagFaceLabel } from "@shared/tagFace";
 import { useToast } from "@/hooks/use-toast";
 import { errorMessage, invalidateAdminTags, sendJson } from "./api";
 import { BTN, INPUT } from "./ui";
@@ -157,7 +158,7 @@ export function GiveKitForm({
                 <option value="">Choose a batch…</option>
                 {batchOptions.map((b) => (
                   <option key={b.id} value={b.id}>
-                    {b.batchCode} · {productLabel(b.productType)} · {b.houseCount} in house
+                    {b.batchCode} · {productLabel(b.productType)}{b.face ? ` · ${tagFaceLabel(b.face)}` : ""} · {b.houseCount} in house
                   </option>
                 ))}
               </select>

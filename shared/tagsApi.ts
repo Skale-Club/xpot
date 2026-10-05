@@ -14,6 +14,10 @@ export interface TagListItem {
   publicCode: string;
   serialNumber: number | null;
   productType: string;
+  /** What is printed on the piece, resolved (own → batch → product); null when unknown. */
+  face: string | null;
+  /** The piece's own face override, before falling back to the batch. */
+  ownFace: string | null;
   status: string;
   nfcStatus: string;
   label: string | null;
@@ -73,7 +77,7 @@ export interface TagAnalytics {
   totals: TagMetrics & { botHits: number; inactiveScans: number };
   daily: TagDailyPoint[];
   devices: Array<{ deviceType: string; count: number }>;
-  topTags: Array<{ id: string; publicCode: string; leadName: string | null; repName: string | null; qr: number; nfc: number }>;
+  topTags: Array<{ id: string; publicCode: string; face: string | null; leadName: string | null; repName: string | null; qr: number; nfc: number }>;
 }
 
 export interface TagOverview {
@@ -87,13 +91,14 @@ export interface TagOverview {
     id: number;
     tagId: string;
     publicCode: string;
+    face: string | null;
     leadName: string | null;
     accessMethod: string;
     eventType: string;
     deviceType: string | null;
     occurredAt: string;
   }>;
-  recentActivations: Array<{ id: string; publicCode: string; leadName: string | null; repName: string | null; activatedAt: string }>;
+  recentActivations: Array<{ id: string; publicCode: string; face: string | null; leadName: string | null; repName: string | null; activatedAt: string }>;
   recentChanges: Array<TagHistoryEntry & { tagId: string; publicCode: string }>;
 }
 
@@ -102,6 +107,10 @@ export interface TagBatchItem {
   batchCode: string;
   name: string;
   productType: string;
+  /** What is printed on the run, resolved (batch → product); null when unknown. */
+  face: string | null;
+  /** The batch's own setting, before the product default. */
+  ownFace: string | null;
   vendor: string | null;
   quantity: number;
   status: string;
@@ -178,6 +187,7 @@ export interface TagTeamReport {
     publicCode: string;
     label: string | null;
     productType: string;
+    face: string | null;
     leadName: string | null;
     repName: string | null;
     qr: number;

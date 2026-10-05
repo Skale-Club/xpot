@@ -2,7 +2,9 @@ import { useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { TagBatchItem, TagListItem } from "@shared/tagsApi";
 import { TAG_PRODUCT_TYPES } from "@shared/tags";
+import { TAG_FACES, TAG_FACE_LABELS } from "@shared/tagFace";
 import { Loader2 } from "@/components/ui/loader";
+import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,6 +33,9 @@ const PRODUCT_LABELS: Record<string, string> = {
 };
 
 export const PRODUCT_OPTIONS = TAG_PRODUCT_TYPES.map((value) => ({ value, label: PRODUCT_LABELS[value] ?? value }));
+
+/** What can be printed on the pieces of a run; empty = the product's default. */
+export const FACE_OPTIONS = TAG_FACES.map((value) => ({ value, label: TAG_FACE_LABELS[value] }));
 
 export function productLabel(type: string | null | undefined): string {
   return type ? PRODUCT_LABELS[type] ?? type : "—";
@@ -278,6 +283,7 @@ export function PieceTable({
                   />
                 </th>
               )}
+              <th className={`${TH} w-10 pr-0`}><span className="sr-only">Printed on the piece</span></th>
               <th className={TH}>Code</th>
               <th className={TH}>#</th>
               {showBatch && <th className={TH}>Batch</th>}
@@ -311,6 +317,7 @@ export function PieceTable({
                       )}
                     </td>
                   )}
+                  <td className={`${TD} pr-0`}><TagFaceIcon face={t.face} size="sm" /></td>
                   <td className={`${TD} font-mono text-white`}>{t.publicCode}</td>
                   <td className={`${TD} tabular-nums text-white/50`}>{t.serialNumber ?? "—"}</td>
                   {showBatch && <td className={`${TD} font-mono text-xs`}>{t.batchCode ?? "—"}</td>}

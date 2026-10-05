@@ -8,6 +8,7 @@ import {
   type TagDestinationType,
   type TagProductType,
 } from "@shared/tags";
+import { TAG_FACES, TAG_FACE_LABELS } from "@shared/tagFace";
 import type { TagBatchItem } from "@shared/tagsApi";
 import { Loader2 } from "@/components/ui/loader";
 import { AdminHttpError, ADMIN_TAGS_KEY, errorMessage, getJson, STALE_MS } from "./api";
@@ -51,6 +52,8 @@ export const destinationLabel = (type: string | null | undefined) =>
 
 export const PRODUCT_OPTIONS = TAG_PRODUCT_TYPES.map((value) => ({ value, label: PRODUCT_LABELS[value] }));
 export const DESTINATION_OPTIONS = TAG_DESTINATION_TYPES.map((value) => ({ value, label: DESTINATION_LABELS[value] }));
+/** What can be printed on a piece; the picker's empty option means "use the batch's / product's". */
+export const FACE_OPTIONS = TAG_FACES.map((value) => ({ value, label: TAG_FACE_LABELS[value] }));
 export const STATUS_OPTIONS = TAG_STATUSES.map((value) => ({ value, label: value[0].toUpperCase() + value.slice(1) }));
 
 export const EVENT_LABELS: Record<string, string> = {

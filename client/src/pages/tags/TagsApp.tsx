@@ -17,6 +17,7 @@ import { APP_BASE, tagPath } from "./lib";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { AppLayout } from "@/components/xpot/AppLayout";
 import { MobileTabBar } from "@/components/xpot/MobileTabBar";
+import { XpotMark } from "@/components/xpot/XpotMark";
 
 const NAV = [
   { href: APP_BASE, key: "navHome", icon: Home },
@@ -86,7 +87,14 @@ export function TagsApp() {
       mobileHeader={
         <div className="mb-5 flex items-center gap-2">
           <div className="min-w-0 flex-1">
-            {modules.length > 1 ? <ModuleSwitch current="tags" /> : <span className="text-lg font-extrabold tracking-tight text-white">Xpot</span>}
+            {modules.length > 1 ? (
+              <ModuleSwitch current="tags" />
+            ) : (
+              <span className="flex items-center gap-2 text-lg font-extrabold tracking-tight text-white">
+                <XpotMark />
+                Xpot
+              </span>
+            )}
           </div>
           <LanguagePicker compact />
         </div>

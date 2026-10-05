@@ -3,12 +3,15 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Download, Factory, PackagePlus, Pencil } from "lucide-react";
 import type { TagListItem } from "@shared/tagsApi";
 import { TAG_BATCH_STATUSES } from "@shared/tags";
+import { resolveTagFace, tagFaceLabel } from "@shared/tagFace";
+import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
 import { useToast } from "@/hooks/use-toast";
 import { ADMIN_TAGS_KEY, STALE_MS, errorMessage, formatDate, getJson, invalidateAdminTags, percent, sendJson } from "./api";
 import { BTN, BTN_GHOST, CARD, INPUT, SectionTitle, Stat } from "./ui";
 import {
   BatchStatusPill,
   ErrorLine,
+  FACE_OPTIONS,
   Field,
   Loading,
   PieceTable,
@@ -26,6 +29,8 @@ interface BatchDetailData {
   batchCode: string;
   name: string;
   productType: string;
+  /** The batch's own face setting (null = the product's default). */
+  face: string | null;
   vendor: string | null;
   quantity: number;
   status: string;
@@ -46,15 +51,17 @@ type FilterId = (typeof FILTERS)[number]["id"];
 
 function EditBatch({ batch, onClose }: { batch: BatchDetailData; onClose: () => void }) {
   const { toast } = useToast();
-  const [form, setForm] = useState({ name: batch.name, vendor: batch.vendor ?? "", notes: batch.notes ?? "", status: batch.status });
+  const initial = () => ({ name: batch.name, face: batch.face ?? "", vendor: batch.vendor ?? "", notes: batch.notes ?? "", status: batch.status });
+  const [form, setForm] = useState(initial);
   useEffect(() => {
-    setForm({ name: batch.name, vendor: batch.vendor ?? "", notes: batch.notes ?? "", status: batch.status });
-  }, [batch.name, batch.vendor, batch.notes, batch.status]);
+    setForm(initial());
+  },[batch.name, batch.face, batch.vendor, batch.notes, batch.status]);
 
   const save = useMutation({
     mutationFn: () =>
       sendJson("PATCH", `/api/xpot/admin/tag-batches/${batch.id}`, {
         name: form.name,
+        face: form.face || null,
         vendor: form.vendor || null,
         notes: form.notes || null,
         status: form.status,
@@ -85,6 +92,19 @@ function EditBatch({ batch, onClose }: { batch: BatchDetailData; onClose: () => 
               </option>
             ))}
           </select>
+        </Field>
+        <Field label="Printed on the pieces" hint="Pieces with their own setting keep it.">
+          <div className="flex items-center gap-2">
+            <TagFaceIcon face={resolveTagFace({ batchFace: form.face || null, productType: batch.productType })} size="sm" />
+            <select value={form.face} onChange={(e) => setForm({ ...form, face: e.target.value })} className={SELECT}>
+              <option value="">{batch.productType === "google_review_sign" ? "From the product (Google review)" : "Not set"}</option>
+              {FACE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </div>
         </Field>
         <Field label="Vendor">
           <input value={form.vendor} onChange={(e) => setForm({ ...form, vendor: e.target.value })} maxLength={120} className={INPUT} />
@@ -144,6 +164,7 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
   const exportBase = `/api/xpot/admin/tag-batches/${encodeURIComponent(batch.id)}`;
   const activeFilter = FILTERS.find((f) => f.id === filter) ?? FILTERS[0];
   const shown = pieces.filter(activeFilter.test);
+  const face = resolveTagFace({ batchFace: batch.face, productType: batch.productType });
 
   return (
     <div className="space-y-5">
@@ -151,6 +172,8 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
 
       <div className={`${CARD} space-y-4 p-5`}>
         <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex min-w-0 items-start gap-3">
+          <TagFaceIcon face={face} size="lg" />
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="font-mono text-xl font-bold text-white">{batch.batchCode}</h2>
@@ -158,9 +181,10 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
             </div>
             <p className="mt-0.5 text-sm text-white/70">{batch.name}</p>
             <p className="text-xs text-white/40">
-              {productLabel(batch.productType)} · {batch.vendor || "No vendor"} · {batch.quantity} ordered · created {formatDate(batch.createdAt)}
+              {productLabel(batch.productType)} · {face ? tagFaceLabel(face) : "Print not recorded"} · {batch.vendor || "No vendor"} · {batch.quantity} ordered · created {formatDate(batch.createdAt)}
             </p>
             {batch.notes && !editing && <p className="mt-2 whitespace-pre-wrap text-sm text-white/60">{batch.notes}</p>}
+          </div>
           </div>
           {!editing && (
             <button type="button" onClick={() => setEditing(true)} className={BTN_GHOST}>

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { BarChart3, Package, Trophy, Users } from "lucide-react";
 import type { TagRepReportRow, TagTeamReport } from "@shared/tagsApi";
+import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
 import { ADMIN_TAGS_KEY, formatDate, getJson, STALE_MS, withQuery } from "./api";
 import { CARD, SectionTitle, Stat, TD, TH } from "./ui";
 import { Loading, LoadError, Panel, PRODUCT_OPTIONS, productLabel, repOptionLabel, Select, useBatchOptions, useLeads, useReps } from "./pieces-shared";
@@ -114,6 +115,7 @@ function TeamReport({ range, go }: { range: AnalyticsRange; go: Go }) {
                 <li key={t.id}>
                   <button type="button" onClick={() => go(`/pieces/${t.id}`)} className="flex w-full items-center gap-3 py-2 text-left text-sm hover:bg-white/[0.03]">
                     <span className="w-5 shrink-0 text-right text-xs tabular-nums text-white/30">{i + 1}</span>
+                    <TagFaceIcon face={t.face} size="sm" />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate font-medium text-white">
                         <span className="font-mono">{t.publicCode}</span> · {t.leadName ?? "No customer"}
