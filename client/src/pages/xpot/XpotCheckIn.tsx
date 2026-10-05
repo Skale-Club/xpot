@@ -101,8 +101,14 @@ function ActiveLeadInfo({ lead, onSaved }: { lead: SalesLead; onSaved: () => voi
 
 const US_STATES = ["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY"];
 
-function formatPhone(value: string): string {
-  const digits = value.replace(/\D/g, "").slice(0, 10);
+/**
+ * "(407) 555-1234" mask while typing a US number. An international number ("+55 …") or one with
+ * more than 10 digits (a Brazilian mobile from Google Places has 11) is left as typed: the mask
+ * used to cut every number to 10 digits.
+ */
+function maskUsPhoneInput(value: string): string {
+  const digits = value.replace(/\D/g, "");
+  if (value.trim().startsWith("+") || digits.length > 10) return value;
   if (digits.length <= 3) return digits;
   if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
   return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
@@ -136,7 +142,7 @@ function CreateLeadDialog({ open, onOpenChange, initialName, onCreated }: {
     setForm((prev) => ({
       ...prev,
       name: place.name,
-      phone: place.phone ? formatPhone(place.phone) : prev.phone,
+      phone: place.phone ? maskUsPhoneInput(place.phone) : prev.phone,
       website: place.website || prev.website,
       address,
       city,
@@ -248,7 +254,7 @@ function CreateLeadDialog({ open, onOpenChange, initialName, onCreated }: {
           ))}
           <input
             value={form.phone}
-            onChange={(e) => setForm((prev) => ({ ...prev, phone: formatPhone(e.target.value) }))}
+            onChange={(e) => setForm((prev) => ({ ...prev, phone: maskUsPhoneInput(e.target.value) }))}
             placeholder={t("fieldPhone")}
             inputMode="tel"
             className="w-full h-10 rounded-xl px-3 text-[16px] text-white placeholder:text-white/25 focus:outline-none"

@@ -5,6 +5,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { ChevronRight, Nfc } from "lucide-react";
 import type { TagRepSummary } from "@shared/tagsApi";
 import { useXpotModules } from "@/components/ModuleSwitch";
+import { canManage } from "@shared/modules";
 import { useXpotQueries } from "./hooks/useXpotQueries";
 import { useSyncStatus } from "./hooks/useSyncStatus";
 import { VisitRow } from "./components/VisitRow";
@@ -350,7 +351,7 @@ export function XpotDashboard() {
         {/* Actions */}
         {/* The desktop sidebar has these; the phone keeps them here. */}
         <div className="flex items-center gap-1.5 shrink-0 lg:hidden">
-          {me && (me.user.isAdmin || ["admin", "manager"].includes(me.rep.role)) && (
+          {canManage(me) && (
             <button
               type="button"
               onClick={() => setLocation("/admin/overview")}

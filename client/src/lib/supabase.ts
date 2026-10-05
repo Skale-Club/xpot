@@ -31,10 +31,3 @@ async function initSupabase(): Promise<SupabaseClient> {
 }
 
 export { initSupabase };
-
-export const getSupabase = () => {
-  if (!supabaseInstance) {
-    throw new Error('Supabase not initialized. Call initSupabase() first.');
-  }
-  return supabaseInstance;
-};

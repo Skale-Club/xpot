@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from "react";
-import { Route, Router, Switch, useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
+import { Redirect, Route, Router, Switch, useLocation } from "wouter";
 import { useXpotQueries } from "./pages/xpot/hooks/useXpotQueries";
 import { useVisits } from "./pages/xpot/hooks/useVisits";
 import { GeoProvider } from "./pages/xpot/hooks/GeoProvider";
@@ -22,6 +23,11 @@ import { commonMessages } from "@/i18n/messages/common";
 import { shellMessages } from "@/i18n/messages/shell";
 import { AppLayout } from "@/components/xpot/AppLayout";
 import { MobileTabBar } from "@/components/xpot/MobileTabBar";
+import { SessionGate } from "@/components/xpot/SessionGate";
+import { XpotLandingPage } from "./pages/xpot/XpotLandingPage";
+import { isStandaloneDisplay, resolveRootView } from "@/lib/pwa";
+import { getXpotHomePath, MODULE_HOME } from "@/lib/xpot";
+import type { XpotMeResponse } from "./pages/xpot/types";
 
 // Screens redesigned for desktop use the full width there; the rest stay in a
 // narrow column until their turn (docs/DESKTOP.md).
@@ -40,28 +46,10 @@ function XpotAppShell() {
     if (visitsAllowed) rememberModule("visits");
   }, [visitsAllowed]);
 
-  if (!me) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#0a0f1e] text-white">
-        {xpotMeQuery.isError ? (
-          <>
-            <p className="text-sm text-white/50">{t("sessionFailed")}</p>
-            <button
-              onClick={() => setLocation("/")}
-              className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 hover:bg-white/10 transition-colors"
-            >
-              {t("goToSignIn")}
-            </button>
-          </>
-        ) : (
-          <Loader2 className="h-7 w-7 animate-spin text-blue-400" />
-        )}
-      </div>
-    );
-  }
+  if (!me) return <SessionGate failed={xpotMeQuery.isError} />;
 
   // A Tags-only reseller has no Visits screens.
-  if (!visitsAllowed && modules.includes("tags")) return <Redirect to="/tags" />;
+  if (!visitsAllowed && modules.includes("tags")) return <Redirect to={MODULE_HOME.tags} />;
 
   const current = tabs.find((tab) => tab.id === activeTab);
 
@@ -103,12 +91,6 @@ function XpotAppShell() {
   );
 }
 
-import { useQuery } from "@tanstack/react-query";
-import { Redirect } from "wouter";
-import { XpotLandingPage } from "./pages/xpot/XpotLandingPage";
-import { isStandaloneDisplay, resolveRootView } from "@/lib/pwa";
-import { getXpotHomePath } from "@/lib/xpot";
-import type { XpotMeResponse } from "./pages/xpot/types";
 
 // "/" is the marketing landing. That is right for a browser visit, but wrong for
 // the installed app: older installs cached start_url "/" at install time, so
