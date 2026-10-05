@@ -13,7 +13,8 @@ import DirectScreen from "./DirectScreen";
 import HomeScreen from "./HomeScreen";
 import PiecesScreen from "./PiecesScreen";
 import TagScreen from "./TagScreen";
-import { APP_BASE } from "./lib";
+import { APP_BASE, tagPath } from "./lib";
+import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { AppLayout } from "@/components/xpot/AppLayout";
 import { MobileTabBar } from "@/components/xpot/MobileTabBar";
 
@@ -37,6 +38,7 @@ export function TagsApp() {
   const meQuery = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
   const modules = useXpotModules();
   const allowed = modules.includes("tags");
+  const isDesktop = useIsDesktop();
 
   useEffect(() => {
     document.title = "Xpot · Tags";
@@ -70,6 +72,8 @@ export function TagsApp() {
   if (!allowed) return <Redirect to="/check-in" />;
 
   const current = activeNav(location);
+  // Home and the pieces table use the desktop width; a piece and Direct stay narrow.
+  const wide = location === APP_BASE || location.startsWith(`${APP_BASE}/pieces`);
 
   const currentNav = NAV.find((n) => n.href === current) ?? NAV[0];
   const pieceCode = location.startsWith(`${APP_BASE}/t/`) ? decodeURIComponent(location.slice(`${APP_BASE}/t/`.length)) : null;
@@ -77,6 +81,7 @@ export function TagsApp() {
   return (
     <AppLayout
       title={pieceCode ?? t(currentNav.key)}
+      wide={wide}
       mobileColumnClassName="pb-28"
       mobileColumnStyle={{ paddingTop: "calc(env(safe-area-inset-top) + 16px)" }}
       mobileHeader={
@@ -96,8 +101,16 @@ export function TagsApp() {
       }
     >
       <Switch>
-        <Route path={`${APP_BASE}/t/:code`}>{(params) => <TagScreen key={params.code} code={decodeURIComponent(params.code)} />}</Route>
-        <Route path={`${APP_BASE}/pieces`} component={PiecesScreen} />
+        <Route path={`${APP_BASE}/t/:code`}>
+          {(params) =>
+            // On desktop a piece opens beside the pieces table.
+            isDesktop ? <Redirect to={`${APP_BASE}/pieces/${params.code}`} replace /> : <TagScreen key={params.code} code={decodeURIComponent(params.code)} />
+          }
+        </Route>
+        <Route path={`${APP_BASE}/pieces/:code`}>
+          {(params) => (isDesktop ? <PiecesScreen selectedCode={decodeURIComponent(params.code)} /> : <Redirect to={tagPath(decodeURIComponent(params.code))} replace />)}
+        </Route>
+        <Route path={`${APP_BASE}/pieces`}>{() => <PiecesScreen />}</Route>
         <Route path={`${APP_BASE}/direct`} component={DirectScreen} />
         <Route path={APP_BASE} component={HomeScreen} />
         <Route>

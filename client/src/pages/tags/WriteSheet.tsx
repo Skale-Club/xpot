@@ -6,6 +6,8 @@ import { tagsMessages } from "@/i18n/messages/tags";
 import { errorText, haptic } from "./lib";
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_TERTIARY, BottomSheet, CopyButton, EYEBROW_MUTED, SHEET_TITLE, Spinner, TapAnimation, type Identity } from "./ui";
 import { isWebNfcSupported, mapNfcError, readBack, writeUrl } from "./webNfc";
+import { useIsDesktop } from "@/hooks/use-is-desktop";
+import { ContinueOnPhone } from "./ContinueOnPhone";
 
 export interface WriteResult {
   method: "web_nfc" | "manual";
@@ -21,16 +23,19 @@ interface Props {
   onClose: () => void;
   /** Report the result. May throw: the sheet shows the message and lets the user retry. */
   onDone: (result: WriteResult) => Promise<void> | void;
+  /** This screen on the phone; desktop shows it as a QR. */
+  continueUrl?: string;
 }
 
 type Phase = "idle" | "writing" | "verifying" | "saving" | "done" | "error";
 
 const MANUAL_STEPS = ["manual1", "manual2", "manual3", "manual4", "manual5"] as const;
 
-export default function WriteSheet({ open, url, identity, onClose, onDone }: Props) {
+export default function WriteSheet({ open, url, identity, onClose, onDone, continueUrl }: Props) {
   const t = useT(tagsMessages);
   const tc = useT(commonMessages);
   const supported = isWebNfcSupported();
+  const isDesktop = useIsDesktop();
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
   const [lastVerified, setLastVerified] = useState(false);
@@ -177,18 +182,24 @@ export default function WriteSheet({ open, url, identity, onClose, onDone }: Pro
         </div>
       ) : (
         <div className="mt-5">
-          <div className="flex items-center gap-2 text-sm font-bold text-white">
-            <Smartphone className="h-4 w-4" />
-            {t("iphoneTitle")}
-          </div>
-          <ol className="mt-3 space-y-2">
-            {MANUAL_STEPS.map((step, i) => (
-              <li key={step} className="flex gap-3 text-sm text-white/75">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-blue-500/15 text-xs font-bold text-blue-300">{i + 1}</span>
-                <span className="pt-0.5">{t(step)}</span>
-              </li>
-            ))}
-          </ol>
+          {isDesktop && continueUrl ? (
+            <ContinueOnPhone url={continueUrl} />
+          ) : (
+            <>
+              <div className="flex items-center gap-2 text-sm font-bold text-white">
+                <Smartphone className="h-4 w-4" />
+                {t("iphoneTitle")}
+              </div>
+              <ol className="mt-3 space-y-2">
+                {MANUAL_STEPS.map((step, i) => (
+                  <li key={step} className="flex gap-3 text-sm text-white/75">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-blue-500/15 text-xs font-bold text-blue-300">{i + 1}</span>
+                    <span className="pt-0.5">{t(step)}</span>
+                  </li>
+                ))}
+              </ol>
+            </>
+          )}
           {errorBox && <div className="mt-4">{errorBox}</div>}
           <button
             type="button"

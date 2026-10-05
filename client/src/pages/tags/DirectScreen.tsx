@@ -10,7 +10,7 @@ import { tagsMessages } from "@/i18n/messages/tags";
 import LeadPicker, { leadPayload, type LeadChoice } from "./LeadPicker";
 import { ReviewLinkAssist } from "./ReviewLinkSheet";
 import WriteSheet, { type WriteResult } from "./WriteSheet";
-import { ageOf, pushRecent, shortUrl, tagsGet, tagsPost, useBanner } from "./lib";
+import { ageOf, pushRecent, shortUrl, tagsGet, tagsPost, useBanner, directPath } from "./lib";
 import { BTN_DIRECT, Banner, CARD, CopyButton, EYEBROW_MUTED, FieldLabel, ICON_BLOCK_DIRECT, INPUT, LinkInput, Pill, TopBar } from "./ui";
 
 const WRITES_KEY = ["/api/xpot/tag-direct-writes"];
@@ -150,7 +150,14 @@ export default function DirectScreen() {
         )}
       </section>
 
-      <WriteSheet open={writeOpen} url={target} identity="direct" onClose={() => setWriteOpen(false)} onDone={onWritten} />
+      <WriteSheet
+        open={writeOpen}
+        url={target}
+        identity="direct"
+        onClose={() => setWriteOpen(false)}
+        onDone={onWritten}
+        continueUrl={`${window.location.origin}${directPath(target)}`}
+      />
     </>
   );
 }

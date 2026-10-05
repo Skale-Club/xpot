@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, Nfc, Power, QrCode, ScanLine, Search, Star } from "lucide-react";
+import { ExternalLink, Nfc, Power, QrCode, ScanLine, Search, Star, X } from "lucide-react";
 import type { TagDetail } from "@shared/tagsApi";
 import { TAG_DESTINATION_TYPES, validateDestinationUrl, type TagDestinationType } from "@shared/tags";
 import { guessDestinationType, normalizeUrlInput } from "@shared/tagApp";
@@ -42,7 +42,11 @@ async function fetchTag(code: string): Promise<Loaded> {
 const isDestinationType = (value: string | null): value is TagDestinationType =>
   !!value && (TAG_DESTINATION_TYPES as readonly string[]).includes(value);
 
-export default function TagScreen({ code }: { code: string }) {
+export default function TagScreen({ code, onClose }: {
+  code: string;
+  /** Set when shown in the desktop pane beside the pieces list. */
+  onClose?: () => void;
+}) {
   const t = useT(tagsMessages);
   const tc = useT(commonMessages);
   const [, navigate] = useLocation();
@@ -203,7 +207,17 @@ export default function TagScreen({ code }: { code: string }) {
 
   return (
     <>
-      <TopBar title={tag.leadName ?? t("noCustomer")} back={APP_BASE} eyebrow={t("pieceEyebrow")} />
+      <TopBar
+        title={tag.leadName ?? t("noCustomer")}
+        back={onClose ? undefined : APP_BASE}
+        eyebrow={t("pieceEyebrow")}
+        right={onClose ? (
+          <button type="button" onClick={onClose} aria-label={t("closePane")} title={t("closePane")}
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-white/40 hover:bg-white/10 hover:text-white">
+            <X className="h-4 w-4" />
+          </button>
+        ) : undefined}
+      />
       <Banner banner={banner} />
 
       <section className="relative overflow-hidden rounded-[20px] border border-white/10 bg-white/[0.04] p-5">
@@ -344,7 +358,14 @@ export default function TagScreen({ code }: { code: string }) {
         </button>
       </div>
 
-      <WriteSheet open={writeOpen} url={tag.nfcUrl} identity="xpot" onClose={() => setWriteOpen(false)} onDone={onWritten} />
+      <WriteSheet
+        open={writeOpen}
+        url={tag.nfcUrl}
+        identity="xpot"
+        onClose={() => setWriteOpen(false)}
+        onDone={onWritten}
+        continueUrl={`${window.location.origin}${tagPath(tag.publicCode)}`}
+      />
     </>
   );
 }
