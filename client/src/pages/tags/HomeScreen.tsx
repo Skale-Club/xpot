@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, Building2, Link2, Nfc, QrCode, ScanLine, Tag, X } from "lucide-react";
+import { ArrowRight, Building2, Link2, Nfc, QrCode, ScanLine, Shield, Tag, X } from "lucide-react";
 import type { TagRepSummary } from "@shared/tagsApi";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
 import type { XpotMeResponse } from "@/pages/xpot/types";
+import { canAdminister } from "@/components/xpot/AppLayout";
+import { shellMessages } from "@/i18n/messages/shell";
 import QrScanner from "./QrScanner";
 import { WholesaleCard } from "./WholesaleCard";
 import {
@@ -68,6 +70,7 @@ function Stat({ label, value }: { label: string; value: number | undefined }) {
 
 export default function HomeScreen() {
   const t = useT(tagsMessages);
+  const ts = useT(shellMessages);
   const tc = useT(commonMessages);
   const [, navigate] = useLocation();
   const { banner, show } = useBanner();
@@ -178,11 +181,24 @@ export default function HomeScreen() {
 
   const main = (
     <div className="space-y-5">
-      <header className="lg:hidden">
-        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-300/80">
-          {me ? t("homeHello", { name: me.rep.displayName.split(" ")[0] }) : "Xpot"}
-        </p>
-        <h1 className="mt-1 text-[26px] font-extrabold leading-tight tracking-tight text-white">{t("homeTitle")}</h1>
+      <header className="flex items-start justify-between gap-3 lg:hidden">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-teal-300/80">
+            {me ? t("homeHello", { name: me.rep.displayName.split(" ")[0] }) : "Xpot"}
+          </p>
+          <h1 className="mt-1 text-[26px] font-extrabold leading-tight tracking-tight text-white">{t("homeTitle")}</h1>
+        </div>
+        {canAdminister(me) && (
+          <button
+            type="button"
+            onClick={() => navigate("/admin/tags")}
+            className="flex h-10 shrink-0 items-center gap-2 rounded-[18px] border border-white/10 bg-white/[0.03] px-3 text-sm font-semibold text-white/60 active:scale-95"
+            data-testid="tags-manage"
+          >
+            <Shield className="h-4 w-4" />
+            {ts("navManage")}
+          </button>
+        )}
       </header>
 
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4 lg:gap-4" data-testid="tags-summary">

@@ -51,8 +51,8 @@ export const commonMessages: Dictionary<typeof en> = {
   },
   es: {
     moduleVisits: "Visitas",
-    moduleTags: "Etiquetas",
-    switchModule: "Cambiar entre Visitas y Etiquetas",
+    moduleTags: "Tags",
+    switchModule: "Cambiar entre Visitas y Tags",
     language: "Idioma",
     save: "Guardar",
     cancel: "Cancelar",

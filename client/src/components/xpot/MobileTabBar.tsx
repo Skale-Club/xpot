@@ -1,9 +1,12 @@
 import type { LucideIcon } from "lucide-react";
+import type { XpotModule } from "@shared/modules";
+import { MODULE_ACCENT } from "./surface";
 
 export type MobileTab = { id: string; label: string; icon: LucideIcon; testId?: string };
 
-/** The phone's floating bottom tab bar (Visits and Tags modules). */
-export function MobileTabBar({ tabs, activeId, onSelect }: { tabs: MobileTab[]; activeId: string; onSelect: (id: string) => void }) {
+/** The phone's floating bottom tab bar (Visits and Tags modules), in the module's colour. */
+export function MobileTabBar({ tabs, activeId, onSelect, module }: { tabs: MobileTab[]; activeId: string; onSelect: (id: string) => void; module: XpotModule }) {
+  const accent = MODULE_ACCENT[module];
   return (
     <nav className="fixed inset-x-0 bottom-0 z-50 px-4 pt-2" style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 16px)" }}>
       <div
@@ -24,13 +27,8 @@ export function MobileTabBar({ tabs, activeId, onSelect }: { tabs: MobileTab[]; 
                 isActive ? "text-white" : "text-white/35 hover:text-white/60"
               }`}
             >
-              {isActive && (
-                <span
-                  className="absolute inset-0 rounded-xl"
-                  style={{ background: "linear-gradient(135deg, rgba(59,130,246,0.25) 0%, rgba(99,102,241,0.25) 100%)" }}
-                />
-              )}
-              <Icon className={`relative h-[18px] w-[18px] transition-all ${isActive ? "drop-shadow-[0_0_6px_rgba(99,102,241,0.8)]" : ""}`} />
+              {isActive && <span className="absolute inset-0 rounded-xl" style={{ background: accent.soft }} />}
+              <Icon className={`relative h-[18px] w-[18px] transition-all ${isActive ? accent.text : ""}`} />
               <span className="relative truncate">{label}</span>
             </button>
           );

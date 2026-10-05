@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { ArrowLeft, Eye, EyeOff, Loader2, Save, ChevronDown, Webhook, Copy, Check, RefreshCw } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, Loader2, Save, ChevronDown, Webhook, Copy, Check, RefreshCw, Shield, ChevronRight } from "lucide-react";
 import ReactCountryFlag from "react-country-flag";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -13,6 +13,8 @@ import { settingsMessages } from "@/i18n/messages/settings";
 import type { XpotMeResponse } from "./types";
 import { AppLayout } from "@/components/xpot/AppLayout";
 import { homeForModules, useXpotModules } from "@/components/ModuleSwitch";
+import { canAdminister } from "@/components/xpot/AppLayout";
+import { shellMessages } from "@/i18n/messages/shell";
 
 type XphereConfig = {
   inboundApiKey: string | null;
@@ -318,6 +320,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 export function XpotSettings() {
   const [, setLocation] = useLocation();
   const modules = useXpotModules();
+  const ts = useT(shellMessages);
   const { toast } = useToast();
   const t = useT(settingsMessages);
   const tc = useT(commonMessages);
@@ -435,6 +438,20 @@ export function XpotSettings() {
             </p>
           </div>
         </div>
+
+        {/* Managers reach the account's Organization (people, integrations, branding) from here on a phone; the desktop sidebar has it. */}
+        {canAdminister(me) && (
+          <button
+            type="button"
+            onClick={() => setLocation("/admin/reps")}
+            className="mb-6 flex w-full items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-left text-sm font-semibold text-white/80 lg:hidden"
+            data-testid="settings-organization"
+          >
+            <Shield className="h-4 w-4 text-white/50" />
+            <span className="flex-1">{ts("navOrganization")}</span>
+            <ChevronRight className="h-4 w-4 text-white/30" />
+          </button>
+        )}
 
         <div className="space-y-8 lg:columns-2 lg:gap-6 lg:space-y-0 lg:[&>*]:mb-6 lg:[&>*]:break-inside-avoid">
           {/* Language */}
