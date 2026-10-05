@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { useLocation } from "wouter";
 import {
   Check,
   TrendingUp,
@@ -187,17 +188,32 @@ const SALES_TABS: { id: SalesTab; labelKey: "tabOverview" | "tabSales" | "tabSto
   { id: "pipeline", labelKey: "tabPipeline" },
 ];
 
+// The tab and the open item live in the URL (/sales/stock/12) so a desktop
+// link opens the same pane. "consignments" is "stock" in the path.
+const TAB_PATH: Record<SalesTab, string> = { overview: "overview", sales: "sales", consignments: "stock", pipeline: "pipeline" };
+
+function parseSalesPath(path: string): { tab: SalesTab; id: number | null } {
+  const [, , seg, rawId] = path.split("/");
+  const tab = (Object.keys(TAB_PATH) as SalesTab[]).find((k) => TAB_PATH[k] === seg) ?? "overview";
+  const id = rawId ? Number(rawId) : NaN;
+  return { tab, id: Number.isInteger(id) && id > 0 ? id : null };
+}
+
 export function XpotSales() {
   const t = useT(salesMessages);
-  const [tab, setTab] = useState<SalesTab>("overview");
+  const [location, navigate] = useLocation();
+  const { tab, id } = parseSalesPath(location);
+  const setTab = (next: SalesTab) => navigate(next === "overview" ? "/sales" : `/sales/${TAB_PATH[next]}`, { replace: true });
+  const select = (which: SalesTab) => (itemId: number | null) =>
+    navigate(itemId == null ? `/sales/${TAB_PATH[which]}` : `/sales/${TAB_PATH[which]}/${itemId}`);
 
   return (
     <div className="space-y-4">
-      <Segmented items={SALES_TABS.map(({ id, labelKey }) => ({ id, label: t(labelKey) }))} value={tab} onChange={setTab} />
+      <Segmented items={SALES_TABS.map(({ id, labelKey }) => ({ id, label: t(labelKey) }))} value={tab} onChange={setTab} className="lg:max-w-xl" />
 
       {tab === "overview" && <SalesOverview onGoToConsignments={() => setTab("consignments")} />}
-      {tab === "sales" && <SalesList />}
-      {tab === "consignments" && <ConsignmentsList />}
+      {tab === "sales" && <SalesList selectedId={id} onSelect={select("sales")} />}
+      {tab === "consignments" && <ConsignmentsList selectedId={id} onSelect={select("consignments")} />}
       {tab === "pipeline" && <PipelineTab />}
     </div>
   );
@@ -235,7 +251,7 @@ function PipelineTab() {
   const pipelines = pipelinesQuery.data?.pipelines ?? [];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 lg:grid lg:grid-cols-2 lg:items-start lg:gap-6 lg:space-y-0">
 
       {/* Opportunities section */}
       <div className="space-y-3">
