@@ -4,6 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import { storage } from "../../storage.js";
 import { requireXpotUser, ensureXpotRep } from "./middleware.js";
 import { getSupabaseAdmin } from "../../lib/supabase.js";
+import { discardFiles } from "../../lib/files.js";
 import { randomUUID } from "crypto";
 
 export function createAuthRouter() {
@@ -116,11 +117,14 @@ export function createAuthRouter() {
       const { data: urlData } = supabase.storage.from("uploads").getPublicUrl(filename);
       const avatarUrl = urlData.publicUrl;
 
+      const previous = actor!.rep.avatarUrl;
       const [updated] = await Promise.all([
         storage.updateSalesRepProfile(actor!.rep.id, { avatarUrl }),
         storage.updateUserProfile(actor!.user.userId, { profileImageUrl: avatarUrl }),
       ]);
       res.json({ avatarUrl, rep: updated });
+      // The replaced picture would otherwise stay in the public bucket for good.
+      if (previous && previous !== avatarUrl) void discardFiles([previous], `avatar of rep #${actor!.rep.id}`);
     } catch (err) {
       console.error("[POST /api/xpot/me/avatar]", err);
       res.status(500).json({ message: (err as Error).message || "Failed to upload avatar" });

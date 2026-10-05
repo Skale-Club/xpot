@@ -17,6 +17,7 @@ import {
   unblockRep,
   type Actor,
 } from "./resellerAccounts.js";
+import { AccountDeletionError, deleteRepAccount } from "../../accountDeletion.js";
 
 export function createAdminRouter() {
   const router = Router();
@@ -70,7 +71,7 @@ export function createAdminRouter() {
     try {
       res.status(status).json(await handler(req));
     } catch (err) {
-      if (err instanceof AccountError) return res.status(err.status).json({ message: err.message });
+      if (err instanceof AccountError || err instanceof AccountDeletionError) return res.status(err.status).json({ message: err.message });
       if (err instanceof z.ZodError) return res.status(400).json({ message: err.issues[0]?.message ?? "Invalid input" });
       console.error(`[${req.method} ${req.path}]`, err);
       res.status(500).json({ message: "Something went wrong" });
@@ -112,6 +113,12 @@ export function createAdminRouter() {
   router.post("/admin/reps/:id/block", withRep((id, req) => blockRep(id, blockSchema.parse(req.body ?? {}).reason, actorOf(req))));
   router.post("/admin/reps/:id/unblock", withRep((id, req) => unblockRep(id, actorOf(req))));
   router.post("/admin/reps/:id/phone", withRep((id, req) => changeRepPhone(id, phoneChangeSchema.parse(req.body), actorOf(req))));
+  // Delete the account and its data on the person's request (server/accountDeletion.ts).
+  // Admins only; the body must say { "confirm": "DELETE" } so a stray call can't do it.
+  router.delete("/admin/reps/:id", withRep((id, req) => {
+    z.object({ confirm: z.literal("DELETE", { errorMap: () => ({ message: 'Send { "confirm": "DELETE" } to delete this account.' }) }) }).parse(req.body ?? {});
+    return deleteRepAccount(id, actorOf(req));
+  }));
 
   router.get("/admin/sync-events", async (_req, res) => {
     res.json(await storage.listSalesSyncEvents());

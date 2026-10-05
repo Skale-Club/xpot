@@ -1,5 +1,6 @@
 import { Building2, MapPinned, Package, Boxes } from "lucide-react";
 import { formatCents } from "../utils";
+import { fileSrc } from "@/lib/files";
 
 type LeadLike = {
   name: string;
@@ -57,7 +58,7 @@ export function LeadCardBody({
       {/* Avatar + route */}
       <div className="flex shrink-0 flex-col items-center gap-3">
         {photo ? (
-          <img src={photo} alt="" className="h-14 w-14 rounded-xl object-cover" />
+          <img src={fileSrc(photo)} alt="" className="h-14 w-14 rounded-xl object-cover" />
         ) : (
           <div className="flex h-14 w-14 items-center justify-center rounded-xl border border-indigo-500/20 bg-indigo-500/10">
             <Building2 className="h-7 w-7 text-indigo-400" />

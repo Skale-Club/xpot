@@ -140,7 +140,57 @@ Skale Club project. The split from Skale Club (see the extraction note above) is
 complete — this section previously described it as TBD, which was stale.
 
 The database itself is moving to the Hetzner host (see "Database on the Hetzner
-host" below); Auth and Storage stay on this project.
+host" below); Auth and Storage (avatars, branding, and private files when R2
+isn't configured) stay on this project. See "Files" for photos and voice notes.
+
+## Files (photos, voice notes, avatars)
+
+Business photos and voice notes are **private** (`server/lib/files.ts`). The DB
+keeps a storage reference, never a URL: `r2:photos/12/lead_7_….jpg`,
+`r2:audio/12/visit_40_….webm` (or `supabase:…` when R2 isn't configured). The
+client loads them through `GET /api/xpot/files?ref=…`
+(`server/routes/xpot/files.ts`), which finds the lead or visit holding that
+reference, applies the usual access rule (a lead: its owner, managers, admins;
+a voice note: the visit's rep, managers, admins) and redirects to a signed URL
+valid for 5 minutes. A key that no lead or visit holds is never signed.
+
+- **Where:** Cloudflare R2 when `R2_ACCOUNT_ID` (or `R2_ENDPOINT`),
+  `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` and `R2_BUCKET` are set; otherwise
+  the private Supabase bucket `private-uploads` (created private at boot).
+  R2 setup: a dedicated bucket with no public access and no r2.dev URL, and an
+  R2 API token with Object Read & Write on that bucket only.
+- **Avatars and branding logos stay public** in the Supabase bucket `uploads`:
+  they show all over the app chrome and on public pages, and a profile picture
+  is something the person chose to show. A replaced avatar's file is deleted;
+  avatars go with the account.
+- **Cleanup:** removing a photo, deleting a lead or a visit, and re-recording a
+  voice note delete the stored files after the DB change, best-effort; a storage
+  error is logged as `[files] …` and does not fail the request.
+- **Existing rows** still hold public Supabase URLs, which keep working (the
+  client shows `https://` values as they are) until moved:
+  1. Set the `R2_*` variables in Coolify and deploy (new uploads go private).
+  2. From a laptop with the production env: `npm run files:migrate` (dry run,
+     counts), then `npm run files:migrate -- --apply` (copies each file, points
+     the row at it).
+  3. Check photos and voice notes in the app, then
+     `npm run files:migrate -- --apply --delete-old`: deletes the old public
+     copies, which is what actually closes the old links. Re-runnable.
+
+## Deleting an account
+
+Admin › Reps › a blocked rep › **Delete account** (platform admins only;
+`DELETE /api/xpot/admin/reps/:id` with `{ "confirm": "DELETE" }`,
+`server/accountDeletion.ts`). It deletes the sign-in identity (users row,
+sessions, sign-in codes, Supabase Auth user, MCP OAuth grants, Xphere
+connection), the rep's visits, notes, voice notes, opportunities, tasks and
+suggested actions, the businesses they own, and every file they uploaded
+(including their photos on other reps' businesses and anything left under
+their folders). Sales, sale items, consignments and stock movements are kept
+for accounting: a business that has them stays, unassigned, and the rep row
+stays as an anonymous "Deleted account" placeholder (`deleted_at` set, hidden
+from Admin › Reps) so those rows keep a valid `rep_id`. With nothing to keep,
+the rep and user rows are deleted outright. Data already synced to a CRM
+(GoHighLevel, Xphere) is not touched there.
 
 ## Tags (QR/NFC pieces)
 
@@ -222,7 +272,8 @@ Coolify app settings:
 - Turn on "Include Source Commit in Build" so `/api/version` reports the commit.
 - Runtime environment variables: `POSTGRES_URL` (the Coolify database, see below), `SUPABASE_URL`, `SUPABASE_ANON_KEY`,
   `SUPABASE_SERVICE_ROLE_KEY`, `SESSION_SECRET`, `GOOGLE_PLACES_API_KEY` (optional),
-  `TAG_PUBLIC_BASE_URL` and `TAG_HASH_SECRET` (see "Tags").
+  `TAG_PUBLIC_BASE_URL` and `TAG_HASH_SECRET` (see "Tags"), `R2_ACCOUNT_ID`,
+  `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` and `R2_BUCKET` (see "Files").
   No build-time variables are needed.
 
 Migrations run automatically: the container starts with `node dist/migrate.cjs`
@@ -234,7 +285,8 @@ keeps the previous container. `npm run migrate` still works from a laptop.
 
 Production Postgres runs as a Coolify database next to the app (not Supabase):
 the QR/NFC redirect path then depends only on the box itself, and nothing pauses
-for inactivity. Supabase stays for Auth and Storage (avatars, visit audio), which
+for inactivity. Supabase stays for Auth and Storage (avatars; photos and voice notes
+go to R2, see "Files"), which
 the redirect path never touches.
 
 Setup in Coolify:

@@ -18,6 +18,7 @@ import { createProductsRouter } from "./products.js";
 import { createSalesRouter } from "./sales.js";
 import { createConsignmentsRouter } from "./consignments.js";
 import { createVisitActionsRouter } from "./visit-actions.js";
+import { createFilesRouter } from "./files.js";
 
 export function registerXpotRoutes(app: Express) {
   // Public branding (favicon / manifest / apple-touch) — no auth.
@@ -27,6 +28,7 @@ export function registerXpotRoutes(app: Express) {
   app.use("/api/xpot", createAuthRouter());
   app.use("/api/xpot", createDashboardRouter());
   app.use("/api/xpot", createMetricsRouter());
+  app.use("/api/xpot", createFilesRouter());
   app.use("/api/xpot", createLeadsRouter());
   app.use("/api/xpot", createVisitsRouter());
   app.use("/api/xpot", createOpportunitiesRouter());

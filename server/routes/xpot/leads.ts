@@ -5,6 +5,7 @@ import { requireXpotUser, ensureXpotRep, isManagerOrAdmin, loadAccessibleLead } 
 import { xpotLeadCreateSchema, xpotLeadUpdateSchema, xpotLeadContactCreateSchema } from "#shared/xpot.js";
 import { syncLeadToGhl, syncLeadToXphere } from "./helpers.js";
 import { salesStorage } from "../../storage-sales.js";
+import { activeStore, discardFiles, putPrivateFile } from "../../lib/files.js";
 
 export function createLeadsRouter() {
   const router = Router();
@@ -304,73 +305,59 @@ export function createLeadsRouter() {
       return res.status(403).json({ message: "Access denied" });
     }
 
-    await storage.deleteSalesLead(leadId);
+    const files = await storage.deleteSalesLead(leadId);
     res.status(204).end();
+    // Best-effort, after the rows are gone: a storage error is logged, not surfaced.
+    void discardFiles(files, `lead #${leadId} deleted`);
   });
 
-  // POST /leads/:id/photos — upload a photo, prepend to photos array (first = cover)
+  // POST /leads/:id/photos — upload a photo, prepend to photos array (first = cover).
+  // Photos are private: the lead keeps a storage reference ("r2:photos/…"),
+  // and the browser reads it through GET /files (server/routes/xpot/files.ts).
   router.post("/leads/:id/photos", async (req, res) => {
     const actor = (req as any).xpotActor as Awaited<ReturnType<typeof ensureXpotRep>>;
-    const leadId = Number(req.params.id);
-    if (!Number.isFinite(leadId)) return res.status(400).json({ message: "Invalid lead id" });
-
-    const lead = await storage.getSalesLead(leadId);
-    if (!lead) return res.status(404).json({ message: "Lead not found" });
-    if (!isManagerOrAdmin(actor!) && lead.ownerRepId !== actor!.rep.id) {
-      return res.status(403).json({ message: "Access denied" });
-    }
+    const lead = await loadAccessibleLead(req, res, Number(req.params.id));
+    if (!lead) return;
 
     const { imageData } = req.body as { imageData?: string };
     if (!imageData) return res.status(400).json({ message: "imageData is required" });
+    const match = imageData.match(/^data:image\/(\w+);base64,/);
+    const ext = (match?.[1] || "jpg").toLowerCase();
 
-    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    if (!activeStore()) {
       return res.status(503).json({ message: "Storage not configured" });
     }
 
     try {
-      const base64 = imageData.replace(/^data:image\/\w+;base64,/, "");
-      const buffer = Buffer.from(base64, "base64");
-      const ext = imageData.match(/^data:image\/(\w+);/)?.[1] || "jpg";
-      const filename = `lead_${leadId}_${Date.now()}.${ext}`;
-      const path = `photos/${actor!.rep.id}/${filename}`;
+      const buffer = Buffer.from(imageData.replace(/^data:image\/\w+;base64,/, ""), "base64");
+      const key = `photos/${actor!.rep.id}/lead_${lead.id}_${Date.now()}.${ext}`;
+      const photo = await putPrivateFile(key, buffer, `image/${ext}`);
 
-      const { createClient } = await import("@supabase/supabase-js");
-      const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-      const { error } = await supabase.storage.from("uploads").upload(path, buffer, {
-        contentType: `image/${ext}`,
-        upsert: false,
-      });
-      if (error) throw error;
+      const currentPhotos = lead.photos ?? [];
+      const updated = await storage.updateSalesLead(lead.id, { photos: [photo, ...currentPhotos] });
 
-      const { data: urlData } = supabase.storage.from("uploads").getPublicUrl(path);
-      const photoUrl = urlData.publicUrl;
-
-      const currentPhotos = (lead as any).photos as string[] ?? [];
-      const updated = await storage.updateSalesLead(leadId, { photos: [photoUrl, ...currentPhotos] } as any);
-
-      res.json({ lead: updated, photoUrl });
+      res.json({ lead: updated, photo });
     } catch (err: any) {
       console.error("Photo upload error:", err);
       res.status(500).json({ message: err.message || "Failed to upload photo" });
     }
   });
 
-  // DELETE /leads/:id/photos — remove a photo by URL
+  // DELETE /leads/:id/photos — remove a photo (by its stored reference) and its file
   router.delete("/leads/:id/photos", async (req, res) => {
-    const actor = (req as any).xpotActor as Awaited<ReturnType<typeof ensureXpotRep>>;
-    const leadId = Number(req.params.id);
-    const { photoUrl } = req.body as { photoUrl?: string };
-    if (!photoUrl) return res.status(400).json({ message: "photoUrl is required" });
+    // `photoUrl` is the old field name; older clients still send it.
+    const { photo, photoUrl } = req.body as { photo?: string; photoUrl?: string };
+    const target = photo || photoUrl;
+    if (!target) return res.status(400).json({ message: "photo is required" });
 
-    const lead = await storage.getSalesLead(leadId);
-    if (!lead) return res.status(404).json({ message: "Lead not found" });
-    if (!isManagerOrAdmin(actor!) && lead.ownerRepId !== actor!.rep.id) {
-      return res.status(403).json({ message: "Access denied" });
-    }
+    const lead = await loadAccessibleLead(req, res, Number(req.params.id));
+    if (!lead) return;
 
-    const currentPhotos = (lead as any).photos as string[] ?? [];
-    const updated = await storage.updateSalesLead(leadId, { photos: currentPhotos.filter((u) => u !== photoUrl) } as any);
+    const currentPhotos = lead.photos ?? [];
+    if (!currentPhotos.includes(target)) return res.json({ lead });
+    const updated = await storage.updateSalesLead(lead.id, { photos: currentPhotos.filter((u) => u !== target) });
     res.json({ lead: updated });
+    void discardFiles([target], `photo removed from lead #${lead.id}`);
   });
 
   // SEG-04: these two were the only routes in this file with no ownership

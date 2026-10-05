@@ -1,15 +1,17 @@
 import { useState, type FormEvent } from "react";
-import { Ban, Check, Copy, KeyRound, Phone, RotateCcw, UserPlus } from "lucide-react";
+import { Ban, Check, Copy, KeyRound, Phone, RotateCcw, Trash2, UserPlus } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "@/components/ui/loader";
 import { XPOT_MODULES, type XpotModule } from "@shared/modules";
 import { PHONE_COUNTRIES, formatPhone } from "@shared/phone";
+import type { XpotMeResponse } from "@/pages/xpot/types";
 
 // Who may use Xpot. People sign up with their phone and wait here for
 // approval; an admin can also create someone's access directly. Everyone
 // signs in with a code texted to their phone. Blocking ends the partnership
-// and logs the rep out everywhere.
+// and logs the rep out everywhere. A blocked rep's account can then be deleted
+// on their request (admins only; server/accountDeletion.ts).
 
 type Access = "pending" | "active" | "blocked";
 
@@ -38,9 +40,9 @@ const FIELD =
   "w-full rounded-lg border border-white/10 bg-[#0a0f1e] px-3 py-2 text-sm text-white placeholder-white/25 outline-none focus:border-blue-500/50";
 const BTN = "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-40";
 
-async function send<T>(url: string, body: unknown = {}): Promise<T> {
+async function send<T>(url: string, body: unknown = {}, method = "POST"): Promise<T> {
   const res = await fetch(url, {
-    method: "POST",
+    method,
     credentials: "include",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -280,6 +282,51 @@ function ActiveRow({ rep }: { rep: Rep }) {
   );
 }
 
+type DeletionResult = { account: "deleted" | "anonymized"; leadsDeleted: number; leadsUnassigned: number; visitsDeleted: number; files: { deleted: number; failed: number } };
+
+/** Delete the account and its data, when the person asks (privacy policy, "How long we keep it"). */
+function DeleteAccountButton({ rep }: { rep: Rep }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { data: me } = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
+  const remove = useMutation({
+    mutationFn: () => send<DeletionResult>(`/api/xpot/admin/reps/${rep.id}`, { confirm: "DELETE" }, "DELETE"),
+    onSuccess: (r) => {
+      const kept = r.leadsUnassigned ? ` ${r.leadsUnassigned} business(es) with sales records kept, now unassigned.` : "";
+      const files = r.files.failed ? ` ${r.files.failed} file(s) could not be deleted; see the server log.` : "";
+      toast({
+        title: `${rep.displayName}'s account deleted`,
+        description: `${r.leadsDeleted} business(es), ${r.visitsDeleted} visit(s) and ${r.files.deleted} file(s) deleted.${kept}${files}`,
+        variant: r.files.failed ? "destructive" : undefined,
+      });
+      void queryClient.invalidateQueries({ queryKey: REPS_KEY });
+    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+  if (!me?.user.isAdmin) return null;
+  return (
+    <button
+      type="button"
+      disabled={remove.isPending}
+      onClick={() => {
+        const typed = window.prompt(
+          `Delete ${rep.displayName}'s account and data? This cannot be undone.\n\n` +
+            "Deleted: sign-in, profile, their visits, notes, voice notes, photos, tasks and the businesses they own. " +
+            "Kept for accounting: sales and consignments (a business with those stays, unassigned).\n\nType DELETE to confirm:",
+          "",
+        );
+        if (typed === "DELETE") remove.mutate();
+        else if (typed !== null) toast({ title: "Not deleted", description: "Type DELETE, in capitals, to confirm." });
+      }}
+      className={`${BTN} border border-red-500/30 text-red-300 hover:bg-red-500/10`}
+      data-testid={`delete-${rep.id}`}
+    >
+      {remove.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+      Delete account
+    </button>
+  );
+}
+
 function BlockedRow({ rep }: { rep: Rep }) {
   const unblock = useRepAction((r) => `${r.displayName} can sign in again`);
   return (
@@ -298,6 +345,7 @@ function BlockedRow({ rep }: { rep: Rep }) {
         <RotateCcw className="h-4 w-4" />
         Unblock
       </button>
+      <DeleteAccountButton rep={rep} />
     </div>
   );
 }
