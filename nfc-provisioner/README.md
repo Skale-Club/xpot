@@ -5,7 +5,7 @@ physical piece through a USB PC/SC reader. Xpot stays the system of record;
 this app holds no data of its own.
 
 ```
-Xpot Admin → Tags → tag page ──send to NFC writer──► job { code, expected URL }
+Xpot Tags › Manage › piece   ──send to NFC writer──► job { code, expected URL }
                                                            │  claimed by this app
 Place tag ─► Program ─► write NDEF URI ─► read back ─► report
                                                            │
@@ -56,7 +56,7 @@ servers.
 
 ## Pairing and security
 
-1. Xpot → **Admin → Tags → NFC writers** → name the computer and create a
+1. Xpot → **Tags › Manage › NFC writers** (`/admin/tags/provisioners`) → name the computer and create a
    pairing code (single use, 10 minutes).
 2. Type the code in the app. The app receives a **device token** (`snp_…`) that
    only works on `/api/provisioner/*` (claim jobs, report events/results). It

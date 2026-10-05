@@ -1,5 +1,15 @@
 # Auditoria técnica — Xpot
 
+> **Retrato histórico (2026-09-01, base `27d2cc1`).** O texto abaixo descreve o
+> código daquele dia e não é atualizado. O estado de cada achado (feito, aberto,
+> obsoleto) vive no [`BACKLOG.md`](./BACKLOG.md). Desde então mudaram duas
+> coisas que este texto pressupõe: a Vercel saiu do projeto (`049cc76`), então
+> `api/index.ts`, `vercel.json` e os limites de 4,5 MB e 30 s não existem mais
+> (o Xpot roda como um contêiner no Coolify); e o login passou a ser por
+> telefone, com código por SMS (`server/auth/phoneAuth.ts`), e não mais pelo
+> Supabase Auth (o login antigo por e-mail, `POST /api/auth/login`, ainda existe,
+> sem tela). Para o desenho atual, veja [`ARCHITECTURE.md`](./ARCHITECTURE.md).
+
 **Base:** `27d2cc1` · **Data:** 2026-09-01 · **Escopo:** 17.406 linhas em `server/`, `client/`, `shared/`, `migrations/`, `scripts/`
 
 Auditoria estática feita antes de uma alteração estrutural do sistema. Todos os achados

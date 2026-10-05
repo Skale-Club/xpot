@@ -28,6 +28,14 @@ contra uma API simulada em 375px, 1100px e 1440px.
 | 7 · Config. e Admin | #25 | DSK-25, 26 | ✅ (helpers de Config. não unificados) |
 | 8 · Acabamento | #26 | DSK-27, 29 | ✅ parcial · DSK-28 adiado |
 
+**Shell substituído pelo [`MODULES.md`](./MODULES.md) (#31).** O shell do §3 (Visitas e
+Tags empilhados como grupos na barra lateral, Admin no rodapé) e o DSK-26 (um grupo
+"Admin" na barra lateral) foram trocados: a barra lateral mostra só o módulo atual,
+com um seletor Visitas | Tags no topo; a gestão de cada módulo é o grupo "Gestão"
+dentro dele; Pessoas, Integrações e Marca ficam em Conta › Organização. O mapa de
+onde cada tela vive é `client/src/components/xpot/moduleNav.ts`. O resto deste plano
+(listas com painel de detalhe, ⌘K, check-in passado para o celular) continua valendo.
+
 **Revisão pós-entrega** (PR #27): quatro revisões independentes, uma por área,
 acharam ~30 problemas médios e pequenos (painel que sumia ao filtrar, histórico
 do navegador poluído, Esc descartando edição, tablets tratados como computador,
@@ -127,6 +135,8 @@ cards abaixo de `md`, tabela acima.
 ---
 
 ## 3. Layout-alvo (≥ 1024px)
+
+> Barra lateral substituída no #31: ver Status e [`MODULES.md`](./MODULES.md).
 
 ```
 ┌────────────┬──────────────────────────────────────────────────────┐
@@ -237,7 +247,7 @@ nenhuma cópia de `GLASS`.
 | ID | Item |
 |---|---|
 | DSK-25 | **Configurações** com navegação de seções à esquerda e formulários em duas colunas. Os helpers `Section`/`Field` duplicados saem (usar o kit da DSK-01). |
-| DSK-26 | **Admin dentro do `AppLayout`:** as abas horizontais (`AdminApp.tsx:95`) viram um grupo "Admin" na barra lateral. Acaba o "sair do app para entrar no admin". |
+| DSK-26 | *(Grupo "Admin" substituído no #31: ver Status.)* **Admin dentro do `AppLayout`:** as abas horizontais (`AdminApp.tsx:95`) viram um grupo "Admin" na barra lateral. Acaba o "sair do app para entrar no admin". |
 
 ### Fase 8 — Acabamento
 
