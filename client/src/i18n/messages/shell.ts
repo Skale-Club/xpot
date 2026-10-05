@@ -27,6 +27,14 @@ const en = {
   activeVisit: "Visit in progress",
   activeVisitAt: "Visit in progress at {lead}",
   openVisit: "Open visit",
+  searchEverything: "Search",
+  palettePlaceholder: "Search companies, pieces or pages…",
+  paletteEmpty: "Nothing matches.",
+  groupPages: "Pages",
+  groupCompanies: "Companies",
+  groupPieces: "Pieces",
+  paletteHint: "↑↓ move · Enter open · Esc close",
+  shortcutsHint: "Shortcuts: / search · N new · J/K next/previous row · Esc close",
 };
 
 export const shellMessages: Dictionary<typeof en> = {
@@ -52,6 +60,14 @@ export const shellMessages: Dictionary<typeof en> = {
     activeVisit: "Visita em andamento",
     activeVisitAt: "Visita em andamento em {lead}",
     openVisit: "Abrir visita",
+    searchEverything: "Buscar",
+    palettePlaceholder: "Buscar empresas, peças ou telas…",
+    paletteEmpty: "Nada encontrado.",
+    groupPages: "Telas",
+    groupCompanies: "Empresas",
+    groupPieces: "Peças",
+    paletteHint: "↑↓ mover · Enter abrir · Esc fechar",
+    shortcutsHint: "Atalhos: / buscar · N novo · J/K próxima/anterior · Esc fechar",
   },
   es: {
     tabCheckIn: "Check-in",
@@ -74,5 +90,13 @@ export const shellMessages: Dictionary<typeof en> = {
     activeVisit: "Visita en curso",
     activeVisitAt: "Visita en curso en {lead}",
     openVisit: "Abrir visita",
+    searchEverything: "Buscar",
+    palettePlaceholder: "Buscar empresas, piezas o pantallas…",
+    paletteEmpty: "No hay resultados.",
+    groupPages: "Pantallas",
+    groupCompanies: "Empresas",
+    groupPieces: "Piezas",
+    paletteHint: "↑↓ mover · Enter abrir · Esc cerrar",
+    shortcutsHint: "Atajos: / buscar · N nuevo · J/K siguiente/anterior · Esc cerrar",
   },
 };

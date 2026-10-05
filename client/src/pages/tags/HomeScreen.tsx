@@ -249,6 +249,7 @@ export default function HomeScreen() {
             maxLength={isDesktop ? 300 : 14}
             className={`${INPUT} font-mono tracking-[0.12em] placeholder:font-sans placeholder:tracking-normal`}
             data-testid="input-tag-code"
+            data-shortcut="search"
           />
           <button
             type="submit"

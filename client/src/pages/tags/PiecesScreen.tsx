@@ -91,6 +91,7 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
           placeholder={t("searchPieces")}
           className={`${INPUT} pl-10`}
           data-testid="input-pieces-search"
+          data-shortcut="search"
         />
       </div>
 
