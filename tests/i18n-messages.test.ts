@@ -37,8 +37,14 @@ describe("i18n dictionaries", () => {
 
       it("has both forms of every plural", () => {
         const keys = new Set(Object.keys(dict.en));
+        // `x_other` is a plural only when x has no other suffixed siblings: in method_cash,
+        // method_card, method_other the last one is the payment method "Other", not a plural form.
+        const isEnumValue = (k: string) => {
+          const base = k.replace(/_(one|other)$/, "");
+          return [...keys].some((s) => s.startsWith(`${base}_`) && !/_(one|other)$/.test(s));
+        };
         const orphans = [...keys]
-          .filter((k) => /_(one|other)$/.test(k))
+          .filter((k) => /_(one|other)$/.test(k) && !isEnumValue(k))
           .filter((k) => !keys.has(k.replace(/_(one|other)$/, k.endsWith("_one") ? "_other" : "_one")));
         expect(orphans).toEqual([]);
       });
