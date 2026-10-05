@@ -2,17 +2,20 @@
 // (server/lib/files.ts). Until a row is moved, its old public URL keeps
 // working: the app shows legacy https:// values as they are.
 //
-//   npm run files:migrate                       dry run: counts what would move
-//   npm run files:migrate -- --apply            copy each file, point the row at it
-//   npm run files:migrate -- --apply --delete-old
-//                                               ...and delete the old copy, which
-//                                               is what actually closes the public links
+// Production: the database has no public port, so run it inside the app
+// container (Coolify › xpot › Terminal), where the env is already set:
+//   node dist/migrate-files.cjs                     dry run: counts what would move
+//   node dist/migrate-files.cjs --apply             copy each file, point the row at it
+//   node dist/migrate-files.cjs --apply --delete-old
+//                                                   ...and delete the old copy, which
+//                                                   is what actually closes the public links
+// Locally, against a database you can reach: npm run files:migrate -- <same flags>.
 //
 // Needs POSTGRES_URL, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY and, for R2, the
 // R2_* variables (without them files go to the private Supabase bucket).
 // Moves: legacy public URLs (Supabase "uploads" bucket) and "supabase:" refs
 // when R2 is now configured. Safe to re-run: moved rows are skipped, and a row
-// that changed meanwhile is left alone. Run it from a laptop, like npm run migrate.
+// that changed meanwhile is left alone.
 
 import "dotenv/config";
 import { isNotNull, sql } from "drizzle-orm";

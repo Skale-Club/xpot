@@ -267,12 +267,14 @@ valid for 5 minutes. A key that no lead or visit holds is never signed.
 - **Existing rows** still hold public Supabase URLs, which keep working (the
   client shows `https://` values as they are) until moved:
   1. Set the `R2_*` variables in Coolify and deploy (new uploads go private).
-  2. From a laptop with the production env: `npm run files:migrate` (dry run,
-     counts), then `npm run files:migrate -- --apply` (copies each file, points
-     the row at it).
+  2. The database has no public port, so run it in the app container
+     (Coolify › xpot › Terminal), where the env is already set:
+     `node dist/migrate-files.cjs` (dry run, counts), then
+     `node dist/migrate-files.cjs --apply` (copies each file, points the row at it).
   3. Check photos and voice notes in the app, then
-     `npm run files:migrate -- --apply --delete-old`: deletes the old public
+     `node dist/migrate-files.cjs --apply --delete-old`: deletes the old public
      copies, which is what actually closes the old links. Re-runnable.
+     Locally, against a database you can reach: `npm run files:migrate -- <flags>`.
 
 ## Deleting an account
 

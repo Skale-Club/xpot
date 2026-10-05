@@ -4,6 +4,8 @@
 //   dist/
 //     index.cjs        — server entry point
 //     migrate.cjs      — migration runner (the Docker image runs it before the server)
+//     migrate-files.cjs — one-time move of photos/voice notes to private storage,
+//                        run by hand in the container (README → Files)
 //     public/          — Vite-built static client (served by server in production)
 
 import { build as esbuild } from "esbuild";
@@ -23,6 +25,20 @@ async function buildMigrate() {
     target: "node20",
     format: "cjs",
     outfile: resolve(ROOT, "dist/migrate.cjs"),
+    packages: "external",
+    logLevel: "info",
+  });
+}
+
+async function buildFilesMigrate() {
+  console.log("→ Building private-files migration (esbuild) ...");
+  await esbuild({
+    entryPoints: [resolve(ROOT, "scripts/migrate-private-files.ts")],
+    bundle: true,
+    platform: "node",
+    target: "node20",
+    format: "cjs",
+    outfile: resolve(ROOT, "dist/migrate-files.cjs"),
     packages: "external",
     logLevel: "info",
   });
@@ -63,8 +79,9 @@ function buildClient() {
 async function main() {
   await buildServer();
   await buildMigrate();
+  await buildFilesMigrate();
   buildClient();
-  console.log("\n✓ Build complete: dist/index.cjs + dist/migrate.cjs + dist/public/");
+  console.log("\n✓ Build complete: dist/index.cjs + dist/migrate.cjs + dist/migrate-files.cjs + dist/public/");
 }
 
 main().catch((err) => {
