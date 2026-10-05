@@ -56,6 +56,16 @@ describe("moduleGroups", () => {
     expect(extra("visits")).toEqual(["/admin/xphere"]);
     expect(organizationItems(labels, admin).filter((i) => i.adminOnly).map((i) => i.href)).toEqual(["/admin/integrations", "/admin/branding"]);
   });
+  it("groups the Admin-tagged items at the end of every list", () => {
+    const lists = [
+      ...(["visits", "tags"] as const).flatMap((m) => moduleGroups(m, admin, labels).map((g) => g.items)),
+      organizationItems(labels, admin),
+    ];
+    for (const items of lists) {
+      const firstAdmin = items.findIndex((i) => i.adminOnly);
+      if (firstAdmin >= 0) expect(items.slice(firstAdmin).every((i) => i.adminOnly)).toBe(true);
+    }
+  });
   it("every Manage link stays in its own module", () => {
     for (const m of ["visits", "tags"] as const) {
       for (const href of hrefs(moduleGroups(m, admin, labels))) expect(contextOfPath(href)).toBe(m);

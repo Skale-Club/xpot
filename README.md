@@ -119,8 +119,8 @@ Management (managers and admins). The URLs keep their old `/admin` prefix; the
 shell decides which module each one belongs to (`client/src/components/xpot/moduleNav.ts`):
 - Visits › Manage: `/admin/overview` (Team; `/admin` alone too), `/admin/products`,
   `/admin/settings` (check-in rules), `/admin/xphere`.
-- Tags › Manage: `/admin/tags/<tab>[/<id>]` with `overview`, `pieces`, `batches`,
-  `kits`, `team` (resellers report), `journey` (admins only) and `provisioners` (NFC writers).
+- Tags › Manage: `/admin/tags/<tab>[/<id>]` with `overview`, `pieces`, `kits`,
+  `team` (resellers report), then the global admin's `batches`, `journey` and `provisioners` (NFC writers).
 - Account › Organization: `/admin/reps` (People), `/admin/integrations`, `/admin/branding`.
 
 ### Server

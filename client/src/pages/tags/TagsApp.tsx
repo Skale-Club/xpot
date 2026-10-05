@@ -50,8 +50,9 @@ export function TagsApp() {
   if (!allowed) return <Redirect to={MODULE_HOME.visits} />;
 
   const current = activeNav(location);
-  // Home and the pieces table use the desktop width; a piece and Direct stay narrow.
-  const wide = location === APP_BASE || location.startsWith(`${APP_BASE}/pieces`);
+  // Every desktop screen uses the full width; only a piece stays narrow, and on
+  // desktop it opens beside the pieces table anyway.
+  const wide = !location.startsWith(`${APP_BASE}/t/`);
 
   const currentNav = NAV.find((n) => n.href === current) ?? NAV[0];
   const pieceCode = location.startsWith(`${APP_BASE}/t/`) ? decodeURIComponent(location.slice(`${APP_BASE}/t/`.length)) : null;
