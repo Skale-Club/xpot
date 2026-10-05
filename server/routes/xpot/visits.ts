@@ -313,7 +313,7 @@ export function createVisitsRouter() {
       });
     } catch (error: any) {
       console.error("Audio upload error:", error);
-      res.status(500).json({ message: error.message || "Failed to upload audio" });
+      res.status(500).json({ message: "Failed to upload audio" });
     }
   });
 

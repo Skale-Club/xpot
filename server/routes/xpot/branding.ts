@@ -127,7 +127,7 @@ export function createBrandingAdminRouter() {
       res.json(present(saved));
     } catch (err) {
       console.error("[POST /admin/branding/favicon]", err);
-      res.status(500).json({ message: (err as Error).message || "Upload failed" });
+      res.status(500).json({ message: "Upload failed" });
     }
   });
 

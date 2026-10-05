@@ -6,7 +6,8 @@ import { registerWholesaleRoutes } from "./wholesale/index.js";
 
 export async function registerRoutes(app: Express) {
   // Tags first: public /q and /n redirects, and /api/xpot/tags* / /api/xpot/admin/tag*
-  // must be matched before the Xpot admin router, which guards every path it sees.
+  // must be matched before the Xpot routers: those mount guards on /api/xpot prefixes (requireXpotUser in
+  // every router, requireXpotManager on /admin) that would answer first with their own 401/403.
   registerTagRoutes(app);
   // MCP endpoint (/mcp) and its token admin API (/api/xpot/admin/mcp-tokens):
   // same ordering reason, and /mcp must beat the SPA catch-all added in index.ts.

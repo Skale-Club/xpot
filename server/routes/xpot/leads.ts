@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { storage } from "../../storage.js";
+import { repModules } from "#shared/modules.js";
 import { requireXpotUser, requireVisitsModule, ensureXpotRep, isManagerOrAdmin, loadAccessibleLead } from "./middleware.js";
 import { xpotLeadCreateSchema, xpotLeadUpdateSchema, xpotLeadContactCreateSchema } from "#shared/xpot.js";
 import { syncLeadToGhl, syncLeadToXphere } from "./helpers.js";
@@ -219,6 +220,11 @@ export function createLeadsRouter() {
     if (!isManagerOrAdmin(actor!) && lead.ownerRepId !== actor!.rep.id) {
       return res.status(403).json({ message: "Access denied" });
     }
+    // The pipeline status (prospect → lead → …) is Visits work, like POST /leads/:id/promote; a Tags-only
+    // reseller may edit a customer's details but not move it through the funnel.
+    if (input.status !== undefined && !isManagerOrAdmin(actor!) && !repModules(actor!.rep).includes("visits")) {
+      return res.status(403).json({ code: "module_off", message: "Visits are not enabled for your account." });
+    }
 
     const updated = await storage.updateSalesLead(leadId, input);
     res.json({ lead: updated });
@@ -353,7 +359,7 @@ export function createLeadsRouter() {
       res.json({ lead: updated, photoUrl });
     } catch (err: any) {
       console.error("Photo upload error:", err);
-      res.status(500).json({ message: err.message || "Failed to upload photo" });
+      res.status(500).json({ message: "Failed to upload photo" });
     }
   });
 
