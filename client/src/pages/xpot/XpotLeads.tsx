@@ -50,6 +50,7 @@ import { BottomSheet } from "@/pages/tags/ui";
 import { LeadsTable } from "./components/leads/LeadsTable";
 import { LeadDetailPane } from "./components/leads/LeadDetailPane";
 import { CsvImportDialog, type CsvLeadRow } from "./components/leads/CsvImportDialog";
+import { MasterDetail } from "@/components/xpot/MasterDetail";
 import { useT } from "@/i18n";
 import { leadsMessages } from "@/i18n/messages/leads";
 import { checkinMessages } from "@/i18n/messages/checkin";
@@ -513,7 +514,7 @@ export function XpotLeads() {
     : filteredLeadsForList.filter((l) => l.status !== "prospect");
 
   const openLead = (lead: FullSalesLead) => setLocation(`/leads/${lead.id}`);
-  const closeLead = () => setLocation("/leads");
+  const closeLead = useCallback(() => setLocation("/leads"), [setLocation]);
 
   const handleDeleteLead = async () => {
     if (!leadPendingDelete) return;
@@ -640,56 +641,48 @@ export function XpotLeads() {
       </div>
 
       {isDesktop ? (
-        <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
-          <div className="min-w-0 space-y-2">
-            {emptyStates}
-            {displayList.length > 0 && (
-              <LeadsTable
-                leads={displayList}
-                isProspect={tab === "prospects"}
-                selectedId={routeId}
-                onSelect={openLead}
-                piecesFor={piecesFor}
-                lastVisitFor={lastVisitFor}
-                onDelete={setLeadPendingDelete}
-                onPromote={handlePromote}
-                onSyncGhl={handleSyncGhl}
-                syncingId={syncingId}
-              />
-            )}
-          </div>
-
-          {/* Detail: a column from xl, a drawer between lg and xl. */}
-          {routeId ? (
+        <MasterDetail
+          closeLabel={t("closePane")}
+          onClose={closeLead}
+          list={
             <>
-              <button type="button" aria-label={t("closePane")} onClick={closeLead} className="fixed inset-0 z-40 bg-black/50 xl:hidden" />
-              <aside className="fixed inset-y-0 right-0 z-50 w-[420px] overflow-y-auto border-l border-white/10 bg-[#080c18] p-4 shadow-2xl xl:sticky xl:top-[88px] xl:z-auto xl:max-h-[calc(100vh-112px)] xl:w-auto xl:border-0 xl:bg-transparent xl:p-0 xl:shadow-none">
-                {selectedLead ? (
-                  <LeadDetailPane
-                    key={selectedLead.id}
-                    lead={selectedLead}
-                    isProspect={selectedLead.status === "prospect"}
-                    pieces={piecesFor(selectedLead.id)}
-                    visits={visitsByLead.get(selectedLead.id) ?? []}
-                    onClose={closeLead}
-                    onDelete={() => setLeadPendingDelete(selectedLead)}
-                    onPromote={() => handlePromote(selectedLead)}
-                    onSyncGhl={() => handleSyncGhl(selectedLead)}
-                    isSyncing={syncingId === selectedLead.id}
-                  />
-                ) : leadsQuery.isLoading ? (
-                  <div className="flex justify-center py-16"><Loader2 className="h-5 w-5 animate-spin text-blue-400" /></div>
-                ) : (
-                  <EmptyState icon={Building2} title={t("leadNotFound")} cardStyle={GLASS} />
-                )}
-              </aside>
+              {emptyStates}
+              {displayList.length > 0 && (
+                <LeadsTable
+                  leads={displayList}
+                  isProspect={tab === "prospects"}
+                  selectedId={routeId}
+                  onSelect={openLead}
+                  piecesFor={piecesFor}
+                  lastVisitFor={lastVisitFor}
+                  onDelete={setLeadPendingDelete}
+                  onPromote={handlePromote}
+                  onSyncGhl={handleSyncGhl}
+                  syncingId={syncingId}
+                />
+              )}
             </>
+          }
+          detail={routeId == null ? null : selectedLead ? (
+            <LeadDetailPane
+              key={selectedLead.id}
+              lead={selectedLead}
+              isProspect={selectedLead.status === "prospect"}
+              pieces={piecesFor(selectedLead.id)}
+              visits={visitsByLead.get(selectedLead.id) ?? []}
+              onClose={closeLead}
+              onDelete={() => setLeadPendingDelete(selectedLead)}
+              onPromote={() => handlePromote(selectedLead)}
+              onSyncGhl={() => handleSyncGhl(selectedLead)}
+              isSyncing={syncingId === selectedLead.id}
+            />
+          ) : leadsQuery.isLoading ? (
+            <div className="flex justify-center py-16"><Loader2 className="h-5 w-5 animate-spin text-blue-400" /></div>
           ) : (
-            <aside className="sticky top-[88px] hidden xl:block">
-              <EmptyState icon={MousePointerClick} title={t("selectLead")} hint={t("selectLeadHint")} cardStyle={GLASS} />
-            </aside>
+            <EmptyState icon={Building2} title={t("leadNotFound")} cardStyle={GLASS} />
           )}
-        </div>
+          placeholder={<EmptyState icon={MousePointerClick} title={t("selectLead")} hint={t("selectLeadHint")} cardStyle={GLASS} />}
+        />
       ) : (
         <div className="space-y-2">
           {emptyStates}

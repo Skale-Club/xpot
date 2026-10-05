@@ -16,8 +16,10 @@ import { commonMessages } from "@/i18n/messages/common";
 import { leadsMessages } from "@/i18n/messages/leads";
 import { visitsMessages } from "@/i18n/messages/visits";
 import { VisitActionsPanel } from "./sales/VisitActions";
+import { useLocation } from "wouter";
+import { useIsDesktop } from "@/hooks/use-is-desktop";
 
-type VisitLike = {
+export type VisitLike = {
   id: number;
   leadId: number;
   lead?: SalesLead & { locations?: any[] };
@@ -29,7 +31,13 @@ type VisitLike = {
 };
 
 
-function VisitDetail({ visit, onDelete }: { visit: VisitLike; onDelete: () => void }) {
+/** A visit's editable record: lead fields, outcome, timings, notes, voice. */
+export function VisitDetail({ visit, onDelete, layout = "dialog" }: {
+  visit: VisitLike;
+  onDelete: () => void;
+  /** "pane" stacks everything in one column (the desktop side pane is narrow). */
+  layout?: "dialog" | "pane";
+}) {
   const { toast } = useToast();
   const t = useT(visitsMessages);
   const tl = useT(leadsMessages);
@@ -160,7 +168,7 @@ function VisitDetail({ visit, onDelete }: { visit: VisitLike; onDelete: () => vo
     // One column on a phone, two side by side once there is room: the details
     // are long enough that a single narrow column meant scrolling through a
     // letterbox on desktop.
-    <div className={visit.lead ? "grid gap-5 sm:grid-cols-2 sm:items-start" : "space-y-5"}>
+    <div className={visit.lead && layout === "dialog" ? "grid gap-5 sm:grid-cols-2 sm:items-start" : "space-y-5"}>
       {/* hidden file input */}
       <input
         ref={photoInputRef}
@@ -353,19 +361,22 @@ function VisitDetail({ visit, onDelete }: { visit: VisitLike; onDelete: () => vo
   );
 }
 
-export function VisitRow({ visit }: { visit: VisitLike }) {
-  const [open, setOpen] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
+/** Confirms and deletes a visit. */
+export function VisitDeleteConfirm({ visitId, open, onOpenChange, onDeleted }: {
+  visitId: number;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onDeleted?: () => void;
+}) {
   const { toast } = useToast();
   const t = useT(visitsMessages);
-  const tl = useT(leadsMessages);
   const tc = useT(commonMessages);
 
   async function handleDelete() {
     try {
-      await apiRequest("DELETE", `/api/xpot/visits/${visit.id}`);
+      await apiRequest("DELETE", `/api/xpot/visits/${visitId}`);
       toast({ title: t("visitDeleted"), variant: "success" });
-      setOpen(false);
+      onDeleted?.();
       queryClient.invalidateQueries({ queryKey: ["/api/xpot/visits"] });
       queryClient.invalidateQueries({ queryKey: ["/api/xpot/dashboard"] });
     } catch (err: any) {
@@ -374,10 +385,53 @@ export function VisitRow({ visit }: { visit: VisitLike }) {
   }
 
   return (
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent
+        className="max-w-xs rounded-2xl border-0 p-6"
+        style={{ background: "#0e1117", boxShadow: "0 24px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.07)" }}
+      >
+        <AlertDialogHeader>
+          <AlertDialogTitle className="text-base font-semibold text-white">{t("deleteVisitTitle")}</AlertDialogTitle>
+          <AlertDialogDescription className="text-sm text-white/45">
+            {t("deleteVisitDesc")}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter className="mt-2 flex-row gap-2 sm:space-x-0">
+          <AlertDialogCancel
+            className="flex-1 rounded-xl border-0 text-sm font-medium text-white/60 hover:text-white transition-colors"
+            style={{ background: "rgba(255,255,255,0.07)" }}
+          >
+            {tc("cancel")}
+          </AlertDialogCancel>
+          <AlertDialogAction
+            onClick={handleDelete}
+            className="flex-1 rounded-xl border-0 text-sm font-medium text-white"
+            style={{ background: "rgba(239,68,68,0.85)" }}
+          >
+            {t("delete")}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+/**
+ * A visit card. On the phone it opens the visit in a dialog; on desktop it
+ * goes to /visits/:id, where the visits screen shows it beside the list.
+ */
+export function VisitRow({ visit }: { visit: VisitLike }) {
+  const [open, setOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const isDesktop = useIsDesktop();
+  const [, navigate] = useLocation();
+  const tl = useT(leadsMessages);
+
+  return (
     <>
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => (isDesktop ? navigate(`/visits/${visit.id}`) : setOpen(true))}
         className="w-full rounded-2xl p-4 text-left transition-all"
         style={{
           background: "rgba(255,255,255,0.04)",
@@ -416,34 +470,7 @@ export function VisitRow({ visit }: { visit: VisitLike }) {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
-        <AlertDialogContent
-          className="max-w-xs rounded-2xl border-0 p-6"
-          style={{ background: "#0e1117", boxShadow: "0 24px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.07)" }}
-        >
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-base font-semibold text-white">{t("deleteVisitTitle")}</AlertDialogTitle>
-            <AlertDialogDescription className="text-sm text-white/45">
-              {t("deleteVisitDesc")}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="mt-2 flex-row gap-2 sm:space-x-0">
-            <AlertDialogCancel
-              className="flex-1 rounded-xl border-0 text-sm font-medium text-white/60 hover:text-white transition-colors"
-              style={{ background: "rgba(255,255,255,0.07)" }}
-            >
-              {tc("cancel")}
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDelete}
-              className="flex-1 rounded-xl border-0 text-sm font-medium text-white"
-              style={{ background: "rgba(239,68,68,0.85)" }}
-            >
-              {t("delete")}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <VisitDeleteConfirm visitId={visit.id} open={confirmDelete} onOpenChange={setConfirmDelete} onDeleted={() => setOpen(false)} />
     </>
   );
 }
