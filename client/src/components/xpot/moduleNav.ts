@@ -33,7 +33,14 @@ import type { XpotModule } from "@shared/modules";
 /** The part of the app a screen belongs to; the account pages belong to neither module. */
 export type ShellContext = XpotModule | "account";
 
-export type NavItem = { href: string; label: string; icon: LucideIcon; match: (path: string) => boolean };
+export type NavItem = {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  match: (path: string) => boolean;
+  /** Only the global admin sees it, and it shows the "Admin" tag (AdminBadge). */
+  adminOnly?: boolean;
+};
 export type NavGroup = { label: string; items: NavItem[] };
 
 /** Matches a path and everything under it ("/tags" matches "/tags/pieces", not "/tagsx"). */
@@ -91,11 +98,16 @@ type ShellKey =
 export type Viewer = {
   /** Manager or admin: sees each module's Manage group and the Organization pages. */
   canManage: boolean;
-  /** Admin only (the Tags Journey). */
+  /** The global admin (isSuperAdmin): sees the items marked adminOnly. */
   isAdmin: boolean;
   /** A real computer: it cannot start a GPS check-in (docs/DESKTOP.md D1). */
   isComputer: boolean;
 };
+
+/** The items this viewer may see: adminOnly ones only for the global admin. */
+function visibleTo(viewer: Pick<Viewer, "isAdmin">, items: NavItem[]): NavItem[] {
+  return items.filter((i) => viewer.isAdmin || !i.adminOnly);
+}
 
 /** The screens of one module: what its people use, then (for managers) its Manage group. */
 export function moduleGroups(module: XpotModule, viewer: Viewer, l: Labels): NavGroup[] {
@@ -116,12 +128,12 @@ export function moduleGroups(module: XpotModule, viewer: Viewer, l: Labels): Nav
       work,
       {
         label: l.shell("navManage"),
-        items: [
+        items: visibleTo(viewer, [
           { href: "/admin/overview", label: l.shell("manageTeam"), icon: LayoutDashboard, match: section("overview") },
           { href: "/admin/products", label: l.shell("manageProducts"), icon: Boxes, match: section("products") },
           { href: "/admin/settings", label: l.shell("manageCheckInRules"), icon: SlidersHorizontal, match: section("settings") },
-          { href: "/admin/xphere", label: l.shell("manageXphere"), icon: Webhook, match: section("xphere") },
-        ],
+          { href: "/admin/xphere", label: l.shell("manageXphere"), icon: Webhook, match: section("xphere"), adminOnly: true },
+        ]),
       },
     ];
   }
@@ -140,25 +152,25 @@ export function moduleGroups(module: XpotModule, viewer: Viewer, l: Labels): Nav
     work,
     {
       label: l.shell("navManage"),
-      items: [
+      items: visibleTo(viewer, [
         { href: "/admin/tags/overview", label: l.shell("manageOverview"), icon: BarChart3, match: (p) => p === "/admin/tags" || tab("overview")(p) },
         { href: "/admin/tags/pieces", label: l.shell("managePieces"), icon: Nfc, match: tab("pieces") },
-        { href: "/admin/tags/batches", label: l.shell("manageBatches"), icon: Factory, match: tab("batches") },
+        { href: "/admin/tags/batches", label: l.shell("manageBatches"), icon: Factory, match: tab("batches"), adminOnly: true },
         { href: "/admin/tags/kits", label: l.shell("manageKits"), icon: PackageOpen, match: tab("kits") },
         { href: "/admin/tags/team", label: l.shell("manageResellers"), icon: Users, match: tab("team") },
-        ...(viewer.isAdmin ? [{ href: "/admin/tags/journey", label: l.shell("manageJourney"), icon: Route, match: tab("journey") }] : []),
-        { href: "/admin/tags/provisioners", label: l.shell("manageWriters"), icon: ShieldCheck, match: tab("provisioners") },
-      ],
+        { href: "/admin/tags/journey", label: l.shell("manageJourney"), icon: Route, match: tab("journey"), adminOnly: true },
+        { href: "/admin/tags/provisioners", label: l.shell("manageWriters"), icon: ShieldCheck, match: tab("provisioners"), adminOnly: true },
+      ]),
     },
   ];
 }
 
-/** The account's Organization pages (managers and admins). */
-export function organizationItems(l: Labels): NavItem[] {
+/** The account's Organization pages (managers; Integrations and Branding for the global admin only). */
+export function organizationItems(l: Labels, viewer: Pick<Viewer, "isAdmin">): NavItem[] {
   const section = (id: string) => starts(`/admin/${id}`);
-  return [
+  return visibleTo(viewer, [
     { href: "/admin/reps", label: l.shell("orgPeople"), icon: Users, match: section("reps") },
-    { href: "/admin/integrations", label: l.shell("orgIntegrations"), icon: Plug, match: section("integrations") },
-    { href: "/admin/branding", label: l.shell("orgBranding"), icon: Palette, match: section("branding") },
-  ];
+    { href: "/admin/integrations", label: l.shell("orgIntegrations"), icon: Plug, match: section("integrations"), adminOnly: true },
+    { href: "/admin/branding", label: l.shell("orgBranding"), icon: Palette, match: section("branding"), adminOnly: true },
+  ]);
 }

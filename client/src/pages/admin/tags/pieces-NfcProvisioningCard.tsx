@@ -3,6 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { CheckCircle2, Circle, Cpu, XCircle } from "lucide-react";
 import { OPEN_JOB_STATUSES, type ProvisioningJobStatus } from "@shared/tagProvisioning";
 import type { ProvisionerDeviceItem, TagProvisioningState } from "@shared/tagsApi";
+import { AdminBadge } from "@/components/xpot/AdminBadge";
 import { Loader2 } from "@/components/ui/loader";
 import { useToast } from "@/hooks/use-toast";
 import { ADMIN_TAGS_KEY, errorMessage, formatDateTime, getJson, invalidateAdminTags, sendJson, STALE_MS } from "./api";
@@ -123,7 +124,7 @@ export function NfcProvisioningCard({
 
   const header = (right?: ReactNode) => (
     <div className="flex flex-wrap items-center justify-between gap-2">
-      <p className="flex items-center gap-2 text-sm font-semibold text-white"><Cpu className="h-4 w-4 text-white/50" />{t("nfcCardTitle")}</p>
+      <p className="flex items-center gap-2 text-sm font-semibold text-white"><Cpu className="h-4 w-4 text-white/50" />{t("nfcCardTitle")}<AdminBadge /></p>
       {right}
     </div>
   );

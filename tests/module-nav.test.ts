@@ -39,19 +39,27 @@ describe("moduleGroups", () => {
   it("a computer cannot start a check-in", () => {
     expect(hrefs(moduleGroups("visits", manager, labels))).not.toContain("/check-in");
   });
-  it("a manager gets each module's own management, and the Journey stays admin-only", () => {
+  it("a manager gets each module's own management, without the global admin's items", () => {
     const tags = hrefs(moduleGroups("tags", manager, labels));
-    expect(tags).toEqual(expect.arrayContaining(["/admin/tags/pieces", "/admin/tags/batches", "/admin/tags/kits"]));
-    expect(tags).not.toContain("/admin/tags/journey");
-    expect(hrefs(moduleGroups("tags", admin, labels))).toContain("/admin/tags/journey");
+    expect(tags).toEqual(expect.arrayContaining(["/admin/tags/overview", "/admin/tags/pieces", "/admin/tags/kits", "/admin/tags/team"]));
+    for (const href of ["/admin/tags/batches", "/admin/tags/journey", "/admin/tags/provisioners"]) expect(tags).not.toContain(href);
     const visits = hrefs(moduleGroups("visits", manager, labels));
     expect(visits).toEqual(expect.arrayContaining(["/admin/overview", "/admin/products", "/admin/settings"]));
+    expect(visits).not.toContain("/admin/xphere");
     expect(visits.some((h) => h.startsWith("/admin/tags"))).toBe(false);
+    expect(organizationItems(labels, manager).map((i) => i.href)).toEqual(["/admin/reps"]);
+  });
+  it("the global admin sees everything, and exactly those extra items carry the Admin tag", () => {
+    const extra = (m: "visits" | "tags") =>
+      moduleGroups(m, admin, labels).flatMap((g) => g.items).filter((i) => i.adminOnly).map((i) => i.href);
+    expect(extra("tags")).toEqual(["/admin/tags/batches", "/admin/tags/journey", "/admin/tags/provisioners"]);
+    expect(extra("visits")).toEqual(["/admin/xphere"]);
+    expect(organizationItems(labels, admin).filter((i) => i.adminOnly).map((i) => i.href)).toEqual(["/admin/integrations", "/admin/branding"]);
   });
   it("every Manage link stays in its own module", () => {
     for (const m of ["visits", "tags"] as const) {
       for (const href of hrefs(moduleGroups(m, admin, labels))) expect(contextOfPath(href)).toBe(m);
     }
-    for (const item of organizationItems(labels)) expect(contextOfPath(item.href)).toBe("account");
+    for (const item of organizationItems(labels, admin)) expect(contextOfPath(item.href)).toBe("account");
   });
 });

@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { isSuperAdmin } from "@shared/modules";
 import { JOURNEY_ENTRY_KINDS, JOURNEY_PRODUCTION_ACTIONS, PLAN_KINDS, PLAN_STATUSES } from "@shared/tagJourney";
 import type { TagJourney } from "@shared/tagsApi";
 import type { XpotMeResponse } from "@/pages/xpot/types";
@@ -14,7 +15,7 @@ import { ADMIN_TAGS_KEY, STALE_MS, getJson, withQuery } from "./api";
 /** Same rule as the server's requireTagAdmin: users.is_admin or rep role "admin". */
 export function useIsTagAdmin(): boolean {
   const { data } = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
-  return !!data && (data.user.isAdmin || data.rep.role === "admin");
+  return isSuperAdmin(data);
 }
 
 /** The batch / piece a new entry or plan is attached to. */

@@ -14,7 +14,7 @@ import { BatchDetail } from "./BatchDetail";
 import { TeamTab } from "./TeamTab";
 import { ProvisionersTab } from "./ProvisionersTab";
 import { JourneyTab } from "./JourneyTab";
-import { useIsTagAdmin } from "./journey-shared";
+import { AdminBadge, useIsSuperAdmin } from "@/components/xpot/AdminBadge";
 import { useT } from "@/i18n";
 import { shellMessages } from "@/i18n/messages/shell";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
@@ -23,11 +23,11 @@ import { manageTagsMessages } from "@/i18n/messages/manageTags";
 const TABS = [
   { id: "overview", labelKey: "manageOverview" },
   { id: "pieces", labelKey: "managePieces" },
-  { id: "batches", labelKey: "manageBatches" },
+  { id: "batches", labelKey: "manageBatches", adminOnly: true },
   { id: "kits", labelKey: "manageKits" },
   { id: "team", labelKey: "manageResellers" },
   { id: "journey", labelKey: "manageJourney", adminOnly: true },
-  { id: "provisioners", labelKey: "manageWriters" },
+  { id: "provisioners", labelKey: "manageWriters", adminOnly: true },
 ] as const satisfies ReadonlyArray<{ id: string; labelKey: string; adminOnly?: boolean }>;
 type TabId = (typeof TABS)[number]["id"];
 
@@ -85,8 +85,9 @@ export function AdminTags() {
   const [location, setLocation] = useLocation();
   const ts = useT(shellMessages);
   const [tabSegment, idSegment] = location.replace(/^\/admin\/tags\/?/, "").split("/");
-  // The Journey is for admins only: managers neither see its tab nor reach it by URL.
-  const isAdmin = useIsTagAdmin();
+  // Batches, the Journey and the NFC writers are the global admin's: managers
+  // neither see their tabs nor reach them by URL (and the API answers 403).
+  const isAdmin = useIsSuperAdmin();
   const tabs = TABS.filter((t) => isAdmin || !("adminOnly" in t));
   const tab: TabId = tabs.find((t) => t.id === tabSegment)?.id ?? "overview";
   const id = idSegment ? decodeURIComponent(idSegment) : null;
@@ -108,6 +109,7 @@ export function AdminTags() {
               data-testid={`admin-tags-tab-${t.id}`}
             >
               {ts(t.labelKey)}
+              {"adminOnly" in t && <AdminBadge className="ml-1.5" />}
             </button>
           ))}
         </nav>
@@ -117,10 +119,10 @@ export function AdminTags() {
       {tab === "overview" && <OverviewTab go={go} />}
       {tab === "pieces" && (id ? <PieceDetail id={id} go={go} /> : <PiecesTab go={go} />)}
       {tab === "kits" && <KitsTab go={go} />}
-      {tab === "batches" && (id ? <BatchDetail id={id} go={go} /> : <BatchesTab go={go} />)}
+      {tab === "batches" && isAdmin && (id ? <BatchDetail id={id} go={go} /> : <BatchesTab go={go} />)}
       {tab === "journey" && isAdmin && <JourneyTab />}
       {tab === "team" && <TeamTab go={go} />}
-      {tab === "provisioners" && <ProvisionersTab go={go} />}
+      {tab === "provisioners" && isAdmin && <ProvisionersTab go={go} />}
     </div>
   );
 }

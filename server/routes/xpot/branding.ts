@@ -2,7 +2,7 @@ import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import { randomUUID } from "crypto";
 import { storage } from "../../storage.js";
-import { requireXpotManager } from "./middleware.js";
+import { requireSuperAdmin, requireXpotManager } from "./middleware.js";
 import { getSupabaseAdmin } from "../../lib/supabase.js";
 
 const DEFAULT_FAVICON = "/favicon.png";
@@ -61,12 +61,13 @@ export function createBrandingPublicRouter() {
   return router;
 }
 
-// ── Admin branding endpoints — mounted at /api/xpot, manager/admin only ──
+// ── Admin branding endpoints — mounted at /api/xpot, the global admin only ──
 export function createBrandingAdminRouter() {
   const router = Router();
   // Only the /admin paths: this router is mounted at /api/xpot, so a bare router.use would guard
   // every route mounted after it (sales, consignments, products...) and lock plain reps out.
   router.use("/admin", requireXpotManager);
+  router.use("/admin/branding", requireSuperAdmin);
 
   const present = (b: Awaited<ReturnType<typeof storage.getAppBranding>>) => ({
     faviconUrl: b.faviconUrl ?? null,

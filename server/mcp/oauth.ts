@@ -100,7 +100,7 @@ export function isAllowedRedirectUri(uri: string): boolean {
 
 /**
  * Whether this user may hold journey access right now: an active, unblocked
- * Xpot admin (global admin or a rep with the admin role), as requireTagAdmin.
+ * global Xpot admin (users.is_admin), as requireTagAdmin.
  */
 export async function journeyAdminDenial(userId: string): Promise<string | null> {
   const [user] = await db.select({ isAdmin: users.isAdmin }).from(users).where(eq(users.id, userId)).limit(1);
@@ -109,7 +109,7 @@ export async function journeyAdminDenial(userId: string): Promise<string | null>
   if (!rep) return "This account has no Xpot profile.";
   const denial = accessDenial(rep);
   if (denial) return denial.message;
-  if (!user.isAdmin && rep.role !== "admin") return "Only Xpot admins can connect AI apps to the journey.";
+  if (!user.isAdmin) return "Only Xpot admins can connect AI apps to the journey.";
   return null;
 }
 
