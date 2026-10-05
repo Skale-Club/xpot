@@ -12,6 +12,7 @@ import { commonMessages } from "@/i18n/messages/common";
 import { settingsMessages } from "@/i18n/messages/settings";
 import type { XpotMeResponse } from "./types";
 import { AppLayout } from "@/components/xpot/AppLayout";
+import { homeForModules, useXpotModules } from "@/components/ModuleSwitch";
 
 type XphereConfig = {
   inboundApiKey: string | null;
@@ -316,6 +317,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 export function XpotSettings() {
   const [, setLocation] = useLocation();
+  const modules = useXpotModules();
   const { toast } = useToast();
   const t = useT(settingsMessages);
   const tc = useT(commonMessages);
@@ -421,7 +423,7 @@ export function XpotSettings() {
         {/* Header (phone only; the desktop top bar shows the title) */}
         <div className="mb-6 flex items-center gap-3 lg:hidden">
           <button
-            onClick={() => setLocation("/dashboard")}
+            onClick={() => setLocation(homeForModules(modules))}
             className="rounded-lg border border-white/10 bg-white/5 p-2 text-white/70 transition-colors hover:bg-white/10"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -558,8 +560,8 @@ export function XpotSettings() {
             </div>
           </Section>
 
-          {/* Xphere Integration (self-service) */}
-          <XphereIntegrationSection />
+          {/* Xphere Integration (self-service): it syncs visits, so only for reps with Visits. */}
+          {modules.includes("visits") && <XphereIntegrationSection />}
         </div>
       </div>
     </AppLayout>

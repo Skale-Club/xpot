@@ -5,10 +5,11 @@ import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { repModules, type XpotModule } from "@shared/modules";
 import type { XpotMeResponse } from "@/pages/xpot/types";
+import { MODULE_HOME } from "@/lib/xpot";
 
 const LAST_MODULE_KEY = "xpot.module";
 
-const HOME: Record<XpotModule, string> = { visits: "/check-in", tags: "/tags" };
+const HOME: Record<XpotModule, string> = MODULE_HOME;
 
 /** The module the signed-in rep may use (managers: both). */
 export function useXpotModules(): XpotModule[] {

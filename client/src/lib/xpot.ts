@@ -15,14 +15,17 @@ export function getXpotPath(path = "/") {
   return normalizePath(path);
 }
 
+/** The landing page of each module; the one place that says it (sign-in, the module switch, "back"). */
+export const MODULE_HOME = { visits: "/dashboard", tags: "/tags" } as const;
+
 /** Where a signed-in rep lands: the Tags module if that was the last one used. */
 export function getXpotHomePath() {
   try {
-    if (window.localStorage.getItem("xpot.module") === "tags") return "/tags";
+    if (window.localStorage.getItem("xpot.module") === "tags") return MODULE_HOME.tags;
   } catch {
     // Storage blocked: default to Visits.
   }
-  return "/dashboard";
+  return MODULE_HOME.visits;
 }
 
 export function getXpotLoginPath() {
