@@ -6,24 +6,30 @@ import { useToast } from "@/hooks/use-toast";
 import { errorMessage, formatDateTime, getJson, invalidateAdminTags, sendJson, withQuery } from "./api";
 import { BTN_GHOST, CARD } from "./ui";
 import { ConfirmDialog, ErrorLine, Loading, PieceTable, isUnsoldWithReseller, usePieces } from "./batches-shared";
+import { useT } from "@/i18n";
+import { manageTagsMessages } from "@/i18n/messages/manageTags";
+import { manageTagsBatchesMessages } from "@/i18n/messages/manageTagsBatches";
 
 /** Send unsold pieces back to house stock. Sold pieces are refused by the server (409). */
 export function useReturnToHouse(onDone?: (returned: number) => void) {
   const { toast } = useToast();
+  const t = useT(manageTagsBatchesMessages);
   return useMutation({
     mutationFn: (codes: string[]) =>
       sendJson<{ returned: number; alreadyInHouse: string[] }>("POST", "/api/xpot/admin/tag-kits/return", { codes }),
     onSuccess: ({ returned, alreadyInHouse }) => {
       void invalidateAdminTags();
-      const home = alreadyInHouse.length ? ` Already in house stock: ${alreadyInHouse.join(", ")}.` : "";
-      toast({ title: "Back in house stock", description: `${returned} piece${returned === 1 ? "" : "s"} returned.${home}` });
+      const home = alreadyInHouse.length ? ` ${t("alreadyInHouse", { codes: alreadyInHouse.join(", ") })}` : "";
+      toast({ title: t("backInHouse"), description: `${t.plural("returnedCount", returned)}${home}` });
       onDone?.(returned);
     },
-    onError: (err) => toast({ title: "Could not return pieces", description: errorMessage(err), variant: "destructive" }),
+    onError: (err) => toast({ title: t("couldNotReturn"), description: errorMessage(err), variant: "destructive" }),
   });
 }
 
 function KitPieces({ kit, go }: { kit: TagKitItem; go: (path: string) => void }) {
+  const t = useT(manageTagsBatchesMessages);
+  const tm = useT(manageTagsMessages);
   const { data: pieces = [], isLoading, isError } = usePieces({ kitId: kit.id });
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirm, setConfirm] = useState(false);
@@ -32,10 +38,10 @@ function KitPieces({ kit, go }: { kit: TagKitItem; go: (path: string) => void })
     setConfirm(false);
   });
   // Only pieces still with this reseller and unsold can go back.
-  const returnable = (t: TagListItem) => isUnsoldWithReseller(t) && t.repId === kit.repId;
+  const returnable = (p: TagListItem) => isUnsoldWithReseller(p) && p.repId === kit.repId;
 
   if (isLoading) return <Loading />;
-  if (isError) return <div className="p-4"><ErrorLine>Could not load the kit's pieces.</ErrorLine></div>;
+  if (isError) return <div className="p-4"><ErrorLine>{tm("couldNotLoad", { what: t("theKitPieces") })}</ErrorLine></div>;
 
   const toggle = (code: string) =>
     setSelected((s) => {
@@ -57,23 +63,23 @@ function KitPieces({ kit, go }: { kit: TagKitItem; go: (path: string) => void })
         selected={selected}
         onToggle={toggle}
         onToggleAll={toggleAll}
-        empty="Every piece of this kit was returned to house stock."
+        empty={t("kitAllReturned")}
       />
       {pieces.some(returnable) && (
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/5 px-3 py-2">
-          <p className="text-xs text-white/40">Tick unsold pieces to send them back to house stock.</p>
+          <p className="text-xs text-white/40">{t("tickToReturn")}</p>
           <button type="button" className={BTN_GHOST} disabled={codes.length === 0 || ret.isPending} onClick={() => setConfirm(true)}>
             <Undo2 className="h-4 w-4" />
-            Return {codes.length || ""} selected
+            {codes.length ? t.plural("returnSelected", codes.length) : t("returnSelectedNone")}
           </button>
         </div>
       )}
       <ConfirmDialog
         open={confirm}
         onOpenChange={setConfirm}
-        title={`Return ${codes.length} piece${codes.length === 1 ? "" : "s"} to house stock?`}
-        description={`They leave ${kit.repName ?? "the reseller"}'s kit and can be given to someone else.`}
-        confirmLabel="Return to house"
+        title={t.plural("returnConfirmTitle", codes.length)}
+        description={kit.repName ? t("leaveKit", { name: kit.repName }) : t("leaveKitNoName")}
+        confirmLabel={t("returnToHouse")}
         busy={ret.isPending}
         onConfirm={() => ret.mutate(codes)}
       />
@@ -86,6 +92,7 @@ function KitRow({ kit, go }: { kit: TagKitItem; go: (path: string) => void }) {
   const [confirm, setConfirm] = useState(false);
   const [loadingCodes, setLoadingCodes] = useState(false);
   const { toast } = useToast();
+  const t = useT(manageTagsBatchesMessages);
   const ret = useReturnToHouse(() => setConfirm(false));
   const sold = kit.pieceCount - kit.unsoldCount;
 
@@ -93,16 +100,16 @@ function KitRow({ kit, go }: { kit: TagKitItem; go: (path: string) => void }) {
     setLoadingCodes(true);
     try {
       const pieces = await getJson<TagListItem[]>(withQuery("/api/xpot/tags", { kitId: kit.id, limit: 2000 }));
-      const codes = pieces.filter((t) => isUnsoldWithReseller(t) && t.repId === kit.repId).map((t) => t.publicCode);
+      const codes = pieces.filter((p) => isUnsoldWithReseller(p) && p.repId === kit.repId).map((p) => p.publicCode);
       if (codes.length === 0) {
         setConfirm(false);
-        toast({ title: "Nothing to return", description: "This kit has no unsold pieces left." });
+        toast({ title: t("nothingToReturn"), description: t("nothingToReturnDesc") });
         void invalidateAdminTags();
         return;
       }
       ret.mutate(codes);
     } catch (err) {
-      toast({ title: "Could not load the kit's pieces", description: errorMessage(err), variant: "destructive" });
+      toast({ title: t("couldNotLoadKitPieces"), description: errorMessage(err), variant: "destructive" });
     } finally {
       setLoadingCodes(false);
     }
@@ -119,7 +126,7 @@ function KitRow({ kit, go }: { kit: TagKitItem; go: (path: string) => void }) {
         >
           {open ? <ChevronDown className="h-4 w-4 shrink-0 text-white/40" /> : <ChevronRight className="h-4 w-4 shrink-0 text-white/40" />}
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-white">{kit.repName ?? `Reseller #${kit.repId}`}</p>
+            <p className="truncate text-sm font-semibold text-white">{kit.repName ?? t("resellerNumber", { id: kit.repId })}</p>
             <p className="truncate text-xs text-white/40">
               {formatDateTime(kit.createdAt)}
               {kit.note ? ` · ${kit.note}` : ""}
@@ -129,25 +136,25 @@ function KitRow({ kit, go }: { kit: TagKitItem; go: (path: string) => void }) {
         <div className="flex shrink-0 items-center gap-4 text-right text-xs tabular-nums">
           <div>
             <p className="text-base font-bold text-white">{kit.pieceCount}</p>
-            <p className="text-white/40">pieces</p>
+            <p className="text-white/40">{t("kitPieces")}</p>
           </div>
           <div>
             <p className="text-base font-bold text-amber-300">{kit.unsoldCount}</p>
-            <p className="text-white/40">unsold</p>
+            <p className="text-white/40">{t("kitUnsold")}</p>
           </div>
           <div>
             <p className="text-base font-bold text-emerald-300">{sold}</p>
-            <p className="text-white/40">sold</p>
+            <p className="text-white/40">{t("kitSold")}</p>
           </div>
           <button
             type="button"
             className={BTN_GHOST}
             disabled={kit.unsoldCount === 0 || ret.isPending || loadingCodes}
             onClick={() => setConfirm(true)}
-            title="Return every unsold piece of this kit to house stock"
+            title={t("returnUnsoldTitle")}
           >
             <Undo2 className="h-4 w-4" />
-            <span className="hidden sm:inline">Return unsold</span>
+            <span className="hidden sm:inline">{t("returnUnsold")}</span>
           </button>
         </div>
       </div>
@@ -155,14 +162,13 @@ function KitRow({ kit, go }: { kit: TagKitItem; go: (path: string) => void }) {
       <ConfirmDialog
         open={confirm}
         onOpenChange={setConfirm}
-        title="Return unsold pieces to house stock?"
+        title={t("returnUnsoldConfirmTitle")}
         description={
-          <>
-            The {kit.unsoldCount} unsold piece{kit.unsoldCount === 1 ? "" : "s"} in {kit.repName ?? "this reseller"}'s kit go back to house
-            stock. Sold pieces stay credited to them.
-          </>
+          kit.repName
+            ? t.plural("returnUnsoldDesc", kit.unsoldCount, { name: kit.repName })
+            : t.plural("returnUnsoldDescNoName", kit.unsoldCount)
         }
-        confirmLabel="Return unsold"
+        confirmLabel={t("returnUnsold")}
         busy={ret.isPending || loadingCodes}
         onConfirm={() => void returnAllUnsold()}
       />

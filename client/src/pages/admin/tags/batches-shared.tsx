@@ -1,8 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { TagBatchItem, TagListItem } from "@shared/tagsApi";
-import { TAG_PRODUCT_TYPES } from "@shared/tags";
-import { TAG_FACES, TAG_FACE_LABELS } from "@shared/tagFace";
 import { Loader2 } from "@/components/ui/loader";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
 import {
@@ -17,33 +15,15 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ADMIN_TAGS_KEY, STALE_MS, formatDate, getJson, withQuery } from "./api";
 import { BTN_GHOST, CARD, INPUT, StatusPill, TD, TH } from "./ui";
+import { useTagLabels } from "./labels";
+import { useT } from "@/i18n";
+import { commonMessages } from "@/i18n/messages/common";
+import { manageTagsMessages } from "@/i18n/messages/manageTags";
 
 // Shared bits for the Batches and Kits screens (and their helpers).
 
 // ─── Labels ───────────────────────────────────────────────────────────────────
-
-const PRODUCT_LABELS: Record<string, string> = {
-  google_review_sign: "Google Review sign",
-  business_card: "Business card",
-  keychain: "Keychain",
-  safety_tag: "Safety tag",
-  menu_tag: "Menu tag",
-  booking_tag: "Booking tag",
-  custom: "Custom",
-};
-
-export const PRODUCT_OPTIONS = TAG_PRODUCT_TYPES.map((value) => ({ value, label: PRODUCT_LABELS[value] ?? value }));
-
-/** What can be printed on the pieces of a run; empty = the product's default. */
-export const FACE_OPTIONS = TAG_FACES.map((value) => ({ value, label: TAG_FACE_LABELS[value] }));
-
-export function productLabel(type: string | null | undefined): string {
-  return type ? PRODUCT_LABELS[type] ?? type : "—";
-}
-
-export function capitalize(value: string): string {
-  return value ? value[0].toUpperCase() + value.slice(1) : value;
-}
+// Product, face and status names: useTagLabels() in labels.ts.
 
 const BATCH_STATUS_TONES: Record<string, string> = {
   draft: "bg-white/10 text-white/60",
@@ -55,9 +35,10 @@ const BATCH_STATUS_TONES: Record<string, string> = {
 };
 
 export function BatchStatusPill({ status }: { status: string }) {
+  const labels = useTagLabels();
   return (
     <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${BATCH_STATUS_TONES[status] ?? "bg-white/10 text-white/60"}`}>
-      {status}
+      {labels.batchStatus(status)}
     </span>
   );
 }
@@ -155,6 +136,7 @@ export function ResellerSelect({
   includeInactive?: boolean;
   id?: string;
 }) {
+  const t = useT(manageTagsMessages);
   const { data: reps = [], isLoading } = useResellers();
   const list = reps.filter((r) => includeInactive || r.isActive || r.id === value);
   return (
@@ -166,12 +148,12 @@ export function ResellerSelect({
       disabled={isLoading}
       data-testid="admin-tags-reseller-select"
     >
-      <option value="">{isLoading ? "Loading…" : includeAll ? "All resellers" : "Choose a reseller…"}</option>
+      <option value="">{isLoading ? t("loadingOption") : includeAll ? t("allResellers") : t("chooseReseller")}</option>
       {list.map((r) => (
         <option key={r.id} value={r.id}>
           {r.displayName}
           {r.team ? ` · ${r.team}` : ""}
-          {!r.isActive ? " (inactive)" : !hasTagsModule(r) ? " (Tags module off)" : ""}
+          {!r.isActive ? t("resellerInactive") : !hasTagsModule(r) ? t("resellerNoTags") : ""}
         </option>
       ))}
     </select>
@@ -198,6 +180,8 @@ export function ConfirmDialog({
   busy?: boolean;
   onConfirm: () => void;
 }) {
+  const t = useT(manageTagsMessages);
+  const tc = useT(commonMessages);
   return (
     <AlertDialog open={open} onOpenChange={(v) => !busy && onOpenChange(v)}>
       <AlertDialogContent
@@ -212,7 +196,7 @@ export function ConfirmDialog({
         </AlertDialogHeader>
         <AlertDialogFooter className="mt-2 gap-2">
           <AlertDialogCancel disabled={busy} className="border-0 bg-white/5 text-white/70 hover:bg-white/10 hover:text-white">
-            Cancel
+            {tc("cancel")}
           </AlertDialogCancel>
           <AlertDialogAction
             variant={destructive ? "destructive" : "default"}
@@ -222,7 +206,7 @@ export function ConfirmDialog({
               onConfirm();
             }}
           >
-            {busy ? "Working…" : confirmLabel}
+            {busy ? t("working") : confirmLabel}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -247,7 +231,7 @@ export function PieceTable({
   selected,
   onToggle,
   onToggleAll,
-  empty = "No pieces.",
+  empty,
 }: {
   pieces: TagListItem[];
   go: (path: string) => void;
@@ -259,8 +243,9 @@ export function PieceTable({
   onToggleAll?: (codes: string[], on: boolean) => void;
   empty?: ReactNode;
 }) {
+  const tm = useT(manageTagsMessages);
   const [limit, setLimit] = useState(PAGE);
-  if (pieces.length === 0) return <p className="px-3 py-6 text-center text-sm text-white/40">{empty}</p>;
+  if (pieces.length === 0) return <p className="px-3 py-6 text-center text-sm text-white/40">{empty ?? tm("noPieces")}</p>;
   const shown = pieces.slice(0, limit);
   const selectableCodes = selectable ? pieces.filter(selectable).map((t) => t.publicCode) : [];
   const allOn = selectableCodes.length > 0 && selectableCodes.every((c) => selected?.has(c));
@@ -275,7 +260,7 @@ export function PieceTable({
                 <th className={`${TH} w-8`}>
                   <input
                     type="checkbox"
-                    aria-label="Select all"
+                    aria-label={tm("selectAll")}
                     checked={allOn}
                     disabled={selectableCodes.length === 0}
                     onChange={(e) => onToggleAll?.(selectableCodes, e.target.checked)}
@@ -283,15 +268,15 @@ export function PieceTable({
                   />
                 </th>
               )}
-              <th className={`${TH} w-10 pr-0`}><span className="sr-only">Printed on the piece</span></th>
-              <th className={TH}>Code</th>
-              <th className={TH}>#</th>
-              {showBatch && <th className={TH}>Batch</th>}
-              <th className={TH}>Status</th>
-              {showReseller && <th className={TH}>Reseller</th>}
-              <th className={TH}>Customer</th>
-              <th className={`${TH} text-right`}>QR / NFC</th>
-              <th className={TH}>Sold</th>
+              <th className={`${TH} w-10 pr-0`}><span className="sr-only">{tm("printedOnPiece")}</span></th>
+              <th className={TH}>{tm("colCode")}</th>
+              <th className={TH}>{tm("colSerial")}</th>
+              {showBatch && <th className={TH}>{tm("colBatch")}</th>}
+              <th className={TH}>{tm("colStatus")}</th>
+              {showReseller && <th className={TH}>{tm("colReseller")}</th>}
+              <th className={TH}>{tm("colCustomer")}</th>
+              <th className={`${TH} text-right`}>{tm("colQrNfc")}</th>
+              <th className={TH}>{tm("colSold")}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
@@ -309,7 +294,7 @@ export function PieceTable({
                       {canSelect && (
                         <input
                           type="checkbox"
-                          aria-label={`Select ${t.publicCode}`}
+                          aria-label={tm("selectCode", { code: t.publicCode })}
                           checked={selected?.has(t.publicCode) ?? false}
                           onChange={() => onToggle?.(t.publicCode)}
                           className="accent-blue-500"
@@ -324,7 +309,7 @@ export function PieceTable({
                   <td className={TD}>
                     <StatusPill status={t.status} />
                   </td>
-                  {showReseller && <td className={TD}>{t.repName ?? <span className="text-white/35">House</span>}</td>}
+                  {showReseller && <td className={TD}>{t.repName ?? <span className="text-white/35">{tm("house")}</span>}</td>}
                   <td className={TD}>{t.leadName ?? <span className="text-white/35">—</span>}</td>
                   <td className={`${TD} text-right tabular-nums`}>
                     {t.qrInteractions} / {t.nfcInteractions}
@@ -339,7 +324,7 @@ export function PieceTable({
       {pieces.length > limit && (
         <div className="flex justify-center border-t border-white/5 p-3">
           <button type="button" className={BTN_GHOST} onClick={() => setLimit((l) => l + PAGE * 5)}>
-            Show more ({pieces.length - limit} left)
+            {tm("showMore", { count: pieces.length - limit })}
           </button>
         </div>
       )}

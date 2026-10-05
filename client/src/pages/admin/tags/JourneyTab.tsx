@@ -1,10 +1,13 @@
 import { useState } from "react";
 import { Switch } from "@/components/ui/switch";
+import { useT } from "@/i18n";
+import { manageTagsMessages } from "@/i18n/messages/manageTags";
 import { useBatches } from "./batches-shared";
 import { JourneyMcpCard } from "./JourneyMcpCard";
 import { JourneyPanel } from "./JourneyPanel";
-import { KIND_OPTIONS, useIsTagAdmin } from "./journey-shared";
-import { Select, repOptionLabel, useReps } from "./pieces-shared";
+import { useIsTagAdmin, useJourneyLabels } from "./journey-shared";
+import { Select, useReps } from "./pieces-shared";
+import { useTagLabels } from "./labels";
 
 /**
  * Admin only (the tab is hidden from managers, and the panel and the server
@@ -18,6 +21,9 @@ export function JourneyTab() {
 }
 
 function JourneyTabBody() {
+  const t = useT(manageTagsMessages);
+  const labels = useTagLabels();
+  const journeyLabels = useJourneyLabels();
   const { data: batches = [] } = useBatches();
   const { data: reps = [] } = useReps();
   const [batchId, setBatchId] = useState<string | undefined>();
@@ -26,19 +32,19 @@ function JourneyTabBody() {
   const [includeArchived, setIncludeArchived] = useState(false);
 
   const batchOptions = batches.map((b) => ({ value: b.id, label: `${b.batchCode} · ${b.name}` }));
-  const repOptions = reps.map((r) => ({ value: String(r.id), label: repOptionLabel(r) }));
+  const repOptions = reps.map((r) => ({ value: String(r.id), label: labels.repOption(r) }));
 
   return (
     <div className="space-y-6" data-testid="admin-tags-journey-tab">
       <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-2">
-          <Select value={batchId} onChange={setBatchId} placeholder="All batches" options={batchOptions} className="sm:w-72" testId="journey-filter-batch" />
-          <Select value={repId} onChange={setRepId} placeholder="All resellers" options={repOptions} className="sm:w-56" testId="journey-filter-reseller" />
-          <Select value={kind} onChange={setKind} placeholder="All kinds" options={KIND_OPTIONS} className="sm:w-44" testId="journey-filter-kind" />
+          <Select value={batchId} onChange={setBatchId} placeholder={t("allBatches")} options={batchOptions} className="sm:w-72" testId="journey-filter-batch" />
+          <Select value={repId} onChange={setRepId} placeholder={t("allResellers")} options={repOptions} className="sm:w-56" testId="journey-filter-reseller" />
+          <Select value={kind} onChange={setKind} placeholder={t("allKinds")} options={journeyLabels.kindOptions} className="sm:w-44" testId="journey-filter-kind" />
           <div className="flex items-center gap-2 px-1">
             <Switch id="journey-archived" checked={includeArchived} onCheckedChange={setIncludeArchived} />
             <label htmlFor="journey-archived" className="text-sm text-white/60">
-              Show archived
+              {t("showArchived")}
             </label>
           </div>
         </div>

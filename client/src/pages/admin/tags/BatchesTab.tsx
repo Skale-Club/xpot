@@ -2,12 +2,17 @@ import { useState, type FormEvent } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Plus, X } from "lucide-react";
 import { TAG_MAX_BATCH_QUANTITY, TAG_PRODUCT_TYPES, normalizeTagCode } from "@shared/tags";
-import { tagFaceLabel } from "@shared/tagFace";
 import { useToast } from "@/hooks/use-toast";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
 import { errorMessage, formatDate, invalidateAdminTags, sendJson } from "./api";
 import { BTN, BTN_GHOST, CARD, Empty, INPUT, SectionTitle, Stat, TD, TH } from "./ui";
-import { BatchStatusPill, ErrorLine, FACE_OPTIONS, Field, Loading, PRODUCT_OPTIONS, SELECT, productLabel, useBatches } from "./batches-shared";
+import { BatchStatusPill, ErrorLine, Field, Loading, SELECT, useBatches } from "./batches-shared";
+import { useTagLabels } from "./labels";
+import { useT } from "@/i18n";
+import { commonMessages } from "@/i18n/messages/common";
+import { shellMessages } from "@/i18n/messages/shell";
+import { manageTagsMessages } from "@/i18n/messages/manageTags";
+import { manageTagsBatchesMessages } from "@/i18n/messages/manageTagsBatches";
 
 const EMPTY_FORM = {
   name: "",
@@ -22,6 +27,9 @@ const EMPTY_FORM = {
 
 function NewBatchForm({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
   const { toast } = useToast();
+  const t = useT(manageTagsBatchesMessages);
+  const tc = useT(commonMessages);
+  const labels = useTagLabels();
   const [form, setForm] = useState(EMPTY_FORM);
   const set = (patch: Partial<typeof EMPTY_FORM>) => setForm((f) => ({ ...f, ...patch }));
   const quantity = Number(form.quantity);
@@ -49,10 +57,10 @@ function NewBatchForm({ onClose, onCreated }: { onClose: () => void; onCreated: 
       }),
     onSuccess: (batch) => {
       void invalidateAdminTags();
-      toast({ title: `Batch ${batch.batchCode} created`, description: `${quantity} pieces are in house stock.` });
+      toast({ title: t("batchCreated", { code: batch.batchCode }), description: t.plural("batchCreatedDesc", quantity) });
       onCreated(batch.id);
     },
-    onError: (err) => toast({ title: "Could not create batch", description: errorMessage(err), variant: "destructive" }),
+    onError: (err) => toast({ title: t("couldNotCreateBatch"), description: errorMessage(err), variant: "destructive" }),
   });
 
   const submit = (e: FormEvent) => {
@@ -64,35 +72,32 @@ function NewBatchForm({ onClose, onCreated }: { onClose: () => void; onCreated: 
     <form onSubmit={submit} className={`${CARD} space-y-4 p-4`} data-testid="admin-tags-new-batch-form">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold text-white">New production batch</p>
-          <p className="text-xs text-white/40">
-            Generate new permanent codes, or import the exact codes from pieces that were already printed. Then download the CSV
-            and QR artwork for the factory.
-          </p>
+          <p className="text-sm font-semibold text-white">{t("newBatchTitle")}</p>
+          <p className="text-xs text-white/40">{t("newBatchIntro")}</p>
         </div>
-        <button type="button" onClick={onClose} className="rounded-lg p-1 text-white/40 hover:bg-white/5 hover:text-white" aria-label="Close">
+        <button type="button" onClick={onClose} className="rounded-lg p-1 text-white/40 hover:bg-white/5 hover:text-white" aria-label={tc("close")}>
           <X className="h-4 w-4" />
         </button>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Name *" className="sm:col-span-2">
-          <input value={form.name} onChange={(e) => set({ name: e.target.value })} maxLength={120} placeholder="Google Review signs — first run" className={INPUT} autoFocus />
+        <Field label={t("fieldNameRequired")} className="sm:col-span-2">
+          <input value={form.name} onChange={(e) => set({ name: e.target.value })} maxLength={120} placeholder={t("namePlaceholder")} className={INPUT} autoFocus />
         </Field>
-        <Field label="Product">
+        <Field label={t("fieldProduct")}>
           <select value={form.productType} onChange={(e) => set({ productType: e.target.value })} className={SELECT}>
-            {PRODUCT_OPTIONS.map((o) => (
+            {labels.productOptions.map((o) => (
               <option key={o.value} value={o.value}>
                 {o.label}
               </option>
             ))}
           </select>
         </Field>
-        <Field label="Printed on the pieces" hint="The mark on every piece of this run: Instagram, Google, a phone, an envelope…" className="sm:col-span-2">
+        <Field label={t("fieldPrintedOnPieces")} hint={t("printedHintNew")} className="sm:col-span-2">
           <div className="flex items-center gap-2">
             <TagFaceIcon face={form.face || (form.productType === "google_review_sign" ? "google_review" : null)} size="md" />
             <select value={form.face} onChange={(e) => set({ face: e.target.value })} className={SELECT}>
-              <option value="">{form.productType === "google_review_sign" ? "From the product (Google review)" : "Not set"}</option>
-              {FACE_OPTIONS.map((o) => (
+              <option value="">{form.productType === "google_review_sign" ? t("faceFromProduct") : t("faceNotSet")}</option>
+              {labels.faceOptions.map((o) => (
                 <option key={o.value} value={o.value}>
                   {o.label}
                 </option>
@@ -100,7 +105,7 @@ function NewBatchForm({ onClose, onCreated }: { onClose: () => void; onCreated: 
             </select>
           </div>
         </Field>
-        <Field label="Quantity *" hint={`1 to ${TAG_MAX_BATCH_QUANTITY}`}>
+        <Field label={t("fieldQuantityRequired")} hint={t("quantityRange", { max: TAG_MAX_BATCH_QUANTITY })}>
           <input
             type="number"
             min={1}
@@ -110,29 +115,31 @@ function NewBatchForm({ onClose, onCreated }: { onClose: () => void; onCreated: 
             className={`${INPUT} tabular-nums`}
           />
         </Field>
-        <Field label="Batch code" hint="Leave empty for automatic, e.g. REV-2026-001.">
+        <Field label={t("fieldBatchCode")} hint={t("batchCodeHint")}>
           <input
             value={form.batchCode}
             onChange={(e) => set({ batchCode: e.target.value.toUpperCase() })}
             maxLength={40}
-            placeholder="Automatic"
+            placeholder={t("batchCodeAutomatic")}
             className={`${INPUT} font-mono`}
           />
         </Field>
-        <Field label="Vendor">
+        <Field label={t("fieldVendor")}>
           <input value={form.vendor} onChange={(e) => set({ vendor: e.target.value })} maxLength={120} className={INPUT} />
         </Field>
-        <Field label="Notes" className="sm:col-span-2">
+        <Field label={t("fieldNotes")} className="sm:col-span-2">
           <textarea value={form.notes} onChange={(e) => set({ notes: e.target.value })} maxLength={2000} rows={2} className={`${INPUT} resize-y`} />
         </Field>
         <Field
-          label="Already-printed codes (optional)"
+          label={t("fieldLegacyCodes")}
           hint={
             importing
               ? validPublicCodes
-                ? `${publicCodes.length} valid unique codes — these will be preserved exactly.`
-                : `Enter exactly ${validQuantity ? quantity : "the quantity"} valid unique codes.`
-              : "Migration only. One code per line; leave empty to generate new codes."
+                ? t.plural("legacyValid", publicCodes.length)
+                : validQuantity
+                  ? t.plural("legacyExact", quantity)
+                  : t("legacyExactQuantity")
+              : t("legacyHint")
           }
           className="sm:col-span-2"
         >
@@ -149,10 +156,14 @@ function NewBatchForm({ onClose, onCreated }: { onClose: () => void; onCreated: 
       </div>
       <div className="flex justify-end gap-2">
         <button type="button" onClick={onClose} className={BTN_GHOST}>
-          Cancel
+          {tc("cancel")}
         </button>
         <button type="submit" disabled={!ready || create.isPending} className={BTN} data-testid="admin-tags-new-batch-submit">
-          {create.isPending ? (importing ? "Importing…" : "Generating…") : `${importing ? "Import" : "Generate"} ${validQuantity ? quantity : ""} pieces`}
+          {create.isPending
+            ? t(importing ? "importing" : "generating")
+            : validQuantity
+              ? t.plural(importing ? "importPieces" : "generatePieces", quantity)
+              : t(importing ? "importPiecesNoCount" : "generatePiecesNoCount")}
         </button>
       </div>
     </form>
@@ -163,6 +174,10 @@ function NewBatchForm({ onClose, onCreated }: { onClose: () => void; onCreated: 
 export function BatchesTab({ go }: { go: (path: string) => void }) {
   const { data: batches = [], isLoading, isError } = useBatches();
   const [creating, setCreating] = useState(false);
+  const t = useT(manageTagsBatchesMessages);
+  const tm = useT(manageTagsMessages);
+  const ts = useT(shellMessages);
+  const labels = useTagLabels();
 
   const totals = batches.reduce(
     (acc, b) => ({ pieces: acc.pieces + b.tagCount, house: acc.house + b.houseCount, out: acc.out + b.withResellersCount, active: acc.active + b.activeCount }),
@@ -173,10 +188,10 @@ export function BatchesTab({ go }: { go: (path: string) => void }) {
     <div className="space-y-5">
       {batches.length > 0 && (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <Stat label="Batches" value={batches.length} hint={`${totals.pieces} pieces made`} />
-          <Stat label="In house stock" value={totals.house} hint="Unsold, not in a kit" />
-          <Stat label="With resellers" value={totals.out} hint="Handed out, sold or not" />
-          <Stat label="Live" value={totals.active} hint="Active pieces" />
+          <Stat label={ts("manageBatches")} value={batches.length} hint={t.plural("piecesMade", totals.pieces)} />
+          <Stat label={t("inHouseStock")} value={totals.house} hint={t("inHouseStockHint")} />
+          <Stat label={t("withResellers")} value={totals.out} hint={t("withResellersHint")} />
+          <Stat label={t("live")} value={totals.active} hint={t("liveHint")} />
         </div>
       )}
 
@@ -190,34 +205,34 @@ export function BatchesTab({ go }: { go: (path: string) => void }) {
             !creating && (
               <button type="button" onClick={() => setCreating(true)} className={BTN} data-testid="admin-tags-new-batch">
                 <Plus className="h-4 w-4" />
-                New batch
+                {t("newBatch")}
               </button>
             )
           }
         >
-          Batches
+          {ts("manageBatches")}
         </SectionTitle>
         {isLoading ? (
           <Loading />
         ) : isError ? (
-          <ErrorLine>Could not load batches.</ErrorLine>
+          <ErrorLine>{tm("couldNotLoad", { what: t("theBatches") })}</ErrorLine>
         ) : batches.length === 0 ? (
-          <Empty>No batches yet. Create one to generate codes and the printable QR artwork.</Empty>
+          <Empty>{t("noBatchesYet")}</Empty>
         ) : (
           <div className={`${CARD} overflow-x-auto`}>
             <table className="w-full min-w-[760px]">
               <thead className="border-b border-white/10">
                 <tr>
-                  <th className={`${TH} w-12 pr-0`}><span className="sr-only">Printed on the pieces</span></th>
-                  <th className={TH}>Batch</th>
-                  <th className={TH}>Product</th>
-                  <th className={TH}>Status</th>
-                  <th className={`${TH} text-right`}>Qty</th>
-                  <th className={`${TH} text-right`}>House</th>
-                  <th className={`${TH} text-right`}>With resellers</th>
-                  <th className={`${TH} text-right`}>Live</th>
-                  <th className={`${TH} text-right`}>NFC verified</th>
-                  <th className={TH}>Created</th>
+                  <th className={`${TH} w-12 pr-0`}><span className="sr-only">{t("fieldPrintedOnPieces")}</span></th>
+                  <th className={TH}>{tm("colBatch")}</th>
+                  <th className={TH}>{t("fieldProduct")}</th>
+                  <th className={TH}>{tm("colStatus")}</th>
+                  <th className={`${TH} text-right`}>{t("colQty")}</th>
+                  <th className={`${TH} text-right`}>{tm("house")}</th>
+                  <th className={`${TH} text-right`}>{t("withResellers")}</th>
+                  <th className={`${TH} text-right`}>{t("live")}</th>
+                  <th className={`${TH} text-right`}>{t("nfcVerified")}</th>
+                  <th className={TH}>{t("colCreated")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
@@ -239,8 +254,8 @@ export function BatchesTab({ go }: { go: (path: string) => void }) {
                       </p>
                     </td>
                     <td className={TD}>
-                      {productLabel(b.productType)}
-                      {b.face ? <span className="block text-xs text-white/40">{tagFaceLabel(b.face)}</span> : null}
+                      {labels.product(b.productType)}
+                      {b.face ? <span className="block text-xs text-white/40">{labels.face(b.face)}</span> : null}
                     </td>
                     <td className={TD}>
                       <BatchStatusPill status={b.status} />
