@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { formatCurrency } from "@/pages/xpot/utils";
 import { Loader2 } from "@/components/ui/loader";
 
 type OverviewResponse = {
@@ -57,7 +58,7 @@ export function AdminOverview() {
             <p className="text-xs text-white/45">{label}</p>
             <p className={`mt-1 text-2xl font-bold ${key === "syncIssues" && metrics.syncIssues > 0 ? "text-amber-400" : ""}`}>
               {money
-                ? new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(metrics[key] || 0)
+                ? formatCurrency(metrics[key] || 0, "USD")
                 : metrics[key] ?? 0}
             </p>
           </div>

@@ -34,7 +34,8 @@ import { BRAND_GRADIENT } from "./surface";
 
 const COLLAPSED_KEY = "xpot.sidebar.collapsed";
 
-type NavItem = { href: string; label: string; icon: LucideIcon; match: (path: string) => boolean };
+export type NavItem = { href: string; label: string; icon: LucideIcon; match: (path: string) => boolean };
+export type NavGroup = { label: string; items: NavItem[] };
 
 function readCollapsed() {
   try {
@@ -103,10 +104,10 @@ function SidebarLink({ item, collapsed, active }: { item: NavItem; collapsed: bo
   );
 }
 
-function DesktopSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
+function DesktopSidebar({ collapsed, onToggle, extraGroups = [] }: { collapsed: boolean; onToggle: () => void; extraGroups?: NavGroup[] }) {
   const t = useT(shellMessages);
   const [location, navigate] = useLocation();
-  const groups = useNavGroups();
+  const groups = [...useNavGroups(), ...extraGroups];
   const { data: me } = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
 
   const name = me
@@ -277,7 +278,10 @@ export function AppLayout({
   mobileNav,
   topBarActions,
   wide = false,
+  size,
+  extraNavGroups,
   mobileColumnClassName = "pb-28 pt-5",
+  mobileMaxWidth = "max-w-md",
   mobileColumnStyle,
 }: {
   /** Shown in the desktop top bar. */
@@ -290,6 +294,12 @@ export function AppLayout({
   topBarActions?: ReactNode;
   /** Let the content use the full desktop width (redesigned screens). */
   wide?: boolean;
+  /** Desktop content width; overrides `wide`. "medium" suits forms. */
+  size?: "narrow" | "medium" | "wide";
+  /** Extra sidebar groups for this screen (the admin sections). */
+  extraNavGroups?: NavGroup[];
+  /** Width cap below `lg` (admin tables need more than a phone column on a tablet). */
+  mobileMaxWidth?: string;
   /** Padding of the phone column; desktop padding is fixed. */
   mobileColumnClassName?: string;
   mobileColumnStyle?: CSSProperties;
@@ -308,13 +318,13 @@ export function AppLayout({
 
   return (
     <AppBackground>
-      <DesktopSidebar collapsed={collapsed} onToggle={toggle} />
+      <DesktopSidebar collapsed={collapsed} onToggle={toggle} extraGroups={extraNavGroups} />
       <div className={`relative ${collapsed ? "lg:pl-[72px]" : "lg:pl-60"}`}>
         <DesktopTopBar title={title} actions={topBarActions} />
         <ActiveVisitBanner />
         <div
-          className={`relative mx-auto flex min-h-screen w-full max-w-md flex-col px-4 ${mobileColumnClassName} lg:min-h-0 lg:px-8 lg:pb-12 lg:pt-6 ${
-            wide ? "lg:max-w-[1400px]" : "lg:max-w-2xl"
+          className={`relative mx-auto flex min-h-screen w-full ${mobileMaxWidth} flex-col px-4 ${mobileColumnClassName} lg:min-h-0 lg:px-8 lg:pb-12 lg:pt-6 ${
+            { narrow: "lg:max-w-2xl", medium: "lg:max-w-5xl", wide: "lg:max-w-[1400px]" }[size ?? (wide ? "wide" : "narrow")]
           }`}
           style={mobileColumnStyle}
         >
