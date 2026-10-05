@@ -191,8 +191,7 @@ export function renderTagPage(
   body::before { content: ""; position: fixed; inset: 0; pointer-events: none; opacity: .16; background-image: linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px); background-size: 32px 32px; mask-image: linear-gradient(to bottom, #000, transparent 72%); }
   .shell { position: relative; width: min(100%, 32rem); min-height: 100vh; min-height: 100svh; margin: 0 auto; padding: max(1.25rem, env(safe-area-inset-top)) 1.25rem max(1.5rem, env(safe-area-inset-bottom)); display: flex; flex-direction: column; justify-content: center; }
   .brand { position: absolute; top: max(1.25rem, env(safe-area-inset-top)); left: 1.25rem; display: flex; align-items: center; gap: .65rem; font-size: 1rem; font-weight: 800; letter-spacing: -.03em; }
-  .brand-mark { width: 1.9rem; height: 1.9rem; display: grid; place-items: center; border: 1px solid rgba(111,232,255,.22); border-radius: .65rem; background: linear-gradient(145deg, rgba(91,140,255,.28), rgba(111,232,255,.08)); box-shadow: inset 0 1px 0 rgba(255,255,255,.14), 0 10px 30px rgba(36,85,255,.18); }
-  .brand-mark::before { content: ""; width: .62rem; height: .62rem; border: 2px solid #fff; border-radius: 50%; box-shadow: .38rem 0 0 -.18rem var(--cyan); }
+  .brand-mark { width: 1.9rem; height: 1.9rem; display: block; object-fit: cover; border-radius: .65rem; box-shadow: 0 10px 30px rgba(36,85,255,.18); }
   .card { position: relative; overflow: hidden; margin-top: 4.5rem; padding: 1.5rem; border: 1px solid var(--line); border-radius: 1.7rem; background: linear-gradient(145deg, rgba(20,29,49,.94), rgba(9,15,28,.9)); box-shadow: 0 30px 90px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.06); backdrop-filter: blur(18px); }
   .card::before { content: ""; position: absolute; width: 15rem; height: 15rem; right: -8rem; top: -9rem; border-radius: 50%; background: rgba(91,140,255,.18); filter: blur(34px); pointer-events: none; }
   .eyebrow { position: relative; display: inline-flex; align-items: center; gap: .5rem; margin: 0 0 1.15rem; padding: .42rem .7rem; border: 1px solid rgba(111,232,255,.16); border-radius: 999px; color: #b8f3ff; background: rgba(111,232,255,.06); font-size: .69rem; font-weight: 750; letter-spacing: .105em; text-transform: uppercase; }
@@ -228,7 +227,7 @@ export function renderTagPage(
 </head>
 <body class="${tone}">
   <main class="shell">
-    <div class="brand"><span class="brand-mark" aria-hidden="true"></span><span>Xpot</span></div>
+    <div class="brand"><img class="brand-mark" src="/api/branding/favicon" alt="" aria-hidden="true" /><span>Xpot</span></div>
     <section class="card" aria-labelledby="page-title">
       <p class="eyebrow">${escapeHtml(page.eyebrow)}</p>
       <div class="signal" aria-hidden="true"><span></span><span></span><span></span></div>

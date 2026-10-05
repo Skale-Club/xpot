@@ -16,6 +16,8 @@ export const tagBatches = pgTable("tag_batches", {
   batchCode: text("batch_code").notNull(),
   name: text("name").notNull(),
   productType: text("product_type").notNull(),
+  // What is printed on every piece of the run (shared/tagFace.ts); null = the product's default.
+  face: text("face"),
   vendor: text("vendor"),
   quantity: integer("quantity").notNull(),
   status: text("status").notNull().default("generated"),
@@ -67,6 +69,8 @@ export const tags = pgTable("tags", {
   // The business the piece was sold to.
   leadId: integer("lead_id").references(() => salesLeads.id, { onDelete: "set null" }),
   productType: text("product_type").notNull(),
+  // Overrides the batch's face for this one piece; null = the batch's (or the product's).
+  face: text("face"),
   status: text("status").notNull().default("inventory"),
   destinationType: text("destination_type"),
   destinationUrl: text("destination_url"),

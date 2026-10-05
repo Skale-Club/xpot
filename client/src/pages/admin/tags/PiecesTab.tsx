@@ -4,12 +4,15 @@ import { useSearchParams } from "wouter";
 import { Plus, Search, X } from "lucide-react";
 import { TAG_STATUSES } from "@shared/tags";
 import type { TagDetail, TagListItem } from "@shared/tagsApi";
+import { tagFaceLabel } from "@shared/tagFace";
+import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { ADMIN_TAGS_KEY, errorMessage, formatDateTime, getJson, invalidateAdminTags, sendJson, STALE_MS, withQuery } from "./api";
 import { BTN, BTN_GHOST, CARD, Empty, INPUT, StatusPill, TD, TH } from "./ui";
 import {
   destinationLabel,
+  FACE_OPTIONS,
   Loading,
   LoadError,
   NFC_LABELS,
@@ -65,13 +68,15 @@ function listUrl(f: Filters): string {
 function NewPieceDialog({ open, onOpenChange, onCreated }: { open: boolean; onOpenChange: (v: boolean) => void; onCreated: (id: string) => void }) {
   const { toast } = useToast();
   const [productType, setProductType] = useState<string | undefined>("google_review_sign");
+  const [face, setFace] = useState<string | undefined>(undefined);
   const [label, setLabel] = useState("");
   const create = useMutation({
-    mutationFn: () => sendJson<TagDetail>("POST", "/api/xpot/admin/tags", { productType, label }),
+    mutationFn: () => sendJson<TagDetail>("POST", "/api/xpot/admin/tags", { productType, face: face ?? null, label }),
     onSuccess: (tag) => {
       void invalidateAdminTags();
       onOpenChange(false);
       setLabel("");
+      setFace(undefined);
       toast({ title: `Piece ${tag.publicCode} created`, description: "It is in house stock." });
       onCreated(tag.id);
     },
@@ -92,6 +97,13 @@ function NewPieceDialog({ open, onOpenChange, onCreated }: { open: boolean; onOp
           <label className="block space-y-1.5">
             <span className="text-xs font-medium text-white/60">Product type</span>
             <Select value={productType} onChange={setProductType} placeholder="Choose…" options={PRODUCT_OPTIONS} allowEmpty={false} testId="new-piece-product" />
+          </label>
+          <label className="block space-y-1.5">
+            <span className="text-xs font-medium text-white/60">Printed on the piece</span>
+            <div className="flex items-center gap-2">
+              <TagFaceIcon face={face ?? (productType === "google_review_sign" ? "google_review" : null)} size="md" />
+              <Select value={face} onChange={setFace} placeholder="From the product (Google sign: Google)" options={FACE_OPTIONS} testId="new-piece-face" />
+            </div>
           </label>
           <label className="block space-y-1.5">
             <span className="text-xs font-medium text-white/60">Internal label (optional)</span>
@@ -123,11 +135,15 @@ function PiecesTable({ tags, onOpen }: { tags: TagListItem[]; onOpen: (id: strin
           <li key={t.id}>
             <button type="button" onClick={() => onOpen(t.id)} className={`${CARD} w-full p-3 text-left active:bg-white/[0.06]`} data-testid={`admin-piece-card-${t.publicCode}`}>
               <div className="flex items-center justify-between gap-2">
-                <span className="font-mono font-semibold text-white">{t.publicCode}</span>
+                <span className="flex min-w-0 items-center gap-2.5">
+                  <TagFaceIcon face={t.face} size="sm" />
+                  <span className="font-mono font-semibold text-white">{t.publicCode}</span>
+                </span>
                 <StatusPill status={t.status} />
               </div>
               <div className="mt-1 text-xs text-white/50">
                 {productLabel(t.productType)}
+                {t.face ? ` · ${tagFaceLabel(t.face)}` : ""}
                 {t.leadName ? ` · ${t.leadName}` : ""}
                 {` · ${t.repName ?? "House stock"}`}
                 {t.batchCode ? ` · ${t.batchCode}` : ""}
@@ -145,6 +161,7 @@ function PiecesTable({ tags, onOpen }: { tags: TagListItem[]; onOpen: (id: strin
         <table className="w-full min-w-[960px]">
           <thead className="border-b border-white/10">
             <tr>
+              <th className={`${TH} w-12 pr-0`}><span className="sr-only">Printed on the piece</span></th>
               <th className={TH}>Code</th>
               <th className={TH}>Product</th>
               <th className={TH}>Status</th>
@@ -161,12 +178,16 @@ function PiecesTable({ tags, onOpen }: { tags: TagListItem[]; onOpen: (id: strin
           <tbody className="divide-y divide-white/5">
             {tags.map((t) => (
               <tr key={t.id} className="cursor-pointer hover:bg-white/[0.04]" onClick={() => onOpen(t.id)} data-testid={`admin-piece-row-${t.publicCode}`}>
+                <td className={`${TD} pr-0`}><TagFaceIcon face={t.face} size="md" /></td>
                 <td className={`${TD} whitespace-nowrap font-mono font-semibold text-white`}>
                   {t.publicCode}
                   {t.serialNumber ? <span className="ml-1 font-sans text-xs font-normal text-white/40">#{t.serialNumber}</span> : null}
                   {t.label ? <span className="block max-w-[160px] truncate font-sans text-xs font-normal text-white/40">{t.label}</span> : null}
                 </td>
-                <td className={TD}>{productLabel(t.productType)}</td>
+                <td className={TD}>
+                  {productLabel(t.productType)}
+                  {t.face ? <span className="block text-xs text-white/40">{tagFaceLabel(t.face)}</span> : null}
+                </td>
                 <td className={TD}><StatusPill status={t.status} /></td>
                 <td className={`${TD} max-w-[180px] truncate`}>{t.leadName ?? <span className="text-white/30">—</span>}</td>
                 <td className={`${TD} max-w-[160px] truncate`}>{t.repName ?? <span className="text-white/40">House</span>}</td>

@@ -25,6 +25,7 @@ import type {
   TagRepSummary,
 } from "#shared/tagsApi.js";
 import { JOURNEY_PRODUCT_LABELS, tagActionEntry, type JourneySource } from "#shared/tagJourney.js";
+import { resolveTagFace } from "#shared/tagFace.js";
 import { generateUniqueCodes } from "./codes.js";
 import { TagError, pgError } from "./errors.js";
 import { journeyContext, recordJourney } from "./journey.js";
@@ -93,6 +94,8 @@ type TagRow = {
   public_code: string;
   serial_number: number | null;
   product_type: string;
+  face: string | null;
+  batch_face: string | null;
   status: string;
   nfc_provisioning_status: string;
   label: string | null;
@@ -113,12 +116,18 @@ type TagRow = {
   created_at: Date;
 };
 
+/** A piece's printed face from a row carrying face / batch_face / product_type. */
+const faceOf = (r: { face: string | null; batch_face: string | null; product_type: string }) =>
+  resolveTagFace({ face: r.face, batchFace: r.batch_face, productType: r.product_type });
+
 function toListItem(r: TagRow): TagListItem {
   return {
     id: r.id,
     publicCode: r.public_code,
     serialNumber: r.serial_number,
     productType: r.product_type,
+    face: faceOf(r),
+    ownFace: r.face,
     status: r.status,
     nfcStatus: r.nfc_provisioning_status,
     label: r.label,
@@ -142,7 +151,7 @@ function toListItem(r: TagRow): TagListItem {
 
 function tagListQuery(where: SQL, limit: number): SQL {
   return sql`
-    SELECT t.id, t.public_code, t.serial_number, t.product_type, t.status, t.nfc_provisioning_status, t.label,
+    SELECT t.id, t.public_code, t.serial_number, t.product_type, t.face, b.face AS batch_face, t.status, t.nfc_provisioning_status, t.label,
            t.destination_type, t.destination_url, t.lead_id, l.name AS lead_name, t.rep_id, r.display_name AS rep_name,
            t.kit_id, t.batch_id, b.batch_code, t.activated_at, t.sold_at, t.created_at,
            COALESCE(s.qr, 0)::int AS qr, COALESCE(s.nfc, 0)::int AS nfc, s.last_interaction_at
@@ -268,6 +277,8 @@ export async function writeHistory(
 export interface TagUpdate {
   label?: string | null;
   productType?: string;
+  /** What is printed on this piece; null falls back to the batch's face. */
+  face?: string | null;
   destinationType?: string | null;
   destinationUrl?: string | null;
   utmEnabled?: boolean;
@@ -300,6 +311,7 @@ export async function updateTag(id: string, patch: TagUpdate, userId: string | n
         ...next,
         ...(patch.label !== undefined ? { label: patch.label } : {}),
         ...(patch.productType ? { productType: patch.productType } : {}),
+        ...(patch.face !== undefined ? { face: patch.face } : {}),
         ...(patch.utmEnabled !== undefined ? { utmEnabled: patch.utmEnabled } : {}),
         ...(patch.utmCampaign !== undefined ? { utmCampaign: patch.utmCampaign } : {}),
         ...(patch.metadata !== undefined ? { metadata: patch.metadata } : {}),
@@ -443,14 +455,14 @@ export async function assignTag(
 
 /** Admin: one standalone piece (not part of a manufacturing batch), in house stock. */
 export async function createSingleTag(
-  input: { productType: string; label?: string | null },
+  input: { productType: string; face?: string | null; label?: string | null },
   userId: string | null = null,
   source: JourneySource = "admin",
 ): Promise<Tag> {
   const [code] = await generateUniqueCodes(1, findExistingCodes);
   const [tag] = await db
     .insert(tags)
-    .values({ publicCode: code, productType: input.productType, label: input.label ?? null, status: "inventory" })
+    .values({ publicCode: code, productType: input.productType, face: input.face ?? null, label: input.label ?? null, status: "inventory" })
     .returning();
   console.log(`[tags] created standalone tag ${code}`);
   await recordJourney({
@@ -460,7 +472,7 @@ export async function createSingleTag(
     content: input.label ?? null,
     tagId: tag.id,
     afterValue: tag.status,
-    metadata: { productType: input.productType },
+    metadata: { productType: input.productType, face: input.face ?? null },
   }, journeyContext(userId, source));
   return tag;
 }
@@ -721,6 +733,8 @@ export interface BatchInput {
   name: string;
   batchCode?: string | null;
   productType: string;
+  /** What is printed on every piece of the run (shared/tagFace.ts). */
+  face?: string | null;
   vendor?: string | null;
   quantity: number;
   notes?: string | null;
@@ -751,6 +765,7 @@ export async function createBatch(input: BatchInput, userId: string | null, sour
             batchCode,
             name: input.name,
             productType: input.productType,
+            face: input.face ?? null,
             vendor: input.vendor ?? null,
             quantity: input.quantity,
             status: "generated",
@@ -777,7 +792,7 @@ export async function createBatch(input: BatchInput, userId: string | null, sour
         content: batch.name,
         batchId: batch.id,
         afterValue: batch.status,
-        metadata: { quantity: input.quantity, productType: input.productType, vendor: batch.vendor },
+        metadata: { quantity: input.quantity, productType: input.productType, face: batch.face, vendor: batch.vendor },
       }, journeyContext(userId, source));
       return batch;
     } catch (err) {
@@ -791,7 +806,7 @@ export async function createBatch(input: BatchInput, userId: string | null, sour
 
 export async function updateBatch(
   id: string,
-  input: Partial<Pick<BatchInput, "name" | "vendor" | "notes">> & { status?: string },
+  input: Partial<Pick<BatchInput, "name" | "face" | "vendor" | "notes">> & { status?: string },
   userId: string | null = null,
   source: JourneySource = "admin",
 ) {
@@ -818,11 +833,11 @@ export async function updateBatch(
 
 export async function listBatches(): Promise<TagBatchItem[]> {
   const list = await rows<{
-    id: string; batch_code: string; name: string; product_type: string; vendor: string | null; quantity: number;
+    id: string; batch_code: string; name: string; product_type: string; face: string | null; vendor: string | null; quantity: number;
     status: string; notes: string | null; created_at: Date; tag_count: number; house_count: number;
     with_resellers_count: number; active_count: number; nfc_verified_count: number;
   }>(sql`
-    SELECT b.id, b.batch_code, b.name, b.product_type, b.vendor, b.quantity, b.status, b.notes, b.created_at,
+    SELECT b.id, b.batch_code, b.name, b.product_type, b.face, b.vendor, b.quantity, b.status, b.notes, b.created_at,
       count(t.id)::int AS tag_count,
       count(t.id) FILTER (WHERE t.status = 'inventory' AND t.rep_id IS NULL)::int AS house_count,
       count(t.id) FILTER (WHERE t.rep_id IS NOT NULL)::int AS with_resellers_count,
@@ -838,6 +853,8 @@ export async function listBatches(): Promise<TagBatchItem[]> {
     batchCode: b.batch_code,
     name: b.name,
     productType: b.product_type,
+    face: resolveTagFace({ batchFace: b.face, productType: b.product_type }),
+    ownFace: b.face,
     vendor: b.vendor,
     quantity: b.quantity,
     status: b.status,
@@ -920,17 +937,19 @@ export async function getAnalytics(scope: AnalyticsScope, from: Date, to: Date):
   `);
 
   const topTags = scope.tagId ? [] : await rows<{
-    id: string; public_code: string; lead_name: string | null; rep_name: string | null; qr: number; nfc: number;
+    id: string; public_code: string; face: string | null; product_type: string; batch_face: string | null;
+    lead_name: string | null; rep_name: string | null; qr: number; nfc: number;
   }>(sql`
-    SELECT t.id, t.public_code, l.name AS lead_name, r.display_name AS rep_name,
+    SELECT t.id, t.public_code, t.face, t.product_type, b.face AS batch_face, l.name AS lead_name, r.display_name AS rep_name,
       count(*) FILTER (WHERE e.access_method = 'qr')::int AS qr,
       count(*) FILTER (WHERE e.access_method = 'nfc')::int AS nfc
     FROM tag_events e
     JOIN tags t ON t.id = e.tag_id
     LEFT JOIN sales_leads l ON l.id = t.lead_id
     LEFT JOIN sales_reps r ON r.id = t.rep_id
+    LEFT JOIN tag_batches b ON b.id = t.batch_id
     WHERE ${where} AND ${COUNTABLE}
-    GROUP BY t.id, t.public_code, l.name, r.display_name
+    GROUP BY t.id, t.public_code, b.face, l.name, r.display_name
     ORDER BY count(*) DESC
     LIMIT 10
   `);
@@ -960,7 +979,7 @@ export async function getAnalytics(scope: AnalyticsScope, from: Date, to: Date):
     daily: points,
     devices: devices.map((d) => ({ deviceType: d.device_type ?? "unknown", count: Number(d.count) })),
     topTags: topTags.map((t) => ({
-      id: t.id, publicCode: t.public_code, leadName: t.lead_name, repName: t.rep_name, qr: Number(t.qr), nfc: Number(t.nfc),
+      id: t.id, publicCode: t.public_code, face: faceOf(t), leadName: t.lead_name, repName: t.rep_name, qr: Number(t.qr), nfc: Number(t.nfc),
     })),
   };
 }
@@ -998,22 +1017,27 @@ export async function getOverview(now: Date = new Date()): Promise<TagOverview> 
   `);
 
   const recentEvents = await rows<{
-    id: number; tag_id: string; public_code: string; lead_name: string | null; access_method: string;
-    event_type: string; device_type: string | null; occurred_at: Date;
+    id: number; tag_id: string; public_code: string; face: string | null; product_type: string; batch_face: string | null;
+    lead_name: string | null; access_method: string; event_type: string; device_type: string | null; occurred_at: Date;
   }>(sql`
-    SELECT e.id, e.tag_id, t.public_code, l.name AS lead_name, e.access_method, e.event_type,
-           e.device_type, e.occurred_at
+    SELECT e.id, e.tag_id, t.public_code, t.face, t.product_type, b.face AS batch_face, l.name AS lead_name,
+           e.access_method, e.event_type, e.device_type, e.occurred_at
     FROM tag_events e
     JOIN tags t ON t.id = e.tag_id
+    LEFT JOIN tag_batches b ON b.id = t.batch_id
     LEFT JOIN sales_leads l ON l.id = e.lead_id
     WHERE NOT e.is_bot
     ORDER BY e.occurred_at DESC
     LIMIT 15
   `);
 
-  const recentActivations = await rows<{ id: string; public_code: string; lead_name: string | null; rep_name: string | null; activated_at: Date }>(sql`
-    SELECT t.id, t.public_code, l.name AS lead_name, r.display_name AS rep_name, t.activated_at
+  const recentActivations = await rows<{
+    id: string; public_code: string; face: string | null; product_type: string; batch_face: string | null;
+    lead_name: string | null; rep_name: string | null; activated_at: Date;
+  }>(sql`
+    SELECT t.id, t.public_code, t.face, t.product_type, b.face AS batch_face, l.name AS lead_name, r.display_name AS rep_name, t.activated_at
     FROM tags t
+    LEFT JOIN tag_batches b ON b.id = t.batch_id
     LEFT JOIN sales_leads l ON l.id = t.lead_id
     LEFT JOIN sales_reps r ON r.id = t.rep_id
     WHERE t.status = 'active' AND t.activated_at IS NOT NULL
@@ -1031,6 +1055,7 @@ export async function getOverview(now: Date = new Date()): Promise<TagOverview> 
       id: Number(e.id),
       tagId: e.tag_id,
       publicCode: e.public_code,
+      face: faceOf(e),
       leadName: e.lead_name,
       accessMethod: e.access_method,
       eventType: e.event_type,
@@ -1038,7 +1063,7 @@ export async function getOverview(now: Date = new Date()): Promise<TagOverview> 
       occurredAt: iso(e.occurred_at)!,
     })),
     recentActivations: recentActivations.map((a) => ({
-      id: a.id, publicCode: a.public_code, leadName: a.lead_name, repName: a.rep_name, activatedAt: iso(a.activated_at)!,
+      id: a.id, publicCode: a.public_code, face: faceOf(a), leadName: a.lead_name, repName: a.rep_name, activatedAt: iso(a.activated_at)!,
     })),
     recentChanges: await historyFor(sql`true`, 10),
   };

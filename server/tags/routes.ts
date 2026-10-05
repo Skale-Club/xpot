@@ -13,6 +13,7 @@ import {
   validateDestinationUrl,
 } from "#shared/tags.js";
 import { canWorkOnTag } from "#shared/tagAccess.js";
+import { TAG_FACES } from "#shared/tagFace.js";
 import { DIRECT_WRITE_METHODS, TAGS_APP_PATH } from "#shared/tagApp.js";
 import {
   DEVICE_EVENT_TYPES,
@@ -121,14 +122,19 @@ export const listQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(2000).optional(),
 });
 
+/** What is printed on the piece (shared/tagFace.ts); null clears it back to the batch/product default. */
+const faceField = z.enum(TAG_FACES).nullable().optional();
+
 const tagCreateSchema = z.object({
   productType: z.enum(TAG_PRODUCT_TYPES),
+  face: faceField,
   label: optionalText(120),
 }).strict();
 
 const tagPatchSchema = z.object({
   label: optionalText(120),
   productType: z.enum(TAG_PRODUCT_TYPES).optional(),
+  face: faceField,
   destinationType: z.enum(TAG_DESTINATION_TYPES).nullable().optional(),
   destinationUrl: nullableDestinationUrl,
   utmEnabled: z.boolean().optional(),
@@ -151,6 +157,7 @@ export const batchCreateSchema = z.object({
     z.string().regex(/^[A-Z0-9._-]{1,40}$/, "Batch code: letters, numbers, dot, dash or underscore").optional(),
   ),
   productType: z.enum(TAG_PRODUCT_TYPES),
+  face: faceField,
   vendor: optionalText(120),
   quantity: z.coerce.number().int().min(1).max(TAG_MAX_BATCH_QUANTITY),
   notes: optionalText(2000),
@@ -178,6 +185,7 @@ export const batchCreateSchema = z.object({
 
 const batchPatchSchema = z.object({
   name: z.string().trim().min(1).max(120).optional(),
+  face: faceField,
   vendor: optionalText(120),
   notes: optionalText(2000),
   status: z.enum(TAG_BATCH_STATUSES).optional(),

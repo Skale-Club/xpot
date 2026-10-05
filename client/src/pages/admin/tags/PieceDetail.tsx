@@ -4,6 +4,8 @@ import { Archive, ArrowLeft, Download, ExternalLink, Power, PowerOff, RotateCcw,
 import { defaultUtmEnabled, planTransition, validateDestinationUrl, type TagAction } from "@shared/tags";
 import { isReviewFormUrl } from "@shared/reviewLink";
 import type { TagDetail } from "@shared/tagsApi";
+import { tagFaceLabel } from "@shared/tagFace";
+import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
@@ -15,6 +17,7 @@ import {
   destinationLabel,
   Loading,
   LoadError,
+  FACE_OPTIONS,
   PRODUCT_OPTIONS,
   productLabel,
   repOptionLabel,
@@ -376,8 +379,9 @@ function LifecycleStep({ tag }: { tag: TagDetail }) {
 function DetailsStep({ tag }: { tag: TagDetail }) {
   const [label, setLabel] = useState(tag.label ?? "");
   const [productType, setProductType] = useState<string | undefined>(tag.productType);
+  const [face, setFace] = useState<string | undefined>(tag.ownFace ?? undefined);
   const save = usePieceMutation(tag.id, "Piece saved");
-  const dirty = label.trim() !== (tag.label ?? "") || productType !== tag.productType;
+  const dirty = label.trim() !== (tag.label ?? "") || productType !== tag.productType || (face ?? null) !== tag.ownFace;
   if (tag.status === "retired") return null;
   return (
     <div className="space-y-3">
@@ -387,12 +391,16 @@ function DetailsStep({ tag }: { tag: TagDetail }) {
           <span className={LABEL}>Product type</span>
           <Select value={productType} onChange={setProductType} placeholder="Product…" options={PRODUCT_OPTIONS} allowEmpty={false} />
         </label>
+        <label className="space-y-1 sm:col-span-2">
+          <span className={LABEL}>Printed on the piece</span>
+          <Select value={face} onChange={setFace} placeholder={tag.batchCode ? "Same as the batch" : "From the product"} options={FACE_OPTIONS} />
+        </label>
         <label className="space-y-1">
           <span className={LABEL}>Internal label</span>
           <input className={INPUT} value={label} onChange={(e) => setLabel(e.target.value)} maxLength={120} placeholder="Optional" />
         </label>
       </div>
-      <button type="button" className={BTN_GHOST} disabled={!dirty || !productType || save.isPending} onClick={() => save.mutate({ method: "PATCH", body: { label, productType } })}>
+      <button type="button" className={BTN_GHOST} disabled={!dirty || !productType || save.isPending} onClick={() => save.mutate({ method: "PATCH", body: { label, productType, face: face ?? null } })}>
         Save details
       </button>
     </div>
@@ -488,10 +496,12 @@ export function PieceDetail({ id, go }: { id: string; go: Go }) {
       <Back go={go} />
 
       <div className="flex flex-wrap items-center gap-3">
+        <TagFaceIcon face={tag.face} size="lg" />
         <h2 className="font-mono text-2xl font-bold tracking-wider text-white" data-testid="admin-piece-code">{tag.publicCode}</h2>
         <StatusPill status={tag.status} />
         <span className="text-sm text-white/50">
           {productLabel(tag.productType)}
+          {` · ${tag.face ? tagFaceLabel(tag.face) : "print not recorded"}`}
           {tag.batchCode ? (
             <>
               {" · "}

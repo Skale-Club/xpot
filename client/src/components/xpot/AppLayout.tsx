@@ -31,6 +31,7 @@ import { CommandPalette } from "./CommandPalette";
 import { useDesktopShortcuts } from "./useDesktopShortcuts";
 import { useIsComputer, useIsDesktop } from "@/hooks/use-is-desktop";
 import { BRAND_GRADIENT } from "./surface";
+import { XpotMark } from "./XpotMark";
 
 // The frame around every rep screen. Below `lg` it is the phone column the app
 // always had (the caller passes its header row and bottom nav). From `lg` up a
@@ -138,9 +139,7 @@ function DesktopSidebar({ collapsed, onToggle, extraGroups = [] }: { collapsed: 
       <div className={`flex h-16 shrink-0 items-center ${collapsed ? "justify-center" : "justify-between px-4"}`}>
         {!collapsed && (
           <Link href="/dashboard" className="flex items-center gap-2 text-lg font-extrabold tracking-tight text-white">
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg text-sm" style={{ background: BRAND_GRADIENT }}>
-              <MapPinned className="h-4 w-4" />
-            </span>
+            <XpotMark />
             Xpot
           </Link>
         )}

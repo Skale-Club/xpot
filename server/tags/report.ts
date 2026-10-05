@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { TagRepReportRow, TagTeamReport } from "#shared/tagsApi.js";
+import { resolveTagFace } from "#shared/tagFace.js";
 import { COUNTABLE, iso, rows } from "./repository.js";
 
 /**
@@ -43,16 +44,17 @@ export async function getTeamReport(from: Date, to: Date): Promise<TagTeamReport
          OR r.id IN (SELECT activated_by_rep_id FROM tags WHERE activated_by_rep_id IS NOT NULL)
          OR r.id IN (SELECT rep_id FROM tag_kits)
     `),
-    rows<{ id: string; public_code: string; label: string | null; product_type: string; lead_name: string | null; rep_name: string | null; qr: number; nfc: number }>(sql`
-      SELECT t.id, t.public_code, t.label, t.product_type, l.name AS lead_name, r.display_name AS rep_name,
+    rows<{ id: string; public_code: string; label: string | null; product_type: string; face: string | null; batch_face: string | null; lead_name: string | null; rep_name: string | null; qr: number; nfc: number }>(sql`
+      SELECT t.id, t.public_code, t.label, t.product_type, t.face, b.face AS batch_face, l.name AS lead_name, r.display_name AS rep_name,
              count(*) FILTER (WHERE e.access_method = 'qr')::int AS qr,
              count(*) FILTER (WHERE e.access_method = 'nfc')::int AS nfc
       FROM tag_events e
       JOIN tags t ON t.id = e.tag_id
       LEFT JOIN sales_leads l ON l.id = t.lead_id
       LEFT JOIN sales_reps r ON r.id = t.rep_id
+      LEFT JOIN tag_batches b ON b.id = t.batch_id
       WHERE e.occurred_at >= ${from} AND e.occurred_at < ${to} AND ${COUNTABLE}
-      GROUP BY t.id, l.name, r.display_name
+      GROUP BY t.id, b.face, l.name, r.display_name
       ORDER BY count(*) DESC
       LIMIT 10
     `),
@@ -99,6 +101,7 @@ export async function getTeamReport(from: Date, to: Date): Promise<TagTeamReport
       publicCode: t.public_code,
       label: t.label,
       productType: t.product_type,
+      face: resolveTagFace({ face: t.face, batchFace: t.batch_face, productType: t.product_type }),
       leadName: t.lead_name,
       repName: t.rep_name,
       qr: Number(t.qr),
