@@ -4,7 +4,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "@/components/ui/loader";
 import { XPOT_MODULES, type XpotModule } from "@shared/modules";
-import { PHONE_COUNTRIES, formatPhone } from "@shared/phone";
+import { formatPhone } from "@shared/phone";
+import { CountryCodePicker } from "@/components/CountryCodePicker";
 
 // Who may use Xpot. People sign up with their phone and wait here for
 // approval; an admin can also create someone's access directly. Everyone
@@ -383,13 +384,7 @@ function NewResellerForm() {
       <div className="grid gap-2 sm:grid-cols-2">
         <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Full name" required className={FIELD} data-testid="input-reseller-name" />
         <div className="flex gap-2">
-          <select value={countryCode} onChange={(e) => setCountryCode(e.target.value)} className="rounded-lg border border-white/10 bg-[#0a0f1e] px-2 text-sm text-white outline-none">
-            {PHONE_COUNTRIES.map((c) => (
-              <option key={c.code} value={c.code}>
-                {c.flag} +{c.code}
-              </option>
-            ))}
-          </select>
+          <CountryCodePicker value={countryCode} onChange={setCountryCode} label="Country" className="rounded-lg text-sm" />
           <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone (sign-in)" type="tel" required className={FIELD} data-testid="input-reseller-phone" />
         </div>
       </div>
