@@ -20,7 +20,9 @@ import {
 
 export function createAdminRouter() {
   const router = Router();
-  router.use(requireXpotManager);
+  // Only the /admin paths: this router is mounted at /api/xpot, so a bare router.use would guard
+  // every route mounted after it (sales, consignments, products...) and lock plain reps out.
+  router.use("/admin", requireXpotManager);
 
   const genInboundKey = () => `xpot_${randomBytes(24).toString("base64url")}`;
 

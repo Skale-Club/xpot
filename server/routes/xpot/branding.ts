@@ -64,7 +64,9 @@ export function createBrandingPublicRouter() {
 // ── Admin branding endpoints — mounted at /api/xpot, manager/admin only ──
 export function createBrandingAdminRouter() {
   const router = Router();
-  router.use(requireXpotManager);
+  // Only the /admin paths: this router is mounted at /api/xpot, so a bare router.use would guard
+  // every route mounted after it (sales, consignments, products...) and lock plain reps out.
+  router.use("/admin", requireXpotManager);
 
   const present = (b: Awaited<ReturnType<typeof storage.getAppBranding>>) => ({
     faviconUrl: b.faviconUrl ?? null,

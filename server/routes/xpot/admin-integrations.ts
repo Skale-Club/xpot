@@ -31,7 +31,9 @@ const testSchema = putSchema.omit({ enabled: true });
 
 export function createAdminIntegrationsRouter() {
   const router = Router();
-  router.use(requireXpotManager);
+  // Only the /admin paths: this router is mounted at /api/xpot, so a bare router.use would guard
+  // every route mounted after it (sales, consignments, products...) and lock plain reps out.
+  router.use("/admin", requireXpotManager);
 
   // List every provider's masked status (registry ⨝ DB).
   router.get("/admin/integrations", async (_req, res) => {
