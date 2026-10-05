@@ -135,7 +135,7 @@ export function LeadsTable({
                       <div className="flex items-center gap-2 truncate text-[11px] text-white/35">
                         {lead.industry && <span className="truncate">{lead.industry}</span>}
                         {pieces && pieces.pieces > 0 && (
-                          <span className="inline-flex shrink-0 items-center gap-1 text-emerald-300/80">
+                          <span className="inline-flex shrink-0 items-center gap-1 text-violet-300/80">
                             <Nfc className="h-3 w-3" /> {pieces.pieces}
                           </span>
                         )}

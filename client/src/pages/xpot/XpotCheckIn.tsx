@@ -50,6 +50,7 @@ import { VisitActionsPanel } from "./components/sales/VisitActions";
 import { GLASS_RAISED } from "@/components/xpot/surface";
 import { useIsComputer } from "@/hooks/use-is-desktop";
 import { ContinueOnPhone } from "@/pages/tags/ContinueOnPhone";
+import { ModuleBadge } from "@/components/xpot/ModuleBadge";
 
 function ActiveLeadInfo({ lead, onSaved }: { lead: SalesLead; onSaved: () => void }) {
   const { toast } = useToast();
@@ -537,15 +538,18 @@ export function XpotCheckIn() {
               setSellTo({ leadId: lead.id, name: lead.name, placeId: lead.googlePlaceId ?? null });
               navigate("/tags");
             }}
-            className="relative flex w-full items-center gap-3 rounded-2xl border border-emerald-400/25 bg-emerald-400/[0.08] p-3 text-left transition-transform active:scale-[0.98]"
+            className="relative flex w-full items-center gap-3 rounded-2xl border border-violet-400/25 bg-violet-400/[0.08] p-3 text-left transition-transform active:scale-[0.98]"
             style={{ WebkitTapHighlightColor: "transparent" }}
             data-testid="button-sell-piece"
           >
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-400/15 text-emerald-300">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-400/15 text-violet-300">
               <Nfc className="h-5 w-5" />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block text-sm font-bold text-white">{t("sellPiece")}</span>
+              <span className="flex items-center gap-2 text-sm font-bold text-white">
+                {t("sellPiece")}
+                <ModuleBadge module="tags" />
+              </span>
               <span className="block text-xs text-white/45">{t("sellPieceHint")}</span>
             </span>
           </button>

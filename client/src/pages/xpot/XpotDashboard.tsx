@@ -16,6 +16,7 @@ import { useT } from "@/i18n";
 import { dashboardMessages } from "@/i18n/messages/dashboard";
 import { EmptyState } from "@/components/xpot/EmptyState";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
+import { ModuleBadge } from "@/components/xpot/ModuleBadge";
 
 const METRIC_CARDS = [
   {
@@ -115,14 +116,17 @@ export function XpotDashboard() {
           type="button"
           onClick={() => setLocation("/tags")}
           className="flex w-full items-center gap-3 rounded-[20px] p-4 text-left transition-transform active:scale-[0.98]"
-          style={{ background: "rgba(16,185,129,0.06)", border: "1px solid rgba(16,185,129,0.18)", WebkitTapHighlightColor: "transparent" }}
+          style={{ background: "rgba(139,92,246,0.07)", border: "1px solid rgba(139,92,246,0.22)", WebkitTapHighlightColor: "transparent" }}
           data-testid="dashboard-tags"
         >
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-400/15 text-emerald-300">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-400/15 text-violet-300">
             <Nfc className="h-5 w-5" />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="text-sm font-bold text-white">{t("tagsTitle")}</div>
+            <div className="flex items-center gap-2 text-sm font-bold text-white">
+              {t("tagsTitle")}
+              <ModuleBadge module="tags" />
+            </div>
             <div className="mt-1 grid grid-cols-3 gap-2">
               {([
                 ["tagsInKit", tagSummary.inStock],

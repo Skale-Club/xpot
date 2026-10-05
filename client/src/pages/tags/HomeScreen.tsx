@@ -183,7 +183,7 @@ export default function HomeScreen() {
     <div className="space-y-5">
       <header className="flex items-start justify-between gap-3 lg:hidden">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-teal-300/80">
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-violet-300/80">
             {me ? t("homeHello", { name: me.rep.displayName.split(" ")[0] }) : "Xpot"}
           </p>
           <h1 className="mt-1 text-[26px] font-extrabold leading-tight tracking-tight text-white">{t("homeTitle")}</h1>

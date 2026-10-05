@@ -28,7 +28,7 @@ function TopPieces({ go }: { go: (path: string) => void }) {
   return (
     <Panel
       title={<><Trophy className="h-4 w-4 text-white/50" />Top pieces · 30 days</>}
-      right={<button type="button" className={LINK} onClick={() => go("/team")}>Team report <ArrowRight className="h-3 w-3" /></button>}
+      right={<button type="button" className={LINK} onClick={() => go("/team")}>Resellers report <ArrowRight className="h-3 w-3" /></button>}
     >
       {isLoading ? (
         <Loading className="py-6" />

@@ -190,7 +190,7 @@ export function TeamTab({ go }: { go: Go }) {
       </div>
 
       <section>
-        <SectionTitle>Team report</SectionTitle>
+        <SectionTitle>Report by reseller</SectionTitle>
         <TeamReport range={range} go={go} />
       </section>
 
