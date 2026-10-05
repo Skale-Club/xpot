@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import {
   ChevronsRight,
   ChevronsLeft,
@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { Loader2 } from '@/components/ui/loader';
 import { useT } from "@/i18n";
 import { checkinMessages } from "@/i18n/messages/checkin";
+import { useIsDesktop } from "@/hooks/use-is-desktop";
 
 /**
  * Two modes:
@@ -34,7 +35,15 @@ export function ConfirmSlider({
   onCancel?: () => void;
 }) {
   const t = useT(checkinMessages);
+  const isDesktop = useIsDesktop();
   const isCheckOut = Boolean(onCancel);
+  // Desktop: a button that asks for a second click instead of a drag.
+  const [armed, setArmed] = useState(false);
+  useEffect(() => {
+    if (!armed) return;
+    const id = window.setTimeout(() => setArmed(false), 4000);
+    return () => window.clearTimeout(id);
+  }, [armed]);
   const startValue = isCheckOut ? 100 : 0;
   const [value, setValue] = useState(startValue);
   const hasTriggeredRef = useRef(false);
@@ -51,6 +60,7 @@ export function ConfirmSlider({
     }
   }, [loading, startValue]);
 
+  const helperId = useId();
   const THUMB = 64;
   const PADDING = 6;
 
@@ -116,6 +126,30 @@ export function ConfirmSlider({
   }
 
   const thumbColor = getThumbColor(value);
+
+  if (isDesktop) {
+    const tone = isCheckOut ? "linear-gradient(135deg, #e11d48, #be123c)" : "linear-gradient(135deg, #6366f1, #10b981)";
+    return (
+      <div className="space-y-3">
+        <button
+          type="button"
+          disabled={disabled || loading}
+          onClick={() => {
+            if (!armed) return setArmed(true);
+            setArmed(false);
+            onConfirm();
+          }}
+          className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl text-sm font-black uppercase tracking-[0.2em] text-white transition-all disabled:cursor-not-allowed disabled:opacity-40"
+          style={{ background: armed ? tone : "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)" }}
+          data-testid="confirm-button"
+        >
+          {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : isCheckOut ? <ChevronsLeft className="h-5 w-5" /> : <ChevronsRight className="h-5 w-5" />}
+          {loading ? t("processing") : armed ? t("clickAgainToConfirm") : label}
+        </button>
+        <div className="text-center text-xs text-white/30 tracking-wide">{helperText}</div>
+      </div>
+    );
+  }
   const isSnapping = !dragging;
 
   // Label fades out as the thumb progresses
@@ -142,6 +176,20 @@ export function ConfirmSlider({
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
+        // Keyboard and screen readers: a button that confirms on Enter/Space.
+        role="button"
+        tabIndex={disabled || loading ? -1 : 0}
+        aria-label={label}
+        aria-disabled={disabled || loading || undefined}
+        aria-describedby={helperId}
+        onKeyDown={(e) => {
+          if (disabled || loading || hasTriggeredRef.current) return;
+          if (e.key !== "Enter" && e.key !== " ") return;
+          e.preventDefault();
+          hasTriggeredRef.current = true;
+          setValue(isCheckOut ? 0 : 100);
+          onConfirm();
+        }}
       >
 
         {/* label */}
@@ -181,7 +229,7 @@ export function ConfirmSlider({
           }
         </div>
       </div>
-      <div className="text-center text-xs text-white/30 tracking-wide">{helperText}</div>
+      <div id={helperId} className="text-center text-xs text-white/30 tracking-wide">{helperText}</div>
     </div>
   );
 }

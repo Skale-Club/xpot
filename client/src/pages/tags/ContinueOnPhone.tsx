@@ -8,7 +8,7 @@ import { Spinner } from "./ui";
  * A computer cannot write NFC chips: this shows a QR the rep scans with the
  * phone to open the same screen there.
  */
-export function ContinueOnPhone({ url }: { url: string }) {
+export function ContinueOnPhone({ url, title, hint }: { url: string; title?: string; hint?: string }) {
   const t = useT(tagsMessages);
   const [src, setSrc] = useState<string | null>(null);
 
@@ -33,9 +33,9 @@ export function ContinueOnPhone({ url }: { url: string }) {
       <div className="min-w-0">
         <div className="flex items-center gap-2 text-sm font-bold text-white">
           <Smartphone className="h-4 w-4 text-blue-300" />
-          {t("continueOnPhone")}
+          {title ?? t("continueOnPhone")}
         </div>
-        <p className="mt-1.5 text-sm text-white/60">{t("continueOnPhoneHint")}</p>
+        <p className="mt-1.5 text-sm text-white/60">{hint ?? t("continueOnPhoneHint")}</p>
       </div>
     </div>
   );
