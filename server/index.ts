@@ -24,6 +24,10 @@ const PORT = Number(process.env.PORT) || 2110;
     // the path stable whether esbuild emits CJS or ESM.
     const clientDist = path.resolve(process.cwd(), "dist", "public");
     app.use(express.static(clientDist));
+    // A typo'd or removed API path must fail as an API, not answer 200 with the app's HTML.
+    app.all("/api/*", (_req, res) => {
+      res.status(404).json({ message: "Not found" });
+    });
     app.get("*", (_req, res) => {
       res.sendFile(path.join(clientDist, "index.html"));
     });

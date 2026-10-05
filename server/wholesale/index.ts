@@ -6,7 +6,8 @@ import { db } from "../db.js";
 import { salesReps } from "#shared/schema.js";
 import { formatWholesaleCode, generateWholesaleCode, normalizeWholesaleCode, wholesaleUrl } from "#shared/wholesale.js";
 import { normalizeIpKey, rateLimit } from "../tags/rateLimit.js";
-import { accessDenial, ensureXpotRep, requireXpotManager } from "../routes/xpot/middleware.js";
+import { accessDenial, ensureXpotRep, isManagerOrAdmin, requireXpotManager } from "../routes/xpot/middleware.js";
+import { repModules } from "#shared/modules.js";
 
 // Wholesale prices live in the Stuscle store; Xpot decides who gets them.
 // Every approved rep has a personal code. Stuscle asks Xpot whether a code is
@@ -60,6 +61,9 @@ export async function verifyWholesaleCode(input: string): Promise<WholesaleVerdi
   const [rep] = await db.select().from(salesReps).where(eq(salesReps.wholesaleCode, code)).limit(1);
   if (!rep) return { valid: false, reason: "unknown" };
   if (accessDenial(rep)) return { valid: false, reason: "inactive" };
+  // The code buys Tags kits: a rep whose Tags module was switched off keeps the code row but may not use
+  // it. "inactive" is the reason Stuscle already handles; a new one could break its side.
+  if (!repModules(rep).includes("tags")) return { valid: false, reason: "inactive" };
   return { valid: true, reseller: { id: rep.id, name: rep.displayName } };
 }
 
@@ -100,6 +104,10 @@ export function registerWholesaleRoutes(app: Express) {
       if (!actor) return res.status(401).json({ message: "Authentication required" });
       const denial = accessDenial(actor.rep);
       if (denial) return res.status(403).json(denial);
+      // The code buys Tags kits at wholesale: only for reps who sell Tags (managers always do).
+      if (!isManagerOrAdmin(actor) && !repModules(actor.rep).includes("tags")) {
+        return res.status(403).json({ message: "Tags are not enabled for your account." });
+      }
       const code = await ensureWholesaleCode(actor.rep.id);
       res.json({ code: formatWholesaleCode(code), url: wholesaleUrl(storeBaseUrl(), code) });
     } catch (err) {
@@ -113,6 +121,9 @@ export function registerWholesaleRoutes(app: Express) {
     const repId = Number(req.params.id);
     if (!Number.isInteger(repId) || repId <= 0) return res.status(400).json({ message: "Invalid rep id" });
     try {
+      const [target] = await db.select().from(salesReps).where(eq(salesReps.id, repId)).limit(1);
+      if (!target) return res.status(404).json({ message: "Rep not found" });
+      if (!repModules(target).includes("tags")) return res.status(400).json({ message: "This person does not sell Tags" });
       const code = await assignWholesaleCode(repId);
       res.json({ code: formatWholesaleCode(code) });
     } catch (err) {

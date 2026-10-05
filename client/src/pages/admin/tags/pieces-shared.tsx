@@ -1,64 +1,15 @@
 import { useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Check, Copy } from "lucide-react";
-import {
-  TAG_DESTINATION_TYPES,
-  TAG_PRODUCT_TYPES,
-  TAG_STATUSES,
-  type TagDestinationType,
-  type TagProductType,
-} from "@shared/tags";
 import type { TagBatchItem } from "@shared/tagsApi";
 import { Loader2 } from "@/components/ui/loader";
 import { AdminHttpError, ADMIN_TAGS_KEY, errorMessage, getJson, STALE_MS } from "./api";
 import { CARD, INPUT } from "./ui";
+import { useT } from "@/i18n";
+import { manageTagsMessages } from "@/i18n/messages/manageTags";
 
-// Labels, pickers and small pieces shared by the Overview / Pieces / Team tabs.
-
-export const PRODUCT_LABELS: Record<TagProductType, string> = {
-  google_review_sign: "Google Review sign",
-  business_card: "NFC card",
-  keychain: "NFC keychain",
-  safety_tag: "Safety tag",
-  menu_tag: "Menu tag",
-  booking_tag: "Booking tag",
-  custom: "Custom piece",
-};
-
-export const DESTINATION_LABELS: Record<TagDestinationType, string> = {
-  google_review: "Google review",
-  website: "Website",
-  booking: "Booking",
-  vcard: "Contact card",
-  menu: "Menu",
-  social: "Social profile",
-  custom: "Other",
-};
-
-export const NFC_LABELS: Record<string, string> = {
-  not_programmed: "Not written",
-  programmed: "Written",
-  verified: "Verified",
-  locked: "Locked",
-  failed: "Failed",
-};
-
-export const productLabel = (type: string | null | undefined) =>
-  type ? PRODUCT_LABELS[type as TagProductType] ?? type : "—";
-
-export const destinationLabel = (type: string | null | undefined) =>
-  type ? DESTINATION_LABELS[type as TagDestinationType] ?? type : "—";
-
-export const PRODUCT_OPTIONS = TAG_PRODUCT_TYPES.map((value) => ({ value, label: PRODUCT_LABELS[value] }));
-export const DESTINATION_OPTIONS = TAG_DESTINATION_TYPES.map((value) => ({ value, label: DESTINATION_LABELS[value] }));
-export const STATUS_OPTIONS = TAG_STATUSES.map((value) => ({ value, label: value[0].toUpperCase() + value.slice(1) }));
-
-export const EVENT_LABELS: Record<string, string> = {
-  redirect: "Opened destination",
-  inventory_scan: "Scanned while not activated",
-  disabled_scan: "Scanned while disabled",
-  misconfigured_scan: "Scanned — destination invalid",
-};
+// Pickers and small pieces shared by the Overview / Pieces / Team tabs. The labels for a piece's
+// product, destination, face, status and scan events are in labels.ts (useTagLabels).
 
 // ─── Pickers' data ────────────────────────────────────────────────────────────
 
@@ -106,10 +57,6 @@ export function useBatchOptions() {
     queryFn: async () => (await getJson<TagBatchItem[]>("/api/xpot/admin/tag-batches")).map((b) => ({ id: b.id, batchCode: b.batchCode })),
     staleTime: STALE_MS,
   });
-}
-
-export function repOptionLabel(r: RepOption): string {
-  return r.isActive ? r.displayName : `${r.displayName} (off)`;
 }
 
 // ─── Small UI ─────────────────────────────────────────────────────────────────
@@ -160,12 +107,16 @@ export function Loading({ className = "py-16" }: { className?: string }) {
   );
 }
 
-/** Load failure, with the server's reason (e.g. "Manager access required" on a 403). */
+/**
+ * Load failure, with the server's reason (e.g. "Manager access required" on a 403). `what` is
+ * already translated and fills "Could not load {what}." (e.g. "the pieces" / "as peças").
+ */
 export function LoadError({ what, error }: { what: string; error: unknown }) {
+  const t = useT(manageTagsMessages);
   const forbidden = error instanceof AdminHttpError && (error.status === 401 || error.status === 403);
   return (
     <div className={`${CARD} px-6 py-8 text-center text-sm`}>
-      <p className="text-red-400">{forbidden ? "You do not have access to this." : `Could not load ${what}.`}</p>
+      <p className="text-red-400">{forbidden ? t("noAccessHere") : t("couldNotLoad", { what })}</p>
       <p className="mt-1 text-xs text-white/40">{errorMessage(error)}</p>
     </div>
   );
@@ -181,6 +132,7 @@ async function copyText(text: string): Promise<boolean> {
 }
 
 export function CopyRow({ label, value }: { label: string; value: string }) {
+  const t = useT(manageTagsMessages);
   const [copied, setCopied] = useState(false);
   return (
     <div className="space-y-1">
@@ -189,7 +141,7 @@ export function CopyRow({ label, value }: { label: string; value: string }) {
         <code className="min-w-0 flex-1 truncate rounded-lg bg-white/5 px-2 py-1.5 text-xs text-white/80">{value}</code>
         <button
           type="button"
-          aria-label={`Copy ${label}`}
+          aria-label={t("copyLabel", { label })}
           className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-white/70 hover:bg-white/10"
           onClick={async () => {
             if (await copyText(value)) {

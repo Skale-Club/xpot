@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { z } from "zod";
 import { storage } from "../../storage.js";
-import { requireXpotUser, ensureXpotRep, isManagerOrAdmin, loadAccessibleLead } from "./middleware.js";
+import { repModules } from "#shared/modules.js";
+import { requireXpotUser, requireVisitsModule, ensureXpotRep, isManagerOrAdmin, loadAccessibleLead } from "./middleware.js";
 import { xpotLeadCreateSchema, xpotLeadUpdateSchema, xpotLeadContactCreateSchema } from "#shared/xpot.js";
 import { syncLeadToGhl, syncLeadToXphere } from "./helpers.js";
 import { salesStorage } from "../../storage-sales.js";
@@ -120,7 +121,9 @@ export function createLeadsRouter() {
     })).min(1).max(500),
   });
 
-  router.post("/leads/import-csv", async (req, res) => {
+  // Leads are the businesses both modules sell to, so the list and create/edit stay open to Tags
+  // resellers; importing, the check-in geofence, the CRM push and promoting a prospect are Visits work.
+  router.post("/leads/import-csv", requireVisitsModule, async (req, res) => {
     const actor = (req as any).xpotActor as Awaited<ReturnType<typeof ensureXpotRep>>;
     const { rows } = csvImportSchema.parse(req.body);
 
@@ -218,13 +221,18 @@ export function createLeadsRouter() {
     if (!isManagerOrAdmin(actor!) && lead.ownerRepId !== actor!.rep.id) {
       return res.status(403).json({ message: "Access denied" });
     }
+    // The pipeline status (prospect → lead → …) is Visits work, like POST /leads/:id/promote; a Tags-only
+    // reseller may edit a customer's details but not move it through the funnel.
+    if (input.status !== undefined && !isManagerOrAdmin(actor!) && !repModules(actor!.rep).includes("visits")) {
+      return res.status(403).json({ code: "module_off", message: "Visits are not enabled for your account." });
+    }
 
     const updated = await storage.updateSalesLead(leadId, input);
     res.json({ lead: updated });
   });
 
   // PATCH /leads/:id/location — upsert primary location
-  router.patch("/leads/:id/location", async (req, res) => {
+  router.patch("/leads/:id/location", requireVisitsModule, async (req, res) => {
     const actor = (req as any).xpotActor as Awaited<ReturnType<typeof ensureXpotRep>>;
     const leadId = Number(req.params.id);
 
@@ -253,7 +261,7 @@ export function createLeadsRouter() {
   });
 
   // POST /leads/:id/sync-ghl — manual, explicit, promotes prospect → lead
-  router.post("/leads/:id/sync-ghl", async (req, res) => {
+  router.post("/leads/:id/sync-ghl", requireVisitsModule, async (req, res) => {
     const actor = (req as any).xpotActor as Awaited<ReturnType<typeof ensureXpotRep>>;
     const leadId = Number(req.params.id);
     if (!Number.isFinite(leadId)) return res.status(400).json({ message: "Invalid lead id" });
@@ -271,7 +279,7 @@ export function createLeadsRouter() {
   });
 
   // POST /leads/:id/promote — explicitly promote prospect → lead
-  router.post("/leads/:id/promote", async (req, res) => {
+  router.post("/leads/:id/promote", requireVisitsModule, async (req, res) => {
     const actor = (req as any).xpotActor as Awaited<ReturnType<typeof ensureXpotRep>>;
     const leadId = Number(req.params.id);
     if (!Number.isFinite(leadId)) return res.status(400).json({ message: "Invalid lead id" });
@@ -339,7 +347,7 @@ export function createLeadsRouter() {
       res.json({ lead: updated, photo });
     } catch (err: any) {
       console.error("Photo upload error:", err);
-      res.status(500).json({ message: err.message || "Failed to upload photo" });
+      res.status(500).json({ message: "Failed to upload photo" });
     }
   });
 

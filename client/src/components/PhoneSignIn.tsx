@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Clock3, Loader2, MessageCircle, Phone, ShieldOff } from "lucide-react";
-import { PHONE_COUNTRIES, formatPhone, normalizePhone } from "@shared/phone";
+import { formatPhone, normalizePhone } from "@shared/phone";
+import { CountryCodePicker } from "@/components/CountryCodePicker";
 import { useT } from "@/i18n";
 import { signinMessages } from "@/i18n/messages/signin";
 import { initSupabase } from "@/lib/supabase";
@@ -280,26 +281,15 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
   return (
     <div className="space-y-4">
       <form onSubmit={submitPhone} className="space-y-4" data-testid="signin-phone">
-        <p className="text-center text-sm text-white/60">{t("subtitle")}</p>
         {errorBox}
-        <label className="block space-y-2">
-          <span className="text-sm font-medium text-white/80">{t("phoneLabel")}</span>
-          <div className="flex gap-2">
-            <select
-              value={countryCode}
-              onChange={(e) => setCountryCode(e.target.value)}
-              aria-label={t("country")}
-              className="h-12 shrink-0 rounded-xl border border-white/10 bg-white/5 px-2 text-base text-white outline-none [color-scheme:dark] focus:border-blue-500/50"
-            >
-              {PHONE_COUNTRIES.map((c) => (
-                <option key={c.code} value={c.code} className="bg-[#0d1424]">
-                  {c.flag} +{c.code}
-                </option>
-              ))}
-            </select>
+        <div className="space-y-2">
+          <label htmlFor="signin-phone" className="block text-sm font-medium text-white/80">{t("phoneLabel")}</label>
+          <div className="flex h-12 gap-2">
+            <CountryCodePicker value={countryCode} onChange={setCountryCode} label={t("country")} />
             <div className="relative flex-1">
               <Phone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
               <input
+                id="signin-phone"
                 value={phoneInput}
                 onChange={(e) => setPhoneInput(e.target.value)}
                 type="tel"
@@ -313,7 +303,7 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
               />
             </div>
           </div>
-        </label>
+        </div>
         <button type="submit" disabled={busy || phoneInput.replace(/\D/g, "").length < 7} className={PRIMARY} data-testid="button-send-code">
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
           {t("sendCode")}

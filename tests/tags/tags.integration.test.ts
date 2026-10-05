@@ -79,6 +79,20 @@ test.skipIf(!enabled)("tags: kits, reseller isolation, sales, scans, report, pro
     assert.equal(batchTags.length, 10);
     assert.ok(batchTags.every((t) => t.repId === null));
 
+    // The face (what is printed): a keychain has none until the batch says so; a piece can override it.
+    assert.equal((await api("GET", `/api/xpot/tags/${batchTags[0].id}`, "it-admin")).json.face, null);
+    assert.equal((await api("PATCH", `/api/xpot/admin/tag-batches/${batch.json.id}`, "it-admin", { face: "instagram" })).status, 200);
+    const faced = (await api("GET", `/api/xpot/tags?batchId=${batch.json.id}`, "it-admin")).json as Array<{ id: string; face: string | null; ownFace: string | null }>;
+    assert.ok(faced.every((t) => t.face === "instagram" && t.ownFace === null));
+    assert.equal((await api("PATCH", `/api/xpot/admin/tags/${batchTags[9].id}`, "it-admin", { face: "email" })).status, 200);
+    const overridden = (await api("GET", `/api/xpot/tags/${batchTags[9].id}`, "it-admin")).json;
+    assert.equal(overridden.face, "email");
+    assert.equal(overridden.ownFace, "email");
+    const listedBatch = ((await api("GET", "/api/xpot/admin/tag-batches", "it-admin")).json as Array<{ id: string; face: string | null; ownFace: string | null }>)
+      .find((b) => b.id === batch.json.id);
+    assert.equal(listedBatch?.face, "instagram");
+    assert.equal((await api("PATCH", `/api/xpot/admin/tags/${batchTags[9].id}`, "it-admin", { face: "myspace" })).status, 400);
+
     // Kits: 3 to Ana by batch + quantity (lowest serials), 2 to Bruno by code.
     const kitA = await api("POST", "/api/xpot/admin/tag-kits", "it-admin", { repId: repId["it-ana"], batchId: batch.json.id, quantity: 3, note: "WhatsApp order #1" });
     assert.equal(kitA.status, 201, kitA.text);

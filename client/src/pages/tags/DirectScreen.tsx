@@ -69,86 +69,91 @@ export default function DirectScreen() {
       <TopBar title={t("directTitle")} eyebrow={t("directEyebrow")} identity="direct" />
       <Banner banner={banner} />
 
-      <section className="rounded-[20px] border border-emerald-400/20 bg-emerald-400/[0.05] p-4">
-        <p className="flex items-start gap-2 text-sm text-white/60">
-          <Info className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" />
-          {t("directExplain")}
-        </p>
-        {current && (
-          <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.04] p-3">
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-300">{t("onChipNow")}</p>
-            <div className="mt-1 flex items-center gap-2">
-              <a href={current} target="_blank" rel="noopener noreferrer" className="min-w-0 flex-1 break-all text-sm font-semibold text-white underline-offset-2 active:underline">
-                {current}
-              </a>
-              <CopyButton text={current} label={t("copyLink")} />
+      {/* Desktop: the form on the left, the recent writes beside it. */}
+      <div className="lg:grid lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start lg:gap-6">
+        <div>
+          <section className="rounded-[20px] border border-emerald-400/20 bg-emerald-400/[0.05] p-4">
+            <p className="flex items-start gap-2 text-sm text-white/60">
+              <Info className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" />
+              {t("directExplain")}
+            </p>
+            {current && (
+              <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.04] p-3">
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-300">{t("onChipNow")}</p>
+                <div className="mt-1 flex items-center gap-2">
+                  <a href={current} target="_blank" rel="noopener noreferrer" className="min-w-0 flex-1 break-all text-sm font-semibold text-white underline-offset-2 active:underline">
+                    {current}
+                  </a>
+                  <CopyButton text={current} label={t("copyLink")} />
+                </div>
+              </div>
+            )}
+          </section>
+
+          <section className={`${CARD} mt-4 space-y-4 p-4`}>
+            <div>
+              <FieldLabel>{current ? t("newLink") : t("customerLink")}</FieldLabel>
+              <LinkInput value={link} onChange={setLink} placeholder={t("linkPlaceholder")} onPasteFailed={() => show({ tone: "error", text: tc("pasteFailed") })} />
+              <ReviewLinkAssist
+                link={link}
+                isReview={!!link.trim() && guessDestinationType(link) === "google_review"}
+                onPick={(place) => {
+                  setLink(place.reviewUrl);
+                  if (!label.trim() && place.name) setLabel(t("reviewLabelDefault", { name: place.name }).slice(0, 120));
+                  show({ tone: "ok", text: place.name ? t("reviewReady", { name: place.name }) : t("reviewReadyNoName") });
+                }}
+              />
             </div>
-          </div>
-        )}
-      </section>
+            <div>
+              <FieldLabel>{t("customerOptional")}</FieldLabel>
+              <LeadPicker value={lead} onChange={setLead} />
+            </div>
+            <div>
+              <FieldLabel>{t("labelField")}</FieldLabel>
+              <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder={t("directLabelPlaceholder")} maxLength={120} className={INPUT} />
+            </div>
+            <button type="button" onClick={prepare} disabled={!link.trim()} className={BTN_DIRECT} data-testid="button-write-direct">
+              <Nfc className="h-5 w-5" />
+              {t("writeToChip")}
+            </button>
+          </section>
+        </div>
 
-      <section className={`${CARD} mt-4 space-y-4 p-4`}>
-        <div>
-          <FieldLabel>{current ? t("newLink") : t("customerLink")}</FieldLabel>
-          <LinkInput value={link} onChange={setLink} placeholder={t("linkPlaceholder")} onPasteFailed={() => show({ tone: "error", text: tc("pasteFailed") })} />
-          <ReviewLinkAssist
-            link={link}
-            isReview={!!link.trim() && guessDestinationType(link) === "google_review"}
-            onPick={(place) => {
-              setLink(place.reviewUrl);
-              if (!label.trim() && place.name) setLabel(t("reviewLabelDefault", { name: place.name }).slice(0, 120));
-              show({ tone: "ok", text: place.name ? t("reviewReady", { name: place.name }) : t("reviewReadyNoName") });
-            }}
-          />
-        </div>
-        <div>
-          <FieldLabel>{t("customerOptional")}</FieldLabel>
-          <LeadPicker value={lead} onChange={setLead} />
-        </div>
-        <div>
-          <FieldLabel>{t("labelField")}</FieldLabel>
-          <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder={t("directLabelPlaceholder")} maxLength={120} className={INPUT} />
-        </div>
-        <button type="button" onClick={prepare} disabled={!link.trim()} className={BTN_DIRECT} data-testid="button-write-direct">
-          <Nfc className="h-5 w-5" />
-          {t("writeToChip")}
-        </button>
-      </section>
-
-      <section className="mt-8">
-        <h2 className={`mb-2 px-1 ${EYEBROW_MUTED}`}>{t("recentDirect")}</h2>
-        {!writes || writes.length === 0 ? (
-          <div className={`${CARD} px-6 py-8 text-center text-sm text-white/45`}>{t("directEmpty")}</div>
-        ) : (
-          <ul className={`${CARD} divide-y divide-white/[0.06] overflow-hidden`}>
-            {writes.slice(0, 12).map((w) => {
-              const age = ageOf(new Date(w.createdAt).getTime());
-              return (
-                <li key={w.id} className="flex items-center gap-3 px-4 py-3">
-                  <span className={`h-9 w-9 ${ICON_BLOCK_DIRECT}`}>
-                    <Link2 className="h-4 w-4" />
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setLink(w.url);
-                      window.scrollTo({ top: 0, behavior: "smooth" });
-                    }}
-                    className="min-w-0 flex-1 text-left"
-                  >
-                    <span className="block truncate text-sm font-semibold text-white">{shortUrl(w.url)}</span>
-                    <span className="block truncate text-xs text-white/40">{[w.leadName, w.label].filter(Boolean).join(" · ") || t("noCustomer")}</span>
-                  </button>
-                  <div className="flex shrink-0 flex-col items-end gap-1">
-                    <Pill tone={w.verified ? "green" : "slate"}>{w.verified ? t("checked") : t("written")}</Pill>
-                    <span className="text-xs text-white/35">{t(age.key, { n: age.n })}</span>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
+        <section className="mt-8 lg:mt-0">
+          <h2 className={`mb-2 px-1 ${EYEBROW_MUTED}`}>{t("recentDirect")}</h2>
+          {!writes || writes.length === 0 ? (
+            <div className={`${CARD} px-6 py-8 text-center text-sm text-white/45`}>{t("directEmpty")}</div>
+          ) : (
+            <ul className={`${CARD} divide-y divide-white/[0.06] overflow-hidden`}>
+              {writes.slice(0, 12).map((w) => {
+                const age = ageOf(new Date(w.createdAt).getTime());
+                return (
+                  <li key={w.id} className="flex items-center gap-3 px-4 py-3">
+                    <span className={`h-9 w-9 ${ICON_BLOCK_DIRECT}`}>
+                      <Link2 className="h-4 w-4" />
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLink(w.url);
+                        window.scrollTo({ top: 0, behavior: "smooth" });
+                      }}
+                      className="min-w-0 flex-1 text-left"
+                    >
+                      <span className="block truncate text-sm font-semibold text-white">{shortUrl(w.url)}</span>
+                      <span className="block truncate text-xs text-white/40">{[w.leadName, w.label].filter(Boolean).join(" · ") || t("noCustomer")}</span>
+                    </button>
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      <Pill tone={w.verified ? "green" : "slate"}>{w.verified ? t("checked") : t("written")}</Pill>
+                      <span className="text-xs text-white/35">{t(age.key, { n: age.n })}</span>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      </div>
 
       <WriteSheet
         open={writeOpen}

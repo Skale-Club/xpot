@@ -10,10 +10,15 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { SalesAppSettings } from "#shared/schema.js";
 import { Field, PrimaryButton, inputCls, inputStyle } from "@/pages/xpot/components/sales/ui";
+import { useT } from "@/i18n";
+import { manageMessages } from "@/i18n/messages/manage";
+import { shellMessages } from "@/i18n/messages/shell";
 
 export function AdminSettings() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const t = useT(manageMessages);
+  const ts = useT(shellMessages);
   const query = useQuery<SalesAppSettings>({ queryKey: ["/api/xpot/admin/settings"] });
   const [draft, setDraft] = useState<Partial<SalesAppSettings> | null>(null);
 
@@ -21,11 +26,11 @@ export function AdminSettings() {
     mutationFn: async (body: Partial<SalesAppSettings>) =>
       (await apiRequest("PUT", "/api/xpot/admin/settings", body)).json() as Promise<SalesAppSettings>,
     onSuccess: async () => {
-      toast({ title: "Settings saved", variant: "success" });
+      toast({ title: t("settingsSaved"), variant: "success" });
       setDraft(null);
       await queryClient.invalidateQueries({ queryKey: ["/api/xpot/admin/settings"] });
     },
-    onError: (err: Error) => toast({ title: "Could not save", description: err.message, variant: "destructive" }),
+    onError: (err: Error) => toast({ title: t("couldNotSave"), description: err.message, variant: "destructive" }),
   });
 
   if (query.isLoading || !query.data) {
@@ -36,14 +41,15 @@ export function AdminSettings() {
   const set = <K extends keyof SalesAppSettings>(k: K, v: SalesAppSettings[K]) => setDraft((d) => ({ ...(d ?? {}), [k]: v }));
 
   return (
-    <div className="max-w-xl space-y-5">
+    <div className="space-y-5">
       <div>
-        <h2 className="text-sm font-semibold text-white/80">Check-in rules</h2>
-        <p className="text-xs text-white/40">How a visit is validated against the company's location.</p>
+        <h2 className="text-sm font-semibold text-white/80">{ts("manageCheckInRules")}</h2>
+        <p className="text-xs text-white/40">{t("checkInRulesHint")}</p>
       </div>
 
-      <div className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-        <Field label="Default geofence radius" hint="metres — used when a location has no radius of its own">
+      {/* The three rules sit side by side on desktop instead of a narrow column. */}
+      <div className="grid gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 lg:grid-cols-3 lg:items-start">
+        <Field label={t("defaultRadius")} hint={t("defaultRadiusHint")}>
           <input
             value={current.defaultGeofenceRadiusMeters}
             inputMode="numeric"
@@ -58,8 +64,8 @@ export function AdminSettings() {
           <input type="checkbox" checked={current.checkInRequiresGps}
             onChange={(e) => set("checkInRequiresGps", e.target.checked)} className="mt-0.5 accent-indigo-500" />
           <span>
-            <span className="block text-sm text-white/85">Require GPS for check-in</span>
-            <span className="block text-[11px] text-white/40">A check-in outside the geofence is refused unless the rep gives a reason.</span>
+            <span className="block text-sm text-white/85">{t("requireGps")}</span>
+            <span className="block text-[11px] text-white/40">{t("requireGpsHint")}</span>
           </span>
         </label>
 
@@ -68,8 +74,8 @@ export function AdminSettings() {
           <input type="checkbox" checked={current.allowManualOverride}
             onChange={(e) => set("allowManualOverride", e.target.checked)} className="mt-0.5 accent-indigo-500" />
           <span>
-            <span className="block text-sm text-white/85">Allow manual override</span>
-            <span className="block text-[11px] text-white/40">Lets a rep check in outside the geofence by writing why. The visit is flagged.</span>
+            <span className="block text-sm text-white/85">{t("allowOverride")}</span>
+            <span className="block text-[11px] text-white/40">{t("allowOverrideHint")}</span>
           </span>
         </label>
       </div>
@@ -81,7 +87,7 @@ export function AdminSettings() {
         onClick={() => draft && save.mutate(draft)}
         className="!w-auto px-5"
       >
-        Save settings
+        {t("saveSettings")}
       </PrimaryButton>
     </div>
   );

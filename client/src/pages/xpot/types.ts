@@ -41,19 +41,6 @@ export type EnrichedSalesOpportunity = SalesOpportunity & {
   lead?: SalesLead;
 };
 
-export type XpotTab = {
-  id: string;
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-};
-
-export type XpotMetricCard = {
-  label: string;
-  value: string | number;
-  change?: string;
-  trend?: "up" | "down" | "neutral";
-};
-
 export type GooglePlaceResult = {
   name: string;
   address: string;

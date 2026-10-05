@@ -18,10 +18,11 @@ export function isStandaloneDisplay(): boolean {
   );
 }
 
-// Query errors carry the HTTP status in the message ("401: Unauthorized"),
-// which is how getQueryFn in queryClient.ts formats them.
+/** The HTTP status of a failed request: ApiError carries it; older errors had it as a "401: …" prefix. */
 export function getHttpStatus(error: unknown): number | null {
   if (!(error instanceof Error)) return null;
+  const status = (error as { status?: unknown }).status;
+  if (typeof status === "number") return status;
   const match = /^(\d+):/.exec(error.message);
   return match ? Number(match[1]) : null;
 }

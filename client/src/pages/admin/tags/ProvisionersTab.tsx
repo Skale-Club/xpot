@@ -3,6 +3,8 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Copy, KeyRound, Laptop, X } from "lucide-react";
 import type { ProvisionerDeviceItem } from "@shared/tagsApi";
 import { useToast } from "@/hooks/use-toast";
+import { useT } from "@/i18n";
+import { manageTagsMessages } from "@/i18n/messages/manageTags";
 import { ADMIN_TAGS_KEY, STALE_MS, errorMessage, formatDateTime, getJson, invalidateAdminTags, sendJson } from "./api";
 import { BTN, BTN_DANGER, CARD, Empty, INPUT, SectionTitle } from "./ui";
 import { ConfirmDialog, ErrorLine, Loading } from "./batches-shared";
@@ -13,10 +15,14 @@ const DEVICE_TONES: Record<string, string> = {
   revoked: "bg-white/5 text-white/40",
 };
 
+const DEVICE_KEYS = { active: "device_active", pairing: "device_pairing", revoked: "device_revoked" } as const;
+
 function DevicePill({ status }: { status: string }) {
+  const t = useT(manageTagsMessages);
+  const key = DEVICE_KEYS[status as keyof typeof DEVICE_KEYS];
   return (
     <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${DEVICE_TONES[status] ?? "bg-white/10 text-white/60"}`}>
-      {status === "pairing" ? "waiting for code" : status}
+      {key ? t(key) : status}
     </span>
   );
 }
@@ -27,19 +33,20 @@ interface Pairing {
   deviceName: string;
 }
 
-function CopyButton({ value, label }: { value: string; label: string }) {
+function CopyButton({ value, label, copiedTitle }: { value: string; label: string; copiedTitle: string }) {
+  const t = useT(manageTagsMessages);
   const { toast } = useToast();
   return (
     <button
       type="button"
       onClick={() => {
         navigator.clipboard?.writeText(value).then(
-          () => toast({ title: `${label} copied` }),
-          () => toast({ title: "Could not copy", variant: "destructive" }),
+          () => toast({ title: copiedTitle }),
+          () => toast({ title: t("couldNotCopy"), variant: "destructive" }),
         );
       }}
       className="rounded-md p-1.5 text-white/40 hover:bg-white/10 hover:text-white"
-      aria-label={`Copy ${label.toLowerCase()}`}
+      aria-label={t("copyLabel", { label: label.toLowerCase() })}
     >
       <Copy className="h-4 w-4" />
     </button>
@@ -47,6 +54,7 @@ function CopyButton({ value, label }: { value: string; label: string }) {
 }
 
 function PairingCode({ pairing, onClose }: { pairing: Pairing; onClose: () => void }) {
+  const t = useT(manageTagsMessages);
   const server = typeof window !== "undefined" ? window.location.origin : "";
   return (
     <div className="relative rounded-2xl border border-blue-500/30 bg-blue-500/[0.06] p-5" data-testid="admin-tags-pairing-code">
@@ -54,27 +62,35 @@ function PairingCode({ pairing, onClose }: { pairing: Pairing; onClose: () => vo
         type="button"
         onClick={onClose}
         className="absolute right-3 top-3 rounded-md p-1 text-white/40 hover:bg-white/10 hover:text-white"
-        aria-label="Hide pairing code"
+        aria-label={t("hidePairingCode")}
       >
         <X className="h-4 w-4" />
       </button>
-      <p className="text-center text-xs text-white/50">Pairing code for {pairing.deviceName}</p>
+      <p className="text-center text-xs text-white/50">{t("pairingCodeFor", { name: pairing.deviceName })}</p>
       <div className="my-2 flex items-center justify-center gap-2">
         <p className="select-all font-mono text-4xl font-bold tracking-[0.2em] text-white">{pairing.code}</p>
-        <CopyButton value={pairing.code} label="Pairing code" />
+        <CopyButton value={pairing.code} label={t("pairingCodeLabel")} copiedTitle={t("pairingCodeCopied")} />
       </div>
-      <p className="text-center text-xs text-white/45">Single use · expires {formatDateTime(pairing.expiresAt)} · shown only once</p>
+      <p className="text-center text-xs text-white/45">{t("pairingCodeExpiry", { date: formatDateTime(pairing.expiresAt) })}</p>
       <ol className="mx-auto mt-4 max-w-md list-decimal space-y-1 pl-5 text-sm text-white/70">
-        <li>On the computer with the USB NFC reader, open the <span className="font-semibold text-white">Xpot NFC Writer</span> desktop app.</li>
         <li>
-          Server address:{" "}
+          {t("pairStep1Before")}
+          <span className="font-semibold text-white">Xpot NFC Writer</span>
+          {t("pairStep1After")}
+        </li>
+        <li>
+          {t("pairStep2")}{" "}
           <span className="inline-flex items-center gap-1 font-mono text-white">
             {server}
-            <CopyButton value={server} label="Server address" />
+            <CopyButton value={server} label={t("serverAddressLabel")} copiedTitle={t("serverAddressCopied")} />
           </span>
         </li>
-        <li>Type the pairing code above and press Pair.</li>
-        <li>This list shows the computer as <span className="font-semibold text-emerald-300">active</span> once it's paired.</li>
+        <li>{t("pairStep3")}</li>
+        <li>
+          {t("pairStep4Before")}
+          <span className="font-semibold text-emerald-300">{t("device_active")}</span>
+          {t("pairStep4After")}
+        </li>
       </ol>
     </div>
   );
@@ -82,6 +98,7 @@ function PairingCode({ pairing, onClose }: { pairing: Pairing; onClose: () => vo
 
 /** Desktop "Xpot NFC Writer" installs: pair a computer, see when it was last seen, revoke it. */
 export function ProvisionersTab(_props: { go: (path: string) => void }) {
+  const t = useT(manageTagsMessages);
   const { toast } = useToast();
   const [name, setName] = useState("");
   const [pairing, setPairing] = useState<Pairing | null>(null);
@@ -102,7 +119,7 @@ export function ProvisionersTab(_props: { go: (path: string) => void }) {
       setName("");
       void invalidateAdminTags();
     },
-    onError: (err) => toast({ title: "Could not create a pairing code", description: errorMessage(err), variant: "destructive" }),
+    onError: (err) => toast({ title: t("couldNotCreatePairingCode"), description: errorMessage(err), variant: "destructive" }),
   });
 
   const revoke = useMutation({
@@ -110,9 +127,9 @@ export function ProvisionersTab(_props: { go: (path: string) => void }) {
     onSuccess: (device) => {
       void invalidateAdminTags();
       setRevoking(null);
-      toast({ title: `${device.deviceName} revoked` });
+      toast({ title: t("deviceRevokedToast", { name: device.deviceName }) });
     },
-    onError: (err) => toast({ title: "Could not revoke", description: errorMessage(err), variant: "destructive" }),
+    onError: (err) => toast({ title: t("couldNotRevoke"), description: errorMessage(err), variant: "destructive" }),
   });
 
   const submit = (e: FormEvent) => {
@@ -126,37 +143,36 @@ export function ProvisionersTab(_props: { go: (path: string) => void }) {
         <div>
           <p className="flex items-center gap-2 text-sm font-semibold text-white">
             <KeyRound className="h-4 w-4 text-white/50" />
-            Pair a computer
+            {t("pairComputer")}
           </p>
           <p className="mt-1 text-xs text-white/45">
-            Install the Xpot NFC Writer desktop app on the computer with the USB NFC reader, then pair it with a one-time code. The app
-            gets a token that can only fetch and report NFC writing jobs — no admin access.
+            {t("pairComputerHint")}
           </p>
         </div>
         <form onSubmit={submit} className="flex flex-col gap-2 sm:flex-row">
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Computer name, e.g. Workshop PC"
+            placeholder={t("computerNamePlaceholder")}
             maxLength={80}
             className={INPUT}
             data-testid="admin-tags-provisioner-name"
           />
           <button type="submit" disabled={!name.trim() || create.isPending} className={`${BTN} shrink-0`}>
-            {create.isPending ? "Creating…" : "Create pairing code"}
+            {create.isPending ? t("creating") : t("createPairingCode")}
           </button>
         </form>
         {pairing && <PairingCode pairing={pairing} onClose={() => setPairing(null)} />}
       </section>
 
       <section>
-        <SectionTitle>Computers</SectionTitle>
+        <SectionTitle>{t("computers")}</SectionTitle>
         {isLoading ? (
           <Loading />
         ) : isError ? (
-          <ErrorLine>Could not load NFC writers.</ErrorLine>
+          <ErrorLine>{t("computersLoadError")}</ErrorLine>
         ) : devices.length === 0 ? (
-          <Empty>No computers paired yet.</Empty>
+          <Empty>{t("noComputers")}</Empty>
         ) : (
           <ul className={`${CARD} divide-y divide-white/5`}>
             {devices.map((d) => (
@@ -170,16 +186,23 @@ export function ProvisionersTab(_props: { go: (path: string) => void }) {
                     </p>
                     <p className="truncate text-xs text-white/40">
                       {d.status === "pairing"
-                        ? `Code not used yet · expires ${formatDateTime(d.pairingExpiresAt)}`
+                        ? t("deviceCodeUnused", { date: formatDateTime(d.pairingExpiresAt) })
                         : d.status === "revoked"
-                          ? `Revoked ${formatDateTime(d.revokedAt)}${d.pairedAt ? ` · paired ${formatDateTime(d.pairedAt)}` : ""}`
-                          : `${d.platform ?? "Unknown OS"} · v${d.appVersion ?? "?"} · last seen ${formatDateTime(d.lastSeenAt)}${d.tokenPrefix ? ` · token ${d.tokenPrefix}…` : ""}`}
+                          ? d.pairedAt
+                            ? t("deviceRevokedPairedAt", { revoked: formatDateTime(d.revokedAt), paired: formatDateTime(d.pairedAt) })
+                            : t("deviceRevokedAt", { revoked: formatDateTime(d.revokedAt) })
+                          : t(d.tokenPrefix ? "deviceSeenToken" : "deviceSeen", {
+                              platform: d.platform ?? t("unknownOs"),
+                              version: d.appVersion ?? "?",
+                              date: formatDateTime(d.lastSeenAt),
+                              token: d.tokenPrefix ?? "",
+                            })}
                     </p>
                   </div>
                 </div>
                 {d.status !== "revoked" && (
                   <button type="button" onClick={() => setRevoking(d)} disabled={revoke.isPending} className={`${BTN_DANGER} shrink-0`}>
-                    {d.status === "pairing" ? "Cancel code" : "Revoke"}
+                    {d.status === "pairing" ? t("cancelCode") : t("revoke")}
                   </button>
                 )}
               </li>
@@ -191,13 +214,13 @@ export function ProvisionersTab(_props: { go: (path: string) => void }) {
       <ConfirmDialog
         open={!!revoking}
         onOpenChange={(open) => !open && setRevoking(null)}
-        title={revoking?.status === "pairing" ? `Cancel the code for “${revoking?.deviceName}”?` : `Revoke “${revoking?.deviceName}”?`}
+        title={t(revoking?.status === "pairing" ? "cancelCodeTitle" : "revokeNamedTitle", { name: revoking?.deviceName ?? "" })}
         description={
           revoking?.status === "pairing"
-            ? "The pairing code stops working."
-            : "It stops working immediately and its open NFC jobs are cancelled. Pair it again with a new code to use it."
+            ? t("cancelCodeDesc")
+            : t("revokeDeviceDesc")
         }
-        confirmLabel={revoking?.status === "pairing" ? "Cancel code" : "Revoke"}
+        confirmLabel={revoking?.status === "pairing" ? t("cancelCode") : t("revoke")}
         destructive
         busy={revoke.isPending}
         onConfirm={() => revoking && revoke.mutate(revoking.id)}

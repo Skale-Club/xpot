@@ -10,19 +10,12 @@ import { useT } from "@/i18n";
 import { checkinMessages } from "@/i18n/messages/checkin";
 import { tabs } from "../utils";
 import { useXpotShared } from "./useXpotShared";
+import { getHttpStatus } from "@/lib/pwa";
 import type { DashboardResponse, FullSalesLead, EnrichedSalesVisit, XpotMeResponse } from "../types";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyMutation = ReturnType<typeof useMutation<any, any, any, any>>;
 
-function getHttpStatus(error: unknown) {
-  if (!(error instanceof Error)) {
-    return null;
-  }
-
-  const match = error.message.match(/^(\d+):/);
-  return match ? Number(match[1]) : null;
-}
 
 export function useXpotQueries() {
   const [pathname, setLocation] = useLocation();

@@ -11,11 +11,10 @@ const en = {
   dashboard: "Dashboard",
   signIn: "Sign in",
   welcomeTitle: "Welcome to Xpot",
-  welcomeSub: "Sign in or create your account with your phone number.",
+  welcomeSub: "Sign in or create your account with your phone number. We'll text you a code.",
   sessionDenied: "Access denied or failed to retrieve session.",
   navHow: "How it works",
   navTools: "Tools",
-  navDesktop: "Desktop",
 
   // Hero
   heroBadge: "For field sales teams",
@@ -66,14 +65,6 @@ const en = {
   tags3: "Write the NFC chip from the phone",
   tags4: "Scans per piece and per customer",
 
-  // Desktop
-  deskTitle: "On the phone in the street. On the computer at the office.",
-  deskBody: "The same account opens on a computer with a full layout: tables, the customer beside the list, keyboard shortcuts and one search over everything. Check-ins stay on the phone, where the GPS is.",
-  deskPoint1: "Edit leads, contacts and stock in bulk",
-  deskPoint2: "Review the day's visits on a calendar",
-  deskPoint3: "Ctrl K to find any company or piece",
-  mockDeskLeads: "Leads",
-  mockDeskSold: "Sold",
 
   // CRM sync
   syncTitle: "Your CRM stays up to date",
@@ -109,11 +100,10 @@ export const landingMessages: Dictionary<typeof en> = {
     dashboard: "Painel",
     signIn: "Entrar",
     welcomeTitle: "Bem-vindo ao Xpot",
-    welcomeSub: "Entre ou crie sua conta com o número do seu celular.",
+    welcomeSub: "Entre ou crie sua conta com o número do seu celular. Vamos mandar um código por SMS.",
     sessionDenied: "Acesso negado ou não foi possível abrir a sessão.",
     navHow: "Como funciona",
     navTools: "Ferramentas",
-    navDesktop: "Computador",
 
     heroBadge: "Para equipes de venda externa",
     heroTitleLine1: "Toda visita registrada.",
@@ -160,13 +150,6 @@ export const landingMessages: Dictionary<typeof en> = {
     tags3: "Grave o chip NFC pelo celular",
     tags4: "Leituras por peça e por cliente",
 
-    deskTitle: "Na rua pelo celular. No escritório pelo computador.",
-    deskBody: "A mesma conta abre no computador com tela cheia: tabelas, o cliente ao lado da lista, atalhos de teclado e uma busca em tudo. O check-in fica no celular, onde está o GPS.",
-    deskPoint1: "Edite clientes, contatos e estoque em volume",
-    deskPoint2: "Revise as visitas do dia num calendário",
-    deskPoint3: "Ctrl K para achar qualquer empresa ou peça",
-    mockDeskLeads: "Clientes",
-    mockDeskSold: "Vendido",
 
     syncTitle: "Seu CRM sempre em dia",
     syncBody: "Visitas, desfechos e vendas vão para o Xphere e o GoHighLevel em segundo plano. Se um envio falhar, o app mostra para você mandar de novo.",
@@ -196,11 +179,10 @@ export const landingMessages: Dictionary<typeof en> = {
     dashboard: "Panel",
     signIn: "Entrar",
     welcomeTitle: "Bienvenido a Xpot",
-    welcomeSub: "Entra o crea tu cuenta con tu número de teléfono.",
+    welcomeSub: "Entra o crea tu cuenta con tu número de celular. Te mandamos un código por SMS.",
     sessionDenied: "Acceso denegado o no se pudo abrir la sesión.",
     navHow: "Cómo funciona",
     navTools: "Herramientas",
-    navDesktop: "Computadora",
 
     heroBadge: "Para equipos de venta en la calle",
     heroTitleLine1: "Cada visita registrada.",
@@ -247,13 +229,6 @@ export const landingMessages: Dictionary<typeof en> = {
     tags3: "Graba el chip NFC desde el teléfono",
     tags4: "Lecturas por pieza y por cliente",
 
-    deskTitle: "En la calle con el teléfono. En la oficina con la computadora.",
-    deskBody: "La misma cuenta se abre en la computadora con pantalla completa: tablas, el cliente junto a la lista, atajos de teclado y una búsqueda en todo. El check-in se queda en el teléfono, donde está el GPS.",
-    deskPoint1: "Edita clientes, contactos y stock en volumen",
-    deskPoint2: "Revisa las visitas del día en un calendario",
-    deskPoint3: "Ctrl K para encontrar cualquier empresa o pieza",
-    mockDeskLeads: "Clientes",
-    mockDeskSold: "Vendido",
 
     syncTitle: "Tu CRM siempre al día",
     syncBody: "Visitas, resultados y ventas se envían a Xphere y GoHighLevel en segundo plano. Si un envío falla, la app lo muestra para enviarlo de nuevo.",

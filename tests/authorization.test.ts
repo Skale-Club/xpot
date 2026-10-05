@@ -101,7 +101,7 @@ const { createOpportunitiesRouter } = await import("../server/routes/xpot/opport
 const { createLeadsRouter } = await import("../server/routes/xpot/leads.js");
 const { createVisitsRouter } = await import("../server/routes/xpot/visits.js");
 const { createAdminRouter } = await import("../server/routes/xpot/admin.js");
-const { ensureXpotRep } = await import("../server/routes/xpot/middleware.js");
+const { ensureXpotRep, requireVisitsModule, VISITS_ONLY_PATHS } = await import("../server/routes/xpot/middleware.js");
 
 // ─── Harness ─────────────────────────────────────────────────────────────────
 
@@ -366,5 +366,46 @@ describe("SEG-08 — one rule for who sees everything", () => {
   it("the same rule governs opportunities", async () => {
     await request(appFor(createOpportunitiesRouter(), "user-m"), "GET", "/opportunities?all=true");
     expect(storage.listSalesOpportunities).toHaveBeenCalledWith(expect.objectContaining({ repId: undefined }));
+  });
+});
+
+// ─── MOD-01 ──────────────────────────────────────────────────────────────────
+
+describe("MOD-01 — Visits APIs refuse a Tags-only reseller", () => {
+  /** The tasks router behind the same gate ./index.ts mounts in front of the Visits routers. */
+  function gated(userId: string, isAdmin = false) {
+    const app = express();
+    app.use(express.json());
+    app.use((req, _res, next) => {
+      (req as any).session = { userId, email: `${userId}@x.test`, isAdmin };
+      next();
+    });
+    app.use([...VISITS_ONLY_PATHS], requireVisitsModule);
+    app.use(createTasksRouter());
+    return app;
+  }
+
+  it("403s a rep whose modules are only tags", async () => {
+    store.reps.set(1, { ...REP_A, modules: ["tags"] });
+    const res = await request(gated("user-a"), "GET", "/tasks");
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe("module_off");
+  });
+
+  it("serves a rep with Visits, and one with no module list (both by default)", async () => {
+    store.reps.set(1, { ...REP_A, modules: ["visits"] });
+    expect((await request(gated("user-a"), "GET", "/tasks")).status).toBe(200);
+    store.reps.set(1, { ...REP_A, modules: null });
+    expect((await request(gated("user-a"), "GET", "/tasks")).status).toBe(200);
+  });
+
+  it("a manager keeps every module whatever the column says", async () => {
+    store.reps.set(3, { ...MANAGER, modules: ["tags"] });
+    expect((await request(gated("user-m"), "GET", "/tasks")).status).toBe(200);
+  });
+
+  it("leaves leads out: Tags picks and creates its customers there", () => {
+    expect(VISITS_ONLY_PATHS).not.toContain("/leads");
+    expect(VISITS_ONLY_PATHS).not.toContain("/place-search");
   });
 });

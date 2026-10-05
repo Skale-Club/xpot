@@ -14,23 +14,28 @@ import { BatchDetail } from "./BatchDetail";
 import { TeamTab } from "./TeamTab";
 import { ProvisionersTab } from "./ProvisionersTab";
 import { JourneyTab } from "./JourneyTab";
-import { useIsTagAdmin } from "./journey-shared";
+import { AdminBadge, useIsSuperAdmin } from "@/components/xpot/AdminBadge";
+import { useT } from "@/i18n";
+import { shellMessages } from "@/i18n/messages/shell";
+import { manageTagsMessages } from "@/i18n/messages/manageTags";
 
+// Same order and names as the Tags "Manage" group in the sidebar (components/xpot/moduleNav.ts).
 const TABS = [
-  { id: "overview", label: "Overview" },
-  { id: "pieces", label: "Pieces" },
-  { id: "kits", label: "Kits" },
-  { id: "batches", label: "Batches" },
-  { id: "journey", label: "Journey", adminOnly: true },
-  { id: "team", label: "Team" },
-  { id: "provisioners", label: "NFC writers" },
-] as const satisfies ReadonlyArray<{ id: string; label: string; adminOnly?: boolean }>;
+  { id: "overview", labelKey: "manageOverview" },
+  { id: "pieces", labelKey: "managePieces" },
+  { id: "kits", labelKey: "manageKits" },
+  { id: "team", labelKey: "manageResellers" },
+  { id: "batches", labelKey: "manageBatches", adminOnly: true },
+  { id: "journey", labelKey: "manageJourney", adminOnly: true },
+  { id: "provisioners", labelKey: "manageWriters", adminOnly: true },
+] as const satisfies ReadonlyArray<{ id: string; labelKey: string; adminOnly?: boolean }>;
 type TabId = (typeof TABS)[number]["id"];
 
 export const ADMIN_TAGS_BASE = "/admin/tags";
 
-/** Type the code printed on a piece, open its record. */
-function CodeLookup({ onFound }: { onFound: (id: string) => void }) {
+/** Type the code printed on a piece, open its record. On desktop it sits in the top bar (AdminApp). */
+export function CodeLookup({ onFound }: { onFound: (id: string) => void }) {
+  const t = useT(manageTagsMessages);
   const { toast } = useToast();
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
@@ -38,7 +43,7 @@ function CodeLookup({ onFound }: { onFound: (id: string) => void }) {
     e.preventDefault();
     const normalized = normalizeTagCode(code);
     if (!normalized) {
-      toast({ title: "Invalid code", description: "Codes are 8 letters/numbers, e.g. A7K3P9X2.", variant: "destructive" });
+      toast({ title: t("invalidCode"), description: t("invalidCodeHint"), variant: "destructive" });
       return;
     }
     setBusy(true);
@@ -47,7 +52,7 @@ function CodeLookup({ onFound }: { onFound: (id: string) => void }) {
       setCode("");
       onFound(tag.id);
     } catch (err) {
-      toast({ title: "Piece not found", description: errorMessage(err), variant: "destructive" });
+      toast({ title: t("pieceNotFound"), description: errorMessage(err), variant: "destructive" });
     } finally {
       setBusy(false);
     }
@@ -57,7 +62,7 @@ function CodeLookup({ onFound }: { onFound: (id: string) => void }) {
       <input
         value={code}
         onChange={(e) => setCode(e.target.value.toUpperCase())}
-        placeholder="Code, e.g. A7K3P9X2"
+        placeholder={t("codePlaceholder")}
         className={`${INPUT} w-48 font-mono`}
         autoCapitalize="characters"
         autoCorrect="off"
@@ -66,7 +71,7 @@ function CodeLookup({ onFound }: { onFound: (id: string) => void }) {
       />
       <button type="submit" disabled={busy || !code.trim()} className={BTN}>
         <ScanLine className="h-4 w-4" />
-        Open
+        {t("open")}
       </button>
     </form>
   );
@@ -78,9 +83,11 @@ function CodeLookup({ onFound }: { onFound: (id: string) => void }) {
  */
 export function AdminTags() {
   const [location, setLocation] = useLocation();
+  const ts = useT(shellMessages);
   const [tabSegment, idSegment] = location.replace(/^\/admin\/tags\/?/, "").split("/");
-  // The Journey is for admins only: managers neither see its tab nor reach it by URL.
-  const isAdmin = useIsTagAdmin();
+  // Batches, the Journey and the NFC writers are the global admin's: managers
+  // neither see their tabs nor reach them by URL (and the API answers 403).
+  const isAdmin = useIsSuperAdmin();
   const tabs = TABS.filter((t) => isAdmin || !("adminOnly" in t));
   const tab: TabId = tabs.find((t) => t.id === tabSegment)?.id ?? "overview";
   const id = idSegment ? decodeURIComponent(idSegment) : null;
@@ -88,7 +95,8 @@ export function AdminTags() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 lg:hidden">
+        {/* The desktop sidebar lists these as the Tags "Manage" group; the phone keeps the strip. */}
         <nav className="flex gap-1 overflow-x-auto rounded-xl border border-white/10 bg-white/[0.02] p-1">
           {tabs.map((t) => (
             <button
@@ -100,7 +108,8 @@ export function AdminTags() {
               }`}
               data-testid={`admin-tags-tab-${t.id}`}
             >
-              {t.label}
+              {ts(t.labelKey)}
+              {"adminOnly" in t && <AdminBadge className="ml-1.5" />}
             </button>
           ))}
         </nav>
@@ -110,10 +119,10 @@ export function AdminTags() {
       {tab === "overview" && <OverviewTab go={go} />}
       {tab === "pieces" && (id ? <PieceDetail id={id} go={go} /> : <PiecesTab go={go} />)}
       {tab === "kits" && <KitsTab go={go} />}
-      {tab === "batches" && (id ? <BatchDetail id={id} go={go} /> : <BatchesTab go={go} />)}
+      {tab === "batches" && isAdmin && (id ? <BatchDetail id={id} go={go} /> : <BatchesTab go={go} />)}
       {tab === "journey" && isAdmin && <JourneyTab />}
       {tab === "team" && <TeamTab go={go} />}
-      {tab === "provisioners" && <ProvisionersTab go={go} />}
+      {tab === "provisioners" && isAdmin && <ProvisionersTab go={go} />}
     </div>
   );
 }

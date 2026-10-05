@@ -86,8 +86,8 @@ test.skipIf(!enabled)("journey: trail, stories, plans, append-only, admin-only A
     assert.equal((await api("POST", "/api/xpot/admin/tag-journey", "jt-mgr", { kind: "insight", title: "x" })).status, 403);
     assert.equal((await api("GET", "/api/xpot/admin/tag-plans", "jt-mgr")).status, 403);
     assert.equal((await api("PATCH", "/api/xpot/admin/tag-plans/00000000-0000-4000-8000-000000000000", "jt-mgr", { status: "done" })).status, 403);
-    // A manager still runs the warehouse; only the journey is closed to them.
-    assert.equal((await api("GET", "/api/xpot/admin/tag-batches", "jt-mgr")).status, 200);
+    // Batches, like the journey, are the global admin's (users.is_admin): a manager gets 403.
+    assert.equal((await api("GET", "/api/xpot/admin/tag-batches", "jt-mgr")).status, 403);
     assert.equal((await api("GET", "/api/xpot/admin/tag-journey", "jt-admin")).status, 200);
 
     // ── The site's own mutations write executions ────────────────────────────
@@ -106,7 +106,8 @@ test.skipIf(!enabled)("journey: trail, stories, plans, append-only, admin-only A
     assert.equal(batchEntries[0].title, `Batch ${batch.batchCode} created: 10 × Keychain`);
     assert.equal(batchEntries[0].content, "Keychains run 1");
     assert.equal(batchEntries[0].afterValue, "generated");
-    assert.deepEqual(batchEntries[0].metadata, { quantity: 10, productType: "keychain", vendor: null });
+    // face: what is printed on the run (#30); a keychain batch created without one records null.
+    assert.deepEqual(batchEntries[0].metadata, { quantity: 10, productType: "keychain", face: null, vendor: null });
     assert.equal(batchEntries[0].source, "admin");
     assert.equal(batchEntries[0].actor, "human");
     assert.equal(batchEntries[0].actorEmail, "admin@jt.test");

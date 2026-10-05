@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from "react";
-import { Route, Router, Switch, useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
+import { Redirect, Route, Router, Switch, useLocation } from "wouter";
 import { useXpotQueries } from "./pages/xpot/hooks/useXpotQueries";
 import { useVisits } from "./pages/xpot/hooks/useVisits";
 import { GeoProvider } from "./pages/xpot/hooks/GeoProvider";
@@ -22,10 +23,37 @@ import { commonMessages } from "@/i18n/messages/common";
 import { shellMessages } from "@/i18n/messages/shell";
 import { AppLayout } from "@/components/xpot/AppLayout";
 import { MobileTabBar } from "@/components/xpot/MobileTabBar";
+import { SessionGate } from "@/components/xpot/SessionGate";
+import { XpotLandingPage } from "./pages/xpot/XpotLandingPage";
+import { getHttpStatus, isStandaloneDisplay, resolveRootView } from "@/lib/pwa";
+import { getXpotHomePath, MODULE_HOME } from "@/lib/xpot";
+import type { XpotMeResponse } from "./pages/xpot/types";
 
 // Screens redesigned for desktop use the full width there; the rest stay in a
 // narrow column until their turn (docs/DESKTOP.md).
 const WIDE_TABS = new Set<string>(["leads", "visits", "dashboard", "sales"]);
+
+/**
+ * Decides who gets the Visits screens before any Visits data is asked for: a
+ * Tags-only reseller is sent to Tags without the dashboard and visits requests
+ * (and the GPS prompt) that XpotAppShell's hooks would fire, and that the server
+ * now refuses with 403 module_off.
+ */
+function VisitsGate() {
+  const meQuery = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
+  const modules = useXpotModules();
+  // An expired or refused session goes back to sign-in on its own, as XpotAppShell's
+  // useXpotQueries did before this gate stood in front of it (/dashboard is the PWA start_url).
+  const status = getHttpStatus(meQuery.error);
+  if (status === 401 || status === 403) return <Redirect to="/" />;
+  if (!meQuery.data) return <SessionGate failed={meQuery.isError} />;
+  if (!modules.includes("visits") && modules.includes("tags")) return <Redirect to={MODULE_HOME.tags} />;
+  return (
+    <GeoProvider>
+      <XpotAppShell />
+    </GeoProvider>
+  );
+}
 
 function XpotAppShell() {
   const { me, xpotMeQuery, isOnline, activeTab } = useXpotQueries();
@@ -37,34 +65,10 @@ function XpotAppShell() {
   useVisits();
 
   useEffect(() => {
-    document.title = "Xpot";
-  }, []);
-  useEffect(() => {
     if (visitsAllowed) rememberModule("visits");
   }, [visitsAllowed]);
 
-  if (!me) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#0a0f1e] text-white">
-        {xpotMeQuery.isError ? (
-          <>
-            <p className="text-sm text-white/50">{t("sessionFailed")}</p>
-            <button
-              onClick={() => setLocation("/")}
-              className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 hover:bg-white/10 transition-colors"
-            >
-              {t("goToSignIn")}
-            </button>
-          </>
-        ) : (
-          <Loader2 className="h-7 w-7 animate-spin text-blue-400" />
-        )}
-      </div>
-    );
-  }
-
-  // A Tags-only reseller has no Visits screens.
-  if (!visitsAllowed && modules.includes("tags")) return <Redirect to="/tags" />;
+  if (!me) return <SessionGate failed={xpotMeQuery.isError} />;
 
   const current = tabs.find((tab) => tab.id === activeTab);
 
@@ -88,6 +92,7 @@ function XpotAppShell() {
       }
       mobileNav={
         <MobileTabBar
+          module="visits"
           tabs={tabs.map(({ id, labelKey, icon }) => ({ id, label: tShell(labelKey), icon }))}
           activeId={activeTab}
           onSelect={(id) => setLocation(`/${id}`)}
@@ -105,12 +110,6 @@ function XpotAppShell() {
   );
 }
 
-import { useQuery } from "@tanstack/react-query";
-import { Redirect } from "wouter";
-import { XpotLandingPage } from "./pages/xpot/XpotLandingPage";
-import { isStandaloneDisplay, resolveRootView } from "@/lib/pwa";
-import { getXpotHomePath } from "@/lib/xpot";
-import type { XpotMeResponse } from "./pages/xpot/types";
 
 // "/" is the marketing landing. That is right for a browser visit, but wrong for
 // the installed app: older installs cached start_url "/" at install time, so
@@ -168,9 +167,7 @@ export default function App() {
         <Route path="/settings" component={XpotSettings} />
         <Route path="/tags/*?" component={TagsApp} />
         <Route>
-          <GeoProvider>
-            <XpotAppShell />
-          </GeoProvider>
+          <VisitsGate />
         </Route>
       </Switch>
     </Router>

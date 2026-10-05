@@ -29,7 +29,7 @@ export function createAuthRouter() {
       });
     } catch (err) {
       console.error("[GET /api/xpot/me]", err);
-      res.status(500).json({ message: (err as Error).message || "Internal server error" });
+      res.status(500).json({ message: "Internal server error" });
     }
   });
 
@@ -79,7 +79,7 @@ export function createAuthRouter() {
       res.json({ rep: updatedRep, user: { ...actor!.user, ...userPatch } });
     } catch (err) {
       console.error("[PATCH /api/xpot/me]", err);
-      res.status(500).json({ message: (err as Error).message || "Internal server error" });
+      res.status(500).json({ message: "Internal server error" });
     }
   });
 
@@ -127,7 +127,7 @@ export function createAuthRouter() {
       if (previous && previous !== avatarUrl) void discardFiles([previous], `avatar of rep #${actor!.rep.id}`);
     } catch (err) {
       console.error("[POST /api/xpot/me/avatar]", err);
-      res.status(500).json({ message: (err as Error).message || "Failed to upload avatar" });
+      res.status(500).json({ message: "Failed to upload avatar" });
     }
   });
 
@@ -176,7 +176,7 @@ export function createAuthRouter() {
       res.json({ success: true });
     } catch (err) {
       console.error("[POST /api/xpot/me/change-password]", err);
-      res.status(500).json({ message: (err as Error).message || "Internal server error" });
+      res.status(500).json({ message: "Internal server error" });
     }
   });
 

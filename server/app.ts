@@ -1,9 +1,9 @@
 import "express-async-errors";
-import { ZodError } from "zod";
-import express, { type Request, type Response, type NextFunction } from "express";
+import express from "express";
 import { createServer, type Server } from "http";
 import { legacyHostRedirect } from "./canonicalHost.js";
 import { registerRoutes } from "./routes.js";
+import { apiErrorHandler } from "./errorHandler.js";
 
 declare module "http" {
   interface IncomingMessage {
@@ -75,14 +75,8 @@ export async function createApp(): Promise<{ app: express.Express; httpServer: S
   const httpServer = createServer(app);
   await registerRoutes(app);
 
-  // Global error handler
-  app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
-    if (err instanceof ZodError) {
-      return res.status(400).json({ message: "Validation error", errors: err.errors });
-    }
-    console.error("Unhandled error:", err);
-    res.status(500).json({ message: (err as Error).message || "Internal server error" });
-  });
+  // Global error handler (server/errorHandler.ts)
+  app.use(apiErrorHandler);
 
   return { app, httpServer };
 }

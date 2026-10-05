@@ -9,7 +9,6 @@ import {
   Check,
   ChevronRight,
   Clock3,
-  Command,
   DollarSign,
   MapPinned,
   Mic,
@@ -145,79 +144,6 @@ function PhoneMock({ t }: { t: LandingT }) {
   );
 }
 
-const DESK_ROWS = [
-  { name: "Bean & Barrel Café", city: "Tampa, FL", sold: "$282.00", active: true },
-  { name: "Lakeside Grind Coffee", city: "Orlando, FL", sold: "$463.00" },
-  { name: "Fade Masters Barbershop", city: "Orlando, FL", sold: "$144.00" },
-  { name: "Thornton Park Dental", city: "Orlando, FL", sold: "—" },
-  { name: "Ybor Cuts & Shaves", city: "Tampa, FL", sold: "$96.00" },
-];
-
-function DesktopMock({ t }: { t: LandingT }) {
-  return (
-    <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#070b16] shadow-[0_30px_80px_rgba(0,0,0,0.55)]">
-      {/* Window bar */}
-      <div className="flex items-center gap-1.5 border-b border-white/[0.06] px-4 py-2.5">
-        <span className="h-2.5 w-2.5 rounded-full bg-white/15" />
-        <span className="h-2.5 w-2.5 rounded-full bg-white/15" />
-        <span className="h-2.5 w-2.5 rounded-full bg-white/15" />
-        <span className="ml-3 flex items-center gap-1.5 rounded-md border border-white/10 px-2 py-0.5 text-[10px] text-white/35">
-          <Command className="h-3 w-3" /> K
-        </span>
-      </div>
-      <div className="flex">
-        {/* Sidebar */}
-        <div className="hidden w-12 shrink-0 space-y-1 border-r border-white/[0.06] p-2 sm:block">
-          {[MapPinned, Building2, DollarSign, Nfc].map((Icon, i) => (
-            <div key={i} className={`flex items-center justify-center rounded-lg py-1.5 ${i === 1 ? "bg-blue-500/15" : ""}`}>
-              <Icon className={`h-3.5 w-3.5 ${i === 1 ? "text-blue-300" : "text-white/30"}`} />
-            </div>
-          ))}
-        </div>
-        {/* Table */}
-        <div className="min-w-0 flex-1 p-3">
-          <div className="mb-2 flex items-center justify-between px-1 text-[10px] font-semibold uppercase tracking-widest text-white/30">
-            <span>{t("mockDeskLeads")}</span>
-            <span>{t("mockDeskSold")}</span>
-          </div>
-          <div className="divide-y divide-white/[0.05] overflow-hidden rounded-xl border border-white/[0.07]">
-            {DESK_ROWS.map((row) => (
-              <div key={row.name} className={`flex items-center gap-2.5 px-3 py-2 ${row.active ? "bg-blue-500/[0.12]" : ""}`}>
-                <span className="h-6 w-6 shrink-0 rounded-md border border-indigo-500/20 bg-indigo-500/10" />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-[11px] font-semibold text-white/85">{row.name}</div>
-                  <div className="truncate text-[10px] text-white/35">{row.city}</div>
-                </div>
-                <span className="text-[11px] font-semibold tabular-nums text-emerald-300/85">{row.sold}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-        {/* Detail pane */}
-        <div className="hidden w-44 shrink-0 space-y-2.5 border-l border-white/[0.06] p-3 md:block">
-          <div className="text-[11px] font-bold text-white">Bean &amp; Barrel Café</div>
-          <div className="h-1.5 w-24 rounded-full bg-white/15" />
-          <div className="grid grid-cols-2 gap-1.5">
-            <div className="rounded-lg border border-emerald-400/20 bg-emerald-400/[0.07] p-2">
-              <div className="text-[11px] font-bold text-emerald-300">$282</div>
-              <div className="mt-1 h-1 w-8 rounded-full bg-white/15" />
-            </div>
-            <div className="rounded-lg border border-white/10 bg-white/[0.04] p-2">
-              <div className="text-[11px] font-bold text-white">18</div>
-              <div className="mt-1 h-1 w-8 rounded-full bg-white/15" />
-            </div>
-          </div>
-          <div className="space-y-1.5 pt-1">
-            <div className="h-1.5 w-full rounded-full bg-white/10" />
-            <div className="h-1.5 w-4/5 rounded-full bg-white/10" />
-            <div className="h-1.5 w-3/5 rounded-full bg-white/10" />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export function XpotLandingPage() {
@@ -335,7 +261,6 @@ export function XpotLandingPage() {
             <nav className="hidden items-center gap-6 text-sm text-white/55 md:flex" aria-label="Sections">
               <button type="button" onClick={() => scrollTo("how")} className="transition-colors hover:text-white">{t("navHow")}</button>
               <button type="button" onClick={() => scrollTo("tools")} className="transition-colors hover:text-white">{t("navTools")}</button>
-              <button type="button" onClick={() => scrollTo("desktop")} className="transition-colors hover:text-white">{t("navDesktop")}</button>
             </nav>
 
             <div className="flex items-center gap-2">
@@ -358,8 +283,8 @@ export function XpotLandingPage() {
                     </Button>
                   </DialogTrigger>
 
-                  <DialogContent className="w-[92%] max-w-md overflow-hidden rounded-2xl border-white/10 bg-[#070b16]/95 p-6 text-white shadow-[0_0_40px_rgba(0,0,0,0.8)] backdrop-blur-2xl sm:p-8">
-                    <div className="absolute left-0 top-0 h-[3px] w-full bg-gradient-to-r from-blue-500 via-indigo-500 to-blue-500" />
+                  <DialogContent className="w-[92%] max-w-md rounded-2xl border-white/10 bg-[#070b16]/95 p-6 text-white shadow-[0_0_40px_rgba(0,0,0,0.8)] backdrop-blur-2xl sm:p-8">
+                    <div className="absolute left-0 top-0 h-[3px] w-full rounded-t-2xl bg-gradient-to-r from-blue-500 via-indigo-500 to-blue-500" />
 
                     <DialogHeader className="pb-4 text-center sm:text-center">
                       <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-blue-500/10 to-indigo-500/10">
@@ -477,25 +402,6 @@ export function XpotLandingPage() {
                 </Reveal>
               ))}
             </div>
-          </section>
-
-          {/* Desktop */}
-          <section id="desktop" className="grid scroll-mt-24 grid-cols-1 items-center gap-12 lg:grid-cols-2 lg:gap-14">
-            <Reveal className="space-y-5 text-center lg:text-left">
-              <h2 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">{t("deskTitle")}</h2>
-              <p className="text-base leading-relaxed text-white/60">{t("deskBody")}</p>
-              <ul className="mx-auto max-w-md space-y-2.5 text-left lg:mx-0">
-                {[t("deskPoint1"), t("deskPoint2"), t("deskPoint3")].map((point) => (
-                  <li key={point} className="flex gap-2.5 text-sm text-white/70">
-                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-blue-300" />
-                    {point}
-                  </li>
-                ))}
-              </ul>
-            </Reveal>
-            <Reveal delay={0.1}>
-              <DesktopMock t={t} />
-            </Reveal>
           </section>
 
           {/* CRM sync */}

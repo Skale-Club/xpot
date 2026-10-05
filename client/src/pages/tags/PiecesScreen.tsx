@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ChevronRight, MousePointerClick, Package, Search, X } from "lucide-react";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { MasterDetail } from "@/components/xpot/MasterDetail";
+import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
 import TagScreen from "./TagScreen";
 import type { TagListItem } from "@shared/tagsApi";
 import { useT } from "@/i18n";
@@ -170,6 +171,7 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
                   onClick={() => openPiece(tag.publicCode)}
                   className="flex min-h-[64px] w-full items-center gap-3 px-4 py-2.5 text-left active:bg-white/10"
                 >
+                  <TagFaceIcon face={tag.face} size="md" title={t(`face_${tag.face ?? "none"}` as "face_none")} />
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-2">
                       <span className="font-mono text-base font-semibold tracking-[0.12em] text-white">{tag.publicCode}</span>
@@ -203,6 +205,7 @@ function PiecesTable({ items, selectedCode, onSelect }: { items: TagListItem[]; 
       <table className="w-full text-left text-sm" data-testid="pieces-table">
         <thead className="border-b border-white/[0.07] text-[10px] uppercase tracking-widest text-white/35">
           <tr>
+            <th className="w-12 py-2.5 pl-4 pr-0"><span className="sr-only">{t("colFace")}</span></th>
             <th className="whitespace-nowrap px-4 py-2.5 font-semibold">{t("colCode")}</th>
             <th className="whitespace-nowrap px-3 py-2.5 font-semibold">{t("colStatus")}</th>
             <th className="px-3 py-2.5 font-semibold">{t("colCustomer")}</th>
@@ -223,6 +226,7 @@ function PiecesTable({ items, selectedCode, onSelect }: { items: TagListItem[]; 
                 className={`cursor-pointer outline-none transition-colors focus-visible:bg-white/[0.05] ${selected ? "bg-blue-500/[0.12]" : "hover:bg-white/[0.03]"}`}
                 data-testid={`piece-row-${tag.publicCode}`}
               >
+                <td className="py-2 pl-4 pr-0"><TagFaceIcon face={tag.face} size="sm" title={t(`face_${tag.face ?? "none"}` as "face_none")} /></td>
                 <td className="whitespace-nowrap px-4 py-2.5 font-mono font-semibold tracking-[0.12em] text-white">{tag.publicCode}</td>
                 <td className="whitespace-nowrap px-3 py-2.5"><Pill tone={STATUS_TONE[tag.status] ?? "slate"}>{t(`status_${tag.status}` as "status_active")}</Pill></td>
                 <td className="max-w-0 px-3 py-2.5" style={{ width: "40%" }}>

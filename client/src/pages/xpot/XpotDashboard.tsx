@@ -5,6 +5,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { ChevronRight, Nfc } from "lucide-react";
 import type { TagRepSummary } from "@shared/tagsApi";
 import { useXpotModules } from "@/components/ModuleSwitch";
+import { canManage } from "@shared/modules";
 import { useXpotQueries } from "./hooks/useXpotQueries";
 import { useSyncStatus } from "./hooks/useSyncStatus";
 import { VisitRow } from "./components/VisitRow";
@@ -16,6 +17,7 @@ import { useT } from "@/i18n";
 import { dashboardMessages } from "@/i18n/messages/dashboard";
 import { EmptyState } from "@/components/xpot/EmptyState";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
+import { ModuleBadge } from "@/components/xpot/ModuleBadge";
 
 const METRIC_CARDS = [
   {
@@ -115,14 +117,17 @@ export function XpotDashboard() {
           type="button"
           onClick={() => setLocation("/tags")}
           className="flex w-full items-center gap-3 rounded-[20px] p-4 text-left transition-transform active:scale-[0.98]"
-          style={{ background: "rgba(16,185,129,0.06)", border: "1px solid rgba(16,185,129,0.18)", WebkitTapHighlightColor: "transparent" }}
+          style={{ background: "rgba(139,92,246,0.07)", border: "1px solid rgba(139,92,246,0.22)", WebkitTapHighlightColor: "transparent" }}
           data-testid="dashboard-tags"
         >
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-400/15 text-emerald-300">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-400/15 text-violet-300">
             <Nfc className="h-5 w-5" />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="text-sm font-bold text-white">{t("tagsTitle")}</div>
+            <div className="flex items-center gap-2 text-sm font-bold text-white">
+              {t("tagsTitle")}
+              <ModuleBadge module="tags" />
+            </div>
             <div className="mt-1 grid grid-cols-3 gap-2">
               {([
                 ["tagsInKit", tagSummary.inStock],
@@ -131,7 +136,7 @@ export function XpotDashboard() {
               ] as const).map(([key, value]) => (
                 <div key={key} className="min-w-0">
                   <div className="text-lg font-extrabold leading-none text-white tabular-nums">{value}</div>
-                  <div className="mt-1 truncate text-[9px] font-semibold uppercase tracking-wider text-white/40">{t(key)}</div>
+                  <div className="mt-1 text-[9px] font-semibold uppercase leading-tight tracking-wider text-white/40">{t(key)}</div>
                 </div>
               ))}
             </div>
@@ -182,7 +187,7 @@ export function XpotDashboard() {
               <Tooltip
                 contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', fontSize: '12px', color: '#fff' }}
                 itemStyle={{ color: '#fff', fontWeight: 'bold' }}
-                formatter={(v: number) => [`$${v.toFixed(2)}`, "Billed"]}
+                formatter={(v: number) => [formatCents(Math.round(v * 100)), t("chartBilled")]}
                 cursor={{ stroke: 'rgba(255,255,255,0.1)', strokeWidth: 1, strokeDasharray: '4 4' }}
               />
               <Area type="monotone" dataKey="value" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#visitsGradient)" />
@@ -208,16 +213,16 @@ export function XpotDashboard() {
         >
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-[10px] font-semibold uppercase tracking-widest text-white/35">Kept this month</div>
+              <div className="text-[10px] font-semibold uppercase tracking-widest text-white/35">{t("salesKeptMonth")}</div>
               <div className="mt-0.5 text-2xl font-bold tabular-nums text-emerald-400">
                 {formatCents(salesSummary.data.profit.monthToDateCents)}
               </div>
               <div className="text-[11px] text-white/35">
-                {formatCents(salesSummary.data.revenue.monthToDateCents)} billed
+                {t("salesBilled", { amount: formatCents(salesSummary.data.revenue.monthToDateCents) })}
               </div>
             </div>
             <div className="text-right">
-              <div className="text-[10px] font-semibold uppercase tracking-widest text-white/35">On the street</div>
+              <div className="text-[10px] font-semibold uppercase tracking-widest text-white/35">{t("salesOnStreet")}</div>
               <div className="mt-0.5 text-2xl font-bold tabular-nums text-white">
                 {salesSummary.data.consignment.unitsOnHand}
               </div>
@@ -228,8 +233,7 @@ export function XpotDashboard() {
           </div>
           {salesSummary.data.consignment.dueCount > 0 && (
             <div className="mt-2.5 border-t border-white/[0.07] pt-2.5 text-[11px] text-red-300">
-              {salesSummary.data.consignment.dueCount} settlement
-              {salesSummary.data.consignment.dueCount === 1 ? "" : "s"} overdue — {isDesktop ? "click" : "tap"} to see them
+              {t.plural(isDesktop ? "salesOverdueClick" : "salesOverdueTap", salesSummary.data.consignment.dueCount)}
             </div>
           )}
         </button>
@@ -267,6 +271,8 @@ export function XpotDashboard() {
                 type="button"
                 onClick={() => retryMutation.mutate({ entityType: event.entityType, entityId: event.entityId })}
                 disabled={retryMutation.isPending}
+                aria-label={t("retrySync")}
+                title={t("retrySync")}
                 className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-white/40 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-40"
               >
                 <RefreshCw className={`h-3.5 w-3.5 ${retryMutation.isPending ? "animate-spin" : ""}`} />
@@ -346,7 +352,7 @@ export function XpotDashboard() {
         {/* Actions */}
         {/* The desktop sidebar has these; the phone keeps them here. */}
         <div className="flex items-center gap-1.5 shrink-0 lg:hidden">
-          {me && (me.user.isAdmin || ["admin", "manager"].includes(me.rep.role)) && (
+          {canManage(me) && (
             <button
               type="button"
               onClick={() => setLocation("/admin/overview")}

@@ -1,9 +1,30 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
+/**
+ * A failed API call. `message` is what the server said (its `{ message }`), ready
+ * for a toast; `status` is the HTTP status for code that branches on it. The
+ * message used to be "400: {\"message\":…}", and that raw text reached users.
+ */
+export class ApiError extends Error {
+  constructor(public status: number, message: string) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
-    const text = (await res.text()) || res.statusText;
-    throw new Error(`${res.status}: ${text}`);
+    const text = await res.text();
+    let message = text || res.statusText;
+    try {
+      const body = JSON.parse(text) as { message?: unknown; error?: unknown };
+      const said = typeof body.message === "string" ? body.message : typeof body.error === "string" ? body.error : null;
+      if (said) message = said;
+    } catch {
+      // Not JSON (a proxy error page, plain text): keep the text as it came.
+    }
+    // An empty body over HTTP/2 has no statusText either: never hand a toast an empty sentence.
+    throw new ApiError(res.status, message.trim() || `Request failed (${res.status})`);
   }
 }
 
@@ -15,30 +36,6 @@ export async function apiRequest(
   const res = await fetch(url, {
     method,
     headers: data ? { "Content-Type": "application/json" } : {},
-    body: data ? JSON.stringify(data) : undefined,
-    credentials: "include",
-  });
-
-  await throwIfResNotOk(res);
-  return res;
-}
-
-export async function authenticatedRequest(
-  method: string,
-  url: string,
-  token: string,
-  data?: unknown | undefined,
-): Promise<Response> {
-  const headers: Record<string, string> = {
-    'Authorization': `Bearer ${token}`,
-  };
-  if (data) {
-    headers['Content-Type'] = 'application/json';
-  }
-  
-  const res = await fetch(url, {
-    method,
-    headers,
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
   });

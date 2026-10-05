@@ -18,12 +18,15 @@ import { createProductsRouter } from "./products.js";
 import { createSalesRouter } from "./sales.js";
 import { createConsignmentsRouter } from "./consignments.js";
 import { createVisitActionsRouter } from "./visit-actions.js";
+import { requireVisitsModule, VISITS_ONLY_PATHS } from "./middleware.js";
 import { createFilesRouter } from "./files.js";
 
 export function registerXpotRoutes(app: Express) {
   // Public branding (favicon / manifest / apple-touch) — no auth.
   app.use("/api/branding", createBrandingPublicRouter());
 
+  // Visits-only APIs refuse a Tags-only reseller before any router runs.
+  app.use(VISITS_ONLY_PATHS.map((path) => `/api/xpot${path}`), requireVisitsModule);
   app.use("/api/xpot", createInboundRouter());
   app.use("/api/xpot", createAuthRouter());
   app.use("/api/xpot", createDashboardRouter());

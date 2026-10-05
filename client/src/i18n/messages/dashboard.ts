@@ -28,11 +28,22 @@ const en = {
   recentVisits: "Recent Visits",
   noVisitsToday: "No visits today",
   goToCheckIn: "Go to Check-In to start your day",
-  tagsTitle: "Your tags",
+  tagsTitle: "Your pieces",
   tagsInKit: "In your kit",
   tagsLive: "Live",
   tagsScans: "Scans (30 days)",
   tagsOpen: "Open Tags",
+
+  // Sales block (profit, stock on consignment, overdue settlements)
+  salesKeptMonth: "Kept this month",
+  salesBilled: "{amount} billed",
+  salesOnStreet: "On the street",
+  salesOverdueTap_one: "{count} settlement overdue — tap to see it",
+  salesOverdueTap_other: "{count} settlements overdue — tap to see them",
+  salesOverdueClick_one: "{count} settlement overdue — click to see it",
+  salesOverdueClick_other: "{count} settlements overdue — click to see them",
+  chartBilled: "Billed",
+  retrySync: "Retry sync",
 };
 
 export const dashboardMessages: Dictionary<typeof en> = {
@@ -44,7 +55,7 @@ export const dashboardMessages: Dictionary<typeof en> = {
 
     metricVisitsToday: "Visitas hoje",
     metricPipelineValue: "Valor em aberto",
-    metricOpportunities: "Negócios",
+    metricOpportunities: "Oportunidades",
     metricPendingTasks: "Tarefas pendentes",
 
     photoUpdated: "Foto atualizada",
@@ -62,11 +73,21 @@ export const dashboardMessages: Dictionary<typeof en> = {
     recentVisits: "Visitas recentes",
     noVisitsToday: "Nenhuma visita hoje",
     goToCheckIn: "Vá para Check-in para começar o dia",
-    tagsTitle: "Suas tags",
+    tagsTitle: "Suas peças",
     tagsInKit: "No seu kit",
     tagsLive: "No ar",
     tagsScans: "Scans (30 dias)",
     tagsOpen: "Abrir Tags",
+
+    salesKeptMonth: "Lucro do mês",
+    salesBilled: "{amount} faturado",
+    salesOnStreet: "Na rua",
+    salesOverdueTap_one: "{count} acerto em atraso — toque para ver",
+    salesOverdueTap_other: "{count} acertos em atraso — toque para ver",
+    salesOverdueClick_one: "{count} acerto em atraso — clique para ver",
+    salesOverdueClick_other: "{count} acertos em atraso — clique para ver",
+    chartBilled: "Faturado",
+    retrySync: "Tentar sincronizar de novo",
   },
   es: {
     greetingMorning: "Buenos días",
@@ -75,7 +96,7 @@ export const dashboardMessages: Dictionary<typeof en> = {
 
     metricVisitsToday: "Visitas hoy",
     metricPipelineValue: "Valor en curso",
-    metricOpportunities: "Negocios",
+    metricOpportunities: "Oportunidades",
     metricPendingTasks: "Tareas pendientes",
 
     photoUpdated: "Foto actualizada",
@@ -93,10 +114,20 @@ export const dashboardMessages: Dictionary<typeof en> = {
     recentVisits: "Visitas recientes",
     noVisitsToday: "No hay visitas hoy",
     goToCheckIn: "Ve a Check-in para empezar el día",
-    tagsTitle: "Tus etiquetas",
+    tagsTitle: "Tus piezas",
     tagsInKit: "En tu kit",
     tagsLive: "Activas",
     tagsScans: "Escaneos (30 días)",
     tagsOpen: "Abrir Etiquetas",
+
+    salesKeptMonth: "Ganancia del mes",
+    salesBilled: "{amount} facturado",
+    salesOnStreet: "En la calle",
+    salesOverdueTap_one: "{count} liquidación atrasada — toca para verla",
+    salesOverdueTap_other: "{count} liquidaciones atrasadas — toca para verlas",
+    salesOverdueClick_one: "{count} liquidación atrasada — haz clic para verla",
+    salesOverdueClick_other: "{count} liquidaciones atrasadas — haz clic para verlas",
+    chartBilled: "Facturado",
+    retrySync: "Reintentar sincronización",
   },
 };

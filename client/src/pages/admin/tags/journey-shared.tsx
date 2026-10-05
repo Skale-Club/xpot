@@ -1,18 +1,11 @@
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import {
-  JOURNEY_ENTRY_KIND_LABELS,
-  JOURNEY_ENTRY_KINDS,
-  JOURNEY_PRODUCTION_ACTIONS,
-  PLAN_KIND_LABELS,
-  PLAN_KINDS,
-  PLAN_STATUS_LABELS,
-  PLAN_STATUSES,
-  type JourneyEntryKind,
-  type PlanKind,
-  type PlanStatus,
-} from "@shared/tagJourney";
+import { isSuperAdmin } from "@shared/modules";
+import { JOURNEY_ENTRY_KINDS, JOURNEY_PRODUCTION_ACTIONS, PLAN_KINDS, PLAN_STATUSES } from "@shared/tagJourney";
 import type { TagJourney } from "@shared/tagsApi";
 import type { XpotMeResponse } from "@/pages/xpot/types";
+import { useT } from "@/i18n";
+import { manageTagsMessages } from "@/i18n/messages/manageTags";
 import { ADMIN_TAGS_KEY, STALE_MS, getJson, withQuery } from "./api";
 
 // Shared bits of the Tags Journey admin: who may see it, the timeline query,
@@ -22,7 +15,7 @@ import { ADMIN_TAGS_KEY, STALE_MS, getJson, withQuery } from "./api";
 /** Same rule as the server's requireTagAdmin: users.is_admin or rep role "admin". */
 export function useIsTagAdmin(): boolean {
   const { data } = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
-  return !!data && (data.user.isAdmin || data.rep.role === "admin");
+  return isSuperAdmin(data);
 }
 
 /** The batch / piece a new entry or plan is attached to. */
@@ -57,14 +50,37 @@ export function useJourney(filters: JourneyFilters, enabled: boolean) {
   });
 }
 
-export const KIND_OPTIONS = JOURNEY_ENTRY_KINDS.map((k) => ({ value: k, label: JOURNEY_ENTRY_KIND_LABELS[k] }));
-export const ACTION_OPTIONS = JOURNEY_PRODUCTION_ACTIONS.map((a) => ({ value: a, label: a.replace(/_/g, " ") }));
-export const PLAN_KIND_OPTIONS = PLAN_KINDS.map((k) => ({ value: k, label: PLAN_KIND_LABELS[k] }));
-export const PLAN_STATUS_OPTIONS = PLAN_STATUSES.map((s) => ({ value: s, label: PLAN_STATUS_LABELS[s] }));
-
-export const kindLabel = (kind: string) => JOURNEY_ENTRY_KIND_LABELS[kind as JourneyEntryKind] ?? kind;
-export const planKindLabel = (kind: string) => PLAN_KIND_LABELS[kind as PlanKind] ?? kind;
-export const planStatusLabel = (status: string) => PLAN_STATUS_LABELS[status as PlanStatus] ?? status;
+/**
+ * Kind, status, plan and production-step names in the language in use. The shared English labels
+ * in @shared/tagJourney stay for the titles the server writes; the screens translate here.
+ * An unknown value (free-text action, a newer status) shows as stored, underscores as spaces.
+ */
+export function useJourneyLabels() {
+  const t = useT(manageTagsMessages);
+  return useMemo(() => {
+    const lookup = (prefix: string, value: string) => {
+      const key = `${prefix}${value}`;
+      const label = t(key as never);
+      return label === key ? value.replace(/_/g, " ") : label;
+    };
+    const kind = (value: string) => lookup("journeyKind_", value);
+    const entryStatus = (value: string) => lookup("entryStatus_", value);
+    const planKind = (value: string) => lookup("planKind_", value);
+    const planStatus = (value: string) => lookup("planStatus_", value);
+    const action = (value: string) => lookup("journeyAction_", value);
+    return {
+      kind,
+      entryStatus,
+      planKind,
+      planStatus,
+      action,
+      kindOptions: JOURNEY_ENTRY_KINDS.map((value) => ({ value, label: kind(value) })),
+      actionOptions: JOURNEY_PRODUCTION_ACTIONS.map((value) => ({ value, label: action(value) })),
+      planKindOptions: PLAN_KINDS.map((value) => ({ value, label: planKind(value) })),
+      planStatusOptions: PLAN_STATUSES.map((value) => ({ value, label: planStatus(value) })),
+    };
+  }, [t]);
+}
 
 const KIND_TONES: Record<string, string> = {
   execution: "bg-white/10 text-white/70",
@@ -95,13 +111,16 @@ const PLAN_STATUS_TONES: Record<string, string> = {
 const PILL = "inline-flex rounded-full px-2 py-0.5 text-xs font-semibold";
 
 export function KindBadge({ kind }: { kind: string }) {
-  return <span className={`${PILL} ${KIND_TONES[kind] ?? "bg-white/10 text-white/60"}`}>{kindLabel(kind)}</span>;
+  const labels = useJourneyLabels();
+  return <span className={`${PILL} ${KIND_TONES[kind] ?? "bg-white/10 text-white/60"}`}>{labels.kind(kind)}</span>;
 }
 
 export function EntryStatusBadge({ status }: { status: string }) {
-  return <span className={`${PILL} ${ENTRY_STATUS_TONES[status] ?? "bg-white/10 text-white/60"}`}>{status.replace("_", " ")}</span>;
+  const labels = useJourneyLabels();
+  return <span className={`${PILL} ${ENTRY_STATUS_TONES[status] ?? "bg-white/10 text-white/60"}`}>{labels.entryStatus(status)}</span>;
 }
 
 export function PlanStatusBadge({ status }: { status: string }) {
-  return <span className={`${PILL} ${PLAN_STATUS_TONES[status] ?? "bg-white/10 text-white/60"}`}>{planStatusLabel(status)}</span>;
+  const labels = useJourneyLabels();
+  return <span className={`${PILL} ${PLAN_STATUS_TONES[status] ?? "bg-white/10 text-white/60"}`}>{labels.planStatus(status)}</span>;
 }

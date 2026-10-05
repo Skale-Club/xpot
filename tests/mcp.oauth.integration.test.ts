@@ -178,6 +178,8 @@ test.skipIf(!enabled)("mcp oauth: register, consent, PKCE exchange, tools, refre
 
     // ── Losing admin cuts access at once; getting it back restores it ───────
     await db.execute(sql`UPDATE users SET is_admin = false WHERE id = 'mo-admin'`);
+    // The rep's admin role alone is not enough: MCP is the global admin's (users.is_admin).
+    assert.equal(await rpcStatus(refreshed.json.access_token), 403);
     await db.execute(sql`UPDATE sales_reps SET role = 'rep' WHERE user_id = 'mo-admin'`);
     assert.equal(await rpcStatus(refreshed.json.access_token), 403);
     await db.execute(sql`UPDATE users SET is_admin = true WHERE id = 'mo-admin'`);

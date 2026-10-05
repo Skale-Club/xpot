@@ -139,7 +139,7 @@ export function VisitDetail({ visit, onDelete, layout = "dialog" }: {
 
   async function handleAudioUpload({ audioBlob, durationSeconds }: { audioBlob: Blob; durationSeconds: number }) {
     if (audioBlob.size > 3 * 1024 * 1024) {
-      toast({ title: "Recording too large", description: "Keep voice notes under five minutes.", variant: "destructive" });
+      toast({ title: t("recordingTooLarge"), description: t("recordingTooLargeDesc"), variant: "destructive" });
       return;
     }
     const reader = new FileReader();
@@ -235,6 +235,8 @@ export function VisitDetail({ visit, onDelete, layout = "dialog" }: {
                 />
                 <button
                   type="button"
+                  aria-label={t("removeSocial")}
+                  title={t("removeSocial")}
                   onClick={() => saveSocials(socials.filter((_, idx) => idx !== i))}
                   className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white/30 hover:text-red-400 transition-colors"
                 >
@@ -262,6 +264,8 @@ export function VisitDetail({ visit, onDelete, layout = "dialog" }: {
                   <img src={fileSrc(photos[0])} alt={t("coverAlt")} className="w-full h-full object-cover" />
                   <button
                     type="button"
+                    aria-label={t("removePhoto")}
+                    title={t("removePhoto")}
                     onClick={() => handleRemovePhoto(photos[0])}
                     className="absolute top-2 right-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/50 text-white/70 hover:text-red-400 transition-colors"
                   >
@@ -275,6 +279,8 @@ export function VisitDetail({ visit, onDelete, layout = "dialog" }: {
                         <img src={fileSrc(url)} alt="" className="w-full h-full object-cover" />
                         <button
                           type="button"
+                          aria-label={t("removePhoto")}
+                          title={t("removePhoto")}
                           onClick={() => handleRemovePhoto(url)}
                           className="absolute top-0.5 right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white/70 hover:text-red-400"
                         >

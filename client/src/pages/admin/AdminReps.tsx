@@ -3,8 +3,14 @@ import { Ban, Check, Copy, KeyRound, Phone, RotateCcw, Trash2, UserPlus } from "
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "@/components/ui/loader";
-import { XPOT_MODULES, type XpotModule } from "@shared/modules";
-import { PHONE_COUNTRIES, formatPhone } from "@shared/phone";
+import { XPOT_MODULES, repModules, type XpotModule } from "@shared/modules";
+import { formatPhone } from "@shared/phone";
+import { CountryCodePicker } from "@/components/CountryCodePicker";
+import { translate, useT, type Translate } from "@/i18n";
+import { commonMessages } from "@/i18n/messages/common";
+import { manageMessages } from "@/i18n/messages/manage";
+import { settingsMessages } from "@/i18n/messages/settings";
+import { signinMessages } from "@/i18n/messages/signin";
 import type { XpotMeResponse } from "@/pages/xpot/types";
 
 // Who may use Xpot. People sign up with their phone and wait here for
@@ -34,8 +40,9 @@ type Rep = {
 };
 
 const REPS_KEY = ["/api/xpot/admin/reps"];
-const MODULE_LABELS: Record<XpotModule, string> = { visits: "Visits", tags: "Tags" };
+const MODULE_KEYS = { visits: "moduleVisits", tags: "moduleTags" } as const satisfies Record<XpotModule, keyof typeof commonMessages.en>;
 const ROLES = ["rep", "manager", "admin"] as const;
+const ROLE_KEYS = { rep: "role_rep", manager: "role_manager", admin: "role_admin" } as const satisfies Record<(typeof ROLES)[number], keyof typeof settingsMessages.en>;
 const FIELD =
   "w-full rounded-lg border border-white/10 bg-[#0a0f1e] px-3 py-2 text-sm text-white placeholder-white/25 outline-none focus:border-blue-500/50";
 const BTN = "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-40";
@@ -48,12 +55,13 @@ async function send<T>(url: string, body: unknown = {}, method = "POST"): Promis
     body: JSON.stringify(body),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data?.message || "Request failed");
+  if (!res.ok) throw new Error(data?.message || translate(commonMessages, "requestFailed"));
   return data as T;
 }
 
 function useRepAction(successTitle: (rep: Rep) => string) {
   const { toast } = useToast();
+  const t = useT(manageMessages);
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ url, body }: { url: string; body?: unknown; rep: Rep }) => send(url, body),
@@ -61,19 +69,16 @@ function useRepAction(successTitle: (rep: Rep) => string) {
       toast({ title: successTitle(rep) });
       void queryClient.invalidateQueries({ queryKey: REPS_KEY });
     },
-    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: t("error"), description: e.message, variant: "destructive" }),
   });
 }
 
-function welcomeMessage(name: string, phone: string): string {
-  return [
-    `Hi ${name.split(" ")[0]}! Your Xpot access is ready.`,
-    window.location.origin,
-    `Sign in with your phone number ${formatPhone(phone)}: you'll get a code by SMS.`,
-  ].join("\n");
+function welcomeMessage(t: Translate<typeof manageMessages.en>, name: string, phone: string): string {
+  return t("welcomeMessage", { name: name.split(" ")[0], link: window.location.origin, phone: formatPhone(phone) });
 }
 
 function ModuleChecks({ value, onChange, disabled }: { value: string[]; onChange: (v: string[]) => void; disabled?: boolean }) {
+  const tc = useT(commonMessages);
   return (
     <div className="flex items-center gap-3">
       {XPOT_MODULES.map((module) => (
@@ -85,7 +90,7 @@ function ModuleChecks({ value, onChange, disabled }: { value: string[]; onChange
             onChange={(e) => onChange(e.target.checked ? (value.includes(module) ? value : [...value, module]) : value.filter((m) => m !== module))}
             className="h-4 w-4 accent-blue-500"
           />
-          {MODULE_LABELS[module]}
+          {tc(MODULE_KEYS[module])}
         </label>
       ))}
     </div>
@@ -94,6 +99,7 @@ function ModuleChecks({ value, onChange, disabled }: { value: string[]; onChange
 
 export function AdminReps() {
   const query = useQuery<Rep[]>({ queryKey: REPS_KEY });
+  const t = useT(manageMessages);
 
   if (query.isLoading) {
     return (
@@ -103,7 +109,7 @@ export function AdminReps() {
     );
   }
   if (query.isError || !query.data) {
-    return <p className="text-sm text-red-400">Failed to load reps.</p>;
+    return <p className="text-sm text-red-400">{t("repsLoadFailed")}</p>;
   }
 
   const pending = query.data.filter((r) => r.access === "pending");
@@ -116,18 +122,18 @@ export function AdminReps() {
 
       <section className="space-y-3" data-testid="reps-pending">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-amber-300/80">
-          Waiting for approval {pending.length > 0 && <span className="ml-1 rounded-full bg-amber-400/15 px-2 py-0.5 text-xs">{pending.length}</span>}
+          {t("waitingForApproval")} {pending.length > 0 && <span className="ml-1 rounded-full bg-amber-400/15 px-2 py-0.5 text-xs">{pending.length}</span>}
         </h2>
         {pending.length === 0 ? (
-          <p className="text-sm text-white/40">Nobody waiting. New sign-ups show up here.</p>
+          <p className="text-sm text-white/40">{t("nobodyWaiting")}</p>
         ) : (
           pending.map((rep) => <PendingRow key={rep.id} rep={rep} />)
         )}
       </section>
 
       <section className="space-y-3" data-testid="reps-active">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-white/60">Active ({active.length})</h2>
-        <p className="text-xs text-white/40">Managers and admins always get every module.</p>
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-white/60">{t("activeCount", { count: active.length })}</h2>
+        <p className="text-xs text-white/40">{t("managersGetAllModules")}</p>
         {active.map((rep) => (
           <ActiveRow key={rep.id} rep={rep} />
         ))}
@@ -135,7 +141,7 @@ export function AdminReps() {
 
       {blocked.length > 0 && (
         <section className="space-y-3" data-testid="reps-blocked">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-red-300/70">Blocked ({blocked.length})</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-red-300/70">{t("blockedCount", { count: blocked.length })}</h2>
           {blocked.map((rep) => (
             <BlockedRow key={rep.id} rep={rep} />
           ))}
@@ -146,11 +152,12 @@ export function AdminReps() {
 }
 
 function Identity({ rep }: { rep: Rep }) {
+  const t = useT(manageMessages);
   return (
     <div className="min-w-0 flex-1">
       <p className="truncate font-medium">{rep.displayName}</p>
       <p className="truncate text-xs text-white/40">
-        {rep.loginPhone ? formatPhone(rep.loginPhone) : <span className="text-amber-300/80">no sign-in phone</span>}
+        {rep.loginPhone ? formatPhone(rep.loginPhone) : <span className="text-amber-300/80">{t("noSignInPhone")}</span>}
         {rep.email ? ` · ${rep.email}` : ""}
       </p>
     </div>
@@ -158,14 +165,15 @@ function Identity({ rep }: { rep: Rep }) {
 }
 
 function PendingRow({ rep }: { rep: Rep }) {
+  const t = useT(manageMessages);
   const [modules, setModules] = useState<string[]>(rep.modules?.length ? rep.modules : [...XPOT_MODULES]);
-  const approve = useRepAction((r) => `${r.displayName} can sign in now`);
-  const refuse = useRepAction((r) => `${r.displayName} refused`);
+  const approve = useRepAction((r) => t("repCanSignInNow", { name: r.displayName }));
+  const refuse = useRepAction((r) => t("repRefused", { name: r.displayName }));
   const busy = approve.isPending || refuse.isPending;
   return (
     <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-amber-400/20 bg-amber-400/[0.04] p-4" data-testid={`rep-${rep.id}`}>
       <Identity rep={rep} />
-      {rep.createdAt && <span className="text-xs text-white/35">signed up {new Date(rep.createdAt).toLocaleDateString()}</span>}
+      {rep.createdAt && <span className="text-xs text-white/35">{t("signedUpOn", { date: new Date(rep.createdAt).toLocaleDateString(t.locale) })}</span>}
       <ModuleChecks value={modules} onChange={setModules} />
       <button
         type="button"
@@ -175,18 +183,18 @@ function PendingRow({ rep }: { rep: Rep }) {
         data-testid={`approve-${rep.id}`}
       >
         {approve.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-        Approve
+        {t("approve")}
       </button>
       <button
         type="button"
         disabled={busy}
         onClick={() => {
-          const reason = window.prompt(`Refuse ${rep.displayName}'s sign-up? Optional note (only admins see it):`, "");
-          if (reason !== null) refuse.mutate({ url: `/api/xpot/admin/reps/${rep.id}/block`, body: { reason: reason || "Sign-up refused" }, rep });
+          const reason = window.prompt(t("refusePrompt", { name: rep.displayName }), "");
+          if (reason !== null) refuse.mutate({ url: `/api/xpot/admin/reps/${rep.id}/block`, body: { reason: reason || t("signUpRefusedReason") }, rep });
         }}
         className={`${BTN} border border-white/10 text-white/60 hover:bg-white/5`}
       >
-        Refuse
+        {t("refuse")}
       </button>
     </div>
   );
@@ -194,6 +202,9 @@ function PendingRow({ rep }: { rep: Rep }) {
 
 function ActiveRow({ rep }: { rep: Rep }) {
   const { toast } = useToast();
+  const t = useT(manageMessages);
+  const tc = useT(commonMessages);
+  const tse = useT(settingsMessages);
   const queryClient = useQueryClient();
   const [role, setRole] = useState(rep.role);
   const [team, setTeam] = useState(rep.team ?? "");
@@ -206,14 +217,14 @@ function ActiveRow({ rep }: { rep: Rep }) {
     mutationFn: () =>
       send("/api/xpot/admin/reps", { userId: rep.userId, displayName: rep.displayName, email: rep.email, role, team: team || null, modules }),
     onSuccess: () => {
-      toast({ title: `${rep.displayName} updated` });
+      toast({ title: t("repUpdated", { name: rep.displayName }) });
       void queryClient.invalidateQueries({ queryKey: REPS_KEY });
     },
-    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: t("error"), description: e.message, variant: "destructive" }),
   });
-  const block = useRepAction((r) => `${r.displayName} blocked and signed out`);
-  const phone = useRepAction((r) => `${r.displayName}'s sign-in phone changed`);
-  const newCode = useRepAction((r) => `New wholesale code for ${r.displayName}; the old one no longer works`);
+  const block = useRepAction((r) => t("repBlocked", { name: r.displayName }));
+  const phone = useRepAction((r) => t("repPhoneChanged", { name: r.displayName }));
+  const newCode = useRepAction((r) => t("repNewCode", { name: r.displayName }));
 
   return (
     <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4" data-testid={`rep-${rep.id}`}>
@@ -221,12 +232,12 @@ function ActiveRow({ rep }: { rep: Rep }) {
       <select value={role} onChange={(e) => setRole(e.target.value)} className="rounded-lg border border-white/10 bg-[#0a0f1e] px-2 py-1.5 text-sm text-white outline-none focus:border-blue-500/50">
         {ROLES.map((r) => (
           <option key={r} value={r}>
-            {r}
+            {tse(ROLE_KEYS[r])}
           </option>
         ))}
       </select>
-      <input value={team} onChange={(e) => setTeam(e.target.value)} placeholder="team" className={`${FIELD} w-28`} />
-      <div title={isManager ? "Managers and admins use every module" : undefined}>
+      <input value={team} onChange={(e) => setTeam(e.target.value)} placeholder={t("teamPlaceholder")} className={`${FIELD} w-28`} />
+      <div title={isManager ? t("managersUseAllModules") : undefined}>
         <ModuleChecks value={modules} onChange={setModules} disabled={isManager} />
       </div>
       <button
@@ -236,29 +247,32 @@ function ActiveRow({ rep }: { rep: Rep }) {
         className={`${BTN} bg-blue-500 text-white hover:bg-blue-600`}
       >
         {save.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-        Save
+        {tc("save")}
       </button>
+      {/* The wholesale code buys Tags kits: only for someone who sells Tags (the server refuses the rest). */}
+      {repModules({ role: rep.role, modules: rep.modules }).includes("tags") && (
+        <button
+          type="button"
+          title={rep.wholesaleCode ? t("wholesaleReissueTitle", { code: rep.wholesaleCode }) : t("wholesaleIssueTitle")}
+          disabled={newCode.isPending}
+          onClick={() => {
+            if (!rep.wholesaleCode || window.confirm(t("wholesaleConfirm", { name: rep.displayName, code: rep.wholesaleCode }))) {
+              newCode.mutate({ url: `/api/xpot/admin/reps/${rep.id}/wholesale-code`, rep });
+            }
+          }}
+          className={`${BTN} border border-white/10 font-mono text-xs text-white/60 hover:bg-white/5`}
+          data-testid={`wholesale-${rep.id}`}
+        >
+          <KeyRound className="h-4 w-4" />
+          {rep.wholesaleCode ?? t("wholesaleButton")}
+        </button>
+      )}
       <button
         type="button"
-        title={rep.wholesaleCode ? `Wholesale code ${rep.wholesaleCode}: issue a new one` : "Issue a wholesale code"}
-        disabled={newCode.isPending}
-        onClick={() => {
-          if (!rep.wholesaleCode || window.confirm(`Issue a new wholesale code for ${rep.displayName}? ${rep.wholesaleCode} stops working in the Stuscle store.`)) {
-            newCode.mutate({ url: `/api/xpot/admin/reps/${rep.id}/wholesale-code`, rep });
-          }
-        }}
-        className={`${BTN} border border-white/10 font-mono text-xs text-white/60 hover:bg-white/5`}
-        data-testid={`wholesale-${rep.id}`}
-      >
-        <KeyRound className="h-4 w-4" />
-        {rep.wholesaleCode ?? "code"}
-      </button>
-      <button
-        type="button"
-        title="Change the phone they sign in with"
+        title={t("changePhoneTitle")}
         disabled={phone.isPending}
         onClick={() => {
-          const next = window.prompt(`New sign-in phone for ${rep.displayName} (US numbers as is, others with +country code):`, rep.loginPhone ?? "");
+          const next = window.prompt(t("changePhonePrompt", { name: rep.displayName }), rep.loginPhone ?? "");
           if (next) phone.mutate({ url: `/api/xpot/admin/reps/${rep.id}/phone`, body: { phone: next }, rep });
         }}
         className={`${BTN} border border-white/10 text-white/60 hover:bg-white/5`}
@@ -269,14 +283,14 @@ function ActiveRow({ rep }: { rep: Rep }) {
         type="button"
         disabled={block.isPending}
         onClick={() => {
-          const reason = window.prompt(`Block ${rep.displayName}? They lose access and are signed out now. Optional reason:`, "");
+          const reason = window.prompt(t("blockPrompt", { name: rep.displayName }), "");
           if (reason !== null) block.mutate({ url: `/api/xpot/admin/reps/${rep.id}/block`, body: { reason: reason || null }, rep });
         }}
         className={`${BTN} border border-red-500/30 text-red-300 hover:bg-red-500/10`}
         data-testid={`block-${rep.id}`}
       >
         <Ban className="h-4 w-4" />
-        Block
+        {t("block")}
       </button>
     </div>
   );
@@ -286,54 +300,56 @@ type DeletionResult = { account: "deleted" | "anonymized"; leadsDeleted: number;
 
 /** Delete the account and its data, when the person asks (privacy policy, "How long we keep it"). */
 function DeleteAccountButton({ rep }: { rep: Rep }) {
+  const t = useT(manageMessages);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { data: me } = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
+  const word = t("deleteAccountWord");
   const remove = useMutation({
+    // The API's own guard word is always "DELETE"; the one typed is localized.
     mutationFn: () => send<DeletionResult>(`/api/xpot/admin/reps/${rep.id}`, { confirm: "DELETE" }, "DELETE"),
     onSuccess: (r) => {
-      const kept = r.leadsUnassigned ? ` ${r.leadsUnassigned} business(es) with sales records kept, now unassigned.` : "";
-      const files = r.files.failed ? ` ${r.files.failed} file(s) could not be deleted; see the server log.` : "";
       toast({
-        title: `${rep.displayName}'s account deleted`,
-        description: `${r.leadsDeleted} business(es), ${r.visitsDeleted} visit(s) and ${r.files.deleted} file(s) deleted.${kept}${files}`,
+        title: t("accountDeleted", { name: rep.displayName }),
+        description: [
+          t("accountDeletedSummary", { leads: r.leadsDeleted, visits: r.visitsDeleted, files: r.files.deleted }),
+          r.leadsUnassigned ? t("accountDeletedKept", { count: r.leadsUnassigned }) : "",
+          r.files.failed ? t("accountDeletedFilesFailed", { count: r.files.failed }) : "",
+        ].filter(Boolean).join(" "),
         variant: r.files.failed ? "destructive" : undefined,
       });
       void queryClient.invalidateQueries({ queryKey: REPS_KEY });
     },
-    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: t("error"), description: e.message, variant: "destructive" }),
   });
+  // Server rule: platform admins only (server/accountDeletion.ts).
   if (!me?.user.isAdmin) return null;
   return (
     <button
       type="button"
       disabled={remove.isPending}
       onClick={() => {
-        const typed = window.prompt(
-          `Delete ${rep.displayName}'s account and data? This cannot be undone.\n\n` +
-            "Deleted: sign-in, profile, their visits, notes, voice notes, photos, tasks and the businesses they own. " +
-            "Kept for accounting: sales and consignments (a business with those stays, unassigned).\n\nType DELETE to confirm:",
-          "",
-        );
-        if (typed === "DELETE") remove.mutate();
-        else if (typed !== null) toast({ title: "Not deleted", description: "Type DELETE, in capitals, to confirm." });
+        const typed = window.prompt(t("deleteAccountPrompt", { name: rep.displayName, word }), "");
+        if (typed === word) remove.mutate();
+        else if (typed !== null) toast({ title: t("notDeleted"), description: t("notDeletedHint", { word }) });
       }}
       className={`${BTN} border border-red-500/30 text-red-300 hover:bg-red-500/10`}
       data-testid={`delete-${rep.id}`}
     >
       {remove.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-      Delete account
+      {t("deleteAccount")}
     </button>
   );
 }
 
 function BlockedRow({ rep }: { rep: Rep }) {
-  const unblock = useRepAction((r) => `${r.displayName} can sign in again`);
+  const t = useT(manageMessages);
+  const unblock = useRepAction((r) => t("repCanSignInAgain", { name: r.displayName }));
   return (
     <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-red-500/15 bg-red-500/[0.03] p-4 opacity-80" data-testid={`rep-${rep.id}`}>
       <Identity rep={rep} />
       <span className="text-xs text-white/40">
-        blocked {rep.blockedAt ? new Date(rep.blockedAt).toLocaleDateString() : ""}
+        {t("blockedOn", { date: rep.blockedAt ? new Date(rep.blockedAt).toLocaleDateString(t.locale) : "" }).trim()}
         {rep.blockedReason ? ` · ${rep.blockedReason}` : ""}
       </span>
       <button
@@ -343,7 +359,7 @@ function BlockedRow({ rep }: { rep: Rep }) {
         className={`${BTN} border border-white/10 text-white/70 hover:bg-white/5`}
       >
         <RotateCcw className="h-4 w-4" />
-        Unblock
+        {t("unblock")}
       </button>
       <DeleteAccountButton rep={rep} />
     </div>
@@ -353,6 +369,9 @@ function BlockedRow({ rep }: { rep: Rep }) {
 /** The admin creates someone's access directly: active, signs in with a code to this phone. */
 function NewResellerForm() {
   const { toast } = useToast();
+  const t = useT(manageMessages);
+  const tc = useT(commonMessages);
+  const tSignin = useT(signinMessages);
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [displayName, setDisplayName] = useState("");
@@ -364,11 +383,11 @@ function NewResellerForm() {
   const create = useMutation({
     mutationFn: () => send<Rep>("/api/xpot/admin/reps/accounts", { displayName, phone, countryCode, modules }),
     onSuccess: (rep) => {
-      setCreated(welcomeMessage(displayName, rep.phone ?? phone));
+      setCreated(welcomeMessage(t, displayName, rep.phone ?? phone));
       void queryClient.invalidateQueries({ queryKey: REPS_KEY });
-      toast({ title: `${displayName} can sign in now` });
+      toast({ title: t("repCanSignInNow", { name: displayName }) });
     },
-    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: t("error"), description: e.message, variant: "destructive" }),
   });
 
   const reset = () => {
@@ -382,7 +401,7 @@ function NewResellerForm() {
     return (
       <button type="button" onClick={() => setOpen(true)} className={`${BTN} bg-blue-500 py-2 text-white hover:bg-blue-600`} data-testid="button-new-reseller">
         <UserPlus className="h-4 w-4" />
-        New reseller
+        {t("newReseller")}
       </button>
     );
   }
@@ -390,19 +409,19 @@ function NewResellerForm() {
   if (created) {
     return (
       <div className="space-y-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/[0.06] p-4" data-testid="reseller-created">
-        <p className="text-sm font-semibold text-emerald-200">Access created. Send this to the reseller (e.g. on WhatsApp):</p>
+        <p className="text-sm font-semibold text-emerald-200">{t("accessCreated")}</p>
         <pre className="whitespace-pre-wrap rounded-lg bg-black/30 p-3 font-mono text-sm text-white">{created}</pre>
         <div className="flex gap-2">
           <button
             type="button"
-            onClick={() => void navigator.clipboard.writeText(created).then(() => toast({ title: "Copied" }))}
+            onClick={() => void navigator.clipboard.writeText(created).then(() => toast({ title: tc("copied") }))}
             className={`${BTN} bg-emerald-500 py-2 text-white hover:bg-emerald-600`}
           >
             <Copy className="h-4 w-4" />
-            Copy message
+            {t("copyMessage")}
           </button>
           <button type="button" onClick={reset} className={`${BTN} border border-white/10 py-2 text-white/70 hover:bg-white/5`}>
-            Create another
+            {t("createAnother")}
           </button>
           <button
             type="button"
@@ -412,7 +431,7 @@ function NewResellerForm() {
             }}
             className={`${BTN} py-2 text-white/50 hover:text-white/80`}
           >
-            Close
+            {tc("close")}
           </button>
         </div>
       </div>
@@ -426,23 +445,17 @@ function NewResellerForm() {
 
   return (
     <form onSubmit={submit} className="space-y-3 rounded-2xl border border-blue-500/25 bg-blue-500/[0.04] p-4" data-testid="new-reseller-form">
-      <p className="text-sm font-semibold text-white">New reseller</p>
-      <p className="text-xs text-white/50">Their access is on right away; they sign in with a code texted to this phone.</p>
+      <p className="text-sm font-semibold text-white">{t("newReseller")}</p>
+      <p className="text-xs text-white/50">{t("newResellerHint")}</p>
       <div className="grid gap-2 sm:grid-cols-2">
-        <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Full name" required className={FIELD} data-testid="input-reseller-name" />
+        <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder={t("fullNamePlaceholder")} required className={FIELD} data-testid="input-reseller-name" />
         <div className="flex gap-2">
-          <select value={countryCode} onChange={(e) => setCountryCode(e.target.value)} className="rounded-lg border border-white/10 bg-[#0a0f1e] px-2 text-sm text-white outline-none">
-            {PHONE_COUNTRIES.map((c) => (
-              <option key={c.code} value={c.code}>
-                {c.flag} +{c.code}
-              </option>
-            ))}
-          </select>
-          <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone (sign-in)" type="tel" required className={FIELD} data-testid="input-reseller-phone" />
+          <CountryCodePicker value={countryCode} onChange={setCountryCode} label={tSignin("country")} className="rounded-lg text-sm" />
+          <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder={t("phonePlaceholder")} type="tel" required className={FIELD} data-testid="input-reseller-phone" />
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-4">
-        <span className="text-xs uppercase tracking-wider text-white/40">Modules</span>
+        <span className="text-xs uppercase tracking-wider text-white/40">{t("modules")}</span>
         <ModuleChecks value={modules} onChange={setModules} />
       </div>
       <div className="flex gap-2">
@@ -453,10 +466,10 @@ function NewResellerForm() {
           data-testid="button-create-reseller"
         >
           {create.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-          Create access
+          {t("createAccess")}
         </button>
         <button type="button" onClick={() => setOpen(false)} className={`${BTN} py-2 text-white/50 hover:text-white/80`}>
-          Cancel
+          {tc("cancel")}
         </button>
       </div>
     </form>

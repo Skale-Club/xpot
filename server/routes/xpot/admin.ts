@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { randomBytes } from "crypto";
 import { storage } from "../../storage.js";
-import { requireXpotManager } from "./middleware.js";
+import { requireSuperAdmin, requireXpotManager } from "./middleware.js";
 import {
   AccountError,
   approveRep,
@@ -21,7 +21,9 @@ import { AccountDeletionError, deleteRepAccount } from "../../accountDeletion.js
 
 export function createAdminRouter() {
   const router = Router();
-  router.use(requireXpotManager);
+  // Only the /admin paths: this router is mounted at /api/xpot, so a bare router.use would guard
+  // every route mounted after it (sales, consignments, products...) and lock plain reps out.
+  router.use("/admin", requireXpotManager);
 
   const genInboundKey = () => `xpot_${randomBytes(24).toString("base64url")}`;
 
@@ -154,7 +156,8 @@ export function createAdminRouter() {
     res.json(await storage.updateSalesAppSettings(input));
   });
 
-  // ── Xphere per-user config, managed by the admin across all reps ──
+  // ── Xphere per-user config, managed by the global admin across all reps ──
+  router.use("/admin/xphere", requireSuperAdmin);
 
   router.get("/admin/xphere", async (_req, res) => {
     const [reps, configs] = await Promise.all([

@@ -1,5 +1,7 @@
 import { Building2, MapPinned, Package, Boxes } from "lucide-react";
 import { formatCents } from "../utils";
+import { useT } from "@/i18n";
+import { salesModuleMessages } from "@/i18n/messages/salesModule";
 import { fileSrc } from "@/lib/files";
 
 type LeadLike = {
@@ -49,6 +51,7 @@ export function LeadCardBody({
   subtitle?: React.ReactNode;
   right?: React.ReactNode;
 }) {
+  const t = useT(salesModuleMessages);
   const loc = lead.locations?.[0];
   const photo = lead.photos?.[0];
   const routeUrl = buildRouteUrl(loc);
@@ -115,12 +118,12 @@ export function LeadCardBody({
           <div className="mt-1 flex flex-wrap items-center gap-x-2.5 text-[11px] font-medium">
             {lead.salesLifetimeCents ? (
               <span className="inline-flex items-center gap-1 text-emerald-400/80">
-                <Package className="h-3 w-3" /> {formatCents(lead.salesLifetimeCents)} sold
+                <Package className="h-3 w-3" /> {t("soldAmount", { amount: formatCents(lead.salesLifetimeCents) })}
               </span>
             ) : null}
             {lead.unitsOnShelf ? (
               <span className="inline-flex items-center gap-1 text-indigo-300/80">
-                <Boxes className="h-3 w-3" /> {lead.unitsOnShelf} on shelf
+                <Boxes className="h-3 w-3" /> {t("onShelfN", { count: lead.unitsOnShelf })}
               </span>
             ) : null}
           </div>

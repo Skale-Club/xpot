@@ -50,6 +50,8 @@ import { VisitActionsPanel } from "./components/sales/VisitActions";
 import { GLASS_RAISED } from "@/components/xpot/surface";
 import { useIsComputer } from "@/hooks/use-is-desktop";
 import { ContinueOnPhone } from "@/pages/tags/ContinueOnPhone";
+import { ModuleBadge } from "@/components/xpot/ModuleBadge";
+import { maskUsPhoneInput } from "./phoneInput";
 
 function ActiveLeadInfo({ lead, onSaved }: { lead: SalesLead; onSaved: () => void }) {
   const { toast } = useToast();
@@ -100,13 +102,6 @@ function ActiveLeadInfo({ lead, onSaved }: { lead: SalesLead; onSaved: () => voi
 
 const US_STATES = ["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY"];
 
-function formatPhone(value: string): string {
-  const digits = value.replace(/\D/g, "").slice(0, 10);
-  if (digits.length <= 3) return digits;
-  if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
-  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
-}
-
 function CreateLeadDialog({ open, onOpenChange, initialName, onCreated }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -135,7 +130,7 @@ function CreateLeadDialog({ open, onOpenChange, initialName, onCreated }: {
     setForm((prev) => ({
       ...prev,
       name: place.name,
-      phone: place.phone ? formatPhone(place.phone) : prev.phone,
+      phone: place.phone ? maskUsPhoneInput(place.phone) : prev.phone,
       website: place.website || prev.website,
       address,
       city,
@@ -247,7 +242,7 @@ function CreateLeadDialog({ open, onOpenChange, initialName, onCreated }: {
           ))}
           <input
             value={form.phone}
-            onChange={(e) => setForm((prev) => ({ ...prev, phone: formatPhone(e.target.value) }))}
+            onChange={(e) => setForm((prev) => ({ ...prev, phone: maskUsPhoneInput(e.target.value) }))}
             placeholder={t("fieldPhone")}
             inputMode="tel"
             className="w-full h-10 rounded-xl px-3 text-[16px] text-white placeholder:text-white/25 focus:outline-none"
@@ -537,15 +532,18 @@ export function XpotCheckIn() {
               setSellTo({ leadId: lead.id, name: lead.name, placeId: lead.googlePlaceId ?? null });
               navigate("/tags");
             }}
-            className="relative flex w-full items-center gap-3 rounded-2xl border border-emerald-400/25 bg-emerald-400/[0.08] p-3 text-left transition-transform active:scale-[0.98]"
+            className="relative flex w-full items-center gap-3 rounded-2xl border border-violet-400/25 bg-violet-400/[0.08] p-3 text-left transition-transform active:scale-[0.98]"
             style={{ WebkitTapHighlightColor: "transparent" }}
             data-testid="button-sell-piece"
           >
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-400/15 text-emerald-300">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-400/15 text-violet-300">
               <Nfc className="h-5 w-5" />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block text-sm font-bold text-white">{t("sellPiece")}</span>
+              <span className="flex items-center gap-2 text-sm font-bold text-white">
+                {t("sellPiece")}
+                <ModuleBadge module="tags" />
+              </span>
               <span className="block text-xs text-white/45">{t("sellPieceHint")}</span>
             </span>
           </button>

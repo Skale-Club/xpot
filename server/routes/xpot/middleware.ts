@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
+import { repModules } from "#shared/modules.js";
 import { storage } from "../../storage.js";
 
 export type SessionUser = {
@@ -74,7 +75,46 @@ export async function requireXpotUser(req: Request, res: Response, next: NextFun
     next();
   } catch (err) {
     console.error("[requireXpotUser]", err);
-    res.status(500).json({ message: (err as Error).message || "Internal server error" });
+    res.status(500).json({ message: "Internal server error" });
+  }
+}
+
+/**
+ * API paths that belong to the Visits module alone. Leads and place search stay
+ * out: they are the businesses both modules sell to (Tags picks and creates its
+ * customers there). Mounted in front of the routers in ./index.ts.
+ */
+export const VISITS_ONLY_PATHS = [
+  "/dashboard",
+  "/metrics",
+  "/visits",
+  "/opportunities",
+  "/tasks",
+  "/sync",
+  "/map",
+  "/xphere",
+  "/products",
+  "/sales",
+  "/consignments",
+] as const;
+
+/**
+ * Refuses a rep whose account has Visits switched off (a Tags-only reseller).
+ * The client already hides those screens; this is the server side of the same
+ * rule, like requireTagUser does for Tags. Anonymous and inactive requests go
+ * through untouched so each route answers them with its own 401/403.
+ */
+export async function requireVisitsModule(req: Request, res: Response, next: NextFunction) {
+  try {
+    const actor = await ensureXpotRep(req);
+    if (!actor || accessDenial(actor.rep) || isManagerOrAdmin(actor)) return next();
+    if (!repModules(actor.rep).includes("visits")) {
+      return res.status(403).json({ code: "module_off", message: "Visits are not enabled for your account." });
+    }
+    next();
+  } catch (err) {
+    console.error("[requireVisitsModule]", err);
+    res.status(500).json({ message: "Failed to verify access" });
   }
 }
 
@@ -104,8 +144,19 @@ export async function requireXpotManager(req: Request, res: Response, next: Next
     next();
   } catch (err) {
     console.error("[requireXpotManager]", err);
-    res.status(500).json({ message: (err as Error).message || "Internal server error" });
+    res.status(500).json({ message: "Internal server error" });
   }
+}
+
+/**
+ * The global admin only (users.is_admin, Skale Club): production, chip writers,
+ * the journey, integrations, branding, Xphere. Runs after requireXpotManager,
+ * which has already loaded the actor; managers get 403 like anyone else.
+ */
+export function requireSuperAdmin(req: Request, res: Response, next: NextFunction) {
+  const actor = (req as any).xpotActor as { user: SessionUser } | undefined;
+  if (!actor?.user.isAdmin) return res.status(403).json({ code: "super_admin_only", message: "Admin access required" });
+  next();
 }
 
 // ─── Resource-level authorization ────────────────────────────────────────────

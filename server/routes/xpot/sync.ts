@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { storage } from "../../storage.js";
 import { requireXpotUser, ensureXpotRep, isManagerOrAdmin } from "./middleware.js";
-import { syncLeadToGhl, syncOpportunityToGhl, syncTaskToGhl, syncVisitToGhl } from "./helpers.js";
+import { syncLeadToGhl, syncLeadToXphere, syncOpportunityToGhl, syncTaskToGhl, syncVisitToGhl } from "./helpers.js";
 import { syncSaleToXphere } from "./xphere-sync.js";
 import { salesStorage } from "../../storage-sales.js";
 
@@ -77,8 +77,12 @@ export function createSyncRouter() {
         if (!lead || (!isManagerOrAdmin(actor!) && lead.ownerRepId !== actor!.rep.id)) {
           return res.status(403).json({ message: "Access denied" });
         }
-        const result = await syncLeadToGhl(Number(entityId));
-        return res.json(result);
+        // A lead goes to Xphere when it is created and to GHL on a flush, and a
+        // failure of either is logged as "sales_lead": retry whichever hasn't landed.
+        const results: { synced: boolean; message?: string }[] = [];
+        if (!lead.xphereRef) results.push(await syncLeadToXphere(lead.id));
+        if (!lead.ghlContactId) results.push(await syncLeadToGhl(lead.id));
+        return res.json({ synced: results.every((r) => r.synced), results });
       }
       case "sales_sale": {
         // Sales reach the CRM through the Xphere mirror; a failure lands in

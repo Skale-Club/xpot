@@ -11,12 +11,16 @@ import { StatusBadge } from "../VisitStatus";
 import { LeadSalesPanel } from "../sales/LeadSalesPanel";
 import { LeadContacts } from "./LeadContacts";
 import type { EnrichedSalesVisit, FullSalesLead } from "../../types";
+import { ModuleBadge } from "@/components/xpot/ModuleBadge";
 import { fileSrc } from "@/lib/files";
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+function Section({ title, children, badge }: { title: string; children: ReactNode; badge?: ReactNode }) {
   return (
     <section className="space-y-2.5 border-t border-white/[0.06] px-5 py-4">
-      <h3 className="text-[10px] font-semibold uppercase tracking-widest text-white/35">{title}</h3>
+      <h3 className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-widest text-white/35">
+        {title}
+        {badge}
+      </h3>
       {children}
     </section>
   );
@@ -210,10 +214,10 @@ export function LeadDetailPane({
           </Section>
 
           {pieces && pieces.pieces > 0 && (
-            <Section title={t("sectionPieces")}>
+            <Section title={t("sectionPieces")} badge={<ModuleBadge module="tags" />}>
               <Link
                 href={`/tags/pieces?lead=${lead.id}&name=${encodeURIComponent(lead.name)}`}
-                className="flex items-center gap-2 rounded-xl bg-emerald-400/10 px-3 py-2.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-400/15"
+                className="flex items-center gap-2 rounded-xl bg-violet-400/10 px-3 py-2.5 text-xs font-semibold text-violet-300 hover:bg-violet-400/15"
               >
                 <Nfc className="h-4 w-4" />
                 <span className="flex-1">

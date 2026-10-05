@@ -327,7 +327,7 @@ function LeadPiecesChip({ lead, summary, onOpen }: { lead: FullSalesLead; summar
       tabIndex={0}
       onClick={(e) => { e.stopPropagation(); onOpen(); }}
       onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); onOpen(); } }}
-      className="inline-flex max-w-full items-center gap-1.5 rounded-xl bg-emerald-400/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-300 hover:bg-emerald-400/20"
+      className="inline-flex max-w-full items-center gap-1.5 rounded-xl bg-violet-400/10 px-2 py-0.5 text-[11px] font-semibold text-violet-300 hover:bg-violet-400/20"
       data-testid={`lead-${lead.id}-pieces`}
     >
       <Nfc className="h-3 w-3 shrink-0" />
