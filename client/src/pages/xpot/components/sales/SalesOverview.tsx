@@ -40,10 +40,10 @@ export function SalesOverview({ onGoToConsignments }: { onGoToConsignments?: () 
   return (
     <div className="space-y-4">
       {/* Range */}
-      <Segmented variant="chips" items={RANGES.map((r) => ({ id: r as number, label: `${r} days` }))} value={days} onChange={setDays} />
+      <Segmented variant="chips" className="lg:max-w-md" items={RANGES.map((r) => ({ id: r as number, label: `${r} days` }))} value={days} onChange={setDays} />
 
       {/* Profit is the headline; revenue sits beside it. */}
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4 lg:gap-4">
         <StatTile tone="green" label={`Kept · ${days}d`} value={formatCents(s.profit.periodCents)}
           sub={`${formatCents(s.revenue.periodCents)} billed`} />
         <StatTile tone="indigo" label="Kept · this month" value={formatCents(s.profit.monthToDateCents)}
@@ -75,7 +75,7 @@ export function SalesOverview({ onGoToConsignments }: { onGoToConsignments?: () 
             <div className="text-sm font-bold text-white">Kept per day</div>
             <div className="text-[10px] font-semibold uppercase tracking-widest text-white/30">Last {days} days</div>
           </div>
-          <div className="h-32 w-full">
+          <div className="h-32 w-full lg:h-60">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chart} margin={{ top: 8, right: 6, left: 6, bottom: 0 }}>
                 <defs>
@@ -98,6 +98,8 @@ export function SalesOverview({ onGoToConsignments }: { onGoToConsignments?: () 
         </div>
       )}
 
+      {/* Desktop: stock and products side by side. */}
+      <div className="space-y-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-4 lg:space-y-0">
       {/* Stock on other people's shelves */}
       <button type="button" onClick={onGoToConsignments} disabled={!onGoToConsignments}
         className="w-full rounded-2xl p-4 text-left transition-all active:scale-[0.995] disabled:active:scale-100"
@@ -168,6 +170,8 @@ export function SalesOverview({ onGoToConsignments }: { onGoToConsignments?: () 
           )}
         </div>
       )}
+
+      </div>
 
       {s.sales.periodCount === 0 && (
         <EmptyState compact icon={Boxes} title="No sales in this period yet." hint="Sell from a company card or during a check-in." />

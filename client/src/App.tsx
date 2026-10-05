@@ -24,7 +24,7 @@ import { MobileTabBar } from "@/components/xpot/MobileTabBar";
 
 // Screens redesigned for desktop use the full width there; the rest stay in a
 // narrow column until their turn (docs/DESKTOP.md).
-const WIDE_TABS = new Set<string>(["leads", "visits", "dashboard"]);
+const WIDE_TABS = new Set<string>(["leads", "visits", "dashboard", "sales"]);
 
 function XpotAppShell() {
   const { me, xpotMeQuery, isOnline, activeTab } = useXpotQueries();
