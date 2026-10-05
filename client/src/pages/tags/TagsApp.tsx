@@ -2,11 +2,9 @@ import { useEffect } from "react";
 import { Redirect, Route, Switch, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Home, Link2, Package } from "lucide-react";
-import { Loader2 } from "@/components/ui/loader";
 import { LanguagePicker } from "@/components/LanguagePicker";
 import { ModuleSwitch, rememberModule, useXpotModules } from "@/components/ModuleSwitch";
 import { useT } from "@/i18n";
-import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
 import type { XpotMeResponse } from "@/pages/xpot/types";
 import DirectScreen from "./DirectScreen";
@@ -18,6 +16,8 @@ import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { AppLayout } from "@/components/xpot/AppLayout";
 import { MobileTabBar } from "@/components/xpot/MobileTabBar";
 import { XpotMark } from "@/components/xpot/XpotMark";
+import { MODULE_HOME } from "@/lib/xpot";
+import { SessionGate } from "@/components/xpot/SessionGate";
 
 const NAV = [
   { href: APP_BASE, key: "navHome", icon: Home },
@@ -34,7 +34,6 @@ function activeNav(path: string): string {
 /** The Tags module: read, sell and write QR/NFC pieces. Mounted at /tags/*. */
 export function TagsApp() {
   const t = useT(tagsMessages);
-  const tc = useT(commonMessages);
   const [location, navigate] = useLocation();
   const meQuery = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
   const modules = useXpotModules();
@@ -45,29 +44,10 @@ export function TagsApp() {
     if (allowed) rememberModule("tags");
   }, [allowed]);
 
-  if (!meQuery.data) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#060912] text-white">
-        {meQuery.isError ? (
-          <>
-            <p className="text-sm text-white/50">{tc("sessionFailed")}</p>
-            <button
-              type="button"
-              onClick={() => navigate("/")}
-              className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 transition-colors hover:bg-white/10"
-            >
-              {tc("goToSignIn")}
-            </button>
-          </>
-        ) : (
-          <Loader2 className="h-7 w-7 animate-spin text-blue-400" />
-        )}
-      </div>
-    );
-  }
+  if (!meQuery.data) return <SessionGate failed={meQuery.isError} />;
 
   // Tags switched off for this rep: back to Visits (the server refuses the API anyway).
-  if (!allowed) return <Redirect to="/check-in" />;
+  if (!allowed) return <Redirect to={MODULE_HOME.visits} />;
 
   const current = activeNav(location);
   // Home and the pieces table use the desktop width; a piece and Direct stay narrow.

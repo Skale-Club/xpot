@@ -1,6 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { formatCurrency } from "@/pages/xpot/utils";
 import { Loader2 } from "@/components/ui/loader";
+import { useT } from "@/i18n";
+import { manageMessages, type ManageKey } from "@/i18n/messages/manage";
 
 type OverviewResponse = {
   metrics: {
@@ -23,19 +25,27 @@ type OverviewResponse = {
   }>;
 };
 
-const CARDS: Array<{ key: keyof OverviewResponse["metrics"]; label: string; money?: boolean }> = [
-  { key: "activeReps", label: "Active reps" },
-  { key: "leads", label: "Leads" },
-  { key: "visitsInProgress", label: "Visits in progress" },
-  { key: "completedVisits", label: "Completed visits" },
-  { key: "openOpportunities", label: "Open opportunities" },
-  { key: "pipelineValue", label: "Pipeline", money: true },
-  { key: "pendingTasks", label: "Pending tasks" },
-  { key: "syncIssues", label: "Sync issues" },
+const CARDS: Array<{ key: keyof OverviewResponse["metrics"]; label: ManageKey; money?: boolean }> = [
+  { key: "activeReps", label: "metricActiveReps" },
+  { key: "leads", label: "metricLeads" },
+  { key: "visitsInProgress", label: "metricVisitsInProgress" },
+  { key: "completedVisits", label: "metricCompletedVisits" },
+  { key: "openOpportunities", label: "metricOpenOpportunities" },
+  { key: "pipelineValue", label: "metricPipeline", money: true },
+  { key: "pendingTasks", label: "metricPendingTasks" },
+  { key: "syncIssues", label: "metricSyncIssues" },
 ];
+
+const SYNC_STATUS_KEYS: Record<string, ManageKey> = {
+  pending: "syncStatus_pending",
+  synced: "syncStatus_synced",
+  failed: "syncStatus_failed",
+  needs_review: "syncStatus_needs_review",
+};
 
 export function AdminOverview() {
   const query = useQuery<OverviewResponse>({ queryKey: ["/api/xpot/admin/overview"] });
+  const t = useT(manageMessages);
 
   if (query.isLoading) {
     return (
@@ -45,7 +55,7 @@ export function AdminOverview() {
     );
   }
   if (query.isError || !query.data) {
-    return <p className="text-sm text-red-400">Failed to load overview.</p>;
+    return <p className="text-sm text-red-400">{t("overviewLoadFailed")}</p>;
   }
 
   const { metrics, latestSyncEvents } = query.data;
@@ -55,7 +65,7 @@ export function AdminOverview() {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {CARDS.map(({ key, label, money }) => (
           <div key={key} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-            <p className="text-xs text-white/45">{label}</p>
+            <p className="text-xs text-white/45">{t(label)}</p>
             <p className={`mt-1 text-2xl font-bold ${key === "syncIssues" && metrics.syncIssues > 0 ? "text-amber-400" : ""}`}>
               {money
                 ? formatCurrency(metrics[key] || 0, "USD")
@@ -66,10 +76,10 @@ export function AdminOverview() {
       </div>
 
       <div>
-        <h3 className="mb-3 text-sm font-semibold text-white/70">Recent sync</h3>
+        <h3 className="mb-3 text-sm font-semibold text-white/70">{t("recentSync")}</h3>
         <div className="overflow-hidden rounded-2xl border border-white/10">
           {latestSyncEvents.length === 0 ? (
-            <p className="bg-white/[0.03] px-4 py-6 text-center text-sm text-white/40">No sync events.</p>
+            <p className="bg-white/[0.03] px-4 py-6 text-center text-sm text-white/40">{t("noSyncEvents")}</p>
           ) : (
             latestSyncEvents.map((ev) => (
               <div key={ev.id} className="flex items-center justify-between gap-3 border-b border-white/5 bg-white/[0.02] px-4 py-3 last:border-0">
@@ -84,7 +94,7 @@ export function AdminOverview() {
                     ev.status === "synced" ? "bg-emerald-500/15 text-emerald-300" : "bg-amber-500/15 text-amber-300"
                   }`}
                 >
-                  {ev.status}
+                  {SYNC_STATUS_KEYS[ev.status] ? t(SYNC_STATUS_KEYS[ev.status]) : ev.status}
                 </span>
               </div>
             ))

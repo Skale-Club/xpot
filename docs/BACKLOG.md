@@ -1,14 +1,14 @@
 # Backlog Xpot
 
-**Rev. 4** · base `f79903d` · 52 itens · **28 concluídos** · 3 obsoletos · 21 abertos
+**Rev. 4** · base `7020bc4` · 52 itens · **29 concluídos** · 3 obsoletos · 20 abertos
 
 > **Rev. 4 (conferência com o código, 2026-10-05):** os contadores não fechavam
 > (o cabeçalho dizia 30 concluídos, a tabela somava 24 e os itens marcados ✅
 > eram 28); agora vêm da contagem dos itens. Confirmados no código e marcados ✅:
 > DAT-03, VND-16 e PLT-05. PLT-01, 02 e 03 eram problemas da Vercel, que saiu do
 > projeto (`049cc76`): ficam como obsoletos. Entrou a área MOD, com o que sobrou
-> do plano de módulos ([`MODULES.md`](./MODULES.md)). Suíte hoje: 280 testes de
-> unidade em 36 arquivos (`npx vitest run`), mais 7 arquivos de integração que
+> do plano de módulos ([`MODULES.md`](./MODULES.md)). Suíte hoje: 332 testes de
+> unidade em 38 arquivos (`npx vitest run`), mais 7 arquivos de integração que
 > só rodam com `TAGS_INTEGRATION=1` e um Postgres descartável.
 >
 > **Rev. 2 (execução):** o módulo de vendas foi construído — catálogo, venda
@@ -36,8 +36,8 @@ Detalhamento e referências completas de arquivo:linha em [`AUDITORIA.md`](./AUD
 | DAT — integridade de dados | 6 | 5 | 0 | 1 |
 | PRF — performance | 5 | 1 | 0 | 4 |
 | DOC — testes e documentação | 5 | 5 | 0 | 0 |
-| MOD — módulos Visitas e Tags | 3 | 0 | 0 | 3 |
-| **Total** | **52** | **28** | **3** | **21** |
+| MOD — módulos Visitas e Tags | 3 | 1 | 0 | 2 |
+| **Total** | **52** | **29** | **3** | **20** |
 
 ### Novidades desta revisão
 
@@ -187,9 +187,9 @@ O que ficou aberto do plano [`MODULES.md`](./MODULES.md), executado no #31.
 
 | ID | Sev | Item | Estado |
 |---|---|---|---|
-| MOD-19 | Médio | **Telas de gestão traduzidas (EN/PT/ES).** Os nomes do menu e os títulos já são traduzidos; o conteúdo das telas de `pages/admin/` continua em inglês. Adiado no #31 por ser grande e não ajudar a separar os módulos. | A fazer (outra sessão, branch `feat/i18n-manage`) |
+| MOD-19 | Médio | **Telas de gestão traduzidas (EN/PT/ES).** `i18n/messages/manage.ts`, `manageTags*.ts`; `tests/i18n-messages.test.ts` confere placeholders e plurais em todos os dicionários. Também a área de Vendas (#34). | ✅ #33 |
 | MOD-21 | Médio | **Peça vendida em Tags contar em Vendas.** Hoje a ativação de uma peça (`tags.sold_at`) não vira linha em `sales_sales`, e a aba Vendas não a mostra. Depende da decisão D5 do `MODULES.md`. | Decidir (D5) |
-| MOD-22 | Baixo | **"Minhas peças" do gerente lista todas as peças** (`server/tags/routes.ts:412`) e duplica Tags › Gestão › Todas as peças. Ficou assim porque o gerente vende peças da casa pelo celular a partir dessa lista. Decidir o que "Minhas peças" quer dizer para o gerente. | Decidir |
+| MOD-22 | Baixo | **"Minhas peças" do gerente lista todas as peças** (`server/tags/routes.ts:412`) e duplica Tags › Gestão › Todas as peças. Vender não depende dessa lista: a peça é aberta lendo o QR/NFC ou digitando o código, e ao ser ativada passa a ser do gerente (`saleCredit`). Proposta: "Minhas peças" mostra só as do próprio gerente; o link "Ver peças" de um cliente de Visitas leva o gerente à Gestão filtrada por cliente; a busca (⌘K) do gerente procura em todas. | Decidir com o dono |
 
 ---
 

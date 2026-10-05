@@ -1,19 +1,9 @@
-// Path helpers for the standalone Xpot app.
-//
-// In the original skaleclub monorepo Xpot was mounted under /xpot/* alongside
-// the marketing site. As a standalone app, Xpot is the root — so /xpot is gone
-// and every page lives at its own top-level path (/, /login, /dashboard, etc.).
-//
-// These helpers are kept as a thin layer so callers don't hard-code paths.
+// Paths of the standalone Xpot app: where each module lands, where a signed-in rep
+// goes, and the post-login return target. (Xpot used to live under /xpot/* in the
+// Skale Club monorepo; every page is at its own top-level path now.)
 
-function normalizePath(path = "/") {
-  if (!path) return "/";
-  return path.startsWith("/") ? path : `/${path}`;
-}
-
-export function getXpotPath(path = "/") {
-  return normalizePath(path);
-}
+/** localStorage key of the module used last (sign-in lands there). */
+export const LAST_MODULE_KEY = "xpot.module";
 
 /** The landing page of each module; the one place that says it (sign-in, the module switch, "back"). */
 export const MODULE_HOME = { visits: "/dashboard", tags: "/tags" } as const;
@@ -21,15 +11,11 @@ export const MODULE_HOME = { visits: "/dashboard", tags: "/tags" } as const;
 /** Where a signed-in rep lands: the Tags module if that was the last one used. */
 export function getXpotHomePath() {
   try {
-    if (window.localStorage.getItem("xpot.module") === "tags") return MODULE_HOME.tags;
+    if (window.localStorage.getItem(LAST_MODULE_KEY) === "tags") return MODULE_HOME.tags;
   } catch {
     // Storage blocked: default to Visits.
   }
   return MODULE_HOME.visits;
-}
-
-export function getXpotLoginPath() {
-  return "/login";
 }
 
 // Extract the section slug from a pathname — e.g. "/leads" → "leads".

@@ -1,6 +1,8 @@
 import type { CSSProperties, ReactNode } from "react";
 import { CalendarCheck, Contact, Facebook, Globe, Instagram, Linkedin, Mail, Phone, Sparkles, Tag, UtensilsCrossed, Youtube } from "lucide-react";
-import { isTagFace, TAG_FACE_LABELS, type TagFace } from "@shared/tagFace";
+import { isTagFace, type TagFace } from "@shared/tagFace";
+import { useT } from "@/i18n";
+import { tagsMessages } from "@/i18n/messages/tags";
 import { GoogleLogo } from "@/components/ui/google-logo";
 
 // What is printed on a piece, drawn as a small app-icon tile so a list of pieces reads at a glance:
@@ -57,13 +59,14 @@ const SIZES = {
  * lines up and the gap is visible: that piece's print was never recorded.
  */
 export function TagFaceIcon({ face, size = "sm", className = "", title }: { face: string | null | undefined; size?: keyof typeof SIZES; className?: string; title?: string }) {
+  const tt = useT(tagsMessages);
   const s = SIZES[size];
   if (!isTagFace(face)) {
     return (
       <span
         className={`inline-flex shrink-0 items-center justify-center border border-dashed border-white/20 text-white/30 ${s.box} ${className}`}
-        title={title ?? "Print not recorded"}
-        aria-label={title ?? "Print not recorded"}
+        title={title ?? tt("face_none")}
+        aria-label={title ?? tt("face_none")}
         role="img"
       >
         <Tag className={s.glyph} />
@@ -72,7 +75,7 @@ export function TagFaceIcon({ face, size = "sm", className = "", title }: { face
   }
   const tile = TILES[face];
   const style: CSSProperties = { background: tile.background, color: tile.color };
-  const label = title ?? TAG_FACE_LABELS[face];
+  const label = title ?? tt(`face_${face}`);
   return (
     <span className={`inline-flex shrink-0 items-center justify-center shadow-sm ring-1 ring-white/10 ${s.box} ${className}`} style={style} title={label} aria-label={label} role="img">
       {tile.glyph(s.glyph)}

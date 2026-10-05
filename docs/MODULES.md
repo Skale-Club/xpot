@@ -14,7 +14,7 @@ As decisões foram reavaliadas antes de executar, contra o código. Cinco mudara
 | MOD-04, `/tags/summary` com escopo de gerente | Corrigir | **Descartado** | O resumo aparece como "Suas peças": ser pessoal é o certo. O total da operação está agora em Tags › Gestão › Visão geral |
 | Seletor de módulo no desktop | Menu suspenso (como o seletor de workspace do Slack) | **Controle segmentado** Visitas \| Tags, sempre visível | Com dois módulos, um menu esconde a opção atrás de um clique a mais. O segmentado é o mesmo do celular |
 | Cor de Tags | Violeta ou verde-água | **Violeta** | Verde-água foi testado e descartado na tela: o verde já significa dinheiro, "ao vivo" e sucesso no app inteiro (o botão "Nova venda" de Visitas é verde), então Tags voltaria a parecer Visitas |
-| MOD-19, Admin traduzido | Fase 4 | **Adiado para PR próprio** | Não ajuda a separar os módulos, que era o objetivo. São centenas de textos em três idiomas, que merecem revisão isolada. Hoje quem usa a gestão é o dono, em inglês. Os nomes do menu e os títulos já estão em EN/PT/ES |
+| MOD-19, Admin traduzido | Fase 4 | **Feito em PR próprio** | Não ajudava a separar os módulos, então saiu depois, numa revisão isolada: são centenas de textos em três idiomas |
 | MOD-21 / D5, peça vendida em Vendas | Depois | **Continua depois**, como recomendado | |
 
 **Feito, por item**
@@ -37,7 +37,7 @@ As decisões foram reavaliadas antes de executar, contra o código. Cinco mudara
 | MOD-16 empresa com seções por módulo | ✅ já existia | O detalhe da empresa já tinha Vendas, Peças e Visitas; a seção de peças ganhou o selo |
 | MOD-17 card de Tags no Painel | ✅ | Mantido, com cor e selo de Tags |
 | MOD-18, MOD-20 vocabulário | ✅ parcial | "Suas peças" em todo lugar, "Peças" + selo, ES "Tags", aba "Visitas" → "Histórico" (D1), "Team report" → relatório por revendedor |
-| MOD-19 Admin traduzido | ⏸ adiado | Ver acima. No BACKLOG como MOD-19 (branch `feat/i18n-manage`) |
+| MOD-19 Admin traduzido | ✅ | `i18n/messages/manage.ts` (Visitas e Organização), `manageTags.ts`, `manageTagsPieces.ts`, `manageTagsBatches.ts`; rótulos de peça, produto, chip e impressão vêm de `tags.ts` via `admin/tags/labels.ts`; `tests/i18n-messages.test.ts` confere placeholders e plurais |
 | MOD-21 | ⏸ depende de D5 | No BACKLOG como MOD-21 |
 
 Também: o mapa de onde cada tela vive é um só (`client/src/components/xpot/moduleNav.ts`), lido pela barra
@@ -47,9 +47,10 @@ contra uma API simulada em 1366px e 375px (admin, gerente, revendedor só de Tag
 **Pendências conscientes**
 
 - O gerente vê **todas** as peças em Tags › Minhas peças (`server/tags/routes.ts:412`), como antes. Agora isso
-  duplica Tags › Gestão › Todas as peças. Não foi mudado porque o gerente vende peças da casa pelo celular a
-  partir dessa lista. Fica em aberto no BACKLOG como MOD-22.
-- As telas de gestão continuam em inglês por dentro (MOD-19).
+  duplica Tags › Gestão › Todas as peças. O motivo dado na Rev. 2 (o gerente venderia peças da casa a partir
+  dessa lista) não se sustenta: uma peça é aberta e vendida lendo o QR/NFC ou digitando o código, e ao ser
+  ativada passa a ser do gerente (`saleCredit`). Em aberto no BACKLOG como MOD-22, para decidir com o dono.
+- Textos que vêm do servidor continuam em inglês: mensagens de erro da API, títulos que o servidor grava na Jornada, o diagnóstico das integrações (`shared/integrations-registry.ts`) e os erros de validação de link em `shared/tags.ts` (a gestão traduz os conhecidos pelo texto).
 
 ---
 

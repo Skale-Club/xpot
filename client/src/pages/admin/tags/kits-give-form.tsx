@@ -3,11 +3,17 @@ import { useMutation } from "@tanstack/react-query";
 import { PackagePlus } from "lucide-react";
 import type { TagKitItem } from "@shared/tagsApi";
 import { TAG_MAX_BATCH_QUANTITY, normalizeTagCode } from "@shared/tags";
-import { tagFaceLabel } from "@shared/tagFace";
 import { useToast } from "@/hooks/use-toast";
 import { errorMessage, invalidateAdminTags, sendJson } from "./api";
 import { BTN, INPUT } from "./ui";
-import { Field, ResellerSelect, SELECT, hasTagsModule, productLabel, useBatches, useResellers } from "./batches-shared";
+import { Field, ResellerSelect, SELECT, hasTagsModule, useBatches, useResellers } from "./batches-shared";
+import { useTagLabels } from "./labels";
+import { useT } from "@/i18n";
+import { shellMessages } from "@/i18n/messages/shell";
+import { manageTagsMessages } from "@/i18n/messages/manageTags";
+import { manageTagsBatchesMessages } from "@/i18n/messages/manageTagsBatches";
+
+const MODE_KEYS = { batch: "modeBatch", codes: "modeCodes" } as const;
 
 /**
  * Codes typed or pasted by the admin: one per line or comma/semicolon
@@ -54,6 +60,10 @@ export function GiveKitForm({
   onDone?: (kit: TagKitItem) => void;
 }) {
   const { toast } = useToast();
+  const t = useT(manageTagsBatchesMessages);
+  const tm = useT(manageTagsMessages);
+  const ts = useT(shellMessages);
+  const labels = useTagLabels();
   const { data: reps = [] } = useResellers();
   const { data: batches = [] } = useBatches();
   const [repId, setRepId] = useState<number | null>(null);
@@ -85,15 +95,16 @@ export function GiveKitForm({
       }),
     onSuccess: (kit) => {
       void invalidateAdminTags();
+      const name = kit.repName ?? rep?.displayName;
       toast({
-        title: "Kit recorded",
-        description: `${kit.pieceCount} piece${kit.pieceCount === 1 ? "" : "s"} now with ${kit.repName ?? rep?.displayName ?? "the reseller"}.`,
+        title: t("kitRecorded"),
+        description: name ? t.plural("kitRecordedDesc", kit.pieceCount, { name }) : t.plural("kitRecordedDescNoName", kit.pieceCount),
       });
       setCodesText("");
       setNote("");
       onDone?.(kit);
     },
-    onError: (err) => toast({ title: "Could not give the kit", description: errorMessage(err), variant: "destructive" }),
+    onError: (err) => toast({ title: t("couldNotGiveKit"), description: errorMessage(err), variant: "destructive" }),
   });
 
   const submit = (e: FormEvent) => {
@@ -105,28 +116,23 @@ export function GiveKitForm({
     <form onSubmit={submit} className="space-y-4" data-testid="admin-tags-give-kit">
       <div className="grid gap-3 sm:grid-cols-2">
         <Field
-          label="Reseller"
+          label={tm("colReseller")}
           hint={
             rep && !hasTagsModule(rep) ? (
-              <span className="text-amber-300/80">Tags module is off for {rep.displayName}: they won't see these pieces in the app until you turn it on in Reps.</span>
+              <span className="text-amber-300/80">{t("tagsOffFor", { name: rep.displayName, screen: ts("orgPeople") })}</span>
             ) : undefined
           }
         >
           <ResellerSelect value={repId} onChange={setRepId} />
         </Field>
-        <Field label="Note (optional)" hint="Where it was agreed, e.g. “WhatsApp order #12”.">
-          <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} placeholder="WhatsApp order #12" className={INPUT} />
+        <Field label={t("fieldNoteOptional")} hint={t("noteHint")}>
+          <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} placeholder={t("notePlaceholder")} className={INPUT} />
         </Field>
       </div>
 
       {!fixedBatch && (
         <div className="inline-flex rounded-lg border border-white/10 bg-white/[0.02] p-1" role="tablist">
-          {(
-            [
-              { id: "batch", label: "From a batch" },
-              { id: "codes", label: "Exact codes" },
-            ] as const
-          ).map((m) => (
+          {(Object.keys(MODE_KEYS) as Mode[]).map((id) => ({ id, label: t(MODE_KEYS[id]) })).map((m) => (
             <button
               key={m.id}
               type="button"
@@ -146,25 +152,25 @@ export function GiveKitForm({
       {effectiveMode === "batch" ? (
         <div className="grid gap-3 sm:grid-cols-[1fr_160px]">
           {fixedBatch ? (
-            <Field label="Batch">
+            <Field label={tm("colBatch")}>
               <p className="py-2 text-sm text-white/80">
                 <span className="font-mono">{fixedBatch.batchCode}</span>
-                <span className="text-white/40"> · {fixedBatch.houseCount} in house stock</span>
+                <span className="text-white/40"> · {t("inHouseStockCount", { count: fixedBatch.houseCount })}</span>
               </p>
             </Field>
           ) : (
-            <Field label="Batch" hint={batchOptions.length === 0 ? "No batch has pieces left in house stock." : "The next unsold house pieces, by serial number."}>
+            <Field label={tm("colBatch")} hint={batchOptions.length === 0 ? t("noBatchWithHouse") : t("nextHousePieces")}>
               <select value={batchId} onChange={(e) => setBatchId(e.target.value)} className={SELECT}>
-                <option value="">Choose a batch…</option>
+                <option value="">{t("chooseBatch")}</option>
                 {batchOptions.map((b) => (
                   <option key={b.id} value={b.id}>
-                    {b.batchCode} · {productLabel(b.productType)}{b.face ? ` · ${tagFaceLabel(b.face)}` : ""} · {b.houseCount} in house
+                    {b.batchCode} · {labels.product(b.productType)}{b.face ? ` · ${labels.face(b.face)}` : ""} · {t("inHouseCount", { count: b.houseCount })}
                   </option>
                 ))}
               </select>
             </Field>
           )}
-          <Field label="Pieces" hint={chosenBatch ? `Up to ${available}` : undefined}>
+          <Field label={t("fieldPieces")} hint={chosenBatch ? t("upTo", { count: available }) : undefined}>
             <input
               type="number"
               min={1}
@@ -177,14 +183,14 @@ export function GiveKitForm({
         </div>
       ) : (
         <Field
-          label="Codes"
+          label={t("fieldCodes")}
           hint={
             parsed.invalid.length > 0 ? (
-              <span className="text-red-300">Not a code: {parsed.invalid.slice(0, 8).join(", ")}{parsed.invalid.length > 8 ? "…" : ""}</span>
+              <span className="text-red-300">{t("notACode", { codes: parsed.invalid.slice(0, 8).join(", ") + (parsed.invalid.length > 8 ? "…" : "") })}</span>
             ) : parsed.codes.length > TAG_MAX_BATCH_QUANTITY ? (
-              <span className="text-red-300">At most {TAG_MAX_BATCH_QUANTITY} codes per kit.</span>
+              <span className="text-red-300">{t("atMostCodes", { max: TAG_MAX_BATCH_QUANTITY })}</span>
             ) : (
-              `${parsed.codes.length} code${parsed.codes.length === 1 ? "" : "s"} · one per line or comma separated, as printed on the pieces.`
+              t.plural("giveCodesCount", parsed.codes.length)
             )
           }
         >
@@ -205,8 +211,14 @@ export function GiveKitForm({
         <button type="submit" disabled={!ready || give.isPending} className={BTN} data-testid="admin-tags-give-kit-submit">
           <PackagePlus className="h-4 w-4" />
           {give.isPending
-            ? "Saving…"
-            : `Give ${pieceCount || ""} piece${pieceCount === 1 ? "" : "s"}${rep ? ` to ${rep.displayName}` : ""}`}
+            ? t("saving")
+            : pieceCount
+              ? rep
+                ? t.plural("givePiecesTo", pieceCount, { name: rep.displayName })
+                : t.plural("givePieces", pieceCount)
+              : rep
+                ? t("giveNoCountTo", { name: rep.displayName })
+                : t("giveNoCount")}
         </button>
       </div>
     </form>

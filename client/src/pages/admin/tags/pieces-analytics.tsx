@@ -5,18 +5,36 @@ import type { TagAnalytics } from "@shared/tagsApi";
 import { ADMIN_TAGS_KEY, formatDateTime, getJson, percent, STALE_MS, withQuery } from "./api";
 import { CARD, Stat } from "./ui";
 import { Loading, LoadError } from "./pieces-shared";
+import { useT } from "@/i18n";
+import { tagsMessages } from "@/i18n/messages/tags";
+import { manageTagsPiecesMessages } from "@/i18n/messages/manageTagsPieces";
 
 // Range picker + KPIs + daily QR/NFC chart, for the whole fleet (Team tab) or
 // one piece (PieceDetail).
 
 export type RangePreset = "today" | "7d" | "30d" | "90d";
 
-export const RANGE_PRESETS: ReadonlyArray<{ id: RangePreset; label: string }> = [
-  { id: "today", label: "Today" },
-  { id: "7d", label: "7 days" },
-  { id: "30d", label: "30 days" },
-  { id: "90d", label: "90 days" },
-];
+export const RANGE_PRESETS = [
+  { id: "today", labelKey: "rangeToday" },
+  { id: "7d", labelKey: "range7d" },
+  { id: "30d", labelKey: "range30d" },
+  { id: "90d", labelKey: "range90d" },
+] as const satisfies ReadonlyArray<{ id: RangePreset; labelKey: keyof (typeof manageTagsPiecesMessages)["en"] }>;
+
+const DEVICE_KEYS = {
+  mobile: "device_mobile",
+  tablet: "device_tablet",
+  desktop: "device_desktop",
+  unknown: "device_unknown",
+} as const satisfies Record<string, keyof (typeof manageTagsPiecesMessages)["en"]>;
+
+const isDevice = (value: string): value is keyof typeof DEVICE_KEYS => value in DEVICE_KEYS;
+
+/** "2026-10-04" (a UTC day) in the language in use. */
+function formatDay(day: string, locale: string, opts: Intl.DateTimeFormatOptions): string {
+  const date = new Date(`${day}T00:00:00Z`);
+  return Number.isNaN(date.getTime()) ? day : date.toLocaleDateString(locale, { ...opts, timeZone: "UTC" });
+}
 
 export interface AnalyticsRange {
   preset: RangePreset | "custom";
@@ -40,25 +58,26 @@ const PILL_OFF = "border border-white/10 bg-white/5 text-white/60 hover:bg-white
 const DATE_INPUT = "h-7 rounded-lg border border-white/10 bg-[#0a0f1e] px-2 text-xs text-white [color-scheme:dark]";
 
 export function RangePicker({ value, onChange }: { value: AnalyticsRange; onChange: (r: AnalyticsRange) => void }) {
+  const t = useT(manageTagsPiecesMessages);
   const [custom, setCustom] = useState({ from: value.from ?? "", to: value.to ?? "" });
   return (
     <div className="flex flex-wrap items-center gap-2" data-testid="admin-tags-range">
       {RANGE_PRESETS.map((p) => (
         <button key={p.id} type="button" className={`${PILL} ${value.preset === p.id ? PILL_ON : PILL_OFF}`} onClick={() => onChange({ preset: p.id })}>
-          {p.label}
+          {t(p.labelKey)}
         </button>
       ))}
       <div className="flex items-center gap-1">
-        <input type="date" aria-label="From" className={DATE_INPUT} value={custom.from} onChange={(e) => setCustom((c) => ({ ...c, from: e.target.value }))} />
+        <input type="date" aria-label={t("rangeFrom")} className={DATE_INPUT} value={custom.from} onChange={(e) => setCustom((c) => ({ ...c, from: e.target.value }))} />
         <span className="text-xs text-white/40">–</span>
-        <input type="date" aria-label="To" className={DATE_INPUT} value={custom.to} onChange={(e) => setCustom((c) => ({ ...c, to: e.target.value }))} />
+        <input type="date" aria-label={t("rangeTo")} className={DATE_INPUT} value={custom.to} onChange={(e) => setCustom((c) => ({ ...c, to: e.target.value }))} />
         <button
           type="button"
           className={`${PILL} ${value.preset === "custom" ? PILL_ON : PILL_OFF} disabled:opacity-40`}
           disabled={!custom.from}
           onClick={() => onChange({ preset: "custom", from: custom.from, to: custom.to || undefined })}
         >
-          Apply
+          {t("apply")}
         </button>
       </div>
     </div>
@@ -82,6 +101,8 @@ export function AnalyticsPanel({
   showTopTags?: boolean;
   onOpenTag?: (id: string) => void;
 }) {
+  const tm = useT(manageTagsPiecesMessages);
+  const tt = useT(tagsMessages);
   const url = withQuery(scopeUrl, { ...scope, ...rangeParams(range) });
   const { data, isLoading, error } = useQuery<TagAnalytics>({
     queryKey: [ADMIN_TAGS_KEY, "analytics", url],
@@ -90,61 +111,62 @@ export function AnalyticsPanel({
   });
 
   if (isLoading) return <Loading />;
-  if (error || !data) return <LoadError what="analytics" error={error} />;
+  if (error || !data) return <LoadError what={tm("whatAnalytics")} error={error} />;
 
   const { totals } = data;
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Interactions" value={totals.interactions} hint="QR scans + NFC taps" />
-        <Stat label="QR scans" value={totals.qr} hint={percent(totals.qr, totals.interactions)} />
-        <Stat label="NFC taps" value={totals.nfc} hint={percent(totals.nfc, totals.interactions)} />
-        <Stat label="Approx. unique" value={totals.approxUnique} hint="Per piece, per day estimate" />
+        <Stat label={tm("interactions")} value={totals.interactions} hint={tm("interactionsHint")} />
+        <Stat label={tt("qrScans")} value={totals.qr} hint={percent(totals.qr, totals.interactions)} />
+        <Stat label={tt("nfcTaps")} value={totals.nfc} hint={percent(totals.nfc, totals.interactions)} />
+        <Stat label={tm("approxUnique")} value={totals.approxUnique} hint={tm("approxUniqueHint")} />
       </div>
 
       <div className={`${CARD} p-4`}>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm font-semibold text-white">Interactions by day</p>
-          <p className="text-xs text-white/40">Last interaction: {formatDateTime(totals.lastInteractionAt)}</p>
+          <p className="text-sm font-semibold text-white">{tm("interactionsByDay")}</p>
+          <p className="text-xs text-white/40">{tm("lastInteraction", { date: formatDateTime(totals.lastInteractionAt) })}</p>
         </div>
         {data.daily.length === 0 || totals.interactions === 0 ? (
-          <p className="py-10 text-center text-sm text-white/40">No scans or taps in this period.</p>
+          <p className="py-10 text-center text-sm text-white/40">{tm("noScansInPeriod")}</p>
         ) : (
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={data.daily} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
-                <XAxis dataKey="day" tick={{ fontSize: 11, fill: "rgba(255,255,255,0.45)" }} tickFormatter={(d: string) => d.slice(5)} stroke="rgba(255,255,255,0.1)" />
+                <XAxis dataKey="day" tick={{ fontSize: 11, fill: "rgba(255,255,255,0.45)" }} tickFormatter={(d: string) => formatDay(d, tm.locale, { month: "short", day: "numeric" })} stroke="rgba(255,255,255,0.1)" />
                 <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "rgba(255,255,255,0.45)" }} stroke="rgba(255,255,255,0.1)" />
                 <Tooltip
                   contentStyle={{ background: "#0f172a", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "12px", fontSize: "12px", color: "#fff" }}
                   itemStyle={{ color: "#fff" }}
                   cursor={{ stroke: "rgba(255,255,255,0.15)", strokeWidth: 1, strokeDasharray: "4 4" }}
+                  labelFormatter={(d) => (typeof d === "string" ? formatDay(d, tm.locale, { dateStyle: "medium" }) : d)}
                 />
                 <Legend wrapperStyle={{ fontSize: 12, color: "rgba(255,255,255,0.7)" }} />
-                <Area type="monotone" dataKey="qr" name="QR scans" stackId="1" stroke={QR_COLOR} strokeWidth={2} fill={QR_COLOR} fillOpacity={0.25} />
-                <Area type="monotone" dataKey="nfc" name="NFC taps" stackId="1" stroke={NFC_COLOR} strokeWidth={2} fill={NFC_COLOR} fillOpacity={0.25} />
+                <Area type="monotone" dataKey="qr" name={tt("qrScans")} stackId="1" stroke={QR_COLOR} strokeWidth={2} fill={QR_COLOR} fillOpacity={0.25} />
+                <Area type="monotone" dataKey="nfc" name={tt("nfcTaps")} stackId="1" stroke={NFC_COLOR} strokeWidth={2} fill={NFC_COLOR} fillOpacity={0.25} />
               </AreaChart>
             </ResponsiveContainer>
           </div>
         )}
         <p className="mt-2 text-xs text-white/40">
-          An interaction is a QR scan or NFC tap that reached the destination. It is not a review, lead or sale.
-          {totals.botHits > 0 ? ` ${totals.botHits} automated hit(s) excluded.` : ""}
-          {totals.inactiveScans > 0 ? ` ${totals.inactiveScans} scan(s) while not live.` : ""}
+          {tm("interactionExplain")}
+          {totals.botHits > 0 ? ` ${tm.plural("botHits", totals.botHits)}` : ""}
+          {totals.inactiveScans > 0 ? ` ${tm.plural("inactiveScans", totals.inactiveScans)}` : ""}
         </p>
       </div>
 
       <div className={`grid gap-4 ${showTopTags ? "md:grid-cols-2" : ""}`}>
         <div className={`${CARD} p-4`}>
-          <p className="mb-2 text-sm font-semibold text-white">Devices</p>
+          <p className="mb-2 text-sm font-semibold text-white">{tm("devices")}</p>
           {data.devices.length === 0 ? (
-            <p className="text-sm text-white/40">No interactions in this period.</p>
+            <p className="text-sm text-white/40">{tm("noInteractionsInPeriod")}</p>
           ) : (
             <ul className="space-y-1.5 text-sm">
               {data.devices.map((d) => (
                 <li key={d.deviceType} className="flex justify-between">
-                  <span className="capitalize text-white/80">{d.deviceType}</span>
+                  <span className="capitalize text-white/80">{isDevice(d.deviceType) ? tm(DEVICE_KEYS[d.deviceType]) : d.deviceType}</span>
                   <span className="tabular-nums text-white/50">
                     {d.count} <span className="text-xs text-white/30">({percent(d.count, totals.interactions)})</span>
                   </span>
@@ -155,16 +177,16 @@ export function AnalyticsPanel({
         </div>
         {showTopTags ? (
           <div className={`${CARD} p-4`}>
-            <p className="mb-2 text-sm font-semibold text-white">Top pieces</p>
+            <p className="mb-2 text-sm font-semibold text-white">{tm("topPieces")}</p>
             {data.topTags.length === 0 ? (
-              <p className="text-sm text-white/40">No interactions in this period.</p>
+              <p className="text-sm text-white/40">{tm("noInteractionsInPeriod")}</p>
             ) : (
               <ul className="space-y-1.5 text-sm">
                 {data.topTags.map((t) => (
                   <li key={t.id} className="flex items-center justify-between gap-2">
                     <button type="button" className="min-w-0 truncate text-left font-mono text-white hover:underline" onClick={() => onOpenTag?.(t.id)}>
                       {t.publicCode}
-                      <span className="ml-2 font-sans text-white/50">{t.leadName ?? "No customer"}</span>
+                      <span className="ml-2 font-sans text-white/50">{t.leadName ?? tm("noCustomer")}</span>
                       {t.repName ? <span className="ml-1 font-sans text-xs text-white/30">· {t.repName}</span> : null}
                     </button>
                     <span className="shrink-0 tabular-nums text-white/50">

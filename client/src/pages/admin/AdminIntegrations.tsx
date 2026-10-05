@@ -22,6 +22,9 @@ import {
   type IntegrationProviderDef,
   type IntegrationStatus,
 } from "#shared/integrations-registry.js";
+import { useT, type Translate } from "@/i18n";
+import { commonMessages } from "@/i18n/messages/common";
+import { manageMessages, type ManageKey } from "@/i18n/messages/manage";
 
 type IntegrationsResponse = { providers: IntegrationProviderDef[]; status: IntegrationStatus[] };
 
@@ -68,6 +71,55 @@ const CONNECTION_DOT: Record<StatusKey, string> = {
 };
 const SAVED_SECRET_MASK = "••••••••";
 
+// The registry is shared with the server and written in English; these keys give the
+// screen its words. A provider or field missing here shows the registry's text.
+const STATUS_LABEL_KEYS = {
+  live: "intStatus_live",
+  broken: "intStatus_broken",
+  idle: "intStatus_idle",
+  off: "intStatus_off",
+} as const satisfies Record<StatusKey, ManageKey>;
+const CATEGORY_KEYS = {
+  Maps: "category_Maps",
+  Voice: "category_Voice",
+  AI: "category_AI",
+  Pipeline: "category_Pipeline",
+  Messaging: "category_Messaging",
+} as const satisfies Record<IntegrationProviderDef["category"], ManageKey>;
+const PROVIDER_KEYS: Record<string, { label?: ManageKey; description: ManageKey }> = {
+  google_places: { description: "descGooglePlaces" },
+  groq: { label: "providerGroq", description: "descGroq" },
+  openai: { label: "providerOpenai", description: "descOpenai" },
+  openrouter: { description: "descOpenrouter" },
+  gemini: { label: "providerGemini", description: "descGemini" },
+  gohighlevel: { description: "descGohighlevel" },
+  twilio: { description: "descTwilio" },
+};
+const FIELD_LABEL_KEYS: Record<string, ManageKey> = {
+  "API Key": "fieldApiKey",
+  Model: "fieldModel",
+  "Location ID": "fieldLocationId",
+  "Calendar ID": "fieldCalendarId",
+  "From number (E.164)": "fieldFromNumber",
+};
+
+type ManageT = Translate<typeof manageMessages.en>;
+
+function providerLabel(t: ManageT, def: IntegrationProviderDef) {
+  const key = PROVIDER_KEYS[def.provider]?.label;
+  return key ? t(key) : def.label;
+}
+
+function providerDescription(t: ManageT, def: IntegrationProviderDef) {
+  const key = PROVIDER_KEYS[def.provider]?.description;
+  return key ? t(key) : def.description;
+}
+
+function fieldLabel(t: ManageT, label: string) {
+  const key = FIELD_LABEL_KEYS[label];
+  return key ? t(key) : label;
+}
+
 function displayFieldValue(
   key: IntegrationProviderDef["fields"][number]["key"],
   fields: Record<string, string>,
@@ -84,6 +136,7 @@ function displayFieldValue(
 export function AdminIntegrations() {
   const query = useQuery<IntegrationsResponse>({ queryKey: ["/api/xpot/admin/integrations"] });
   const [selectedProvider, setSelectedProvider] = useState<string>(INTEGRATION_PROVIDERS[0]?.provider ?? "");
+  const t = useT(manageMessages);
 
   if (query.isLoading) {
     return (
@@ -93,7 +146,7 @@ export function AdminIntegrations() {
     );
   }
   if (query.isError || !query.data) {
-    return <p className="text-sm text-red-400">Failed to load integrations.</p>;
+    return <p className="text-sm text-red-400">{t("integrationsLoadFailed")}</p>;
   }
 
   const statusByProvider = new Map(query.data.status.map((s) => [s.provider, s]));
@@ -104,7 +157,7 @@ export function AdminIntegrations() {
     <div className="space-y-4">
       <div className="flex items-center gap-2 text-sm text-white/55">
         <Plug className="h-4 w-4" />
-        Register API keys. Keys are masked after saving — the server never returns the value.
+        {t("integrationsIntro")}
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[260px,1fr]">
@@ -132,23 +185,20 @@ export function AdminIntegrations() {
                       className={`absolute left-0 top-0 h-full w-1 ${STATUS_LEFT_BAR[sk]}`}
                     />
                     <span
-                      aria-label={sk === "live" ? "Connected" : "Not connected"}
+                      aria-label={sk === "live" ? t("connected") : t("notConnected")}
                       className={`h-2 w-2 shrink-0 rounded-full ${CONNECTION_DOT[sk]}`}
                     />
                     <span className="flex min-w-0 flex-1 flex-col">
                       <span className="flex items-center gap-2">
-                        <span className="truncate text-sm font-medium">{def.label}</span>
+                        <span className="truncate text-sm font-medium">{providerLabel(t, def)}</span>
                         <span
                           className={`hidden shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide sm:inline-flex ${STATUS_CHIP[sk]}`}
                         >
-                          {sk === "live" && "Live"}
-                          {sk === "broken" && "Incomplete"}
-                          {sk === "idle" && "Idle"}
-                          {sk === "off" && "Off"}
+                          {t(STATUS_LABEL_KEYS[sk])}
                         </span>
                       </span>
                       <span className="flex items-center gap-1.5 text-[11px] text-white/40">
-                        {def.category}
+                        {t(CATEGORY_KEYS[def.category])}
                         {status?.hasApiKey && (
                           <span className="inline-flex items-center gap-1 text-white/40">
                             <KeyRound className="h-2.5 w-2.5" />
@@ -192,6 +242,9 @@ function ProviderDetail({
 }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const t = useT(manageMessages);
+  const tc = useT(commonMessages);
+  const label = providerLabel(t, def);
   const [fields, setFields] = useState<Record<string, string>>({});
   const [enabled, setEnabled] = useState<boolean>(status.enabled);
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
@@ -221,7 +274,7 @@ function ProviderDetail({
       return res.json() as Promise<IntegrationStatus>;
     },
     onSuccess: (savedStatus) => {
-      toast({ title: `${def.label} saved` });
+      toast({ title: t("integrationSaved", { name: label }) });
       setFields({});
       queryClient.setQueryData<IntegrationsResponse>(["/api/xpot/admin/integrations"], (current) => {
         if (!current) return current;
@@ -237,7 +290,7 @@ function ProviderDetail({
       });
       queryClient.invalidateQueries({ queryKey: ["/api/xpot/admin/integrations"] });
     },
-    onError: (e: Error) => toast({ title: "Error saving", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: t("errorSaving"), description: e.message, variant: "destructive" }),
   });
 
   const test = useMutation({
@@ -252,7 +305,7 @@ function ProviderDetail({
     },
     onSuccess: (r) => setTestResult(r),
     onError: (e: Error) =>
-      setTestResult({ ok: false, message: `Network error: ${e.message || "request failed"}` }),
+      setTestResult({ ok: false, message: t("networkError", { message: e.message || t("requestFailedShort") }) }),
   });
 
   return (
@@ -261,23 +314,23 @@ function ProviderDetail({
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-lg font-semibold text-white">{def.label}</h3>
+            <h3 className="text-lg font-semibold text-white">{label}</h3>
             <span className={`rounded-md border px-2 py-0.5 text-[11px] font-medium ${categoryColor}`}>
-              {def.category}
+              {t(CATEGORY_KEYS[def.category])}
             </span>
             {status.hasApiKey && (
               <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[11px] font-medium text-emerald-300">
                 <KeyRound className="h-3 w-3" />
-                key •••• {status.apiKeyLast4}
+                {t("keyLast4", { last4: status.apiKeyLast4 ?? "" })}
               </span>
             )}
           </div>
-          <p className="mt-1.5 text-sm text-white/55">{def.description}</p>
+          <p className="mt-1.5 text-sm text-white/55">{providerDescription(t, def)}</p>
         </div>
 
         <label className="flex shrink-0 cursor-pointer items-center gap-3 text-sm text-white/70">
           <span className={enabled ? "text-emerald-400" : "text-white/40"}>
-            {enabled ? "Enabled" : "Disabled"}
+            {enabled ? t("enabled") : t("disabled")}
           </span>
           <Switch
             checked={enabled}
@@ -286,14 +339,14 @@ function ProviderDetail({
                 const siblings = getMutexSiblings(def.provider);
                 if (siblings.length) {
                   toast({
-                    title: `${def.label} exclusive`,
-                    description: `Enabling ${def.label} will turn off: ${siblings.map((s) => s.label).join(", ")}.`,
+                    title: t("exclusiveTitle", { name: label }),
+                    description: t("exclusiveBody", { name: label, others: siblings.map((s) => providerLabel(t, s)).join(", ") }),
                   });
                 }
               }
               setEnabled(v);
             }}
-            aria-label={`Toggle ${def.label}`}
+            aria-label={t("toggleProvider", { name: label })}
           />
         </label>
       </div>
@@ -303,7 +356,7 @@ function ProviderDetail({
         <div className="mt-4 flex items-start gap-2.5 rounded-lg border border-red-500/30 bg-red-500/10 px-3.5 py-3 text-sm text-red-200">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <div className="min-w-0 flex-1">
-            <div className="font-medium">Setup incomplete</div>
+            <div className="font-medium">{t("setupIncomplete")}</div>
             <div className="text-red-200/80">{status.problem}</div>
           </div>
         </div>
@@ -314,7 +367,7 @@ function ProviderDetail({
         {def.fields.map((f) => (
           <div key={f.key} className={def.fields.length === 1 ? "sm:col-span-2" : ""}>
             <label className="mb-1.5 block text-xs font-medium text-white/55">
-              {f.label} {f.optional && <span className="text-white/30">(optional)</span>}
+              {fieldLabel(t, f.label)} {f.optional && <span className="text-white/30">({t("optional")})</span>}
             </label>
             {f.options ? (
               <SearchableSelect
@@ -340,7 +393,7 @@ function ProviderDetail({
                   setTestResult(null);
                   setFields((prev) => ({ ...prev, [f.key]: e.target.value }));
                 }}
-                placeholder={f.secret && status.hasApiKey ? `current: ${status.apiKeyLast4 ?? "saved"}` : f.placeholder ?? ""}
+                placeholder={f.secret && status.hasApiKey ? t("currentKey", { last4: status.apiKeyLast4 ?? t("savedKey") }) : f.placeholder ?? ""}
                 className="w-full rounded-lg border border-white/10 bg-[#0a0f1e] px-3 py-2.5 text-sm text-white placeholder-white/25 outline-none transition-colors focus:border-blue-500/50"
               />
             )}
@@ -356,16 +409,16 @@ function ProviderDetail({
           className="inline-flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-600 disabled:opacity-50"
         >
           {save.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-          Save
+          {tc("save")}
         </button>
         <button
           onClick={() => test.mutate()}
           disabled={test.isPending || !hasApiKeyForTest}
-          title={!hasApiKeyForTest ? "Paste or save a key before testing" : "Test credentials"}
+          title={!hasApiKeyForTest ? t("testNeedsKey") : t("testCredentials")}
           className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-white/80 transition-colors hover:bg-white/10 disabled:opacity-40"
         >
           {test.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-          Test
+          {t("test")}
         </button>
       </div>
 
@@ -401,6 +454,7 @@ function SearchableSelect({
   options: string[];
   onChange: (value: string) => void;
 }) {
+  const t = useT(manageMessages);
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const normalizedSearch = search.trim().toLowerCase();
@@ -421,7 +475,7 @@ function SearchableSelect({
         }`}
       >
         <span className={value ? "min-w-0 truncate text-white" : "min-w-0 truncate text-white/25"}>
-          {value || placeholder || "Select model"}
+          {value || placeholder || t("selectModel")}
         </span>
         <ChevronDown className={`h-4 w-4 shrink-0 text-white/35 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
@@ -442,7 +496,7 @@ function SearchableSelect({
                   setOpen(false);
                 }
               }}
-              placeholder="Search or type a model"
+              placeholder={t("searchModel")}
               className="min-w-0 flex-1 bg-transparent py-1.5 text-sm text-white placeholder-white/25 outline-none"
             />
           </div>
@@ -457,7 +511,7 @@ function SearchableSelect({
                 className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-blue-200 transition-colors hover:bg-blue-500/10"
               >
                 <Check className="h-4 w-4 shrink-0 text-blue-300" />
-                <span className="min-w-0 truncate">Use "{customValue}"</span>
+                <span className="min-w-0 truncate">{t("useCustomValue", { value: customValue })}</span>
               </button>
             )}
             {filtered.map((option) => {
@@ -480,7 +534,7 @@ function SearchableSelect({
               );
             })}
             {!filtered.length && !customValue && (
-              <div className="px-3 py-4 text-center text-sm text-white/35">No models found.</div>
+              <div className="px-3 py-4 text-center text-sm text-white/35">{t("noModels")}</div>
             )}
           </div>
         </div>

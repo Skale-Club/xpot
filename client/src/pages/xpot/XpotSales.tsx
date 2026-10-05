@@ -250,6 +250,9 @@ function PipelineTab() {
           <SectionLabel>{t("opportunities")}</SectionLabel>
           <button
             onClick={() => setOppExpanded((v) => !v)}
+            aria-label={t("newOpp")}
+            title={t("newOpp")}
+            aria-expanded={oppExpanded}
             className="flex h-7 w-7 items-center justify-center rounded-lg text-white/40 transition-colors hover:bg-white/8 hover:text-white/70"
           >
             <Plus className="h-3.5 w-3.5" />
@@ -354,6 +357,9 @@ function PipelineTab() {
           <SectionLabel>{t("followUpTasks")}</SectionLabel>
           <button
             onClick={() => setTaskExpanded((v) => !v)}
+            aria-label={t("newTask")}
+            title={t("newTask")}
+            aria-expanded={taskExpanded}
             className="flex h-7 w-7 items-center justify-center rounded-lg text-white/40 transition-colors hover:bg-white/8 hover:text-white/70"
           >
             <Plus className="h-3.5 w-3.5" />
@@ -419,6 +425,8 @@ function PipelineTab() {
                   {!done && (
                     <button
                       onClick={() => updateTaskStatus(task.id, "completed")}
+                      aria-label={t("markTaskDone")}
+                      title={t("markTaskDone")}
                       className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl transition-all hover:scale-105"
                       style={{ background: "rgba(16,185,129,0.15)", border: "1px solid rgba(16,185,129,0.3)" }}
                     >

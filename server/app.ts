@@ -81,7 +81,8 @@ export async function createApp(): Promise<{ app: express.Express; httpServer: S
       return res.status(400).json({ message: "Validation error", errors: err.errors });
     }
     console.error("Unhandled error:", err);
-    res.status(500).json({ message: (err as Error).message || "Internal server error" });
+    // The cause stays in the log: a 500's own text can carry SQL or library internals.
+    res.status(500).json({ message: "Internal server error" });
   });
 
   return { app, httpServer };

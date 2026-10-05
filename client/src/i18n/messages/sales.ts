@@ -1,7 +1,9 @@
 import type { Dictionary } from "../index";
 
-// Opportunities and follow-up tasks (client/src/pages/xpot/XpotSales.tsx,
-// hooks/useSales.ts). An opportunity is a "venda" / "venta"; a lead is a
+// The Sales tabs and the GHL pipeline tab: opportunities and follow-up tasks
+// (client/src/pages/xpot/XpotSales.tsx, hooks/useSales.ts). An opportunity is
+// an "oportunidade" / "oportunidad" (a "venda" / "venta" is a recorded sale,
+// see salesModule.ts); a pipeline is a "funil" / "embudo"; a lead is a
 // "cliente".
 
 const en = {
@@ -44,6 +46,9 @@ const en = {
   tabSales: "Sales",
   tabStock: "Stock",
   tabPipeline: "Pipeline",
+  newOpp: "New opportunity",
+  newTask: "New task",
+  markTaskDone: "Mark task as done",
 };
 
 export const salesMessages: Dictionary<typeof en> = {
@@ -54,15 +59,15 @@ export const salesMessages: Dictionary<typeof en> = {
     noLeadsFound: "Nenhum cliente encontrado",
     leadNumber: "Cliente #{id}",
 
-    opportunities: "Vendas",
-    oppTitle: "Nome da venda",
+    opportunities: "Oportunidades",
+    oppTitle: "Nome da oportunidade",
     oppValue: "Valor ($)",
     loadingPipelines: "Carregando funis...",
     pipeline: "Funil",
     stage: "Etapa",
     noPipelines: "Nenhum funil configurado no GHL",
-    createOpp: "Criar venda",
-    noOpps: "Nenhuma venda ainda — toque em + para criar",
+    createOpp: "Criar oportunidade",
+    noOpps: "Nenhuma oportunidade ainda — toque em + para criar",
     sync_pending: "Pendente",
     sync_synced: "Sincronizada",
     sync_failed: "Falhou",
@@ -74,8 +79,8 @@ export const salesMessages: Dictionary<typeof en> = {
     noDueDate: "Sem prazo",
     noTasks: "Nenhuma tarefa ainda — toque em + para adicionar um acompanhamento",
 
-    oppCreated: "Venda criada",
-    oppCreateFailed: "Não foi possível criar a venda",
+    oppCreated: "Oportunidade criada",
+    oppCreateFailed: "Não foi possível criar a oportunidade",
     taskCreated: "Tarefa criada",
     taskCreateFailed: "Não foi possível criar a tarefa",
     taskUpdated: "Tarefa atualizada",
@@ -83,7 +88,10 @@ export const salesMessages: Dictionary<typeof en> = {
     tabOverview: "Resumo",
     tabSales: "Vendas",
     tabStock: "Estoque",
-    tabPipeline: "Pipeline",
+    tabPipeline: "Funil",
+    newOpp: "Nova oportunidade",
+    newTask: "Nova tarefa",
+    markTaskDone: "Marcar tarefa como feita",
   },
   es: {
     chooseLead: "Elige el cliente",
@@ -91,15 +99,15 @@ export const salesMessages: Dictionary<typeof en> = {
     noLeadsFound: "No se encontraron clientes",
     leadNumber: "Cliente #{id}",
 
-    opportunities: "Ventas",
-    oppTitle: "Nombre de la venta",
+    opportunities: "Oportunidades",
+    oppTitle: "Nombre de la oportunidad",
     oppValue: "Valor ($)",
     loadingPipelines: "Cargando embudos...",
     pipeline: "Embudo",
     stage: "Etapa",
     noPipelines: "No hay embudos configurados en GHL",
-    createOpp: "Crear venta",
-    noOpps: "Aún no hay ventas — toca + para crear una",
+    createOpp: "Crear oportunidad",
+    noOpps: "Aún no hay oportunidades — toca + para crear una",
     sync_pending: "Pendiente",
     sync_synced: "Sincronizada",
     sync_failed: "Falló",
@@ -111,15 +119,18 @@ export const salesMessages: Dictionary<typeof en> = {
     noDueDate: "Sin fecha límite",
     noTasks: "Aún no hay tareas — toca + para agregar un seguimiento",
 
-    oppCreated: "Venta creada",
-    oppCreateFailed: "No se pudo crear la venta",
+    oppCreated: "Oportunidad creada",
+    oppCreateFailed: "No se pudo crear la oportunidad",
     taskCreated: "Tarea creada",
     taskCreateFailed: "No se pudo crear la tarea",
     taskUpdated: "Tarea actualizada",
     taskUpdateFailed: "No se pudo actualizar la tarea",
     tabOverview: "Resumen",
     tabSales: "Ventas",
-    tabStock: "Inventario",
-    tabPipeline: "Pipeline",
+    tabStock: "Stock",
+    tabPipeline: "Embudo",
+    newOpp: "Nueva oportunidad",
+    newTask: "Nueva tarea",
+    markTaskDone: "Marcar tarea como hecha",
   },
 };

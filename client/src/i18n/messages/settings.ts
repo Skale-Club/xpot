@@ -61,15 +61,8 @@ const en = {
   keyRotated: "Inbound key rotated",
   rotateFailed: "Failed to rotate key",
 
-  // Profile editor dialog
-  editProfile: "Edit Profile",
-  avatarAlt: "Avatar",
-  changePhoto: "Change photo",
-  yourNamePlaceholder: "Your name",
+  // Generic save button
   saveChanges: "Save Changes",
-  profileUpdated: "Profile updated",
-  profileUpdateFailed: "Failed to update profile",
-  avatarUploadFailed: "Avatar upload failed",
 };
 
 export const settingsMessages: Dictionary<typeof en> = {
@@ -128,14 +121,7 @@ export const settingsMessages: Dictionary<typeof en> = {
     keyRotated: "Nova chave de entrada gerada",
     rotateFailed: "Não foi possível gerar uma nova chave",
 
-    editProfile: "Editar perfil",
-    avatarAlt: "Foto de perfil",
-    changePhoto: "Trocar foto",
-    yourNamePlaceholder: "Seu nome",
     saveChanges: "Salvar alterações",
-    profileUpdated: "Perfil atualizado",
-    profileUpdateFailed: "Não foi possível atualizar o perfil",
-    avatarUploadFailed: "Não foi possível enviar a foto",
   },
   es: {
     title: "Ajustes",
@@ -191,13 +177,6 @@ export const settingsMessages: Dictionary<typeof en> = {
     keyRotated: "Nueva clave de entrada generada",
     rotateFailed: "No se pudo generar una nueva clave",
 
-    editProfile: "Editar perfil",
-    avatarAlt: "Foto de perfil",
-    changePhoto: "Cambiar foto",
-    yourNamePlaceholder: "Tu nombre",
     saveChanges: "Guardar cambios",
-    profileUpdated: "Perfil actualizado",
-    profileUpdateFailed: "No se pudo actualizar el perfil",
-    avatarUploadFailed: "No se pudo subir la foto",
   },
 };

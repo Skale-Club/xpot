@@ -8,9 +8,15 @@ import { BTN_GHOST, CARD, Empty, INPUT, SectionTitle, Stat } from "./ui";
 import { ConfirmDialog, ErrorLine, Loading, ResellerSelect } from "./batches-shared";
 import { GiveKitForm, parseCodes } from "./kits-give-form";
 import { KitList, useReturnToHouse } from "./kits-list";
+import { useT } from "@/i18n";
+import { shellMessages } from "@/i18n/messages/shell";
+import { tagsMessages } from "@/i18n/messages/tags";
+import { manageTagsMessages } from "@/i18n/messages/manageTags";
+import { manageTagsBatchesMessages } from "@/i18n/messages/manageTagsBatches";
 
 /** Return pieces a reseller handed back, by the codes printed on them. */
 function ReturnByCodes() {
+  const t = useT(manageTagsBatchesMessages);
   const [text, setText] = useState("");
   const [confirm, setConfirm] = useState(false);
   const parsed = useMemo(() => parseCodes(text), [text]);
@@ -29,7 +35,7 @@ function ReturnByCodes() {
         value={text}
         onChange={(e) => setText(e.target.value)}
         rows={3}
-        placeholder={"Codes, one per line or comma separated\nA7K3P9X2, B8M4Q1Z3"}
+        placeholder={t("returnCodesPlaceholder")}
         className={`${INPUT} resize-y font-mono`}
         autoCapitalize="characters"
         autoCorrect="off"
@@ -38,22 +44,22 @@ function ReturnByCodes() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs text-white/40">
           {parsed.invalid.length > 0 ? (
-            <span className="text-red-300">Not a code: {parsed.invalid.slice(0, 6).join(", ")}</span>
+            <span className="text-red-300">{t("notACode", { codes: parsed.invalid.slice(0, 6).join(", ") })}</span>
           ) : (
-            `${parsed.codes.length} code${parsed.codes.length === 1 ? "" : "s"} · only unsold pieces can come back.`
+            t.plural("returnCodesCount", parsed.codes.length)
           )}
         </p>
         <button type="submit" className={BTN_GHOST} disabled={!valid || ret.isPending}>
           <Undo2 className="h-4 w-4" />
-          Return to house stock
+          {t("returnToHouseStock")}
         </button>
       </div>
       <ConfirmDialog
         open={confirm}
         onOpenChange={setConfirm}
-        title={`Return ${parsed.codes.length} piece${parsed.codes.length === 1 ? "" : "s"} to house stock?`}
-        description="They leave whichever reseller holds them. If any of them is already sold, nothing is returned and you'll see which."
-        confirmLabel="Return to house"
+        title={t.plural("returnConfirmTitle", parsed.codes.length)}
+        description={t("returnByCodesDesc")}
+        confirmLabel={t("returnToHouse")}
         busy={ret.isPending}
         onConfirm={() => ret.mutate(parsed.codes)}
       />
@@ -67,6 +73,10 @@ function ReturnByCodes() {
  */
 export function KitsTab({ go }: { go: (path: string) => void }) {
   const [repFilter, setRepFilter] = useState<number | null>(null);
+  const t = useT(manageTagsBatchesMessages);
+  const tm = useT(manageTagsMessages);
+  const ts = useT(shellMessages);
+  const tt = useT(tagsMessages);
 
   const stock = useQuery<TagOverview>({
     queryKey: [ADMIN_TAGS_KEY, "kits", "stock"],
@@ -87,20 +97,20 @@ export function KitsTab({ go }: { go: (path: string) => void }) {
     <div className="space-y-6">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <div className={`${CARD} col-span-2 border-blue-500/30 bg-blue-500/[0.06] p-4`} data-testid="admin-tags-house-stock">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-blue-300/80">House stock</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-blue-300/80">{t("houseStock")}</p>
           <p className="mt-1 text-4xl font-bold tabular-nums text-white">{stock.data ? stock.data.stock.house : "—"}</p>
-          <p className="mt-0.5 text-xs text-white/45">Unsold pieces not handed to anyone yet, ready to go into a kit.</p>
+          <p className="mt-0.5 text-xs text-white/45">{t("houseStockCardHint")}</p>
         </div>
-        <Stat label="With resellers" value={stock.data ? stock.data.stock.withResellers : "—"} hint="Unsold, in someone's kit" />
+        <Stat label={t("withResellers")} value={stock.data ? stock.data.stock.withResellers : "—"} hint={t("withResellersKitHint")} />
         <Stat
-          label={repFilter ? "This reseller's kits" : "Kits given"}
+          label={repFilter ? t("thisResellersKits") : t("kitsGiven")}
           value={kits.data ? list.length : "—"}
-          hint={kits.data ? `${totals.pieces} pieces · ${totals.unsold} unsold` : undefined}
+          hint={kits.data ? `${tt.plural("pieces", totals.pieces)} · ${t.plural("unsoldCount", totals.unsold)}` : undefined}
         />
       </div>
 
       <section>
-        <SectionTitle>Give a kit</SectionTitle>
+        <SectionTitle>{t("giveAKit")}</SectionTitle>
         <div className={`${CARD} p-4`}>
           <GiveKitForm />
         </div>
@@ -114,21 +124,21 @@ export function KitsTab({ go }: { go: (path: string) => void }) {
             </div>
           }
         >
-          Kits
+          {ts("manageKits")}
         </SectionTitle>
         {kits.isLoading ? (
           <Loading />
         ) : kits.isError ? (
-          <ErrorLine>Could not load kits.</ErrorLine>
+          <ErrorLine>{tm("couldNotLoad", { what: t("theKits") })}</ErrorLine>
         ) : list.length === 0 ? (
-          <Empty>{repFilter ? "No kits for this reseller yet." : "No kits yet. Give the first one above."}</Empty>
+          <Empty>{repFilter ? t("noKitsForReseller") : t("noKitsYet")}</Empty>
         ) : (
           <KitList kits={list} go={go} />
         )}
       </section>
 
       <section>
-        <SectionTitle>Return pieces by code</SectionTitle>
+        <SectionTitle>{t("returnByCode")}</SectionTitle>
         <div className={`${CARD} p-4`}>
           <ReturnByCodes />
         </div>

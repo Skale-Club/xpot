@@ -36,7 +36,8 @@ export type ShellContext = XpotModule | "account";
 export type NavItem = { href: string; label: string; icon: LucideIcon; match: (path: string) => boolean };
 export type NavGroup = { label: string; items: NavItem[] };
 
-const starts = (prefix: string) => (path: string) => path === prefix || path.startsWith(`${prefix}/`);
+/** Matches a path and everything under it ("/tags" matches "/tags/pieces", not "/tagsx"). */
+export const starts = (prefix: string) => (path: string) => path === prefix || path.startsWith(`${prefix}/`);
 
 /** Admin sections that are really Visits management, and the ones that belong to the account. */
 const VISITS_ADMIN = ["overview", "products", "settings", "xphere"] as const;
