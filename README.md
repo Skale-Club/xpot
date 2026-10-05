@@ -59,7 +59,6 @@ npm run test:watch   # Vitest in watch mode
 npm run build        # Production build to dist/
 npm run start        # Run production build
 npm run migrate      # Apply pending SQL migrations to the database
-npm run db:push      # Push Drizzle schema changes (use with caution)
 ```
 
 **Integration tests** need a real Postgres, so they skip unless

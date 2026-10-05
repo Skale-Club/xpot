@@ -92,6 +92,15 @@ tab bar per module (`MobileTabBar`).
 - On desktop the sidebar has a segmented Visits | Tags switch
   (`SidebarModuleSwitch`), and the top bar shows the path ("Tags › Batches"),
   which also goes into the browser tab's title.
+- **`ScreenErrorBoundary`** wraps each screen, keyed by the path: a render error
+  shows a "Reload" card in place of that screen while the sidebar and tab bar
+  stay, instead of React unmounting the whole app.
+- **`SessionGate`**: what a module shows while `/api/xpot/me` loads, or a way
+  back to sign-in when it fails.
+- **Errors from the API.** `apiRequest` (`client/src/lib/queryClient.ts`) throws
+  `ApiError` with the HTTP `status` and the server's own `message`, so a toast
+  can show `err.message` as is. The server answers `{ message }` for every error
+  and never sends internal error text on a 500.
 
 ## 4. Directory map
 
@@ -226,8 +235,12 @@ live in `server/mcp/tools/tagJourney.ts`:
   real Postgres and skip themselves unless `TAGS_INTEGRATION=1`. Point
   `DATABASE_URL` at a disposable database and run `npm run migrate` first. CI
   does this with a throwaway Postgres 17 service (`.github/workflows/ci.yml`)
-  for five of the seven; `tests/tags/journey.integration.test.ts` and
-  `tests/mcp.integration.test.ts` are run by hand.
+  for all seven, one file at a time (several truncate the same tables).
+- **Schema changes are SQL migrations, never `drizzle-kit push`.** About 25
+  indexes and partial unique constraints exist only in `migrations/*.sql` (one
+  active consignment per lead, unique phone, one open provisioning job per
+  tag…); a push from the TypeScript schema would drop them, so the script was
+  removed.
 
 ## 9. Deploy
 
