@@ -39,12 +39,14 @@ export async function ensureUploadBucket(): Promise<void> {
     if (error) throw new Error(`Failed to create "uploads" bucket: ${error.message}`);
   }
 
+  // Only the fallback store, so a failure here is logged, not fatal: with R2 set it
+  // is never written to, and without R2 photo/audio uploads fail and say so.
   const privateBucket = buckets?.find((b) => b.name === "private-uploads");
   if (!privateBucket) {
     const { error } = await supabase.storage.createBucket("private-uploads", { public: false });
-    if (error) throw new Error(`Failed to create "private-uploads" bucket: ${error.message}`);
+    if (error) console.error(`[storage] could not create the "private-uploads" bucket: ${error.message}`);
   } else if (privateBucket.public) {
     const { error } = await supabase.storage.updateBucket("private-uploads", { public: false });
-    if (error) throw new Error(`Failed to make "private-uploads" private: ${error.message}`);
+    if (error) console.error(`[storage] could not make "private-uploads" private: ${error.message}`);
   }
 }

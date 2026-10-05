@@ -11,7 +11,7 @@ import { commonMessages } from "@/i18n/messages/common";
 import { manageMessages } from "@/i18n/messages/manage";
 import { settingsMessages } from "@/i18n/messages/settings";
 import { signinMessages } from "@/i18n/messages/signin";
-import type { XpotMeResponse } from "@/pages/xpot/types";
+import { AdminBadge, useIsSuperAdmin } from "@/components/xpot/AdminBadge";
 
 // Who may use Xpot. People sign up with their phone and wait here for
 // approval; an admin can also create someone's access directly. Everyone
@@ -303,7 +303,7 @@ function DeleteAccountButton({ rep }: { rep: Rep }) {
   const t = useT(manageMessages);
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { data: me } = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
+  const isSuperAdmin = useIsSuperAdmin();
   const word = t("deleteAccountWord");
   const remove = useMutation({
     // The API's own guard word is always "DELETE"; the one typed is localized.
@@ -322,8 +322,8 @@ function DeleteAccountButton({ rep }: { rep: Rep }) {
     },
     onError: (e: Error) => toast({ title: t("error"), description: e.message, variant: "destructive" }),
   });
-  // Server rule: platform admins only (server/accountDeletion.ts).
-  if (!me?.user.isAdmin) return null;
+  // The global admin only, like the server (requireSuperAdmin), so it carries the "Admin" tag.
+  if (!isSuperAdmin) return null;
   return (
     <button
       type="button"
@@ -338,6 +338,7 @@ function DeleteAccountButton({ rep }: { rep: Rep }) {
     >
       {remove.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
       {t("deleteAccount")}
+      <AdminBadge />
     </button>
   );
 }

@@ -116,8 +116,8 @@ export function createAdminRouter() {
   router.post("/admin/reps/:id/unblock", withRep((id, req) => unblockRep(id, actorOf(req))));
   router.post("/admin/reps/:id/phone", withRep((id, req) => changeRepPhone(id, phoneChangeSchema.parse(req.body), actorOf(req))));
   // Delete the account and its data on the person's request (server/accountDeletion.ts).
-  // Admins only; the body must say { "confirm": "DELETE" } so a stray call can't do it.
-  router.delete("/admin/reps/:id", withRep((id, req) => {
+  // The global admin only; the body must say { "confirm": "DELETE" } so a stray call can't do it.
+  router.delete("/admin/reps/:id", requireSuperAdmin, withRep((id, req) => {
     z.object({ confirm: z.literal("DELETE", { errorMap: () => ({ message: 'Send { "confirm": "DELETE" } to delete this account.' }) }) }).parse(req.body ?? {});
     return deleteRepAccount(id, actorOf(req));
   }));
