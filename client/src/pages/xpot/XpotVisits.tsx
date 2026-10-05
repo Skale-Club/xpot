@@ -1,7 +1,14 @@
-import { useRef, useState, useCallback } from "react";
-import { ChevronLeft, ChevronRight, CalendarDays, RefreshCw } from "lucide-react";
+import { useRef, useState, useCallback, useMemo, useEffect } from "react";
+import { Link, useLocation, useRoute } from "wouter";
+import { ChevronLeft, ChevronRight, CalendarDays, RefreshCw, Building2, MousePointerClick, X } from "lucide-react";
 import { useVisits } from "./hooks/useVisits";
-import { VisitRow } from "./components/VisitRow";
+import { VisitRow, VisitDetail, VisitDeleteConfirm } from "./components/VisitRow";
+import { VisitsTable } from "./components/VisitsTable";
+import { useIsDesktop } from "@/hooks/use-is-desktop";
+import { MasterDetail } from "@/components/xpot/MasterDetail";
+import { MiniCalendar } from "@/components/xpot/MiniCalendar";
+import { GLASS } from "@/components/xpot/surface";
+import type { EnrichedSalesVisit } from "./types";
 import { useT, type Translate } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { visitsMessages } from "@/i18n/messages/visits";
@@ -39,18 +46,28 @@ export function XpotVisits() {
   const [viewMode, setViewMode] = useState<"all" | "day">("all");
   const [dayOffset, setDayOffset] = useState(0);
   const dateInputRef = useRef<HTMLInputElement>(null);
+  const isDesktop = useIsDesktop();
+  const [, navigate] = useLocation();
+  const [routeMatch, routeParams] = useRoute("/visits/:id");
+  const routeId = routeMatch ? Number(routeParams.id) : null;
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [deleteId, setDeleteId] = useState<number | null>(null);
 
   const today = new Date();
   const selectedDate = new Date();
   selectedDate.setDate(today.getDate() + dayOffset);
 
-  const handleDateChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.value) return;
-    const picked = new Date(e.target.value + "T12:00:00");
-    const todayMid = new Date(toLocalDateString(today) + "T12:00:00");
+  const pickDay = useCallback((day: Date) => {
+    const picked = new Date(toLocalDateString(day) + "T12:00:00");
+    const todayMid = new Date(toLocalDateString(new Date()) + "T12:00:00");
     const diff = Math.round((picked.getTime() - todayMid.getTime()) / (1000 * 60 * 60 * 24));
     setDayOffset(Math.min(0, diff));
   }, []);
+
+  const handleDateChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.value) return;
+    pickDay(new Date(e.target.value + "T12:00:00"));
+  }, [pickDay]);
 
   // VND-12: the picker could set sale_made / follow_up / no_answer /
   // not_interested / came_back_later, and none were filterable — a rep could
@@ -72,13 +89,37 @@ export function XpotVisits() {
 
   const visitsToRender = viewMode === "all" ? filteredAll : visitsForDay;
 
+  // Visits per day, for the dots on the desktop calendar.
+  const countsByDay = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const v of allVisits) {
+      if (!v.checkedInAt) continue;
+      const k = toLocalDateString(new Date(v.checkedInAt));
+      map.set(k, (map.get(k) ?? 0) + 1);
+    }
+    return map;
+  }, [allVisits]);
+
+  const selectedVisit = routeId ? allVisits.find((v) => v.id === routeId) ?? null : null;
+  const closeVisit = useCallback(() => navigate("/visits"), [navigate]);
+  const openVisit = (v: EnrichedSalesVisit) => navigate(`/visits/${v.id}`);
+
+  // Close the calendar popover on Escape.
+  useEffect(() => {
+    if (!calendarOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setCalendarOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [calendarOpen]);
+
   return (
     <div className="space-y-4">
       <div
-        className="space-y-3 rounded-2xl px-3 py-3"
+        className="space-y-3 rounded-2xl px-3 py-3 lg:flex lg:items-center lg:gap-4 lg:space-y-0"
         style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
       >
         <Segmented
+          className="lg:w-72 lg:shrink-0"
           items={[
             { id: "all" as const, label: t("allVisits"), count: allVisits.length },
             { id: "day" as const, label: t("byDay"), count: visitsForDay.length },
@@ -88,7 +129,7 @@ export function XpotVisits() {
         />
 
         {viewMode === "all" ? (
-          <div className="flex gap-1.5 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none]">
+          <div className="flex gap-1.5 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] lg:flex-1 lg:flex-wrap lg:overflow-visible lg:pb-0">
             {([
               { id: "all",             label: t("filterAll"),          active: "rgba(99,102,241,0.25)",  border: "rgba(99,102,241,0.4)",  text: "white" },
               { id: "sale_made",       label: t("filterSold"),         active: "rgba(16,185,129,0.2)",   border: "rgba(16,185,129,0.4)",  text: "#34d399" },
@@ -115,7 +156,7 @@ export function XpotVisits() {
             ))}
           </div>
         ) : viewMode === "day" ? (
-          <div className="flex items-center justify-between gap-2">
+          <div className="relative flex items-center justify-between gap-2 lg:flex-1 lg:justify-center lg:gap-4">
             <button
               type="button"
               onClick={() => setDayOffset((d) => d - 1)}
@@ -126,8 +167,10 @@ export function XpotVisits() {
 
             <button
               type="button"
-              onClick={() => dateInputRef.current?.showPicker()}
-              className="relative flex flex-col items-center gap-0.5"
+              onClick={() => (isDesktop ? setCalendarOpen((o) => !o) : dateInputRef.current?.showPicker())}
+              aria-expanded={isDesktop ? calendarOpen : undefined}
+              aria-label={t("pickDay")}
+              className="relative flex flex-col items-center gap-0.5 rounded-xl px-3 py-1 lg:hover:bg-white/[0.05]"
             >
               <span className="text-sm font-semibold text-white">{formatDayLabel(selectedDate, t)}</span>
               <span className="text-[11px] text-white/35">
@@ -151,6 +194,25 @@ export function XpotVisits() {
             >
               <ChevronRight className="h-4 w-4" />
             </button>
+
+            {isDesktop && calendarOpen && (
+              <>
+                <button type="button" aria-hidden tabIndex={-1} className="fixed inset-0 z-30 cursor-default" onClick={() => setCalendarOpen(false)} />
+                <div
+                  className="absolute left-1/2 top-full z-40 mt-2 w-72 -translate-x-1/2 rounded-2xl p-3 shadow-2xl"
+                  style={{ background: "#0e1424", border: "1px solid rgba(255,255,255,0.1)" }}
+                >
+                  <MiniCalendar
+                    value={selectedDate}
+                    onChange={(d) => { pickDay(d); setCalendarOpen(false); }}
+                    counts={countsByDay}
+                    max={today}
+                    locale={t.locale}
+                    labels={{ prev: t("prevMonth"), next: t("nextMonth") }}
+                  />
+                </div>
+              </>
+            )}
           </div>
         ) : null}
       </div>
@@ -186,9 +248,35 @@ export function XpotVisits() {
 
       {/* Visit list */}
       {!visitsQuery.isLoading && !visitsQuery.isError && visitsToRender.length ? (
-        <div className="space-y-2">
-          {visitsToRender.map((visit) => <VisitRow key={visit.id} visit={visit} />)}
-        </div>
+        isDesktop ? (
+          <MasterDetail
+            closeLabel={t("closePane")}
+            onClose={closeVisit}
+            list={<VisitsTable visits={visitsToRender} selectedId={routeId} onSelect={openVisit} />}
+            detail={routeId == null ? null : selectedVisit ? (
+              <div className="overflow-hidden rounded-2xl" style={{ background: "rgba(255,255,255,0.035)", border: "1px solid rgba(255,255,255,0.08)" }} data-testid="visit-detail-pane">
+                <div className="flex items-center gap-3 border-b border-white/[0.06] px-5 py-3">
+                  <Link href={`/leads/${selectedVisit.leadId}`} className="inline-flex min-w-0 flex-1 items-center gap-1.5 text-xs font-semibold text-indigo-400 hover:text-indigo-300">
+                    <Building2 className="h-3.5 w-3.5 shrink-0" /> <span className="truncate">{t("openCompany")}</span>
+                  </Link>
+                  <button type="button" onClick={closeVisit} aria-label={t("closePane")} title={t("closePane")} className="flex h-8 w-8 items-center justify-center rounded-lg text-white/35 hover:bg-white/10 hover:text-white">
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="p-5">
+                  <VisitDetail key={selectedVisit.id} visit={selectedVisit} layout="pane" onDelete={() => setDeleteId(selectedVisit.id)} />
+                </div>
+              </div>
+            ) : (
+              <EmptyState icon={CalendarDays} title={t("visitNotFound")} cardStyle={GLASS} />
+            )}
+            placeholder={<EmptyState icon={MousePointerClick} title={t("selectVisit")} hint={t("selectVisitHint")} cardStyle={GLASS} />}
+          />
+        ) : (
+          <div className="space-y-2">
+            {visitsToRender.map((visit) => <VisitRow key={visit.id} visit={visit} />)}
+          </div>
+        )
       ) : !visitsQuery.isLoading && !visitsQuery.isError ? (
         <EmptyState
           icon={CalendarDays}
@@ -206,6 +294,15 @@ export function XpotVisits() {
               : t("nothingThisDay")}
         />
       ) : null}
+
+      {deleteId != null && (
+        <VisitDeleteConfirm
+          visitId={deleteId}
+          open
+          onOpenChange={(o) => { if (!o) setDeleteId(null); }}
+          onDeleted={() => { setDeleteId(null); closeVisit(); }}
+        />
+      )}
     </div>
   );
 }
