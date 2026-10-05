@@ -84,6 +84,8 @@ export const salesReps = pgTable("sales_reps", {
   blockedReason: text("blocked_reason"),
   // Personal code for wholesale prices in the Stuscle store (shared/wholesale.ts).
   wholesaleCode: text("wholesale_code"),
+  // Account deleted, row kept as an anonymous placeholder; migrations/0020_rep_deleted_at.sql.
+  deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => ({

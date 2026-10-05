@@ -32,7 +32,7 @@ The history of this split is in [MODULES.md](./MODULES.md).
 | reseller | Not a role: a `rep` whose `modules` is just `{tags}` | The pieces in their own kit and the leads they own |
 | manager | `role = 'manager'` | Everything in both modules, plus each module's Manage group and People, minus the global admin's items below |
 | admin | `role = 'admin'` | What a manager has, plus acting on managers and admins |
-| global admin | `users.is_admin` (Skale Club; an admin created in People gets it too) | Everything, plus the items only it sees, each tagged "Admin" in the UI: Tags batches, the Journey, the NFC writers (and writing a piece's chip), MCP, Integrations, Branding and Xphere. Client: `isSuperAdmin()` and `adminOnly` nav items; server: `requireSuperAdmin` and `requireTagAdmin` answer 403 to everyone else |
+| global admin | `users.is_admin` (Skale Club; an admin created in People gets it too) | Everything, plus the items only it sees, each tagged "Admin" in the UI: Tags batches, the Journey, the NFC writers (and writing a piece's chip), MCP, Integrations, Branding, Xphere and deleting an account (People › a blocked person). Client: `isSuperAdmin()` and `adminOnly` nav items; server: `requireSuperAdmin` and `requireTagAdmin` answer 403 to everyone else |
 
 Every person also needs `is_active` and no `blocked_at`. A phone that signs up
 starts pending; an admin approves it in People (`/admin/reps`).
@@ -124,7 +124,7 @@ client/                    React app (Vite)
   src/i18n/                EN/PT/ES messages, one file per area
   src/lib/                 Query client, PWA helpers, MODULE_HOME, Supabase client
 server/
-  index.ts                 Boot: creates the Supabase uploads bucket, starts Express
+  index.ts                 Boot: makes sure the Supabase buckets exist (public "uploads", fallback "private-uploads"), starts Express
   app.ts                   createApp: env check, legacy-host redirect, body limits, sessions, routes
   routes.ts                Mount order: Tags, MCP, wholesale, then /api/xpot/*, health, version
   routes/xpot/             The Visits and account API (leads, visits, sales, consignments, admin,
@@ -135,6 +135,10 @@ server/
   wholesale/               Stuscle wholesale code check
   integrations/ghl.ts      GoHighLevel client (legacy)
   lib/ai.ts                LLM client: OpenRouter, Gemini fallback
+  lib/files.ts             Private files (photos, voice notes): R2 or the private Supabase bucket,
+                           references, signed URLs, best-effort cleanup
+  routes/xpot/files.ts     GET /api/xpot/files?ref=…: access check, then a 5-minute signed URL
+  accountDeletion.ts       Deleting a person's account and data; sales and consignments are kept
   storage.ts               Data access for Visits and the account; storage-sales.ts for the sales module
   canonicalHost.ts         301 from xpot.skale.club to xpot.place
 shared/                    Code both sides import
@@ -170,6 +174,12 @@ runner creates for its own bookkeeping.
 | Account | `users`, `sessions`, `auth_phone_codes`, `app_branding` |
 | MCP | `mcp_tokens`, `mcp_oauth_clients`, `mcp_oauth_codes`, `mcp_oauth_tokens` |
 
+Files are not in the database: business photos (`sales_leads.photos`) and voice
+notes (`sales_visit_notes.audio_url`) hold a storage reference such as
+`r2:photos/12/lead_7_….jpg`, read through `GET /api/xpot/files` (README → Files).
+Rows from before that hold the old public Supabase URL until
+`npm run files:migrate` moves them.
+
 Every table has RLS on and no policies. That blocks the public Supabase anon key
 from reading them through PostgREST; the app is unaffected because it connects
 as the owner, which has `BYPASSRLS`. Run it as any other role and every query
@@ -204,6 +214,7 @@ starting together never apply one twice. Files are written to be re-runnable
 | `0017_products_sales_consignments` | The sales module: products, price tiers, sales, consignments, the stock ledger |
 | `0018_mcp_oauth` | OAuth 2.1 clients, codes and tokens for MCP |
 | `0019_tag_face` | `tag_batches.face`, `tags.face`: what is printed on a piece |
+| `0020_rep_deleted_at` | `sales_reps.deleted_at`: a deleted account kept as an anonymous placeholder for its sales |
 
 ## 7. MCP
 
@@ -258,6 +269,9 @@ live in `server/mcp/tools/tagJourney.ts`:
   Dockerfile's `CMD` is `node dist/migrate.cjs && exec node dist/index.cjs`.
   A failing migration stops the new container from starting, so Coolify keeps
   the old one serving.
-- Supabase is still used for Storage and the legacy email Auth;
+- Business photos and voice notes live in a private Cloudflare R2 bucket
+  (`R2_*` variables; README → Files). Supabase is still used for public Storage
+  (avatars, the branding icon), as the private fallback when R2 isn't set, and
+  for the legacy email Auth;
   `.github/workflows/keepalive.yml` pings it every 12 hours so the free project
   does not pause.

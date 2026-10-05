@@ -12,6 +12,7 @@ import { LeadSalesPanel } from "../sales/LeadSalesPanel";
 import { LeadContacts } from "./LeadContacts";
 import type { EnrichedSalesVisit, FullSalesLead } from "../../types";
 import { ModuleBadge } from "@/components/xpot/ModuleBadge";
+import { fileSrc } from "@/lib/files";
 
 function Section({ title, children, badge }: { title: string; children: ReactNode; badge?: ReactNode }) {
   return (
@@ -89,7 +90,7 @@ export function LeadDetailPane({
       {/* Header */}
       <div className="flex items-start gap-4 p-5">
         {photo ? (
-          <img src={photo} alt="" className="h-16 w-16 shrink-0 rounded-2xl object-cover" />
+          <img src={fileSrc(photo)} alt="" className="h-16 w-16 shrink-0 rounded-2xl object-cover" />
         ) : (
           <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border border-indigo-500/20 bg-indigo-500/10">
             <Building2 className="h-8 w-8 text-indigo-400" />

@@ -124,6 +124,26 @@ describe("the composed /api/xpot routers", () => {
     expect(rename.status).toBe(200);
   });
 
+  it("deleting an account is the global admin's alone", async () => {
+    const del = (user: string, body: unknown = {}) => get(appFor(user), "/api/xpot/admin/reps/1", { method: "DELETE", body: JSON.stringify(body) });
+    expect((await del("rep")).status).toBe(403);
+    const manager = await del("manager", { confirm: "DELETE" });
+    expect([manager.status, manager.code]).toEqual([403, "super_admin_only"]);
+    // Past the guards, the body's confirmation is still required.
+    const admin = await del("platform-admin");
+    expect(admin.status).toBe(400);
+    expect(admin.message).toContain("DELETE");
+  });
+
+  it("private files: a Tags-only reseller isn't stopped by the Visits gate; anonymous gets 401", async () => {
+    // Businesses belong to both modules, and so do their photos; the file route does its own access check.
+    const ref = encodeURIComponent("r2:photos/2/lead_5_1.jpg");
+    const tagsOnly = await get(appFor("tags-only"), `/api/xpot/files?ref=${ref}`);
+    expect(tagsOnly.code).not.toBe("module_off");
+    expect(tagsOnly.status).toBe(404); // the empty storage holds no such photo
+    expect((await get(appFor(null), `/api/xpot/files?ref=${ref}`)).status).toBe(401);
+  });
+
   it("a body over the JSON limit answers 413, not a 500", async () => {
     const res = await get(appFor("rep"), "/api/xpot/leads", { method: "POST", body: JSON.stringify({ name: "x".repeat(4096) }) });
     expect(res.status).toBe(413);
