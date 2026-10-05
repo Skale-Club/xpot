@@ -28,6 +28,7 @@ import { useIsComputer, useIsDesktop } from "@/hooks/use-is-desktop";
 import { BRAND_GRADIENT, MODULE_ACCENT } from "./surface";
 import { contextOfPath, moduleGroups, organizationItems, type NavGroup, type NavItem, type ShellContext } from "./moduleNav";
 import { XpotMark } from "./XpotMark";
+import { ScreenErrorBoundary } from "./ScreenErrorBoundary";
 
 // The frame around every rep screen. Below `lg` it is the phone column the app
 // always had (the caller passes its header row and bottom nav). From `lg` up a
@@ -399,6 +400,7 @@ export function AppLayout({
   mobileColumnStyle?: CSSProperties;
 }) {
   const [collapsed, setCollapsed] = useState(readCollapsed);
+  const [location] = useLocation();
   const isDesktop = useIsDesktop();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const togglePalette = useCallback(() => setPaletteOpen((o) => !o), []);
@@ -437,7 +439,9 @@ export function AppLayout({
           style={mobileColumnStyle}
         >
           {mobileHeader ? <div className="lg:hidden">{mobileHeader}</div> : null}
-          <main className="flex-1">{children}</main>
+          <main className="flex-1">
+            <ScreenErrorBoundary key={location}>{children}</ScreenErrorBoundary>
+          </main>
         </div>
         {mobileNav ? <div className="lg:hidden">{mobileNav}</div> : null}
       </div>
