@@ -12,7 +12,7 @@ import { formatCents } from "../../utils";
 import {
   useProducts,
   useSalesMutations,
-  PAYMENT_METHODS,
+  usePaymentOptions,
   type ConsignmentWithRefs,
   type PaymentMethod,
   type PaymentStatus,
@@ -20,6 +20,9 @@ import {
 import {
   Field, Money, MoneyInput, PrimaryButton, QtyInput, Select, SheetDialog, inputCls, inputStyle,
 } from "./ui";
+import { useT } from "@/i18n";
+import { commonMessages } from "@/i18n/messages/common";
+import { salesModuleMessages } from "@/i18n/messages/salesModule";
 
 // ─── Leave stock ─────────────────────────────────────────────────────────────
 
@@ -35,6 +38,8 @@ export function DepositDialog({
   existing?: ConsignmentWithRefs[];
   onDone?: () => void;
 }) {
+  const t = useT(salesModuleMessages);
+  const tc = useT(commonMessages);
   const productsQuery = useProducts({ enabled: open });
   const { deposit } = useSalesMutations();
 
@@ -78,44 +83,44 @@ export function DepositDialog({
   }
 
   return (
-    <SheetDialog open={open} onOpenChange={onOpenChange} title={leadName ? `Leave stock — ${leadName}` : "Leave stock"}>
+    <SheetDialog open={open} onOpenChange={onOpenChange} title={leadName ? t("leaveStockFor", { name: leadName }) : t("leaveStock")}>
       <div className="space-y-4">
-        <Field label="Product">
+        <Field label={t("product")}>
           <Select
             value={productId}
             onChange={(v) => { setProductId(v); setPriceTouched(false); }}
-            placeholder={productsQuery.isLoading ? "Loading…" : "Choose a product"}
+            placeholder={productsQuery.isLoading ? `${tc("loading")}…` : t("chooseProduct")}
             options={consignable.map((p) => ({ value: String(p.id), label: p.name }))}
           />
         </Field>
 
         {consignable.length === 0 && !productsQuery.isLoading && (
-          <p className="text-xs text-white/40">
-            No product is set up for consignment yet. Mark one as consignable in Admin › Products.
-          </p>
+          <p className="text-xs text-white/40">{t("noConsignableProducts")}</p>
         )}
 
         {openAgreement && (
           <div className="rounded-xl px-3 py-2.5 text-[11px] text-amber-200"
             style={{ background: "rgba(245,158,11,0.10)", border: "1px solid rgba(245,158,11,0.25)" }}>
-            {openAgreement.consignment.quantityOnHand} already on the shelf here —
-            this adds to the same agreement at {formatCents(openAgreement.consignment.unitPriceCents)} a unit.
+            {t("alreadyOnShelf", {
+              count: openAgreement.consignment.quantityOnHand,
+              price: formatCents(openAgreement.consignment.unitPriceCents, openAgreement.consignment.currency),
+            })}
           </div>
         )}
 
-        <Field label="Quantity" hint={product?.unitLabel ? `${product.unitLabel}s` : undefined}>
+        <Field label={t("quantity")} hint={product?.unitLabel ? `${product.unitLabel}s` : undefined}>
           <QtyInput value={quantity} onChange={setQuantity} min={1} />
         </Field>
 
         <div className="grid grid-cols-2 gap-2">
-          <Field label="Unit price (they pay)" hint={priceTouched ? undefined : "catalog"}>
+          <Field label={t("unitPriceTheyPay")} hint={priceTouched ? undefined : t("hintCatalog")}>
             <MoneyInput
               valueCents={unitPriceCents}
               onChangeCents={(c) => { setUnitPriceCents(c); setPriceTouched(true); }}
               disabled={Boolean(openAgreement)}
             />
           </Field>
-          <Field label="Settle every" hint="days">
+          <Field label={t("settleEvery")} hint={t("hintDays")}>
             <input
               value={intervalDays}
               inputMode="numeric"
@@ -129,26 +134,26 @@ export function DepositDialog({
 
         {product?.suggestedRetailCents ? (
           <p className="text-[11px] text-white/35">
-            Suggested resale {formatCents(product.suggestedRetailCents)} — the shop sets its own price.
+            {t("suggestedResale", { price: formatCents(product.suggestedRetailCents, product.currency) })}
           </p>
         ) : null}
 
         <div className="rounded-2xl p-3.5"
           style={{ background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.2)" }}>
           <div className="flex items-center justify-between">
-            <span className="text-sm text-white/60">Owed if it all sells</span>
-            <Money cents={quantity * unitPriceCents} className="text-lg font-bold text-indigo-300" />
+            <span className="text-sm text-white/60">{t("owedIfAllSells")}</span>
+            <Money cents={quantity * unitPriceCents} currency={product?.currency} className="text-lg font-bold text-indigo-300" />
           </div>
         </div>
 
-        <Field label="Notes">
-          <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional"
+        <Field label={t("notes")}>
+          <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={t("optional")}
             className={inputCls} style={inputStyle} />
         </Field>
 
         <PrimaryButton onClick={submit} disabled={!product} loading={deposit.isPending}>
           <PackagePlus className="h-4 w-4" />
-          {openAgreement ? `Add ${quantity} to the shelf` : `Leave ${quantity} here`}
+          {openAgreement ? t("addToShelf", { count: quantity }) : t("leaveHere", { count: quantity })}
         </PrimaryButton>
       </div>
     </SheetDialog>
@@ -166,6 +171,8 @@ export function SettleDialog({
   visitId?: number | null;
   onDone?: () => void;
 }) {
+  const t = useT(salesModuleMessages);
+  const { statusOptions, methodOptions } = usePaymentOptions();
   const { settle } = useSalesMutations();
   const productsQuery = useProducts({ enabled: open });
 
@@ -214,23 +221,23 @@ export function SettleDialog({
   }
 
   return (
-    <SheetDialog open={open} onOpenChange={onOpenChange} title={`Settle — ${row.product?.name ?? "stock"}`}>
+    <SheetDialog open={open} onOpenChange={onOpenChange} title={t("settleTitle", { product: row.product?.name ?? t("stockFallback") })}>
       <div className="space-y-4">
         <div className="flex items-center justify-between rounded-xl px-3.5 py-3"
           style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}>
           <div>
-            <div className="text-[10px] font-semibold uppercase tracking-widest text-white/35">On record</div>
+            <div className="text-[10px] font-semibold uppercase tracking-widest text-white/35">{t("onRecord")}</div>
             <div className="text-xl font-bold tabular-nums text-white">{onHand}</div>
           </div>
           <div className="text-right">
-            <div className="text-[10px] font-semibold uppercase tracking-widest text-white/35">Unit price</div>
+            <div className="text-[10px] font-semibold uppercase tracking-widest text-white/35">{t("unitPrice")}</div>
             <div className="text-xl font-bold tabular-nums text-white">
               {formatCents(row.consignment.unitPriceCents, currency)}
             </div>
           </div>
         </div>
 
-        <Field label="Still on the shelf" hint="count them">
+        <Field label={t("stillOnShelf")} hint={t("hintCountThem")}>
           <QtyInput value={counted} onChange={setCounted} min={0} autoFocus />
         </Field>
 
@@ -238,73 +245,67 @@ export function SettleDialog({
           <div className="flex items-start gap-2 rounded-xl px-3 py-2.5 text-[11px] text-red-300"
             style={{ background: "rgba(239,68,68,0.10)", border: "1px solid rgba(239,68,68,0.25)" }}>
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-            <span>
-              You counted more than the {onHand} on record. Record an adjustment first so the ledger matches
-              the shelf, then settle.
-            </span>
+            <span>{t("overCount", { count: onHand })}</span>
           </div>
         ) : (
           <div className="rounded-2xl p-3.5 space-y-2"
             style={{ background: "rgba(16,185,129,0.07)", border: "1px solid rgba(16,185,129,0.2)" }}>
             <div className="flex items-center justify-between text-xs text-white/50">
-              <span>Sold since last visit</span>
+              <span>{t("soldSinceLastVisit")}</span>
               <span className="tabular-nums font-semibold text-white">{result.soldQuantity}</span>
             </div>
             <div className="flex items-center justify-between border-t border-white/10 pt-2">
-              <span className="text-sm font-semibold text-white">They owe</span>
+              <span className="text-sm font-semibold text-white">{t("theyOwe")}</span>
               <Money cents={result.amountCents} currency={currency} className="text-2xl font-bold text-emerald-400" />
             </div>
             <div className="flex items-center justify-between text-[11px] text-white/35">
-              <span>You keep</span>
+              <span>{t("youKeep")}</span>
               <span className="tabular-nums">{formatCents(result.profitCents, currency)}</span>
             </div>
           </div>
         )}
 
-        <Field label="Leaving more today" hint="restock">
+        <Field label={t("leavingMoreToday")} hint={t("hintRestock")}>
           <QtyInput value={restock} onChange={setRestock} min={0} />
         </Field>
 
         {restock > 0 && (
           <p className="text-[11px] text-white/40">
-            Shelf after this visit: <strong className="text-white/70">{result.onHandAfterRestock}</strong> units.
+            {t("shelfAfterVisit")}{" "}
+            <strong className="text-white/70">{t.plural("units", result.onHandAfterRestock)}</strong>
           </p>
         )}
 
         {result.soldQuantity > 0 && (
           <>
             <div className="grid grid-cols-2 gap-2">
-              <Field label="Payment">
+              <Field label={t("payment")}>
                 <Select value={paymentStatus} onChange={(v) => setPaymentStatus(v as PaymentStatus)}
-                  options={[
-                    { value: "paid", label: "Paid" },
-                    { value: "partial", label: "Partial" },
-                    { value: "unpaid", label: "Unpaid" },
-                  ]} />
+                  options={statusOptions} />
               </Field>
-              <Field label="Method">
+              <Field label={t("method")}>
                 <Select value={paymentMethod} onChange={(v) => setPaymentMethod(v as PaymentMethod)}
-                  placeholder="—" options={PAYMENT_METHODS} />
+                  placeholder="—" options={methodOptions} />
               </Field>
             </div>
             {paymentStatus === "partial" && (
-              <Field label="Amount received">
+              <Field label={t("amountReceived")}>
                 <MoneyInput valueCents={paidCents} onChangeCents={setPaidCents} />
               </Field>
             )}
           </>
         )}
 
-        <Field label="Notes">
-          <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional"
+        <Field label={t("notes")}>
+          <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={t("optional")}
             className={inputCls} style={inputStyle} />
         </Field>
 
         <PrimaryButton tone="emerald" onClick={submit} disabled={result.overCount} loading={settle.isPending}>
           <Handshake className="h-4 w-4" />
           {result.soldQuantity > 0
-            ? `Settle ${formatCents(result.amountCents, currency)}`
-            : "Settle — nothing sold"}
+            ? t("settleAmount", { amount: formatCents(result.amountCents, currency) })
+            : t("settleNothingSold")}
         </PrimaryButton>
       </div>
     </SheetDialog>
@@ -319,6 +320,7 @@ export function ReturnDialog({
   open: boolean; onOpenChange: (o: boolean) => void; row: ConsignmentWithRefs | null;
   visitId?: number | null; onDone?: () => void;
 }) {
+  const t = useT(salesModuleMessages);
   const { returnStock } = useSalesMutations();
   const onHand = row?.consignment.quantityOnHand ?? 0;
   const [quantity, setQuantity] = useState(0);
@@ -329,21 +331,19 @@ export function ReturnDialog({
   if (!row) return null;
 
   return (
-    <SheetDialog open={open} onOpenChange={onOpenChange} title={`Take back — ${row.product?.name ?? "stock"}`}>
+    <SheetDialog open={open} onOpenChange={onOpenChange} title={t("takeBackTitle", { product: row.product?.name ?? t("stockFallback") })}>
       <div className="space-y-4">
-        <p className="text-xs text-white/45">
-          Picking stock back up without billing for it. {onHand} on record here.
-        </p>
-        <Field label="Units taken back">
+        <p className="text-xs text-white/45">{t("takeBackIntro", { count: onHand })}</p>
+        <Field label={t("unitsTakenBack")}>
           <QtyInput value={quantity} onChange={setQuantity} min={1} max={onHand} autoFocus />
         </Field>
         <label className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 cursor-pointer"
           style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
           <input type="checkbox" checked={close} onChange={(e) => setClose(e.target.checked)} className="accent-indigo-500" />
-          <span className="text-xs text-white/70">Close this consignment</span>
+          <span className="text-xs text-white/70">{t("closeThisConsignment")}</span>
         </label>
-        <Field label="Reason">
-          <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional"
+        <Field label={t("reason")}>
+          <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={t("optional")}
             className={inputCls} style={inputStyle} />
         </Field>
         <PrimaryButton tone="amber" loading={returnStock.isPending} disabled={quantity < 1 || quantity > onHand}
@@ -354,7 +354,7 @@ export function ReturnDialog({
             });
             onOpenChange(false); onDone?.();
           }}>
-          <Undo2 className="h-4 w-4" /> Take back {quantity}
+          <Undo2 className="h-4 w-4" /> {t("takeBackN", { count: quantity })}
         </PrimaryButton>
       </div>
     </SheetDialog>
@@ -367,6 +367,7 @@ export function AdjustDialog({
   open: boolean; onOpenChange: (o: boolean) => void; row: ConsignmentWithRefs | null;
   visitId?: number | null; onDone?: () => void;
 }) {
+  const t = useT(salesModuleMessages);
   const { adjust } = useSalesMutations();
   const onHand = row?.consignment.quantityOnHand ?? 0;
   const [delta, setDelta] = useState(0);
@@ -378,20 +379,18 @@ export function AdjustDialog({
   const after = onHand + delta;
 
   return (
-    <SheetDialog open={open} onOpenChange={onOpenChange} title={`Correct stock — ${row.product?.name ?? ""}`}>
+    <SheetDialog open={open} onOpenChange={onOpenChange} title={row.product?.name ? t("correctStockTitle", { product: row.product.name }) : t("correctStock")}>
       <div className="space-y-4">
-        <p className="text-xs text-white/45">
-          For a miscount, a breakage or units found later. This moves the record without billing anything.
-        </p>
+        <p className="text-xs text-white/45">{t("correctIntro")}</p>
         <div className="flex items-center justify-between rounded-xl px-3.5 py-3"
           style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}>
-          <span className="text-xs text-white/45">On record</span>
+          <span className="text-xs text-white/45">{t("onRecord")}</span>
           <span className="tabular-nums text-white">
             {onHand} <span className="text-white/30">→</span>{" "}
             <strong className={after < 0 ? "text-red-400" : "text-white"}>{after}</strong>
           </span>
         </div>
-        <Field label="Change" hint="negative to remove">
+        <Field label={t("change")} hint={t("hintNegative")}>
           <input
             value={delta}
             inputMode="numeric"
@@ -404,8 +403,8 @@ export function AdjustDialog({
             autoFocus
           />
         </Field>
-        <Field label="Reason">
-          <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Broken, miscounted…"
+        <Field label={t("reason")}>
+          <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={t("reasonPlaceholder")}
             className={inputCls} style={inputStyle} />
         </Field>
         <PrimaryButton tone="indigo" loading={adjust.isPending} disabled={delta === 0 || after < 0}
@@ -415,7 +414,7 @@ export function AdjustDialog({
             });
             onOpenChange(false); onDone?.();
           }}>
-          <SlidersHorizontal className="h-4 w-4" /> Correct to {after}
+          <SlidersHorizontal className="h-4 w-4" /> {t("correctTo", { count: after })}
         </PrimaryButton>
       </div>
     </SheetDialog>

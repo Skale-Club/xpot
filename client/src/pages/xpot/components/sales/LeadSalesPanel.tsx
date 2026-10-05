@@ -13,6 +13,9 @@ import { SaleDialog } from "./SaleDialog";
 import { DepositDialog, SettleDialog, ReturnDialog } from "./ConsignmentDialogs";
 import { ConsignmentCard } from "./cards";
 import { SectionLabel } from "./ui";
+import { useT } from "@/i18n";
+import { salesMessages } from "@/i18n/messages/sales";
+import { salesModuleMessages } from "@/i18n/messages/salesModule";
 
 export function LeadSalesPanel({
   leadId, leadName, visitId, compact,
@@ -23,6 +26,8 @@ export function LeadSalesPanel({
   /** Inside the visit card: tighter, no section heading. */
   compact?: boolean;
 }) {
+  const t = useT(salesModuleMessages);
+  const ts = useT(salesMessages);
   const snapshot = useLeadSalesSnapshot(leadId);
   const [saleOpen, setSaleOpen] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
@@ -35,28 +40,28 @@ export function LeadSalesPanel({
 
   return (
     <div className="space-y-3">
-      {!compact && <SectionLabel>Sales</SectionLabel>}
+      {!compact && <SectionLabel>{ts("tabSales")}</SectionLabel>}
 
       {/* Lifetime with this company */}
       <div className="flex items-stretch gap-2">
         <div className="flex-1 rounded-2xl px-3.5 py-3"
           style={{ background: "rgba(16,185,129,0.07)", border: "1px solid rgba(16,185,129,0.18)" }}>
-          <div className="text-[10px] font-semibold uppercase tracking-widest text-white/35">Sold here</div>
+          <div className="text-[10px] font-semibold uppercase tracking-widest text-white/35">{t("soldHere")}</div>
           <div className="mt-0.5 text-xl font-bold tabular-nums text-emerald-400">
             {formatCents(data?.lifetimeCents ?? 0)}
           </div>
           <div className="text-[10px] text-white/35">
-            {data?.salesCount ?? 0} {data?.salesCount === 1 ? "sale" : "sales"}
-            {data?.lastSaleAt ? ` · last ${formatShortDate(data.lastSaleAt)}` : ""}
+            {t.plural("salesCount", data?.salesCount ?? 0)}
+            {data?.lastSaleAt ? ` · ${t("lastSale", { date: formatShortDate(data.lastSaleAt) })}` : ""}
           </div>
         </div>
         <div className="flex-1 rounded-2xl px-3.5 py-3"
           style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
-          <div className="text-[10px] font-semibold uppercase tracking-widest text-white/35">You kept</div>
+          <div className="text-[10px] font-semibold uppercase tracking-widest text-white/35">{t("youKept")}</div>
           <div className="mt-0.5 text-xl font-bold tabular-nums text-white">
             {formatCents(data?.lifetimeProfitCents ?? 0)}
           </div>
-          <div className="text-[10px] text-white/35">after production cost</div>
+          <div className="text-[10px] text-white/35">{t("afterProductionCost")}</div>
         </div>
       </div>
 
@@ -65,12 +70,12 @@ export function LeadSalesPanel({
         <button type="button" onClick={() => setSaleOpen(true)}
           className="flex flex-1 items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold text-white transition-all active:scale-[0.98] touch-manipulation"
           style={{ background: "linear-gradient(135deg, #10b981, #06b6d4)" }}>
-          <Package className="h-4 w-4" /> New sale
+          <Package className="h-4 w-4" /> {t("newSale")}
         </button>
         <button type="button" onClick={() => setDepositOpen(true)}
           className="flex flex-1 items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold text-white/80 transition-colors hover:bg-white/10 touch-manipulation"
           style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.10)" }}>
-          <PackagePlus className="h-4 w-4" /> Leave stock
+          <PackagePlus className="h-4 w-4" /> {t("leaveStock")}
         </button>
       </div>
 
@@ -78,7 +83,7 @@ export function LeadSalesPanel({
       {consignments.length > 0 && (
         <div className="space-y-2">
           <div className="flex items-center gap-1.5 px-1 text-[10px] font-semibold uppercase tracking-widest text-white/30">
-            <TrendingUp className="h-3 w-3" /> On consignment here
+            <TrendingUp className="h-3 w-3" /> {t("onConsignmentHere")}
           </div>
           {consignments.map((row) => (
             <ConsignmentCard
