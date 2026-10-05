@@ -1,11 +1,20 @@
 # Backlog Xpot
 
-**Rev. 3** · base `07f640d` · 49 itens · **30 concluídos** · foco: módulo de vendas
+**Rev. 4** · base `7020bc4` · 52 itens · **29 concluídos** · 3 obsoletos · 20 abertos
 
+> **Rev. 4 (conferência com o código, 2026-10-05):** os contadores não fechavam
+> (o cabeçalho dizia 30 concluídos, a tabela somava 24 e os itens marcados ✅
+> eram 28); agora vêm da contagem dos itens. Confirmados no código e marcados ✅:
+> DAT-03, VND-16 e PLT-05. PLT-01, 02 e 03 eram problemas da Vercel, que saiu do
+> projeto (`049cc76`): ficam como obsoletos. Entrou a área MOD, com o que sobrou
+> do plano de módulos ([`MODULES.md`](./MODULES.md)). Suíte hoje: 332 testes de
+> unidade em 38 arquivos (`npx vitest run`), mais 7 arquivos de integração que
+> só rodam com `TAGS_INTEGRATION=1` e um Postgres descartável.
+>
 > **Rev. 2 (execução):** o módulo de vendas foi construído — catálogo, venda
 > direta, consignação com acerto, captura por voz e espelho no Xphere — e a
 > Fase 0 fechou as falhas de autorização antes disso. Itens resolvidos estão
-> marcados ✅ com o commit. Suíte: 93 testes, typecheck limpo, build de produção
+> marcados ✅ com o commit. Suíte na época: 93 testes, typecheck limpo, build de produção
 > passando. **Pendente de você:** a migration (renumerada para `0017` no merge
 > com o `main`) roda sozinha no deploy do Coolify, antes do servidor subir.
 >
@@ -19,14 +28,16 @@ para referência em conversa. Estados: **Agora** (bloqueia outras coisas) · **A
 
 Detalhamento e referências completas de arquivo:linha em [`AUDITORIA.md`](./AUDITORIA.md).
 
-| Área | Itens | Concluídos | Restantes |
-|---|---|---|---|
-| VND — sistema de vendas | 18 | 6 | 12 |
-| SEG — segurança/autorização | 10 | 9 | 1 |
-| PLT — plataforma | 5 | 1 | 4 |
-| DAT — integridade de dados | 6 | 4 | 2 |
-| PRF — performance | 5 | 0 | 5 |
-| DOC — testes e documentação | 5 | 4 | 1 |
+| Área | Itens | Concluídos | Obsoletos | Abertos |
+|---|---|---|---|---|
+| VND — sistema de vendas | 18 | 5 | 0 | 13 |
+| SEG — segurança/autorização | 10 | 10 | 0 | 0 |
+| PLT — plataforma | 5 | 2 | 3 | 0 |
+| DAT — integridade de dados | 6 | 5 | 0 | 1 |
+| PRF — performance | 5 | 1 | 0 | 4 |
+| DOC — testes e documentação | 5 | 5 | 0 | 0 |
+| MOD — módulos Visitas e Tags | 3 | 1 | 0 | 2 |
+| **Total** | **52** | **29** | **3** | **20** |
 
 ### Novidades desta revisão
 
@@ -88,7 +99,7 @@ mais tocada — sem mudar estágio, corrigir valor, marcar ganha/perdida ou arqu
 
 | ID | Sev | Item | Estado |
 |---|---|---|---|
-| VND-16 | Médio | **Contatos da conta existem só no banco.** Tabela, schema, storage e rotas prontos; `POST /leads/:id/contacts` sem chamadores. Sem registrar decisor/comprador. — `leads.ts:364-374` | A fazer |
+| ✅ VND-16 | Médio | **Contatos da conta existem só no banco.** Tabela, schema, storage e rotas prontos; `POST /leads/:id/contacts` sem chamadores. Sem registrar decisor/comprador. — `leads.ts:364-374` | ✅ feito em `de1a2c8` (#20): `LeadContacts.tsx` chama `POST /leads/:id/contacts`, no detalhe da empresa (`LeadDetailPane.tsx`) |
 | VND-17 | Baixo | **Painel admin de visitas recentes nunca foi ligado.** ~70 linhas com joins e a única paginação do sistema, sem consumidor. Ligar ou remover. — `storage.ts:492-560` | Decidir |
 | VND-18 | Baixo | **Fila offline é uma coluna sem implementação.** `offline_queue_enabled` não é lida nem escrita; o app bloqueia check-in offline. — `shared/schema/sales.ts:261` | Decidir |
 
@@ -133,11 +144,11 @@ Bloqueiam a refatoração: não faz sentido reestruturar sobre autorização que
 
 | ID | Sev | Item | Estado |
 |---|---|---|---|
-| ✅ PLT-01 | Médio | Bucket de storage nunca criado em produção (Vercel pula `ensureUploadBucket`). `api/index.ts:16-33` | ✅ feito |
-| ✅ PLT-02 | Médio | Limite de upload de 50 MB contra teto de 4,5 MB da Vercel. `app.ts:26-34` | ✅ feito |
-| ✅ PLT-03 | Médio | Pipeline de áudio síncrono dentro de 30 s (upload + Whisper + LLM). `visits.ts:214-320` | ✅ feito |
+| PLT-01 | Médio | Bucket de storage nunca criado em produção (Vercel pula `ensureUploadBucket`). `api/index.ts:16-33` | Obsoleto: a Vercel e o `api/index.ts` saíram em `049cc76`. No Coolify há um processo só, e `server/index.ts` cria o bucket no boot |
+| PLT-02 | Médio | Limite de upload de 50 MB contra teto de 4,5 MB da Vercel. `app.ts:26-34` | Obsoleto: o teto de 4,5 MB era da Vercel. O limite de 8 MB do corpo JSON (`server/app.ts`) continua |
+| PLT-03 | Médio | Pipeline de áudio síncrono dentro de 30 s (upload + Whisper + LLM). `visits.ts:214-320` | Obsoleto: os 30 s eram o limite de função da Vercel. O contêiner no Coolify não tem esse teto |
 | ✅ PLT-04 | Médio | Nenhuma validação de ambiente no boot além de `DATABASE_URL`. `db.ts:9-13` | ✅ feito |
-| PLT-05 | Baixo | RLS depende de `BYPASSRLS` sem estar documentado. `migrations/0004, 0007` | A fazer |
+| ✅ PLT-05 | Baixo | RLS depende de `BYPASSRLS` sem estar documentado. `migrations/0004, 0007` | ✅ documentado: comentários das migrations 0004 e 0007, README (seção Database) e `docs/ARCHITECTURE.md` §5 |
 
 ## DAT — Integridade de dados
 
@@ -145,7 +156,7 @@ Bloqueiam a refatoração: não faz sentido reestruturar sobre autorização que
 |---|---|---|---|
 | ✅ DAT-01 | Médio | Excluir visita quebra em violação de FK (tarefas vinculadas). `storage.ts:594-597` | ✅ feito |
 | ✅ DAT-02 | Médio | Entrada do Xphere não é idempotente — retry duplica leads. `inbound.ts:30-73` | ✅ feito |
-| DAT-03 | Médio | Configurações de check-in inalcançáveis pela aplicação. `storage.ts:155-163` | A fazer |
+| ✅ DAT-03 | Médio | Configurações de check-in inalcançáveis pela aplicação. `storage.ts:155-163` | ✅ feito em `f99fbb5`: `GET/PUT /api/xpot/admin/settings` (`server/routes/xpot/admin.ts`) e a tela Visitas › Gestão › Regras de check-in (`AdminSettings.tsx`) |
 | ✅ DAT-04 | Baixo | Check-in faz dois UPDATEs no lead, fora de transação. `visits.ts:97-104` | ✅ feito |
 | ✅ DAT-05 | Baixo | `upsertPrimaryLocation` não atualiza `updatedAt`. `storage.ts:427-448` | ✅ feito |
 | DAT-06 | Alto | Verificar o schema de produção contra o Drizzle — baseline antes de qualquer migration estrutural. | Agora |
@@ -170,6 +181,15 @@ Bloqueiam a refatoração: não faz sentido reestruturar sobre autorização que
 | ✅ DOC-04 | Baixo | Dois módulos de tipos concorrentes no cliente. `hooks/types.ts` | ✅ feito |
 | ✅ DOC-05 | Baixo | Endpoints admin sem consumidor (`/admin/sync-events`, `/admin/ghl/pipelines`). | ✅ feito |
 
+## MOD — Módulos Visitas e Tags
+
+O que ficou aberto do plano [`MODULES.md`](./MODULES.md), executado no #31.
+
+| ID | Sev | Item | Estado |
+|---|---|---|---|
+| MOD-19 | Médio | **Telas de gestão traduzidas (EN/PT/ES).** `i18n/messages/manage.ts`, `manageTags*.ts`; `tests/i18n-messages.test.ts` confere placeholders e plurais em todos os dicionários. Também a área de Vendas (#34). | ✅ #33 |
+| MOD-21 | Médio | **Peça vendida em Tags contar em Vendas.** Hoje a ativação de uma peça (`tags.sold_at`) não vira linha em `sales_sales`, e a aba Vendas não a mostra. Depende da decisão D5 do `MODULES.md`. | Decidir (D5) |
+| MOD-22 | Baixo | **"Minhas peças" do gerente lista todas as peças** (`server/tags/routes.ts:412`) e duplica Tags › Gestão › Todas as peças. Vender não depende dessa lista: a peça é aberta lendo o QR/NFC ou digitando o código, e ao ser ativada passa a ser do gerente (`saleCredit`). Proposta: "Minhas peças" mostra só as do próprio gerente; o link "Ver peças" de um cliente de Visitas leva o gerente à Gestão filtrada por cliente; a busca (⌘K) do gerente procura em todas. | Decidir com o dono |
 
 ---
 
@@ -197,4 +217,4 @@ Coisas que a execução revelou e que precisam de você:
 5. **Modelo de IA para a extração.** O configurado hoje é `gpt-4o-mini`. Para
    números falados em português recomendo um modelo mais forte; trocável no
    admin sem código.
-6. **Preços do catálogo inicial** são estimativas minhas — edite em Admin › Products.
+6. **Preços do catálogo inicial** são estimativas minhas — edite em Visitas › Gestão › Produtos (`/admin/products`).

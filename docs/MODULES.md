@@ -38,7 +38,7 @@ As decisões foram reavaliadas antes de executar, contra o código. Cinco mudara
 | MOD-17 card de Tags no Painel | ✅ | Mantido, com cor e selo de Tags |
 | MOD-18, MOD-20 vocabulário | ✅ parcial | "Suas peças" em todo lugar, "Peças" + selo, ES "Tags", aba "Visitas" → "Histórico" (D1), "Team report" → relatório por revendedor |
 | MOD-19 Admin traduzido | ✅ | `i18n/messages/manage.ts` (Visitas e Organização), `manageTags.ts`, `manageTagsPieces.ts`, `manageTagsBatches.ts`; rótulos de peça, produto, chip e impressão vêm de `tags.ts` via `admin/tags/labels.ts`; `tests/i18n-messages.test.ts` confere placeholders e plurais |
-| MOD-21 | ⏸ depende de D5 | |
+| MOD-21 | ⏸ depende de D5 | No BACKLOG como MOD-21 |
 
 Também: o mapa de onde cada tela vive é um só (`client/src/components/xpot/moduleNav.ts`), lido pela barra
 lateral, pela paleta e pelo `AdminApp`, com testes (`tests/module-nav.test.ts`). As telas foram conferidas
@@ -47,8 +47,9 @@ contra uma API simulada em 1366px e 375px (admin, gerente, revendedor só de Tag
 **Pendências conscientes**
 
 - O gerente vê **todas** as peças em Tags › Minhas peças (`server/tags/routes.ts:412`), como antes. Agora isso
-  duplica Tags › Gestão › Todas as peças. Não foi mudado porque o gerente vende peças da casa pelo celular a
-  partir dessa lista.
+  duplica Tags › Gestão › Todas as peças. O motivo dado na Rev. 2 (o gerente venderia peças da casa a partir
+  dessa lista) não se sustenta: uma peça é aberta e vendida lendo o QR/NFC ou digitando o código, e ao ser
+  ativada passa a ser do gerente (`saleCredit`). Em aberto no BACKLOG como MOD-22, para decidir com o dono.
 - Textos que vêm do servidor continuam em inglês: mensagens de erro da API, títulos que o servidor grava na Jornada, o diagnóstico das integrações (`shared/integrations-registry.ts`) e os erros de validação de link em `shared/tags.ts` (a gestão traduz os conhecidos pelo texto).
 
 ---
@@ -71,10 +72,14 @@ Os códigos `MOD-xx` seguem o formato do [`BACKLOG.md`](./BACKLOG.md) e do [`DES
 
 ## 1. Diagnóstico
 
+> Retrato do código na base `2cf0985`, antes do #31. As referências arquivo:linha desta seção
+> apontam para esse commit (`git show 2cf0985:<arquivo>`); várias dessas telas foram reescritas
+> no #31 e as linhas de hoje são outras.
+
 ### 1.1 O shell do desktop mistura três mundos numa coluna só
 
 No celular existe o `ModuleSwitch` (Visitas | Tags) no topo da tela, e cada módulo tem a sua barra
-inferior. No desktop esse seletor **some** (`App.tsx:82-86` e `TagsApp.tsx:93-95` só o renderizam em
+inferior. No desktop esse seletor **some** (`App.tsx:82-86` e `TagsApp.tsx:86-89` só o renderizam em
 `mobileHeader`, que é `lg:hidden`). No lugar dele, a barra lateral empilha tudo:
 
 ```
@@ -107,7 +112,7 @@ ADMIN             ← só dentro do admin
 
 | Onde | O que é | Para quem |
 |---|---|---|
-| Grupo **TAGS** da barra (`/tags`) | Home, Minhas peças, Link direto: o app do revendedor | Revendedor (o gerente vê **todas** as peças aqui também, `server/tags/routes.ts:412`) |
+| Grupo **TAGS** da barra (`/tags`) | Home, Minhas peças, Link direto: o app do revendedor | Revendedor (o gerente vê **todas** as peças aqui também, `server/tags/routes.ts:404`) |
 | **Admin › Tags** (`/admin/tags`) | 7 abas: Overview, Pieces, Kits, Batches, Journey, Team, NFC writers | Gerente/admin |
 
 Um gerente tem portanto duas listas de peças, em dois lugares, com colunas diferentes.
@@ -135,7 +140,7 @@ resto do app tem EN/PT/ES.
 | Leads, lista e tabela | contagem de peças NFC | `XpotLeads.tsx:454-461`, `LeadsTable.tsx:137-139` |
 | Detalhe do lead | seção "Peças Tags" entre Vendas e Visitas | `LeadDetailPane.tsx:211-221` |
 | Check-in | "Vender uma peça a este cliente": salta para `/tags` | `XpotCheckIn.tsx:531-551` |
-| Tags, peça/direto | escolhe e **cria leads** de Visitas | `LeadPicker.tsx`, `repository.ts:527-550` |
+| Tags, peça/direto | escolhe e **cria leads** de Visitas | `LeadPicker.tsx`, `createLeadForSale` em `server/tags/repository.ts:515-520` |
 
 Essas pontes são úteis. O problema é que nada mostra que você está atravessando de um módulo para o
 outro.
@@ -169,8 +174,8 @@ outro.
 2. **Configurações mostra a integração Xphere a quem só tem Tags** (`XpotSettings.tsx:562`, sem
    condição), e a rota do servidor não checa módulo.
 3. **Os botões "voltar" de Configurações e do Admin vão para `/dashboard`**, que é Visitas, mesmo
-   para quem só tem Tags (`XpotSettings.tsx:424`, `AdminApp.tsx:114`).
-4. **`/tags/summary` ignora o papel de gerente** (`routes.ts:377-380`). O card do Painel do gerente
+   para quem só tem Tags (`XpotSettings.tsx:424`, `AdminApp.tsx:96`).
+4. **`/tags/summary` ignora o papel de gerente** (`server/tags/routes.ts:369-372`). O card do Painel do gerente
    mostra só as peças dele, enquanto a lista mostra todas.
 
 ---
@@ -198,15 +203,22 @@ outro.
 
 | Espaço | Rota | Conteúdo |
 |---|---|---|
-| **Visitas** | `/visitas/*` (hoje na raiz) | Para o vendedor: Painel, Visitas, Empresas, Vendas. **Gestão** (gerente): Equipe (o atual Admin Overview), Produtos, Regras de check-in, Xphere |
+| **Visitas** | `/visitas/*` (hoje na raiz) (descartado na Rev. 2 — ver Status): as URLs continuam na raiz | Para o vendedor: Painel, Visitas, Empresas, Vendas. **Gestão** (gerente): Equipe (o atual Admin Overview), Produtos, Regras de check-in, Xphere |
 | **Tags** | `/tags/*` | Para o revendedor: Início, Minhas peças, Link direto. **Gestão** (gerente): Visão geral, Todas as peças, Lotes, Kits, Revendedores (atual "Team"), Jornada, Gravadores NFC |
-| **Conta** | `/conta/*` (Configurações + parte global do Admin) | Perfil, idioma e senha para todos. **Organização** (admin): Pessoas e acessos, Integrações, Marca |
+| **Conta** | `/conta/*` (Configurações + parte global do Admin) (descartado na Rev. 2 — ver Status): continuam `/settings` e `/admin/reps`, `/admin/integrations`, `/admin/branding` | Perfil, idioma e senha para todos. **Organização** (admin): Pessoas e acessos, Integrações, Marca |
 
 O `/admin` deixa de existir como lugar próprio e vira redirecionamento para a seção equivalente.
+**(descartado na Rev. 2 — ver Status):** não há redirecionamento. As URLs `/admin/*` ficaram e só mudaram de lugar no shell;
+`moduleNav.ts` diz a que módulo cada uma pertence.
 Com isso, o "Admin › Tags" se funde com o "Tags" do revendedor: **um só Tags**, que mostra mais itens
 para o gerente.
 
 ### 3.2 Desktop
+
+> O seletor em menu suspenso, os atalhos `G V` / `G T` e a cor verde-água foram
+> descartados na Rev. 2 (ver Status). O que existe: um controle segmentado Visitas | Tags sempre visível no topo da barra
+> lateral (`SidebarModuleSwitch` em `AppLayout.tsx`), sem atalho de teclado próprio, e Tags em
+> violeta. O desenho abaixo é a proposta da Rev. 1.
 
 ```
 ┌──────────────────────┬────────────────────────────────────────────────┐
@@ -230,11 +242,13 @@ para o gerente.
 └──────────────────────┴────────────────────────────────────────────────┘
 ```
 
-- **Seletor de módulo no topo da barra lateral**, como o seletor de workspace do Slack ou do Notion.
+- **Seletor de módulo no topo da barra lateral**, como o seletor de workspace do Slack ou do Notion
+  (descartado na Rev. 2 — ver Status): virou um controle segmentado.
   Ele mostra o módulo atual com a sua cor e abre a lista dos outros. Também troca por atalho (`G V`,
   `G T`). Quem tem um módulo só vê o nome, sem seta.
 - **Cor por módulo**, aplicada ao item ativo, ao seletor e a uma fina linha no topo. Sugestão:
-  Visitas no azul atual e Tags em violeta/ciano, que já é a cor dos ícones NFC.
+  Visitas no azul atual e Tags em violeta/ciano, que já é a cor dos ícones NFC. Verde-água/ciano
+  (descartado na Rev. 2 — ver Status); Tags ficou violeta (`MODULE_ACCENT` em `surface.ts`).
 - **A barra superior mostra o caminho** "Módulo › Tela", em vez de só o nome da tela.
 - **⌘K agrupado por módulo.** "Em Visitas: empresas…" e "Em Tags: peças…", com o módulo atual
   primeiro.
@@ -269,7 +283,7 @@ Cada fase é um PR que vai para produção sozinho.
 | MOD-01 | **Checagem do módulo Visitas no servidor**, espelhando `server/tags/access.ts`: as rotas de Visitas (leads, visitas, vendas, Xphere) recusam quem não tem `visits`. É a correção do furo 1.6.1. Atenção: o `LeadPicker` de Tags usa `/api/xpot/leads`, então Tags precisa de uma rota própria de busca e criação de empresa, ou essa rota passa a aceitar os dois módulos |
 | MOD-02 | **Xphere só para quem tem Visitas**, em Configurações e no servidor (1.6.2) |
 | MOD-03 | **Um destino inicial por módulo**, numa fonte só: `ModuleSwitch.HOME` e `getXpotHomePath` param de divergir. Os botões "voltar" de Configurações e do Admin respeitam o módulo da pessoa (1.6.3) |
-| MOD-04 | **`/tags/summary` com escopo de gerente** (1.6.4) |
+| MOD-04 | **`/tags/summary` com escopo de gerente** (1.6.4) (descartado na Rev. 2 — ver Status) |
 | MOD-05 | **Glossário fechado** (§5) e aprovado antes das fases de texto |
 
 ### Fase 1: shell por módulo
@@ -280,7 +294,7 @@ Cada fase é um PR que vai para produção sozinho.
 | MOD-07 | **Identidade por módulo:** token de cor em `components/xpot/surface.ts` (`MODULE_ACCENT.visits / .tags`) aplicado no item ativo, no seletor, na linha do topo e nas pílulas do celular |
 | MOD-08 | **Título com caminho** "Módulo › Tela" na barra superior; `document.title` igual |
 | MOD-09 | **⌘K agrupado por módulo**, com o módulo atual primeiro |
-| MOD-10 | **Rotas com prefixo de módulo:** `/visitas/painel`, `/visitas/empresas`… As rotas antigas redirecionam (links salvos, PWA instalada, `start_url`). Os nomes em PT nas URLs dependem da decisão D3 |
+| MOD-10 | **Rotas com prefixo de módulo:** `/visitas/painel`, `/visitas/empresas`… As rotas antigas redirecionam (links salvos, PWA instalada, `start_url`). Os nomes em PT nas URLs dependem da decisão D3. (descartado na Rev. 2 — ver Status) |
 
 ### Fase 2: a gestão entra no módulo
 
@@ -289,7 +303,7 @@ Cada fase é um PR que vai para produção sozinho.
 | MOD-11 | **Tags unificado:** as abas de Admin › Tags viram itens do grupo **Gestão** dentro de Tags. "Todas as peças" usa a tabela do admin (com a coluna da face); "Minhas peças" continua a do revendedor. Some a lista duplicada de peças |
 | MOD-12 | **Gestão de Visitas:** Admin Overview vira "Equipe" em Visitas. Products, Settings (regras de check-in) e Xphere (admin) entram nesse grupo |
 | MOD-13 | **Conta › Organização:** Reps (renomeado "Pessoas e acessos"), Integrações e Marca. O código de atacado de Tags aparece na pessoa, com o selo de Tags |
-| MOD-14 | **`/admin/*` redireciona** para os novos lugares. A entrada "Admin" do rodapé sai |
+| MOD-14 | **`/admin/*` redireciona** para os novos lugares. A entrada "Admin" do rodapé sai. O redirecionamento foi descartado na Rev. 2 (ver Status); a entrada "Admin" saiu |
 
 ### Fase 3: pontes explícitas
 
@@ -304,7 +318,7 @@ Cada fase é um PR que vai para produção sozinho.
 | ID | Item |
 |---|---|
 | MOD-18 | **Aplicar o glossário** nos arquivos de `i18n/messages/*` |
-| MOD-19 | **Admin traduzido** (EN/PT/ES): hoje é 100% inglês. Entra junto da Fase 2, já que as telas mudam de lugar de qualquer forma |
+| MOD-19 | **Admin traduzido** (EN/PT/ES): hoje é 100% inglês. Entra junto da Fase 2, já que as telas mudam de lugar de qualquer forma. Adiado para PR próprio na Rev. 2 (BACKLOG MOD-19) |
 | MOD-20 | **Desfazer as palavras duplas:** "Team" (campo da pessoa) contra "Revendedores" (relatório), e os três "Overview" |
 
 ### Fase 5: números da conta (depende de D5)
@@ -322,7 +336,7 @@ Cada fase é um PR que vai para produção sozinho.
 | Módulo de campo | Visits | Visitas | Visitas | Ou "Campo". Ver D1: hoje o módulo e uma tela dele têm o mesmo nome |
 | Módulo das peças | Tags | Tags | Tags | Hoje "Etiquetas" em ES. Unificar para a marca ser uma só |
 | O objeto físico | piece | peça | pieza | Nunca "tag" para o objeto: Tags é o módulo |
-| A empresa | business | empresa | empresa | "Lead" e "Cliente" passam a ser **status** da empresa, não nomes da lista |
+| A empresa | business | empresa | empresa | "Lead" e "Cliente" passam a ser **status** da empresa, não nomes da lista. (descartado na Rev. 2 — ver Status) com a D6: a tela continua "Leads" (EN) e "Clientes" (PT/ES), com as abas de clientes e de prospectos |
 | Quem vende na rua | rep | vendedor | vendedor | |
 | Quem revende peças | reseller | revendedor | revendedor | O mesmo cadastro de pessoa, com o módulo Tags |
 | Lote de fabricação | batch | lote | lote | |
@@ -338,10 +352,10 @@ Cada uma tem uma recomendação; se ninguém discordar, a recomendação vale.
 |---|---|---|
 | D1 | O módulo continua se chamando "Visitas", tendo uma tela "Visitas" dentro? | **Renomear a tela** para "Histórico" ou "Check-ins" e manter o módulo "Visitas". O nome do módulo é o que o vendedor já conhece |
 | D2 | A gestão vai para dentro de cada módulo (§3.1) ou o Admin continua separado, só organizado por módulo? | **Dentro do módulo.** É o que acaba com o "Tags duas vezes", e o gerente trabalha no mesmo lugar que a equipe dele |
-| D3 | URLs em português (`/visitas/empresas`) ou em inglês (`/visits/businesses`)? | **Inglês**, como o código e a API. A interface traduz. Evita três idiomas de URL |
+| D3 | URLs em português (`/visitas/empresas`) ou em inglês (`/visits/businesses`)? | **Inglês**, como o código e a API. A interface traduz. Evita três idiomas de URL. Perdeu o objeto: o prefixo de módulo nas URLs (MOD-10) foi descartado na Rev. 2 (ver Status) |
 | D4 | O Painel de Visitas continua mostrando Tags? | **Sim, como atalho compacto com o selo de Tags**, só para quem tem os dois módulos |
 | D5 | Peça vendida conta como venda na aba Vendas? | **Ainda não.** Primeiro separar bem (Fases 1–4); depois decidir com os números reais de Tags |
-| D6 | "Lead/Cliente" vira "Empresa" na interface? | **Sim** (§5). Acaba com "Cliente" sendo ao mesmo tempo a lista e um status |
+| D6 | "Lead/Cliente" vira "Empresa" na interface? | **Sim** (§5). Acaba com "Cliente" sendo ao mesmo tempo a lista e um status. (descartado na Rev. 2 — ver Status) |
 
 ---
 
