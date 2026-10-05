@@ -75,7 +75,7 @@ export async function requireXpotUser(req: Request, res: Response, next: NextFun
     next();
   } catch (err) {
     console.error("[requireXpotUser]", err);
-    res.status(500).json({ message: (err as Error).message || "Internal server error" });
+    res.status(500).json({ message: "Internal server error" });
   }
 }
 
@@ -144,7 +144,7 @@ export async function requireXpotManager(req: Request, res: Response, next: Next
     next();
   } catch (err) {
     console.error("[requireXpotManager]", err);
-    res.status(500).json({ message: (err as Error).message || "Internal server error" });
+    res.status(500).json({ message: "Internal server error" });
   }
 }
 

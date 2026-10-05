@@ -92,9 +92,11 @@ tab bar per module (`MobileTabBar`).
 - On desktop the sidebar has a segmented Visits | Tags switch
   (`SidebarModuleSwitch`), and the top bar shows the path ("Tags › Batches"),
   which also goes into the browser tab's title.
-- **`ScreenErrorBoundary`** wraps each screen, keyed by the path: a render error
-  shows a "Reload" card in place of that screen while the sidebar and tab bar
-  stay, instead of React unmounting the whole app.
+- **`ScreenErrorBoundary`** wraps each screen: a render error shows a "Reload"
+  card in place of that screen while the sidebar and tab bar stay, instead of
+  React unmounting the whole app. The path is its `resetKey` (moving to another
+  path clears the error), not a React `key`: a key would remount the screen on
+  every in-screen navigation, such as opening a detail pane (`/leads/12`).
 - **`SessionGate`**: what a module shows while `/api/xpot/me` loads, or a way
   back to sign-in when it fails.
 - **Errors from the API.** `apiRequest` (`client/src/lib/queryClient.ts`) throws

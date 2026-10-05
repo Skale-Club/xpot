@@ -33,6 +33,24 @@ import type { XpotMeResponse } from "./pages/xpot/types";
 // narrow column until their turn (docs/DESKTOP.md).
 const WIDE_TABS = new Set<string>(["leads", "visits", "dashboard", "sales"]);
 
+/**
+ * Decides who gets the Visits screens before any Visits data is asked for: a
+ * Tags-only reseller is sent to Tags without the dashboard and visits requests
+ * (and the GPS prompt) that XpotAppShell's hooks would fire, and that the server
+ * now refuses with 403 module_off.
+ */
+function VisitsGate() {
+  const meQuery = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
+  const modules = useXpotModules();
+  if (!meQuery.data) return <SessionGate failed={meQuery.isError} />;
+  if (!modules.includes("visits") && modules.includes("tags")) return <Redirect to={MODULE_HOME.tags} />;
+  return (
+    <GeoProvider>
+      <XpotAppShell />
+    </GeoProvider>
+  );
+}
+
 function XpotAppShell() {
   const { me, xpotMeQuery, isOnline, activeTab } = useXpotQueries();
   const [, setLocation] = useLocation();
@@ -47,9 +65,6 @@ function XpotAppShell() {
   }, [visitsAllowed]);
 
   if (!me) return <SessionGate failed={xpotMeQuery.isError} />;
-
-  // A Tags-only reseller has no Visits screens.
-  if (!visitsAllowed && modules.includes("tags")) return <Redirect to={MODULE_HOME.tags} />;
 
   const current = tabs.find((tab) => tab.id === activeTab);
 
@@ -148,9 +163,7 @@ export default function App() {
         <Route path="/settings" component={XpotSettings} />
         <Route path="/tags/*?" component={TagsApp} />
         <Route>
-          <GeoProvider>
-            <XpotAppShell />
-          </GeoProvider>
+          <VisitsGate />
         </Route>
       </Switch>
     </Router>

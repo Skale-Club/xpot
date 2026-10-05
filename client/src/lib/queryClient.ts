@@ -23,7 +23,8 @@ async function throwIfResNotOk(res: Response) {
     } catch {
       // Not JSON (a proxy error page, plain text): keep the text as it came.
     }
-    throw new ApiError(res.status, message);
+    // An empty body over HTTP/2 has no statusText either: never hand a toast an empty sentence.
+    throw new ApiError(res.status, message.trim() || `Request failed (${res.status})`);
   }
 }
 

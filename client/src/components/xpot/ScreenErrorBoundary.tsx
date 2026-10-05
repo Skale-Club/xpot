@@ -25,9 +25,12 @@ function CrashCard() {
 /**
  * Keeps one broken screen from blanking the whole app: React unmounts the entire
  * tree on an uncaught render error, sidebar and tab bar included. The shell wraps
- * each screen in this, keyed by the path, so moving to another screen clears it.
+ * each screen in this and passes the path as `resetKey`: after a crash, moving to
+ * another path clears it. It is deliberately not a React `key`: keying by the path
+ * would remount the whole screen on every in-screen navigation (/leads → /leads/12
+ * opens a detail pane) and wipe its search, filters and scroll.
  */
-export class ScreenErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+export class ScreenErrorBoundary extends Component<{ children: ReactNode; resetKey: string }, { failed: boolean }> {
   state = { failed: false };
 
   static getDerivedStateFromError() {
@@ -36,6 +39,10 @@ export class ScreenErrorBoundary extends Component<{ children: ReactNode }, { fa
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error("[screen crashed]", error, info.componentStack);
+  }
+
+  componentDidUpdate(prev: { resetKey: string }) {
+    if (this.state.failed && prev.resetKey !== this.props.resetKey) this.setState({ failed: false });
   }
 
   render() {

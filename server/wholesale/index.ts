@@ -61,6 +61,9 @@ export async function verifyWholesaleCode(input: string): Promise<WholesaleVerdi
   const [rep] = await db.select().from(salesReps).where(eq(salesReps.wholesaleCode, code)).limit(1);
   if (!rep) return { valid: false, reason: "unknown" };
   if (accessDenial(rep)) return { valid: false, reason: "inactive" };
+  // The code buys Tags kits: a rep whose Tags module was switched off keeps the code row but may not use
+  // it. "inactive" is the reason Stuscle already handles; a new one could break its side.
+  if (!repModules(rep).includes("tags")) return { valid: false, reason: "inactive" };
   return { valid: true, reseller: { id: rep.id, name: rep.displayName } };
 }
 
@@ -118,6 +121,9 @@ export function registerWholesaleRoutes(app: Express) {
     const repId = Number(req.params.id);
     if (!Number.isInteger(repId) || repId <= 0) return res.status(400).json({ message: "Invalid rep id" });
     try {
+      const [target] = await db.select().from(salesReps).where(eq(salesReps.id, repId)).limit(1);
+      if (!target) return res.status(404).json({ message: "Rep not found" });
+      if (!repModules(target).includes("tags")) return res.status(400).json({ message: "This person does not sell Tags" });
       const code = await assignWholesaleCode(repId);
       res.json({ code: formatWholesaleCode(code) });
     } catch (err) {

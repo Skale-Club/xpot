@@ -14,6 +14,8 @@ const REPS = new Map<string, any>([
   ["rep", { id: 1, userId: "rep", displayName: "Rep", role: "rep", isActive: true, modules: ["visits", "tags"] }],
   ["tags-only", { id: 2, userId: "tags-only", displayName: "Reseller", role: "rep", isActive: true, modules: ["tags"] }],
   ["manager", { id: 3, userId: "manager", displayName: "Manager", role: "manager", isActive: true, modules: ["visits"] }],
+  // A platform admin (session isAdmin) whose rep row only lists Tags: admins get every module anyway.
+  ["platform-admin", { id: 4, userId: "platform-admin", displayName: "Admin", role: "rep", isActive: true, modules: ["tags"] }],
 ]);
 
 /** Any storage call answers "nothing": these tests are about the guards, not the handlers. */
@@ -24,41 +26,43 @@ const anything = () =>
 
 const storage = anything();
 (storage as any).getSalesRepByUserId = vi.fn(async (userId: string) => REPS.get(userId));
+// Lead 5 belongs to the Tags-only reseller (rep 2).
+(storage as any).getSalesLead = vi.fn(async (id: number) => (id === 5 ? { id: 5, name: "Shop", ownerRepId: 2, status: "prospect" } : undefined));
 vi.mock("../server/storage.js", () => ({ storage }));
 vi.mock("../server/storage-sales.js", () => ({ salesStorage: anything() }));
 vi.mock("../server/db.js", () => ({ db: anything() }));
 
 const { registerXpotRoutes } = await import("../server/routes/xpot/index.js");
+const { apiErrorHandler } = await import("../server/errorHandler.js");
 
 function appFor(userId: string | null) {
   const app = express();
-  app.use(express.json());
+  app.use(express.json({ limit: "1kb" }));
   app.use((req, _res, next) => {
-    (req as any).session = userId ? { userId, email: `${userId}@x.test`, isAdmin: false } : {};
+    (req as any).session = userId ? { userId, email: `${userId}@x.test`, isAdmin: userId === "platform-admin" } : {};
     next();
   });
   registerXpotRoutes(app);
-  // Whatever the handler does with the empty storage, a guard refusal is what we look for.
-  app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-    res.status(500).json({ message: err.message });
-  });
+  // The real global handler (server/app.ts mounts the same one).
+  app.use(apiErrorHandler);
   return app;
 }
 
-async function get(app: express.Express, path: string): Promise<{ status: number; message?: string }> {
+async function get(app: express.Express, path: string, init?: { method: string; body: string }): Promise<{ status: number; message?: string; code?: string }> {
   return new Promise((resolve, reject) => {
     const server = app.listen(0, async () => {
       const { port } = server.address() as { port: number };
       try {
-        const res = await fetch(`http://127.0.0.1:${port}${path}`);
+        const res = await fetch(`http://127.0.0.1:${port}${path}`, init ? { ...init, headers: { "content-type": "application/json" } } : undefined);
         const text = await res.text();
         let message: string | undefined;
+        let code: string | undefined;
         try {
-          message = JSON.parse(text).message;
+          ({ message, code } = JSON.parse(text));
         } catch {
           message = undefined;
         }
-        resolve({ status: res.status, message });
+        resolve({ status: res.status, message, code });
       } catch (err) {
         reject(err);
       } finally {
@@ -89,9 +93,31 @@ describe("the composed /api/xpot routers", () => {
     }
   });
 
-  it("a Tags-only reseller is refused the Visits-only APIs", async () => {
-    const res = await get(appFor("tags-only"), "/api/xpot/sales");
-    expect(res.status).toBe(403);
+  it("a Tags-only reseller is refused the Visits-only APIs, by the module gate", async () => {
+    // module_off, not just 403: a misplaced manager guard also answers 403, and that is the bug #32 fixed.
+    for (const path of ["/api/xpot/sales", "/api/xpot/visits", "/api/xpot/dashboard", "/api/xpot/consignments", "/api/xpot/products"]) {
+      const res = await get(appFor("tags-only"), path);
+      expect([res.status, res.code], path).toEqual([403, "module_off"]);
+    }
+  });
+
+  it("a platform admin gets Visits even when the rep row lists only Tags", async () => {
+    const res = await get(appFor("platform-admin"), "/api/xpot/sales");
+    expect(res.code).not.toBe("module_off");
+    expect([401, 403]).not.toContain(res.status);
+  });
+
+  it("a Tags-only reseller may edit a customer but not move it through the funnel", async () => {
+    const app = appFor("tags-only");
+    const promote = await get(app, "/api/xpot/leads/5", { method: "PATCH", body: JSON.stringify({ status: "lead" }) });
+    expect([promote.status, promote.code]).toEqual([403, "module_off"]);
+    const rename = await get(app, "/api/xpot/leads/5", { method: "PATCH", body: JSON.stringify({ name: "Shop & Co" }) });
+    expect(rename.status).toBe(200);
+  });
+
+  it("a body over the JSON limit answers 413, not a 500", async () => {
+    const res = await get(appFor("rep"), "/api/xpot/leads", { method: "POST", body: JSON.stringify({ name: "x".repeat(4096) }) });
+    expect(res.status).toBe(413);
   });
 
   it("an anonymous caller gets 401, not a manager refusal", async () => {

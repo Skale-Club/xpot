@@ -70,6 +70,12 @@ test.skipIf(!enabled)("wholesale codes: issue, verify, block, reissue", async ()
     assert.equal(formatWholesaleCode(back.wholesaleCode), code);
     assert.equal((await verify(code)).json.valid, true);
 
+    // The code buys Tags kits: with the Tags module switched off it stops working, and comes back with it.
+    await db.execute(sql`UPDATE sales_reps SET modules = ARRAY['visits']::text[] WHERE id = ${pending.id}`);
+    assert.deepEqual((await verify(code)).json, { valid: false, reason: "inactive" });
+    await db.execute(sql`UPDATE sales_reps SET modules = ARRAY['visits','tags']::text[] WHERE id = ${pending.id}`);
+    assert.equal((await verify(code)).json.valid, true);
+
     // Reissued: the old code is dead, the new one works.
     const fresh = formatWholesaleCode(await assignWholesaleCode(pending.id));
     assert.notEqual(fresh, code);

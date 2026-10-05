@@ -25,6 +25,13 @@ describe("apiRequest errors", () => {
     expect((await apiRequest("GET", "/api/x").catch((e) => e)).message).toBe("Unauthorized");
   });
 
+  it("never gives an empty message (a gateway error with no body)", async () => {
+    respond(502, "", "text/plain");
+    const err = await apiRequest("GET", "/api/x").catch((e) => e);
+    expect(err.message).toBe("Request failed (502)");
+    expect(err.status).toBe(502);
+  });
+
   it("keeps a non-JSON body as text", async () => {
     respond(502, "Bad gateway", "text/plain");
     const err = await apiRequest("GET", "/api/x").catch((e) => e);
