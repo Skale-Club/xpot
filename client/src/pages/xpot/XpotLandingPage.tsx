@@ -358,8 +358,8 @@ export function XpotLandingPage() {
                     </Button>
                   </DialogTrigger>
 
-                  <DialogContent className="w-[92%] max-w-md overflow-hidden rounded-2xl border-white/10 bg-[#070b16]/95 p-6 text-white shadow-[0_0_40px_rgba(0,0,0,0.8)] backdrop-blur-2xl sm:p-8">
-                    <div className="absolute left-0 top-0 h-[3px] w-full bg-gradient-to-r from-blue-500 via-indigo-500 to-blue-500" />
+                  <DialogContent className="w-[92%] max-w-md rounded-2xl border-white/10 bg-[#070b16]/95 p-6 text-white shadow-[0_0_40px_rgba(0,0,0,0.8)] backdrop-blur-2xl sm:p-8">
+                    <div className="absolute left-0 top-0 h-[3px] w-full rounded-t-2xl bg-gradient-to-r from-blue-500 via-indigo-500 to-blue-500" />
 
                     <DialogHeader className="pb-4 text-center sm:text-center">
                       <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-blue-500/10 to-indigo-500/10">

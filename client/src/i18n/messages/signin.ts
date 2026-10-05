@@ -4,7 +4,6 @@ import type { Dictionary } from "../index";
 
 const en = {
   title: "Sign in to Xpot",
-  subtitle: "Use your phone number. We'll text you a code.",
   country: "Country",
   phoneLabel: "Phone number",
   phonePlaceholder: "(508) 555-0100",
@@ -47,7 +46,6 @@ export const signinMessages: Dictionary<typeof en> = {
   en,
   pt: {
     title: "Entrar no Xpot",
-    subtitle: "Use o seu número de celular. Vamos mandar um código por SMS.",
     country: "País",
     phoneLabel: "Número de celular",
     phonePlaceholder: "(508) 555-0100",
@@ -87,7 +85,6 @@ export const signinMessages: Dictionary<typeof en> = {
   },
   es: {
     title: "Entrar a Xpot",
-    subtitle: "Usa tu número de celular. Te mandamos un código por SMS.",
     country: "País",
     phoneLabel: "Número de celular",
     phonePlaceholder: "(508) 555-0100",

@@ -4,14 +4,14 @@
 
 export const DEFAULT_COUNTRY_CODE = "1";
 
-/** Country codes offered in the sign-in screen (the rest can be typed with +). */
+/** Country codes offered in the sign-in screen (the rest can be typed with +). `iso` picks the flag. */
 export const PHONE_COUNTRIES = [
-  { code: "1", label: "US/CA", flag: "🇺🇸" },
-  { code: "55", label: "BR", flag: "🇧🇷" },
-  { code: "52", label: "MX", flag: "🇲🇽" },
-  { code: "57", label: "CO", flag: "🇨🇴" },
-  { code: "351", label: "PT", flag: "🇵🇹" },
-  { code: "34", label: "ES", flag: "🇪🇸" },
+  { code: "1", label: "US/CA", iso: "US" },
+  { code: "55", label: "BR", iso: "BR" },
+  { code: "52", label: "MX", iso: "MX" },
+  { code: "57", label: "CO", iso: "CO" },
+  { code: "351", label: "PT", iso: "PT" },
+  { code: "34", label: "ES", iso: "ES" },
 ] as const;
 
 /**
