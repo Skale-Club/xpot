@@ -23,9 +23,9 @@ import { manageTagsMessages } from "@/i18n/messages/manageTags";
 const TABS = [
   { id: "overview", labelKey: "manageOverview" },
   { id: "pieces", labelKey: "managePieces" },
-  { id: "batches", labelKey: "manageBatches", adminOnly: true },
   { id: "kits", labelKey: "manageKits" },
   { id: "team", labelKey: "manageResellers" },
+  { id: "batches", labelKey: "manageBatches", adminOnly: true },
   { id: "journey", labelKey: "manageJourney", adminOnly: true },
   { id: "provisioners", labelKey: "manageWriters", adminOnly: true },
 ] as const satisfies ReadonlyArray<{ id: string; labelKey: string; adminOnly?: boolean }>;

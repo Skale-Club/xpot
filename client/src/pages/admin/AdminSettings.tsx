@@ -41,13 +41,14 @@ export function AdminSettings() {
   const set = <K extends keyof SalesAppSettings>(k: K, v: SalesAppSettings[K]) => setDraft((d) => ({ ...(d ?? {}), [k]: v }));
 
   return (
-    <div className="max-w-xl space-y-5">
+    <div className="space-y-5">
       <div>
         <h2 className="text-sm font-semibold text-white/80">{ts("manageCheckInRules")}</h2>
         <p className="text-xs text-white/40">{t("checkInRulesHint")}</p>
       </div>
 
-      <div className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+      {/* The three rules sit side by side on desktop instead of a narrow column. */}
+      <div className="grid gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 lg:grid-cols-3 lg:items-start">
         <Field label={t("defaultRadius")} hint={t("defaultRadiusHint")}>
           <input
             value={current.defaultGeofenceRadiusMeters}

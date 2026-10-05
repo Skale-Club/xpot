@@ -113,7 +113,7 @@ ADMIN             ← só dentro do admin
 | Onde | O que é | Para quem |
 |---|---|---|
 | Grupo **TAGS** da barra (`/tags`) | Home, Minhas peças, Link direto: o app do revendedor | Revendedor (o gerente vê **todas** as peças aqui também, `server/tags/routes.ts:404`) |
-| **Admin › Tags** (`/admin/tags`) | 7 abas: Overview, Pieces, Kits, Batches, Journey, Team, NFC writers | Gerente/admin |
+| **Admin › Tags** (`/admin/tags`) | 7 abas: Overview, Pieces, Kits, Team e, no fim, as do admin global (Batches, Journey, NFC writers) | Gerente/admin |
 
 Um gerente tem portanto duas listas de peças, em dois lugares, com colunas diferentes.
 
