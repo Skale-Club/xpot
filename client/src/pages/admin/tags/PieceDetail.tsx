@@ -4,42 +4,45 @@ import { Archive, ArrowLeft, Download, ExternalLink, Power, PowerOff, RotateCcw,
 import { defaultUtmEnabled, planTransition, validateDestinationUrl, type TagAction } from "@shared/tags";
 import { isReviewFormUrl } from "@shared/reviewLink";
 import type { TagDetail } from "@shared/tagsApi";
-import { tagFaceLabel } from "@shared/tagFace";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { AdminHttpError, ADMIN_TAGS_KEY, errorMessage, formatDateTime, getJson, invalidateAdminTags, sendJson, STALE_MS } from "./api";
 import { BTN, BTN_DANGER, BTN_GHOST, CARD, INPUT, StatusPill } from "./ui";
-import {
-  CopyRow,
-  DESTINATION_OPTIONS,
-  destinationLabel,
-  Loading,
-  LoadError,
-  FACE_OPTIONS,
-  PRODUCT_OPTIONS,
-  productLabel,
-  repOptionLabel,
-  Select,
-  useLeads,
-  useReps,
-} from "./pieces-shared";
+import { CopyRow, Loading, LoadError, Select, useLeads, useReps } from "./pieces-shared";
+import { useTagLabels } from "./labels";
 import { AnalyticsPanel, RangePicker, type AnalyticsRange } from "./pieces-analytics";
 import { NfcProvisioningCard } from "./pieces-NfcProvisioningCard";
 import { ReviewLinkFinder } from "./pieces-ReviewLinkFinder";
 import { JourneyPanel } from "./JourneyPanel";
+import { useT } from "@/i18n";
+import { commonMessages } from "@/i18n/messages/common";
+import { shellMessages } from "@/i18n/messages/shell";
+import { manageTagsMessages } from "@/i18n/messages/manageTags";
+import { manageTagsPiecesMessages } from "@/i18n/messages/manageTagsPieces";
 
 type Go = (path: string) => void;
 
-const URL_HINTS: Record<string, string> = {
-  google_review: 'The Google "write a review" link. Find the business below, or paste the "Ask for reviews" link from Google Business Profile.',
-  website: "Customer website, e.g. https://example.com",
-  booking: "Booking page URL",
-  vcard: "Digital business card URL",
-  menu: "Menu URL",
-  social: "Instagram / Facebook / TikTok profile URL",
-  custom: "Any https:// URL",
+type PieceKey = keyof (typeof manageTagsPiecesMessages)["en"];
+
+const URL_HINT_KEYS: Record<string, PieceKey> = {
+  google_review: "urlHint_google_review",
+  website: "urlHint_website",
+  booking: "urlHint_booking",
+  vcard: "urlHint_vcard",
+  menu: "urlHint_menu",
+  social: "urlHint_social",
+  custom: "urlHint_custom",
+};
+
+/** validateDestinationUrl (shared) answers in English; its messages, by text. */
+const URL_ERROR_KEYS: Record<string, PieceKey> = {
+  "Destination URL is required": "urlErrorRequired",
+  "Destination URL is too long": "urlErrorTooLong",
+  "Destination must be a full URL starting with https://": "urlErrorNotFull",
+  "Destination must use https://": "urlErrorHttps",
+  "Destination URL is not valid": "urlErrorInvalid",
 };
 
 const LABEL = "text-[11px] font-semibold uppercase tracking-wider text-white/40";
@@ -48,6 +51,7 @@ const STEP_TITLE = "text-sm font-semibold text-white";
 /** Every write on this screen answers with the fresh TagDetail. */
 function usePieceMutation(id: string, successTitle: string) {
   const { toast } = useToast();
+  const t = useT(manageTagsPiecesMessages);
   return useMutation({
     mutationFn: ({ url, method = "POST", body }: { url?: string; method?: "POST" | "PATCH"; body?: unknown }) =>
       sendJson<TagDetail>(method, url ?? `/api/xpot/admin/tags/${id}`, body ?? {}),
@@ -55,7 +59,7 @@ function usePieceMutation(id: string, successTitle: string) {
       void invalidateAdminTags();
       toast({ title: successTitle });
     },
-    onError: (err) => toast({ title: "Action failed", description: errorMessage(err), variant: "destructive" }),
+    onError: (err) => toast({ title: t("actionFailed"), description: errorMessage(err), variant: "destructive" }),
   });
 }
 
@@ -63,12 +67,13 @@ function usePieceMutation(id: string, successTitle: string) {
 
 function CustomerStep({ tag }: { tag: TagDetail }) {
   const { toast } = useToast();
+  const t = useT(manageTagsPiecesMessages);
   const { data: leads = [], isLoading: leadsLoading, error: leadsError } = useLeads();
   const [leadId, setLeadId] = useState<string | undefined>(tag.leadId ? String(tag.leadId) : undefined);
   const [filter, setFilter] = useState("");
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
-  const assign = usePieceMutation(tag.id, "Customer assigned");
+  const assign = usePieceMutation(tag.id, t("customerAssigned"));
   const locked = tag.status === "retired";
 
   const options = useMemo(() => {
@@ -79,16 +84,16 @@ function CustomerStep({ tag }: { tag: TagDetail }) {
     for (const keep of [leadId, tag.leadId ? String(tag.leadId) : undefined]) {
       if (keep && !opts.some((o) => o.value === keep)) {
         const lead = leads.find((l) => String(l.id) === keep);
-        opts.unshift({ value: keep, label: lead?.name ?? (String(tag.leadId) === keep ? tag.leadName ?? `Customer #${keep}` : `Customer #${keep}`) });
+        opts.unshift({ value: keep, label: lead?.name ?? (String(tag.leadId) === keep ? tag.leadName ?? t("customerNumber", { id: keep }) : t("customerNumber", { id: keep })) });
       }
     }
     return opts;
-  }, [leads, filter, leadId, tag.leadId, tag.leadName]);
+  }, [leads, filter, leadId, tag.leadId, tag.leadName, t]);
 
   const confirmMove = () =>
     !tag.leadId ||
     !(tag.destinationUrl || tag.destinationType) ||
-    window.confirm("Moving this piece to another customer clears its current destination. Continue?");
+    window.confirm(t("confirmMoveCustomer"));
 
   const submit = async () => {
     if (creating) {
@@ -111,26 +116,27 @@ function CustomerStep({ tag }: { tag: TagDetail }) {
 
   return (
     <div className="space-y-3">
-      <p className={STEP_TITLE}>1. Customer</p>
+      <p className={STEP_TITLE}>{t("stepCustomer")}</p>
       {tag.leadName || tag.leadId ? (
         <p className="text-sm text-white/70">
-          Assigned to <strong className="text-white">{tag.leadName ?? `Customer #${tag.leadId}`}</strong>
+          {t("assignedTo")}{" "}
+          <strong className="text-white">{tag.leadName ?? t("customerNumber", { id: tag.leadId ?? "" })}</strong>
         </p>
       ) : (
-        <p className="text-sm text-white/40">Not assigned yet.</p>
+        <p className="text-sm text-white/40">{t("notAssigned")}</p>
       )}
       {liveWithCustomer ? (
-        <p className="text-xs text-white/40">Disable the piece before moving it to another customer.</p>
+        <p className="text-xs text-white/40">{t("disableBeforeMove")}</p>
       ) : null}
       {locked ? null : creating ? (
-        <input className={INPUT} placeholder="Business name *" value={newName} onChange={(e) => setNewName(e.target.value)} maxLength={200} data-testid="admin-piece-new-lead" />
+        <input className={INPUT} placeholder={t("businessNameRequired")} value={newName} onChange={(e) => setNewName(e.target.value)} maxLength={200} data-testid="admin-piece-new-lead" />
       ) : (
         <div className="grid gap-2 sm:grid-cols-[minmax(0,180px)_1fr]">
-          <input className={INPUT} placeholder="Filter customers…" value={filter} onChange={(e) => setFilter(e.target.value)} />
+          <input className={INPUT} placeholder={t("filterCustomers")} value={filter} onChange={(e) => setFilter(e.target.value)} />
           <Select
             value={leadId}
             onChange={setLeadId}
-            placeholder={leadsLoading ? "Loading customers…" : leadsError ? "Could not load customers" : options.length ? "Select customer…" : "No customers match"}
+            placeholder={leadsLoading ? t("loadingCustomers") : leadsError ? t("customersFailed") : options.length ? t("selectCustomer") : t("noCustomersMatch")}
             options={options}
             testId="admin-piece-lead-select"
           />
@@ -145,11 +151,11 @@ function CustomerStep({ tag }: { tag: TagDetail }) {
             disabled={busy || liveWithCustomer || (creating ? !newName.trim() : !leadId || Number(leadId) === tag.leadId)}
             data-testid="admin-piece-assign"
           >
-            {creating ? "Create & assign" : "Assign"}
+            {creating ? t("createAndAssign") : t("assign")}
           </button>
           <button type="button" className={BTN_GHOST} onClick={() => setCreating((v) => !v)}>
             <UserPlus className="h-3.5 w-3.5" />
-            {creating ? "Pick existing" : "New customer"}
+            {creating ? t("pickExisting") : t("newCustomer")}
           </button>
         </div>
       )}
@@ -160,13 +166,15 @@ function CustomerStep({ tag }: { tag: TagDetail }) {
 // ─── Destination ──────────────────────────────────────────────────────────────
 
 function DestinationStep({ tag }: { tag: TagDetail }) {
+  const t = useT(manageTagsPiecesMessages);
+  const labels = useTagLabels();
   const [destinationType, setDestinationType] = useState<string | undefined>(tag.destinationType ?? undefined);
   const [destinationUrl, setDestinationUrl] = useState(tag.destinationUrl ?? "");
   const [utmEnabled, setUtmEnabled] = useState(tag.utmEnabled);
   const [utmTouched, setUtmTouched] = useState(false);
   const [utmCampaign, setUtmCampaign] = useState(tag.utmCampaign ?? "");
   const [reason, setReason] = useState("");
-  const save = usePieceMutation(tag.id, "Destination saved");
+  const save = usePieceMutation(tag.id, t("destinationSaved"));
   const locked = tag.status === "retired";
   const trimmed = destinationUrl.trim();
   const check = trimmed ? validateDestinationUrl(trimmed, { allowHttp: import.meta.env.DEV }) : null;
@@ -181,15 +189,15 @@ function DestinationStep({ tag }: { tag: TagDetail }) {
 
   return (
     <div className="space-y-3">
-      <p className={STEP_TITLE}>2. Destination</p>
+      <p className={STEP_TITLE}>{t("stepDestination")}</p>
       <Select
         value={destinationType}
         onChange={(v) => {
           setDestinationType(v);
           if (!utmTouched) setUtmEnabled(defaultUtmEnabled(v));
         }}
-        placeholder="Destination type…"
-        options={DESTINATION_OPTIONS}
+        placeholder={t("destinationTypePlaceholder")}
+        options={labels.destinationOptions}
         disabled={locked}
         testId="admin-piece-destination-type"
       />
@@ -206,10 +214,14 @@ function DestinationStep({ tag }: { tag: TagDetail }) {
           data-testid="admin-piece-destination-url"
         />
         <p className="text-xs text-white/40">
-          {check && !check.ok ? <span className="text-red-400">{check.error}</span> : URL_HINTS[destinationType ?? ""] ?? "Paste the full URL."}
+          {check && !check.ok ? (
+            <span className="text-red-400">{URL_ERROR_KEYS[check.error] ? t(URL_ERROR_KEYS[check.error]) : check.error}</span>
+          ) : (
+            t(URL_HINT_KEYS[destinationType ?? ""] ?? "urlHintDefault")
+          )}
         </p>
         {destinationType === "google_review" && check?.ok && !isReviewFormUrl(check.url) ? (
-          <p className="text-xs text-amber-300">This link opens the business on Maps, not the review form. Use the finder below to convert it.</p>
+          <p className="text-xs text-amber-300">{t("reviewNotFormConvert")}</p>
         ) : null}
       </div>
       {destinationType === "google_review" && !locked ? (
@@ -221,8 +233,8 @@ function DestinationStep({ tag }: { tag: TagDetail }) {
       ) : null}
       <div className="flex items-center justify-between gap-3 rounded-xl border border-white/10 p-3">
         <div>
-          <label htmlFor={`utm-${tag.id}`} className="text-sm text-white/80">Add tracking parameters (UTM)</label>
-          <p className="text-xs text-white/40">utm_medium=qr or nfc. Off by default for Google Review links.</p>
+          <label htmlFor={`utm-${tag.id}`} className="text-sm text-white/80">{t("utmLabel")}</label>
+          <p className="text-xs text-white/40">{t("utmHint")}</p>
         </div>
         <Switch
           id={`utm-${tag.id}`}
@@ -235,10 +247,10 @@ function DestinationStep({ tag }: { tag: TagDetail }) {
         />
       </div>
       {utmEnabled ? (
-        <input className={INPUT} value={utmCampaign} onChange={(e) => setUtmCampaign(e.target.value)} placeholder="Campaign (optional), e.g. johns-barber" maxLength={80} disabled={locked} />
+        <input className={INPUT} value={utmCampaign} onChange={(e) => setUtmCampaign(e.target.value)} placeholder={t("utmCampaignPlaceholder")} maxLength={80} disabled={locked} />
       ) : null}
       {tag.destinationUrl && !locked ? (
-        <input className={INPUT} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason for change (optional, kept in history)" maxLength={300} />
+        <input className={INPUT} value={reason} onChange={(e) => setReason(e.target.value)} placeholder={t("changeReasonPlaceholder")} maxLength={300} />
       ) : null}
       {locked ? null : (
         <button
@@ -255,7 +267,7 @@ function DestinationStep({ tag }: { tag: TagDetail }) {
           }
           data-testid="admin-piece-save-destination"
         >
-          Save destination
+          {t("saveDestination")}
         </button>
       )}
     </div>
@@ -266,13 +278,15 @@ function DestinationStep({ tag }: { tag: TagDetail }) {
 
 type LifecycleAction = Exclude<TagAction, "assign">;
 
-const ACTION_COPY: Record<LifecycleAction, { title: string; description: string; confirm: string; danger?: boolean }> = {
-  activate: { title: "Activate this piece?", description: "Both the QR and the NFC URL start redirecting to the destination. The sale is credited to the reseller holding it.", confirm: "Activate" },
-  disable: { title: "Disable this piece?", description: 'Scans will show an "unavailable" page. The customer and destination are kept.', confirm: "Disable", danger: true },
-  unassign: { title: "Return to inventory?", description: "The customer and destination are cleared (history is kept). The piece stays with its current reseller.", confirm: "Unassign", danger: true },
-  retire: { title: "Retire this piece permanently?", description: "It stops redirecting. Analytics and history are kept; it can be restored later.", confirm: "Retire", danger: true },
-  restore: { title: "Restore this retired piece?", description: "It comes back as not live (assigned if it still has a customer, otherwise inventory).", confirm: "Restore" },
-};
+/** Title, description and button are action_<action>_title / _description / _confirm. */
+const DANGER_ACTIONS: ReadonlySet<LifecycleAction> = new Set<LifecycleAction>(["disable", "unassign", "retire"]);
+
+/** Why a piece cannot go live yet (planTransition's reason, in the language in use). */
+function activateBlockerKey(tag: TagDetail): PieceKey {
+  if (tag.status === "inventory" || !tag.leadId) return "activateNeedsCustomer";
+  if (!tag.destinationType) return "activateNeedsType";
+  return "activateNeedsUrl";
+}
 
 /** Activate/disable live on the field API (managers may act on any piece); the rest on the admin API. */
 function actionUrl(id: string, action: LifecycleAction): string {
@@ -280,8 +294,9 @@ function actionUrl(id: string, action: LifecycleAction): string {
 }
 
 function ActionDialog({ action, onClose, onConfirm, pending }: { action: LifecycleAction | null; onClose: () => void; onConfirm: (reason: string) => void; pending: boolean }) {
+  const t = useT(manageTagsPiecesMessages);
+  const tc = useT(commonMessages);
   const [reason, setReason] = useState("");
-  const copy = action ? ACTION_COPY[action] : null;
   return (
     <Dialog
       open={!!action}
@@ -294,15 +309,15 @@ function ActionDialog({ action, onClose, onConfirm, pending }: { action: Lifecyc
     >
       <DialogContent className="border-white/10 bg-[#0d1326] text-white">
         <DialogHeader>
-          <DialogTitle>{copy?.title}</DialogTitle>
-          <DialogDescription className="text-white/50">{copy?.description}</DialogDescription>
+          <DialogTitle>{action ? t(`action_${action}_title`) : null}</DialogTitle>
+          <DialogDescription className="text-white/50">{action ? t(`action_${action}_description`) : null}</DialogDescription>
         </DialogHeader>
-        <input className={INPUT} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason (optional, kept in the log)" maxLength={300} data-testid="admin-piece-action-reason" />
+        <input className={INPUT} value={reason} onChange={(e) => setReason(e.target.value)} placeholder={t("reasonPlaceholder")} maxLength={300} data-testid="admin-piece-action-reason" />
         <DialogFooter className="gap-2">
-          <button type="button" className={BTN_GHOST} onClick={onClose}>Cancel</button>
+          <button type="button" className={BTN_GHOST} onClick={onClose}>{tc("cancel")}</button>
           <button
             type="button"
-            className={copy?.danger ? BTN_DANGER : BTN}
+            className={action && DANGER_ACTIONS.has(action) ? BTN_DANGER : BTN}
             disabled={pending}
             onClick={() => {
               onConfirm(reason);
@@ -310,7 +325,7 @@ function ActionDialog({ action, onClose, onConfirm, pending }: { action: Lifecyc
             }}
             data-testid="admin-piece-action-confirm"
           >
-            {copy?.confirm}
+            {action ? t(`action_${action}_confirm`) : null}
           </button>
         </DialogFooter>
       </DialogContent>
@@ -319,7 +334,8 @@ function ActionDialog({ action, onClose, onConfirm, pending }: { action: Lifecyc
 }
 
 function LifecycleStep({ tag }: { tag: TagDetail }) {
-  const run = usePieceMutation(tag.id, "Piece updated");
+  const t = useT(manageTagsPiecesMessages);
+  const run = usePieceMutation(tag.id, t("pieceUpdated"));
   const [pending, setPending] = useState<LifecycleAction | null>(null);
   const can = (action: LifecycleAction) => planTransition(tag, action).ok;
   const activatePlan = planTransition(tag, "activate");
@@ -331,7 +347,7 @@ function LifecycleStep({ tag }: { tag: TagDetail }) {
 
   return (
     <div className="space-y-3">
-      <p className={STEP_TITLE}>3. Test & go live</p>
+      <p className={STEP_TITLE}>{t("stepLive")}</p>
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
@@ -339,36 +355,36 @@ function LifecycleStep({ tag }: { tag: TagDetail }) {
           disabled={!tag.destinationUrl}
           onClick={() => tag.destinationUrl && window.open(tag.destinationUrl, "_blank", "noopener,noreferrer")}
         >
-          <ExternalLink className="h-3.5 w-3.5" />Test destination
+          <ExternalLink className="h-3.5 w-3.5" />{t("testDestination")}
         </button>
         {tag.status !== "active" && tag.status !== "retired" ? (
           <button type="button" className={BTN} disabled={!activatePlan.ok || run.isPending} onClick={() => setPending("activate")} data-testid="admin-piece-activate">
-            <Power className="h-3.5 w-3.5" />Activate
+            <Power className="h-3.5 w-3.5" />{t("action_activate_confirm")}
           </button>
         ) : null}
         {can("disable") ? (
           <button type="button" className={BTN_GHOST} disabled={run.isPending} onClick={() => setPending("disable")} data-testid="admin-piece-disable">
-            <PowerOff className="h-3.5 w-3.5" />Disable
+            <PowerOff className="h-3.5 w-3.5" />{t("action_disable_confirm")}
           </button>
         ) : null}
         {can("unassign") ? (
           <button type="button" className={BTN_GHOST} disabled={run.isPending} onClick={() => setPending("unassign")}>
-            <Undo2 className="h-3.5 w-3.5" />Unassign
+            <Undo2 className="h-3.5 w-3.5" />{t("action_unassign_confirm")}
           </button>
         ) : null}
         {can("retire") ? (
           <button type="button" className={BTN_DANGER} disabled={run.isPending} onClick={() => setPending("retire")}>
-            <Archive className="h-3.5 w-3.5" />Retire
+            <Archive className="h-3.5 w-3.5" />{t("action_retire_confirm")}
           </button>
         ) : null}
         {can("restore") ? (
           <button type="button" className={BTN_GHOST} disabled={run.isPending} onClick={() => setPending("restore")}>
-            <RotateCcw className="h-3.5 w-3.5" />Restore
+            <RotateCcw className="h-3.5 w-3.5" />{t("action_restore_confirm")}
           </button>
         ) : null}
       </div>
-      {tag.status !== "active" && tag.status !== "retired" && !activatePlan.ok ? <p className="text-xs text-white/40">{activatePlan.error}.</p> : null}
-      {tag.status === "active" ? <p className="text-xs text-emerald-400">Live — both the QR and the NFC URL redirect to the destination.</p> : null}
+      {tag.status !== "active" && tag.status !== "retired" && !activatePlan.ok ? <p className="text-xs text-white/40">{t(activateBlockerKey(tag))}</p> : null}
+      {tag.status === "active" ? <p className="text-xs text-emerald-400">{t("liveExplain")}</p> : null}
       <ActionDialog action={pending} onClose={() => setPending(null)} onConfirm={confirm} pending={run.isPending} />
     </div>
   );
@@ -377,31 +393,34 @@ function LifecycleStep({ tag }: { tag: TagDetail }) {
 // ─── Label / product ──────────────────────────────────────────────────────────
 
 function DetailsStep({ tag }: { tag: TagDetail }) {
+  const t = useT(manageTagsPiecesMessages);
+  const tg = useT(manageTagsMessages);
+  const labels = useTagLabels();
   const [label, setLabel] = useState(tag.label ?? "");
   const [productType, setProductType] = useState<string | undefined>(tag.productType);
   const [face, setFace] = useState<string | undefined>(tag.ownFace ?? undefined);
-  const save = usePieceMutation(tag.id, "Piece saved");
+  const save = usePieceMutation(tag.id, t("pieceSaved"));
   const dirty = label.trim() !== (tag.label ?? "") || productType !== tag.productType || (face ?? null) !== tag.ownFace;
   if (tag.status === "retired") return null;
   return (
     <div className="space-y-3">
-      <p className={STEP_TITLE}>Piece details</p>
+      <p className={STEP_TITLE}>{t("pieceDetails")}</p>
       <div className="grid gap-2 sm:grid-cols-2">
         <label className="space-y-1">
-          <span className={LABEL}>Product type</span>
-          <Select value={productType} onChange={setProductType} placeholder="Product…" options={PRODUCT_OPTIONS} allowEmpty={false} />
+          <span className={LABEL}>{t("productType")}</span>
+          <Select value={productType} onChange={setProductType} placeholder={t("productPlaceholder")} options={labels.productOptions} allowEmpty={false} />
         </label>
         <label className="space-y-1 sm:col-span-2">
-          <span className={LABEL}>Printed on the piece</span>
-          <Select value={face} onChange={setFace} placeholder={tag.batchCode ? "Same as the batch" : "From the product"} options={FACE_OPTIONS} />
+          <span className={LABEL}>{tg("printedOnPiece")}</span>
+          <Select value={face} onChange={setFace} placeholder={tag.batchCode ? t("sameAsBatch") : t("fromProduct")} options={labels.faceOptions} />
         </label>
         <label className="space-y-1">
-          <span className={LABEL}>Internal label</span>
-          <input className={INPUT} value={label} onChange={(e) => setLabel(e.target.value)} maxLength={120} placeholder="Optional" />
+          <span className={LABEL}>{t("internalLabel")}</span>
+          <input className={INPUT} value={label} onChange={(e) => setLabel(e.target.value)} maxLength={120} placeholder={t("optional")} />
         </label>
       </div>
       <button type="button" className={BTN_GHOST} disabled={!dirty || !productType || save.isPending} onClick={() => save.mutate({ method: "PATCH", body: { label, productType, face: face ?? null } })}>
-        Save details
+        {t("saveDetails")}
       </button>
     </div>
   );
@@ -413,36 +432,38 @@ const HOUSE = "house";
 
 /** Move the piece (and, if sold, its sale credit) to another reseller or back to house stock. */
 function ResellerField({ tag }: { tag: TagDetail }) {
+  const t = useT(manageTagsPiecesMessages);
+  const tg = useT(manageTagsMessages);
+  const labels = useTagLabels();
   const { data: reps = [], error } = useReps();
   const current = tag.repId ? String(tag.repId) : HOUSE;
   const [choice, setChoice] = useState<string>(current);
-  const move = usePieceMutation(tag.id, "Reseller updated");
-  const options = [{ value: HOUSE, label: "House stock (no reseller)" }, ...reps.map((r) => ({ value: String(r.id), label: repOptionLabel(r) }))];
-  if (tag.repId && !options.some((o) => o.value === current)) options.push({ value: current, label: tag.repName ?? `Reseller #${tag.repId}` });
+  const move = usePieceMutation(tag.id, t("resellerUpdated"));
+  const options = [{ value: HOUSE, label: t("houseStockNoReseller") }, ...reps.map((r) => ({ value: String(r.id), label: labels.repOption(r) }))];
+  if (tag.repId && !options.some((o) => o.value === current)) options.push({ value: current, label: tag.repName ?? t("resellerNumber", { id: tag.repId }) });
 
   const submit = () => {
     if (choice === current) return;
-    const target = choice === HOUSE ? "house stock" : options.find((o) => o.value === choice)?.label ?? "this reseller";
-    const note = tag.soldAt ? " The sale credit moves with it." : "";
-    if (!window.confirm(`Move ${tag.publicCode} to ${target}?${note}`)) return;
+    const target = choice === HOUSE ? t("houseStockTarget") : options.find((o) => o.value === choice)?.label ?? t("thisReseller");
+    if (!window.confirm(t(tag.soldAt ? "moveConfirmSold" : "moveConfirm", { code: tag.publicCode, target }))) return;
     move.mutate({ url: `/api/xpot/admin/tags/${tag.id}/rep`, method: "PATCH", body: { repId: choice === HOUSE ? null : Number(choice) } });
   };
 
   return (
     <div className="space-y-1.5">
-      <p className={LABEL}>Reseller</p>
+      <p className={LABEL}>{tg("colReseller")}</p>
       <p className="text-sm text-white/80">
-        {tag.repName ?? (tag.repId ? `Reseller #${tag.repId}` : "House stock")}
-        {tag.kitId ? <span className="text-xs text-white/40"> · in a kit</span> : null}
+        {tag.repName ?? (tag.repId ? t("resellerNumber", { id: tag.repId }) : t("houseStock"))}
+        {tag.kitId ? <span className="text-xs text-white/40"> · {t("inKit")}</span> : null}
       </p>
       <div className="flex gap-2">
-        <Select value={choice} onChange={(v) => setChoice(v ?? HOUSE)} placeholder="House stock" options={options} allowEmpty={false} testId="admin-piece-rep" />
+        <Select value={choice} onChange={(v) => setChoice(v ?? HOUSE)} placeholder={t("houseStock")} options={options} allowEmpty={false} testId="admin-piece-rep" />
         <button type="button" className={`${BTN_GHOST} shrink-0`} disabled={choice === current || move.isPending} onClick={submit} data-testid="admin-piece-rep-move">
-          <Truck className="h-3.5 w-3.5" />Move
+          <Truck className="h-3.5 w-3.5" />{t("move")}
         </button>
       </div>
-      {error ? <p className="text-xs text-red-400">Could not load resellers.</p> : null}
-      {tag.soldAt ? <p className="text-xs text-white/40">Sale counted {formatDateTime(tag.soldAt)}</p> : null}
+      {error ? <p className="text-xs text-red-400">{t("resellersFailed")}</p> : null}
+      {tag.soldAt ? <p className="text-xs text-white/40">{t("saleCounted", { date: formatDateTime(tag.soldAt) })}</p> : null}
     </div>
   );
 }
@@ -450,9 +471,10 @@ function ResellerField({ tag }: { tag: TagDetail }) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 function Back({ go }: { go: Go }) {
+  const ts = useT(shellMessages);
   return (
     <button type="button" className="inline-flex items-center gap-1.5 text-sm text-white/50 hover:text-white" onClick={() => go("/pieces")} data-testid="admin-piece-back">
-      <ArrowLeft className="h-4 w-4" />All pieces
+      <ArrowLeft className="h-4 w-4" />{ts("managePieces")}
     </button>
   );
 }
@@ -470,6 +492,8 @@ function Row({ label, value }: { label: string; value: ReactNode }) {
 }
 
 export function PieceDetail({ id, go }: { id: string; go: Go }) {
+  const t = useT(manageTagsPiecesMessages);
+  const labels = useTagLabels();
   const [range, setRange] = useState<AnalyticsRange>({ preset: "30d" });
   const { data: tag, isLoading, error } = useQuery<TagDetail>({
     queryKey: [ADMIN_TAGS_KEY, "piece", id],
@@ -484,7 +508,7 @@ export function PieceDetail({ id, go }: { id: string; go: Go }) {
     return (
       <div className="space-y-3">
         <Back go={go} />
-        {notFound ? <p className="text-sm text-red-400">Piece not found.</p> : <LoadError what="this piece" error={error} />}
+        {notFound ? <p className="text-sm text-red-400">{t("notFound")}</p> : <LoadError what={t("whatThisPiece")} error={error} />}
       </div>
     );
   }
@@ -500,8 +524,8 @@ export function PieceDetail({ id, go }: { id: string; go: Go }) {
         <h2 className="font-mono text-2xl font-bold tracking-wider text-white" data-testid="admin-piece-code">{tag.publicCode}</h2>
         <StatusPill status={tag.status} />
         <span className="text-sm text-white/50">
-          {productLabel(tag.productType)}
-          {` · ${tag.face ? tagFaceLabel(tag.face) : "print not recorded"}`}
+          {labels.product(tag.productType)}
+          {` · ${labels.face(tag.face)}`}
           {tag.batchCode ? (
             <>
               {" · "}
@@ -529,7 +553,7 @@ export function PieceDetail({ id, go }: { id: string; go: Go }) {
 
         <section className={`${CARD} space-y-4 p-4`} key={`side-${tag.id}-${tag.updatedAt}`}>
           <div className="mx-auto w-44 rounded-xl bg-white p-2">
-            <img src={`${qrBase}/qr.svg?v=${encodeURIComponent(tag.publicCode)}`} alt={`QR code for ${tag.publicCode}`} className="h-full w-full" />
+            <img src={`${qrBase}/qr.svg?v=${encodeURIComponent(tag.publicCode)}`} alt={t("qrAlt", { code: tag.publicCode })} className="h-full w-full" />
           </div>
           <div className="flex justify-center gap-2">
             <a className={BTN_GHOST} href={`${qrBase}/qr.svg?download=1`} download={`${tag.publicCode}.svg`}>
@@ -539,16 +563,16 @@ export function PieceDetail({ id, go }: { id: string; go: Go }) {
               <Download className="h-3.5 w-3.5" />PNG
             </a>
           </div>
-          <CopyRow label="QR URL (printed)" value={tag.qrUrl} />
-          <CopyRow label="NFC URL (program the chip)" value={tag.nfcUrl} />
+          <CopyRow label={t("qrUrlLabel")} value={tag.qrUrl} />
+          <CopyRow label={t("nfcUrlLabel")} value={tag.nfcUrl} />
           <Dl>
-            <Row label="Destination" value={destinationLabel(tag.destinationType)} />
-            <Row label="Assigned" value={formatDateTime(tag.assignedAt)} />
-            <Row label="Activated" value={formatDateTime(tag.activatedAt)} />
-            <Row label="Disabled" value={formatDateTime(tag.disabledAt)} />
-            <Row label="Last interaction" value={formatDateTime(tag.lastInteractionAt)} />
-            <Row label="Scans" value={`QR ${tag.qrInteractions} · NFC ${tag.nfcInteractions}`} />
-            <Row label="Created" value={formatDateTime(tag.createdAt)} />
+            <Row label={t("colDestination")} value={labels.destination(tag.destinationType)} />
+            <Row label={t("rowAssigned")} value={formatDateTime(tag.assignedAt)} />
+            <Row label={t("rowActivated")} value={formatDateTime(tag.activatedAt)} />
+            <Row label={t("rowDisabled")} value={formatDateTime(tag.disabledAt)} />
+            <Row label={t("colLastInteraction")} value={formatDateTime(tag.lastInteractionAt)} />
+            <Row label={t("rowScans")} value={`QR ${tag.qrInteractions} · NFC ${tag.nfcInteractions}`} />
+            <Row label={t("rowCreated")} value={formatDateTime(tag.createdAt)} />
           </Dl>
           <div className="border-t border-white/10" />
           <ResellerField tag={tag} />
@@ -558,29 +582,29 @@ export function PieceDetail({ id, go }: { id: string; go: Go }) {
       <NfcProvisioningCard tagId={tag.id} publicCode={tag.publicCode} nfcUrl={tag.nfcUrl} retired={tag.status === "retired"} onOpenWriters={() => go("/provisioners")} />
 
       {/* Admin only: renders nothing (and sends no request) for managers. */}
-      <JourneyPanel scope={{ tagId: tag.id }} title="Piece journey" />
+      <JourneyPanel scope={{ tagId: tag.id }} title={t("journeyTitle")} />
 
       <section className={`${CARD} p-4`}>
-        <p className="mb-3 text-sm font-semibold text-white">Destination history</p>
+        <p className="mb-3 text-sm font-semibold text-white">{t("destinationHistory")}</p>
         {tag.history.length === 0 ? (
-          <p className="text-sm text-white/40">No destination set yet.</p>
+          <p className="text-sm text-white/40">{t("noDestinationYet")}</p>
         ) : (
           <ul className="divide-y divide-white/5 text-sm">
             {tag.history.map((h) => (
               <li key={h.id} className="space-y-0.5 py-2">
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-white/40">
                   <span>
-                    {formatDateTime(h.createdAt)} · {h.changedByEmail ?? "admin"}
+                    {formatDateTime(h.createdAt)} · {h.changedByEmail ?? t("historyByAdmin")}
                   </span>
                   {h.reason ? <span className="italic">“{h.reason}”</span> : null}
                 </div>
                 <p className="break-all">
                   <span className="text-white/40">
-                    {destinationLabel(h.previousDestinationType)}: {h.previousUrl ?? "—"}
+                    {labels.destination(h.previousDestinationType)}: {h.previousUrl ?? "—"}
                   </span>
                   <span className="mx-1 text-white/30">→</span>
                   <span className="text-white/80">
-                    {destinationLabel(h.newDestinationType)}: {h.newUrl ?? "cleared"}
+                    {labels.destination(h.newDestinationType)}: {h.newUrl ?? t("historyCleared")}
                   </span>
                 </p>
               </li>
@@ -591,7 +615,7 @@ export function PieceDetail({ id, go }: { id: string; go: Go }) {
 
       <div className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm font-semibold uppercase tracking-wider text-white/60">Analytics</p>
+          <p className="text-sm font-semibold uppercase tracking-wider text-white/60">{t("analytics")}</p>
           <RangePicker value={range} onChange={setRange} />
         </div>
         <AnalyticsPanel scopeUrl={`/api/xpot/admin/tags/${tag.id}/analytics`} range={range} />

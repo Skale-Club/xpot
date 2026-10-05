@@ -1,4 +1,6 @@
 import { queryClient } from "@/lib/queryClient";
+import { currentLocale, translate } from "@/i18n";
+import { commonMessages } from "@/i18n/messages/common";
 
 // Fetch helpers for the Tags admin (/api/xpot/admin/tag*). The server answers
 // errors as JSON { message }; only the message reaches the admin.
@@ -20,7 +22,7 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!res.ok) {
-    let message = res.statusText || "Request failed";
+    let message = translate(commonMessages, "requestFailed");
     try {
       const data = (await res.json()) as { message?: string };
       if (data?.message) message = data.message;
@@ -36,7 +38,7 @@ export const getJson = <T,>(url: string) => request<T>("GET", url);
 export const sendJson = <T,>(method: "POST" | "PATCH", url: string, body: unknown = {}) => request<T>(method, url, body);
 
 export function errorMessage(err: unknown): string {
-  return err instanceof Error && err.message ? err.message : "Request failed";
+  return err instanceof Error && err.message ? err.message : translate(commonMessages, "requestFailed");
 }
 
 export function withQuery(url: string, params: Record<string, string | number | undefined | null>): string {
@@ -57,14 +59,15 @@ export function invalidateAdminTags() {
 
 export const STALE_MS = 30_000;
 
+/** Dates follow the app's language, not the browser's. */
 export function formatDateTime(value: string | null | undefined): string {
   if (!value) return "—";
-  return new Date(value).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  return new Date(value).toLocaleString(currentLocale(), { dateStyle: "medium", timeStyle: "short" });
 }
 
 export function formatDate(value: string | null | undefined): string {
   if (!value) return "—";
-  return new Date(value).toLocaleDateString(undefined, { dateStyle: "medium" });
+  return new Date(value).toLocaleDateString(currentLocale(), { dateStyle: "medium" });
 }
 
 export function percent(part: number, total: number): string {

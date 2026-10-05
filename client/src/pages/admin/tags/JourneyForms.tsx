@@ -3,17 +3,14 @@ import { useMutation } from "@tanstack/react-query";
 import type { TagPlanItem } from "@shared/tagsApi";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { useT } from "@/i18n";
+import { commonMessages } from "@/i18n/messages/common";
+import { manageTagsMessages } from "@/i18n/messages/manageTags";
 import { errorMessage, invalidateAdminTags, sendJson } from "./api";
 import { BTN, BTN_GHOST, INPUT } from "./ui";
 import { Field } from "./batches-shared";
 import { Select } from "./pieces-shared";
-import {
-  ACTION_OPTIONS,
-  KIND_OPTIONS,
-  PLAN_KIND_OPTIONS,
-  PLAN_STATUS_OPTIONS,
-  type JourneyScope,
-} from "./journey-shared";
+import { useJourneyLabels, type JourneyScope } from "./journey-shared";
 
 // The three dialogs of the journey: record an entry, create a plan, and
 // change a plan's status (with the outcome when it is closed).
@@ -25,13 +22,23 @@ interface ScopedDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   scope: JourneyScope;
-  /** Short name of what the scope is ("batch", "piece"), for the hint under the title. */
-  scopeLabel?: string;
+  /** What the scope is, for the hint under the title. */
+  scopeLabel?: "piece" | "batch";
+}
+
+/** "It is attached to this piece / batch.", with its leading space, or nothing. */
+function useAttachedHint(scopeLabel: ScopedDialogProps["scopeLabel"]) {
+  const t = useT(manageTagsMessages);
+  return scopeLabel ? ` ${t(scopeLabel === "piece" ? "attachedPiece" : "attachedBatch")}` : "";
 }
 
 const EMPTY_ENTRY = { kind: "observation", action: undefined as string | undefined, title: "", content: "" };
 
 export function NewEntryDialog({ open, onOpenChange, scope, scopeLabel }: ScopedDialogProps) {
+  const t = useT(manageTagsMessages);
+  const tc = useT(commonMessages);
+  const labels = useJourneyLabels();
+  const attached = useAttachedHint(scopeLabel);
   const { toast } = useToast();
   const [form, setForm] = useState(EMPTY_ENTRY);
   const save = useMutation({
@@ -47,42 +54,42 @@ export function NewEntryDialog({ open, onOpenChange, scope, scopeLabel }: Scoped
       void invalidateAdminTags();
       onOpenChange(false);
       setForm(EMPTY_ENTRY);
-      toast({ title: "Recorded in the journey" });
+      toast({ title: t("entryRecorded") });
     },
-    onError: (err) => toast({ title: "Could not record", description: errorMessage(err), variant: "destructive" }),
+    onError: (err) => toast({ title: t("couldNotRecord"), description: errorMessage(err), variant: "destructive" }),
   });
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className={DIALOG}>
         <DialogHeader>
-          <DialogTitle>Record in the journey</DialogTitle>
+          <DialogTitle>{t("entryDialogTitle")}</DialogTitle>
           <DialogDescription className={DESC}>
-            Something that happened, was decided or was learned. Entries cannot be edited afterwards, only archived.
-            {scopeLabel ? ` It is attached to this ${scopeLabel}.` : ""}
+            {t("entryDialogDesc")}
+            {attached}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Kind">
-              <Select value={form.kind} onChange={(kind) => setForm({ ...form, kind: kind ?? "observation" })} placeholder="Kind" options={KIND_OPTIONS} allowEmpty={false} testId="journey-entry-kind" />
+            <Field label={t("fieldKind")}>
+              <Select value={form.kind} onChange={(kind) => setForm({ ...form, kind: kind ?? "observation" })} placeholder={t("fieldKind")} options={labels.kindOptions} allowEmpty={false} testId="journey-entry-kind" />
             </Field>
             {form.kind === "execution" && (
-              <Field label="Step">
-                <Select value={form.action} onChange={(action) => setForm({ ...form, action })} placeholder="Other" options={ACTION_OPTIONS} testId="journey-entry-action" />
+              <Field label={t("fieldStep")}>
+                <Select value={form.action} onChange={(action) => setForm({ ...form, action })} placeholder={t("stepOther")} options={labels.actionOptions} testId="journey-entry-action" />
               </Field>
             )}
           </div>
-          <Field label="Title">
+          <Field label={t("fieldTitle")}>
             <input
               value={form.title}
               maxLength={200}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
-              placeholder="e.g. Plate printed in PETG"
+              placeholder={t("entryTitlePlaceholder")}
               className={INPUT}
               data-testid="journey-entry-title"
             />
           </Field>
-          <Field label="Details">
+          <Field label={t("fieldDetails")}>
             <textarea
               value={form.content}
               maxLength={4000}
@@ -95,10 +102,10 @@ export function NewEntryDialog({ open, onOpenChange, scope, scopeLabel }: Scoped
         </div>
         <DialogFooter className="gap-2">
           <button type="button" className={BTN_GHOST} onClick={() => onOpenChange(false)}>
-            Cancel
+            {tc("cancel")}
           </button>
           <button type="button" className={BTN} onClick={() => save.mutate()} disabled={save.isPending || !form.title.trim()} data-testid="journey-entry-save">
-            {save.isPending ? "Saving…" : "Record"}
+            {save.isPending ? t("saving") : t("journeyRecord")}
           </button>
         </DialogFooter>
       </DialogContent>
@@ -109,6 +116,10 @@ export function NewEntryDialog({ open, onOpenChange, scope, scopeLabel }: Scoped
 const EMPTY_PLAN = { kind: "task", title: "", description: "", dueDate: "" };
 
 export function NewPlanDialog({ open, onOpenChange, scope, scopeLabel }: ScopedDialogProps) {
+  const t = useT(manageTagsMessages);
+  const tc = useT(commonMessages);
+  const labels = useJourneyLabels();
+  const attached = useAttachedHint(scopeLabel);
   const { toast } = useToast();
   const [form, setForm] = useState(EMPTY_PLAN);
   const save = useMutation({
@@ -117,26 +128,26 @@ export function NewPlanDialog({ open, onOpenChange, scope, scopeLabel }: ScopedD
       void invalidateAdminTags();
       onOpenChange(false);
       setForm(EMPTY_PLAN);
-      toast({ title: "Plan created" });
+      toast({ title: t("planCreated") });
     },
-    onError: (err) => toast({ title: "Could not create plan", description: errorMessage(err), variant: "destructive" }),
+    onError: (err) => toast({ title: t("couldNotCreatePlan"), description: errorMessage(err), variant: "destructive" }),
   });
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className={DIALOG}>
         <DialogHeader>
-          <DialogTitle>New plan</DialogTitle>
+          <DialogTitle>{t("planDialogTitle")}</DialogTitle>
           <DialogDescription className={DESC}>
-            A task, experiment, hypothesis, target or strategy. Closing it records the outcome in the journey.
-            {scopeLabel ? ` It is attached to this ${scopeLabel}.` : ""}
+            {t("planDialogDesc")}
+            {attached}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Kind">
-              <Select value={form.kind} onChange={(kind) => setForm({ ...form, kind: kind ?? "task" })} placeholder="Kind" options={PLAN_KIND_OPTIONS} allowEmpty={false} testId="journey-plan-kind" />
+            <Field label={t("fieldKind")}>
+              <Select value={form.kind} onChange={(kind) => setForm({ ...form, kind: kind ?? "task" })} placeholder={t("fieldKind")} options={labels.planKindOptions} allowEmpty={false} testId="journey-plan-kind" />
             </Field>
-            <Field label="Due">
+            <Field label={t("fieldDue")}>
               <input
                 type="date"
                 value={form.dueDate}
@@ -146,17 +157,17 @@ export function NewPlanDialog({ open, onOpenChange, scope, scopeLabel }: ScopedD
               />
             </Field>
           </div>
-          <Field label="Title">
+          <Field label={t("fieldTitle")}>
             <input
               value={form.title}
               maxLength={200}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
-              placeholder="e.g. Choose the size of the bigger plaque"
+              placeholder={t("planTitlePlaceholder")}
               className={INPUT}
               data-testid="journey-plan-title"
             />
           </Field>
-          <Field label="Description">
+          <Field label={t("fieldDescription")}>
             <textarea
               value={form.description}
               maxLength={4000}
@@ -168,10 +179,10 @@ export function NewPlanDialog({ open, onOpenChange, scope, scopeLabel }: ScopedD
         </div>
         <DialogFooter className="gap-2">
           <button type="button" className={BTN_GHOST} onClick={() => onOpenChange(false)}>
-            Cancel
+            {tc("cancel")}
           </button>
           <button type="button" className={BTN} onClick={() => save.mutate()} disabled={save.isPending || !form.title.trim()} data-testid="journey-plan-save">
-            {save.isPending ? "Saving…" : "Create"}
+            {save.isPending ? t("saving") : t("create")}
           </button>
         </DialogFooter>
       </DialogContent>
@@ -180,6 +191,9 @@ export function NewPlanDialog({ open, onOpenChange, scope, scopeLabel }: ScopedD
 }
 
 export function PlanStatusDialog({ plan, onClose }: { plan: TagPlanItem | null; onClose: () => void }) {
+  const t = useT(manageTagsMessages);
+  const tc = useT(commonMessages);
+  const labels = useJourneyLabels();
   const { toast } = useToast();
   const [status, setStatus] = useState<string | undefined>(undefined);
   const [outcome, setOutcome] = useState("");
@@ -195,9 +209,9 @@ export function PlanStatusDialog({ plan, onClose }: { plan: TagPlanItem | null; 
       void invalidateAdminTags();
       reset();
       onClose();
-      toast({ title: "Plan updated" });
+      toast({ title: t("planUpdated") });
     },
-    onError: (err) => toast({ title: "Could not update plan", description: errorMessage(err), variant: "destructive" }),
+    onError: (err) => toast({ title: t("couldNotUpdatePlan"), description: errorMessage(err), variant: "destructive" }),
   });
   return (
     <Dialog
@@ -212,19 +226,19 @@ export function PlanStatusDialog({ plan, onClose }: { plan: TagPlanItem | null; 
       <DialogContent className={DIALOG}>
         <DialogHeader>
           <DialogTitle className="break-words pr-6">{plan?.title}</DialogTitle>
-          <DialogDescription className={DESC}>Changing the status records it in the journey, with the outcome when the plan is closed.</DialogDescription>
+          <DialogDescription className={DESC}>{t("planStatusDesc")}</DialogDescription>
         </DialogHeader>
         {plan?.description && <p className="whitespace-pre-wrap text-sm text-white/60">{plan.description}</p>}
         <div className="space-y-3">
-          <Field label="Status">
-            <Select value={next} onChange={setStatus} placeholder="Status" options={PLAN_STATUS_OPTIONS} allowEmpty={false} testId="journey-plan-status" />
+          <Field label={t("colStatus")}>
+            <Select value={next} onChange={setStatus} placeholder={t("colStatus")} options={labels.planStatusOptions} allowEmpty={false} testId="journey-plan-status" />
           </Field>
-          <Field label="Outcome">
+          <Field label={t("fieldOutcome")}>
             <textarea
               value={outcome}
               maxLength={4000}
               rows={3}
-              placeholder={plan?.outcome ?? "What did it show?"}
+              placeholder={plan?.outcome ?? t("outcomePlaceholder")}
               onChange={(e) => setOutcome(e.target.value)}
               className={`${INPUT} resize-y`}
               data-testid="journey-plan-outcome"
@@ -240,7 +254,7 @@ export function PlanStatusDialog({ plan, onClose }: { plan: TagPlanItem | null; 
               onClose();
             }}
           >
-            Cancel
+            {tc("cancel")}
           </button>
           <button
             type="button"
@@ -249,7 +263,7 @@ export function PlanStatusDialog({ plan, onClose }: { plan: TagPlanItem | null; 
             disabled={save.isPending || (next === plan?.status && !outcome.trim())}
             data-testid="journey-plan-status-save"
           >
-            {save.isPending ? "Saving…" : "Save"}
+            {save.isPending ? t("saving") : tc("save")}
           </button>
         </DialogFooter>
       </DialogContent>

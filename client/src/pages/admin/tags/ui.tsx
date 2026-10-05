@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import { useT } from "@/i18n";
+import { tagsMessages } from "@/i18n/messages/tags";
 
 // Shared look for the Tags admin, matching the rest of Xpot Admin.
 
@@ -42,7 +44,14 @@ const STATUS_TONES: Record<string, string> = {
 };
 
 export function StatusPill({ status }: { status: string }) {
-  return <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_TONES[status] ?? "bg-white/10 text-white/60"}`}>{status}</span>;
+  const tt = useT(tagsMessages);
+  const key = `status_${status}`;
+  const label = tt(key as never);
+  return (
+    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_TONES[status] ?? "bg-white/10 text-white/60"}`}>
+      {label === key ? status : label}
+    </span>
+  );
 }
 
 export function Empty({ children }: { children: ReactNode }) {

@@ -17,6 +17,7 @@ import { JourneyTab } from "./JourneyTab";
 import { useIsTagAdmin } from "./journey-shared";
 import { useT } from "@/i18n";
 import { shellMessages } from "@/i18n/messages/shell";
+import { manageTagsMessages } from "@/i18n/messages/manageTags";
 
 // Same order and names as the Tags "Manage" group in the sidebar (components/xpot/moduleNav.ts).
 const TABS = [
@@ -34,6 +35,7 @@ export const ADMIN_TAGS_BASE = "/admin/tags";
 
 /** Type the code printed on a piece, open its record. On desktop it sits in the top bar (AdminApp). */
 export function CodeLookup({ onFound }: { onFound: (id: string) => void }) {
+  const t = useT(manageTagsMessages);
   const { toast } = useToast();
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
@@ -41,7 +43,7 @@ export function CodeLookup({ onFound }: { onFound: (id: string) => void }) {
     e.preventDefault();
     const normalized = normalizeTagCode(code);
     if (!normalized) {
-      toast({ title: "Invalid code", description: "Codes are 8 letters/numbers, e.g. A7K3P9X2.", variant: "destructive" });
+      toast({ title: t("invalidCode"), description: t("invalidCodeHint"), variant: "destructive" });
       return;
     }
     setBusy(true);
@@ -50,7 +52,7 @@ export function CodeLookup({ onFound }: { onFound: (id: string) => void }) {
       setCode("");
       onFound(tag.id);
     } catch (err) {
-      toast({ title: "Piece not found", description: errorMessage(err), variant: "destructive" });
+      toast({ title: t("pieceNotFound"), description: errorMessage(err), variant: "destructive" });
     } finally {
       setBusy(false);
     }
@@ -60,7 +62,7 @@ export function CodeLookup({ onFound }: { onFound: (id: string) => void }) {
       <input
         value={code}
         onChange={(e) => setCode(e.target.value.toUpperCase())}
-        placeholder="Code, e.g. A7K3P9X2"
+        placeholder={t("codePlaceholder")}
         className={`${INPUT} w-48 font-mono`}
         autoCapitalize="characters"
         autoCorrect="off"
@@ -69,7 +71,7 @@ export function CodeLookup({ onFound }: { onFound: (id: string) => void }) {
       />
       <button type="submit" disabled={busy || !code.trim()} className={BTN}>
         <ScanLine className="h-4 w-4" />
-        Open
+        {t("open")}
       </button>
     </form>
   );

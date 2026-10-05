@@ -5,6 +5,9 @@ import { Archive, Bot, Check, ClipboardList, Cog, History, Plus, User } from "lu
 import { isClosedPlanStatus } from "@shared/tagJourney";
 import type { TagJourneyEntryItem, TagPlanItem } from "@shared/tagsApi";
 import { useToast } from "@/hooks/use-toast";
+import { useT } from "@/i18n";
+import { manageTagsMessages } from "@/i18n/messages/manageTags";
+import { shellMessages } from "@/i18n/messages/shell";
 import { errorMessage, formatDate, formatDateTime, invalidateAdminTags, sendJson } from "./api";
 import { BTN_GHOST, CARD } from "./ui";
 import { Loading } from "./pieces-shared";
@@ -14,9 +17,9 @@ import {
   JOURNEY_LIMIT,
   KindBadge,
   PlanStatusBadge,
-  planKindLabel,
   useIsTagAdmin,
   useJourney,
+  useJourneyLabels,
   type JourneyFilters,
   type JourneyScope,
 } from "./journey-shared";
@@ -31,13 +34,14 @@ const LINK = "font-mono hover:text-white hover:underline";
 
 /** Who did it: the AI session (MCP), a person (rep name, else email) or the system. */
 function ActorLabel({ entry }: { entry: TagJourneyEntryItem }) {
+  const t = useT(manageTagsMessages);
   const Icon = entry.actor === "ai" ? Bot : entry.actor === "human" ? User : Cog;
-  const who = entry.actor === "ai" ? "AI (MCP)" : entry.actor === "human" ? entry.actorName ?? entry.actorEmail ?? "admin" : "system";
+  const who = entry.actor === "ai" ? t("actorAi") : entry.actor === "human" ? entry.actorName ?? entry.actorEmail ?? t("actorAdmin") : t("actorSystem");
   return (
     <span className="inline-flex items-center gap-1">
       <Icon className="h-3 w-3 shrink-0" />
       {who}
-      {entry.source === "field" ? " (app)" : ""}
+      {entry.source === "field" ? ` ${t("fromApp")}` : ""}
     </span>
   );
 }
@@ -61,12 +65,13 @@ function MetadataChips({ metadata }: { metadata: Record<string, unknown> }) {
 }
 
 function EntryRow({ entry, showScope }: { entry: TagJourneyEntryItem; showScope: boolean }) {
+  const t = useT(manageTagsMessages);
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const review = useMutation({
     mutationFn: (status: string) => sendJson("PATCH", `/api/xpot/admin/tag-journey/${entry.id}`, { status }),
     onSuccess: () => void invalidateAdminTags(),
-    onError: (err) => toast({ title: "Could not update entry", description: errorMessage(err), variant: "destructive" }),
+    onError: (err) => toast({ title: t("couldNotUpdateEntry"), description: errorMessage(err), variant: "destructive" }),
   });
   const dimmed = entry.status === "archived" || entry.status === "superseded";
   return (
@@ -86,7 +91,7 @@ function EntryRow({ entry, showScope }: { entry: TagJourneyEntryItem; showScope:
               <span className="mx-1 text-white/30">→</span>
             </>
           )}
-          <span className="text-white/80">{entry.afterValue ?? "none"}</span>
+          <span className="text-white/80">{entry.afterValue ?? t("valueNone")}</span>
         </p>
       )}
       {entry.content && <p className="whitespace-pre-wrap break-words text-sm text-white/55">{entry.content}</p>}
@@ -105,7 +110,7 @@ function EntryRow({ entry, showScope }: { entry: TagJourneyEntryItem; showScope:
             {entry.serialNumber ? ` #${entry.serialNumber}` : ""}
           </button>
         )}
-        {entry.kitId && <span className="font-mono">kit {entry.kitId.slice(0, 8)}</span>}
+        {entry.kitId && <span className="font-mono">{t("kitShort", { id: entry.kitId.slice(0, 8) })}</span>}
         {entry.repName && <span>{entry.repName}</span>}
         {entry.leadName && <span>{entry.leadName}</span>}
         {entry.planTitle && (
@@ -118,13 +123,13 @@ function EntryRow({ entry, showScope }: { entry: TagJourneyEntryItem; showScope:
           {entry.status === "needs_review" && (
             <button type="button" className={SMALL_BTN} onClick={() => review.mutate("active")} disabled={review.isPending} data-testid="journey-entry-approve">
               <Check className="h-3 w-3" />
-              Approve
+              {t("approve")}
             </button>
           )}
           {!dimmed && (
             <button type="button" className={SMALL_BTN} onClick={() => review.mutate("archived")} disabled={review.isPending} data-testid="journey-entry-archive">
               <Archive className="h-3 w-3" />
-              Archive
+              {t("archive")}
             </button>
           )}
         </span>
@@ -134,7 +139,9 @@ function EntryRow({ entry, showScope }: { entry: TagJourneyEntryItem; showScope:
 }
 
 function PlanList({ plans, onOpen }: { plans: TagPlanItem[]; onOpen: (plan: TagPlanItem) => void }) {
-  if (plans.length === 0) return <p className="text-sm text-white/40">No plans yet.</p>;
+  const t = useT(manageTagsMessages);
+  const labels = useJourneyLabels();
+  if (plans.length === 0) return <p className="text-sm text-white/40">{t("noPlans")}</p>;
   return (
     <ul className="divide-y divide-white/5">
       {plans.map((p) => (
@@ -147,8 +154,8 @@ function PlanList({ plans, onOpen }: { plans: TagPlanItem[]; onOpen: (plan: TagP
           >
             <div className="flex flex-wrap items-center gap-2">
               <PlanStatusBadge status={p.status} />
-              <span className="text-xs text-white/45">{planKindLabel(p.kind)}</span>
-              {p.dueDate && <span className="text-xs text-white/45">due {formatDate(`${p.dueDate}T12:00:00`)}</span>}
+              <span className="text-xs text-white/45">{labels.planKind(p.kind)}</span>
+              {p.dueDate && <span className="text-xs text-white/45">{t("planDue", { date: formatDate(`${p.dueDate}T12:00:00`) })}</span>}
             </div>
             <p className="break-words text-sm font-medium text-white">{p.title}</p>
             {p.outcome && <p className="break-words text-xs text-white/50">{p.outcome}</p>}
@@ -186,12 +193,14 @@ export function JourneyPanel(props: { scope: JourneyScope; filters?: Omit<Journe
   return <JourneyPanelBody {...props} />;
 }
 
-function JourneyPanelBody({ scope, filters, title = "Journey" }: { scope: JourneyScope; filters?: Omit<JourneyFilters, keyof JourneyScope>; title?: string }) {
+function JourneyPanelBody({ scope, filters, title }: { scope: JourneyScope; filters?: Omit<JourneyFilters, keyof JourneyScope>; title?: string }) {
+  const t = useT(manageTagsMessages);
+  const ts = useT(shellMessages);
   const [entryOpen, setEntryOpen] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
   const [plan, setPlan] = useState<TagPlanItem | null>(null);
   const { data, isLoading, isError, error } = useJourney({ ...scope, ...filters }, true);
-  const scopeLabel = scope.tagId ? "piece" : scope.batchId ? "batch" : undefined;
+  const scopeLabel = scope.tagId ? ("piece" as const) : scope.batchId ? ("batch" as const) : undefined;
   const repFiltered = filters?.repId != null;
 
   return (
@@ -200,21 +209,20 @@ function JourneyPanelBody({ scope, filters, title = "Journey" }: { scope: Journe
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <h3 className="flex items-center gap-2 text-sm font-semibold text-white">
             <History className="h-4 w-4 text-white/50" />
-            {title}
+            {title ?? ts("manageJourney")}
           </h3>
           <button type="button" className={BTN_GHOST} onClick={() => setEntryOpen(true)} data-testid="journey-record">
             <Plus className="h-3.5 w-3.5" />
-            Record
+            {t("journeyRecord")}
           </button>
         </div>
         {isLoading ? (
           <Loading className="py-10" />
         ) : isError ? (
-          <p className="text-sm text-red-400">Could not load the journey. {errorMessage(error)}</p>
+          <p className="text-sm text-red-400">{t("journeyLoadError")} {errorMessage(error)}</p>
         ) : !data || data.entries.length === 0 ? (
           <div className="px-4 py-10 text-center text-sm text-white/40">
-            Nothing recorded yet. Batches, assignments, activations and NFC writes appear here as they happen; production steps and decisions
-            are recorded from the MCP or with Record.
+            {t("journeyEmpty")}
           </div>
         ) : (
           <div className="space-y-3">
@@ -228,7 +236,7 @@ function JourneyPanelBody({ scope, filters, title = "Journey" }: { scope: Journe
                 </ul>
               </div>
             ))}
-            {data.entries.length >= JOURNEY_LIMIT && <p className="text-xs text-white/40">Showing the latest {JOURNEY_LIMIT} entries.</p>}
+            {data.entries.length >= JOURNEY_LIMIT && <p className="text-xs text-white/40">{t("journeyShowingLatest", { count: JOURNEY_LIMIT })}</p>}
           </div>
         )}
       </section>
@@ -237,16 +245,16 @@ function JourneyPanelBody({ scope, filters, title = "Journey" }: { scope: Journe
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <h3 className="flex items-center gap-2 text-sm font-semibold text-white">
             <ClipboardList className="h-4 w-4 text-white/50" />
-            Plans
+            {t("plans")}
           </h3>
           <button type="button" className={BTN_GHOST} onClick={() => setPlanOpen(true)} data-testid="journey-new-plan">
             <Plus className="h-3.5 w-3.5" />
-            Plan
+            {t("newPlanButton")}
           </button>
         </div>
         {isLoading ? <Loading className="py-6" /> : <PlanList plans={data?.plans ?? []} onOpen={setPlan} />}
-        {repFiltered && <p className="mt-2 text-[11px] text-white/40">Plans have no reseller, so they are hidden while one is selected.</p>}
-        {scopeLabel && <p className="mt-2 text-[11px] text-white/40">New entries and plans are attached to this {scopeLabel}.</p>}
+        {repFiltered && <p className="mt-2 text-[11px] text-white/40">{t("plansHiddenRep")}</p>}
+        {scopeLabel && <p className="mt-2 text-[11px] text-white/40">{t(scopeLabel === "piece" ? "attachedPanelPiece" : "attachedPanelBatch")}</p>}
       </section>
 
       <NewEntryDialog open={entryOpen} onOpenChange={setEntryOpen} scope={scope} scopeLabel={scopeLabel} />

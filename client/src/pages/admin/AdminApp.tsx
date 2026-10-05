@@ -18,6 +18,7 @@ import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { shellMessages } from "@/i18n/messages/shell";
 import { tagsMessages } from "@/i18n/messages/tags";
+import { manageMessages } from "@/i18n/messages/manage";
 import { MODULE_HOME } from "@/lib/xpot";
 
 // The management screens. They are not a place of their own any more: each one
@@ -35,6 +36,7 @@ export function AdminApp({ section }: { section: string }) {
   const t = useT(shellMessages);
   const tt = useT(tagsMessages);
   const tc = useT(commonMessages);
+  const tm = useT(manageMessages);
   const isComputer = useIsComputer();
 
   const me = meQuery.data;
@@ -55,16 +57,16 @@ export function AdminApp({ section }: { section: string }) {
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#060912] px-6 text-center text-white">
         <ShieldAlert className="h-10 w-10 text-red-400" />
         <div>
-          <p className="text-lg font-semibold">Access restricted</p>
+          <p className="text-lg font-semibold">{tm("accessRestricted")}</p>
           <p className="mt-1 text-sm text-white/50">
-            {me ? "You don't have admin permission." : "Sign in to continue."}
+            {me ? tm("noAdminPermission") : tm("signInToContinue")}
           </p>
         </div>
         <button
           onClick={() => setLocation(me ? MODULE_HOME.visits : "/")}
           className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 transition-colors hover:bg-white/10"
         >
-          {me ? "Back to app" : "Go to sign in"}
+          {me ? tm("backToApp") : tc("goToSignIn")}
         </button>
       </div>
     );
