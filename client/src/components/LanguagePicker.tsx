@@ -1,8 +1,13 @@
 import { Languages } from "lucide-react";
-import { LANGS, LANG_LABELS, LANG_SHORT, useI18n, useT } from "@/i18n";
+import { LANGS, LANG_LABELS, LANG_SHORT, useI18n, useT, type Lang } from "@/i18n";
+import { CountryFlag } from "@/components/CountryFlag";
 import { commonMessages } from "@/i18n/messages/common";
 
-/** EN · PT · ES segmented picker; the choice is saved on this device. */
+// The flag stands for the locale each language is written for (LOCALES in
+// @/i18n): American English, Brazilian Portuguese, Spanish.
+const LANG_FLAG: Record<Lang, string> = { en: "US", pt: "BR", es: "ES" };
+
+/** EN · PT · ES segmented picker with flags; the choice is saved on this device. */
 export function LanguagePicker({ compact = false }: { compact?: boolean }) {
   const { lang, setLang } = useI18n();
   const t = useT(commonMessages);
@@ -25,11 +30,13 @@ export function LanguagePicker({ compact = false }: { compact?: boolean }) {
             title={LANG_LABELS[l]}
             onClick={() => setLang(l)}
             data-testid={`language-${l}`}
-            className={`min-h-[32px] rounded-lg px-2.5 text-xs font-semibold transition-colors ${
+            className={`flex min-h-[32px] items-center gap-1.5 rounded-lg px-2 text-xs font-semibold transition-colors ${
               lang === l ? "bg-blue-500/30 text-white" : "text-white/45 hover:text-white/75"
             }`}
           >
-            {LANG_SHORT[l]}
+            <CountryFlag iso={LANG_FLAG[l]} className={`h-3.5 w-[17.5px] transition-opacity ${lang === l ? "" : "opacity-60"}`} />
+            {/* Compact (the landing header) keeps only the flag on a phone. */}
+            <span className={compact ? "hidden sm:inline" : ""}>{LANG_SHORT[l]}</span>
           </button>
         ))}
       </div>
