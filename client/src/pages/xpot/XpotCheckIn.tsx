@@ -48,6 +48,8 @@ import type { FullSalesLead, SalesLead } from "./types";
 import { LeadSalesPanel } from "./components/sales/LeadSalesPanel";
 import { VisitActionsPanel } from "./components/sales/VisitActions";
 import { GLASS_RAISED } from "@/components/xpot/surface";
+import { useIsDesktop } from "@/hooks/use-is-desktop";
+import { ContinueOnPhone } from "@/pages/tags/ContinueOnPhone";
 
 function ActiveLeadInfo({ lead, onSaved }: { lead: SalesLead; onSaved: () => void }) {
   const { toast } = useToast();
@@ -404,10 +406,13 @@ export function XpotCheckIn() {
 
   // Follow the rep while this screen is open; the provider stops the watch on
   // unmount so the GPS radio isn't pinned on the other tabs.
+  // Not on desktop: it never starts a check-in, so it should not ask for location.
+  const isDesktop = useIsDesktop();
   useEffect(() => {
+    if (isDesktop) return;
     setLiveTracking(true);
     return () => setLiveTracking(false);
-  }, [setLiveTracking]);
+  }, [setLiveTracking, isDesktop]);
 
   // Only a lead with real coordinates can be pinned on the map.
   const selectedLeadLocation = (() => {
@@ -442,6 +447,18 @@ export function XpotCheckIn() {
 
   // A visit already in progress stays reachable even if the fix drops — the rep
   // must always be able to check out. The gate only guards starting one.
+  if (!activeVisit && isDesktop) {
+    return (
+      <div className="rounded-3xl p-6" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)" }} data-testid="desktop-checkin">
+        <ContinueOnPhone
+          url={`${window.location.origin}/check-in`}
+          title={t("desktopCheckInTitle")}
+          hint={t("desktopCheckInHint")}
+        />
+      </div>
+    );
+  }
+
   if (!activeVisit && !hasLocation) {
     return (
       <LocationGate

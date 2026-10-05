@@ -140,6 +140,9 @@ const en = {
   actionsDetected_other: "{count} actions detected",
   noteAnalyzed: "Note analyzed",
   actionsReviewBefore: "Check them below before they are recorded.",
+  desktopCheckInTitle: "Check-ins start on the phone",
+  desktopCheckInHint: "The phone's GPS confirms you are at the customer. Scan this code with your phone to open Check-in there. A visit in progress shows up here.",
+  clickAgainToConfirm: "Click again to confirm",
 };
 
 export const checkinMessages: Dictionary<typeof en> = {
@@ -268,6 +271,9 @@ export const checkinMessages: Dictionary<typeof en> = {
     actionsDetected_other: "{count} ações detectadas",
     noteAnalyzed: "Nota analisada",
     actionsReviewBefore: "Confira abaixo antes de serem registradas.",
+    desktopCheckInTitle: "O check-in começa no celular",
+    desktopCheckInHint: "O GPS do celular confirma que você está no cliente. Leia este código com o celular para abrir o Check-in lá. Uma visita em andamento aparece aqui.",
+    clickAgainToConfirm: "Clique de novo para confirmar",
   },
   es: {
     saved: "Guardado",
@@ -393,5 +399,8 @@ export const checkinMessages: Dictionary<typeof en> = {
     actionsDetected_other: "{count} acciones detectadas",
     noteAnalyzed: "Nota analizada",
     actionsReviewBefore: "Revísalas abajo antes de que se registren.",
+    desktopCheckInTitle: "El check-in empieza en el teléfono",
+    desktopCheckInHint: "El GPS del teléfono confirma que estás en el cliente. Escanea este código con tu teléfono para abrir el Check-in allí. Una visita en curso aparece aquí.",
+    clickAgainToConfirm: "Haz clic de nuevo para confirmar",
   },
 };
