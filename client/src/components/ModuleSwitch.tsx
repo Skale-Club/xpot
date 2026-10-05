@@ -5,10 +5,9 @@ import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { repModules, type XpotModule } from "@shared/modules";
 import type { XpotMeResponse } from "@/pages/xpot/types";
-import { MODULE_HOME } from "@/lib/xpot";
+import { LAST_MODULE_KEY, MODULE_HOME } from "@/lib/xpot";
 import { MODULE_ACCENT } from "@/components/xpot/surface";
 
-const LAST_MODULE_KEY = "xpot.module";
 
 const HOME: Record<XpotModule, string> = MODULE_HOME;
 

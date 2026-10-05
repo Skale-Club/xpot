@@ -106,7 +106,8 @@ test.skipIf(!enabled)("journey: trail, stories, plans, append-only, admin-only A
     assert.equal(batchEntries[0].title, `Batch ${batch.batchCode} created: 10 × Keychain`);
     assert.equal(batchEntries[0].content, "Keychains run 1");
     assert.equal(batchEntries[0].afterValue, "generated");
-    assert.deepEqual(batchEntries[0].metadata, { quantity: 10, productType: "keychain", vendor: null });
+    // face: what is printed on the run (#30); a keychain batch created without one records null.
+    assert.deepEqual(batchEntries[0].metadata, { quantity: 10, productType: "keychain", face: null, vendor: null });
     assert.equal(batchEntries[0].source, "admin");
     assert.equal(batchEntries[0].actor, "human");
     assert.equal(batchEntries[0].actorEmail, "admin@jt.test");

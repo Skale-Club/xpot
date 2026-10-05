@@ -11,7 +11,7 @@ import {
   Settings,
   type LucideIcon,
 } from "lucide-react";
-import type { XpotModule } from "@shared/modules";
+import { canManage, isAppAdmin, type XpotModule } from "@shared/modules";
 import { LanguagePicker } from "@/components/LanguagePicker";
 import { rememberModule, useXpotModules } from "@/components/ModuleSwitch";
 import { MODULE_HOME } from "@/lib/xpot";
@@ -26,8 +26,9 @@ import { CommandPalette } from "./CommandPalette";
 import { useDesktopShortcuts } from "./useDesktopShortcuts";
 import { useIsComputer, useIsDesktop } from "@/hooks/use-is-desktop";
 import { BRAND_GRADIENT, MODULE_ACCENT } from "./surface";
-import { contextOfPath, moduleGroups, organizationItems, type NavGroup, type NavItem, type ShellContext } from "./moduleNav";
+import { contextOfPath, moduleGroups, organizationItems, starts, type NavGroup, type NavItem, type ShellContext } from "./moduleNav";
 import { XpotMark } from "./XpotMark";
+import { ScreenErrorBoundary } from "./ScreenErrorBoundary";
 
 // The frame around every rep screen. Below `lg` it is the phone column the app
 // always had (the caller passes its header row and bottom nav). From `lg` up a
@@ -46,12 +47,10 @@ function readCollapsed() {
 }
 
 export function canAdminister(me: XpotMeResponse | undefined | null) {
-  return !!me && (me.user.isAdmin || ["admin", "manager"].includes(me.rep.role));
+  return canManage(me);
 }
 
 const MODULE_ICON: Record<XpotModule, LucideIcon> = { visits: MapPinned, tags: Nfc };
-
-const starts = (prefix: string) => (path: string) => path === prefix || path.startsWith(`${prefix}/`);
 
 /**
  * Where the current screen sits: its part of the app, the module whose screens
@@ -68,7 +67,7 @@ function useShellNav() {
   const { data: me } = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
   const viewer = {
     canManage: canAdminister(me),
-    isAdmin: !!me && (me.user.isAdmin || me.rep.role === "admin"),
+    isAdmin: isAppAdmin(me),
     isComputer,
   };
   const labels = { shell: t, tags: tt };
@@ -399,6 +398,7 @@ export function AppLayout({
   mobileColumnStyle?: CSSProperties;
 }) {
   const [collapsed, setCollapsed] = useState(readCollapsed);
+  const [location] = useLocation();
   const isDesktop = useIsDesktop();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const togglePalette = useCallback(() => setPaletteOpen((o) => !o), []);
@@ -437,7 +437,9 @@ export function AppLayout({
           style={mobileColumnStyle}
         >
           {mobileHeader ? <div className="lg:hidden">{mobileHeader}</div> : null}
-          <main className="flex-1">{children}</main>
+          <main className="flex-1">
+            <ScreenErrorBoundary key={location}>{children}</ScreenErrorBoundary>
+          </main>
         </div>
         {mobileNav ? <div className="lg:hidden">{mobileNav}</div> : null}
       </div>

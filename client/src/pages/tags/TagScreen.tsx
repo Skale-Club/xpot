@@ -106,6 +106,8 @@ export default function TagScreen({ code, onClose }: {
       qc.setQueryData(queryKey, next);
       void qc.invalidateQueries({ queryKey: ["/api/xpot/tags/summary"] });
       void qc.invalidateQueries({ queryKey: ["tags", "list"] });
+      // The pieces chip on each Visits lead counts these too (sold, live, scans).
+      void qc.invalidateQueries({ queryKey: ["/api/xpot/tags/by-lead"] });
     },
     [qc, code], // eslint-disable-line react-hooks/exhaustive-deps
   );
