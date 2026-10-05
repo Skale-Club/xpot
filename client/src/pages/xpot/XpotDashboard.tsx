@@ -136,7 +136,7 @@ export function XpotDashboard() {
               ] as const).map(([key, value]) => (
                 <div key={key} className="min-w-0">
                   <div className="text-lg font-extrabold leading-none text-white tabular-nums">{value}</div>
-                  <div className="mt-1 truncate text-[9px] font-semibold uppercase tracking-wider text-white/40">{t(key)}</div>
+                  <div className="mt-1 text-[9px] font-semibold uppercase leading-tight tracking-wider text-white/40">{t(key)}</div>
                 </div>
               ))}
             </div>

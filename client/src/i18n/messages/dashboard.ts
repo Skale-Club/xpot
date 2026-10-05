@@ -55,7 +55,7 @@ export const dashboardMessages: Dictionary<typeof en> = {
 
     metricVisitsToday: "Visitas hoje",
     metricPipelineValue: "Valor em aberto",
-    metricOpportunities: "Negócios",
+    metricOpportunities: "Oportunidades",
     metricPendingTasks: "Tarefas pendentes",
 
     photoUpdated: "Foto atualizada",
@@ -96,7 +96,7 @@ export const dashboardMessages: Dictionary<typeof en> = {
 
     metricVisitsToday: "Visitas hoy",
     metricPipelineValue: "Valor en curso",
-    metricOpportunities: "Negocios",
+    metricOpportunities: "Oportunidades",
     metricPendingTasks: "Tareas pendientes",
 
     photoUpdated: "Foto actualizada",
