@@ -44,6 +44,7 @@ import {
   TapAnimation,
 } from "./ui";
 import { isWebNfcSupported, mapNfcError, scanOnce } from "./webNfc";
+import { useIsDesktop } from "@/hooks/use-is-desktop";
 
 type Sheet = { kind: "empty" } | { kind: "nfc" } | null;
 
@@ -72,6 +73,9 @@ export default function HomeScreen() {
   const nfcAbort = useRef<AbortController | null>(null);
   const nfcSupported = isWebNfcSupported();
   const ios = isIos();
+  // A computer has no NFC and rarely a usable camera: it types the code, or a
+  // USB/Bluetooth scanner "types" the whole QR link followed by Enter.
+  const isDesktop = useIsDesktop();
 
   const openCode = useCallback(
     async (tagCode: string) => {
@@ -145,6 +149,7 @@ export default function HomeScreen() {
   };
 
   const submitCode = () => {
+    if (isDesktop) return void handleScan(code.trim());
     const result = classify(code);
     if (result.kind !== "xpot") return show({ tone: "error", text: t("invalidCode") });
     void openCode(result.code);
@@ -152,16 +157,16 @@ export default function HomeScreen() {
 
   const scans = summary ? summary.scansLast30.qr + summary.scansLast30.nfc : undefined;
 
-  return (
+  const main = (
     <div className="space-y-5">
-      <header>
+      <header className="lg:hidden">
         <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-300/80">
           {me ? t("homeHello", { name: me.rep.displayName.split(" ")[0] }) : "Xpot"}
         </p>
         <h1 className="mt-1 text-[26px] font-extrabold leading-tight tracking-tight text-white">{t("homeTitle")}</h1>
       </header>
 
-      <div className="grid grid-cols-2 gap-2" data-testid="tags-summary">
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4 lg:gap-4" data-testid="tags-summary">
         <Stat label={t("statInStock")} value={summary?.inStock} />
         <Stat label={t("statActive")} value={summary?.active} />
         <Stat label={t("statSold30")} value={summary?.soldLast30} />
@@ -194,7 +199,7 @@ export default function HomeScreen() {
 
       <Banner banner={banner} />
 
-      <div className="space-y-3">
+      <div className="space-y-3 lg:hidden">
         {nfcSupported && (
           <ActionTile
             primary
@@ -233,19 +238,21 @@ export default function HomeScreen() {
           <input
             id="tag-code"
             value={code}
-            onChange={(e) => setCode(e.target.value.toUpperCase())}
+            // Scanners send the full link; only a typed code is upper-cased.
+            onChange={(e) => setCode(/[/:.]/.test(e.target.value) ? e.target.value : e.target.value.toUpperCase())}
+            autoFocus={isDesktop}
             placeholder={t("codePlaceholder")}
             autoCapitalize="characters"
             autoCorrect="off"
             spellCheck={false}
             enterKeyHint="go"
-            maxLength={14}
+            maxLength={isDesktop ? 300 : 14}
             className={`${INPUT} font-mono tracking-[0.12em] placeholder:font-sans placeholder:tracking-normal`}
             data-testid="input-tag-code"
           />
           <button
             type="submit"
-            disabled={busy || code.trim().length < 8}
+            disabled={busy || code.trim().length < (isDesktop ? 4 : 8)}
             aria-label={t("open")}
             className="flex min-h-[48px] min-w-[48px] shrink-0 items-center justify-center rounded-2xl bg-blue-500 text-white disabled:opacity-40"
             data-testid="button-open-code"
@@ -253,9 +260,10 @@ export default function HomeScreen() {
             {busy ? <Spinner /> : <ArrowRight className="h-5 w-5" />}
           </button>
         </div>
+        {isDesktop && <p className="mt-2 text-xs text-white/35">{t("scannerHint")}</p>}
       </form>
 
-      <WholesaleCard />
+      {!isDesktop && <WholesaleCard />}
 
       <section>
         <div className="mb-2 flex items-center justify-between px-1">
@@ -350,6 +358,14 @@ export default function HomeScreen() {
           </button>
         </div>
       </BottomSheet>
+    </div>
+  );
+
+  if (!isDesktop) return main;
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)_360px] items-start gap-6">
+      {main}
+      <div className="sticky top-[88px]"><WholesaleCard /></div>
     </div>
   );
 }
