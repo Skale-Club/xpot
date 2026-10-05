@@ -4,18 +4,9 @@ import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { leadsMessages } from "@/i18n/messages/leads";
 import { BRAND_GRADIENT } from "@/components/xpot/surface";
+import type { CsvLeadRow } from "../../csvLeads";
 
-export type CsvLeadRow = {
-  name: string;
-  phone: string;
-  email: string;
-  website: string;
-  industry: string;
-  addressLine1: string;
-  city: string;
-  state: string;
-  postalCode: string;
-};
+export type { CsvLeadRow };
 
 const PREVIEW_LIMIT = 50;
 

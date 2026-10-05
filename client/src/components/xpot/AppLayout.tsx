@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import {
@@ -13,6 +13,7 @@ import {
   Package,
   PanelLeftClose,
   PanelLeftOpen,
+  Search,
   Settings,
   Shield,
   type LucideIcon,
@@ -26,6 +27,9 @@ import { tagsMessages } from "@/i18n/messages/tags";
 import { signOut } from "@/lib/signOut";
 import type { XpotMeResponse } from "@/pages/xpot/types";
 import { AppBackground } from "./AppBackground";
+import { CommandPalette } from "./CommandPalette";
+import { useDesktopShortcuts } from "./useDesktopShortcuts";
+import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { BRAND_GRADIENT } from "./surface";
 
 // The frame around every rep screen. Below `lg` it is the phone column the app
@@ -209,9 +213,10 @@ function useOnline() {
   return online;
 }
 
-function DesktopTopBar({ title, actions }: { title: ReactNode; actions?: ReactNode }) {
+function DesktopTopBar({ title, actions, onSearch }: { title: ReactNode; actions?: ReactNode; onSearch: () => void }) {
   const t = useT(shellMessages);
   const online = useOnline();
+  const mac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
   return (
     <header
       className="sticky top-0 z-30 hidden h-16 items-center gap-4 border-b border-white/[0.07] px-8 lg:flex"
@@ -219,6 +224,16 @@ function DesktopTopBar({ title, actions }: { title: ReactNode; actions?: ReactNo
     >
       <h1 className="min-w-0 flex-1 truncate text-lg font-bold tracking-tight text-white">{title}</h1>
       {actions}
+      <button
+        type="button"
+        onClick={onSearch}
+        className="flex h-9 w-64 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 text-sm text-white/40 transition-colors hover:border-white/20 hover:text-white/60"
+        data-testid="open-command-palette"
+      >
+        <Search className="h-4 w-4" />
+        <span className="flex-1 text-left">{t("searchEverything")}</span>
+        <kbd className="rounded-md border border-white/10 px-1.5 py-0.5 font-sans text-[10px] text-white/40">{mac ? "⌘" : "Ctrl"} K</kbd>
+      </button>
       <span className={`flex items-center gap-1.5 text-xs ${online ? "text-white/40" : "text-red-300"}`}>
         <span className={`h-2 w-2 rounded-full ${online ? "bg-emerald-400" : "bg-red-400"}`} />
         {online ? t("online") : t("offline")}
@@ -305,6 +320,12 @@ export function AppLayout({
   mobileColumnStyle?: CSSProperties;
 }) {
   const [collapsed, setCollapsed] = useState(readCollapsed);
+  const isDesktop = useIsDesktop();
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const togglePalette = useCallback(() => setPaletteOpen((o) => !o), []);
+  useDesktopShortcuts({ enabled: isDesktop, onPalette: togglePalette });
+  const navGroups = useNavGroups();
+  const pages = [...navGroups, ...(extraNavGroups ?? [])].flatMap((g) => g.items);
   const toggle = () => {
     setCollapsed((c) => {
       try {
@@ -320,7 +341,7 @@ export function AppLayout({
     <AppBackground>
       <DesktopSidebar collapsed={collapsed} onToggle={toggle} extraGroups={extraNavGroups} />
       <div className={`relative ${collapsed ? "lg:pl-[72px]" : "lg:pl-60"}`}>
-        <DesktopTopBar title={title} actions={topBarActions} />
+        <DesktopTopBar title={title} actions={topBarActions} onSearch={() => setPaletteOpen(true)} />
         <ActiveVisitBanner />
         <div
           className={`relative mx-auto flex min-h-screen w-full ${mobileMaxWidth} flex-col px-4 ${mobileColumnClassName} lg:min-h-0 lg:px-8 lg:pb-12 lg:pt-6 ${
@@ -333,6 +354,7 @@ export function AppLayout({
         </div>
         {mobileNav ? <div className="lg:hidden">{mobileNav}</div> : null}
       </div>
+      {isDesktop && <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} pages={pages} />}
     </AppBackground>
   );
 }

@@ -1,6 +1,6 @@
 # Plano: versão desktop do Xpot
 
-**Rev. 1** · base `a973fa5` · 2026-10-04
+**Rev. 2** · base `a973fa5` · 2026-10-04 · **executado** (ver Status)
 
 O app do vendedor foi feito para o celular e está bem resolvido lá. No desktop, ele
 é a mesma coluna de 448px (`max-w-md`) centralizada, com a barra de abas no rodapé
@@ -9,6 +9,40 @@ O app do vendedor foi feito para o celular e está bem resolvido lá. No desktop
 
 Cada item tem código estável (`DSK-03`) para referência em conversa, no mesmo
 formato do [`BACKLOG.md`](./BACKLOG.md).
+
+
+## Status (Rev. 2)
+
+As nove fases (0 a 8) foram executadas no mesmo dia, uma PR por fase, todas verificadas
+contra uma API simulada em 375px, 1100px e 1440px.
+
+| Fase | PR | Itens | Estado |
+|---|---|---|---|
+| 0 · Fundação | #18 | DSK-01, 02, 03, 04 | ✅ (DSK-02 parcial: ver abaixo) |
+| 1 · Shell | #19 | DSK-05, 07, 08 | ✅ |
+| 2 · Leads | #20 | DSK-06, 09, 10, 11, 12 | ✅ |
+| 3 · Painel e Visitas | #21 | DSK-06, 13, 14, 15 | ✅ |
+| 4 · Vendas | #22 | DSK-06, 16, 17, 18, 19 | ✅ |
+| 5 · Tags | #23 | DSK-06, 20, 21, 22 | ✅ |
+| 6 · Check-in | #24 | DSK-23, 24 | ✅ |
+| 7 · Config. e Admin | #25 | DSK-25, 26 | ✅ (helpers de Config. não unificados) |
+| 8 · Acabamento | #26 | DSK-27, 29 | ✅ parcial · DSK-28 adiado |
+
+**Pendências conscientes**
+
+- **DSK-02**: as cores repetidas saíram das telas que foram redesenhadas; o
+  restante (`rgba(…)` inline em diálogos e cards antigos) migra quando cada
+  arquivo for tocado de novo. Uma troca em massa mudaria a aparência sem querer.
+- **DSK-28 (paginação no servidor)**: adiado. As telas de desktop usam a lista
+  completa no cliente (última visita por empresa, calendário com pontos,
+  filtros e busca locais); paginar exige levar esses cálculos para o servidor.
+  Com os volumes atuais a tabela não mostra o teto. Continua como **PRF-02** no
+  BACKLOG.
+- **DSK-29**: entraram testes de lógica das rotas e do CSV
+  (`tests/desktop-routes.test.ts`). O smoke test visual em 390/1280px precisa
+  de um navegador no CI (Playwright) e fica para quando o CI tiver um.
+- **Visita ativa no desktop**: funciona inteira, mas na coluna estreita; o
+  layout em 2–3 colunas descrito na Fase 3 do plano original não foi feito.
 
 ---
 
