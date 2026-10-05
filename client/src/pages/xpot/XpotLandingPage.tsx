@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, type ReactNode } from "react";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { MotionConfig, motion } from "framer-motion";
 import {
@@ -377,6 +377,13 @@ export function XpotLandingPage() {
                       <div className="mb-4 rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-center text-sm text-red-300">{error}</div>
                     )}
                     <PhoneSignIn onSignedIn={openXpotWorkspace} />
+                    <p className="mt-4 text-center text-xs leading-relaxed text-white/45">
+                      {t("agreeBefore")}{" "}
+                      <Link href="/terms" className="text-white/70 underline-offset-2 hover:underline">{t("termsOfService")}</Link>{" "}
+                      {t("agreeAnd")}{" "}
+                      <Link href="/privacy" className="text-white/70 underline-offset-2 hover:underline">{t("privacyPolicy")}</Link>
+                      {t("agreeAfter")}
+                    </p>
                   </DialogContent>
                 </Dialog>
               )}
@@ -527,6 +534,11 @@ export function XpotLandingPage() {
 
         <footer className="relative border-t border-white/[0.06] py-10 text-center text-sm text-white/50">
           <p className="font-semibold text-white/60">{t("footerTagline")}</p>
+          <p className="mt-3 flex justify-center gap-4">
+            <Link href="/privacy" className="transition-colors hover:text-white">{t("privacyPolicy")}</Link>
+            <span aria-hidden>·</span>
+            <Link href="/terms" className="transition-colors hover:text-white">{t("termsOfService")}</Link>
+          </p>
           <p className="mt-2">{t("footerRights", { year: new Date().getFullYear() })}</p>
         </footer>
       </div>

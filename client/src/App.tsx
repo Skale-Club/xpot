@@ -11,6 +11,7 @@ import { XpotSales } from "./pages/xpot/XpotSales";
 import { XpotDashboard } from "./pages/xpot/XpotDashboard";
 
 import Login from "./pages/Login";
+import { LegalPage } from "./pages/legal/LegalPage";
 import { Loader2 } from "@/components/ui/loader";
 import { AdminApp } from "./pages/admin/AdminApp";
 import { XpotSettings } from "./pages/xpot/XpotSettings";
@@ -158,6 +159,8 @@ export default function App() {
       <Switch>
         <Route path="/" component={RootRoute} />
         <Route path="/login" component={Login} />
+        <Route path="/privacy">{() => <LegalPage doc="privacy" />}</Route>
+        <Route path="/terms">{() => <LegalPage doc="terms" />}</Route>
         <Route path="/admin/tags/*?">{() => <AdminApp section="tags" />}</Route>
         <Route path="/admin/:section?">
           {(params) => <AdminApp section={params.section ?? "overview"} />}
