@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "license": "MIT",
-  "description": "Xpot | mobile-first field sales companion (standalone, extracted from skaleclub on 2026-05-18)",
+  "description": "Xpot | field sales (Visits) and QR/NFC pieces (Tags) for Skale Club reps and resellers; extracted from skaleclub on 2026-05-18",
   "imports": {
     "#shared/*": "./shared/*"
   },
