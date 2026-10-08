@@ -130,6 +130,16 @@ Dashboard (scans by place/piece over time, etc.). See the answer given in chat; 
   4 s while `programmed` and shows the confirmation. NFC Tools steps vary by content kind; locking on
   iPhone shows NFC Tools steps + "I locked it".
 
+## Centered pop-ups + piece editor as a pop-up (PR from `feat/centered-popups`)
+
+- Owner: pop-ups must open **centered** on phone and desktop. `BottomSheet` (`client/src/pages/tags/ui.tsx`,
+  used by Tags and the Leads sheet) is now a centered modal; Radix `dialog`/`alert-dialog` got side
+  margins and rounded corners on phones; `MasterDetail` between lg and xl opens the detail as a centered
+  pop-up (from xl it is still the side column of the list layout).
+- Piece screen: "Change" / "Link a customer" / "Set up this piece" open the editor in a pop-up (with
+  its own banner for errors). A **Chip NFC card** always shows Write and Lock (Lock disabled until the
+  chip is written, "Locked" hint when sealed). The editor only opens by itself when selling during a visit.
+
 ## Backlog (owner's requests, in their order)
 
 1. **SEO + Google Search Console** (owner asked explicitly). `client/index.html` has
