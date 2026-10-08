@@ -23,6 +23,7 @@ import { shellMessages } from "@/i18n/messages/shell";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { manageMessages } from "@/i18n/messages/manage";
 import { MODULE_HOME } from "@/lib/xpot";
+import { TagsTabBar } from "@/pages/tags/TagsTabBar";
 import { useViewerAccess } from "@/lib/adminMode";
 
 // The management screens. They are not a place of their own any more: each one
@@ -104,7 +105,9 @@ export function AdminApp({ section }: { section: string }) {
       title={title}
       size="wide"
       mobileMaxWidth="max-w-5xl"
-      mobileColumnClassName="pb-20 pt-6"
+      mobileColumnClassName={active === "tags" ? "pb-28 pt-6" : "pb-20 pt-6"}
+      // Tags management is a tab of the Tags module on a phone.
+      mobileNav={active === "tags" ? <TagsTabBar /> : undefined}
       topBarActions={active === "tags" ? <CodeLookup onFound={(id) => setLocation(`/admin/tags/pieces/${id}`)} /> : undefined}
       mobileHeader={
         <>

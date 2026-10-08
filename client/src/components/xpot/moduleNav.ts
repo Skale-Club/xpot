@@ -8,7 +8,6 @@ import {
   Factory,
   Home,
   LayoutDashboard,
-  Link2,
   MapPinned,
   Nfc,
   Package,
@@ -18,6 +17,7 @@ import {
   Route,
   ShieldCheck,
   SlidersHorizontal,
+  Star,
   Users,
   Webhook,
   type LucideIcon,
@@ -144,7 +144,7 @@ export function moduleGroups(module: XpotModule, viewer: Viewer, l: Labels): Nav
     items: [
       { href: "/tags", label: l.tags("navHome"), icon: Home, match: (p) => p === "/tags" || p.startsWith("/tags/t/") },
       { href: "/tags/pieces", label: l.tags("navPieces"), icon: Package, match: starts("/tags/pieces") },
-      { href: "/tags/direct", label: l.tags("navDirect"), icon: Link2, match: starts("/tags/direct") },
+      { href: "/tags/direct", label: l.tags("navDirect"), icon: Star, match: starts("/tags/direct") },
     ],
   };
   if (!viewer.canManage) return [work];

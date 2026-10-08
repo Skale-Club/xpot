@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, Building2, Link2, Nfc, QrCode, ScanLine, Shield, Tag, X } from "lucide-react";
+import { ArrowRight, Building2, Link2, Nfc, QrCode, ScanLine, Tag, X } from "lucide-react";
 import type { TagRepSummary } from "@shared/tagsApi";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
 import type { XpotMeResponse } from "@/pages/xpot/types";
-import { useViewerAccess } from "@/lib/adminMode";
 import { shellMessages } from "@/i18n/messages/shell";
 import QrScanner from "./QrScanner";
 import { WholesaleCard } from "./WholesaleCard";
@@ -75,7 +74,6 @@ export default function HomeScreen() {
   const [, navigate] = useLocation();
   const { banner, show } = useBanner();
   const { data: me } = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
-  const access = useViewerAccess();
   const { data: summary } = useQuery<TagRepSummary>({ queryKey: ["/api/xpot/tags/summary"], staleTime: 30_000 });
   const [recents, setRecents] = useState<RecentItem[]>(getRecents);
   const [busy, setBusy] = useState(false);
@@ -189,17 +187,6 @@ export default function HomeScreen() {
           </p>
           <h1 className="mt-1 text-[26px] font-extrabold leading-tight tracking-tight text-white">{t("homeTitle")}</h1>
         </div>
-        {access.canManage && (
-          <button
-            type="button"
-            onClick={() => navigate("/admin/tags")}
-            className="flex h-10 shrink-0 items-center gap-2 rounded-[18px] border border-white/10 bg-white/[0.03] px-3 text-sm font-semibold text-white/60 active:scale-95"
-            data-testid="tags-manage"
-          >
-            <Shield className="h-4 w-4" />
-            {ts("navManage")}
-          </button>
-        )}
       </header>
 
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4 lg:gap-4" data-testid="tags-summary">

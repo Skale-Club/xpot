@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { Redirect, Route, Switch, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { Home, Link2, Package, Settings } from "lucide-react";
+import { Settings } from "lucide-react";
 import { ModuleSwitch, rememberModule, useXpotModules } from "@/components/ModuleSwitch";
 import { useT } from "@/i18n";
 import { tagsMessages } from "@/i18n/messages/tags";
@@ -14,22 +14,11 @@ import TagScreen from "./TagScreen";
 import { APP_BASE, tagPath } from "./lib";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { AppLayout } from "@/components/xpot/AppLayout";
-import { MobileTabBar } from "@/components/xpot/MobileTabBar";
+import { TAGS_NAV, TagsTabBar, activeTagsTab } from "./TagsTabBar";
 import { XpotMark } from "@/components/xpot/XpotMark";
 import { MODULE_HOME } from "@/lib/xpot";
 import { SessionGate } from "@/components/xpot/SessionGate";
 
-const NAV = [
-  { href: APP_BASE, key: "navHome", icon: Home },
-  { href: `${APP_BASE}/pieces`, key: "navPieces", icon: Package },
-  { href: `${APP_BASE}/direct`, key: "navDirect", icon: Link2 },
-] as const;
-
-function activeNav(path: string): string {
-  if (path.startsWith(`${APP_BASE}/pieces`)) return `${APP_BASE}/pieces`;
-  if (path.startsWith(`${APP_BASE}/direct`)) return `${APP_BASE}/direct`;
-  return APP_BASE;
-}
 
 /** The Tags module: read, sell and write QR/NFC pieces. Mounted at /tags/*. */
 export function TagsApp() {
@@ -50,12 +39,12 @@ export function TagsApp() {
   // Tags switched off for this rep: back to Visits (the server refuses the API anyway).
   if (!allowed) return <Redirect to={MODULE_HOME.visits} />;
 
-  const current = activeNav(location);
+  const current = activeTagsTab(location);
   // Every desktop screen uses the full width; only a piece stays narrow, and on
   // desktop it opens beside the pieces table anyway.
   const wide = !location.startsWith(`${APP_BASE}/t/`);
 
-  const currentNav = NAV.find((n) => n.href === current) ?? NAV[0];
+  const currentNav = TAGS_NAV.find((n) => n.href === current) ?? TAGS_NAV[0];
   const pieceCode = location.startsWith(`${APP_BASE}/t/`) ? decodeURIComponent(location.slice(`${APP_BASE}/t/`.length)) : null;
 
   return (
@@ -88,14 +77,7 @@ export function TagsApp() {
           </button>
         </div>
       }
-      mobileNav={
-        <MobileTabBar
-          module="tags"
-          tabs={NAV.map(({ href, key, icon }) => ({ id: href, label: t(key), icon, testId: `tags-nav-${key}` }))}
-          activeId={current}
-          onSelect={navigate}
-        />
-      }
+      mobileNav={<TagsTabBar />}
     >
       <Switch>
         <Route path={`${APP_BASE}/t/:code`}>
