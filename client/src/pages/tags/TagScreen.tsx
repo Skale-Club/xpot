@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, Nfc, Power, QrCode, ScanLine, Search, X } from "lucide-react";
+import { Contact, ExternalLink, Link2, Mail, Nfc, Phone, Power, QrCode, ScanLine, Search, X } from "lucide-react";
 import type { TagDetail } from "@shared/tagsApi";
 import { TAG_DESTINATION_TYPES, type TagDestinationType } from "@shared/tags";
 import { contentKindOf, contentSummary, validateChipContent, type ChipContentKind } from "@shared/chipContent";
@@ -24,6 +24,8 @@ import {
   Banner,
   CARD,
   CHIP_TONE,
+  CopyButton,
+  EYEBROW,
   FieldLabel,
   INPUT,
   LinkInput,
@@ -222,70 +224,75 @@ export default function TagScreen({ code, onClose }: {
       <TopBar title={tag.leadName ?? t("noCustomer")} back={back} eyebrow={t("pieceEyebrow")} right={closeButton} />
       <Banner banner={banner} />
 
-      <section className="relative overflow-hidden rounded-[20px] border border-white/10 bg-white/[0.04] p-5">
-        <div className="pointer-events-none absolute -right-6 -top-6 h-24 w-24 rounded-full bg-indigo-500/30 blur-[30px]" />
-        <div className="relative flex items-center gap-3">
-          <TagFaceIcon face={tag.face} size="lg" title={t(`face_${tag.face ?? "none"}` as "face_none")} />
-          <p className="font-mono text-[34px] font-bold tracking-[0.18em] text-white" data-testid="text-tag-code">
+      {/* The piece itself, compact: which one it is and whether it is live. */}
+      <section className="flex items-center gap-3 rounded-[20px] border border-white/10 bg-white/[0.04] px-4 py-3">
+        <TagFaceIcon face={tag.face} size="md" title={t(`face_${tag.face ?? "none"}` as "face_none")} />
+        <div className="min-w-0 flex-1">
+          <p className="font-mono text-xl font-bold tracking-[0.14em] text-white" data-testid="text-tag-code">
             {tag.publicCode}
           </p>
+          <p className="truncate text-xs text-white/45">
+            {[t(`product_${tag.productType}` as "product_custom"), tag.face ? t(`face_${tag.face}` as "face_none") : null, tag.label].filter(Boolean).join(" · ")}
+          </p>
         </div>
-        <div className="relative mt-3 flex flex-wrap gap-2">
-          <Pill tone={STATUS_TONE[tag.status] ?? "slate"}>{t(`status_${tag.status}` as "status_active")}</Pill>
-          <Pill tone={CHIP_TONE[tag.nfcStatus] ?? "amber"}>{t(`chip_${tag.nfcStatus}` as "chip_verified")}</Pill>
-          <Pill tone="slate">{t(`product_${tag.productType}` as "product_custom")}</Pill>
-          {tag.face && <Pill tone="slate">{t(`face_${tag.face}` as "face_none")}</Pill>}
-        </div>
-        <dl className="relative mt-4 space-y-2 text-sm">
-          <div className="flex justify-between gap-4">
-            <dt className="text-white/45">{t("customer")}</dt>
-            <dd className="truncate font-semibold text-white" data-testid="text-tag-lead">
-              {tag.leadName ?? t("noCustomer")}
-            </dd>
-          </div>
-          {tag.label && (
-            <div className="flex justify-between gap-4">
-              <dt className="text-white/45">{t("label")}</dt>
-              <dd className="truncate font-semibold text-white">{tag.label}</dd>
-            </div>
-          )}
-          <div className="flex items-start justify-between gap-4">
-            <dt className="text-white/45">{t("destination")}</dt>
-            <dd className="min-w-0 text-right font-semibold text-white">
-              {tag.destinationUrl && contentKindOf(tag.destinationUrl) === "vcard" ? (
-                <span className="truncate">{t("contentKind_vcard")}: {contentSummary(tag.destinationUrl)}</span>
-              ) : tag.destinationUrl ? (
-                <a
-                  href={tag.destinationUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex max-w-full items-center gap-1 text-blue-300 underline-offset-2 active:underline"
-                >
-                  <span className="truncate">{contentKindOf(tag.destinationUrl) === "url" ? shortUrl(tag.destinationUrl) : contentSummary(tag.destinationUrl)}</span>
-                  <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-                </a>
-              ) : (
-                t("noDestination")
-              )}
-            </dd>
-          </div>
-        </dl>
-        <div className="relative mt-4 grid grid-cols-2 gap-2 text-center">
-          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] py-2">
-            <QrCode className="mx-auto h-4 w-4 text-blue-300" />
-            <p className="text-xl font-extrabold text-white tabular-nums">{tag.qrInteractions}</p>
-            <p className="text-xs text-white/40">{t("qrScans")}</p>
-          </div>
-          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] py-2">
-            <Nfc className="mx-auto h-4 w-4 text-blue-300" />
-            <p className="text-xl font-extrabold text-white tabular-nums">{tag.nfcInteractions}</p>
-            <p className="text-xs text-white/40">{t("nfcTaps")}</p>
-          </div>
-        </div>
+        <Pill tone={STATUS_TONE[tag.status] ?? "slate"}>{t(`status_${tag.status}` as "status_active")}</Pill>
       </section>
 
+      {/* The star of the screen: where a scan or tap sends people. */}
+      {(() => {
+        const dest = tag.destinationUrl;
+        const destKind = contentKindOf(dest);
+        const KindIcon = { url: Link2, email: Mail, phone: Phone, vcard: Contact }[destKind];
+        const display = !dest ? null : destKind === "url" ? shortUrl(dest) : contentSummary(dest);
+        const typeLabel = destKind === "url" ? (tag.destinationType ? destinationLabel(tag.destinationType) : null) : t(`contentKind_${destKind}`);
+        return (
+          <section className="mt-3 rounded-[20px] border border-blue-400/25 bg-blue-500/[0.08] p-4" data-testid="destination-hero">
+            <p className={EYEBROW}>{t("destination")}</p>
+            {dest ? (
+              <div className="mt-2 flex items-center gap-3">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-500/20 text-blue-200">
+                  <KindIcon className="h-5 w-5" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  {destKind === "vcard" ? (
+                    <p className="truncate text-lg font-bold text-white">{display}</p>
+                  ) : (
+                    <a href={dest} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-lg font-bold text-white underline-offset-2 active:underline" data-testid="link-destination">
+                      <span className="truncate">{display}</span>
+                      <ExternalLink className="h-4 w-4 shrink-0 text-blue-300" />
+                    </a>
+                  )}
+                  <p className="truncate text-xs text-white/50" data-testid="text-tag-lead">
+                    {[typeLabel, tag.leadName ?? t("noCustomer")].filter(Boolean).join(" · ")}
+                  </p>
+                </div>
+                {destKind !== "vcard" && <CopyButton text={dest} label={t("copyLink")} />}
+              </div>
+            ) : (
+              <p className="mt-2 text-lg font-bold text-white/55" data-testid="text-tag-lead">
+                {t("noDestination")}
+                <span className="block text-xs font-normal text-white/40">{tag.leadName ?? t("noCustomer")}</span>
+              </p>
+            )}
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-white/[0.08] pt-3 text-sm text-white/60">
+              <span className="flex items-center gap-1.5">
+                <QrCode className="h-4 w-4 text-blue-300" />
+                <span className="font-bold tabular-nums text-white">{tag.qrInteractions}</span> {t("qrScans")}
+              </span>
+              <span className="flex items-center gap-1.5">
+                <Nfc className="h-4 w-4 text-blue-300" />
+                <span className="font-bold tabular-nums text-white">{tag.nfcInteractions}</span> {t("nfcTaps")}
+              </span>
+              <span className="ml-auto">
+                <Pill tone={CHIP_TONE[tag.nfcStatus] ?? "amber"}>{t(`chip_${tag.nfcStatus}` as "chip_verified")}</Pill>
+              </span>
+            </div>
+          </section>
+        );
+      })()}
+
       <section className={`${CARD} mt-4 space-y-4 p-4`}>
-        <h2 className="text-base font-bold text-white">{t("sellTitle")}</h2>
+        <h2 className="text-base font-bold text-white">{tag.destinationUrl ? t("editDestination") : t("sellTitle")}</h2>
         {needsLead && (
           <div>
             <FieldLabel>{t("customerField")}</FieldLabel>

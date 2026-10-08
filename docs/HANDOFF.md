@@ -88,6 +88,14 @@ write an email, phone and vCard chip and scan each; scan a live Xpot piece set t
   otherwise a Google search by the customer's name; the generated link is shown. `LeadPicker` no
   longer lists customers until you type. Picking a customer no longer fills the link by itself.
 
+## Piece screen hierarchy (PR from `feat/piece-screen-hierarchy`)
+
+`client/src/pages/tags/TagScreen.tsx`: a compact identity row (face icon, code, product/face/label,
+status) and then the **destination card as the main element** (kind icon, the link or
+email/phone/contact name, open + copy, type · customer, QR scans / NFC taps / chip state). The edit
+section is titled "Change where it opens" once a destination exists. Header jump between Visits and
+Tags was fixed in #54 (`MODULE_COLUMN` in `AppLayout.tsx`).
+
 ## Backlog (owner's requests, in their order)
 
 1. **SEO + Google Search Console** (owner asked explicitly). `client/index.html` has
