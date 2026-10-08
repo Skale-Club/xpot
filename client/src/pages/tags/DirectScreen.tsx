@@ -8,7 +8,7 @@ import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
 import LeadPicker, { leadPayload, type LeadChoice } from "./LeadPicker";
-import { ReviewLinkAssist } from "./ReviewLinkSheet";
+import { GenerateReviewButton, ReviewLinkAssist } from "./ReviewLinkSheet";
 import { ContentEditor, type ContentState } from "./ContentEditor";
 import { ContentQr } from "./ContentQr";
 import WriteSheet, { type WriteResult } from "./WriteSheet";
@@ -130,6 +130,23 @@ export default function DirectScreen() {
           </section>
 
           <section className={`${CARD} mt-4 space-y-4 p-4`}>
+            {/* The customer first: their Google review link is generated from it. */}
+            <div>
+              <FieldLabel>{t("customerOptional")}</FieldLabel>
+              <LeadPicker value={lead} onChange={setLead} />
+              {lead && (
+                <GenerateReviewButton
+                  name={lead.name}
+                  placeId={lead.placeId}
+                  currentLink={link}
+                  onLink={(url, place) => {
+                    setKind("url");
+                    setLink(url);
+                    if (!label.trim()) setLabel(t("reviewLabelDefault", { name: place?.name || lead.name }).slice(0, 120));
+                  }}
+                />
+              )}
+            </div>
             <ContentEditor
               kind={kind}
               onKind={setKind}
@@ -152,10 +169,6 @@ export default function DirectScreen() {
                 </div>
               }
             />
-            <div>
-              <FieldLabel>{t("customerOptional")}</FieldLabel>
-              <LeadPicker value={lead} onChange={setLead} />
-            </div>
             <div>
               <FieldLabel>{t("labelField")}</FieldLabel>
               <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder={t("directLabelPlaceholder")} maxLength={120} className={INPUT} />

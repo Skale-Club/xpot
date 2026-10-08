@@ -21,6 +21,7 @@ import { ModuleSwitch, rememberModule, useXpotModules } from "@/components/Modul
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { shellMessages } from "@/i18n/messages/shell";
+import { ShellHeader } from "@/components/xpot/ShellHeader";
 import { AppLayout } from "@/components/xpot/AppLayout";
 import { MobileTabBar } from "@/components/xpot/MobileTabBar";
 import { SessionGate } from "@/components/xpot/SessionGate";
@@ -83,6 +84,7 @@ function XpotAppShell() {
               {t("offline")}
             </div>
           )}
+          <ShellHeader module="visits" />
           {modules.length > 1 && (
             <div className="mb-4">
               <ModuleSwitch current="visits" />

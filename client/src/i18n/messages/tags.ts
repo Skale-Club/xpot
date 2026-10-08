@@ -88,6 +88,8 @@ const en = {
   dest_social: "Social profile",
   dest_custom: "Other",
   dest_email: "Email",
+  reviewGenerateFor: "Generate Google review link for {name}",
+  reviewGenerated: "Google review link ready",
   dest_phone: "Phone",
 
   // What a piece opens (ContentEditor): a link, an email, a phone or a contact card
@@ -356,6 +358,8 @@ export const tagsMessages: Dictionary<typeof en> = {
     dest_social: "Rede social",
     dest_custom: "Outro",
     dest_email: "E-mail",
+    reviewGenerateFor: "Gerar link de avaliação do Google de {name}",
+    reviewGenerated: "Link de avaliação do Google pronto",
     dest_phone: "Telefone",
 
     contentField: "O que abre",
@@ -611,6 +615,8 @@ export const tagsMessages: Dictionary<typeof en> = {
     dest_social: "Red social",
     dest_custom: "Otro",
     dest_email: "Correo",
+    reviewGenerateFor: "Generar enlace de reseña de Google de {name}",
+    reviewGenerated: "Enlace de reseña de Google listo",
     dest_phone: "Teléfono",
 
     contentField: "Qué abre",

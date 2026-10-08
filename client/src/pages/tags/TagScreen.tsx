@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, Nfc, Power, QrCode, ScanLine, Search, Star, X } from "lucide-react";
+import { ExternalLink, Nfc, Power, QrCode, ScanLine, Search, X } from "lucide-react";
 import type { TagDetail } from "@shared/tagsApi";
 import { TAG_DESTINATION_TYPES, type TagDestinationType } from "@shared/tags";
 import { contentKindOf, contentSummary, validateChipContent, type ChipContentKind } from "@shared/chipContent";
@@ -13,7 +13,7 @@ import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
 import LeadPicker, { leadPayload, type LeadChoice } from "./LeadPicker";
-import { ReviewLinkAssist } from "./ReviewLinkSheet";
+import { GenerateReviewButton, ReviewLinkAssist } from "./ReviewLinkSheet";
 import { ContentEditor, type ContentState } from "./ContentEditor";
 import WriteSheet, { type WriteResult } from "./WriteSheet";
 import { APP_BASE, errorText, getSellTo, haptic, lookupTag, pushRecent, shortUrl, tagPath, tagsGet, tagsPost, useBanner } from "./lib";
@@ -166,23 +166,7 @@ export default function TagScreen({ code, onClose }: {
   const ownLead = tag.leadId ? leads?.find((l) => l.id === tag.leadId) : undefined;
   const leadPlace = needsLead ? lead?.placeId ?? null : ownLead?.googlePlaceId ?? null;
   const leadPlaceName = needsLead ? lead?.name ?? "" : tag.leadName ?? "";
-  const leadReviewUrl = leadPlace ? buildReviewUrl(leadPlace) : null;
-  const useLeadReview = () => {
-    if (!leadReviewUrl) return;
-    setLink(leadReviewUrl);
-    setType("google_review");
-    setTypeTouched(true);
-    show({ tone: "ok", text: t("reviewFromLeadDone", { name: leadPlaceName }) });
-  };
-  const pickLead = (choice: LeadChoice) => {
-    setLead(choice);
-    // An empty link fills itself with the customer's review link.
-    if (choice?.placeId && !link.trim()) {
-      setLink(buildReviewUrl(choice.placeId));
-      setType("google_review");
-      setTypeTouched(true);
-    }
-  };
+  const pickLead = (choice: LeadChoice) => setLead(choice);
   const disabled = tag.status === "disabled";
   const destinationLabel = (value: string) => (isDestinationType(value) ? t(`dest_${value}`) : value);
 
@@ -308,6 +292,21 @@ export default function TagScreen({ code, onClose }: {
             <LeadPicker value={lead} onChange={pickLead} />
           </div>
         )}
+        {/* The customer first, then their Google review link from it. */}
+        {(needsLead ? lead : tag.leadId) && leadPlaceName && (
+          <GenerateReviewButton
+            name={leadPlaceName}
+            placeId={leadPlace}
+            currentLink={link}
+            onLink={(url, place) => {
+              setKind("url");
+              setLink(url);
+              setType("google_review");
+              setTypeTouched(true);
+              show({ tone: "ok", text: place?.name || leadPlaceName ? t("reviewReady", { name: place?.name || leadPlaceName }) : t("reviewReadyNoName") });
+            }}
+          />
+        )}
         <ContentEditor
           kind={kind}
           onKind={(next) => {
@@ -322,17 +321,6 @@ export default function TagScreen({ code, onClose }: {
             <div>
               <FieldLabel>{t("linkField")}</FieldLabel>
               <LinkInput value={link} onChange={onLink} placeholder={t("linkPlaceholder")} onPasteFailed={() => show({ tone: "error", text: tc("pasteFailed") })} />
-              {leadReviewUrl && normalizeUrlInput(link) !== leadReviewUrl && (
-                <button
-                  type="button"
-                  onClick={useLeadReview}
-                  className="mt-2 flex min-h-[44px] w-full items-center gap-2 rounded-2xl border border-amber-400/25 bg-amber-400/10 px-3 text-left text-sm font-semibold text-amber-100 active:bg-amber-400/20"
-                  data-testid="button-lead-review"
-                >
-                  <Star className="h-4 w-4 shrink-0 fill-amber-400 text-amber-400" />
-                  <span className="min-w-0 truncate">{t("reviewFromLead", { name: leadPlaceName })}</span>
-                </button>
-              )}
               <ReviewLinkAssist
                 link={link}
                 isReview={type === "google_review"}
