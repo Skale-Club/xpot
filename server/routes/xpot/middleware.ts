@@ -122,6 +122,21 @@ export function isManagerOrAdmin(actor: { user: SessionUser; rep: { role: string
   return actor.user.isAdmin || actor.rep.role === "manager" || actor.rep.role === "admin";
 }
 
+/**
+ * The app's admin mode is off ("X-Xpot-View: rep", client/src/lib/adminMode.ts):
+ * the person wants to see Xpot as a rep does, so a manager's lists narrow to
+ * their own. It only ever narrows: what someone may open or change is still
+ * decided by isManagerOrAdmin.
+ */
+export function viewsAsRep(req: Request): boolean {
+  return req.get("x-xpot-view") === "rep";
+}
+
+/** Whether this request's lists span every rep: a manager or admin, unless viewing as a rep. */
+export function listsEveryone(req: Request, actor: { user: SessionUser; rep: { role: string } }): boolean {
+  return isManagerOrAdmin(actor) && !viewsAsRep(req);
+}
+
 export async function requireXpotManager(req: Request, res: Response, next: NextFunction) {
   try {
     const actor = await ensureXpotRep(req);

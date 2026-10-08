@@ -30,6 +30,7 @@ import { BRAND_GRADIENT, MODULE_ACCENT } from "./surface";
 import { contextOfPath, moduleGroups, organizationItems, starts, type NavGroup, type NavItem, type ShellContext } from "./moduleNav";
 import { XpotMark } from "./XpotMark";
 import { InstallAppSidebarItem } from "./InstallApp";
+import { AdminModeBar, AdminModeSidebarItem } from "./AdminMode";
 import { ScreenErrorBoundary } from "./ScreenErrorBoundary";
 
 // The frame around every rep screen. Below `lg` it is the phone column the app
@@ -234,6 +235,7 @@ function DesktopSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
       </nav>
 
       <div className="space-y-1 border-t border-white/[0.07] px-3 py-3">
+        <AdminModeSidebarItem collapsed={collapsed} />
         <InstallAppSidebarItem collapsed={collapsed} />
         {footer.map((item) => (
           <SidebarLink key={item.href} item={item} collapsed={collapsed} active={item.match(location)} accent={MODULE_ACCENT.account} />
@@ -429,6 +431,7 @@ export function AppLayout({
     <AppBackground>
       <DesktopSidebar collapsed={collapsed} onToggle={toggle} />
       <div className={`relative ${collapsed ? "lg:pl-[72px]" : "lg:pl-60"}`}>
+        <AdminModeBar />
         <DesktopTopBar title={title} crumb={crumb} actions={topBarActions} onSearch={() => setPaletteOpen(true)} />
         <ActiveVisitBanner />
         <div

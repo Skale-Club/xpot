@@ -1,11 +1,10 @@
 import { useState, useRef, useEffect } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { ArrowLeft, Eye, EyeOff, Loader2, Save, ChevronDown, Webhook, Copy, Check, RefreshCw, Shield, ChevronRight } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, Loader2, Save, ChevronDown } from "lucide-react";
 import ReactCountryFlag from "react-country-flag";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Switch } from "@/components/ui/switch";
 import { LanguageList } from "@/components/LanguagePicker";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
@@ -13,16 +12,7 @@ import { settingsMessages } from "@/i18n/messages/settings";
 import type { XpotMeResponse } from "./types";
 import { AppLayout } from "@/components/xpot/AppLayout";
 import { homeForModules, useXpotModules } from "@/components/ModuleSwitch";
-import { useViewerAccess } from "@/lib/adminMode";
-import { shellMessages } from "@/i18n/messages/shell";
 import { InstallAppRow } from "@/components/xpot/InstallApp";
-
-type XphereConfig = {
-  inboundApiKey: string | null;
-  apiUrl: string;
-  apiKeySet: boolean;
-  isEnabled: boolean;
-};
 
 const COUNTRIES = [
   { code: "BR", dial: "+55", name: "Brazil" },
@@ -158,146 +148,6 @@ function CountryPhoneInput({
   );
 }
 
-function XphereIntegrationSection() {
-  const { toast } = useToast();
-  const t = useT(settingsMessages);
-  const tc = useT(commonMessages);
-  const [copied, setCopied] = useState(false);
-
-  const configQuery = useQuery<XphereConfig>({ queryKey: ["/api/xpot/xphere/config"], retry: false });
-  const config = configQuery.data;
-
-  const [initialized, setInitialized] = useState(false);
-  const [apiKey, setApiKey] = useState("");
-  const [apiUrl, setApiUrl] = useState("https://xphere.app");
-  const [isEnabled, setIsEnabled] = useState(false);
-
-  if (config && !initialized) {
-    setInitialized(true);
-    setApiUrl(config.apiUrl);
-    setIsEnabled(config.isEnabled);
-  }
-
-  const saveMutation = useMutation({
-    mutationFn: async () => {
-      const body: Record<string, unknown> = { isEnabled, apiUrl };
-      if (apiKey) body.apiKey = apiKey;
-      const res = await apiRequest("PUT", "/api/xpot/xphere/config", body);
-      return res.json() as Promise<XphereConfig>;
-    },
-    onSuccess: (data) => {
-      queryClient.setQueryData(["/api/xpot/xphere/config"], data);
-      setApiKey("");
-      toast({ title: t("xphereSaved") });
-    },
-    onError: (err: Error) => toast({ title: t("saveFailed"), description: err.message, variant: "destructive" }),
-  });
-
-  const rotateMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/xpot/xphere/config/rotate-inbound-key", {});
-      return res.json() as Promise<XphereConfig>;
-    },
-    onSuccess: (data) => {
-      queryClient.setQueryData(["/api/xpot/xphere/config"], data);
-      toast({ title: t("keyRotated") });
-    },
-    onError: (err: Error) => toast({ title: t("rotateFailed"), description: err.message, variant: "destructive" }),
-  });
-
-  const handleCopy = async () => {
-    if (!config?.inboundApiKey) return;
-    await navigator.clipboard.writeText(config.inboundApiKey);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  };
-
-  if (configQuery.isLoading) {
-    return (
-      <Section title={t("xphereTitle")}>
-        <div className="flex justify-center py-4">
-          <Loader2 className="h-5 w-5 animate-spin text-white/30" />
-        </div>
-      </Section>
-    );
-  }
-
-  return (
-    <Section title={t("xphereTitle")}>
-      <div className="flex items-start gap-2 text-xs text-white/40">
-        <Webhook className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-        <span>{t("xphereIntro")}</span>
-      </div>
-
-      <label className="flex cursor-pointer items-center justify-between rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-3">
-        <span className="text-sm font-medium text-white/80">{t("enabled")}</span>
-        <Switch checked={isEnabled} onCheckedChange={setIsEnabled} />
-      </label>
-
-      {config?.inboundApiKey && (
-        <Field label={t("inboundKey")}>
-          <div className="flex items-center gap-2">
-            <code className="block flex-1 break-all rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-3 text-xs text-white/60">
-              {config.inboundApiKey}
-            </code>
-            <button
-              type="button"
-              onClick={handleCopy}
-              className="shrink-0 rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-white/60 transition-colors hover:bg-white/[0.08]"
-              title={tc("copy")}
-            >
-              {copied ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
-            </button>
-          </div>
-        </Field>
-      )}
-
-      <Field label={t("outboundToken")}>
-        <input
-          type="password"
-          autoComplete="off"
-          value={apiKey}
-          onChange={(e) => setApiKey(e.target.value)}
-          placeholder={config?.apiKeySet ? t("keepCurrentKey") : "xph_..."}
-          className="w-full rounded-2xl border border-white/5 bg-white/[0.03] px-4 py-3 text-[15px] font-medium text-white placeholder-white/20 outline-none focus:border-indigo-500/50 focus:bg-white/[0.05] transition-all"
-        />
-      </Field>
-
-      <Field label={t("xphereApiUrl")}>
-        <input
-          type="text"
-          value={apiUrl}
-          onChange={(e) => setApiUrl(e.target.value)}
-          placeholder="https://xphere.app"
-          className="w-full rounded-2xl border border-white/5 bg-white/[0.03] px-4 py-3 text-[15px] font-medium text-white placeholder-white/20 outline-none focus:border-indigo-500/50 focus:bg-white/[0.05] transition-all"
-        />
-      </Field>
-
-      <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={() => saveMutation.mutate()}
-          disabled={saveMutation.isPending}
-          className="flex flex-1 items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-bold text-white transition-all disabled:opacity-40 active:scale-[0.98] touch-manipulation"
-          style={{ background: "linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)", boxShadow: "0 8px 24px rgba(99,102,241,0.25)" }}
-        >
-          {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-          <span>{saveMutation.isPending ? t("saving") : tc("save")}</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => rotateMutation.mutate()}
-          disabled={rotateMutation.isPending}
-          title={t("rotateKey")}
-          className="flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3.5 text-sm font-medium text-white/70 transition-colors disabled:opacity-40 hover:bg-white/[0.06]"
-        >
-          {rotateMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-        </button>
-      </div>
-    </Section>
-  );
-}
-
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="space-y-3">
@@ -321,7 +171,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 export function XpotSettings() {
   const [, setLocation] = useLocation();
   const modules = useXpotModules();
-  const ts = useT(shellMessages);
   const { toast } = useToast();
   const t = useT(settingsMessages);
   const tc = useT(commonMessages);
@@ -329,7 +178,6 @@ export function XpotSettings() {
 
   const meQuery = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
   const me = meQuery.data;
-  const access = useViewerAccess();
 
   const [displayName, setDisplayName] = useState("");
   const [firstName, setFirstName] = useState("");
@@ -425,7 +273,8 @@ export function XpotSettings() {
   return (
     <AppLayout title={t("title")} size="medium" mobileMaxWidth="max-w-lg" mobileColumnClassName="pb-20 pt-6">
       <div>
-        {/* Header (phone only; the desktop top bar shows the title) */}
+        {/* Header (phone only; the desktop top bar shows the title). Settings is the
+            person's own: language, profile, password. Management is admin mode. */}
         <div className="mb-6 flex items-center gap-3 lg:hidden">
           <button
             onClick={() => setLocation(homeForModules(modules))}
@@ -567,36 +416,6 @@ export function XpotSettings() {
             </div>
           </Section>
 
-          {/* Administration: only for people who manage the account, and last. */}
-          {access.hasAdminAccess && (
-            <Section title={t("sectionAdmin")}>
-              <label className="flex cursor-pointer items-center gap-3" data-testid="settings-admin-mode">
-                <Shield className={`h-5 w-5 shrink-0 ${access.adminMode ? "text-amber-300" : "text-white/40"}`} />
-                <span className="min-w-0 flex-1">
-                  <span className="block text-[15px] font-semibold text-white">{t("adminMode")}</span>
-                  <span className="block text-sm text-white/45">{t("adminModeHint")}</span>
-                </span>
-                <Switch checked={access.adminMode} onCheckedChange={access.setAdminMode} />
-              </label>
-              {access.adminMode && (
-                <button
-                  type="button"
-                  onClick={() => setLocation("/admin/reps")}
-                  className="flex w-full items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-left"
-                  data-testid="settings-organization"
-                >
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-[15px] font-semibold text-white/85">{ts("navOrganization")}</span>
-                    <span className="block text-sm text-white/45">{t("organizationHint")}</span>
-                  </span>
-                  <ChevronRight className="h-4 w-4 shrink-0 text-white/30" />
-                </button>
-              )}
-            </Section>
-          )}
-
-          {/* Xphere Integration: API keys, so part of the management side. It syncs visits. */}
-          {access.adminMode && modules.includes("visits") && <XphereIntegrationSection />}
         </div>
       </div>
     </AppLayout>

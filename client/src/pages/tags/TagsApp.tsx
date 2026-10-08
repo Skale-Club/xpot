@@ -15,6 +15,7 @@ import { APP_BASE, tagPath } from "./lib";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { AppLayout } from "@/components/xpot/AppLayout";
 import { TAGS_NAV, TagsTabBar, activeTagsTab } from "./TagsTabBar";
+import { AdminModeButton } from "@/components/xpot/AdminMode";
 import { XpotMark } from "@/components/xpot/XpotMark";
 import { MODULE_HOME } from "@/lib/xpot";
 import { SessionGate } from "@/components/xpot/SessionGate";
@@ -64,6 +65,7 @@ export function TagsApp() {
               </span>
             )}
           </div>
+          <AdminModeButton module="tags" />
           {/* The account (language, profile) lives in Settings, as on the Visits dashboard. */}
           <button
             type="button"

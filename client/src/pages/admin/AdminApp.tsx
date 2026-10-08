@@ -54,7 +54,8 @@ export function AdminApp({ section }: { section: string }) {
     if (access.hasAdminAccess && !access.adminMode) access.setAdminMode(true);
   }, [access.hasAdminAccess, access.adminMode, access.setAdminMode]);
 
-  if (meQuery.isLoading) {
+  // Wait for admin mode before any screen fetches: its lists would come back as a rep's.
+  if (meQuery.isLoading || (access.hasAdminAccess && !access.adminMode)) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#060912]">
         <Loader2 className="h-7 w-7 animate-spin text-blue-400" />

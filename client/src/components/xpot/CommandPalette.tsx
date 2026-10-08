@@ -39,7 +39,8 @@ export function CommandPalette({
   });
   const { data: pieces } = useQuery({
     queryKey: ["tags", "list", null, null],
-    queryFn: () => tagsGet<TagListItem[]>("/api/xpot/tags"),
+    // "My pieces", as on the Pieces screen (same key); every piece is in Tags › Manage.
+    queryFn: () => tagsGet<TagListItem[]>("/api/xpot/tags?mine=1"),
     enabled: open && modules.includes("tags"),
     staleTime: 15_000,
   });
