@@ -41,6 +41,13 @@ const COLLAPSED_KEY = "xpot.sidebar.collapsed";
 
 export type { NavGroup, NavItem } from "./moduleNav";
 
+/**
+ * The phone column of both modules' screens. Visits and Tags must use exactly
+ * the same spacing above the shell header and module switch: any difference
+ * shows as the header jumping when switching modules.
+ */
+export const MODULE_COLUMN = "pb-28 pt-[calc(env(safe-area-inset-top)+20px)]";
+
 function readCollapsed() {
   try {
     return window.localStorage.getItem(COLLAPSED_KEY) === "1";

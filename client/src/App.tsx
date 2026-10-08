@@ -22,7 +22,7 @@ import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { shellMessages } from "@/i18n/messages/shell";
 import { ShellHeader } from "@/components/xpot/ShellHeader";
-import { AppLayout } from "@/components/xpot/AppLayout";
+import { AppLayout, MODULE_COLUMN } from "@/components/xpot/AppLayout";
 import { MobileTabBar } from "@/components/xpot/MobileTabBar";
 import { SessionGate } from "@/components/xpot/SessionGate";
 import { XpotLandingPage } from "./pages/xpot/XpotLandingPage";
@@ -77,6 +77,7 @@ function XpotAppShell() {
     <AppLayout
       title={current ? tShell(current.labelKey) : "Xpot"}
       wide={WIDE_TABS.has(activeTab)}
+      mobileColumnClassName={MODULE_COLUMN}
       mobileHeader={
         <>
           {!isOnline && (
