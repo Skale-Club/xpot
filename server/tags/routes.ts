@@ -375,6 +375,7 @@ export function registerTagRoutes(app: Express) {
   const publicDeps = {
     findByCode: repo.findPublicTagByCode,
     recordEvent: repo.recordTagEvent,
+    confirmNfc: repo.confirmNfcFromTap,
     configureUrlFor,
   };
   app.get("/q/:code", createTagRedirectHandler("qr", publicDeps));
@@ -389,6 +390,17 @@ export function registerTagRoutes(app: Express) {
       res.json(await repo.getRepSummary(actorOf(req).repId));
     } catch (err) {
       fail(res, err, "Failed to load summary");
+    }
+  });
+
+  // The Tags dashboard: the person's own pieces, or every rep's for a manager in admin mode.
+  app.get(`${fieldBase}/dashboard`, requireTagUser, async (req, res) => {
+    try {
+      const days = Math.min(Math.max(Number(req.query.days) || 30, 7), 90);
+      const actor = listActor(req);
+      res.json(await repo.getTagDashboard(actor.isManager ? null : actor.repId, days));
+    } catch (err) {
+      fail(res, err, "Failed to load dashboard");
     }
   });
 

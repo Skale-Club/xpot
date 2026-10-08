@@ -70,7 +70,13 @@ export default function TagScreen({ code, onClose }: {
   const qc = useQueryClient();
   const { banner, show } = useBanner();
   const queryKey = ["tags", "piece", code];
-  const { data, isLoading, error } = useQuery({ queryKey, queryFn: () => fetchTag(code), staleTime: 0 });
+  const { data, isLoading, error } = useQuery({
+    queryKey,
+    queryFn: () => fetchTag(code),
+    staleTime: 0,
+    // Written but not checked (iPhone + NFC Tools): a real tap confirms it on the server; watch for it.
+    refetchInterval: (q) => (q.state.data?.kind === "ok" && q.state.data.tag.nfcStatus === "programmed" ? 4000 : false),
+  });
   const tag = data?.kind === "ok" ? data.tag : null;
   const { data: leads } = useQuery<FullSalesLead[]>({ queryKey: ["/api/xpot/leads"], staleTime: 60_000 });
 
@@ -121,6 +127,7 @@ export default function TagScreen({ code, onClose }: {
       const next: Loaded = { kind: "ok", tag: detail };
       qc.setQueryData(queryKey, next);
       void qc.invalidateQueries({ queryKey: ["/api/xpot/tags/summary"] });
+      void qc.invalidateQueries({ queryKey: ["/api/xpot/tags/dashboard"] });
       void qc.invalidateQueries({ queryKey: ["tags", "list"] });
       // The pieces chip on each Visits lead counts these too (sold, live, scans).
       void qc.invalidateQueries({ queryKey: ["/api/xpot/tags/by-lead"] });
@@ -529,6 +536,7 @@ export default function TagScreen({ code, onClose }: {
         onClose={() => setWriteOpen(false)}
         onDone={onWritten}
         onLock={() => setLockOpen(true)}
+        confirmed={tag.nfcStatus === "verified" || tag.nfcStatus === "locked"}
         continueUrl={`${window.location.origin}${tagPath(tag.publicCode)}?write=1`}
       />
     </>

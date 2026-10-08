@@ -2,14 +2,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, Building2, Link2, Nfc, QrCode, ScanLine, Tag, X } from "lucide-react";
-import type { TagRepSummary } from "@shared/tagsApi";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
 import type { XpotMeResponse } from "@/pages/xpot/types";
-import { shellMessages } from "@/i18n/messages/shell";
 import QrScanner from "./QrScanner";
 import { WholesaleCard } from "./WholesaleCard";
+import { TagsDashboard } from "./TagsDashboard";
 import {
   ageOf,
   APP_BASE,
@@ -58,23 +57,12 @@ function isOwnHost(url: string) {
   }
 }
 
-function Stat({ label, value }: { label: string; value: number | undefined }) {
-  return (
-    <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 py-3">
-      <p className="text-[22px] font-extrabold leading-none tracking-tight text-white tabular-nums">{value ?? "–"}</p>
-      <p className="mt-1.5 text-[10px] font-semibold uppercase tracking-widest text-white/40">{label}</p>
-    </div>
-  );
-}
-
 export default function HomeScreen() {
   const t = useT(tagsMessages);
-  const ts = useT(shellMessages);
   const tc = useT(commonMessages);
   const [, navigate] = useLocation();
   const { banner, show } = useBanner();
   const { data: me } = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
-  const { data: summary } = useQuery<TagRepSummary>({ queryKey: ["/api/xpot/tags/summary"], staleTime: 30_000 });
   const [recents, setRecents] = useState<RecentItem[]>(getRecents);
   const [busy, setBusy] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
@@ -176,8 +164,6 @@ export default function HomeScreen() {
     void openCode(result.code);
   };
 
-  const scans = summary ? summary.scansLast30.qr + summary.scansLast30.nfc : undefined;
-
   const main = (
     <div className="space-y-5">
       <header className="flex items-start justify-between gap-3 lg:hidden">
@@ -189,12 +175,6 @@ export default function HomeScreen() {
         </div>
       </header>
 
-      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4 lg:gap-4" data-testid="tags-summary">
-        <Stat label={t("statInStock")} value={summary?.inStock} />
-        <Stat label={t("statActive")} value={summary?.active} />
-        <Stat label={t("statSold30")} value={summary?.soldLast30} />
-        <Stat label={t("statScans30")} value={scans} />
-      </div>
 
       {sellTo && (
         <div className="flex items-center gap-3 rounded-[20px] border border-emerald-400/25 bg-emerald-400/[0.08] p-4" data-testid="selling-to">
@@ -286,6 +266,9 @@ export default function HomeScreen() {
         </div>
         {isDesktop && <p className="mt-2 text-xs text-white/35">{t("scannerHint")}</p>}
       </form>
+
+      {/* The numbers: scans over time, top pieces and customers, chips to write. */}
+      <TagsDashboard />
 
       {!isDesktop && <WholesaleCard />}
 

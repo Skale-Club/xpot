@@ -6,7 +6,6 @@ import {
   Clock3,
   DollarSign,
   Factory,
-  Home,
   LayoutDashboard,
   MapPinned,
   Nfc,
@@ -17,7 +16,6 @@ import {
   Route,
   ShieldCheck,
   SlidersHorizontal,
-  Star,
   Users,
   Webhook,
   type LucideIcon,
@@ -142,9 +140,9 @@ export function moduleGroups(module: XpotModule, viewer: Viewer, l: Labels): Nav
   const work: NavGroup = {
     label: "",
     items: [
-      { href: "/tags", label: l.tags("navHome"), icon: Home, match: (p) => p === "/tags" || p.startsWith("/tags/t/") },
+      // Writing a chip without Xpot (/tags/direct) is reached from the dashboard, not the nav.
+      { href: "/tags", label: l.tags("navHome"), icon: LayoutDashboard, match: (p) => p === "/tags" || p.startsWith("/tags/t/") || p.startsWith("/tags/direct") },
       { href: "/tags/pieces", label: l.tags("navPieces"), icon: Package, match: starts("/tags/pieces") },
-      { href: "/tags/direct", label: l.tags("navDirect"), icon: Star, match: starts("/tags/direct") },
     ],
   };
   if (!viewer.canManage) return [work];
