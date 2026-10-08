@@ -11,7 +11,7 @@ import PiecesScreen from "./PiecesScreen";
 import TagScreen from "./TagScreen";
 import { APP_BASE, tagPath } from "./lib";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
-import { AppLayout } from "@/components/xpot/AppLayout";
+import { AppLayout, MODULE_COLUMN } from "@/components/xpot/AppLayout";
 import { TAGS_NAV, TagsTabBar, activeTagsTab } from "./TagsTabBar";
 import { ShellHeader } from "@/components/xpot/ShellHeader";
 import { XpotMark } from "@/components/xpot/XpotMark";
@@ -49,11 +49,11 @@ export function TagsApp() {
     <AppLayout
       title={pieceCode ?? t(currentNav.key)}
       wide={wide}
-      mobileColumnClassName="pb-28 pt-[calc(env(safe-area-inset-top)+16px)]"
+      mobileColumnClassName={MODULE_COLUMN}
       mobileHeader={
         <>
           <ShellHeader module="tags" />
-          <div className="mb-5">
+          <div className="mb-4">
             {modules.length > 1 ? (
               <ModuleSwitch current="tags" />
             ) : (
