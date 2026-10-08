@@ -55,6 +55,18 @@ const en = {
   groupPieces: "Pieces",
   paletteHint: "↑↓ move · Enter open · Esc close",
   shortcutsHint: "Shortcuts: / search · N new · J/K next/previous row · Esc close",
+
+  // Install the PWA (sidebar footer, Settings)
+  installApp: "Install app",
+  installAppHint: "Open Xpot from your home screen like any other app, full screen and quicker to launch.",
+  installIosTitle: "Install Xpot on your iPhone",
+  installIosStep1: "Tap the Share button {icon} in the browser bar.",
+  installIosStep2: "Scroll down and tap “Add to Home Screen”.",
+  installIosStep3: "Tap “Add”. Xpot shows up on your home screen.",
+  installMacTitle: "Install Xpot on your Mac",
+  installMacStep1: "In Safari's menu bar, open File.",
+  installMacStep2: "Choose “Add to Dock…” and confirm.",
+  installDone: "Got it",
 };
 
 export const shellMessages: Dictionary<typeof en> = {
@@ -107,6 +119,17 @@ export const shellMessages: Dictionary<typeof en> = {
     groupPieces: "Peças",
     paletteHint: "↑↓ mover · Enter abrir · Esc fechar",
     shortcutsHint: "Atalhos: / buscar · N novo · J/K próxima/anterior · Esc fechar",
+
+    installApp: "Instalar app",
+    installAppHint: "Abra o Xpot pela tela inicial como qualquer outro app, em tela cheia e mais rápido.",
+    installIosTitle: "Instale o Xpot no iPhone",
+    installIosStep1: "Toque no botão Compartilhar {icon} na barra do navegador.",
+    installIosStep2: "Role para baixo e toque em “Adicionar à Tela de Início”.",
+    installIosStep3: "Toque em “Adicionar”. O Xpot aparece na sua tela inicial.",
+    installMacTitle: "Instale o Xpot no Mac",
+    installMacStep1: "Na barra de menus do Safari, abra Arquivo.",
+    installMacStep2: "Escolha “Adicionar ao Dock…” e confirme.",
+    installDone: "Entendi",
   },
   es: {
     tabCheckIn: "Check-in",
@@ -156,5 +179,16 @@ export const shellMessages: Dictionary<typeof en> = {
     groupPieces: "Piezas",
     paletteHint: "↑↓ mover · Enter abrir · Esc cerrar",
     shortcutsHint: "Atajos: / buscar · N nuevo · J/K siguiente/anterior · Esc cerrar",
+
+    installApp: "Instalar app",
+    installAppHint: "Abre Xpot desde la pantalla de inicio como cualquier otra app, a pantalla completa y más rápido.",
+    installIosTitle: "Instala Xpot en tu iPhone",
+    installIosStep1: "Toca el botón Compartir {icon} en la barra del navegador.",
+    installIosStep2: "Desplázate y toca “Agregar a pantalla de inicio”.",
+    installIosStep3: "Toca “Agregar”. Xpot aparece en tu pantalla de inicio.",
+    installMacTitle: "Instala Xpot en tu Mac",
+    installMacStep1: "En la barra de menús de Safari, abre Archivo.",
+    installMacStep2: "Elige “Agregar al Dock…” y confirma.",
+    installDone: "Entendido",
   },
 };
