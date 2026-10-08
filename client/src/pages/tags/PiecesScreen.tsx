@@ -47,7 +47,8 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
   const { data, isLoading, error } = useQuery({
     queryKey: ["tags", "list", status, leadFilter?.id ?? null],
     queryFn: () => {
-      const params = new URLSearchParams();
+      // "My pieces": the viewer's own, even for an admin who can reach every piece.
+      const params = new URLSearchParams({ mine: "1" });
       if (status) params.set("status", status);
       if (leadFilter) params.set("leadId", String(leadFilter.id));
       const qs = params.toString();
