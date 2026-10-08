@@ -5,7 +5,7 @@ import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { errorText, haptic } from "./lib";
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_TERTIARY, BottomSheet, CopyButton, EYEBROW_MUTED, SHEET_TITLE, Spinner, TapAnimation, type Identity } from "./ui";
-import { isWebNfcSupported, mapNfcError, readBack, writeUrl } from "./webNfc";
+import { isWebNfcSupported, mapNfcError, readBack, writeContent } from "./webNfc";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { ContinueOnPhone } from "./ContinueOnPhone";
 
@@ -79,7 +79,7 @@ export default function WriteSheet({ open, url, identity, onClose, onDone, conti
     setError(null);
     setPhase("writing");
     try {
-      await writeUrl(url, ctrl.signal);
+      await writeContent(url, ctrl.signal);
       haptic(40);
       setPhase("verifying");
       const readback = await readBack(ctrl.signal);
@@ -121,7 +121,7 @@ export default function WriteSheet({ open, url, identity, onClose, onDone, conti
 
       <div className="mt-2 rounded-2xl border border-white/10 bg-white/[0.04] p-4">
         <p className={EYEBROW_MUTED}>{t("writeUrl")}</p>
-        <p className="mt-1 break-all font-mono text-sm tracking-wide text-white" data-testid="text-write-url">
+        <p className="mt-1 whitespace-pre-wrap break-all font-mono text-sm tracking-wide text-white" data-testid="text-write-url">
           {url}
         </p>
       </div>

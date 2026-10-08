@@ -3,7 +3,8 @@ import { useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, Nfc, Power, QrCode, ScanLine, Search, Star, X } from "lucide-react";
 import type { TagDetail } from "@shared/tagsApi";
-import { TAG_DESTINATION_TYPES, validateDestinationUrl, type TagDestinationType } from "@shared/tags";
+import { TAG_DESTINATION_TYPES, type TagDestinationType } from "@shared/tags";
+import { contentKindOf, contentSummary, validateChipContent, type ChipContentKind } from "@shared/chipContent";
 import { guessDestinationType, normalizeUrlInput } from "@shared/tagApp";
 import { buildReviewUrl } from "@shared/reviewLink";
 import type { FullSalesLead } from "@/pages/xpot/types";
@@ -13,6 +14,7 @@ import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
 import LeadPicker, { leadPayload, type LeadChoice } from "./LeadPicker";
 import { ReviewLinkAssist } from "./ReviewLinkSheet";
+import { ContentEditor, type ContentState } from "./ContentEditor";
 import WriteSheet, { type WriteResult } from "./WriteSheet";
 import { APP_BASE, errorText, getSellTo, haptic, lookupTag, pushRecent, shortUrl, tagPath, tagsGet, tagsPost, useBanner } from "./lib";
 import {
@@ -59,6 +61,10 @@ export default function TagScreen({ code, onClose }: {
   const { data: leads } = useQuery<FullSalesLead[]>({ queryKey: ["/api/xpot/leads"], staleTime: 60_000 });
 
   const [link, setLink] = useState("");
+  // What the piece opens: a link (above) or an email, phone or contact card (ContentEditor).
+  const [kind, setKind] = useState<ChipContentKind>("url");
+  const [content, setContent] = useState<ContentState>({ value: null, error: null });
+  const [initialContent, setInitialContent] = useState<string | null>(null);
   const [type, setType] = useState<TagDestinationType>("website");
   const [typeTouched, setTypeTouched] = useState(false);
   const [label, setLabel] = useState("");
@@ -71,7 +77,10 @@ export default function TagScreen({ code, onClose }: {
   useEffect(() => {
     if (!tag || seeded === tag.id) return;
     setSeeded(tag.id);
-    setLink(tag.destinationUrl ?? "");
+    const storedKind = contentKindOf(tag.destinationUrl);
+    setKind(storedKind);
+    if (storedKind === "url") setLink(tag.destinationUrl ?? "");
+    else setInitialContent(tag.destinationUrl);
     setLabel(tag.label ?? "");
     if (isDestinationType(tag.destinationType)) {
       setType(tag.destinationType);
@@ -178,20 +187,25 @@ export default function TagScreen({ code, onClose }: {
   const destinationLabel = (value: string) => (isDestinationType(value) ? t(`dest_${value}`) : value);
 
   const save = async () => {
-    const check = validateDestinationUrl(normalizeUrlInput(link), { allowHttp: true });
-    if (!check.ok) return show({ tone: "error", text: t("invalidLink") });
+    const check = kind === "url"
+      ? validateChipContent(normalizeUrlInput(link), { allowHttp: true })
+      : content.value
+        ? validateChipContent(content.value)
+        : null;
+    if (!check?.ok) return show({ tone: "error", text: kind === "url" ? t("invalidLink") : content.error ?? t("invalidLink") });
     if (needsLead && !lead) return show({ tone: "error", text: t("chooseCustomer") });
     setBusy("save");
     try {
       const detail = await tagsPost<TagDetail>(`/api/xpot/tags/${tag.id}/quick-activate`, {
-        destinationUrl: check.url,
-        destinationType: type,
+        destinationUrl: check.value,
+        // A link keeps its chosen type; the other kinds are their own type.
+        destinationType: kind === "url" ? type : kind,
         // Empty clears the label (the server turns "" into null).
         label,
         ...(needsLead ? leadPayload(lead) : {}),
       });
       setDetail(detail);
-      setLink(detail.destinationUrl ?? check.url);
+      if (kind === "url") setLink(detail.destinationUrl ?? check.value);
       if (lead && !lead.leadId) void qc.invalidateQueries({ queryKey: ["/api/xpot/leads"] });
       setLead(null);
       haptic([40, 30, 40]);
@@ -254,14 +268,16 @@ export default function TagScreen({ code, onClose }: {
           <div className="flex items-start justify-between gap-4">
             <dt className="text-white/45">{t("destination")}</dt>
             <dd className="min-w-0 text-right font-semibold text-white">
-              {tag.destinationUrl ? (
+              {tag.destinationUrl && contentKindOf(tag.destinationUrl) === "vcard" ? (
+                <span className="truncate">{t("contentKind_vcard")}: {contentSummary(tag.destinationUrl)}</span>
+              ) : tag.destinationUrl ? (
                 <a
                   href={tag.destinationUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex max-w-full items-center gap-1 text-blue-300 underline-offset-2 active:underline"
                 >
-                  <span className="truncate">{shortUrl(tag.destinationUrl)}</span>
+                  <span className="truncate">{contentKindOf(tag.destinationUrl) === "url" ? shortUrl(tag.destinationUrl) : contentSummary(tag.destinationUrl)}</span>
                   <ExternalLink className="h-3.5 w-3.5 shrink-0" />
                 </a>
               ) : (
@@ -292,54 +308,69 @@ export default function TagScreen({ code, onClose }: {
             <LeadPicker value={lead} onChange={pickLead} />
           </div>
         )}
-        <div>
-          <FieldLabel>{t("linkField")}</FieldLabel>
-          <LinkInput value={link} onChange={onLink} placeholder={t("linkPlaceholder")} onPasteFailed={() => show({ tone: "error", text: tc("pasteFailed") })} />
-          {leadReviewUrl && normalizeUrlInput(link) !== leadReviewUrl && (
-            <button
-              type="button"
-              onClick={useLeadReview}
-              className="mt-2 flex min-h-[44px] w-full items-center gap-2 rounded-2xl border border-amber-400/25 bg-amber-400/10 px-3 text-left text-sm font-semibold text-amber-100 active:bg-amber-400/20"
-              data-testid="button-lead-review"
-            >
-              <Star className="h-4 w-4 shrink-0 fill-amber-400 text-amber-400" />
-              <span className="min-w-0 truncate">{t("reviewFromLead", { name: leadPlaceName })}</span>
-            </button>
-          )}
-          <ReviewLinkAssist
-            link={link}
-            isReview={type === "google_review"}
-            onPick={(place) => {
-              setLink(place.reviewUrl);
-              setType("google_review");
-              setTypeTouched(true);
-              show({ tone: "ok", text: place.name ? t("reviewReady", { name: place.name }) : t("reviewReadyNoName") });
-            }}
-          />
-        </div>
-        <div>
-          <FieldLabel>{t("destTypeField")}</FieldLabel>
-          <select
-            value={type}
-            onChange={(e) => {
-              setType(e.target.value as TagDestinationType);
-              setTypeTouched(true);
-            }}
-            className={INPUT}
-            data-testid="select-destination-type"
-          >
-            {TAG_DESTINATION_TYPES.map((value) => (
-              <option key={value} value={value} className={OPTION}>
-                {destinationLabel(value)}
-              </option>
-            ))}
-          </select>
-        </div>
+        <ContentEditor
+          kind={kind}
+          onKind={(next) => {
+            setKind(next);
+            // Back to a link: an email/phone type no longer fits.
+            if (next === "url" && (type === "email" || type === "phone")) setType(guessDestinationType(link));
+          }}
+          initial={initialContent}
+          onChange={setContent}
+          urlField={
+            <>
+            <div>
+              <FieldLabel>{t("linkField")}</FieldLabel>
+              <LinkInput value={link} onChange={onLink} placeholder={t("linkPlaceholder")} onPasteFailed={() => show({ tone: "error", text: tc("pasteFailed") })} />
+              {leadReviewUrl && normalizeUrlInput(link) !== leadReviewUrl && (
+                <button
+                  type="button"
+                  onClick={useLeadReview}
+                  className="mt-2 flex min-h-[44px] w-full items-center gap-2 rounded-2xl border border-amber-400/25 bg-amber-400/10 px-3 text-left text-sm font-semibold text-amber-100 active:bg-amber-400/20"
+                  data-testid="button-lead-review"
+                >
+                  <Star className="h-4 w-4 shrink-0 fill-amber-400 text-amber-400" />
+                  <span className="min-w-0 truncate">{t("reviewFromLead", { name: leadPlaceName })}</span>
+                </button>
+              )}
+              <ReviewLinkAssist
+                link={link}
+                isReview={type === "google_review"}
+                onPick={(place) => {
+                  setLink(place.reviewUrl);
+                  setType("google_review");
+                  setTypeTouched(true);
+                  show({ tone: "ok", text: place.name ? t("reviewReady", { name: place.name }) : t("reviewReadyNoName") });
+                }}
+              />
+            </div>
+            <div>
+              <FieldLabel>{t("destTypeField")}</FieldLabel>
+              <select
+                value={type}
+                onChange={(e) => {
+                  setType(e.target.value as TagDestinationType);
+                  setTypeTouched(true);
+                }}
+                className={INPUT}
+                data-testid="select-destination-type"
+              >
+                {/* Email and phone are kinds of their own (the buttons above), not links. */}
+                {TAG_DESTINATION_TYPES.filter((value) => value !== "email" && value !== "phone").map((value) => (
+                  <option key={value} value={value} className={OPTION}>
+                    {destinationLabel(value)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            </>
+          }
+        />
         <div>
           <FieldLabel>{t("labelField")}</FieldLabel>
           <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder={t("labelPlaceholder")} maxLength={120} className={INPUT} />
         </div>
-        <button type="button" onClick={() => void save()} disabled={busy !== null || !link.trim()} className={BTN_PRIMARY} data-testid="button-save-activate">
+        <button type="button" onClick={() => void save()} disabled={busy !== null || (kind === "url" ? !link.trim() : !content.value)} className={BTN_PRIMARY} data-testid="button-save-activate">
           {busy === "save" ? <Spinner /> : <Power className="h-5 w-5" />}
           {tag.status === "active" ? t("saveLink") : t("saveAndGoLive")}
         </button>

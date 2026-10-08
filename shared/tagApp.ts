@@ -9,6 +9,7 @@
 //            rewriting the chip, and there are no analytics.
 
 import { normalizeTagCode, type TagAccessMethod, type TagDestinationType } from "./tags.js";
+import { contentKindOf } from "./chipContent.js";
 
 /** The Tags module inside the Xpot app. */
 export const TAGS_APP_PATH = "/tags";
@@ -46,6 +47,8 @@ export function normalizeUrlInput(raw: string | null | undefined): string {
 export function classifyScan(raw: string | null | undefined, extraHosts: readonly string[] = []): ScanClassification {
   const value = (raw ?? "").trim();
   if (!value) return { kind: "empty" };
+  // An email, phone or contact card written straight on a chip (shared/chipContent.ts).
+  if (contentKindOf(value) !== "url") return { kind: "direct", url: value };
 
   let url: URL | null = null;
   try {
@@ -89,6 +92,8 @@ function hostMatches(host: string, list: readonly string[]): boolean {
 
 /** Best guess of the destination type from the link, so the operator rarely has to pick it. */
 export function guessDestinationType(rawUrl: string | null | undefined): TagDestinationType {
+  const kind = contentKindOf(rawUrl);
+  if (kind !== "url") return kind;
   const value = normalizeUrlInput(rawUrl);
   let url: URL;
   try {

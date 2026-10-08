@@ -56,6 +56,29 @@ Leads/History/Sales/My pieces show only your own data; the shield enters admin m
 Gotcha: `client/src/lib/adminMode.ts` uses relative imports (not `@shared`/`@/`) because
 `client/src/lib/queryClient.ts` imports it and `tests/api-error.test.ts` loads that without the aliases.
 
+## In progress: branch `feat/chip-content-types` (backlog item 2, QR/NFC write types)
+
+Pushed to GitHub; not merged yet. What a piece opens can be a **link (default), email, phone or
+contact card (vCard)**:
+
+- `shared/chipContent.ts` (+ `tests/tags/chipContent.test.ts`, passing): build/parse/validate each
+  kind. Stored as one string in the old column: `https://…`, `mailto:…`, `tel:+E164`, or the vCard 3.0
+  text. `validateChipContent` replaces `validateDestinationUrl` for tag destinations and direct writes
+  (`server/tags/routes.ts`). `TAG_DESTINATION_TYPES` gained `email` and `phone`. UTMs only on http(s).
+- Public scan (`server/tags/publicHandler.ts`): link → 302; email/phone → `renderContactPage`
+  (`server/tags/publicPages.ts`, opens it + big button); vCard → `text/vcard` download.
+- App: `client/src/pages/tags/ContentEditor.tsx` (kind buttons, email input, phone with country
+  picker + US mask, vCard form, byte count vs NTAG213), used in `TagScreen.tsx` (Xpot pieces) and
+  `DirectScreen.tsx` (Review link: also a QR sheet `ContentQr.tsx` with PNG download).
+  `webNfc.ts` `writeContent` writes a vCard as a `text/vcard` MIME record and reads it back.
+  `classifyScan` treats mailto:/tel:/vCard as direct content.
+
+Left to do: admin `client/src/pages/admin/tags/PieceDetail.tsx` still validates with
+`validateDestinationUrl` (switch to `validateChipContent` so admins can save email/phone/vCard pieces);
+run `npx tsc -p . && npx vitest run && npm run build`; add a publicHandler test for the vCard/contact
+responses; open the PR, wait CI, merge, align `dev`, check `/api/version`; then test on an Android
+phone (Chrome): write an email, phone and vCard chip and scan each.
+
 ## Backlog (owner's requests, in their order)
 
 1. **SEO + Google Search Console** (owner asked explicitly). `client/index.html` has
@@ -67,7 +90,7 @@ Gotcha: `client/src/lib/adminMode.ts` uses relative imports (not `@shared`/`@/`)
    URL-prefix property with an HTML meta tag; the owner must do the Google-account steps (or approve
    them explicitly), then submit `https://xpot.place/sitemap.xml`. Also consider Bing Webmaster Tools
    (can import from GSC).
-2. **QR/NFC write types.** When writing a piece (QR code or NFC chip) the person picks what to store:
+2. **QR/NFC write types** (in progress, see above). When writing a piece (QR code or NFC chip) the person picks what to store:
    **URL (default)**, **email**, **phone**, **vCard**. Each needs proper input + validation:
    - URL: current behavior (`validateDestinationUrl` in `@shared/tags`, `normalizeUrlInput`).
    - Email: `mailto:` with a validated address (optionally subject/body).

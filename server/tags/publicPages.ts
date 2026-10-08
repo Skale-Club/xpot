@@ -159,31 +159,7 @@ export function pickTagPageLang(acceptLanguage: string | null | undefined): TagP
   return "en";
 }
 
-export function renderTagPage(
-  kind: TagPageKind,
-  opts: { code?: string; configureUrl?: string; lang?: TagPageLang } = {},
-): string {
-  const lang = opts.lang ?? "en";
-  const copy = COPY[lang];
-  const page = copy[kind];
-  const code = opts.code
-    ? `<div class="piece-code"><span>${escapeHtml(copy.piece)}</span><strong>${escapeHtml(opts.code)}</strong></div>`
-    : "";
-  const primaryHref = opts.configureUrl ? escapeHtml(opts.configureUrl) : "/";
-  const primaryLabel = opts.configureUrl ? copy.configure : copy.discover;
-  const secondary = opts.configureUrl
-    ? `<a class="button secondary" href="/">${escapeHtml(copy.discover)}</a>`
-    : "";
-  const tone = kind === "inventory" || kind === "assigned" ? "waiting" : "muted";
-  return `<!doctype html>
-<html lang="${lang === "pt" ? "pt-BR" : lang}">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="robots" content="noindex, nofollow">
-<meta name="theme-color" content="#060912">
-<title>${escapeHtml(page.title)} | Xpot</title>
-<style>
+const PAGE_STYLE = `<style>
   :root { color-scheme: dark; --blue: #5b8cff; --cyan: #6fe8ff; --ink: #f7f9ff; --muted: #a7b0c3; --line: rgba(255,255,255,.1); }
   * { box-sizing: border-box; }
   html { min-height: 100%; background: #060912; }
@@ -223,7 +199,33 @@ export function renderTagPage(
   @keyframes breathe { 0%, 100% { transform: scale(.94); opacity: .42; } 50% { transform: scale(1.04); opacity: .88; } }
   @media (min-width: 31rem) { .card { padding: 2rem; } .shell { padding-inline: 1.5rem; } .brand { left: 1.5rem; } }
   @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; scroll-behavior: auto !important; transition: none !important; } }
-</style>
+</style>`;
+
+export function renderTagPage(
+  kind: TagPageKind,
+  opts: { code?: string; configureUrl?: string; lang?: TagPageLang } = {},
+): string {
+  const lang = opts.lang ?? "en";
+  const copy = COPY[lang];
+  const page = copy[kind];
+  const code = opts.code
+    ? `<div class="piece-code"><span>${escapeHtml(copy.piece)}</span><strong>${escapeHtml(opts.code)}</strong></div>`
+    : "";
+  const primaryHref = opts.configureUrl ? escapeHtml(opts.configureUrl) : "/";
+  const primaryLabel = opts.configureUrl ? copy.configure : copy.discover;
+  const secondary = opts.configureUrl
+    ? `<a class="button secondary" href="/">${escapeHtml(copy.discover)}</a>`
+    : "";
+  const tone = kind === "inventory" || kind === "assigned" ? "waiting" : "muted";
+  return `<!doctype html>
+<html lang="${lang === "pt" ? "pt-BR" : lang}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#060912">
+<title>${escapeHtml(page.title)} | Xpot</title>
+${PAGE_STYLE}
 </head>
 <body class="${tone}">
   <main class="shell">
@@ -239,6 +241,49 @@ export function renderTagPage(
       <p class="owner">${escapeHtml(page.owner)}</p>
     </section>
     <p class="promise">${escapeHtml(copy.promise)}</p>
+  </main>
+</body>
+</html>`;
+}
+
+// ─── Contact pages (a live piece that hands out an email or a phone number) ───
+
+export type ContactPageKind = "email" | "phone";
+
+const CONTACT_COPY: Record<TagPageLang, Record<ContactPageKind, { title: string; action: string }>> = {
+  en: { email: { title: "Send an email", action: "Write email" }, phone: { title: "Give us a call", action: "Call now" } },
+  pt: { email: { title: "Envie um e-mail", action: "Escrever e-mail" }, phone: { title: "Ligue para nós", action: "Ligar agora" } },
+  es: { email: { title: "Envíanos un correo", action: "Escribir correo" }, phone: { title: "Llámanos", action: "Llamar ahora" } },
+};
+
+/**
+ * A live piece whose content is an email or a phone: browsers often refuse to
+ * follow a redirect to mailto:/tel: from a scan, so this page opens it (meta
+ * refresh) and keeps a big button for when that is blocked.
+ */
+export function renderContactPage(kind: ContactPageKind, opts: { href: string; display: string; lang?: TagPageLang }): string {
+  const lang = opts.lang ?? "en";
+  const copy = CONTACT_COPY[lang][kind];
+  const href = escapeHtml(opts.href);
+  return `<!doctype html>
+<html lang="${lang === "pt" ? "pt-BR" : lang}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#060912">
+<meta http-equiv="refresh" content="0;url=${href}">
+<title>${escapeHtml(copy.title)} | Xpot</title>
+${PAGE_STYLE}
+</head>
+<body class="waiting">
+  <main class="shell">
+    <div class="brand"><img class="brand-mark" src="/api/branding/favicon" alt="" aria-hidden="true" /><span>Xpot</span></div>
+    <section class="card" aria-labelledby="page-title">
+      <h1 id="page-title">${escapeHtml(copy.title)}</h1>
+      <p class="body">${escapeHtml(opts.display)}</p>
+      <div class="actions"><a class="button primary" href="${href}" data-testid="contact-action">${escapeHtml(copy.action)}</a></div>
+    </section>
   </main>
 </body>
 </html>`;
