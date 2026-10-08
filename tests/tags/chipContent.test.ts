@@ -108,3 +108,39 @@ describe("UTMs", () => {
     expect(resolveRedirectTarget({ ...tag, destinationUrl: "tel:+15085550100" }, "nfc")).toBe("tel:+15085550100");
   });
 });
+
+describe("public scan of a live piece", () => {
+  it("serves a contact card as a vCard download and an email as a page that opens it", async () => {
+    const { createTagRedirectHandler } = await import("../../server/tags/publicHandler.js");
+    const vcard = buildVCard(card);
+    const serve = async (destinationUrl: string) => {
+      const handler = createTagRedirectHandler("nfc", {
+        findByCode: async () => ({ id: "t1", publicCode: "A7K3P9X2", leadId: 1, repId: 1, status: "active", destinationUrl, utmEnabled: true, utmCampaign: null }),
+        recordEvent: async () => undefined,
+        configureUrlFor: async () => undefined,
+      } as never);
+      const out: { status?: number; type?: string; body?: string; headers: Record<string, string>; location?: string } = { headers: {} };
+      const res = {
+        setHeader: (k: string, v: string) => { out.headers[k.toLowerCase()] = v; },
+        set: (k: string, v: string) => { out.headers[k.toLowerCase()] = v; return res; },
+        status: (s: number) => { out.status = s; return res; },
+        type: (t: string) => { out.type = t; return res; },
+        send: (b: string) => { out.body = b; return res; },
+        redirect: (s: number, l: string) => { out.status = s; out.location = l; },
+      };
+      await handler({ params: { code: "A7K3P9X2" }, get: () => undefined, headers: {}, ip: "1.1.1.1", query: {} } as never, res as never, () => undefined);
+      return out;
+    };
+    const v = await serve(vcard);
+    expect(v.status).toBe(200);
+    expect(v.type).toMatch(/text\/vcard/);
+    expect(v.body).toBe(vcard);
+    expect(v.headers["content-disposition"]).toContain("Ana-Souza.vcf");
+    const e = await serve("mailto:ana@example.com");
+    expect(e.status).toBe(200);
+    expect(e.body).toContain('href="mailto:ana@example.com"');
+    const l = await serve("https://cafe.example");
+    expect(l.status).toBe(302);
+    expect(l.location).toContain("https://cafe.example/?utm_source=xpot-tag");
+  });
+});

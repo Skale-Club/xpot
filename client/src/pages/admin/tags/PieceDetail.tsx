@@ -1,7 +1,8 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Archive, ArrowLeft, Download, ExternalLink, Power, PowerOff, RotateCcw, Truck, Undo2, UserPlus } from "lucide-react";
-import { defaultUtmEnabled, planTransition, validateDestinationUrl, type TagAction } from "@shared/tags";
+import { defaultUtmEnabled, planTransition, type TagAction } from "@shared/tags";
+import { validateChipContent } from "@shared/chipContent";
 import { isReviewFormUrl } from "@shared/reviewLink";
 import type { TagDetail } from "@shared/tagsApi";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
@@ -178,7 +179,8 @@ function DestinationStep({ tag }: { tag: TagDetail }) {
   const save = usePieceMutation(tag.id, t("destinationSaved"));
   const locked = tag.status === "retired";
   const trimmed = destinationUrl.trim();
-  const check = trimmed ? validateDestinationUrl(trimmed, { allowHttp: import.meta.env.DEV }) : null;
+  // A link, or an email/phone/vCard set from the phone app (shared/chipContent.ts).
+  const check = trimmed ? validateChipContent(trimmed, { allowHttp: import.meta.env.DEV }) : null;
   const dirty =
     destinationType !== (tag.destinationType ?? undefined) ||
     trimmed !== (tag.destinationUrl ?? "") ||
@@ -221,7 +223,7 @@ function DestinationStep({ tag }: { tag: TagDetail }) {
             t(URL_HINT_KEYS[destinationType ?? ""] ?? "urlHintDefault")
           )}
         </p>
-        {destinationType === "google_review" && check?.ok && !isReviewFormUrl(check.url) ? (
+        {destinationType === "google_review" && check?.ok && !isReviewFormUrl(check.value) ? (
           <p className="text-xs text-amber-300">{t("reviewNotFormConvert")}</p>
         ) : null}
       </div>

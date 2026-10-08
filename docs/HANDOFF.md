@@ -56,9 +56,9 @@ Leads/History/Sales/My pieces show only your own data; the shield enters admin m
 Gotcha: `client/src/lib/adminMode.ts` uses relative imports (not `@shared`/`@/`) because
 `client/src/lib/queryClient.ts` imports it and `tests/api-error.test.ts` loads that without the aliases.
 
-## In progress: branch `feat/chip-content-types` (backlog item 2, QR/NFC write types)
+## QR/NFC write types (backlog item 2, PR from `feat/chip-content-types`)
 
-Pushed to GitHub; not merged yet. What a piece opens can be a **link (default), email, phone or
+ What a piece opens can be a **link (default), email, phone or
 contact card (vCard)**:
 
 - `shared/chipContent.ts` (+ `tests/tags/chipContent.test.ts`, passing): build/parse/validate each
@@ -73,11 +73,9 @@ contact card (vCard)**:
   `webNfc.ts` `writeContent` writes a vCard as a `text/vcard` MIME record and reads it back.
   `classifyScan` treats mailto:/tel:/vCard as direct content.
 
-Left to do: admin `client/src/pages/admin/tags/PieceDetail.tsx` still validates with
-`validateDestinationUrl` (switch to `validateChipContent` so admins can save email/phone/vCard pieces);
-run `npx tsc -p . && npx vitest run && npm run build`; add a publicHandler test for the vCard/contact
-responses; open the PR, wait CI, merge, align `dev`, check `/api/version`; then test on an Android
-phone (Chrome): write an email, phone and vCard chip and scan each.
+Done since: admin `PieceDetail.tsx` validates with `validateChipContent`; tests cover the vCard
+download, the email page and the link redirect. Still to check by hand on an Android phone (Chrome):
+write an email, phone and vCard chip and scan each; scan a live Xpot piece set to each kind.
 
 ## Backlog (owner's requests, in their order)
 
