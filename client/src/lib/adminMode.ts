@@ -1,7 +1,8 @@
 import { useCallback, useSyncExternalStore } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { canManage, isSuperAdmin } from "@shared/modules";
-import type { XpotMeResponse } from "@/pages/xpot/types";
+// Relative, not @shared: queryClient.ts imports this file and is loaded by tests without the alias.
+import { canManage, isSuperAdmin } from "../../../shared/modules";
+import type { XpotMeResponse } from "../pages/xpot/types";
 
 // Admin mode: whether a manager or the global admin sees the management side of
 // the app (each module's Manage group, the Organization, the admin screens).
