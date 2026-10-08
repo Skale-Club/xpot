@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { storage } from "../../storage.js";
 import { salesStorage } from "../../storage-sales.js";
-import { requireXpotUser, isManagerOrAdmin, loadAccessibleLead, type XpotActor } from "./middleware.js";
+import { requireXpotUser, isManagerOrAdmin, loadAccessibleLead, type XpotActor, listsEveryone } from "./middleware.js";
 import { xpotSaleCreateSchema, xpotSalePaymentSchema, xpotSaleCancelSchema } from "#shared/xpot.js";
 import { computeSaleTotals, paymentStatusFor } from "#shared/pricing.js";
 import { syncSaleToXphere } from "./xphere-sync.js";
@@ -28,7 +28,7 @@ export function createSalesRouter() {
   router.get("/sales", async (req, res) => {
     const actor = (req as any).xpotActor as XpotActor;
     const q = listQuerySchema.parse(req.query);
-    const repId = isManagerOrAdmin(actor) ? q.repId : actor.rep.id;
+    const repId = listsEveryone(req, actor) ? q.repId : actor.rep.id;
     const since = q.days ? new Date(Date.now() - q.days * 24 * 60 * 60 * 1000) : undefined;
     res.json(await salesStorage.listSales({ repId, leadId: q.leadId, visitId: q.visitId, status: q.status, since, limit: q.limit, offset: q.offset }));
   });
@@ -37,7 +37,7 @@ export function createSalesRouter() {
   router.get("/sales/summary", async (req, res) => {
     const actor = (req as any).xpotActor as XpotActor;
     const days = Math.min(Math.max(Number(req.query.days) || 30, 1), 365);
-    const repId = isManagerOrAdmin(actor)
+    const repId = listsEveryone(req, actor)
       ? (req.query.repId ? Number(req.query.repId) : undefined)
       : actor.rep.id;
     res.json(await salesStorage.salesSummary({ repId, days }));

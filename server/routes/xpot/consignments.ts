@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { storage } from "../../storage.js";
 import { salesStorage } from "../../storage-sales.js";
-import { requireXpotUser, isManagerOrAdmin, loadAccessibleLead, type XpotActor } from "./middleware.js";
+import { requireXpotUser, isManagerOrAdmin, loadAccessibleLead, type XpotActor, listsEveryone } from "./middleware.js";
 import {
   xpotConsignmentDepositSchema,
   xpotConsignmentSettleSchema,
@@ -51,7 +51,7 @@ export function createConsignmentsRouter() {
   router.get("/consignments", async (req, res) => {
     const actor = (req as any).xpotActor as XpotActor;
     const q = listQuerySchema.parse(req.query);
-    const repId = isManagerOrAdmin(actor) ? q.repId : actor.rep.id;
+    const repId = listsEveryone(req, actor) ? q.repId : actor.rep.id;
     res.json(await salesStorage.listConsignments({ repId, leadId: q.leadId, status: q.status }));
   });
 

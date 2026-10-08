@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { storage } from "../../storage.js";
-import { requireXpotUser, ensureXpotRep, isManagerOrAdmin } from "./middleware.js";
+import { requireXpotUser, ensureXpotRep, isManagerOrAdmin, listsEveryone } from "./middleware.js";
 import { syncTaskToGhl } from "./helpers.js";
 import { xpotTaskCreateSchema, xpotTaskUpdateSchema } from "#shared/xpot.js";
 
@@ -18,7 +18,7 @@ export function createTasksRouter() {
     // isManagerOrAdmin, not user.isAdmin (a rep with role "manager" saw all
     // leads but only their own tasks).
     const tasks = await storage.listSalesTasks({
-      repId: isManagerOrAdmin(actor!) && req.query.all === "true" ? undefined : actor!.rep.id,
+      repId: listsEveryone(req, actor!) && req.query.all === "true" ? undefined : actor!.rep.id,
       status,
     });
     res.json(tasks);

@@ -1,11 +1,11 @@
 import { useRef } from "react";
-import { Camera, MapPinned, DollarSign, Target, Clock3, Footprints, LogOut, Activity, AlertTriangle, RefreshCw, Settings, Shield } from "lucide-react";
+import { Camera, MapPinned, DollarSign, Target, Clock3, Footprints, LogOut, Activity, AlertTriangle, RefreshCw, Settings } from "lucide-react";
 import { AreaChart, Area, XAxis, Tooltip, ResponsiveContainer, LabelList } from "recharts";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { ChevronRight, Nfc } from "lucide-react";
 import type { TagRepSummary } from "@shared/tagsApi";
 import { useXpotModules } from "@/components/ModuleSwitch";
-import { useViewerAccess } from "@/lib/adminMode";
+import { AdminModeButton } from "@/components/xpot/AdminMode";
 import { useXpotQueries } from "./hooks/useXpotQueries";
 import { useSyncStatus } from "./hooks/useSyncStatus";
 import { VisitRow } from "./components/VisitRow";
@@ -58,7 +58,6 @@ function getGreetingKey() {
 }
 
 export function XpotDashboard() {
-  const access = useViewerAccess();
   const { dashboardQuery, repName, me, signOut, isOnline, setLocation } = useXpotQueries();
   const { toast } = useToast();
   const t = useT(dashboardMessages);
@@ -353,17 +352,7 @@ export function XpotDashboard() {
         {/* Actions */}
         {/* The desktop sidebar has these; the phone keeps them here. */}
         <div className="flex items-center gap-1.5 shrink-0 lg:hidden">
-          {access.canManage && (
-            <button
-              type="button"
-              onClick={() => setLocation("/admin/overview")}
-              title={t("admin")}
-              className="flex h-10 w-10 items-center justify-center rounded-[18px] bg-white/[0.03] text-white/30 transition-all hover:bg-white/10 hover:text-white active:bg-white/10 active:scale-95 touch-manipulation"
-              style={{ border: "1px solid rgba(255,255,255,0.05)", WebkitTapHighlightColor: "transparent" }}
-            >
-              <Shield className="h-[18px] w-[18px]" />
-            </button>
-          )}
+          <AdminModeButton module="visits" />
           <button
             type="button"
             onClick={() => setLocation("/settings")}

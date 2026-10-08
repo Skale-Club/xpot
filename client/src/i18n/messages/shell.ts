@@ -56,6 +56,12 @@ const en = {
   paletteHint: "↑↓ move · Enter open · Esc close",
   shortcutsHint: "Shortcuts: / search · N new · J/K next/previous row · Esc close",
 
+  // Admin mode (components/xpot/AdminMode.tsx): the management side, apart from personal Settings
+  adminModeEnter: "Admin mode",
+  adminModeOn: "Admin mode: you are managing the account",
+  adminModeExit: "Exit",
+  adminModeLeave: "Exit admin mode",
+
   // Install the PWA (sidebar footer, Settings)
   installApp: "Install app",
   installAppHint: "Open Xpot from your home screen like any other app, full screen and quicker to launch.",
@@ -120,6 +126,11 @@ export const shellMessages: Dictionary<typeof en> = {
     paletteHint: "↑↓ mover · Enter abrir · Esc fechar",
     shortcutsHint: "Atalhos: / buscar · N novo · J/K próxima/anterior · Esc fechar",
 
+    adminModeEnter: "Modo administrador",
+    adminModeOn: "Modo administrador: você está gerenciando a conta",
+    adminModeExit: "Sair",
+    adminModeLeave: "Sair do modo administrador",
+
     installApp: "Instalar app",
     installAppHint: "Abra o Xpot pela tela inicial como qualquer outro app, em tela cheia e mais rápido.",
     installIosTitle: "Instale o Xpot no iPhone",
@@ -179,6 +190,11 @@ export const shellMessages: Dictionary<typeof en> = {
     groupPieces: "Piezas",
     paletteHint: "↑↓ mover · Enter abrir · Esc cerrar",
     shortcutsHint: "Atajos: / buscar · N nuevo · J/K siguiente/anterior · Esc cerrar",
+
+    adminModeEnter: "Modo administrador",
+    adminModeOn: "Modo administrador: estás gestionando la cuenta",
+    adminModeExit: "Salir",
+    adminModeLeave: "Salir del modo administrador",
 
     installApp: "Instalar app",
     installAppHint: "Abre Xpot desde la pantalla de inicio como cualquier otra app, a pantalla completa y más rápido.",

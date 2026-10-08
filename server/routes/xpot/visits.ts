@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { storage } from "../../storage.js";
-import { requireXpotUser, ensureXpotRep, isManagerOrAdmin, loadAccessibleLead } from "./middleware.js";
+import { requireXpotUser, ensureXpotRep, isManagerOrAdmin, loadAccessibleLead, listsEveryone } from "./middleware.js";
 import type { SalesVisitStatus } from "#shared/schema/sales.js";
 import { getDistanceMeters, syncVisitToGhl, syncVisitToXphere } from "./helpers.js";
 import { xpotCheckInSchema, xpotCheckOutSchema, xpotVisitNoteUpsertSchema } from "#shared/xpot.js";
@@ -14,7 +14,7 @@ export function createVisitsRouter() {
     const actor = (req as any).xpotActor as Awaited<ReturnType<typeof ensureXpotRep>>;
     const leadId = typeof req.query.leadId === "string" ? Number(req.query.leadId) : undefined;
     const visits = await storage.listSalesVisits({
-      repId: isManagerOrAdmin(actor!) ? (req.query.repId ? Number(req.query.repId) : undefined) : actor!.rep.id,
+      repId: listsEveryone(req, actor!) ? (req.query.repId ? Number(req.query.repId) : undefined) : actor!.rep.id,
       leadId,
     });
     const result = await Promise.all(visits.map(async (visit) => {

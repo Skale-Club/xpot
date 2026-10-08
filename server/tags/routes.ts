@@ -25,6 +25,7 @@ import type { TagProvisioningDevice } from "#shared/schema.js";
 import { storage } from "../storage.js";
 import { resolveGoogleApiKey } from "../routes/xpot/google.js";
 import { actorOf, requireTagAdmin, requireTagManager, requireTagUser } from "./access.js";
+import { viewsAsRep } from "../routes/xpot/middleware.js";
 import { registerJourneyRoutes } from "./journeyRoutes.js";
 import { createTagRedirectHandler, type PublicTag } from "./publicHandler.js";
 import { buildBatchZip, qrPng, qrSvg } from "./qrAssets.js";
@@ -42,6 +43,12 @@ import { ReviewLinkError, resolveReviewLink } from "./reviewLink.js";
 //   /api/xpot/admin/tag*         — active managers/admins (the journey: admins only)
 //   /api/provisioner/*           — the paired desktop NFC provisioner (device token)
 // Registered before the Xpot routers, whose admin router guards every path it sees.
+
+/** The actor for a list: viewing as a rep (admin mode off), a manager's lists are their own. */
+function listActor(req: Request) {
+  const actor = actorOf(req);
+  return viewsAsRep(req) ? { ...actor, isManager: false } : actor;
+}
 
 /** Where printed QR / programmed NFC URLs point. */
 export function tagBaseUrl(): string {
@@ -387,7 +394,7 @@ export function registerTagRoutes(app: Express) {
   // Pieces per customer, for the customer cards on the Visits side.
   app.get(`${fieldBase}/by-lead`, requireTagUser, async (req, res) => {
     try {
-      res.json(await repo.getLeadTagSummaries(actorOf(req)));
+      res.json(await repo.getLeadTagSummaries(listActor(req)));
     } catch (err) {
       fail(res, err, "Failed to load customer pieces");
     }
@@ -414,7 +421,7 @@ export function registerTagRoutes(app: Express) {
       // every piece (the admin screens), unless asking for their own: a piece is theirs
       // once it is in their kit or they activated it, not because they can reach it.
       const { mine, ...rest } = filters;
-      const own = !actor.isManager || mine;
+      const own = !actor.isManager || mine || viewsAsRep(req);
       res.json(await repo.listTags(own ? { ...rest, repId: actor.repId, house: undefined } : rest));
     } catch (err) {
       fail(res, err, "Failed to load tags");
@@ -475,7 +482,7 @@ export function registerTagRoutes(app: Express) {
   // Direct pieces: chips holding the customer's own link.
   app.get("/api/xpot/tag-direct-writes", requireTagUser, async (req, res) => {
     try {
-      res.json(await field.listDirectWrites(actorOf(req)));
+      res.json(await field.listDirectWrites(listActor(req)));
     } catch (err) {
       fail(res, err, "Failed to load direct links");
     }

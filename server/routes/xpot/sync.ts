@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { storage } from "../../storage.js";
-import { requireXpotUser, ensureXpotRep, isManagerOrAdmin } from "./middleware.js";
+import { requireXpotUser, ensureXpotRep, isManagerOrAdmin, listsEveryone } from "./middleware.js";
 import { syncLeadToGhl, syncLeadToXphere, syncOpportunityToGhl, syncTaskToGhl, syncVisitToGhl } from "./helpers.js";
 import { syncSaleToXphere } from "./xphere-sync.js";
 import { salesStorage } from "../../storage-sales.js";
@@ -13,7 +13,7 @@ export function createSyncRouter() {
   router.post("/sync/flush", async (req, res) => {
     const actor = (req as any).xpotActor as Awaited<ReturnType<typeof ensureXpotRep>>;
     const repId = actor!.rep.id;
-    const canSyncAll = isManagerOrAdmin(actor!);
+    const canSyncAll = listsEveryone(req, actor!);
 
     const allLeads = await storage.listSalesLeads(canSyncAll ? {} : { ownerRepId: repId });
     const allOpportunities = await storage.listSalesOpportunities();
@@ -48,7 +48,7 @@ export function createSyncRouter() {
   router.get("/sync/status", async (req, res) => {
     const actor = (req as any).xpotActor as Awaited<ReturnType<typeof ensureXpotRep>>;
     const limit = Math.min(Number(req.query.limit) || 20, 100);
-    const events = isManagerOrAdmin(actor!)
+    const events = listsEveryone(req, actor!)
       ? await storage.listSalesSyncEvents(limit)
       : await storage.listSalesSyncEventsForRep(actor!.rep.id, limit);
     const failedCount = events.filter((e) => e.status === "failed").length;

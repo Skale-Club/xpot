@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { storage } from "../../storage.js";
 import { repModules } from "#shared/modules.js";
-import { requireXpotUser, requireVisitsModule, ensureXpotRep, isManagerOrAdmin, loadAccessibleLead } from "./middleware.js";
+import { requireXpotUser, requireVisitsModule, ensureXpotRep, isManagerOrAdmin, loadAccessibleLead, listsEveryone } from "./middleware.js";
 import { xpotLeadCreateSchema, xpotLeadUpdateSchema, xpotLeadContactCreateSchema } from "#shared/xpot.js";
 import { syncLeadToGhl, syncLeadToXphere } from "./helpers.js";
 import { salesStorage } from "../../storage-sales.js";
@@ -17,7 +17,7 @@ export function createLeadsRouter() {
     const actor = (req as any).xpotActor as Awaited<ReturnType<typeof ensureXpotRep>>;
 
     let ownerRepId: number | undefined;
-    if (isManagerOrAdmin(actor!)) {
+    if (listsEveryone(req, actor!)) {
       // Manager can filter by a specific rep
       ownerRepId = req.query.repId ? Number(req.query.repId) : undefined;
     } else {
@@ -187,7 +187,7 @@ export function createLeadsRouter() {
     // scoped — listSalesOpportunities({ leadId }) returned every rep's deals on
     // the lead, and listSalesTasks() loaded the whole table before filtering in
     // memory. A manager sharing a lead with a rep exposed both pipelines.
-    const seesAll = isManagerOrAdmin(actor!);
+    const seesAll = listsEveryone(req, actor!);
     const scope = seesAll ? undefined : actor!.rep.id;
     const [locations, contacts, visits, opportunities, tasks] = await Promise.all([
       storage.listSalesLeadLocations(leadId),

@@ -61,11 +61,6 @@ const en = {
   keyRotated: "Inbound key rotated",
   rotateFailed: "Failed to rotate key",
 
-  // Administration
-  sectionAdmin: "Administration",
-  adminMode: "Admin mode",
-  adminModeHint: "Shows the management screens. Off, you see Xpot the way your reps do.",
-  organizationHint: "People, integrations and branding of your account.",
 
   // Generic save button
   saveChanges: "Save Changes",
@@ -126,11 +121,6 @@ export const settingsMessages: Dictionary<typeof en> = {
     saveFailed: "Não foi possível salvar",
     keyRotated: "Nova chave de entrada gerada",
     rotateFailed: "Não foi possível gerar uma nova chave",
-
-    sectionAdmin: "Administração",
-    adminMode: "Modo administrador",
-    adminModeHint: "Mostra as telas de gestão. Desligado, você vê o Xpot como os seus vendedores.",
-    organizationHint: "Pessoas, integrações e marca da sua conta.",
     saveChanges: "Salvar alterações",
   },
   es: {
@@ -186,11 +176,6 @@ export const settingsMessages: Dictionary<typeof en> = {
     saveFailed: "No se pudo guardar",
     keyRotated: "Nueva clave de entrada generada",
     rotateFailed: "No se pudo generar una nueva clave",
-
-    sectionAdmin: "Administración",
-    adminMode: "Modo administrador",
-    adminModeHint: "Muestra las pantallas de gestión. Apagado, ves Xpot como lo ven tus vendedores.",
-    organizationHint: "Personas, integraciones y marca de tu cuenta.",
     saveChanges: "Guardar cambios",
   },
 };
