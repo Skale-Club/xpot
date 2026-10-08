@@ -117,6 +117,8 @@ export const listQuerySchema = z.object({
   repId: z.coerce.number().int().positive().optional(),
   kitId: z.string().uuid().optional(),
   house: z.enum(["1", "true"]).transform(() => true).optional(),
+  /** Only the viewer's own pieces, even for a manager (the phone app's Pieces screen). */
+  mine: z.enum(["1", "true"]).transform(() => true).optional(),
   method: z.enum(["qr", "nfc"]).optional(),
   search: z.string().trim().max(100).optional(),
   limit: z.coerce.number().int().min(1).max(2000).optional(),
@@ -408,8 +410,12 @@ export function registerTagRoutes(app: Express) {
     try {
       const actor = actorOf(req);
       const filters = listQuerySchema.parse(req.query);
-      // A reseller's list is their own pieces, whatever filter they send.
-      res.json(await repo.listTags(actor.isManager ? filters : { ...filters, repId: actor.repId, house: undefined }));
+      // A reseller's list is their own pieces, whatever filter they send. A manager gets
+      // every piece (the admin screens), unless asking for their own: a piece is theirs
+      // once it is in their kit or they activated it, not because they can reach it.
+      const { mine, ...rest } = filters;
+      const own = !actor.isManager || mine;
+      res.json(await repo.listTags(own ? { ...rest, repId: actor.repId, house: undefined } : rest));
     } catch (err) {
       fail(res, err, "Failed to load tags");
     }
