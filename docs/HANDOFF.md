@@ -31,6 +31,7 @@ Everything below is in the repo; nothing lives only in a chat.
 | #57 | **Tags Dashboard** replaces Home; "Review link" tab removed (direct chip behind a dashboard button); chips auto-verified by a real `/n/` tap; iPhone NFC Tools flows. |
 | #58 | Lock offered on iPhone once a tap confirmed the write. |
 | #59 | **Pop-ups centered** on phone and desktop; piece editor in a pop-up; Chip NFC card with Write + Lock always visible. |
+| #61 | **SEO + Search readiness**: public EN/PT/ES URLs with server-rendered metadata, canonical/hreflang, JSON-LD, `robots.txt`, `sitemap.xml`, and a 1200×630 social image. Internal app routes stay `noindex`. |
 
 **Not yet checked by hand** (no local login; everything passed tests/CI): on Android Chrome and an iPhone,
 write/scan/lock a chip of each kind; the iPhone "touch the chip to confirm" flow; the Dashboard numbers;
@@ -152,17 +153,31 @@ Dashboard (scans by place/piece over time, etc.). See the answer given in chat; 
   its own banner for errors). A **Chip NFC card** always shows Write and Lock (Lock disabled until the
   chip is written, "Locked" hint when sealed). The editor only opens by itself when selling during a visit.
 
+## SEO + Google Search readiness (#61)
+
+- Public, indexable URLs are `/`, `/pt`, `/es`, plus localized Privacy and Terms pages
+  (`/privacy`, `/pt/privacy`, `/es/privacy`, and the same shape for `/terms`). The language picker
+  keeps the URL, visible copy and metadata in step. English is the unprefixed/x-default version.
+- `shared/seo.ts` owns titles, descriptions, canonical URLs, hreflang alternates, Open Graph/Twitter
+  metadata and the `SoftwareApplication` + `Organization` JSON-LD. `server/seo.ts` injects the correct
+  head and `<html lang>` before Express serves the SPA, so crawlers and link previews do not have to
+  run JavaScript. Every non-public/app route gets `noindex, nofollow, noarchive`.
+- `client/public/robots.txt` blocks APIs, admin/auth/app routes and scan URLs;
+  `client/public/sitemap.xml` contains the nine localized public URLs. The social card is
+  `client/public/og-image.png` (1200×630); regenerate it with `npm run seo:og` from the source image
+  in `scripts/assets/`.
+- Verified with the full test suite (412 passed, 7 skipped), TypeScript, production build and a local
+  production smoke test of `/`, `/pt`, `/es/privacy`, `/dashboard`, `/robots.txt`, `/sitemap.xml` and
+  `/og-image.png`.
+- **Still external:** create the Google Search Console Domain property `xpot.place`, add Google's DNS
+  TXT at the DNS provider, verify it, and submit `https://xpot.place/sitemap.xml`. Google-account and
+  DNS steps cannot be completed from code alone. Bing Webmaster Tools can then import the property.
+
 ## Backlog (owner's requests, in their order)
 
-1. **SEO + Google Search Console** (owner asked explicitly). `client/index.html` has
-   `<meta name="robots" content="noindex, nofollow">`, so remove it for the public pages (landing `/`,
-   legal pages). Add `robots.txt` (disallow `/api/`, `/admin`, app routes), `sitemap.xml`, canonical
-   `https://xpot.place/`, per-language meta/hreflang if the landing is localized, JSON-LD
-   (`SoftwareApplication` / `Organization`), a proper OG image (1200×630) instead of the 512 icon.
-   Search Console: add a **Domain property `xpot.place`** (DNS TXT at the registrar/Cloudflare) or a
-   URL-prefix property with an HTML meta tag; the owner must do the Google-account steps (or approve
-   them explicitly), then submit `https://xpot.place/sitemap.xml`. Also consider Bing Webmaster Tools
-   (can import from GSC).
+1. ~~**SEO + Google Search readiness**~~ done (#61). **External Search Console setup remains:** add a
+   Domain property for `xpot.place`, publish Google's DNS TXT, verify, then submit
+   `https://xpot.place/sitemap.xml`. Bing Webmaster Tools can import the verified GSC property.
 2. ~~QR/NFC write types~~ done (#52). When writing a piece (QR code or NFC chip) the person picks what to store:
    **URL (default)**, **email**, **phone**, **vCard**. Each needs proper input + validation:
    - URL: current behavior (`validateDestinationUrl` in `@shared/tags`, `normalizeUrlInput`).
