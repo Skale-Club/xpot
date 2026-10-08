@@ -24,6 +24,18 @@ Everything below is in the repo; nothing lives only in a chat.
 | #50 | **"My pieces" shows only the viewer's own pieces**, admins included (`GET /api/xpot/tags?mine=1`). Before, the super admin saw every printed piece. A piece is yours once it is in your kit or you activated it. `server/tags/routes.ts`, `client/src/pages/tags/PiecesScreen.tsx`. |
 | #49 | **Admin mode + Settings + Tags nav.** Admin mode (off by default) hides all management UI; language chosen only in Settings (full names, big rows); flags removed from in-app headers; Tags phone header got a Settings button; Tags "Manage" became a 4th bottom tab (admin mode); "Direct link" renamed "Review link" / "Link de review" / "Enlace de reseña" (URL still `/tags/direct`). `client/src/lib/adminMode.ts`, `client/src/pages/tags/TagsTabBar.tsx`. |
 | #51 | **Clear split between personal Settings and the admin side**, and the rep view narrows the lists. See next section. |
+| #52 | **QR/NFC content kinds**: link (default), email, phone, vCard. See "QR/NFC write types". |
+| #53 | **Phone shell header** (avatar, greeting, admin, Settings, sign out) on every Visits/Tags screen; customer-first "Generate Google review link". |
+| #54 | Header no longer jumps when switching Visits/Tags (`MODULE_COLUMN`). |
+| #55, #56 | **Piece screen** rebuilt: one-row header, loud "NFC not written" card, customer card (link/rename/change), destination as the main card, chip lock (Web NFC + server record). |
+| #57 | **Tags Dashboard** replaces Home; "Review link" tab removed (direct chip behind a dashboard button); chips auto-verified by a real `/n/` tap; iPhone NFC Tools flows. |
+| #58 | Lock offered on iPhone once a tap confirmed the write. |
+| #59 | **Pop-ups centered** on phone and desktop; piece editor in a pop-up; Chip NFC card with Write + Lock always visible. |
+
+**Not yet checked by hand** (no local login; everything passed tests/CI): on Android Chrome and an iPhone,
+write/scan/lock a chip of each kind; the iPhone "touch the chip to confirm" flow; the Dashboard numbers;
+admin mode off = only your own data; centered pop-ups; NFC Tools menu names ("Other" > "Lock tag")
+were written from memory.
 
 ## Admin mode and the rep view (#51)
 
@@ -151,7 +163,7 @@ Dashboard (scans by place/piece over time, etc.). See the answer given in chat; 
    URL-prefix property with an HTML meta tag; the owner must do the Google-account steps (or approve
    them explicitly), then submit `https://xpot.place/sitemap.xml`. Also consider Bing Webmaster Tools
    (can import from GSC).
-2. **QR/NFC write types** (in progress, see above). When writing a piece (QR code or NFC chip) the person picks what to store:
+2. ~~QR/NFC write types~~ done (#52). When writing a piece (QR code or NFC chip) the person picks what to store:
    **URL (default)**, **email**, **phone**, **vCard**. Each needs proper input + validation:
    - URL: current behavior (`validateDestinationUrl` in `@shared/tags`, `normalizeUrlInput`).
    - Email: `mailto:` with a validated address (optionally subject/body).
