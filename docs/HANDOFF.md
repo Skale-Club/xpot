@@ -77,6 +77,17 @@ Done since: admin `PieceDetail.tsx` validates with `validateChipContent`; tests 
 download, the email page and the link redirect. Still to check by hand on an Android phone (Chrome):
 write an email, phone and vCard chip and scan each; scan a live Xpot piece set to each kind.
 
+## Phone shell header + Review link flow (PR from `feat/shell-header`)
+
+- `client/src/components/xpot/ShellHeader.tsx`: avatar (tap to change), greeting, date, admin-mode
+  shield, Settings, sign out. Top of every phone screen in Visits (`client/src/App.tsx`) and Tags
+  (`TagsApp.tsx`), above the module switch. The Tags header lost its own shield/Settings; the Visits
+  dashboard shows it on desktop without the buttons.
+- Review link / piece screens: customer first, then **"Generate Google review link for X"**
+  (`GenerateReviewButton` in `ReviewLinkSheet.tsx`): instant from the customer's saved Google place,
+  otherwise a Google search by the customer's name; the generated link is shown. `LeadPicker` no
+  longer lists customers until you type. Picking a customer no longer fills the link by itself.
+
 ## Backlog (owner's requests, in their order)
 
 1. **SEO + Google Search Console** (owner asked explicitly). `client/index.html` has

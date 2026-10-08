@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, ClipboardPaste, MapPin, Search, Star } from "lucide-react";
 import { normalizeUrlInput } from "@shared/tagApp";
-import { extractFirstUrl, isReviewFormUrl } from "@shared/reviewLink";
+import { buildReviewUrl, extractFirstUrl, isReviewFormUrl } from "@shared/reviewLink";
 import type { ReviewLinkPlace } from "@shared/tagsApi";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
@@ -230,6 +230,71 @@ export function ReviewLinkAssist({
         onPick={(place) => {
           setOpen(false);
           onPick(place);
+        }}
+      />
+    </>
+  );
+}
+
+/**
+ * Under the customer field: turns the chosen customer into their Google
+ * "write a review" link. With the customer's Google place on file it is
+ * instant; otherwise it searches Google for the customer's name (near the
+ * reseller) and they pick the right business. The generated link is shown.
+ */
+export function GenerateReviewButton({
+  name,
+  placeId,
+  currentLink,
+  onLink,
+}: {
+  name: string;
+  placeId: string | null | undefined;
+  /** The link in the form now, to show when it is this customer's review link. */
+  currentLink: string;
+  onLink: (url: string, place: ReviewLinkPlace | null) => void;
+}) {
+  const t = useT(tagsMessages);
+  const [open, setOpen] = useState(false);
+  const [generated, setGenerated] = useState<string | null>(null);
+  const shown = generated && normalizeUrlInput(currentLink) === generated ? generated : null;
+
+  const generate = () => {
+    if (placeId) {
+      const url = buildReviewUrl(placeId);
+      haptic(30);
+      setGenerated(url);
+      onLink(url, null);
+    } else setOpen(true);
+  };
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={generate}
+        className="mt-2 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl border border-amber-400/30 bg-amber-400/10 px-3 text-sm font-bold text-amber-100 active:bg-amber-400/20"
+        data-testid="button-generate-review"
+      >
+        <Star className="h-4 w-4 shrink-0 fill-amber-400 text-amber-400" />
+        <span className="min-w-0 truncate">{t("reviewGenerateFor", { name })}</span>
+      </button>
+      {shown && (
+        <div className="mt-2 rounded-2xl border border-emerald-400/30 bg-emerald-400/10 p-3" data-testid="review-generated">
+          <p className="text-xs font-bold uppercase tracking-wider text-emerald-300">{t("reviewGenerated")}</p>
+          <a href={shown} target="_blank" rel="noopener noreferrer" className="mt-1 block break-all text-sm font-semibold text-white underline-offset-2 active:underline">
+            {shown}
+          </a>
+        </div>
+      )}
+      <ReviewLinkSheet
+        open={open}
+        initialQuery={name}
+        onClose={() => setOpen(false)}
+        onPick={(place) => {
+          setOpen(false);
+          setGenerated(place.reviewUrl);
+          onLink(place.reviewUrl, place);
         }}
       />
     </>
