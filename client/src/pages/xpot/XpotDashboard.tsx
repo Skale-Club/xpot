@@ -1,9 +1,5 @@
 import { MapPinned, DollarSign, Target, Clock3, Footprints, Activity, AlertTriangle, RefreshCw } from "lucide-react";
 import { AreaChart, Area, XAxis, Tooltip, ResponsiveContainer, LabelList } from "recharts";
-import { useQuery } from "@tanstack/react-query";
-import { ChevronRight, Nfc } from "lucide-react";
-import type { TagRepSummary } from "@shared/tagsApi";
-import { useXpotModules } from "@/components/ModuleSwitch";
 import { ShellHeader } from "@/components/xpot/ShellHeader";
 import { useXpotQueries } from "./hooks/useXpotQueries";
 import { useSyncStatus } from "./hooks/useSyncStatus";
@@ -14,7 +10,6 @@ import { useT } from "@/i18n";
 import { dashboardMessages } from "@/i18n/messages/dashboard";
 import { EmptyState } from "@/components/xpot/EmptyState";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
-import { ModuleBadge } from "@/components/xpot/ModuleBadge";
 
 const METRIC_CARDS = [
   {
@@ -53,57 +48,13 @@ export function XpotDashboard() {
   const metrics = dashboardQuery.data?.metrics;
   const { failedEvents, retryMutation } = useSyncStatus();
   const salesSummary = useSalesSummary(7);
-  const canSellTags = useXpotModules().includes("tags");
   const isDesktop = useIsDesktop();
-  const { data: tagSummary } = useQuery<TagRepSummary>({
-    queryKey: ["/api/xpot/tags/summary"],
-    enabled: canSellTags,
-    staleTime: 30_000,
-  });
 
   function metricValue(key: typeof METRIC_CARDS[number]["key"]) {
     if (!metrics) return "—";
     if (key === "pipelineValue") return formatCurrency(metrics.pipelineValue ?? 0, "USD");
     return metrics[key] ?? 0;
   }
-
-  const tagsBlock = (
-    <>
-      {/* Tags at a glance, for reps who sell QR/NFC pieces */}
-      {tagSummary && (
-        <button
-          type="button"
-          onClick={() => setLocation("/tags")}
-          className="flex w-full items-center gap-3 rounded-[20px] p-4 text-left transition-transform active:scale-[0.98]"
-          style={{ background: "rgba(139,92,246,0.07)", border: "1px solid rgba(139,92,246,0.22)", WebkitTapHighlightColor: "transparent" }}
-          data-testid="dashboard-tags"
-        >
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-400/15 text-violet-300">
-            <Nfc className="h-5 w-5" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 text-sm font-bold text-white">
-              {t("tagsTitle")}
-              <ModuleBadge module="tags" />
-            </div>
-            <div className="mt-1 grid grid-cols-3 gap-2">
-              {([
-                ["tagsInKit", tagSummary.inStock],
-                ["tagsLive", tagSummary.active],
-                ["tagsScans", tagSummary.scansLast30.qr + tagSummary.scansLast30.nfc],
-              ] as const).map(([key, value]) => (
-                <div key={key} className="min-w-0">
-                  <div className="text-lg font-extrabold leading-none text-white tabular-nums">{value}</div>
-                  <div className="mt-1 text-[9px] font-semibold uppercase leading-tight tracking-wider text-white/40">{t(key)}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-          <ChevronRight className="h-4 w-4 shrink-0 text-white/30" aria-label={t("tagsOpen")} />
-        </button>
-      )}
-    </>
-  );
 
   const chartBlock = (
     <>
@@ -325,13 +276,11 @@ export function XpotDashboard() {
           </div>
           <div className="space-y-4">
             {salesBlock}
-            {tagsBlock}
             {syncBlock}
           </div>
         </div>
       ) : (
         <>
-          {tagsBlock}
           {chartBlock}
           {salesBlock}
           {syncBlock}

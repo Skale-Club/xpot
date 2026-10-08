@@ -17,6 +17,7 @@ interface NdefReadingEventLike extends Event {
 interface NdefReaderLike {
   scan(options?: { signal?: AbortSignal }): Promise<void>;
   write(message: unknown, options?: { overwrite?: boolean; signal?: AbortSignal }): Promise<void>;
+  makeReadOnly?(options?: { signal?: AbortSignal }): Promise<void>;
   onreading: ((ev: NdefReadingEventLike) => void) | null;
   onreadingerror: ((ev: Event) => void) | null;
 }
@@ -172,6 +173,25 @@ export async function writeContent(value: string, signal: AbortSignal): Promise<
     : { recordType: "url", data: value };
   try {
     await new Ctor().write({ records: [record] }, { overwrite: true, signal });
+  } catch (err) {
+    throw mapNfcError(err);
+  }
+}
+
+/** Whether this browser can lock a chip (Chrome 100+ on Android). */
+export function canLockChip(): boolean {
+  const Ctor = getCtor();
+  return !!Ctor && typeof Ctor.prototype.makeReadOnly === "function";
+}
+
+/** Makes the next chip tapped permanently read-only. Irreversible. */
+export async function lockChip(signal: AbortSignal): Promise<void> {
+  const Ctor = getCtor();
+  if (!Ctor) throw new NfcError("nfcNoBrowser");
+  const reader = new Ctor();
+  if (typeof reader.makeReadOnly !== "function") throw new NfcError("nfcUnsupported");
+  try {
+    await reader.makeReadOnly({ signal });
   } catch (err) {
     throw mapNfcError(err);
   }

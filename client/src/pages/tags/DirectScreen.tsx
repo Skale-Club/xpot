@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Contact, Info, Link2, Mail, Nfc, Phone, QrCode } from "lucide-react";
 import { contentKindOf, contentSummary, validateChipContent, type ChipContentKind } from "@shared/chipContent";
-import { guessDestinationType, normalizeUrlInput } from "@shared/tagApp";
+import { normalizeUrlInput } from "@shared/tagApp";
 import type { DirectWriteItem } from "@shared/tagsApi";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
@@ -11,6 +11,7 @@ import LeadPicker, { leadPayload, type LeadChoice } from "./LeadPicker";
 import { GenerateReviewButton, ReviewLinkAssist } from "./ReviewLinkSheet";
 import { ContentEditor, type ContentState } from "./ContentEditor";
 import { ContentQr } from "./ContentQr";
+import LockSheet from "./LockSheet";
 import WriteSheet, { type WriteResult } from "./WriteSheet";
 import { ageOf, pushRecent, shortUrl, tagsGet, tagsPost, useBanner, directPath } from "./lib";
 import { BTN_DIRECT, Banner, CARD, CopyButton, EYEBROW_MUTED, FieldLabel, ICON_BLOCK_DIRECT, INPUT, LinkInput, Pill, TopBar } from "./ui";
@@ -30,6 +31,7 @@ export default function DirectScreen() {
   const [content, setContent] = useState<ContentState>({ value: null, error: null });
   const [initialContent, setInitialContent] = useState<string | null>(null);
   const [qrOpen, setQrOpen] = useState(false);
+  const [lockOpen, setLockOpen] = useState(false);
   const [label, setLabel] = useState("");
   const [lead, setLead] = useState<LeadChoice>(null);
   const [writeOpen, setWriteOpen] = useState(false);
@@ -159,7 +161,6 @@ export default function DirectScreen() {
                   <LinkInput value={link} onChange={setLink} placeholder={t("linkPlaceholder")} onPasteFailed={() => show({ tone: "error", text: tc("pasteFailed") })} />
                   <ReviewLinkAssist
                     link={link}
-                    isReview={!!link.trim() && guessDestinationType(link) === "google_review"}
                     onPick={(place) => {
                       setLink(place.reviewUrl);
                       if (!label.trim() && place.name) setLabel(t("reviewLabelDefault", { name: place.name }).slice(0, 120));
@@ -232,7 +233,11 @@ export default function DirectScreen() {
 
       <ContentQr open={qrOpen} value={target} onClose={() => setQrOpen(false)} />
 
+      {/* A direct chip sealed can never change what it opens: LockSheet says so first. */}
+      <LockSheet open={lockOpen} identity="direct" onClose={() => setLockOpen(false)} />
+
       <WriteSheet
+        onLock={() => setLockOpen(true)}
         open={writeOpen}
         url={target}
         identity="direct"

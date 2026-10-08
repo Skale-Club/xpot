@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Contact, ExternalLink, Link2, Mail, Nfc, Phone, Power, QrCode, ScanLine, Search, X } from "lucide-react";
+import { AlertTriangle, Building2, Contact, ExternalLink, Link2, Lock, Mail, Nfc, Pencil, Phone, Plus, Power, QrCode, ScanLine, Search, X } from "lucide-react";
 import type { TagDetail } from "@shared/tagsApi";
 import { TAG_DESTINATION_TYPES, type TagDestinationType } from "@shared/tags";
 import { contentKindOf, contentSummary, validateChipContent, type ChipContentKind } from "@shared/chipContent";
@@ -9,6 +9,7 @@ import { guessDestinationType, normalizeUrlInput } from "@shared/tagApp";
 import { buildReviewUrl } from "@shared/reviewLink";
 import type { FullSalesLead } from "@/pages/xpot/types";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
+import { apiRequest } from "@/lib/queryClient";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
@@ -16,25 +17,34 @@ import LeadPicker, { leadPayload, type LeadChoice } from "./LeadPicker";
 import { GenerateReviewButton, ReviewLinkAssist } from "./ReviewLinkSheet";
 import { ContentEditor, type ContentState } from "./ContentEditor";
 import WriteSheet, { type WriteResult } from "./WriteSheet";
+import LockSheet from "./LockSheet";
 import { APP_BASE, errorText, getSellTo, haptic, lookupTag, pushRecent, shortUrl, tagPath, tagsGet, tagsPost, useBanner } from "./lib";
 import {
   BTN_PRIMARY,
   BTN_SECONDARY,
   BTN_TERTIARY,
   Banner,
+  BottomSheet,
   CARD,
   CHIP_TONE,
   CopyButton,
   EYEBROW,
+  EYEBROW_MUTED,
   FieldLabel,
   INPUT,
   LinkInput,
-  OPTION,
   Pill,
+  SHEET_TITLE,
   STATUS_TONE,
   Spinner,
   TopBar,
 } from "./ui";
+
+// One piece, opened by scanning it or from the list. Top to bottom, in order of
+// importance: which piece and whether it is live; a loud warning when its NFC
+// chip holds nothing (QR works, a tap opens nothing); the customer (link one,
+// rename or change it); and the destination, the star of the screen, with its
+// own Change button. The editor stays closed on a configured piece.
 
 type Loaded = { kind: "ok"; tag: TagDetail } | { kind: "not_found" } | { kind: "not_yours" };
 
@@ -46,6 +56,8 @@ async function fetchTag(code: string): Promise<Loaded> {
 
 const isDestinationType = (value: string | null): value is TagDestinationType =>
   !!value && (TAG_DESTINATION_TYPES as readonly string[]).includes(value);
+
+const KIND_ICON = { url: Link2, email: Mail, phone: Phone, vcard: Contact } as const;
 
 export default function TagScreen({ code, onClose }: {
   code: string;
@@ -67,12 +79,16 @@ export default function TagScreen({ code, onClose }: {
   const [kind, setKind] = useState<ChipContentKind>("url");
   const [content, setContent] = useState<ContentState>({ value: null, error: null });
   const [initialContent, setInitialContent] = useState<string | null>(null);
-  const [type, setType] = useState<TagDestinationType>("website");
-  const [typeTouched, setTypeTouched] = useState(false);
   const [label, setLabel] = useState("");
   const [lead, setLead] = useState<LeadChoice>(null);
-  const [busy, setBusy] = useState<"save" | "toggle" | null>(null);
+  // The editor stays closed on a configured piece; "Change" / "Link a customer" open it.
+  const [editing, setEditing] = useState(false);
+  const [changingCustomer, setChangingCustomer] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [busy, setBusy] = useState<"save" | "toggle" | "rename" | null>(null);
   const [writeOpen, setWriteOpen] = useState(false);
+  const [lockOpen, setLockOpen] = useState(false);
   const [seeded, setSeeded] = useState<string | null>(null);
 
   // Seed the form once per piece.
@@ -84,20 +100,14 @@ export default function TagScreen({ code, onClose }: {
     if (storedKind === "url") setLink(tag.destinationUrl ?? "");
     else setInitialContent(tag.destinationUrl);
     setLabel(tag.label ?? "");
-    if (isDestinationType(tag.destinationType)) {
-      setType(tag.destinationType);
-      setTypeTouched(true);
-    }
+    // Nothing to show yet: the editor is the screen.
+    setEditing(!tag.destinationUrl || !tag.leadId);
     pushRecent({ kind: "xpot", value: tag.publicCode });
     // Selling during a visit: an unsold piece goes to the visit's customer.
     const sellTo = getSellTo();
     if (!tag.leadId && sellTo) {
       setLead({ leadId: sellTo.leadId, name: sellTo.name, placeId: sellTo.placeId });
-      if (sellTo.placeId && !tag.destinationUrl) {
-        setLink(buildReviewUrl(sellTo.placeId));
-        setType("google_review");
-        setTypeTouched(true);
-      }
+      if (sellTo.placeId && !tag.destinationUrl) setLink(buildReviewUrl(sellTo.placeId));
     }
     if (new URLSearchParams(window.location.search).get("write") === "1") {
       // In the desktop pane the path is /tags/pieces/<code>; only drop the query.
@@ -105,11 +115,6 @@ export default function TagScreen({ code, onClose }: {
       setWriteOpen(true);
     }
   }, [tag, seeded]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const onLink = (value: string) => {
-    setLink(value);
-    if (!typeTouched) setType(guessDestinationType(value));
-  };
 
   const setDetail = useCallback(
     (detail: TagDetail) => {
@@ -163,13 +168,15 @@ export default function TagScreen({ code, onClose }: {
     );
   }
 
-  const needsLead = !tag.leadId;
+  // Choosing a customer: an unsold piece, or moving this one to another customer.
+  const needsLead = !tag.leadId || changingCustomer;
   // The customer's Google Place, when known, gives its review link for free.
   const ownLead = tag.leadId ? leads?.find((l) => l.id === tag.leadId) : undefined;
   const leadPlace = needsLead ? lead?.placeId ?? null : ownLead?.googlePlaceId ?? null;
   const leadPlaceName = needsLead ? lead?.name ?? "" : tag.leadName ?? "";
-  const pickLead = (choice: LeadChoice) => setLead(choice);
   const disabled = tag.status === "disabled";
+  const locked = tag.nfcStatus === "locked";
+  const chipMissing = tag.nfcStatus === "not_programmed" || tag.nfcStatus === "failed";
   const destinationLabel = (value: string) => (isDestinationType(value) ? t(`dest_${value}`) : value);
 
   const save = async () => {
@@ -184,8 +191,8 @@ export default function TagScreen({ code, onClose }: {
     try {
       const detail = await tagsPost<TagDetail>(`/api/xpot/tags/${tag.id}/quick-activate`, {
         destinationUrl: check.value,
-        // A link keeps its chosen type; the other kinds are their own type.
-        destinationType: kind === "url" ? type : kind,
+        // The type follows from what it opens: a Google review form, a booking page, an email…
+        destinationType: kind === "url" ? guessDestinationType(check.value) : kind,
         // Empty clears the label (the server turns "" into null).
         label,
         ...(needsLead ? leadPayload(lead) : {}),
@@ -194,8 +201,27 @@ export default function TagScreen({ code, onClose }: {
       if (kind === "url") setLink(detail.destinationUrl ?? check.value);
       if (lead && !lead.leadId) void qc.invalidateQueries({ queryKey: ["/api/xpot/leads"] });
       setLead(null);
+      setChangingCustomer(false);
+      setEditing(false);
       haptic([40, 30, 40]);
       show({ tone: "ok", text: t("savedLive") });
+    } catch (err) {
+      show({ tone: "error", text: errorText(err, tc("requestFailed")) });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const rename = async () => {
+    const name = newName.trim();
+    if (!name || !tag.leadId) return;
+    setBusy("rename");
+    try {
+      await apiRequest("PATCH", `/api/xpot/leads/${tag.leadId}`, { name });
+      await qc.invalidateQueries({ queryKey });
+      void qc.invalidateQueries({ queryKey: ["/api/xpot/leads"] });
+      setRenameOpen(false);
+      show({ tone: "ok", text: t("customerRenamed") });
     } catch (err) {
       show({ tone: "error", text: errorText(err, tc("requestFailed")) });
     } finally {
@@ -219,163 +245,230 @@ export default function TagScreen({ code, onClose }: {
     setDetail(await tagsPost<TagDetail>(`/api/xpot/tags/${tag.id}/nfc-written`, { readbackUrl: result.readbackUrl, method: result.method }));
   };
 
+  const dest = tag.destinationUrl;
+  const destKind = contentKindOf(dest);
+  const KindIcon = KIND_ICON[destKind];
+  const destDisplay = !dest ? null : destKind === "url" ? shortUrl(dest) : contentSummary(dest);
+  const destType = destKind === "url" ? (tag.destinationType ? destinationLabel(tag.destinationType) : null) : t(`contentKind_${destKind}`);
+
   return (
     <>
-      <TopBar title={tag.leadName ?? t("noCustomer")} back={back} eyebrow={t("pieceEyebrow")} right={closeButton} />
+      <TopBar
+        title={tag.publicCode}
+        titleClassName="font-mono tracking-[0.12em]"
+        back={back}
+        eyebrow={t("pieceEyebrow")}
+        right={closeButton}
+        sub={
+          <div className="flex flex-wrap items-center gap-2">
+            <Pill tone={STATUS_TONE[tag.status] ?? "slate"}>{t(`status_${tag.status}` as "status_active")}</Pill>
+            <span className="flex min-w-0 items-center gap-1.5 text-xs text-white/45">
+              <TagFaceIcon face={tag.face} size="xs" title={t(`face_${tag.face ?? "none"}` as "face_none")} />
+              <span className="truncate">
+                {[t(`product_${tag.productType}` as "product_custom"), tag.face ? t(`face_${tag.face}` as "face_none") : null, tag.label].filter(Boolean).join(" · ")}
+              </span>
+            </span>
+          </div>
+        }
+      />
       <Banner banner={banner} />
 
-      {/* The piece itself, compact: which one it is and whether it is live. */}
-      <section className="flex items-center gap-3 rounded-[20px] border border-white/10 bg-white/[0.04] px-4 py-3">
-        <TagFaceIcon face={tag.face} size="md" title={t(`face_${tag.face ?? "none"}` as "face_none")} />
-        <div className="min-w-0 flex-1">
-          <p className="font-mono text-xl font-bold tracking-[0.14em] text-white" data-testid="text-tag-code">
-            {tag.publicCode}
+      {/* A piece whose chip holds nothing works by QR only: a tap opens nothing. Say it loudly. */}
+      {chipMissing && (
+        <section className="mb-3 rounded-[20px] border border-red-400/40 bg-red-500/[0.12] p-4" role="alert" data-testid="nfc-missing">
+          <p className="flex items-center gap-2 text-base font-bold text-red-100">
+            <AlertTriangle className="h-5 w-5 shrink-0 text-red-300" />
+            {tag.nfcStatus === "failed" ? t("nfcFailedTitle") : t("nfcMissingTitle")}
           </p>
-          <p className="truncate text-xs text-white/45">
-            {[t(`product_${tag.productType}` as "product_custom"), tag.face ? t(`face_${tag.face}` as "face_none") : null, tag.label].filter(Boolean).join(" · ")}
+          <p className="mt-1 text-sm text-red-100/80">{tag.nfcStatus === "failed" ? t("nfcFailedBody") : t("nfcMissingBody")}</p>
+          <button
+            type="button"
+            onClick={() => setWriteOpen(true)}
+            className="mt-3 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl bg-red-500 px-4 text-base font-bold text-white active:bg-red-600"
+            data-testid="button-write-chip-now"
+          >
+            <Nfc className="h-5 w-5" />
+            {t("writeChipNow")}
+          </button>
+        </section>
+      )}
+
+      {/* The customer: linked here, or renamed / changed. */}
+      <section className={`${CARD} flex items-center gap-3 px-4 py-3`}>
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/[0.06] text-white/60">
+          <Building2 className="h-5 w-5" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className={EYEBROW_MUTED}>{t("customer")}</p>
+          <p className={`truncate text-base font-bold ${tag.leadName ? "text-white" : "text-white/45"}`} data-testid="text-tag-lead">
+            {tag.leadName ?? t("noCustomer")}
           </p>
         </div>
-        <Pill tone={STATUS_TONE[tag.status] ?? "slate"}>{t(`status_${tag.status}` as "status_active")}</Pill>
+        {tag.leadId ? (
+          <button
+            type="button"
+            onClick={() => {
+              setNewName(tag.leadName ?? "");
+              setRenameOpen(true);
+            }}
+            className="flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl border border-white/10 px-3 text-sm font-semibold text-white/80 active:bg-white/10"
+            data-testid="button-edit-customer"
+          >
+            <Pencil className="h-4 w-4" />
+            {t("editCustomer")}
+          </button>
+        ) : (
+          !editing && (
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl bg-blue-500 px-3 text-sm font-bold text-white active:bg-blue-600"
+              data-testid="button-link-customer"
+            >
+              <Plus className="h-4 w-4" />
+              {t("linkCustomer")}
+            </button>
+          )
+        )}
       </section>
 
       {/* The star of the screen: where a scan or tap sends people. */}
-      {(() => {
-        const dest = tag.destinationUrl;
-        const destKind = contentKindOf(dest);
-        const KindIcon = { url: Link2, email: Mail, phone: Phone, vcard: Contact }[destKind];
-        const display = !dest ? null : destKind === "url" ? shortUrl(dest) : contentSummary(dest);
-        const typeLabel = destKind === "url" ? (tag.destinationType ? destinationLabel(tag.destinationType) : null) : t(`contentKind_${destKind}`);
-        return (
-          <section className="mt-3 rounded-[20px] border border-blue-400/25 bg-blue-500/[0.08] p-4" data-testid="destination-hero">
-            <p className={EYEBROW}>{t("destination")}</p>
-            {dest ? (
-              <div className="mt-2 flex items-center gap-3">
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-500/20 text-blue-200">
-                  <KindIcon className="h-5 w-5" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  {destKind === "vcard" ? (
-                    <p className="truncate text-lg font-bold text-white">{display}</p>
-                  ) : (
-                    <a href={dest} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-lg font-bold text-white underline-offset-2 active:underline" data-testid="link-destination">
-                      <span className="truncate">{display}</span>
-                      <ExternalLink className="h-4 w-4 shrink-0 text-blue-300" />
-                    </a>
-                  )}
-                  <p className="truncate text-xs text-white/50" data-testid="text-tag-lead">
-                    {[typeLabel, tag.leadName ?? t("noCustomer")].filter(Boolean).join(" · ")}
-                  </p>
-                </div>
-                {destKind !== "vcard" && <CopyButton text={dest} label={t("copyLink")} />}
-              </div>
-            ) : (
-              <p className="mt-2 text-lg font-bold text-white/55" data-testid="text-tag-lead">
-                {t("noDestination")}
-                <span className="block text-xs font-normal text-white/40">{tag.leadName ?? t("noCustomer")}</span>
-              </p>
-            )}
-            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-white/[0.08] pt-3 text-sm text-white/60">
-              <span className="flex items-center gap-1.5">
-                <QrCode className="h-4 w-4 text-blue-300" />
-                <span className="font-bold tabular-nums text-white">{tag.qrInteractions}</span> {t("qrScans")}
-              </span>
-              <span className="flex items-center gap-1.5">
-                <Nfc className="h-4 w-4 text-blue-300" />
-                <span className="font-bold tabular-nums text-white">{tag.nfcInteractions}</span> {t("nfcTaps")}
-              </span>
-              <span className="ml-auto">
-                <Pill tone={CHIP_TONE[tag.nfcStatus] ?? "amber"}>{t(`chip_${tag.nfcStatus}` as "chip_verified")}</Pill>
-              </span>
-            </div>
-          </section>
-        );
-      })()}
-
-      <section className={`${CARD} mt-4 space-y-4 p-4`}>
-        <h2 className="text-base font-bold text-white">{tag.destinationUrl ? t("editDestination") : t("sellTitle")}</h2>
-        {needsLead && (
-          <div>
-            <FieldLabel>{t("customerField")}</FieldLabel>
-            <LeadPicker value={lead} onChange={pickLead} />
-          </div>
-        )}
-        {/* The customer first, then their Google review link from it. */}
-        {(needsLead ? lead : tag.leadId) && leadPlaceName && (
-          <GenerateReviewButton
-            name={leadPlaceName}
-            placeId={leadPlace}
-            currentLink={link}
-            onLink={(url, place) => {
-              setKind("url");
-              setLink(url);
-              setType("google_review");
-              setTypeTouched(true);
-              show({ tone: "ok", text: place?.name || leadPlaceName ? t("reviewReady", { name: place?.name || leadPlaceName }) : t("reviewReadyNoName") });
-            }}
-          />
-        )}
-        <ContentEditor
-          kind={kind}
-          onKind={(next) => {
-            setKind(next);
-            // Back to a link: an email/phone type no longer fits.
-            if (next === "url" && (type === "email" || type === "phone")) setType(guessDestinationType(link));
-          }}
-          initial={initialContent}
-          onChange={setContent}
-          urlField={
-            <>
-            <div>
-              <FieldLabel>{t("linkField")}</FieldLabel>
-              <LinkInput value={link} onChange={onLink} placeholder={t("linkPlaceholder")} onPasteFailed={() => show({ tone: "error", text: tc("pasteFailed") })} />
-              <ReviewLinkAssist
-                link={link}
-                isReview={type === "google_review"}
-                onPick={(place) => {
-                  setLink(place.reviewUrl);
-                  setType("google_review");
-                  setTypeTouched(true);
-                  show({ tone: "ok", text: place.name ? t("reviewReady", { name: place.name }) : t("reviewReadyNoName") });
-                }}
-              />
-            </div>
-            <div>
-              <FieldLabel>{t("destTypeField")}</FieldLabel>
-              <select
-                value={type}
-                onChange={(e) => {
-                  setType(e.target.value as TagDestinationType);
-                  setTypeTouched(true);
-                }}
-                className={INPUT}
-                data-testid="select-destination-type"
-              >
-                {/* Email and phone are kinds of their own (the buttons above), not links. */}
-                {TAG_DESTINATION_TYPES.filter((value) => value !== "email" && value !== "phone").map((value) => (
-                  <option key={value} value={value} className={OPTION}>
-                    {destinationLabel(value)}
-                  </option>
-                ))}
-              </select>
-            </div>
-            </>
-          }
-        />
-        <div>
-          <FieldLabel>{t("labelField")}</FieldLabel>
-          <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder={t("labelPlaceholder")} maxLength={120} className={INPUT} />
+      <section className="mt-3 rounded-[20px] border border-blue-400/25 bg-blue-500/[0.08] p-4" data-testid="destination-hero">
+        <div className="flex items-center justify-between gap-2">
+          <p className={EYEBROW}>{t("destination")}</p>
+          {!editing && (
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="flex min-h-[36px] items-center gap-1.5 rounded-xl border border-blue-300/30 px-3 text-sm font-semibold text-blue-100 active:bg-blue-500/20"
+              data-testid="button-change-destination"
+            >
+              <Pencil className="h-4 w-4" />
+              {t("changeDestination")}
+            </button>
+          )}
         </div>
-        <button type="button" onClick={() => void save()} disabled={busy !== null || (kind === "url" ? !link.trim() : !content.value)} className={BTN_PRIMARY} data-testid="button-save-activate">
-          {busy === "save" ? <Spinner /> : <Power className="h-5 w-5" />}
-          {tag.status === "active" ? t("saveLink") : t("saveAndGoLive")}
-        </button>
+        {dest ? (
+          <div className="mt-2 flex items-center gap-3">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-500/20 text-blue-200">
+              <KindIcon className="h-5 w-5" />
+            </span>
+            <div className="min-w-0 flex-1">
+              {destKind === "vcard" ? (
+                <p className="truncate text-lg font-bold text-white">{destDisplay}</p>
+              ) : (
+                <a href={dest} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-lg font-bold text-white underline-offset-2 active:underline" data-testid="link-destination">
+                  <span className="truncate">{destDisplay}</span>
+                  <ExternalLink className="h-4 w-4 shrink-0 text-blue-300" />
+                </a>
+              )}
+              {destType && <p className="truncate text-xs text-white/50">{destType}</p>}
+            </div>
+            {destKind !== "vcard" && <CopyButton text={dest} label={t("copyLink")} />}
+          </div>
+        ) : (
+          <p className="mt-2 text-lg font-bold text-white/55">{t("noDestination")}</p>
+        )}
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-white/[0.08] pt-3 text-sm text-white/60">
+          <span className="flex items-center gap-1.5">
+            <QrCode className="h-4 w-4 text-blue-300" />
+            <span className="font-bold tabular-nums text-white">{tag.qrInteractions}</span> {t("qrScans")}
+          </span>
+          <span className="flex items-center gap-1.5">
+            <Nfc className="h-4 w-4 text-blue-300" />
+            <span className="font-bold tabular-nums text-white">{tag.nfcInteractions}</span> {t("nfcTaps")}
+          </span>
+          <span className="ml-auto">
+            <Pill tone={CHIP_TONE[tag.nfcStatus] ?? "amber"}>{t(`chip_${tag.nfcStatus}` as "chip_verified")}</Pill>
+          </span>
+        </div>
       </section>
 
+      {/* Editing: the customer first (when choosing one), then what the piece opens. */}
+      {editing && (
+        <section className={`${CARD} mt-3 space-y-4 p-4`} data-testid="destination-editor">
+          <h2 className="text-base font-bold text-white">{dest ? t("editDestination") : t("sellTitle")}</h2>
+          {needsLead && (
+            <div>
+              <FieldLabel>{t("customerField")}</FieldLabel>
+              <LeadPicker value={lead} onChange={setLead} />
+            </div>
+          )}
+          {(needsLead ? lead : tag.leadId) && leadPlaceName && (
+            <GenerateReviewButton
+              name={leadPlaceName}
+              placeId={leadPlace}
+              currentLink={link}
+              onLink={(url, place) => {
+                setKind("url");
+                setLink(url);
+                show({ tone: "ok", text: place?.name || leadPlaceName ? t("reviewReady", { name: place?.name || leadPlaceName }) : t("reviewReadyNoName") });
+              }}
+            />
+          )}
+          <ContentEditor
+            kind={kind}
+            onKind={setKind}
+            initial={initialContent}
+            onChange={setContent}
+            urlField={
+              <div>
+                <FieldLabel>{t("linkField")}</FieldLabel>
+                <LinkInput value={link} onChange={setLink} placeholder={t("linkPlaceholder")} onPasteFailed={() => show({ tone: "error", text: tc("pasteFailed") })} />
+                <ReviewLinkAssist
+                  link={link}
+                  onPick={(place) => {
+                    setLink(place.reviewUrl);
+                    show({ tone: "ok", text: place.name ? t("reviewReady", { name: place.name }) : t("reviewReadyNoName") });
+                  }}
+                />
+              </div>
+            }
+          />
+          <div>
+            <FieldLabel>{t("labelField")}</FieldLabel>
+            <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder={t("labelPlaceholder")} maxLength={120} className={INPUT} />
+          </div>
+          <button
+            type="button"
+            onClick={() => void save()}
+            disabled={busy !== null || (kind === "url" ? !link.trim() : !content.value)}
+            className={BTN_PRIMARY}
+            data-testid="button-save-activate"
+          >
+            {busy === "save" ? <Spinner /> : <Power className="h-5 w-5" />}
+            {tag.status === "active" ? t("saveLink") : t("saveAndGoLive")}
+          </button>
+          {dest && tag.leadId && (
+            <button
+              type="button"
+              onClick={() => {
+                setEditing(false);
+                setChangingCustomer(false);
+                setLead(null);
+              }}
+              className={BTN_TERTIARY}
+            >
+              {tc("cancel")}
+            </button>
+          )}
+        </section>
+      )}
+
       <div className="mt-4 space-y-2">
-        <button type="button" onClick={() => setWriteOpen(true)} className={BTN_SECONDARY} data-testid="button-write-chip">
-          <Nfc className="h-5 w-5 text-blue-600" />
-          {tag.nfcStatus === "not_programmed" ? t("writeChip") : t("rewriteChip")}
-        </button>
+        {!locked && !chipMissing && (
+          <button type="button" onClick={() => setWriteOpen(true)} className={BTN_TERTIARY} data-testid="button-write-chip">
+            <Nfc className="h-5 w-5 text-blue-300" />
+            {t("rewriteChip")}
+          </button>
+        )}
+        {/* A written chip can be sealed so nobody rewrites it. */}
+        {(tag.nfcStatus === "verified" || tag.nfcStatus === "programmed") && (
+          <button type="button" onClick={() => setLockOpen(true)} className={BTN_TERTIARY} data-testid="button-lock-chip">
+            <Lock className="h-5 w-5 text-amber-300" />
+            {t("lockNow")}
+          </button>
+        )}
         {(tag.status === "active" || disabled) && (
           <button type="button" onClick={() => void toggle()} disabled={busy !== null} className={BTN_TERTIARY} data-testid="button-toggle">
             {busy === "toggle" ? <Spinner /> : <Power className={`h-5 w-5 ${disabled ? "text-emerald-400" : "text-red-400"}`} />}
@@ -394,12 +487,48 @@ export default function TagScreen({ code, onClose }: {
         )}
       </div>
 
+      {/* Rename the customer, or move the piece to another one. */}
+      <BottomSheet open={renameOpen} onClose={() => setRenameOpen(false)} title={t("customer")}>
+        <h2 className={SHEET_TITLE}>{t("customer")}</h2>
+        <div className="mt-4 space-y-3">
+          <div>
+            <FieldLabel>{t("customerName")}</FieldLabel>
+            <input value={newName} onChange={(e) => setNewName(e.target.value)} maxLength={200} autoCapitalize="words" className={INPUT} data-testid="input-customer-name" />
+          </div>
+          <button type="button" onClick={() => void rename()} disabled={busy !== null || !newName.trim() || newName.trim() === tag.leadName} className={BTN_PRIMARY}>
+            {busy === "rename" ? <Spinner /> : null}
+            {t("saveName")}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setRenameOpen(false);
+              setChangingCustomer(true);
+              setLead(null);
+              setEditing(true);
+            }}
+            className={BTN_TERTIARY}
+            data-testid="button-change-customer"
+          >
+            {t("changeCustomer")}
+          </button>
+        </div>
+      </BottomSheet>
+
+      <LockSheet
+        open={lockOpen}
+        identity="xpot"
+        onClose={() => setLockOpen(false)}
+        onLocked={async () => setDetail(await tagsPost<TagDetail>(`/api/xpot/tags/${tag.id}/nfc-locked`))}
+      />
+
       <WriteSheet
         open={writeOpen}
         url={tag.nfcUrl}
         identity="xpot"
         onClose={() => setWriteOpen(false)}
         onDone={onWritten}
+        onLock={() => setLockOpen(true)}
         continueUrl={`${window.location.origin}${tagPath(tag.publicCode)}?write=1`}
       />
     </>

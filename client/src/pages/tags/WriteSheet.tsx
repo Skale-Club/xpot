@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, Nfc, Smartphone, X } from "lucide-react";
+import { Check, Lock, Nfc, Smartphone, X } from "lucide-react";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
@@ -26,13 +26,15 @@ interface Props {
   /** This screen on the phone; desktop shows it as a QR. */
   continueUrl?: string;
   continueHint?: string;
+  /** Offered once the chip is written: seal it so nobody can rewrite it (LockSheet). */
+  onLock?: () => void;
 }
 
 type Phase = "idle" | "writing" | "verifying" | "saving" | "done" | "error";
 
 const MANUAL_STEPS = ["manual1", "manual2", "manual3", "manual4", "manual5"] as const;
 
-export default function WriteSheet({ open, url, identity, onClose, onDone, continueUrl, continueHint }: Props) {
+export default function WriteSheet({ open, url, identity, onClose, onDone, continueUrl, continueHint, onLock }: Props) {
   const t = useT(tagsMessages);
   const tc = useT(commonMessages);
   const supported = isWebNfcSupported();
@@ -139,6 +141,20 @@ export default function WriteSheet({ open, url, identity, onClose, onDone, conti
           <button type="button" onClick={close} className={`${BTN_PRIMARY} mt-5`}>
             {tc("done")}
           </button>
+          {onLock && supported && (
+            <button
+              type="button"
+              onClick={() => {
+                close();
+                onLock();
+              }}
+              className={`${BTN_TERTIARY} mt-2`}
+              data-testid="button-write-then-lock"
+            >
+              <Lock className="h-5 w-5 text-amber-300" />
+              {t("lockNow")}
+            </button>
+          )}
         </div>
       ) : phase === "writing" ? (
         <>

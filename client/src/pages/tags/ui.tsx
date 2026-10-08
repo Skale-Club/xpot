@@ -35,33 +35,38 @@ export function TopBar({
   eyebrow,
   identity = "xpot",
   right,
+  sub,
+  titleClassName = "",
 }: {
   title: string;
   back?: string;
   eyebrow?: string;
   identity?: Identity;
   right?: ReactNode;
+  /** A line under the title (status, details). */
+  sub?: ReactNode;
+  titleClassName?: string;
 }) {
   const t = useT(commonMessages);
+  // Back, title and the right-hand slot share one row: a row of its own for the
+  // back arrow left a tall empty band above every screen.
   return (
-    <header className="mb-4">
-      {(back || right) && (
-        <div className="mb-1 flex min-h-[48px] items-center gap-2">
-          {back && (
-            <Link
-              href={back}
-              aria-label={t("back")}
-              className="-ml-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/80 active:bg-white/10"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </Link>
-          )}
-          <div className="flex-1" />
-          {right}
-        </div>
+    <header className="mb-4 flex items-start gap-2">
+      {back && (
+        <Link
+          href={back}
+          aria-label={t("back")}
+          className="-ml-2 mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/80 active:bg-white/10"
+        >
+          <ArrowLeft className="h-5 w-5" />
+        </Link>
       )}
-      {eyebrow && <p className={identity === "direct" ? EYEBROW.replace("text-indigo-300/80", "text-emerald-300/80") : EYEBROW}>{eyebrow}</p>}
-      <h1 className="mt-1 break-words text-[26px] font-extrabold leading-tight tracking-tight text-white">{title}</h1>
+      <div className="min-w-0 flex-1">
+        {eyebrow && <p className={identity === "direct" ? EYEBROW.replace("text-indigo-300/80", "text-emerald-300/80") : EYEBROW}>{eyebrow}</p>}
+        <h1 className={`mt-0.5 break-words text-[26px] font-extrabold leading-tight tracking-tight text-white ${titleClassName}`}>{title}</h1>
+        {sub && <div className="mt-1.5">{sub}</div>}
+      </div>
+      {right && <div className="shrink-0">{right}</div>}
     </header>
   );
 }

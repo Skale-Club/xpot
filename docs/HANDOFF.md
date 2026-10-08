@@ -96,6 +96,24 @@ email/phone/contact name, open + copy, type · customer, QR scans / NFC taps / c
 section is titled "Change where it opens" once a destination exists. Header jump between Visits and
 Tags was fixed in #54 (`MODULE_COLUMN` in `AppLayout.tsx`).
 
+## Piece screen v2 (PR from `feat/piece-screen-v2`)
+
+`TagScreen.tsx` rewritten: TopBar now puts back arrow, eyebrow and title on one row (the separate
+back row was the "hole" under the module switch, `ui.tsx` TopBar, affects every Tags screen) with a
+`sub` line (status + product). Order: loud red "NFC chip not written/failed" card with "Write chip
+now"; customer card (Link a customer / Edit → rename via PATCH /api/xpot/leads/:id or move to another
+customer); destination card with its own Change button; editor closed unless no destination/customer
+or Change tapped; destination type no longer a select (derived with guessDestinationType). Save button
+reads "Save new destination". `ReviewLinkAssist` only appears for a Google link that is not the review
+form (conversion); generating from scratch is `GenerateReviewButton` under the customer.
+**Chip lock**: `LockSheet.tsx` uses Web NFC `makeReadOnly` (Chrome Android); Xpot pieces record it via
+`POST /api/xpot/tags/:id/nfc-locked` (`recordPhoneLock` in `server/tags/field.ts`, status `locked`,
+`nfc_locked_at`); a locked chip refuses rewrites. Offered after a write and on written chips; direct
+chips get a stronger warning (content can never change). Visits dashboard lost the redundant Tags card.
+
+Owner's open idea (not built): drop the "Review link" tab and turn Tags Home into a fuller customer
+Dashboard (scans by place/piece over time, etc.). See the answer given in chat; decide before building.
+
 ## Backlog (owner's requests, in their order)
 
 1. **SEO + Google Search Console** (owner asked explicitly). `client/index.html` has
