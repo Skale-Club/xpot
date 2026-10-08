@@ -23,9 +23,9 @@ Everything below is in the repo; nothing lives only in a chat.
 | #48 | **PWA install entry, passive.** "Install app" item in the desktop sidebar footer and a row in Settings. Chromium: native prompt (captured at boot, mini-infobar suppressed). iPhone/iPad and Safari Mac: steps dialog. Hidden when installed or unsupported. `client/src/hooks/use-install-app.ts`, `client/src/components/xpot/InstallApp.tsx`, `resolveInstallMode()` in `client/src/lib/pwa.ts`, test `tests/pwa-install-mode.test.ts`. |
 | #50 | **"My pieces" shows only the viewer's own pieces**, admins included (`GET /api/xpot/tags?mine=1`). Before, the super admin saw every printed piece. A piece is yours once it is in your kit or you activated it. `server/tags/routes.ts`, `client/src/pages/tags/PiecesScreen.tsx`. |
 | #49 | **Admin mode + Settings + Tags nav.** Admin mode (off by default) hides all management UI; language chosen only in Settings (full names, big rows); flags removed from in-app headers; Tags phone header got a Settings button; Tags "Manage" became a 4th bottom tab (admin mode); "Direct link" renamed "Review link" / "Link de review" / "Enlace de reseña" (URL still `/tags/direct`). `client/src/lib/adminMode.ts`, `client/src/pages/tags/TagsTabBar.tsx`. |
-| branch `fix/rep-view-lists` (PR in progress) | **Clear split between personal Settings and the admin side.** See next section. |
+| #51 | **Clear split between personal Settings and the admin side**, and the rep view narrows the lists. See next section. |
 
-## In progress: `fix/rep-view-lists`
+## Admin mode and the rep view (#51)
 
 Owner's requirement: "the super admin's day-to-day view must be a normal user's view; everything
 super admin stays inside super admin; the difference between personal Settings and super admin must be obvious."
@@ -50,9 +50,11 @@ What the branch does:
    person's Xphere connection at `/admin/xphere`).
 4. Command palette (desktop) searches "my pieces" (`?mine=1`), matching the Pieces screen cache key.
 
-To finish: `npx tsc -p . && npx vitest run`, commit, push, open PR, wait for CI, merge, align `dev`,
-check `https://xpot.place/api/version`. Then manually check on a phone: as the super admin, with admin
-mode off, Leads/History/Sales/My pieces show only your own data; the shield enters admin mode and the amber bar appears.
+Not yet checked by hand (no local session): on a phone, as the super admin with admin mode off,
+Leads/History/Sales/My pieces show only your own data; the shield enters admin mode and the amber bar appears.
+
+Gotcha: `client/src/lib/adminMode.ts` uses relative imports (not `@shared`/`@/`) because
+`client/src/lib/queryClient.ts` imports it and `tests/api-error.test.ts` loads that without the aliases.
 
 ## Backlog (owner's requests, in their order)
 
