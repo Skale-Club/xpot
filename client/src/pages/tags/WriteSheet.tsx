@@ -165,7 +165,8 @@ export default function WriteSheet({ open, url, identity, onClose, onDone, conti
           <button type="button" onClick={close} className={`${BTN_PRIMARY} mt-5`}>
             {tc("done")}
           </button>
-          {onLock && supported && (
+          {/* Android locks right away; an iPhone once a real tap confirmed the write (lock a wrong chip and it is lost). */}
+          {onLock && (supported || confirmed) && (
             <button
               type="button"
               onClick={() => {
