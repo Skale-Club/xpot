@@ -87,7 +87,7 @@ export default function TagScreen({ code, onClose }: {
   const [initialContent, setInitialContent] = useState<string | null>(null);
   const [label, setLabel] = useState("");
   const [lead, setLead] = useState<LeadChoice>(null);
-  // The editor stays closed on a configured piece; "Change" / "Link a customer" open it.
+  // The editor is a pop-up: "Change", "Link a customer" and "Set up this piece" open it.
   const [editing, setEditing] = useState(false);
   const [changingCustomer, setChangingCustomer] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
@@ -106,14 +106,14 @@ export default function TagScreen({ code, onClose }: {
     if (storedKind === "url") setLink(tag.destinationUrl ?? "");
     else setInitialContent(tag.destinationUrl);
     setLabel(tag.label ?? "");
-    // Nothing to show yet: the editor is the screen.
-    setEditing(!tag.destinationUrl || !tag.leadId);
     pushRecent({ kind: "xpot", value: tag.publicCode });
     // Selling during a visit: an unsold piece goes to the visit's customer.
     const sellTo = getSellTo();
     if (!tag.leadId && sellTo) {
       setLead({ leadId: sellTo.leadId, name: sellTo.name, placeId: sellTo.placeId });
       if (sellTo.placeId && !tag.destinationUrl) setLink(buildReviewUrl(sellTo.placeId));
+      // Selling during a visit: straight to setting the piece up.
+      setEditing(true);
     }
     if (new URLSearchParams(window.location.search).get("write") === "1") {
       // In the desktop pane the path is /tags/pieces/<code>; only drop the query.
@@ -217,6 +217,12 @@ export default function TagScreen({ code, onClose }: {
     } finally {
       setBusy(null);
     }
+  };
+
+  const closeEditor = () => {
+    setEditing(false);
+    setChangingCustomer(false);
+    setLead(null);
   };
 
   const rename = async () => {
@@ -325,17 +331,15 @@ export default function TagScreen({ code, onClose }: {
             {t("editCustomer")}
           </button>
         ) : (
-          !editing && (
-            <button
-              type="button"
-              onClick={() => setEditing(true)}
-              className="flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl bg-blue-500 px-3 text-sm font-bold text-white active:bg-blue-600"
-              data-testid="button-link-customer"
-            >
-              <Plus className="h-4 w-4" />
-              {t("linkCustomer")}
-            </button>
-          )
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl bg-blue-500 px-3 text-sm font-bold text-white active:bg-blue-600"
+            data-testid="button-link-customer"
+          >
+            <Plus className="h-4 w-4" />
+            {t("linkCustomer")}
+          </button>
         )}
       </section>
 
@@ -343,7 +347,7 @@ export default function TagScreen({ code, onClose }: {
       <section className="mt-3 rounded-[20px] border border-blue-400/25 bg-blue-500/[0.08] p-4" data-testid="destination-hero">
         <div className="flex items-center justify-between gap-2">
           <p className={EYEBROW}>{t("destination")}</p>
-          {!editing && (
+          {dest && (
             <button
               type="button"
               onClick={() => setEditing(true)}
@@ -374,7 +378,13 @@ export default function TagScreen({ code, onClose }: {
             {destKind !== "vcard" && <CopyButton text={dest} label={t("copyLink")} />}
           </div>
         ) : (
-          <p className="mt-2 text-lg font-bold text-white/55">{t("noDestination")}</p>
+          <>
+            <p className="mt-2 text-lg font-bold text-white/55">{t("noDestination")}</p>
+            <button type="button" onClick={() => setEditing(true)} className={`${BTN_PRIMARY} mt-3`} data-testid="button-setup-piece">
+              <Power className="h-5 w-5" />
+              {t("configurePiece")}
+            </button>
+          </>
         )}
         <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-white/[0.08] pt-3 text-sm text-white/60">
           <span className="flex items-center gap-1.5">
@@ -385,16 +395,63 @@ export default function TagScreen({ code, onClose }: {
             <Nfc className="h-4 w-4 text-blue-300" />
             <span className="font-bold tabular-nums text-white">{tag.nfcInteractions}</span> {t("nfcTaps")}
           </span>
-          <span className="ml-auto">
-            <Pill tone={CHIP_TONE[tag.nfcStatus] ?? "amber"}>{t(`chip_${tag.nfcStatus}` as "chip_verified")}</Pill>
-          </span>
         </div>
       </section>
 
-      {/* Editing: the customer first (when choosing one), then what the piece opens. */}
-      {editing && (
-        <section className={`${CARD} mt-3 space-y-4 p-4`} data-testid="destination-editor">
-          <h2 className="text-base font-bold text-white">{dest ? t("editDestination") : t("sellTitle")}</h2>
+      {/* The NFC chip: its state and what can be done with it, write and lock always in view. */}
+      <section className={`${CARD} mt-3 p-4`} data-testid="chip-card">
+        <div className="flex items-center justify-between gap-2">
+          <p className={EYEBROW_MUTED}>{t("chipTitle")}</p>
+          <Pill tone={CHIP_TONE[tag.nfcStatus] ?? "amber"}>{t(`chip_${tag.nfcStatus}` as "chip_verified")}</Pill>
+        </div>
+        {locked ? (
+          <p className="mt-2 flex items-center gap-2 text-sm text-white/60">
+            <Lock className="h-4 w-4 shrink-0 text-amber-300" />
+            {t("lockedHint")}
+          </p>
+        ) : (
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setWriteOpen(true)}
+              className="flex min-h-[48px] items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.05] text-sm font-semibold text-white active:bg-white/10"
+              data-testid="button-write-chip"
+            >
+              <Nfc className="h-4 w-4 text-blue-300" />
+              {chipMissing ? t("writeChip") : t("rewriteChip")}
+            </button>
+            <button
+              type="button"
+              onClick={() => setLockOpen(true)}
+              disabled={chipMissing}
+              className="flex min-h-[48px] items-center justify-center gap-2 rounded-2xl border border-amber-400/25 bg-amber-400/[0.06] text-sm font-semibold text-amber-100 active:bg-amber-400/15 disabled:opacity-40"
+              data-testid="button-lock-chip"
+            >
+              <Lock className="h-4 w-4 text-amber-300" />
+              {t("lockNow")}
+            </button>
+          </div>
+        )}
+        {!locked && chipMissing && <p className="mt-2 text-xs text-white/40">{t("lockNeedsWrite")}</p>}
+      </section>
+
+      {/* The editor, as a pop-up: the customer first (when choosing one), then what the piece opens. */}
+      <BottomSheet open={editing} onClose={closeEditor} title={dest ? t("editDestination") : t("configurePiece")}>
+        <div className="space-y-4" data-testid="destination-editor">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className={SHEET_TITLE}>{dest ? t("editDestination") : t("configurePiece")}</h2>
+            <button type="button" onClick={closeEditor} aria-label={tc("close")} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/60 active:bg-white/10">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          {/* Messages (a bad link, a save error) show here too: the page banner is behind the pop-up. */}
+          <Banner banner={banner} />
+          {!needsLead && tag.leadName && (
+            <p className="flex items-center gap-2 text-sm text-white/60">
+              <Building2 className="h-4 w-4 shrink-0 text-white/40" />
+              <span className="truncate">{tag.leadName}</span>
+            </p>
+          )}
           {needsLead && (
             <div>
               <FieldLabel>{t("customerField")}</FieldLabel>
@@ -446,36 +503,13 @@ export default function TagScreen({ code, onClose }: {
             {busy === "save" ? <Spinner /> : <Power className="h-5 w-5" />}
             {tag.status === "active" ? t("saveLink") : t("saveAndGoLive")}
           </button>
-          {dest && tag.leadId && (
-            <button
-              type="button"
-              onClick={() => {
-                setEditing(false);
-                setChangingCustomer(false);
-                setLead(null);
-              }}
-              className={BTN_TERTIARY}
-            >
-              {tc("cancel")}
-            </button>
-          )}
-        </section>
-      )}
+          <button type="button" onClick={closeEditor} className={BTN_TERTIARY}>
+            {tc("cancel")}
+          </button>
+        </div>
+      </BottomSheet>
 
       <div className="mt-4 space-y-2">
-        {!locked && !chipMissing && (
-          <button type="button" onClick={() => setWriteOpen(true)} className={BTN_TERTIARY} data-testid="button-write-chip">
-            <Nfc className="h-5 w-5 text-blue-300" />
-            {t("rewriteChip")}
-          </button>
-        )}
-        {/* A written chip can be sealed so nobody rewrites it. */}
-        {(tag.nfcStatus === "verified" || tag.nfcStatus === "programmed") && (
-          <button type="button" onClick={() => setLockOpen(true)} className={BTN_TERTIARY} data-testid="button-lock-chip">
-            <Lock className="h-5 w-5 text-amber-300" />
-            {t("lockNow")}
-          </button>
-        )}
         {(tag.status === "active" || disabled) && (
           <button type="button" onClick={() => void toggle()} disabled={busy !== null} className={BTN_TERTIARY} data-testid="button-toggle">
             {busy === "toggle" ? <Spinner /> : <Power className={`h-5 w-5 ${disabled ? "text-emerald-400" : "text-red-400"}`} />}
