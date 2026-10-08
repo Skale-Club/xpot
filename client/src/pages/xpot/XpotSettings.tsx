@@ -15,6 +15,7 @@ import { AppLayout } from "@/components/xpot/AppLayout";
 import { homeForModules, useXpotModules } from "@/components/ModuleSwitch";
 import { canAdminister } from "@/components/xpot/AppLayout";
 import { shellMessages } from "@/i18n/messages/shell";
+import { InstallAppRow } from "@/components/xpot/InstallApp";
 
 type XphereConfig = {
   inboundApiKey: string | null;
@@ -452,6 +453,8 @@ export function XpotSettings() {
             <ChevronRight className="h-4 w-4 text-white/30" />
           </button>
         )}
+
+        <InstallAppRow className="mb-6" />
 
         <div className="space-y-8 lg:columns-2 lg:gap-6 lg:space-y-0 lg:[&>*]:mb-6 lg:[&>*]:break-inside-avoid">
           {/* Language */}

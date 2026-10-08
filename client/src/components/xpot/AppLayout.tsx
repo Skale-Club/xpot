@@ -29,6 +29,7 @@ import { useIsComputer, useIsDesktop } from "@/hooks/use-is-desktop";
 import { BRAND_GRADIENT, MODULE_ACCENT } from "./surface";
 import { contextOfPath, moduleGroups, organizationItems, starts, type NavGroup, type NavItem, type ShellContext } from "./moduleNav";
 import { XpotMark } from "./XpotMark";
+import { InstallAppSidebarItem } from "./InstallApp";
 import { ScreenErrorBoundary } from "./ScreenErrorBoundary";
 
 // The frame around every rep screen. Below `lg` it is the phone column the app
@@ -234,7 +235,8 @@ function DesktopSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
         ))}
       </nav>
 
-      <div className={`space-y-1 border-t border-white/[0.07] px-3 ${footer.length ? "py-3" : "pb-3 pt-1"}`}>
+      <div className="space-y-1 border-t border-white/[0.07] px-3 py-3">
+        <InstallAppSidebarItem collapsed={collapsed} />
         {footer.map((item) => (
           <SidebarLink key={item.href} item={item} collapsed={collapsed} active={item.match(location)} accent={MODULE_ACCENT.account} />
         ))}
