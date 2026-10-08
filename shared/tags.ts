@@ -25,6 +25,8 @@ export const TAG_DESTINATION_TYPES = [
   "vcard",
   "menu",
   "social",
+  "email",
+  "phone",
   "custom",
 ] as const;
 export type TagDestinationType = (typeof TAG_DESTINATION_TYPES)[number];
@@ -187,7 +189,8 @@ export function resolveRedirectTarget(
   method: TagAccessMethod,
 ): string | null {
   if (!tag.destinationUrl) return null;
-  if (!tag.utmEnabled) return tag.destinationUrl;
+  // UTMs are for web links; an email, phone or contact card is served as is (shared/chipContent.ts).
+  if (!tag.utmEnabled || !/^https?:/i.test(tag.destinationUrl)) return tag.destinationUrl;
   return applyTagUtm(tag.destinationUrl, { method, campaign: tag.utmCampaign, code: tag.publicCode });
 }
 

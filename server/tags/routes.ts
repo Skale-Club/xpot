@@ -10,10 +10,10 @@ import {
   buildManufacturingCsv,
   buildTagUrls,
   normalizeTagCode,
-  validateDestinationUrl,
 } from "#shared/tags.js";
 import { canWorkOnTag } from "#shared/tagAccess.js";
 import { TAG_FACES } from "#shared/tagFace.js";
+import { validateChipContent } from "#shared/chipContent.js";
 import { DIRECT_WRITE_METHODS, TAGS_APP_PATH } from "#shared/tagApp.js";
 import {
   DEVICE_EVENT_TYPES,
@@ -62,13 +62,14 @@ const allowHttp = () => process.env.NODE_ENV !== "production";
 const optionalText = (max: number) =>
   z.preprocess((v) => (typeof v === "string" ? v.trim() || null : v), z.string().max(max).nullable().optional());
 
+// A link, an email, a phone or a contact card (shared/chipContent.ts), stored canonical.
 const destinationUrl = z.string().transform((value, ctx) => {
-  const result = validateDestinationUrl(value, { allowHttp: allowHttp() });
+  const result = validateChipContent(value, { allowHttp: allowHttp() });
   if (!result.ok) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: result.error });
     return z.NEVER;
   }
-  return result.url;
+  return result.value;
 });
 
 const nullableDestinationUrl = z
@@ -77,12 +78,12 @@ const nullableDestinationUrl = z
   .transform((value, ctx) => {
     if (value === undefined) return undefined;
     if (value === null || value.trim() === "") return null;
-    const result = validateDestinationUrl(value, { allowHttp: allowHttp() });
+    const result = validateChipContent(value, { allowHttp: allowHttp() });
     if (!result.ok) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: result.error, path: ["destinationUrl"] });
       return z.NEVER;
     }
-    return result.url;
+    return result.value;
   });
 
 const leadFields = {
