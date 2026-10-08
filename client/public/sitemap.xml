@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:xhtml="http://www.w3.org/1999/xhtml">
+  <url>
+    <loc>https://xpot.place/</loc>
+    <lastmod>2026-10-08</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://xpot.place/" />
+    <xhtml:link rel="alternate" hreflang="pt" href="https://xpot.place/pt" />
+    <xhtml:link rel="alternate" hreflang="es" href="https://xpot.place/es" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://xpot.place/" />
+  </url>
+  <url>
+    <loc>https://xpot.place/pt</loc>
+    <lastmod>2026-10-08</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://xpot.place/" />
+    <xhtml:link rel="alternate" hreflang="pt" href="https://xpot.place/pt" />
+    <xhtml:link rel="alternate" hreflang="es" href="https://xpot.place/es" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://xpot.place/" />
+  </url>
+  <url>
+    <loc>https://xpot.place/es</loc>
+    <lastmod>2026-10-08</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://xpot.place/" />
+    <xhtml:link rel="alternate" hreflang="pt" href="https://xpot.place/pt" />
+    <xhtml:link rel="alternate" hreflang="es" href="https://xpot.place/es" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://xpot.place/" />
+  </url>
+  <url>
+    <loc>https://xpot.place/privacy</loc>
+    <lastmod>2026-10-05</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.4</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://xpot.place/privacy" />
+    <xhtml:link rel="alternate" hreflang="pt" href="https://xpot.place/pt/privacy" />
+    <xhtml:link rel="alternate" hreflang="es" href="https://xpot.place/es/privacy" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://xpot.place/privacy" />
+  </url>
+  <url>
+    <loc>https://xpot.place/pt/privacy</loc>
+    <lastmod>2026-10-05</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://xpot.place/privacy" />
+    <xhtml:link rel="alternate" hreflang="pt" href="https://xpot.place/pt/privacy" />
+    <xhtml:link rel="alternate" hreflang="es" href="https://xpot.place/es/privacy" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://xpot.place/privacy" />
+  </url>
+  <url>
+    <loc>https://xpot.place/es/privacy</loc>
+    <lastmod>2026-10-05</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://xpot.place/privacy" />
+    <xhtml:link rel="alternate" hreflang="pt" href="https://xpot.place/pt/privacy" />
+    <xhtml:link rel="alternate" hreflang="es" href="https://xpot.place/es/privacy" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://xpot.place/privacy" />
+  </url>
+  <url>
+    <loc>https://xpot.place/terms</loc>
+    <lastmod>2026-10-05</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.4</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://xpot.place/terms" />
+    <xhtml:link rel="alternate" hreflang="pt" href="https://xpot.place/pt/terms" />
+    <xhtml:link rel="alternate" hreflang="es" href="https://xpot.place/es/terms" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://xpot.place/terms" />
+  </url>
+  <url>
+    <loc>https://xpot.place/pt/terms</loc>
+    <lastmod>2026-10-05</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://xpot.place/terms" />
+    <xhtml:link rel="alternate" hreflang="pt" href="https://xpot.place/pt/terms" />
+    <xhtml:link rel="alternate" hreflang="es" href="https://xpot.place/es/terms" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://xpot.place/terms" />
+  </url>
+  <url>
+    <loc>https://xpot.place/es/terms</loc>
+    <lastmod>2026-10-05</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://xpot.place/terms" />
+    <xhtml:link rel="alternate" hreflang="pt" href="https://xpot.place/pt/terms" />
+    <xhtml:link rel="alternate" hreflang="es" href="https://xpot.place/es/terms" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://xpot.place/terms" />
+  </url>
+</urlset>

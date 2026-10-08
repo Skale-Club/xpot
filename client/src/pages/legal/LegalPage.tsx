@@ -6,6 +6,8 @@ import { LanguagePicker } from "@/components/LanguagePicker";
 import { useI18n, useT } from "@/i18n";
 import { landingMessages } from "@/i18n/messages/landing";
 import { LEGAL_DOCS, type LegalBlock } from "./content";
+import { publicPagePath } from "@shared/seo";
+import { usePublicSeo } from "@/lib/seo";
 
 function Block({ block }: { block: LegalBlock }) {
   if (typeof block === "string") return <p>{block}</p>;
@@ -31,6 +33,7 @@ export function LegalPage({ doc }: { doc: "privacy" | "terms" }) {
   const t = useT(landingMessages);
   const content = LEGAL_DOCS[doc][lang];
   const other = doc === "privacy" ? "terms" : "privacy";
+  usePublicSeo(doc);
   // The support WhatsApp is configured on the server (XPOT_SUPPORT_WHATSAPP).
   const { data: config } = useQuery<{ supportWhatsapp: string | null }>({
     queryKey: ["/api/auth/phone/config"],
@@ -38,16 +41,13 @@ export function LegalPage({ doc }: { doc: "privacy" | "terms" }) {
   });
   const whatsapp = config?.supportWhatsapp ? `https://wa.me/${config.supportWhatsapp.replace(/\D/g, "")}` : null;
 
-  useEffect(() => {
-    document.title = `${content.title} · Xpot`;
-    window.scrollTo(0, 0);
-  }, [content.title]);
+  useEffect(() => window.scrollTo(0, 0), [content.title]);
 
   return (
     <div className="min-h-screen text-white" style={{ background: "linear-gradient(160deg, #05070f 0%, #080c18 50%, #040810 100%)" }}>
       <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-[#05070f]/80 backdrop-blur-md">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-5 py-4">
-          <Link href="/" className="flex items-center gap-2 text-sm font-semibold text-white/70 transition-colors hover:text-white">
+          <Link href={publicPagePath("home", lang)} className="flex items-center gap-2 text-sm font-semibold text-white/70 transition-colors hover:text-white">
             <ArrowLeft className="h-4 w-4" />
             {t("backHome")}
           </Link>
@@ -93,7 +93,7 @@ export function LegalPage({ doc }: { doc: "privacy" | "terms" }) {
       </main>
 
       <footer className="border-t border-white/[0.06] py-8 text-center text-sm text-white/50">
-        <Link href={`/${other}`} className="transition-colors hover:text-white">
+        <Link href={publicPagePath(other, lang)} className="transition-colors hover:text-white">
           {t(other === "privacy" ? "privacyPolicy" : "termsOfService")}
         </Link>
         <p className="mt-2">{t("footerRights", { year: new Date().getFullYear() })}</p>

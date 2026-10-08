@@ -1,0 +1,20 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /admin
+Disallow: /dashboard
+Disallow: /leads
+Disallow: /check-in
+Disallow: /visits
+Disallow: /sales
+Disallow: /settings
+Disallow: /tags
+Disallow: /login
+Disallow: /oauth
+Disallow: /mcp
+Disallow: /n/
+Disallow: /q/
+Disallow: /wholesale
+
+Sitemap: https://xpot.place/sitemap.xml
+Host: xpot.place

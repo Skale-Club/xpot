@@ -7,6 +7,7 @@ import path from "path";
 import type { Express } from "express";
 import type { Server } from "http";
 import { createServer as createViteServer } from "vite";
+import { injectSeoHead } from "./seo.js";
 
 export async function setupVite(app: Express, httpServer: Server): Promise<void> {
   const vite = await createViteServer({
@@ -39,7 +40,8 @@ export async function setupVite(app: Express, httpServer: Server): Promise<void>
     try {
       const templatePath = path.resolve(process.cwd(), "client", "index.html");
       const template = await fs.readFile(templatePath, "utf-8");
-      const html = await vite.transformIndexHtml(req.originalUrl, template);
+      const transformed = await vite.transformIndexHtml(req.originalUrl, template);
+      const html = injectSeoHead(transformed, req.path);
       res.status(200).set({ "Content-Type": "text/html" }).end(html);
     } catch (err) {
       vite.ssrFixStacktrace(err as Error);

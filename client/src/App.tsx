@@ -160,9 +160,15 @@ export default function App() {
     <Router>
       <Switch>
         <Route path="/" component={RootRoute} />
+        <Route path="/pt" component={RootRoute} />
+        <Route path="/es" component={RootRoute} />
         <Route path="/login" component={Login} />
         <Route path="/privacy">{() => <LegalPage doc="privacy" />}</Route>
         <Route path="/terms">{() => <LegalPage doc="terms" />}</Route>
+        <Route path="/pt/privacy">{() => <LegalPage doc="privacy" />}</Route>
+        <Route path="/pt/terms">{() => <LegalPage doc="terms" />}</Route>
+        <Route path="/es/privacy">{() => <LegalPage doc="privacy" />}</Route>
+        <Route path="/es/terms">{() => <LegalPage doc="terms" />}</Route>
         <Route path="/admin/tags/*?">{() => <AdminApp section="tags" />}</Route>
         <Route path="/admin/:section?">
           {(params) => <AdminApp section={params.section ?? "overview"} />}

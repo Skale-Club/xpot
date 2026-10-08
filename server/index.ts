@@ -1,9 +1,11 @@
 import "dotenv/config";
 import express from "express";
+import fs from "fs/promises";
 import path from "path";
 import { createApp, log } from "./app.js";
 import { pool } from "./db.js";
 import { ensureUploadBucket } from "./lib/supabase.js";
+import { injectSeoHead } from "./seo.js";
 
 const PORT = Number(process.env.PORT) || 2110;
 
@@ -23,13 +25,20 @@ const PORT = Number(process.env.PORT) || 2110;
     // dist/index.cjs lives next to dist/public — resolve relative to cwd to keep
     // the path stable whether esbuild emits CJS or ESM.
     const clientDist = path.resolve(process.cwd(), "dist", "public");
-    app.use(express.static(clientDist));
+    const clientTemplate = await fs.readFile(path.join(clientDist, "index.html"), "utf8");
+    // index:false makes every document navigation pass through the SEO renderer;
+    // fingerprinted assets, robots.txt, sitemap.xml and the OG image stay static.
+    app.use(express.static(clientDist, { index: false }));
     // A typo'd or removed API path must fail as an API, not answer 200 with the app's HTML.
     app.all("/api/*", (_req, res) => {
       res.status(404).json({ message: "Not found" });
     });
-    app.get("*", (_req, res) => {
-      res.sendFile(path.join(clientDist, "index.html"));
+    app.get("*", (req, res) => {
+      res
+        .status(200)
+        .set("Cache-Control", "no-cache")
+        .type("html")
+        .send(injectSeoHead(clientTemplate, req.path));
     });
   } else {
     // Dynamic import so Vite (a devDependency) is never pulled into the

@@ -16,7 +16,8 @@
     "migrate": "tsx scripts/migrate.ts",
     "files:migrate": "tsx scripts/migrate-private-files.ts",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "seo:og": "tsx scripts/generate-og-image.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.0",
