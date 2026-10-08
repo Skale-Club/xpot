@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "@/components/ui/loader";
@@ -22,6 +23,7 @@ import { shellMessages } from "@/i18n/messages/shell";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { manageMessages } from "@/i18n/messages/manage";
 import { MODULE_HOME } from "@/lib/xpot";
+import { useViewerAccess } from "@/lib/adminMode";
 
 // The management screens. They are not a place of their own any more: each one
 // belongs to a module (Visits: team, products, check-in rules, Xphere; Tags: the
@@ -45,6 +47,11 @@ export function AdminApp({ section }: { section: string }) {
 
   const me = meQuery.data;
   const active: SectionId = SECTIONS.find((s) => s === section) ?? "overview";
+  // Opening a management screen (a bookmark, a link) means the person wants the management side.
+  const access = useViewerAccess();
+  useEffect(() => {
+    if (access.hasAdminAccess && !access.adminMode) access.setAdminMode(true);
+  }, [access.hasAdminAccess, access.adminMode, access.setAdminMode]);
 
   if (meQuery.isLoading) {
     return (

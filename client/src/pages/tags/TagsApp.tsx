@@ -1,11 +1,11 @@
 import { useEffect } from "react";
 import { Redirect, Route, Switch, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { Home, Link2, Package } from "lucide-react";
-import { LanguagePicker } from "@/components/LanguagePicker";
+import { Home, Link2, Package, Settings } from "lucide-react";
 import { ModuleSwitch, rememberModule, useXpotModules } from "@/components/ModuleSwitch";
 import { useT } from "@/i18n";
 import { tagsMessages } from "@/i18n/messages/tags";
+import { shellMessages } from "@/i18n/messages/shell";
 import type { XpotMeResponse } from "@/pages/xpot/types";
 import DirectScreen from "./DirectScreen";
 import HomeScreen from "./HomeScreen";
@@ -34,6 +34,7 @@ function activeNav(path: string): string {
 /** The Tags module: read, sell and write QR/NFC pieces. Mounted at /tags/*. */
 export function TagsApp() {
   const t = useT(tagsMessages);
+  const ts = useT(shellMessages);
   const [location, navigate] = useLocation();
   const meQuery = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
   const modules = useXpotModules();
@@ -74,7 +75,17 @@ export function TagsApp() {
               </span>
             )}
           </div>
-          <LanguagePicker compact />
+          {/* The account (language, profile) lives in Settings, as on the Visits dashboard. */}
+          <button
+            type="button"
+            onClick={() => navigate("/settings")}
+            title={ts("navSettings")}
+            aria-label={ts("navSettings")}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[18px] border border-white/5 bg-white/[0.03] text-white/40 transition-all hover:bg-white/10 hover:text-white active:scale-95 touch-manipulation"
+            data-testid="tags-settings"
+          >
+            <Settings className="h-[18px] w-[18px]" />
+          </button>
         </div>
       }
       mobileNav={

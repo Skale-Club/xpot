@@ -11,9 +11,9 @@ import {
   Settings,
   type LucideIcon,
 } from "lucide-react";
-import { canManage, isSuperAdmin, type XpotModule } from "@shared/modules";
+import type { XpotModule } from "@shared/modules";
+import { useViewerAccess } from "@/lib/adminMode";
 import { AdminBadge } from "./AdminBadge";
-import { LanguagePicker } from "@/components/LanguagePicker";
 import { rememberModule, useXpotModules } from "@/components/ModuleSwitch";
 import { MODULE_HOME } from "@/lib/xpot";
 import { useT } from "@/i18n";
@@ -48,10 +48,6 @@ function readCollapsed() {
   }
 }
 
-export function canAdminister(me: XpotMeResponse | undefined | null) {
-  return canManage(me);
-}
-
 const MODULE_ICON: Record<XpotModule, LucideIcon> = { visits: MapPinned, tags: Nfc };
 
 /**
@@ -66,10 +62,12 @@ function useShellNav() {
   const modules = useXpotModules();
   // A tablet at desktop width can still check in (decision D1 is about computers).
   const isComputer = useIsComputer();
-  const { data: me } = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
+  // Management items follow admin mode: off, a manager sees the app as a rep does.
+  const access = useViewerAccess();
+  const me = access.me;
   const viewer = {
-    canManage: canAdminister(me),
-    isAdmin: isSuperAdmin(me),
+    canManage: access.canManage,
+    isAdmin: access.isSuperAdmin,
     isComputer,
   };
   const labels = { shell: t, tags: tt };
@@ -319,7 +317,6 @@ function DesktopTopBar({ title, crumb, actions, onSearch }: {
         <span className="flex-1 text-left">{t("searchEverything")}</span>
         <kbd className="rounded-md border border-white/10 px-1.5 py-0.5 font-sans text-[10px] text-white/40">{mac ? "⌘" : "Ctrl"} K</kbd>
       </button>
-      <LanguagePicker compact />
       <span className={`flex items-center gap-1.5 text-xs ${online ? "text-white/40" : "text-red-300"}`}>
         <span className={`h-2 w-2 rounded-full ${online ? "bg-emerald-400" : "bg-red-400"}`} />
         {online ? t("online") : t("offline")}
