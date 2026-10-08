@@ -169,15 +169,18 @@ Dashboard (scans by place/piece over time, etc.). See the answer given in chat; 
 - Verified with the full test suite (412 passed, 7 skipped), TypeScript, production build and a local
   production smoke test of `/`, `/pt`, `/es/privacy`, `/dashboard`, `/robots.txt`, `/sitemap.xml` and
   `/og-image.png`.
-- **Still external:** create the Google Search Console Domain property `xpot.place`, add Google's DNS
-  TXT at the DNS provider, verify it, and submit `https://xpot.place/sitemap.xml`. Google-account and
-  DNS steps cannot be completed from code alone. Bing Webmaster Tools can then import the property.
+- **External setup completed (2026-10-08):** the Google Search Console Domain property `xpot.place`
+  was verified after publishing Google's DNS TXT in Cloudflare, and `https://xpot.place/sitemap.xml`
+  was submitted. The public endpoint is healthy (`200 application/xml`) and is referenced by
+  `robots.txt`; immediately after submission Search Console showed `Unknown / Couldn't fetch` with
+  `0` discovered pages, so Google needs to retry processing it. Recheck this row after propagation and
+  resubmit only if it remains in that state. Bing Webmaster Tools can then import the verified property.
 
 ## Backlog (owner's requests, in their order)
 
-1. ~~**SEO + Google Search readiness**~~ done (#61). **External Search Console setup remains:** add a
-   Domain property for `xpot.place`, publish Google's DNS TXT, verify, then submit
-   `https://xpot.place/sitemap.xml`. Bing Webmaster Tools can import the verified GSC property.
+1. ~~**SEO + Google Search readiness**~~ done (#61 + external setup). Search Console property and DNS
+   verification are complete; sitemap submission is recorded and awaiting Google's first successful
+   fetch/retry (see the status note above). Bing Webmaster Tools can import the verified GSC property.
 2. ~~QR/NFC write types~~ done (#52). When writing a piece (QR code or NFC chip) the person picks what to store:
    **URL (default)**, **email**, **phone**, **vCard**. Each needs proper input + validation:
    - URL: current behavior (`validateDestinationUrl` in `@shared/tags`, `normalizeUrlInput`).
