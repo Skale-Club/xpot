@@ -118,7 +118,7 @@ client/                    React app (Vite)
     ui/                    shadcn/ui primitives
   src/pages/
     xpot/                  Visits: check-in, dashboard, visits, leads, sales, settings, landing
-    tags/                  Tags: home, pieces, piece screen, direct link, NFC writing (Web NFC), QR scanner
+    tags/                  Tags: home, pieces, piece screen, review link, NFC writing (Web NFC), QR scanner
     admin/                 Manage and Organization pages; admin/tags/ is Tags › Manage
     legal/                 Privacy and terms
   src/i18n/                EN/PT/ES messages, one file per area

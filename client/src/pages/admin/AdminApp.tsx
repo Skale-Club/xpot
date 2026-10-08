@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "@/components/ui/loader";
@@ -22,6 +23,8 @@ import { shellMessages } from "@/i18n/messages/shell";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { manageMessages } from "@/i18n/messages/manage";
 import { MODULE_HOME } from "@/lib/xpot";
+import { TagsTabBar } from "@/pages/tags/TagsTabBar";
+import { useViewerAccess } from "@/lib/adminMode";
 
 // The management screens. They are not a place of their own any more: each one
 // belongs to a module (Visits: team, products, check-in rules, Xphere; Tags: the
@@ -45,6 +48,11 @@ export function AdminApp({ section }: { section: string }) {
 
   const me = meQuery.data;
   const active: SectionId = SECTIONS.find((s) => s === section) ?? "overview";
+  // Opening a management screen (a bookmark, a link) means the person wants the management side.
+  const access = useViewerAccess();
+  useEffect(() => {
+    if (access.hasAdminAccess && !access.adminMode) access.setAdminMode(true);
+  }, [access.hasAdminAccess, access.adminMode, access.setAdminMode]);
 
   if (meQuery.isLoading) {
     return (
@@ -97,7 +105,9 @@ export function AdminApp({ section }: { section: string }) {
       title={title}
       size="wide"
       mobileMaxWidth="max-w-5xl"
-      mobileColumnClassName="pb-20 pt-6"
+      mobileColumnClassName={active === "tags" ? "pb-28 pt-6" : "pb-20 pt-6"}
+      // Tags management is a tab of the Tags module on a phone.
+      mobileNav={active === "tags" ? <TagsTabBar /> : undefined}
       topBarActions={active === "tags" ? <CodeLookup onFound={(id) => setLocation(`/admin/tags/pieces/${id}`)} /> : undefined}
       mobileHeader={
         <>

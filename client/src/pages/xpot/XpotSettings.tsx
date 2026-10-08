@@ -6,14 +6,14 @@ import ReactCountryFlag from "react-country-flag";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
-import { LanguagePicker } from "@/components/LanguagePicker";
+import { LanguageList } from "@/components/LanguagePicker";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { settingsMessages } from "@/i18n/messages/settings";
 import type { XpotMeResponse } from "./types";
 import { AppLayout } from "@/components/xpot/AppLayout";
 import { homeForModules, useXpotModules } from "@/components/ModuleSwitch";
-import { canAdminister } from "@/components/xpot/AppLayout";
+import { useViewerAccess } from "@/lib/adminMode";
 import { shellMessages } from "@/i18n/messages/shell";
 import { InstallAppRow } from "@/components/xpot/InstallApp";
 
@@ -301,7 +301,7 @@ function XphereIntegrationSection() {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="space-y-3">
-      <h2 className="text-[11px] font-bold uppercase tracking-[0.15em] text-white/40">{title}</h2>
+      <h2 className="px-1 text-base font-bold text-white/90">{title}</h2>
       <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-4 space-y-4">
         {children}
       </div>
@@ -312,7 +312,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1.5">
-      <label className="text-[10px] font-bold uppercase tracking-widest text-white/40">{label}</label>
+      <label className="text-sm font-medium text-white/55">{label}</label>
       {children}
     </div>
   );
@@ -329,6 +329,7 @@ export function XpotSettings() {
 
   const meQuery = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
   const me = meQuery.data;
+  const access = useViewerAccess();
 
   const [displayName, setDisplayName] = useState("");
   const [firstName, setFirstName] = useState("");
@@ -432,35 +433,21 @@ export function XpotSettings() {
           >
             <ArrowLeft className="h-4 w-4" />
           </button>
-          <div>
-            <h1 className="text-xl font-bold tracking-tight">{t("title")}</h1>
-            <p className="text-xs text-white/40">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold tracking-tight">{t("title")}</h1>
+            <p className="truncate text-sm text-white/45">
               {me ? [me.user.firstName, me.user.lastName].filter(Boolean).join(" ") || me.user.email : ""}
             </p>
           </div>
         </div>
-
-        {/* Managers reach the account's Organization (people, integrations, branding) from here on a phone; the desktop sidebar has it. */}
-        {canAdminister(me) && (
-          <button
-            type="button"
-            onClick={() => setLocation("/admin/reps")}
-            className="mb-6 flex w-full items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-left text-sm font-semibold text-white/80 lg:hidden"
-            data-testid="settings-organization"
-          >
-            <Shield className="h-4 w-4 text-white/50" />
-            <span className="flex-1">{ts("navOrganization")}</span>
-            <ChevronRight className="h-4 w-4 text-white/30" />
-          </button>
-        )}
 
         <InstallAppRow className="mb-6" />
 
         <div className="space-y-8 lg:columns-2 lg:gap-6 lg:space-y-0 lg:[&>*]:mb-6 lg:[&>*]:break-inside-avoid">
           {/* Language */}
           <Section title={tc("language")}>
-            <p className="text-xs text-white/40">{t("languageHint")}</p>
-            <LanguagePicker />
+            <p className="text-sm text-white/45">{t("languageHint")}</p>
+            <LanguageList />
           </Section>
 
           {/* Profile */}
@@ -580,8 +567,36 @@ export function XpotSettings() {
             </div>
           </Section>
 
-          {/* Xphere Integration (self-service): it syncs visits, so only for reps with Visits. */}
-          {modules.includes("visits") && <XphereIntegrationSection />}
+          {/* Administration: only for people who manage the account, and last. */}
+          {access.hasAdminAccess && (
+            <Section title={t("sectionAdmin")}>
+              <label className="flex cursor-pointer items-center gap-3" data-testid="settings-admin-mode">
+                <Shield className={`h-5 w-5 shrink-0 ${access.adminMode ? "text-amber-300" : "text-white/40"}`} />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[15px] font-semibold text-white">{t("adminMode")}</span>
+                  <span className="block text-sm text-white/45">{t("adminModeHint")}</span>
+                </span>
+                <Switch checked={access.adminMode} onCheckedChange={access.setAdminMode} />
+              </label>
+              {access.adminMode && (
+                <button
+                  type="button"
+                  onClick={() => setLocation("/admin/reps")}
+                  className="flex w-full items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-left"
+                  data-testid="settings-organization"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[15px] font-semibold text-white/85">{ts("navOrganization")}</span>
+                    <span className="block text-sm text-white/45">{t("organizationHint")}</span>
+                  </span>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-white/30" />
+                </button>
+              )}
+            </Section>
+          )}
+
+          {/* Xphere Integration: API keys, so part of the management side. It syncs visits. */}
+          {access.adminMode && modules.includes("visits") && <XphereIntegrationSection />}
         </div>
       </div>
     </AppLayout>
