@@ -47,7 +47,7 @@ export function TagsApp() {
 
   return (
     <AppLayout
-      title={pieceCode ?? t(currentNav.key)}
+      title={pieceCode ?? (location.startsWith(`${APP_BASE}/direct`) ? t("navDirect") : t(currentNav.key))}
       wide={wide}
       mobileColumnClassName={MODULE_COLUMN}
       mobileHeader={

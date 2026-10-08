@@ -7,6 +7,7 @@ import { errorText, haptic } from "./lib";
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_TERTIARY, BottomSheet, CopyButton, EYEBROW_MUTED, SHEET_TITLE, Spinner, TapAnimation, type Identity } from "./ui";
 import { isWebNfcSupported, mapNfcError, readBack, writeContent } from "./webNfc";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
+import { contentKindOf } from "@shared/chipContent";
 import { ContinueOnPhone } from "./ContinueOnPhone";
 
 export interface WriteResult {
@@ -28,13 +29,21 @@ interface Props {
   continueHint?: string;
   /** Offered once the chip is written: seal it so nobody can rewrite it (LockSheet). */
   onLock?: () => void;
+  /** Xpot pieces: the chip was confirmed by a real tap (server side), e.g. after an iPhone write. */
+  confirmed?: boolean;
 }
 
 type Phase = "idle" | "writing" | "verifying" | "saving" | "done" | "error";
 
-const MANUAL_STEPS = ["manual1", "manual2", "manual3", "manual4", "manual5"] as const;
+/** NFC Tools on iPhone: the record to add depends on what is written. */
+function manualSteps(value: string) {
+  const kind = contentKindOf(value);
+  if (kind === "vcard") return ["manual1", "manual2", "manual3Contact", "manual4Contact", "manual5"] as const;
+  if (kind === "email" || kind === "phone") return ["manual1", "manual2", "manual3Uri", "manual4", "manual5"] as const;
+  return ["manual1", "manual2", "manual3", "manual4", "manual5"] as const;
+}
 
-export default function WriteSheet({ open, url, identity, onClose, onDone, continueUrl, continueHint, onLock }: Props) {
+export default function WriteSheet({ open, url, identity, onClose, onDone, continueUrl, continueHint, onLock, confirmed }: Props) {
   const t = useT(tagsMessages);
   const tc = useT(commonMessages);
   const supported = isWebNfcSupported();
@@ -137,7 +146,22 @@ export default function WriteSheet({ open, url, identity, onClose, onDone, conti
             <Check className="h-10 w-10" />
           </div>
           <p className={`mt-3 ${SHEET_TITLE}`}>{lastVerified ? t("writtenChecked") : t("writtenMarked")}</p>
-          {!lastVerified && <p className="mt-1 text-sm text-white/50">{t("notReadBack")}</p>}
+          {/* No read-back (iPhone + NFC Tools): a real tap on the chip confirms it on the server. */}
+          {!lastVerified && identity === "xpot" && !supported ? (
+            confirmed ? (
+              <p className="mt-2 text-sm font-semibold text-emerald-300" data-testid="iphone-confirmed">{t("iphoneConfirmed")}</p>
+            ) : (
+              <div className="mt-3 rounded-2xl border border-blue-400/25 bg-blue-500/[0.08] p-3 text-left" data-testid="iphone-confirm">
+                <p className="flex items-center gap-2 text-sm font-bold text-white">
+                  <Spinner className="h-4 w-4 text-blue-300" />
+                  {t("iphoneConfirmTitle")}
+                </p>
+                <p className="mt-1 text-sm text-white/60">{t("iphoneConfirmHint")}</p>
+              </div>
+            )
+          ) : (
+            !lastVerified && <p className="mt-1 text-sm text-white/50">{t("notReadBack")}</p>
+          )}
           <button type="button" onClick={close} className={`${BTN_PRIMARY} mt-5`}>
             {tc("done")}
           </button>
@@ -208,7 +232,7 @@ export default function WriteSheet({ open, url, identity, onClose, onDone, conti
                 {t("iphoneTitle")}
               </div>
               <ol className="mt-3 space-y-2">
-                {MANUAL_STEPS.map((step, i) => (
+                {manualSteps(url).map((step, i) => (
                   <li key={step} className="flex gap-3 text-sm text-white/75">
                     <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-blue-500/15 text-xs font-bold text-blue-300">{i + 1}</span>
                     <span className="pt-0.5">{t(step)}</span>

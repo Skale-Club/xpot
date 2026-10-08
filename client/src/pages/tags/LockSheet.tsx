@@ -7,6 +7,9 @@ import { errorText, haptic } from "./lib";
 import { BTN_PRIMARY, BTN_TERTIARY, BottomSheet, SHEET_TITLE, Spinner, TapAnimation, type Identity } from "./ui";
 import { canLockChip, lockChip, mapNfcError } from "./webNfc";
 
+const isIos = () =>
+  typeof navigator !== "undefined" && (/iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1));
+
 /**
  * Makes a written chip read-only for good, so nobody can rewrite it later.
  * An Xpot piece loses nothing (the chip only holds its code; the destination
@@ -56,6 +59,19 @@ export default function LockSheet({ open, identity, onClose, onLocked }: {
       const e = mapNfcError(err);
       if (e.silent) return setPhase("idle");
       setError(e.code === "nfcGeneric" ? errorText(err, t("nfcGeneric")) : t(e.code));
+      setPhase("error");
+    }
+  };
+
+  /** iPhone: locked with NFC Tools; record it. */
+  const markLocked = async () => {
+    setError(null);
+    setPhase("saving");
+    try {
+      await onLocked?.();
+      setPhase("done");
+    } catch (err) {
+      setError(errorText(err, t("nfcGeneric")));
       setPhase("error");
     }
   };
@@ -115,6 +131,22 @@ export default function LockSheet({ open, identity, onClose, onLocked }: {
               <Lock className="h-5 w-5" />
               {phase === "error" ? tc("retry") : t("lockNow")}
             </button>
+          ) : isIos() ? (
+            // iPhone: the app cannot lock; NFC Tools can, and the person tells us it is done.
+            <>
+              <ol className="space-y-2">
+                {(["lockIphone1", "lockIphone2", "lockIphone3"] as const).map((step, i) => (
+                  <li key={step} className="flex gap-3 text-sm text-white/75">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-amber-400/15 text-xs font-bold text-amber-300">{i + 1}</span>
+                    <span className="pt-0.5">{t(step)}</span>
+                  </li>
+                ))}
+              </ol>
+              <button type="button" onClick={() => void markLocked()} className={BTN_PRIMARY} data-testid="button-lock-marked">
+                <Lock className="h-5 w-5" />
+                {t("lockIphoneDone")}
+              </button>
+            </>
           ) : (
             <p className="text-sm text-white/50">{t("lockUnsupported")}</p>
           )}

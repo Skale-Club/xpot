@@ -36,6 +36,12 @@ export interface PublicTagDeps {
   findByCode(code: string): Promise<PublicTag | null>;
   recordEvent(event: InsertTagEvent): Promise<void>;
   /**
+   * A real phone opened /n/<code>, a link that only exists on the chip: proof
+   * the chip holds it. Marks the chip verified (an iPhone written with NFC
+   * Tools has no other way to be checked). Optional; never blocks the scan.
+   */
+  confirmNfc?(tagId: string): Promise<void>;
+  /**
    * Link to the field app for this tag when the requester is signed in and may
    * work on it (its reseller, or a manager); undefined for everyone else.
    */
@@ -92,6 +98,13 @@ async function record(
     await deps.recordEvent(buildEvent(req, tag, method, eventType));
   } catch (err) {
     console.error(`[tags] failed to record ${eventType} for ${tag.publicCode}:`, err);
+  }
+  if (method === "nfc" && deps.confirmNfc && !isBotUserAgent(req.get("user-agent") ?? "")) {
+    try {
+      await deps.confirmNfc(tag.id);
+    } catch (err) {
+      console.error(`[tags] failed to confirm the chip of ${tag.publicCode}:`, err);
+    }
   }
 }
 

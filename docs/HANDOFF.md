@@ -114,6 +114,22 @@ chips get a stronger warning (content can never change). Visits dashboard lost t
 Owner's open idea (not built): drop the "Review link" tab and turn Tags Home into a fuller customer
 Dashboard (scans by place/piece over time, etc.). See the answer given in chat; decide before building.
 
+## Tags Dashboard + iPhone confirmation (PR from `feat/tags-dashboard`)
+
+- Tags Home is now the **Dashboard** (`TagsDashboard.tsx` under the scan actions; tab label
+  Dashboard/Painel/Panel): stock, sold, scans 30 days (QR vs NFC chart, recharts), people, top pieces,
+  top customers, phones used, red count of pieces with an unwritten chip. Data:
+  `GET /api/xpot/tags/dashboard?days=30` (`getTagDashboard` in `server/tags/repository.ts`; own pieces,
+  every rep's for a manager in admin mode). The "Review link" tab is gone from the bottom bar and the
+  desktop nav; writing a chip without Xpot stays at `/tags/direct`, reached from a discreet button at
+  the end of the dashboard (owner: rare case, must exist, not mandatory).
+- **Chip confirmed by a real tap**: any non-bot GET on `/n/<code>` promotes the tag's chip to
+  `verified` (`confirmNfcFromTap`, `deps.confirmNfc` in `publicHandler.ts`, test
+  `tests/tags/nfcConfirm.test.ts`). iPhone flow: write with NFC Tools → "Mark as written"
+  (status programmed) → the sheet asks to touch the chip with the iPhone; the piece screen polls every
+  4 s while `programmed` and shows the confirmation. NFC Tools steps vary by content kind; locking on
+  iPhone shows NFC Tools steps + "I locked it".
+
 ## Backlog (owner's requests, in their order)
 
 1. **SEO + Google Search Console** (owner asked explicitly). `client/index.html` has
