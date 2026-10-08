@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, ClipboardPaste, MapPin, Search, Star } from "lucide-react";
-import { normalizeUrlInput } from "@shared/tagApp";
+import { guessDestinationType, normalizeUrlInput } from "@shared/tagApp";
 import { buildReviewUrl, extractFirstUrl, isReviewFormUrl } from "@shared/reviewLink";
 import type { ReviewLinkPlace } from "@shared/tagsApi";
 import { useT } from "@/i18n";
@@ -169,34 +169,27 @@ export default function ReviewLinkSheet({
 }
 
 /**
- * Sits under a destination field: a shortcut to find the review link, plus a
- * warning when a Google link that is not the review form is about to be used
- * (a pasted Maps / share link opens the business, not "write a review").
+ * Sits under a link field and stays out of the way: only when a Google link
+ * that is not the "write a review" form is typed or pasted (a Maps / share
+ * link opens the business, not the review form) does it offer the conversion.
+ * Generating a review link from scratch is GenerateReviewButton, under the customer.
  */
 export function ReviewLinkAssist({
   link,
-  isReview,
   onPick,
 }: {
   link: string;
-  /** The destination is meant to be a Google review. */
-  isReview: boolean;
   onPick: (place: ReviewLinkPlace) => void;
 }) {
   const t = useT(tagsMessages);
   const [open, setOpen] = useState(false);
-  const [initialQuery, setInitialQuery] = useState("");
   const normalized = normalizeUrlInput(link);
-  const notReviewForm = isReview && !!normalized && !isReviewFormUrl(normalized);
-
-  const openWith = (value: string) => {
-    setInitialQuery(value);
-    setOpen(true);
-  };
+  const notReviewForm = !!normalized && guessDestinationType(normalized) === "google_review" && !isReviewFormUrl(normalized);
+  if (!notReviewForm && !open) return null;
 
   return (
     <>
-      {notReviewForm ? (
+      {notReviewForm && (
         <div className="mt-2 rounded-2xl border border-amber-400/30 bg-amber-400/10 p-3">
           <p className="flex items-start gap-2 text-sm text-amber-100">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
@@ -204,7 +197,7 @@ export function ReviewLinkAssist({
           </p>
           <button
             type="button"
-            onClick={() => openWith(normalized)}
+            onClick={() => setOpen(true)}
             className="mt-2 flex min-h-[44px] w-full items-center justify-center gap-2 rounded-2xl bg-amber-400 px-4 text-sm font-bold text-slate-900 active:bg-amber-300"
             data-testid="button-review-convert"
           >
@@ -212,20 +205,10 @@ export function ReviewLinkAssist({
             {t("reviewConvert")}
           </button>
         </div>
-      ) : (
-        <button
-          type="button"
-          onClick={() => openWith("")}
-          className="mt-2 flex min-h-[44px] items-center gap-2 text-sm font-semibold text-blue-300 active:text-white"
-          data-testid="button-review-find"
-        >
-          <Star className="h-4 w-4 text-amber-400" />
-          {t("reviewFind")}
-        </button>
       )}
       <ReviewLinkSheet
         open={open}
-        initialQuery={initialQuery}
+        initialQuery={normalized}
         onClose={() => setOpen(false)}
         onPick={(place) => {
           setOpen(false);

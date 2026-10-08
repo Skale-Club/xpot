@@ -480,6 +480,18 @@ export function registerTagRoutes(app: Express) {
     }
   });
 
+  // The phone made this tag's chip read-only, so nobody can rewrite it.
+  app.post(`${fieldBase}/:id/nfc-locked`, requireTagUser, async (req, res) => {
+    const id = idParam(req, res);
+    if (!id) return;
+    try {
+      await field.recordPhoneLock(id, actorOf(req));
+      res.json(await repo.getTagDetail(id, tagBaseUrl()));
+    } catch (err) {
+      fail(res, err, "Failed to record chip lock");
+    }
+  });
+
   // Direct pieces: chips holding the customer's own link.
   app.get("/api/xpot/tag-direct-writes", requireTagUser, async (req, res) => {
     try {
