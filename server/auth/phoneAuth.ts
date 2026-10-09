@@ -6,6 +6,7 @@ import { db } from "../db.js";
 import { authPhoneCodes, users, type User } from "#shared/schema.js";
 import { normalizePhone } from "#shared/phone.js";
 import { storage } from "../storage.js";
+import { completePhoneCodeVerification } from "./phoneCodeFlow.js";
 import { defaultSmsSender, SmsError, type SmsSender } from "./sms.js";
 import { loadTwilioConfigFromDb } from "./smsConfigDb.js";
 
@@ -139,7 +140,7 @@ export async function sendCode(phone: string, lang: Lang, ip: string | null, sms
   await db.execute(sql`UPDATE auth_phone_codes SET expires_at = ${now} WHERE phone = ${phone} AND created_at < ${now} AND expires_at > ${now}`);
 }
 
-/** Checks the latest code for the number; on success all its codes are spent. */
+/** Checks the latest code for the number without consuming it. */
 export async function checkCode(phone: string, code: string, now = new Date()) {
   const [row] = await db
     .select()
@@ -153,6 +154,9 @@ export async function checkCode(phone: string, code: string, now = new Date()) {
     await db.update(authPhoneCodes).set({ attempts: row.attempts + 1 }).where(eq(authPhoneCodes.id, row.id));
     throw new PhoneAuthError("wrong_code", 400, "Wrong code. Check the SMS and try again.", { attemptsLeft: MAX_ATTEMPTS - row.attempts - 1 });
   }
+}
+
+async function consumeCodes(phone: string) {
   await db.delete(authPhoneCodes).where(eq(authPhoneCodes.phone, phone));
 }
 
@@ -248,15 +252,21 @@ export function registerPhoneAuthRoutes(app: Express, sms: SmsSender = defaultSm
     try {
       const input = verifySchema.parse(req.body);
       const phone = parsePhone(input.phone, input.countryCode);
-      await checkCode(phone, input.code);
-      const user = await findUserByPhone(phone);
-      if (!user) {
-        await rememberVerifiedPhone(req, phone);
-        return res.json({ status: "new" satisfies PhoneAuthStatus });
-      }
-      const status = await accessOf(user);
-      if (status === "active") await startSession(req, user);
-      res.json({ status });
+      const result = await completePhoneCodeVerification({
+        validate: () => checkCode(phone, input.code),
+        complete: async () => {
+          const user = await findUserByPhone(phone);
+          if (!user) {
+            await rememberVerifiedPhone(req, phone);
+            return { status: "new" satisfies PhoneAuthStatus };
+          }
+          const status = await accessOf(user);
+          if (status === "active") await startSession(req, user);
+          return { status };
+        },
+        consume: () => consumeCodes(phone),
+      });
+      res.json(result);
     } catch (err) {
       fail(res, err);
     }

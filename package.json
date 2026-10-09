@@ -9,7 +9,9 @@
     "#shared/*": "./shared/*"
   },
   "scripts": {
-    "dev": "cross-env NODE_ENV=development tsx server/index.ts",
+    "dev": "npm run migrate && npm run dev:server",
+    "dev:server": "cross-env NODE_ENV=development tsx server/index.ts",
+    "local": "tsx scripts/open-localhost.ts",
     "build": "tsx scripts/build.ts",
     "start": "cross-env NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
