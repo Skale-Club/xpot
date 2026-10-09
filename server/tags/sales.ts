@@ -90,7 +90,9 @@ export async function createTagSale(input: TagSaleCreateInput, actor: TagActor, 
       .from(tags)
       .leftJoin(tagBatches, eq(tags.batchId, tagBatches.id))
       .where(inArray(tags.id, allTagIds))
-      .for("update");
+      // Lock only the physical pieces. PostgreSQL rejects a blanket FOR UPDATE
+      // when a LEFT JOIN is present because the batch is the nullable side.
+      .for("update", { of: tags });
     if (tagRows.length !== allTagIds.length) {
       throw new TagSaleError("One or more pieces were not found", 404, "tag_not_found");
     }
