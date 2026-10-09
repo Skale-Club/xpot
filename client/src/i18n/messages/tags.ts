@@ -47,7 +47,7 @@ const en = {
   piecesNoMatch: "No pieces match.",
 
   // Status, chip, product and destination labels
-  status_inventory: "Not sold",
+  status_inventory: "In stock",
   status_assigned: "No link yet",
   status_active: "Live",
   status_disabled: "Off",
@@ -370,7 +370,7 @@ export const tagsMessages: Dictionary<typeof en> = {
     piecesEmpty: "Nenhuma peça ainda. Peça um kit à Skale Club.",
     piecesNoMatch: "Nenhuma peça encontrada.",
 
-    status_inventory: "Não vendida",
+    status_inventory: "Em estoque",
     status_assigned: "Sem link",
     status_active: "No ar",
     status_disabled: "Desligada",
@@ -676,7 +676,7 @@ export const tagsMessages: Dictionary<typeof en> = {
     piecesEmpty: "Todavía no tienes piezas. Pide un kit a Skale Club.",
     piecesNoMatch: "Ninguna pieza coincide.",
 
-    status_inventory: "Sin vender",
+    status_inventory: "En stock",
     status_assigned: "Sin enlace",
     status_active: "Activa",
     status_disabled: "Apagada",

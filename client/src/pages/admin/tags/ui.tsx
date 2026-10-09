@@ -48,7 +48,9 @@ export function StatusPill({ status }: { status: string }) {
   const key = `status_${status}`;
   const label = tt(key as never);
   return (
-    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_TONES[status] ?? "bg-white/10 text-white/60"}`}>
+    <span
+      className={`inline-flex min-h-6 items-center justify-center whitespace-nowrap rounded-full px-2.5 py-1 text-center text-xs font-semibold leading-none ${STATUS_TONES[status] ?? "bg-white/10 text-white/60"}`}
+    >
       {label === key ? status : label}
     </span>
   );

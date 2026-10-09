@@ -9,6 +9,7 @@ import { guessDestinationType, normalizeUrlInput } from "@shared/tagApp";
 import { buildReviewUrl } from "@shared/reviewLink";
 import type { FullSalesLead } from "@/pages/xpot/types";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
+import { TagProductThumbnail } from "@/components/xpot/TagProductThumbnail";
 import { apiRequest } from "@/lib/queryClient";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
@@ -276,7 +277,10 @@ export default function TagScreen({ code, onClose }: {
           <div className="flex flex-wrap items-center gap-2">
             <Pill tone={STATUS_TONE[tag.status] ?? "slate"}>{t(`status_${tag.status}` as "status_active")}</Pill>
             <span className="flex min-w-0 items-center gap-1.5 text-xs text-white/45">
-              <TagFaceIcon face={tag.face} size="xs" title={t(`face_${tag.face ?? "none"}` as "face_none")} />
+              <span className="flex shrink-0 items-center gap-1">
+                <TagFaceIcon face={tag.face} size="xs" title={t(`face_${tag.face ?? "none"}` as "face_none")} />
+                <TagProductThumbnail productType={tag.productType} face={tag.face} batchCode={tag.batchCode} size="sm" showModelLabel={false} />
+              </span>
               <span className="truncate">
                 {[t(`product_${tag.productType}` as "product_custom"), tag.face ? t(`face_${tag.face}` as "face_none") : null, tag.label].filter(Boolean).join(" · ")}
               </span>

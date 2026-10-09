@@ -6,6 +6,7 @@ import { validateChipContent } from "@shared/chipContent";
 import { isReviewFormUrl } from "@shared/reviewLink";
 import type { TagDetail } from "@shared/tagsApi";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
+import { TagProductThumbnail } from "@/components/xpot/TagProductThumbnail";
 import { useIsSuperAdmin } from "@/components/xpot/AdminBadge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
@@ -524,7 +525,10 @@ export function PieceDetail({ id, go }: { id: string; go: Go }) {
       <Back go={go} />
 
       <div className="flex flex-wrap items-center gap-3">
-        <TagFaceIcon face={tag.face} size="lg" />
+        <div className="flex shrink-0 items-center gap-2">
+          <TagFaceIcon face={tag.face} size="lg" />
+          <TagProductThumbnail productType={tag.productType} face={tag.face} batchCode={tag.batchCode} />
+        </div>
         <h2 className="font-mono text-2xl font-bold tracking-wider text-white" data-testid="admin-piece-code">{tag.publicCode}</h2>
         <StatusPill status={tag.status} />
         <span className="text-sm text-white/50">
