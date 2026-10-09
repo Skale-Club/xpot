@@ -51,6 +51,7 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
   const [phoneInput, setPhoneInput] = useState("");
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
+  const [devCode, setDevCode] = useState("");
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -78,10 +79,11 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
     setBusy(true);
     setError("");
     try {
-      const { ok, data } = await post<{ phone: string }>("/api/auth/phone/start", { phone: target, countryCode, lang: t.lang });
+      const { ok, data } = await post<{ phone: string; devCode?: string }>("/api/auth/phone/start", { phone: target, countryCode, lang: t.lang });
       if (!ok) return showError(data);
       setPhone(data.phone);
-      setCode("");
+      setDevCode(data.devCode ?? "");
+      setCode(data.devCode ?? "");
       setResendAt(Date.now() + 30_000);
       setStep("code");
     } catch {
@@ -156,6 +158,7 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
   const restart = () => {
     setStep("phone");
     setCode("");
+    setDevCode("");
     setError("");
   };
 
@@ -246,7 +249,7 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
         <div>
           <p className="text-lg font-bold text-white">{t("codeTitle")}</p>
           <p className="mt-1 text-sm text-white/60">{t("codeSent", { phone: formatPhone(phone) })}</p>
-          {config && !config.smsLive && <p className="mt-1 text-xs text-amber-300/80">{t("devCode")}</p>}
+          {devCode && <p className="mt-1 text-xs text-amber-300/80">{t("devCode", { code: devCode })}</p>}
         </div>
         {errorBox}
         <input
