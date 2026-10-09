@@ -6,6 +6,7 @@ import { db } from "../db.js";
 import { authPhoneCodes, users, type User } from "#shared/schema.js";
 import { normalizePhone } from "#shared/phone.js";
 import { storage } from "../storage.js";
+import { devCodeForResponse } from "./devPhoneCode.js";
 import { completePhoneCodeVerification } from "./phoneCodeFlow.js";
 import { defaultSmsSender, SmsError, type SmsSender } from "./sms.js";
 import { loadTwilioConfigFromDb } from "./smsConfigDb.js";
@@ -138,6 +139,7 @@ export async function sendCode(phone: string, lang: Lang, ip: string | null, sms
   // Old codes for this number stop working once a new one is out (the rows
   // stay until then: they count toward the hourly limit).
   await db.execute(sql`UPDATE auth_phone_codes SET expires_at = ${now} WHERE phone = ${phone} AND created_at < ${now} AND expires_at > ${now}`);
+  return code;
 }
 
 /** Checks the latest code for the number without consuming it. */
@@ -241,8 +243,10 @@ export function registerPhoneAuthRoutes(app: Express, sms: SmsSender = defaultSm
     try {
       const input = startSchema.parse(req.body);
       const phone = parsePhone(input.phone, input.countryCode);
-      await sendCode(phone, input.lang ?? "en", req.ip ?? null, sms);
-      res.json({ ok: true, phone });
+      const code = await sendCode(phone, input.lang ?? "en", req.ip ?? null, sms);
+      const smsLive = sms.resolveLive ? await sms.resolveLive().catch(() => sms.live) : sms.live;
+      const devCode = devCodeForResponse({ code, nodeEnv: process.env.NODE_ENV, smsLive });
+      res.json({ ok: true, phone, ...(devCode ? { devCode } : {}) });
     } catch (err) {
       fail(res, err);
     }
