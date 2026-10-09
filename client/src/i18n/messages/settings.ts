@@ -5,7 +5,7 @@ import type { Dictionary } from "../index";
 
 const en = {
   title: "Settings",
-  languageHint: "Choose the language of the app on this phone.",
+  languageHint: "Choose the language of the app on this device.",
 
   // Profile
   sectionProfile: "Profile",
@@ -61,6 +61,7 @@ const en = {
   keyRotated: "Inbound key rotated",
   rotateFailed: "Failed to rotate key",
 
+
   // Generic save button
   saveChanges: "Save Changes",
 };
@@ -69,7 +70,7 @@ export const settingsMessages: Dictionary<typeof en> = {
   en,
   pt: {
     title: "Configurações",
-    languageHint: "Escolha o idioma do app neste celular.",
+    languageHint: "Escolha o idioma do app neste aparelho.",
 
     sectionProfile: "Perfil",
     firstName: "Nome",
@@ -120,12 +121,11 @@ export const settingsMessages: Dictionary<typeof en> = {
     saveFailed: "Não foi possível salvar",
     keyRotated: "Nova chave de entrada gerada",
     rotateFailed: "Não foi possível gerar uma nova chave",
-
     saveChanges: "Salvar alterações",
   },
   es: {
     title: "Ajustes",
-    languageHint: "Elige el idioma de la app en este teléfono.",
+    languageHint: "Elige el idioma de la app en este dispositivo.",
 
     sectionProfile: "Perfil",
     firstName: "Nombre",
@@ -176,7 +176,6 @@ export const settingsMessages: Dictionary<typeof en> = {
     saveFailed: "No se pudo guardar",
     keyRotated: "Nueva clave de entrada generada",
     rotateFailed: "No se pudo generar una nueva clave",
-
     saveChanges: "Guardar cambios",
   },
 };

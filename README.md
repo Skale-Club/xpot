@@ -36,9 +36,10 @@ New here? Read [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) first.
 - **Sign-in:** phone number + a 6-digit SMS code (Twilio). See "Auth model".
 - **DB:** PostgreSQL. Production runs on a Coolify database on the Hetzner host
   (see "Database on the Hetzner host"). Xpot's own Supabase project
-  (`Xpot`, ref `swqxxeivetzakglaphil`) keeps Storage (avatars, visit audio, the
+  (`Xpot`, ref `swqxxeivetzakglaphil`) keeps public Storage (avatars, the
   branding icon) and the Auth accounts behind the legacy email sign-in and the
-  password change. Nothing is shared with Skale Club.
+  password change. Business photos and voice notes are private, on Cloudflare
+  R2 (see "Files"). Nothing is shared with Skale Club.
 - **Integrations:**
   - Xphere CRM: prospects in, leads, sales and visit outcomes out (per-user keys).
   - GoHighLevel: legacy pipeline sync, configured in Organization › Integrations.
@@ -120,8 +121,8 @@ Management (managers and admins). The URLs keep their old `/admin` prefix; the
 shell decides which module each one belongs to (`client/src/components/xpot/moduleNav.ts`):
 - Visits › Manage: `/admin/overview` (Team; `/admin` alone too), `/admin/products`,
   `/admin/settings` (check-in rules), `/admin/xphere`.
-- Tags › Manage: `/admin/tags/<tab>[/<id>]` with `overview`, `pieces`, `batches`,
-  `kits`, `team` (resellers report), `journey` (admins only) and `provisioners` (NFC writers).
+- Tags › Manage: `/admin/tags/<tab>[/<id>]` with `overview`, `pieces`, `kits`,
+  `team` (resellers report), then the global admin's `batches`, `journey` and `provisioners` (NFC writers).
 - Account › Organization: `/admin/reps` (People), `/admin/integrations`, `/admin/branding`.
 
 ### Server
@@ -248,6 +249,57 @@ Xpot. Approved reps buy at wholesale with a personal code:
 - Without `XPOT_WHOLESALE_SECRET` the endpoint answers 503 and the store sells
   retail only. Code in `server/wholesale/`, `shared/wholesale.ts`.
 
+## Files (photos, voice notes, avatars)
+
+Business photos and voice notes are **private** (`server/lib/files.ts`). The DB
+keeps a storage reference, never a URL: `r2:photos/12/lead_7_….jpg`,
+`r2:audio/12/visit_40_….webm` (or `supabase:…` when R2 isn't configured). The
+client loads them through `GET /api/xpot/files?ref=…`
+(`server/routes/xpot/files.ts`), which finds the lead or visit holding that
+reference, applies the usual access rule (a lead: its owner, managers, admins;
+a voice note: the visit's rep, managers, admins) and redirects to a signed URL
+valid for 5 minutes. A key that no lead or visit holds is never signed.
+
+- **Where:** Cloudflare R2 when `R2_ACCOUNT_ID` (or `R2_ENDPOINT`),
+  `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` and `R2_BUCKET` are set; otherwise
+  the private Supabase bucket `private-uploads` (created private at boot).
+  R2 setup: a dedicated bucket with no public access and no r2.dev URL, and an
+  R2 API token with Object Read & Write on that bucket only.
+- **Avatars and branding logos stay public** in the Supabase bucket `uploads`:
+  they show all over the app chrome and on public pages, and a profile picture
+  is something the person chose to show. A replaced avatar's file is deleted;
+  avatars go with the account.
+- **Cleanup:** removing a photo, deleting a lead or a visit, and re-recording a
+  voice note delete the stored files after the DB change, best-effort; a storage
+  error is logged as `[files] …` and does not fail the request.
+- **Existing rows** still hold public Supabase URLs, which keep working (the
+  client shows `https://` values as they are) until moved:
+  1. Set the `R2_*` variables in Coolify and deploy (new uploads go private).
+  2. The database has no public port, so run it in the app container
+     (Coolify › xpot › Terminal), where the env is already set:
+     `node dist/migrate-files.cjs` (dry run, counts), then
+     `node dist/migrate-files.cjs --apply` (copies each file, points the row at it).
+  3. Check photos and voice notes in the app, then
+     `node dist/migrate-files.cjs --apply --delete-old`: deletes the old public
+     copies, which is what actually closes the old links. Re-runnable.
+     Locally, against a database you can reach: `npm run files:migrate -- <flags>`.
+
+## Deleting an account
+
+Admin › Reps › a blocked rep › **Delete account** (platform admins only;
+`DELETE /api/xpot/admin/reps/:id` with `{ "confirm": "DELETE" }`,
+`server/accountDeletion.ts`). It deletes the sign-in identity (users row,
+sessions, sign-in codes, Supabase Auth user, MCP OAuth grants, Xphere
+connection), the rep's visits, notes, voice notes, opportunities, tasks and
+suggested actions, the businesses they own, and every file they uploaded
+(including their photos on other reps' businesses and anything left under
+their folders). Sales, sale items, consignments and stock movements are kept
+for accounting: a business that has them stays, unassigned, and the rep row
+stays as an anonymous "Deleted account" placeholder (`deleted_at` set, hidden
+from Admin › Reps) so those rows keep a valid `rep_id`. With nothing to keep,
+the rep and user rows are deleted outright. Data already synced to a CRM
+(GoHighLevel, Xphere) is not touched there.
+
 ## Tags (QR/NFC pieces)
 
 Skale Club supplies physical pieces (Google Review signs, NFC keychains, cards);
@@ -338,6 +390,7 @@ comment on each.
 | `DATABASE_URL` or `POSTGRES_URL` | yes | Postgres. If both are set, `DATABASE_URL` wins |
 | `SESSION_SECRET` | yes | Signs the session cookie |
 | `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` | yes | Storage and the legacy email Auth; the server won't boot without them |
+| `R2_ACCOUNT_ID` (or `R2_ENDPOINT`), `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | no | Private storage for photos and voice notes (see "Files"); unset, they go to the private Supabase bucket |
 | `PGSSLMODE`, `POSTGRES_SSL` | no | Force TLS on (`require` / `true`) or off (`PGSSLMODE=disable`); by default it follows the URL |
 | `PORT` | no | Listen port (2110 by default; the Docker image sets 8888) |
 | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` or `TWILIO_MESSAGING_SERVICE_SID` | no | SMS fallback when Organization › Integrations has no Twilio |
@@ -397,7 +450,7 @@ the previous container. `npm run migrate` still works from a laptop.
 
 Production Postgres runs as a Coolify database next to the app (not Supabase):
 the QR/NFC redirect path then depends only on the box itself, and nothing pauses
-for inactivity. Supabase stays for Storage (avatars, visit audio) and the legacy
+for inactivity. Supabase stays for Storage (avatars; photos and voice notes are on R2) and the legacy
 email Auth, which the redirect path never touches.
 
 Setup in Coolify:

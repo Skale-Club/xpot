@@ -18,6 +18,7 @@ import { visitsMessages } from "@/i18n/messages/visits";
 import { VisitActionsPanel } from "./sales/VisitActions";
 import { useLocation } from "wouter";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
+import { fileSrc } from "@/lib/files";
 
 export type VisitLike = {
   id: number;
@@ -72,8 +73,8 @@ export function VisitDetail({ visit, onDelete, layout = "dialog" }: {
         reader.readAsDataURL(file);
       });
       const res = await apiRequest("POST", `/api/xpot/leads/${visit.lead.id}/photos`, { imageData });
-      const result = await res.json() as { photoUrl: string };
-      setPhotos((prev) => [result.photoUrl, ...prev]);
+      const result = await res.json() as { photo: string };
+      setPhotos((prev) => [result.photo, ...prev]);
       queryClient.invalidateQueries({ queryKey: ["/api/xpot/visits"] });
       queryClient.invalidateQueries({ queryKey: ["/api/xpot/leads"] });
       toast({ title: t("photoAdded"), variant: "success" });
@@ -84,10 +85,10 @@ export function VisitDetail({ visit, onDelete, layout = "dialog" }: {
     }
   }
 
-  async function handleRemovePhoto(url: string) {
+  async function handleRemovePhoto(photo: string) {
     if (!visit.lead) return;
-    setPhotos((prev) => prev.filter((u) => u !== url));
-    apiRequest("DELETE", `/api/xpot/leads/${visit.lead.id}/photos`, { photoUrl: url })
+    setPhotos((prev) => prev.filter((u) => u !== photo));
+    apiRequest("DELETE", `/api/xpot/leads/${visit.lead.id}/photos`, { photo })
       .then(() => queryClient.invalidateQueries({ queryKey: ["/api/xpot/visits"] }))
       .catch((err: Error) => toast({ title: t("photoRemoveFailed"), description: err.message, variant: "destructive" }));
   }
@@ -261,7 +262,7 @@ export function VisitDetail({ visit, onDelete, layout = "dialog" }: {
             {photos.length > 0 && (
               <div className="space-y-2">
                 <div className="relative w-full aspect-video rounded-2xl overflow-hidden">
-                  <img src={photos[0]} alt={t("coverAlt")} className="w-full h-full object-cover" />
+                  <img src={fileSrc(photos[0])} alt={t("coverAlt")} className="w-full h-full object-cover" />
                   <button
                     type="button"
                     aria-label={t("removePhoto")}
@@ -276,7 +277,7 @@ export function VisitDetail({ visit, onDelete, layout = "dialog" }: {
                   <div className="flex gap-2 overflow-x-auto pb-1">
                     {photos.slice(1).map((url, i) => (
                       <div key={i} className="relative h-16 w-16 shrink-0 rounded-xl overflow-hidden">
-                        <img src={url} alt="" className="w-full h-full object-cover" />
+                        <img src={fileSrc(url)} alt="" className="w-full h-full object-cover" />
                         <button
                           type="button"
                           aria-label={t("removePhoto")}
@@ -355,7 +356,7 @@ export function VisitDetail({ visit, onDelete, layout = "dialog" }: {
       >
         <VoiceRecorder
           onUpload={handleAudioUpload}
-          existingAudio={visit.note?.audioUrl}
+          existingAudio={fileSrc(visit.note?.audioUrl)}
           existingDuration={visit.note?.audioDurationSeconds}
           existingTranscription={visit.note?.audioTranscription}
         />

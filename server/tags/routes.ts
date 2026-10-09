@@ -10,10 +10,10 @@ import {
   buildManufacturingCsv,
   buildTagUrls,
   normalizeTagCode,
-  validateDestinationUrl,
 } from "#shared/tags.js";
 import { canWorkOnTag } from "#shared/tagAccess.js";
 import { TAG_FACES } from "#shared/tagFace.js";
+import { validateChipContent } from "#shared/chipContent.js";
 import { DIRECT_WRITE_METHODS, TAGS_APP_PATH } from "#shared/tagApp.js";
 import {
   DEVICE_EVENT_TYPES,
@@ -25,6 +25,7 @@ import type { TagProvisioningDevice } from "#shared/schema.js";
 import { storage } from "../storage.js";
 import { resolveGoogleApiKey } from "../routes/xpot/google.js";
 import { actorOf, requireTagAdmin, requireTagManager, requireTagUser } from "./access.js";
+import { viewsAsRep } from "../routes/xpot/middleware.js";
 import { registerJourneyRoutes } from "./journeyRoutes.js";
 import { createTagRedirectHandler, type PublicTag } from "./publicHandler.js";
 import { buildBatchZip, qrPng, qrSvg } from "./qrAssets.js";
@@ -48,6 +49,12 @@ import { salesStorage } from "../storage-sales.js";
 //   /api/provisioner/*           — the paired desktop NFC provisioner (device token)
 // Registered before the Xpot routers, whose admin router guards every path it sees.
 
+/** The actor for a list: viewing as a rep (admin mode off), a manager's lists are their own. */
+function listActor(req: Request) {
+  const actor = actorOf(req);
+  return viewsAsRep(req) ? { ...actor, isManager: false } : actor;
+}
+
 /** Where printed QR / programmed NFC URLs point. */
 export function tagBaseUrl(): string {
   return (process.env.TAG_PUBLIC_BASE_URL?.trim() || TAG_DEFAULT_PUBLIC_BASE_URL).replace(/\/+$/, "");
@@ -60,13 +67,14 @@ const allowHttp = () => process.env.NODE_ENV !== "production";
 const optionalText = (max: number) =>
   z.preprocess((v) => (typeof v === "string" ? v.trim() || null : v), z.string().max(max).nullable().optional());
 
+// A link, an email, a phone or a contact card (shared/chipContent.ts), stored canonical.
 const destinationUrl = z.string().transform((value, ctx) => {
-  const result = validateDestinationUrl(value, { allowHttp: allowHttp() });
+  const result = validateChipContent(value, { allowHttp: allowHttp() });
   if (!result.ok) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: result.error });
     return z.NEVER;
   }
-  return result.url;
+  return result.value;
 });
 
 const nullableDestinationUrl = z
@@ -75,12 +83,12 @@ const nullableDestinationUrl = z
   .transform((value, ctx) => {
     if (value === undefined) return undefined;
     if (value === null || value.trim() === "") return null;
-    const result = validateDestinationUrl(value, { allowHttp: allowHttp() });
+    const result = validateChipContent(value, { allowHttp: allowHttp() });
     if (!result.ok) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: result.error, path: ["destinationUrl"] });
       return z.NEVER;
     }
-    return result.url;
+    return result.value;
   });
 
 const leadFields = {
@@ -122,6 +130,8 @@ export const listQuerySchema = z.object({
   repId: z.coerce.number().int().positive().optional(),
   kitId: z.string().uuid().optional(),
   house: z.enum(["1", "true"]).transform(() => true).optional(),
+  /** Only the viewer's own pieces, even for a manager (the phone app's Pieces screen). */
+  mine: z.enum(["1", "true"]).transform(() => true).optional(),
   method: z.enum(["qr", "nfc"]).optional(),
   search: z.string().trim().max(100).optional(),
   limit: z.coerce.number().int().min(1).max(2000).optional(),
@@ -375,6 +385,7 @@ export function registerTagRoutes(app: Express) {
   const publicDeps = {
     findByCode: repo.findPublicTagByCode,
     recordEvent: repo.recordTagEvent,
+    confirmNfc: repo.confirmNfcFromTap,
     configureUrlFor,
   };
   app.get("/q/:code", createTagRedirectHandler("qr", publicDeps));
@@ -392,10 +403,21 @@ export function registerTagRoutes(app: Express) {
     }
   });
 
+  // The Tags dashboard: the person's own pieces, or every rep's for a manager in admin mode.
+  app.get(`${fieldBase}/dashboard`, requireTagUser, async (req, res) => {
+    try {
+      const days = Math.min(Math.max(Number(req.query.days) || 30, 7), 90);
+      const actor = listActor(req);
+      res.json(await repo.getTagDashboard(actor.isManager ? null : actor.repId, days));
+    } catch (err) {
+      fail(res, err, "Failed to load dashboard");
+    }
+  });
+
   // Pieces per customer, for the customer cards on the Visits side.
   app.get(`${fieldBase}/by-lead`, requireTagUser, async (req, res) => {
     try {
-      res.json(await repo.getLeadTagSummaries(actorOf(req)));
+      res.json(await repo.getLeadTagSummaries(listActor(req)));
     } catch (err) {
       fail(res, err, "Failed to load customer pieces");
     }
@@ -418,8 +440,12 @@ export function registerTagRoutes(app: Express) {
     try {
       const actor = actorOf(req);
       const filters = listQuerySchema.parse(req.query);
-      // A reseller's list is their own pieces, whatever filter they send.
-      res.json(await repo.listTags(actor.isManager ? filters : { ...filters, repId: actor.repId, house: undefined }));
+      // A reseller's list is their own pieces, whatever filter they send. A manager gets
+      // every piece (the admin screens), unless asking for their own: a piece is theirs
+      // once it is in their kit or they activated it, not because they can reach it.
+      const { mine, ...rest } = filters;
+      const own = !actor.isManager || mine || viewsAsRep(req);
+      res.json(await repo.listTags(own ? { ...rest, repId: actor.repId, house: undefined } : rest));
     } catch (err) {
       fail(res, err, "Failed to load tags");
     }
@@ -505,10 +531,22 @@ export function registerTagRoutes(app: Express) {
     }
   });
 
+  // The phone made this tag's chip read-only, so nobody can rewrite it.
+  app.post(`${fieldBase}/:id/nfc-locked`, requireTagUser, async (req, res) => {
+    const id = idParam(req, res);
+    if (!id) return;
+    try {
+      await field.recordPhoneLock(id, actorOf(req));
+      res.json(await repo.getTagDetail(id, tagBaseUrl()));
+    } catch (err) {
+      fail(res, err, "Failed to record chip lock");
+    }
+  });
+
   // Direct pieces: chips holding the customer's own link.
   app.get("/api/xpot/tag-direct-writes", requireTagUser, async (req, res) => {
     try {
-      res.json(await field.listDirectWrites(actorOf(req)));
+      res.json(await field.listDirectWrites(listActor(req)));
     } catch (err) {
       fail(res, err, "Failed to load direct links");
     }

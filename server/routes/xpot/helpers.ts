@@ -358,6 +358,10 @@ export async function syncLeadToXphere(leadId: number): Promise<{ synced: boolea
     const res = await fetch(`${apiUrl}/api/v1/prospects`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${integration.apiKey}` },
+      // Without a deadline a hung request never resolves and no sync event is
+      // written, so the lead silently never reaches Xphere (leads 2 and 3 did
+      // that in prod). On timeout the catch below logs a retryable failure.
+      signal: AbortSignal.timeout(20_000),
       body: JSON.stringify({
         source: { type: "xpot" },
         prospects: [

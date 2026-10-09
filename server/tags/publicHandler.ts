@@ -2,11 +2,12 @@ import type { Request, RequestHandler, Response } from "express";
 import {
   normalizeTagCode,
   resolveRedirectTarget,
-  validateDestinationUrl,
   type TagAccessMethod,
   type TagEventType,
 } from "#shared/tags.js";
 import type { InsertTagEvent } from "#shared/schema.js";
+import { contentSummary, validateChipContent } from "#shared/chipContent.js";
+import { formatPhone } from "#shared/phone.js";
 import { normalizeIpKey, rateLimit } from "./rateLimit.js";
 import {
   browserFamilyFromUserAgent,
@@ -17,7 +18,7 @@ import {
   trustedCountryCode,
   visitorDayKey,
 } from "./requestInfo.js";
-import { pickTagPageLang, renderTagPage } from "./publicPages.js";
+import { pickTagPageLang, renderContactPage, renderTagPage } from "./publicPages.js";
 
 /** The slice of a tag the public routes need — never customer data. */
 export interface PublicTag {
@@ -34,6 +35,12 @@ export interface PublicTag {
 export interface PublicTagDeps {
   findByCode(code: string): Promise<PublicTag | null>;
   recordEvent(event: InsertTagEvent): Promise<void>;
+  /**
+   * A real phone opened /n/<code>, a link that only exists on the chip: proof
+   * the chip holds it. Marks the chip verified (an iPhone written with NFC
+   * Tools has no other way to be checked). Optional; never blocks the scan.
+   */
+  confirmNfc?(tagId: string): Promise<void>;
   /**
    * Link to the field app for this tag when the requester is signed in and may
    * work on it (its reseller, or a manager); undefined for everyone else.
@@ -92,6 +99,13 @@ async function record(
   } catch (err) {
     console.error(`[tags] failed to record ${eventType} for ${tag.publicCode}:`, err);
   }
+  if (method === "nfc" && deps.confirmNfc && !isBotUserAgent(req.get("user-agent") ?? "")) {
+    try {
+      await deps.confirmNfc(tag.id);
+    } catch (err) {
+      console.error(`[tags] failed to confirm the chip of ${tag.publicCode}:`, err);
+    }
+  }
 }
 
 /**
@@ -128,14 +142,24 @@ export function createTagRedirectHandler(method: TagAccessMethod, deps: PublicTa
       const target = resolveRedirectTarget(tag, method);
       // Stored URLs were validated on write; re-check so a bad row can never
       // turn into an open javascript:/data: redirect.
-      const valid = target ? validateDestinationUrl(target, { allowHttp: true }) : null;
+      const valid = target ? validateChipContent(target, { allowHttp: true }) : null;
       if (!valid?.ok) {
         console.error(`[tags] active tag ${tag.publicCode} has no valid destination`);
         res.status(503).type("html").send(renderTagPage("unavailable", { lang }));
         await record(deps, req, tag, method, "misconfigured_scan");
         return;
       }
-      res.redirect(302, valid.url);
+      // A link redirects; an email or phone gets a page that opens it; a contact card downloads.
+      if (valid.kind === "url") res.redirect(302, valid.value);
+      else if (valid.kind === "vcard") {
+        const name = contentSummary(valid.value).replace(/[^\w.-]+/g, "-").replace(/^-+|-+$/g, "") || "contact";
+        res.status(200).type("text/vcard; charset=utf-8");
+        res.set("Content-Disposition", `inline; filename="${name}.vcf"`);
+        res.send(valid.value);
+      } else {
+        const display = valid.kind === "phone" ? formatPhone(contentSummary(valid.value)) : contentSummary(valid.value);
+        res.status(200).type("html").send(renderContactPage(valid.kind, { href: valid.value, display, lang }));
+      }
       await record(deps, req, tag, method, "redirect");
       return;
     }

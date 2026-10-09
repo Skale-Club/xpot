@@ -5,6 +5,7 @@ import { leadsMessages } from "@/i18n/messages/leads";
 import { formatDuration } from "../utils";
 import { StatusBadge } from "./VisitStatus";
 import type { EnrichedSalesVisit } from "../types";
+import { fileSrc } from "@/lib/files";
 
 /** Desktop list of visits, newest first, one row each. */
 export function VisitsTable({
@@ -61,7 +62,7 @@ export function VisitsTable({
                 <td className="max-w-0 px-3 py-2.5" style={{ width: "50%" }}>
                   <div className="flex items-center gap-3">
                     {photo ? (
-                      <img src={photo} alt="" className="h-8 w-8 shrink-0 rounded-lg object-cover" />
+                      <img src={fileSrc(photo)} alt="" className="h-8 w-8 shrink-0 rounded-lg object-cover" />
                     ) : (
                       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-indigo-500/20 bg-indigo-500/10">
                         <Building2 className="h-4 w-4 text-indigo-400" />

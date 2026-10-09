@@ -1,10 +1,11 @@
 import { Router } from "express";
 import { storage } from "../../storage.js";
-import { requireXpotUser, ensureXpotRep, isManagerOrAdmin, loadAccessibleLead } from "./middleware.js";
+import { requireXpotUser, ensureXpotRep, isManagerOrAdmin, loadAccessibleLead, listsEveryone } from "./middleware.js";
 import type { SalesVisitStatus } from "#shared/schema/sales.js";
 import { getDistanceMeters, syncVisitToGhl, syncVisitToXphere } from "./helpers.js";
 import { xpotCheckInSchema, xpotCheckOutSchema, xpotVisitNoteUpsertSchema } from "#shared/xpot.js";
 import { salesStorage } from "../../storage-sales.js";
+import { activeStore, discardFiles, putPrivateFile } from "../../lib/files.js";
 
 export function createVisitsRouter() {
   const router = Router();
@@ -14,7 +15,7 @@ export function createVisitsRouter() {
     const actor = (req as any).xpotActor as Awaited<ReturnType<typeof ensureXpotRep>>;
     const leadId = typeof req.query.leadId === "string" ? Number(req.query.leadId) : undefined;
     const visits = await storage.listSalesVisits({
-      repId: isManagerOrAdmin(actor!) ? (req.query.repId ? Number(req.query.repId) : undefined) : actor!.rep.id,
+      repId: listsEveryone(req, actor!) ? (req.query.repId ? Number(req.query.repId) : undefined) : actor!.rep.id,
       leadId,
     });
     const visitSalesById = await salesStorage.visitSalesBatch(visits.map((visit) => visit.id));
@@ -199,8 +200,9 @@ export function createVisitsRouter() {
     if (!visit || (visit.repId !== actor!.rep.id && !actor!.user.isAdmin)) {
       return res.status(404).json({ message: "Visit not found" });
     }
-    await storage.deleteSalesVisit(visitId);
+    const files = await storage.deleteSalesVisit(visitId);
     res.status(204).end();
+    void discardFiles(files, `visit #${visitId} deleted`);
   });
 
   router.patch("/visits/:id/note", async (req, res) => {
@@ -235,26 +237,17 @@ export function createVisitsRouter() {
       return res.status(400).json({ message: "Audio data is required" });
     }
 
+    if (!activeStore()) {
+      return res.status(503).json({ message: "Storage not configured" });
+    }
+
     try {
-      let audioUrl = "";
       const base64Data = audioData.replace(/^data:audio\/\w+;base64,/, "");
       const buffer = Buffer.from(base64Data, "base64");
       const filename = `visit_${visitId}_${Date.now()}.webm`;
-
-      if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
-        const { createClient } = await import("@supabase/supabase-js");
-        const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-        const path = `audio/${actor!.rep.id}/${filename}`;
-        const { error: uploadError } = await supabase.storage.from("uploads").upload(path, buffer, {
-          contentType: "audio/webm",
-          upsert: true,
-        });
-        if (uploadError) throw uploadError;
-        const { data: urlData } = supabase.storage.from("uploads").getPublicUrl(path);
-        audioUrl = urlData.publicUrl;
-      } else {
-        return res.status(503).json({ message: "Storage not configured" });
-      }
+      // Private: the note keeps a storage reference, read through GET /files.
+      const audioUrl = await putPrivateFile(`audio/${actor!.rep.id}/${filename}`, buffer, "audio/webm");
+      const previousAudio = (await storage.getSalesVisitNote(visitId))?.audioUrl;
 
       // Transcribe with Groq Whisper (best-effort — does not block save on failure)
       let audioTranscription: string | null = null;
@@ -308,6 +301,8 @@ export function createVisitsRouter() {
         audioDurationSeconds: durationSeconds || null,
         ...(audioTranscription !== null && { audioTranscription }),
       });
+      // A re-recording replaces the note's audio; the old file goes with it.
+      if (previousAudio && previousAudio !== audioUrl) void discardFiles([previousAudio], `voice note of visit #${visitId} replaced`);
       return res.json({
         note,
         transcriptionAvailable: Boolean(audioTranscription),

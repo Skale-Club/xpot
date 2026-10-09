@@ -147,6 +147,7 @@ export async function recordPhoneWrite(
     if (!tag) throw new TagError("Tag not found", 404);
     assertCanWork(actor, tag);
     publicCode = tag.publicCode;
+    if (tag.nfcProvisioningStatus === "locked") throw new TagError("This chip is locked and cannot be rewritten", 409);
     const { nfcUrl } = buildTagUrls(baseUrl, tag.publicCode);
     const decision = decidePhoneWrite(nfcUrl, report.readbackUrl);
     const now = new Date();
@@ -183,6 +184,42 @@ export async function recordPhoneWrite(
     metadata: { method: report.method },
   }, journeyContext(actor.userId, "field", actor.repId));
   return result;
+}
+
+/**
+ * The phone made the chip read-only (Web NFC makeReadOnly). Only a written
+ * chip can be locked; once locked it can never be rewritten, which is exactly
+ * what an Xpot piece wants: the chip keeps /n/<code> forever and the
+ * destination keeps changing on the server.
+ */
+export async function recordPhoneLock(id: string, actor: TagActor) {
+  let publicCode = "";
+  await db.transaction(async (tx) => {
+    const [tag] = await tx.select().from(tags).where(eq(tags.id, id)).for("update");
+    if (!tag) throw new TagError("Tag not found", 404);
+    assertCanWork(actor, tag);
+    publicCode = tag.publicCode;
+    if (tag.nfcProvisioningStatus === "locked") return;
+    if (tag.nfcProvisioningStatus !== "verified" && tag.nfcProvisioningStatus !== "programmed") {
+      throw new TagError("Write the chip before locking it", 409);
+    }
+    const now = new Date();
+    await tx.update(tags).set({ nfcProvisioningStatus: "locked", nfcLockedAt: now, updatedAt: now }).where(eq(tags.id, id));
+    await tx.insert(tagProvisioningEvents).values({
+      jobId: null,
+      tagId: tag.id,
+      deviceId: null,
+      eventType: "lock_completed",
+      detail: { source: "field_app", userId: actor.userId },
+    });
+    console.log(`[tags] phone lock ${tag.publicCode} (rep ${actor.repId})`);
+  });
+  await recordJourney({
+    kind: "execution",
+    action: "nfc_locked",
+    title: `NFC chip of ${publicCode} locked (phone)`,
+    tagId: id,
+  }, journeyContext(actor.userId, "field", actor.repId));
 }
 
 // ─── Direct pieces ────────────────────────────────────────────────────────────

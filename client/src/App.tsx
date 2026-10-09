@@ -21,7 +21,8 @@ import { ModuleSwitch, rememberModule, useXpotModules } from "@/components/Modul
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { shellMessages } from "@/i18n/messages/shell";
-import { AppLayout } from "@/components/xpot/AppLayout";
+import { ShellHeader } from "@/components/xpot/ShellHeader";
+import { AppLayout, MODULE_COLUMN } from "@/components/xpot/AppLayout";
 import { MobileTabBar } from "@/components/xpot/MobileTabBar";
 import { SessionGate } from "@/components/xpot/SessionGate";
 import { XpotLandingPage } from "./pages/xpot/XpotLandingPage";
@@ -76,6 +77,7 @@ function XpotAppShell() {
     <AppLayout
       title={current ? tShell(current.labelKey) : "Xpot"}
       wide={WIDE_TABS.has(activeTab)}
+      mobileColumnClassName={MODULE_COLUMN}
       mobileHeader={
         <>
           {!isOnline && (
@@ -83,6 +85,7 @@ function XpotAppShell() {
               {t("offline")}
             </div>
           )}
+          <ShellHeader module="visits" />
           {modules.length > 1 && (
             <div className="mb-4">
               <ModuleSwitch current="visits" />
@@ -157,9 +160,15 @@ export default function App() {
     <Router>
       <Switch>
         <Route path="/" component={RootRoute} />
+        <Route path="/pt" component={RootRoute} />
+        <Route path="/es" component={RootRoute} />
         <Route path="/login" component={Login} />
         <Route path="/privacy">{() => <LegalPage doc="privacy" />}</Route>
         <Route path="/terms">{() => <LegalPage doc="terms" />}</Route>
+        <Route path="/pt/privacy">{() => <LegalPage doc="privacy" />}</Route>
+        <Route path="/pt/terms">{() => <LegalPage doc="terms" />}</Route>
+        <Route path="/es/privacy">{() => <LegalPage doc="privacy" />}</Route>
+        <Route path="/es/terms">{() => <LegalPage doc="terms" />}</Route>
         <Route path="/admin/tags/*?">{() => <AdminApp section="tags" />}</Route>
         <Route path="/admin/:section?">
           {(params) => <AdminApp section={params.section ?? "overview"} />}

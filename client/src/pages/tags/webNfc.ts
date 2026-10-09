@@ -2,8 +2,11 @@
 // Every operation takes an AbortSignal so the UI can cancel a pending tap.
 // Errors carry a code; the screens turn it into words in the user's language.
 
+import { contentKindOf } from "@shared/chipContent";
+
 interface NdefRecordLike {
   recordType: string;
+  mediaType?: string;
   data?: DataView;
   encoding?: string;
 }
@@ -14,6 +17,7 @@ interface NdefReadingEventLike extends Event {
 interface NdefReaderLike {
   scan(options?: { signal?: AbortSignal }): Promise<void>;
   write(message: unknown, options?: { overwrite?: boolean; signal?: AbortSignal }): Promise<void>;
+  makeReadOnly?(options?: { signal?: AbortSignal }): Promise<void>;
   onreading: ((ev: NdefReadingEventLike) => void) | null;
   onreadingerror: ((ev: Event) => void) | null;
 }
@@ -94,6 +98,13 @@ function readingFrom(ev: NdefReadingEventLike): NfcReading {
       if (url) return { kind: "url", url, serialNumber: ev.serialNumber };
     }
   }
+  // A contact card written as a text/vcard record (writeContent).
+  for (const record of ev.message.records) {
+    if (record.recordType === "mime" && /^text\/(x-)?vcard/i.test(record.mediaType ?? "")) {
+      const text = decode(record);
+      if (text) return { kind: "text", text, serialNumber: ev.serialNumber };
+    }
+  }
   for (const record of ev.message.records) {
     if (record.recordType === "text") {
       const text = decode(record);
@@ -149,12 +160,38 @@ export async function scanOnce(signal: AbortSignal): Promise<NfcReading> {
   }
 }
 
-/** Writes one URL record on the next tap. */
-export async function writeUrl(url: string, signal: AbortSignal): Promise<void> {
+/**
+ * Writes one record on the next tap: a URI record for a link, mailto: or tel:
+ * (phones open each in the right app), a text/vcard MIME record for a contact
+ * card (phones offer to save the contact).
+ */
+export async function writeContent(value: string, signal: AbortSignal): Promise<void> {
   const Ctor = getCtor();
   if (!Ctor) throw new NfcError("nfcNoBrowser");
+  const record = contentKindOf(value) === "vcard"
+    ? { recordType: "mime", mediaType: "text/vcard", data: new TextEncoder().encode(value) }
+    : { recordType: "url", data: value };
   try {
-    await new Ctor().write({ records: [{ recordType: "url", data: url }] }, { overwrite: true, signal });
+    await new Ctor().write({ records: [record] }, { overwrite: true, signal });
+  } catch (err) {
+    throw mapNfcError(err);
+  }
+}
+
+/** Whether this browser can lock a chip (Chrome 100+ on Android). */
+export function canLockChip(): boolean {
+  const Ctor = getCtor();
+  return !!Ctor && typeof Ctor.prototype.makeReadOnly === "function";
+}
+
+/** Makes the next chip tapped permanently read-only. Irreversible. */
+export async function lockChip(signal: AbortSignal): Promise<void> {
+  const Ctor = getCtor();
+  if (!Ctor) throw new NfcError("nfcNoBrowser");
+  const reader = new Ctor();
+  if (typeof reader.makeReadOnly !== "function") throw new NfcError("nfcUnsupported");
+  try {
+    await reader.makeReadOnly({ signal });
   } catch (err) {
     throw mapNfcError(err);
   }

@@ -32,7 +32,12 @@ test("classifyScan: empty chips and non-link payloads", () => {
   assert.deepEqual(classifyScan(""), { kind: "empty" });
   assert.deepEqual(classifyScan(null), { kind: "empty" });
   assert.deepEqual(classifyScan("hello world"), { kind: "text", text: "hello world" });
-  assert.equal(classifyScan("tel:+15085001095").kind, "text");
+});
+
+test("classifyScan: an email, phone or contact card on a chip is direct content", () => {
+  assert.deepEqual(classifyScan("tel:+15085001095"), { kind: "direct", url: "tel:+15085001095" });
+  assert.deepEqual(classifyScan("mailto:ana@example.com"), { kind: "direct", url: "mailto:ana@example.com" });
+  assert.equal(classifyScan(["BEGIN:VCARD", "VERSION:3.0", "FN:Ana", "END:VCARD"].join(String.fromCharCode(10))).kind, "direct");
 });
 
 test("normalizeUrlInput adds https:// only to scheme-less hosts", () => {

@@ -19,7 +19,8 @@ export default function LeadPicker({ value, onChange }: { value: LeadChoice; onC
   const query = text.trim().toLowerCase();
   const matches = useMemo(() => {
     const list = data ?? [];
-    return (query ? list.filter((lead) => lead.name.toLowerCase().includes(query)) : list).slice(0, 6);
+    // Nothing until the person searches: the list is not a menu to scroll through.
+    return query ? list.filter((lead) => lead.name.toLowerCase().includes(query)).slice(0, 6) : [];
   }, [data, query]);
   const exact = (data ?? []).some((lead) => lead.name.toLowerCase() === query);
 

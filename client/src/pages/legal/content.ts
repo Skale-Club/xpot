@@ -12,11 +12,11 @@ export type LegalBlock = string | { list: string[] } | { lead: string; text: str
 export type LegalSection = { heading: string; body: LegalBlock[] };
 export type LegalDoc = { title: string; updated: string; intro: string; sections: LegalSection[] };
 
-export const LEGAL_UPDATED = "2026-10-04";
+export const LEGAL_UPDATED = "2026-10-05";
 
 const privacyEn: LegalDoc = {
   title: "Privacy Policy",
-  updated: "Last updated: October 4, 2026",
+  updated: "Last updated: October 5, 2026",
   intro:
     "Xpot (xpot.place) is a field sales app operated by Skale Club (“we”, “us”). This policy explains what we collect from the people who use the app (sales reps, managers and admins), what we keep about the businesses and contacts recorded in it, and what we record when someone scans an Xpot QR or NFC piece.",
   sections: [
@@ -61,7 +61,8 @@ const privacyEn: LegalDoc = {
         {
           list: [
             "Hetzner, through Coolify: hosting and database.",
-            "Supabase: sign-in and file storage (photos, profile pictures, voice notes).",
+            "Supabase: sign-in and profile pictures.",
+            "Cloudflare (R2): private storage for business photos and voice notes, and database backups.",
             "Twilio: text messages with sign-in codes.",
             "Groq and OpenAI: transcription of voice notes (they receive the audio).",
             "OpenRouter and Google Gemini: summaries and suggested actions (they receive the transcript, the business name and your product list).",
@@ -82,13 +83,16 @@ const privacyEn: LegalDoc = {
     {
       heading: "6. Files and links",
       body: [
-        "Photos, profile pictures and voice notes are stored with long links that cannot be guessed. Anyone who has one of those links can open the file, so do not share them outside your team.",
+        "Business photos and voice notes are private. The app opens them through links that work only for people who can see that business or visit (whoever recorded it, and the managers and admins of your team), and each link expires after a few minutes. Profile pictures are stored with long links that cannot be guessed; anyone who has one of those links can open the picture, so do not share it outside your team.",
       ],
     },
     {
       heading: "7. How long we keep it",
       body: [
-        "We keep your data while your account is active and for as long as it is needed for the business relationship. Sign-in codes are deleted after use and sessions expire after 30 days without use. Deleting a business or a visit in the app removes it from the app; to delete the stored files or your whole account, contact us and we will do it.",
+        "We keep your data while your account is active and for as long as it is needed for the business relationship. Sign-in codes are deleted after use and sessions expire after 30 days without use.",
+        "When you delete a business, a visit or a photo in the app, or record a voice note again, the stored files that belonged to it are deleted too.",
+        "You can ask us to delete your account at any time. We then delete your sign-in details and profile (including your profile picture), your visits with their notes, voice notes, transcripts and photos, your tasks and opportunities, and the businesses you own. We keep sales and consignment records because we need them for accounting: they stay under an anonymous account instead of your name, and a business that has them stays in Xpot without an owner.",
+        "Deleted data can remain in our database backups until those backups are replaced. Data already sent to a CRM your team connected stays there until it is deleted in that CRM.",
       ],
     },
     {
@@ -118,7 +122,7 @@ const privacyEn: LegalDoc = {
 
 const privacyPt: LegalDoc = {
   title: "Política de Privacidade",
-  updated: "Atualizada em 4 de outubro de 2026",
+  updated: "Atualizada em 5 de outubro de 2026",
   intro:
     "O Xpot (xpot.place) é um app de vendas externas operado pela Skale Club (“nós”). Esta política explica o que coletamos de quem usa o app (vendedores, gestores e administradores), o que guardamos sobre as empresas e os contatos cadastrados nele e o que registramos quando alguém escaneia uma peça QR ou NFC do Xpot.",
   sections: [
@@ -163,7 +167,8 @@ const privacyPt: LegalDoc = {
         {
           list: [
             "Hetzner, via Coolify: hospedagem e banco de dados.",
-            "Supabase: login e armazenamento de arquivos (fotos, fotos de perfil, notas de voz).",
+            "Supabase: login e fotos de perfil.",
+            "Cloudflare (R2): armazenamento privado das fotos das empresas e das notas de voz, e backups do banco de dados.",
             "Twilio: SMS com os códigos de acesso.",
             "Groq e OpenAI: transcrição das notas de voz (recebem o áudio).",
             "OpenRouter e Google Gemini: resumos e ações sugeridas (recebem a transcrição, o nome da empresa e sua lista de produtos).",
@@ -184,13 +189,16 @@ const privacyPt: LegalDoc = {
     {
       heading: "6. Arquivos e links",
       body: [
-        "Fotos, fotos de perfil e notas de voz ficam guardadas com links longos, impossíveis de adivinhar. Quem tiver um desses links consegue abrir o arquivo, então não os compartilhe fora da sua equipe.",
+        "As fotos das empresas e as notas de voz são privadas. O app as abre por links que só funcionam para quem pode ver aquela empresa ou visita (quem gravou, e os gestores e administradores da sua equipe), e cada link expira em poucos minutos. As fotos de perfil ficam guardadas com links longos, impossíveis de adivinhar; quem tiver um desses links consegue abrir a foto, então não os compartilhe fora da sua equipe.",
       ],
     },
     {
       heading: "7. Por quanto tempo guardamos",
       body: [
-        "Guardamos seus dados enquanto sua conta estiver ativa e pelo tempo necessário para a relação comercial. Os códigos de acesso são apagados depois do uso e as sessões expiram após 30 dias sem uso. Apagar uma empresa ou uma visita no app a remove do app; para apagar os arquivos guardados ou sua conta inteira, fale conosco e nós fazemos isso.",
+        "Guardamos seus dados enquanto sua conta estiver ativa e pelo tempo necessário para a relação comercial. Os códigos de acesso são apagados depois do uso e as sessões expiram após 30 dias sem uso.",
+        "Quando você apaga uma empresa, uma visita ou uma foto no app, ou grava de novo uma nota de voz, os arquivos guardados que pertenciam a ela também são apagados.",
+        "Você pode pedir a qualquer momento que apaguemos sua conta. Nesse caso apagamos seus dados de acesso e seu perfil (incluindo a foto de perfil), suas visitas com as anotações, notas de voz, transcrições e fotos, suas tarefas e oportunidades, e as empresas que são suas. Guardamos os registros de vendas e de consignação porque precisamos deles para a contabilidade: eles ficam ligados a uma conta anônima, e não ao seu nome, e uma empresa que os tenha continua no Xpot sem responsável.",
+        "Dados apagados podem continuar nos backups do banco de dados até esses backups serem substituídos. O que já foi enviado a um CRM conectado pela sua equipe fica lá até ser apagado nesse CRM.",
       ],
     },
     {
@@ -220,7 +228,7 @@ const privacyPt: LegalDoc = {
 
 const privacyEs: LegalDoc = {
   title: "Política de Privacidad",
-  updated: "Actualizada el 4 de octubre de 2026",
+  updated: "Actualizada el 5 de octubre de 2026",
   intro:
     "Xpot (xpot.place) es una app de ventas en la calle operada por Skale Club (“nosotros”). Esta política explica qué recopilamos de quienes usan la app (vendedores, gerentes y administradores), qué guardamos sobre las empresas y los contactos registrados en ella y qué registramos cuando alguien escanea una pieza QR o NFC de Xpot.",
   sections: [
@@ -265,7 +273,8 @@ const privacyEs: LegalDoc = {
         {
           list: [
             "Hetzner, a través de Coolify: alojamiento y base de datos.",
-            "Supabase: inicio de sesión y almacenamiento de archivos (fotos, fotos de perfil, notas de voz).",
+            "Supabase: inicio de sesión y fotos de perfil.",
+            "Cloudflare (R2): almacenamiento privado de las fotos de las empresas y de las notas de voz, y copias de seguridad de la base de datos.",
             "Twilio: mensajes SMS con los códigos de acceso.",
             "Groq y OpenAI: transcripción de las notas de voz (reciben el audio).",
             "OpenRouter y Google Gemini: resúmenes y acciones sugeridas (reciben la transcripción, el nombre de la empresa y tu lista de productos).",
@@ -286,13 +295,16 @@ const privacyEs: LegalDoc = {
     {
       heading: "6. Archivos y enlaces",
       body: [
-        "Las fotos, las fotos de perfil y las notas de voz se guardan con enlaces largos que no se pueden adivinar. Quien tenga uno de esos enlaces puede abrir el archivo, así que no los compartas fuera de tu equipo.",
+        "Las fotos de las empresas y las notas de voz son privadas. La app las abre con enlaces que solo funcionan para quien puede ver esa empresa o visita (quien la grabó, y los gerentes y administradores de tu equipo), y cada enlace vence a los pocos minutos. Las fotos de perfil se guardan con enlaces largos que no se pueden adivinar; quien tenga uno de esos enlaces puede abrir la foto, así que no los compartas fuera de tu equipo.",
       ],
     },
     {
       heading: "7. Cuánto tiempo lo guardamos",
       body: [
-        "Guardamos tus datos mientras tu cuenta esté activa y el tiempo necesario para la relación comercial. Los códigos de acceso se borran después de usarse y las sesiones vencen tras 30 días sin uso. Borrar una empresa o una visita en la app la quita de la app; para borrar los archivos guardados o tu cuenta completa, escríbenos y lo hacemos.",
+        "Guardamos tus datos mientras tu cuenta esté activa y el tiempo necesario para la relación comercial. Los códigos de acceso se borran después de usarse y las sesiones vencen tras 30 días sin uso.",
+        "Cuando borras una empresa, una visita o una foto en la app, o vuelves a grabar una nota de voz, también se borran los archivos guardados que le pertenecían.",
+        "Puedes pedirnos en cualquier momento que borremos tu cuenta. Entonces borramos tus datos de acceso y tu perfil (incluida la foto de perfil), tus visitas con sus notas, notas de voz, transcripciones y fotos, tus tareas y oportunidades, y las empresas que son tuyas. Conservamos los registros de ventas y de consignación porque los necesitamos para la contabilidad: quedan asociados a una cuenta anónima, no a tu nombre, y una empresa que los tenga sigue en Xpot sin responsable.",
+        "Los datos borrados pueden seguir en las copias de seguridad de la base de datos hasta que esas copias se reemplacen. Lo que ya se envió a un CRM conectado por tu equipo queda allí hasta que se borre en ese CRM.",
       ],
     },
     {

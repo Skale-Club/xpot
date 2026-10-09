@@ -54,3 +54,46 @@ export function resolveRootView(input: {
 
   return "landing";
 }
+
+// ── Install entry ────────────────────────────────────────────────────────────
+//
+// The app offers installation passively: an "Install app" item in the sidebar
+// and in Settings, never a banner or a pop-up. How it installs depends on the
+// browser, and resolveInstallMode() is where that is decided (pure, tested in
+// tests/pwa-install-mode).
+//
+//   prompt     Chromium (Android, desktop Chrome/Edge) handed us its install
+//              prompt; the button opens it.
+//   ios        iPhone/iPad: no prompt API, so the button explains Share → Add
+//              to Home Screen.
+//   safari-mac Safari 17+ on macOS: File → Add to Dock.
+//   hidden     Already installed, or a browser that can't install (Firefox
+//              desktop, Chromium before it decides the app is installable).
+
+export type InstallMode = "prompt" | "ios" | "safari-mac" | "hidden";
+
+export function resolveInstallMode(input: {
+  standalone: boolean;
+  installed: boolean;
+  hasPrompt: boolean;
+  userAgent: string;
+  maxTouchPoints: number;
+}): InstallMode {
+  const { standalone, installed, hasPrompt, userAgent, maxTouchPoints } = input;
+  if (standalone || installed) return "hidden";
+  if (hasPrompt) return "prompt";
+
+  // iPadOS 13+ reports itself as a Mac; touch points give it away.
+  const isIOS = /iPhone|iPad|iPod/.test(userAgent) || (/Macintosh/.test(userAgent) && maxTouchPoints > 1);
+  if (isIOS) return "ios";
+
+  const isMacSafari =
+    /Macintosh/.test(userAgent) &&
+    /Version\/(\d+)/.test(userAgent) &&
+    Number(/Version\/(\d+)/.exec(userAgent)?.[1]) >= 17 &&
+    /Safari\//.test(userAgent) &&
+    !/Chrome|Chromium|CriOS|FxiOS|Edg|OPR|Firefox/.test(userAgent);
+  if (isMacSafari) return "safari-mac";
+
+  return "hidden";
+}

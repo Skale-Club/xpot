@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { storage } from "../../storage.js";
-import { requireXpotUser, ensureXpotRep, isManagerOrAdmin } from "./middleware.js";
+import { requireXpotUser, ensureXpotRep, isManagerOrAdmin, listsEveryone } from "./middleware.js";
 import { syncOpportunityToGhl } from "./helpers.js";
 import { xpotOpportunityCreateSchema, xpotOpportunityUpdateSchema } from "#shared/xpot.js";
 import { getGHLPipelines } from "../../integrations/ghl.js";
@@ -28,7 +28,7 @@ export function createOpportunitiesRouter() {
       : undefined;
     const opportunities = await storage.listSalesOpportunities({
       // SEG-08: same "who sees everything" rule as leads/visits/tasks.
-      repId: isManagerOrAdmin(actor!) && req.query.all === "true" ? undefined : actor!.rep.id,
+      repId: listsEveryone(req, actor!) && req.query.all === "true" ? undefined : actor!.rep.id,
       status,
     });
 

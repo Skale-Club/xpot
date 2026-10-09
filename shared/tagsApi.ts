@@ -152,6 +152,23 @@ export interface LeadTagSummary {
 }
 
 /** The field app's home numbers for the signed-in reseller. */
+/** The Tags dashboard (GET /api/xpot/tags/dashboard): the person's pieces, or everyone's in admin mode. */
+export interface TagDashboard {
+  days: number;
+  inStock: number;
+  active: number;
+  soldInPeriod: number;
+  scans: { qr: number; nfc: number };
+  /** Distinct visitors per day, summed (a person scanning twice in a day counts once). */
+  visitors: number;
+  /** Assigned or live pieces whose NFC chip holds nothing (or failed): QR only. */
+  chipsMissing: number;
+  daily: Array<{ day: string; qr: number; nfc: number }>;
+  topPieces: Array<{ id: string; publicCode: string; label: string | null; leadName: string | null; scans: number }>;
+  topCustomers: Array<{ leadId: number; name: string; pieces: number; scans: number }>;
+  devices: Array<{ os: string; scans: number }>;
+}
+
 export interface TagRepSummary {
   /** Pieces in hand, not sold yet. */
   inStock: number;

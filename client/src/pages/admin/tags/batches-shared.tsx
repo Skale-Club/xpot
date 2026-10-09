@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { TagBatchItem, TagListItem } from "@shared/tagsApi";
 import { Loader2 } from "@/components/ui/loader";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
+import { TagProductThumbnail } from "@/components/xpot/TagProductThumbnail";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -285,7 +286,7 @@ export function PieceTable({
                   />
                 </th>
               )}
-              <th className={`${TH} w-10 pr-0`}><span className="sr-only">{tm("printedOnPiece")}</span></th>
+              <th className={`${TH} w-20 pr-0`}><span className="sr-only">{tm("printedOnPiece")}</span></th>
               <th className={TH}>{tm("colCode")}</th>
               <th className={TH}>{tm("colSerial")}</th>
               {showBatch && <th className={TH}>{tm("colBatch")}</th>}
@@ -319,7 +320,12 @@ export function PieceTable({
                       )}
                     </td>
                   )}
-                  <td className={`${TD} pr-0`}><TagFaceIcon face={t.face} size="sm" /></td>
+                  <td className={`${TD} pr-0`}>
+                    <div className="flex items-center gap-2">
+                      <TagFaceIcon face={t.face} size="sm" />
+                      <TagProductThumbnail productType={t.productType} face={t.face} batchCode={t.batchCode} size="sm" />
+                    </div>
+                  </td>
                   <td className={`${TD} font-mono text-white`}>{t.publicCode}</td>
                   <td className={`${TD} tabular-nums text-white/50`}>{t.serialNumber ?? "—"}</td>
                   {showBatch && <td className={`${TD} font-mono text-xs`}>{t.batchCode ?? "—"}</td>}

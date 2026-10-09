@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { storage } from "../../storage.js";
-import { requireXpotUser, ensureXpotRep, isManagerOrAdmin } from "./middleware.js";
-import { syncLeadToGhl, syncOpportunityToGhl, syncTaskToGhl, syncVisitToGhl } from "./helpers.js";
+import { requireXpotUser, ensureXpotRep, isManagerOrAdmin, listsEveryone } from "./middleware.js";
+import { syncLeadToGhl, syncLeadToXphere, syncOpportunityToGhl, syncTaskToGhl, syncVisitToGhl } from "./helpers.js";
 import { syncSaleToXphere } from "./xphere-sync.js";
 import { salesStorage } from "../../storage-sales.js";
 
@@ -13,7 +13,7 @@ export function createSyncRouter() {
   router.post("/sync/flush", async (req, res) => {
     const actor = (req as any).xpotActor as Awaited<ReturnType<typeof ensureXpotRep>>;
     const repId = actor!.rep.id;
-    const canSyncAll = isManagerOrAdmin(actor!);
+    const canSyncAll = listsEveryone(req, actor!);
 
     const allLeads = await storage.listSalesLeads(canSyncAll ? {} : { ownerRepId: repId });
     const allOpportunities = await storage.listSalesOpportunities();
@@ -48,7 +48,7 @@ export function createSyncRouter() {
   router.get("/sync/status", async (req, res) => {
     const actor = (req as any).xpotActor as Awaited<ReturnType<typeof ensureXpotRep>>;
     const limit = Math.min(Number(req.query.limit) || 20, 100);
-    const events = isManagerOrAdmin(actor!)
+    const events = listsEveryone(req, actor!)
       ? await storage.listSalesSyncEvents(limit)
       : await storage.listSalesSyncEventsForRep(actor!.rep.id, limit);
     const failedCount = events.filter((e) => e.status === "failed").length;
@@ -77,8 +77,12 @@ export function createSyncRouter() {
         if (!lead || (!isManagerOrAdmin(actor!) && lead.ownerRepId !== actor!.rep.id)) {
           return res.status(403).json({ message: "Access denied" });
         }
-        const result = await syncLeadToGhl(Number(entityId));
-        return res.json(result);
+        // A lead goes to Xphere when it is created and to GHL on a flush, and a
+        // failure of either is logged as "sales_lead": retry whichever hasn't landed.
+        const results: { synced: boolean; message?: string }[] = [];
+        if (!lead.xphereRef) results.push(await syncLeadToXphere(lead.id));
+        if (!lead.ghlContactId) results.push(await syncLeadToGhl(lead.id));
+        return res.json({ synced: results.every((r) => r.synced), results });
       }
       case "sales_sale": {
         // Sales reach the CRM through the Xphere mirror; a failure lands in

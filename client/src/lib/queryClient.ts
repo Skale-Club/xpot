@@ -1,4 +1,5 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { viewHeaders } from "./adminMode";
 
 /**
  * A failed API call. `message` is what the server said (its `{ message }`), ready
@@ -35,7 +36,7 @@ export async function apiRequest(
 ): Promise<Response> {
   const res = await fetch(url, {
     method,
-    headers: data ? { "Content-Type": "application/json" } : {},
+    headers: { ...viewHeaders(), ...(data ? { "Content-Type": "application/json" } : {}) },
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
   });
@@ -56,6 +57,7 @@ export const getQueryFn: <T>(options: {
     try {
       res = await fetch(queryKey.join("/") as string, {
         credentials: "include",
+        headers: viewHeaders(),
         signal: controller.signal,
       });
     } finally {

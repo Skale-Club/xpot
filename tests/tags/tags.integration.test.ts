@@ -113,6 +113,15 @@ test.skipIf(!enabled)("tags: kits, reseller isolation, sales, scans, report, pro
     // Ana sees exactly her kit, whatever filter she sends.
     const anaList = await api("GET", `/api/xpot/tags?repId=${repId["it-bruno"]}&house=1`, "it-ana");
     assert.deepEqual(anaList.json.map((t: any) => t.publicCode).sort(), [a1, a2, a3].map((t) => t.publicCode).sort());
+    assert.deepEqual((await api("GET", "/api/xpot/tags?mine=1", "it-ana")).json.map((t: any) => t.publicCode).sort(), [a1, a2, a3].map((t) => t.publicCode).sort());
+    // The admin reaches every piece, but none of them is "theirs" until it is in their kit or they activate it.
+    assert.equal(((await api("GET", `/api/xpot/tags?batchId=${batch.json.id}&mine=1`, "it-admin")).json as unknown[]).length, 0);
+    assert.equal(((await api("GET", `/api/xpot/tags?batchId=${batch.json.id}`, "it-admin")).json as unknown[]).length, 10);
+    // The dashboard (real SQL: generate_series, joins): her kit, 30 empty days, nothing ranked yet.
+    const dash = (await api("GET", "/api/xpot/tags/dashboard?days=30", "it-ana")).json;
+    assert.equal(dash.inStock, 3);
+    assert.equal(dash.daily.length >= 30, true);
+    assert.deepEqual(dash.topPieces, []);
     assert.deepEqual((await api("GET", "/api/xpot/tags/summary", "it-ana")).json, { inStock: 3, active: 0, soldLast30: 0, scansLast30: { qr: 0, nfc: 0 } });
     // Bruno's piece and house stock are out of her reach.
     assert.equal((await api("GET", `/api/xpot/tags/lookup/${b1.publicCode}`, "it-ana")).status, 403);

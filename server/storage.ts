@@ -5,6 +5,7 @@
 
 import { and, asc, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { db } from "./db.js";
+import { decryptSecret, encryptSecret } from "./lib/token-crypto.js";
 import {
   // Schema tables
   salesAppSettings,
@@ -105,7 +106,10 @@ export interface IStorage {
   getSalesLeadByXphereRef(ref: string): Promise<SalesLead | undefined>;
   createSalesLead(input: InsertSalesLead): Promise<SalesLead>;
   updateSalesLead(id: number, input: Partial<InsertSalesLead>): Promise<SalesLead | undefined>;
-  deleteSalesLead(id: number): Promise<void>;
+  /** Returns the file references (photos, voice notes) the deleted rows held, for discardFiles. */
+  deleteSalesLead(id: number): Promise<string[]>;
+  /** The lead whose photos include this file reference. */
+  findLeadIdByPhoto(ref: string): Promise<number | undefined>;
   listSalesLeadLocations(leadId: number): Promise<SalesLeadLocation[]>;
   listSalesLeadLocationsBatch(leadIds: number[]): Promise<SalesLeadLocation[]>;
   createSalesLeadLocation(input: InsertSalesLeadLocation): Promise<SalesLeadLocation>;
@@ -122,7 +126,10 @@ export interface IStorage {
   getActiveSalesVisitForRep(repId: number): Promise<SalesVisit | undefined>;
   createSalesVisit(input: InsertSalesVisit): Promise<SalesVisit>;
   updateSalesVisit(id: number, input: Partial<InsertSalesVisit>): Promise<SalesVisit | undefined>;
-  deleteSalesVisit(id: number): Promise<void>;
+  /** Returns the voice-note reference the deleted note held, if any. */
+  deleteSalesVisit(id: number): Promise<string[]>;
+  /** The visit whose note holds this voice-note reference. */
+  findVisitIdByAudio(ref: string): Promise<number | undefined>;
   getSalesVisitNote(visitId: number): Promise<SalesVisitNote | undefined>;
   upsertSalesVisitNote(input: InsertSalesVisitNote): Promise<SalesVisitNote>;
 
@@ -145,6 +152,18 @@ export interface IStorage {
 
 // ─── Implementation ──────────────────────────────────────────────────────────
 
+/** Row as the app uses it: api_key decrypted (legacy plaintext passes through). */
+function withPlainApiKey<T extends { apiKey?: string | null }>(row: T): T;
+function withPlainApiKey<T extends { apiKey?: string | null }>(row: T | undefined): T | undefined;
+function withPlainApiKey<T extends { apiKey?: string | null }>(row: T | undefined): T | undefined {
+  return row && row.apiKey ? { ...row, apiKey: decryptSecret(row.apiKey) } : row;
+}
+
+/** Write payload with api_key encrypted; a payload without apiKey is left alone. */
+function withEncryptedApiKey<T extends { apiKey?: string | null }>(data: T): T {
+  return data.apiKey ? { ...data, apiKey: encryptSecret(data.apiKey) } : data;
+}
+
 export class DatabaseStorage implements IStorage {
   // ── Settings + integrations ──
 
@@ -165,22 +184,25 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
+  // api_key is encrypted at rest (server/lib/token-crypto.ts): every read below
+  // returns it decrypted, every write encrypts it. Nothing else reads these tables.
+
   async getChatIntegration(provider: string): Promise<ChatIntegration | undefined> {
     const [integration] = await db.select().from(chatIntegrations).where(eq(chatIntegrations.provider, provider));
-    return integration;
+    return withPlainApiKey(integration);
   }
 
   async getIntegrationSettings(provider: string): Promise<IntegrationSettings | undefined> {
     const [settings] = await db.select().from(integrationSettings).where(eq(integrationSettings.provider, provider));
-    return settings;
+    return withPlainApiKey(settings);
   }
 
   async listChatIntegrations(): Promise<ChatIntegration[]> {
-    return await db.select().from(chatIntegrations);
+    return (await db.select().from(chatIntegrations)).map((row) => withPlainApiKey(row));
   }
 
   async listIntegrationSettings(): Promise<IntegrationSettings[]> {
-    return await db.select().from(integrationSettings);
+    return (await db.select().from(integrationSettings)).map((row) => withPlainApiKey(row));
   }
 
   async upsertChatIntegration(
@@ -191,13 +213,13 @@ export class DatabaseStorage implements IStorage {
     if (existing) {
       const [updated] = await db
         .update(chatIntegrations)
-        .set({ ...data, updatedAt: new Date() })
+        .set({ ...withEncryptedApiKey(data), updatedAt: new Date() })
         .where(eq(chatIntegrations.id, existing.id))
         .returning();
-      return updated;
+      return withPlainApiKey(updated);
     }
-    const [created] = await db.insert(chatIntegrations).values({ ...data, provider }).returning();
-    return created;
+    const [created] = await db.insert(chatIntegrations).values({ ...withEncryptedApiKey(data), provider }).returning();
+    return withPlainApiKey(created);
   }
 
   async upsertIntegrationSettings(
@@ -208,13 +230,13 @@ export class DatabaseStorage implements IStorage {
     if (existing) {
       const [updated] = await db
         .update(integrationSettings)
-        .set({ ...data, updatedAt: new Date() })
+        .set({ ...withEncryptedApiKey(data), updatedAt: new Date() })
         .where(eq(integrationSettings.id, existing.id))
         .returning();
-      return updated;
+      return withPlainApiKey(updated);
     }
-    const [created] = await db.insert(integrationSettings).values({ ...data, provider }).returning();
-    return created;
+    const [created] = await db.insert(integrationSettings).values({ ...withEncryptedApiKey(data), provider }).returning();
+    return withPlainApiKey(created);
   }
 
   // ── Xphere per-user (tenant) integration config ──
@@ -362,52 +384,17 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  async deleteSalesLead(id: number): Promise<void> {
-    await db.transaction(async (tx) => {
-      const visitIds = (await tx
-        .select({ id: salesVisits.id })
-        .from(salesVisits)
-        .where(eq(salesVisits.leadId, id)))
-        .map((visit) => visit.id);
+  async deleteSalesLead(id: number): Promise<string[]> {
+    return db.transaction((tx) => deleteLeadRows(tx, id));
+  }
 
-      const opportunityIds = (await tx
-        .select({ id: salesOpportunitiesLocal.id })
-        .from(salesOpportunitiesLocal)
-        .where(eq(salesOpportunitiesLocal.leadId, id)))
-        .map((opp) => opp.id);
-
-      await tx.delete(salesTasks).where(eq(salesTasks.leadId, id));
-
-      if (visitIds.length) {
-        await tx.delete(salesTasks).where(inArray(salesTasks.visitId, visitIds));
-        await tx.delete(salesVisitNotes).where(inArray(salesVisitNotes.visitId, visitIds));
-      }
-
-      if (opportunityIds.length) {
-        await tx.delete(salesTasks).where(inArray(salesTasks.opportunityId, opportunityIds));
-        await tx.delete(salesSyncEvents).where(
-          and(
-            eq(salesSyncEvents.entityType, "sales_opportunity"),
-            inArray(salesSyncEvents.entityId, opportunityIds.map(String)),
-          ),
-        );
-        await tx.delete(salesOpportunitiesLocal).where(inArray(salesOpportunitiesLocal.id, opportunityIds));
-      }
-
-      if (visitIds.length) {
-        await tx.delete(salesVisits).where(inArray(salesVisits.id, visitIds));
-      }
-
-      await tx.delete(salesLeadContacts).where(eq(salesLeadContacts.leadId, id));
-      await tx.delete(salesLeadLocations).where(eq(salesLeadLocations.leadId, id));
-      await tx.delete(salesSyncEvents).where(
-        and(
-          eq(salesSyncEvents.entityType, "sales_lead"),
-          eq(salesSyncEvents.entityId, String(id)),
-        ),
-      );
-      await tx.delete(salesLeads).where(eq(salesLeads.id, id));
-    });
+  async findLeadIdByPhoto(ref: string): Promise<number | undefined> {
+    const [row] = await db
+      .select({ id: salesLeads.id })
+      .from(salesLeads)
+      .where(sql`${salesLeads.photos} @> ${JSON.stringify([ref])}::jsonb`)
+      .limit(1);
+    return row?.id;
   }
 
   async listSalesLeadLocations(leadId: number): Promise<SalesLeadLocation[]> {
@@ -607,13 +594,24 @@ export class DatabaseStorage implements IStorage {
    * foreign-key violation whenever the visit had one. Tasks are detached
    * rather than deleted: a follow-up outlives the visit that produced it.
    */
-  async deleteSalesVisit(id: number): Promise<void> {
-    await db.transaction(async (tx) => {
+  async deleteSalesVisit(id: number): Promise<string[]> {
+    return db.transaction(async (tx) => {
+      const [note] = await tx.select({ audioUrl: salesVisitNotes.audioUrl }).from(salesVisitNotes).where(eq(salesVisitNotes.visitId, id));
       await tx.update(salesTasks).set({ visitId: null }).where(eq(salesTasks.visitId, id));
       await tx.update(salesOpportunitiesLocal).set({ visitId: null }).where(eq(salesOpportunitiesLocal.visitId, id));
       await tx.delete(salesVisitNotes).where(eq(salesVisitNotes.visitId, id));
       await tx.delete(salesVisits).where(eq(salesVisits.id, id));
+      return note?.audioUrl ? [note.audioUrl] : [];
     });
+  }
+
+  async findVisitIdByAudio(ref: string): Promise<number | undefined> {
+    const [row] = await db
+      .select({ visitId: salesVisitNotes.visitId })
+      .from(salesVisitNotes)
+      .where(eq(salesVisitNotes.audioUrl, ref))
+      .limit(1);
+    return row?.visitId;
   }
 
   async getSalesVisitNote(visitId: number): Promise<SalesVisitNote | undefined> {
@@ -739,3 +737,66 @@ export class DatabaseStorage implements IStorage {
 }
 
 export const storage = new DatabaseStorage();
+
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * Delete a lead and everything hanging off it, inside the caller's
+ * transaction. Returns the file references the rows held (lead photos and the
+ * voice notes of its visits) so the caller can remove them from storage once
+ * the transaction commits. Also used by account deletion (server/accountDeletion.ts).
+ */
+export async function deleteLeadRows(tx: Tx, id: number): Promise<string[]> {
+  const [lead] = await tx.select({ photos: salesLeads.photos }).from(salesLeads).where(eq(salesLeads.id, id));
+  const files: string[] = [...(lead?.photos ?? [])];
+
+  const visitIds = (await tx
+    .select({ id: salesVisits.id })
+    .from(salesVisits)
+    .where(eq(salesVisits.leadId, id)))
+    .map((visit) => visit.id);
+
+  const opportunityIds = (await tx
+    .select({ id: salesOpportunitiesLocal.id })
+    .from(salesOpportunitiesLocal)
+    .where(eq(salesOpportunitiesLocal.leadId, id)))
+    .map((opp) => opp.id);
+
+  await tx.delete(salesTasks).where(eq(salesTasks.leadId, id));
+
+  if (visitIds.length) {
+    const notes = await tx
+      .select({ audioUrl: salesVisitNotes.audioUrl })
+      .from(salesVisitNotes)
+      .where(inArray(salesVisitNotes.visitId, visitIds));
+    files.push(...notes.map((n) => n.audioUrl).filter((u): u is string => Boolean(u)));
+    await tx.delete(salesTasks).where(inArray(salesTasks.visitId, visitIds));
+    await tx.delete(salesVisitNotes).where(inArray(salesVisitNotes.visitId, visitIds));
+  }
+
+  if (opportunityIds.length) {
+    await tx.delete(salesTasks).where(inArray(salesTasks.opportunityId, opportunityIds));
+    await tx.delete(salesSyncEvents).where(
+      and(
+        eq(salesSyncEvents.entityType, "sales_opportunity"),
+        inArray(salesSyncEvents.entityId, opportunityIds.map(String)),
+      ),
+    );
+    await tx.delete(salesOpportunitiesLocal).where(inArray(salesOpportunitiesLocal.id, opportunityIds));
+  }
+
+  if (visitIds.length) {
+    await tx.delete(salesVisits).where(inArray(salesVisits.id, visitIds));
+  }
+
+  await tx.delete(salesLeadContacts).where(eq(salesLeadContacts.leadId, id));
+  await tx.delete(salesLeadLocations).where(eq(salesLeadLocations.leadId, id));
+  await tx.delete(salesSyncEvents).where(
+    and(
+      eq(salesSyncEvents.entityType, "sales_lead"),
+      eq(salesSyncEvents.entityId, String(id)),
+    ),
+  );
+  await tx.delete(salesLeads).where(eq(salesLeads.id, id));
+  return files;
+}

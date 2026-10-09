@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db.js";
 import { salesReps, users, type SalesRep } from "#shared/schema.js";
@@ -86,7 +86,7 @@ export async function createResellerAccount(input: ResellerAccountInput, actor: 
 
 async function repOr404(repId: number): Promise<SalesRep> {
   const rep = await storage.getSalesRep(repId);
-  if (!rep) throw new AccountError("Rep not found", 404);
+  if (!rep || rep.deletedAt) throw new AccountError("Rep not found", 404);
   return rep;
 }
 
@@ -149,6 +149,8 @@ export async function listRepsWithAccess() {
     .select({ rep: salesReps, loginPhone: users.phone })
     .from(salesReps)
     .leftJoin(users, eq(users.id, salesReps.userId))
+    // Deleted accounts kept only as placeholders for sales records (server/accountDeletion.ts).
+    .where(isNull(salesReps.deletedAt))
     .orderBy(salesReps.createdAt);
   // Reps approved before wholesale codes existed get theirs now.
   for (const row of list) {

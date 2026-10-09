@@ -26,6 +26,7 @@ import type {
   TagKitItem,
   TagListItem,
   TagOverview,
+  TagDashboard,
   TagRepSummary,
 } from "#shared/tagsApi.js";
 import { JOURNEY_PRODUCT_LABELS, tagActionEntry, type JourneySource } from "#shared/tagJourney.js";
@@ -1210,6 +1211,88 @@ export async function getLeadTagSummaries(actor: TagActor, now: Date = new Date(
     GROUP BY t.lead_id
   `);
   return list.map((r) => ({ leadId: r.lead_id, pieces: r.pieces, live: r.live, scansLast30: r.scans30 }));
+}
+
+/**
+ * A phone opened this tag's /n/ link, which only the chip holds: the chip is
+ * written right. Promotes a not-yet-checked chip to verified; a locked or
+ * already verified one is left alone.
+ */
+export async function confirmNfcFromTap(tagId: string): Promise<void> {
+  const now = new Date();
+  await db
+    .update(tags)
+    .set({ nfcProvisioningStatus: "verified", nfcVerifiedAt: now, nfcProgrammedAt: sql`coalesce(${tags.nfcProgrammedAt}, ${now})`, updatedAt: now })
+    .where(and(eq(tags.id, tagId), inArray(tags.nfcProvisioningStatus, ["not_programmed", "programmed", "failed"])));
+}
+
+/**
+ * The Tags dashboard: stock, sales, scans per day (QR vs NFC), the pieces and
+ * customers scanned most, the phones used and the chips still unwritten.
+ * `repId` null means every rep (a manager in admin mode).
+ */
+export async function getTagDashboard(repId: number | null, days = 30, now: Date = new Date()): Promise<TagDashboard> {
+  const since = new Date(now.getTime() - (days - 1) * 86_400_000);
+  since.setUTCHours(0, 0, 0, 0);
+  const tagScope = repId === null ? sql`true` : sql`t.rep_id = ${repId}`;
+  const eventScope = repId === null ? sql`true` : sql`e.rep_id = ${repId}`;
+  const inPeriod = sql`e.occurred_at >= ${since} AND ${COUNTABLE} AND ${eventScope}`;
+
+  const [totals] = await rows<{ in_stock: number; active: number; sold: number; missing: number }>(sql`
+    SELECT
+      count(*) FILTER (WHERE t.status = 'inventory')::int AS in_stock,
+      count(*) FILTER (WHERE t.status = 'active')::int AS active,
+      count(*) FILTER (WHERE t.sold_at >= ${since})::int AS sold,
+      count(*) FILTER (WHERE t.status IN ('assigned', 'active') AND t.nfc_provisioning_status IN ('not_programmed', 'failed'))::int AS missing
+    FROM tags t WHERE ${tagScope}
+  `);
+  const [scans] = await rows<{ qr: number; nfc: number; visitors: number }>(sql`
+    SELECT count(*) FILTER (WHERE e.access_method = 'qr')::int AS qr,
+           count(*) FILTER (WHERE e.access_method = 'nfc')::int AS nfc,
+           count(DISTINCT e.visitor_day_key)::int AS visitors
+    FROM tag_events e WHERE ${inPeriod}
+  `);
+  const daily = await rows<{ day: string; qr: number; nfc: number }>(sql`
+    SELECT to_char(d, 'YYYY-MM-DD') AS day,
+           count(e.id) FILTER (WHERE e.access_method = 'qr')::int AS qr,
+           count(e.id) FILTER (WHERE e.access_method = 'nfc')::int AS nfc
+    FROM generate_series(${since}::timestamptz, ${now}::timestamptz, interval '1 day') d
+    LEFT JOIN tag_events e ON e.occurred_at >= d AND e.occurred_at < d + interval '1 day' AND ${COUNTABLE} AND ${eventScope}
+    GROUP BY d ORDER BY d
+  `);
+  const topPieces = await rows<{ id: string; public_code: string; label: string | null; lead_name: string | null; scans: number }>(sql`
+    SELECT t.id, t.public_code, t.label, l.name AS lead_name, count(*)::int AS scans
+    FROM tag_events e JOIN tags t ON t.id = e.tag_id LEFT JOIN sales_leads l ON l.id = t.lead_id
+    WHERE ${inPeriod}
+    GROUP BY t.id, t.public_code, t.label, l.name
+    ORDER BY scans DESC LIMIT 5
+  `);
+  const topCustomers = await rows<{ lead_id: number; name: string; pieces: number; scans: number }>(sql`
+    SELECT l.id AS lead_id, l.name, count(DISTINCT t.id)::int AS pieces, count(*)::int AS scans
+    FROM tag_events e JOIN tags t ON t.id = e.tag_id JOIN sales_leads l ON l.id = t.lead_id
+    WHERE ${inPeriod}
+    GROUP BY l.id, l.name
+    ORDER BY scans DESC LIMIT 5
+  `);
+  const devices = await rows<{ os: string | null; scans: number }>(sql`
+    SELECT e.os_family AS os, count(*)::int AS scans
+    FROM tag_events e WHERE ${inPeriod}
+    GROUP BY e.os_family ORDER BY scans DESC LIMIT 4
+  `);
+
+  return {
+    days,
+    inStock: Number(totals?.in_stock ?? 0),
+    active: Number(totals?.active ?? 0),
+    soldInPeriod: Number(totals?.sold ?? 0),
+    scans: { qr: Number(scans?.qr ?? 0), nfc: Number(scans?.nfc ?? 0) },
+    visitors: Number(scans?.visitors ?? 0),
+    chipsMissing: Number(totals?.missing ?? 0),
+    daily: daily.map((d) => ({ day: d.day, qr: Number(d.qr), nfc: Number(d.nfc) })),
+    topPieces: topPieces.map((p) => ({ id: p.id, publicCode: p.public_code, label: p.label, leadName: p.lead_name, scans: Number(p.scans) })),
+    topCustomers: topCustomers.map((c) => ({ leadId: Number(c.lead_id), name: c.name, pieces: Number(c.pieces), scans: Number(c.scans) })),
+    devices: devices.map((d) => ({ os: d.os ?? "other", scans: Number(d.scans) })),
+  };
 }
 
 export async function getRepSummary(repId: number, now: Date = new Date()): Promise<TagRepSummary> {

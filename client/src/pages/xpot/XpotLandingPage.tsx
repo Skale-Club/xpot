@@ -31,6 +31,8 @@ import { LanguagePicker } from "@/components/LanguagePicker";
 import { PhoneSignIn } from "@/components/PhoneSignIn";
 import { translate, useT } from "@/i18n";
 import { landingMessages } from "@/i18n/messages/landing";
+import { publicPagePath } from "@shared/seo";
+import { usePublicSeo } from "@/lib/seo";
 
 type LandingT = ReturnType<typeof useT<(typeof landingMessages)["en"]>>;
 
@@ -149,6 +151,7 @@ function PhoneMock({ t }: { t: LandingT }) {
 export function XpotLandingPage() {
   const [, setLocation] = useLocation();
   const t = useT(landingMessages);
+  usePublicSeo("home");
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [error, setError] = useState("");
 
@@ -304,9 +307,9 @@ export function XpotLandingPage() {
                     <PhoneSignIn onSignedIn={openXpotWorkspace} />
                     <p className="mt-4 text-center text-xs leading-relaxed text-white/45">
                       {t("agreeBefore")}{" "}
-                      <Link href="/terms" className="text-white/70 underline-offset-2 hover:underline">{t("termsOfService")}</Link>{" "}
+                      <Link href={publicPagePath("terms", t.lang)} className="text-white/70 underline-offset-2 hover:underline">{t("termsOfService")}</Link>{" "}
                       {t("agreeAnd")}{" "}
-                      <Link href="/privacy" className="text-white/70 underline-offset-2 hover:underline">{t("privacyPolicy")}</Link>
+                      <Link href={publicPagePath("privacy", t.lang)} className="text-white/70 underline-offset-2 hover:underline">{t("privacyPolicy")}</Link>
                       {t("agreeAfter")}
                     </p>
                   </DialogContent>
@@ -441,9 +444,9 @@ export function XpotLandingPage() {
         <footer className="relative border-t border-white/[0.06] py-10 text-center text-sm text-white/50">
           <p className="font-semibold text-white/60">{t("footerTagline")}</p>
           <p className="mt-3 flex justify-center gap-4">
-            <Link href="/privacy" className="transition-colors hover:text-white">{t("privacyPolicy")}</Link>
+            <Link href={publicPagePath("privacy", t.lang)} className="transition-colors hover:text-white">{t("privacyPolicy")}</Link>
             <span aria-hidden>·</span>
-            <Link href="/terms" className="transition-colors hover:text-white">{t("termsOfService")}</Link>
+            <Link href={publicPagePath("terms", t.lang)} className="transition-colors hover:text-white">{t("termsOfService")}</Link>
           </p>
           <p className="mt-2">{t("footerRights", { year: new Date().getFullYear() })}</p>
         </footer>

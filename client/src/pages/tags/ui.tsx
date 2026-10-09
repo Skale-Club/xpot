@@ -35,33 +35,38 @@ export function TopBar({
   eyebrow,
   identity = "xpot",
   right,
+  sub,
+  titleClassName = "",
 }: {
   title: string;
   back?: string;
   eyebrow?: string;
   identity?: Identity;
   right?: ReactNode;
+  /** A line under the title (status, details). */
+  sub?: ReactNode;
+  titleClassName?: string;
 }) {
   const t = useT(commonMessages);
+  // Back, title and the right-hand slot share one row: a row of its own for the
+  // back arrow left a tall empty band above every screen.
   return (
-    <header className="mb-4">
-      {(back || right) && (
-        <div className="mb-1 flex min-h-[48px] items-center gap-2">
-          {back && (
-            <Link
-              href={back}
-              aria-label={t("back")}
-              className="-ml-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/80 active:bg-white/10"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </Link>
-          )}
-          <div className="flex-1" />
-          {right}
-        </div>
+    <header className="mb-4 flex items-start gap-2">
+      {back && (
+        <Link
+          href={back}
+          aria-label={t("back")}
+          className="-ml-2 mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/80 active:bg-white/10"
+        >
+          <ArrowLeft className="h-5 w-5" />
+        </Link>
       )}
-      {eyebrow && <p className={identity === "direct" ? EYEBROW.replace("text-indigo-300/80", "text-emerald-300/80") : EYEBROW}>{eyebrow}</p>}
-      <h1 className="mt-1 break-words text-[26px] font-extrabold leading-tight tracking-tight text-white">{title}</h1>
+      <div className="min-w-0 flex-1">
+        {eyebrow && <p className={identity === "direct" ? EYEBROW.replace("text-indigo-300/80", "text-emerald-300/80") : EYEBROW}>{eyebrow}</p>}
+        <h1 className={`mt-0.5 break-words text-[26px] font-extrabold leading-tight tracking-tight text-white ${titleClassName}`}>{title}</h1>
+        {sub && <div className="mt-1.5">{sub}</div>}
+      </div>
+      {right && <div className="shrink-0">{right}</div>}
     </header>
   );
 }
@@ -252,6 +257,7 @@ export function FieldLabel({ children }: { children: ReactNode }) {
 }
 
 /** Slide-up sheet with a dimmed backdrop; a centred dialog from `lg` up. */
+/** A pop-up, centered on phone and desktop. (Named for when it slid up from the bottom.) */
 export function BottomSheet({ open, onClose, children, title }: { open: boolean; onClose: () => void; children: ReactNode; title?: string }) {
   const t = useT(commonMessages);
   useEffect(() => {
@@ -264,13 +270,16 @@ export function BottomSheet({ open, onClose, children, title }: { open: boolean;
   }, [open]);
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-[60] flex items-end justify-center lg:items-center lg:p-6" role="dialog" aria-modal="true" aria-label={title}>
+    // Centered on every screen (the owner found bottom sheets awkward on the phone).
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center p-4 lg:p-6"
+      style={{ paddingTop: "calc(env(safe-area-inset-top) + 16px)", paddingBottom: "calc(env(safe-area-inset-bottom) + 16px)" }}
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+    >
       <button type="button" aria-label={t("close")} onClick={onClose} className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
-      <div
-        className="relative max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-t-[28px] border border-b-0 border-white/10 px-5 pt-3 lg:max-w-lg lg:rounded-[28px] lg:border-b lg:pt-6"
-        style={{ background: "#0d1424", paddingBottom: "calc(env(safe-area-inset-bottom) + 20px)" }}
-      >
-        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20 lg:hidden" />
+      <div className="relative max-h-full w-full max-w-md overflow-y-auto rounded-[28px] border border-white/10 px-5 pb-5 pt-5 lg:max-w-lg lg:pt-6" style={{ background: "#0d1424" }}>
         {children}
       </div>
     </div>

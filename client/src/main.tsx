@@ -6,6 +6,8 @@ import { I18nProvider } from "./i18n";
 import { queryClient } from "./lib/queryClient";
 import { Toaster } from "./components/ui/toaster";
 import "./index.css";
+// Attaches the beforeinstallprompt listener before React mounts (the event can fire first).
+import "./hooks/use-install-app";
 
 declare global {
   interface Window {

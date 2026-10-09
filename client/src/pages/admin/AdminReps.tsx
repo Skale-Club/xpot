@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Ban, Check, Copy, KeyRound, Phone, RotateCcw, UserPlus } from "lucide-react";
+import { Ban, Check, Copy, KeyRound, Phone, RotateCcw, Trash2, UserPlus } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "@/components/ui/loader";
@@ -11,11 +11,13 @@ import { commonMessages } from "@/i18n/messages/common";
 import { manageMessages } from "@/i18n/messages/manage";
 import { settingsMessages } from "@/i18n/messages/settings";
 import { signinMessages } from "@/i18n/messages/signin";
+import { AdminBadge, useIsSuperAdmin } from "@/components/xpot/AdminBadge";
 
 // Who may use Xpot. People sign up with their phone and wait here for
 // approval; an admin can also create someone's access directly. Everyone
 // signs in with a code texted to their phone. Blocking ends the partnership
-// and logs the rep out everywhere.
+// and logs the rep out everywhere. A blocked rep's account can then be deleted
+// on their request (admins only; server/accountDeletion.ts).
 
 type Access = "pending" | "active" | "blocked";
 
@@ -47,9 +49,9 @@ const FIELD =
   "w-full rounded-lg border border-white/10 bg-[#0a0f1e] px-3 py-2 text-sm text-white placeholder-white/25 outline-none focus:border-blue-500/50";
 const BTN = "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-40";
 
-async function send<T>(url: string, body: unknown = {}): Promise<T> {
+async function send<T>(url: string, body: unknown = {}, method = "POST"): Promise<T> {
   const res = await fetch(url, {
-    method: "POST",
+    method,
     credentials: "include",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -307,6 +309,53 @@ function ActiveRow({ rep }: { rep: Rep }) {
   );
 }
 
+type DeletionResult = { account: "deleted" | "anonymized"; leadsDeleted: number; leadsUnassigned: number; visitsDeleted: number; files: { deleted: number; failed: number } };
+
+/** Delete the account and its data, when the person asks (privacy policy, "How long we keep it"). */
+function DeleteAccountButton({ rep }: { rep: Rep }) {
+  const t = useT(manageMessages);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const isSuperAdmin = useIsSuperAdmin();
+  const word = t("deleteAccountWord");
+  const remove = useMutation({
+    // The API's own guard word is always "DELETE"; the one typed is localized.
+    mutationFn: () => send<DeletionResult>(`/api/xpot/admin/reps/${rep.id}`, { confirm: "DELETE" }, "DELETE"),
+    onSuccess: (r) => {
+      toast({
+        title: t("accountDeleted", { name: rep.displayName }),
+        description: [
+          t("accountDeletedSummary", { leads: r.leadsDeleted, visits: r.visitsDeleted, files: r.files.deleted }),
+          r.leadsUnassigned ? t("accountDeletedKept", { count: r.leadsUnassigned }) : "",
+          r.files.failed ? t("accountDeletedFilesFailed", { count: r.files.failed }) : "",
+        ].filter(Boolean).join(" "),
+        variant: r.files.failed ? "destructive" : undefined,
+      });
+      void queryClient.invalidateQueries({ queryKey: REPS_KEY });
+    },
+    onError: (e: Error) => toast({ title: t("error"), description: e.message, variant: "destructive" }),
+  });
+  // The global admin only, like the server (requireSuperAdmin), so it carries the "Admin" tag.
+  if (!isSuperAdmin) return null;
+  return (
+    <button
+      type="button"
+      disabled={remove.isPending}
+      onClick={() => {
+        const typed = window.prompt(t("deleteAccountPrompt", { name: rep.displayName, word }), "");
+        if (typed === word) remove.mutate();
+        else if (typed !== null) toast({ title: t("notDeleted"), description: t("notDeletedHint", { word }) });
+      }}
+      className={`${BTN} border border-red-500/30 text-red-300 hover:bg-red-500/10`}
+      data-testid={`delete-${rep.id}`}
+    >
+      {remove.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+      {t("deleteAccount")}
+      <AdminBadge />
+    </button>
+  );
+}
+
 function BlockedRow({ rep }: { rep: Rep }) {
   const t = useT(manageMessages);
   const unblock = useRepAction((r) => t("repCanSignInAgain", { name: r.displayName }));
@@ -326,6 +375,7 @@ function BlockedRow({ rep }: { rep: Rep }) {
         <RotateCcw className="h-4 w-4" />
         {t("unblock")}
       </button>
+      <DeleteAccountButton rep={rep} />
     </div>
   );
 }

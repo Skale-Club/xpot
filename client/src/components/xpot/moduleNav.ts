@@ -6,9 +6,7 @@ import {
   Clock3,
   DollarSign,
   Factory,
-  Home,
   LayoutDashboard,
-  Link2,
   MapPinned,
   Nfc,
   Package,
@@ -104,9 +102,10 @@ export type Viewer = {
   isComputer: boolean;
 };
 
-/** The items this viewer may see: adminOnly ones only for the global admin. */
+/** The items this viewer may see: adminOnly ones only for the global admin, grouped at the end. */
 function visibleTo(viewer: Pick<Viewer, "isAdmin">, items: NavItem[]): NavItem[] {
-  return items.filter((i) => viewer.isAdmin || !i.adminOnly);
+  const shared = items.filter((i) => !i.adminOnly);
+  return viewer.isAdmin ? [...shared, ...items.filter((i) => i.adminOnly)] : shared;
 }
 
 /** The screens of one module: what its people use, then (for managers) its Manage group. */
@@ -141,9 +140,9 @@ export function moduleGroups(module: XpotModule, viewer: Viewer, l: Labels): Nav
   const work: NavGroup = {
     label: "",
     items: [
-      { href: "/tags", label: l.tags("navHome"), icon: Home, match: (p) => p === "/tags" || p.startsWith("/tags/t/") },
+      // Writing a chip without Xpot (/tags/direct) is reached from the dashboard, not the nav.
+      { href: "/tags", label: l.tags("navHome"), icon: LayoutDashboard, match: (p) => p === "/tags" || p.startsWith("/tags/t/") || p.startsWith("/tags/direct") },
       { href: "/tags/pieces", label: l.tags("navPieces"), icon: Package, match: starts("/tags/pieces") },
-      { href: "/tags/direct", label: l.tags("navDirect"), icon: Link2, match: starts("/tags/direct") },
     ],
   };
   if (!viewer.canManage) return [work];
@@ -155,9 +154,9 @@ export function moduleGroups(module: XpotModule, viewer: Viewer, l: Labels): Nav
       items: visibleTo(viewer, [
         { href: "/admin/tags/overview", label: l.shell("manageOverview"), icon: BarChart3, match: (p) => p === "/admin/tags" || tab("overview")(p) },
         { href: "/admin/tags/pieces", label: l.shell("managePieces"), icon: Nfc, match: tab("pieces") },
-        { href: "/admin/tags/batches", label: l.shell("manageBatches"), icon: Factory, match: tab("batches"), adminOnly: true },
         { href: "/admin/tags/kits", label: l.shell("manageKits"), icon: PackageOpen, match: tab("kits") },
         { href: "/admin/tags/team", label: l.shell("manageResellers"), icon: Users, match: tab("team") },
+        { href: "/admin/tags/batches", label: l.shell("manageBatches"), icon: Factory, match: tab("batches"), adminOnly: true },
         { href: "/admin/tags/journey", label: l.shell("manageJourney"), icon: Route, match: tab("journey"), adminOnly: true },
         { href: "/admin/tags/provisioners", label: l.shell("manageWriters"), icon: ShieldCheck, match: tab("provisioners"), adminOnly: true },
       ]),

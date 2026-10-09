@@ -88,6 +88,8 @@ export const salesReps = pgTable("sales_reps", {
   costPolicy: text("cost_policy").notNull().default("acquisition"),
   costPolicyConfiguredAt: timestamp("cost_policy_configured_at"),
   costPolicyConfiguredByUserId: text("cost_policy_configured_by_user_id"),
+  // Account deleted, row kept as an anonymous placeholder; migrations/0020_rep_deleted_at.sql.
+  deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => ({

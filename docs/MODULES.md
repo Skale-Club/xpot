@@ -91,7 +91,7 @@ VISITS            ← rótulo de 10px em caixa alta
 TAGS
   Home            ← um segundo "início"
   My pieces
-  Direct link
+  Review link
 ADMIN             ← só dentro do admin
   Overview        ← na prática só fala de Visitas
   Tags            ← um segundo "Tags", agora o de gestão
@@ -112,8 +112,8 @@ ADMIN             ← só dentro do admin
 
 | Onde | O que é | Para quem |
 |---|---|---|
-| Grupo **TAGS** da barra (`/tags`) | Home, Minhas peças, Link direto: o app do revendedor | Revendedor (o gerente vê **todas** as peças aqui também, `server/tags/routes.ts:404`) |
-| **Admin › Tags** (`/admin/tags`) | 7 abas: Overview, Pieces, Kits, Batches, Journey, Team, NFC writers | Gerente/admin |
+| Grupo **TAGS** da barra (`/tags`) | Home, Minhas peças, Link de review: o app do revendedor | Revendedor (o gerente vê só as dele aqui; todas ficam em Gestão, `?mine=1`) |
+| **Admin › Tags** (`/admin/tags`) | 7 abas: Overview, Pieces, Kits, Team e, no fim, as do admin global (Batches, Journey, NFC writers) | Gerente/admin |
 
 Um gerente tem portanto duas listas de peças, em dois lugares, com colunas diferentes.
 
@@ -204,7 +204,7 @@ outro.
 | Espaço | Rota | Conteúdo |
 |---|---|---|
 | **Visitas** | `/visitas/*` (hoje na raiz) (descartado na Rev. 2 — ver Status): as URLs continuam na raiz | Para o vendedor: Painel, Visitas, Empresas, Vendas. **Gestão** (gerente): Equipe (o atual Admin Overview), Produtos, Regras de check-in, Xphere |
-| **Tags** | `/tags/*` | Para o revendedor: Início, Minhas peças, Link direto. **Gestão** (gerente): Visão geral, Todas as peças, Lotes, Kits, Revendedores (atual "Team"), Jornada, Gravadores NFC |
+| **Tags** | `/tags/*` | Para o revendedor: Início, Minhas peças, Link de review. **Gestão** (gerente): Visão geral, Todas as peças, Lotes, Kits, Revendedores (atual "Team"), Jornada, Gravadores NFC |
 | **Conta** | `/conta/*` (Configurações + parte global do Admin) (descartado na Rev. 2 — ver Status): continuam `/settings` e `/admin/reps`, `/admin/integrations`, `/admin/branding` | Perfil, idioma e senha para todos. **Organização** (admin): Pessoas e acessos, Integrações, Marca |
 
 O `/admin` deixa de existir como lugar próprio e vira redirecionamento para a seção equivalente.
@@ -228,7 +228,7 @@ para o gerente.
 │ └──────────────────┘ │   (conteúdo)                                   │
 │   Início             │                                                │
 │   Minhas peças       │                                                │
-│   Link direto        │                                                │
+│   Link de review     │                                                │
 │ GESTÃO               │                                                │
 │   Visão geral        │                                                │
 │   Todas as peças     │                                                │

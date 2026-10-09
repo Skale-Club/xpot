@@ -7,6 +7,7 @@
 // the sign-in screen) and defaults to the phone's language.
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { langFromPublicPath } from "@shared/seo";
 
 export const LANGS = ["en", "pt", "es"] as const;
 export type Lang = (typeof LANGS)[number];
@@ -29,6 +30,8 @@ function isLang(value: unknown): value is Lang {
 
 /** The saved choice, else the first supported language the phone prefers, else English. */
 export function detectLang(): Lang {
+  const pathLang = typeof window !== "undefined" ? langFromPublicPath(window.location.pathname) : null;
+  if (pathLang) return pathLang;
   try {
     const saved = window.localStorage.getItem(STORAGE_KEY);
     if (isLang(saved)) return saved;

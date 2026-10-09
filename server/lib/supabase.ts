@@ -24,14 +24,29 @@ export function getSupabaseAdmin(): SupabaseClient {
   return supabaseAdmin;
 }
 
-/** Ensure the "uploads" bucket exists in Supabase Storage, creating it if necessary. */
+/**
+ * Ensure the Storage buckets exist: "uploads" (public: avatars, branding logos,
+ * and photos/voice notes from before they went private) and "private-uploads",
+ * where photos and voice notes go when R2 is not configured (server/lib/files.ts).
+ * The private one is forced back to private if someone flipped it.
+ */
 export async function ensureUploadBucket(): Promise<void> {
   const supabase = getSupabaseAdmin();
   const { data: buckets } = await supabase.storage.listBuckets();
-  if (buckets?.some((b) => b.name === "uploads")) return;
 
-  const { error } = await supabase.storage.createBucket("uploads", {
-    public: true,
-  });
-  if (error) throw new Error(`Failed to create "uploads" bucket: ${error.message}`);
+  if (!buckets?.some((b) => b.name === "uploads")) {
+    const { error } = await supabase.storage.createBucket("uploads", { public: true });
+    if (error) throw new Error(`Failed to create "uploads" bucket: ${error.message}`);
+  }
+
+  // Only the fallback store, so a failure here is logged, not fatal: with R2 set it
+  // is never written to, and without R2 photo/audio uploads fail and say so.
+  const privateBucket = buckets?.find((b) => b.name === "private-uploads");
+  if (!privateBucket) {
+    const { error } = await supabase.storage.createBucket("private-uploads", { public: false });
+    if (error) console.error(`[storage] could not create the "private-uploads" bucket: ${error.message}`);
+  } else if (privateBucket.public) {
+    const { error } = await supabase.storage.updateBucket("private-uploads", { public: false });
+    if (error) console.error(`[storage] could not make "private-uploads" private: ${error.message}`);
+  }
 }

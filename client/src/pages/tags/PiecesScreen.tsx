@@ -5,6 +5,7 @@ import { Building2, ChevronDown, ChevronRight, DollarSign, MousePointerClick, Pa
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { MasterDetail } from "@/components/xpot/MasterDetail";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
+import { TagProductThumbnail } from "@/components/xpot/TagProductThumbnail";
 import TagScreen from "./TagScreen";
 import TagSaleDialog from "./TagSaleDialog";
 import type { TagListItem } from "@shared/tagsApi";
@@ -91,7 +92,8 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
   const { data, isLoading, error } = useQuery({
     queryKey: ["tags", "list", status, leadFilter?.id ?? null],
     queryFn: () => {
-      const params = new URLSearchParams();
+      // "My pieces": the viewer's own, even for an admin who can reach every piece.
+      const params = new URLSearchParams({ mine: "1" });
       if (status) params.set("status", status);
       if (leadFilter) params.set("leadId", String(leadFilter.id));
       const qs = params.toString();
@@ -301,7 +303,10 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
                   onClick={() => openPiece(tag.publicCode)}
                   className="flex min-h-[64px] w-full items-center gap-3 px-4 py-2.5 text-left active:bg-white/10"
                 >
-                  <TagFaceIcon face={tag.face} size="md" title={t(`face_${tag.face ?? "none"}` as "face_none")} />
+                  <span className="flex shrink-0 items-center gap-1.5">
+                    <TagFaceIcon face={tag.face} size="md" title={t(`face_${tag.face ?? "none"}` as "face_none")} />
+                    <TagProductThumbnail productType={tag.productType} face={tag.face} batchCode={tag.batchCode} size="sm" />
+                  </span>
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-2">
                       <span className="font-mono text-base font-semibold tracking-[0.12em] text-white">{tag.publicCode}</span>
@@ -366,12 +371,17 @@ function PiecesTable({ items, selectedCode, onSelect }: { items: TagListItem[]; 
                 className={`cursor-pointer outline-none transition-colors focus-visible:bg-white/[0.05] ${selected ? "bg-blue-500/[0.12]" : "hover:bg-white/[0.03]"}`}
                 data-testid={`piece-row-${tag.publicCode}`}
               >
-                <td className="py-3 pl-4 pr-2 align-middle"><TagFaceIcon face={tag.face} size="sm" title={t(`face_${tag.face ?? "none"}` as "face_none")} /></td>
-                <td className="whitespace-nowrap px-3 py-3 align-middle font-mono font-semibold tracking-[0.12em] text-white">{tag.publicCode}</td>
-                <td className="px-3 py-3 align-middle"><div className="flex flex-wrap gap-1"><Pill tone={STATUS_TONE[tag.status] ?? "slate"}>{t(`status_${tag.status}` as "status_active")}</Pill>{tag.saleId && <Pill tone="green">{t("soldBadge")}</Pill>}</div></td>
-                <td className="min-w-0 px-3 py-3 align-middle">
-                  <div className="truncate leading-5 text-white/85">{tag.leadName ?? t(`product_${tag.productType}` as "product_custom")}</div>
-                  {tag.label && <div className="mt-0.5 truncate text-[11px] leading-4 text-white/35">{tag.label}</div>}
+                <td className="py-2 pl-4 pr-0">
+                  <div className="flex items-center gap-2">
+                    <TagFaceIcon face={tag.face} size="sm" title={t(`face_${tag.face ?? "none"}` as "face_none")} />
+                    <TagProductThumbnail productType={tag.productType} face={tag.face} batchCode={tag.batchCode} size="sm" />
+                  </div>
+                </td>
+                <td className="whitespace-nowrap px-4 py-2.5 font-mono font-semibold tracking-[0.12em] text-white">{tag.publicCode}</td>
+                <td className="px-3 py-2.5"><div className="flex flex-wrap gap-1"><Pill tone={STATUS_TONE[tag.status] ?? "slate"}>{t(`status_${tag.status}` as "status_active")}</Pill>{tag.saleId && <Pill tone="green">{t("soldBadge")}</Pill>}</div></td>
+                <td className="max-w-0 px-3 py-2.5" style={{ width: "40%" }}>
+                  <div className="truncate text-white/85">{tag.leadName ?? t(`product_${tag.productType}` as "product_custom")}</div>
+                  {tag.label && <div className="truncate text-[11px] text-white/35">{tag.label}</div>}
                 </td>
                 <td className="hidden max-w-0 truncate px-3 py-3 align-middle text-xs text-white/45 xl:table-cell">{tag.destinationUrl ? shortUrl(tag.destinationUrl) : "—"}</td>
                 <td className="whitespace-nowrap py-3 pl-3 pr-4 text-right align-middle tabular-nums text-white/55">

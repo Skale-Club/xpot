@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { classifyScan, TAGS_APP_PATH, type ScanClassification } from "@shared/tagApp";
+import { viewHeaders } from "@/lib/adminMode";
 
 export const APP_BASE = TAGS_APP_PATH;
 const RECENTS_KEY = "xpot.tags.recents";
@@ -158,7 +159,7 @@ async function call<T>(method: "GET" | "POST", url: string, body?: unknown, extr
   const res = await fetch(url, {
     method,
     credentials: "include",
-    headers: { ...(body === undefined ? {} : { "Content-Type": "application/json" }), ...extraHeaders },
+    headers: { ...viewHeaders(), ...(body === undefined ? {} : { "Content-Type": "application/json" }), ...extraHeaders },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (res.status === 401) {
