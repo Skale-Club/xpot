@@ -77,3 +77,13 @@ test("the Google runs are named by model, size and face, not by their working na
   assert.match(migration, /"name" = 'Plaquinhas Google Small - QR legado Skale Club'/);
   assert.match(migration, /"name" = 'Plaquinhas Google Large 103x137 - Xpot'/);
 });
+
+test("the Celes batch is a Large Stand like every printed run", () => {
+  const migration = readFileSync(new URL("../../migrations/0027_celes_batch_is_a_stand.sql", import.meta.url), "utf8");
+
+  assert.match(migration, /UPDATE "tag_batches"[\s\S]+"product_type" = 'large_stand'[\s\S]+'IG-2026-001'[\s\S]+'stand-large'/);
+  assert.match(migration, /UPDATE "tags"[\s\S]+"product_type" = 'large_stand'[\s\S]+'IG-2026-001'/);
+  // The mistaken Plate product is hidden, never deleted, and only when nothing points at it.
+  assert.match(migration, /"is_active" = false[\s\S]+'plate-large'[\s\S]+NOT EXISTS/);
+  assert.doesNotMatch(migration, /DELETE\s+FROM/i);
+});
