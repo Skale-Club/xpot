@@ -135,7 +135,7 @@ function displayFieldValue(
   return "";
 }
 
-export function AdminIntegrations() {
+function ProvidersPanel() {
   const query = useQuery<IntegrationsResponse>({ queryKey: ["/api/xpot/admin/integrations"] });
   const [selectedProvider, setSelectedProvider] = useState<string>(INTEGRATION_PROVIDERS[0]?.provider ?? "");
   const t = useT(manageMessages);
@@ -230,14 +230,6 @@ export function AdminIntegrations() {
         />
       </div>
 
-      {/* Per-rep Xphere connection: syncs each rep's visits. */}
-      <section className="space-y-3 pt-2" data-testid="integrations-xphere">
-        <h3 className="text-sm font-semibold text-white">Xphere</h3>
-        <AdminXphere />
-      </section>
-
-      {/* Inbound: AI sessions (Claude, ChatGPT, Claude Code) reaching Xpot over /mcp. */}
-      <JourneyMcpCard />
     </div>
   );
 }
@@ -550,6 +542,44 @@ function SearchableSelect({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+export type IntegrationsTab = "providers" | "xphere" | "mcp";
+const TABS: IntegrationsTab[] = ["providers", "xphere", "mcp"];
+const TAB_KEYS = { providers: "tabApiKeys", xphere: "tabXphere", mcp: "tabAiAccess" } as const;
+
+/**
+ * Account -> Integrations, one tab per kind of connection: outside services
+ * Xpot calls (API keys), each rep's Xphere visit sync, and the AI sessions
+ * that reach Xpot over /mcp.
+ */
+export function AdminIntegrations({ initialTab = "providers" }: { initialTab?: IntegrationsTab }) {
+  const t = useT(manageMessages);
+  const [tab, setTab] = useState<IntegrationsTab>(initialTab);
+  return (
+    <div className="space-y-4">
+      <nav role="tablist" className="flex gap-1 overflow-x-auto border-b border-white/10" data-testid="integrations-tabs">
+        {TABS.map((id) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={tab === id}
+            onClick={() => setTab(id)}
+            className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
+              tab === id ? "border-blue-400 text-white" : "border-transparent text-white/50 hover:text-white/80"
+            }`}
+            data-testid={`integrations-tab-${id}`}
+          >
+            {t(TAB_KEYS[id])}
+          </button>
+        ))}
+      </nav>
+      {tab === "providers" && <ProvidersPanel />}
+      {tab === "xphere" && <AdminXphere />}
+      {tab === "mcp" && <JourneyMcpCard />}
     </div>
   );
 }

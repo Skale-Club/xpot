@@ -155,7 +155,7 @@ export function AdminApp({ section }: { section: string }) {
       {SUPER_ADMIN_SECTIONS.includes(active) && !viewer.isAdmin && (
         <p className="py-16 text-center text-sm text-white/50">{tm("noAdminPermission")}</p>
       )}
-      {(active === "integrations" || active === "xphere") && viewer.isAdmin && <AdminIntegrations />}
+      {(active === "integrations" || active === "xphere") && viewer.isAdmin && <AdminIntegrations initialTab={active === "xphere" ? "xphere" : "providers"} />}
       {active === "branding" && viewer.isAdmin && <AdminBranding />}
       {active === "reps" && <AdminReps />}
       {active === "tags" && <AdminTags />}

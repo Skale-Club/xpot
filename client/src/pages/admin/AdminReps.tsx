@@ -1,5 +1,5 @@
-import { useState, type FormEvent } from "react";
-import { Ban, Check, Copy, KeyRound, Phone, RotateCcw, Trash2, UserPlus } from "lucide-react";
+import { useState, type FormEvent, type ReactNode } from "react";
+import { Ban, Check, Copy, KeyRound, Pencil, Phone, RotateCcw, Trash2, UserPlus, type LucideIcon } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "@/components/ui/loader";
@@ -12,6 +12,8 @@ import { manageMessages } from "@/i18n/messages/manage";
 import { settingsMessages } from "@/i18n/messages/settings";
 import { signinMessages } from "@/i18n/messages/signin";
 import { AdminBadge, useIsSuperAdmin } from "@/components/xpot/AdminBadge";
+import { Pill, type PillTone } from "@/components/xpot/StatusPill";
+import type { XpotMeResponse } from "@/pages/xpot/types";
 
 // Who may use Xpot. People sign up with their phone and wait here for
 // approval; an admin can also create someone's access directly. Everyone
@@ -122,28 +124,31 @@ export function AdminReps() {
     <div className="space-y-6">
       <NewResellerForm />
 
-      <section className="space-y-3" data-testid="reps-pending">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-amber-300/80">
-          {t("waitingForApproval")} {pending.length > 0 && <span className="ml-1 rounded-full bg-amber-400/15 px-2 py-0.5 text-xs">{pending.length}</span>}
-        </h2>
-        {pending.length === 0 ? (
-          <p className="text-sm text-white/40">{t("nobodyWaiting")}</p>
-        ) : (
-          pending.map((rep) => <PendingRow key={rep.id} rep={rep} />)
-        )}
-      </section>
+      {/* Only when someone is waiting: an empty "waiting" block is noise. */}
+      {pending.length > 0 && (
+        <section className="space-y-3" data-testid="reps-pending">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-amber-300">
+            {t("waitingForApproval")}
+            <span className="rounded-full bg-amber-400/15 px-2 py-0.5 text-xs">{pending.length}</span>
+          </h2>
+          {pending.map((rep) => (
+            <PendingRow key={rep.id} rep={rep} />
+          ))}
+        </section>
+      )}
 
       <section className="space-y-3" data-testid="reps-active">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-white/60">{t("activeCount", { count: active.length })}</h2>
-        <p className="text-xs text-white/40">{t("managersGetAllModules")}</p>
-        {active.map((rep) => (
-          <ActiveRow key={rep.id} rep={rep} />
-        ))}
+        <h2 className="text-sm font-semibold text-white/80">{t("activeCount", { count: active.length })}</h2>
+        <div className="divide-y divide-white/[0.06] rounded-2xl border border-white/10 bg-white/[0.03]">
+          {active.map((rep) => (
+            <ActiveRow key={rep.id} rep={rep} />
+          ))}
+        </div>
       </section>
 
       {blocked.length > 0 && (
         <section className="space-y-3" data-testid="reps-blocked">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-red-300/70">{t("blockedCount", { count: blocked.length })}</h2>
+          <h2 className="text-sm font-semibold text-red-300/80">{t("blockedCount", { count: blocked.length })}</h2>
           {blocked.map((rep) => (
             <BlockedRow key={rep.id} rep={rep} />
           ))}
@@ -157,11 +162,91 @@ function Identity({ rep }: { rep: Rep }) {
   const t = useT(manageMessages);
   return (
     <div className="min-w-0 flex-1">
-      <p className="truncate font-medium">{rep.displayName}</p>
+      <p className="truncate font-medium text-white">{rep.displayName}</p>
       <p className="truncate text-xs text-white/40">
         {rep.loginPhone ? formatPhone(rep.loginPhone) : <span className="text-amber-300/80">{t("noSignInPhone")}</span>}
         {rep.email ? ` · ${rep.email}` : ""}
       </p>
+    </div>
+  );
+}
+
+const ROLE_TONE: Record<string, PillTone> = { admin: "violet", manager: "blue", rep: "slate" };
+
+/** A labelled block of the editor: the label, the control, and what it means. */
+function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+  return (
+    <div className="min-w-0 space-y-1.5">
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-white/40">{label}</p>
+      {children}
+      {hint ? <p className="text-xs text-white/40">{hint}</p> : null}
+    </div>
+  );
+}
+
+/**
+ * A button that opens a small confirmation in place (with an optional text, like a
+ * reason or a new phone) instead of the browser's prompt box.
+ */
+function InlineAction({
+  label,
+  icon: Icon,
+  danger,
+  hint,
+  placeholder,
+  initial = "",
+  required,
+  confirmLabel,
+  busy,
+  onConfirm,
+  testId,
+}: {
+  label: string;
+  icon?: LucideIcon;
+  danger?: boolean;
+  hint?: string;
+  /** Shows a text field when set. */
+  placeholder?: string;
+  initial?: string;
+  required?: boolean;
+  confirmLabel: string;
+  busy: boolean;
+  onConfirm: (value: string) => void;
+  testId?: string;
+}) {
+  const tc = useT(commonMessages);
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState(initial);
+  const tone = danger ? "border-red-500/30 text-red-300 hover:bg-red-500/10" : "border-white/10 text-white/70 hover:bg-white/5";
+  if (!open) {
+    return (
+      <button type="button" onClick={() => { setValue(initial); setOpen(true); }} className={`${BTN} border ${tone}`} data-testid={testId}>
+        {Icon ? <Icon className="h-4 w-4" /> : null}
+        {label}
+      </button>
+    );
+  }
+  return (
+    <div className={`w-full space-y-2 rounded-xl border p-3 ${danger ? "border-red-500/25 bg-red-500/[0.05]" : "border-white/10 bg-white/[0.03]"}`}>
+      {hint ? <p className="text-xs text-white/60">{hint}</p> : null}
+      {placeholder !== undefined ? (
+        <input autoFocus value={value} onChange={(e) => setValue(e.target.value)} placeholder={placeholder} className={FIELD} />
+      ) : null}
+      <div className="flex gap-2">
+        <button
+          type="button"
+          disabled={busy || (required && !value.trim())}
+          onClick={() => { onConfirm(value.trim()); setOpen(false); }}
+          className={`${BTN} ${danger ? "bg-red-500 text-white hover:bg-red-600" : "bg-blue-500 text-white hover:bg-blue-600"}`}
+          data-testid={testId ? `${testId}-confirm` : undefined}
+        >
+          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+          {confirmLabel}
+        </button>
+        <button type="button" onClick={() => setOpen(false)} className={`${BTN} text-white/50 hover:text-white/80`}>
+          {tc("cancel")}
+        </button>
+      </div>
     </div>
   );
 }
@@ -187,22 +272,44 @@ function PendingRow({ rep }: { rep: Rep }) {
         {approve.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
         {t("approve")}
       </button>
-      <button
-        type="button"
-        disabled={busy}
-        onClick={() => {
-          const reason = window.prompt(t("refusePrompt", { name: rep.displayName }), "");
-          if (reason !== null) refuse.mutate({ url: `/api/xpot/admin/reps/${rep.id}/block`, body: { reason: reason || t("signUpRefusedReason") }, rep });
-        }}
-        className={`${BTN} border border-white/10 text-white/60 hover:bg-white/5`}
-      >
-        {t("refuse")}
-      </button>
+      <InlineAction
+        label={t("refuse")}
+        placeholder={t("reasonOptional")}
+        confirmLabel={t("refuse")}
+        danger
+        busy={busy}
+        onConfirm={(reason) => refuse.mutate({ url: `/api/xpot/admin/reps/${rep.id}/block`, body: { reason: reason || t("signUpRefusedReason") }, rep })}
+      />
     </div>
   );
 }
 
+/** One person: a summary line; "Edit" opens their settings, each labelled. */
 function ActiveRow({ rep }: { rep: Rep }) {
+  const t = useT(manageMessages);
+  const tc = useT(commonMessages);
+  const tse = useT(settingsMessages);
+  const [open, setOpen] = useState(false);
+  const effective = repModules({ role: rep.role, modules: rep.modules });
+  const roleKey = ROLE_KEYS[rep.role as (typeof ROLES)[number]];
+  return (
+    <div data-testid={`rep-${rep.id}`}>
+      <div className="flex flex-wrap items-center gap-3 px-4 py-3">
+        <Identity rep={rep} />
+        <Pill tone={ROLE_TONE[rep.role] ?? "slate"}>{roleKey ? tse(roleKey) : rep.role}</Pill>
+        <span className="text-xs text-white/45">{effective.map((m) => tc(MODULE_KEYS[m as XpotModule])).join(" · ")}</span>
+        {rep.team ? <span className="text-xs text-white/45">{rep.team}</span> : null}
+        <button type="button" onClick={() => setOpen((v) => !v)} className={`${BTN} border border-white/10 text-white/70 hover:bg-white/5`} aria-expanded={open} data-testid={`edit-${rep.id}`}>
+          <Pencil className="h-4 w-4" />
+          {open ? tc("close") : t("edit")}
+        </button>
+      </div>
+      {open ? <RepEditor rep={rep} onDone={() => setOpen(false)} /> : null}
+    </div>
+  );
+}
+
+function RepEditor({ rep, onDone }: { rep: Rep; onDone: () => void }) {
   const { toast } = useToast();
   const t = useT(manageMessages);
   const tc = useT(commonMessages);
@@ -222,89 +329,107 @@ function ActiveRow({ rep }: { rep: Rep }) {
     onSuccess: () => {
       toast({ title: t("repUpdated", { name: rep.displayName }) });
       void queryClient.invalidateQueries({ queryKey: REPS_KEY });
+      onDone();
     },
     onError: (e: Error) => toast({ title: t("error"), description: e.message, variant: "destructive" }),
   });
   const block = useRepAction((r) => t("repBlocked", { name: r.displayName }));
   const phone = useRepAction((r) => t("repPhoneChanged", { name: r.displayName }));
   const newCode = useRepAction((r) => t("repNewCode", { name: r.displayName }));
+  const sellsTags = repModules({ role: rep.role, modules: rep.modules }).includes("tags");
+  // Blocking yourself would lock you out of the admin you are using.
+  const { data: me } = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
+  const isSelf = !!me && rep.id === me.rep.id;
+  const SELECT = "w-full rounded-lg border border-white/10 bg-[#0a0f1e] px-3 py-2 text-sm text-white outline-none focus:border-blue-500/50";
 
   return (
-    <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4" data-testid={`rep-${rep.id}`}>
-      <Identity rep={rep} />
-      <select value={role} onChange={(e) => setRole(e.target.value)} className="rounded-lg border border-white/10 bg-[#0a0f1e] px-2 py-1.5 text-sm text-white outline-none focus:border-blue-500/50">
-        {ROLES.map((r) => (
-          <option key={r} value={r}>
-            {tse(ROLE_KEYS[r])}
-          </option>
-        ))}
-      </select>
-      <input value={team} onChange={(e) => setTeam(e.target.value)} placeholder={t("teamPlaceholder")} className={`${FIELD} w-28`} />
-      <select
-        value={costPolicy}
-        onChange={(e) => setCostPolicy(e.target.value as "zero" | "acquisition")}
-        title={t("costPolicyTitle")}
-        className="rounded-lg border border-white/10 bg-[#0a0f1e] px-2 py-1.5 text-sm text-white outline-none focus:border-blue-500/50"
-        data-testid={`cost-policy-${rep.id}`}
-      >
-        <option value="zero">{t("costPolicyZero")}</option>
-        <option value="acquisition">{t("costPolicyAcquisition")}</option>
-      </select>
-      <div title={isManager ? t("managersUseAllModules") : undefined}>
-        <ModuleChecks value={modules} onChange={setModules} disabled={isManager} />
+    <div className="space-y-5 border-t border-white/[0.06] bg-black/10 px-4 py-4" data-testid={`rep-editor-${rep.id}`}>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label={t("fieldRole")}>
+          <select value={role} onChange={(e) => setRole(e.target.value)} className={SELECT}>
+            {ROLES.map((r) => (
+              <option key={r} value={r}>{tse(ROLE_KEYS[r])}</option>
+            ))}
+          </select>
+        </Field>
+        <Field label={t("fieldTeam")}>
+          <input value={team} onChange={(e) => setTeam(e.target.value)} placeholder={t("teamPlaceholder")} className={FIELD} />
+        </Field>
+        <Field label={t("costPolicyTitle")} hint={t("costPolicyHint")}>
+          <select value={costPolicy} onChange={(e) => setCostPolicy(e.target.value as "zero" | "acquisition")} className={SELECT} data-testid={`cost-policy-${rep.id}`}>
+            <option value="zero">{t("costPolicyZero")}</option>
+            <option value="acquisition">{t("costPolicyAcquisition")}</option>
+          </select>
+        </Field>
+        <Field label={t("modules")} hint={isManager ? t("managersUseAllModules") : undefined}>
+          <div className="flex min-h-[38px] items-center">
+            <ModuleChecks value={modules} onChange={setModules} disabled={isManager} />
+          </div>
+        </Field>
       </div>
-      <button
-        type="button"
-        onClick={() => save.mutate()}
-        disabled={!dirty || save.isPending || modules.length === 0}
-        className={`${BTN} bg-blue-500 text-white hover:bg-blue-600`}
-      >
-        {save.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-        {tc("save")}
-      </button>
-      {/* The wholesale code buys Tags kits: only for someone who sells Tags (the server refuses the rest). */}
-      {repModules({ role: rep.role, modules: rep.modules }).includes("tags") && (
-        <button
-          type="button"
-          title={rep.wholesaleCode ? t("wholesaleReissueTitle", { code: rep.wholesaleCode }) : t("wholesaleIssueTitle")}
-          disabled={newCode.isPending}
-          onClick={() => {
-            if (!rep.wholesaleCode || window.confirm(t("wholesaleConfirm", { name: rep.displayName, code: rep.wholesaleCode }))) {
-              newCode.mutate({ url: `/api/xpot/admin/reps/${rep.id}/wholesale-code`, rep });
-            }
-          }}
-          className={`${BTN} border border-white/10 font-mono text-xs text-white/60 hover:bg-white/5`}
-          data-testid={`wholesale-${rep.id}`}
-        >
-          <KeyRound className="h-4 w-4" />
-          {rep.wholesaleCode ?? t("wholesaleButton")}
+      <div className="flex gap-2">
+        <button type="button" onClick={() => save.mutate()} disabled={!dirty || save.isPending || modules.length === 0} className={`${BTN} bg-blue-500 text-white hover:bg-blue-600`}>
+          {save.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+          {tc("save")}
         </button>
-      )}
-      <button
-        type="button"
-        title={t("changePhoneTitle")}
-        disabled={phone.isPending}
-        onClick={() => {
-          const next = window.prompt(t("changePhonePrompt", { name: rep.displayName }), rep.loginPhone ?? "");
-          if (next) phone.mutate({ url: `/api/xpot/admin/reps/${rep.id}/phone`, body: { phone: next }, rep });
-        }}
-        className={`${BTN} border border-white/10 text-white/60 hover:bg-white/5`}
-      >
-        <Phone className="h-4 w-4" />
-      </button>
-      <button
-        type="button"
-        disabled={block.isPending}
-        onClick={() => {
-          const reason = window.prompt(t("blockPrompt", { name: rep.displayName }), "");
-          if (reason !== null) block.mutate({ url: `/api/xpot/admin/reps/${rep.id}/block`, body: { reason: reason || null }, rep });
-        }}
-        className={`${BTN} border border-red-500/30 text-red-300 hover:bg-red-500/10`}
-        data-testid={`block-${rep.id}`}
-      >
-        <Ban className="h-4 w-4" />
-        {t("block")}
-      </button>
+        <button type="button" onClick={onDone} className={`${BTN} text-white/50 hover:text-white/80`}>{tc("cancel")}</button>
+      </div>
+
+      <div className="grid gap-4 border-t border-white/[0.06] pt-4 sm:grid-cols-2">
+        <Field label={t("fieldSignInPhone")} hint={t("signInPhoneHint")}>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm text-white/80">{rep.loginPhone ? formatPhone(rep.loginPhone) : t("noSignInPhone")}</span>
+            <InlineAction
+              label={t("changePhone")}
+              icon={Phone}
+              placeholder={t("phonePlaceholder")}
+              initial={rep.loginPhone ?? ""}
+              required
+              confirmLabel={tc("save")}
+              busy={phone.isPending}
+              onConfirm={(next) => phone.mutate({ url: `/api/xpot/admin/reps/${rep.id}/phone`, body: { phone: next }, rep })}
+            />
+          </div>
+        </Field>
+        {/* The wholesale code buys Tags kits: only for someone who sells Tags (the server refuses the rest). */}
+        {sellsTags ? (
+          <Field label={t("fieldWholesale")} hint={t("wholesaleHint")}>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`text-sm ${rep.wholesaleCode ? "font-mono text-white/80" : "text-white/40"}`}>{rep.wholesaleCode ?? t("wholesaleNone")}</span>
+              {rep.wholesaleCode ? (
+                <InlineAction
+                  label={t("wholesaleReissue")}
+                  icon={KeyRound}
+                  hint={t("wholesaleConfirm", { name: rep.displayName, code: rep.wholesaleCode })}
+                  confirmLabel={t("wholesaleReissue")}
+                  busy={newCode.isPending}
+                  onConfirm={() => newCode.mutate({ url: `/api/xpot/admin/reps/${rep.id}/wholesale-code`, rep })}
+                  testId={`wholesale-${rep.id}`}
+                />
+              ) : (
+                <button type="button" disabled={newCode.isPending} onClick={() => newCode.mutate({ url: `/api/xpot/admin/reps/${rep.id}/wholesale-code`, rep })} className={`${BTN} border border-white/10 text-white/70 hover:bg-white/5`} data-testid={`wholesale-${rep.id}`}>
+                  <KeyRound className="h-4 w-4" />
+                  {t("wholesaleIssue")}
+                </button>
+              )}
+            </div>
+          </Field>
+        ) : null}
+      </div>
+
+      {!isSelf && <div className="border-t border-white/[0.06] pt-4">
+        <InlineAction
+          label={t("blockTitle")}
+          icon={Ban}
+          danger
+          hint={t("blockHint")}
+          placeholder={t("reasonOptional")}
+          confirmLabel={t("confirmBlock", { name: rep.displayName })}
+          busy={block.isPending}
+          onConfirm={(reason) => block.mutate({ url: `/api/xpot/admin/reps/${rep.id}/block`, body: { reason: reason || null }, rep })}
+          testId={`block-${rep.id}`}
+        />
+      </div>}
     </div>
   );
 }
