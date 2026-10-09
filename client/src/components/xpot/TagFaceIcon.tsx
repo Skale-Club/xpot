@@ -48,10 +48,11 @@ const TILES: Record<TagFace, Tile> = {
 };
 
 const SIZES = {
-  xs: { box: "h-5 w-5 rounded-md", glyph: "h-3 w-3" },
-  sm: { box: "h-7 w-7 rounded-lg", glyph: "h-4 w-4" },
-  md: { box: "h-9 w-9 rounded-xl", glyph: "h-5 w-5" },
-  lg: { box: "h-12 w-12 rounded-2xl", glyph: "h-7 w-7" },
+  // Keep the tile footprint stable in tables and cards; only the brand glyph grows.
+  xs: { box: "h-5 w-5 rounded-md", glyph: "h-3.5 w-3.5" },
+  sm: { box: "h-7 w-7 rounded-lg", glyph: "h-5 w-5" },
+  md: { box: "h-9 w-9 rounded-xl", glyph: "h-7 w-7" },
+  lg: { box: "h-12 w-12 rounded-2xl", glyph: "h-9 w-9" },
 } as const;
 
 /**
