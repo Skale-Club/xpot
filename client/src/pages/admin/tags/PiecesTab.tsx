@@ -149,7 +149,7 @@ function PiecesTable({ tags, onOpen }: { tags: TagListItem[]; onOpen: (id: strin
               <div className="flex items-center justify-between gap-2">
                 <span className="flex min-w-0 items-center gap-2.5">
                   <TagFaceIcon face={t.face} size="sm" />
-                  <TagProductThumbnail productType={t.productType} face={t.face} size="sm" />
+                  <TagProductThumbnail productType={t.productType} face={t.face} batchCode={t.batchCode} size="sm" />
                   <span className="font-mono font-semibold text-white">{t.publicCode}</span>
                 </span>
                 <StatusPill status={t.status} />
@@ -194,7 +194,7 @@ function PiecesTable({ tags, onOpen }: { tags: TagListItem[]; onOpen: (id: strin
                 <td className={`${TD} pr-0`}>
                   <span className="flex items-center gap-2">
                     <TagFaceIcon face={t.face} size="md" />
-                    <TagProductThumbnail productType={t.productType} face={t.face} />
+                    <TagProductThumbnail productType={t.productType} face={t.face} batchCode={t.batchCode} />
                   </span>
                 </td>
                 <td className={`${TD} whitespace-nowrap font-mono font-semibold text-white`}>
