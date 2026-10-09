@@ -5,7 +5,7 @@ import { Building2, ChevronDown, ChevronRight, DollarSign, MousePointerClick, Pa
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { MasterDetail } from "@/components/xpot/MasterDetail";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
-import { TagProductThumbnail } from "@/components/xpot/TagProductThumbnail";
+import { TagModelChips, TagProductThumbnail } from "@/components/xpot/TagProductThumbnail";
 import TagScreen from "./TagScreen";
 import TagSaleDialog from "./TagSaleDialog";
 import type { TagListItem } from "@shared/tagsApi";
@@ -305,7 +305,7 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
                 >
                   <span className="flex shrink-0 items-center gap-1.5">
                     <TagFaceIcon face={tag.face} size="md" title={t(`face_${tag.face ?? "none"}` as "face_none")} />
-                    <TagProductThumbnail productType={tag.productType} face={tag.face} batchCode={tag.batchCode} size="sm" />
+                    <TagProductThumbnail productType={tag.productType} face={tag.face} size="sm" />
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-2">
@@ -313,10 +313,13 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
                       <Pill tone={STATUS_TONE[tag.status] ?? "slate"}>{t(`status_${tag.status}` as "status_active")}</Pill>
                       {tag.saleId && <Pill tone="green">{t("soldBadge")}</Pill>}
                     </span>
-                    <span className="mt-0.5 block truncate text-xs text-white/45">
+                    <span className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-white/45">
+                      <TagModelChips productType={tag.productType} face={tag.face} batchCode={tag.batchCode} className="shrink-0" />
+                      <span className="truncate">
                       {[tag.leadName ?? t(`product_${tag.productType}` as "product_custom"), tag.label, tag.destinationUrl && shortUrl(tag.destinationUrl)]
                         .filter(Boolean)
                         .join(" · ")}
+                      </span>
                     </span>
                   </span>
                   {tag.status === "active" && (
@@ -341,8 +344,8 @@ function PiecesTable({ items, selectedCode, onSelect }: { items: TagListItem[]; 
     <div className={`${CARD} overflow-hidden`}>
       <table className="w-full table-fixed text-left text-sm" data-testid="pieces-table">
         <colgroup>
-          <col className="w-14" />
-          <col className="w-36" />
+          <col className="w-20" />
+          <col className="w-40" />
           <col className="w-24" />
           <col />
           <col className="hidden w-40 xl:table-column" />
@@ -374,10 +377,13 @@ function PiecesTable({ items, selectedCode, onSelect }: { items: TagListItem[]; 
                 <td className="py-2 pl-4 pr-0">
                   <div className="flex items-center gap-2">
                     <TagFaceIcon face={tag.face} size="sm" title={t(`face_${tag.face ?? "none"}` as "face_none")} />
-                    <TagProductThumbnail productType={tag.productType} face={tag.face} batchCode={tag.batchCode} size="sm" />
+                    <TagProductThumbnail productType={tag.productType} face={tag.face} size="sm" />
                   </div>
                 </td>
-                <td className="whitespace-nowrap px-4 py-2.5 font-mono font-semibold tracking-[0.12em] text-white">{tag.publicCode}</td>
+                <td className="whitespace-nowrap px-3 py-2.5">
+                  <div className="font-mono font-semibold tracking-[0.12em] text-white">{tag.publicCode}</div>
+                  <TagModelChips productType={tag.productType} face={tag.face} batchCode={tag.batchCode} className="mt-1" />
+                </td>
                 <td className="px-3 py-2.5"><div className="flex flex-wrap gap-1"><Pill tone={STATUS_TONE[tag.status] ?? "slate"}>{t(`status_${tag.status}` as "status_active")}</Pill>{tag.saleId && <Pill tone="green">{t("soldBadge")}</Pill>}</div></td>
                 <td className="max-w-0 px-3 py-2.5" style={{ width: "40%" }}>
                   <div className="truncate text-white/85">{tag.leadName ?? t(`product_${tag.productType}` as "product_custom")}</div>
