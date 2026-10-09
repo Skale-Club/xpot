@@ -59,7 +59,6 @@ const en = {
   adminModeEnter: "Management mode",
   adminModeOn: "Management mode: you are managing the account",
   adminModeExit: "Exit",
-  adminModeLeave: "Exit management",
 
   // Install the PWA (sidebar footer, Settings)
   installApp: "Install app",
@@ -127,7 +126,6 @@ export const shellMessages: Dictionary<typeof en> = {
     adminModeEnter: "Modo de gestão",
     adminModeOn: "Modo de gestão: você está gerenciando a conta",
     adminModeExit: "Sair",
-    adminModeLeave: "Sair da gestão",
 
     installApp: "Instalar app",
     installAppHint: "Abra o Xpot pela tela inicial como qualquer outro app, em tela cheia e mais rápido.",
@@ -191,7 +189,6 @@ export const shellMessages: Dictionary<typeof en> = {
     adminModeEnter: "Modo de gestión",
     adminModeOn: "Modo de gestión: estás gestionando la cuenta",
     adminModeExit: "Salir",
-    adminModeLeave: "Salir de gestión",
 
     installApp: "Instalar app",
     installAppHint: "Abre Xpot desde la pantalla de inicio como cualquier otra app, a pantalla completa y más rápido.",

@@ -41,28 +41,26 @@ export function AdminModeButton({ module }: { module: XpotModule }) {
   );
 }
 
-/** Desktop sidebar item: the same switch, in the sidebar's style. */
+/**
+ * Desktop sidebar item that enters admin mode. Leaving is the amber bar's job
+ * (on every screen, phone and desktop), so there is one way out, not two.
+ */
 export function AdminModeSidebarItem({ collapsed }: { collapsed: boolean }) {
   const t = useT(shellMessages);
   const [location, navigate] = useLocation();
   const { hasAdminAccess, adminMode, setAdminMode } = useViewerAccess();
-  if (!hasAdminAccess) return null;
+  if (!hasAdminAccess || adminMode) return null;
   const context = contextOfPath(location);
-  const label = adminMode ? t("adminModeLeave") : t("adminModeEnter");
+  const label = t("adminModeEnter");
   return (
     <button
       type="button"
       onClick={() => {
-        if (adminMode) leave(location, navigate, setAdminMode);
-        else {
-          setAdminMode(true);
-          navigate(MANAGE_HOME[context === "tags" ? "tags" : "visits"]);
-        }
+        setAdminMode(true);
+        navigate(MANAGE_HOME[context === "tags" ? "tags" : "visits"]);
       }}
       title={collapsed ? label : undefined}
-      className={`flex h-10 w-full items-center gap-3 rounded-xl text-sm font-medium transition-colors ${collapsed ? "justify-center px-0" : "px-3"} ${
-        adminMode ? "bg-amber-400/10 text-amber-300 hover:bg-amber-400/15" : "text-white/50 hover:bg-white/[0.04] hover:text-white/85"
-      }`}
+      className={`flex h-10 w-full items-center gap-3 rounded-xl text-sm font-medium text-white/50 transition-colors hover:bg-white/[0.04] hover:text-white/85 ${collapsed ? "justify-center px-0" : "px-3"}`}
       data-testid="sidebar-admin-mode"
     >
       <Shield className="h-[18px] w-[18px] shrink-0" />
