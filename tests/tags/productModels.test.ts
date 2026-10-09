@@ -67,3 +67,13 @@ test("physical model names stay canonical English labels in every UI locale", ()
     }
   }
 });
+
+test("the Google runs are named by model, size and face, not by their working names", () => {
+  const migration = readFileSync(new URL("../../migrations/0026_rename_rev_batches.sql", import.meta.url), "utf8");
+
+  assert.match(migration, /'Small Stand — Google Review'[\s\S]+'REV-2026-001'/);
+  assert.match(migration, /'Large Stand — Google Review — 103x137 mm'[\s\S]+'REV-2026-002', 'REV-2026-003'/);
+  // Only the original working names are replaced; a name someone edited stays.
+  assert.match(migration, /"name" = 'Plaquinhas Google Small - QR legado Skale Club'/);
+  assert.match(migration, /"name" = 'Plaquinhas Google Large 103x137 - Xpot'/);
+});
