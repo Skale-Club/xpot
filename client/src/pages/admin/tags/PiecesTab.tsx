@@ -5,6 +5,7 @@ import { Plus, Search, X } from "lucide-react";
 import { TAG_PRODUCT_TYPES, TAG_STATUSES } from "@shared/tags";
 import type { TagDetail, TagListItem } from "@shared/tagsApi";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
+import { TagProductThumbnail } from "@/components/xpot/TagProductThumbnail";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { ADMIN_TAGS_KEY, errorMessage, formatDateTime, getJson, invalidateAdminTags, sendJson, STALE_MS, withQuery } from "./api";
@@ -137,6 +138,7 @@ function PiecesTable({ tags, onOpen }: { tags: TagListItem[]; onOpen: (id: strin
               <div className="flex items-center justify-between gap-2">
                 <span className="flex min-w-0 items-center gap-2.5">
                   <TagFaceIcon face={t.face} size="sm" />
+                  <TagProductThumbnail productType={t.productType} face={t.face} size="sm" />
                   <span className="font-mono font-semibold text-white">{t.publicCode}</span>
                 </span>
                 <StatusPill status={t.status} />
@@ -161,7 +163,7 @@ function PiecesTable({ tags, onOpen }: { tags: TagListItem[]; onOpen: (id: strin
         <table className="w-full min-w-[960px]">
           <thead className="border-b border-white/10">
             <tr>
-              <th className={`${TH} w-12 pr-0`}><span className="sr-only">{tg("printedOnPiece")}</span></th>
+              <th className={`${TH} w-28 pr-0`}><span className="sr-only">{tg("printedOnPiece")}</span></th>
               <th className={TH}>{tg("colCode")}</th>
               <th className={TH}>{tm("colProduct")}</th>
               <th className={TH}>{tg("colStatus")}</th>
@@ -178,7 +180,12 @@ function PiecesTable({ tags, onOpen }: { tags: TagListItem[]; onOpen: (id: strin
           <tbody className="divide-y divide-white/5">
             {tags.map((t) => (
               <tr key={t.id} className="cursor-pointer hover:bg-white/[0.04]" onClick={() => onOpen(t.id)} data-testid={`admin-piece-row-${t.publicCode}`}>
-                <td className={`${TD} pr-0`}><TagFaceIcon face={t.face} size="md" /></td>
+                <td className={`${TD} pr-0`}>
+                  <span className="flex items-center gap-2">
+                    <TagFaceIcon face={t.face} size="md" />
+                    <TagProductThumbnail productType={t.productType} face={t.face} />
+                  </span>
+                </td>
                 <td className={`${TD} whitespace-nowrap font-mono font-semibold text-white`}>
                   {t.publicCode}
                   {t.serialNumber ? <span className="ml-1 font-sans text-xs font-normal text-white/40">#{t.serialNumber}</span> : null}
