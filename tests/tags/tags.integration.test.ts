@@ -39,6 +39,11 @@ test.skipIf(!enabled)("tags: kits, reseller isolation, sales, scans, report, pro
     ('it-carla', 'Carla', 'carla@it.test', 'rep', false)
     RETURNING id, user_id`);
   const repId = Object.fromEntries((reps.rows as Array<{ id: number; user_id: string }>).map((r) => [r.user_id, r.id]));
+  const product = await db.execute(sql`INSERT INTO sales_products (sku, name, kind, base_price_cents, is_active)
+    VALUES ('IT-TAGS-KEYCHAIN', 'Integration keychain', 'physical', 2500, true)
+    ON CONFLICT (sku) DO UPDATE SET name = EXCLUDED.name
+    RETURNING id`);
+  const salesProductId = Number((product.rows[0] as { id: number }).id);
 
   const app = express();
   app.use(express.json());
@@ -73,7 +78,7 @@ test.skipIf(!enabled)("tags: kits, reseller isolation, sales, scans, report, pro
     assert.equal((await api("GET", "/api/xpot/tags", "it-carla")).status, 403);
 
     // A batch of 10 pieces lands in house stock.
-    const batch = await api("POST", "/api/xpot/admin/tag-batches", "it-admin", { name: "Keychains run 1", productType: "keychain", quantity: 10 });
+    const batch = await api("POST", "/api/xpot/admin/tag-batches", "it-admin", { name: "Keychains run 1", productType: "keychain", salesProductId, quantity: 10 });
     assert.equal(batch.status, 201, batch.text);
     const batchTags = (await api("GET", `/api/xpot/admin/tag-batches/${batch.json.id}`, "it-admin")).json.tags as Array<{ id: string; publicCode: string; repId: number | null }>;
     assert.equal(batchTags.length, 10);

@@ -49,6 +49,11 @@ test.skipIf(!enabled)("journey: trail, stories, plans, append-only, admin-only A
     ('jt-bruno', 'Bruno', 'bruno@jt.test', 'rep', true)
     RETURNING id, user_id`);
   const repId = Object.fromEntries((seeded.rows as Array<{ id: number; user_id: string }>).map((r) => [r.user_id, r.id]));
+  const product = await db.execute(sql`INSERT INTO sales_products (sku, name, kind, base_price_cents, is_active)
+    VALUES ('IT-JOURNEY-KEYCHAIN', 'Journey keychain', 'physical', 2500, true)
+    ON CONFLICT (sku) DO UPDATE SET name = EXCLUDED.name
+    RETURNING id`);
+  const salesProductId = Number((product.rows[0] as { id: number }).id);
 
   const app = express();
   app.use(express.json());
@@ -91,7 +96,7 @@ test.skipIf(!enabled)("journey: trail, stories, plans, append-only, admin-only A
     assert.equal((await api("GET", "/api/xpot/admin/tag-journey", "jt-admin")).status, 200);
 
     // ── The site's own mutations write executions ────────────────────────────
-    const created = await api("POST", "/api/xpot/admin/tag-batches", "jt-admin", { name: "Keychains run 1", productType: "keychain", quantity: 10 });
+    const created = await api("POST", "/api/xpot/admin/tag-batches", "jt-admin", { name: "Keychains run 1", productType: "keychain", salesProductId, quantity: 10 });
     assert.equal(created.status, 201, created.text);
     const batch = created.json;
     const batchTags = (await api("GET", `/api/xpot/admin/tag-batches/${batch.id}`, "jt-admin")).json.tags as Array<{ id: string; publicCode: string }>;

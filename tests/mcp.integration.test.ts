@@ -35,6 +35,11 @@ test.skipIf(!enabled)("mcp: token via admin API, tools over Streamable HTTP, rev
   await db.execute(sql`INSERT INTO sales_reps (user_id, display_name, email, role, is_active) VALUES
     ('jm-admin', 'Admin', 'admin@jm.test', 'admin', true),
     ('jm-mgr', 'Manager', 'mgr@jm.test', 'manager', true)`);
+  const product = await db.execute(sql`INSERT INTO sales_products (sku, name, kind, base_price_cents, is_active)
+    VALUES ('IT-MCP-KEYCHAIN', 'MCP keychain', 'physical', 2500, true)
+    ON CONFLICT (sku) DO UPDATE SET name = EXCLUDED.name
+    RETURNING id`);
+  const salesProductId = Number((product.rows[0] as { id: number }).id);
 
   const app = express();
   app.use(express.json());
@@ -119,7 +124,7 @@ test.skipIf(!enabled)("mcp: token via admin API, tools over Streamable HTTP, rev
       ]);
 
       // Something to document: a batch made through the site's own API.
-      const batch = (await api("POST", "/api/xpot/admin/tag-batches", "jm-admin", { name: "MCP run", productType: "keychain", quantity: 4 })).json;
+      const batch = (await api("POST", "/api/xpot/admin/tag-batches", "jm-admin", { name: "MCP run", productType: "keychain", salesProductId, quantity: 4 })).json;
       const first = ((await api("GET", `/api/xpot/admin/tag-batches/${batch.id}`, "jm-admin")).json.tags as Array<{ id: string; publicCode: string }>)[0];
 
       const batches = await call(client, "tags_batches_list");
@@ -130,7 +135,7 @@ test.skipIf(!enabled)("mcp: token via admin API, tools over Streamable HTTP, rev
       assert.equal(tagDetail.json.publicCode, first.publicCode);
 
       // Create a batch over MCP: fresh codes, journaled by the site itself, pinned codes refused.
-      const made = await call(client, "tags_batch_create", { batch: { name: "MCP batch", productType: "google_review_sign", quantity: 3, batchCode: "ig-mcp-001" } });
+      const made = await call(client, "tags_batch_create", { batch: { name: "MCP batch", productType: "google_review_sign", salesProductId, quantity: 3, batchCode: "ig-mcp-001" } });
       assert.equal(made.isError, false);
       assert.equal(made.json.batch.batchCode, "IG-MCP-001");
       assert.equal(made.json.tags.length, 3);
