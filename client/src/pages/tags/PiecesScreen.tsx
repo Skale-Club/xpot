@@ -1,12 +1,11 @@
 import { useCallback, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { Building2, ChevronDown, ChevronRight, DollarSign, MousePointerClick, Package, RotateCcw, ScanLine, Search, Shapes, X, type LucideIcon } from "lucide-react";
+import { Building2, ChevronDown, ChevronRight, MousePointerClick, Package, RotateCcw, ScanLine, Search, Shapes, X, type LucideIcon } from "lucide-react";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { MasterDetail } from "@/components/xpot/MasterDetail";
 import { TagModelChips, TagPieceVisual } from "@/components/xpot/TagProductThumbnail";
 import TagScreen from "./TagScreen";
-import TagSaleDialog from "./TagSaleDialog";
 import type { TagListItem } from "@shared/tagsApi";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
@@ -79,7 +78,6 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
   const [companyFilter, setCompanyFilter] = useState("");
   const [faceFilter, setFaceFilter] = useState("");
   const [scanFilter, setScanFilter] = useState<ScanFilter>("all");
-  const [saleOpen, setSaleOpen] = useState(false);
   const status = FILTERS.find((f) => f.id === filter)?.status ?? null;
   // ?lead=<id>&name=<name>: one customer's pieces, opened from a customer card.
   const [leadFilter, setLeadFilter] = useState(() => {
@@ -146,20 +144,10 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
     </div>
   );
 
-  // Sits in the top bar on mobile and at the end of the search row on desktop,
-  // where the shell header already names the screen.
-  const sellButton = (testId: string) => (
-    <button type="button" onClick={() => setSaleOpen(true)}
-      className="inline-flex min-h-[42px] shrink-0 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 text-sm font-bold text-white transition-colors hover:bg-emerald-400 active:scale-[0.98]"
-      data-testid={testId}>
-      <DollarSign className="h-4 w-4" /> {t("sellPiecesAction")}
-    </button>
-  );
-
   return (
     <>
       <div className="lg:hidden">
-        <TopBar title={t("piecesTitle")} eyebrow={data ? t.plural("pieces", data.length) : undefined} right={sellButton("button-sell-pieces-mobile")} />
+        <TopBar title={t("piecesTitle")} eyebrow={data ? t.plural("pieces", data.length) : undefined} />
       </div>
 
       {leadFilter && (
@@ -179,8 +167,10 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
         </div>
       )}
 
-      <div className="lg:flex lg:items-center lg:gap-4">
-        <div className="relative lg:flex-1">
+      {/* Desktop: search, status and the selects share one row (it wraps only when the pane is narrow). */}
+      <div className="lg:flex lg:flex-wrap lg:items-center lg:gap-2">
+      <div className="lg:contents">
+        <div className="relative lg:min-w-[180px] lg:flex-1">
           <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
           <input
             type="search"
@@ -211,12 +201,11 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
           ))}
         </div>
 
-        <div className="hidden lg:block">{sellButton("button-sell-pieces")}</div>
       </div>
 
-      <div className="mt-2.5 flex flex-col gap-2 sm:grid sm:grid-cols-3 lg:flex lg:flex-row lg:items-center">
-        <div className="grid min-w-0 grid-cols-2 gap-2 sm:col-span-2 sm:grid-cols-2 lg:flex lg:flex-1">
-          <div className="min-w-0 lg:w-56">
+      <div className="mt-2.5 flex flex-col gap-2 sm:grid sm:grid-cols-3 lg:mt-0 lg:contents">
+        <div className="grid min-w-0 grid-cols-2 gap-2 sm:col-span-2 sm:grid-cols-2 lg:contents">
+          <div className="min-w-0 lg:w-auto lg:shrink-0">
             <FilterSelect
               value={companyFilter}
               onChange={setCompanyFilter}
@@ -226,7 +215,7 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
               testId="filter-company"
             />
           </div>
-          <div className="min-w-0 lg:w-52">
+          <div className="min-w-0 lg:w-auto lg:shrink-0">
             <FilterSelect
               value={faceFilter}
               onChange={setFaceFilter}
@@ -237,7 +226,7 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
             />
           </div>
         </div>
-        <div className="min-w-0 lg:w-52">
+        <div className="min-w-0 lg:w-auto lg:shrink-0">
           <FilterSelect
             value={scanFilter === "all" ? "" : scanFilter}
             onChange={(value) => setScanFilter((value || "all") as ScanFilter)}
@@ -267,6 +256,7 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
             {t("clearListFilters")}
           </button>
         )}
+      </div>
       </div>
 
       <div className="mt-4">
@@ -332,7 +322,6 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
           </ul>
         )}
       </div>
-      <TagSaleDialog open={saleOpen} onOpenChange={setSaleOpen} pieces={data ?? []} />
     </>
   );
 }

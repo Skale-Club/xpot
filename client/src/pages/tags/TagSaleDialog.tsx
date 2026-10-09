@@ -11,6 +11,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useT } from "@/i18n";
 import { salesModuleMessages } from "@/i18n/messages/salesModule";
 import { tagsMessages } from "@/i18n/messages/tags";
+import { TagModelChips, TagPieceVisual } from "@/components/xpot/TagProductThumbnail";
 import LeadPicker, { type LeadChoice } from "./LeadPicker";
 import { errorText, getSellTo, haptic, tagsGet, tagsPostIdempotent } from "./lib";
 import { Field, Money, MoneyInput, PrimaryButton, Select, SheetDialog, inputStyle } from "@/pages/xpot/components/sales/ui";
@@ -44,17 +45,8 @@ export default function TagSaleDialog({
     enabled: open,
     staleTime: 5 * 60_000,
   });
-  const salePiecesQuery = useQuery<TagListItem[]>({
-    queryKey: ["tags", "sale-candidates"],
-    queryFn: () => tagsGet<TagListItem[]>("/api/xpot/tags"),
-    enabled: open,
-    staleTime: 0,
-  });
-
-  const available = useMemo(
-    () => (salePiecesQuery.data ?? pieces).filter((piece) => !piece.saleId && piece.status !== "retired"),
-    [pieces, salePiecesQuery.data],
-  );
+  // One sale per piece, opened from that piece (like activating it).
+  const available = useMemo(() => pieces.filter((piece) => !piece.saleId && piece.status !== "retired"), [pieces]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [lead, setLead] = useState<LeadChoice>(null);
   const [prices, setPrices] = useState<PriceState>({});
@@ -142,16 +134,6 @@ export default function TagSaleDialog({
   const partialInvalid = paymentStatus === "partial" && (paidCents <= 0 || paidCents >= totals.totalCents);
   const canSubmit = Boolean(lead && selectedPieces.length && !unmapped && !missingCost && !unconfiguredPolicy && !catalogUnavailable && !partialInvalid && totals.totalCents >= 0 && !busy);
 
-  function toggle(tagId: string) {
-    setSelected((current) => {
-      const next = new Set(current);
-      if (next.has(tagId)) next.delete(tagId);
-      else next.add(tagId);
-      return next;
-    });
-    setError(null);
-    attempt.current = null;
-  }
 
   async function resolveLeadId(): Promise<number> {
     if (!lead) throw new Error(t("chooseCustomer"));
@@ -222,31 +204,17 @@ export default function TagSaleDialog({
           </div>
         )}
 
-        <div>
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-[10px] font-semibold uppercase tracking-widest text-white/35">{t("chooseSalePieces")}</span>
-            <span className="text-xs text-white/45">{t.plural("salePiecesSelected", selectedPieces.length)}</span>
+        {selectedPieces.length === 0 ? (
+          <p className="rounded-2xl border border-white/10 px-4 py-6 text-center text-sm text-white/45">{t("noPiecesToSell")}</p>
+        ) : selectedPieces.map((piece) => (
+          <div key={piece.id} className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.035] px-3 py-2.5" data-testid="sale-piece">
+            <TagPieceVisual productType={piece.productType} face={piece.face} />
+            <span className="min-w-0 flex-1">
+              <span className="block font-mono text-sm font-semibold tracking-wider text-white">{piece.publicCode}</span>
+              <TagModelChips productType={piece.productType} face={piece.face} batchCode={piece.batchCode} className="mt-1" />
+            </span>
           </div>
-          <div className="max-h-52 divide-y divide-white/[0.06] overflow-y-auto rounded-2xl border border-white/10">
-            {available.length === 0 ? (
-              <p className="px-4 py-6 text-center text-sm text-white/45">{t("noPiecesToSell")}</p>
-            ) : available.map((piece) => {
-              const checked = selected.has(piece.id);
-              return (
-                <button key={piece.id} type="button" onClick={() => toggle(piece.id)}
-                  className={`flex w-full items-center gap-3 px-3 py-2.5 text-left ${checked ? "bg-blue-500/10" : "hover:bg-white/[0.03]"}`}>
-                  <span className={`flex h-5 w-5 items-center justify-center rounded-md border ${checked ? "border-blue-400 bg-blue-500 text-white" : "border-white/20"}`}>
-                    {checked && <Check className="h-3.5 w-3.5" />}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block font-mono text-sm font-semibold tracking-wider text-white">{piece.publicCode}</span>
-                    <span className="block truncate text-xs text-white/40">{piece.leadName ?? t(`product_${piece.productType}` as "product_custom")}</span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
+        ))}
 
         {groups.map((group) => {
           const product = catalog.data?.find((item) => item.id === group.productId);
