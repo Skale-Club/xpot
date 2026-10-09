@@ -1,4 +1,5 @@
 import { useMemo, useState, type FormEvent } from "react";
+import { Tabs } from "@/components/xpot/Tabs";
 import { useMutation } from "@tanstack/react-query";
 import { PackagePlus } from "lucide-react";
 import type { TagKitItem } from "@shared/tagsApi";
@@ -149,22 +150,14 @@ export function GiveKitForm({
       </div>
 
       {!fixedBatch && (
-        <div className="inline-flex rounded-lg border border-white/10 bg-white/[0.02] p-1" role="tablist">
-          {(Object.keys(MODE_KEYS) as Mode[]).map((id) => ({ id, label: t(MODE_KEYS[id]) })).map((m) => (
-            <button
-              key={m.id}
-              type="button"
-              role="tab"
-              aria-selected={mode === m.id}
-              onClick={() => setMode(m.id)}
-              className={`rounded-md px-3 py-1 text-sm font-medium transition-colors ${
-                mode === m.id ? "bg-white/10 text-white" : "text-white/50 hover:text-white/80"
-              }`}
-            >
-              {m.label}
-            </button>
-          ))}
-        </div>
+        <Tabs
+          tabs={(Object.keys(MODE_KEYS) as Mode[]).map((id) => ({ id, label: t(MODE_KEYS[id]) }))}
+          value={mode}
+          onChange={setMode}
+          ariaLabel={t(MODE_KEYS[mode])}
+          idPrefix="give-kit"
+          fill={false}
+        />
       )}
 
       {effectiveMode === "batch" ? (

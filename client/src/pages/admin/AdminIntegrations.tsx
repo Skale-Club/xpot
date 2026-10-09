@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { shellMessages } from "@/i18n/messages/shell";
+import { Tabs } from "@/components/xpot/Tabs";
 import { JourneyMcpCard } from "./tags/JourneyMcpCard";
 import { AdminXphere } from "./AdminXphere";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -16,6 +18,8 @@ import {
   AlertTriangle,
   Search,
   Check,
+  Webhook,
+  Bot,
 } from "lucide-react";
 import {
   INTEGRATION_PROVIDERS,
@@ -549,6 +553,7 @@ function SearchableSelect({
 export type IntegrationsTab = "providers" | "xphere" | "mcp";
 const TABS: IntegrationsTab[] = ["providers", "xphere", "mcp"];
 const TAB_KEYS = { providers: "tabApiKeys", xphere: "tabXphere", mcp: "tabAiAccess" } as const;
+const TAB_ICONS = { providers: KeyRound, xphere: Webhook, mcp: Bot };
 
 /**
  * Account -> Integrations, one tab per kind of connection: outside services
@@ -557,26 +562,18 @@ const TAB_KEYS = { providers: "tabApiKeys", xphere: "tabXphere", mcp: "tabAiAcce
  */
 export function AdminIntegrations({ initialTab = "providers" }: { initialTab?: IntegrationsTab }) {
   const t = useT(manageMessages);
+  const ts = useT(shellMessages);
   const [tab, setTab] = useState<IntegrationsTab>(initialTab);
   return (
     <div className="space-y-4">
-      <nav role="tablist" className="flex gap-1 overflow-x-auto border-b border-white/10" data-testid="integrations-tabs">
-        {TABS.map((id) => (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            aria-selected={tab === id}
-            onClick={() => setTab(id)}
-            className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
-              tab === id ? "border-blue-400 text-white" : "border-transparent text-white/50 hover:text-white/80"
-            }`}
-            data-testid={`integrations-tab-${id}`}
-          >
-            {t(TAB_KEYS[id])}
-          </button>
-        ))}
-      </nav>
+      <Tabs
+        tabs={TABS.map((id) => ({ id, label: t(TAB_KEYS[id]), icon: TAB_ICONS[id], testId: `integrations-tab-${id}` }))}
+        value={tab}
+        onChange={setTab}
+        ariaLabel={ts("orgIntegrations")}
+        idPrefix="integrations"
+        testId="integrations-tabs"
+      />
       {tab === "providers" && <ProvidersPanel />}
       {tab === "xphere" && <AdminXphere />}
       {tab === "mcp" && <JourneyMcpCard />}

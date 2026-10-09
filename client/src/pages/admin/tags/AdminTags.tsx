@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { Tabs } from "@/components/xpot/Tabs";
 import { useLocation } from "wouter";
 import { ScanLine } from "lucide-react";
 import { normalizeTagCode } from "@shared/tags";
@@ -14,7 +15,7 @@ import { BatchDetail } from "./BatchDetail";
 import { TeamTab } from "./TeamTab";
 import { ProvisionersTab } from "./ProvisionersTab";
 import { JourneyTab } from "./JourneyTab";
-import { AdminBadge, useIsSuperAdmin } from "@/components/xpot/AdminBadge";
+import { useIsSuperAdmin } from "@/components/xpot/AdminBadge";
 import { useT } from "@/i18n";
 import { shellMessages } from "@/i18n/messages/shell";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
@@ -97,22 +98,15 @@ export function AdminTags() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3 lg:hidden">
         {/* The desktop sidebar lists these as the Tags "Manage" group; the phone keeps the strip. */}
-        <nav className="flex gap-1 overflow-x-auto rounded-xl border border-white/10 bg-white/[0.02] p-1">
-          {tabs.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => go(`/${t.id}`)}
-              className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-                tab === t.id ? "bg-white/10 text-white" : "text-white/50 hover:text-white/80"
-              }`}
-              data-testid={`admin-tags-tab-${t.id}`}
-            >
-              {ts(t.labelKey)}
-              {"adminOnly" in t && <AdminBadge className="ml-1.5" />}
-            </button>
-          ))}
-        </nav>
+        <Tabs
+          tabs={tabs.map((t) => ({ id: t.id, label: ts(t.labelKey), testId: `admin-tags-tab-${t.id}` }))}
+          value={tab}
+          onChange={(id) => go(`/${id}`)}
+          ariaLabel={ts("navManage")}
+          idPrefix="admin-tags"
+          fill={false}
+          className="min-w-0 flex-1"
+        />
         <CodeLookup onFound={(tagId) => go(`/pieces/${tagId}`)} />
       </div>
 

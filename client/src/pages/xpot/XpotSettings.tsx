@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { Tabs } from "@/components/xpot/Tabs";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import {
@@ -290,24 +291,8 @@ export function XpotSettings() {
     { id: "account", label: t("sectionAccount"), icon: BadgeInfo },
   ] satisfies Array<{ id: SettingsTab; label: string; icon: typeof UserRound }>;
 
-  function handleTabKeyDown(event: React.KeyboardEvent<HTMLButtonElement>, currentTab: SettingsTab) {
-    const currentIndex = settingsTabs.findIndex((tab) => tab.id === currentTab);
-    let nextIndex: number | null = null;
-
-    if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % settingsTabs.length;
-    if (event.key === "ArrowLeft") nextIndex = (currentIndex - 1 + settingsTabs.length) % settingsTabs.length;
-    if (event.key === "Home") nextIndex = 0;
-    if (event.key === "End") nextIndex = settingsTabs.length - 1;
-    if (nextIndex === null) return;
-
-    event.preventDefault();
-    const nextTab = settingsTabs[nextIndex].id;
-    setActiveTab(nextTab);
-    document.getElementById(`settings-tab-${nextTab}`)?.focus();
-  }
-
   return (
-    <AppLayout title={t("title")} size="medium" mobileMaxWidth="max-w-lg" mobileColumnClassName="pb-20 pt-6">
+    <AppLayout title={t("title")} size="wide" mobileMaxWidth="max-w-lg" mobileColumnClassName="pb-20 pt-6">
       <div>
         {/* Header (phone only; the desktop top bar shows the title). Settings is the
             person's own: language, profile, password. Management is admin mode. */}
@@ -328,40 +313,15 @@ export function XpotSettings() {
 
         <InstallAppRow className="mb-6" />
 
-        <div className="mx-auto w-full max-w-3xl">
-          <div
-            role="tablist"
-            aria-label={t("settingsSections")}
-            data-testid="settings-tabs"
-            className="flex gap-1 overflow-x-auto rounded-2xl border border-white/[0.07] bg-black/20 p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-          >
-            {settingsTabs.map((tab) => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  id={`settings-tab-${tab.id}`}
-                  type="button"
-                  role="tab"
-                  aria-selected={isActive}
-                  aria-controls={`settings-panel-${tab.id}`}
-                  tabIndex={isActive ? 0 : -1}
-                  data-testid={`settings-tab-${tab.id}`}
-                  onClick={() => setActiveTab(tab.id)}
-                  onKeyDown={(event) => handleTabKeyDown(event, tab.id)}
-                  className={`group relative flex min-w-max flex-1 items-center justify-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/70 ${
-                    isActive
-                      ? "bg-gradient-to-br from-blue-500/20 to-indigo-500/15 text-white shadow-[0_8px_24px_rgba(37,99,235,0.12),inset_0_0_0_1px_rgba(96,165,250,0.25)]"
-                      : "text-white/45 hover:bg-white/[0.04] hover:text-white/75"
-                  }`}
-                >
-                  <Icon className={`h-4 w-4 ${isActive ? "text-blue-300" : "text-white/35 group-hover:text-white/55"}`} />
-                  <span>{tab.label}</span>
-                </button>
-              );
-            })}
-          </div>
+        <div className="w-full">
+          <Tabs
+            tabs={settingsTabs.map((tab) => ({ ...tab, testId: `settings-tab-${tab.id}` }))}
+            value={activeTab}
+            onChange={setActiveTab}
+            ariaLabel={t("settingsSections")}
+            idPrefix="settings"
+            testId="settings-tabs"
+          />
 
           <div
             id={`settings-panel-${activeTab}`}
