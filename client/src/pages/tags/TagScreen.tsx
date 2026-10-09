@@ -279,7 +279,7 @@ export default function TagScreen({ code, onClose }: {
             <span className="flex min-w-0 items-center gap-1.5 text-xs text-white/45">
               <span className="flex shrink-0 items-center gap-1">
                 <TagFaceIcon face={tag.face} size="xs" title={t(`face_${tag.face ?? "none"}` as "face_none")} />
-                <TagProductThumbnail productType={tag.productType} face={tag.face} batchCode={tag.batchCode} size="sm" />
+                <TagProductThumbnail productType={tag.productType} face={tag.face} batchCode={tag.batchCode} size="sm" showModelLabel={false} />
               </span>
               <span className="truncate">
                 {[t(`product_${tag.productType}` as "product_custom"), tag.face ? t(`face_${tag.face}` as "face_none") : null, tag.label].filter(Boolean).join(" · ")}

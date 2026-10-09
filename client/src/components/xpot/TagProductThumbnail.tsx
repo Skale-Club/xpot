@@ -19,6 +19,7 @@ const SIZES = {
     face: "top-2.5",
     qr: "hidden",
     sizeBadge: "left-0.5 top-0.5 h-2.5 min-w-2 px-0.5 text-[6px]",
+    modelBadge: "h-2.5 px-1 text-[6px]",
   },
   md: {
     frame: "h-12 w-9 rounded-[5px]",
@@ -26,10 +27,12 @@ const SIZES = {
     face: "top-3.5",
     qr: "bottom-1 h-2.5 w-2.5",
     sizeBadge: "left-0.5 top-0.5 h-3 min-w-3 px-1 text-[7px]",
+    modelBadge: "h-3 px-1.5 text-[7px]",
   },
 } as const;
 
 type PlaqueSize = "S" | "L";
+type PlaqueModel = "Plate" | "Stand" | "Sign";
 
 // These four runs predate physical product models. New batches derive size
 // from their large_* / small_* product type and never need an entry here.
@@ -44,6 +47,15 @@ function plaqueSize(productType: string, batchCode: string | null | undefined): 
   if (productType.startsWith("large_")) return "L";
   if (productType.startsWith("small_")) return "S";
   return batchCode ? LEGACY_BATCH_SIZES[batchCode] ?? null : null;
+}
+
+function plaqueModel(productType: string, face: string | null | undefined): PlaqueModel | null {
+  if (productType.endsWith("_plate")) return "Plate";
+  if (productType.endsWith("_stand")) return "Stand";
+  if (productType.endsWith("_sign") || productType === "google_review_sign") return "Sign";
+  // This batch predates the physical model field but uses the same sign body.
+  if (productType === "custom" && face === "instagram") return "Sign";
+  return null;
 }
 
 function MiniQr({ className }: { className: string }) {
@@ -64,12 +76,14 @@ export function TagProductThumbnail({
   face,
   batchCode,
   size = "md",
+  showModelLabel = true,
   className = "",
 }: {
   productType: string;
   face: string | null | undefined;
   batchCode?: string | null;
   size?: keyof typeof SIZES;
+  showModelLabel?: boolean;
   className?: string;
 }) {
   // IG-2026-001 was originally recorded as custom; retain its plaque preview
@@ -79,19 +93,27 @@ export function TagProductThumbnail({
 
   const s = SIZES[size];
   const physicalSize = plaqueSize(productType, batchCode);
+  const physicalModel = plaqueModel(productType, face);
   return (
     <span
-      className={`relative inline-flex shrink-0 justify-center overflow-hidden border border-black/15 bg-gradient-to-b from-white to-[#e9e9e6] text-neutral-800 shadow-[0_2px_5px_rgba(0,0,0,0.3)] ring-1 ring-white/10 ${s.frame} ${className}`}
+      className={`inline-flex shrink-0 flex-col items-center gap-0.5 ${className}`}
       aria-hidden="true"
     >
-      <Wifi className={`absolute left-1/2 -translate-x-1/2 ${s.wifi}`} strokeWidth={2.4} />
-      <TagFaceIcon face={face} size="xs" className={`absolute shadow-none ${s.face}`} />
-      <MiniQr className={`absolute ${s.qr}`} />
-      {physicalSize ? (
-        <span
-          className={`absolute z-10 inline-flex items-center justify-center rounded-full font-black leading-none text-white shadow-sm ${physicalSize === "L" ? "bg-blue-600" : "bg-amber-500"} ${s.sizeBadge}`}
-        >
-          {physicalSize}
+      <span className={`relative inline-flex justify-center overflow-hidden border border-black/15 bg-gradient-to-b from-white to-[#e9e9e6] text-neutral-800 shadow-[0_2px_5px_rgba(0,0,0,0.3)] ring-1 ring-white/10 ${s.frame}`}>
+        <Wifi className={`absolute left-1/2 -translate-x-1/2 ${s.wifi}`} strokeWidth={2.4} />
+        <TagFaceIcon face={face} size="xs" className={`absolute shadow-none ${s.face}`} />
+        <MiniQr className={`absolute ${s.qr}`} />
+        {physicalSize ? (
+          <span
+            className={`absolute z-10 inline-flex items-center justify-center rounded-full font-black leading-none text-white shadow-sm ${physicalSize === "L" ? "bg-blue-600" : "bg-amber-500"} ${s.sizeBadge}`}
+          >
+            {physicalSize}
+          </span>
+        ) : null}
+      </span>
+      {showModelLabel && physicalModel ? (
+        <span className={`inline-flex items-center rounded-full border border-white/10 bg-white/10 font-black uppercase leading-none tracking-[0.08em] text-white/75 ${s.modelBadge}`}>
+          {physicalModel}
         </span>
       ) : null}
     </span>
