@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "wouter";
-import { AlertCircle, ArrowLeft, ArrowRight, Check, ClipboardPaste, Copy, Loader2, type LucideIcon } from "lucide-react";
+import { AlertCircle, ArrowLeft, ArrowRight, Check, ClipboardPaste, Copy, Loader2, X, type LucideIcon } from "lucide-react";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { copyToClipboard, haptic, readClipboard, type BannerState } from "./lib";
@@ -211,7 +211,7 @@ export function CopyButton({ text, label, large = false }: { text: string; label
   );
 }
 
-/** URL input with a Paste button that reads the clipboard. */
+/** URL input with Clear (inside the field) and a Paste button that reads the clipboard. */
 export function LinkInput({
   value,
   onChange,
@@ -226,18 +226,32 @@ export function LinkInput({
   const t = useT(commonMessages);
   return (
     <div className="flex gap-2">
-      <input
-        type="url"
-        inputMode="url"
-        autoCapitalize="none"
-        autoCorrect="off"
-        spellCheck={false}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className={INPUT}
-        data-testid="input-destination"
-      />
+      <div className="relative min-w-0 flex-1">
+        <input
+          type="url"
+          inputMode="url"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className={`${INPUT} ${value ? "pr-11" : ""}`}
+          data-testid="input-destination"
+        />
+        {value ? (
+          <button
+            type="button"
+            onClick={() => onChange("")}
+            aria-label={t("clearField")}
+            title={t("clearField")}
+            className="absolute right-1.5 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full text-white/45 hover:bg-white/10 hover:text-white active:bg-white/10"
+            data-testid="button-clear-destination"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        ) : null}
+      </div>
       <button
         type="button"
         onClick={async () => {

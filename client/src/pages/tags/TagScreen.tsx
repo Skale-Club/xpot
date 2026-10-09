@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Building2, Contact, DollarSign, ExternalLink, Link2, Lock, Mail, Nfc, Pencil, Phone, Plus, Power, QrCode, ScanLine, Search, X } from "lucide-react";
+import { AlertTriangle, ArrowLeftRight, Building2, Contact, DollarSign, ExternalLink, Link2, Lock, Mail, Nfc, Pencil, Phone, Plus, Power, QrCode, ScanLine, Search, X } from "lucide-react";
 import type { TagDetail } from "@shared/tagsApi";
 import { TAG_DESTINATION_TYPES, type TagDestinationType } from "@shared/tags";
 import { contentKindOf, contentSummary, validateChipContent, type ChipContentKind } from "@shared/chipContent";
@@ -222,6 +222,17 @@ export default function TagScreen({ code, onClose }: {
     }
   };
 
+  // Another company: the old one's link must not carry over to the new one.
+  const startCustomerChange = () => {
+    setRenameOpen(false);
+    setChangingCustomer(true);
+    setLead(null);
+    setKind("url");
+    setLink("");
+    setInitialContent(null);
+    setEditing(true);
+  };
+
   const closeEditor = () => {
     setEditing(false);
     setChangingCustomer(false);
@@ -323,18 +334,30 @@ export default function TagScreen({ code, onClose }: {
           </p>
         </div>
         {tag.leadId ? (
-          <button
-            type="button"
-            onClick={() => {
-              setNewName(tag.leadName ?? "");
-              setRenameOpen(true);
-            }}
-            className="flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl border border-white/10 px-3 text-sm font-semibold text-white/80 active:bg-white/10"
-            data-testid="button-edit-customer"
-          >
-            <Pencil className="h-4 w-4" />
-            {t("editCustomer")}
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={() => {
+                setNewName(tag.leadName ?? "");
+                setRenameOpen(true);
+              }}
+              aria-label={t("renameCustomer")}
+              title={t("renameCustomer")}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white/45 hover:bg-white/10 hover:text-white active:bg-white/10"
+              data-testid="button-edit-customer"
+            >
+              <Pencil className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={startCustomerChange}
+              className="flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl border border-white/10 px-3 text-sm font-semibold text-white/80 active:bg-white/10"
+              data-testid="button-change-customer"
+            >
+              <ArrowLeftRight className="h-4 w-4" />
+              {t("changeCustomerShort")}
+            </button>
+          </>
         ) : (
           <button
             type="button"
@@ -455,10 +478,10 @@ export default function TagScreen({ code, onClose }: {
       </section>
 
       {/* The editor, as a pop-up: the customer first (when choosing one), then what the piece opens. */}
-      <BottomSheet open={editing} onClose={closeEditor} title={dest ? t("editDestination") : t("configurePiece")}>
+      <BottomSheet open={editing} onClose={closeEditor} title={changingCustomer ? t("changeCustomer") : dest ? t("editDestination") : t("configurePiece")}>
         <div className="space-y-4" data-testid="destination-editor">
           <div className="flex items-center justify-between gap-2">
-            <h2 className={SHEET_TITLE}>{dest ? t("editDestination") : t("configurePiece")}</h2>
+            <h2 className={SHEET_TITLE}>{changingCustomer ? t("changeCustomer") : dest ? t("editDestination") : t("configurePiece")}</h2>
             <button type="button" onClick={closeEditor} aria-label={tc("close")} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/60 active:bg-white/10">
               <X className="h-5 w-5" />
             </button>
@@ -475,6 +498,7 @@ export default function TagScreen({ code, onClose }: {
             <div>
               <FieldLabel>{t("customerField")}</FieldLabel>
               <LeadPicker value={lead} onChange={setLead} />
+              {changingCustomer && tag.destinationUrl ? <p className="mt-1.5 text-xs text-amber-200/80">{t("linkClearedForNewCustomer")}</p> : null}
             </div>
           )}
           {/* Only where a review link makes sense: a Google review piece, or a customer already
@@ -550,28 +574,19 @@ export default function TagScreen({ code, onClose }: {
       </div>
 
       {/* Rename the customer, or move the piece to another one. */}
-      <BottomSheet open={renameOpen} onClose={() => setRenameOpen(false)} title={t("customer")}>
-        <h2 className={SHEET_TITLE}>{t("customer")}</h2>
+      <BottomSheet open={renameOpen} onClose={() => setRenameOpen(false)} title={t("renameCustomer")}>
+        <h2 className={SHEET_TITLE}>{t("renameCustomer")}</h2>
         <div className="mt-4 space-y-3">
           <div>
             <FieldLabel>{t("customerName")}</FieldLabel>
             <input value={newName} onChange={(e) => setNewName(e.target.value)} maxLength={200} autoCapitalize="words" className={INPUT} data-testid="input-customer-name" />
+            <p className="mt-1.5 text-xs text-white/45">{t("renameHint")}</p>
           </div>
           <button type="button" onClick={() => void rename()} disabled={busy !== null || !newName.trim() || newName.trim() === tag.leadName} className={BTN_PRIMARY}>
             {busy === "rename" ? <Spinner /> : null}
             {t("saveName")}
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              setRenameOpen(false);
-              setChangingCustomer(true);
-              setLead(null);
-              setEditing(true);
-            }}
-            className={BTN_TERTIARY}
-            data-testid="button-change-customer"
-          >
+          <button type="button" onClick={startCustomerChange} className={BTN_TERTIARY} data-testid="button-rename-change-instead">
             {t("changeCustomer")}
           </button>
         </div>
