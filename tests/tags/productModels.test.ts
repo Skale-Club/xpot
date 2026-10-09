@@ -29,6 +29,17 @@ test("the first Instagram batch is migrated from custom to Large Plate", () => {
   assert.match(migration, /Large Plate[^']*Instagram/i);
 });
 
+test("the final Celes correction wins over the temporary legacy Stand classification", () => {
+  const migration = readFileSync(new URL("../../migrations/0025_celes_large_plate.sql", import.meta.url), "utf8");
+
+  assert.match(migration, /'plate-large', 'Large Plate'/);
+  assert.match(migration, /UPDATE\s+"tag_batches"[\s\S]+"product_type"\s*=\s*'large_plate'/i);
+  assert.match(migration, /UPDATE\s+"tags"[\s\S]+"product_type"\s*=\s*'large_plate'/i);
+  assert.match(migration, /"batch_code"\s*=\s*'IG-2026-001'/i);
+  assert.match(migration, /"face"\s*=\s*'instagram'/i);
+  assert.match(migration, /"sku"\s*=\s*'plate-large'/i);
+});
+
 test("the printed batches are reclassified as stands and keep their Google face", () => {
   const migration = readFileSync(new URL("../../migrations/0022_legacy_batches_are_stands.sql", import.meta.url), "utf8");
 
