@@ -1,7 +1,18 @@
 import { useState, useRef, useEffect } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { ArrowLeft, Eye, EyeOff, Loader2, Save, ChevronDown } from "lucide-react";
+import {
+  ArrowLeft,
+  BadgeInfo,
+  ChevronDown,
+  Eye,
+  EyeOff,
+  Languages,
+  Loader2,
+  Save,
+  ShieldCheck,
+  UserRound,
+} from "lucide-react";
 import ReactCountryFlag from "react-country-flag";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -33,6 +44,8 @@ const COUNTRIES = [
   { code: "IN", dial: "+91", name: "India" },
   { code: "CN", dial: "+86", name: "China" },
 ];
+
+type SettingsTab = "profile" | "security" | "language" | "account";
 
 /** Country name in the app's language; falls back to the English name. */
 function countryName(code: string, fallback: string, locale: string): string {
@@ -175,6 +188,7 @@ export function XpotSettings() {
   const t = useT(settingsMessages);
   const tc = useT(commonMessages);
   const [initialized, setInitialized] = useState(false);
+  const [activeTab, setActiveTab] = useState<SettingsTab>("profile");
 
   const meQuery = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
   const me = meQuery.data;
@@ -269,6 +283,28 @@ export function XpotSettings() {
   }
 
   const isSaving = profileMutation.isPending;
+  const settingsTabs = [
+    { id: "profile", label: t("sectionProfile"), icon: UserRound },
+    { id: "security", label: t("sectionSecurity"), icon: ShieldCheck },
+    { id: "language", label: tc("language"), icon: Languages },
+    { id: "account", label: t("sectionAccount"), icon: BadgeInfo },
+  ] satisfies Array<{ id: SettingsTab; label: string; icon: typeof UserRound }>;
+
+  function handleTabKeyDown(event: React.KeyboardEvent<HTMLButtonElement>, currentTab: SettingsTab) {
+    const currentIndex = settingsTabs.findIndex((tab) => tab.id === currentTab);
+    let nextIndex: number | null = null;
+
+    if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % settingsTabs.length;
+    if (event.key === "ArrowLeft") nextIndex = (currentIndex - 1 + settingsTabs.length) % settingsTabs.length;
+    if (event.key === "Home") nextIndex = 0;
+    if (event.key === "End") nextIndex = settingsTabs.length - 1;
+    if (nextIndex === null) return;
+
+    event.preventDefault();
+    const nextTab = settingsTabs[nextIndex].id;
+    setActiveTab(nextTab);
+    document.getElementById(`settings-tab-${nextTab}`)?.focus();
+  }
 
   return (
     <AppLayout title={t("title")} size="medium" mobileMaxWidth="max-w-lg" mobileColumnClassName="pb-20 pt-6">
@@ -292,130 +328,180 @@ export function XpotSettings() {
 
         <InstallAppRow className="mb-6" />
 
-        <div className="space-y-8 lg:columns-2 lg:gap-6 lg:space-y-0 lg:[&>*]:mb-6 lg:[&>*]:break-inside-avoid">
-          {/* Language */}
-          <Section title={tc("language")}>
-            <p className="text-sm text-white/45">{t("languageHint")}</p>
-            <LanguageList />
-          </Section>
+        <div className="mx-auto w-full max-w-3xl">
+          <div
+            role="tablist"
+            aria-label={t("settingsSections")}
+            data-testid="settings-tabs"
+            className="flex gap-1 overflow-x-auto rounded-2xl border border-white/[0.07] bg-black/20 p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          >
+            {settingsTabs.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  id={`settings-tab-${tab.id}`}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  aria-controls={`settings-panel-${tab.id}`}
+                  tabIndex={isActive ? 0 : -1}
+                  data-testid={`settings-tab-${tab.id}`}
+                  onClick={() => setActiveTab(tab.id)}
+                  onKeyDown={(event) => handleTabKeyDown(event, tab.id)}
+                  className={`group relative flex min-w-max flex-1 items-center justify-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/70 ${
+                    isActive
+                      ? "bg-gradient-to-br from-blue-500/20 to-indigo-500/15 text-white shadow-[0_8px_24px_rgba(37,99,235,0.12),inset_0_0_0_1px_rgba(96,165,250,0.25)]"
+                      : "text-white/45 hover:bg-white/[0.04] hover:text-white/75"
+                  }`}
+                >
+                  <Icon className={`h-4 w-4 ${isActive ? "text-blue-300" : "text-white/35 group-hover:text-white/55"}`} />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
 
-          {/* Profile */}
-          <Section title={t("sectionProfile")}>
-            <Field label={t("firstName")}>
-              <input
-                type="text"
-                value={firstName}
-                onChange={(e) => setFirstName(e.target.value)}
-                placeholder={t("firstNamePlaceholder")}
-                className="w-full rounded-2xl border border-white/5 bg-white/[0.03] px-4 py-3 text-[15px] font-medium text-white placeholder-white/20 outline-none focus:border-indigo-500/50 focus:bg-white/[0.05] transition-all"
-              />
-            </Field>
-            <Field label={t("lastName")}>
-              <input
-                type="text"
-                value={lastName}
-                onChange={(e) => setLastName(e.target.value)}
-                placeholder={t("lastNamePlaceholder")}
-                className="w-full rounded-2xl border border-white/5 bg-white/[0.03] px-4 py-3 text-[15px] font-medium text-white placeholder-white/20 outline-none focus:border-indigo-500/50 focus:bg-white/[0.05] transition-all"
-              />
-            </Field>
-            <Field label={t("displayName")}>
-              <input
-                type="text"
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                placeholder={t("displayNamePlaceholder")}
-                className="w-full rounded-2xl border border-white/5 bg-white/[0.03] px-4 py-3 text-[15px] font-medium text-white placeholder-white/20 outline-none focus:border-indigo-500/50 focus:bg-white/[0.05] transition-all"
-              />
-            </Field>
-            <Field label={t("email")}>
-              <div className="rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-3 text-[15px] font-medium text-white/40">
-                {me?.user.email ?? "—"}
-              </div>
-            </Field>
-            <Field label={t("phone")}>
-              <CountryPhoneInput value={phone} onChange={setPhone} />
-            </Field>
-            <button
-              type="button"
-              onClick={handleSaveProfile}
-              disabled={isSaving || !displayName.trim()}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-bold text-white transition-all disabled:opacity-40 active:scale-[0.98] touch-manipulation"
-              style={{ background: "linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)", boxShadow: "0 8px 24px rgba(99,102,241,0.25)" }}
-            >
-              {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              <span>{isSaving ? t("saving") : t("saveProfile")}</span>
-            </button>
-          </Section>
-
-          {/* Password */}
-          <Section title={t("sectionSecurity")}>
-            <Field label={t("currentPassword")}>
-              <div className="relative">
-                <input
-                  type={showPwd ? "text" : "password"}
-                  value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                  placeholder={t("currentPasswordPlaceholder")}
-                  className="w-full rounded-2xl border border-white/5 bg-white/[0.03] px-4 py-3 pr-11 text-[15px] font-medium text-white placeholder-white/20 outline-none focus:border-indigo-500/50 focus:bg-white/[0.05] transition-all"
-                />
+          <div
+            id={`settings-panel-${activeTab}`}
+            role="tabpanel"
+            aria-labelledby={`settings-tab-${activeTab}`}
+            data-testid={`settings-panel-${activeTab}`}
+            className="mt-5 animate-in fade-in slide-in-from-bottom-1 duration-200"
+          >
+            {activeTab === "profile" && (
+              <Section title={t("sectionProfile")}>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field label={t("firstName")}>
+                    <input
+                      type="text"
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
+                      placeholder={t("firstNamePlaceholder")}
+                      className="w-full rounded-2xl border border-white/5 bg-white/[0.03] px-4 py-3 text-[15px] font-medium text-white placeholder-white/20 outline-none transition-all focus:border-indigo-500/50 focus:bg-white/[0.05]"
+                    />
+                  </Field>
+                  <Field label={t("lastName")}>
+                    <input
+                      type="text"
+                      value={lastName}
+                      onChange={(e) => setLastName(e.target.value)}
+                      placeholder={t("lastNamePlaceholder")}
+                      className="w-full rounded-2xl border border-white/5 bg-white/[0.03] px-4 py-3 text-[15px] font-medium text-white placeholder-white/20 outline-none transition-all focus:border-indigo-500/50 focus:bg-white/[0.05]"
+                    />
+                  </Field>
+                  <Field label={t("displayName")}>
+                    <input
+                      type="text"
+                      value={displayName}
+                      onChange={(e) => setDisplayName(e.target.value)}
+                      placeholder={t("displayNamePlaceholder")}
+                      className="w-full rounded-2xl border border-white/5 bg-white/[0.03] px-4 py-3 text-[15px] font-medium text-white placeholder-white/20 outline-none transition-all focus:border-indigo-500/50 focus:bg-white/[0.05]"
+                    />
+                  </Field>
+                  <Field label={t("email")}>
+                    <div className="rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-3 text-[15px] font-medium text-white/40">
+                      {me?.user.email ?? "—"}
+                    </div>
+                  </Field>
+                  <div className="sm:col-span-2">
+                    <Field label={t("phone")}>
+                      <CountryPhoneInput value={phone} onChange={setPhone} />
+                    </Field>
+                  </div>
+                </div>
                 <button
                   type="button"
-                  onClick={() => setShowPwd(!showPwd)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60"
+                  onClick={handleSaveProfile}
+                  disabled={isSaving || !displayName.trim()}
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-bold text-white transition-all touch-manipulation active:scale-[0.98] disabled:opacity-40"
+                  style={{ background: "linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)", boxShadow: "0 8px 24px rgba(99,102,241,0.25)" }}
                 >
-                  {showPwd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  <span>{isSaving ? t("saving") : t("saveProfile")}</span>
                 </button>
-              </div>
-            </Field>
-            <Field label={t("newPassword")}>
-              <input
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                placeholder={t("newPasswordPlaceholder")}
-                className="w-full rounded-2xl border border-white/5 bg-white/[0.03] px-4 py-3 text-[15px] font-medium text-white placeholder-white/20 outline-none focus:border-indigo-500/50 focus:bg-white/[0.05] transition-all"
-              />
-            </Field>
-            <Field label={t("confirmPassword")}>
-              <input
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder={t("confirmPasswordPlaceholder")}
-                className="w-full rounded-2xl border border-white/5 bg-white/[0.03] px-4 py-3 text-[15px] font-medium text-white placeholder-white/20 outline-none focus:border-indigo-500/50 focus:bg-white/[0.05] transition-all"
-              />
-            </Field>
-            {newPassword && confirmPassword && newPassword !== confirmPassword && (
-              <p className="text-xs text-red-400">{t("passwordsMismatch")}</p>
+              </Section>
             )}
-            <button
-              type="button"
-              onClick={handleChangePassword}
-              disabled={passwordMutation.isPending || !currentPassword || !newPassword || newPassword !== confirmPassword}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] py-3.5 text-sm font-bold text-white transition-all disabled:opacity-40 active:scale-[0.98] hover:bg-white/[0.06] touch-manipulation"
-            >
-              {passwordMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              <span>{passwordMutation.isPending ? t("changing") : t("changePassword")}</span>
-            </button>
-          </Section>
 
-          {/* Account Info */}
-          <Section title={t("sectionAccount")}>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label={t("role")}>
-                <div className="rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-3 text-[15px] font-medium text-white/40">
-                  {me?.rep.role ? roleLabel(me.rep.role, t) : "—"}
-                </div>
-              </Field>
-              <Field label={t("team")}>
-                <div className="rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-3 text-[15px] font-medium text-white/40">
-                  {me?.rep.team ?? "—"}
-                </div>
-              </Field>
-            </div>
-          </Section>
+            {activeTab === "security" && (
+              <Section title={t("sectionSecurity")}>
+                <Field label={t("currentPassword")}>
+                  <div className="relative">
+                    <input
+                      type={showPwd ? "text" : "password"}
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      placeholder={t("currentPasswordPlaceholder")}
+                      className="w-full rounded-2xl border border-white/5 bg-white/[0.03] px-4 py-3 pr-11 text-[15px] font-medium text-white placeholder-white/20 outline-none transition-all focus:border-indigo-500/50 focus:bg-white/[0.05]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPwd(!showPwd)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60"
+                      aria-label={showPwd ? t("hidePassword") : t("showPassword")}
+                    >
+                      {showPwd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </Field>
+                <Field label={t("newPassword")}>
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder={t("newPasswordPlaceholder")}
+                    className="w-full rounded-2xl border border-white/5 bg-white/[0.03] px-4 py-3 text-[15px] font-medium text-white placeholder-white/20 outline-none transition-all focus:border-indigo-500/50 focus:bg-white/[0.05]"
+                  />
+                </Field>
+                <Field label={t("confirmPassword")}>
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder={t("confirmPasswordPlaceholder")}
+                    className="w-full rounded-2xl border border-white/5 bg-white/[0.03] px-4 py-3 text-[15px] font-medium text-white placeholder-white/20 outline-none transition-all focus:border-indigo-500/50 focus:bg-white/[0.05]"
+                  />
+                </Field>
+                {newPassword && confirmPassword && newPassword !== confirmPassword && (
+                  <p className="text-xs text-red-400">{t("passwordsMismatch")}</p>
+                )}
+                <button
+                  type="button"
+                  onClick={handleChangePassword}
+                  disabled={passwordMutation.isPending || !currentPassword || !newPassword || newPassword !== confirmPassword}
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] py-3.5 text-sm font-bold text-white transition-all touch-manipulation hover:bg-white/[0.06] active:scale-[0.98] disabled:opacity-40"
+                >
+                  {passwordMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  <span>{passwordMutation.isPending ? t("changing") : t("changePassword")}</span>
+                </button>
+              </Section>
+            )}
 
+            {activeTab === "language" && (
+              <Section title={tc("language")}>
+                <p className="text-sm text-white/45">{t("languageHint")}</p>
+                <LanguageList />
+              </Section>
+            )}
+
+            {activeTab === "account" && (
+              <Section title={t("sectionAccount")}>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <Field label={t("role")}>
+                    <div className="rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-3 text-[15px] font-medium text-white/40">
+                      {me?.rep.role ? roleLabel(me.rep.role, t) : "—"}
+                    </div>
+                  </Field>
+                  <Field label={t("team")}>
+                    <div className="rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-3 text-[15px] font-medium text-white/40">
+                      {me?.rep.team ?? "—"}
+                    </div>
+                  </Field>
+                </div>
+              </Section>
+            )}
+          </div>
         </div>
       </div>
     </AppLayout>

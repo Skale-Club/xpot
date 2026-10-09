@@ -5,6 +5,7 @@ import type { Dictionary } from "../index";
 
 const en = {
   title: "Settings",
+  settingsSections: "Settings sections",
   languageHint: "Choose the language of the app on this device.",
 
   // Profile
@@ -38,6 +39,8 @@ const en = {
   changePassword: "Change Password",
   passwordChanged: "Password changed",
   passwordChangeFailed: "Failed to change password",
+  showPassword: "Show password",
+  hidePassword: "Hide password",
 
   // Account info
   sectionAccount: "Account Info",
@@ -70,6 +73,7 @@ export const settingsMessages: Dictionary<typeof en> = {
   en,
   pt: {
     title: "Configurações",
+    settingsSections: "Seções das configurações",
     languageHint: "Escolha o idioma do app neste aparelho.",
 
     sectionProfile: "Perfil",
@@ -101,6 +105,8 @@ export const settingsMessages: Dictionary<typeof en> = {
     changePassword: "Alterar senha",
     passwordChanged: "Senha alterada",
     passwordChangeFailed: "Não foi possível alterar a senha",
+    showPassword: "Mostrar senha",
+    hidePassword: "Ocultar senha",
 
     sectionAccount: "Dados da conta",
     role: "Função",
@@ -125,6 +131,7 @@ export const settingsMessages: Dictionary<typeof en> = {
   },
   es: {
     title: "Ajustes",
+    settingsSections: "Secciones de ajustes",
     languageHint: "Elige el idioma de la app en este dispositivo.",
 
     sectionProfile: "Perfil",
@@ -156,6 +163,8 @@ export const settingsMessages: Dictionary<typeof en> = {
     changePassword: "Cambiar contraseña",
     passwordChanged: "Contraseña cambiada",
     passwordChangeFailed: "No se pudo cambiar la contraseña",
+    showPassword: "Mostrar contraseña",
+    hidePassword: "Ocultar contraseña",
 
     sectionAccount: "Datos de la cuenta",
     role: "Rol",
