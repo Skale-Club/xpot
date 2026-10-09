@@ -29,6 +29,16 @@ test("the first Instagram batch is migrated from custom to Large Plate", () => {
   assert.match(migration, /Large Plate[^']*Instagram/i);
 });
 
+test("the printed batches are reclassified as stands and keep their Google face", () => {
+  const migration = readFileSync(new URL("../../migrations/0022_legacy_batches_are_stands.sql", import.meta.url), "utf8");
+
+  assert.match(migration, /"face"\s*=\s*'google_review'[\s\S]+'REV-2026-001', 'REV-2026-002', 'REV-2026-003'/);
+  assert.match(migration, /"product_type"\s*=\s*'small_stand'\s+WHERE\s+"batch_code"\s*=\s*'REV-2026-001'/);
+  assert.match(migration, /"product_type"\s*=\s*'large_stand'\s+WHERE\s+"batch_code"\s+IN\s+\('REV-2026-002', 'REV-2026-003', 'IG-2026-001'\)/);
+  // The face must be on the batch before the type stops implying it.
+  assert.ok(migration.indexOf("'google_review'") < migration.indexOf("'small_stand'"));
+});
+
 test("physical model names stay canonical English labels in every UI locale", () => {
   const expected = {
     large_stand: "Large Stand",
