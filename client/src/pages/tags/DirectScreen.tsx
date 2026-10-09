@@ -136,7 +136,8 @@ export default function DirectScreen() {
             <div>
               <FieldLabel>{t("customerOptional")}</FieldLabel>
               <LeadPicker value={lead} onChange={setLead} />
-              {lead && (
+              {/* A direct write has no printed face to go by: offer it only for a customer matched to their Google place. */}
+              {lead?.placeId && (
                 <GenerateReviewButton
                   name={lead.name}
                   placeId={lead.placeId}
