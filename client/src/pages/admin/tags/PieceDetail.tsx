@@ -1,12 +1,12 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Archive, ArrowLeft, Download, ExternalLink, Power, PowerOff, RotateCcw, Truck, Undo2, UserPlus } from "lucide-react";
+import { AlertTriangle, Archive, ArrowLeft, Building2, Download, ExternalLink, MapPin, Pencil, Plus, Power, PowerOff, RotateCcw, Truck, Undo2 } from "lucide-react";
 import { defaultUtmEnabled, planTransition, type TagAction } from "@shared/tags";
 import { validateChipContent } from "@shared/chipContent";
 import { isReviewFormUrl } from "@shared/reviewLink";
 import type { TagDetail } from "@shared/tagsApi";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
-import { TagProductThumbnail } from "@/components/xpot/TagProductThumbnail";
+import { TagModelChips, TagProductThumbnail, tagPlaqueSpec } from "@/components/xpot/TagProductThumbnail";
 import { useIsSuperAdmin } from "@/components/xpot/AdminBadge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
@@ -68,101 +68,156 @@ function usePieceMutation(id: string, successTitle: string) {
 
 // ─── Customer (lead) ──────────────────────────────────────────────────────────
 
+type CustomerPick = { leadId: number; name: string } | { leadId: null; name: string };
+
 function CustomerStep({ tag }: { tag: TagDetail }) {
-  const { toast } = useToast();
   const t = useT(manageTagsPiecesMessages);
   const { data: leads = [], isLoading: leadsLoading, error: leadsError } = useLeads();
-  const [leadId, setLeadId] = useState<string | undefined>(tag.leadId ? String(tag.leadId) : undefined);
-  const [filter, setFilter] = useState("");
-  const [creating, setCreating] = useState(false);
-  const [newName, setNewName] = useState("");
+  const [changing, setChanging] = useState(false);
+  const [text, setText] = useState("");
+  // A pick that would wipe the current destination waits here for a confirm.
+  const [pending, setPending] = useState<CustomerPick | null>(null);
   const assign = usePieceMutation(tag.id, t("customerAssigned"));
   const locked = tag.status === "retired";
-
-  const options = useMemo(() => {
-    const term = filter.trim().toLowerCase();
-    const list = (term ? leads.filter((l) => l.name.toLowerCase().includes(term)) : leads).slice(0, 300);
-    const opts = list.map((l) => ({ value: String(l.id), label: l.name }));
-    // Keep the current / chosen lead visible even when filtered out.
-    for (const keep of [leadId, tag.leadId ? String(tag.leadId) : undefined]) {
-      if (keep && !opts.some((o) => o.value === keep)) {
-        const lead = leads.find((l) => String(l.id) === keep);
-        opts.unshift({ value: keep, label: lead?.name ?? (String(tag.leadId) === keep ? tag.leadName ?? t("customerNumber", { id: keep }) : t("customerNumber", { id: keep })) });
-      }
-    }
-    return opts;
-  }, [leads, filter, leadId, tag.leadId, tag.leadName, t]);
-
-  const confirmMove = () =>
-    !tag.leadId ||
-    !(tag.destinationUrl || tag.destinationType) ||
-    window.confirm(t("confirmMoveCustomer"));
-
-  const submit = async () => {
-    if (creating) {
-      const name = newName.trim();
-      if (!name || !confirmMove()) return;
-      // The server creates the lead, owned by the reseller holding the piece.
-      setNewName("");
-      setCreating(false);
-      assign.mutate({ url: `/api/xpot/admin/tags/${tag.id}/assign`, body: { leadName: name } });
-      return;
-    }
-    if (!leadId || Number(leadId) === tag.leadId) return;
-    if (!confirmMove()) return;
-    assign.mutate({ url: `/api/xpot/admin/tags/${tag.id}/assign`, body: { leadId: Number(leadId) } });
-  };
-
   // The server refuses to move a live piece; don't create a lead that would be left orphaned.
   const liveWithCustomer = tag.status === "active" && !!tag.leadId;
-  const busy = assign.isPending;
+  const hasCustomer = !!(tag.leadName || tag.leadId);
+  const current = tag.leadId ? leads.find((l) => l.id === tag.leadId) : undefined;
+
+  const query = text.trim().toLowerCase();
+  const matches = useMemo(
+    // Nothing until someone searches: the list is not a menu to scroll through.
+    () => (query ? leads.filter((l) => l.name.toLowerCase().includes(query) && l.id !== tag.leadId).slice(0, 8) : []),
+    [leads, query, tag.leadId],
+  );
+  const exact = leads.some((l) => l.name.toLowerCase() === query);
+
+  const reset = () => {
+    setChanging(false);
+    setText("");
+    setPending(null);
+  };
+
+  const commit = (pick: CustomerPick) => {
+    // The server creates a new lead, owned by the reseller holding the piece.
+    const body = pick.leadId ? { leadId: pick.leadId } : { leadName: pick.name };
+    assign.mutate({ url: `/api/xpot/admin/tags/${tag.id}/assign`, body }, { onSuccess: reset });
+  };
+
+  const choose = (pick: CustomerPick) => {
+    if (tag.leadId && (tag.destinationUrl || tag.destinationType)) setPending(pick);
+    else commit(pick);
+  };
+
+  const picking = !locked && !liveWithCustomer && (!hasCustomer || changing);
 
   return (
     <div className="space-y-3">
       <p className={STEP_TITLE}>{t("stepCustomer")}</p>
-      {tag.leadName || tag.leadId ? (
-        <p className="text-sm text-white/70">
-          {t("assignedTo")}{" "}
-          <strong className="text-white">{tag.leadName ?? t("customerNumber", { id: tag.leadId ?? "" })}</strong>
-        </p>
+
+      {hasCustomer ? (
+        <div className="flex min-h-[52px] items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] py-2 pl-3 pr-2" data-testid="admin-piece-customer">
+          <Building2 className="h-4 w-4 shrink-0 text-white/40" />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate font-semibold text-white">{tag.leadName ?? t("customerNumber", { id: tag.leadId ?? "" })}</span>
+            {current?.city ? <span className="block truncate text-xs text-white/40">{current.city}</span> : null}
+          </span>
+          {current?.googlePlaceId ? <GoogleBadge label={t("onGoogle")} /> : null}
+          {!locked && !liveWithCustomer && !changing ? (
+            <button type="button" className={BTN_GHOST} onClick={() => setChanging(true)} data-testid="admin-piece-change-customer">
+              <Pencil className="h-3.5 w-3.5" />
+              {t("changeCustomer")}
+            </button>
+          ) : null}
+        </div>
       ) : (
         <p className="text-sm text-white/40">{t("notAssigned")}</p>
       )}
-      {liveWithCustomer ? (
-        <p className="text-xs text-white/40">{t("disableBeforeMove")}</p>
+      {liveWithCustomer ? <p className="text-xs text-white/40">{t("disableBeforeMove")}</p> : null}
+
+      {pending ? (
+        <div className="space-y-3 rounded-xl border border-amber-400/30 bg-amber-400/10 p-3" data-testid="admin-piece-confirm-move">
+          <p className="flex items-start gap-2 text-sm text-amber-100">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
+            <span>
+              <strong className="block text-white">{t("moveCustomerTitle", { name: pending.name })}</strong>
+              {t("confirmMoveCustomer")}
+            </span>
+          </p>
+          <div className="flex gap-2">
+            <button type="button" className={BTN} disabled={assign.isPending} onClick={() => commit(pending)} data-testid="admin-piece-confirm-move-yes">
+              {t("confirmMove")}
+            </button>
+            <button type="button" className={BTN_GHOST} disabled={assign.isPending} onClick={() => setPending(null)}>
+              {t("cancelChange")}
+            </button>
+          </div>
+        </div>
+      ) : picking ? (
+        <div>
+          <div className="flex gap-2">
+            <input
+              className={INPUT}
+              autoFocus={changing}
+              placeholder={leadsLoading ? t("loadingCustomers") : t("searchCustomers")}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              maxLength={200}
+              disabled={assign.isPending}
+              data-testid="admin-piece-lead-search"
+            />
+            {changing ? (
+              <button type="button" className={BTN_GHOST} onClick={reset}>
+                {t("cancelChange")}
+              </button>
+            ) : null}
+          </div>
+          {leadsError ? <p className="mt-1 text-xs text-red-300">{t("customersFailed")}</p> : null}
+          {query ? (
+            <ul className="mt-2 divide-y divide-white/10 overflow-hidden rounded-xl border border-white/10 bg-white/[0.03]">
+              {matches.map((lead) => (
+                <li key={lead.id}>
+                  <button
+                    type="button"
+                    disabled={assign.isPending}
+                    onClick={() => choose({ leadId: lead.id, name: lead.name })}
+                    className="flex min-h-[44px] w-full items-center gap-3 px-3 py-2 text-left hover:bg-white/[0.05] disabled:opacity-50"
+                    data-testid={`admin-piece-lead-${lead.id}`}
+                  >
+                    <span className="min-w-0 flex-1 truncate text-sm text-white">{lead.name}</span>
+                    {lead.city ? <span className="shrink-0 text-xs text-white/40">{lead.city}</span> : null}
+                    {lead.googlePlaceId ? <GoogleBadge label={t("onGoogle")} /> : null}
+                  </button>
+                </li>
+              ))}
+              {!exact ? (
+                <li>
+                  <button
+                    type="button"
+                    disabled={assign.isPending}
+                    onClick={() => choose({ leadId: null, name: text.trim() })}
+                    className="flex min-h-[44px] w-full items-center gap-2 px-3 py-2 text-left text-sm font-semibold text-blue-300 hover:bg-white/[0.05] disabled:opacity-50"
+                    data-testid="admin-piece-lead-create"
+                  >
+                    <Plus className="h-4 w-4 shrink-0" />
+                    <span className="truncate">{t("createCustomer", { name: text.trim() })}</span>
+                  </button>
+                </li>
+              ) : null}
+            </ul>
+          ) : null}
+        </div>
       ) : null}
-      {locked ? null : creating ? (
-        <input className={INPUT} placeholder={t("businessNameRequired")} value={newName} onChange={(e) => setNewName(e.target.value)} maxLength={200} data-testid="admin-piece-new-lead" />
-      ) : (
-        <div className="grid gap-2 sm:grid-cols-[minmax(0,180px)_1fr]">
-          <input className={INPUT} placeholder={t("filterCustomers")} value={filter} onChange={(e) => setFilter(e.target.value)} />
-          <Select
-            value={leadId}
-            onChange={setLeadId}
-            placeholder={leadsLoading ? t("loadingCustomers") : leadsError ? t("customersFailed") : options.length ? t("selectCustomer") : t("noCustomersMatch")}
-            options={options}
-            testId="admin-piece-lead-select"
-          />
-        </div>
-      )}
-      {locked ? null : (
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            className={BTN}
-            onClick={() => void submit()}
-            disabled={busy || liveWithCustomer || (creating ? !newName.trim() : !leadId || Number(leadId) === tag.leadId)}
-            data-testid="admin-piece-assign"
-          >
-            {creating ? t("createAndAssign") : t("assign")}
-          </button>
-          <button type="button" className={BTN_GHOST} onClick={() => setCreating((v) => !v)}>
-            <UserPlus className="h-3.5 w-3.5" />
-            {creating ? t("pickExisting") : t("newCustomer")}
-          </button>
-        </div>
-      )}
     </div>
+  );
+}
+
+function GoogleBadge({ label }: { label: string }) {
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-400/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-300 ring-1 ring-emerald-400/25">
+      <MapPin className="h-3 w-3" />
+      {label}
+    </span>
   );
 }
 
@@ -528,7 +583,7 @@ export function PieceDetail({ id, go }: { id: string; go: Go }) {
         <div className="flex shrink-0 items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.025] p-2">
           <TagFaceIcon face={tag.face} size="lg" />
           <span className="h-10 w-px bg-white/10" aria-hidden="true" />
-          <TagProductThumbnail productType={tag.productType} face={tag.face} batchCode={tag.batchCode} />
+          <TagProductThumbnail productType={tag.productType} face={tag.face} />
         </div>
         <div className="min-w-0 flex-1 space-y-1.5">
           <div className="flex flex-wrap items-center gap-2.5">
@@ -536,8 +591,12 @@ export function PieceDetail({ id, go }: { id: string; go: Go }) {
             <StatusPill status={tag.status} />
           </div>
           <div className="flex flex-wrap items-center gap-y-1 text-sm text-white/50">
-            <span>{labels.product(tag.productType)}</span>
-            <span className="before:mx-2 before:text-white/20 before:content-['·']">{labels.face(tag.face)}</span>
+            {tagPlaqueSpec(tag.productType, tag.face, tag.batchCode).model ? (
+              <TagModelChips productType={tag.productType} face={tag.face} batchCode={tag.batchCode} className="mr-2" />
+            ) : (
+              <span className="mr-2">{labels.product(tag.productType)}</span>
+            )}
+            <span>{labels.face(tag.face)}</span>
             {tag.batchCode ? (
               /* Batches are the global admin's; a manager sees the code without the link. */
               isAdmin ? (

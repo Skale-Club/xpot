@@ -323,7 +323,7 @@ export function PieceTable({
                   <td className={`${TD} pr-0`}>
                     <div className="flex items-center gap-2">
                       <TagFaceIcon face={t.face} size="sm" />
-                      <TagProductThumbnail productType={t.productType} face={t.face} batchCode={t.batchCode} size="sm" />
+                      <TagProductThumbnail productType={t.productType} face={t.face} size="sm" />
                     </div>
                   </td>
                   <td className={`${TD} font-mono text-white`}>{t.publicCode}</td>

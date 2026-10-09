@@ -9,7 +9,7 @@ import { guessDestinationType, normalizeUrlInput } from "@shared/tagApp";
 import { buildReviewUrl } from "@shared/reviewLink";
 import type { FullSalesLead } from "@/pages/xpot/types";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
-import { TagProductThumbnail } from "@/components/xpot/TagProductThumbnail";
+import { TagModelChips, TagProductThumbnail, tagPlaqueSpec } from "@/components/xpot/TagProductThumbnail";
 import { apiRequest } from "@/lib/queryClient";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
@@ -283,10 +283,11 @@ export default function TagScreen({ code, onClose }: {
             <span className="flex min-w-0 items-center gap-1.5 text-xs text-white/45">
               <span className="flex shrink-0 items-center gap-1">
                 <TagFaceIcon face={tag.face} size="xs" title={t(`face_${tag.face ?? "none"}` as "face_none")} />
-                <TagProductThumbnail productType={tag.productType} face={tag.face} batchCode={tag.batchCode} size="sm" showModelLabel={false} />
+                <TagProductThumbnail productType={tag.productType} face={tag.face} size="sm" />
               </span>
+              <TagModelChips productType={tag.productType} face={tag.face} batchCode={tag.batchCode} className="shrink-0" />
               <span className="truncate">
-                {[t(`product_${tag.productType}` as "product_custom"), tag.face ? t(`face_${tag.face}` as "face_none") : null, tag.label].filter(Boolean).join(" · ")}
+                {[tagPlaqueSpec(tag.productType, tag.face, tag.batchCode).model ? null : t(`product_${tag.productType}` as "product_custom"), tag.face ? t(`face_${tag.face}` as "face_none") : null, tag.label].filter(Boolean).join(" · ")}
               </span>
             </span>
           </div>
@@ -480,7 +481,9 @@ export default function TagScreen({ code, onClose }: {
               <LeadPicker value={lead} onChange={setLead} />
             </div>
           )}
-          {(needsLead ? lead : tag.leadId) && leadPlaceName && (
+          {/* Only where a review link makes sense: a Google review piece, or a customer already
+              matched to their Google place. An Instagram piece for a shop that is not on Maps gets nothing. */}
+          {(needsLead ? lead : tag.leadId) && leadPlaceName && (leadPlace || tag.face === "google_review") && (
             <GenerateReviewButton
               name={leadPlaceName}
               placeId={leadPlace}

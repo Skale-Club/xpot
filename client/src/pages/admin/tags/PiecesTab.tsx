@@ -5,7 +5,7 @@ import { Plus, Search, X } from "lucide-react";
 import { TAG_PRODUCT_TYPES, TAG_STATUSES } from "@shared/tags";
 import type { TagDetail, TagListItem } from "@shared/tagsApi";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
-import { TagProductThumbnail } from "@/components/xpot/TagProductThumbnail";
+import { TagModelChips, TagProductThumbnail } from "@/components/xpot/TagProductThumbnail";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { ADMIN_TAGS_KEY, errorMessage, formatDateTime, getJson, invalidateAdminTags, sendJson, STALE_MS, withQuery } from "./api";
@@ -149,14 +149,14 @@ function PiecesTable({ tags, onOpen }: { tags: TagListItem[]; onOpen: (id: strin
               <div className="flex items-center justify-between gap-2">
                 <span className="flex min-w-0 items-center gap-2.5">
                   <TagFaceIcon face={t.face} size="sm" />
-                  <TagProductThumbnail productType={t.productType} face={t.face} batchCode={t.batchCode} size="sm" />
+                  <TagProductThumbnail productType={t.productType} face={t.face} size="sm" />
                   <span className="font-mono font-semibold text-white">{t.publicCode}</span>
                 </span>
                 <StatusPill status={t.status} />
               </div>
-              <div className="mt-1 text-xs text-white/50">
-                {labels.product(t.productType)}
-                {t.face ? ` · ${labels.face(t.face)}` : ""}
+              <div className="mt-1.5 text-xs text-white/50">
+                <TagModelChips productType={t.productType} face={t.face} batchCode={t.batchCode} fallback={labels.product(t.productType)} className="mr-1.5" />
+                {t.face ? labels.face(t.face) : ""}
                 {t.leadName ? ` · ${t.leadName}` : ""}
                 {` · ${t.repName ?? tm("houseStock")}`}
                 {t.batchCode ? ` · ${t.batchCode}` : ""}
@@ -194,7 +194,7 @@ function PiecesTable({ tags, onOpen }: { tags: TagListItem[]; onOpen: (id: strin
                 <td className={`${TD} pr-0`}>
                   <span className="flex items-center gap-2">
                     <TagFaceIcon face={t.face} size="md" />
-                    <TagProductThumbnail productType={t.productType} face={t.face} batchCode={t.batchCode} />
+                    <TagProductThumbnail productType={t.productType} face={t.face} />
                   </span>
                 </td>
                 <td className={`${TD} whitespace-nowrap font-mono font-semibold text-white`}>
@@ -203,8 +203,8 @@ function PiecesTable({ tags, onOpen }: { tags: TagListItem[]; onOpen: (id: strin
                   {t.label ? <span className="block max-w-[160px] truncate font-sans text-xs font-normal text-white/40">{t.label}</span> : null}
                 </td>
                 <td className={TD}>
-                  {labels.product(t.productType)}
-                  {t.face ? <span className="block text-xs text-white/40">{labels.face(t.face)}</span> : null}
+                  <TagModelChips productType={t.productType} face={t.face} batchCode={t.batchCode} fallback={labels.product(t.productType)} />
+                  {t.face ? <span className="mt-1 block text-xs text-white/40">{labels.face(t.face)}</span> : null}
                 </td>
                 <td className={TD}><StatusPill status={t.status} /></td>
                 <td className={`${TD} max-w-[180px] truncate`}>{t.leadName ?? <span className="text-white/30">—</span>}</td>

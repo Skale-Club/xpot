@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Wifi } from "lucide-react";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
 
@@ -18,34 +19,30 @@ const SIZES = {
     wifi: "top-1 h-1.5 w-1.5",
     face: "top-2.5",
     qr: "hidden",
-    sizeBadge: "left-0.5 top-0.5 h-2.5 min-w-2 px-0.5 text-[6px]",
-    modelBadge: "h-2.5 px-1 text-[6px]",
   },
   md: {
     frame: "h-12 w-9 rounded-[5px]",
     wifi: "top-1 h-2.5 w-2.5",
     face: "top-3.5",
     qr: "bottom-1 h-2.5 w-2.5",
-    sizeBadge: "left-0.5 top-0.5 h-3 min-w-3 px-1 text-[7px]",
-    modelBadge: "h-3 px-1.5 text-[7px]",
   },
 } as const;
 
-type PlaqueSize = "S" | "L";
-type PlaqueModel = "Plate" | "Stand" | "Sign";
+export type PlaqueSize = "Small" | "Large";
+export type PlaqueModel = "Plate" | "Stand" | "Sign";
 
 // These four runs predate physical product models. New batches derive size
 // from their large_* / small_* product type and never need an entry here.
 const LEGACY_BATCH_SIZES: Record<string, PlaqueSize> = {
-  "REV-2026-001": "S",
-  "REV-2026-002": "L",
-  "REV-2026-003": "L",
-  "IG-2026-001": "L",
+  "REV-2026-001": "Small",
+  "REV-2026-002": "Large",
+  "REV-2026-003": "Large",
+  "IG-2026-001": "Large",
 };
 
 function plaqueSize(productType: string, batchCode: string | null | undefined): PlaqueSize | null {
-  if (productType.startsWith("large_")) return "L";
-  if (productType.startsWith("small_")) return "S";
+  if (productType.startsWith("large_")) return "Large";
+  if (productType.startsWith("small_")) return "Small";
   return batchCode ? LEGACY_BATCH_SIZES[batchCode] ?? null : null;
 }
 
@@ -56,6 +53,47 @@ function plaqueModel(productType: string, face: string | null | undefined): Plaq
   // This batch predates the physical model field but uses the same sign body.
   if (productType === "custom" && face === "instagram") return "Sign";
   return null;
+}
+
+/** Physical size and model of a plaque; both null for products that are not plaques. */
+export function tagPlaqueSpec(
+  productType: string,
+  face: string | null | undefined,
+  batchCode?: string | null,
+): { size: PlaqueSize | null; model: PlaqueModel | null } {
+  return { size: plaqueSize(productType, batchCode), model: plaqueModel(productType, face) };
+}
+
+/**
+ * Size and model as readable text ("LARGE" "STAND"), kept beside the plaque
+ * drawing rather than on it. Products that are not plaques show `fallback`.
+ */
+export function TagModelChips({
+  productType,
+  face,
+  batchCode,
+  fallback,
+  className = "",
+}: {
+  productType: string;
+  face: string | null | undefined;
+  batchCode?: string | null;
+  fallback?: ReactNode;
+  className?: string;
+}) {
+  const { size, model } = tagPlaqueSpec(productType, face, batchCode);
+  if (!size && !model) return fallback ? <>{fallback}</> : null;
+  const chip = "inline-flex h-5 items-center rounded-md px-1.5 text-[11px] font-bold uppercase leading-none tracking-wider";
+  return (
+    <span className={`inline-flex items-center gap-1 align-middle ${className}`} data-testid="tag-model-chips">
+      {size ? (
+        <span className={`${chip} ${size === "Large" ? "bg-blue-500/15 text-blue-300 ring-1 ring-blue-400/30" : "bg-amber-500/15 text-amber-300 ring-1 ring-amber-400/30"}`}>
+          {size}
+        </span>
+      ) : null}
+      {model ? <span className={`${chip} bg-white/10 text-white/85 ring-1 ring-white/15`}>{model}</span> : null}
+    </span>
+  );
 }
 
 function MiniQr({ className }: { className: string }) {
@@ -74,16 +112,12 @@ function MiniQr({ className }: { className: string }) {
 export function TagProductThumbnail({
   productType,
   face,
-  batchCode,
   size = "md",
-  showModelLabel = true,
   className = "",
 }: {
   productType: string;
   face: string | null | undefined;
-  batchCode?: string | null;
   size?: keyof typeof SIZES;
-  showModelLabel?: boolean;
   className?: string;
 }) {
   // IG-2026-001 was originally recorded as custom; retain its plaque preview
@@ -92,8 +126,6 @@ export function TagProductThumbnail({
   if (!PLAQUE_PRODUCT_TYPES.has(productType) && !isLegacyInstagramPlaque) return null;
 
   const s = SIZES[size];
-  const physicalSize = plaqueSize(productType, batchCode);
-  const physicalModel = plaqueModel(productType, face);
   return (
     <span
       className={`inline-flex shrink-0 flex-col items-center gap-0.5 ${className}`}
@@ -103,19 +135,7 @@ export function TagProductThumbnail({
         <Wifi className={`absolute left-1/2 -translate-x-1/2 ${s.wifi}`} strokeWidth={2.4} />
         <TagFaceIcon face={face} size="xs" className={`absolute shadow-none ${s.face}`} />
         <MiniQr className={`absolute ${s.qr}`} />
-        {physicalSize ? (
-          <span
-            className={`absolute z-10 inline-flex items-center justify-center rounded-full font-black leading-none text-white shadow-sm ${physicalSize === "L" ? "bg-blue-600" : "bg-amber-500"} ${s.sizeBadge}`}
-          >
-            {physicalSize}
-          </span>
-        ) : null}
       </span>
-      {showModelLabel && physicalModel ? (
-        <span className={`inline-flex items-center rounded-full border border-white/10 bg-white/10 font-black uppercase leading-none tracking-[0.08em] text-white/75 ${s.modelBadge}`}>
-          {physicalModel}
-        </span>
-      ) : null}
     </span>
   );
 }

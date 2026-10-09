@@ -4,7 +4,7 @@ import { ArrowLeft, Download, Factory, PackagePlus, Pencil } from "lucide-react"
 import type { TagListItem } from "@shared/tagsApi";
 import { resolveTagFace } from "@shared/tagFace";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
-import { TagProductThumbnail } from "@/components/xpot/TagProductThumbnail";
+import { TagModelChips, TagProductThumbnail } from "@/components/xpot/TagProductThumbnail";
 import { useToast } from "@/hooks/use-toast";
 import { ADMIN_TAGS_KEY, STALE_MS, errorMessage, formatDate, getJson, invalidateAdminTags, percent, sendJson } from "./api";
 import { BTN, BTN_GHOST, CARD, INPUT, SectionTitle, Stat } from "./ui";
@@ -185,12 +185,13 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
           <div className="flex min-w-0 items-start gap-3">
             <div className="flex shrink-0 items-center gap-2">
               <TagFaceIcon face={face} size="lg" />
-              <TagProductThumbnail productType={batch.productType} face={face} batchCode={batch.batchCode} />
+              <TagProductThumbnail productType={batch.productType} face={face} />
             </div>
             <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="font-mono text-xl font-bold text-white">{batch.batchCode}</h2>
               <BatchStatusPill status={batch.status} />
+              <TagModelChips productType={batch.productType} face={face} batchCode={batch.batchCode} />
             </div>
             <p className="mt-0.5 text-sm text-white/70">{batch.name}</p>
             <p className="text-xs text-white/40">

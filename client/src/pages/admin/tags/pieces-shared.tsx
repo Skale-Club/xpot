@@ -23,6 +23,9 @@ export interface RepOption {
 export interface LeadOption {
   id: number;
   name: string;
+  city?: string | null;
+  /** Set when the customer is matched to their Google place. */
+  googlePlaceId?: string | null;
 }
 
 /** Resellers (Xpot reps), for "move to reseller" and the reseller filter. */
@@ -44,8 +47,10 @@ export function useLeads() {
   return useQuery<LeadOption[]>({
     queryKey: [ADMIN_TAGS_KEY, "pickers", "leads"],
     queryFn: async () => {
-      const leads = await getJson<LeadOption[]>("/api/xpot/leads");
-      return leads.map((l) => ({ id: l.id, name: l.name })).sort((a, b) => a.name.localeCompare(b.name));
+      const leads = await getJson<Array<{ id: number; name: string; googlePlaceId?: string | null; locations?: Array<{ city?: string | null }> }>>("/api/xpot/leads");
+      return leads
+        .map((l) => ({ id: l.id, name: l.name, city: l.locations?.[0]?.city ?? null, googlePlaceId: l.googlePlaceId ?? null }))
+        .sort((a, b) => a.name.localeCompare(b.name));
     },
     staleTime: STALE_MS,
   });
