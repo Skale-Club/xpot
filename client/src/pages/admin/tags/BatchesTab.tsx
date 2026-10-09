@@ -4,7 +4,7 @@ import { Plus, X } from "lucide-react";
 import { TAG_MAX_BATCH_QUANTITY, TAG_PRODUCT_TYPES, normalizeTagCode } from "@shared/tags";
 import { useToast } from "@/hooks/use-toast";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
-import { TagModelChips, TagProductThumbnail } from "@/components/xpot/TagProductThumbnail";
+import { TagModelChips, TagPieceVisual } from "@/components/xpot/TagProductThumbnail";
 import { errorMessage, formatDate, invalidateAdminTags, sendJson } from "./api";
 import { BTN, BTN_GHOST, CARD, Empty, INPUT, SectionTitle, Stat, TD, TH } from "./ui";
 import { BatchStatusPill, ErrorLine, Field, Loading, SELECT, useBatches, useTagCatalog } from "./batches-shared";
@@ -256,10 +256,7 @@ export function BatchesTab({ go }: { go: (path: string) => void }) {
                     data-testid={`admin-tags-batch-${b.batchCode}`}
                   >
                     <td className={`${TD} pr-0`}>
-                      <div className="flex items-center gap-2">
-                        <TagFaceIcon face={b.face} size="md" />
-                        <TagProductThumbnail productType={b.productType} face={b.face} />
-                      </div>
+                      <TagPieceVisual productType={b.productType} face={b.face} size="md" />
                     </td>
                     <td className={TD}>
                       <p className="font-mono font-semibold text-white">{b.batchCode}</p>
@@ -269,8 +266,8 @@ export function BatchesTab({ go }: { go: (path: string) => void }) {
                       </p>
                     </td>
                     <td className={TD}>
+                      {b.face ? <span className="mb-1 block text-sm text-white/85">{labels.face(b.face)}</span> : null}
                       <TagModelChips productType={b.productType} face={b.face} batchCode={b.batchCode} fallback={labels.product(b.productType)} />
-                      {b.face ? <span className="mt-1 block text-xs text-white/40">{labels.face(b.face)}</span> : null}
                     </td>
                     <td className={TD}>
                       <BatchStatusPill status={b.status} />

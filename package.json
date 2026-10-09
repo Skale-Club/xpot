@@ -16,6 +16,7 @@
     "start": "cross-env NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
     "migrate": "tsx scripts/migrate.ts",
+    "db:pull": "tsx scripts/db-pull.ts",
     "files:migrate": "tsx scripts/migrate-private-files.ts",
     "test": "vitest run",
     "test:watch": "vitest",

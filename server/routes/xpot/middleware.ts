@@ -182,8 +182,14 @@ export function requireSuperAdmin(req: Request, res: Response, next: NextFunctio
 
 export type XpotActor = NonNullable<Awaited<ReturnType<typeof ensureXpotRep>>>;
 
-export function canAccessLead(actor: XpotActor, lead: { ownerRepId: number | null }): boolean {
-  return isManagerOrAdmin(actor) || lead.ownerRepId === actor.rep.id;
+export async function canAccessLead(actor: XpotActor, lead: { ownerRepId: number | null; organizationId: number }): Promise<boolean> {
+  if (isManagerOrAdmin(actor)) return true;
+  // Transitional compatibility for isolated unit-test fixtures and pre-migration rows.
+  // Production migration 0023 makes organization_id NOT NULL.
+  if (!lead.organizationId) return lead.ownerRepId === actor.rep.id;
+  const { canManageOrganizationForActor, canViewOrganizationForActor } = await import("../../organizations/service.js");
+  if (!(await canViewOrganizationForActor(actor, lead.organizationId))) return false;
+  return lead.ownerRepId === actor.rep.id || canManageOrganizationForActor(actor, lead.organizationId);
 }
 
 /** Load a lead and enforce access. Returns null after writing the error response. */
@@ -198,7 +204,7 @@ export async function loadAccessibleLead(req: Request, res: Response, leadId: nu
     res.status(404).json({ message: "Lead not found" });
     return null;
   }
-  if (!canAccessLead(actor, lead)) {
+  if (!(await canAccessLead(actor, lead))) {
     res.status(403).json({ message: "Access denied" });
     return null;
   }

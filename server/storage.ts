@@ -101,7 +101,7 @@ export interface IStorage {
   updateUserProfile(userId: string, data: { firstName?: string | null; lastName?: string | null; profileImageUrl?: string | null }): Promise<User>;
 
   // Leads + child tables
-  listSalesLeads(filters?: { ownerRepId?: number; search?: string }): Promise<SalesLead[]>;
+  listSalesLeads(filters?: { ownerRepId?: number; organizationIds?: number[]; search?: string }): Promise<SalesLead[]>;
   getSalesLead(id: number): Promise<SalesLead | undefined>;
   getSalesLeadByXphereRef(ref: string): Promise<SalesLead | undefined>;
   createSalesLead(input: InsertSalesLead): Promise<SalesLead>;
@@ -138,7 +138,7 @@ export interface IStorage {
   getSalesOpportunity(id: number): Promise<SalesOpportunity | undefined>;
   createSalesOpportunity(input: InsertSalesOpportunity): Promise<SalesOpportunity>;
   updateSalesOpportunity(id: number, input: Partial<InsertSalesOpportunity>): Promise<SalesOpportunity | undefined>;
-  listSalesTasks(filters?: { repId?: number; status?: SalesTaskStatus }): Promise<SalesTask[]>;
+  listSalesTasks(filters?: { repId?: number; leadId?: number; status?: SalesTaskStatus }): Promise<SalesTask[]>;
   getSalesTask(id: number): Promise<SalesTask | undefined>;
   createSalesTask(input: InsertSalesTask): Promise<SalesTask>;
   updateSalesTask(id: number, input: Partial<InsertSalesTask>): Promise<SalesTask | undefined>;
@@ -339,9 +339,13 @@ export class DatabaseStorage implements IStorage {
 
   // ── Leads ──
 
-  async listSalesLeads(filters: { ownerRepId?: number; search?: string } = {}): Promise<SalesLead[]> {
+  async listSalesLeads(filters: { ownerRepId?: number; organizationIds?: number[]; search?: string } = {}): Promise<SalesLead[]> {
     const conditions: any[] = [];
     if (filters.ownerRepId) conditions.push(eq(salesLeads.ownerRepId, filters.ownerRepId));
+    if (filters.organizationIds) {
+      if (!filters.organizationIds.length) return [];
+      conditions.push(inArray(salesLeads.organizationId, filters.organizationIds));
+    }
     if (filters.search) {
       const likeValue = `%${filters.search}%`;
       conditions.push(
@@ -665,9 +669,10 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  async listSalesTasks(filters: { repId?: number; status?: SalesTaskStatus } = {}): Promise<SalesTask[]> {
+  async listSalesTasks(filters: { repId?: number; leadId?: number; status?: SalesTaskStatus } = {}): Promise<SalesTask[]> {
     const conditions: any[] = [];
     if (filters.repId) conditions.push(eq(salesTasks.repId, filters.repId));
+    if (filters.leadId) conditions.push(eq(salesTasks.leadId, filters.leadId));
     if (filters.status) conditions.push(eq(salesTasks.status, filters.status));
     if (conditions.length) {
       return await db.select().from(salesTasks).where(and(...conditions)).orderBy(asc(salesTasks.dueAt), desc(salesTasks.createdAt));

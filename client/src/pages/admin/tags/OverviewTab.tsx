@@ -76,7 +76,7 @@ export function OverviewTab({ go }: { go: (path: string) => void }) {
   const labels = useTagLabels();
   const { data, isLoading, error } = useQuery<TagOverview>({
     queryKey: [ADMIN_TAGS_KEY, "overview"],
-    queryFn: () => getJson("/api/xpot/admin/tags/overview"),
+    queryFn: () => getJson(`/api/xpot/admin/tags/overview?timezoneOffset=${new Date().getTimezoneOffset()}`),
     staleTime: STALE_MS,
   });
 
@@ -103,7 +103,7 @@ export function OverviewTab({ go }: { go: (path: string) => void }) {
 
       <section>
         <SectionTitle right={<button type="button" className={LINK} onClick={() => go("/pieces")}>{ts("managePieces")} <ArrowRight className="h-3 w-3" /></button>}>
-          {t("colStatus")}
+          {t("ovLifecycle")}
         </SectionTitle>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           <StatButton label={labels.status("inventory")} value={counts.inventory} hint={t("ovInventoryHint")} onClick={() => go("/pieces?status=inventory")} />

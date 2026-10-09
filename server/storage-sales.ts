@@ -162,6 +162,7 @@ async function attachLeadRefs<T extends { leadId: number }>(rows: T[]): Promise<
 
 export async function listSales(filters: {
   repId?: number;
+  organizationIds?: number[];
   leadId?: number;
   visitId?: number;
   status?: SalesSaleStatus;
@@ -172,6 +173,10 @@ export async function listSales(filters: {
 } = {}): Promise<SaleWithItems[]> {
   const conditions = [];
   if (filters.repId) conditions.push(eq(salesSales.repId, filters.repId));
+  if (filters.organizationIds) {
+    if (!filters.organizationIds.length) return [];
+    conditions.push(inArray(salesSales.organizationId, filters.organizationIds));
+  }
   if (filters.leadId) conditions.push(eq(salesSales.leadId, filters.leadId));
   if (filters.visitId) conditions.push(eq(salesSales.visitId, filters.visitId));
   if (filters.status) conditions.push(eq(salesSales.status, filters.status));
@@ -412,10 +417,13 @@ export async function runDeposit(input: {
     let opened = false;
     if (!existing) {
       opened = true;
+      const [lead] = await tx.select({ organizationId: salesLeads.organizationId }).from(salesLeads).where(eq(salesLeads.id, input.leadId));
+      if (!lead) throw new Error("Customer not found");
       const interval = input.settlementIntervalDays ?? 30;
       [existing] = await tx
         .insert(salesConsignments)
         .values({
+          organizationId: lead.organizationId,
           leadId: input.leadId,
           productId: input.productId,
           repId: input.repId,
@@ -528,6 +536,7 @@ export async function runSettlement(input: {
       const created = await insertSaleWithItems(
         tx,
         {
+          organizationId: current.organizationId,
           leadId: current.leadId,
           repId: input.repId,
           visitId: input.visitId ?? null,
@@ -732,7 +741,7 @@ function startOfDay(d: Date): Date {
   return x;
 }
 
-export async function salesSummary(filters: { repId?: number; days?: number } = {}): Promise<SalesSummary> {
+export async function salesSummary(filters: { repId?: number; organizationIds?: number[]; days?: number } = {}): Promise<SalesSummary> {
   const days = Math.min(Math.max(filters.days ?? 30, 1), 365);
   const now = new Date();
   const from = startOfDay(new Date(now.getTime() - (days - 1) * 24 * 60 * 60 * 1000));
@@ -741,7 +750,8 @@ export async function salesSummary(filters: { repId?: number; days?: number } = 
 
   const completed = eq(salesSales.status, "completed");
   const repFilter = filters.repId ? eq(salesSales.repId, filters.repId) : undefined;
-  const where = (...extra: (ReturnType<typeof eq> | undefined)[]) => and(completed, repFilter, ...extra);
+  const organizationFilter = filters.organizationIds ? inArray(salesSales.organizationId, filters.organizationIds) : undefined;
+  const where = (...extra: (ReturnType<typeof eq> | undefined)[]) => and(completed, repFilter, organizationFilter, ...extra);
 
   // Profit lives on the ITEMS (price and cost are per line), so anything that
   // reports profit joins through sales_sale_items rather than summing the sale.
@@ -779,7 +789,7 @@ export async function salesSummary(filters: { repId?: number; days?: number } = 
         cents: sql<number>`coalesce(sum(${salesSales.totalCents} - ${salesSales.paidCents}), 0)::int`,
       })
       .from(salesSales)
-      .where(and(completed, repFilter, sql`${salesSales.paymentStatus} <> 'paid'`)),
+      .where(and(completed, repFilter, organizationFilter, sql`${salesSales.paymentStatus} <> 'paid'`)),
     db
       .select({
         productId: salesSaleItems.productId,
@@ -817,6 +827,7 @@ export async function salesSummary(filters: { repId?: number; days?: number } = 
   ]);
 
   const consignmentRepFilter = filters.repId ? eq(salesConsignments.repId, filters.repId) : undefined;
+  const consignmentOrganizationFilter = filters.organizationIds ? inArray(salesConsignments.organizationId, filters.organizationIds) : undefined;
   const dueSoon = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
   const [[cons]] = await Promise.all([
     db
@@ -828,7 +839,7 @@ export async function salesSummary(filters: { repId?: number; days?: number } = 
         dueSoonCount: sql<number>`coalesce(sum(case when ${salesConsignments.nextVisitDueAt} > ${now} and ${salesConsignments.nextVisitDueAt} <= ${dueSoon} then 1 else 0 end), 0)::int`,
       })
       .from(salesConsignments)
-      .where(and(eq(salesConsignments.status, "active"), consignmentRepFilter)),
+      .where(and(eq(salesConsignments.status, "active"), consignmentRepFilter, consignmentOrganizationFilter)),
   ]);
 
   // Fill every day in the window so the chart never has gaps.

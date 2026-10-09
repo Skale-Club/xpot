@@ -583,9 +583,12 @@ export function registerTagRoutes(app: Express) {
   // Journey and plans: admins only (see journeyRoutes.ts).
   registerJourneyRoutes(app);
 
-  app.get(`${adminBase}/overview`, requireTagManager, async (_req, res) => {
+  app.get(`${adminBase}/overview`, requireTagManager, async (req, res) => {
     try {
-      res.json(await repo.getOverview());
+      const { timezoneOffset } = z.object({
+        timezoneOffset: z.coerce.number().int().min(-840).max(840).default(0),
+      }).parse(req.query);
+      res.json(await repo.getOverview(new Date(), timezoneOffset));
     } catch (err) {
       fail(res, err, "Failed to load overview");
     }

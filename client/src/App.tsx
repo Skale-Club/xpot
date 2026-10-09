@@ -29,6 +29,7 @@ import { XpotLandingPage } from "./pages/xpot/XpotLandingPage";
 import { getHttpStatus, isStandaloneDisplay, resolveRootView } from "@/lib/pwa";
 import { getXpotHomePath, MODULE_HOME } from "@/lib/xpot";
 import type { XpotMeResponse } from "./pages/xpot/types";
+import { OrganizationsPage } from "./pages/xpot/OrganizationsPage";
 
 // Screens redesigned for desktop use the full width there; the rest stay in a
 // narrow column until their turn (docs/DESKTOP.md).
@@ -169,6 +170,10 @@ export default function App() {
         <Route path="/pt/terms">{() => <LegalPage doc="terms" />}</Route>
         <Route path="/es/privacy">{() => <LegalPage doc="privacy" />}</Route>
         <Route path="/es/terms">{() => <LegalPage doc="terms" />}</Route>
+        <Route path="/organizations/:organizationId">
+          {(params) => <OrganizationsPage organizationId={Number(params.organizationId)} />}
+        </Route>
+        <Route path="/organizations">{() => <OrganizationsPage />}</Route>
         <Route path="/admin/tags/*?">{() => <AdminApp section="tags" />}</Route>
         <Route path="/admin/:section?">
           {(params) => <AdminApp section={params.section ?? "overview"} />}

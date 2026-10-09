@@ -28,7 +28,7 @@ export function createFilesRouter() {
       const leadId = await storage.findLeadIdByPhoto(ref);
       const lead = leadId ? await storage.getSalesLead(leadId) : undefined;
       if (!lead) return res.status(404).json({ message: "File not found" });
-      if (!canAccessLead(actor, lead)) return res.status(403).json({ message: "Access denied" });
+      if (!(await canAccessLead(actor, lead))) return res.status(403).json({ message: "Access denied" });
     } else if (path.startsWith("audio/")) {
       const visitId = await storage.findVisitIdByAudio(ref);
       const visit = visitId ? await storage.getSalesVisit(visitId) : undefined;

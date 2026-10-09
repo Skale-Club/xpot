@@ -11,19 +11,32 @@ export interface TagActor {
   repId: number;
   /** Manager or admin: full access to every tag, kit and report. */
   isManager: boolean;
+  /** Organizations where this actor currently has any active membership. */
+  organizationIds?: readonly number[];
+  /** Organizations where this Rep is a Rep Admin. */
+  managedOrganizationIds?: readonly number[];
 }
 
 /**
  * A reseller reaches a piece only when it is in their kit (tags.rep_id). House
  * stock (no rep yet) is out of reach until an admin hands it over in a kit.
  */
-export function canWorkOnTag(actor: TagActor, tag: { repId: number | null }): boolean {
-  return actor.isManager || (tag.repId !== null && tag.repId === actor.repId);
+export function canWorkOnTag(actor: TagActor, tag: { repId: number | null; organizationId?: number | null }): boolean {
+  if (actor.isManager) return true;
+  // Pre-migration fixtures have no Organization; retain the former ownership rule.
+  if (!tag.organizationId) return tag.repId !== null && tag.repId === actor.repId;
+  if (!actor.organizationIds?.includes(tag.organizationId)) return false;
+  return actor.managedOrganizationIds?.includes(tag.organizationId) ||
+    (tag.repId !== null && tag.repId === actor.repId) || false;
 }
 
 /** A reseller sees the leads they own; managers see every lead. */
-export function canUseLead(actor: TagActor, lead: { ownerRepId: number | null }): boolean {
-  return actor.isManager || (lead.ownerRepId !== null && lead.ownerRepId === actor.repId);
+export function canUseLead(actor: TagActor, lead: { ownerRepId: number | null; organizationId?: number | null }): boolean {
+  if (actor.isManager) return true;
+  if (!lead.organizationId) return lead.ownerRepId !== null && lead.ownerRepId === actor.repId;
+  if (!actor.organizationIds?.includes(lead.organizationId)) return false;
+  return actor.managedOrganizationIds?.includes(lead.organizationId) ||
+    (lead.ownerRepId !== null && lead.ownerRepId === actor.repId) || false;
 }
 
 /**

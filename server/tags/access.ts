@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from "express";
 import type { TagActor } from "#shared/tagAccess.js";
 import { repModules } from "#shared/modules.js";
 import { accessDenial, ensureXpotRep, isManagerOrAdmin } from "../routes/xpot/middleware.js";
+import { membershipsForRep } from "../organizations/service.js";
 
 // Who is acting on the Tags API. Built from Xpot's own rep identity, read from
 // the database on every request, so switching a reseller off takes effect at
@@ -25,10 +26,25 @@ async function loadActor(req: Request, res: Response): Promise<(TagActor & { isA
     res.status(403).json({ message: "Tags are not enabled for your account." });
     return null;
   }
-  return { userId: found.user.userId, repId: found.rep.id, isManager, isAdmin: found.user.isAdmin };
+  const memberships = await membershipsForRep(found.rep.id);
+  const active = memberships.filter((membership) => membership.isActive && !membership.blockedAt);
+  return {
+    userId: found.user.userId,
+    repId: found.rep.id,
+    isManager,
+    isAdmin: found.user.isAdmin,
+    organizationIds: active.map((membership) => membership.organizationId),
+    managedOrganizationIds: active.filter((membership) => membership.role === "admin").map((membership) => membership.organizationId),
+  };
 }
 
-const asActor = ({ userId, repId, isManager }: TagActor & { isAdmin: boolean }): TagActor => ({ userId, repId, isManager });
+const asActor = ({ userId, repId, isManager, organizationIds, managedOrganizationIds }: TagActor & { isAdmin: boolean }): TagActor => ({
+  userId,
+  repId,
+  isManager,
+  organizationIds,
+  managedOrganizationIds,
+});
 
 /** Any active rep (reseller, manager or admin); the actor is then `actorOf(req)`. */
 export async function requireTagUser(req: Request, res: Response, next: NextFunction) {

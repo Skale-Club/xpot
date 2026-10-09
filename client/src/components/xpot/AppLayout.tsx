@@ -9,6 +9,7 @@ import {
   PanelLeftOpen,
   Search,
   Settings,
+  Building2,
   type LucideIcon,
 } from "lucide-react";
 import type { XpotModule } from "@shared/modules";
@@ -81,7 +82,9 @@ function useShellNav() {
   const labels = { shell: t, tags: tt };
 
   const context = contextOfPath(location);
-  const organization = viewer.canManage ? organizationItems(labels, viewer) : [];
+  const workspaceItem: NavItem = { href: "/organizations", label: t("navOrganization"), icon: Building2, match: starts("/organizations") };
+  const managementItems = viewer.canManage ? organizationItems(labels, viewer) : [];
+  const organization = me ? [workspaceItem, ...managementItems] : [];
   const settingsItem: NavItem = { href: "/settings", label: t("navSettings"), icon: Settings, match: starts("/settings") };
   // On an account page no module is current: the sidebar lists the account itself.
   const module: XpotModule | null = context === "account" ? null : modules.includes(context) ? context : modules[0] ?? null;

@@ -17,6 +17,7 @@ import {
 } from "#shared/schema.js";
 import { buildTagUrls, planTransition, type TagAction, type TagStatus } from "#shared/tags.js";
 import { activationCredit, canUseLead, type TagActor } from "#shared/tagAccess.js";
+import { companyOrganizationId, organizationIdForRep } from "../organizations/service.js";
 import type {
   LeadTagSummary,
   TagAnalytics,
@@ -496,9 +497,10 @@ export async function createSingleTag(
   source: JourneySource = "admin",
 ): Promise<Tag> {
   const [code] = await generateUniqueCodes(1, findExistingCodes);
+  const organizationId = await companyOrganizationId();
   const [tag] = await db
     .insert(tags)
-    .values({ publicCode: code, productType: input.productType, salesProductId: input.salesProductId ?? null, face: input.face ?? null, label: input.label ?? null, status: "inventory" })
+    .values({ organizationId, publicCode: code, productType: input.productType, salesProductId: input.salesProductId ?? null, face: input.face ?? null, label: input.label ?? null, status: "inventory" })
     .returning();
   console.log(`[tags] created standalone tag ${code}`);
   await recordJourney({
@@ -523,6 +525,7 @@ async function findExistingCodes(codes: string[]): Promise<Set<string>> {
 export async function setTagRep(id: string, repId: number | null, userId: string | null, source: JourneySource = "admin"): Promise<Tag> {
   let previous: { repId: number | null; name: string } = { repId: null, name: "house" };
   let next = "house";
+  const organizationId = repId === null ? await companyOrganizationId() : await organizationIdForRep(repId);
   const updated = await db.transaction(async (tx) => {
     const tag = await lockTag(tx, id);
     const names = async (rid: number | null) =>
@@ -531,7 +534,7 @@ export async function setTagRep(id: string, repId: number | null, userId: string
     next = await names(repId);
     const [updated] = await tx
       .update(tags)
-      .set({ repId, kitId: repId === tag.repId ? tag.kitId : null, updatedAt: new Date() })
+      .set({ organizationId, repId, kitId: repId === tag.repId ? tag.kitId : null, updatedAt: new Date() })
       .where(eq(tags.id, id))
       .returning();
     console.log(`[tags] ${tag.publicCode} reseller ${tag.repId ?? "house"} → ${repId ?? "house"} (user ${userId ?? "?"})`);
@@ -555,15 +558,16 @@ export async function setTagRep(id: string, repId: number | null, userId: string
 
 /** True when the actor may sell pieces to this lead (see canUseLead). */
 export async function leadUsableBy(actor: TagActor, leadId: number, executor: typeof db | Tx = db): Promise<boolean> {
-  const [lead] = await executor.select({ ownerRepId: salesLeads.ownerRepId }).from(salesLeads).where(eq(salesLeads.id, leadId));
+  const [lead] = await executor.select({ organizationId: salesLeads.organizationId, ownerRepId: salesLeads.ownerRepId }).from(salesLeads).where(eq(salesLeads.id, leadId));
   return !!lead && canUseLead(actor, lead);
 }
 
 /** A business met while configuring a piece. It becomes a customer only after a financial sale. */
 export async function createLeadForSale(tx: Tx, name: string, ownerRepId: number): Promise<number> {
+  const organizationId = await organizationIdForRep(ownerRepId);
   const [lead] = await tx
     .insert(salesLeads)
-    .values({ name, ownerRepId, source: "tags", status: "lead" })
+    .values({ organizationId, name, ownerRepId, source: "tags", status: "lead" })
     .returning({ id: salesLeads.id });
   return lead.id;
 }
@@ -589,6 +593,10 @@ export async function markLeadCustomer(tx: Tx, leadId: number) {
 
 export interface KitInput {
   repId: number;
+  /** Target Organization. API callers must derive this from membership, never trust the browser. */
+  organizationId?: number;
+  /** When set, only pieces already owned by this Organization may be distributed. */
+  sourceOrganizationId?: number;
   /** Exact pieces, by printed code. */
   codes?: string[];
   /** Or: the next `quantity` house pieces of this batch, by serial. */
@@ -606,25 +614,32 @@ export interface KitInput {
  */
 export async function deliverKit(input: KitInput, userId: string | null, source: JourneySource = "admin"): Promise<TagKitItem> {
   let delivered: Array<{ publicCode: string; batchId: string | null }> = [];
+  const organizationId = input.organizationId ?? await organizationIdForRep(input.repId);
   const kitId = await db.transaction(async (tx) => {
-    let picked: Array<{ id: string; publicCode: string; status: string; repId: number | null; batchId: string | null }>;
+    let picked: Array<{ id: string; organizationId: number; publicCode: string; status: string; repId: number | null; batchId: string | null }>;
     if (input.codes?.length) {
       const codes = Array.from(new Set(input.codes));
       picked = await tx
-        .select({ id: tags.id, publicCode: tags.publicCode, status: tags.status, repId: tags.repId, batchId: tags.batchId })
+        .select({ id: tags.id, organizationId: tags.organizationId, publicCode: tags.publicCode, status: tags.status, repId: tags.repId, batchId: tags.batchId })
         .from(tags)
         .where(inArray(tags.publicCode, codes))
         .for("update");
       const found = new Set(picked.map((t) => t.publicCode));
       const missing = codes.filter((c) => !found.has(c));
       if (missing.length) throw new TagError(`Unknown codes: ${missing.join(", ")}`, 404);
-      const unavailable = picked.filter((t) => t.status !== "inventory" || t.repId !== null).map((t) => t.publicCode);
+      const unavailable = picked.filter((t) => t.status !== "inventory" || t.repId !== null ||
+        (input.sourceOrganizationId !== undefined && t.organizationId !== input.sourceOrganizationId)).map((t) => t.publicCode);
       if (unavailable.length) throw new TagError(`Not in house stock: ${unavailable.join(", ")}`, 409);
     } else if (input.batchId && input.quantity) {
       picked = await tx
-        .select({ id: tags.id, publicCode: tags.publicCode, status: tags.status, repId: tags.repId, batchId: tags.batchId })
+        .select({ id: tags.id, organizationId: tags.organizationId, publicCode: tags.publicCode, status: tags.status, repId: tags.repId, batchId: tags.batchId })
         .from(tags)
-        .where(and(eq(tags.batchId, input.batchId), eq(tags.status, "inventory"), isNull(tags.repId)))
+        .where(and(
+          eq(tags.batchId, input.batchId),
+          eq(tags.status, "inventory"),
+          isNull(tags.repId),
+          ...(input.sourceOrganizationId !== undefined ? [eq(tags.organizationId, input.sourceOrganizationId)] : []),
+        ))
         .orderBy(tags.serialNumber, tags.publicCode)
         .limit(input.quantity)
         .for("update");
@@ -637,11 +652,11 @@ export async function deliverKit(input: KitInput, userId: string | null, source:
 
     const [kit] = await tx
       .insert(tagKits)
-      .values({ repId: input.repId, note: input.note ?? null, createdByUserId: userId })
+      .values({ organizationId, repId: input.repId, note: input.note ?? null, createdByUserId: userId })
       .returning({ id: tagKits.id });
     await tx
       .update(tags)
-      .set({ repId: input.repId, kitId: kit.id, updatedAt: new Date() })
+      .set({ organizationId, repId: input.repId, kitId: kit.id, updatedAt: new Date() })
       .where(inArray(tags.id, picked.map((t) => t.id)));
 
     if (input.unitCostCents !== undefined) {
@@ -856,6 +871,7 @@ export interface BatchInput {
  */
 export async function createBatch(input: BatchInput, userId: string | null, source: JourneySource = "admin") {
   const batchCode = input.batchCode?.trim() || (await nextBatchCode(input.productType));
+  const organizationId = await companyOrganizationId();
   for (let attempt = 1; ; attempt++) {
     const codes = input.publicCodes ?? (await generateUniqueCodes(input.quantity, findExistingCodes));
     if (input.publicCodes) {
@@ -883,6 +899,7 @@ export async function createBatch(input: BatchInput, userId: string | null, sour
           .returning();
         await tx.insert(tags).values(
           codes.map((publicCode, index) => ({
+            organizationId,
             publicCode,
             serialNumber: index + 1,
             batchId: batch.id,
@@ -1100,8 +1117,11 @@ export async function getAnalytics(scope: AnalyticsScope, from: Date, to: Date):
   };
 }
 
-export async function getOverview(now: Date = new Date()): Promise<TagOverview> {
-  const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+export async function getOverview(now: Date = new Date(), timezoneOffsetMinutes = 0): Promise<TagOverview> {
+  // Browser Date#getTimezoneOffset is minutes from local time to UTC. Shift to
+  // the user's wall clock, take midnight, then shift back to the real instant.
+  const localNow = new Date(now.getTime() - timezoneOffsetMinutes * 60_000);
+  const dayStart = new Date(Date.UTC(localNow.getUTCFullYear(), localNow.getUTCMonth(), localNow.getUTCDate()) + timezoneOffsetMinutes * 60_000);
   const since7 = new Date(now.getTime() - 7 * 86_400_000);
   const since30 = new Date(now.getTime() - 30 * 86_400_000);
 

@@ -1,6 +1,7 @@
 import { createHash } from "crypto";
 import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "../db.js";
+import { organizationIdForRep } from "../organizations/service.js";
 import {
   salesProducts,
   salesReps,
@@ -123,8 +124,10 @@ export async function fulfillAcquisition(acquisitionId: string, codes: string[],
     const quantity = lines.reduce((sum, line) => sum + line.quantity, 0);
     if (codes.length !== quantity) throw new TagSaleError(`This acquisition needs exactly ${quantity} pieces`, 400, "acquisition_quantity_mismatch");
     const picked = await lockFulfillmentTags(tx, codes);
+    const organizationId = await organizationIdForRep(acquisition.repId);
 
     const [kit] = await tx.insert(tagKits).values({
+      organizationId,
       repId: acquisition.repId,
       note: acquisition.source === "stuscle" ? `Stuscle order ${acquisition.externalRef}` : "Manual acquisition",
       createdByUserId: userId,
@@ -142,7 +145,7 @@ export async function fulfillAcquisition(acquisitionId: string, codes: string[],
         tagId: tag.id,
         unitCostCents: costs[index],
       })));
-      await tx.update(tags).set({ repId: acquisition.repId, kitId: kit.id, updatedAt: new Date() }).where(inArray(tags.id, matches.map((tag) => tag.id)));
+      await tx.update(tags).set({ organizationId, repId: acquisition.repId, kitId: kit.id, updatedAt: new Date() }).where(inArray(tags.id, matches.map((tag) => tag.id)));
       matches.forEach((tag) => remaining.delete(tag.id));
     }
     if (remaining.size) throw new TagSaleError("Some selected pieces do not match any acquisition line", 409, "acquisition_product_mismatch");

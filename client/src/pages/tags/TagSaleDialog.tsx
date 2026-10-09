@@ -76,8 +76,11 @@ export default function TagSaleDialog({
       : sellTo
         ? { leadId: sellTo.leadId, name: sellTo.name, placeId: sellTo.placeId }
         : null;
+    // Selling one piece that already has a customer: that customer, unless a visit says otherwise.
+    const pieceLead = initialTagId ? available.find((piece) => piece.id === initialTagId) : undefined;
+    const fromPiece = pieceLead?.leadId && pieceLead.leadName ? { leadId: pieceLead.leadId, name: pieceLead.leadName, placeId: null } : null;
     setSelected(new Set(initialTagId && available.some((piece) => piece.id === initialTagId) ? [initialTagId] : []));
-    setLead(suggested);
+    setLead(suggested ?? fromPiece);
     setPrices({});
     setDiscountCents(0);
     setPaymentStatus("paid");

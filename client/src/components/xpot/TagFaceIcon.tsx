@@ -49,6 +49,8 @@ const TILES: Record<TagFace, Tile> = {
 
 const SIZES = {
   // Keep the tile footprint stable in tables and cards; only the brand glyph grows.
+  // 2xs is the artwork printed on the small plaque drawing (TagProductThumbnail).
+  "2xs": { box: "h-3 w-3 rounded-[3px]", glyph: "h-2.5 w-2.5" },
   xs: { box: "h-5 w-5 rounded-md", glyph: "h-3.5 w-3.5" },
   sm: { box: "h-7 w-7 rounded-lg", glyph: "h-5 w-5" },
   md: { box: "h-9 w-9 rounded-xl", glyph: "h-7 w-7" },

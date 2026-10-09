@@ -4,8 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Building2, ChevronDown, ChevronRight, DollarSign, MousePointerClick, Package, RotateCcw, ScanLine, Search, Shapes, X, type LucideIcon } from "lucide-react";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { MasterDetail } from "@/components/xpot/MasterDetail";
-import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
-import { TagModelChips, TagProductThumbnail } from "@/components/xpot/TagProductThumbnail";
+import { TagModelChips, TagPieceVisual } from "@/components/xpot/TagProductThumbnail";
 import TagScreen from "./TagScreen";
 import TagSaleDialog from "./TagSaleDialog";
 import type { TagListItem } from "@shared/tagsApi";
@@ -147,18 +146,20 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
     </div>
   );
 
+  // Sits in the top bar on mobile and at the end of the search row on desktop,
+  // where the shell header already names the screen.
+  const sellButton = (testId: string) => (
+    <button type="button" onClick={() => setSaleOpen(true)}
+      className="inline-flex min-h-[42px] shrink-0 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 text-sm font-bold text-white transition-colors hover:bg-emerald-400 active:scale-[0.98]"
+      data-testid={testId}>
+      <DollarSign className="h-4 w-4" /> {t("sellPiecesAction")}
+    </button>
+  );
+
   return (
     <>
       <div className="lg:hidden">
-        <TopBar title={t("piecesTitle")} eyebrow={data ? t.plural("pieces", data.length) : undefined} />
-      </div>
-
-      <div className="mb-3 flex justify-end">
-        <button type="button" onClick={() => setSaleOpen(true)}
-          className="inline-flex min-h-[42px] items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 text-sm font-bold text-white shadow-[0_8px_24px_rgba(16,185,129,0.2)] active:scale-[0.98]"
-          data-testid="button-sell-pieces">
-          <DollarSign className="h-4 w-4" /> {t("sellPiecesAction")}
-        </button>
+        <TopBar title={t("piecesTitle")} eyebrow={data ? t.plural("pieces", data.length) : undefined} right={sellButton("button-sell-pieces-mobile")} />
       </div>
 
       {leadFilter && (
@@ -209,6 +210,8 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
             </button>
           ))}
         </div>
+
+        <div className="hidden lg:block">{sellButton("button-sell-pieces")}</div>
       </div>
 
       <div className="mt-2.5 flex flex-col gap-2 sm:grid sm:grid-cols-3 lg:flex lg:flex-row lg:items-center">
@@ -303,10 +306,7 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
                   onClick={() => openPiece(tag.publicCode)}
                   className="flex min-h-[64px] w-full items-center gap-3 px-4 py-2.5 text-left active:bg-white/10"
                 >
-                  <span className="flex shrink-0 items-center gap-1.5">
-                    <TagFaceIcon face={tag.face} size="md" title={t(`face_${tag.face ?? "none"}` as "face_none")} />
-                    <TagProductThumbnail productType={tag.productType} face={tag.face} size="sm" />
-                  </span>
+                  <TagPieceVisual productType={tag.productType} face={tag.face} title={t(`face_${tag.face ?? "none"}` as "face_none")} />
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-2">
                       <span className="font-mono text-base font-semibold tracking-[0.12em] text-white">{tag.publicCode}</span>
@@ -375,10 +375,7 @@ function PiecesTable({ items, selectedCode, onSelect }: { items: TagListItem[]; 
                 data-testid={`piece-row-${tag.publicCode}`}
               >
                 <td className="py-2 pl-4 pr-0">
-                  <div className="flex items-center gap-2">
-                    <TagFaceIcon face={tag.face} size="sm" title={t(`face_${tag.face ?? "none"}` as "face_none")} />
-                    <TagProductThumbnail productType={tag.productType} face={tag.face} size="sm" />
-                  </div>
+                  <TagPieceVisual productType={tag.productType} face={tag.face} title={t(`face_${tag.face ?? "none"}` as "face_none")} />
                 </td>
                 <td className="whitespace-nowrap px-3 py-2.5">
                   <div className="font-mono font-semibold tracking-[0.12em] text-white">{tag.publicCode}</div>

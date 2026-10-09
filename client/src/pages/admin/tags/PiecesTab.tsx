@@ -5,7 +5,7 @@ import { Plus, Search, X } from "lucide-react";
 import { TAG_PRODUCT_TYPES, TAG_STATUSES } from "@shared/tags";
 import type { TagDetail, TagListItem } from "@shared/tagsApi";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
-import { TagModelChips, TagProductThumbnail } from "@/components/xpot/TagProductThumbnail";
+import { TagModelChips, TagPieceVisual } from "@/components/xpot/TagProductThumbnail";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { ADMIN_TAGS_KEY, errorMessage, formatDateTime, getJson, invalidateAdminTags, sendJson, STALE_MS, withQuery } from "./api";
@@ -148,15 +148,14 @@ function PiecesTable({ tags, onOpen }: { tags: TagListItem[]; onOpen: (id: strin
             <button type="button" onClick={() => onOpen(t.id)} className={`${CARD} w-full p-3 text-left active:bg-white/[0.06]`} data-testid={`admin-piece-card-${t.publicCode}`}>
               <div className="flex items-center justify-between gap-2">
                 <span className="flex min-w-0 items-center gap-2.5">
-                  <TagFaceIcon face={t.face} size="sm" />
-                  <TagProductThumbnail productType={t.productType} face={t.face} size="sm" />
+                  <TagPieceVisual productType={t.productType} face={t.face} />
                   <span className="font-mono font-semibold text-white">{t.publicCode}</span>
                 </span>
                 <StatusPill status={t.status} />
               </div>
               <div className="mt-1.5 text-xs text-white/50">
-                <TagModelChips productType={t.productType} face={t.face} batchCode={t.batchCode} fallback={labels.product(t.productType)} className="mr-1.5" />
-                {t.face ? labels.face(t.face) : ""}
+                {t.face ? <span className="mr-1.5 text-white/80">{labels.face(t.face)}</span> : null}
+                <TagModelChips productType={t.productType} face={t.face} batchCode={t.batchCode} fallback={labels.product(t.productType)} />
                 {t.leadName ? ` · ${t.leadName}` : ""}
                 {` · ${t.repName ?? tm("houseStock")}`}
                 {t.batchCode ? ` · ${t.batchCode}` : ""}
@@ -177,7 +176,7 @@ function PiecesTable({ tags, onOpen }: { tags: TagListItem[]; onOpen: (id: strin
               <th className={`${TH} w-28 pr-0`}><span className="sr-only">{tg("printedOnPiece")}</span></th>
               <th className={TH}>{tg("colCode")}</th>
               <th className={TH}>{tm("colProduct")}</th>
-              <th className={TH}>{tg("colStatus")}</th>
+              <th className={`${TH} text-center`}>{tg("colStatus")}</th>
               <th className={TH}>{tg("colCustomer")}</th>
               <th className={TH}>{tg("colReseller")}</th>
               <th className={TH}>{tm("colDestination")}</th>
@@ -192,10 +191,7 @@ function PiecesTable({ tags, onOpen }: { tags: TagListItem[]; onOpen: (id: strin
             {tags.map((t) => (
               <tr key={t.id} className="cursor-pointer hover:bg-white/[0.04]" onClick={() => onOpen(t.id)} data-testid={`admin-piece-row-${t.publicCode}`}>
                 <td className={`${TD} pr-0`}>
-                  <span className="flex items-center gap-2">
-                    <TagFaceIcon face={t.face} size="md" />
-                    <TagProductThumbnail productType={t.productType} face={t.face} />
-                  </span>
+                  <TagPieceVisual productType={t.productType} face={t.face} />
                 </td>
                 <td className={`${TD} whitespace-nowrap font-mono font-semibold text-white`}>
                   {t.publicCode}
@@ -203,10 +199,10 @@ function PiecesTable({ tags, onOpen }: { tags: TagListItem[]; onOpen: (id: strin
                   {t.label ? <span className="block max-w-[160px] truncate font-sans text-xs font-normal text-white/40">{t.label}</span> : null}
                 </td>
                 <td className={TD}>
+                  {t.face ? <span className="mb-1 block text-sm text-white/85">{labels.face(t.face)}</span> : null}
                   <TagModelChips productType={t.productType} face={t.face} batchCode={t.batchCode} fallback={labels.product(t.productType)} />
-                  {t.face ? <span className="mt-1 block text-xs text-white/40">{labels.face(t.face)}</span> : null}
                 </td>
-                <td className={TD}><StatusPill status={t.status} /></td>
+                <td className={`${TD} text-center`}><StatusPill status={t.status} /></td>
                 <td className={`${TD} max-w-[180px] truncate`}>{t.leadName ?? <span className="text-white/30">—</span>}</td>
                 <td className={`${TD} max-w-[160px] truncate`}>{t.repName ?? <span className="text-white/40">{tg("house")}</span>}</td>
                 <td className={TD}>{labels.destination(t.destinationType)}</td>

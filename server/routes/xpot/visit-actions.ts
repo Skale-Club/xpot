@@ -359,8 +359,11 @@ async function applyAction(row: SalesVisitAction, ctx: ApplyCtx): Promise<string
       }
       const total = lines.reduce((sum, l) => sum + l.totalCents, 0);
       const paid = action.paid !== false;
+      const saleLead = await storage.getSalesLead(ctx.leadId);
+      if (!saleLead) throw new Error("Customer not found");
       const sale = await salesStorage.createDirectSale(
         {
+          organizationId: saleLead.organizationId,
           leadId: ctx.leadId,
           repId: ctx.repId,
           visitId: ctx.visitId,

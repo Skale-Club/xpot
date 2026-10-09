@@ -2,11 +2,12 @@ import { Router } from "express";
 import { z } from "zod";
 import { storage } from "../../storage.js";
 import { repModules } from "#shared/modules.js";
-import { requireXpotUser, requireVisitsModule, ensureXpotRep, isManagerOrAdmin, loadAccessibleLead, listsEveryone } from "./middleware.js";
+import { canAccessLead, requireXpotUser, requireVisitsModule, ensureXpotRep, isManagerOrAdmin, loadAccessibleLead, listsEveryone } from "./middleware.js";
 import { xpotLeadCreateSchema, xpotLeadUpdateSchema, xpotLeadContactCreateSchema } from "#shared/xpot.js";
 import { syncLeadToGhl, syncLeadToXphere } from "./helpers.js";
 import { salesStorage } from "../../storage-sales.js";
 import { activeStore, discardFiles, putPrivateFile } from "../../lib/files.js";
+import { activeOrganizationIds, canManageOrganizationForActor, managedOrganizationIds, organizationIdForRep } from "../../organizations/service.js";
 
 export function createLeadsRouter() {
   const router = Router();
@@ -17,15 +18,21 @@ export function createLeadsRouter() {
     const actor = (req as any).xpotActor as Awaited<ReturnType<typeof ensureXpotRep>>;
 
     let ownerRepId: number | undefined;
+    let organizationIds: number[] | undefined;
     if (listsEveryone(req, actor!)) {
       // Manager can filter by a specific rep
       ownerRepId = req.query.repId ? Number(req.query.repId) : undefined;
     } else {
-      ownerRepId = actor!.rep.id;
+      const managed = await managedOrganizationIds(actor!);
+      if (managed?.length) organizationIds = managed;
+      else {
+        ownerRepId = actor!.rep.id;
+        organizationIds = (await activeOrganizationIds(actor!)) ?? undefined;
+      }
     }
 
     const search = typeof req.query.search === "string" ? req.query.search : undefined;
-    const leads = await storage.listSalesLeads({ ownerRepId, search });
+    const leads = await storage.listSalesLeads({ ownerRepId, organizationIds, search });
 
     if (!leads.length) return res.json([]);
 
@@ -66,8 +73,10 @@ export function createLeadsRouter() {
     const actor = (req as any).xpotActor as Awaited<ReturnType<typeof ensureXpotRep>>;
     const input = xpotLeadCreateSchema.parse(req.body);
     const status = input.status || "lead";
+    const organizationId = await organizationIdForRep(actor!.rep.id);
 
     const lead = await storage.createSalesLead({
+      organizationId,
       name: input.name,
       legalName: input.legalName,
       website: input.website,
@@ -126,6 +135,7 @@ export function createLeadsRouter() {
   router.post("/leads/import-csv", requireVisitsModule, async (req, res) => {
     const actor = (req as any).xpotActor as Awaited<ReturnType<typeof ensureXpotRep>>;
     const { rows } = csvImportSchema.parse(req.body);
+    const organizationId = await organizationIdForRep(actor!.rep.id);
 
     const created: number[] = [];
     const errors: { row: number; message: string }[] = [];
@@ -134,6 +144,7 @@ export function createLeadsRouter() {
       const row = rows[i];
       try {
         const lead = await storage.createSalesLead({
+          organizationId,
           name: row.name,
           phone: row.phone || undefined,
           email: row.email || undefined,
@@ -179,7 +190,7 @@ export function createLeadsRouter() {
       return res.status(404).json({ message: "Lead not found" });
     }
 
-    if (!isManagerOrAdmin(actor!) && lead.ownerRepId !== actor!.rep.id) {
+    if (!(await canAccessLead(actor!, lead))) {
       return res.status(403).json({ message: "Access denied" });
     }
 
@@ -187,14 +198,14 @@ export function createLeadsRouter() {
     // scoped — listSalesOpportunities({ leadId }) returned every rep's deals on
     // the lead, and listSalesTasks() loaded the whole table before filtering in
     // memory. A manager sharing a lead with a rep exposed both pipelines.
-    const seesAll = listsEveryone(req, actor!);
+    const seesAll = listsEveryone(req, actor!) || await canManageOrganizationForActor(actor!, lead.organizationId);
     const scope = seesAll ? undefined : actor!.rep.id;
     const [locations, contacts, visits, opportunities, tasks] = await Promise.all([
       storage.listSalesLeadLocations(leadId),
       storage.listSalesLeadContacts(leadId),
       storage.listSalesVisits({ leadId, repId: scope }),
       storage.listSalesOpportunities({ leadId, repId: scope }),
-      storage.listSalesTasks({ repId: scope }),
+      storage.listSalesTasks({ leadId, repId: scope }),
     ]);
 
     res.json({
@@ -218,7 +229,7 @@ export function createLeadsRouter() {
       return res.status(404).json({ message: "Lead not found" });
     }
 
-    if (!isManagerOrAdmin(actor!) && lead.ownerRepId !== actor!.rep.id) {
+    if (!(await canAccessLead(actor!, lead))) {
       return res.status(403).json({ message: "Access denied" });
     }
     // The pipeline status (prospect → lead → …) is Visits work, like POST /leads/:id/promote; a Tags-only
@@ -238,7 +249,7 @@ export function createLeadsRouter() {
 
     const lead = await storage.getSalesLead(leadId);
     if (!lead) return res.status(404).json({ message: "Lead not found" });
-    if (!isManagerOrAdmin(actor!) && lead.ownerRepId !== actor!.rep.id) {
+    if (!(await canAccessLead(actor!, lead))) {
       return res.status(403).json({ message: "Access denied" });
     }
 
@@ -269,7 +280,7 @@ export function createLeadsRouter() {
     const lead = await storage.getSalesLead(leadId);
     if (!lead) return res.status(404).json({ message: "Lead not found" });
 
-    if (!isManagerOrAdmin(actor!) && lead.ownerRepId !== actor!.rep.id) {
+    if (!(await canAccessLead(actor!, lead))) {
       return res.status(403).json({ message: "Access denied" });
     }
 
@@ -287,7 +298,7 @@ export function createLeadsRouter() {
     const lead = await storage.getSalesLead(leadId);
     if (!lead) return res.status(404).json({ message: "Lead not found" });
 
-    if (!isManagerOrAdmin(actor!) && lead.ownerRepId !== actor!.rep.id) {
+    if (!(await canAccessLead(actor!, lead))) {
       return res.status(403).json({ message: "Access denied" });
     }
 
@@ -309,7 +320,7 @@ export function createLeadsRouter() {
     const lead = await storage.getSalesLead(leadId);
     if (!lead) return res.status(404).json({ message: "Lead not found" });
 
-    if (!isManagerOrAdmin(actor!) && lead.ownerRepId !== actor!.rep.id) {
+    if (!(await canAccessLead(actor!, lead))) {
       return res.status(403).json({ message: "Access denied" });
     }
 

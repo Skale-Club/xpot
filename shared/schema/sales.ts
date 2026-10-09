@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, serial, integer, timestamp, boolean, jsonb, pgEnum, uniqueIndex, index } from "drizzle-orm/pg-core";
+import { bigserial, pgTable, text, serial, integer, timestamp, boolean, jsonb, pgEnum, uniqueIndex, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { users } from "./auth.js";
@@ -11,6 +11,25 @@ export const salesRepRoleEnum = pgEnum("sales_rep_role", [
   "manager",
   "admin",
 ]);
+
+/** A Rep's authority inside one Organization, separate from their platform role. */
+export const organizationMemberRoleEnum = pgEnum("organization_member_role", [
+  "member",
+  "admin",
+]);
+
+export const organizations = pgTable("organizations", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  slug: text("slug").notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  createdByUserId: text("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  slugIdx: uniqueIndex("organizations_slug_unique").on(table.slug),
+  activeIdx: index("organizations_active_idx").on(table.isActive, table.name),
+}));
 
 export const salesLeadStatusEnum = pgEnum("sales_lead_status", [
   "prospect",
@@ -97,8 +116,38 @@ export const salesReps = pgTable("sales_reps", {
   roleIdx: index("sales_reps_role_idx").on(table.role),
 }));
 
+export const organizationMemberships = pgTable("organization_memberships", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  repId: integer("rep_id").notNull().references(() => salesReps.id, { onDelete: "cascade" }),
+  role: organizationMemberRoleEnum("role").notNull().default("member"),
+  isActive: boolean("is_active").notNull().default(true),
+  blockedAt: timestamp("blocked_at", { withTimezone: true }),
+  blockedReason: text("blocked_reason"),
+  createdByUserId: text("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  organizationRepIdx: uniqueIndex("organization_memberships_org_rep_unique").on(table.organizationId, table.repId),
+  repIdx: index("organization_memberships_rep_idx").on(table.repId, table.isActive),
+  organizationIdx: index("organization_memberships_org_idx").on(table.organizationId, table.isActive),
+}));
+
+export const organizationAuditLog = pgTable("organization_audit_log", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  action: text("action").notNull(),
+  targetRepId: integer("target_rep_id").references(() => salesReps.id, { onDelete: "set null" }),
+  actorUserId: text("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+  detail: jsonb("detail").$type<Record<string, unknown>>().notNull().default({}),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  organizationIdx: index("organization_audit_log_org_idx").on(table.organizationId, table.createdAt),
+}));
+
 export const salesLeads = pgTable("sales_leads", {
   id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: "restrict" }),
   name: text("name").notNull(),
   legalName: text("legal_name"),
   website: text("website"),
@@ -455,6 +504,13 @@ export type SalesRep = typeof salesReps.$inferSelect;
 export type InsertSalesRep = typeof salesReps.$inferInsert;
 export type SalesRepRole = typeof salesRepRoleEnum.enumValues[number];
 
+export type Organization = typeof organizations.$inferSelect;
+export type InsertOrganization = typeof organizations.$inferInsert;
+export type OrganizationMembership = typeof organizationMemberships.$inferSelect;
+export type InsertOrganizationMembership = typeof organizationMemberships.$inferInsert;
+export type OrganizationMemberRole = typeof organizationMemberRoleEnum.enumValues[number];
+export type OrganizationAuditEntry = typeof organizationAuditLog.$inferSelect;
+
 export type SalesLead = typeof salesLeads.$inferSelect;
 export type InsertSalesLead = typeof salesLeads.$inferInsert;
 
@@ -538,6 +594,7 @@ export const salesProductPriceTiers = pgTable("sales_product_price_tiers", {
 
 export const salesConsignments = pgTable("sales_consignments", {
   id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: "restrict" }),
   leadId: integer("lead_id").references(() => salesLeads.id).notNull(),
   productId: integer("product_id").references(() => salesProducts.id).notNull(),
   repId: integer("rep_id").references(() => salesReps.id).notNull(),
@@ -559,11 +616,13 @@ export const salesConsignments = pgTable("sales_consignments", {
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => ({
   leadIdx: index("sales_consignments_lead_idx").on(table.leadId),
+  organizationIdx: index("sales_consignments_organization_idx").on(table.organizationId, table.updatedAt),
   repIdx: index("sales_consignments_rep_idx").on(table.repId),
 }));
 
 export const salesSales = pgTable("sales_sales", {
   id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: "restrict" }),
   leadId: integer("lead_id").references(() => salesLeads.id).notNull(),
   repId: integer("rep_id").references(() => salesReps.id).notNull(),
   visitId: integer("visit_id").references(() => salesVisits.id, { onDelete: "set null" }),
@@ -589,6 +648,7 @@ export const salesSales = pgTable("sales_sales", {
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => ({
   leadIdx: index("sales_sales_lead_idx").on(table.leadId),
+  organizationIdx: index("sales_sales_organization_idx").on(table.organizationId, table.soldAt),
   repIdx: index("sales_sales_rep_idx").on(table.repId),
   visitIdx: index("sales_sales_visit_idx").on(table.visitId),
   soldAtIdx: index("sales_sales_sold_at_idx").on(table.soldAt),

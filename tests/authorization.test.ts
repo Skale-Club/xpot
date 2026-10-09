@@ -74,6 +74,13 @@ const storage = {
 };
 
 vi.mock("../server/storage.js", () => ({ storage }));
+vi.mock("../server/organizations/service.js", () => ({
+  activeOrganizationIds: vi.fn(async () => [1]),
+  managedOrganizationIds: vi.fn(async () => []),
+  organizationIdForRep: vi.fn(async () => 1),
+  canManageOrganizationForActor: vi.fn(async () => false),
+  canViewOrganizationForActor: vi.fn(async () => true),
+}));
 // leads.ts now enriches the list with sales totals; that module reaches db.ts,
 // which refuses to load without a database. None of these cases need it.
 vi.mock("../server/storage-sales.js", () => ({

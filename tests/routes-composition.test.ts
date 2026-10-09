@@ -29,6 +29,13 @@ const storage = anything();
 // Lead 5 belongs to the Tags-only reseller (rep 2).
 (storage as any).getSalesLead = vi.fn(async (id: number) => (id === 5 ? { id: 5, name: "Shop", ownerRepId: 2, status: "prospect" } : undefined));
 vi.mock("../server/storage.js", () => ({ storage }));
+vi.mock("../server/organizations/service.js", () => ({
+  activeOrganizationIds: vi.fn(async () => [1]),
+  managedOrganizationIds: vi.fn(async () => []),
+  organizationIdForRep: vi.fn(async () => 1),
+  canManageOrganizationForActor: vi.fn(async () => false),
+  canViewOrganizationForActor: vi.fn(async () => true),
+}));
 vi.mock("../server/storage-sales.js", () => ({ salesStorage: anything() }));
 vi.mock("../server/db.js", () => ({ db: anything() }));
 

@@ -46,11 +46,18 @@ async function seedUser(id: string, phone: string, extra: Record<string, unknown
     `INSERT INTO sales_reps (user_id, display_name, phone, email, avatar_url, wholesale_code) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
     [id, extra.displayName ?? id, phone, extra.email ?? null, extra.avatarUrl ?? null, extra.wholesaleCode ?? null],
   );
+  const organization = await one(
+    `INSERT INTO organizations (name, slug) VALUES ($1, $2) RETURNING id`,
+    [`Test ${id}`, `test-${id}`],
+  );
+  await q(`INSERT INTO organization_memberships (organization_id, rep_id, role) VALUES ($1, $2, 'admin')`, [organization.id, rep.id]);
   return rep.id as number;
 }
 
 const lead = async (name: string, ownerRepId: number | null, photos: string[] = []) =>
-  (await one(`INSERT INTO sales_leads (name, owner_rep_id, photos) VALUES ($1, $2, $3::jsonb) RETURNING id`, [name, ownerRepId, JSON.stringify(photos)])).id as number;
+  (await one(`INSERT INTO sales_leads (organization_id, name, owner_rep_id, photos)
+    SELECT m.organization_id, $1, $2, $3::jsonb FROM organization_memberships m WHERE m.rep_id = $2 LIMIT 1
+    RETURNING id`, [name, ownerRepId, JSON.stringify(photos)])).id as number;
 const visit = async (repId: number, leadId: number, audio?: string) => {
   const v = (await one(`INSERT INTO sales_visits (rep_id, lead_id, status) VALUES ($1, $2, 'completed') RETURNING id`, [repId, leadId])).id as number;
   if (audio !== undefined) await q(`INSERT INTO sales_visit_notes (visit_id, audio_url, created_by_rep_id) VALUES ($1, $2, $3)`, [v, audio, repId]);
@@ -65,7 +72,8 @@ beforeAll(async () => {
 beforeEach(async () => {
   await q(`TRUNCATE sessions, auth_phone_codes, sales_sale_items, sales_sales, sales_visit_actions, sales_tasks, sales_opportunities_local,
            sales_visit_notes, sales_visits, sales_lead_contacts, sales_lead_locations, sales_leads, xphere_integrations,
-           mcp_oauth_tokens, mcp_oauth_codes, mcp_tokens, sales_reps, users RESTART IDENTITY CASCADE`);
+           mcp_oauth_tokens, mcp_oauth_codes, mcp_tokens, organization_audit_log, organization_memberships, organizations,
+           sales_reps, users RESTART IDENTITY CASCADE`);
   r2 = memoryStore("r2");
   pub = memoryStore("supabase");
   setFileStoresForTests({ r2, supabase: null, public: pub });
@@ -120,7 +128,8 @@ describe("deleting a rep's account", () => {
     // Ana's businesses: one plain, one with a sale (must stay).
     const plain = await lead("Plain", a, [aPhoto("plain")]);
     const sold = await lead("Sold", a, [aPhoto("sold"), bPhoto("sold")]);
-    await q(`INSERT INTO sales_sales (lead_id, rep_id, total_cents) VALUES ($1, $2, 5000)`, [sold, a]);
+    await q(`INSERT INTO sales_sales (organization_id, lead_id, rep_id, total_cents)
+      SELECT organization_id, id, $2, 5000 FROM sales_leads WHERE id = $1`, [sold, a]);
     // Bruno's business, with a photo Ana took there.
     const brunos = await lead("Brunos", b, [aPhoto("brunos"), bPhoto("brunos")]);
 

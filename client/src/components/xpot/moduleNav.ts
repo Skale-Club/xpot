@@ -51,7 +51,7 @@ export const ORGANIZATION_SECTIONS = ["reps", "integrations", "branding"] as con
 /** Which part of the app a path belongs to. */
 export function contextOfPath(path: string): ShellContext {
   if (starts("/tags")(path) || starts("/admin/tags")(path)) return "tags";
-  if (starts("/settings")(path)) return "account";
+  if (starts("/settings")(path) || starts("/organizations")(path)) return "account";
   const admin = /^\/admin(?:\/([^/]+))?/.exec(path);
   if (admin) return (ORGANIZATION_SECTIONS as readonly string[]).includes(admin[1] ?? "") ? "account" : "visits";
   return "visits";

@@ -31,28 +31,28 @@ This keeps `Admin`, `Manager`, and `Rep` as the platform roles while allowing mu
 
 ## Slices
 
-- [ ] **S01: Physical product models and Celes correction** `risk:low` `depends:[]`
+- [x] **S01: Physical product models and Celes correction** `risk:low` `depends:[]`
   > After this: batch `IG-2026-001` and its four pieces display as `Large Plate · Instagram`, while the catalog offers Large/Small Stand, Sign, and Plate.
 
-- [ ] **S02: Canonical role and management terminology** `risk:medium` `depends:[]`
+- [x] **S02: Canonical role and management terminology** `risk:medium` `depends:[]`
   > After this: the UI consistently uses Admin, Manager, Rep, Management mode, Exit management, and Admin badges without Super Admin or Owner terminology.
 
-- [ ] **S03: Organization creation and membership tracer bullet** `risk:high` `depends:[S02]`
+- [x] **S03: Organization creation and membership tracer bullet** `risk:high` `depends:[S02]`
   > After this: an Admin or Manager can create an Organization, assign a Rep Admin, and both users can see the Organization context.
 
-- [ ] **S04: Organization team management** `risk:high` `depends:[S03]`
+- [x] **S04: Organization team management** `risk:high` `depends:[S03]`
   > After this: a Rep Admin can add, remove, activate, and block Reps only inside their Organization, while Admin and Manager can manage every Organization.
 
-- [ ] **S05: Organization-owned inventory and kits** `risk:high` `depends:[S03,S04]`
+- [x] **S05: Organization-owned inventory and kits** `risk:high` `depends:[S03,S04]`
   > After this: a Manager can give a kit to an Organization, a Rep Admin can distribute its pieces, and each Rep sees the permitted inventory.
 
-- [ ] **S06: Organization-scoped customers, sales, and analytics** `risk:high` `depends:[S04]`
+- [x] **S06: Organization-scoped customers, sales, and analytics** `risk:high` `depends:[S04]`
   > After this: team members work with shared Organization customers while assignments, sales credit, and analytics remain attributable to individual Reps.
 
-- [ ] **S07: Real Organization workspace** `risk:medium` `depends:[S03,S04]`
+- [x] **S07: Real Organization workspace** `risk:medium` `depends:[S03,S04]`
   > After this: Organization opens a real workspace with Overview, Team, Inventory, Kits, Customers, and Settings instead of being only a navigation label.
 
-- [ ] **S08: Management navigation and dashboard cleanup** `risk:low` `depends:[S05,S06,S07]`
+- [x] **S08: Management navigation and dashboard cleanup** `risk:low` `depends:[S05,S06,S07]`
   > After this: the dashboard clearly separates Inventory location, Piece lifecycle, and usage metrics, using consistent Rep and Admin terminology.
 
 - [ ] **S09: Cross-role and cross-Organization security verification** `risk:high` `depends:[S01,S02,S03,S04,S05,S06,S07,S08]`
@@ -112,3 +112,10 @@ Existing Reps must be assigned to Organizations during S03. Preferred rule:
 - Permission tests cover allowed and denied behavior for every role.
 - Existing customers, pieces, scans, kits, and sales history remain intact.
 - Production migrations and deployment are completed and verified against the live system.
+
+## Execution status
+
+- S01–S08 are implemented in the application and database migration.
+- S09 automated authorization coverage is implemented, including denied cross-Organization API and URL access.
+- Type checking, the full automated test suite, and the production build are the release gates for this change.
+- Browser acceptance, production migration, and deployment remain release activities and must be completed together so older application code never runs against the new required Organization columns.

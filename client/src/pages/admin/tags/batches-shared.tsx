@@ -2,8 +2,7 @@ import { useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { TagBatchItem, TagListItem } from "@shared/tagsApi";
 import { Loader2 } from "@/components/ui/loader";
-import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
-import { TagProductThumbnail } from "@/components/xpot/TagProductThumbnail";
+import { TagPieceVisual } from "@/components/xpot/TagProductThumbnail";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -321,10 +320,7 @@ export function PieceTable({
                     </td>
                   )}
                   <td className={`${TD} pr-0`}>
-                    <div className="flex items-center gap-2">
-                      <TagFaceIcon face={t.face} size="sm" />
-                      <TagProductThumbnail productType={t.productType} face={t.face} size="sm" />
-                    </div>
+                    <TagPieceVisual productType={t.productType} face={t.face} />
                   </td>
                   <td className={`${TD} font-mono text-white`}>{t.publicCode}</td>
                   <td className={`${TD} tabular-nums text-white/50`}>{t.serialNumber ?? "—"}</td>

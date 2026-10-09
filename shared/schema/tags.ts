@@ -9,7 +9,7 @@
 
 import { sql } from "drizzle-orm";
 import { bigserial, boolean, date, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
-import { salesLeads, salesProducts, salesReps, salesSaleItems, salesSales } from "./sales.js";
+import { organizations, salesLeads, salesProducts, salesReps, salesSaleItems, salesSales } from "./sales.js";
 
 export const tagBatches = pgTable("tag_batches", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -33,12 +33,14 @@ export const tagBatches = pgTable("tag_batches", {
 /** One hand-over of pieces to a reseller (agreed on WhatsApp for now). */
 export const tagKits = pgTable("tag_kits", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: "restrict" }),
   repId: integer("rep_id").notNull().references(() => salesReps.id),
   note: text("note"),
   createdByUserId: text("created_by_user_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
   repIdx: index("tag_kits_rep_idx").on(table.repId, table.createdAt),
+  organizationIdx: index("tag_kits_organization_idx").on(table.organizationId, table.createdAt),
 }));
 
 export const tagProvisioningDevices = pgTable("tag_provisioning_devices", {
@@ -60,6 +62,7 @@ export const tagProvisioningDevices = pgTable("tag_provisioning_devices", {
 
 export const tags = pgTable("tags", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: "restrict" }),
   publicCode: text("public_code").notNull(),
   // Position inside its batch (1-based); the manufacturing CSV's serial_number.
   serialNumber: integer("serial_number"),
@@ -96,6 +99,7 @@ export const tags = pgTable("tags", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
   publicCodeIdx: uniqueIndex("tags_public_code_unique").on(table.publicCode),
+  organizationIdx: index("tags_organization_idx").on(table.organizationId, table.status),
   repIdx: index("tags_rep_idx").on(table.repId, table.status),
   leadIdx: index("tags_lead_idx").on(table.leadId),
   batchIdx: index("tags_batch_idx").on(table.batchId),

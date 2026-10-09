@@ -1,11 +1,33 @@
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
 const LOCAL_URL = "http://localhost:2110";
 const HEALTH_URL = `${LOCAL_URL}/api/health`;
 const projectRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
+/** Refresh the local database from production when the last pull is older than this. */
+const PULL_EVERY_MS = 6 * 60 * 60 * 1000;
+
+function lastPullAt(): number {
+  try {
+    return Date.parse(JSON.parse(readFileSync(path.join(projectRoot, ".cache", "db-pull.json"), "utf8")).pulledAt) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+/** Best effort: a failed pull never stops the app from opening, it just keeps the data it has. */
+async function pullProductionData(npmCli: string) {
+  if (Date.now() - lastPullAt() < PULL_EVERY_MS) return;
+  console.log("[local] Refreshing local data from production (npm run db:pull) ...");
+  const code = await new Promise<number | null>((resolve) => {
+    const pull = spawn(process.execPath, [npmCli, "run", "db:pull"], { cwd: projectRoot, env: process.env, stdio: "inherit", windowsHide: true });
+    pull.once("error", () => resolve(1));
+    pull.once("exit", resolve);
+  });
+  if (code !== 0) console.warn("[local] Could not refresh from production; opening with the data already here.");
+}
 
 async function isServerReady(): Promise<boolean> {
   try {
@@ -58,6 +80,8 @@ async function main() {
   if (!npmCli) {
     throw new Error("Could not locate npm. Run this shortcut with npm run local.");
   }
+
+  await pullProductionData(npmCli);
 
   const server = spawn(process.execPath, [npmCli, "run", "dev"], {
     cwd: projectRoot,

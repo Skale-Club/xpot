@@ -6,6 +6,7 @@ import { requireXpotUser, ensureXpotRep } from "./middleware.js";
 import { getSupabaseAdmin } from "../../lib/supabase.js";
 import { discardFiles } from "../../lib/files.js";
 import { randomUUID } from "crypto";
+import { listOrganizations, membershipsForRep } from "../../organizations/service.js";
 
 export function createAuthRouter() {
   const router = Router();
@@ -14,7 +15,11 @@ export function createAuthRouter() {
   router.get("/me", async (req, res) => {
     try {
       const actor = (req as any).xpotActor as Awaited<ReturnType<typeof ensureXpotRep>>;
-      const activeVisit = await storage.getActiveSalesVisitForRep(actor!.rep.id);
+      const [activeVisit, organizations, organizationMemberships] = await Promise.all([
+        storage.getActiveSalesVisitForRep(actor!.rep.id),
+        listOrganizations(actor!),
+        membershipsForRep(actor!.rep.id),
+      ]);
       const enrichedVisit = activeVisit
         ? {
             ...activeVisit,
@@ -25,6 +30,8 @@ export function createAuthRouter() {
       res.json({
         user: actor!.user,
         rep: actor!.rep,
+        organizations,
+        organizationMemberships,
         activeVisit: enrichedVisit,
       });
     } catch (err) {

@@ -59,7 +59,7 @@ export async function createTagSale(input: TagSaleCreateInput, actor: TagActor, 
 
     const [[seller], [lead]] = await Promise.all([
       tx.select({ id: salesReps.id, costPolicy: salesReps.costPolicy, costPolicyConfiguredAt: salesReps.costPolicyConfiguredAt }).from(salesReps).where(eq(salesReps.id, sellerRepId)).limit(1),
-      tx.select({ id: salesLeads.id, ownerRepId: salesLeads.ownerRepId }).from(salesLeads).where(eq(salesLeads.id, input.leadId)).limit(1),
+      tx.select({ id: salesLeads.id, organizationId: salesLeads.organizationId, ownerRepId: salesLeads.ownerRepId }).from(salesLeads).where(eq(salesLeads.id, input.leadId)).limit(1),
     ]);
     if (!seller) throw new TagSaleError("Seller not found", 404, "seller_not_found");
     if (!seller.costPolicyConfiguredAt) {
@@ -204,6 +204,7 @@ export async function createTagSale(input: TagSaleCreateInput, actor: TagActor, 
     const soldAt = input.soldAt ? new Date(input.soldAt) : new Date();
 
     const [sale] = await tx.insert(salesSales).values({
+      organizationId: lead.organizationId,
       leadId: input.leadId,
       repId: sellerRepId,
       visitId: input.visitId ?? null,

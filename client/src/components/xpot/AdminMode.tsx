@@ -94,10 +94,10 @@ export function AdminModeBar() {
     >
       <Shield className="h-4 w-4 shrink-0 text-amber-300" />
       <span className="min-w-0 flex-1 truncate text-sm font-semibold">{t("adminModeOn")}</span>
-      {!location.startsWith("/admin/reps") && (
+      {!location.startsWith("/organizations") && (
         <button
           type="button"
-          onClick={() => navigate("/admin/reps")}
+          onClick={() => navigate("/organizations")}
           className="shrink-0 rounded-lg px-2 py-1 text-xs font-semibold text-amber-200/80 hover:bg-amber-400/15 hover:text-amber-100"
           data-testid="admin-mode-organization"
         >

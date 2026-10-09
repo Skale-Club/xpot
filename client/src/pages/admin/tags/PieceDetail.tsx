@@ -1,12 +1,11 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Archive, ArrowLeft, Building2, Download, ExternalLink, MapPin, Pencil, Plus, Power, PowerOff, RotateCcw, Truck, Undo2 } from "lucide-react";
+import { AlertTriangle, Archive, ArrowLeft, Building2, ChevronRight, Download, ExternalLink, MapPin, Pencil, Plus, Power, PowerOff, RotateCcw, Truck, Undo2 } from "lucide-react";
 import { defaultUtmEnabled, planTransition, type TagAction } from "@shared/tags";
-import { validateChipContent } from "@shared/chipContent";
-import { isReviewFormUrl } from "@shared/reviewLink";
+import { contentKindOf, contentSummary, validateChipContent, type ChipContentKind } from "@shared/chipContent";
+import { guessDestinationType, normalizeUrlInput } from "@shared/tagApp";
 import type { TagDetail } from "@shared/tagsApi";
-import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
-import { TagModelChips, TagProductThumbnail, tagPlaqueSpec } from "@/components/xpot/TagProductThumbnail";
+import { TagModelChips, TagPieceVisual, tagPlaqueSpec } from "@/components/xpot/TagProductThumbnail";
 import { useIsSuperAdmin } from "@/components/xpot/AdminBadge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
@@ -17,27 +16,20 @@ import { CopyRow, Loading, LoadError, Select, useLeads, useReps } from "./pieces
 import { useTagLabels } from "./labels";
 import { AnalyticsPanel, RangePicker, type AnalyticsRange } from "./pieces-analytics";
 import { NfcProvisioningCard } from "./pieces-NfcProvisioningCard";
-import { ReviewLinkFinder } from "./pieces-ReviewLinkFinder";
+import { ContentEditor, type ContentState } from "@/pages/tags/ContentEditor";
+import { GenerateReviewButton, ReviewLinkAssist } from "@/pages/tags/ReviewLinkSheet";
+import { FieldLabel, LinkInput } from "@/pages/tags/ui";
 import { JourneyPanel } from "./JourneyPanel";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { shellMessages } from "@/i18n/messages/shell";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
 import { manageTagsPiecesMessages } from "@/i18n/messages/manageTagsPieces";
+import { tagsMessages } from "@/i18n/messages/tags";
 
 type Go = (path: string) => void;
 
 type PieceKey = keyof (typeof manageTagsPiecesMessages)["en"];
-
-const URL_HINT_KEYS: Record<string, PieceKey> = {
-  google_review: "urlHint_google_review",
-  website: "urlHint_website",
-  booking: "urlHint_booking",
-  vcard: "urlHint_vcard",
-  menu: "urlHint_menu",
-  social: "urlHint_social",
-  custom: "urlHint_custom",
-};
 
 /** validateDestinationUrl (shared) answers in English; its messages, by text. */
 const URL_ERROR_KEYS: Record<string, PieceKey> = {
@@ -225,110 +217,155 @@ function GoogleBadge({ label }: { label: string }) {
 
 function DestinationStep({ tag }: { tag: TagDetail }) {
   const t = useT(manageTagsPiecesMessages);
+  const tt = useT(tagsMessages);
+  const tc = useT(commonMessages);
   const labels = useTagLabels();
-  const [destinationType, setDestinationType] = useState<string | undefined>(tag.destinationType ?? undefined);
-  const [destinationUrl, setDestinationUrl] = useState(tag.destinationUrl ?? "");
+  const { toast } = useToast();
+  const { data: leads = [] } = useLeads();
+  const stored = tag.destinationUrl ?? "";
+  const storedKind = contentKindOf(stored);
+  // With a destination on file the step is a summary; "Change" opens the form.
+  const [editing, setEditing] = useState(!stored);
+  const [kind, setKind] = useState<ChipContentKind>(storedKind);
+  const [link, setLink] = useState(storedKind === "url" ? stored : "");
+  const [content, setContent] = useState<ContentState>({ value: null, error: null });
   const [utmEnabled, setUtmEnabled] = useState(tag.utmEnabled);
   const [utmTouched, setUtmTouched] = useState(false);
   const [utmCampaign, setUtmCampaign] = useState(tag.utmCampaign ?? "");
   const [reason, setReason] = useState("");
   const save = usePieceMutation(tag.id, t("destinationSaved"));
   const locked = tag.status === "retired";
-  const trimmed = destinationUrl.trim();
-  // A link, or an email/phone/vCard set from the phone app (shared/chipContent.ts).
-  const check = trimmed ? validateChipContent(trimmed, { allowHttp: import.meta.env.DEV }) : null;
-  const dirty =
-    destinationType !== (tag.destinationType ?? undefined) ||
-    trimmed !== (tag.destinationUrl ?? "") ||
-    utmEnabled !== tag.utmEnabled ||
-    utmCampaign.trim() !== (tag.utmCampaign ?? "");
-  // Clearing both is allowed (server accepts null); half-set is not.
-  const clearing = !trimmed && !destinationType;
-  const valid = clearing ? !!tag.destinationUrl && tag.status !== "active" : !!destinationType && !!check?.ok;
+  const customer = tag.leadId ? leads.find((l) => l.id === tag.leadId) : undefined;
+
+  // A link, or an email/phone/vCard from the kind tabs (shared/chipContent.ts).
+  const raw = kind === "url" ? normalizeUrlInput(link) : content.value ?? "";
+  const check = raw ? validateChipContent(raw, { allowHttp: import.meta.env.DEV }) : null;
+  const value = check?.ok ? check.value : null;
+  const destinationType = value ? (kind === "url" ? guessDestinationType(value) : kind) : null;
+  const utm = utmTouched ? utmEnabled : destinationType ? defaultUtmEnabled(destinationType) : utmEnabled;
+  const dirty = value !== (tag.destinationUrl ?? null) || utm !== tag.utmEnabled || utmCampaign.trim() !== (tag.utmCampaign ?? "");
+  // Why the button is off, said out loud instead of a silent grey button.
+  const blocker = !value
+    ? kind === "url" && check && !check.ok
+      ? URL_ERROR_KEYS[check.error] ? t(URL_ERROR_KEYS[check.error]) : check.error
+      : kind !== "url"
+        ? content.error ?? t("saveNeedsContent")
+        : t("saveNeedsContent")
+    : !dirty
+      ? t("saveNoChanges")
+      : null;
+
+  if (!stored && !tag.leadId && tag.status === "inventory") {
+    return (
+      <div className="space-y-2">
+        <p className={STEP_TITLE}>{t("stepDestination")}</p>
+        <p className="text-sm text-white/40">{t("destinationNeedsCustomer")}</p>
+      </div>
+    );
+  }
+
+  if (!editing) {
+    return (
+      <div className="space-y-3">
+        <p className={STEP_TITLE}>{t("stepDestination")}</p>
+        <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] py-2 pl-3 pr-2" data-testid="admin-piece-destination">
+          <span className="min-w-0 flex-1">
+            <span className="block text-xs text-white/40">
+              {t("destinationOpens")} · {storedKind === "url" ? labels.destination(tag.destinationType) : tt(`contentKind_${storedKind}`)}
+            </span>
+            {storedKind === "url" ? (
+              <a href={stored} target="_blank" rel="noopener noreferrer" className="block truncate font-semibold text-white hover:underline">
+                {stored.replace(/^https?:\/\/(www\.)?/, "")}
+              </a>
+            ) : (
+              <span className="block truncate font-semibold text-white">{contentSummary(stored)}</span>
+            )}
+          </span>
+          {!locked ? (
+            <button type="button" className={BTN_GHOST} onClick={() => setEditing(true)} data-testid="admin-piece-change-destination">
+              <Pencil className="h-3.5 w-3.5" />
+              {t("changeDestination")}
+            </button>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3">
       <p className={STEP_TITLE}>{t("stepDestination")}</p>
-      <Select
-        value={destinationType}
-        onChange={(v) => {
-          setDestinationType(v);
-          if (!utmTouched) setUtmEnabled(defaultUtmEnabled(v));
-        }}
-        placeholder={t("destinationTypePlaceholder")}
-        options={labels.destinationOptions}
-        disabled={locked}
-        testId="admin-piece-destination-type"
-      />
-      <div className="space-y-1">
-        <input
-          className={INPUT}
-          value={destinationUrl}
-          onChange={(e) => setDestinationUrl(e.target.value)}
-          placeholder="https://"
-          inputMode="url"
-          autoCapitalize="off"
-          autoCorrect="off"
-          disabled={locked}
-          data-testid="admin-piece-destination-url"
-        />
-        <p className="text-xs text-white/40">
-          {check && !check.ok ? (
-            <span className="text-red-400">{URL_ERROR_KEYS[check.error] ? t(URL_ERROR_KEYS[check.error]) : check.error}</span>
-          ) : (
-            t(URL_HINT_KEYS[destinationType ?? ""] ?? "urlHintDefault")
-          )}
-        </p>
-        {destinationType === "google_review" && check?.ok && !isReviewFormUrl(check.value) ? (
-          <p className="text-xs text-amber-300">{t("reviewNotFormConvert")}</p>
-        ) : null}
-      </div>
-      {destinationType === "google_review" && !locked ? (
-        <ReviewLinkFinder
-          key={tag.id}
-          initialQuery={trimmed && !isReviewFormUrl(trimmed) ? trimmed : tag.leadName ?? ""}
-          onPick={(place) => setDestinationUrl(place.reviewUrl)}
-        />
-      ) : null}
-      <div className="flex items-center justify-between gap-3 rounded-xl border border-white/10 p-3">
-        <div>
-          <label htmlFor={`utm-${tag.id}`} className="text-sm text-white/80">{t("utmLabel")}</label>
-          <p className="text-xs text-white/40">{t("utmHint")}</p>
-        </div>
-        <Switch
-          id={`utm-${tag.id}`}
-          checked={utmEnabled}
-          onCheckedChange={(v) => {
-            setUtmEnabled(v);
-            setUtmTouched(true);
+      {tag.leadName && (customer?.googlePlaceId || tag.face === "google_review") ? (
+        <GenerateReviewButton
+          name={tag.leadName}
+          placeId={customer?.googlePlaceId}
+          currentLink={link}
+          onLink={(url) => {
+            setKind("url");
+            setLink(url);
           }}
-          disabled={locked}
         />
-      </div>
-      {utmEnabled ? (
-        <input className={INPUT} value={utmCampaign} onChange={(e) => setUtmCampaign(e.target.value)} placeholder={t("utmCampaignPlaceholder")} maxLength={80} disabled={locked} />
       ) : null}
-      {tag.destinationUrl && !locked ? (
-        <input className={INPUT} value={reason} onChange={(e) => setReason(e.target.value)} placeholder={t("changeReasonPlaceholder")} maxLength={300} />
+      <ContentEditor
+        kind={kind}
+        onKind={setKind}
+        initial={storedKind === "url" ? null : stored}
+        onChange={setContent}
+        urlField={
+          <div>
+            <FieldLabel>{tt("linkField")}</FieldLabel>
+            <LinkInput
+              value={link}
+              onChange={setLink}
+              placeholder={tt("linkPlaceholder")}
+              onPasteFailed={() => toast({ title: tc("pasteFailed"), variant: "destructive" })}
+            />
+            <ReviewLinkAssist link={link} onPick={(place) => setLink(place.reviewUrl)} />
+          </div>
+        }
+      />
+      {kind === "url" ? (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-white/10 p-3">
+          <div>
+            <label htmlFor={`utm-${tag.id}`} className="text-sm text-white/80">{t("utmLabel")}</label>
+            <p className="text-xs text-white/40">{t("utmHint")}</p>
+          </div>
+          <Switch
+            id={`utm-${tag.id}`}
+            checked={utm}
+            onCheckedChange={(v) => {
+              setUtmEnabled(v);
+              setUtmTouched(true);
+            }}
+          />
+        </div>
       ) : null}
-      {locked ? null : (
+      {kind === "url" && utm ? (
+        <input className={INPUT} value={utmCampaign} onChange={(e) => setUtmCampaign(e.target.value)} placeholder={t("utmCampaignPlaceholder")} maxLength={80} />
+      ) : null}
+      {stored ? <input className={INPUT} value={reason} onChange={(e) => setReason(e.target.value)} placeholder={t("changeReasonPlaceholder")} maxLength={300} /> : null}
+      <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
           className={BTN}
-          disabled={!dirty || save.isPending || !valid}
+          disabled={!!blocker || save.isPending}
           onClick={() =>
-            save.mutate({
-              method: "PATCH",
-              body: clearing
-                ? { destinationType: null, destinationUrl: null, reason }
-                : { destinationType, destinationUrl: trimmed, utmEnabled, utmCampaign, reason },
-            })
+            save.mutate(
+              { method: "PATCH", body: { destinationType, destinationUrl: value, utmEnabled: kind === "url" ? utm : false, utmCampaign, reason } },
+              { onSuccess: () => setEditing(false) },
+            )
           }
           data-testid="admin-piece-save-destination"
         >
           {t("saveDestination")}
         </button>
-      )}
+        {stored ? (
+          <button type="button" className={BTN_GHOST} onClick={() => setEditing(false)}>
+            {tc("cancel")}
+          </button>
+        ) : null}
+        {blocker ? <span className="text-xs text-white/40" data-testid="admin-piece-save-hint">{blocker}</span> : null}
+      </div>
     </div>
   );
 }
@@ -408,14 +445,11 @@ function LifecycleStep({ tag }: { tag: TagDetail }) {
     <div className="space-y-3">
       <p className={STEP_TITLE}>{t("stepLive")}</p>
       <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          className={BTN_GHOST}
-          disabled={!tag.destinationUrl}
-          onClick={() => tag.destinationUrl && window.open(tag.destinationUrl, "_blank", "noopener,noreferrer")}
-        >
-          <ExternalLink className="h-3.5 w-3.5" />{t("testDestination")}
-        </button>
+        {tag.destinationUrl ? (
+          <button type="button" className={BTN_GHOST} onClick={() => tag.destinationUrl && window.open(tag.destinationUrl, "_blank", "noopener,noreferrer")}>
+            <ExternalLink className="h-3.5 w-3.5" />{t("testDestination")}
+          </button>
+        ) : null}
         {tag.status !== "active" && tag.status !== "retired" ? (
           <button type="button" className={BTN} disabled={!activatePlan.ok || run.isPending} onClick={() => setPending("activate")} data-testid="admin-piece-activate">
             <Power className="h-3.5 w-3.5" />{t("action_activate_confirm")}
@@ -462,9 +496,12 @@ function DetailsStep({ tag }: { tag: TagDetail }) {
   const dirty = label.trim() !== (tag.label ?? "") || productType !== tag.productType || (face ?? null) !== tag.ownFace;
   if (tag.status === "retired") return null;
   return (
-    <div className="space-y-3">
-      <p className={STEP_TITLE}>{t("pieceDetails")}</p>
-      <div className="grid gap-2 sm:grid-cols-2">
+    <details className="group space-y-3">
+      <summary className="flex cursor-pointer list-none items-center gap-1.5 text-sm font-semibold text-white/70 hover:text-white">
+        <ChevronRight className="h-4 w-4 transition-transform group-open:rotate-90" />
+        {t("pieceSettings")}
+      </summary>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
         <label className="space-y-1">
           <span className={LABEL}>{t("productType")}</span>
           <Select value={productType} onChange={setProductType} placeholder={t("productPlaceholder")} options={labels.productOptions} allowEmpty={false} />
@@ -481,7 +518,7 @@ function DetailsStep({ tag }: { tag: TagDetail }) {
       <button type="button" className={BTN_GHOST} disabled={!dirty || !productType || save.isPending} onClick={() => save.mutate({ method: "PATCH", body: { label, productType, face: face ?? null } })}>
         {t("saveDetails")}
       </button>
-    </div>
+    </details>
   );
 }
 
@@ -580,11 +617,7 @@ export function PieceDetail({ id, go }: { id: string; go: Go }) {
       <Back go={go} />
 
       <div className="flex min-w-0 items-center gap-3 sm:gap-4">
-        <div className="flex shrink-0 items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.025] p-2">
-          <TagFaceIcon face={tag.face} size="lg" />
-          <span className="h-10 w-px bg-white/10" aria-hidden="true" />
-          <TagProductThumbnail productType={tag.productType} face={tag.face} />
-        </div>
+        <TagPieceVisual productType={tag.productType} face={tag.face} size="md" />
         <div className="min-w-0 flex-1 space-y-1.5">
           <div className="flex flex-wrap items-center gap-2.5">
             <h2 className="font-mono text-xl font-bold tracking-wider text-white sm:text-2xl" data-testid="admin-piece-code">{tag.publicCode}</h2>
@@ -632,27 +665,46 @@ export function PieceDetail({ id, go }: { id: string; go: Go }) {
           <div className="mx-auto w-44 rounded-xl bg-white p-2">
             <img src={`${qrBase}/qr.svg?v=${encodeURIComponent(tag.publicCode)}`} alt={t("qrAlt", { code: tag.publicCode })} className="h-full w-full" />
           </div>
-          <div className="flex justify-center gap-2">
-            <a className={BTN_GHOST} href={`${qrBase}/qr.svg?download=1`} download={`${tag.publicCode}.svg`}>
-              <Download className="h-3.5 w-3.5" />SVG
-            </a>
-            <a className={BTN_GHOST} href={`${qrBase}/qr.png?download=1`} download={`${tag.publicCode}.png`}>
-              <Download className="h-3.5 w-3.5" />PNG
-            </a>
-          </div>
-          <CopyRow label={t("qrUrlLabel")} value={tag.qrUrl} />
-          <CopyRow label={t("nfcUrlLabel")} value={tag.nfcUrl} />
           <Dl>
-            <Row label={t("colDestination")} value={labels.destination(tag.destinationType)} />
-            <Row label={t("rowAssigned")} value={formatDateTime(tag.assignedAt)} />
-            <Row label={t("rowActivated")} value={formatDateTime(tag.activatedAt)} />
-            <Row label={t("rowDisabled")} value={formatDateTime(tag.disabledAt)} />
-            <Row label={t("colLastInteraction")} value={formatDateTime(tag.lastInteractionAt)} />
             <Row label={t("rowScans")} value={`QR ${tag.qrInteractions} · NFC ${tag.nfcInteractions}`} />
-            <Row label={t("rowCreated")} value={formatDateTime(tag.createdAt)} />
+            <Row label={t("colLastInteraction")} value={formatDateTime(tag.lastInteractionAt)} />
           </Dl>
           <div className="border-t border-white/10" />
           <ResellerField tag={tag} />
+          <div className="border-t border-white/10" />
+          {/* Rarely needed: the QR is printed and the chip is written by the NFC tools. */}
+          <details className="group" data-testid="admin-piece-technical">
+            <summary className="flex cursor-pointer list-none items-center gap-1.5 text-sm font-semibold text-white/70 hover:text-white">
+              <ChevronRight className="h-4 w-4 transition-transform group-open:rotate-90" />
+              {t("technicalDetails")}
+            </summary>
+            <div className="mt-3 space-y-3">
+              <div>
+                <CopyRow label={t("qrUrlLabel")} value={tag.qrUrl} />
+                <p className="mt-1 text-xs text-white/40">{t("qrUrlHint")}</p>
+              </div>
+              <div>
+                <CopyRow label={t("nfcUrlLabel")} value={tag.nfcUrl} />
+                <p className="mt-1 text-xs text-white/40">{t("nfcUrlHint")}</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs text-white/40">{t("downloadQr")}</span>
+                <a className={BTN_GHOST} href={`${qrBase}/qr.svg?download=1`} download={`${tag.publicCode}.svg`}>
+                  <Download className="h-3.5 w-3.5" />SVG
+                </a>
+                <a className={BTN_GHOST} href={`${qrBase}/qr.png?download=1`} download={`${tag.publicCode}.png`}>
+                  <Download className="h-3.5 w-3.5" />PNG
+                </a>
+              </div>
+              {/* Only the dates that happened. */}
+              <Dl>
+                {tag.assignedAt ? <Row label={t("rowAssigned")} value={formatDateTime(tag.assignedAt)} /> : null}
+                {tag.activatedAt ? <Row label={t("rowActivated")} value={formatDateTime(tag.activatedAt)} /> : null}
+                {tag.disabledAt ? <Row label={t("rowDisabled")} value={formatDateTime(tag.disabledAt)} /> : null}
+                <Row label={t("rowCreated")} value={formatDateTime(tag.createdAt)} />
+              </Dl>
+            </div>
+          </details>
         </section>
       </div>
 

@@ -36,6 +36,7 @@ export function TopBar({
   identity = "xpot",
   right,
   sub,
+  picture,
   titleClassName = "",
 }: {
   title: string;
@@ -45,6 +46,8 @@ export function TopBar({
   right?: ReactNode;
   /** A line under the title (status, details). */
   sub?: ReactNode;
+  /** A picture right of the title, e.g. the piece's icon and plaque. */
+  picture?: ReactNode;
   titleClassName?: string;
 }) {
   const t = useT(commonMessages);
@@ -66,6 +69,7 @@ export function TopBar({
         <h1 className={`mt-0.5 break-words text-[26px] font-extrabold leading-tight tracking-tight text-white ${titleClassName}`}>{title}</h1>
         {sub && <div className="mt-1.5">{sub}</div>}
       </div>
+      {picture && <div className="shrink-0 self-center">{picture}</div>}
       {right && <div className="shrink-0">{right}</div>}
     </header>
   );

@@ -28,7 +28,7 @@ export const TAG_FACES = [
 export type TagFace = (typeof TAG_FACES)[number];
 
 export const TAG_FACE_LABELS: Record<TagFace, string> = {
-  google_review: "Google review",
+  google_review: "Google Review",
   instagram: "Instagram",
   facebook: "Facebook",
   tiktok: "TikTok",

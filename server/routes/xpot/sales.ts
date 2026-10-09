@@ -7,6 +7,7 @@ import { xpotSaleCreateSchema, xpotSalePaymentSchema, xpotSaleCancelSchema } fro
 import { allocateSaleLineTotals, computeSaleTotals, paymentStatusFor } from "#shared/pricing.js";
 import { syncSaleToXphere } from "./xphere-sync.js";
 import { cancelTagLinksForSale } from "../../tags/sales.js";
+import { activeOrganizationIds, canManageOrganizationForActor, canViewOrganizationForActor, managedOrganizationIds } from "../../organizations/service.js";
 
 // Direct sales: what the rep closes on the spot (a website, a marketing plan,
 // a handful of keychains sold outright). Consignment settlements also land
@@ -30,19 +31,37 @@ export function createSalesRouter() {
   router.get("/sales", async (req, res) => {
     const actor = (req as any).xpotActor as XpotActor;
     const q = listQuerySchema.parse(req.query);
-    const repId = listsEveryone(req, actor) ? q.repId : actor.rep.id;
+    let repId: number | undefined;
+    let organizationIds: number[] | undefined;
+    if (listsEveryone(req, actor)) repId = q.repId;
+    else {
+      const managed = await managedOrganizationIds(actor);
+      if (managed?.length) organizationIds = managed;
+      else {
+        repId = actor.rep.id;
+        organizationIds = (await activeOrganizationIds(actor)) ?? undefined;
+      }
+    }
     const since = q.days ? new Date(Date.now() - q.days * 24 * 60 * 60 * 1000) : undefined;
-    res.json(await salesStorage.listSales({ repId, leadId: q.leadId, visitId: q.visitId, status: q.status, source: q.source, since, limit: q.limit, offset: q.offset }));
+    res.json(await salesStorage.listSales({ repId, organizationIds, leadId: q.leadId, visitId: q.visitId, status: q.status, source: q.source, since, limit: q.limit, offset: q.offset }));
   });
 
   // GET /sales/summary?days=30[&repId=] — revenue, by product, daily series, consignment stock.
   router.get("/sales/summary", async (req, res) => {
     const actor = (req as any).xpotActor as XpotActor;
     const days = Math.min(Math.max(Number(req.query.days) || 30, 1), 365);
-    const repId = listsEveryone(req, actor)
-      ? (req.query.repId ? Number(req.query.repId) : undefined)
-      : actor.rep.id;
-    res.json(await salesStorage.salesSummary({ repId, days }));
+    let repId: number | undefined;
+    let organizationIds: number[] | undefined;
+    if (listsEveryone(req, actor)) repId = req.query.repId ? Number(req.query.repId) : undefined;
+    else {
+      const managed = await managedOrganizationIds(actor);
+      if (managed?.length) organizationIds = managed;
+      else {
+        repId = actor.rep.id;
+        organizationIds = (await activeOrganizationIds(actor)) ?? undefined;
+      }
+    }
+    res.json(await salesStorage.salesSummary({ repId, organizationIds, days }));
   });
 
   // GET /sales/lead/:leadId — lifetime totals + active consignments for a lead card.
@@ -56,7 +75,8 @@ export function createSalesRouter() {
     const actor = (req as any).xpotActor as XpotActor;
     const sale = await salesStorage.getSale(Number(req.params.id));
     if (!sale) return res.status(404).json({ message: "Sale not found" });
-    if (!isManagerOrAdmin(actor) && sale.sale.repId !== actor.rep.id) {
+    if (!isManagerOrAdmin(actor) && (!(await canViewOrganizationForActor(actor, sale.sale.organizationId)) ||
+      (sale.sale.repId !== actor.rep.id && !(await canManageOrganizationForActor(actor, sale.sale.organizationId))))) {
       return res.status(403).json({ message: "Access denied" });
     }
     res.json(sale);
@@ -125,6 +145,7 @@ export function createSalesRouter() {
 
     const sale = await salesStorage.createDirectSale(
       {
+        organizationId: lead.organizationId,
         leadId: lead.id,
         repId: actor.rep.id,
         visitId: input.visitId ?? null,
@@ -167,7 +188,8 @@ export function createSalesRouter() {
     const actor = (req as any).xpotActor as XpotActor;
     const existing = await salesStorage.getSale(Number(req.params.id));
     if (!existing) return res.status(404).json({ message: "Sale not found" });
-    if (!isManagerOrAdmin(actor) && existing.sale.repId !== actor.rep.id) {
+    if (!isManagerOrAdmin(actor) && (!(await canViewOrganizationForActor(actor, existing.sale.organizationId)) ||
+      (existing.sale.repId !== actor.rep.id && !(await canManageOrganizationForActor(actor, existing.sale.organizationId))))) {
       return res.status(403).json({ message: "Access denied" });
     }
     if (existing.sale.status === "cancelled") {
@@ -196,7 +218,8 @@ export function createSalesRouter() {
     const actor = (req as any).xpotActor as XpotActor;
     const existing = await salesStorage.getSale(Number(req.params.id));
     if (!existing) return res.status(404).json({ message: "Sale not found" });
-    if (!isManagerOrAdmin(actor) && existing.sale.repId !== actor.rep.id) {
+    if (!isManagerOrAdmin(actor) && (!(await canViewOrganizationForActor(actor, existing.sale.organizationId)) ||
+      (existing.sale.repId !== actor.rep.id && !(await canManageOrganizationForActor(actor, existing.sale.organizationId))))) {
       return res.status(403).json({ message: "Access denied" });
     }
     if (existing.sale.status === "cancelled") return res.json(existing);
