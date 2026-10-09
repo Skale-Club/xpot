@@ -219,6 +219,10 @@ const en = {
   // Journey tab and panel
   allKinds: "All kinds",
   showArchived: "Show archived",
+  journeySearch: "Search the journey (code, customer, text)",
+  journeyDetails: "Details ({count})",
+  journeyHideDetails: "Hide details",
+  journeyNoMatch: "Nothing in the journey matches this search.",
   actorAi: "AI (MCP)",
   actorAdmin: "admin",
   actorSystem: "system",
@@ -504,6 +508,10 @@ export const manageTagsMessages: Dictionary<typeof en> = {
 
     allKinds: "Todos os tipos",
     showArchived: "Mostrar arquivados",
+    journeySearch: "Buscar no histórico (código, cliente, texto)",
+    journeyDetails: "Detalhes ({count})",
+    journeyHideDetails: "Esconder detalhes",
+    journeyNoMatch: "Nada no histórico corresponde a esta busca.",
     actorAi: "IA (MCP)",
     actorAdmin: "admin",
     actorSystem: "sistema",
@@ -784,6 +792,10 @@ export const manageTagsMessages: Dictionary<typeof en> = {
 
     allKinds: "Todos los tipos",
     showArchived: "Mostrar archivadas",
+    journeySearch: "Buscar en el historial (código, cliente, texto)",
+    journeyDetails: "Detalles ({count})",
+    journeyHideDetails: "Ocultar detalles",
+    journeyNoMatch: "Nada en el historial coincide con esta búsqueda.",
     actorAi: "IA (MCP)",
     actorAdmin: "admin",
     actorSystem: "sistema",

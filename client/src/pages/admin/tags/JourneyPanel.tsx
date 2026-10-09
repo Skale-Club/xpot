@@ -1,14 +1,15 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { Archive, Bot, Check, ClipboardList, Cog, History, Plus, User } from "lucide-react";
-import { isClosedPlanStatus } from "@shared/tagJourney";
+import { Archive, Bot, Check, ChevronRight, ClipboardList, Cog, History, Plus, User } from "lucide-react";
+import { JOURNEY_PRODUCTION_ACTIONS, isClosedPlanStatus } from "@shared/tagJourney";
 import type { TagJourneyEntryItem, TagPlanItem } from "@shared/tagsApi";
 import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/i18n";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
 import { shellMessages } from "@/i18n/messages/shell";
-import { errorMessage, formatDate, formatDateTime, invalidateAdminTags, sendJson } from "./api";
+import { tagsMessages } from "@/i18n/messages/tags";
+import { errorMessage, formatDate, formatDateTime, formatTime, invalidateAdminTags, sendJson } from "./api";
 import { BTN_GHOST, CARD } from "./ui";
 import { Loading } from "./pieces-shared";
 import { NewEntryDialog, NewPlanDialog, PlanStatusDialog } from "./JourneyForms";
@@ -46,26 +47,54 @@ function ActorLabel({ entry }: { entry: TagJourneyEntryItem }) {
   );
 }
 
-/** Metadata as key: value chips (files, minutes, codes, checks). */
-function MetadataChips({ metadata }: { metadata: Record<string, unknown> }) {
+/** "destinationUrl" → "destination url", "pause_z" → "pause z". */
+function humanKey(key: string): string {
+  return key.replace(/_/g, " ").replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase();
+}
+
+/** Metadata (files, minutes, codes, checks): folded away until asked for. */
+function MetadataDetails({ metadata }: { metadata: Record<string, unknown> }) {
+  const t = useT(manageTagsMessages);
+  const [open, setOpen] = useState(false);
   const items = Object.entries(metadata).filter(([, v]) => v !== null && v !== undefined && v !== "");
   if (items.length === 0) return null;
   return (
-    <div className="flex flex-wrap gap-1.5 pt-1">
-      {items.slice(0, 12).map(([k, v]) => {
-        const text = `${k}: ${typeof v === "object" ? JSON.stringify(v) : String(v)}`;
-        return (
-          <span key={k} title={text} className="max-w-full truncate rounded-md border border-white/10 px-1.5 py-0.5 font-mono text-[11px] text-white/50">
-            {text}
-          </span>
-        );
-      })}
+    <div className="pt-0.5">
+      <button type="button" className="inline-flex items-center gap-1 text-xs text-white/40 hover:text-white/70" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+        <ChevronRight className={`h-3 w-3 transition-transform ${open ? "rotate-90" : ""}`} />
+        {open ? t("journeyHideDetails") : t("journeyDetails", { count: items.length })}
+      </button>
+      {open ? (
+        <dl className="mt-1.5 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded-lg bg-white/[0.03] px-3 py-2 text-xs">
+          {items.slice(0, 20).map(([k, v]) => (
+            <div key={k} className="contents">
+              <dt className="text-white/40">{humanKey(k)}</dt>
+              <dd className="min-w-0 break-all font-mono text-white/70">{Array.isArray(v) ? v.join(", ") : typeof v === "object" ? JSON.stringify(v) : String(v)}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
     </div>
   );
 }
 
+/** Timeline dot: the entry's kind at a glance (a decision, a risk, a result...). */
+const KIND_DOT: Record<string, string> = {
+  execution: "bg-white/40",
+  decision: "bg-blue-400",
+  insight: "bg-violet-400",
+  observation: "bg-white/25",
+  risk: "bg-amber-400",
+  result: "bg-emerald-400",
+};
+
+/** Production steps get a label of their own; system actions repeat what the title says. */
+const LABELLED_ACTIONS = new Set<string>(JOURNEY_PRODUCTION_ACTIONS);
+
 function EntryRow({ entry, showScope }: { entry: TagJourneyEntryItem; showScope: boolean }) {
   const t = useT(manageTagsMessages);
+  const tt = useT(tagsMessages);
+  const labels = useJourneyLabels();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const review = useMutation({
@@ -74,30 +103,43 @@ function EntryRow({ entry, showScope }: { entry: TagJourneyEntryItem; showScope:
     onError: (err) => toast({ title: t("couldNotUpdateEntry"), description: errorMessage(err), variant: "destructive" }),
   });
   const dimmed = entry.status === "archived" || entry.status === "superseded";
+  // A piece's status change reads as the status names people see (Available → Live).
+  const isStatusChange = !!entry.action?.startsWith("tag_");
+  const value = (v: string) => {
+    if (!isStatusChange) return v;
+    const key = `status_${v}`;
+    const label = tt(key as never);
+    return label === key ? v : label;
+  };
+  const actorName = entry.actor === "human" ? entry.actorName ?? entry.actorEmail : null;
+  const labelledAction = entry.action && LABELLED_ACTIONS.has(entry.action) ? entry.action : null;
   return (
-    <li className={`relative min-w-0 space-y-1 py-3 pl-5 ${dimmed ? "opacity-60" : ""}`} data-testid="journey-entry">
-      <span className="absolute -left-[4.5px] top-[1.15rem] h-2 w-2 rounded-full bg-blue-500" aria-hidden />
-      <div className="flex flex-wrap items-center gap-2">
-        <KindBadge kind={entry.kind} />
-        {entry.action && <span className="font-mono text-[11px] text-white/45">{entry.action}</span>}
-        <EntryStatusBadge status={entry.status} />
-      </div>
+    <li className={`group relative min-w-0 space-y-1 py-3 pl-5 ${dimmed ? "opacity-60" : ""}`} data-testid="journey-entry">
+      <span className={`absolute -left-[4.5px] top-[1.15rem] h-2 w-2 rounded-full ${KIND_DOT[entry.kind] ?? "bg-white/40"}`} aria-hidden />
+      {/* Only what is not routine: execution and "active" are the norm, so they stay quiet. */}
+      {(entry.kind !== "execution" || labelledAction || entry.status !== "active") && (
+        <div className="flex flex-wrap items-center gap-2">
+          {entry.kind !== "execution" && <KindBadge kind={entry.kind} />}
+          {labelledAction && <span className="text-xs font-medium text-white/55">{labels.action(labelledAction)}</span>}
+          {entry.status !== "active" && <EntryStatusBadge status={entry.status} />}
+        </div>
+      )}
       <p className="break-words font-medium text-white">{entry.title}</p>
       {(entry.beforeValue || entry.afterValue) && (
         <p className="break-all text-sm">
           {entry.beforeValue && (
             <>
-              <span className="text-white/40">{entry.beforeValue}</span>
+              <span className="text-white/40">{value(entry.beforeValue)}</span>
               <span className="mx-1 text-white/30">→</span>
             </>
           )}
-          <span className="text-white/80">{entry.afterValue ?? t("valueNone")}</span>
+          <span className="text-white/80">{entry.afterValue ? value(entry.afterValue) : t("valueNone")}</span>
         </p>
       )}
       {entry.content && <p className="whitespace-pre-wrap break-words text-sm text-white/55">{entry.content}</p>}
-      <MetadataChips metadata={entry.metadata} />
+      <MetadataDetails metadata={entry.metadata} />
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-white/40">
-        <span>{formatDateTime(entry.occurredAt)}</span>
+        <span title={formatDateTime(entry.occurredAt)}>{formatTime(entry.occurredAt)}</span>
         <ActorLabel entry={entry} />
         {showScope && entry.batchCode && (
           <button type="button" className={LINK} onClick={() => entry.batchId && setLocation(`${TAGS_BASE}/batches/${entry.batchId}`)}>
@@ -111,8 +153,8 @@ function EntryRow({ entry, showScope }: { entry: TagJourneyEntryItem; showScope:
           </button>
         )}
         {entry.kitId && <span className="font-mono">{t("kitShort", { id: entry.kitId.slice(0, 8) })}</span>}
-        {entry.repName && <span>{entry.repName}</span>}
-        {entry.leadName && <span>{entry.leadName}</span>}
+        {entry.repName && entry.repName !== actorName && <span>{entry.repName}</span>}
+        {entry.leadName && <span className="text-white/60">{entry.leadName}</span>}
         {entry.planTitle && (
           <span className="inline-flex min-w-0 items-center gap-1">
             <ClipboardList className="h-3 w-3 shrink-0" />
@@ -126,8 +168,15 @@ function EntryRow({ entry, showScope }: { entry: TagJourneyEntryItem; showScope:
               {t("approve")}
             </button>
           )}
+          {/* Archiving is occasional: it shows on hover or keyboard focus, not on every row. */}
           {!dimmed && (
-            <button type="button" className={SMALL_BTN} onClick={() => review.mutate("archived")} disabled={review.isPending} data-testid="journey-entry-archive">
+            <button
+              type="button"
+              className={`${SMALL_BTN} opacity-0 focus-visible:opacity-100 group-hover:opacity-100`}
+              onClick={() => review.mutate("archived")}
+              disabled={review.isPending}
+              data-testid="journey-entry-archive"
+            >
               <Archive className="h-3 w-3" />
               {t("archive")}
             </button>
@@ -186,14 +235,14 @@ function groupByDay(entries: TagJourneyEntryItem[]) {
  * the left, the plans on the right, and buttons to add to both. `scope` is
  * where new entries and plans are attached; filters narrow what is listed.
  */
-export function JourneyPanel(props: { scope: JourneyScope; filters?: Omit<JourneyFilters, keyof JourneyScope>; title?: string }) {
+export function JourneyPanel(props: { scope: JourneyScope; filters?: Omit<JourneyFilters, keyof JourneyScope>; title?: string; search?: string }) {
   // The gate lives here so a manager never mounts the query below.
   const isAdmin = useIsTagAdmin();
   if (!isAdmin) return null;
   return <JourneyPanelBody {...props} />;
 }
 
-function JourneyPanelBody({ scope, filters, title }: { scope: JourneyScope; filters?: Omit<JourneyFilters, keyof JourneyScope>; title?: string }) {
+function JourneyPanelBody({ scope, filters, title, search = "" }: { scope: JourneyScope; filters?: Omit<JourneyFilters, keyof JourneyScope>; title?: string; search?: string }) {
   const t = useT(manageTagsMessages);
   const ts = useT(shellMessages);
   const [entryOpen, setEntryOpen] = useState(false);
@@ -202,6 +251,13 @@ function JourneyPanelBody({ scope, filters, title }: { scope: JourneyScope; filt
   const { data, isLoading, isError, error } = useJourney({ ...scope, ...filters }, true);
   const scopeLabel = scope.tagId ? ("piece" as const) : scope.batchId ? ("batch" as const) : undefined;
   const repFiltered = filters?.repId != null;
+  // Search runs over what is loaded: titles, notes, codes, customers, reps.
+  const query = search.trim().toLowerCase();
+  const entries = (data?.entries ?? []).filter((e) =>
+    !query ||
+    [e.title, e.content, e.publicCode, e.batchCode, e.leadName, e.repName, e.action, e.beforeValue, e.afterValue]
+      .some((v) => v?.toLowerCase().includes(query)),
+  );
 
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_320px]" data-testid="admin-tags-journey">
@@ -224,9 +280,11 @@ function JourneyPanelBody({ scope, filters, title }: { scope: JourneyScope; filt
           <div className="px-4 py-10 text-center text-sm text-white/40">
             {t("journeyEmpty")}
           </div>
+        ) : entries.length === 0 ? (
+          <div className="px-4 py-10 text-center text-sm text-white/40">{t("journeyNoMatch")}</div>
         ) : (
           <div className="space-y-3">
-            {groupByDay(data.entries).map((g) => (
+            {groupByDay(entries).map((g) => (
               <div key={g.day}>
                 <p className="py-1 text-xs font-semibold uppercase tracking-wider text-white/40">{g.day}</p>
                 <ul className="ml-[3px] divide-y divide-white/5 border-l border-white/10">

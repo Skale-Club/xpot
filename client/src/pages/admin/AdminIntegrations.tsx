@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { JourneyMcpCard } from "./tags/JourneyMcpCard";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -227,6 +228,9 @@ export function AdminIntegrations() {
           categoryColor={CATEGORY_COLORS[selectedDef.category] ?? "bg-white/10 text-white/60 border-white/10"}
         />
       </div>
+
+      {/* Inbound: AI sessions (Claude, ChatGPT, Claude Code) reaching Xpot over /mcp. */}
+      <JourneyMcpCard />
     </div>
   );
 }
