@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { JourneyMcpCard } from "./tags/JourneyMcpCard";
+import { AdminXphere } from "./AdminXphere";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -228,6 +229,12 @@ export function AdminIntegrations() {
           categoryColor={CATEGORY_COLORS[selectedDef.category] ?? "bg-white/10 text-white/60 border-white/10"}
         />
       </div>
+
+      {/* Per-rep Xphere connection: syncs each rep's visits. */}
+      <section className="space-y-3 pt-2" data-testid="integrations-xphere">
+        <h3 className="text-sm font-semibold text-white">Xphere</h3>
+        <AdminXphere />
+      </section>
 
       {/* Inbound: AI sessions (Claude, ChatGPT, Claude Code) reaching Xpot over /mcp. */}
       <JourneyMcpCard />

@@ -7,7 +7,6 @@ import type { XpotMeResponse } from "@/pages/xpot/types";
 import { AdminOverview } from "./AdminOverview";
 import { AdminReps } from "./AdminReps";
 import { AdminIntegrations } from "./AdminIntegrations";
-import { AdminXphere } from "./AdminXphere";
 import { AdminBranding } from "./AdminBranding";
 import { AdminTags, CodeLookup } from "./tags/AdminTags";
 import { AdminProducts } from "./AdminProducts";
@@ -27,7 +26,7 @@ import { TagsTabBar } from "@/pages/tags/TagsTabBar";
 import { useViewerAccess } from "@/lib/adminMode";
 
 // The management screens. They are not a place of their own any more: each one
-// belongs to a module (Visits: team, products, check-in rules, Xphere; Tags: the
+// belongs to a module (Visits: team, products, check-in rules; Tags: the
 // /admin/tags tabs) or to the account's Organization (people, integrations,
 // branding), and the shell shows it inside that part of the app (moduleNav.ts).
 // The URLs stay /admin/<section> so bookmarks and links keep working.
@@ -156,9 +155,8 @@ export function AdminApp({ section }: { section: string }) {
       {SUPER_ADMIN_SECTIONS.includes(active) && !viewer.isAdmin && (
         <p className="py-16 text-center text-sm text-white/50">{tm("noAdminPermission")}</p>
       )}
-      {active === "integrations" && viewer.isAdmin && <AdminIntegrations />}
+      {(active === "integrations" || active === "xphere") && viewer.isAdmin && <AdminIntegrations />}
       {active === "branding" && viewer.isAdmin && <AdminBranding />}
-      {active === "xphere" && viewer.isAdmin && <AdminXphere />}
       {active === "reps" && <AdminReps />}
       {active === "tags" && <AdminTags />}
       {active === "settings" && <AdminSettings />}

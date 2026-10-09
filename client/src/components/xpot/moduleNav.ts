@@ -17,7 +17,6 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Users,
-  Webhook,
   type LucideIcon,
 } from "lucide-react";
 import type { XpotModule } from "@shared/modules";
@@ -45,8 +44,8 @@ export type NavGroup = { label: string; items: NavItem[] };
 export const starts = (prefix: string) => (path: string) => path === prefix || path.startsWith(`${prefix}/`);
 
 /** Admin sections that are really Visits management, and the ones that belong to the account. */
-const VISITS_ADMIN = ["overview", "products", "settings", "xphere"] as const;
-export const ORGANIZATION_SECTIONS = ["reps", "integrations", "branding"] as const;
+const VISITS_ADMIN = ["overview", "products", "settings"] as const;
+export const ORGANIZATION_SECTIONS = ["reps", "integrations", "branding", "xphere"] as const;
 
 /** Which part of the app a path belongs to. */
 export function contextOfPath(path: string): ShellContext {
@@ -81,7 +80,6 @@ type ShellKey =
   | "manageTeam"
   | "manageProducts"
   | "manageCheckInRules"
-  | "manageXphere"
   | "manageOverview"
   | "managePieces"
   | "manageKits"
@@ -131,7 +129,6 @@ export function moduleGroups(module: XpotModule, viewer: Viewer, l: Labels): Nav
           { href: "/admin/overview", label: l.shell("manageTeam"), icon: LayoutDashboard, match: section("overview") },
           { href: "/admin/products", label: l.shell("manageProducts"), icon: Boxes, match: section("products") },
           { href: "/admin/settings", label: l.shell("manageCheckInRules"), icon: SlidersHorizontal, match: section("settings") },
-          { href: "/admin/xphere", label: l.shell("manageXphere"), icon: Webhook, match: section("xphere"), adminOnly: true },
         ]),
       },
     ];
@@ -169,7 +166,7 @@ export function organizationItems(l: Labels, viewer: Pick<Viewer, "isAdmin">): N
   const section = (id: string) => starts(`/admin/${id}`);
   return visibleTo(viewer, [
     { href: "/admin/reps", label: l.shell("orgPeople"), icon: Users, match: section("reps") },
-    { href: "/admin/integrations", label: l.shell("orgIntegrations"), icon: Plug, match: section("integrations"), adminOnly: true },
+    { href: "/admin/integrations", label: l.shell("orgIntegrations"), icon: Plug, match: (p) => section("integrations")(p) || section("xphere")(p), adminOnly: true },
     { href: "/admin/branding", label: l.shell("orgBranding"), icon: Palette, match: section("branding"), adminOnly: true },
   ]);
 }

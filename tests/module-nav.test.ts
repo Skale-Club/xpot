@@ -19,10 +19,11 @@ describe("contextOfPath", () => {
     for (const p of ["/tags", "/tags/pieces/ABC", "/admin/tags", "/admin/tags/batches/x"]) expect(contextOfPath(p)).toBe("tags");
   });
   it("puts the Visits management in Visits, not in an Admin of its own", () => {
-    for (const p of ["/admin", "/admin/overview", "/admin/products", "/admin/settings", "/admin/xphere"]) expect(contextOfPath(p)).toBe("visits");
+    for (const p of ["/admin", "/admin/overview", "/admin/products", "/admin/settings"]) expect(contextOfPath(p)).toBe("visits");
   });
   it("puts settings and the organization in the account", () => {
-    for (const p of ["/settings", "/admin/reps", "/admin/integrations", "/admin/branding"]) expect(contextOfPath(p)).toBe("account");
+    // Xphere is an account integration; its old URL opens Integrations.
+    for (const p of ["/settings", "/admin/reps", "/admin/integrations", "/admin/branding", "/admin/xphere"]) expect(contextOfPath(p)).toBe("account");
   });
   it("does not mistake a prefix for a section", () => {
     expect(contextOfPath("/tagsx")).toBe("visits");
@@ -53,7 +54,7 @@ describe("moduleGroups", () => {
     const extra = (m: "visits" | "tags") =>
       moduleGroups(m, admin, labels).flatMap((g) => g.items).filter((i) => i.adminOnly).map((i) => i.href);
     expect(extra("tags")).toEqual(["/admin/tags/batches", "/admin/tags/journey", "/admin/tags/provisioners"]);
-    expect(extra("visits")).toEqual(["/admin/xphere"]);
+    expect(extra("visits")).toEqual([]);
     expect(organizationItems(labels, admin).filter((i) => i.adminOnly).map((i) => i.href)).toEqual(["/admin/integrations", "/admin/branding"]);
   });
   it("groups the Admin-tagged items at the end of every list", () => {
