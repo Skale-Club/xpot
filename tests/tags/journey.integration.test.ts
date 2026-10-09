@@ -118,7 +118,7 @@ test.skipIf(!enabled)("journey: trail, stories, plans, append-only, admin-only A
     assert.equal(batchEntries[0].actorEmail, "admin@jt.test");
 
     // A kit is one entry carrying the codes it moved.
-    const kit = await api("POST", "/api/xpot/admin/tag-kits", "jt-admin", { repId: repId["jt-ana"], batchId: batch.id, quantity: 3, note: "WhatsApp order #1" });
+    const kit = await api("POST", "/api/xpot/admin/tag-kits", "jt-admin", { repId: repId["jt-ana"], batchId: batch.id, quantity: 3, unitCostCents: 500, note: "WhatsApp order #1" });
     assert.equal(kit.status, 201, kit.text);
     const kitId = kit.json.id as string;
     const delivered = (await story(`kitId=${kitId}`)).filter((e) => e.action === "kit_delivered");

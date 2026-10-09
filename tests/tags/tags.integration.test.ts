@@ -21,6 +21,7 @@ const REVIEW = "https://search.google.com/local/writereview?placeid=ChIJN1t_tDeu
 test.skipIf(!enabled)("tags: kits, reseller isolation, sales, scans, report, provisioner", async () => {
   process.env.TAG_PUBLIC_BASE_URL = "https://xpot.place";
   const { registerTagRoutes } = await import("../../server/tags/routes.js");
+  const { cancelTagLinksForSale } = await import("../../server/tags/sales.js");
   const { db, pool } = await import("../../server/db.js");
   const { sql } = await import("drizzle-orm");
 
@@ -39,6 +40,9 @@ test.skipIf(!enabled)("tags: kits, reseller isolation, sales, scans, report, pro
     ('it-carla', 'Carla', 'carla@it.test', 'rep', false)
     RETURNING id, user_id`);
   const repId = Object.fromEntries((reps.rows as Array<{ id: number; user_id: string }>).map((r) => [r.user_id, r.id]));
+  await db.execute(sql`UPDATE sales_reps
+    SET cost_policy = 'acquisition', cost_policy_configured_at = NOW()
+    WHERE user_id LIKE 'it-%'`);
   const product = await db.execute(sql`INSERT INTO sales_products (sku, name, kind, base_price_cents, is_active)
     VALUES ('IT-TAGS-KEYCHAIN', 'Integration keychain', 'physical', 2500, true)
     ON CONFLICT (sku) DO UPDATE SET name = EXCLUDED.name
@@ -56,10 +60,10 @@ test.skipIf(!enabled)("tags: kits, reseller isolation, sales, scans, report, pro
   registerTagRoutes(app);
   const server = app.listen(0);
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  const api = async (method: string, path: string, user: string, body?: unknown) => {
+  const api = async (method: string, path: string, user: string, body?: unknown, extraHeaders: Record<string, string> = {}) => {
     const res = await fetch(`${base}${path}`, {
       method,
-      headers: { "content-type": "application/json", "x-test-user": user },
+      headers: { "content-type": "application/json", "x-test-user": user, ...extraHeaders },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     const text = await res.text();
@@ -99,14 +103,14 @@ test.skipIf(!enabled)("tags: kits, reseller isolation, sales, scans, report, pro
     assert.equal((await api("PATCH", `/api/xpot/admin/tags/${batchTags[9].id}`, "it-admin", { face: "myspace" })).status, 400);
 
     // Kits: 3 to Ana by batch + quantity (lowest serials), 2 to Bruno by code.
-    const kitA = await api("POST", "/api/xpot/admin/tag-kits", "it-admin", { repId: repId["it-ana"], batchId: batch.json.id, quantity: 3, note: "WhatsApp order #1" });
+    const kitA = await api("POST", "/api/xpot/admin/tag-kits", "it-admin", { repId: repId["it-ana"], batchId: batch.json.id, quantity: 3, unitCostCents: 500, note: "WhatsApp order #1" });
     assert.equal(kitA.status, 201, kitA.text);
     assert.equal(kitA.json.pieceCount, 3);
     const brunoCodes = [batchTags[5].publicCode, batchTags[6].publicCode.toLowerCase()];
-    const kitB = await api("POST", "/api/xpot/admin/tag-kits", "it-admin", { repId: repId["it-bruno"], codes: brunoCodes });
+    const kitB = await api("POST", "/api/xpot/admin/tag-kits", "it-admin", { repId: repId["it-bruno"], codes: brunoCodes, unitCostCents: 500 });
     assert.equal(kitB.status, 201, kitB.text);
     // A piece already handed out cannot go into another kit; nothing moves.
-    const dup = await api("POST", "/api/xpot/admin/tag-kits", "it-admin", { repId: repId["it-bruno"], codes: [batchTags[0].publicCode, batchTags[7].publicCode] });
+    const dup = await api("POST", "/api/xpot/admin/tag-kits", "it-admin", { repId: repId["it-bruno"], codes: [batchTags[0].publicCode, batchTags[7].publicCode], unitCostCents: 500 });
     assert.equal(dup.status, 409);
     assert.match(dup.json.message, new RegExp(batchTags[0].publicCode));
     assert.equal((await api("GET", `/api/xpot/tags/lookup/${batchTags[7].publicCode}`, "it-admin")).status, 200);
@@ -141,18 +145,27 @@ test.skipIf(!enabled)("tags: kits, reseller isolation, sales, scans, report, pro
     const other = await (await scan(`/n/${a1.publicCode}`, "it-bruno")).text();
     assert.doesNotMatch(other, /\/tags\/t\//);
 
-    // Ana sells a1 to a new business.
-    const sold = await api("POST", `/api/xpot/tags/${a1.id}/quick-activate`, "it-ana", {
+    // Ana configures a1 for a new business, then records the financial sale separately.
+    const activated = await api("POST", `/api/xpot/tags/${a1.id}/quick-activate`, "it-ana", {
       destinationUrl: REVIEW, destinationType: "google_review", leadName: "Taqueria El Sol", label: "Counter",
     });
-    assert.equal(sold.status, 200, sold.text);
-    assert.equal(sold.json.status, "active");
-    assert.equal(sold.json.repId, repId["it-ana"]);
-    assert.equal(sold.json.leadName, "Taqueria El Sol");
-    assert.ok(sold.json.soldAt);
-    const leadId = sold.json.leadId as number;
+    assert.equal(activated.status, 200, activated.text);
+    assert.equal(activated.json.status, "active");
+    assert.equal(activated.json.repId, repId["it-ana"]);
+    assert.equal(activated.json.leadName, "Taqueria El Sol");
+    assert.equal(activated.json.soldAt, null);
+    const leadId = activated.json.leadId as number;
     const [lead] = (await db.execute(sql`SELECT owner_rep_id, status, source FROM sales_leads WHERE id = ${leadId}`)).rows as any[];
-    assert.deepEqual(lead, { owner_rep_id: repId["it-ana"], status: "customer", source: "tag_sale" });
+    assert.deepEqual(lead, { owner_rep_id: repId["it-ana"], status: "lead", source: "tags" });
+    const sale1 = await api("POST", "/api/xpot/tag-sales", "it-ana", {
+      leadId,
+      lines: [{ salesProductId, tagIds: [a1.id], unitPriceCents: 2500 }],
+      paymentStatus: "paid",
+    }, { "idempotency-key": "it-sale-a1" });
+    assert.equal(sale1.status, 201, sale1.text);
+    assert.ok((await api("GET", `/api/xpot/tags/${a1.id}`, "it-ana")).json.soldAt);
+    const [customerLead] = (await db.execute(sql`SELECT owner_rep_id, status, source FROM sales_leads WHERE id = ${leadId}`)).rows as any[];
+    assert.deepEqual(customerLead, { owner_rep_id: repId["it-ana"], status: "customer", source: "tags" });
 
     // Bruno cannot sell to Ana's customer, nor touch her pieces.
     assert.equal((await api("POST", `/api/xpot/tags/${b1.id}/quick-activate`, "it-bruno", {
@@ -161,10 +174,16 @@ test.skipIf(!enabled)("tags: kits, reseller isolation, sales, scans, report, pro
     assert.equal((await api("POST", `/api/xpot/tags/${a1.id}/disable`, "it-bruno")).status, 403);
     assert.equal((await api("POST", `/api/xpot/tags/${a1.id}/nfc-written`, "it-bruno", { method: "web_nfc" })).status, 403);
 
-    // Ana sells a second piece to the same customer.
+    // Ana configures and sells a second piece to the same customer.
     assert.equal((await api("POST", `/api/xpot/tags/${a2.id}/quick-activate`, "it-ana", {
       destinationUrl: "https://elsol.example/menu", destinationType: "menu", leadId,
     })).status, 200);
+    const sale2 = await api("POST", "/api/xpot/tag-sales", "it-ana", {
+      leadId,
+      lines: [{ salesProductId, tagIds: [a2.id], unitPriceCents: 2500 }],
+      paymentStatus: "paid",
+    }, { "idempotency-key": "it-sale-a2" });
+    assert.equal(sale2.status, 201, sale2.text);
 
     // She writes a1's chip from her phone and reads it back: verified.
     const written = await api("POST", `/api/xpot/tags/${a1.id}/nfc-written`, "it-ana", {
@@ -244,8 +263,10 @@ test.skipIf(!enabled)("tags: kits, reseller isolation, sales, scans, report, pro
     const kits = await api("GET", `/api/xpot/admin/tag-kits?repId=${repId["it-ana"]}`, "it-admin");
     assert.deepEqual(kits.json.map((k: any) => [k.pieceCount, k.unsoldCount, k.note]), [[3, 1, "WhatsApp order #1"]]);
 
-    // Unassigning a sold piece undoes the sale but leaves it in Ana's hands.
+    // A financially sold piece cannot be unassigned until its sale link is cancelled.
     assert.equal((await api("POST", `/api/xpot/tags/${a2.id}/disable`, "it-ana")).status, 200);
+    assert.equal((await api("POST", `/api/xpot/admin/tags/${a2.id}/unassign`, "it-admin")).status, 409);
+    await cancelTagLinksForSale(sale2.json.sale.id);
     const unassigned = await api("POST", `/api/xpot/admin/tags/${a2.id}/unassign`, "it-admin");
     assert.equal(unassigned.json.status, "inventory");
     assert.equal(unassigned.json.soldAt, null);
@@ -256,7 +277,7 @@ test.skipIf(!enabled)("tags: kits, reseller isolation, sales, scans, report, pro
     assert.equal(reassigned.status, 200, reassigned.text);
     assert.equal(reassigned.json.leadName, "Cafe Nuevo");
     const [cafe] = (await db.execute(sql`SELECT owner_rep_id, status FROM sales_leads WHERE id = ${reassigned.json.leadId}`)).rows as any[];
-    assert.deepEqual(cafe, { owner_rep_id: repId["it-ana"], status: "customer" });
+    assert.deepEqual(cafe, { owner_rep_id: repId["it-ana"], status: "lead" });
     assert.equal((await api("POST", `/api/xpot/admin/tags/${a2.id}/assign`, "it-admin", { leadId, leadName: "Both" })).status, 400);
 
     // Manufacturing export.
