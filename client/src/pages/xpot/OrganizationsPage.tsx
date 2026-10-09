@@ -29,6 +29,43 @@ type Member = {
 const FIELD = "w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-white outline-none placeholder:text-white/25 focus:border-blue-400/50";
 const BUTTON = "rounded-xl border border-white/10 bg-white/[0.06] px-3 py-2 text-sm font-semibold text-white/80 transition-colors hover:bg-white/10";
 
+const PRODUCT_LABELS: Record<string, string> = {
+  large_stand: "Large Stand",
+  small_stand: "Small Stand",
+  large_sign: "Large Sign",
+  small_sign: "Small Sign",
+  large_plate: "Large Plate",
+  small_plate: "Small Plate",
+  google_review_sign: "Google Review Sign",
+  business_card: "NFC Card",
+  keychain: "NFC Keychain",
+  safety_tag: "Safety Tag",
+  menu_tag: "Menu Tag",
+  booking_tag: "Booking Tag",
+  custom: "Custom Piece",
+};
+
+const PIECE_STATUS_LABELS: Record<string, string> = {
+  inventory: "Available",
+  assigned: "Assigned",
+  active: "Live",
+  disabled: "Disabled",
+  retired: "Retired",
+};
+
+const CUSTOMER_STATUS_LABELS: Record<string, string> = {
+  prospect: "Prospect",
+  lead: "Lead",
+  active: "Active",
+  inactive: "Inactive",
+  customer: "Customer",
+};
+
+function readableLabel(value: unknown, labels: Record<string, string>) {
+  const key = String(value ?? "");
+  return labels[key] ?? key.replace(/_/g, " ").replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
 async function json<T>(method: string, url: string, body?: unknown): Promise<T> {
   return (await apiRequest(method, url, body)).json() as Promise<T>;
 }
@@ -220,9 +257,9 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
             </div>
           </div>
         )}
-        {tab === "inventory" && <SimpleList rows={inventory.data ?? []} empty="No pieces in this Organization." render={(row) => <><span className="font-mono text-sm text-white">{row.publicCode}</span><span className="text-xs text-white/45">{row.productType} · {row.status}</span></>} />}
+        {tab === "inventory" && <SimpleList rows={inventory.data ?? []} empty="No pieces in this Organization." render={(row) => <><span className="font-mono text-sm text-white">{row.publicCode}</span><span className="text-xs text-white/45">{readableLabel(row.productType, PRODUCT_LABELS)} · {readableLabel(row.status, PIECE_STATUS_LABELS)}</span></>} />}
         {tab === "kits" && <SimpleList rows={kits.data ?? []} empty="No kits in this Organization." render={(row) => <><span className="text-sm text-white">Kit {String(row.id).slice(0, 8)}</span><span className="text-xs text-white/45">Rep #{row.repId}</span></>} />}
-        {tab === "customers" && <SimpleList rows={customers.data ?? []} empty="No customers in this Organization." render={(row) => <><span className="text-sm font-medium text-white">{row.name}</span><span className="text-xs text-white/45">{row.status} · Rep #{row.ownerRepId ?? "—"}</span></>} />}
+        {tab === "customers" && <SimpleList rows={customers.data ?? []} empty="No customers in this Organization." render={(row) => <><span className="text-sm font-medium text-white">{row.name}</span><span className="text-xs text-white/45">{readableLabel(row.status, CUSTOMER_STATUS_LABELS)} · Rep #{row.ownerRepId ?? "—"}</span></>} />}
         {tab === "settings" && <OrganizationSettings organization={org} mayEdit={platformManager} />}
       </div>
     </AppLayout>
