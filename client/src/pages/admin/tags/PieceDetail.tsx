@@ -524,35 +524,37 @@ export function PieceDetail({ id, go }: { id: string; go: Go }) {
     <div className="space-y-4" data-testid="admin-piece-detail">
       <Back go={go} />
 
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex shrink-0 items-center gap-2">
+      <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+        <div className="flex shrink-0 items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.025] p-2">
           <TagFaceIcon face={tag.face} size="lg" />
+          <span className="h-10 w-px bg-white/10" aria-hidden="true" />
           <TagProductThumbnail productType={tag.productType} face={tag.face} batchCode={tag.batchCode} />
         </div>
-        <h2 className="font-mono text-2xl font-bold tracking-wider text-white" data-testid="admin-piece-code">{tag.publicCode}</h2>
-        <StatusPill status={tag.status} />
-        <span className="text-sm text-white/50">
-          {labels.product(tag.productType)}
-          {` · ${labels.face(tag.face)}`}
-          {tag.batchCode ? (
-            <>
-              {" · "}
-              {/* Batches are the global admin's; a manager sees the code without the link. */}
-              {isAdmin ? (
-                <button type="button" className="font-mono hover:text-white hover:underline" onClick={() => tag.batchId && go(`/batches/${tag.batchId}`)}>
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h2 className="font-mono text-xl font-bold tracking-wider text-white sm:text-2xl" data-testid="admin-piece-code">{tag.publicCode}</h2>
+            <StatusPill status={tag.status} />
+          </div>
+          <div className="flex flex-wrap items-center gap-y-1 text-sm text-white/50">
+            <span>{labels.product(tag.productType)}</span>
+            <span className="before:mx-2 before:text-white/20 before:content-['·']">{labels.face(tag.face)}</span>
+            {tag.batchCode ? (
+              /* Batches are the global admin's; a manager sees the code without the link. */
+              isAdmin ? (
+                <button type="button" className="font-mono before:mx-2 before:text-white/20 before:content-['·'] hover:text-white hover:underline" onClick={() => tag.batchId && go(`/batches/${tag.batchId}`)}>
                   {tag.batchCode}
                   {tag.serialNumber ? ` #${tag.serialNumber}` : ""}
                 </button>
               ) : (
-                <span className="font-mono">
+                <span className="font-mono before:mx-2 before:text-white/20 before:content-['·']">
                   {tag.batchCode}
                   {tag.serialNumber ? ` #${tag.serialNumber}` : ""}
                 </span>
-              )}
-            </>
-          ) : null}
-          {tag.label ? ` · ${tag.label}` : ""}
-        </span>
+              )
+            ) : null}
+            {tag.label ? <span className="before:mx-2 before:text-white/20 before:content-['·']">{tag.label}</span> : null}
+          </div>
+        </div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
