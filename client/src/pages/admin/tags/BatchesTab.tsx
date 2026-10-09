@@ -4,6 +4,7 @@ import { Plus, X } from "lucide-react";
 import { TAG_MAX_BATCH_QUANTITY, TAG_PRODUCT_TYPES, normalizeTagCode } from "@shared/tags";
 import { useToast } from "@/hooks/use-toast";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
+import { TagProductThumbnail } from "@/components/xpot/TagProductThumbnail";
 import { errorMessage, formatDate, invalidateAdminTags, sendJson } from "./api";
 import { BTN, BTN_GHOST, CARD, Empty, INPUT, SectionTitle, Stat, TD, TH } from "./ui";
 import { BatchStatusPill, ErrorLine, Field, Loading, SELECT, useBatches } from "./batches-shared";
@@ -223,7 +224,7 @@ export function BatchesTab({ go }: { go: (path: string) => void }) {
             <table className="w-full min-w-[760px]">
               <thead className="border-b border-white/10">
                 <tr>
-                  <th className={`${TH} w-12 pr-0`}><span className="sr-only">{t("fieldPrintedOnPieces")}</span></th>
+                  <th className={`${TH} w-24 pr-0`}><span className="sr-only">{t("fieldPrintedOnPieces")}</span></th>
                   <th className={TH}>{tm("colBatch")}</th>
                   <th className={TH}>{t("fieldProduct")}</th>
                   <th className={TH}>{tm("colStatus")}</th>
@@ -244,7 +245,10 @@ export function BatchesTab({ go }: { go: (path: string) => void }) {
                     data-testid={`admin-tags-batch-${b.batchCode}`}
                   >
                     <td className={`${TD} pr-0`}>
-                      <TagFaceIcon face={b.face} size="md" />
+                      <div className="flex items-center gap-2">
+                        <TagFaceIcon face={b.face} size="md" />
+                        <TagProductThumbnail productType={b.productType} face={b.face} batchCode={b.batchCode} />
+                      </div>
                     </td>
                     <td className={TD}>
                       <p className="font-mono font-semibold text-white">{b.batchCode}</p>
