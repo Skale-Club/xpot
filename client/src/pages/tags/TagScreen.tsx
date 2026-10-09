@@ -37,7 +37,7 @@ import {
   LinkInput,
   Pill,
   SHEET_TITLE,
-  STATUS_TONE,
+  SOLD_TONE, STATUS_TONE,
   Spinner,
   TopBar,
 } from "./ui";
@@ -149,7 +149,7 @@ export default function TagScreen({ code, onClose }: {
   if (isLoading) {
     return (
       <>
-        <TopBar title={code} back={back} right={closeButton} eyebrow={t("pieceEyebrow")} />
+        <TopBar title={code} back={back} right={closeButton} />
         <div className="flex justify-center py-20 text-white/40">
           <Spinner className="h-8 w-8" />
         </div>
@@ -161,7 +161,7 @@ export default function TagScreen({ code, onClose }: {
     const title = error ? t("loadFailed") : data?.kind === "not_yours" ? t("notYours") : t("notFound", { code });
     return (
       <>
-        <TopBar title={code} back={back} right={closeButton} eyebrow={t("pieceEyebrow")} />
+        <TopBar title={code} back={back} right={closeButton} />
         <div className={`${CARD} p-6 text-center`}>
           <ScanLine className="mx-auto h-10 w-10 text-white/30" />
           <p className="mt-3 text-lg font-bold text-white" data-testid="text-tag-error">
@@ -284,19 +284,20 @@ export default function TagScreen({ code, onClose }: {
         title={tag.publicCode}
         titleClassName="font-mono tracking-[0.12em]"
         back={back}
-        eyebrow={t("pieceEyebrow")}
         right={closeButton}
-        picture={<TagPieceVisual productType={tag.productType} face={tag.face} title={t(`face_${tag.face ?? "none"}` as "face_none")} />}
+        picture={<TagPieceVisual productType={tag.productType} face={tag.face} size="md" title={t(`face_${tag.face ?? "none"}` as "face_none")} />}
         sub={
-          <div className="flex flex-wrap items-center gap-2">
+          // The piece's state, then (after a dot) what it is. The face is the picture's job.
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
             <Pill tone={STATUS_TONE[tag.status] ?? "slate"}>{t(`status_${tag.status}` as "status_active")}</Pill>
-            {tag.saleId && <Pill tone="green">{t("soldBadge")}</Pill>}
-            <span className="flex min-w-0 items-center gap-1.5 text-xs text-white/45">
+            {tag.saleId && <Pill tone={SOLD_TONE}>{t("soldBadge")}</Pill>}
+            <span className="text-white/20" aria-hidden="true">·</span>
+            {tagPlaqueSpec(tag.productType, tag.face, tag.batchCode).model ? (
               <TagModelChips productType={tag.productType} face={tag.face} batchCode={tag.batchCode} className="shrink-0" />
-              <span className="truncate">
-                {[tagPlaqueSpec(tag.productType, tag.face, tag.batchCode).model ? null : t(`product_${tag.productType}` as "product_custom"), tag.face ? t(`face_${tag.face}` as "face_none") : null, tag.label].filter(Boolean).join(" · ")}
-              </span>
-            </span>
+            ) : (
+              <span className="text-xs text-white/45">{t(`product_${tag.productType}` as "product_custom")}</span>
+            )}
+            {tag.label ? <span className="truncate text-xs text-white/45">{tag.label}</span> : null}
           </div>
         }
       />
@@ -372,9 +373,9 @@ export default function TagScreen({ code, onClose }: {
       </section>
 
       {tag.saleId ? (
-        <section className="mt-3 flex items-center justify-between gap-4 rounded-[20px] border border-emerald-400/20 bg-emerald-500/[0.08] p-4">
+        <section className="mt-3 flex items-center justify-between gap-4 rounded-[20px] border border-blue-400/20 bg-blue-500/[0.08] p-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-emerald-300/80">{t("soldBadge")}</p>
+            <p className="text-xs font-semibold uppercase tracking-widest text-blue-300/80">{t("soldBadge")}</p>
             <p className="mt-1 text-base font-bold text-white">{t("soldFor", { amount: formatCents(tag.soldPriceCents) })}</p>
           </div>
           <span className="font-mono text-xs text-white/40">#{tag.saleId}</span>

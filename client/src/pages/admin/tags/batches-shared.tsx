@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { BATCH_STATUS_TONE, Pill } from "@/components/xpot/StatusPill";
 import type { TagBatchItem, TagListItem } from "@shared/tagsApi";
 import { Loader2 } from "@/components/ui/loader";
 import { TagPieceVisual } from "@/components/xpot/TagProductThumbnail";
@@ -25,21 +26,10 @@ import { manageTagsMessages } from "@/i18n/messages/manageTags";
 // ─── Labels ───────────────────────────────────────────────────────────────────
 // Product, face and status names: useTagLabels() in labels.ts.
 
-const BATCH_STATUS_TONES: Record<string, string> = {
-  draft: "bg-white/10 text-white/60",
-  generated: "bg-blue-400/10 text-blue-300",
-  ordered: "bg-amber-400/10 text-amber-300",
-  received: "bg-violet-400/10 text-violet-300",
-  completed: "bg-emerald-400/10 text-emerald-300",
-  cancelled: "bg-red-400/10 text-red-300",
-};
-
 export function BatchStatusPill({ status }: { status: string }) {
   const labels = useTagLabels();
   return (
-    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${BATCH_STATUS_TONES[status] ?? "bg-white/10 text-white/60"}`}>
-      {labels.batchStatus(status)}
-    </span>
+    <Pill tone={BATCH_STATUS_TONE[status] ?? "slate"}>{labels.batchStatus(status)}</Pill>
   );
 }
 

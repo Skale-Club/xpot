@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { CHIP_STATUS_TONE, Pill } from "@/components/xpot/StatusPill";
 import { CheckCircle2, Circle, Cpu, XCircle } from "lucide-react";
 import { OPEN_JOB_STATUSES, type ProvisioningJobStatus } from "@shared/tagProvisioning";
 import type { ProvisionerDeviceItem, TagProvisioningState } from "@shared/tagsApi";
@@ -16,18 +17,9 @@ import { manageTagsPiecesMessages } from "@/i18n/messages/manageTagsPieces";
 
 type PieceKey = keyof (typeof manageTagsPiecesMessages)["en"];
 
-const NFC_TONE: Record<string, string> = {
-  not_programmed: "bg-white/10 text-white/60",
-  programmed: "bg-amber-400/10 text-amber-300",
-  verified: "bg-emerald-400/10 text-emerald-300",
-  locked: "bg-white/5 text-white/50",
-  failed: "bg-red-400/10 text-red-300",
-};
-
 export function NfcStatusPill({ status }: { status: string }) {
   const labels = useTagLabels();
-  const tone = NFC_TONE[status] ?? "bg-white/10 text-white/60";
-  return <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${tone}`}>{labels.chip(status)}</span>;
+  return <Pill tone={CHIP_STATUS_TONE[status] ?? "slate"}>{labels.chip(status)}</Pill>;
 }
 
 const JOB_STEP_KEYS: Record<string, PieceKey> = {

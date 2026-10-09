@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { useT } from "@/i18n";
+import { Pill, PIECE_STATUS_TONE } from "@/components/xpot/StatusPill";
 import { tagsMessages } from "@/i18n/messages/tags";
 
 // Shared look for the Tags admin, matching the rest of Xpot Admin.
@@ -35,25 +36,11 @@ export function SectionTitle({ children, right }: { children: ReactNode; right?:
   );
 }
 
-const STATUS_TONES: Record<string, string> = {
-  active: "bg-emerald-400/10 text-emerald-300",
-  disabled: "bg-red-400/10 text-red-300",
-  assigned: "bg-amber-400/10 text-amber-300",
-  inventory: "bg-white/10 text-white/60",
-  retired: "bg-white/5 text-white/40",
-};
-
 export function StatusPill({ status }: { status: string }) {
   const tt = useT(tagsMessages);
   const key = `status_${status}`;
   const label = tt(key as never);
-  return (
-    <span
-      className={`inline-flex min-h-6 items-center justify-center whitespace-nowrap rounded-full px-2.5 py-1 text-center text-xs font-semibold leading-none ${STATUS_TONES[status] ?? "bg-white/10 text-white/60"}`}
-    >
-      {label === key ? status : label}
-    </span>
-  );
+  return <Pill tone={PIECE_STATUS_TONE[status] ?? "slate"}>{label === key ? status : label}</Pill>;
 }
 
 export function Empty({ children }: { children: ReactNode }) {

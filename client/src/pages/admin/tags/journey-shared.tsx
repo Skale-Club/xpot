@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { PILL_BASE } from "@/components/xpot/StatusPill";
 import { isSuperAdmin } from "@shared/modules";
 import { JOURNEY_ENTRY_KINDS, JOURNEY_PRODUCTION_ACTIONS, PLAN_KINDS, PLAN_STATUSES } from "@shared/tagJourney";
 import type { TagJourney } from "@shared/tagsApi";
@@ -108,7 +109,7 @@ const PLAN_STATUS_TONES: Record<string, string> = {
   cancelled: "bg-white/5 text-white/40",
 };
 
-const PILL = "inline-flex rounded-full px-2 py-0.5 text-xs font-semibold";
+const PILL = PILL_BASE;
 
 export function KindBadge({ kind }: { kind: string }) {
   const labels = useJourneyLabels();

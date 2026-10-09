@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { CHIP_STATUS_TONE, Pill } from "@/components/xpot/StatusPill";
 import { useSearchParams } from "wouter";
 import { Plus, Search, X } from "lucide-react";
 import { TAG_PRODUCT_TYPES, TAG_STATUSES } from "@shared/tags";
@@ -117,22 +118,8 @@ function NewPieceDialog({ open, onOpenChange, onCreated }: { open: boolean; onOp
   );
 }
 
-const CHIP_TONES: Record<string, string> = {
-  not_programmed: "border-red-400/20 bg-red-400/10 text-red-300",
-  failed: "border-red-400/20 bg-red-400/10 text-red-300",
-  programmed: "border-amber-400/20 bg-amber-400/10 text-amber-300",
-  verified: "border-emerald-400/20 bg-emerald-400/10 text-emerald-300",
-  locked: "border-emerald-400/20 bg-emerald-400/10 text-emerald-300",
-};
-
 function ChipStatusPill({ status, label }: { status: string; label: string }) {
-  return (
-    <span
-      className={`inline-flex min-h-6 items-center justify-center whitespace-nowrap rounded-full border px-2.5 py-1 text-center text-xs font-semibold leading-none ${CHIP_TONES[status] ?? "border-white/10 bg-white/5 text-white/50"}`}
-    >
-      {label}
-    </span>
-  );
+  return <Pill tone={CHIP_STATUS_TONE[status] ?? "slate"}>{label}</Pill>;
 }
 
 function PiecesTable({ tags, onOpen }: { tags: TagListItem[]; onOpen: (id: string) => void }) {

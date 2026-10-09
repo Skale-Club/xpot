@@ -11,7 +11,7 @@ import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { APP_BASE, errorText, shortUrl, tagPath, tagsGet } from "./lib";
-import { CARD, INPUT, Pill, STATUS_TONE, Spinner, TopBar } from "./ui";
+import { CARD, INPUT, Pill, SOLD_TONE, STATUS_TONE, Spinner, TopBar } from "./ui";
 
 const FILTERS = [
   { id: "all", status: null, key: "filterAll" },
@@ -301,7 +301,7 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
                     <span className="flex items-center gap-2">
                       <span className="font-mono text-base font-semibold tracking-[0.12em] text-white">{tag.publicCode}</span>
                       <Pill tone={STATUS_TONE[tag.status] ?? "slate"}>{t(`status_${tag.status}` as "status_active")}</Pill>
-                      {tag.saleId && <Pill tone="green">{t("soldBadge")}</Pill>}
+                      {tag.saleId && <Pill tone={SOLD_TONE}>{t("soldBadge")}</Pill>}
                     </span>
                     <span className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-white/45">
                       <TagModelChips productType={tag.productType} face={tag.face} batchCode={tag.batchCode} className="shrink-0" />
@@ -370,7 +370,7 @@ function PiecesTable({ items, selectedCode, onSelect }: { items: TagListItem[]; 
                   <div className="font-mono font-semibold tracking-[0.12em] text-white">{tag.publicCode}</div>
                   <TagModelChips productType={tag.productType} face={tag.face} batchCode={tag.batchCode} className="mt-1" />
                 </td>
-                <td className="px-3 py-2.5"><div className="flex flex-wrap gap-1"><Pill tone={STATUS_TONE[tag.status] ?? "slate"}>{t(`status_${tag.status}` as "status_active")}</Pill>{tag.saleId && <Pill tone="green">{t("soldBadge")}</Pill>}</div></td>
+                <td className="px-3 py-2.5"><div className="flex flex-wrap gap-1"><Pill tone={STATUS_TONE[tag.status] ?? "slate"}>{t(`status_${tag.status}` as "status_active")}</Pill>{tag.saleId && <Pill tone={SOLD_TONE}>{t("soldBadge")}</Pill>}</div></td>
                 <td className="max-w-0 px-3 py-2.5" style={{ width: "40%" }}>
                   <div className="truncate text-white/85">{tag.leadName ?? t(`product_${tag.productType}` as "product_custom")}</div>
                   {tag.label && <div className="truncate text-[11px] text-white/35">{tag.label}</div>}

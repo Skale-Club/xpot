@@ -69,7 +69,8 @@ export function TopBar({
         <h1 className={`mt-0.5 break-words text-[26px] font-extrabold leading-tight tracking-tight text-white ${titleClassName}`}>{title}</h1>
         {sub && <div className="mt-1.5">{sub}</div>}
       </div>
-      {picture && <div className="shrink-0 self-center">{picture}</div>}
+      {/* Top-aligned with the title: the piece's picture, not a floating badge. */}
+      {picture && <div className="mt-1 shrink-0 self-start">{picture}</div>}
       {right && <div className="shrink-0">{right}</div>}
     </header>
   );
@@ -144,34 +145,9 @@ export function Spinner({ className = "h-5 w-5" }: { className?: string }) {
   return <Loader2 className={`animate-spin ${className}`} />;
 }
 
-export type PillTone = "green" | "amber" | "red" | "slate" | "blue";
-
-export function Pill({ tone, children }: { tone: PillTone; children: ReactNode }) {
-  const tones = {
-    green: "bg-emerald-400/10 text-emerald-300",
-    amber: "bg-amber-400/10 text-amber-300",
-    red: "bg-red-400/10 text-red-300",
-    slate: "bg-white/10 text-white/60",
-    blue: "bg-blue-500/15 text-blue-300",
-  } as const;
-  return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${tones[tone]}`}>{children}</span>;
-}
-
-export const STATUS_TONE: Record<string, PillTone> = {
-  active: "green",
-  disabled: "red",
-  assigned: "amber",
-  inventory: "slate",
-  retired: "slate",
-};
-
-export const CHIP_TONE: Record<string, PillTone> = {
-  verified: "green",
-  programmed: "blue",
-  failed: "red",
-  locked: "slate",
-  not_programmed: "amber",
-};
+// Status pills: one shape and palette for admin and app (components/xpot/StatusPill.tsx).
+export { Pill, type PillTone } from "@/components/xpot/StatusPill";
+export { PIECE_STATUS_TONE as STATUS_TONE, CHIP_STATUS_TONE as CHIP_TONE, SOLD_TONE } from "@/components/xpot/StatusPill";
 
 export function CopyButton({ text, label, large = false }: { text: string; label: string; large?: boolean }) {
   const t = useT(commonMessages);
