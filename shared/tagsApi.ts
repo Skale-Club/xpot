@@ -14,6 +14,8 @@ export interface TagListItem {
   publicCode: string;
   serialNumber: number | null;
   productType: string;
+  salesProductId: number | null;
+  acquisitionCostCents: number | null;
   /** What is printed on the piece, resolved (own → batch → product); null when unknown. */
   face: string | null;
   /** The piece's own face override, before falling back to the batch. */
@@ -37,6 +39,8 @@ export interface TagListItem {
   lastInteractionAt: string | null;
   activatedAt: string | null;
   soldAt: string | null;
+  saleId: number | null;
+  soldPriceCents: number | null;
   createdAt: string;
 }
 
@@ -107,6 +111,7 @@ export interface TagBatchItem {
   batchCode: string;
   name: string;
   productType: string;
+  salesProductId: number | null;
   /** What is printed on the run, resolved (batch → product); null when unknown. */
   face: string | null;
   /** The batch's own setting, before the product default. */
@@ -134,6 +139,8 @@ export interface TagKitItem {
   pieceCount: number;
   /** Pieces from this kit still unsold in the reseller's hands. */
   unsoldCount: number;
+  acquisitionSource: string | null;
+  unitCostCents: number | null;
 }
 
 /** Pieces sold to one customer (lead), for the Visits side. */

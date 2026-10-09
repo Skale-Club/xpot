@@ -4,8 +4,9 @@ import { storage } from "../../storage.js";
 import { salesStorage } from "../../storage-sales.js";
 import { requireXpotUser, isManagerOrAdmin, loadAccessibleLead, type XpotActor } from "./middleware.js";
 import { xpotSaleCreateSchema, xpotSalePaymentSchema, xpotSaleCancelSchema } from "#shared/xpot.js";
-import { computeSaleTotals, paymentStatusFor } from "#shared/pricing.js";
+import { allocateSaleLineTotals, computeSaleTotals, paymentStatusFor } from "#shared/pricing.js";
 import { syncSaleToXphere } from "./xphere-sync.js";
+import { cancelTagLinksForSale } from "../../tags/sales.js";
 
 // Direct sales: what the rep closes on the spot (a website, a marketing plan,
 // a handful of keychains sold outright). Consignment settlements also land
@@ -19,6 +20,7 @@ export function createSalesRouter() {
     visitId: z.coerce.number().int().positive().optional(),
     repId: z.coerce.number().int().positive().optional(),
     status: z.enum(["completed", "cancelled"]).optional(),
+    source: z.enum(["sales", "tags", "voice", "visit", "lead"]).optional(),
     days: z.coerce.number().int().min(1).max(365).optional(),
     limit: z.coerce.number().int().min(1).max(500).optional(),
     offset: z.coerce.number().int().min(0).optional(),
@@ -30,7 +32,7 @@ export function createSalesRouter() {
     const q = listQuerySchema.parse(req.query);
     const repId = isManagerOrAdmin(actor) ? q.repId : actor.rep.id;
     const since = q.days ? new Date(Date.now() - q.days * 24 * 60 * 60 * 1000) : undefined;
-    res.json(await salesStorage.listSales({ repId, leadId: q.leadId, visitId: q.visitId, status: q.status, since, limit: q.limit, offset: q.offset }));
+    res.json(await salesStorage.listSales({ repId, leadId: q.leadId, visitId: q.visitId, status: q.status, source: q.source, since, limit: q.limit, offset: q.offset }));
   });
 
   // GET /sales/summary?days=30[&repId=] — revenue, by product, daily series, consignment stock.
@@ -112,6 +114,7 @@ export function createSalesRouter() {
     }
 
     const totals = computeSaleTotals(lines, input.discountCents ?? 0);
+    const allocations = allocateSaleLineTotals(lines, input.discountCents ?? 0);
     const paidCents = input.paymentStatus === "paid"
       ? totals.totalCents
       : input.paymentStatus === "unpaid"
@@ -138,7 +141,11 @@ export function createSalesRouter() {
         soldAt,
         notes: input.notes ?? null,
       },
-      lines,
+      lines.map((line, index) => ({
+        ...line,
+        allocatedDiscountCents: allocations[index].discountCents,
+        netTotalCents: allocations[index].netCents,
+      })),
     );
 
     // A sale is the strongest signal a lead can send — promote and mark customer.
@@ -202,6 +209,7 @@ export function createSalesRouter() {
       cancelledAt: new Date(),
       cancelReason: reason ?? null,
     });
+    if (existing.sale.source === "tags") await cancelTagLinksForSale(existing.sale.id);
     res.json(await salesStorage.getSale(existing.sale.id));
   });
 

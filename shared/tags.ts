@@ -8,6 +8,12 @@
 // change at any time. Ported from Skale Club's Smart Tags.
 
 export const TAG_PRODUCT_TYPES = [
+  "large_stand",
+  "small_stand",
+  "large_sign",
+  "small_sign",
+  "large_plate",
+  "small_plate",
   "google_review_sign",
   "business_card",
   "keychain",

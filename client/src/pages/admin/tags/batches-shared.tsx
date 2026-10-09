@@ -61,6 +61,23 @@ export interface Reseller {
   role: string;
   isActive: boolean;
   modules: string[] | null;
+  costPolicy: "zero" | "acquisition";
+}
+
+export interface TagCatalogProduct {
+  id: number;
+  name: string;
+  sku: string | null;
+  basePriceCents: number;
+  currency: string;
+}
+
+export function useTagCatalog() {
+  return useQuery<TagCatalogProduct[]>({
+    queryKey: [ADMIN_TAGS_KEY, "catalog"],
+    queryFn: () => getJson("/api/xpot/tags/catalog"),
+    staleTime: STALE_MS,
+  });
 }
 
 /** Can this person see Tags in the field app? Managers/admins always can. */

@@ -152,7 +152,7 @@ export function registerTagJourneyTools(server: McpServer, caller: McpCaller) {
   // already-manufactured pieces (publicCodes) stay an admin-UI-only escape hatch.
   server.tool(
     "tags_batch_create",
-    `Create a production batch of new pieces in house stock, each with a fresh random public code. \`batch\`: { name, productType (${TAG_PRODUCT_TYPES.join("|")}), face? (what is printed on every piece: ${TAG_FACES.join("|")}; omit for a Google Review sign, whose face is implied), quantity (1-1000), batchCode? (A-Z 0-9 . _ -, automatic if omitted, e.g. REV-2026-003), vendor?, notes? }. Returns { batch, tags: [{ serialNumber, publicCode, qrUrl, nfcUrl }] } — qrUrl goes in the printed QR, nfcUrl is written to the chip.`,
+    `Create a production batch of new pieces in house stock, each with a fresh random public code. \`batch\`: { name, productType (${TAG_PRODUCT_TYPES.join("|")}), salesProductId (the physical product in the Sales catalog), face? (what is printed on every piece: ${TAG_FACES.join("|")}; omit for a Google Review sign, whose face is implied), quantity (1-1000), batchCode? (A-Z 0-9 . _ -, automatic if omitted, e.g. REV-2026-003), vendor?, notes? }. Returns { batch, tags: [{ serialNumber, publicCode, qrUrl, nfcUrl }] } — qrUrl goes in the printed QR, nfcUrl is written to the chip.`,
     { batch: objectParam },
     async ({ batch }) =>
       run("tags_batch_create", async () => {

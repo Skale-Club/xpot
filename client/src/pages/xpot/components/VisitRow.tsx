@@ -7,7 +7,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { VoiceRecorder } from "./VoiceRecorder";
 import { InlineField, validateEmail } from "./InlineField";
-import { formatDateTime, formatDuration } from "../utils";
+import { formatCents, formatDateTime, formatDuration } from "../utils";
 import type { SalesLead, SalesVisitNote } from "../types";
 import { Trash2, Plus, X, Camera } from "lucide-react";
 import { LeadCardBody } from "./LeadCardBody";
@@ -28,6 +28,7 @@ export type VisitLike = {
   checkedOutAt?: string | Date | null;
   durationSeconds?: number | null;
   note?: SalesVisitNote | null;
+  visitSales?: { transactions: number; pieces: number; totalCents: number };
 };
 
 
@@ -311,7 +312,7 @@ export function VisitDetail({ visit, onDelete, layout = "dialog" }: {
 
       {/* Time metadata */}
       <div
-        className="grid grid-cols-3 gap-3 rounded-2xl p-3"
+        className="grid grid-cols-2 gap-3 rounded-2xl p-3 sm:grid-cols-4"
         style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}
       >
         <div>
@@ -325,6 +326,11 @@ export function VisitDetail({ visit, onDelete, layout = "dialog" }: {
         <div>
           <div className="text-[10px] font-semibold uppercase tracking-widest text-white/30 mb-1">{t("duration")}</div>
           <div className="text-xs text-white/70">{formatDuration(visit.durationSeconds)}</div>
+        </div>
+        <div>
+          <div className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-white/30">{t("visitSales")}</div>
+          <div className="text-xs font-semibold text-emerald-300">{formatCents(visit.visitSales?.totalCents ?? 0)}</div>
+          <div className="mt-0.5 text-[10px] text-white/35">{t("visitSalesCount", { sales: visit.visitSales?.transactions ?? 0, pieces: visit.visitSales?.pieces ?? 0 })}</div>
         </div>
       </div>
 

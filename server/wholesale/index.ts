@@ -8,6 +8,9 @@ import { formatWholesaleCode, generateWholesaleCode, normalizeWholesaleCode, who
 import { normalizeIpKey, rateLimit } from "../tags/rateLimit.js";
 import { accessDenial, ensureXpotRep, isManagerOrAdmin, requireXpotManager } from "../routes/xpot/middleware.js";
 import { repModules } from "#shared/modules.js";
+import { stuscleWholesaleOrderSchema } from "#shared/tagSales.js";
+import { recordStuscleOrder } from "../tags/acquisitions.js";
+import { TagSaleError } from "../tags/sales.js";
 
 // Wholesale prices live in the Stuscle store; Xpot decides who gets them.
 // Every approved rep has a personal code. Stuscle asks Xpot whether a code is
@@ -94,6 +97,25 @@ export function registerWholesaleRoutes(app: Express) {
     } catch (err) {
       console.error("[wholesale] verify", err);
       res.status(500).json({ message: "Verification failed" });
+    }
+  });
+
+  // Stuscle → Xpot: a paid wholesale order becomes the partner's cost basis.
+  // Physical codes may arrive now or be fulfilled later by an admin.
+  app.post("/api/integrations/stuscle/wholesale/orders", async (req: Request, res: Response) => {
+    if (!process.env.XPOT_WHOLESALE_SECRET) return res.status(503).json({ message: "Wholesale is not configured" });
+    if (!secretMatches(req)) return res.status(401).json({ message: "Unauthorized" });
+    try {
+      const input = stuscleWholesaleOrderSchema.parse(req.body);
+      const verdict = await verifyWholesaleCode(input.wholesaleCode);
+      if (!verdict.valid) return res.status(403).json({ code: `wholesale_${verdict.reason}`, message: "Wholesale code is not active" });
+      const result = await recordStuscleOrder(input, verdict.reseller.id);
+      res.status(201).json(result);
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json({ code: "validation_error", message: err.issues[0]?.message ?? "Invalid input", details: err.errors });
+      if (err instanceof TagSaleError) return res.status(err.status).json({ code: err.code, message: err.message });
+      console.error("[wholesale] order", err);
+      res.status(500).json({ message: "Order import failed" });
     }
   });
 

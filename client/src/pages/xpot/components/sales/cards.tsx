@@ -220,7 +220,8 @@ export function MovementLedger({ movements, currency }: { movements: SalesConsig
 
 export function SaleDetail({ row }: { row: SaleWithItems }) {
   const t = useT(salesModuleMessages);
-  const { sale, items } = row;
+  const { sale, items, pieces } = row;
+  const costCents = items.reduce((sum, item) => sum + item.quantity * item.unitCostCents, 0);
   return (
     <div className="space-y-3">
       <div className="space-y-1.5">
@@ -237,6 +238,18 @@ export function SaleDetail({ row }: { row: SaleWithItems }) {
           </div>
         ))}
       </div>
+
+      {pieces.length > 0 && (
+        <div className="rounded-xl border border-blue-400/20 bg-blue-500/[0.07] px-3 py-3">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-blue-300/80">{t("tagPieces")}</span>
+            <Chip tone="blue">{t("source_tags")}</Chip>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {pieces.map((piece) => <span key={piece.tagId} className="rounded-lg bg-white/[0.06] px-2 py-1 font-mono text-xs tracking-wider text-white/75">{piece.publicCode}</span>)}
+          </div>
+        </div>
+      )}
 
       <div className="space-y-1.5 rounded-xl px-3 py-3" style={{ background: "rgba(16,185,129,0.06)" }}>
         {sale.discountCents > 0 && (
@@ -261,6 +274,8 @@ export function SaleDetail({ row }: { row: SaleWithItems }) {
         </Row>
         {sale.paymentMethod ? <Row label={t("method")}><span className="text-xs text-white/60">{t(`method_${sale.paymentMethod as PaymentMethod}`)}</span></Row> : null}
         <Row label={t("date")}><span className="text-xs text-white/60">{formatDateTime(sale.soldAt)}</span></Row>
+        {pieces.length > 0 && <Row label={t("costOfGoods")}><Money cents={costCents} currency={sale.currency} /></Row>}
+        {pieces.length > 0 && <Row label={t("grossProfit")}><Money cents={sale.totalCents - costCents} currency={sale.currency} /></Row>}
       </div>
 
       {sale.notes ? (

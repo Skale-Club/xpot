@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, Nfc, Power, QrCode, ScanLine, Search, Star, X } from "lucide-react";
+import { DollarSign, ExternalLink, Nfc, Power, QrCode, ScanLine, Search, Star, X } from "lucide-react";
 import type { TagDetail } from "@shared/tagsApi";
 import { TAG_DESTINATION_TYPES, validateDestinationUrl, type TagDestinationType } from "@shared/tags";
 import { guessDestinationType, normalizeUrlInput } from "@shared/tagApp";
@@ -12,8 +12,10 @@ import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
 import LeadPicker, { leadPayload, type LeadChoice } from "./LeadPicker";
+import TagSaleDialog from "./TagSaleDialog";
 import { ReviewLinkAssist } from "./ReviewLinkSheet";
 import WriteSheet, { type WriteResult } from "./WriteSheet";
+import { formatCents } from "@/pages/xpot/utils";
 import { APP_BASE, errorText, getSellTo, haptic, lookupTag, pushRecent, shortUrl, tagPath, tagsGet, tagsPost, useBanner } from "./lib";
 import {
   BTN_PRIMARY,
@@ -65,6 +67,7 @@ export default function TagScreen({ code, onClose }: {
   const [lead, setLead] = useState<LeadChoice>(null);
   const [busy, setBusy] = useState<"save" | "toggle" | null>(null);
   const [writeOpen, setWriteOpen] = useState(false);
+  const [saleOpen, setSaleOpen] = useState(false);
   const [seeded, setSeeded] = useState<string | null>(null);
 
   // Seed the form once per piece.
@@ -234,6 +237,7 @@ export default function TagScreen({ code, onClose }: {
         </div>
         <div className="relative mt-3 flex flex-wrap gap-2">
           <Pill tone={STATUS_TONE[tag.status] ?? "slate"}>{t(`status_${tag.status}` as "status_active")}</Pill>
+          {tag.saleId && <Pill tone="green">{t("soldBadge")}</Pill>}
           <Pill tone={CHIP_TONE[tag.nfcStatus] ?? "amber"}>{t(`chip_${tag.nfcStatus}` as "chip_verified")}</Pill>
           <Pill tone="slate">{t(`product_${tag.productType}` as "product_custom")}</Pill>
           {tag.face && <Pill tone="slate">{t(`face_${tag.face}` as "face_none")}</Pill>}
@@ -283,6 +287,20 @@ export default function TagScreen({ code, onClose }: {
           </div>
         </div>
       </section>
+
+      {tag.saleId ? (
+        <section className="mt-4 flex items-center justify-between gap-4 rounded-[20px] border border-emerald-400/20 bg-emerald-500/[0.08] p-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-widest text-emerald-300/80">{t("soldBadge")}</p>
+            <p className="mt-1 text-base font-bold text-white">{t("soldFor", { amount: formatCents(tag.soldPriceCents) })}</p>
+          </div>
+          <span className="font-mono text-xs text-white/40">#{tag.saleId}</span>
+        </section>
+      ) : (
+        <button type="button" onClick={() => setSaleOpen(true)} className={`${BTN_PRIMARY} mt-4 bg-none !bg-emerald-500`} data-testid="button-sell-this-piece">
+          <DollarSign className="h-5 w-5" /> {t("sellThisPiece")}
+        </button>
+      )}
 
       <section className={`${CARD} mt-4 space-y-4 p-4`}>
         <h2 className="text-base font-bold text-white">{t("sellTitle")}</h2>
@@ -376,6 +394,7 @@ export default function TagScreen({ code, onClose }: {
         onDone={onWritten}
         continueUrl={`${window.location.origin}${tagPath(tag.publicCode)}?write=1`}
       />
+      <TagSaleDialog open={saleOpen} onOpenChange={setSaleOpen} pieces={[tag]} initialTagId={tag.id} />
     </>
   );
 }

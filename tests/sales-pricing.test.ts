@@ -4,6 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  allocateSaleLineTotals,
   computeSaleTotals,
   computeSettlement,
   lineProfitCents,
@@ -89,6 +90,22 @@ describe("computeSaleTotals", () => {
     expect(t.totalCents).toBe(49400);
     expect(computeSaleTotals([{ quantity: 1, unitPriceCents: 1000 }], 5000).totalCents).toBe(0);
     expect(computeSaleTotals([{ quantity: 1, unitPriceCents: 1000 }], -50).discountCents).toBe(0);
+  });
+});
+
+describe("allocateSaleLineTotals", () => {
+  it("allocates every discount cent across lines and keeps the sale total exact", () => {
+    const lines = allocateSaleLineTotals([
+      { quantity: 1, unitPriceCents: 1000 },
+      { quantity: 1, unitPriceCents: 500 },
+    ], 101);
+
+    expect(lines).toEqual([
+      { grossCents: 1000, discountCents: 67, netCents: 933 },
+      { grossCents: 500, discountCents: 34, netCents: 466 },
+    ]);
+    expect(lines.reduce((sum, line) => sum + line.discountCents, 0)).toBe(101);
+    expect(lines.reduce((sum, line) => sum + line.netCents, 0)).toBe(1399);
   });
 });
 

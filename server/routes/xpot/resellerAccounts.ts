@@ -31,6 +31,7 @@ export const resellerAccountSchema = z.object({
   team: z.string().trim().max(60).optional().nullable(),
   role: z.enum(["rep", "manager", "admin"]).default("rep"),
   modules: z.array(z.enum(XPOT_MODULES)).min(1).default([...XPOT_MODULES]),
+  costPolicy: z.enum(["zero", "acquisition"]).default("acquisition"),
 }).strict();
 
 export type ResellerAccountInput = z.infer<typeof resellerAccountSchema>;
@@ -75,6 +76,9 @@ export async function createResellerAccount(input: ResellerAccountInput, actor: 
     role: input.role,
     isActive: true,
     modules: input.modules,
+    costPolicy: input.costPolicy,
+    costPolicyConfiguredAt: new Date(),
+    costPolicyConfiguredByUserId: actor.userId,
   });
   const wholesaleCode = await ensureWholesaleCode(rep.id);
   return { ...rep, wholesaleCode };

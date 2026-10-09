@@ -6,7 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
 import { errorMessage, formatDate, invalidateAdminTags, sendJson } from "./api";
 import { BTN, BTN_GHOST, CARD, Empty, INPUT, SectionTitle, Stat, TD, TH } from "./ui";
-import { BatchStatusPill, ErrorLine, Field, Loading, SELECT, useBatches } from "./batches-shared";
+import { BatchStatusPill, ErrorLine, Field, Loading, SELECT, useBatches, useTagCatalog } from "./batches-shared";
 import { useTagLabels } from "./labels";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
@@ -18,6 +18,7 @@ const EMPTY_FORM = {
   name: "",
   batchCode: "",
   productType: TAG_PRODUCT_TYPES[0] as string,
+  salesProductId: "",
   face: "",
   vendor: "",
   quantity: "100",
@@ -30,6 +31,7 @@ function NewBatchForm({ onClose, onCreated }: { onClose: () => void; onCreated: 
   const t = useT(manageTagsBatchesMessages);
   const tc = useT(commonMessages);
   const labels = useTagLabels();
+  const { data: catalog = [] } = useTagCatalog();
   const [form, setForm] = useState(EMPTY_FORM);
   const set = (patch: Partial<typeof EMPTY_FORM>) => setForm((f) => ({ ...f, ...patch }));
   const quantity = Number(form.quantity);
@@ -41,7 +43,7 @@ function NewBatchForm({ onClose, onCreated }: { onClose: () => void; onCreated: 
     !publicCodes ||
     (publicCodes.length === quantity && publicCodes.every((code): code is string => code !== null) && new Set(publicCodes).size === publicCodes.length);
   const importing = !!publicCodes;
-  const ready = form.name.trim().length > 0 && validQuantity && validPublicCodes;
+  const ready = form.name.trim().length > 0 && !!form.salesProductId && validQuantity && validPublicCodes;
 
   const create = useMutation({
     mutationFn: () =>
@@ -49,6 +51,7 @@ function NewBatchForm({ onClose, onCreated }: { onClose: () => void; onCreated: 
         name: form.name,
         batchCode: form.batchCode || undefined,
         productType: form.productType,
+        salesProductId: Number(form.salesProductId),
         face: form.face || null,
         vendor: form.vendor || null,
         quantity,
@@ -89,6 +92,14 @@ function NewBatchForm({ onClose, onCreated }: { onClose: () => void; onCreated: 
               <option key={o.value} value={o.value}>
                 {o.label}
               </option>
+            ))}
+          </select>
+        </Field>
+        <Field label={t("fieldCatalogProduct")} hint={t("catalogProductHint")}>
+          <select value={form.salesProductId} onChange={(e) => set({ salesProductId: e.target.value })} className={SELECT} required>
+            <option value="">{t("chooseCatalogProduct")}</option>
+            {catalog.map((product) => (
+              <option key={product.id} value={product.id}>{product.name}{product.sku ? ` · ${product.sku}` : ""}</option>
             ))}
           </select>
         </Field>

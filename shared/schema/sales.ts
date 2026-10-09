@@ -84,6 +84,10 @@ export const salesReps = pgTable("sales_reps", {
   blockedReason: text("blocked_reason"),
   // Personal code for wholesale prices in the Stuscle store (shared/wholesale.ts).
   wholesaleCode: text("wholesale_code"),
+  // Economic model for physical Tags. Access role does not imply cost policy.
+  costPolicy: text("cost_policy").notNull().default("acquisition"),
+  costPolicyConfiguredAt: timestamp("cost_policy_configured_at"),
+  costPolicyConfiguredByUserId: text("cost_policy_configured_by_user_id"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => ({
@@ -304,6 +308,7 @@ export const insertSalesRepSchema = z.object({
   ghlUserId: z.string().nullable().optional(),
   isActive: z.boolean().default(true),
   modules: z.array(z.enum(["visits", "tags"])).optional(),
+  costPolicy: z.enum(["zero", "acquisition"]).optional(),
 });
 
 export const insertSalesLeadSchema = z.object({
@@ -561,6 +566,9 @@ export const salesSales = pgTable("sales_sales", {
   repId: integer("rep_id").references(() => salesReps.id).notNull(),
   visitId: integer("visit_id").references(() => salesVisits.id, { onDelete: "set null" }),
   consignmentId: integer("consignment_id").references(() => salesConsignments.id),
+  source: text("source").notNull().default("sales"),
+  idempotencyKey: text("idempotency_key"),
+  idempotencyFingerprint: text("idempotency_fingerprint"),
   kind: salesSaleKindEnum("kind").notNull().default("direct"),
   status: salesSaleStatusEnum("status").notNull().default("completed"),
   currency: text("currency").notNull().default("USD"),
@@ -595,6 +603,8 @@ export const salesSaleItems = pgTable("sales_sale_items", {
   // Frozen at sale time — see the column comment in migrations/0017.
   unitCostCents: integer("unit_cost_cents").notNull().default(0),
   totalCents: integer("total_cents").notNull().default(0),
+  allocatedDiscountCents: integer("allocated_discount_cents").notNull().default(0),
+  netTotalCents: integer("net_total_cents").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => ({
   saleIdx: index("sales_sale_items_sale_idx").on(table.saleId),

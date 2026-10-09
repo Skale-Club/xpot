@@ -7,7 +7,7 @@ import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
 import { useToast } from "@/hooks/use-toast";
 import { ADMIN_TAGS_KEY, STALE_MS, errorMessage, formatDate, getJson, invalidateAdminTags, percent, sendJson } from "./api";
 import { BTN, BTN_GHOST, CARD, INPUT, SectionTitle, Stat } from "./ui";
-import { BatchStatusPill, ErrorLine, Field, Loading, PieceTable, SELECT, isHouseStock, isUnsoldWithReseller } from "./batches-shared";
+import { BatchStatusPill, ErrorLine, Field, Loading, PieceTable, SELECT, isHouseStock, isUnsoldWithReseller, useTagCatalog } from "./batches-shared";
 import { useTagLabels } from "./labels";
 import { GiveKitForm } from "./kits-give-form";
 import { JourneyPanel } from "./JourneyPanel";
@@ -21,6 +21,7 @@ interface BatchDetailData {
   batchCode: string;
   name: string;
   productType: string;
+  salesProductId: number | null;
   /** The batch's own face setting (null = the product's default). */
   face: string | null;
   vendor: string | null;
@@ -47,11 +48,12 @@ function EditBatch({ batch, onClose }: { batch: BatchDetailData; onClose: () => 
   const tm = useT(manageTagsMessages);
   const tc = useT(commonMessages);
   const labels = useTagLabels();
-  const initial = () => ({ name: batch.name, face: batch.face ?? "", vendor: batch.vendor ?? "", notes: batch.notes ?? "", status: batch.status });
+  const { data: catalog = [] } = useTagCatalog();
+  const initial = () => ({ name: batch.name, face: batch.face ?? "", vendor: batch.vendor ?? "", notes: batch.notes ?? "", status: batch.status, salesProductId: batch.salesProductId ? String(batch.salesProductId) : "" });
   const [form, setForm] = useState(initial);
   useEffect(() => {
     setForm(initial());
-  },[batch.name, batch.face, batch.vendor, batch.notes, batch.status]);
+  },[batch.name, batch.face, batch.vendor, batch.notes, batch.status, batch.salesProductId]);
 
   const save = useMutation({
     mutationFn: () =>
@@ -61,6 +63,7 @@ function EditBatch({ batch, onClose }: { batch: BatchDetailData; onClose: () => 
         vendor: form.vendor || null,
         notes: form.notes || null,
         status: form.status,
+        salesProductId: Number(form.salesProductId),
       }),
     onSuccess: () => {
       void invalidateAdminTags();
@@ -89,6 +92,14 @@ function EditBatch({ batch, onClose }: { batch: BatchDetailData; onClose: () => 
             ))}
           </select>
         </Field>
+        <Field label={t("fieldCatalogProduct")} hint={t("catalogProductHint")}>
+          <select value={form.salesProductId} onChange={(e) => setForm({ ...form, salesProductId: e.target.value })} className={SELECT} required>
+            <option value="">{t("chooseCatalogProduct")}</option>
+            {catalog.map((product) => (
+              <option key={product.id} value={product.id}>{product.name}{product.sku ? ` · ${product.sku}` : ""}</option>
+            ))}
+          </select>
+        </Field>
         <Field label={t("fieldPrintedOnPieces")} hint={t("printedHintEdit")}>
           <div className="flex items-center gap-2">
             <TagFaceIcon face={resolveTagFace({ batchFace: form.face || null, productType: batch.productType })} size="sm" />
@@ -113,7 +124,7 @@ function EditBatch({ batch, onClose }: { batch: BatchDetailData; onClose: () => 
         <button type="button" onClick={onClose} className={BTN_GHOST}>
           {tc("cancel")}
         </button>
-        <button type="submit" disabled={!form.name.trim() || save.isPending} className={BTN}>
+        <button type="submit" disabled={!form.name.trim() || !form.salesProductId || save.isPending} className={BTN}>
           {save.isPending ? t("saving") : tc("save")}
         </button>
       </div>

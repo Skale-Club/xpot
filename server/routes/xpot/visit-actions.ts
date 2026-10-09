@@ -353,6 +353,8 @@ async function applyAction(row: SalesVisitAction, ctx: ApplyCtx): Promise<string
           unitPriceCents,
           unitCostCents,
           totalCents: (item.quantity ?? 1) * unitPriceCents,
+          allocatedDiscountCents: 0,
+          netTotalCents: (item.quantity ?? 1) * unitPriceCents,
         });
       }
       const total = lines.reduce((sum, l) => sum + l.totalCents, 0);
@@ -373,6 +375,7 @@ async function applyAction(row: SalesVisitAction, ctx: ApplyCtx): Promise<string
           paidAt: paid ? new Date() : null,
           soldAt: new Date(),
           notes: action.evidence ?? null,
+          source: "voice",
         },
         lines,
       );

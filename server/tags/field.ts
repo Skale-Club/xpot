@@ -2,10 +2,10 @@ import { desc, eq } from "drizzle-orm";
 import { db } from "../db.js";
 import { salesLeads, tagDestinationHistory, tagDirectWrites, tagProvisioningEvents, tags, type Tag } from "#shared/schema.js";
 import { buildTagUrls, defaultUtmEnabled } from "#shared/tags.js";
-import { canWorkOnTag, saleCredit, type TagActor } from "#shared/tagAccess.js";
+import { activationCredit, canWorkOnTag, type TagActor } from "#shared/tagAccess.js";
 import { decidePhoneWrite, type DirectWriteMethod } from "#shared/tagApp.js";
 import type { DirectWriteItem } from "#shared/tagsApi.js";
-import { createLeadForSale, leadUsableBy, markLeadCustomer, rememberLeadPlace, TagError, type Tx } from "./repository.js";
+import { createLeadForSale, leadUsableBy, rememberLeadPlace, TagError, type Tx } from "./repository.js";
 import { journeyContext, recordJourney } from "./journey.js";
 import { placeIdFromReviewUrl } from "#shared/reviewLink.js";
 
@@ -36,7 +36,7 @@ export interface QuickActivateInput {
 /**
  * Link + customer + activation in one transaction. Keeps every rule of the
  * step-by-step admin flow (history row, no owner change on a live tag, retired
- * stays retired) and credits the sale to the reseller holding the piece.
+ * stays retired). Activation is operational setup; financial sale is separate.
  */
 export async function quickActivateTag(id: string, input: QuickActivateInput, actor: TagActor): Promise<Tag> {
   let before: Tag | null = null;
@@ -52,7 +52,7 @@ export async function quickActivateTag(id: string, input: QuickActivateInput, ac
     if (input.leadId && input.leadId !== tag.leadId) {
       leadId = await pickLead(tx, actor, input.leadId);
     } else if (!input.leadId && newName) {
-      // A business met in the field belongs to the reseller who sold it.
+      // A business met in the field belongs to the reseller configuring it.
       leadId = await createLeadForSale(tx, newName, tag.repId ?? actor.repId);
     }
     if (!leadId) throw new TagError("Choose the customer before activating", 409);
@@ -91,13 +91,12 @@ export async function quickActivateTag(id: string, input: QuickActivateInput, ac
         assignedAt: changingOwner || !tag.assignedAt ? now : tag.assignedAt,
         activatedAt: tag.status === "active" ? tag.activatedAt : now,
         activatedByRepId: tag.status === "active" ? tag.activatedByRepId : actor.repId,
-        ...saleCredit(tag, actor.repId, now),
+        ...activationCredit(tag, actor.repId),
         disabledAt: null,
         updatedAt: now,
       })
       .where(eq(tags.id, id))
       .returning();
-    await markLeadCustomer(tx, leadId);
     if (input.destinationType === "google_review") await rememberLeadPlace(tx, leadId, placeIdFromReviewUrl(input.destinationUrl));
     console.log(`[tags] quick-activate ${tag.publicCode}: ${tag.status} → active (rep ${actor.repId})`);
     return updated;

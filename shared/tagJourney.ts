@@ -84,6 +84,12 @@ export const JOURNEY_ACTION_PATTERN = /^[a-z][a-z0-9_]{0,39}$/;
 
 /** Product labels for titles written on the server (same wording as the admin UI). */
 export const JOURNEY_PRODUCT_LABELS: Record<string, string> = {
+  large_stand: "Large Stand",
+  small_stand: "Small Stand",
+  large_sign: "Large Sign",
+  small_sign: "Small Sign",
+  large_plate: "Large Plate",
+  small_plate: "Small Plate",
   google_review_sign: "Google Review sign",
   business_card: "Business card",
   keychain: "Keychain",

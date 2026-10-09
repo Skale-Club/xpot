@@ -98,6 +98,7 @@ export function createAdminRouter() {
       vcardId: z.number().int().positive().optional().nullable(),
       ghlUserId: z.string().optional().nullable(),
       modules: z.array(z.enum(["visits", "tags"])).min(1).optional(),
+      costPolicy: z.enum(["zero", "acquisition"]).optional(),
     }).parse(req.body);
     const actor = actorOf(req);
     const existing = await storage.getSalesRepByUserId(input.userId);
@@ -105,7 +106,13 @@ export function createAdminRouter() {
     if (!actor.isAdmin && (input.role !== "rep" || existing.role !== "rep")) {
       throw new AccountError("Only an admin can change a manager's or admin's role.", 403);
     }
-    return storage.upsertSalesRep({ ...input, isActive: existing.isActive });
+    const costPolicyChanged = input.costPolicy !== undefined &&
+      (input.costPolicy !== existing.costPolicy || !existing.costPolicyConfiguredAt);
+    return storage.upsertSalesRep({
+      ...input,
+      isActive: existing.isActive,
+      ...(costPolicyChanged ? { costPolicyConfiguredAt: new Date(), costPolicyConfiguredByUserId: actor.userId } : {}),
+    });
   }));
 
   // Create someone's access directly (active; they sign in with a code sent to this phone).

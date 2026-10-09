@@ -15,6 +15,8 @@ import {
   salesConsignmentMovements,
   salesSales,
   salesSaleItems,
+  salesSaleTags,
+  tags,
   type SalesProduct,
   type InsertSalesProduct,
   type SalesProductPriceTier,
@@ -40,6 +42,15 @@ export type SaleWithItems = {
   sale: SalesSale;
   items: SalesSaleItem[];
   lead: LeadRef | null;
+  pieces: SalePieceRef[];
+};
+
+export type SalePieceRef = {
+  tagId: string;
+  publicCode: string;
+  saleItemId: number;
+  costBasisCents: number;
+  status: string;
 };
 
 export type ConsignmentWithRefs = {
@@ -53,6 +64,7 @@ export type SalesSummary = {
   revenue: { todayCents: number; periodCents: number; monthToDateCents: number };
   /** What we keep: revenue minus the frozen production cost of what was sold. */
   profit: { todayCents: number; periodCents: number; monthToDateCents: number };
+  financial: { grossCents: number; discountCents: number; netCents: number; costCents: number; grossProfitCents: number };
   sales: { periodCount: number; unitsSold: number; directCents: number; settlementCents: number };
   unpaid: { count: number; cents: number };
   byProduct: { productId: number | null; name: string; quantity: number; revenueCents: number; profitCents: number }[];
@@ -153,6 +165,7 @@ export async function listSales(filters: {
   leadId?: number;
   visitId?: number;
   status?: SalesSaleStatus;
+  source?: string;
   since?: Date;
   limit?: number;
   offset?: number;
@@ -162,6 +175,7 @@ export async function listSales(filters: {
   if (filters.leadId) conditions.push(eq(salesSales.leadId, filters.leadId));
   if (filters.visitId) conditions.push(eq(salesSales.visitId, filters.visitId));
   if (filters.status) conditions.push(eq(salesSales.status, filters.status));
+  if (filters.source) conditions.push(eq(salesSales.source, filters.source));
   if (filters.since) conditions.push(gte(salesSales.soldAt, filters.since));
 
   let query = db.select().from(salesSales).orderBy(desc(salesSales.soldAt), desc(salesSales.id)).$dynamic();
@@ -180,12 +194,30 @@ export async function listSales(filters: {
     if (!itemsBySale.has(item.saleId)) itemsBySale.set(item.saleId, []);
     itemsBySale.get(item.saleId)!.push(item);
   }
-  const leadRefs = await attachLeadRefs(sales);
+  const [leadRefs, pieceRows] = await Promise.all([
+    attachLeadRefs(sales),
+    db.select({
+      saleId: salesSaleTags.saleId,
+      tagId: salesSaleTags.tagId,
+      publicCode: tags.publicCode,
+      saleItemId: salesSaleTags.saleItemId,
+      costBasisCents: salesSaleTags.costBasisCents,
+      status: salesSaleTags.status,
+    }).from(salesSaleTags)
+      .innerJoin(tags, eq(salesSaleTags.tagId, tags.id))
+      .where(inArray(salesSaleTags.saleId, sales.map((sale) => sale.id))),
+  ]);
+  const piecesBySale = new Map<number, SalePieceRef[]>();
+  for (const { saleId, ...piece } of pieceRows) {
+    if (!piecesBySale.has(saleId)) piecesBySale.set(saleId, []);
+    piecesBySale.get(saleId)!.push(piece);
+  }
 
   return sales.map((sale) => ({
     sale,
     items: itemsBySale.get(sale.id) ?? [],
     lead: leadRefs.get(sale.leadId) ?? null,
+    pieces: piecesBySale.get(sale.id) ?? [],
   }));
 }
 
@@ -193,8 +225,53 @@ export async function getSale(id: number): Promise<SaleWithItems | undefined> {
   const [sale] = await db.select().from(salesSales).where(eq(salesSales.id, id));
   if (!sale) return undefined;
   const items = await db.select().from(salesSaleItems).where(eq(salesSaleItems.saleId, id)).orderBy(asc(salesSaleItems.id));
-  const leadRefs = await attachLeadRefs([sale]);
-  return { sale, items, lead: leadRefs.get(sale.leadId) ?? null };
+  const [leadRefs, pieces] = await Promise.all([
+    attachLeadRefs([sale]),
+    db.select({
+      tagId: salesSaleTags.tagId,
+      publicCode: tags.publicCode,
+      saleItemId: salesSaleTags.saleItemId,
+      costBasisCents: salesSaleTags.costBasisCents,
+      status: salesSaleTags.status,
+    }).from(salesSaleTags)
+      .innerJoin(tags, eq(salesSaleTags.tagId, tags.id))
+      .where(eq(salesSaleTags.saleId, id)),
+  ]);
+  return { sale, items, lead: leadRefs.get(sale.leadId) ?? null, pieces };
+}
+
+/** Transaction and physical-piece totals shown beside completed visits. */
+export async function visitSalesBatch(visitIds: number[]) {
+  const uniqueIds = Array.from(new Set(visitIds));
+  const result = new Map<number, { transactions: number; pieces: number; totalCents: number }>();
+  if (!uniqueIds.length) return result;
+  const [saleRows, pieceRows] = await Promise.all([
+    db.select({
+      visitId: salesSales.visitId,
+      transactions: sql<number>`count(*)::int`,
+      totalCents: sql<number>`coalesce(sum(${salesSales.totalCents}), 0)::int`,
+    }).from(salesSales)
+      .where(and(inArray(salesSales.visitId, uniqueIds), eq(salesSales.status, "completed")))
+      .groupBy(salesSales.visitId),
+    db.select({
+      visitId: salesSales.visitId,
+      pieces: sql<number>`count(${salesSaleTags.id})::int`,
+    }).from(salesSaleTags)
+      .innerJoin(salesSales, eq(salesSaleTags.saleId, salesSales.id))
+      .where(and(inArray(salesSales.visitId, uniqueIds), eq(salesSales.status, "completed"), eq(salesSaleTags.status, "active")))
+      .groupBy(salesSales.visitId),
+  ]);
+  for (const row of saleRows) {
+    if (row.visitId == null) continue;
+    result.set(row.visitId, { transactions: row.transactions, pieces: 0, totalCents: row.totalCents });
+  }
+  for (const row of pieceRows) {
+    if (row.visitId == null) continue;
+    const current = result.get(row.visitId) ?? { transactions: 0, pieces: 0, totalCents: 0 };
+    current.pieces = row.pieces;
+    result.set(row.visitId, current);
+  }
+  return result;
 }
 
 async function insertSaleWithItems(
@@ -215,7 +292,7 @@ export async function createDirectSale(
 ): Promise<SaleWithItems> {
   const result = await db.transaction((tx) => insertSaleWithItems(tx, { ...sale, kind: "direct" }, items));
   const leadRefs = await attachLeadRefs([result.sale]);
-  return { ...result, lead: leadRefs.get(result.sale.leadId) ?? null };
+  return { ...result, lead: leadRefs.get(result.sale.leadId) ?? null, pieces: [] };
 }
 
 export async function updateSale(id: number, patch: Partial<InsertSalesSale>): Promise<SalesSale | undefined> {
@@ -476,10 +553,12 @@ export async function runSettlement(input: {
             unitPriceCents,
             unitCostCents,
             totalCents: result.amountCents,
+            allocatedDiscountCents: 0,
+            netTotalCents: result.amountCents,
           },
         ],
       );
-      sale = { ...created, lead: null };
+      sale = { ...created, lead: null, pieces: [] };
     }
 
     const [settlement] = await tx
@@ -666,7 +745,7 @@ export async function salesSummary(filters: { repId?: number; days?: number } = 
 
   // Profit lives on the ITEMS (price and cost are per line), so anything that
   // reports profit joins through sales_sale_items rather than summing the sale.
-  const profitExpr = sql<number>`coalesce(sum((${salesSaleItems.unitPriceCents} - ${salesSaleItems.unitCostCents}) * ${salesSaleItems.quantity}), 0)::int`;
+  const profitExpr = sql<number>`coalesce(sum(${salesSaleItems.netTotalCents} - (${salesSaleItems.unitCostCents} * ${salesSaleItems.quantity})), 0)::int`;
   const profitFor = (from: Date) =>
     db
       .select({ cents: profitExpr })
@@ -678,6 +757,8 @@ export async function salesSummary(filters: { repId?: number; days?: number } = 
     db
       .select({
         cents: sql<number>`coalesce(sum(${salesSales.totalCents}), 0)::int`,
+        grossCents: sql<number>`coalesce(sum(${salesSales.subtotalCents}), 0)::int`,
+        discountCents: sql<number>`coalesce(sum(${salesSales.discountCents}), 0)::int`,
         count: sql<number>`count(*)::int`,
         directCents: sql<number>`coalesce(sum(case when ${salesSales.kind} = 'direct' then ${salesSales.totalCents} else 0 end), 0)::int`,
         settlementCents: sql<number>`coalesce(sum(case when ${salesSales.kind} = 'consignment_settlement' then ${salesSales.totalCents} else 0 end), 0)::int`,
@@ -704,7 +785,7 @@ export async function salesSummary(filters: { repId?: number; days?: number } = 
         productId: salesSaleItems.productId,
         name: sql<string>`coalesce(min(${salesProducts.name}), min(${salesSaleItems.description}))`,
         quantity: sql<number>`coalesce(sum(${salesSaleItems.quantity}), 0)::int`,
-        revenueCents: sql<number>`coalesce(sum(${salesSaleItems.totalCents}), 0)::int`,
+        revenueCents: sql<number>`coalesce(sum(${salesSaleItems.netTotalCents}), 0)::int`,
         profitCents: profitExpr,
       })
       .from(salesSaleItems)
@@ -712,11 +793,11 @@ export async function salesSummary(filters: { repId?: number; days?: number } = 
       .leftJoin(salesProducts, eq(salesSaleItems.productId, salesProducts.id))
       .where(where(gte(salesSales.soldAt, from)))
       .groupBy(salesSaleItems.productId)
-      .orderBy(desc(sql`sum(${salesSaleItems.totalCents})`)),
+      .orderBy(desc(sql`sum(${salesSaleItems.netTotalCents})`)),
     db
       .select({
         date: sql<string>`to_char(${salesSales.soldAt}::date, 'YYYY-MM-DD')`,
-        revenueCents: sql<number>`coalesce(sum(${salesSaleItems.totalCents}), 0)::int`,
+        revenueCents: sql<number>`coalesce(sum(${salesSaleItems.netTotalCents}), 0)::int`,
         profitCents: profitExpr,
         salesCount: sql<number>`count(distinct ${salesSales.id})::int`,
       })
@@ -773,6 +854,13 @@ export async function salesSummary(filters: { repId?: number; days?: number } = 
       periodCents: profitPeriod?.cents ?? 0,
       monthToDateCents: profitMtd?.cents ?? 0,
     },
+    financial: {
+      grossCents: period?.grossCents ?? 0,
+      discountCents: period?.discountCents ?? 0,
+      netCents: period?.cents ?? 0,
+      costCents: Math.max(0, (period?.cents ?? 0) - (profitPeriod?.cents ?? 0)),
+      grossProfitCents: profitPeriod?.cents ?? 0,
+    },
     sales: {
       periodCount: period?.count ?? 0,
       unitsSold: itemsInPeriod[0]?.units ?? 0,
@@ -818,7 +906,7 @@ export async function leadSalesSnapshot(leadId: number): Promise<{
       .where(completedForLead),
     db
       .select({
-        cents: sql<number>`coalesce(sum((${salesSaleItems.unitPriceCents} - ${salesSaleItems.unitCostCents}) * ${salesSaleItems.quantity}), 0)::int`,
+        cents: sql<number>`coalesce(sum(${salesSaleItems.netTotalCents} - (${salesSaleItems.unitCostCents} * ${salesSaleItems.quantity})), 0)::int`,
       })
       .from(salesSaleItems)
       .innerJoin(salesSales, eq(salesSaleItems.saleId, salesSales.id))
@@ -866,6 +954,7 @@ export const salesStorage = {
   priceProduct,
   listSales,
   getSale,
+  visitSalesBatch,
   createDirectSale,
   updateSale,
   listConsignments,

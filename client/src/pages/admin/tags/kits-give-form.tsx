@@ -72,6 +72,7 @@ export function GiveKitForm({
   const [quantity, setQuantity] = useState("10");
   const [codesText, setCodesText] = useState("");
   const [note, setNote] = useState("");
+  const [unitCost, setUnitCost] = useState("");
 
   const effectiveMode: Mode = fixedBatch ? "batch" : mode;
   const rep = reps.find((r) => r.id === repId) ?? null;
@@ -83,7 +84,9 @@ export function GiveKitForm({
   const parsed = useMemo(() => parseCodes(codesText), [codesText]);
   const validCodes = parsed.codes.length > 0 && parsed.invalid.length === 0 && parsed.codes.length <= TAG_MAX_BATCH_QUANTITY;
 
-  const ready = !!repId && (effectiveMode === "batch" ? !!chosenBatch && validQty : validCodes);
+  const unitCostNumber = Number(unitCost);
+  const validUnitCost = unitCost.trim() !== "" && Number.isFinite(unitCostNumber) && unitCostNumber >= 0;
+  const ready = !!repId && validUnitCost && (effectiveMode === "batch" ? !!chosenBatch && validQty : validCodes);
   const pieceCount = effectiveMode === "batch" ? (validQty ? qty : 0) : parsed.codes.length;
 
   const give = useMutation({
@@ -92,6 +95,7 @@ export function GiveKitForm({
         repId,
         ...(effectiveMode === "batch" ? { batchId: chosenBatch!.id, quantity: qty } : { codes: parsed.codes }),
         note: note.trim() || null,
+        unitCostCents: Math.round(unitCostNumber * 100),
       }),
     onSuccess: (kit) => {
       void invalidateAdminTags();
@@ -102,6 +106,7 @@ export function GiveKitForm({
       });
       setCodesText("");
       setNote("");
+      setUnitCost("");
       onDone?.(kit);
     },
     onError: (err) => toast({ title: t("couldNotGiveKit"), description: errorMessage(err), variant: "destructive" }),
@@ -114,7 +119,7 @@ export function GiveKitForm({
 
   return (
     <form onSubmit={submit} className="space-y-4" data-testid="admin-tags-give-kit">
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-3">
         <Field
           label={tm("colReseller")}
           hint={
@@ -127,6 +132,19 @@ export function GiveKitForm({
         </Field>
         <Field label={t("fieldNoteOptional")} hint={t("noteHint")}>
           <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} placeholder={t("notePlaceholder")} className={INPUT} />
+        </Field>
+        <Field label={t("fieldUnitCost")} hint={t("unitCostHint")}>
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={unitCost}
+            onChange={(e) => setUnitCost(e.target.value)}
+            placeholder="0.00"
+            required
+            className={`${INPUT} tabular-nums`}
+            data-testid="input-kit-unit-cost"
+          />
         </Field>
       </div>
 

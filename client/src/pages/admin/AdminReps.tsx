@@ -27,6 +27,8 @@ type Rep = {
   phone: string | null;
   loginPhone: string | null;
   wholesaleCode: string | null;
+  costPolicy: "zero" | "acquisition";
+  costPolicyConfiguredAt: string | null;
   team: string | null;
   role: string;
   isActive: boolean;
@@ -207,13 +209,14 @@ function ActiveRow({ rep }: { rep: Rep }) {
   const [role, setRole] = useState(rep.role);
   const [team, setTeam] = useState(rep.team ?? "");
   const [modules, setModules] = useState<string[]>(rep.modules ?? [...XPOT_MODULES]);
+  const [costPolicy, setCostPolicy] = useState<"zero" | "acquisition">(rep.costPolicy ?? "acquisition");
   const isManager = role === "manager" || role === "admin";
   const sameModules = [...modules].sort().join() === [...(rep.modules ?? XPOT_MODULES)].sort().join();
-  const dirty = role !== rep.role || (team || "") !== (rep.team || "") || !sameModules;
+  const dirty = role !== rep.role || (team || "") !== (rep.team || "") || !sameModules || costPolicy !== rep.costPolicy || !rep.costPolicyConfiguredAt;
 
   const save = useMutation({
     mutationFn: () =>
-      send("/api/xpot/admin/reps", { userId: rep.userId, displayName: rep.displayName, email: rep.email, role, team: team || null, modules }),
+      send("/api/xpot/admin/reps", { userId: rep.userId, displayName: rep.displayName, email: rep.email, role, team: team || null, modules, costPolicy }),
     onSuccess: () => {
       toast({ title: t("repUpdated", { name: rep.displayName }) });
       void queryClient.invalidateQueries({ queryKey: REPS_KEY });
@@ -235,6 +238,16 @@ function ActiveRow({ rep }: { rep: Rep }) {
         ))}
       </select>
       <input value={team} onChange={(e) => setTeam(e.target.value)} placeholder={t("teamPlaceholder")} className={`${FIELD} w-28`} />
+      <select
+        value={costPolicy}
+        onChange={(e) => setCostPolicy(e.target.value as "zero" | "acquisition")}
+        title={t("costPolicyTitle")}
+        className="rounded-lg border border-white/10 bg-[#0a0f1e] px-2 py-1.5 text-sm text-white outline-none focus:border-blue-500/50"
+        data-testid={`cost-policy-${rep.id}`}
+      >
+        <option value="zero">{t("costPolicyZero")}</option>
+        <option value="acquisition">{t("costPolicyAcquisition")}</option>
+      </select>
       <div title={isManager ? t("managersUseAllModules") : undefined}>
         <ModuleChecks value={modules} onChange={setModules} disabled={isManager} />
       </div>
@@ -329,10 +342,11 @@ function NewResellerForm() {
   const [countryCode, setCountryCode] = useState("1");
   const [phone, setPhone] = useState("");
   const [modules, setModules] = useState<string[]>(["tags"]);
+  const [costPolicy, setCostPolicy] = useState<"zero" | "acquisition">("acquisition");
   const [created, setCreated] = useState<string | null>(null);
 
   const create = useMutation({
-    mutationFn: () => send<Rep>("/api/xpot/admin/reps/accounts", { displayName, phone, countryCode, modules }),
+    mutationFn: () => send<Rep>("/api/xpot/admin/reps/accounts", { displayName, phone, countryCode, modules, costPolicy }),
     onSuccess: (rep) => {
       setCreated(welcomeMessage(t, displayName, rep.phone ?? phone));
       void queryClient.invalidateQueries({ queryKey: REPS_KEY });
@@ -345,6 +359,7 @@ function NewResellerForm() {
     setDisplayName("");
     setPhone("");
     setModules(["tags"]);
+    setCostPolicy("acquisition");
     setCreated(null);
   };
 
@@ -408,6 +423,11 @@ function NewResellerForm() {
       <div className="flex flex-wrap items-center gap-4">
         <span className="text-xs uppercase tracking-wider text-white/40">{t("modules")}</span>
         <ModuleChecks value={modules} onChange={setModules} />
+        <select value={costPolicy} onChange={(event) => setCostPolicy(event.target.value as "zero" | "acquisition")}
+          className="rounded-lg border border-white/10 bg-[#0a0f1e] px-3 py-2 text-sm text-white outline-none focus:border-blue-500/50">
+          <option value="zero">{t("costPolicyZero")}</option>
+          <option value="acquisition">{t("costPolicyAcquisition")}</option>
+        </select>
       </div>
       <div className="flex gap-2">
         <button

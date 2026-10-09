@@ -86,7 +86,8 @@ export function SalesList({ selectedId = null, onSelect }: {
   const t = useT(salesModuleMessages);
   const tc = useT(commonMessages);
   const [days, setDays] = useState<number | undefined>(90);
-  const query = useSalesList({ days, limit: 100 });
+  const [source, setSource] = useState<"" | "tags">("");
+  const query = useSalesList({ days, source: source || undefined, limit: 100 });
   const [detail, setDetail] = useState<SaleWithItems | null>(null);
   const isDesktop = useIsDesktop() && Boolean(onSelect);
   const selected = selectedId != null ? query.data?.find((r) => r.sale.id === selectedId) ?? null : null;
@@ -103,6 +104,12 @@ export function SalesList({ selectedId = null, onSelect }: {
           value={days}
           onChange={setDays}
         />
+        <div className="w-36">
+          <Select value={source} onChange={(value) => setSource(value as "" | "tags")} options={[
+            { value: "", label: t("allOrigins") },
+            { value: "tags", label: t("tagsOrigin") },
+          ]} />
+        </div>
         <GhostButton onClick={() => setPickerOpen(true)}>
           <Package className="h-3.5 w-3.5" /> {t("newShort")}
         </GhostButton>

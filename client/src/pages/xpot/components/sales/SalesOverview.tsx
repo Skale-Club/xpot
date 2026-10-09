@@ -57,6 +57,13 @@ export function SalesOverview({ onGoToConsignments }: { onGoToConsignments?: () 
           sub={t.plural("units", s.sales.unitsSold)} />
       </div>
 
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+        <StatTile label={t("grossRevenue")} value={formatCents(s.financial.grossCents)} />
+        <StatTile label={t("discountsGiven")} value={formatCents(s.financial.discountCents)} />
+        <StatTile label={t("acquisitionCosts")} value={formatCents(s.financial.costCents)} />
+        <StatTile tone="green" label={t("grossProfitMetric")} value={formatCents(s.financial.grossProfitCents)} />
+      </div>
+
       {/* Unpaid */}
       {s.unpaid.count > 0 && (
         <div className="flex items-center gap-3 rounded-2xl px-4 py-3"

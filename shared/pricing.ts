@@ -53,6 +53,48 @@ export function computeSaleTotals(lines: LineInput[], discountCents = 0) {
   };
 }
 
+export type AllocatedSaleLine = {
+  grossCents: number;
+  discountCents: number;
+  netCents: number;
+};
+
+/**
+ * Allocate a sale-level discount proportionally across its lines. Any cents
+ * left by integer division go to the largest fractional remainders, with the
+ * original line order as the stable tie-breaker.
+ */
+export function allocateSaleLineTotals(lines: LineInput[], discountCents = 0): AllocatedSaleLine[] {
+  const gross = lines.map(lineTotalCents);
+  const subtotal = gross.reduce((sum, cents) => sum + cents, 0);
+  const discount = Math.max(0, Math.min(Math.round(discountCents), subtotal));
+  if (subtotal <= 0 || discount <= 0) {
+    return gross.map((grossCents) => ({ grossCents, discountCents: 0, netCents: grossCents }));
+  }
+
+  const allocations = gross.map((grossCents, index) => {
+    const exact = (discount * grossCents) / subtotal;
+    const allocated = Math.floor(exact);
+    return { index, grossCents, allocated, remainder: exact - allocated };
+  });
+  let remaining = discount - allocations.reduce((sum, line) => sum + line.allocated, 0);
+  for (const line of [...allocations].sort((a, b) => b.remainder - a.remainder || a.index - b.index)) {
+    if (remaining <= 0) break;
+    if (line.allocated < line.grossCents) {
+      line.allocated += 1;
+      remaining -= 1;
+    }
+  }
+
+  return allocations
+    .sort((a, b) => a.index - b.index)
+    .map(({ grossCents, allocated }) => ({
+      grossCents,
+      discountCents: allocated,
+      netCents: grossCents - allocated,
+    }));
+}
+
 /** Unit margin for the catalog screen: US$ 5.00 − US$ 1.20 = US$ 3.80. */
 export function unitMarginCents(basePriceCents: number, costCents: number | null | undefined): number {
   return basePriceCents - (costCents ?? 0);

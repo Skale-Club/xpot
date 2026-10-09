@@ -3,6 +3,10 @@ import { db } from "../db.js";
 import {
   salesLeads,
   salesReps,
+  salesSaleTags,
+  tagAcquisitionLines,
+  tagAcquisitionUnits,
+  tagAcquisitions,
   tagBatches,
   tagDestinationHistory,
   tagEvents,
@@ -12,7 +16,7 @@ import {
   type Tag,
 } from "#shared/schema.js";
 import { buildTagUrls, planTransition, type TagAction, type TagStatus } from "#shared/tags.js";
-import { canUseLead, saleCredit, type TagActor } from "#shared/tagAccess.js";
+import { activationCredit, canUseLead, type TagActor } from "#shared/tagAccess.js";
 import type {
   LeadTagSummary,
   TagAnalytics,
@@ -94,6 +98,8 @@ type TagRow = {
   public_code: string;
   serial_number: number | null;
   product_type: string;
+  sales_product_id: number | null;
+  acquisition_cost_cents: number | null;
   face: string | null;
   batch_face: string | null;
   status: string;
@@ -113,6 +119,8 @@ type TagRow = {
   last_interaction_at: Date | null;
   activated_at: Date | null;
   sold_at: Date | null;
+  sale_id: number | null;
+  sold_price_cents: number | null;
   created_at: Date;
 };
 
@@ -126,6 +134,8 @@ function toListItem(r: TagRow): TagListItem {
     publicCode: r.public_code,
     serialNumber: r.serial_number,
     productType: r.product_type,
+    salesProductId: r.sales_product_id,
+    acquisitionCostCents: r.acquisition_cost_cents === null ? null : Number(r.acquisition_cost_cents),
     face: faceOf(r),
     ownFace: r.face,
     status: r.status,
@@ -145,20 +155,39 @@ function toListItem(r: TagRow): TagListItem {
     lastInteractionAt: iso(r.last_interaction_at),
     activatedAt: iso(r.activated_at),
     soldAt: iso(r.sold_at),
+    saleId: r.sale_id,
+    soldPriceCents: r.sold_price_cents === null ? null : Number(r.sold_price_cents),
     createdAt: iso(r.created_at)!,
   };
 }
 
 function tagListQuery(where: SQL, limit: number): SQL {
   return sql`
-    SELECT t.id, t.public_code, t.serial_number, t.product_type, t.face, b.face AS batch_face, t.status, t.nfc_provisioning_status, t.label,
+    SELECT t.id, t.public_code, t.serial_number, t.product_type, COALESCE(t.sales_product_id, b.sales_product_id) AS sales_product_id,
+           t.face, b.face AS batch_face, t.status, t.nfc_provisioning_status, t.label,
            t.destination_type, t.destination_url, t.lead_id, l.name AS lead_name, t.rep_id, r.display_name AS rep_name,
            t.kit_id, t.batch_id, b.batch_code, t.activated_at, t.sold_at, t.created_at,
+           sold.sale_id, sold.net_total_cents AS sold_price_cents, acquired.acquisition_cost_cents,
            COALESCE(s.qr, 0)::int AS qr, COALESCE(s.nfc, 0)::int AS nfc, s.last_interaction_at
     FROM tags t
     LEFT JOIN sales_leads l ON l.id = t.lead_id
     LEFT JOIN sales_reps r ON r.id = t.rep_id
     LEFT JOIN tag_batches b ON b.id = t.batch_id
+    LEFT JOIN LATERAL (
+      SELECT st.sale_id, si.net_total_cents
+      FROM sales_sale_tags st
+      JOIN sales_sale_items si ON si.id = st.sale_item_id
+      WHERE st.tag_id = t.id AND st.status = 'active'
+      ORDER BY st.sold_at DESC
+      LIMIT 1
+    ) sold ON true
+    LEFT JOIN LATERAL (
+      SELECT COALESCE(u.override_cost_cents, u.unit_cost_cents)::int AS acquisition_cost_cents
+      FROM tag_acquisition_units u
+      WHERE u.tag_id = t.id AND u.returned_at IS NULL
+      ORDER BY u.assigned_at DESC
+      LIMIT 1
+    ) acquired ON true
     LEFT JOIN LATERAL (
       SELECT count(*) FILTER (WHERE e.access_method = 'qr') AS qr,
              count(*) FILTER (WHERE e.access_method = 'nfc') AS nfc,
@@ -277,6 +306,7 @@ export async function writeHistory(
 export interface TagUpdate {
   label?: string | null;
   productType?: string;
+  salesProductId?: number | null;
   /** What is printed on this piece; null falls back to the batch's face. */
   face?: string | null;
   destinationType?: string | null;
@@ -311,6 +341,7 @@ export async function updateTag(id: string, patch: TagUpdate, userId: string | n
         ...next,
         ...(patch.label !== undefined ? { label: patch.label } : {}),
         ...(patch.productType ? { productType: patch.productType } : {}),
+        ...(patch.salesProductId !== undefined ? { salesProductId: patch.salesProductId } : {}),
         ...(patch.face !== undefined ? { face: patch.face } : {}),
         ...(patch.utmEnabled !== undefined ? { utmEnabled: patch.utmEnabled } : {}),
         ...(patch.utmCampaign !== undefined ? { utmCampaign: patch.utmCampaign } : {}),
@@ -357,13 +388,17 @@ export async function transitionTag(
     const now = new Date();
     const set: Partial<Tag> = { status: plan.status, updatedAt: now };
     if (action === "activate") {
-      Object.assign(set, { activatedAt: now, activatedByRepId: actor.repId, disabledAt: null, ...saleCredit(tag, actor.repId, now) });
+      Object.assign(set, { activatedAt: now, activatedByRepId: actor.repId, disabledAt: null, ...activationCredit(tag, actor.repId) });
     }
     if (action === "disable") set.disabledAt = now;
     if (action === "retire") set.disabledAt = tag.disabledAt ?? now;
     if (action === "unassign") {
-      // Back to unsold stock in the same hands: the previous customer's
-      // destination must not follow the piece, and the sale is undone.
+      const [activeSale] = await tx.select({ id: salesSaleTags.id }).from(salesSaleTags)
+        .where(and(eq(salesSaleTags.tagId, tag.id), eq(salesSaleTags.status, "active")))
+        .limit(1);
+      if (activeSale) throw new TagError("Cancel the financial sale before unassigning this piece", 409);
+      // Back to unconfigured stock in the same hands. The previous customer's
+      // destination must not follow the piece.
       Object.assign(set, {
         leadId: null, destinationUrl: null, destinationType: null, utmEnabled: false, utmCampaign: null,
         assignedAt: null, activatedAt: null, disabledAt: null, soldAt: null, activatedByRepId: null,
@@ -455,14 +490,14 @@ export async function assignTag(
 
 /** Admin: one standalone piece (not part of a manufacturing batch), in house stock. */
 export async function createSingleTag(
-  input: { productType: string; face?: string | null; label?: string | null },
+  input: { productType: string; salesProductId?: number; face?: string | null; label?: string | null },
   userId: string | null = null,
   source: JourneySource = "admin",
 ): Promise<Tag> {
   const [code] = await generateUniqueCodes(1, findExistingCodes);
   const [tag] = await db
     .insert(tags)
-    .values({ publicCode: code, productType: input.productType, face: input.face ?? null, label: input.label ?? null, status: "inventory" })
+    .values({ publicCode: code, productType: input.productType, salesProductId: input.salesProductId ?? null, face: input.face ?? null, label: input.label ?? null, status: "inventory" })
     .returning();
   console.log(`[tags] created standalone tag ${code}`);
   await recordJourney({
@@ -523,11 +558,11 @@ export async function leadUsableBy(actor: TagActor, leadId: number, executor: ty
   return !!lead && canUseLead(actor, lead);
 }
 
-/** A business met in the field, created while selling it a piece. */
+/** A business met while configuring a piece. It becomes a customer only after a financial sale. */
 export async function createLeadForSale(tx: Tx, name: string, ownerRepId: number): Promise<number> {
   const [lead] = await tx
     .insert(salesLeads)
-    .values({ name, ownerRepId, source: "tag_sale", status: "customer" })
+    .values({ name, ownerRepId, source: "tags", status: "lead" })
     .returning({ id: salesLeads.id });
   return lead.id;
 }
@@ -559,6 +594,8 @@ export interface KitInput {
   batchId?: string;
   quantity?: number;
   note?: string | null;
+  /** Partner's cost per physical piece. Zero is valid for house/owner stock. */
+  unitCostCents?: number;
 }
 
 /**
@@ -605,6 +642,42 @@ export async function deliverKit(input: KitInput, userId: string | null, source:
       .update(tags)
       .set({ repId: input.repId, kitId: kit.id, updatedAt: new Date() })
       .where(inArray(tags.id, picked.map((t) => t.id)));
+
+    if (input.unitCostCents !== undefined) {
+      const [acquisition] = await tx.insert(tagAcquisitions).values({
+        repId: input.repId,
+        kitId: kit.id,
+        source: "manual",
+        status: "fulfilled",
+        createdByUserId: userId,
+      }).returning();
+      const productRows = await tx
+        .select({ id: tags.id, ownProductId: tags.salesProductId, batchProductId: tagBatches.salesProductId })
+        .from(tags)
+        .leftJoin(tagBatches, eq(tags.batchId, tagBatches.id))
+        .where(inArray(tags.id, picked.map((tag) => tag.id)));
+      const byProduct = new Map<number | null, typeof productRows>();
+      for (const row of productRows) {
+        const productId = row.ownProductId ?? row.batchProductId ?? null;
+        const group = byProduct.get(productId) ?? [];
+        group.push(row);
+        byProduct.set(productId, group);
+      }
+      for (const [salesProductId, units] of Array.from(byProduct.entries())) {
+        const [line] = await tx.insert(tagAcquisitionLines).values({
+          acquisitionId: acquisition.id,
+          salesProductId,
+          quantity: units.length,
+          subtotalCents: input.unitCostCents * units.length,
+          unitCostCents: input.unitCostCents,
+        }).returning();
+        await tx.insert(tagAcquisitionUnits).values(units.map((unit) => ({
+          acquisitionLineId: line.id,
+          tagId: unit.id,
+          unitCostCents: input.unitCostCents!,
+        })));
+      }
+    }
     console.log(`[tags] kit ${kit.id}: ${picked.length} pieces → rep ${input.repId} (user ${userId ?? "?"})`);
     delivered = picked.map((t) => ({ publicCode: t.publicCode, batchId: t.batchId }));
     return kit.id;
@@ -633,15 +706,28 @@ export async function listKits(filter: { repId?: number; kitId?: string } = {}):
   if (filter.kitId) conds.push(sql`k.id = ${filter.kitId}`);
   const list = await rows<{
     id: string; rep_id: number; rep_name: string | null; note: string | null; created_at: Date; piece_count: number; unsold_count: number;
+    acquisition_source: string | null; unit_cost_cents: number | null;
   }>(sql`
     SELECT k.id, k.rep_id, r.display_name AS rep_name, k.note, k.created_at,
       count(t.id)::int AS piece_count,
-      count(t.id) FILTER (WHERE t.status = 'inventory' AND t.rep_id = k.rep_id)::int AS unsold_count
+      count(t.id) FILTER (WHERE t.rep_id = k.rep_id AND NOT EXISTS (
+        SELECT 1 FROM sales_sale_tags st WHERE st.tag_id = t.id AND st.status = 'active'
+      ))::int AS unsold_count,
+      acq.source AS acquisition_source, acq.unit_cost_cents
     FROM tag_kits k
     LEFT JOIN sales_reps r ON r.id = k.rep_id
     LEFT JOIN tags t ON t.kit_id = k.id
+    LEFT JOIN LATERAL (
+      SELECT a.source, min(l.unit_cost_cents)::int AS unit_cost_cents
+      FROM tag_acquisitions a
+      LEFT JOIN tag_acquisition_lines l ON l.acquisition_id = a.id
+      WHERE a.kit_id = k.id
+      GROUP BY a.id
+      ORDER BY a.created_at DESC
+      LIMIT 1
+    ) acq ON true
     WHERE ${sql.join(conds, sql` AND `)}
-    GROUP BY k.id, r.display_name
+    GROUP BY k.id, r.display_name, acq.source, acq.unit_cost_cents
     ORDER BY k.created_at DESC
   `);
   return list.map((k) => ({
@@ -652,6 +738,8 @@ export async function listKits(filter: { repId?: number; kitId?: string } = {}):
     createdAt: iso(k.created_at)!,
     pieceCount: Number(k.piece_count),
     unsoldCount: Number(k.unsold_count),
+    acquisitionSource: k.acquisition_source,
+    unitCostCents: k.unit_cost_cents === null ? null : Number(k.unit_cost_cents),
   }));
 }
 
@@ -676,11 +764,22 @@ export async function returnToHouse(
     const found = new Set(picked.map((t) => t.publicCode));
     const missing = codes.filter((c) => !found.has(c));
     if (missing.length) throw new TagError(`Unknown codes: ${missing.join(", ")}`, 404);
-    const sold = picked.filter((t) => t.status !== "inventory").map((t) => t.publicCode);
-    if (sold.length) throw new TagError(`Already sold, cannot return: ${sold.join(", ")}`, 409);
+    const activeSales = picked.length ? await tx.select({ tagId: salesSaleTags.tagId }).from(salesSaleTags)
+      .where(and(inArray(salesSaleTags.tagId, picked.map((tag) => tag.id)), eq(salesSaleTags.status, "active"))) : [];
+    if (activeSales.length) {
+      const soldIds = new Set(activeSales.map((sale) => sale.tagId));
+      const soldCodes = picked.filter((tag) => soldIds.has(tag.id)).map((tag) => tag.publicCode);
+      throw new TagError(`Already sold, cannot return: ${soldCodes.join(", ")}`, 409);
+    }
+    const configured = picked.filter((t) => t.status !== "inventory").map((t) => t.publicCode);
+    if (configured.length) throw new TagError(`Unassign these configured pieces before returning them: ${configured.join(", ")}`, 409);
     const alreadyInHouse = picked.filter((t) => t.repId === null).map((t) => t.publicCode);
     const moving = picked.filter((t) => t.repId !== null);
     if (moving.length) {
+      await tx
+        .update(tagAcquisitionUnits)
+        .set({ returnedAt: new Date() })
+        .where(and(inArray(tagAcquisitionUnits.tagId, moving.map((t) => t.id)), isNull(tagAcquisitionUnits.returnedAt)));
       await tx
         .update(tags)
         .set({ repId: null, kitId: null, updatedAt: new Date() })
@@ -712,6 +811,12 @@ export async function returnToHouse(
 // ─── Batches ──────────────────────────────────────────────────────────────────
 
 const BATCH_PREFIX: Record<string, string> = {
+  large_stand: "LSTAND",
+  small_stand: "SSTAND",
+  large_sign: "LSIGN",
+  small_sign: "SSIGN",
+  large_plate: "LPLATE",
+  small_plate: "SPLATE",
   google_review_sign: "REV",
   business_card: "CARD",
   keychain: "KEY",
@@ -733,6 +838,7 @@ export interface BatchInput {
   name: string;
   batchCode?: string | null;
   productType: string;
+  salesProductId: number;
   /** What is printed on every piece of the run (shared/tagFace.ts). */
   face?: string | null;
   vendor?: string | null;
@@ -765,6 +871,7 @@ export async function createBatch(input: BatchInput, userId: string | null, sour
             batchCode,
             name: input.name,
             productType: input.productType,
+            salesProductId: input.salesProductId,
             face: input.face ?? null,
             vendor: input.vendor ?? null,
             quantity: input.quantity,
@@ -779,6 +886,7 @@ export async function createBatch(input: BatchInput, userId: string | null, sour
             serialNumber: index + 1,
             batchId: batch.id,
             productType: input.productType,
+            salesProductId: input.salesProductId,
             status: "inventory",
           })),
         );
@@ -806,17 +914,23 @@ export async function createBatch(input: BatchInput, userId: string | null, sour
 
 export async function updateBatch(
   id: string,
-  input: Partial<Pick<BatchInput, "name" | "face" | "vendor" | "notes">> & { status?: string },
+  input: Partial<Pick<BatchInput, "name" | "face" | "vendor" | "notes" | "salesProductId">> & { status?: string },
   userId: string | null = null,
   source: JourneySource = "admin",
 ) {
   const [previous] = await db.select({ status: tagBatches.status }).from(tagBatches).where(eq(tagBatches.id, id)).limit(1);
   if (!previous) throw new TagError("Batch not found", 404);
-  const [batch] = await db
-    .update(tagBatches)
-    .set({ ...input, updatedAt: new Date() })
-    .where(eq(tagBatches.id, id))
-    .returning();
+  const batch = await db.transaction(async (tx) => {
+    const [updated] = await tx
+      .update(tagBatches)
+      .set({ ...input, updatedAt: new Date() })
+      .where(eq(tagBatches.id, id))
+      .returning();
+    if (input.salesProductId !== undefined) {
+      await tx.update(tags).set({ salesProductId: input.salesProductId, updatedAt: new Date() }).where(eq(tags.batchId, id));
+    }
+    return updated;
+  });
   if (!batch) throw new TagError("Batch not found", 404);
   if (input.status && input.status !== previous.status) {
     await recordJourney({
@@ -833,11 +947,11 @@ export async function updateBatch(
 
 export async function listBatches(): Promise<TagBatchItem[]> {
   const list = await rows<{
-    id: string; batch_code: string; name: string; product_type: string; face: string | null; vendor: string | null; quantity: number;
+    id: string; batch_code: string; name: string; product_type: string; sales_product_id: number | null; face: string | null; vendor: string | null; quantity: number;
     status: string; notes: string | null; created_at: Date; tag_count: number; house_count: number;
     with_resellers_count: number; active_count: number; nfc_verified_count: number;
   }>(sql`
-    SELECT b.id, b.batch_code, b.name, b.product_type, b.face, b.vendor, b.quantity, b.status, b.notes, b.created_at,
+    SELECT b.id, b.batch_code, b.name, b.product_type, b.sales_product_id, b.face, b.vendor, b.quantity, b.status, b.notes, b.created_at,
       count(t.id)::int AS tag_count,
       count(t.id) FILTER (WHERE t.status = 'inventory' AND t.rep_id IS NULL)::int AS house_count,
       count(t.id) FILTER (WHERE t.rep_id IS NOT NULL)::int AS with_resellers_count,
@@ -853,6 +967,7 @@ export async function listBatches(): Promise<TagBatchItem[]> {
     batchCode: b.batch_code,
     name: b.name,
     productType: b.product_type,
+    salesProductId: b.sales_product_id,
     face: resolveTagFace({ batchFace: b.face, productType: b.product_type }),
     ownFace: b.face,
     vendor: b.vendor,
@@ -989,19 +1104,23 @@ export async function getOverview(now: Date = new Date()): Promise<TagOverview> 
   const since7 = new Date(now.getTime() - 7 * 86_400_000);
   const since30 = new Date(now.getTime() - 30 * 86_400_000);
 
-  const statusRows = await rows<{ status: string; count: number; house: number }>(sql`
-    SELECT status, count(*)::int AS count, count(*) FILTER (WHERE rep_id IS NULL)::int AS house
+  const statusRows = await rows<{ status: string; count: number }>(sql`
+    SELECT status, count(*)::int AS count
     FROM tags GROUP BY status
   `);
+  const [stockRow] = await rows<{ house: number; with_resellers: number }>(sql`
+    SELECT
+      count(*) FILTER (WHERE t.rep_id IS NULL)::int AS house,
+      count(*) FILTER (WHERE t.rep_id IS NOT NULL)::int AS with_resellers
+    FROM tags t
+    WHERE t.status <> 'retired'
+      AND NOT EXISTS (SELECT 1 FROM sales_sale_tags st WHERE st.tag_id = t.id AND st.status = 'active')
+  `);
   const counts: TagOverview["counts"] = { total: 0, inventory: 0, assigned: 0, active: 0, disabled: 0, retired: 0 };
-  const stock = { house: 0, withResellers: 0 };
+  const stock = { house: Number(stockRow?.house ?? 0), withResellers: Number(stockRow?.with_resellers ?? 0) };
   for (const r of statusRows) {
     counts.total += Number(r.count);
     if (r.status in counts) counts[r.status as TagStatus] = Number(r.count);
-    if (r.status === "inventory") {
-      stock.house = Number(r.house);
-      stock.withResellers = Number(r.count) - Number(r.house);
-    }
   }
 
   const [m] = await rows<{ today: number; last7: number; last30: number; qr30: number; nfc30: number; unique30: number }>(sql`
@@ -1097,10 +1216,16 @@ export async function getRepSummary(repId: number, now: Date = new Date()): Prom
   const since30 = new Date(now.getTime() - 30 * 86_400_000);
   const [t] = await rows<{ in_stock: number; active: number; sold30: number }>(sql`
     SELECT
-      count(*) FILTER (WHERE status = 'inventory')::int AS in_stock,
-      count(*) FILTER (WHERE status = 'active')::int AS active,
-      count(*) FILTER (WHERE sold_at >= ${since30})::int AS sold30
-    FROM tags WHERE rep_id = ${repId}
+      count(*) FILTER (WHERE t.status <> 'retired' AND sold.sold_at IS NULL)::int AS in_stock,
+      count(*) FILTER (WHERE t.status = 'active')::int AS active,
+      count(*) FILTER (WHERE sold.sold_at >= ${since30})::int AS sold30
+    FROM tags t
+    LEFT JOIN LATERAL (
+      SELECT st.sold_at FROM sales_sale_tags st
+      WHERE st.tag_id = t.id AND st.status = 'active'
+      ORDER BY st.sold_at DESC LIMIT 1
+    ) sold ON true
+    WHERE t.rep_id = ${repId}
   `);
   const [e] = await rows<{ qr: number; nfc: number }>(sql`
     SELECT count(*) FILTER (WHERE e.access_method = 'qr')::int AS qr,

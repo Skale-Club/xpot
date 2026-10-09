@@ -1,6 +1,6 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
-import { canUseLead, canWorkOnTag, saleCredit } from "../../shared/tagAccess.js";
+import { activationCredit, canUseLead, canWorkOnTag } from "../../shared/tagAccess.js";
 
 const manager = { userId: "boss", repId: 1, isManager: true };
 const ana = { userId: "ana", repId: 10, isManager: false };
@@ -24,12 +24,8 @@ test("canUseLead: a reseller sells only to their own leads", () => {
   assert.equal(canUseLead(manager, { ownerRepId: null }), true);
 });
 
-test("saleCredit: the holder gets the sale, the first activation date sticks", () => {
-  const now = new Date("2026-10-03T12:00:00Z");
-  const before = new Date("2026-09-01T12:00:00Z");
-  assert.deepEqual(saleCredit({ repId: 10, soldAt: null }, 1, now), { repId: 10, soldAt: now });
-  // An admin re-activating a reseller's piece keeps the reseller's credit and date.
-  assert.deepEqual(saleCredit({ repId: 10, soldAt: before }, 1, now), { repId: 10, soldAt: before });
-  // A house piece an admin activates is credited to that admin.
-  assert.deepEqual(saleCredit({ repId: null, soldAt: null }, 1, now), { repId: 1, soldAt: now });
+test("activationCredit: activation keeps the holder but never creates a financial sale", () => {
+  assert.deepEqual(activationCredit({ repId: 10 }, 1), { repId: 10 });
+  // A house piece an admin activates is credited to that admin, without soldAt.
+  assert.deepEqual(activationCredit({ repId: null }, 1), { repId: 1 });
 });

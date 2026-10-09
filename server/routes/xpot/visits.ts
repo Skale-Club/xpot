@@ -4,6 +4,7 @@ import { requireXpotUser, ensureXpotRep, isManagerOrAdmin, loadAccessibleLead } 
 import type { SalesVisitStatus } from "#shared/schema/sales.js";
 import { getDistanceMeters, syncVisitToGhl, syncVisitToXphere } from "./helpers.js";
 import { xpotCheckInSchema, xpotCheckOutSchema, xpotVisitNoteUpsertSchema } from "#shared/xpot.js";
+import { salesStorage } from "../../storage-sales.js";
 
 export function createVisitsRouter() {
   const router = Router();
@@ -16,6 +17,7 @@ export function createVisitsRouter() {
       repId: isManagerOrAdmin(actor!) ? (req.query.repId ? Number(req.query.repId) : undefined) : actor!.rep.id,
       leadId,
     });
+    const visitSalesById = await salesStorage.visitSalesBatch(visits.map((visit) => visit.id));
     const result = await Promise.all(visits.map(async (visit) => {
       const lead = await storage.getSalesLead(visit.leadId);
       const locations = lead ? await storage.listSalesLeadLocations(visit.leadId) : [];
@@ -23,6 +25,7 @@ export function createVisitsRouter() {
         ...visit,
         lead: lead ? { ...lead, locations } : undefined,
         note: await storage.getSalesVisitNote(visit.id),
+        visitSales: visitSalesById.get(visit.id) ?? { transactions: 0, pieces: 0, totalCents: 0 },
       };
     }));
 

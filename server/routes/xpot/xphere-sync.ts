@@ -18,7 +18,7 @@
 // shows one deal that progressed, not an abandoned open one beside a won one.
 // Later sales get their own key (sale-<id>).
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "../../db.js";
 import { storage } from "../../storage.js";
 import { salesStorage } from "../../storage-sales.js";
@@ -153,14 +153,27 @@ export async function syncSaleToXphere(saleId: number): Promise<Outcome> {
     note: { title: kind, content, dedup_id: `xpot-sale-${sale.sale.id}` },
   });
 
-  await storage.createSalesSyncEvent({
-    provider: "xphere",
-    entityType: "sales_sale",
-    entityId: String(saleId),
-    status: result.ok ? "synced" : "failed",
+  const syncPatch = {
+    status: result.ok ? "synced" as const : "failed" as const,
     payload: { leadId: lead.id, totalCents: sale.sale.totalCents, convertedInterest: convertsInterest },
     lastError: result.ok ? null : result.message,
     lastAttemptAt: new Date(),
+  };
+  const [pending] = await db.select({ id: salesSyncEvents.id }).from(salesSyncEvents)
+    .where(and(
+      eq(salesSyncEvents.provider, "xphere"),
+      eq(salesSyncEvents.entityType, "sales_sale"),
+      eq(salesSyncEvents.entityId, String(saleId)),
+      eq(salesSyncEvents.status, "pending"),
+    ))
+    .orderBy(desc(salesSyncEvents.id))
+    .limit(1);
+  if (pending) await storage.updateSalesSyncEvent(pending.id, syncPatch);
+  else await storage.createSalesSyncEvent({
+    provider: "xphere",
+    entityType: "sales_sale",
+    entityId: String(saleId),
+    ...syncPatch,
   });
 
   return result.ok ? { synced: true } : { synced: false, message: result.message };

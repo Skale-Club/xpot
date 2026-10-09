@@ -27,14 +27,12 @@ export function canUseLead(actor: TagActor, lead: { ownerRepId: number | null })
 }
 
 /**
- * Sale credit when a piece goes live for a customer. The reseller holding the
- * piece gets it; a house piece an admin activates is credited to that admin.
- * The sale date is the first activation and never moves afterwards.
+ * Operational credit when a piece goes live. Activation does not create a
+ * financial sale; the tag sale service owns soldAt and money.
  */
-export function saleCredit(
-  tag: { repId: number | null; soldAt: Date | null },
+export function activationCredit(
+  tag: { repId: number | null },
   actorRepId: number,
-  now: Date,
-): { repId: number; soldAt: Date } {
-  return { repId: tag.repId ?? actorRepId, soldAt: tag.soldAt ?? now };
+): { repId: number } {
+  return { repId: tag.repId ?? actorRepId };
 }

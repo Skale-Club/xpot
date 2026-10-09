@@ -34,6 +34,11 @@ import * as field from "./field.js";
 import * as provisioning from "./provisioning.js";
 import { getTeamReport } from "./report.js";
 import { ReviewLinkError, resolveReviewLink } from "./reviewLink.js";
+import { tagSaleCreateSchema } from "#shared/tagSales.js";
+import { createTagSale, TagSaleError } from "./sales.js";
+import { syncSaleToXphere } from "../routes/xpot/xphere-sync.js";
+import { fulfillAcquisition, listAcquisitions } from "./acquisitions.js";
+import { salesStorage } from "../storage-sales.js";
 
 // Xpot Tags HTTP API. Four audiences:
 //   /q/:code, /n/:code           — public redirects printed/programmed on pieces
@@ -127,6 +132,7 @@ const faceField = z.enum(TAG_FACES).nullable().optional();
 
 const tagCreateSchema = z.object({
   productType: z.enum(TAG_PRODUCT_TYPES),
+  salesProductId: z.number().int().positive().optional(),
   face: faceField,
   label: optionalText(120),
 }).strict();
@@ -134,6 +140,7 @@ const tagCreateSchema = z.object({
 const tagPatchSchema = z.object({
   label: optionalText(120),
   productType: z.enum(TAG_PRODUCT_TYPES).optional(),
+  salesProductId: z.number().int().positive().nullable().optional(),
   face: faceField,
   destinationType: z.enum(TAG_DESTINATION_TYPES).nullable().optional(),
   destinationUrl: nullableDestinationUrl,
@@ -157,6 +164,7 @@ export const batchCreateSchema = z.object({
     z.string().regex(/^[A-Z0-9._-]{1,40}$/, "Batch code: letters, numbers, dot, dash or underscore").optional(),
   ),
   productType: z.enum(TAG_PRODUCT_TYPES),
+  salesProductId: z.number().int().positive(),
   face: faceField,
   vendor: optionalText(120),
   quantity: z.coerce.number().int().min(1).max(TAG_MAX_BATCH_QUANTITY),
@@ -189,6 +197,7 @@ const batchPatchSchema = z.object({
   vendor: optionalText(120),
   notes: optionalText(2000),
   status: z.enum(TAG_BATCH_STATUSES).optional(),
+  salesProductId: z.number().int().positive().optional(),
 }).strict();
 
 const codeList = z
@@ -214,6 +223,7 @@ const kitSchema = z.object({
   batchId: z.string().uuid().optional(),
   quantity: z.number().int().min(1).max(TAG_MAX_BATCH_QUANTITY).optional(),
   note: optionalText(500),
+  unitCostCents: z.number().int().nonnegative().optional(),
 }).strict().refine((v) => v.codes?.length || (v.batchId && v.quantity), {
   message: "Choose the pieces: codes, or a batch and a quantity",
 });
@@ -412,6 +422,35 @@ export function registerTagRoutes(app: Express) {
       res.json(await repo.listTags(actor.isManager ? filters : { ...filters, repId: actor.repId, house: undefined }));
     } catch (err) {
       fail(res, err, "Failed to load tags");
+    }
+  });
+
+  // A financial sale backed by exact physical pieces. Kept in the Tags router
+  // so a Tags-only partner does not need the Visits module.
+  app.post("/api/xpot/tag-sales", requireTagUser, async (req, res) => {
+    try {
+      const input = tagSaleCreateSchema.parse(req.body);
+      const result = await createTagSale(input, actorOf(req), req.get("idempotency-key") ?? "");
+      res.status(201).json(result);
+      if (!result.replayed) syncSaleToXphere(result.sale.id).catch((err) => console.error("[tag-sale] xphere mirror:", err));
+    } catch (err) {
+      if (err instanceof TagSaleError) {
+        return res.status(err.status).json({ code: err.code, message: err.message, requestId: req.get("x-request-id") ?? null });
+      }
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ code: "validation_error", message: err.issues[0]?.message ?? "Validation error", details: err.errors, requestId: req.get("x-request-id") ?? null });
+      }
+      fail(res, err, "Failed to record tag sale");
+    }
+  });
+
+  app.get(`${fieldBase}/catalog`, requireTagUser, async (_req, res) => {
+    try {
+      const products = (await salesStorage.listProducts()).filter((product) => product.kind === "physical");
+      const tiers = await salesStorage.listTiersBatch(products.map((product) => product.id));
+      res.json(products.map((product) => ({ ...product, tiers: tiers.filter((tier) => tier.productId === product.id) })));
+    } catch (err) {
+      fail(res, err, "Failed to load tag catalog");
     }
   });
 
@@ -643,6 +682,9 @@ export function registerTagRoutes(app: Express) {
       const input = kitSchema.parse(req.body);
       const rep = await storage.getSalesRep(input.repId);
       if (!rep) return res.status(404).json({ message: "Reseller not found" });
+      if (rep.costPolicy === "acquisition" && input.unitCostCents === undefined) {
+        return res.status(400).json({ code: "tag_cost_required", message: "Unit acquisition cost is required for this partner" });
+      }
       res.status(201).json(await repo.deliverKit(input, userIdOf(req)));
     } catch (err) {
       fail(res, err, "Failed to deliver kit");
@@ -655,6 +697,27 @@ export function registerTagRoutes(app: Express) {
       res.json(await repo.returnToHouse(codes, userIdOf(req)));
     } catch (err) {
       fail(res, err, "Failed to return pieces");
+    }
+  });
+
+  app.get("/api/xpot/admin/tag-acquisitions", requireTagManager, async (req, res) => {
+    try {
+      const { repId } = z.object({ repId: z.coerce.number().int().positive().optional() }).parse(req.query);
+      res.json(await listAcquisitions(repId));
+    } catch (err) {
+      fail(res, err, "Failed to load acquisitions");
+    }
+  });
+
+  app.post("/api/xpot/admin/tag-acquisitions/:id/fulfill", requireTagManager, async (req, res) => {
+    const id = z.string().uuid().safeParse(req.params.id);
+    if (!id.success) return res.status(404).json({ message: "Acquisition not found" });
+    try {
+      const { codes } = z.object({ codes: codeList }).strict().parse(req.body);
+      res.json(await fulfillAcquisition(id.data, codes, userIdOf(req)));
+    } catch (err) {
+      if (err instanceof TagSaleError) return res.status(err.status).json({ code: err.code, message: err.message });
+      fail(res, err, "Failed to fulfill acquisition");
     }
   });
 

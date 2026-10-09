@@ -31,6 +31,12 @@ const bridge = (window as unknown as { provisioner: Bridge }).provisioner;
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
 const PRODUCT: Record<string, string> = {
+  large_stand: "Large Stand",
+  small_stand: "Small Stand",
+  large_sign: "Large Sign",
+  small_sign: "Small Sign",
+  large_plate: "Large Plate",
+  small_plate: "Small Plate",
   google_review_sign: "Google Review sign",
   business_card: "NFC business card",
   keychain: "NFC keychain",

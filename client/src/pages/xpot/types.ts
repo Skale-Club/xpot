@@ -35,6 +35,7 @@ export type FullSalesLead = SalesLead & {
 export type EnrichedSalesVisit = SalesVisit & {
   lead?: SalesLead;
   note?: SalesVisitNote;
+  visitSales?: { transactions: number; pieces: number; totalCents: number };
 };
 
 export type EnrichedSalesOpportunity = SalesOpportunity & {
@@ -79,7 +80,7 @@ export type SalesLeadPayload = {
 
 export type XpotMeResponse = {
   user: { id: string; email: string; firstName?: string | null; lastName?: string | null; isAdmin: boolean; profileImageUrl?: string | null };
-  rep: { id: number; displayName: string; email?: string; phone?: string; team?: string; role: string; avatarUrl?: string | null; isActive?: boolean; modules?: string[] };
+  rep: { id: number; displayName: string; email?: string; phone?: string; team?: string; role: string; avatarUrl?: string | null; isActive?: boolean; modules?: string[]; costPolicy?: "zero" | "acquisition"; costPolicyConfiguredAt?: string | null };
   activeVisit: (SalesVisit & { lead?: SalesLead; note?: SalesVisitNote }) | null;
 };
 

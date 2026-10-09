@@ -9,13 +9,14 @@
 
 import { sql } from "drizzle-orm";
 import { bigserial, boolean, date, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
-import { salesLeads, salesReps } from "./sales.js";
+import { salesLeads, salesProducts, salesReps, salesSaleItems, salesSales } from "./sales.js";
 
 export const tagBatches = pgTable("tag_batches", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   batchCode: text("batch_code").notNull(),
   name: text("name").notNull(),
   productType: text("product_type").notNull(),
+  salesProductId: integer("sales_product_id").references(() => salesProducts.id, { onDelete: "set null" }),
   // What is printed on every piece of the run (shared/tagFace.ts); null = the product's default.
   face: text("face"),
   vendor: text("vendor"),
@@ -69,6 +70,7 @@ export const tags = pgTable("tags", {
   // The business the piece was sold to.
   leadId: integer("lead_id").references(() => salesLeads.id, { onDelete: "set null" }),
   productType: text("product_type").notNull(),
+  salesProductId: integer("sales_product_id").references(() => salesProducts.id, { onDelete: "set null" }),
   // Overrides the batch's face for this one piece; null = the batch's (or the product's).
   face: text("face"),
   status: text("status").notNull().default("inventory"),
@@ -186,6 +188,72 @@ export const tagDirectWrites = pgTable("tag_direct_writes", {
   repIdx: index("tag_direct_writes_rep_idx").on(table.repId, table.createdAt.desc()),
 }));
 
+// Economic receipt of physical pieces by a reseller. Kits are logistics;
+// acquisitions are the cost ledger and may arrive before fulfillment.
+export const tagAcquisitions = pgTable("tag_acquisitions", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  repId: integer("rep_id").notNull().references(() => salesReps.id),
+  kitId: uuid("kit_id").references(() => tagKits.id, { onDelete: "set null" }),
+  source: text("source").notNull(),
+  externalRef: text("external_ref"),
+  externalPayloadHash: text("external_payload_hash"),
+  currency: text("currency").notNull().default("USD"),
+  status: text("status").notNull().default("pending"),
+  purchasedAt: timestamp("purchased_at", { withTimezone: true }).notNull().defaultNow(),
+  createdByUserId: text("created_by_user_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  repIdx: index("tag_acquisitions_rep_idx").on(table.repId, table.purchasedAt),
+  externalIdx: uniqueIndex("tag_acquisitions_external_unique").on(table.source, table.externalRef),
+}));
+
+export const tagAcquisitionLines = pgTable("tag_acquisition_lines", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  acquisitionId: uuid("acquisition_id").notNull().references(() => tagAcquisitions.id, { onDelete: "cascade" }),
+  salesProductId: integer("sales_product_id").references(() => salesProducts.id, { onDelete: "set null" }),
+  externalSku: text("external_sku"),
+  quantity: integer("quantity").notNull(),
+  subtotalCents: integer("subtotal_cents").notNull(),
+  unitCostCents: integer("unit_cost_cents").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  acquisitionIdx: index("tag_acquisition_lines_acquisition_idx").on(table.acquisitionId),
+}));
+
+export const tagAcquisitionUnits = pgTable("tag_acquisition_units", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  acquisitionLineId: uuid("acquisition_line_id").notNull().references(() => tagAcquisitionLines.id, { onDelete: "cascade" }),
+  tagId: uuid("tag_id").notNull().references(() => tags.id, { onDelete: "restrict" }),
+  unitCostCents: integer("unit_cost_cents").notNull(),
+  overrideCostCents: integer("override_cost_cents"),
+  overrideReason: text("override_reason"),
+  overriddenByUserId: text("overridden_by_user_id"),
+  assignedAt: timestamp("assigned_at", { withTimezone: true }).notNull().defaultNow(),
+  returnedAt: timestamp("returned_at", { withTimezone: true }),
+}, (table) => ({
+  tagIdx: index("tag_acquisition_units_tag_idx").on(table.tagId, table.assignedAt),
+}));
+
+// Exact physical units behind a financial sale item. Historical rows remain
+// after cancellation/return; only one active row is allowed per piece by SQL.
+export const salesSaleTags = pgTable("sales_sale_tags", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  saleId: integer("sale_id").notNull().references(() => salesSales.id, { onDelete: "cascade" }),
+  saleItemId: integer("sale_item_id").notNull().references(() => salesSaleItems.id, { onDelete: "cascade" }),
+  tagId: uuid("tag_id").notNull().references(() => tags.id, { onDelete: "restrict" }),
+  acquisitionUnitId: uuid("acquisition_unit_id").references(() => tagAcquisitionUnits.id, { onDelete: "set null" }),
+  costBasisCents: integer("cost_basis_cents").notNull(),
+  costSource: text("cost_source").notNull(),
+  status: text("status").notNull().default("active"),
+  soldAt: timestamp("sold_at", { withTimezone: true }).notNull().defaultNow(),
+  endedAt: timestamp("ended_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  saleIdx: index("sales_sale_tags_sale_idx").on(table.saleId),
+  tagIdx: index("sales_sale_tags_tag_idx").on(table.tagId, table.soldAt),
+}));
+
 // ─── Journey (story, planning, execution) ────────────────────────────────────
 // SQL: migrations/0014_tag_journey.sql. Allowed values: shared/tagJourney.ts.
 // Admin-only; resellers never read these tables through the API.
@@ -249,6 +317,10 @@ export type InsertTagEvent = typeof tagEvents.$inferInsert;
 export type TagProvisioningDevice = typeof tagProvisioningDevices.$inferSelect;
 export type TagProvisioningJob = typeof tagProvisioningJobs.$inferSelect;
 export type TagDirectWrite = typeof tagDirectWrites.$inferSelect;
+export type TagAcquisition = typeof tagAcquisitions.$inferSelect;
+export type TagAcquisitionLine = typeof tagAcquisitionLines.$inferSelect;
+export type TagAcquisitionUnit = typeof tagAcquisitionUnits.$inferSelect;
+export type SalesSaleTag = typeof salesSaleTags.$inferSelect;
 export type TagPlan = typeof tagPlans.$inferSelect;
 export type TagJourneyEntry = typeof tagJourneyEntries.$inferSelect;
 export type InsertTagJourneyEntry = typeof tagJourneyEntries.$inferInsert;

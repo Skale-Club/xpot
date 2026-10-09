@@ -13,13 +13,18 @@ export async function getTeamReport(from: Date, to: Date): Promise<TagTeamReport
   const [sales, activations, scans, people, topTags] = await Promise.all([
     rows<{ rep_id: number | null; sold: number; in_stock: number; active_now: number; total: number; customers: number; last_sale_at: Date | null }>(sql`
       SELECT t.rep_id,
-        count(*) FILTER (WHERE t.sold_at >= ${from} AND t.sold_at < ${to})::int AS sold,
-        count(*) FILTER (WHERE t.status = 'inventory')::int AS in_stock,
+        count(*) FILTER (WHERE sold.sold_at >= ${from} AND sold.sold_at < ${to})::int AS sold,
+        count(*) FILTER (WHERE t.status <> 'retired' AND sold.sold_at IS NULL)::int AS in_stock,
         count(*) FILTER (WHERE t.status = 'active')::int AS active_now,
-        count(*) FILTER (WHERE t.sold_at IS NOT NULL)::int AS total,
-        count(DISTINCT t.lead_id)::int AS customers,
-        max(t.sold_at) AS last_sale_at
+        count(*) FILTER (WHERE sold.sold_at IS NOT NULL)::int AS total,
+        count(DISTINCT t.lead_id) FILTER (WHERE sold.sold_at IS NOT NULL)::int AS customers,
+        max(sold.sold_at) AS last_sale_at
       FROM tags t
+      LEFT JOIN LATERAL (
+        SELECT st.sold_at FROM sales_sale_tags st
+        WHERE st.tag_id = t.id AND st.status = 'active'
+        ORDER BY st.sold_at DESC LIMIT 1
+      ) sold ON true
       GROUP BY t.rep_id
     `),
     rows<{ rep_id: number; activations: number }>(sql`

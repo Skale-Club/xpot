@@ -8,6 +8,7 @@ const base = {
   name: "Legacy small plaques",
   batchCode: "REV-2026-001",
   productType: "google_review_sign",
+  salesProductId: 1,
   vendor: "Skale Club",
   quantity: 4,
 };

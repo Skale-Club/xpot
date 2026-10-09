@@ -22,7 +22,8 @@ import type {
 export type ProductWithTiers = SalesProduct & { tiers: SalesProductPriceTier[] };
 export type LeadRef = { id: number; name: string };
 export type ProductRef = Pick<SalesProduct, "id" | "name" | "sku" | "kind" | "unitLabel" | "currency">;
-export type SaleWithItems = { sale: SalesSale; items: SalesSaleItem[]; lead: LeadRef | null };
+export type SalePieceRef = { tagId: string; publicCode: string; saleItemId: number; costBasisCents: number; status: string };
+export type SaleWithItems = { sale: SalesSale; items: SalesSaleItem[]; lead: LeadRef | null; pieces: SalePieceRef[] };
 export type ConsignmentWithRefs = { consignment: SalesConsignment; product: ProductRef | null; lead: LeadRef | null };
 export type ConsignmentDetail = ConsignmentWithRefs & { movements: SalesConsignmentMovement[] };
 
@@ -30,6 +31,7 @@ export type SalesSummary = {
   period: { days: number; from: string; to: string };
   revenue: { todayCents: number; periodCents: number; monthToDateCents: number };
   profit: { todayCents: number; periodCents: number; monthToDateCents: number };
+  financial: { grossCents: number; discountCents: number; netCents: number; costCents: number; grossProfitCents: number };
   sales: { periodCount: number; unitsSold: number; directCents: number; settlementCents: number };
   unpaid: { count: number; cents: number };
   byProduct: { productId: number | null; name: string; quantity: number; revenueCents: number; profitCents: number }[];
@@ -85,7 +87,7 @@ export function useProducts(opts: { all?: boolean; enabled?: boolean } = {}) {
   });
 }
 
-export function useSalesList(filters: { leadId?: number; visitId?: number; repId?: number; status?: "completed" | "cancelled"; days?: number; limit?: number } = {}, enabled = true) {
+export function useSalesList(filters: { leadId?: number; visitId?: number; repId?: number; status?: "completed" | "cancelled"; source?: "sales" | "tags" | "voice" | "visit" | "lead"; days?: number; limit?: number } = {}, enabled = true) {
   return useQuery<SaleWithItems[]>({
     queryKey: ["/api/xpot/sales", "list", filters],
     queryFn: () => getJson(`/api/xpot/sales${qs(filters)}`),

@@ -1,9 +1,9 @@
 import { useMemo, useState, type FormEvent } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Undo2 } from "lucide-react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { PackageCheck, Undo2 } from "lucide-react";
 import type { TagKitItem, TagOverview } from "@shared/tagsApi";
 import { TAG_MAX_BATCH_QUANTITY } from "@shared/tags";
-import { ADMIN_TAGS_KEY, STALE_MS, getJson, withQuery } from "./api";
+import { ADMIN_TAGS_KEY, STALE_MS, errorMessage, getJson, invalidateAdminTags, sendJson, withQuery } from "./api";
 import { BTN_GHOST, CARD, Empty, INPUT, SectionTitle, Stat } from "./ui";
 import { ConfirmDialog, ErrorLine, Loading, ResellerSelect } from "./batches-shared";
 import { GiveKitForm, parseCodes } from "./kits-give-form";
@@ -13,6 +13,88 @@ import { shellMessages } from "@/i18n/messages/shell";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
 import { manageTagsBatchesMessages } from "@/i18n/messages/manageTagsBatches";
+import { useToast } from "@/hooks/use-toast";
+import { formatCents } from "@/pages/xpot/utils";
+
+type AcquisitionInboxItem = {
+  acquisition: {
+    id: string;
+    repId: number;
+    source: string;
+    externalRef: string | null;
+    currency: string;
+    status: string;
+    purchasedAt: string;
+  };
+  repName: string | null;
+  lines: Array<{
+    id: string;
+    externalSku: string | null;
+    quantity: number;
+    subtotalCents: number;
+    fulfilledUnits: number;
+  }>;
+};
+
+function AcquisitionInbox() {
+  const t = useT(manageTagsBatchesMessages);
+  const { toast } = useToast();
+  const [codesById, setCodesById] = useState<Record<string, string>>({});
+  const query = useQuery<AcquisitionInboxItem[]>({
+    queryKey: [ADMIN_TAGS_KEY, "acquisitions"],
+    queryFn: () => getJson("/api/xpot/admin/tag-acquisitions"),
+    staleTime: STALE_MS,
+  });
+  const fulfill = useMutation({
+    mutationFn: ({ id, codes }: { id: string; codes: string[] }) =>
+      sendJson("POST", `/api/xpot/admin/tag-acquisitions/${id}/fulfill`, { codes }),
+    onSuccess: async () => {
+      toast({ title: t("acquisitionFulfilled") });
+      await invalidateAdminTags();
+    },
+    onError: (err) => toast({ title: t("acquisitionFulfillFailed"), description: errorMessage(err), variant: "destructive" }),
+  });
+  const pending = (query.data ?? []).filter((item) => item.acquisition.status === "pending");
+  if (query.isLoading) return <Loading />;
+  if (query.isError) return <ErrorLine>{t("acquisitionsLoadFailed")}</ErrorLine>;
+  if (!pending.length) return <Empty>{t("noPendingAcquisitions")}</Empty>;
+  return (
+    <div className="space-y-3">
+      {pending.map((item) => {
+        const expected = item.lines.reduce((sum, line) => sum + line.quantity, 0);
+        const total = item.lines.reduce((sum, line) => sum + line.subtotalCents, 0);
+        const parsed = parseCodes(codesById[item.acquisition.id] ?? "");
+        const valid = parsed.invalid.length === 0 && parsed.codes.length === expected;
+        return (
+          <div key={item.acquisition.id} className={`${CARD} p-4`}>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="font-semibold text-white">{item.repName ?? `#${item.acquisition.repId}`}</p>
+                <p className="mt-0.5 text-xs text-white/40">{item.acquisition.externalRef ?? item.acquisition.source} · {formatCents(total, item.acquisition.currency)}</p>
+              </div>
+              <span className="rounded-full bg-amber-400/10 px-2.5 py-1 text-xs font-semibold text-amber-300">{t.plural("acquisitionPiecesExpected", expected)}</span>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {item.lines.map((line) => <span key={line.id} className="rounded-lg bg-white/[0.05] px-2 py-1 text-xs text-white/55">{line.externalSku ?? t("catalogProduct")} · {line.quantity}</span>)}
+            </div>
+            <textarea value={codesById[item.acquisition.id] ?? ""}
+              onChange={(event) => setCodesById((current) => ({ ...current, [item.acquisition.id]: event.target.value }))}
+              rows={3} className={`${INPUT} mt-3 resize-y font-mono`} placeholder={t("acquisitionCodesPlaceholder")} />
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+              <p className={`text-xs ${parsed.invalid.length ? "text-red-300" : "text-white/40"}`}>
+                {parsed.invalid.length ? t("notACode", { codes: parsed.invalid.slice(0, 6).join(", ") }) : t("acquisitionCodesProgress", { count: parsed.codes.length, expected })}
+              </p>
+              <button type="button" className={BTN_GHOST} disabled={!valid || fulfill.isPending}
+                onClick={() => fulfill.mutate({ id: item.acquisition.id, codes: parsed.codes })}>
+                <PackageCheck className="h-4 w-4" /> {t("fulfillAcquisition")}
+              </button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 /** Return pieces a reseller handed back, by the codes printed on them. */
 function ReturnByCodes() {
@@ -108,6 +190,11 @@ export function KitsTab({ go }: { go: (path: string) => void }) {
           hint={kits.data ? `${tt.plural("pieces", totals.pieces)} · ${t.plural("unsoldCount", totals.unsold)}` : undefined}
         />
       </div>
+
+      <section>
+        <SectionTitle>{t("stuscleInbox")}</SectionTitle>
+        <AcquisitionInbox />
+      </section>
 
       <section>
         <SectionTitle>{t("giveAKit")}</SectionTitle>

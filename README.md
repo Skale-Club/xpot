@@ -24,6 +24,7 @@ New here? Read [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) first.
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the app is put together: modules and roles, the shell, directories, tables, migrations, tests, deploy |
 | [BACKLOG.md](docs/BACKLOG.md) | Open and closed work items with stable codes (`VND-04`, `MOD-19`), in Portuguese |
 | [MODULES.md](docs/MODULES.md) | The plan that split Visits and Tags into distinct panels (#31), and what was decided, in Portuguese |
+| [TAG_SALES_EXECUTION_PLAN.md](docs/TAG_SALES_EXECUTION_PLAN.md) | Execution plan for linking physical pieces to sales, Stuscle acquisitions and partner margins, in Portuguese |
 | [DESKTOP.md](docs/DESKTOP.md) | The plan that brought the rep app to the desktop (#17 to #27), in Portuguese |
 | [AUDITORIA.md](docs/AUDITORIA.md) | The 2026-09-01 technical audit; a historical snapshot, in Portuguese |
 | [nfc-provisioner/README.md](nfc-provisioner/README.md) | The desktop NFC writer app |
@@ -180,8 +181,9 @@ card in Leads, and the Sales tab. They can also be **captured by voice**: the
 visit's audio is transcribed, read against the catalog and the shop's live
 stock, and turned into proposed actions the rep confirms with one tap.
 
-A piece sold in Tags does not appear in Sales; whether it should is decision D5
-in `docs/MODULES.md` (backlog item MOD-21).
+A piece sold in Tags does not appear in Sales yet. The implementation and the
+business rules for linking pieces, visits, Stuscle acquisitions and partner
+margins are specified in `docs/TAG_SALES_EXECUTION_PLAN.md`.
 
 ## Auth model
 
@@ -237,6 +239,12 @@ Xpot. Approved reps buy at wholesale with a personal code:
   is entered and again at checkout. Answer: `{valid:true, reseller:{id,name}}`
   or `{valid:false, reason:"unknown"|"inactive"}`. Pending or blocked reps get
   `inactive`, so blocking someone closes wholesale at once.
+- After payment, Stuscle sends `POST /api/integrations/stuscle/wholesale/orders`
+  with the same bearer secret, the external order id, wholesale code, currency,
+  date and SKU lines. The order is idempotent. When physical codes are included,
+  Xpot assigns the pieces immediately; otherwise it appears in Tags → Manage →
+  Kits for separation. The net line subtotal becomes the partner's exact
+  per-piece acquisition cost.
 - Without `XPOT_WHOLESALE_SECRET` the endpoint answers 503 and the store sells
   retail only. Code in `server/wholesale/`, `shared/wholesale.ts`.
 
@@ -259,9 +267,12 @@ resellers sell them to businesses with the Tags module. Code:
 - Pieces live in house stock until an admin hands them to a reseller in a kit
   (`POST /api/xpot/admin/tag-kits`). A reseller only reaches the pieces in their
   own kit and the leads they own; managers and admins reach everything.
-- Selling a piece (`POST /api/xpot/tags/:id/quick-activate`) links it to a lead
-  (created on the spot if new), sets the destination, makes it live and credits
-  the sale to the reseller holding it.
+- Activating a piece (`POST /api/xpot/tags/:id/quick-activate`) links it to a lead
+  and destination, but does not create revenue. Selling one or more physical
+  pieces uses `POST /api/xpot/tag-sales` with an idempotency key; this creates one
+  financial sale, links every exact piece and freezes its cost. A seller's
+  explicit cost policy is `zero` for the app owners or `acquisition` for a
+  partner. Partner cost comes from a Stuscle order or a manual kit delivery.
 - Tags › Manage (`/admin/tags/*`, managers and admins): overview and analytics,
   all pieces, batches with the manufacturing CSV and QR ZIP, kits and returns,
   the per-reseller report, the Journey (admins only) and the desktop NFC
