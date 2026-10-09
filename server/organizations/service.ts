@@ -88,10 +88,18 @@ export async function ensureOrganizationForRep(repId: number, actorUserId?: stri
     if (active) return active.organizationId;
     if (current.length > 0) throw new OrganizationError("This Rep has no active Organization.", 403);
 
+    // HTTP actors always reference a real user. Integration/import callers may
+    // provide a service identifier instead; fall back to the Rep's own user so
+    // audit foreign keys never make account provisioning fail.
+    const requestedCreator = actorUserId
+      ? (await tx.select({ id: users.id }).from(users).where(eq(users.id, actorUserId)).limit(1))[0]?.id
+      : undefined;
+    const creatorUserId = requestedCreator ?? rep.userId;
+
     const [created] = await tx.insert(organizations).values({
       name: rep.displayName,
       slug,
-      createdByUserId: actorUserId ?? rep.userId,
+      createdByUserId: creatorUserId,
     }).onConflictDoNothing({ target: organizations.slug }).returning();
     const organization = created ?? (await tx.select().from(organizations).where(eq(organizations.slug, slug)))[0];
     if (!organization) throw new OrganizationError("Failed to create the Rep Organization.", 500);
@@ -99,14 +107,14 @@ export async function ensureOrganizationForRep(repId: number, actorUserId?: stri
       organizationId: organization.id,
       repId,
       role: "admin",
-      createdByUserId: actorUserId ?? rep.userId,
+      createdByUserId: creatorUserId,
     }).onConflictDoNothing({ target: [organizationMemberships.organizationId, organizationMemberships.repId] });
     if (created) {
       await tx.insert(organizationAuditLog).values({
         organizationId: organization.id,
         action: "organization_created_for_rep",
         targetRepId: repId,
-        actorUserId: actorUserId ?? rep.userId,
+        actorUserId: creatorUserId,
         detail: { source: "legacy_account_flow" },
       });
     }

@@ -21,6 +21,7 @@ vi.mock("../server/db.js", async () => {
 
 const { createOrganizationsRouter } = await import("../server/routes/xpot/organizations.js");
 const { createLeadsRouter } = await import("../server/routes/xpot/leads.js");
+const { ensureOrganizationForRep } = await import("../server/organizations/service.js");
 
 const q = async (text: string, params: unknown[] = []) => (await pg.client.query(text, params)).rows as any[];
 const one = async (text: string, params: unknown[] = []) => (await q(text, params))[0];
@@ -81,6 +82,13 @@ beforeEach(async () => {
 });
 
 describe("Organizations API authorization", () => {
+  it("creates a default Organization even when an import actor is not a user", async () => {
+    const repId = await seedRep("new-rep");
+    const organizationId = await ensureOrganizationForRep(repId, "service-import");
+    const membership = await one(`SELECT role, is_active FROM organization_memberships WHERE organization_id = $1 AND rep_id = $2`, [organizationId, repId]);
+    expect(membership).toEqual({ role: "admin", is_active: true });
+  });
+
   it("Admin and Manager can create Organizations with an initial Rep Admin", async () => {
     await seedRep("admin", "admin", true);
     const managerId = await seedRep("manager", "manager");
