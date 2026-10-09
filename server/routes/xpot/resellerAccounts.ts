@@ -7,6 +7,7 @@ import { normalizePhone } from "#shared/phone.js";
 import { storage } from "../../storage.js";
 import { ensureWholesaleCode } from "../../wholesale/index.js";
 import { formatWholesaleCode } from "#shared/wholesale.js";
+import { ensureOrganizationForRep } from "../../organizations/service.js";
 
 // Who may use Xpot is decided by Skale Club. People sign up themselves (by
 // phone) and wait for approval, or an admin creates their access directly;
@@ -62,7 +63,11 @@ function splitName(displayName: string): { firstName: string; lastName: string |
 }
 
 /** The admin creates someone's access: active straight away, signs in with their phone. */
-export async function createResellerAccount(input: ResellerAccountInput, actor: Actor): Promise<SalesRep> {
+export async function createResellerAccount(
+  input: ResellerAccountInput,
+  actor: Actor,
+  options: { createOrganization?: boolean } = {},
+): Promise<SalesRep> {
   if (input.role === "admin" && !actor.isAdmin) throw new AccountError("Only an admin can create another admin.", 403);
   const phone = parsePhone(input.phone, input.countryCode);
   await assertPhoneFree(phone);
@@ -81,6 +86,9 @@ export async function createResellerAccount(input: ResellerAccountInput, actor: 
     costPolicyConfiguredByUserId: actor.userId,
   });
   const wholesaleCode = await ensureWholesaleCode(rep.id);
+  if (input.role === "rep" && options.createOrganization !== false) {
+    await ensureOrganizationForRep(rep.id, actor.userId);
+  }
   return { ...rep, wholesaleCode };
 }
 
@@ -107,6 +115,7 @@ export async function approveRep(repId: number, modules: string[] | undefined, a
   assertMayManage(rep, actor);
   if (rep.blockedAt) throw new AccountError("This rep is blocked. Unblock them instead.", 409);
   const updated = await setAccess(repId, { isActive: true, ...(modules ? { modules } : {}) });
+  if (updated.role === "rep") await ensureOrganizationForRep(repId, actor.userId);
   // Approved partners buy kits at wholesale with their own code.
   return { ...updated, wholesaleCode: await ensureWholesaleCode(repId) };
 }

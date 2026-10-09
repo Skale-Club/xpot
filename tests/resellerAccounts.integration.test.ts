@@ -30,6 +30,13 @@ test.skipIf(!enabled)("reseller access: create, approve, block, unblock, phone",
     assert.equal(rep.phone, "+15550110001");
     const [user] = (await db.execute(sql`SELECT phone, first_name, last_name, is_admin FROM users WHERE id = ${rep.userId}`)).rows as any[];
     assert.deepEqual(user, { phone: "+15550110001", first_name: "João", last_name: "Silva", is_admin: false });
+    const [membership] = (await db.execute(sql`
+      SELECT m.role, m.is_active, o.name
+      FROM organization_memberships m
+      JOIN organizations o ON o.id = m.organization_id
+      WHERE m.rep_id = ${rep.id}
+    `)).rows as any[];
+    assert.deepEqual(membership, { role: "admin", is_active: true, name: "João Silva" });
 
     // Same phone again, written differently: refused.
     await assert.rejects(accounts.createResellerAccount({ ...input, phone: "+1 555 011 0001" }, admin), (err: any) => err.status === 409);

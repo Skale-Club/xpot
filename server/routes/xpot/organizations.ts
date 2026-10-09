@@ -110,7 +110,11 @@ export function createOrganizationsRouter() {
       throw new OrganizationError("Only an Admin or Manager can assign Rep Admin access.", 403);
     }
     const { membershipRole: role, ...account } = created;
-    const rep = await createResellerAccount(account, { userId: actor.user.userId, isAdmin: actor.user.isAdmin });
+    const rep = await createResellerAccount(
+      account,
+      { userId: actor.user.userId, isAdmin: actor.user.isAdmin },
+      { createOrganization: false },
+    );
     return addOrganizationMember(organizationId, rep.id, role, actor);
   }, 201));
 

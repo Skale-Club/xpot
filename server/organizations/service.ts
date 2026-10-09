@@ -50,16 +50,68 @@ export async function companyOrganizationId(): Promise<number> {
 
 /** New operational records follow the Rep's active Organization. */
 export async function organizationIdForRep(repId: number): Promise<number> {
-  const [membership] = await db.select({ organizationId: organizationMemberships.organizationId })
+  const memberships = await db.select({
+    organizationId: organizationMemberships.organizationId,
+    isActive: organizationMemberships.isActive,
+    blockedAt: organizationMemberships.blockedAt,
+  })
     .from(organizationMemberships)
-    .where(and(
-      eq(organizationMemberships.repId, repId),
-      eq(organizationMemberships.isActive, true),
-      sql`${organizationMemberships.blockedAt} IS NULL`,
-    ))
-    .orderBy(desc(organizationMemberships.updatedAt))
-    .limit(1);
-  return membership?.organizationId ?? companyOrganizationId();
+    .where(eq(organizationMemberships.repId, repId))
+    .orderBy(desc(organizationMemberships.updatedAt));
+  const active = memberships.find((membership) => membership.isActive && !membership.blockedAt);
+  if (active) return active.organizationId;
+  // An explicitly blocked/removed Rep must not escape that decision by getting
+  // a fresh Organization. Only accounts that have never been assigned get the
+  // backwards-compatible individual Organization.
+  if (memberships.length > 0) throw new OrganizationError("This Rep has no active Organization.", 403);
+  return ensureOrganizationForRep(repId);
+}
+
+/**
+ * Legacy account creation predates Organizations. Keep that API safe by giving
+ * a brand-new Rep an individual Organization; Admin/Manager can reorganize it
+ * later. Existing inactive memberships are deliberately never reactivated.
+ */
+export async function ensureOrganizationForRep(repId: number, actorUserId?: string): Promise<number> {
+  const [rep] = await db.select().from(salesReps).where(eq(salesReps.id, repId));
+  if (!rep || rep.deletedAt) throw new OrganizationError("Rep not found", 404);
+  const slug = `rep-${rep.id}`;
+  return db.transaction(async (tx) => {
+    const current = await tx.select({
+      organizationId: organizationMemberships.organizationId,
+      isActive: organizationMemberships.isActive,
+      blockedAt: organizationMemberships.blockedAt,
+    }).from(organizationMemberships)
+      .where(eq(organizationMemberships.repId, repId))
+      .orderBy(desc(organizationMemberships.updatedAt));
+    const active = current.find((membership) => membership.isActive && !membership.blockedAt);
+    if (active) return active.organizationId;
+    if (current.length > 0) throw new OrganizationError("This Rep has no active Organization.", 403);
+
+    const [created] = await tx.insert(organizations).values({
+      name: rep.displayName,
+      slug,
+      createdByUserId: actorUserId ?? rep.userId,
+    }).onConflictDoNothing({ target: organizations.slug }).returning();
+    const organization = created ?? (await tx.select().from(organizations).where(eq(organizations.slug, slug)))[0];
+    if (!organization) throw new OrganizationError("Failed to create the Rep Organization.", 500);
+    await tx.insert(organizationMemberships).values({
+      organizationId: organization.id,
+      repId,
+      role: "admin",
+      createdByUserId: actorUserId ?? rep.userId,
+    }).onConflictDoNothing({ target: [organizationMemberships.organizationId, organizationMemberships.repId] });
+    if (created) {
+      await tx.insert(organizationAuditLog).values({
+        organizationId: organization.id,
+        action: "organization_created_for_rep",
+        targetRepId: repId,
+        actorUserId: actorUserId ?? rep.userId,
+        detail: { source: "legacy_account_flow" },
+      });
+    }
+    return organization.id;
+  });
 }
 
 export async function managedOrganizationIds(actor: OrganizationActor): Promise<number[] | null> {
