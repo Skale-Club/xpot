@@ -28,6 +28,7 @@ import type {
   TagListItem,
   TagOverview,
   TagDashboard,
+  TagPieceDashboard,
   TagRepSummary,
 } from "#shared/tagsApi.js";
 import { JOURNEY_PRODUCT_LABELS, tagActionEntry, type JourneySource } from "#shared/tagJourney.js";
@@ -1311,6 +1312,45 @@ export async function getTagDashboard(repId: number | null, days = 30, now: Date
     daily: daily.map((d) => ({ day: d.day, qr: Number(d.qr), nfc: Number(d.nfc) })),
     topPieces: topPieces.map((p) => ({ id: p.id, publicCode: p.public_code, label: p.label, leadName: p.lead_name, scans: Number(p.scans) })),
     topCustomers: topCustomers.map((c) => ({ leadId: Number(c.lead_id), name: c.name, pieces: Number(c.pieces), scans: Number(c.scans) })),
+    devices: devices.map((d) => ({ os: d.os ?? "other", scans: Number(d.scans) })),
+  };
+}
+
+/** A single piece's recent traffic, kept deliberately smaller than the fleet dashboard. */
+export async function getTagPieceDashboard(tagId: string, days = 30, now: Date = new Date()): Promise<TagPieceDashboard> {
+  const since = new Date(now.getTime() - (days - 1) * 86_400_000);
+  since.setUTCHours(0, 0, 0, 0);
+  const inPeriod = sql`e.tag_id = ${tagId} AND e.occurred_at >= ${since} AND ${COUNTABLE}`;
+
+  const [scans] = await rows<{ qr: number; nfc: number; visitors: number; last_interaction_at: Date | null }>(sql`
+    SELECT count(*) FILTER (WHERE e.access_method = 'qr')::int AS qr,
+           count(*) FILTER (WHERE e.access_method = 'nfc')::int AS nfc,
+           count(DISTINCT e.visitor_day_key)::int AS visitors,
+           max(e.occurred_at) AS last_interaction_at
+    FROM tag_events e WHERE ${inPeriod}
+  `);
+  const daily = await rows<{ day: string; qr: number; nfc: number }>(sql`
+    SELECT to_char(d, 'YYYY-MM-DD') AS day,
+           count(e.id) FILTER (WHERE e.access_method = 'qr')::int AS qr,
+           count(e.id) FILTER (WHERE e.access_method = 'nfc')::int AS nfc
+    FROM generate_series(${since}::timestamptz, ${now}::timestamptz, interval '1 day') d
+    LEFT JOIN tag_events e ON e.tag_id = ${tagId}
+      AND e.occurred_at >= d AND e.occurred_at < d + interval '1 day'
+      AND ${COUNTABLE}
+    GROUP BY d ORDER BY d
+  `);
+  const devices = await rows<{ os: string | null; scans: number }>(sql`
+    SELECT e.os_family AS os, count(*)::int AS scans
+    FROM tag_events e WHERE ${inPeriod}
+    GROUP BY e.os_family ORDER BY scans DESC LIMIT 3
+  `);
+
+  return {
+    days,
+    scans: { qr: Number(scans?.qr ?? 0), nfc: Number(scans?.nfc ?? 0) },
+    visitors: Number(scans?.visitors ?? 0),
+    lastInteractionAt: iso(scans?.last_interaction_at),
+    daily: daily.map((d) => ({ day: d.day, qr: Number(d.qr), nfc: Number(d.nfc) })),
     devices: devices.map((d) => ({ os: d.os ?? "other", scans: Number(d.scans) })),
   };
 }

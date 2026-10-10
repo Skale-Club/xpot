@@ -491,6 +491,18 @@ export function registerTagRoutes(app: Express) {
     }
   });
 
+  app.get(`${fieldBase}/:id/dashboard`, requireTagUser, async (req, res) => {
+    const id = idParam(req, res);
+    if (!id) return;
+    try {
+      if (!(await tagForActor(req, res, id))) return;
+      const days = Math.min(Math.max(Number(req.query.days) || 30, 7), 90);
+      res.json(await repo.getTagPieceDashboard(id, days));
+    } catch (err) {
+      fail(res, err, "Failed to load piece dashboard");
+    }
+  });
+
   // Customer + link + activation in one step.
   app.post(`${fieldBase}/:id/quick-activate`, requireTagUser, async (req, res) => {
     const id = idParam(req, res);

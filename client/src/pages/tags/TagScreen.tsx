@@ -20,6 +20,7 @@ import { GenerateReviewButton, ReviewLinkAssist } from "./ReviewLinkSheet";
 import { ContentEditor, type ContentState } from "./ContentEditor";
 import WriteSheet, { type WriteResult } from "./WriteSheet";
 import LockSheet from "./LockSheet";
+import PieceDashboard from "./PieceDashboard";
 import { APP_BASE, errorText, getSellTo, haptic, lookupTag, pushRecent, shortUrl, tagPath, tagsGet, tagsPost, useBanner } from "./lib";
 import {
   BTN_PRIMARY,
@@ -440,6 +441,8 @@ export default function TagScreen({ code, onClose }: {
           </span>
         </div>
       </section>
+
+      <PieceDashboard tagId={tag.id} />
 
       {/* The NFC chip: its state and what can be done with it, write and lock always in view. */}
       <section className={`${CARD} mt-3 p-4`} data-testid="chip-card">

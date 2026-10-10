@@ -208,6 +208,15 @@ test.skipIf(!enabled)("tags: kits, reseller isolation, sales, scans, report, pro
       FROM tag_events WHERE event_type = 'redirect'`)).rows as any[];
     assert.deepEqual(ev, { n: 4, owned: 4 });
 
+    // Each piece gets its own compact 30-day dashboard, with the same access boundary as the detail screen.
+    const pieceDash = await api("GET", `/api/xpot/tags/${a1.id}/dashboard?days=30`, "it-ana");
+    assert.equal(pieceDash.status, 200, pieceDash.text);
+    assert.deepEqual(pieceDash.json.scans, { qr: 1, nfc: 2 });
+    assert.equal(pieceDash.json.visitors, 1);
+    assert.equal(pieceDash.json.daily.length >= 30, true);
+    assert.equal(pieceDash.json.devices[0].os, "Android");
+    assert.equal((await api("GET", `/api/xpot/tags/${a1.id}/dashboard`, "it-bruno")).status, 403);
+
     // Direct links are per reseller.
     assert.equal((await api("POST", "/api/xpot/tag-direct-writes", "it-ana", { url: REVIEW, method: "web_nfc", verified: true, leadId })).status, 201);
     assert.equal((await api("GET", "/api/xpot/tag-direct-writes", "it-bruno")).json.length, 0);
