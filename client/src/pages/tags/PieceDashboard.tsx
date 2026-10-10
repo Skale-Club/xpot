@@ -9,6 +9,13 @@ import { CARD, EYEBROW_MUTED } from "./ui";
 const QR_COLOR = "#60a5fa";
 const NFC_COLOR = "#a78bfa";
 
+function formatChartDay(day: string, locale: string, options: Intl.DateTimeFormatOptions): string {
+  const date = new Date(`${day}T00:00:00Z`);
+  return Number.isNaN(date.getTime())
+    ? day
+    : date.toLocaleDateString(locale, { ...options, timeZone: "UTC" });
+}
+
 function Metric({ value, label }: { value: number; label: string }) {
   return (
     <div className="min-w-0 rounded-2xl bg-white/[0.035] px-3 py-2.5">
@@ -42,10 +49,6 @@ export default function PieceDashboard({ tagId }: { tagId: string }) {
 
   if (!data) return null;
   const total = data.scans.qr + data.scans.nfc;
-  const chart = data.daily.map((point) => ({
-    ...point,
-    label: new Date(`${point.day}T12:00:00Z`).toLocaleDateString(t.locale, { day: "numeric", month: "short" }),
-  }));
 
   return (
     <section className={`${CARD} mt-3 overflow-hidden p-4`} data-testid="piece-dashboard">
@@ -66,11 +69,25 @@ export default function PieceDashboard({ tagId }: { tagId: string }) {
       ) : (
         <div className="mt-3 h-24" role="img" aria-label={t("pieceAnalyticsChartLabel")}>
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chart} margin={{ top: 2, right: 0, left: 0, bottom: 0 }} barCategoryGap="18%">
-              <XAxis dataKey="label" axisLine={false} tickLine={false} interval="preserveStartEnd" minTickGap={48} tick={{ fill: "rgba(255,255,255,0.32)", fontSize: 9 }} />
+            <BarChart data={data.daily} margin={{ top: 2, right: 0, left: 0, bottom: 0 }} barCategoryGap="18%">
+              <XAxis
+                dataKey="day"
+                axisLine={false}
+                tickLine={false}
+                interval="preserveStartEnd"
+                minTickGap={48}
+                tick={{ fill: "rgba(255,255,255,0.32)", fontSize: 9 }}
+                tickFormatter={(day: string) => formatChartDay(day, t.locale, { day: "numeric", month: "short" })}
+              />
               <Tooltip
                 cursor={{ fill: "rgba(255,255,255,0.04)" }}
                 contentStyle={{ background: "#0f172a", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, fontSize: 12, color: "#fff" }}
+                labelStyle={{ color: "rgba(255,255,255,0.9)", fontWeight: 700 }}
+                labelFormatter={(day) => (
+                  typeof day === "string"
+                    ? formatChartDay(day, t.locale, { weekday: "short", day: "numeric", month: "short" })
+                    : day
+                )}
               />
               <Bar dataKey="qr" name="QR" stackId="piece" fill={QR_COLOR} />
               <Bar dataKey="nfc" name="NFC" stackId="piece" fill={NFC_COLOR} radius={[3, 3, 0, 0]} />
