@@ -47,7 +47,13 @@ export type TagDestinationType = (typeof TAG_DESTINATION_TYPES)[number];
 export const TAG_STATUSES = ["inventory", "assigned", "active", "disabled", "retired"] as const;
 export type TagStatus = (typeof TAG_STATUSES)[number];
 
-export const TAG_BATCH_STATUSES = ["draft", "generated", "ordered", "received", "completed", "cancelled"] as const;
+export const TAG_STOCK_STATUSES = ["available", "reserved", "internal_use", "sold", "damaged", "lost", "retired"] as const;
+export type TagStockStatus = (typeof TAG_STOCK_STATUSES)[number];
+
+export const TAG_OWNERSHIP_TYPES = ["company", "rep", "customer"] as const;
+export type TagOwnershipType = (typeof TAG_OWNERSHIP_TYPES)[number];
+
+export const TAG_BATCH_STATUSES = ["open", "closed", "cancelled"] as const;
 export type TagBatchStatus = (typeof TAG_BATCH_STATUSES)[number];
 
 export const TAG_ACCESS_METHODS = ["qr", "nfc"] as const;

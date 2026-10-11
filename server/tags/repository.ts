@@ -11,6 +11,7 @@ import {
   tagDestinationHistory,
   tagEvents,
   tagKits,
+  tagStockMovements,
   tags,
   type InsertTagEvent,
   type Tag,
@@ -33,6 +34,7 @@ import type {
 } from "#shared/tagsApi.js";
 import { JOURNEY_PRODUCT_LABELS, tagActionEntry, type JourneySource } from "#shared/tagJourney.js";
 import { resolveTagFace } from "#shared/tagFace.js";
+import { parseTagIntakeScan } from "#shared/tagIntake.js";
 import { generateUniqueCodes } from "./codes.js";
 import { TagError, pgError } from "./errors.js";
 import { journeyContext, recordJourney } from "./journey.js";
@@ -106,6 +108,10 @@ type TagRow = {
   face: string | null;
   batch_face: string | null;
   status: string;
+  stock_status: string;
+  ownership_type: string;
+  custodian_rep_id: number | null;
+  internal_use_note: string | null;
   nfc_provisioning_status: string;
   label: string | null;
   destination_type: string | null;
@@ -142,6 +148,10 @@ function toListItem(r: TagRow): TagListItem {
     face: faceOf(r),
     ownFace: r.face,
     status: r.status,
+    stockStatus: r.stock_status,
+    ownershipType: r.ownership_type,
+    custodianRepId: r.custodian_rep_id,
+    internalUseNote: r.internal_use_note,
     nfcStatus: r.nfc_provisioning_status,
     label: r.label,
     destinationType: r.destination_type,
@@ -167,7 +177,8 @@ function toListItem(r: TagRow): TagListItem {
 function tagListQuery(where: SQL, limit: number): SQL {
   return sql`
     SELECT t.id, t.public_code, t.serial_number, t.product_type, COALESCE(t.sales_product_id, b.sales_product_id) AS sales_product_id,
-           t.face, b.face AS batch_face, t.status, t.nfc_provisioning_status, t.label,
+           t.face, b.face AS batch_face, t.status, t.stock_status, t.ownership_type, t.custodian_rep_id,
+           t.internal_use_note, t.nfc_provisioning_status, t.label,
            t.destination_type, t.destination_url, t.lead_id, l.name AS lead_name, t.rep_id, r.display_name AS rep_name,
            t.kit_id, t.batch_id, b.batch_code, t.activated_at, t.sold_at, t.created_at,
            sold.sale_id, sold.net_total_cents AS sold_price_cents, acquired.acquisition_cost_cents,
@@ -617,27 +628,39 @@ export async function deliverKit(input: KitInput, userId: string | null, source:
   let delivered: Array<{ publicCode: string; batchId: string | null }> = [];
   const organizationId = input.organizationId ?? await organizationIdForRep(input.repId);
   const kitId = await db.transaction(async (tx) => {
-    let picked: Array<{ id: string; organizationId: number; publicCode: string; status: string; repId: number | null; batchId: string | null }>;
+    let picked: Array<{
+      id: string; organizationId: number; publicCode: string; status: string; stockStatus: string;
+      ownershipType: string; custodianRepId: number | null; repId: number | null; batchId: string | null;
+    }>;
     if (input.codes?.length) {
       const codes = Array.from(new Set(input.codes));
       picked = await tx
-        .select({ id: tags.id, organizationId: tags.organizationId, publicCode: tags.publicCode, status: tags.status, repId: tags.repId, batchId: tags.batchId })
+        .select({
+          id: tags.id, organizationId: tags.organizationId, publicCode: tags.publicCode, status: tags.status,
+          stockStatus: tags.stockStatus, ownershipType: tags.ownershipType, custodianRepId: tags.custodianRepId,
+          repId: tags.repId, batchId: tags.batchId,
+        })
         .from(tags)
         .where(inArray(tags.publicCode, codes))
         .for("update");
       const found = new Set(picked.map((t) => t.publicCode));
       const missing = codes.filter((c) => !found.has(c));
       if (missing.length) throw new TagError(`Unknown codes: ${missing.join(", ")}`, 404);
-      const unavailable = picked.filter((t) => t.status !== "inventory" || t.repId !== null ||
+      const unavailable = picked.filter((t) => t.status !== "inventory" || t.stockStatus !== "available" || t.repId !== null ||
         (input.sourceOrganizationId !== undefined && t.organizationId !== input.sourceOrganizationId)).map((t) => t.publicCode);
       if (unavailable.length) throw new TagError(`Not in house stock: ${unavailable.join(", ")}`, 409);
     } else if (input.batchId && input.quantity) {
       picked = await tx
-        .select({ id: tags.id, organizationId: tags.organizationId, publicCode: tags.publicCode, status: tags.status, repId: tags.repId, batchId: tags.batchId })
+        .select({
+          id: tags.id, organizationId: tags.organizationId, publicCode: tags.publicCode, status: tags.status,
+          stockStatus: tags.stockStatus, ownershipType: tags.ownershipType, custodianRepId: tags.custodianRepId,
+          repId: tags.repId, batchId: tags.batchId,
+        })
         .from(tags)
         .where(and(
           eq(tags.batchId, input.batchId),
           eq(tags.status, "inventory"),
+          eq(tags.stockStatus, "available"),
           isNull(tags.repId),
           ...(input.sourceOrganizationId !== undefined ? [eq(tags.organizationId, input.sourceOrganizationId)] : []),
         ))
@@ -655,10 +678,34 @@ export async function deliverKit(input: KitInput, userId: string | null, source:
       .insert(tagKits)
       .values({ organizationId, repId: input.repId, note: input.note ?? null, createdByUserId: userId })
       .returning({ id: tagKits.id });
+    const now = new Date();
+    const ownershipType = input.unitCostCents === undefined ? "company" : "rep";
     await tx
       .update(tags)
-      .set({ organizationId, repId: input.repId, kitId: kit.id, updatedAt: new Date() })
+      .set({
+        organizationId,
+        repId: input.repId,
+        kitId: kit.id,
+        custodianRepId: input.repId,
+        ownershipType,
+        stockUpdatedAt: now,
+        updatedAt: now,
+      })
       .where(inArray(tags.id, picked.map((t) => t.id)));
+    await tx.insert(tagStockMovements).values(picked.map((tag) => ({
+      tagId: tag.id,
+      movementType: "transfer",
+      fromStockStatus: tag.stockStatus,
+      toStockStatus: "available",
+      fromOwnershipType: tag.ownershipType,
+      toOwnershipType: ownershipType,
+      fromCustodianRepId: tag.custodianRepId,
+      toCustodianRepId: input.repId,
+      referenceType: "kit",
+      referenceId: kit.id,
+      actorUserId: userId,
+      reason: input.note ?? null,
+    })));
 
     if (input.unitCostCents !== undefined) {
       const [acquisition] = await tx.insert(tagAcquisitions).values({
@@ -771,10 +818,16 @@ export async function returnToHouse(
   userId: string | null,
   source: JourneySource = "admin",
 ): Promise<{ returned: number; alreadyInHouse: string[] }> {
-  let moved: Array<{ publicCode: string; repId: number | null; kitId: string | null }> = [];
+  let moved: Array<{
+    id: string; publicCode: string; repId: number | null; kitId: string | null; stockStatus: string;
+    ownershipType: string; custodianRepId: number | null;
+  }> = [];
   const result = await db.transaction(async (tx) => {
     const picked = await tx
-      .select({ id: tags.id, publicCode: tags.publicCode, status: tags.status, repId: tags.repId, kitId: tags.kitId })
+      .select({
+        id: tags.id, publicCode: tags.publicCode, status: tags.status, stockStatus: tags.stockStatus,
+        ownershipType: tags.ownershipType, custodianRepId: tags.custodianRepId, repId: tags.repId, kitId: tags.kitId,
+      })
       .from(tags)
       .where(inArray(tags.publicCode, codes))
       .for("update");
@@ -788,21 +841,43 @@ export async function returnToHouse(
       const soldCodes = picked.filter((tag) => soldIds.has(tag.id)).map((tag) => tag.publicCode);
       throw new TagError(`Already sold, cannot return: ${soldCodes.join(", ")}`, 409);
     }
-    const configured = picked.filter((t) => t.status !== "inventory").map((t) => t.publicCode);
+    const configured = picked.filter((t) => t.status !== "inventory" || t.stockStatus !== "available").map((t) => t.publicCode);
     if (configured.length) throw new TagError(`Unassign these configured pieces before returning them: ${configured.join(", ")}`, 409);
     const alreadyInHouse = picked.filter((t) => t.repId === null).map((t) => t.publicCode);
     const moving = picked.filter((t) => t.repId !== null);
     if (moving.length) {
+      const now = new Date();
       await tx
         .update(tagAcquisitionUnits)
-        .set({ returnedAt: new Date() })
+        .set({ returnedAt: now })
         .where(and(inArray(tagAcquisitionUnits.tagId, moving.map((t) => t.id)), isNull(tagAcquisitionUnits.returnedAt)));
       await tx
         .update(tags)
-        .set({ repId: null, kitId: null, updatedAt: new Date() })
+        .set({
+          repId: null,
+          kitId: null,
+          custodianRepId: null,
+          ownershipType: "company",
+          stockStatus: "available",
+          stockUpdatedAt: now,
+          updatedAt: now,
+        })
         .where(inArray(tags.id, moving.map((t) => t.id)));
+      await tx.insert(tagStockMovements).values(moving.map((tag) => ({
+        tagId: tag.id,
+        movementType: "return",
+        fromStockStatus: tag.stockStatus,
+        toStockStatus: "available",
+        fromOwnershipType: tag.ownershipType,
+        toOwnershipType: "company",
+        fromCustodianRepId: tag.custodianRepId,
+        toCustodianRepId: null,
+        referenceType: "kit",
+        referenceId: tag.kitId,
+        actorUserId: userId,
+      })));
       console.log(`[tags] ${moving.length} pieces returned to house stock (user ${userId ?? "?"})`);
-      moved = moving.map((t) => ({ publicCode: t.publicCode, repId: t.repId, kitId: t.kitId }));
+      moved = moving;
     }
     return { returned: moving.length, alreadyInHouse };
   });
@@ -859,76 +934,255 @@ export interface BatchInput {
   /** What is printed on every piece of the run (shared/tagFace.ts). */
   face?: string | null;
   vendor?: string | null;
-  quantity: number;
   notes?: string | null;
-  /** Exact codes from already-printed legacy pieces; admin API validates them. */
-  publicCodes?: string[];
 }
 
-/**
- * Creates the batch and its N house-stock tags in one transaction. Codes are
- * checked against the database before insert; a race that still collides on
- * the unique index rolls the whole batch back and is retried.
- */
 export async function createBatch(input: BatchInput, userId: string | null, source: JourneySource = "admin") {
   const batchCode = input.batchCode?.trim() || (await nextBatchCode(input.productType));
+  try {
+    const [batch] = await db.insert(tagBatches).values({
+      batchCode,
+      name: input.name,
+      productType: input.productType,
+      salesProductId: input.salesProductId,
+      face: input.face ?? null,
+      vendor: input.vendor ?? null,
+      quantity: 0,
+      status: "open",
+      notes: input.notes ?? null,
+      createdByUserId: userId,
+    }).returning();
+    await recordJourney({
+      kind: "execution",
+      action: "batch_created",
+      title: `Empty intake batch ${batch.batchCode} opened`,
+      content: batch.name,
+      batchId: batch.id,
+      afterValue: batch.status,
+      metadata: { productType: input.productType, face: batch.face, vendor: batch.vendor },
+    }, journeyContext(userId, source));
+    return batch;
+  } catch (err) {
+    if (pgError(err).code === "23505") throw new TagError(`Batch code ${batchCode} already exists`, 409);
+    throw err;
+  }
+}
+
+export interface BatchScanResult {
+  tag: Tag;
+  batchCount: number;
+  alreadyRegistered: boolean;
+}
+
+/** Registers one physical piece into an open batch. One accepted scan = one stock row. */
+export async function scanTagIntoBatch(
+  batchId: string,
+  rawValue: string,
+  idempotencyKey: string | null,
+  userId: string | null,
+  source: JourneySource = "admin",
+): Promise<BatchScanResult> {
+  const parsed = parseTagIntakeScan(rawValue);
+  if (!parsed.ok) throw new TagError(parsed.error, 400);
   const organizationId = await companyOrganizationId();
-  for (let attempt = 1; ; attempt++) {
-    const codes = input.publicCodes ?? (await generateUniqueCodes(input.quantity, findExistingCodes));
-    if (input.publicCodes) {
-      const existing = await findExistingCodes(codes);
-      if (existing.size > 0) {
-        throw new TagError(`Public codes already exist: ${Array.from(existing).sort().join(", ")}`, 409);
+
+  const result = await db.transaction(async (tx) => {
+    const [batch] = await tx.select().from(tagBatches).where(eq(tagBatches.id, batchId)).for("update");
+    if (!batch) throw new TagError("Batch not found", 404);
+    if (batch.status !== "open") throw new TagError("This batch is closed and no longer accepts scans", 409);
+
+    if (idempotencyKey && userId) {
+      const [sameRequest] = await tx.select().from(tags).where(and(
+        eq(tags.registeredByUserId, userId),
+        eq(tags.intakeIdempotencyKey, idempotencyKey),
+      )).limit(1);
+      if (sameRequest) {
+        if (sameRequest.batchId !== batchId || sameRequest.publicCode !== parsed.publicCode) {
+          throw new TagError("This scan request was already used for another piece", 409);
+        }
+        return { tag: sameRequest, batchCount: batch.quantity, alreadyRegistered: true };
       }
     }
-    try {
-      const batch = await db.transaction(async (tx) => {
-        const [batch] = await tx
-          .insert(tagBatches)
-          .values({
-            batchCode,
-            name: input.name,
-            productType: input.productType,
-            salesProductId: input.salesProductId,
-            face: input.face ?? null,
-            vendor: input.vendor ?? null,
-            quantity: input.quantity,
-            status: "generated",
-            notes: input.notes ?? null,
-            createdByUserId: userId,
-          })
-          .returning();
-        await tx.insert(tags).values(
-          codes.map((publicCode, index) => ({
-            organizationId,
-            publicCode,
-            serialNumber: index + 1,
-            batchId: batch.id,
-            productType: input.productType,
-            salesProductId: input.salesProductId,
-            status: "inventory",
-          })),
-        );
-        return batch;
-      });
-      console.log(`[tags] batch ${batch.batchCode} created with ${input.quantity} tags (user ${userId ?? "?"})`);
-      await recordJourney({
-        kind: "execution",
-        action: "batch_created",
-        title: `Batch ${batch.batchCode} created: ${input.quantity} × ${JOURNEY_PRODUCT_LABELS[input.productType] ?? input.productType}`,
-        content: batch.name,
-        batchId: batch.id,
-        afterValue: batch.status,
-        metadata: { quantity: input.quantity, productType: input.productType, face: batch.face, vendor: batch.vendor },
-      }, journeyContext(userId, source));
-      return batch;
-    } catch (err) {
-      const pg = pgError(err);
-      if (pg.code === "23505" && pg.constraint === "tags_public_code_unique" && attempt < 3) continue;
-      if (pg.code === "23505") throw new TagError(`Batch code ${batchCode} already exists`, 409);
-      throw err;
+
+    const [existing] = await tx.select().from(tags).where(eq(tags.publicCode, parsed.publicCode)).limit(1);
+    if (existing) {
+      if (existing.batchId !== batchId) throw new TagError(`Piece ${parsed.publicCode} already belongs to another batch`, 409);
+      return { tag: existing, batchCount: batch.quantity, alreadyRegistered: true };
     }
+
+    const now = new Date();
+    const nextSerial = batch.quantity + 1;
+    const [tag] = await tx.insert(tags).values({
+      organizationId,
+      publicCode: parsed.publicCode,
+      serialNumber: nextSerial,
+      batchId: batch.id,
+      productType: batch.productType,
+      salesProductId: batch.salesProductId,
+      status: "inventory",
+      registeredAt: now,
+      registeredByUserId: userId,
+      scannedPayload: rawValue,
+      intakeIdempotencyKey: idempotencyKey,
+      stockStatus: "available",
+      ownershipType: "company",
+      stockUpdatedAt: now,
+    }).returning();
+    await tx.insert(tagStockMovements).values({
+      tagId: tag.id,
+      movementType: "intake",
+      fromStockStatus: null,
+      toStockStatus: "available",
+      fromOwnershipType: null,
+      toOwnershipType: "company",
+      actorUserId: userId,
+      referenceType: "batch",
+      referenceId: batch.id,
+      idempotencyKey,
+    });
+    const [updatedBatch] = await tx.update(tagBatches).set({
+      quantity: nextSerial,
+      updatedAt: now,
+    }).where(eq(tagBatches.id, batch.id)).returning({ quantity: tagBatches.quantity });
+    return { tag, batchCount: updatedBatch.quantity, alreadyRegistered: false };
+  });
+
+  if (!result.alreadyRegistered) {
+    await recordJourney({
+      kind: "execution",
+      action: "piece_scanned_into_batch",
+      title: `Piece ${result.tag.publicCode} added to batch`,
+      batchId,
+      tagId: result.tag.id,
+      afterValue: "inventory",
+      metadata: { serialNumber: result.tag.serialNumber, method: parsed.method },
+    }, journeyContext(userId, source));
   }
+  return result;
+}
+
+export async function setTagInternalUse(
+  id: string,
+  purpose: string,
+  userId: string | null,
+  source: JourneySource = "admin",
+) {
+  const now = new Date();
+  const updated = await db.transaction(async (tx) => {
+    const tag = await lockTag(tx, id);
+    if (tag.stockStatus !== "available" || tag.repId !== null) {
+      throw new TagError("Only available house stock can be moved to internal use", 409);
+    }
+    const [next] = await tx.update(tags).set({
+      stockStatus: "internal_use",
+      internalUseNote: purpose,
+      stockUpdatedAt: now,
+      updatedAt: now,
+    }).where(eq(tags.id, id)).returning();
+    await tx.insert(tagStockMovements).values({
+      tagId: tag.id,
+      movementType: "internal_use",
+      fromStockStatus: tag.stockStatus,
+      toStockStatus: next.stockStatus,
+      fromOwnershipType: tag.ownershipType,
+      toOwnershipType: next.ownershipType,
+      fromCustodianRepId: tag.custodianRepId,
+      toCustodianRepId: next.custodianRepId,
+      actorUserId: userId,
+      reason: purpose,
+    });
+    return next;
+  });
+  await recordJourney({
+    kind: "execution",
+    action: "piece_internal_use",
+    title: `Piece ${updated.publicCode} moved to internal use`,
+    content: purpose,
+    tagId: updated.id,
+    batchId: updated.batchId,
+    beforeValue: "available",
+    afterValue: "internal_use",
+  }, journeyContext(userId, source));
+  return updated;
+}
+
+export async function returnInternalTagToStock(
+  id: string,
+  reason: string,
+  userId: string | null,
+  source: JourneySource = "admin",
+) {
+  const now = new Date();
+  const updated = await db.transaction(async (tx) => {
+    const tag = await lockTag(tx, id);
+    if (tag.stockStatus !== "internal_use") throw new TagError("Only an internal-use piece can return through this action", 409);
+    const [next] = await tx.update(tags).set({
+      stockStatus: "available",
+      internalUseNote: null,
+      stockUpdatedAt: now,
+      updatedAt: now,
+    }).where(eq(tags.id, id)).returning();
+    await tx.insert(tagStockMovements).values({
+      tagId: tag.id,
+      movementType: "return",
+      fromStockStatus: tag.stockStatus,
+      toStockStatus: next.stockStatus,
+      fromOwnershipType: tag.ownershipType,
+      toOwnershipType: next.ownershipType,
+      fromCustodianRepId: tag.custodianRepId,
+      toCustodianRepId: next.custodianRepId,
+      actorUserId: userId,
+      reason,
+    });
+    return next;
+  });
+  await recordJourney({
+    kind: "execution",
+    action: "piece_returned_to_stock",
+    title: `Piece ${updated.publicCode} returned to house stock`,
+    content: reason,
+    tagId: updated.id,
+    batchId: updated.batchId,
+    beforeValue: "internal_use",
+    afterValue: "available",
+  }, journeyContext(userId, source));
+  return updated;
+}
+
+export async function setBatchIntakeStatus(
+  id: string,
+  status: "open" | "closed",
+  userId: string | null,
+  reason: string | null = null,
+  source: JourneySource = "admin",
+) {
+  const now = new Date();
+  const [previous] = await db.select().from(tagBatches).where(eq(tagBatches.id, id)).limit(1);
+  if (!previous) throw new TagError("Batch not found", 404);
+  if (previous.status === "cancelled") throw new TagError("A cancelled batch cannot be changed", 409);
+  if (previous.status === status) return previous;
+  const [batch] = await db.update(tagBatches).set(status === "closed" ? {
+    status,
+    closedAt: now,
+    closedByUserId: userId,
+    updatedAt: now,
+  } : {
+    status,
+    reopenedAt: now,
+    reopenedByUserId: userId,
+    reopenReason: reason,
+    updatedAt: now,
+  }).where(eq(tagBatches.id, id)).returning();
+  await recordJourney({
+    kind: "execution",
+    action: status === "closed" ? "batch_closed" : "batch_reopened",
+    title: `Batch ${batch.batchCode} ${status}`,
+    batchId: id,
+    beforeValue: previous.status,
+    afterValue: status,
+    content: reason,
+  }, journeyContext(userId, source));
+  return batch;
 }
 
 export async function updateBatch(
@@ -970,7 +1224,7 @@ export async function listBatches(): Promise<TagBatchItem[]> {
     status: string; notes: string | null; created_at: Date; tag_count: number; house_count: number;
     with_resellers_count: number; active_count: number; nfc_verified_count: number;
   }>(sql`
-    SELECT b.id, b.batch_code, b.name, b.product_type, b.sales_product_id, b.face, b.vendor, b.quantity, b.status, b.notes, b.created_at,
+    SELECT b.id, b.batch_code, b.name, b.product_type, b.sales_product_id, b.face, b.vendor, count(t.id)::int AS quantity, b.status, b.notes, b.created_at,
       count(t.id)::int AS tag_count,
       count(t.id) FILTER (WHERE t.status = 'inventory' AND t.rep_id IS NULL)::int AS house_count,
       count(t.id) FILTER (WHERE t.rep_id IS NOT NULL)::int AS with_resellers_count,
@@ -1003,8 +1257,34 @@ export async function listBatches(): Promise<TagBatchItem[]> {
 }
 
 export async function getBatch(id: string) {
-  const [batch] = await db.select().from(tagBatches).where(eq(tagBatches.id, id)).limit(1);
-  return batch ?? null;
+  const [batch] = await rows<{
+    id: string; batch_code: string; name: string; product_type: string; sales_product_id: number | null;
+    face: string | null; vendor: string | null; quantity: number; status: string; notes: string | null;
+    created_by_user_id: string | null; created_at: Date; updated_at: Date;
+  }>(sql`
+    SELECT b.id, b.batch_code, b.name, b.product_type, b.sales_product_id, b.face, b.vendor,
+           count(t.id)::int AS quantity, b.status, b.notes, b.created_by_user_id, b.created_at, b.updated_at
+    FROM tag_batches b
+    LEFT JOIN tags t ON t.batch_id = b.id
+    WHERE b.id = ${id}
+    GROUP BY b.id
+  `);
+  if (!batch) return null;
+  return {
+    id: batch.id,
+    batchCode: batch.batch_code,
+    name: batch.name,
+    productType: batch.product_type,
+    salesProductId: batch.sales_product_id,
+    face: batch.face,
+    vendor: batch.vendor,
+    quantity: Number(batch.quantity),
+    status: batch.status,
+    notes: batch.notes,
+    createdByUserId: batch.created_by_user_id,
+    createdAt: batch.created_at,
+    updatedAt: batch.updated_at,
+  };
 }
 
 export async function getBatchTagsForExport(batchId: string) {

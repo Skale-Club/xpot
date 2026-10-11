@@ -21,6 +21,10 @@ export interface TagListItem {
   /** The piece's own face override, before falling back to the batch. */
   ownFace: string | null;
   status: string;
+  stockStatus: string;
+  ownershipType: string;
+  custodianRepId: number | null;
+  internalUseNote: string | null;
   nfcStatus: string;
   label: string | null;
   destinationType: string | null;

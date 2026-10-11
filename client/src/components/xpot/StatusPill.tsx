@@ -44,6 +44,8 @@ export const CHIP_STATUS_TONE: Record<string, PillTone> = {
 
 /** A production batch, from the file to the pieces in hand. */
 export const BATCH_STATUS_TONE: Record<string, PillTone> = {
+  open: "blue",
+  closed: "green",
   draft: "slate",
   generated: "blue",
   ordered: "amber",

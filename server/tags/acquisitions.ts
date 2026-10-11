@@ -10,6 +10,7 @@ import {
   tagAcquisitions,
   tagBatches,
   tagKits,
+  tagStockMovements,
   tags,
 } from "#shared/schema.js";
 import { allocateAcquisitionUnitCosts, type StuscleWholesaleOrderInput } from "#shared/tagSales.js";
@@ -100,6 +101,9 @@ async function lockFulfillmentTags(tx: Tx, rawCodes: string[]) {
       id: tags.id,
       publicCode: tags.publicCode,
       status: tags.status,
+      stockStatus: tags.stockStatus,
+      ownershipType: tags.ownershipType,
+      custodianRepId: tags.custodianRepId,
       repId: tags.repId,
       ownProductId: tags.salesProductId,
       batchProductId: tagBatches.salesProductId,
@@ -109,7 +113,7 @@ async function lockFulfillmentTags(tx: Tx, rawCodes: string[]) {
     .where(inArray(tags.publicCode, normalized))
     .for("update");
   if (rows.length !== normalized.length) throw new TagSaleError("One or more pieces were not found", 404, "tag_not_found");
-  const unavailable = rows.filter((tag) => tag.status !== "inventory" || tag.repId !== null);
+  const unavailable = rows.filter((tag) => tag.status !== "inventory" || tag.stockStatus !== "available" || tag.repId !== null);
   if (unavailable.length) throw new TagSaleError(`Not in house stock: ${unavailable.map((tag) => tag.publicCode).join(", ")}`, 409, "tag_not_house_stock");
   return rows;
 }
@@ -145,7 +149,29 @@ export async function fulfillAcquisition(acquisitionId: string, codes: string[],
         tagId: tag.id,
         unitCostCents: costs[index],
       })));
-      await tx.update(tags).set({ organizationId, repId: acquisition.repId, kitId: kit.id, updatedAt: new Date() }).where(inArray(tags.id, matches.map((tag) => tag.id)));
+      const now = new Date();
+      await tx.update(tags).set({
+        organizationId,
+        repId: acquisition.repId,
+        kitId: kit.id,
+        custodianRepId: acquisition.repId,
+        ownershipType: "rep",
+        stockUpdatedAt: now,
+        updatedAt: now,
+      }).where(inArray(tags.id, matches.map((tag) => tag.id)));
+      await tx.insert(tagStockMovements).values(matches.map((tag) => ({
+        tagId: tag.id,
+        movementType: "transfer",
+        fromStockStatus: tag.stockStatus,
+        toStockStatus: "available",
+        fromOwnershipType: tag.ownershipType,
+        toOwnershipType: "rep",
+        fromCustodianRepId: tag.custodianRepId,
+        toCustodianRepId: acquisition.repId,
+        referenceType: "acquisition",
+        referenceId: acquisition.id,
+        actorUserId: userId,
+      })));
       matches.forEach((tag) => remaining.delete(tag.id));
     }
     if (remaining.size) throw new TagSaleError("Some selected pieces do not match any acquisition line", 409, "acquisition_product_mismatch");

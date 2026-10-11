@@ -15,6 +15,7 @@ import {
   tagAcquisitionUnits,
   tagAcquisitions,
   tagBatches,
+  tagStockMovements,
   tags,
 } from "#shared/schema.js";
 import type { TagActor } from "#shared/tagAccess.js";
@@ -84,6 +85,9 @@ export async function createTagSale(input: TagSaleCreateInput, actor: TagActor, 
         repId: tags.repId,
         leadId: tags.leadId,
         status: tags.status,
+        stockStatus: tags.stockStatus,
+        ownershipType: tags.ownershipType,
+        custodianRepId: tags.custodianRepId,
         ownProductId: tags.salesProductId,
         batchProductId: tagBatches.salesProductId,
       })
@@ -157,6 +161,9 @@ export async function createTagSale(input: TagSaleCreateInput, actor: TagActor, 
         }
         if (tag.status === "retired") {
           throw new TagSaleError(`Piece ${tag.publicCode} is retired`, 409, "tag_retired");
+        }
+        if (tag.stockStatus !== "available") {
+          throw new TagSaleError(`Piece ${tag.publicCode} is not available`, 409, "tag_not_available");
         }
         if (tag.leadId !== null && tag.leadId !== input.leadId) {
           throw new TagSaleError(`Piece ${tag.publicCode} is assigned to another customer`, 409, "tag_lead_mismatch");
@@ -251,8 +258,25 @@ export async function createTagSale(input: TagSaleCreateInput, actor: TagActor, 
       repId: sellerRepId,
       soldAt,
       assignedAt: soldAt,
+      stockStatus: "sold",
+      ownershipType: "customer",
+      custodianRepId: null,
+      stockUpdatedAt: soldAt,
       updatedAt: new Date(),
     }).where(inArray(tags.id, allTagIds));
+    await tx.insert(tagStockMovements).values(tagRows.map((tag) => ({
+      tagId: tag.id,
+      movementType: "sale",
+      fromStockStatus: tag.stockStatus,
+      toStockStatus: "sold",
+      fromOwnershipType: tag.ownershipType,
+      toOwnershipType: "customer",
+      fromCustodianRepId: tag.custodianRepId,
+      toCustodianRepId: null,
+      referenceType: "sale",
+      referenceId: String(sale.id),
+      actorUserId: actor.userId,
+    })));
     await tx.update(salesLeads).set({ status: "customer", updatedAt: new Date() }).where(eq(salesLeads.id, input.leadId));
     await tx.insert(salesSyncEvents).values({
       provider: "xphere",

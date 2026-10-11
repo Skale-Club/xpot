@@ -81,9 +81,15 @@ test.skipIf(!enabled)("tags: kits, reseller isolation, sales, scans, report, pro
     // A switched-off rep gets nothing.
     assert.equal((await api("GET", "/api/xpot/tags", "it-carla")).status, 403);
 
-    // A batch of 10 pieces lands in house stock.
-    const batch = await api("POST", "/api/xpot/admin/tag-batches", "it-admin", { name: "Keychains run 1", productType: "keychain", salesProductId, quantity: 10 });
+    // An empty batch is opened, then each physical piece is scanned into stock.
+    const batch = await api("POST", "/api/xpot/admin/tag-batches", "it-admin", { name: "Keychains run 1", productType: "keychain", salesProductId });
     assert.equal(batch.status, 201, batch.text);
+    assert.equal(batch.json.quantity, 0);
+    const intakeCodes = Array.from({ length: 10 }, (_, index) => `A${String(index + 1).padStart(7, "0")}`);
+    for (const code of intakeCodes) {
+      const intake = await api("POST", `/api/xpot/admin/tag-batches/${batch.json.id}/scan`, "it-admin", { value: code, idempotencyKey: `it-${code}` });
+      assert.equal(intake.status, 201, intake.text);
+    }
     const batchTags = (await api("GET", `/api/xpot/admin/tag-batches/${batch.json.id}`, "it-admin")).json.tags as Array<{ id: string; publicCode: string; repId: number | null }>;
     assert.equal(batchTags.length, 10);
     assert.ok(batchTags.every((t) => t.repId === null));

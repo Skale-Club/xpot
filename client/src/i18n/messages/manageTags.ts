@@ -54,6 +54,8 @@ const en = {
   batchStatus_received: "Received",
   batchStatus_completed: "Completed",
   batchStatus_cancelled: "Cancelled",
+  batchStatus_open: "Open for scanning",
+  batchStatus_closed: "Closed",
 
   // Scan events
   event_redirect: "Opened destination",
@@ -350,6 +352,8 @@ export const manageTagsMessages: Dictionary<typeof en> = {
     batchStatus_received: "Recebido",
     batchStatus_completed: "Concluído",
     batchStatus_cancelled: "Cancelado",
+    batchStatus_open: "Aberto para leitura",
+    batchStatus_closed: "Fechado",
 
     event_redirect: "Abriu o destino",
     event_inventory_scan: "Lida antes de ativada",
@@ -634,6 +638,8 @@ export const manageTagsMessages: Dictionary<typeof en> = {
     batchStatus_received: "Recibido",
     batchStatus_completed: "Completado",
     batchStatus_cancelled: "Cancelado",
+    batchStatus_open: "Abierto para escaneo",
+    batchStatus_closed: "Cerrado",
 
     event_redirect: "Abrió el destino",
     event_inventory_scan: "Leída antes de activarse",

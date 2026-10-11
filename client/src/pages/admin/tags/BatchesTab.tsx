@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Plus, X } from "lucide-react";
-import { TAG_MAX_BATCH_QUANTITY, TAG_PRODUCT_TYPES, normalizeTagCode } from "@shared/tags";
+import { TAG_PRODUCT_TYPES } from "@shared/tags";
 import { useToast } from "@/hooks/use-toast";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
 import { TagModelChips, TagPieceVisual } from "@/components/xpot/TagProductThumbnail";
@@ -22,9 +22,7 @@ const EMPTY_FORM = {
   salesProductId: "",
   face: "",
   vendor: "",
-  quantity: "100",
   notes: "",
-  publicCodes: "",
 };
 
 function NewBatchForm({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
@@ -35,16 +33,7 @@ function NewBatchForm({ onClose, onCreated }: { onClose: () => void; onCreated: 
   const { data: catalog = [] } = useTagCatalog();
   const [form, setForm] = useState(EMPTY_FORM);
   const set = (patch: Partial<typeof EMPTY_FORM>) => setForm((f) => ({ ...f, ...patch }));
-  const quantity = Number(form.quantity);
-  const validQuantity = Number.isInteger(quantity) && quantity >= 1 && quantity <= TAG_MAX_BATCH_QUANTITY;
-  const publicCodes = form.publicCodes.trim()
-    ? form.publicCodes.split(/[\s,;]+/).filter(Boolean).map((code) => normalizeTagCode(code))
-    : undefined;
-  const validPublicCodes =
-    !publicCodes ||
-    (publicCodes.length === quantity && publicCodes.every((code): code is string => code !== null) && new Set(publicCodes).size === publicCodes.length);
-  const importing = !!publicCodes;
-  const ready = form.name.trim().length > 0 && !!form.salesProductId && validQuantity && validPublicCodes;
+  const ready = form.name.trim().length > 0 && !!form.salesProductId;
 
   const create = useMutation({
     mutationFn: () =>
@@ -55,13 +44,11 @@ function NewBatchForm({ onClose, onCreated }: { onClose: () => void; onCreated: 
         salesProductId: Number(form.salesProductId),
         face: form.face || null,
         vendor: form.vendor || null,
-        quantity,
         notes: form.notes || null,
-        publicCodes: publicCodes || undefined,
       }),
     onSuccess: (batch) => {
       void invalidateAdminTags();
-      toast({ title: t("batchCreated", { code: batch.batchCode }), description: t.plural("batchCreatedDesc", quantity) });
+      toast({ title: t("batchCreated", { code: batch.batchCode }), description: t("batchCreatedDesc") });
       onCreated(batch.id);
     },
     onError: (err) => toast({ title: t("couldNotCreateBatch"), description: errorMessage(err), variant: "destructive" }),
@@ -117,16 +104,6 @@ function NewBatchForm({ onClose, onCreated }: { onClose: () => void; onCreated: 
             </select>
           </div>
         </Field>
-        <Field label={t("fieldQuantityRequired")} hint={t("quantityRange", { max: TAG_MAX_BATCH_QUANTITY })}>
-          <input
-            type="number"
-            min={1}
-            max={TAG_MAX_BATCH_QUANTITY}
-            value={form.quantity}
-            onChange={(e) => set({ quantity: e.target.value })}
-            className={`${INPUT} tabular-nums`}
-          />
-        </Field>
         <Field label={t("fieldBatchCode")} hint={t("batchCodeHint")}>
           <input
             value={form.batchCode}
@@ -142,40 +119,13 @@ function NewBatchForm({ onClose, onCreated }: { onClose: () => void; onCreated: 
         <Field label={t("fieldNotes")} className="sm:col-span-2">
           <textarea value={form.notes} onChange={(e) => set({ notes: e.target.value })} maxLength={2000} rows={2} className={`${INPUT} resize-y`} />
         </Field>
-        <Field
-          label={t("fieldLegacyCodes")}
-          hint={
-            importing
-              ? validPublicCodes
-                ? t.plural("legacyValid", publicCodes.length)
-                : validQuantity
-                  ? t.plural("legacyExact", quantity)
-                  : t("legacyExactQuantity")
-              : t("legacyHint")
-          }
-          className="sm:col-span-2"
-        >
-          <textarea
-            value={form.publicCodes}
-            onChange={(e) => set({ publicCodes: e.target.value })}
-            rows={4}
-            spellCheck={false}
-            placeholder={"Z8MEZP0X\n7414WRMT"}
-            className={`${INPUT} resize-y font-mono uppercase`}
-            data-testid="admin-tags-legacy-public-codes"
-          />
-        </Field>
       </div>
       <div className="flex justify-end gap-2">
         <button type="button" onClick={onClose} className={BTN_GHOST}>
           {tc("cancel")}
         </button>
         <button type="submit" disabled={!ready || create.isPending} className={BTN} data-testid="admin-tags-new-batch-submit">
-          {create.isPending
-            ? t(importing ? "importing" : "generating")
-            : validQuantity
-              ? t.plural(importing ? "importPieces" : "generatePieces", quantity)
-              : t(importing ? "importPiecesNoCount" : "generatePiecesNoCount")}
+          {create.isPending ? t("creatingBatch") : t("createEmptyBatch")}
         </button>
       </div>
     </form>
