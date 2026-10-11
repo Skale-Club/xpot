@@ -1,7 +1,6 @@
 import type { Express, NextFunction, Request, Response } from "express";
 import { z } from "zod";
 import {
-  TAG_BATCH_STATUSES,
   TAG_DEFAULT_PUBLIC_BASE_URL,
   TAG_DESTINATION_TYPES,
   TAG_MAX_BATCH_QUANTITY,
@@ -177,37 +176,38 @@ export const batchCreateSchema = z.object({
   salesProductId: z.number().int().positive(),
   face: faceField,
   vendor: optionalText(120),
-  quantity: z.coerce.number().int().min(1).max(TAG_MAX_BATCH_QUANTITY),
   notes: optionalText(2000),
-  // Admin-only escape hatch for already-manufactured pieces whose printed QR
-  // codes must be preserved during a migration. Normal batches omit this and
-  // keep using cryptographically random codes.
+  // Issue this many codes now (3D printing, or a supplier printing Xpot codes); the pieces start `pending` and enter
+  // stock when scanned. Omit for an empty batch filled by scanning already-coded pieces.
+  quantity: z.coerce.number().int().min(1).max(TAG_MAX_BATCH_QUANTITY).optional(),
+  // Admin-only escape hatch for already-manufactured pieces whose printed codes must be preserved (they enter stock
+  // at once). Never offered over MCP.
   publicCodes: z.array(legacyPublicCode).min(1).max(TAG_MAX_BATCH_QUANTITY).optional(),
 }).strict().superRefine((value, ctx) => {
   if (!value.publicCodes) return;
-  if (value.publicCodes.length !== value.quantity) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["publicCodes"],
-      message: "publicCodes must contain exactly quantity codes",
-    });
+  if (value.quantity !== undefined && value.publicCodes.length !== value.quantity) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["publicCodes"], message: "publicCodes must contain exactly quantity codes" });
   }
   if (new Set(value.publicCodes).size !== value.publicCodes.length) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["publicCodes"],
-      message: "publicCodes must not contain duplicates",
-    });
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["publicCodes"], message: "publicCodes must not contain duplicates" });
   }
 });
+
+export const batchScanSchema = z.object({
+  value: z.string().trim().min(1).max(2048),
+  idempotencyKey: z.string().trim().min(1).max(160).optional(),
+}).strict();
 
 const batchPatchSchema = z.object({
   name: z.string().trim().min(1).max(120).optional(),
   face: faceField,
   vendor: optionalText(120),
   notes: optionalText(2000),
-  status: z.enum(TAG_BATCH_STATUSES).optional(),
   salesProductId: z.number().int().positive().optional(),
+}).strict();
+
+const batchReopenSchema = z.object({
+  reason: z.string().trim().min(1).max(300),
 }).strict();
 
 const codeList = z
@@ -647,6 +647,30 @@ export function registerTagRoutes(app: Express) {
     }
   });
 
+  app.post(`${adminBase}/:id/internal-use`, requireTagManager, async (req, res) => {
+    const id = idParam(req, res);
+    if (!id) return;
+    try {
+      const { purpose } = z.object({ purpose: z.string().trim().min(1).max(300) }).strict().parse(req.body);
+      await repo.setTagInternalUse(id, purpose, userIdOf(req));
+      res.json(await repo.getTagDetail(id, tagBaseUrl()));
+    } catch (err) {
+      fail(res, err, "Failed to move piece to internal use");
+    }
+  });
+
+  app.post(`${adminBase}/:id/return-to-stock`, requireTagManager, async (req, res) => {
+    const id = idParam(req, res);
+    if (!id) return;
+    try {
+      const { reason } = z.object({ reason: z.string().trim().min(1).max(300) }).strict().parse(req.body);
+      await repo.returnInternalTagToStock(id, reason, userIdOf(req));
+      res.json(await repo.getTagDetail(id, tagBaseUrl()));
+    } catch (err) {
+      fail(res, err, "Failed to return piece to stock");
+    }
+  });
+
   app.post(`${adminBase}/:id/assign`, requireTagManager, async (req, res) => {
     const id = idParam(req, res);
     if (!id) return;
@@ -788,6 +812,39 @@ export function registerTagRoutes(app: Express) {
       res.status(201).json(await repo.createBatch(batchCreateSchema.parse(req.body), userIdOf(req)));
     } catch (err) {
       fail(res, err, "Failed to create batch");
+    }
+  });
+
+  app.post("/api/xpot/admin/tag-batches/:id/scan", requireTagAdmin, async (req, res) => {
+    const id = idParam(req, res);
+    if (!id) return;
+    try {
+      const input = batchScanSchema.parse(req.body);
+      const result = await repo.scanTagIntoBatch(id, input.value, input.idempotencyKey ?? null, userIdOf(req));
+      res.status(result.alreadyRegistered ? 200 : 201).json(result);
+    } catch (err) {
+      fail(res, err, "Failed to add piece to batch");
+    }
+  });
+
+  app.post("/api/xpot/admin/tag-batches/:id/close", requireTagAdmin, async (req, res) => {
+    const id = idParam(req, res);
+    if (!id) return;
+    try {
+      res.json(await repo.setBatchIntakeStatus(id, "closed", userIdOf(req)));
+    } catch (err) {
+      fail(res, err, "Failed to close batch");
+    }
+  });
+
+  app.post("/api/xpot/admin/tag-batches/:id/reopen", requireTagAdmin, async (req, res) => {
+    const id = idParam(req, res);
+    if (!id) return;
+    try {
+      const { reason } = batchReopenSchema.parse(req.body);
+      res.json(await repo.setBatchIntakeStatus(id, "open", userIdOf(req), reason));
+    } catch (err) {
+      fail(res, err, "Failed to reopen batch");
     }
   });
 

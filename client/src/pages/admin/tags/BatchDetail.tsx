@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Download, Factory, PackagePlus, Pencil } from "lucide-react";
+import { ArrowLeft, Download, Factory, LockKeyhole, PackagePlus, Pencil, RotateCcw, ScanLine } from "lucide-react";
 import type { TagListItem } from "@shared/tagsApi";
 import { resolveTagFace } from "@shared/tagFace";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
@@ -8,14 +8,14 @@ import { TagModelChips, TagPieceVisual } from "@/components/xpot/TagProductThumb
 import { useToast } from "@/hooks/use-toast";
 import { ADMIN_TAGS_KEY, STALE_MS, errorMessage, formatDate, getJson, invalidateAdminTags, percent, sendJson } from "./api";
 import { BTN, BTN_GHOST, CARD, INPUT, SectionTitle, Stat } from "./ui";
-import { BatchStatusPill, ErrorLine, Field, Loading, PieceTable, SELECT, isHouseStock, isUnsoldWithReseller, useTagCatalog } from "./batches-shared";
+import { BatchStagePill, BatchStatusPill, ErrorLine, Field, Loading, PieceTable, SELECT, isHouseStock, isPendingPiece, isUnsoldWithReseller, useTagCatalog } from "./batches-shared";
 import { useTagLabels } from "./labels";
 import { GiveKitForm } from "./kits-give-form";
 import { JourneyPanel } from "./JourneyPanel";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
-import { manageTagsMessages } from "@/i18n/messages/manageTags";
 import { manageTagsBatchesMessages } from "@/i18n/messages/manageTagsBatches";
+import QrScanner from "../../tags/QrScanner";
 
 interface BatchDetailData {
   id: string;
@@ -28,6 +28,11 @@ interface BatchDetailData {
   vendor: string | null;
   quantity: number;
   status: string;
+  codeSource: string;
+  stage: string;
+  tagCount: number;
+  pendingCount: number;
+  receivedCount: number;
   notes: string | null;
   createdAt: string;
   updatedAt?: string;
@@ -36,6 +41,7 @@ interface BatchDetailData {
 
 const FILTERS = [
   { id: "all", label: "filterAll", test: () => true },
+  { id: "pending", label: "pendingPieces", test: isPendingPiece },
   { id: "house", label: "houseStock", test: isHouseStock },
   { id: "resellers", label: "withResellers", test: (t: TagListItem) => t.repId !== null },
   { id: "sold", label: "sold", test: (t: TagListItem) => t.status !== "inventory" },
@@ -46,15 +52,14 @@ type FilterId = (typeof FILTERS)[number]["id"];
 function EditBatch({ batch, onClose }: { batch: BatchDetailData; onClose: () => void }) {
   const { toast } = useToast();
   const t = useT(manageTagsBatchesMessages);
-  const tm = useT(manageTagsMessages);
   const tc = useT(commonMessages);
   const labels = useTagLabels();
   const { data: catalog = [] } = useTagCatalog();
-  const initial = () => ({ name: batch.name, face: batch.face ?? "", vendor: batch.vendor ?? "", notes: batch.notes ?? "", status: batch.status, salesProductId: batch.salesProductId ? String(batch.salesProductId) : "" });
+  const initial = () => ({ name: batch.name, face: batch.face ?? "", vendor: batch.vendor ?? "", notes: batch.notes ?? "", salesProductId: batch.salesProductId ? String(batch.salesProductId) : "" });
   const [form, setForm] = useState(initial);
   useEffect(() => {
     setForm(initial());
-  },[batch.name, batch.face, batch.vendor, batch.notes, batch.status, batch.salesProductId]);
+  },[batch.name, batch.face, batch.vendor, batch.notes, batch.salesProductId]);
 
   const save = useMutation({
     mutationFn: () =>
@@ -63,7 +68,6 @@ function EditBatch({ batch, onClose }: { batch: BatchDetailData; onClose: () => 
         face: form.face || null,
         vendor: form.vendor || null,
         notes: form.notes || null,
-        status: form.status,
         salesProductId: Number(form.salesProductId),
       }),
     onSuccess: () => {
@@ -80,18 +84,9 @@ function EditBatch({ batch, onClose }: { batch: BatchDetailData; onClose: () => 
 
   return (
     <form onSubmit={submit} className="space-y-3 border-t border-white/5 pt-4">
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2">
         <Field label={t("fieldName")} className="sm:col-span-2">
           <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} maxLength={120} className={INPUT} />
-        </Field>
-        <Field label={tm("colStatus")}>
-          <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className={SELECT}>
-            {labels.batchStatusOptions.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
         </Field>
         <Field label={t("fieldCatalogProduct")} hint={t("catalogProductHint")}>
           <select value={form.salesProductId} onChange={(e) => setForm({ ...form, salesProductId: e.target.value })} className={SELECT} required>
@@ -133,6 +128,84 @@ function EditBatch({ batch, onClose }: { batch: BatchDetailData; onClose: () => 
   );
 }
 
+function BatchIntakePanel({ batch }: { batch: BatchDetailData }) {
+  const [value, setValue] = useState("");
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const { toast } = useToast();
+  const t = useT(manageTagsBatchesMessages);
+
+  const add = useMutation({
+    mutationFn: (scanValue: string) => sendJson<{ tag: { publicCode: string }; batchCount: number; receivedCount: number; alreadyRegistered: boolean }>(
+      "POST",
+      `/api/xpot/admin/tag-batches/${batch.id}/scan`,
+      { value: scanValue, idempotencyKey: crypto.randomUUID() },
+    ),
+    onSuccess: (result) => {
+      setValue("");
+      void invalidateAdminTags();
+      toast({
+        title: result.alreadyRegistered ? t("pieceAlreadyAdded") : t("pieceAdded", { code: result.tag.publicCode }),
+        description: batch.codeSource === "issued"
+          ? t("receivedCount", { received: result.receivedCount, total: result.batchCount })
+          : t("registeredCount", { count: result.batchCount }),
+      });
+    },
+    onError: (err) => toast({ title: t("couldNotAddPiece"), description: errorMessage(err), variant: "destructive" }),
+  });
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    const scanValue = value.trim();
+    if (scanValue && !add.isPending) add.mutate(scanValue);
+  };
+
+  if (batch.status !== "open") return null;
+  return (
+    <div className={`${CARD} border border-blue-400/20 p-4`} data-testid="admin-tags-batch-intake">
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="flex items-center gap-2 text-sm font-semibold text-white"><ScanLine className="h-4 w-4 text-blue-300" />{t("addPiecesTitle")}</p>
+          <p className="mt-1 text-xs text-white/45">{batch.codeSource === "issued" ? t("receiveIntro") : t("addPiecesIntro")}</p>
+        </div>
+        <span className="rounded-full bg-blue-400/10 px-3 py-1 text-sm font-semibold tabular-nums text-blue-200">
+          {batch.codeSource === "issued"
+            ? t("receivedCount", { received: batch.receivedCount, total: batch.tagCount })
+            : t("registeredCount", { count: batch.quantity })}
+        </span>
+      </div>
+      <form onSubmit={submit} className="flex flex-col gap-2 sm:flex-row">
+        <input
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder={t("scanPlaceholder")}
+          className={`${INPUT} min-w-0 flex-1 font-mono`}
+          autoCapitalize="characters"
+          autoComplete="off"
+          spellCheck={false}
+          autoFocus
+          data-testid="admin-tags-batch-scan-input"
+        />
+        <button type="submit" disabled={!value.trim() || add.isPending} className={BTN}>
+          <ScanLine className="h-4 w-4" />
+          {add.isPending ? t("addingPiece") : t("addPiece")}
+        </button>
+        <button type="button" onClick={() => setCameraOpen(true)} disabled={add.isPending} className={BTN_GHOST}>
+          {t("scanWithCamera")}
+        </button>
+      </form>
+      {cameraOpen && (
+        <QrScanner
+          onClose={() => setCameraOpen(false)}
+          onResult={(text) => {
+            setCameraOpen(false);
+            if (!add.isPending) add.mutate(text);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
 /** One production batch: info, factory downloads, its pieces, and kits from it. */
 export function BatchDetail({ id, go }: { id: string; go: (path: string) => void }) {
   const [editing, setEditing] = useState(false);
@@ -140,6 +213,7 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
   const [filter, setFilter] = useState<FilterId>("all");
   const t = useT(manageTagsBatchesMessages);
   const labels = useTagLabels();
+  const { toast } = useToast();
   const { data: batch, isLoading, isError } = useQuery<BatchDetailData>({
     queryKey: [ADMIN_TAGS_KEY, "batch", id],
     queryFn: () => getJson(`/api/xpot/admin/tag-batches/${encodeURIComponent(id)}`),
@@ -176,6 +250,23 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
   const shown = pieces.filter(activeFilter.test);
   const face = resolveTagFace({ batchFace: batch.face, productType: batch.productType });
 
+  const changeState = async () => {
+    try {
+      if (batch.status === "open") {
+        await sendJson("POST", `/api/xpot/admin/tag-batches/${batch.id}/close`, {});
+        toast({ title: t("batchClosed") });
+      } else {
+        const reason = window.prompt(t("reopenReasonPrompt"));
+        if (!reason?.trim()) return;
+        await sendJson("POST", `/api/xpot/admin/tag-batches/${batch.id}/reopen`, { reason });
+        toast({ title: t("batchReopened") });
+      }
+      await invalidateAdminTags();
+    } catch (err) {
+      toast({ title: batch.status === "open" ? t("couldNotCloseBatch") : t("couldNotReopenBatch"), description: errorMessage(err), variant: "destructive" });
+    }
+  };
+
   return (
     <div className="space-y-5">
       {back}
@@ -187,26 +278,33 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
             <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="font-mono text-xl font-bold text-white">{batch.batchCode}</h2>
+              <BatchStagePill stage={batch.stage} />
               <BatchStatusPill status={batch.status} />
               <TagModelChips productType={batch.productType} face={face} batchCode={batch.batchCode} />
             </div>
             <p className="mt-0.5 text-sm text-white/70">{batch.name}</p>
             <p className="text-xs text-white/40">
-              {labels.product(batch.productType)} · {labels.face(face)} · {batch.vendor || t("noVendor")} · {t.plural("orderedCount", batch.quantity)} ·{" "}
+              {labels.product(batch.productType)} · {labels.face(face)} · {batch.vendor || t("noVendor")} · {t("registeredCount", { count: batch.quantity })} ·{" "}
               {t("createdOn", { date: formatDate(batch.createdAt) })}
             </p>
             {batch.notes && !editing && <p className="mt-2 whitespace-pre-wrap text-sm text-white/60">{batch.notes}</p>}
           </div>
           </div>
-          {!editing && (
+          {!editing && <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => void changeState()} className={BTN_GHOST}>
+              {batch.status === "open" ? <LockKeyhole className="h-4 w-4" /> : <RotateCcw className="h-4 w-4" />}
+              {batch.status === "open" ? t("closeBatch") : t("reopenBatch")}
+            </button>
             <button type="button" onClick={() => setEditing(true)} className={BTN_GHOST}>
               <Pencil className="h-4 w-4" />
               {t("edit")}
             </button>
-          )}
+          </div>}
         </div>
         {editing && <EditBatch batch={batch} onClose={() => setEditing(false)} />}
       </div>
+
+      <BatchIntakePanel batch={batch} />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label={t("houseStock")} value={house} hint={t.plural("houseShare", total, { percent: percent(house, total) })} />

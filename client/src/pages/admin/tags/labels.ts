@@ -33,6 +33,7 @@ export function useTagLabels() {
     };
     const event = (type: string) => own("event_", type);
     const batchStatus = (value: string) => own("batchStatus_", value);
+    const batchStage = (value: string) => own("batchStage_", value);
     const productOptions: Option[] = TAG_PRODUCT_TYPES.map((value) => ({ value, label: product(value) }));
     const destinationOptions: Option[] = TAG_DESTINATION_TYPES.map((value) => ({ value, label: destination(value) }));
     /** What can be printed on a piece; a picker's empty option means "use the batch's / product's". */
@@ -49,6 +50,7 @@ export function useTagLabels() {
       chip,
       event,
       batchStatus,
+      batchStage,
       productOptions,
       destinationOptions,
       faceOptions,

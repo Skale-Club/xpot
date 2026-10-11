@@ -99,6 +99,9 @@ test.skipIf(!enabled)("journey: trail, stories, plans, append-only, admin-only A
     const created = await api("POST", "/api/xpot/admin/tag-batches", "jt-admin", { name: "Keychains run 1", productType: "keychain", salesProductId, quantity: 10 });
     assert.equal(created.status, 201, created.text);
     const batch = created.json;
+    // Issued codes start `pending`; this test is about the journey after the pieces exist, so receive them all at once
+    // (the scan path itself is covered in batchIntake.integration.test.ts).
+    await db.execute(sql`UPDATE tags SET stock_status = 'available', registered_at = now() WHERE batch_id = ${batch.id}`);
     const batchTags = (await api("GET", `/api/xpot/admin/tag-batches/${batch.id}`, "jt-admin")).json.tags as Array<{ id: string; publicCode: string }>;
     const [a1, a2, a3] = batchTags.slice(0, 3);
     const untouched = batchTags[5];
@@ -110,9 +113,9 @@ test.skipIf(!enabled)("journey: trail, stories, plans, append-only, admin-only A
     assert.equal(batchEntries[0].action, "batch_created");
     assert.equal(batchEntries[0].title, `Batch ${batch.batchCode} created: 10 × Keychain`);
     assert.equal(batchEntries[0].content, "Keychains run 1");
-    assert.equal(batchEntries[0].afterValue, "generated");
+    assert.equal(batchEntries[0].afterValue, "open");
     // face: what is printed on the run (#30); a keychain batch created without one records null.
-    assert.deepEqual(batchEntries[0].metadata, { quantity: 10, productType: "keychain", face: null, vendor: null });
+    assert.deepEqual(batchEntries[0].metadata, { quantity: 10, codeSource: "issued", pinned: false, productType: "keychain", face: null, vendor: null });
     assert.equal(batchEntries[0].source, "admin");
     assert.equal(batchEntries[0].actor, "human");
     assert.equal(batchEntries[0].actorEmail, "admin@jt.test");
@@ -144,13 +147,13 @@ test.skipIf(!enabled)("journey: trail, stories, plans, append-only, admin-only A
     assert.equal((await api("POST", `/api/xpot/tags/${a1.id}/disable`, "jt-ana", { reason: "Customer closed for the week" })).status, 200);
     assert.equal((await api("POST", `/api/xpot/admin/tags/${a1.id}/retire`, "jt-admin", { reason: "Lost" })).status, 200);
     assert.equal((await api("POST", `/api/xpot/admin/tags/${a1.id}/restore`, "jt-admin", {})).status, 200);
-    assert.equal((await api("PATCH", `/api/xpot/admin/tag-batches/${batch.id}`, "jt-admin", { status: "completed" })).status, 200);
+    assert.equal((await api("POST", `/api/xpot/admin/tag-batches/${batch.id}/close`, "jt-admin", {})).status, 200);
     assert.equal((await api("PATCH", `/api/xpot/admin/tag-batches/${batch.id}`, "jt-admin", { notes: "no status change" })).status, 200);
 
     const a1Story = await story(`tagId=${a1.id}`);
     assert.deepEqual(actions(a1Story), [
       "batch_created", "kit_delivered", "tag_assigned", "destination_changed", "tag_activated",
-      "tag_disabled", "tag_retired", "tag_restored", "batch_status_changed",
+      "tag_disabled", "tag_retired", "tag_restored", "batch_closed",
     ]);
     const by = (list: Entry[], action: string) => list.find((e) => e.action === action)!;
     const assigned = by(a1Story, "tag_assigned");
@@ -183,8 +186,8 @@ test.skipIf(!enabled)("journey: trail, stories, plans, append-only, admin-only A
     assert.equal(disabled.afterValue, "disabled");
     assert.equal(by(a1Story, "tag_retired").source, "admin");
     assert.equal(by(a1Story, "tag_retired").content, "Lost");
-    assert.equal(by(a1Story, "batch_status_changed").title, `Batch ${batch.batchCode} completed`);
-    assert.equal(by(a1Story, "batch_status_changed").beforeValue, "generated");
+    assert.equal(by(a1Story, "batch_closed").title, `Batch ${batch.batchCode} closed`);
+    assert.equal(by(a1Story, "batch_closed").beforeValue, "open");
 
     // ── Field app: what a reseller does is recorded, with who did it ─────────
     const sold = await api("POST", `/api/xpot/tags/${a2.id}/quick-activate`, "jt-ana", {
@@ -212,7 +215,7 @@ test.skipIf(!enabled)("journey: trail, stories, plans, append-only, admin-only A
 
     const a2Story = await story(`tagId=${a2.id}`);
     assert.deepEqual(actions(a2Story), [
-      "batch_created", "kit_delivered", "batch_status_changed", "tag_activated", "destination_changed", "nfc_verified", "nfc_written",
+      "batch_created", "kit_delivered", "batch_closed", "tag_activated", "destination_changed", "nfc_verified", "nfc_written",
     ]);
     const activated = by(a2Story, "tag_activated");
     assert.equal(activated.title, `Tag ${a2.publicCode} activated in the app`);
@@ -257,7 +260,7 @@ test.skipIf(!enabled)("journey: trail, stories, plans, append-only, admin-only A
     assert.equal((await api("PATCH", `/api/xpot/admin/tags/${moved.id}/rep`, "jt-admin", { repId: repId["jt-bruno"] })).status, 200); // unchanged
     assert.equal((await api("PATCH", `/api/xpot/admin/tags/${moved.id}/rep`, "jt-admin", { repId: null })).status, 200);
     const movedStory = await story(`tagId=${moved.id}`);
-    assert.deepEqual(actions(movedStory), ["batch_created", "batch_status_changed", "reseller_changed", "reseller_changed"]);
+    assert.deepEqual(actions(movedStory), ["batch_created", "batch_closed", "reseller_changed", "reseller_changed"]);
     const moves = movedStory.filter((e) => e.action === "reseller_changed").reverse();
     assert.equal(moves[0].title, `Tag ${moved.publicCode} moved from house to Bruno`);
     assert.deepEqual([moves[0].beforeValue, moves[0].afterValue, moves[0].repId], ["house", "Bruno", repId["jt-bruno"]]);
@@ -297,9 +300,9 @@ test.skipIf(!enabled)("journey: trail, stories, plans, append-only, admin-only A
 
     // ── Stories: tag, kit, reseller, lead ────────────────────────────────────
     // A piece that never left house stock sees only the batch-wide entries.
-    assert.deepEqual(actions(await story(`tagId=${untouched.id}`)), ["batch_created", "batch_status_changed"]);
+    assert.deepEqual(actions(await story(`tagId=${untouched.id}`)), ["batch_created", "batch_closed"]);
     // A returned piece keeps its kit history through the codes the entries list.
-    assert.deepEqual(actions(await story(`tagId=${a3.id}`)), ["batch_created", "kit_delivered", "batch_status_changed", "returned_to_house"]);
+    assert.deepEqual(actions(await story(`tagId=${a3.id}`)), ["batch_created", "kit_delivered", "batch_closed", "returned_to_house"]);
     // The kit's story: its delivery, the pieces' own entries, the return.
     const kitStory = await story(`kitId=${kitId}`);
     assert.ok(kitStory.some((e) => e.action === "kit_delivered"));

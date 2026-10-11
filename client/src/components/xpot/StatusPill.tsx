@@ -44,11 +44,23 @@ export const CHIP_STATUS_TONE: Record<string, PillTone> = {
 
 /** A production batch, from the file to the pieces in hand. */
 export const BATCH_STATUS_TONE: Record<string, PillTone> = {
+  open: "blue",
+  closed: "green",
   draft: "slate",
   generated: "blue",
   ordered: "amber",
   received: "violet",
   completed: "green",
+  cancelled: "red",
+};
+
+/** Where an issued batch is in production (shared/tags.ts batchStage). */
+export const BATCH_STAGE_TONE: Record<string, PillTone> = {
+  issued: "slate",
+  built: "amber",
+  printed: "blue",
+  receiving: "violet",
+  received: "green",
   cancelled: "red",
 };
 

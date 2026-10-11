@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { BATCH_STATUS_TONE, Pill } from "@/components/xpot/StatusPill";
+import { BATCH_STAGE_TONE, BATCH_STATUS_TONE, Pill } from "@/components/xpot/StatusPill";
 import type { TagBatchItem, TagListItem } from "@shared/tagsApi";
 import { Loader2 } from "@/components/ui/loader";
 import { TagPieceVisual } from "@/components/xpot/TagProductThumbnail";
@@ -30,6 +30,14 @@ export function BatchStatusPill({ status }: { status: string }) {
   const labels = useTagLabels();
   return (
     <Pill tone={BATCH_STATUS_TONE[status] ?? "slate"}>{labels.batchStatus(status)}</Pill>
+  );
+}
+
+/** The derived production stage: codes issued → print file → printed → receiving → in stock. */
+export function BatchStagePill({ stage }: { stage: string }) {
+  const labels = useTagLabels();
+  return (
+    <Pill tone={BATCH_STAGE_TONE[stage] ?? "slate"}>{labels.batchStage(stage)}</Pill>
   );
 }
 
@@ -100,7 +108,12 @@ export function isUnsoldWithReseller(t: TagListItem): boolean {
 }
 
 export function isHouseStock(t: TagListItem): boolean {
-  return t.status === "inventory" && t.repId === null;
+  return t.status === "inventory" && t.repId === null && t.stockStatus !== "pending";
+}
+
+/** A code issued for a piece not printed / not delivered yet. */
+export function isPendingPiece(t: TagListItem): boolean {
+  return t.stockStatus === "pending";
 }
 
 // ─── Small UI ─────────────────────────────────────────────────────────────────

@@ -47,8 +47,46 @@ export type TagDestinationType = (typeof TAG_DESTINATION_TYPES)[number];
 export const TAG_STATUSES = ["inventory", "assigned", "active", "disabled", "retired"] as const;
 export type TagStatus = (typeof TAG_STATUSES)[number];
 
-export const TAG_BATCH_STATUSES = ["draft", "generated", "ordered", "received", "completed", "cancelled"] as const;
+/** `pending`: a code issued for a piece that does not physically exist yet (not printed / not delivered). */
+export const TAG_STOCK_STATUSES = ["pending", "available", "reserved", "internal_use", "sold", "damaged", "lost", "retired"] as const;
+export type TagStockStatus = (typeof TAG_STOCK_STATUSES)[number];
+
+export const TAG_OWNERSHIP_TYPES = ["company", "rep", "customer"] as const;
+export type TagOwnershipType = (typeof TAG_OWNERSHIP_TYPES)[number];
+
+export const TAG_BATCH_STATUSES = ["open", "closed", "cancelled"] as const;
 export type TagBatchStatus = (typeof TAG_BATCH_STATUSES)[number];
+
+/** `issued`: Xpot generated the codes at creation; `scanned`: the batch started empty and is filled by scanning. */
+export const TAG_BATCH_CODE_SOURCES = ["issued", "scanned"] as const;
+export type TagBatchCodeSource = (typeof TAG_BATCH_CODE_SOURCES)[number];
+
+export const PENDING_PIECE_ERROR = "This piece is not in stock yet: scan it into its batch first";
+
+/**
+ * Where an issued batch is in production, derived and never typed by hand: `issued` (codes only) → `built` (art /
+ * print file recorded) → `printed` → `receiving` (some pieces scanned in) → `received` (all in stock). A scanned
+ * batch is `receiving` while open and `received` once closed.
+ */
+export const TAG_BATCH_STAGES = ["issued", "built", "printed", "receiving", "received", "cancelled"] as const;
+export type TagBatchStage = (typeof TAG_BATCH_STAGES)[number];
+
+export function batchStage(b: {
+  status: string;
+  codeSource: string;
+  tagCount: number;
+  pendingCount: number;
+  lastProductionAction: string | null;
+}): TagBatchStage {
+  if (b.status === "cancelled") return "cancelled";
+  if (b.codeSource === "scanned") return b.status === "open" ? "receiving" : "received";
+  if (b.tagCount > 0 && b.pendingCount === 0) return "received";
+  if (b.pendingCount < b.tagCount) return "receiving";
+  const step = b.lastProductionAction;
+  if (step === "printed" || step === "nfc_inserted" || step === "assembled" || step === "tested") return "printed";
+  if (step === "art_built" || step === "plate_built" || step === "sliced") return "built";
+  return "issued";
+}
 
 export const TAG_ACCESS_METHODS = ["qr", "nfc"] as const;
 export type TagAccessMethod = (typeof TAG_ACCESS_METHODS)[number];
@@ -214,12 +252,16 @@ export type TransitionResult =
  *   inventory → assigned → active ⇄ disabled
  *   any → retired (terminal; `restore` is the explicit, controlled way back)
  * `assign` on an assigned/active/disabled tag re-assigns without changing status.
+ * A `pending` piece (code issued, piece not received) cannot be assigned or activated.
  */
 export function planTransition(
-  tag: { status: string; leadId: number | null; destinationUrl: string | null; destinationType: string | null },
+  tag: { status: string; leadId: number | null; destinationUrl: string | null; destinationType: string | null; stockStatus?: string },
   action: TagAction,
 ): TransitionResult {
   const status = tag.status as TagStatus;
+  if (tag.stockStatus === "pending" && (action === "assign" || action === "activate")) {
+    return { ok: false, error: PENDING_PIECE_ERROR };
+  }
   switch (action) {
     case "assign":
       if (status === "retired") return { ok: false, error: "A retired tag cannot be assigned" };

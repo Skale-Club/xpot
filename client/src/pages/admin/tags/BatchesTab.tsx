@@ -1,13 +1,13 @@
 import { useState, type FormEvent } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Plus, X } from "lucide-react";
-import { TAG_MAX_BATCH_QUANTITY, TAG_PRODUCT_TYPES, normalizeTagCode } from "@shared/tags";
+import { TAG_MAX_BATCH_QUANTITY, TAG_PRODUCT_TYPES } from "@shared/tags";
 import { useToast } from "@/hooks/use-toast";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
 import { TagModelChips, TagPieceVisual } from "@/components/xpot/TagProductThumbnail";
 import { errorMessage, formatDate, invalidateAdminTags, sendJson } from "./api";
 import { BTN, BTN_GHOST, CARD, Empty, INPUT, SectionTitle, Stat, TD, TH } from "./ui";
-import { BatchStatusPill, ErrorLine, Field, Loading, SELECT, useBatches, useTagCatalog } from "./batches-shared";
+import { BatchStagePill, ErrorLine, Field, Loading, SELECT, useBatches, useTagCatalog } from "./batches-shared";
 import { useTagLabels } from "./labels";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
@@ -22,9 +22,9 @@ const EMPTY_FORM = {
   salesProductId: "",
   face: "",
   vendor: "",
-  quantity: "100",
   notes: "",
-  publicCodes: "",
+  codes: "issued" as "issued" | "scanned",
+  quantity: "4",
 };
 
 function NewBatchForm({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
@@ -36,32 +36,28 @@ function NewBatchForm({ onClose, onCreated }: { onClose: () => void; onCreated: 
   const [form, setForm] = useState(EMPTY_FORM);
   const set = (patch: Partial<typeof EMPTY_FORM>) => setForm((f) => ({ ...f, ...patch }));
   const quantity = Number(form.quantity);
-  const validQuantity = Number.isInteger(quantity) && quantity >= 1 && quantity <= TAG_MAX_BATCH_QUANTITY;
-  const publicCodes = form.publicCodes.trim()
-    ? form.publicCodes.split(/[\s,;]+/).filter(Boolean).map((code) => normalizeTagCode(code))
-    : undefined;
-  const validPublicCodes =
-    !publicCodes ||
-    (publicCodes.length === quantity && publicCodes.every((code): code is string => code !== null) && new Set(publicCodes).size === publicCodes.length);
-  const importing = !!publicCodes;
-  const ready = form.name.trim().length > 0 && !!form.salesProductId && validQuantity && validPublicCodes;
+  const issuing = form.codes === "issued";
+  const quantityOk = !issuing || (Number.isInteger(quantity) && quantity >= 1 && quantity <= TAG_MAX_BATCH_QUANTITY);
+  const ready = form.name.trim().length > 0 && !!form.salesProductId && quantityOk;
 
   const create = useMutation({
     mutationFn: () =>
-      sendJson<{ id: string; batchCode: string }>("POST", "/api/xpot/admin/tag-batches", {
+      sendJson<{ id: string; batchCode: string; quantity: number; codeSource: string }>("POST", "/api/xpot/admin/tag-batches", {
         name: form.name,
         batchCode: form.batchCode || undefined,
         productType: form.productType,
         salesProductId: Number(form.salesProductId),
         face: form.face || null,
         vendor: form.vendor || null,
-        quantity,
         notes: form.notes || null,
-        publicCodes: publicCodes || undefined,
+        ...(issuing ? { quantity } : {}),
       }),
     onSuccess: (batch) => {
       void invalidateAdminTags();
-      toast({ title: t("batchCreated", { code: batch.batchCode }), description: t.plural("batchCreatedDesc", quantity) });
+      toast({
+        title: t("batchCreated", { code: batch.batchCode }),
+        description: batch.codeSource === "issued" ? t.plural("batchIssuedDesc", batch.quantity) : t("batchCreatedDesc"),
+      });
       onCreated(batch.id);
     },
     onError: (err) => toast({ title: t("couldNotCreateBatch"), description: errorMessage(err), variant: "destructive" }),
@@ -82,6 +78,20 @@ function NewBatchForm({ onClose, onCreated }: { onClose: () => void; onCreated: 
         <button type="button" onClick={onClose} className="rounded-lg p-1 text-white/40 hover:bg-white/5 hover:text-white" aria-label={tc("close")}>
           <X className="h-4 w-4" />
         </button>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" data-testid="admin-tags-new-batch-codes">
+        {(["issued", "scanned"] as const).map((mode) => (
+          <label
+            key={mode}
+            className={`cursor-pointer rounded-xl border p-3 ${form.codes === mode ? "border-blue-400/50 bg-blue-500/10" : "border-white/10 hover:bg-white/[0.03]"}`}
+          >
+            <span className="flex items-center gap-2 text-sm font-semibold text-white">
+              <input type="radio" name="codes" value={mode} checked={form.codes === mode} onChange={() => set({ codes: mode })} />
+              {mode === "issued" ? t("codesIssued") : t("codesScanned")}
+            </span>
+            <span className="mt-1 block text-xs text-white/45">{mode === "issued" ? t("codesIssuedHint") : t("codesScannedHint")}</span>
+          </label>
+        ))}
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label={t("fieldNameRequired")} className="sm:col-span-2">
@@ -117,16 +127,6 @@ function NewBatchForm({ onClose, onCreated }: { onClose: () => void; onCreated: 
             </select>
           </div>
         </Field>
-        <Field label={t("fieldQuantityRequired")} hint={t("quantityRange", { max: TAG_MAX_BATCH_QUANTITY })}>
-          <input
-            type="number"
-            min={1}
-            max={TAG_MAX_BATCH_QUANTITY}
-            value={form.quantity}
-            onChange={(e) => set({ quantity: e.target.value })}
-            className={`${INPUT} tabular-nums`}
-          />
-        </Field>
         <Field label={t("fieldBatchCode")} hint={t("batchCodeHint")}>
           <input
             value={form.batchCode}
@@ -136,34 +136,25 @@ function NewBatchForm({ onClose, onCreated }: { onClose: () => void; onCreated: 
             className={`${INPUT} font-mono`}
           />
         </Field>
+        {issuing && (
+          <Field label={t("fieldQuantityRequired")} hint={t("quantityRange", { max: TAG_MAX_BATCH_QUANTITY })}>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={TAG_MAX_BATCH_QUANTITY}
+              value={form.quantity}
+              onChange={(e) => set({ quantity: e.target.value })}
+              className={`${INPUT} tabular-nums`}
+              data-testid="admin-tags-new-batch-quantity"
+            />
+          </Field>
+        )}
         <Field label={t("fieldVendor")}>
           <input value={form.vendor} onChange={(e) => set({ vendor: e.target.value })} maxLength={120} className={INPUT} />
         </Field>
         <Field label={t("fieldNotes")} className="sm:col-span-2">
           <textarea value={form.notes} onChange={(e) => set({ notes: e.target.value })} maxLength={2000} rows={2} className={`${INPUT} resize-y`} />
-        </Field>
-        <Field
-          label={t("fieldLegacyCodes")}
-          hint={
-            importing
-              ? validPublicCodes
-                ? t.plural("legacyValid", publicCodes.length)
-                : validQuantity
-                  ? t.plural("legacyExact", quantity)
-                  : t("legacyExactQuantity")
-              : t("legacyHint")
-          }
-          className="sm:col-span-2"
-        >
-          <textarea
-            value={form.publicCodes}
-            onChange={(e) => set({ publicCodes: e.target.value })}
-            rows={4}
-            spellCheck={false}
-            placeholder={"Z8MEZP0X\n7414WRMT"}
-            className={`${INPUT} resize-y font-mono uppercase`}
-            data-testid="admin-tags-legacy-public-codes"
-          />
         </Field>
       </div>
       <div className="flex justify-end gap-2">
@@ -171,11 +162,7 @@ function NewBatchForm({ onClose, onCreated }: { onClose: () => void; onCreated: 
           {tc("cancel")}
         </button>
         <button type="submit" disabled={!ready || create.isPending} className={BTN} data-testid="admin-tags-new-batch-submit">
-          {create.isPending
-            ? t(importing ? "importing" : "generating")
-            : validQuantity
-              ? t.plural(importing ? "importPieces" : "generatePieces", quantity)
-              : t(importing ? "importPiecesNoCount" : "generatePiecesNoCount")}
+          {create.isPending ? t("creatingBatch") : issuing && quantityOk ? t.plural("createIssuedBatch", quantity) : t("createEmptyBatch")}
         </button>
       </div>
     </form>
@@ -240,6 +227,7 @@ export function BatchesTab({ go }: { go: (path: string) => void }) {
                   <th className={TH}>{t("fieldProduct")}</th>
                   <th className={TH}>{tm("colStatus")}</th>
                   <th className={`${TH} text-right`}>{t("colQty")}</th>
+                  <th className={`${TH} text-right`}>{t("colReceived")}</th>
                   <th className={`${TH} text-right`}>{tm("house")}</th>
                   <th className={`${TH} text-right`}>{t("withResellers")}</th>
                   <th className={`${TH} text-right`}>{t("live")}</th>
@@ -270,9 +258,12 @@ export function BatchesTab({ go }: { go: (path: string) => void }) {
                       <TagModelChips productType={b.productType} face={b.face} batchCode={b.batchCode} fallback={labels.product(b.productType)} />
                     </td>
                     <td className={TD}>
-                      <BatchStatusPill status={b.status} />
+                      <BatchStagePill stage={b.stage} />
                     </td>
                     <td className={`${TD} text-right tabular-nums`}>{b.quantity}</td>
+                    <td className={`${TD} text-right tabular-nums ${b.pendingCount ? "text-violet-200" : ""}`}>
+                      {b.pendingCount ? `${b.receivedCount}/${b.tagCount}` : b.receivedCount}
+                    </td>
                     <td className={`${TD} text-right font-semibold tabular-nums text-white`}>{b.houseCount}</td>
                     <td className={`${TD} text-right tabular-nums`}>{b.withResellersCount}</td>
                     <td className={`${TD} text-right tabular-nums`}>{b.activeCount}</td>

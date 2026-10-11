@@ -20,10 +20,19 @@ export const tagBatches = pgTable("tag_batches", {
   // What is printed on every piece of the run (shared/tagFace.ts); null = the product's default.
   face: text("face"),
   vendor: text("vendor"),
-  quantity: integer("quantity").notNull(),
-  status: text("status").notNull().default("generated"),
+  // Derived/cached count of the pieces scanned into this intake batch.
+  quantity: integer("quantity").notNull().default(0),
+  status: text("status").notNull().default("open"),
+  // Where the pieces' codes came from: issued by Xpot at creation (printed in-house or by a supplier; the pieces start
+  // `pending` and enter stock when scanned) or read from pieces already coded (an empty batch filled by scanning).
+  codeSource: text("code_source").notNull().default("scanned"),
   notes: text("notes"),
   createdByUserId: text("created_by_user_id"),
+  closedAt: timestamp("closed_at", { withTimezone: true }),
+  closedByUserId: text("closed_by_user_id"),
+  reopenedAt: timestamp("reopened_at", { withTimezone: true }),
+  reopenedByUserId: text("reopened_by_user_id"),
+  reopenReason: text("reopen_reason"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
@@ -95,6 +104,15 @@ export const tags = pgTable("tags", {
   nfcVerifiedAt: timestamp("nfc_verified_at", { withTimezone: true }),
   nfcLockedAt: timestamp("nfc_locked_at", { withTimezone: true }),
   nfcProvisioningDeviceId: uuid("nfc_provisioning_device_id").references(() => tagProvisioningDevices.id, { onDelete: "set null" }),
+  registeredAt: timestamp("registered_at", { withTimezone: true }),
+  registeredByUserId: text("registered_by_user_id"),
+  scannedPayload: text("scanned_payload"),
+  intakeIdempotencyKey: text("intake_idempotency_key"),
+  stockStatus: text("stock_status").notNull().default("available"),
+  ownershipType: text("ownership_type").notNull().default("company"),
+  custodianRepId: integer("custodian_rep_id").references(() => salesReps.id, { onDelete: "set null" }),
+  internalUseNote: text("internal_use_note"),
+  stockUpdatedAt: timestamp("stock_updated_at", { withTimezone: true }).notNull().defaultNow(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
@@ -104,6 +122,27 @@ export const tags = pgTable("tags", {
   leadIdx: index("tags_lead_idx").on(table.leadId),
   batchIdx: index("tags_batch_idx").on(table.batchId),
   statusIdx: index("tags_status_idx").on(table.status),
+}));
+
+export const tagStockMovements = pgTable("tag_stock_movements", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tagId: uuid("tag_id").notNull().references(() => tags.id, { onDelete: "cascade" }),
+  movementType: text("movement_type").notNull(),
+  fromStockStatus: text("from_stock_status"),
+  toStockStatus: text("to_stock_status").notNull(),
+  fromOwnershipType: text("from_ownership_type"),
+  toOwnershipType: text("to_ownership_type").notNull(),
+  fromCustodianRepId: integer("from_custodian_rep_id").references(() => salesReps.id, { onDelete: "set null" }),
+  toCustodianRepId: integer("to_custodian_rep_id").references(() => salesReps.id, { onDelete: "set null" }),
+  referenceType: text("reference_type"),
+  referenceId: text("reference_id"),
+  actorUserId: text("actor_user_id"),
+  reason: text("reason"),
+  idempotencyKey: text("idempotency_key"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  tagIdx: index("tag_stock_movements_tag_idx").on(table.tagId, table.createdAt),
+  referenceIdx: index("tag_stock_movements_reference_idx").on(table.referenceType, table.referenceId),
 }));
 
 // Append-only: every destination/type change writes one row, never updated.
@@ -322,6 +361,7 @@ export type TagProvisioningDevice = typeof tagProvisioningDevices.$inferSelect;
 export type TagProvisioningJob = typeof tagProvisioningJobs.$inferSelect;
 export type TagDirectWrite = typeof tagDirectWrites.$inferSelect;
 export type TagAcquisition = typeof tagAcquisitions.$inferSelect;
+export type TagStockMovement = typeof tagStockMovements.$inferSelect;
 export type TagAcquisitionLine = typeof tagAcquisitionLines.$inferSelect;
 export type TagAcquisitionUnit = typeof tagAcquisitionUnits.$inferSelect;
 export type SalesSaleTag = typeof salesSaleTags.$inferSelect;
