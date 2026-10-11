@@ -152,7 +152,7 @@ export function registerTagJourneyTools(server: McpServer, caller: McpCaller) {
   // already-manufactured pieces (publicCodes) stay an admin-UI-only escape hatch.
   server.tool(
     "tags_batch_create",
-    `Create a production batch of new pieces in house stock, each with a fresh random public code. \`batch\`: { name, productType (${TAG_PRODUCT_TYPES.join("|")}), salesProductId (the physical product in the Sales catalog), face? (what is printed on every piece: ${TAG_FACES.join("|")}; omit for a Google Review sign, whose face is implied), quantity (1-1000), batchCode? (A-Z 0-9 . _ -, automatic if omitted, e.g. REV-2026-003), vendor?, notes? }. Returns { batch, tags: [{ serialNumber, publicCode, qrUrl, nfcUrl }] } — qrUrl goes in the printed QR, nfcUrl is written to the chip.`,
+    `Create a production batch and issue its codes: \`quantity\` fresh random public codes for pieces still to be made (printed in-house or ordered). The pieces start as \`pending\` stock — not sellable — and each enters stock when its printed QR is scanned into the batch (tags_batch_scan, or Tags → Batches → the batch → scan). \`batch\`: { name, productType (${TAG_PRODUCT_TYPES.join("|")}), salesProductId (the physical product in the Sales catalog), face? (what is printed on every piece: ${TAG_FACES.join("|")}; omit for a Google Review sign, whose face is implied), quantity (1-1000; omit only for an empty batch filled by scanning already-coded pieces), batchCode? (A-Z 0-9 . _ -, automatic if omitted, e.g. REV-2026-003), vendor?, notes? }. Returns { batch, tags: [{ serialNumber, publicCode, qrUrl, nfcUrl }] } — qrUrl goes in the printed QR, nfcUrl is written to the chip.`,
     { batch: objectParam },
     async ({ batch }) =>
       run("tags_batch_create", async () => {
@@ -176,6 +176,29 @@ export function registerTagJourneyTools(server: McpServer, caller: McpCaller) {
     "List the production batches (id, batchCode, name, productType, face (what is printed on the pieces), vendor, quantity, status, and counts: pieces, at the house, with resellers, active, NFC verified). Use the batchCode or id as `batch` in the journey tools.",
     {},
     async () => run("tags_batches_list", () => repo.listBatches()),
+  );
+
+  server.tool(
+    "tags_batch_get",
+    "One batch as a production view: the batch (status open/closed/cancelled, codeSource issued/scanned, derived stage issued → built → printed → receiving → received, lastProductionAction, counts: pieces, pending, received, in house, with resellers, active, NFC verified) and every piece (serial, code, status, stockStatus pending/available/…, NFC status, registeredAt). `batch`: uuid or batch code.",
+    { batch: z.string().min(1) },
+    async ({ batch }) =>
+      run("tags_batch_get", async () => {
+        const found = await repo.getBatchProduction(batch);
+        if (!found) throw new TagError("Batch not found", 404);
+        return found;
+      }),
+  );
+
+  server.tool(
+    "tags_batch_scan",
+    "Receive one physical piece into its batch, exactly as the admin scanner does: `value` is the scanned QR/NFC link or the printed public code. An issued code that is still `pending` becomes `available` stock (one `intake` movement); a piece already received returns alreadyRegistered: true and changes nothing; a code of another batch, or one this issued batch never issued, is refused. Only for a piece that is physically in hand and whose QR was actually read — never to backfill. `batch`: uuid or batch code.",
+    { batch: z.string().min(1), value: z.string().min(1).max(2048), idempotencyKey: z.string().min(1).max(160).optional() },
+    async ({ batch, value, idempotencyKey }) =>
+      run("tags_batch_scan", async () => {
+        const batchId = await journey.resolveBatchId(batch);
+        return repo.scanTagIntoBatch(batchId, value, idempotencyKey ?? null, null, "mcp");
+      }),
   );
 
   server.tool(

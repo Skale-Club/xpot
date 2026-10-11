@@ -1,13 +1,13 @@
 import { useState, type FormEvent } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Plus, X } from "lucide-react";
-import { TAG_PRODUCT_TYPES } from "@shared/tags";
+import { TAG_MAX_BATCH_QUANTITY, TAG_PRODUCT_TYPES } from "@shared/tags";
 import { useToast } from "@/hooks/use-toast";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
 import { TagModelChips, TagPieceVisual } from "@/components/xpot/TagProductThumbnail";
 import { errorMessage, formatDate, invalidateAdminTags, sendJson } from "./api";
 import { BTN, BTN_GHOST, CARD, Empty, INPUT, SectionTitle, Stat, TD, TH } from "./ui";
-import { BatchStatusPill, ErrorLine, Field, Loading, SELECT, useBatches, useTagCatalog } from "./batches-shared";
+import { BatchStagePill, ErrorLine, Field, Loading, SELECT, useBatches, useTagCatalog } from "./batches-shared";
 import { useTagLabels } from "./labels";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
@@ -23,6 +23,8 @@ const EMPTY_FORM = {
   face: "",
   vendor: "",
   notes: "",
+  codes: "issued" as "issued" | "scanned",
+  quantity: "4",
 };
 
 function NewBatchForm({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
@@ -33,11 +35,14 @@ function NewBatchForm({ onClose, onCreated }: { onClose: () => void; onCreated: 
   const { data: catalog = [] } = useTagCatalog();
   const [form, setForm] = useState(EMPTY_FORM);
   const set = (patch: Partial<typeof EMPTY_FORM>) => setForm((f) => ({ ...f, ...patch }));
-  const ready = form.name.trim().length > 0 && !!form.salesProductId;
+  const quantity = Number(form.quantity);
+  const issuing = form.codes === "issued";
+  const quantityOk = !issuing || (Number.isInteger(quantity) && quantity >= 1 && quantity <= TAG_MAX_BATCH_QUANTITY);
+  const ready = form.name.trim().length > 0 && !!form.salesProductId && quantityOk;
 
   const create = useMutation({
     mutationFn: () =>
-      sendJson<{ id: string; batchCode: string }>("POST", "/api/xpot/admin/tag-batches", {
+      sendJson<{ id: string; batchCode: string; quantity: number; codeSource: string }>("POST", "/api/xpot/admin/tag-batches", {
         name: form.name,
         batchCode: form.batchCode || undefined,
         productType: form.productType,
@@ -45,10 +50,14 @@ function NewBatchForm({ onClose, onCreated }: { onClose: () => void; onCreated: 
         face: form.face || null,
         vendor: form.vendor || null,
         notes: form.notes || null,
+        ...(issuing ? { quantity } : {}),
       }),
     onSuccess: (batch) => {
       void invalidateAdminTags();
-      toast({ title: t("batchCreated", { code: batch.batchCode }), description: t("batchCreatedDesc") });
+      toast({
+        title: t("batchCreated", { code: batch.batchCode }),
+        description: batch.codeSource === "issued" ? t.plural("batchIssuedDesc", batch.quantity) : t("batchCreatedDesc"),
+      });
       onCreated(batch.id);
     },
     onError: (err) => toast({ title: t("couldNotCreateBatch"), description: errorMessage(err), variant: "destructive" }),
@@ -69,6 +78,20 @@ function NewBatchForm({ onClose, onCreated }: { onClose: () => void; onCreated: 
         <button type="button" onClick={onClose} className="rounded-lg p-1 text-white/40 hover:bg-white/5 hover:text-white" aria-label={tc("close")}>
           <X className="h-4 w-4" />
         </button>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" data-testid="admin-tags-new-batch-codes">
+        {(["issued", "scanned"] as const).map((mode) => (
+          <label
+            key={mode}
+            className={`cursor-pointer rounded-xl border p-3 ${form.codes === mode ? "border-blue-400/50 bg-blue-500/10" : "border-white/10 hover:bg-white/[0.03]"}`}
+          >
+            <span className="flex items-center gap-2 text-sm font-semibold text-white">
+              <input type="radio" name="codes" value={mode} checked={form.codes === mode} onChange={() => set({ codes: mode })} />
+              {mode === "issued" ? t("codesIssued") : t("codesScanned")}
+            </span>
+            <span className="mt-1 block text-xs text-white/45">{mode === "issued" ? t("codesIssuedHint") : t("codesScannedHint")}</span>
+          </label>
+        ))}
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label={t("fieldNameRequired")} className="sm:col-span-2">
@@ -113,6 +136,20 @@ function NewBatchForm({ onClose, onCreated }: { onClose: () => void; onCreated: 
             className={`${INPUT} font-mono`}
           />
         </Field>
+        {issuing && (
+          <Field label={t("fieldQuantityRequired")} hint={t("quantityRange", { max: TAG_MAX_BATCH_QUANTITY })}>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={TAG_MAX_BATCH_QUANTITY}
+              value={form.quantity}
+              onChange={(e) => set({ quantity: e.target.value })}
+              className={`${INPUT} tabular-nums`}
+              data-testid="admin-tags-new-batch-quantity"
+            />
+          </Field>
+        )}
         <Field label={t("fieldVendor")}>
           <input value={form.vendor} onChange={(e) => set({ vendor: e.target.value })} maxLength={120} className={INPUT} />
         </Field>
@@ -125,7 +162,7 @@ function NewBatchForm({ onClose, onCreated }: { onClose: () => void; onCreated: 
           {tc("cancel")}
         </button>
         <button type="submit" disabled={!ready || create.isPending} className={BTN} data-testid="admin-tags-new-batch-submit">
-          {create.isPending ? t("creatingBatch") : t("createEmptyBatch")}
+          {create.isPending ? t("creatingBatch") : issuing && quantityOk ? t.plural("createIssuedBatch", quantity) : t("createEmptyBatch")}
         </button>
       </div>
     </form>
@@ -190,6 +227,7 @@ export function BatchesTab({ go }: { go: (path: string) => void }) {
                   <th className={TH}>{t("fieldProduct")}</th>
                   <th className={TH}>{tm("colStatus")}</th>
                   <th className={`${TH} text-right`}>{t("colQty")}</th>
+                  <th className={`${TH} text-right`}>{t("colReceived")}</th>
                   <th className={`${TH} text-right`}>{tm("house")}</th>
                   <th className={`${TH} text-right`}>{t("withResellers")}</th>
                   <th className={`${TH} text-right`}>{t("live")}</th>
@@ -220,9 +258,12 @@ export function BatchesTab({ go }: { go: (path: string) => void }) {
                       <TagModelChips productType={b.productType} face={b.face} batchCode={b.batchCode} fallback={labels.product(b.productType)} />
                     </td>
                     <td className={TD}>
-                      <BatchStatusPill status={b.status} />
+                      <BatchStagePill stage={b.stage} />
                     </td>
                     <td className={`${TD} text-right tabular-nums`}>{b.quantity}</td>
+                    <td className={`${TD} text-right tabular-nums ${b.pendingCount ? "text-violet-200" : ""}`}>
+                      {b.pendingCount ? `${b.receivedCount}/${b.tagCount}` : b.receivedCount}
+                    </td>
                     <td className={`${TD} text-right font-semibold tabular-nums text-white`}>{b.houseCount}</td>
                     <td className={`${TD} text-right tabular-nums`}>{b.withResellersCount}</td>
                     <td className={`${TD} text-right tabular-nums`}>{b.activeCount}</td>

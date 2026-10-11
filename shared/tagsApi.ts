@@ -123,10 +123,20 @@ export interface TagBatchItem {
   vendor: string | null;
   quantity: number;
   status: string;
+  /** `issued` (Xpot generated the codes) or `scanned` (filled by scanning already-coded pieces). */
+  codeSource: string;
+  /** Derived production stage (shared/tags.ts `batchStage`). */
+  stage: string;
+  /** Latest production step in the batch's journey (`sliced`, `printed`, …), or null. */
+  lastProductionAction: string | null;
   notes: string | null;
   createdAt: string;
   tagCount: number;
-  /** Unsold pieces still in house stock (no reseller). */
+  /** Codes issued for pieces not received yet (not printed / not delivered). */
+  pendingCount: number;
+  /** Pieces physically received into stock at some point (tagCount − pendingCount). */
+  receivedCount: number;
+  /** Unsold pieces in house stock (received, no reseller). */
   houseCount: number;
   /** Pieces handed to resellers (sold or not). */
   withResellersCount: number;

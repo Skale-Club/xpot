@@ -161,6 +161,11 @@ const tagPatchSchema = z.object({
 
 const actionSchema = z.object({ reason: optionalText(300) }).strict();
 
+const legacyPublicCode = z
+  .string()
+  .refine((value) => normalizeTagCode(value) !== null, "Invalid public code")
+  .transform((value) => normalizeTagCode(value)!);
+
 export const batchCreateSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(120),
   batchCode: z.preprocess(
@@ -172,7 +177,21 @@ export const batchCreateSchema = z.object({
   face: faceField,
   vendor: optionalText(120),
   notes: optionalText(2000),
-}).strict();
+  // Issue this many codes now (3D printing, or a supplier printing Xpot codes); the pieces start `pending` and enter
+  // stock when scanned. Omit for an empty batch filled by scanning already-coded pieces.
+  quantity: z.coerce.number().int().min(1).max(TAG_MAX_BATCH_QUANTITY).optional(),
+  // Admin-only escape hatch for already-manufactured pieces whose printed codes must be preserved (they enter stock
+  // at once). Never offered over MCP.
+  publicCodes: z.array(legacyPublicCode).min(1).max(TAG_MAX_BATCH_QUANTITY).optional(),
+}).strict().superRefine((value, ctx) => {
+  if (!value.publicCodes) return;
+  if (value.quantity !== undefined && value.publicCodes.length !== value.quantity) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["publicCodes"], message: "publicCodes must contain exactly quantity codes" });
+  }
+  if (new Set(value.publicCodes).size !== value.publicCodes.length) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["publicCodes"], message: "publicCodes must not contain duplicates" });
+  }
+});
 
 export const batchScanSchema = z.object({
   value: z.string().trim().min(1).max(2048),

@@ -1,8 +1,36 @@
 # Plano de execução: cadastro e estoque de plaquinhas NFC
 
-**Status:** proposto em outubro de 2026  
+**Status:** fases 1–2 implementadas em outubro de 2026, com a emenda da seção 0  
 **Público:** produto, engenharia e operação  
 **Objetivo:** permitir que a equipe receba fisicamente as plaquinhas, abra um lote no Xpot e escaneie cada unidade para colocá-la no estoque.
+
+---
+
+## 0. Emenda (2026-10-10): códigos emitidos e estoque, juntos
+
+A regra "o lote começa vazio e a leitura cria a unidade" vale para peças que **já chegam com um código Xpot**. Ela não
+cobria duas origens reais, e sem elas ninguém emitia código nenhum:
+
+- **impressão 3D na casa** (repositório 3D Printing): o código precisa existir antes da peça, porque vai dentro do
+  arquivo de impressão (QR) e do chip;
+- **fornecedor que imprime códigos Xpot**: os códigos precisam ser enviados a ele, e só o Xpot pode emiti-los sem
+  colisão.
+
+Por isso o lote ganhou a origem dos códigos, `tag_batches.code_source`:
+
+| Origem | Criação | Estado físico inicial | Entrada no estoque |
+|---|---|---|---|
+| `issued` | `quantity` códigos gerados agora (`POST /tag-batches` com `quantity`, MCP `tags_batch_create`) | **`pending`** — não é estoque, não entra em kit, venda, atribuição ou ativação | a leitura da peça pronta no próprio lote: `pending → available`, movimento `intake` (a leitura também prova que o QR impresso funciona) |
+| `scanned` | lote vazio (o fluxo das seções 2–14) | — | a leitura cria a unidade, como antes |
+
+- Um lote `issued` recusa ler um código que ele não emitiu. Um código de outro lote continua recusado nos dois tipos.
+- `publicCodes` (códigos legados fixados, só admin) cria um lote `issued` já `closed`, com as peças `available`.
+- O estágio de produção é derivado, nunca digitado: `issued → built → printed → receiving → received`
+  (`batchStage` em `shared/tags.ts`), a partir das contagens e da última etapa de produção no journey (`art_built`,
+  `plate_built`, `sliced`, `printed`, …). O status `open/closed/cancelled` continua sendo só "aceita leituras".
+- Migração `0031`: todos os lotes que já existiam ficam `issued`. REV-2026-003 e LPLATE-2026-002 (arquivos prontos,
+  ainda não impressos) têm as peças em `pending` e voltam a `open`. As demais continuam como a `0029` as deixou.
+- MCP: `tags_batch_get` (lote, estágio, contagens e peças) e `tags_batch_scan` (o mesmo serviço da tela de leitura).
 
 ---
 

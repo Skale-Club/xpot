@@ -16,7 +16,7 @@ import {
   type InsertTagEvent,
   type Tag,
 } from "#shared/schema.js";
-import { buildTagUrls, planTransition, type TagAction, type TagStatus } from "#shared/tags.js";
+import { batchStage, buildTagUrls, planTransition, type TagAction, type TagStatus } from "#shared/tags.js";
 import { activationCredit, canUseLead, type TagActor } from "#shared/tagAccess.js";
 import { companyOrganizationId, organizationIdForRep } from "../organizations/service.js";
 import type {
@@ -935,9 +935,19 @@ export interface BatchInput {
   face?: string | null;
   vendor?: string | null;
   notes?: string | null;
+  /** Issue this many fresh codes now (pieces to print or to order); the pieces start `pending`. */
+  quantity?: number;
+  /** Admin-only: pieces already made with these printed codes; they enter stock at once. */
+  publicCodes?: string[];
 }
 
+/**
+ * Two kinds of batch. With `quantity` (or `publicCodes`) Xpot issues the codes now: they go into a print file or to a
+ * supplier, and each piece enters stock when it is scanned into the batch. Without, the batch starts empty and every
+ * scan of an already-coded piece creates it (docs/TAG_INVENTORY_EXECUTION_PLAN.md).
+ */
 export async function createBatch(input: BatchInput, userId: string | null, source: JourneySource = "admin") {
+  if (input.quantity || input.publicCodes?.length) return createIssuedBatch(input, userId, source);
   const batchCode = input.batchCode?.trim() || (await nextBatchCode(input.productType));
   try {
     const [batch] = await db.insert(tagBatches).values({
@@ -968,10 +978,98 @@ export async function createBatch(input: BatchInput, userId: string | null, sour
   }
 }
 
+async function createIssuedBatch(input: BatchInput, userId: string | null, source: JourneySource) {
+  const batchCode = input.batchCode?.trim() || (await nextBatchCode(input.productType));
+  const organizationId = await companyOrganizationId();
+  const pinned = Boolean(input.publicCodes?.length);
+  const quantity = input.publicCodes?.length ?? input.quantity!;
+  for (let attempt = 1; ; attempt++) {
+    const codes = input.publicCodes ?? (await generateUniqueCodes(quantity, findExistingCodes));
+    if (pinned) {
+      const existing = await findExistingCodes(codes);
+      if (existing.size > 0) throw new TagError(`Public codes already exist: ${Array.from(existing).sort().join(", ")}`, 409);
+    }
+    try {
+      const batch = await db.transaction(async (tx) => {
+        const now = new Date();
+        const [batch] = await tx.insert(tagBatches).values({
+          batchCode,
+          name: input.name,
+          productType: input.productType,
+          salesProductId: input.salesProductId,
+          face: input.face ?? null,
+          vendor: input.vendor ?? null,
+          quantity,
+          status: pinned ? "closed" : "open",
+          codeSource: "issued",
+          closedAt: pinned ? now : null,
+          closedByUserId: pinned ? userId : null,
+          notes: input.notes ?? null,
+          createdByUserId: userId,
+        }).returning();
+        // Pinned codes are pieces already in hand: stock at once. Fresh codes are pieces still to be made.
+        const stockStatus = pinned ? "available" : "pending";
+        const created = await tx.insert(tags).values(codes.map((publicCode, index) => ({
+          organizationId,
+          publicCode,
+          serialNumber: index + 1,
+          batchId: batch.id,
+          productType: input.productType,
+          salesProductId: input.salesProductId,
+          status: "inventory",
+          stockStatus,
+          ownershipType: "company",
+          registeredAt: pinned ? now : null,
+          registeredByUserId: pinned ? userId : null,
+          stockUpdatedAt: now,
+        }))).returning({ id: tags.id });
+        await tx.insert(tagStockMovements).values(created.map((tag) => ({
+          tagId: tag.id,
+          movementType: pinned ? "intake" : "issue",
+          fromStockStatus: null,
+          toStockStatus: stockStatus,
+          fromOwnershipType: null,
+          toOwnershipType: "company",
+          actorUserId: userId,
+          referenceType: "batch",
+          referenceId: batch.id,
+        })));
+        return batch;
+      });
+      console.log(`[tags] batch ${batch.batchCode} created with ${quantity} ${pinned ? "pinned" : "issued"} codes (user ${userId ?? "?"})`);
+      await recordJourney({
+        kind: "execution",
+        action: "batch_created",
+        title: `Batch ${batch.batchCode} created: ${quantity} × ${JOURNEY_PRODUCT_LABELS[input.productType] ?? input.productType}`,
+        content: batch.name,
+        batchId: batch.id,
+        afterValue: batch.status,
+        metadata: { quantity, codeSource: "issued", pinned, productType: input.productType, face: batch.face, vendor: batch.vendor },
+      }, journeyContext(userId, source));
+      return batch;
+    } catch (err) {
+      const pg = pgError(err);
+      if (pg.code === "23505" && pg.constraint === "tags_public_code_unique" && attempt < 3 && !pinned) continue;
+      if (pg.code === "23505" && pg.constraint === "tags_public_code_unique") throw new TagError("Public codes already exist", 409);
+      if (pg.code === "23505") throw new TagError(`Batch code ${batchCode} already exists`, 409);
+      throw err;
+    }
+  }
+}
+
 export interface BatchScanResult {
   tag: Tag;
+  /** Pieces registered in the batch: every code of an issued batch, every scanned piece of an empty one. */
   batchCount: number;
+  /** Pieces of the batch physically in stock (not `pending`). */
+  receivedCount: number;
   alreadyRegistered: boolean;
+}
+
+async function receivedCountOf(tx: Tx | typeof db, batchId: string): Promise<number> {
+  const [row] = await tx.select({ n: sql<number>`count(*)::int` }).from(tags)
+    .where(and(eq(tags.batchId, batchId), sql`${tags.stockStatus} <> 'pending'`));
+  return Number(row?.n ?? 0);
 }
 
 /** Registers one physical piece into an open batch. One accepted scan = one stock row. */
@@ -1000,14 +1098,45 @@ export async function scanTagIntoBatch(
         if (sameRequest.batchId !== batchId || sameRequest.publicCode !== parsed.publicCode) {
           throw new TagError("This scan request was already used for another piece", 409);
         }
-        return { tag: sameRequest, batchCount: batch.quantity, alreadyRegistered: true };
+        return { tag: sameRequest, batchCount: batch.quantity, receivedCount: await receivedCountOf(tx, batchId), alreadyRegistered: true };
       }
     }
 
-    const [existing] = await tx.select().from(tags).where(eq(tags.publicCode, parsed.publicCode)).limit(1);
+    const [existing] = await tx.select().from(tags).where(eq(tags.publicCode, parsed.publicCode)).for("update");
     if (existing) {
       if (existing.batchId !== batchId) throw new TagError(`Piece ${parsed.publicCode} already belongs to another batch`, 409);
-      return { tag: existing, batchCount: batch.quantity, alreadyRegistered: true };
+      if (existing.stockStatus !== "pending") {
+        return { tag: existing, batchCount: batch.quantity, receivedCount: await receivedCountOf(tx, batchId), alreadyRegistered: true };
+      }
+      // An issued code: the printed (or delivered) piece now exists. This scan is also the proof its QR reads.
+      const now = new Date();
+      const [received] = await tx.update(tags).set({
+        stockStatus: "available",
+        ownershipType: "company",
+        registeredAt: now,
+        registeredByUserId: userId,
+        scannedPayload: rawValue,
+        intakeIdempotencyKey: idempotencyKey,
+        stockUpdatedAt: now,
+        updatedAt: now,
+      }).where(eq(tags.id, existing.id)).returning();
+      await tx.insert(tagStockMovements).values({
+        tagId: existing.id,
+        movementType: "intake",
+        fromStockStatus: "pending",
+        toStockStatus: "available",
+        fromOwnershipType: existing.ownershipType,
+        toOwnershipType: "company",
+        actorUserId: userId,
+        referenceType: "batch",
+        referenceId: batch.id,
+        idempotencyKey,
+      });
+      await tx.update(tagBatches).set({ updatedAt: now }).where(eq(tagBatches.id, batch.id));
+      return { tag: received, batchCount: batch.quantity, receivedCount: await receivedCountOf(tx, batchId), alreadyRegistered: false };
+    }
+    if (batch.codeSource === "issued") {
+      throw new TagError(`Piece ${parsed.publicCode} was not issued to this batch`, 409);
     }
 
     const now = new Date();
@@ -1044,18 +1173,18 @@ export async function scanTagIntoBatch(
       quantity: nextSerial,
       updatedAt: now,
     }).where(eq(tagBatches.id, batch.id)).returning({ quantity: tagBatches.quantity });
-    return { tag, batchCount: updatedBatch.quantity, alreadyRegistered: false };
+    return { tag, batchCount: updatedBatch.quantity, receivedCount: await receivedCountOf(tx, batch.id), alreadyRegistered: false };
   });
 
   if (!result.alreadyRegistered) {
     await recordJourney({
       kind: "execution",
       action: "piece_scanned_into_batch",
-      title: `Piece ${result.tag.publicCode} added to batch`,
+      title: `Piece ${result.tag.publicCode} received into stock (${result.receivedCount}/${result.batchCount})`,
       batchId,
       tagId: result.tag.id,
-      afterValue: "inventory",
-      metadata: { serialNumber: result.tag.serialNumber, method: parsed.method },
+      afterValue: "available",
+      metadata: { serialNumber: result.tag.serialNumber, method: parsed.method, receivedCount: result.receivedCount, batchCount: result.batchCount },
     }, journeyContext(userId, source));
   }
   return result;
@@ -1218,24 +1347,38 @@ export async function updateBatch(
   return batch;
 }
 
-export async function listBatches(): Promise<TagBatchItem[]> {
-  const list = await rows<{
-    id: string; batch_code: string; name: string; product_type: string; sales_product_id: number | null; face: string | null; vendor: string | null; quantity: number;
-    status: string; notes: string | null; created_at: Date; tag_count: number; house_count: number;
-    with_resellers_count: number; active_count: number; nfc_verified_count: number;
-  }>(sql`
-    SELECT b.id, b.batch_code, b.name, b.product_type, b.sales_product_id, b.face, b.vendor, count(t.id)::int AS quantity, b.status, b.notes, b.created_at,
-      count(t.id)::int AS tag_count,
-      count(t.id) FILTER (WHERE t.status = 'inventory' AND t.rep_id IS NULL)::int AS house_count,
-      count(t.id) FILTER (WHERE t.rep_id IS NOT NULL)::int AS with_resellers_count,
-      count(t.id) FILTER (WHERE t.status = 'active')::int AS active_count,
-      count(t.id) FILTER (WHERE t.nfc_provisioning_status IN ('verified', 'locked'))::int AS nfc_verified_count
-    FROM tag_batches b
-    LEFT JOIN tags t ON t.batch_id = b.id
-    GROUP BY b.id
-    ORDER BY b.created_at DESC
-  `);
-  return list.map((b) => ({
+// The latest production step written to a batch's journey (3D Printing records art, slicing, printing, assembly).
+const PRODUCTION_STEP_SQL = sql`(
+  SELECT j.action FROM tag_journey_entries j
+  WHERE j.batch_id = b.id AND j.status = 'active'
+    AND j.action IN ('art_built', 'plate_built', 'sliced', 'printed', 'nfc_inserted', 'assembled', 'tested')
+  ORDER BY j.occurred_at DESC LIMIT 1
+)`;
+
+interface BatchRow {
+  id: string; batch_code: string; name: string; product_type: string; sales_product_id: number | null;
+  face: string | null; vendor: string | null; quantity: number; status: string; code_source: string;
+  notes: string | null; created_at: Date; tag_count: number; pending_count: number; house_count: number;
+  with_resellers_count: number; active_count: number; nfc_verified_count: number; last_production_action: string | null;
+}
+
+const BATCH_SELECT = sql`
+  SELECT b.id, b.batch_code, b.name, b.product_type, b.sales_product_id, b.face, b.vendor, count(t.id)::int AS quantity,
+    b.status, b.code_source, b.notes, b.created_at, b.created_by_user_id, b.updated_at,
+    count(t.id)::int AS tag_count,
+    count(t.id) FILTER (WHERE t.stock_status = 'pending')::int AS pending_count,
+    count(t.id) FILTER (WHERE t.status = 'inventory' AND t.rep_id IS NULL AND t.stock_status = 'available')::int AS house_count,
+    count(t.id) FILTER (WHERE t.rep_id IS NOT NULL)::int AS with_resellers_count,
+    count(t.id) FILTER (WHERE t.status = 'active')::int AS active_count,
+    count(t.id) FILTER (WHERE t.nfc_provisioning_status IN ('verified', 'locked'))::int AS nfc_verified_count,
+    ${PRODUCTION_STEP_SQL} AS last_production_action
+  FROM tag_batches b
+  LEFT JOIN tags t ON t.batch_id = b.id`;
+
+function batchItem(b: BatchRow): TagBatchItem {
+  const tagCount = Number(b.tag_count);
+  const pendingCount = Number(b.pending_count);
+  return {
     id: b.id,
     batchCode: b.batch_code,
     name: b.name,
@@ -1244,47 +1387,60 @@ export async function listBatches(): Promise<TagBatchItem[]> {
     face: resolveTagFace({ batchFace: b.face, productType: b.product_type }),
     ownFace: b.face,
     vendor: b.vendor,
-    quantity: b.quantity,
+    quantity: Number(b.quantity),
     status: b.status,
+    codeSource: b.code_source,
+    stage: batchStage({ status: b.status, codeSource: b.code_source, tagCount, pendingCount, lastProductionAction: b.last_production_action }),
+    lastProductionAction: b.last_production_action,
     notes: b.notes,
     createdAt: iso(b.created_at)!,
-    tagCount: Number(b.tag_count),
+    tagCount,
+    pendingCount,
+    receivedCount: tagCount - pendingCount,
     houseCount: Number(b.house_count),
     withResellersCount: Number(b.with_resellers_count),
     activeCount: Number(b.active_count),
     nfcVerifiedCount: Number(b.nfc_verified_count),
-  }));
+  };
+}
+
+export async function listBatches(): Promise<TagBatchItem[]> {
+  const list = await rows<BatchRow>(sql`${BATCH_SELECT} GROUP BY b.id ORDER BY b.created_at DESC`);
+  return list.map(batchItem);
 }
 
 export async function getBatch(id: string) {
-  const [batch] = await rows<{
-    id: string; batch_code: string; name: string; product_type: string; sales_product_id: number | null;
-    face: string | null; vendor: string | null; quantity: number; status: string; notes: string | null;
-    created_by_user_id: string | null; created_at: Date; updated_at: Date;
-  }>(sql`
-    SELECT b.id, b.batch_code, b.name, b.product_type, b.sales_product_id, b.face, b.vendor,
-           count(t.id)::int AS quantity, b.status, b.notes, b.created_by_user_id, b.created_at, b.updated_at
-    FROM tag_batches b
-    LEFT JOIN tags t ON t.batch_id = b.id
-    WHERE b.id = ${id}
-    GROUP BY b.id
-  `);
+  const [batch] = await rows<BatchRow & { created_by_user_id: string | null; updated_at: Date }>(
+    sql`${BATCH_SELECT} WHERE b.id = ${id} GROUP BY b.id`,
+  );
   if (!batch) return null;
   return {
-    id: batch.id,
-    batchCode: batch.batch_code,
-    name: batch.name,
-    productType: batch.product_type,
-    salesProductId: batch.sales_product_id,
+    ...batchItem(batch),
     face: batch.face,
-    vendor: batch.vendor,
-    quantity: Number(batch.quantity),
-    status: batch.status,
-    notes: batch.notes,
     createdByUserId: batch.created_by_user_id,
     createdAt: batch.created_at,
     updatedAt: batch.updated_at,
   };
+}
+
+/** One batch with its stage, counts and pieces: the production view (MCP `tags_batch_get`). */
+export async function getBatchProduction(idOrCode: string) {
+  const [ref] = await rows<{ id: string }>(sql`
+    SELECT id FROM tag_batches WHERE id::text = ${idOrCode} OR batch_code = ${idOrCode.trim().toUpperCase()} LIMIT 1
+  `);
+  if (!ref) return null;
+  const batch = await getBatch(ref.id);
+  const pieces = await db.select({
+    serialNumber: tags.serialNumber,
+    publicCode: tags.publicCode,
+    status: tags.status,
+    stockStatus: tags.stockStatus,
+    nfcStatus: tags.nfcProvisioningStatus,
+    registeredAt: tags.registeredAt,
+    repId: tags.repId,
+    leadId: tags.leadId,
+  }).from(tags).where(eq(tags.batchId, ref.id)).orderBy(tags.serialNumber, tags.publicCode);
+  return { batch, pieces };
 }
 
 export async function getBatchTagsForExport(batchId: string) {

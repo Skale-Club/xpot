@@ -54,6 +54,16 @@ export const BATCH_STATUS_TONE: Record<string, PillTone> = {
   cancelled: "red",
 };
 
+/** Where an issued batch is in production (shared/tags.ts batchStage). */
+export const BATCH_STAGE_TONE: Record<string, PillTone> = {
+  issued: "slate",
+  built: "amber",
+  printed: "blue",
+  receiving: "violet",
+  received: "green",
+  cancelled: "red",
+};
+
 export function Pill({ tone, children, className = "" }: { tone: PillTone; children: ReactNode; className?: string }) {
   return <span className={`${PILL_BASE} ${PILL_TONES[tone]} ${className}`}>{children}</span>;
 }

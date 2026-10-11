@@ -8,7 +8,7 @@ import { TagModelChips, TagPieceVisual } from "@/components/xpot/TagProductThumb
 import { useToast } from "@/hooks/use-toast";
 import { ADMIN_TAGS_KEY, STALE_MS, errorMessage, formatDate, getJson, invalidateAdminTags, percent, sendJson } from "./api";
 import { BTN, BTN_GHOST, CARD, INPUT, SectionTitle, Stat } from "./ui";
-import { BatchStatusPill, ErrorLine, Field, Loading, PieceTable, SELECT, isHouseStock, isUnsoldWithReseller, useTagCatalog } from "./batches-shared";
+import { BatchStagePill, BatchStatusPill, ErrorLine, Field, Loading, PieceTable, SELECT, isHouseStock, isPendingPiece, isUnsoldWithReseller, useTagCatalog } from "./batches-shared";
 import { useTagLabels } from "./labels";
 import { GiveKitForm } from "./kits-give-form";
 import { JourneyPanel } from "./JourneyPanel";
@@ -28,6 +28,11 @@ interface BatchDetailData {
   vendor: string | null;
   quantity: number;
   status: string;
+  codeSource: string;
+  stage: string;
+  tagCount: number;
+  pendingCount: number;
+  receivedCount: number;
   notes: string | null;
   createdAt: string;
   updatedAt?: string;
@@ -36,6 +41,7 @@ interface BatchDetailData {
 
 const FILTERS = [
   { id: "all", label: "filterAll", test: () => true },
+  { id: "pending", label: "pendingPieces", test: isPendingPiece },
   { id: "house", label: "houseStock", test: isHouseStock },
   { id: "resellers", label: "withResellers", test: (t: TagListItem) => t.repId !== null },
   { id: "sold", label: "sold", test: (t: TagListItem) => t.status !== "inventory" },
@@ -129,7 +135,7 @@ function BatchIntakePanel({ batch }: { batch: BatchDetailData }) {
   const t = useT(manageTagsBatchesMessages);
 
   const add = useMutation({
-    mutationFn: (scanValue: string) => sendJson<{ tag: { publicCode: string }; batchCount: number; alreadyRegistered: boolean }>(
+    mutationFn: (scanValue: string) => sendJson<{ tag: { publicCode: string }; batchCount: number; receivedCount: number; alreadyRegistered: boolean }>(
       "POST",
       `/api/xpot/admin/tag-batches/${batch.id}/scan`,
       { value: scanValue, idempotencyKey: crypto.randomUUID() },
@@ -139,7 +145,9 @@ function BatchIntakePanel({ batch }: { batch: BatchDetailData }) {
       void invalidateAdminTags();
       toast({
         title: result.alreadyRegistered ? t("pieceAlreadyAdded") : t("pieceAdded", { code: result.tag.publicCode }),
-        description: t("registeredCount", { count: result.batchCount }),
+        description: batch.codeSource === "issued"
+          ? t("receivedCount", { received: result.receivedCount, total: result.batchCount })
+          : t("registeredCount", { count: result.batchCount }),
       });
     },
     onError: (err) => toast({ title: t("couldNotAddPiece"), description: errorMessage(err), variant: "destructive" }),
@@ -157,9 +165,13 @@ function BatchIntakePanel({ batch }: { batch: BatchDetailData }) {
       <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="flex items-center gap-2 text-sm font-semibold text-white"><ScanLine className="h-4 w-4 text-blue-300" />{t("addPiecesTitle")}</p>
-          <p className="mt-1 text-xs text-white/45">{t("addPiecesIntro")}</p>
+          <p className="mt-1 text-xs text-white/45">{batch.codeSource === "issued" ? t("receiveIntro") : t("addPiecesIntro")}</p>
         </div>
-        <span className="rounded-full bg-blue-400/10 px-3 py-1 text-sm font-semibold tabular-nums text-blue-200">{t("registeredCount", { count: batch.quantity })}</span>
+        <span className="rounded-full bg-blue-400/10 px-3 py-1 text-sm font-semibold tabular-nums text-blue-200">
+          {batch.codeSource === "issued"
+            ? t("receivedCount", { received: batch.receivedCount, total: batch.tagCount })
+            : t("registeredCount", { count: batch.quantity })}
+        </span>
       </div>
       <form onSubmit={submit} className="flex flex-col gap-2 sm:flex-row">
         <input
@@ -266,6 +278,7 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
             <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="font-mono text-xl font-bold text-white">{batch.batchCode}</h2>
+              <BatchStagePill stage={batch.stage} />
               <BatchStatusPill status={batch.status} />
               <TagModelChips productType={batch.productType} face={face} batchCode={batch.batchCode} />
             </div>

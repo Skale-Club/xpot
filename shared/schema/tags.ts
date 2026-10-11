@@ -23,6 +23,9 @@ export const tagBatches = pgTable("tag_batches", {
   // Derived/cached count of the pieces scanned into this intake batch.
   quantity: integer("quantity").notNull().default(0),
   status: text("status").notNull().default("open"),
+  // Where the pieces' codes came from: issued by Xpot at creation (printed in-house or by a supplier; the pieces start
+  // `pending` and enter stock when scanned) or read from pieces already coded (an empty batch filled by scanning).
+  codeSource: text("code_source").notNull().default("scanned"),
   notes: text("notes"),
   createdByUserId: text("created_by_user_id"),
   closedAt: timestamp("closed_at", { withTimezone: true }),

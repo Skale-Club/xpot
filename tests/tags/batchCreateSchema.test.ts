@@ -20,9 +20,18 @@ test("a new intake batch is created without quantity or pre-generated codes", ()
   assert.equal("publicCodes" in parsed, false);
 });
 
-test("batch creation rejects quantity and pre-generated codes", () => {
-  assert.equal(batchCreateSchema.safeParse({ ...base, quantity: 100 }).success, false);
-  assert.equal(batchCreateSchema.safeParse({ ...base, publicCodes: ["Z8MEZP0X"] }).success, false);
+test("an issued batch takes a quantity (codes generated for pieces still to be made)", () => {
+  assert.equal(batchCreateSchema.parse({ ...base, quantity: "4" }).quantity, 4);
+  assert.equal(batchCreateSchema.safeParse({ ...base, quantity: 0 }).success, false);
+  assert.equal(batchCreateSchema.safeParse({ ...base, quantity: 1001 }).success, false);
+});
+
+test("pinned legacy codes are normalized; a count that differs from quantity or a duplicate is refused", () => {
+  const parsed = batchCreateSchema.parse({ ...base, publicCodes: ["z8mezp0x", "7414-wrmt", "Y4B0FB8B", "ESNQ1ZWA"] });
+  assert.deepEqual(parsed.publicCodes, ["Z8MEZP0X", "7414WRMT", "Y4B0FB8B", "ESNQ1ZWA"]);
+  assert.equal(batchCreateSchema.safeParse({ ...base, quantity: 2, publicCodes: ["Z8MEZP0X"] }).success, false);
+  assert.equal(batchCreateSchema.safeParse({ ...base, publicCodes: ["Z8MEZP0X", "z8mezp0x"] }).success, false);
+  assert.equal(batchCreateSchema.safeParse({ ...base, publicCodes: ["NOT-A-CODE!"] }).success, false);
 });
 
 test("a batch scan accepts a bare code or an Xpot QR/NFC URL", () => {

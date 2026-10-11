@@ -1,7 +1,7 @@
 import { desc, eq } from "drizzle-orm";
 import { db } from "../db.js";
 import { salesLeads, tagDestinationHistory, tagDirectWrites, tagProvisioningEvents, tags, type Tag } from "#shared/schema.js";
-import { buildTagUrls, defaultUtmEnabled } from "#shared/tags.js";
+import { buildTagUrls, defaultUtmEnabled, PENDING_PIECE_ERROR } from "#shared/tags.js";
 import { activationCredit, canWorkOnTag, type TagActor } from "#shared/tagAccess.js";
 import { decidePhoneWrite, type DirectWriteMethod } from "#shared/tagApp.js";
 import type { DirectWriteItem } from "#shared/tagsApi.js";
@@ -46,6 +46,7 @@ export async function quickActivateTag(id: string, input: QuickActivateInput, ac
     assertCanWork(actor, tag);
     before = tag;
     if (tag.status === "retired") throw new TagError("A retired tag cannot be edited", 409);
+    if (tag.stockStatus === "pending") throw new TagError(PENDING_PIECE_ERROR, 409);
 
     let leadId = tag.leadId;
     const newName = input.leadName?.trim();
