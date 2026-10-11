@@ -15,7 +15,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { ADMIN_TAGS_KEY, STALE_MS, formatDate, getJson, withQuery } from "./api";
-import { BTN_GHOST, CARD, INPUT, StatusPill, TD, TH } from "./ui";
+import { BTN_GHOST, CARD, INPUT, PieceStatusPill, TD, TH } from "./ui";
 import { useTagLabels } from "./labels";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
@@ -104,11 +104,11 @@ export function usePieces(params: { kitId?: string; batchId?: string; house?: "1
 
 /** Unsold and still with the reseller that holds it. */
 export function isUnsoldWithReseller(t: TagListItem): boolean {
-  return t.status === "inventory" && t.repId !== null;
+  return t.status === "inventory" && t.repId !== null && t.stockStatus === "available";
 }
 
 export function isHouseStock(t: TagListItem): boolean {
-  return t.status === "inventory" && t.repId === null && t.stockStatus !== "pending";
+  return t.status === "inventory" && t.repId === null && t.stockStatus === "available";
 }
 
 /** A code issued for a piece not printed / not delivered yet. */
@@ -329,7 +329,7 @@ export function PieceTable({
                   <td className={`${TD} tabular-nums text-white/50`}>{t.serialNumber ?? "—"}</td>
                   {showBatch && <td className={`${TD} font-mono text-xs`}>{t.batchCode ?? "—"}</td>}
                   <td className={TD}>
-                    <StatusPill status={t.status} />
+                    <PieceStatusPill status={t.status} stockStatus={t.stockStatus} />
                   </td>
                   {showReseller && <td className={TD}>{t.repName ?? <span className="text-white/35">{tm("house")}</span>}</td>}
                   <td className={TD}>{t.leadName ?? <span className="text-white/35">—</span>}</td>

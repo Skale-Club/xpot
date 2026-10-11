@@ -106,6 +106,9 @@ const en = {
   action_retire_title: "Retire this piece permanently?",
   action_retire_description: "It stops redirecting. Analytics and history are kept; it can be restored later.",
   action_retire_confirm: "Retire",
+  action_damage_title: "Mark this piece as damaged?",
+  action_damage_description: "It leaves usable stock and remains in the batch history as a quality-control sample. This cannot be undone from this screen.",
+  action_damage_confirm: "Mark damaged",
   action_restore_title: "Restore this retired piece?",
   action_restore_description: "It comes back as not live (assigned if it still has a customer, otherwise inventory).",
   action_restore_confirm: "Restore",
@@ -114,6 +117,7 @@ const en = {
   activateNeedsType: "Choose a destination type before activating.",
   activateNeedsUrl: "Set a destination URL before activating.",
   liveExplain: "Live — both the QR and the NFC URL redirect to the destination.",
+  damagedExplain: "Damaged — this physical piece is out of usable stock and retained in the batch for quality-control reporting.",
 
   // Piece screen: details
   productPlaceholder: "Product…",
@@ -334,6 +338,9 @@ export const manageTagsPiecesMessages: Dictionary<typeof en> = {
     action_retire_title: "Aposentar esta peça de vez?",
     action_retire_description: "Ela para de redirecionar. As estatísticas e o histórico ficam; dá para restaurá-la depois.",
     action_retire_confirm: "Aposentar",
+    action_damage_title: "Marcar esta peça como estragada?",
+    action_damage_description: "Ela sai do estoque utilizável e permanece no histórico do lote como amostra de controle de qualidade. Esta ação não pode ser desfeita por esta tela.",
+    action_damage_confirm: "Marcar como estragada",
     action_restore_title: "Restaurar esta peça aposentada?",
     action_restore_description: "Ela volta fora do ar (atribuída se ainda tiver cliente, senão no estoque).",
     action_restore_confirm: "Restaurar",
@@ -342,6 +349,7 @@ export const manageTagsPiecesMessages: Dictionary<typeof en> = {
     activateNeedsType: "Escolha um tipo de destino antes de ativar.",
     activateNeedsUrl: "Defina uma URL de destino antes de ativar.",
     liveExplain: "No ar — o QR e a URL NFC redirecionam para o destino.",
+    damagedExplain: "Estragada — esta peça física saiu do estoque utilizável e ficou registrada no lote para controle de qualidade.",
 
     productPlaceholder: "Produto…",
     sameAsBatch: "Igual ao lote",
@@ -553,6 +561,9 @@ export const manageTagsPiecesMessages: Dictionary<typeof en> = {
     action_retire_title: "¿Retirar esta pieza para siempre?",
     action_retire_description: "Deja de redirigir. Las estadísticas y el historial se conservan; se puede restaurar después.",
     action_retire_confirm: "Retirar",
+    action_damage_title: "¿Marcar esta pieza como dañada?",
+    action_damage_description: "Sale del inventario utilizable y permanece en el historial del lote como muestra de control de calidad. Esta acción no se puede deshacer desde esta pantalla.",
+    action_damage_confirm: "Marcar como dañada",
     action_restore_title: "¿Restaurar esta pieza retirada?",
     action_restore_description: "Vuelve sin estar activa (asignada si aún tiene cliente; si no, al inventario).",
     action_restore_confirm: "Restaurar",
@@ -561,6 +572,7 @@ export const manageTagsPiecesMessages: Dictionary<typeof en> = {
     activateNeedsType: "Elige un tipo de destino antes de activar.",
     activateNeedsUrl: "Define una URL de destino antes de activar.",
     liveExplain: "Activa — el QR y la URL NFC redirigen al destino.",
+    damagedExplain: "Dañada — esta pieza física salió del inventario utilizable y quedó registrada en el lote para control de calidad.",
 
     productPlaceholder: "Producto…",
     sameAsBatch: "Igual que el lote",

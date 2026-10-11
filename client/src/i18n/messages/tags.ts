@@ -55,6 +55,7 @@ const en = {
 
   // Status, chip, product and destination labels
   status_inventory: "Available",
+  status_damaged: "Damaged",
   status_assigned: "Assigned",
   status_active: "Live",
   status_disabled: "Disabled",
@@ -417,6 +418,7 @@ export const tagsMessages: Dictionary<typeof en> = {
     piecesNoMatch: "Nenhuma peça encontrada.",
 
     status_inventory: "Em estoque",
+    status_damaged: "Estragada",
     status_assigned: "Sem link",
     status_active: "No ar",
     status_disabled: "Desligada",
@@ -762,6 +764,7 @@ export const tagsMessages: Dictionary<typeof en> = {
     piecesNoMatch: "Ninguna pieza coincide.",
 
     status_inventory: "En stock",
+    status_damaged: "Dañada",
     status_assigned: "Sin enlace",
     status_active: "Activa",
     status_disabled: "Apagada",

@@ -5,6 +5,7 @@ import {
   TAG_DESTINATION_TYPES,
   TAG_MAX_BATCH_QUANTITY,
   TAG_PRODUCT_TYPES,
+  TAG_STOCK_STATUSES,
   TAG_STATUSES,
   buildManufacturingCsv,
   buildTagUrls,
@@ -123,6 +124,7 @@ const reviewLinkSchema = z.object({
 
 export const listQuerySchema = z.object({
   status: z.enum(TAG_STATUSES).optional(),
+  stockStatus: z.enum(TAG_STOCK_STATUSES).optional(),
   productType: z.enum(TAG_PRODUCT_TYPES).optional(),
   leadId: z.coerce.number().int().positive().optional(),
   batchId: z.string().uuid().optional(),
@@ -668,6 +670,18 @@ export function registerTagRoutes(app: Express) {
       res.json(await repo.getTagDetail(id, tagBaseUrl()));
     } catch (err) {
       fail(res, err, "Failed to return piece to stock");
+    }
+  });
+
+  app.post(`${adminBase}/:id/damage`, requireTagManager, async (req, res) => {
+    const id = idParam(req, res);
+    if (!id) return;
+    try {
+      const { reason } = z.object({ reason: z.string().trim().min(1).max(300) }).strict().parse(req.body);
+      await repo.markTagDamaged(id, reason, userIdOf(req));
+      res.json(await repo.getTagDetail(id, tagBaseUrl()));
+    } catch (err) {
+      fail(res, err, "Failed to mark piece damaged");
     }
   });
 

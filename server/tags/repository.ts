@@ -85,6 +85,7 @@ export async function recordTagEvent(event: InsertTagEvent): Promise<void> {
 
 export interface TagListFilters {
   status?: string;
+  stockStatus?: string;
   productType?: string;
   leadId?: number;
   batchId?: string;
@@ -218,6 +219,7 @@ function tagListQuery(where: SQL, limit: number): SQL {
 export async function listTags(filters: TagListFilters): Promise<TagListItem[]> {
   const conds: SQL[] = [sql`true`];
   if (filters.status) conds.push(sql`t.status = ${filters.status}`);
+  if (filters.stockStatus) conds.push(sql`t.stock_status = ${filters.stockStatus}`);
   if (filters.productType) conds.push(sql`t.product_type = ${filters.productType}`);
   if (filters.leadId !== undefined) conds.push(sql`t.lead_id = ${filters.leadId}`);
   if (filters.batchId) conds.push(sql`t.batch_id = ${filters.batchId}`);
@@ -1278,6 +1280,61 @@ export async function returnInternalTagToStock(
   return updated;
 }
 
+/**
+ * Remove a failed physical piece from usable stock while retaining its code,
+ * batch and movement history for manufacturing quality-control reporting.
+ */
+export async function markTagDamaged(
+  id: string,
+  reason: string,
+  userId: string | null,
+  source: JourneySource = "admin",
+) {
+  const now = new Date();
+  let beforeStockStatus = "";
+  const updated = await db.transaction(async (tx) => {
+    const tag = await lockTag(tx, id);
+    beforeStockStatus = tag.stockStatus;
+    if (tag.status !== "inventory" || tag.repId !== null || tag.leadId !== null) {
+      throw new TagError("Only unassigned company stock can be marked damaged", 409);
+    }
+    if (tag.stockStatus === "damaged") throw new TagError("This piece is already marked damaged", 409);
+    if (tag.stockStatus !== "available" && tag.stockStatus !== "pending") {
+      throw new TagError(`A piece in ${tag.stockStatus} stock cannot be marked damaged`, 409);
+    }
+    const [next] = await tx.update(tags).set({
+      stockStatus: "damaged",
+      internalUseNote: null,
+      stockUpdatedAt: now,
+      updatedAt: now,
+    }).where(eq(tags.id, id)).returning();
+    await tx.insert(tagStockMovements).values({
+      tagId: tag.id,
+      movementType: "damage",
+      fromStockStatus: tag.stockStatus,
+      toStockStatus: next.stockStatus,
+      fromOwnershipType: tag.ownershipType,
+      toOwnershipType: next.ownershipType,
+      fromCustodianRepId: tag.custodianRepId,
+      toCustodianRepId: next.custodianRepId,
+      actorUserId: userId,
+      reason,
+    });
+    return next;
+  });
+  await recordJourney({
+    kind: "execution",
+    action: "piece_damaged",
+    title: `Piece ${updated.publicCode} marked damaged`,
+    content: reason,
+    tagId: updated.id,
+    batchId: updated.batchId,
+    beforeValue: beforeStockStatus,
+    afterValue: "damaged",
+  }, journeyContext(userId, source));
+  return updated;
+}
+
 export async function setBatchIntakeStatus(
   id: string,
   status: "open" | "closed",
@@ -1563,18 +1620,18 @@ export async function getOverview(now: Date = new Date(), timezoneOffsetMinutes 
   const since30 = new Date(now.getTime() - 30 * 86_400_000);
 
   const statusRows = await rows<{ status: string; count: number }>(sql`
-    SELECT status, count(*)::int AS count
-    FROM tags GROUP BY status
+    SELECT CASE WHEN stock_status = 'damaged' THEN 'damaged' ELSE status END AS status, count(*)::int AS count
+    FROM tags GROUP BY CASE WHEN stock_status = 'damaged' THEN 'damaged' ELSE status END
   `);
   const [stockRow] = await rows<{ house: number; with_resellers: number }>(sql`
     SELECT
       count(*) FILTER (WHERE t.rep_id IS NULL)::int AS house,
       count(*) FILTER (WHERE t.rep_id IS NOT NULL)::int AS with_resellers
     FROM tags t
-    WHERE t.status <> 'retired'
+    WHERE t.status <> 'retired' AND t.stock_status = 'available'
       AND NOT EXISTS (SELECT 1 FROM sales_sale_tags st WHERE st.tag_id = t.id AND st.status = 'active')
   `);
-  const counts: TagOverview["counts"] = { total: 0, inventory: 0, assigned: 0, active: 0, disabled: 0, retired: 0 };
+  const counts: TagOverview["counts"] = { total: 0, inventory: 0, assigned: 0, active: 0, disabled: 0, retired: 0, damaged: 0 };
   const stock = { house: Number(stockRow?.house ?? 0), withResellers: Number(stockRow?.with_resellers ?? 0) };
   for (const r of statusRows) {
     counts.total += Number(r.count);
@@ -1697,7 +1754,7 @@ export async function getTagDashboard(repId: number | null, days = 30, now: Date
 
   const [totals] = await rows<{ in_stock: number; active: number; sold: number; missing: number }>(sql`
     SELECT
-      count(*) FILTER (WHERE t.status = 'inventory')::int AS in_stock,
+      count(*) FILTER (WHERE t.status = 'inventory' AND t.stock_status = 'available')::int AS in_stock,
       count(*) FILTER (WHERE t.status = 'active')::int AS active,
       count(*) FILTER (WHERE t.sold_at >= ${since})::int AS sold,
       count(*) FILTER (WHERE t.status IN ('assigned', 'active') AND t.nfc_provisioning_status IN ('not_programmed', 'failed'))::int AS missing

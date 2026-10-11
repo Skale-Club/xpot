@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Archive, ArrowLeft, Building2, ChevronRight, Download, ExternalLink, MapPin, Pencil, Plus, Power, PowerOff, RotateCcw, Truck, Undo2 } from "lucide-react";
+import { AlertTriangle, Archive, ArrowLeft, Ban, Building2, ChevronRight, Download, ExternalLink, MapPin, Pencil, Plus, Power, PowerOff, RotateCcw, Truck, Undo2 } from "lucide-react";
 import { defaultUtmEnabled, planTransition, type TagAction } from "@shared/tags";
 import { contentKindOf, contentSummary, validateChipContent, type ChipContentKind } from "@shared/chipContent";
 import { guessDestinationType, normalizeUrlInput } from "@shared/tagApp";
@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { AdminHttpError, ADMIN_TAGS_KEY, errorMessage, formatDateTime, getJson, invalidateAdminTags, sendJson, STALE_MS } from "./api";
-import { BTN, BTN_DANGER, BTN_GHOST, CARD, INPUT, StatusPill } from "./ui";
+import { BTN, BTN_DANGER, BTN_GHOST, CARD, INPUT, PieceStatusPill } from "./ui";
 import { CopyRow, Loading, LoadError, Select, useLeads, useReps } from "./pieces-shared";
 import { useTagLabels } from "./labels";
 import { AnalyticsPanel, RangePicker, type AnalyticsRange } from "./pieces-analytics";
@@ -70,7 +70,7 @@ function CustomerStep({ tag }: { tag: TagDetail }) {
   // A pick that would wipe the current destination waits here for a confirm.
   const [pending, setPending] = useState<CustomerPick | null>(null);
   const assign = usePieceMutation(tag.id, t("customerAssigned"));
-  const locked = tag.status === "retired";
+  const locked = tag.status === "retired" || tag.stockStatus === "damaged";
   // The server refuses to move a live piece; don't create a lead that would be left orphaned.
   const liveWithCustomer = tag.status === "active" && !!tag.leadId;
   const hasCustomer = !!(tag.leadName || tag.leadId);
@@ -234,7 +234,7 @@ function DestinationStep({ tag }: { tag: TagDetail }) {
   const [utmCampaign, setUtmCampaign] = useState(tag.utmCampaign ?? "");
   const [reason, setReason] = useState("");
   const save = usePieceMutation(tag.id, t("destinationSaved"));
-  const locked = tag.status === "retired";
+  const locked = tag.status === "retired" || tag.stockStatus === "damaged";
   const customer = tag.leadId ? leads.find((l) => l.id === tag.leadId) : undefined;
 
   // A link, or an email/phone/vCard from the kind tabs (shared/chipContent.ts).
@@ -373,9 +373,10 @@ function DestinationStep({ tag }: { tag: TagDetail }) {
 // ─── Lifecycle ────────────────────────────────────────────────────────────────
 
 type LifecycleAction = Exclude<TagAction, "assign">;
+type PieceAction = LifecycleAction | "damage";
 
 /** Title, description and button are action_<action>_title / _description / _confirm. */
-const DANGER_ACTIONS: ReadonlySet<LifecycleAction> = new Set<LifecycleAction>(["disable", "unassign", "retire"]);
+const DANGER_ACTIONS: ReadonlySet<PieceAction> = new Set<PieceAction>(["disable", "unassign", "retire", "damage"]);
 
 /** Why a piece cannot go live yet (planTransition's reason, in the language in use). */
 function activateBlockerKey(tag: TagDetail): PieceKey {
@@ -385,11 +386,12 @@ function activateBlockerKey(tag: TagDetail): PieceKey {
 }
 
 /** Activate/disable live on the field API (managers may act on any piece); the rest on the admin API. */
-function actionUrl(id: string, action: LifecycleAction): string {
+function actionUrl(id: string, action: PieceAction): string {
+  if (action === "damage") return `/api/xpot/admin/tags/${id}/damage`;
   return action === "activate" || action === "disable" ? `/api/xpot/tags/${id}/${action}` : `/api/xpot/admin/tags/${id}/${action}`;
 }
 
-function ActionDialog({ action, onClose, onConfirm, pending }: { action: LifecycleAction | null; onClose: () => void; onConfirm: (reason: string) => void; pending: boolean }) {
+function ActionDialog({ action, onClose, onConfirm, pending }: { action: PieceAction | null; onClose: () => void; onConfirm: (reason: string) => void; pending: boolean }) {
   const t = useT(manageTagsPiecesMessages);
   const tc = useT(commonMessages);
   const [reason, setReason] = useState("");
@@ -414,7 +416,7 @@ function ActionDialog({ action, onClose, onConfirm, pending }: { action: Lifecyc
           <button
             type="button"
             className={action && DANGER_ACTIONS.has(action) ? BTN_DANGER : BTN}
-            disabled={pending}
+            disabled={pending || (action === "damage" && !reason.trim())}
             onClick={() => {
               onConfirm(reason);
               setReason("");
@@ -432,9 +434,11 @@ function ActionDialog({ action, onClose, onConfirm, pending }: { action: Lifecyc
 function LifecycleStep({ tag }: { tag: TagDetail }) {
   const t = useT(manageTagsPiecesMessages);
   const run = usePieceMutation(tag.id, t("pieceUpdated"));
-  const [pending, setPending] = useState<LifecycleAction | null>(null);
+  const [pending, setPending] = useState<PieceAction | null>(null);
   const can = (action: LifecycleAction) => planTransition(tag, action).ok;
   const activatePlan = planTransition(tag, "activate");
+  const damaged = tag.stockStatus === "damaged";
+  const canDamage = tag.status === "inventory" && tag.repId === null && tag.leadId === null && (tag.stockStatus === "available" || tag.stockStatus === "pending");
 
   const confirm = (reason: string) => {
     if (!pending) return;
@@ -444,39 +448,50 @@ function LifecycleStep({ tag }: { tag: TagDetail }) {
   return (
     <div className="space-y-3">
       <p className={STEP_TITLE}>{t("stepLive")}</p>
+      {damaged ? (
+        <div className="flex items-start gap-2 rounded-xl border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-200" data-testid="admin-piece-damaged-banner">
+          <Ban className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{t("damagedExplain")}</span>
+        </div>
+      ) : null}
       <div className="flex flex-wrap gap-2">
         {tag.destinationUrl ? (
           <button type="button" className={BTN_GHOST} onClick={() => tag.destinationUrl && window.open(tag.destinationUrl, "_blank", "noopener,noreferrer")}>
             <ExternalLink className="h-3.5 w-3.5" />{t("testDestination")}
           </button>
         ) : null}
-        {tag.status !== "active" && tag.status !== "retired" ? (
+        {!damaged && tag.status !== "active" && tag.status !== "retired" ? (
           <button type="button" className={BTN} disabled={!activatePlan.ok || run.isPending} onClick={() => setPending("activate")} data-testid="admin-piece-activate">
             <Power className="h-3.5 w-3.5" />{t("action_activate_confirm")}
           </button>
         ) : null}
-        {can("disable") ? (
+        {!damaged && can("disable") ? (
           <button type="button" className={BTN_GHOST} disabled={run.isPending} onClick={() => setPending("disable")} data-testid="admin-piece-disable">
             <PowerOff className="h-3.5 w-3.5" />{t("action_disable_confirm")}
           </button>
         ) : null}
-        {can("unassign") ? (
+        {!damaged && can("unassign") ? (
           <button type="button" className={BTN_GHOST} disabled={run.isPending} onClick={() => setPending("unassign")}>
             <Undo2 className="h-3.5 w-3.5" />{t("action_unassign_confirm")}
           </button>
         ) : null}
-        {can("retire") ? (
+        {!damaged && can("retire") ? (
           <button type="button" className={BTN_DANGER} disabled={run.isPending} onClick={() => setPending("retire")}>
             <Archive className="h-3.5 w-3.5" />{t("action_retire_confirm")}
           </button>
         ) : null}
-        {can("restore") ? (
+        {!damaged && can("restore") ? (
           <button type="button" className={BTN_GHOST} disabled={run.isPending} onClick={() => setPending("restore")}>
             <RotateCcw className="h-3.5 w-3.5" />{t("action_restore_confirm")}
           </button>
         ) : null}
+        {canDamage ? (
+          <button type="button" className={BTN_DANGER} disabled={run.isPending} onClick={() => setPending("damage")} data-testid="admin-piece-damage">
+            <Ban className="h-3.5 w-3.5" />{t("action_damage_confirm")}
+          </button>
+        ) : null}
       </div>
-      {tag.status !== "active" && tag.status !== "retired" && !activatePlan.ok ? <p className="text-xs text-white/40">{t(activateBlockerKey(tag))}</p> : null}
+      {!damaged && tag.status !== "active" && tag.status !== "retired" && !activatePlan.ok ? <p className="text-xs text-white/40">{t(activateBlockerKey(tag))}</p> : null}
       {tag.status === "active" ? <p className="text-xs text-emerald-400">{t("liveExplain")}</p> : null}
       <ActionDialog action={pending} onClose={() => setPending(null)} onConfirm={confirm} pending={run.isPending} />
     </div>
@@ -494,7 +509,7 @@ function DetailsStep({ tag }: { tag: TagDetail }) {
   const [face, setFace] = useState<string | undefined>(tag.ownFace ?? undefined);
   const save = usePieceMutation(tag.id, t("pieceSaved"));
   const dirty = label.trim() !== (tag.label ?? "") || productType !== tag.productType || (face ?? null) !== tag.ownFace;
-  if (tag.status === "retired") return null;
+  if (tag.status === "retired" || tag.stockStatus === "damaged") return null;
   return (
     <details className="group space-y-3">
       <summary className="flex cursor-pointer list-none items-center gap-1.5 text-sm font-semibold text-white/70 hover:text-white">
@@ -554,7 +569,7 @@ function ResellerField({ tag }: { tag: TagDetail }) {
       </p>
       <div className="flex gap-2">
         <Select value={choice} onChange={(v) => setChoice(v ?? HOUSE)} placeholder={t("houseStock")} options={options} allowEmpty={false} testId="admin-piece-rep" />
-        <button type="button" className={`${BTN_GHOST} shrink-0`} disabled={choice === current || move.isPending} onClick={submit} data-testid="admin-piece-rep-move">
+        <button type="button" className={`${BTN_GHOST} shrink-0`} disabled={tag.stockStatus === "damaged" || choice === current || move.isPending} onClick={submit} data-testid="admin-piece-rep-move">
           <Truck className="h-3.5 w-3.5" />{t("move")}
         </button>
       </div>
@@ -621,7 +636,7 @@ export function PieceDetail({ id, go }: { id: string; go: Go }) {
         <div className="min-w-0 flex-1 space-y-1.5">
           <div className="flex flex-wrap items-center gap-2.5">
             <h2 className="font-mono text-xl font-bold tracking-wider text-white sm:text-2xl" data-testid="admin-piece-code">{tag.publicCode}</h2>
-            <StatusPill status={tag.status} />
+            <PieceStatusPill status={tag.status} stockStatus={tag.stockStatus} />
           </div>
           <div className="flex flex-wrap items-center gap-y-1 text-sm text-white/50">
             {tagPlaqueSpec(tag.productType, tag.face, tag.batchCode).model ? (
@@ -710,7 +725,7 @@ export function PieceDetail({ id, go }: { id: string; go: Go }) {
 
       {/* Writing the chip is the global admin's (NFC writers); managers don't get the card. */}
       {isAdmin && (
-        <NfcProvisioningCard tagId={tag.id} publicCode={tag.publicCode} nfcUrl={tag.nfcUrl} retired={tag.status === "retired"} onOpenWriters={() => go("/provisioners")} />
+        <NfcProvisioningCard tagId={tag.id} publicCode={tag.publicCode} nfcUrl={tag.nfcUrl} retired={tag.status === "retired" || tag.stockStatus === "damaged"} onOpenWriters={() => go("/provisioners")} />
       )}
 
       {/* Admin only: renders nothing (and sends no request) for managers. */}

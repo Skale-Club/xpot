@@ -89,7 +89,7 @@ export interface TagAnalytics {
 }
 
 export interface TagOverview {
-  counts: Record<"total" | "inventory" | "assigned" | "active" | "disabled" | "retired", number>;
+  counts: Record<"total" | "inventory" | "assigned" | "active" | "disabled" | "retired" | "damaged", number>;
   /** Unsold pieces still in house stock vs. out with resellers. */
   stock: { house: number; withResellers: number };
   interactions: { today: number; last7: number; last30: number };

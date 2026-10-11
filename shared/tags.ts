@@ -262,6 +262,9 @@ export function planTransition(
   if (tag.stockStatus === "pending" && (action === "assign" || action === "activate")) {
     return { ok: false, error: PENDING_PIECE_ERROR };
   }
+  if (["damaged", "lost", "retired"].includes(tag.stockStatus ?? "") && (action === "assign" || action === "activate")) {
+    return { ok: false, error: `A piece in ${tag.stockStatus} stock cannot be ${action === "assign" ? "assigned" : "activated"}` };
+  }
   switch (action) {
     case "assign":
       if (status === "retired") return { ok: false, error: "A retired tag cannot be assigned" };

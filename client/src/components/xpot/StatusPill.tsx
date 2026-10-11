@@ -24,6 +24,7 @@ export const PILL_TONES: Record<PillTone, string> = {
 /** A piece: in stock → with a customer → live ⇄ switched off → retired. */
 export const PIECE_STATUS_TONE: Record<string, PillTone> = {
   inventory: "slate",
+  damaged: "red",
   assigned: "amber",
   active: "green",
   disabled: "red",

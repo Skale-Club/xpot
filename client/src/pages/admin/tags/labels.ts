@@ -38,7 +38,7 @@ export function useTagLabels() {
     const destinationOptions: Option[] = TAG_DESTINATION_TYPES.map((value) => ({ value, label: destination(value) }));
     /** What can be printed on a piece; a picker's empty option means "use the batch's / product's". */
     const faceOptions: Option[] = TAG_FACES.map((value) => ({ value, label: face(value) }));
-    const statusOptions: Option[] = TAG_STATUSES.map((value) => ({ value, label: status(value) }));
+    const statusOptions: Option[] = [...TAG_STATUSES, "damaged"].map((value) => ({ value, label: status(value) }));
     const batchStatusOptions: Option[] = TAG_BATCH_STATUSES.map((value) => ({ value, label: batchStatus(value) }));
     /** A reseller in a picker, flagged when switched off. */
     const repOption = (r: { displayName: string; isActive: boolean }) => (r.isActive ? r.displayName : t("repOff", { name: r.displayName }));

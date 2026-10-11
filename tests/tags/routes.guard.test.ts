@@ -38,6 +38,7 @@ test("tag endpoints refuse anonymous callers", async () => {
       ["PATCH", `/api/xpot/admin/tags/${ID}`],
       ["POST", `/api/xpot/admin/tags/${ID}/internal-use`],
       ["POST", `/api/xpot/admin/tags/${ID}/return-to-stock`],
+      ["POST", `/api/xpot/admin/tags/${ID}/damage`],
       ["POST", `/api/xpot/admin/tags/${ID}/assign`],
       ["POST", `/api/xpot/admin/tags/${ID}/unassign`],
       ["POST", `/api/xpot/admin/tags/${ID}/retire`],

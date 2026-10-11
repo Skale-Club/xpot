@@ -77,6 +77,7 @@ test("UTMs are only appended when enabled, and off by default for Google Review"
 test("state machine: inventory → assigned → active ⇄ disabled → retired", () => {
   const base = { leadId: null as number | null, destinationUrl: null as string | null, destinationType: null as string | null };
   assert.deepEqual(planTransition({ ...base, status: "inventory" }, "assign"), { ok: true, status: "assigned" });
+  assert.equal(planTransition({ ...base, status: "inventory", stockStatus: "damaged" }, "assign").ok, false);
   assert.equal(planTransition({ ...base, status: "inventory" }, "activate").ok, false);
 
   const assigned = { status: "assigned", leadId: 1, destinationUrl: null, destinationType: null };

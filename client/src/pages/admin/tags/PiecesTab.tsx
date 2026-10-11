@@ -10,7 +10,7 @@ import { TagModelChips, TagPieceVisual } from "@/components/xpot/TagProductThumb
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { ADMIN_TAGS_KEY, errorMessage, formatDateTime, getJson, invalidateAdminTags, sendJson, STALE_MS, withQuery } from "./api";
-import { BTN, BTN_GHOST, CARD, Empty, INPUT, StatusPill, TD, TH } from "./ui";
+import { BTN, BTN_GHOST, CARD, Empty, INPUT, PieceStatusPill, TD, TH } from "./ui";
 import { Loading, LoadError, Select, useBatchOptions, useLeads, useReps } from "./pieces-shared";
 import { useTagLabels } from "./labels";
 import { useT } from "@/i18n";
@@ -48,6 +48,7 @@ const posInt = (v: string | undefined) => (v && /^\d+$/.test(v) && Number(v) > 0
 function listUrl(f: Filters): string {
   return withQuery("/api/xpot/tags", {
     status: f.status && (TAG_STATUSES as readonly string[]).includes(f.status) ? f.status : undefined,
+    stockStatus: f.status === "damaged" ? "damaged" : f.status === "inventory" ? "available" : undefined,
     productType: f.product && (TAG_PRODUCT_TYPES as readonly string[]).includes(f.product) ? f.product : undefined,
     house: f.rep === "house" ? "1" : undefined,
     repId: f.rep !== "house" ? posInt(f.rep) : undefined,
@@ -138,7 +139,7 @@ function PiecesTable({ tags, onOpen }: { tags: TagListItem[]; onOpen: (id: strin
                   <TagPieceVisual productType={t.productType} face={t.face} />
                   <span className="font-mono font-semibold text-white">{t.publicCode}</span>
                 </span>
-                <StatusPill status={t.status} />
+                <PieceStatusPill status={t.status} stockStatus={t.stockStatus} />
               </div>
               <div className="mt-1.5 text-xs text-white/50">
                 {t.face ? <span className="mr-1.5 text-white/80">{labels.face(t.face)}</span> : null}
@@ -189,7 +190,7 @@ function PiecesTable({ tags, onOpen }: { tags: TagListItem[]; onOpen: (id: strin
                   {t.face ? <span className="mb-1 block text-sm text-white/85">{labels.face(t.face)}</span> : null}
                   <TagModelChips productType={t.productType} face={t.face} batchCode={t.batchCode} fallback={labels.product(t.productType)} />
                 </td>
-                <td className={`${TD} text-center`}><StatusPill status={t.status} /></td>
+                <td className={`${TD} text-center`}><PieceStatusPill status={t.status} stockStatus={t.stockStatus} /></td>
                 <td className={`${TD} max-w-[180px] truncate`}>{t.leadName ?? <span className="text-white/30">—</span>}</td>
                 <td className={`${TD} max-w-[160px] truncate`}>{t.repName ?? <span className="text-white/40">{tg("house")}</span>}</td>
                 <td className={TD}>{labels.destination(t.destinationType)}</td>
@@ -239,7 +240,10 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
 
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    for (const t of tags) counts[t.status] = (counts[t.status] ?? 0) + 1;
+    for (const t of tags) {
+      const status = t.stockStatus === "damaged" ? "damaged" : t.status;
+      counts[status] = (counts[status] ?? 0) + 1;
+    }
     return counts;
   }, [tags]);
   const houseCount = useMemo(() => tags.filter((t) => t.repId === null).length, [tags]);

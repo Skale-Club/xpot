@@ -43,6 +43,11 @@ export function StatusPill({ status }: { status: string }) {
   return <Pill tone={PIECE_STATUS_TONE[status] ?? "slate"}>{label === key ? status : label}</Pill>;
 }
 
+/** Physical stock state takes precedence when the piece cannot be used. */
+export function PieceStatusPill({ status, stockStatus }: { status: string; stockStatus: string }) {
+  return <StatusPill status={stockStatus === "damaged" ? "damaged" : status} />;
+}
+
 export function Empty({ children }: { children: ReactNode }) {
   return <div className={`${CARD} px-6 py-10 text-center text-sm text-white/40`}>{children}</div>;
 }

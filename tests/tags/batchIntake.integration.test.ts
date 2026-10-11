@@ -147,6 +147,40 @@ describe("batch intake API", () => {
     ]);
   });
 
+  it("marks failed prints as damaged stock and retains an auditable quality-control sample", async () => {
+    const app = appForAdmin();
+    const batch = await createBatch(app, "Quality sample");
+    const scan = await request(app, "POST", `/api/xpot/admin/tag-batches/${batch.body.id}/scan`, { value: "ABY74NEB" });
+    const tagId = scan.body.tag.id;
+
+    const missingReason = await request(app, "POST", `/api/xpot/admin/tags/${tagId}/damage`, { reason: "" });
+    expect(missingReason.status).toBe(400);
+
+    const damaged = await request(app, "POST", `/api/xpot/admin/tags/${tagId}/damage`, { reason: "Print ruined during production" });
+    expect(damaged.status).toBe(200);
+    expect(damaged.body).toMatchObject({ publicCode: "ABY74NEB", status: "inventory", stockStatus: "damaged" });
+    expect((await batchItem(app, batch.body.id))).toMatchObject({ houseCount: 0 });
+
+    expect(await q("SELECT movement_type, from_stock_status, to_stock_status, reason FROM tag_stock_movements WHERE tag_id = $1 ORDER BY created_at", [tagId])).toEqual([
+      { movement_type: "intake", from_stock_status: null, to_stock_status: "available", reason: null },
+      { movement_type: "damage", from_stock_status: "available", to_stock_status: "damaged", reason: "Print ruined during production" },
+    ]);
+    expect((await q("SELECT action, before_value, after_value, content FROM tag_journey_entries WHERE tag_id = $1 ORDER BY occurred_at DESC LIMIT 1", [tagId]))[0]).toEqual({
+      action: "piece_damaged",
+      before_value: "available",
+      after_value: "damaged",
+      content: "Print ruined during production",
+    });
+
+    const filtered = await request(app, "GET", "/api/xpot/tags?stockStatus=damaged");
+    expect(filtered.status).toBe(200);
+    expect(filtered.body.map((tag: any) => tag.publicCode)).toEqual(["ABY74NEB"]);
+
+    const overview = await request(app, "GET", "/api/xpot/admin/tags/overview");
+    expect(overview.body.counts).toMatchObject({ total: 1, inventory: 0, damaged: 1 });
+    expect(overview.body.stock).toEqual({ house: 0, withResellers: 0 });
+  });
+
   it("rejects a code already registered in another batch and scans into a closed batch", async () => {
     const app = appForAdmin();
     const first = await createBatch(app, "First");

@@ -105,12 +105,13 @@ export function OverviewTab({ go }: { go: (path: string) => void }) {
         <SectionTitle right={<button type="button" className={LINK} onClick={() => go("/pieces")}>{ts("managePieces")} <ArrowRight className="h-3 w-3" /></button>}>
           {t("ovLifecycle")}
         </SectionTitle>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           <StatButton label={labels.status("inventory")} value={counts.inventory} hint={t("ovInventoryHint")} onClick={() => go("/pieces?status=inventory")} />
           <StatButton label={labels.status("assigned")} value={counts.assigned} hint={t("ovAssignedHint")} onClick={() => go("/pieces?status=assigned")} />
           <StatButton label={labels.status("active")} value={counts.active} hint={t("ovActiveHint")} onClick={() => go("/pieces?status=active")} />
           <StatButton label={labels.status("disabled")} value={counts.disabled} onClick={() => go("/pieces?status=disabled")} />
           <StatButton label={labels.status("retired")} value={counts.retired} onClick={() => go("/pieces?status=retired")} />
+          <StatButton label={labels.status("damaged")} value={counts.damaged} onClick={() => go("/pieces?status=damaged")} />
         </div>
       </section>
 

@@ -42,9 +42,10 @@ interface BatchDetailData {
 const FILTERS = [
   { id: "all", label: "filterAll", test: () => true },
   { id: "pending", label: "pendingPieces", test: isPendingPiece },
+  { id: "damaged", label: "damaged", test: (t: TagListItem) => t.stockStatus === "damaged" },
   { id: "house", label: "houseStock", test: isHouseStock },
-  { id: "resellers", label: "withResellers", test: (t: TagListItem) => t.repId !== null },
-  { id: "sold", label: "sold", test: (t: TagListItem) => t.status !== "inventory" },
+  { id: "resellers", label: "withResellers", test: isUnsoldWithReseller },
+  { id: "sold", label: "sold", test: (t: TagListItem) => t.status !== "inventory" && t.stockStatus === "sold" },
   { id: "live", label: "live", test: (t: TagListItem) => t.status === "active" },
 ] as const;
 type FilterId = (typeof FILTERS)[number]["id"];
@@ -243,6 +244,7 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
   const withResellers = pieces.filter((p) => p.repId !== null).length;
   const unsoldInKits = pieces.filter(isUnsoldWithReseller).length;
   const sold = pieces.filter((p) => p.status !== "inventory").length;
+  const damaged = pieces.filter((p) => p.stockStatus === "damaged").length;
   const live = pieces.filter((p) => p.status === "active").length;
   const chipsVerified = pieces.filter((p) => p.nfcStatus === "verified" || p.nfcStatus === "locked").length;
   const exportBase = `/api/xpot/admin/tag-batches/${encodeURIComponent(batch.id)}`;
@@ -306,10 +308,11 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
 
       <BatchIntakePanel batch={batch} />
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <Stat label={t("houseStock")} value={house} hint={t.plural("houseShare", total, { percent: percent(house, total) })} />
         <Stat label={t("withResellers")} value={withResellers} hint={t.plural("unsoldInKits", unsoldInKits)} />
         <Stat label={t("sold")} value={sold} hint={t.plural("liveCount", live)} />
+        <Stat label={t("damaged")} value={damaged} hint={t("qualityControlSample")} />
         <Stat label={t("nfcVerified")} value={chipsVerified} hint={t("chipsShare", { percent: percent(chipsVerified, total) })} />
       </div>
 
