@@ -7,6 +7,7 @@ import {
 } from "#shared/schema.js";
 import {
   TODAY_PROSPECTING_POLICY,
+  targetStopsForShift,
   type ProspectingJobCreateInput,
 } from "#shared/prospecting.js";
 import { isEngineConfigured } from "./google-maps-engine.js";
@@ -68,8 +69,8 @@ export async function createProspectingJobForRep(repId: number, input: Prospecti
       location: input.location,
       searches: input.searches,
       maxResultsPerSearch: TODAY_PROSPECTING_POLICY.maxResultsPerSearch,
-      targetStops: TODAY_PROSPECTING_POLICY.targetStops,
-      shiftDurationMinutes: TODAY_PROSPECTING_POLICY.shiftDurationMinutes,
+      targetStops: targetStopsForShift(input.shiftDurationMinutes),
+      shiftDurationMinutes: input.shiftDurationMinutes,
       defaultVisitMinutes: TODAY_PROSPECTING_POLICY.defaultVisitMinutes,
       autoExpand: TODAY_PROSPECTING_POLICY.autoExpand,
       maxExpansionKm: TODAY_PROSPECTING_POLICY.maxExpansionKm,

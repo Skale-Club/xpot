@@ -138,6 +138,36 @@ after its final open stop.
 | PATCH | `/api/xpot/prospecting/routes/:id/status` | Publish, start, complete or cancel a route |
 | PATCH | `/api/xpot/prospecting/routes/:routeId/stops/:stopId` | Record stop execution and optional visit link |
 
+## Google route optimization
+
+The daily route is calculated by the Google Route Optimization API when
+`GOOGLE_ROUTE_OPTIMIZATION_PROJECT_ID` is configured. Xpot sends one vehicle,
+the seller's current position, the selected shift boundary, every eligible
+candidate, and a 20-minute service duration for each visit. Road travel time,
+traffic, visit order, return travel, and the encoded road polyline come back in
+one response. The old deterministic Haversine optimizer remains available only
+for local environments where Google is not configured.
+
+Xpot persists the response before presenting it. A unique database index on
+`(rep_id, route_date)` and an API reuse check enforce **one optimization per
+seller per day**. Browser refreshes, retries, a second scrape, and route publish
+actions reuse that row and cannot generate a second Google optimization. The
+web map renders the stored encoded polyline with a referrer-restricted Maps
+JavaScript key; it does not call Directions or optimize the route again.
+
+Required deployment variables:
+
+- `GOOGLE_ROUTE_OPTIMIZATION_PROJECT_ID`
+- one of `GOOGLE_ROUTE_OPTIMIZATION_CREDENTIALS_FILE` (preferred) or
+  `GOOGLE_ROUTE_OPTIMIZATION_CREDENTIALS_JSON`
+- `VITE_GOOGLE_MAPS_API_KEY` at client build time
+
+The Google Cloud project should enable Route Optimization API and Maps
+JavaScript API. Keep the service-account JSON in the platform secret store, not
+in Git. Restrict the browser key to the production origins and Maps JavaScript
+API. Billing budgets are alerts, not hard caps; Xpot's daily uniqueness rule is
+the cost-control boundary.
+
 All endpoints are rep-scoped and protected by the Visits module gate. Managers do not silently gain
 access to another customer's queue or route through these endpoints.
 

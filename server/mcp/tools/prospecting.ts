@@ -74,16 +74,17 @@ export function registerProspectingTools(server: McpServer, caller: McpCaller) {
 
   server.tool(
     "prospecting_create_today",
-    "Start one cold-prospecting discovery job in the Xpot account that authorized this MCP connection. `location` is the city/territory and `sectors` contains 1-5 business types. Xpot applies the standard eight-hour-day policy, removes existing customers and previously visited places, and may expand into a nearby area if the city is too small. Returns the persisted job and physical engine runs. Use an idempotencyKey when retrying the same request.",
+    "Start one cold-prospecting discovery job in the Xpot account that authorized this MCP connection. `location` is the city/territory, `sectors` contains 1-5 business types, and `shiftHours` is 2, 4, 6, 8, 10, or 12 (default 8). Xpot removes conflicts and may expand into a nearby area if the city is too small. Returns the persisted job and physical engine runs. Use an idempotencyKey when retrying the same request.",
     {
       location: z.string().trim().min(2).max(500),
       sectors: z.array(z.string().trim().min(2).max(120)).min(1).max(5),
+      shiftHours: z.union([z.literal(2), z.literal(4), z.literal(6), z.literal(8), z.literal(10), z.literal(12)]).default(8),
       idempotencyKey: z.string().trim().min(8).max(200).optional(),
     },
-    async ({ location, sectors, idempotencyKey }) => run("prospecting_create_today", async () => {
+    async ({ location, sectors, shiftHours, idempotencyKey }) => run("prospecting_create_today", async () => {
       const rep = await repForCaller(caller);
       const searches = sectors.map((query) => ({ query, niche: nicheForSector(query) }));
-      const input = prospectingJobCreateSchema.parse({ location, searches, idempotencyKey });
+      const input = prospectingJobCreateSchema.parse({ location, searches, shiftDurationMinutes: shiftHours * 60, idempotencyKey });
       const result = await createProspectingJobForRep(rep.id, input);
       if (!result.details) throw new ProspectingServiceError("The prospecting job could not be loaded after creation.", 500);
       return { ...compactDetails(result.details), reused: result.reused };

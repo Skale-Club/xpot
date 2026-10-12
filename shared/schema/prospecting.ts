@@ -1,5 +1,4 @@
 import { boolean, index, integer, jsonb, pgEnum, pgTable, serial, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
-import { sql } from "drizzle-orm";
 import { salesLeads, salesReps, salesVisits } from "./sales.js";
 
 export const prospectingJobStatusEnum = pgEnum("prospecting_job_status", [
@@ -59,7 +58,7 @@ export const prospectingJobs = pgTable("prospecting_jobs", {
   location: text("location").notNull(),
   searches: jsonb("searches").$type<ProspectingSearchSpec[]>().notNull().default([]),
   maxResultsPerSearch: integer("max_results_per_search").notNull().default(30),
-  targetStops: integer("target_stops").notNull().default(12),
+  targetStops: integer("target_stops").notNull().default(24),
   shiftDurationMinutes: integer("shift_duration_minutes").notNull().default(480),
   defaultVisitMinutes: integer("default_visit_minutes").notNull().default(20),
   autoExpand: boolean("auto_expand").notNull().default(true),
@@ -158,7 +157,7 @@ export const prospectingRoutes = pgTable("prospecting_routes", {
   endAddress: text("end_address"),
   endLat: text("end_lat"),
   endLng: text("end_lng"),
-  maxStops: integer("max_stops").notNull().default(12),
+  maxStops: integer("max_stops").notNull().default(60),
   defaultVisitMinutes: integer("default_visit_minutes").notNull().default(20),
   totalDistanceMeters: integer("total_distance_meters").notNull().default(0),
   totalDurationSeconds: integer("total_duration_seconds").notNull().default(0),
@@ -171,9 +170,8 @@ export const prospectingRoutes = pgTable("prospecting_routes", {
 }, (table) => ({
   repDateIdx: index("prospecting_routes_rep_date_idx").on(table.repId, table.routeDate),
   statusIdx: index("prospecting_routes_status_idx").on(table.status),
-  activeJobDateIdx: uniqueIndex("prospecting_routes_active_job_date_unique")
-    .on(table.repId, table.jobId, table.routeDate)
-    .where(sql`${table.jobId} is not null and ${table.status} <> 'cancelled'`),
+  repDateUniqueIdx: uniqueIndex("prospecting_routes_rep_date_unique")
+    .on(table.repId, table.routeDate),
 }));
 
 export const prospectingRouteStops = pgTable("prospecting_route_stops", {

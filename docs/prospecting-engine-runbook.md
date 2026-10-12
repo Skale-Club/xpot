@@ -15,6 +15,9 @@ PROSPECTING_ENGINE_CF_CLIENT_SECRET=<Cloudflare Access service-token secret>
 PROSPECTING_ENGINE_MAX_TIME_SECONDS=1800
 PROSPECTING_ENGINE_DEPTH=10
 PROSPECTING_ENGINE_POLL_MS=30000
+GOOGLE_ROUTE_OPTIMIZATION_PROJECT_ID=skaleclub
+GOOGLE_ROUTE_OPTIMIZATION_CREDENTIALS_FILE=/run/secrets/google-route-optimizer.json
+VITE_GOOGLE_MAPS_API_KEY=<referrer-restricted browser key>
 ```
 
 The two Cloudflare values are optional only when the worker is reachable through a trusted private
@@ -45,7 +48,8 @@ together if the token is replaced.
 ## Deployment behavior
 
 The Docker entrypoint runs `dist/migrate.cjs` before starting the server. Migration
-`0032_prospecting_routes.sql` is transactional and tracked by `_xpot_migrations`. The server starts
+`0032_prospecting_routes.sql` and `0033_google_daily_route_optimization.sql` are transactional and
+tracked by `_xpot_migrations`. The latter enforces one route optimization per rep/day. The server starts
 the queue worker after Express begins listening. One PostgreSQL advisory lock plus a partial unique
 index permits only one `starting` or `running` physical extraction across all Xpot accounts.
 
@@ -63,7 +67,7 @@ If the engine URL is missing or invalid:
 4. Enter a small city and one sector, for example `Framingham, MA` and `barber shop`.
 5. Confirm the job moves from **Na fila** to **Buscando**.
 6. Leave the screen and return; the persisted state must still be visible.
-7. After completion, prepare the route and select **Usar esta rota**.
+7. After completion, confirm the route is prepared automatically and select **Usar esta rota**.
 8. Open **Visitas de hoje** and confirm the ordered stops appear as `Planejadas`.
 9. On a phone, start one planned visit. Confirm the same visit becomes `Em andamento`, without a
    second history row.
@@ -106,6 +110,10 @@ Never copy Cloudflare credentials or raw environment output into an incident rep
   freeing the Xpot queue slot.
 - **Some sectors completed and one failed:** completed candidates remain available; retry requeues
   only the failed physical run.
+- **Google optimization fails:** verify the Route Optimization API, service-account role, project id,
+  and mounted credential. Xpot does not silently publish an estimated route when Google is configured.
+- **Map preview fails but the route exists:** verify `VITE_GOOGLE_MAPS_API_KEY` was present at build
+  time and is restricted to `https://xpot.place/*`, `https://*.xpot.place/*`, and Maps JavaScript API.
 
 ## Cutover to a hosted worker
 
@@ -125,7 +133,8 @@ Xpot MCP server. The credential is bound to the Xpot user that created the stati
 the OAuth connection, so jobs are created for that user's representative profile. OAuth clients
 should request only the `xpot:prospecting` scope; this does not expose the Tags Journey tools:
 
-- `prospecting_create_today`: accepts `location`, 1-5 `sectors` and an optional idempotency key;
+- `prospecting_create_today`: accepts `location`, 1-5 `sectors`, an optional `shiftHours`
+  (2/4/6/8/10/12, default 8), and an optional idempotency key;
 - `prospecting_job_get`: reads a specific job or the newest job for that account.
 
 Example arguments for a small smoke run:
@@ -134,6 +143,7 @@ Example arguments for a small smoke run:
 {
   "location": "Framingham, MA",
   "sectors": ["barber shop"],
+  "shiftHours": 8,
   "idempotencyKey": "today:2026-10-12:framingham:barber-shop"
 }
 ```

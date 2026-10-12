@@ -35,7 +35,9 @@ export type OptimizeRouteResult = {
   totalDurationSeconds: number;
   returnDistanceMeters: number;
   returnDurationSeconds: number;
-  optimizer: "heuristic_v1";
+  optimizer: "heuristic_v1" | "google_route_optimization_v1";
+  encodedPolyline?: string;
+  trafficAware?: boolean;
 };
 
 const EARTH_RADIUS_METERS = 6_371_000;

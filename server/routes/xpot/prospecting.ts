@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { and, asc, desc, eq, ne } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { db } from "../../db.js";
 import { storage } from "../../storage.js";
 import {
@@ -20,7 +20,11 @@ import {
 import { ensureXpotRep, requireXpotUser } from "./middleware.js";
 import { retryFailedProspectingRuns, tickProspectingQueueSafely } from "../../prospecting/queue.js";
 import { isEngineConfigured } from "../../prospecting/google-maps-engine.js";
-import { optimizeRouteHeuristic, type RouteCandidate } from "../../prospecting/route-optimizer.js";
+import type { RouteCandidate } from "../../prospecting/route-optimizer.js";
+import {
+  GoogleRouteOptimizationError,
+  optimizeRouteWithGoogle,
+} from "../../prospecting/google-route-optimizer.js";
 import { organizationIdForRep } from "../../organizations/service.js";
 import {
   createProspectingJobForRep,
@@ -46,6 +50,8 @@ function lifecycleScore(lead: Awaited<ReturnType<typeof storage.getSalesLead>>):
   if (lead.phone) { score += 5; reasons.push("phone available"); }
   return { score: Math.max(0, Math.min(100, score)), reasons };
 }
+
+class NoProspectingStopFitsError extends Error {}
 
 export function createProspectingRouter() {
   const router = Router();
@@ -129,18 +135,18 @@ export function createProspectingRouter() {
       if (["draft", "queued", "running"].includes(ownedJob.status)) {
         return res.status(409).json({ message: "Wait for prospecting discovery to finish before building the route." });
       }
-      const [existingRoute] = await db.select().from(prospectingRoutes).where(and(
-        eq(prospectingRoutes.repId, actor.rep.id),
-        eq(prospectingRoutes.jobId, input.jobId),
-        eq(prospectingRoutes.routeDate, input.routeDate),
-        ne(prospectingRoutes.status, "cancelled"),
-      )).orderBy(desc(prospectingRoutes.createdAt)).limit(1);
-      if (existingRoute) {
-        const existingStops = await db.select().from(prospectingRouteStops)
-          .where(eq(prospectingRouteStops.routeId, existingRoute.id))
-          .orderBy(asc(prospectingRouteStops.position));
-        return res.status(200).json({ route: existingRoute, stops: existingStops, reused: true });
-      }
+    }
+    // A seller gets exactly one paid optimization per calendar day. Reusing the
+    // persisted route also makes retries, double-clicks and a second scrape free.
+    const [existingRoute] = await db.select().from(prospectingRoutes).where(and(
+      eq(prospectingRoutes.repId, actor.rep.id),
+      eq(prospectingRoutes.routeDate, input.routeDate),
+    )).orderBy(desc(prospectingRoutes.createdAt)).limit(1);
+    if (existingRoute) {
+      const existingStops = await db.select().from(prospectingRouteStops)
+        .where(eq(prospectingRouteStops.routeId, existingRoute.id))
+        .orderBy(asc(prospectingRouteStops.position));
+      return res.status(200).json({ route: existingRoute, stops: existingStops, reused: true });
     }
     const uniqueLeadIds = Array.from(new Set(input.leadIds));
     const leads = (await storage.listSalesLeads({ ownerRepId: actor.rep.id }))
@@ -213,80 +219,92 @@ export function createProspectingRouter() {
     }
 
     const plannedStartAt = new Date(input.plannedStartAt);
-    const optimized = optimizeRouteHeuristic({
-      start: input.start,
-      end: input.end,
-      plannedStartAt,
-      shiftDurationSeconds: input.shiftDurationMinutes * 60,
-      maxStops: input.maxStops,
-      candidates,
-    });
-    if (!optimized.stops.length) {
-      return res.status(400).json({ message: "No selected prospect fits in the route's time budget." });
-    }
-
-    const result = await db.transaction(async (tx) => {
-      const [route] = await tx.insert(prospectingRoutes).values({
-        repId: actor.rep.id,
-        jobId: input.jobId ?? discovered[0]?.jobId ?? null,
-        name: input.name ?? `Prospecting — ${input.routeDate}`,
-        routeDate: input.routeDate,
-        plannedStartAt,
-        plannedEndAt: new Date(plannedStartAt.getTime() + optimized.totalDurationSeconds * 1000),
-        startAddress: input.start.address ?? null,
-        startLat: String(input.start.lat),
-        startLng: String(input.start.lng),
-        endAddress: input.end?.address ?? input.start.address ?? null,
-        endLat: String(input.end?.lat ?? input.start.lat),
-        endLng: String(input.end?.lng ?? input.start.lng),
-        maxStops: input.maxStops,
-        defaultVisitMinutes: input.defaultVisitMinutes,
-        optimizer: optimized.optimizer,
-        totalDistanceMeters: optimized.totalDistanceMeters,
-        totalDurationSeconds: optimized.totalDurationSeconds,
-        optimizationMeta: {
-          shiftDurationMinutes: input.shiftDurationMinutes,
-          returnDistanceMeters: optimized.returnDistanceMeters,
-          returnDurationSeconds: optimized.returnDurationSeconds,
-          missingCoordinates,
-          excludedByBudget: optimized.excludedCandidateIds,
-          distanceModel: "haversine",
-        },
-      }).onConflictDoNothing().returning();
-      if (!route && input.jobId !== undefined) {
-        const [reusedRoute] = await tx.select().from(prospectingRoutes).where(and(
+    let result;
+    try {
+      result = await db.transaction(async (tx) => {
+        // The database lock covers the external request. Without it, two
+        // simultaneous clicks could both be billed before the unique insert.
+        await tx.execute(sql`select pg_advisory_xact_lock(${actor.rep.id}, hashtext(${input.routeDate}))`);
+        const [lockedExisting] = await tx.select().from(prospectingRoutes).where(and(
           eq(prospectingRoutes.repId, actor.rep.id),
-          eq(prospectingRoutes.jobId, input.jobId),
           eq(prospectingRoutes.routeDate, input.routeDate),
-          ne(prospectingRoutes.status, "cancelled"),
         )).limit(1);
-        if (reusedRoute) {
-          const reusedStops = await tx.select().from(prospectingRouteStops)
-            .where(eq(prospectingRouteStops.routeId, reusedRoute.id))
+        if (lockedExisting) {
+          const existingStops = await tx.select().from(prospectingRouteStops)
+            .where(eq(prospectingRouteStops.routeId, lockedExisting.id))
             .orderBy(asc(prospectingRouteStops.position));
-          return { route: reusedRoute, stops: reusedStops, reused: true };
+          return { route: lockedExisting, stops: existingStops, reused: true as const };
         }
+
+        const optimized = await optimizeRouteWithGoogle({
+          start: input.start,
+          end: input.end,
+          plannedStartAt,
+          shiftDurationSeconds: input.shiftDurationMinutes * 60,
+          maxStops: input.maxStops,
+          candidates,
+        });
+        if (!optimized.stops.length) throw new NoProspectingStopFitsError();
+
+        const [route] = await tx.insert(prospectingRoutes).values({
+          repId: actor.rep.id,
+          jobId: input.jobId ?? discovered[0]?.jobId ?? null,
+          name: input.name ?? `Prospecting — ${input.routeDate}`,
+          routeDate: input.routeDate,
+          plannedStartAt,
+          plannedEndAt: new Date(plannedStartAt.getTime() + optimized.totalDurationSeconds * 1000),
+          startAddress: input.start.address ?? null,
+          startLat: String(input.start.lat),
+          startLng: String(input.start.lng),
+          endAddress: input.end?.address ?? input.start.address ?? null,
+          endLat: String(input.end?.lat ?? input.start.lat),
+          endLng: String(input.end?.lng ?? input.start.lng),
+          maxStops: input.maxStops,
+          defaultVisitMinutes: input.defaultVisitMinutes,
+          optimizer: optimized.optimizer,
+          totalDistanceMeters: optimized.totalDistanceMeters,
+          totalDurationSeconds: optimized.totalDurationSeconds,
+          optimizationMeta: {
+            shiftDurationMinutes: input.shiftDurationMinutes,
+            returnDistanceMeters: optimized.returnDistanceMeters,
+            returnDurationSeconds: optimized.returnDurationSeconds,
+            missingCoordinates,
+            excludedByBudget: optimized.excludedCandidateIds,
+            distanceModel: optimized.optimizer === "google_route_optimization_v1" ? "google_road_network" : "haversine",
+            trafficAware: optimized.trafficAware ?? false,
+            encodedPolyline: optimized.encodedPolyline,
+          },
+        }).returning();
+        const stops = await tx.insert(prospectingRouteStops).values(optimized.stops.map((stop) => ({
+          routeId: route.id,
+          candidateId: stop.candidateId ?? null,
+          leadId: stop.leadId,
+          position: stop.position,
+          name: stop.name,
+          address: stop.address,
+          lat: String(stop.lat),
+          lng: String(stop.lng),
+          score: stop.score,
+          scoreReasons: stop.scoreReasons,
+          serviceDurationSeconds: stop.serviceDurationSeconds,
+          travelDistanceMeters: stop.travelDistanceMeters,
+          travelDurationSeconds: stop.travelDurationSeconds,
+          estimatedArrivalAt: stop.estimatedArrivalAt,
+        }))).returning();
+        return { route, stops, optimized };
+      });
+    } catch (error) {
+      if (error instanceof GoogleRouteOptimizationError) {
+        return res.status(502).json({ message: error.message });
       }
-      if (!route) throw new Error("The route could not be created.");
-      const stops = await tx.insert(prospectingRouteStops).values(optimized.stops.map((stop) => ({
-        routeId: route.id,
-        candidateId: stop.candidateId ?? null,
-        leadId: stop.leadId,
-        position: stop.position,
-        name: stop.name,
-        address: stop.address,
-        lat: String(stop.lat),
-        lng: String(stop.lng),
-        score: stop.score,
-        scoreReasons: stop.scoreReasons,
-        serviceDurationSeconds: stop.serviceDurationSeconds,
-        travelDistanceMeters: stop.travelDistanceMeters,
-        travelDurationSeconds: stop.travelDurationSeconds,
-        estimatedArrivalAt: stop.estimatedArrivalAt,
-      }))).returning();
-      return { route, stops };
-    });
-    res.status("reused" in result ? 200 : 201).json({ ...result, excluded: { missingCoordinates, budget: optimized.excludedCandidateIds } });
+      if (error instanceof NoProspectingStopFitsError) {
+        return res.status(400).json({ message: "No selected prospect fits in the route's time budget." });
+      }
+      throw error;
+    }
+    if ("reused" in result) return res.status(200).json(result);
+    const { optimized, ...payload } = result;
+    res.status(201).json({ ...payload, excluded: { missingCoordinates, budget: optimized.excludedCandidateIds } });
   });
 
   router.get("/prospecting/routes/:id", async (req, res) => {

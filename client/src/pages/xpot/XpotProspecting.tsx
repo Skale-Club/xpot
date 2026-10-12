@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { CheckCircle2, ChevronRight, Loader2, MapPin, Navigation, Radar, Route as RouteIcon, Search, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { prospectingMessages } from "@/i18n/messages/prospecting";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Link } from "wouter";
 import { approximateCandidateCenter } from "#shared/prospecting.js";
+import { RoutePreviewMap } from "./components/RoutePreviewMap";
 
 type ProspectingJob = {
   id: number;
@@ -38,6 +39,7 @@ type ProspectingRoute = {
   startLng: string;
   totalDurationSeconds: number;
   totalDistanceMeters: number;
+  optimizationMeta: { encodedPolyline?: string };
   createdAt: string;
 };
 
@@ -120,6 +122,7 @@ export function XpotProspecting() {
   const { toast } = useToast();
   const [city, setCity] = useState("");
   const [sectors, setSectors] = useState("");
+  const [shiftHours, setShiftHours] = useState(8);
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
   const [selectedRouteId, setSelectedRouteId] = useState<number | null>(null);
   const parsedSearches = useMemo(() => sectorSearches(sectors), [sectors]);
@@ -152,7 +155,8 @@ export function XpotProspecting() {
       const response = await apiRequest("POST", "/api/xpot/prospecting/jobs", {
         location: city.trim(),
         searches,
-        idempotencyKey: `today:${today}:${city.trim().toLowerCase()}:${searches.map((search) => search.niche).join("+")}`,
+        shiftDurationMinutes: shiftHours * 60,
+        idempotencyKey: `today:${today}:${shiftHours}h:${city.trim().toLowerCase()}:${searches.map((search) => search.niche).join("+")}`,
       });
       return response.json() as Promise<ProspectingJobDetails>;
     },
@@ -192,6 +196,15 @@ export function XpotProspecting() {
     },
     onError: (error: Error) => toast({ title: t("errorTitle"), description: error.message, variant: "destructive" }),
   });
+
+  const autoRouteJobRef = useRef<number | null>(null);
+  useEffect(() => {
+    const currentDetails = detailsQuery.data;
+    if (!currentDetails || currentDetails.job.status !== "completed" || currentDetails.summary.eligible === 0 || todayRoutes.length > 0) return;
+    if (autoRouteJobRef.current === currentDetails.job.id || createRoute.isPending) return;
+    autoRouteJobRef.current = currentDetails.job.id;
+    createRoute.mutate();
+  }, [detailsQuery.data, todayRoutes.length, createRoute.isPending]);
 
   const retryJob = useMutation({
     mutationFn: async (jobId: number) => {
@@ -260,6 +273,23 @@ export function XpotProspecting() {
           <Button type="submit" disabled={createJob.isPending || !city.trim() || parsedSearches.length === 0} className="h-11 rounded-xl bg-indigo-500 px-5 text-white">
             {createJob.isPending ? <><Loader2 className="animate-spin" />{t("creating")}</> : <><RouteIcon />{t("buildToday")}</>}
           </Button>
+          <fieldset className="md:col-span-3">
+            <legend className="mb-2 text-xs font-semibold text-white/65">{t("shiftLabel")}</legend>
+            <div className="flex flex-wrap gap-2">
+              {[2, 4, 6, 8, 10, 12].map((hours) => (
+                <button
+                  key={hours}
+                  type="button"
+                  aria-pressed={shiftHours === hours}
+                  onClick={() => setShiftHours(hours)}
+                  className={`rounded-xl border px-4 py-2 text-sm font-semibold transition ${shiftHours === hours ? "border-indigo-400/60 bg-indigo-500/20 text-indigo-100" : "border-white/10 bg-black/10 text-white/45 hover:bg-white/[0.05]"}`}
+                >
+                  {t("shiftHours", { hours })}
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-[11px] text-white/30">{t("shiftHint")}</p>
+          </fieldset>
         </form>
       </section>
 
@@ -309,7 +339,13 @@ export function XpotProspecting() {
 
       {routeDetails ? (
         <section className="overflow-hidden rounded-[24px]" style={cardStyle}>
-          {mapSrc ? <img src={mapSrc} alt={t("routeReady")} className="h-56 w-full object-cover sm:h-72" /> : null}
+          <RoutePreviewMap
+            start={{ lat: Number(routeDetails.route.startLat), lng: Number(routeDetails.route.startLng) }}
+            stops={routeDetails.stops.map((stop) => ({ lat: Number(stop.lat), lng: Number(stop.lng), label: stop.name }))}
+            encodedPolyline={routeDetails.route.optimizationMeta.encodedPolyline}
+            fallbackSrc={mapSrc}
+            alt={t("routeReady")}
+          />
           <div className="grid gap-5 p-5 lg:grid-cols-[1fr_0.9fr] lg:p-6">
             <div>
               <div className="flex items-center gap-2 text-indigo-300"><RouteIcon className="h-4 w-4" /><span className="text-xs font-bold uppercase tracking-wider">{t("routeReady")}</span></div>

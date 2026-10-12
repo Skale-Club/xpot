@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { approximateCandidateCenter, prospectingJobCreateSchema, prospectingRouteCreateSchema, TODAY_PROSPECTING_POLICY } from "../shared/prospecting.js";
+import { approximateCandidateCenter, prospectingJobCreateSchema, prospectingRouteCreateSchema, targetStopsForShift, TODAY_PROSPECTING_POLICY } from "../shared/prospecting.js";
 import { haversineMeters, optimizeRouteHeuristic } from "../server/prospecting/route-optimizer.js";
+import { buildGoogleOptimizeToursRequest, parseGoogleOptimizeToursResponse } from "../server/prospecting/google-route-optimizer.js";
 import { buildEngineInput, depthForMaxResults, mapEngineStatus, parseEngineResults } from "../server/prospecting/google-maps-engine.js";
 import { evaluateColdEligibility } from "../server/prospecting/eligibility.js";
 import { chooseExpansionArea } from "../server/prospecting/expansion.js";
@@ -29,6 +30,8 @@ describe("prospecting contracts", () => {
     expect(TODAY_PROSPECTING_POLICY.shiftDurationMinutes).toBe(480);
     expect(TODAY_PROSPECTING_POLICY.defaultVisitMinutes).toBe(20);
     expect(TODAY_PROSPECTING_POLICY.targetUtilization).toBe(0.85);
+    expect(value.shiftDurationMinutes).toBe(480);
+    expect(targetStopsForShift(720)).toBe(36);
     expect(value.searches).toHaveLength(2);
   });
 
@@ -46,7 +49,7 @@ describe("prospecting contracts", () => {
       start: { lat: 42.3459, lng: -71.5523 },
       leadIds: [1, 2],
     });
-    expect(value.maxStops).toBe(12);
+    expect(value.maxStops).toBe(60);
     expect(value.shiftDurationMinutes).toBe(480);
   });
 
@@ -238,5 +241,52 @@ describe("route heuristic", () => {
     });
     expect(result.stops).toEqual([]);
     expect(result.excludedCandidateIds).toEqual([1]);
+  });
+});
+
+describe("Google daily route optimization", () => {
+  const input = {
+    start: { lat: 42.3459, lng: -71.5523 },
+    plannedStartAt: new Date("2026-10-13T13:00:00.000Z"),
+    shiftDurationSeconds: 4 * 60 * 60,
+    maxStops: 60,
+    candidates: [
+      { id: 11, leadId: null, name: "A", address: "1 Main", lat: 42.35, lng: -71.55, score: 70, scoreReasons: [], serviceDurationSeconds: 1200 },
+      { id: 22, leadId: null, name: "B", address: "2 Main", lat: 42.36, lng: -71.56, score: 90, scoreReasons: [], serviceDurationSeconds: 1200 },
+    ],
+  };
+
+  it("sends every candidate with the shift boundary and 20 minute service time", () => {
+    const request = buildGoogleOptimizeToursRequest(input);
+    expect(request.model.shipments).toHaveLength(2);
+    expect(request.model.shipments[0].deliveries[0].duration).toBe("1200s");
+    expect(request.model.vehicles[0].loadLimits.visit_count.maxLoad).toBe("60");
+    expect(request.model.globalEndTime).toBe("2026-10-13T17:00:00.000Z");
+    expect(request.considerRoadTraffic).toBe(true);
+  });
+
+  it("maps Google's road order, drive times and encoded road line", () => {
+    const result = parseGoogleOptimizeToursResponse(input, {
+      routes: [{
+        vehicleStartTime: "2026-10-13T13:00:00Z",
+        vehicleEndTime: "2026-10-13T14:02:00Z",
+        visits: [
+          { shipmentIndex: 1, startTime: "2026-10-13T13:07:00Z" },
+          { shipmentIndex: 0, startTime: "2026-10-13T13:34:00Z" },
+        ],
+        transitions: [
+          { travelDuration: "420s", travelDistanceMeters: 3200 },
+          { travelDuration: "420s", travelDistanceMeters: 4100 },
+          { travelDuration: "480s", travelDistanceMeters: 5000 },
+        ],
+        routePolyline: { points: "encoded-road-line" },
+      }],
+    });
+    expect(result.stops.map((stop) => stop.id)).toEqual([22, 11]);
+    expect(result.stops.map((stop) => stop.travelDurationSeconds)).toEqual([420, 420]);
+    expect(result.totalDistanceMeters).toBe(12_300);
+    expect(result.returnDurationSeconds).toBe(480);
+    expect(result.totalDurationSeconds).toBe(62 * 60);
+    expect(result.encodedPolyline).toBe("encoded-road-line");
   });
 });
