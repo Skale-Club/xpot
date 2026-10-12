@@ -8,11 +8,21 @@ function loadGoogleMaps(apiKey: string) {
   if ((window as any).google?.maps) return Promise.resolve();
   if (mapsLoader) return mapsLoader;
   mapsLoader = new Promise<void>((resolve, reject) => {
+    const callbackName = "__xpotGoogleMapsReady";
+    const browserWindow = window as any;
     const script = document.createElement("script");
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&v=weekly&loading=async`;
+    const cleanup = () => { delete browserWindow[callbackName]; };
+    browserWindow[callbackName] = () => {
+      cleanup();
+      resolve();
+    };
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&v=weekly&loading=async&callback=${callbackName}`;
     script.async = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error("Google Maps failed to load"));
+    script.onerror = () => {
+      cleanup();
+      mapsLoader = null;
+      reject(new Error("Google Maps failed to load"));
+    };
     document.head.appendChild(script);
   });
   return mapsLoader;
