@@ -20,6 +20,7 @@ export type OptimizedStop = RouteCandidate & {
 
 export type OptimizeRouteInput = {
   start: GeoPoint;
+  /** Where the day must finish (the rep's home). Without it the route ends at the last visit. */
   end?: GeoPoint;
   plannedStartAt: Date;
   shiftDurationSeconds: number;
@@ -61,12 +62,12 @@ function travelSeconds(distanceMeters: number, averageSpeedKph: number): number 
  * Deterministic, explainable fallback for the first route slice.
  *
  * It is not a replacement for a road-time optimizer. It chooses a high-value nearby stop,
- * verifies that visiting it and returning to the configured end still fits in the shift,
+ * verifies that visiting it (and returning to the configured end, when there is one) still fits in the shift,
  * and repeats until the stop or time budget is exhausted.
  */
 export function optimizeRouteHeuristic(input: OptimizeRouteInput): OptimizeRouteResult {
   const speed = input.averageSpeedKph ?? 32;
-  const end = input.end ?? input.start;
+  const end = input.end ?? null;
   const remaining = [...input.candidates];
   const stops: OptimizedStop[] = [];
   let current = input.start;
@@ -84,8 +85,7 @@ export function optimizeRouteHeuristic(input: OptimizeRouteInput): OptimizeRoute
 
     const next = ranked.find(({ candidate, distance }) => {
       const outbound = travelSeconds(distance, speed);
-      const returnDistance = haversineMeters(candidate, end);
-      const returnTime = travelSeconds(returnDistance, speed);
+      const returnTime = end ? travelSeconds(haversineMeters(candidate, end), speed) : 0;
       return elapsedSeconds + outbound + candidate.serviceDurationSeconds + returnTime <= input.shiftDurationSeconds;
     });
     if (!next) break;
@@ -106,8 +106,8 @@ export function optimizeRouteHeuristic(input: OptimizeRouteInput): OptimizeRoute
     remaining.splice(remaining.findIndex((candidate) => candidate.id === next.candidate.id), 1);
   }
 
-  const returnDistanceMeters = stops.length ? haversineMeters(current, end) : 0;
-  const returnDurationSeconds = stops.length ? travelSeconds(returnDistanceMeters, speed) : 0;
+  const returnDistanceMeters = stops.length && end ? haversineMeters(current, end) : 0;
+  const returnDurationSeconds = stops.length && end ? travelSeconds(returnDistanceMeters, speed) : 0;
   totalDistanceMeters += returnDistanceMeters;
   elapsedSeconds += returnDurationSeconds;
 

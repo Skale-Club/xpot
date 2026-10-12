@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { CheckCircle2, ChevronRight, Clock3, Loader2, MapPin, Navigation, Radar, Route as RouteIcon, Search, ShieldCheck } from "lucide-react";
+import { CheckCircle2, ChevronRight, Clock3, Home, Loader2, MapPin, Navigation, Radar, RefreshCw, Route as RouteIcon, Search, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/i18n";
 import { prospectingMessages } from "@/i18n/messages/prospecting";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useViewerAccess } from "@/lib/adminMode";
 import { Link } from "wouter";
 import { approximateCandidateCenter } from "#shared/prospecting.js";
 import { RoutePreviewMap } from "./components/RoutePreviewMap";
@@ -38,9 +39,13 @@ type ProspectingRoute = {
   status: "draft" | "published" | "in_progress" | "completed" | "cancelled";
   startLat: string;
   startLng: string;
+  endAddress: string | null;
+  endLat: string | null;
+  endLng: string | null;
+  plannedEndAt: string | null;
   totalDurationSeconds: number;
   totalDistanceMeters: number;
-  optimizationMeta: { encodedPolyline?: string };
+  optimizationMeta: { encodedPolyline?: string; returnHome?: boolean; returnDurationSeconds?: number };
   createdAt: string;
 };
 
@@ -168,8 +173,10 @@ export function XpotProspecting() {
     onError: (error: Error) => toast({ title: t("errorTitle"), description: error.message, variant: "destructive" }),
   });
 
+  const { isSuperAdmin } = useViewerAccess();
   const createRoute = useMutation({
-    mutationFn: async () => {
+    // rebuild replaces today's route; the server only honours it for the platform owner.
+    mutationFn: async (options: { rebuild?: boolean } | void) => {
       if (!detailsQuery.data) throw new Error(t("emptyCandidates"));
       let start: { lat: number; lng: number };
       try { start = await currentPosition(); }
@@ -185,10 +192,12 @@ export function XpotProspecting() {
         jobId: detailsQuery.data.job.id,
         shiftDurationMinutes: detailsQuery.data.job.shiftDurationMinutes,
         defaultVisitMinutes: detailsQuery.data.job.defaultVisitMinutes,
+        rebuild: options ? options.rebuild ?? false : false,
       });
       return response.json() as Promise<RouteDetails>;
     },
-    onSuccess: async (data) => {
+    onSuccess: async (data, options) => {
+      if (options && options.rebuild) toast({ title: t("routeRebuilt") });
       setSelectedRouteId(data.route.id);
       await queryClient.invalidateQueries({ queryKey: ["/api/xpot/prospecting/routes"] });
       queryClient.setQueryData(["/api/xpot/prospecting/routes", data.route.id], data);
@@ -243,8 +252,13 @@ export function XpotProspecting() {
   // Android and desktop navigate with Google Maps; an iPhone or iPad also gets Apple Maps.
   const appleDevice = useMemo(() => typeof navigator !== "undefined" && isAppleMobileDevice(navigator.userAgent, navigator.maxTouchPoints ?? 0), []);
   const routeStart = routeDetails ? { lat: routeDetails.route.startLat, lng: routeDetails.route.startLng } : null;
-  const directionsUrl = routeDetails && routeStart ? googleRouteUrl(routeStart, routeDetails.stops) : null;
-  const appleDirectionsUrl = appleDevice && routeDetails && routeStart ? appleRouteUrl(routeStart, routeDetails.stops) : null;
+  // The day ends at home only when the rep turned that on in Settings > Route.
+  const routeHome = routeDetails?.route.optimizationMeta.returnHome && routeDetails.route.endLat && routeDetails.route.endLng
+    ? { lat: routeDetails.route.endLat, lng: routeDetails.route.endLng }
+    : null;
+  const homeDriveSeconds = routeDetails?.route.optimizationMeta.returnDurationSeconds;
+  const directionsUrl = routeDetails && routeStart ? googleRouteUrl(routeStart, routeDetails.stops, routeHome) : null;
+  const appleDirectionsUrl = appleDevice && routeDetails && routeStart ? appleRouteUrl(routeStart, routeDetails.stops, routeHome) : null;
   const mapStops = useMemo(() => routeDetails?.stops.map((stop) => ({
     lat: Number(stop.lat),
     lng: Number(stop.lng),
@@ -369,6 +383,16 @@ export function XpotProspecting() {
                 {routeDetails.route.status === "draft" ? <Button onClick={() => publishRoute.mutate(routeDetails.route.id)} disabled={publishRoute.isPending} className="h-12 w-full touch-manipulation rounded-xl bg-emerald-500 text-white sm:h-10 sm:w-auto">{publishRoute.isPending ? <Loader2 className="animate-spin" /> : <ShieldCheck />}{publishRoute.isPending ? t("publishing") : t("publishRoute")}</Button> : <><span className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-300"><CheckCircle2 className="h-4 w-4" />{routeStatusLabel(routeDetails.route.status, t)}</span>{routeDetails.route.status !== "cancelled" ? <Button asChild className="h-12 w-full touch-manipulation rounded-xl bg-indigo-500 text-white sm:h-10 sm:w-auto"><Link href="/visits?view=day">{t("openVisits")}</Link></Button> : null}</>}
                 {directionsUrl ? <Button asChild variant="outline" className="h-12 w-full touch-manipulation rounded-xl border-white/10 text-white sm:h-10 sm:w-auto"><a href={directionsUrl} target="_blank" rel="noreferrer"><Navigation />{t("openMaps")}</a></Button> : null}
                 {appleDirectionsUrl ? <Button asChild variant="outline" className="h-12 w-full touch-manipulation rounded-xl border-white/10 text-white sm:h-10 sm:w-auto"><a href={appleDirectionsUrl} target="_blank" rel="noreferrer"><Navigation />{t("openAppleMaps")}</a></Button> : null}
+                {isSuperAdmin && details ? (
+                  <Button
+                    variant="outline"
+                    onClick={() => createRoute.mutate({ rebuild: true })}
+                    disabled={createRoute.isPending || ["queued", "running"].includes(details.job.status)}
+                    className="h-12 w-full touch-manipulation rounded-xl border-amber-400/30 text-amber-200 sm:h-10 sm:w-auto"
+                  >
+                    {createRoute.isPending ? <Loader2 className="animate-spin" /> : <RefreshCw />}{t("rebuildRoute")}
+                  </Button>
+                ) : null}
               </div>
             </div>
             <div>
@@ -416,6 +440,19 @@ export function XpotProspecting() {
                     </div>
                   </li>
                 ))}
+                {routeHome ? (
+                  <li className="grid min-h-[60px] grid-cols-[auto_minmax(0,1fr)] items-center gap-3 rounded-xl border border-dashed border-white/[0.08] p-3">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/[0.06] text-white/60"><Home className="h-4 w-4" /></span>
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold text-white/70">{t("returnHome")}</div>
+                      <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[10px] text-white/40">
+                        <Clock3 className="h-3 w-3 shrink-0" />
+                        {typeof homeDriveSeconds === "number" ? <span>{t("driveMinutes", { minutes: driveMinutes(homeDriveSeconds) })}</span> : null}
+                        {routeDetails.route.plannedEndAt ? <><span aria-hidden="true">·</span><span className="truncate">{t("arrivalAt", { time: new Date(routeDetails.route.plannedEndAt).toLocaleTimeString(t.locale, { hour: "numeric", minute: "2-digit" }) })}</span></> : null}
+                      </div>
+                    </div>
+                  </li>
+                ) : null}
               </ol>
             </div>
           </div>

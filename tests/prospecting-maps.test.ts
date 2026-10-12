@@ -41,6 +41,21 @@ describe("prospecting navigation links", () => {
     expect(new URL(googleRouteUrl(start, stops)!).searchParams.has("origin")).toBe(false);
   });
 
+  it("finishes the link at home when the route returns there", () => {
+    const home = { lat: "42.20", lng: "-71.40" };
+    const stops = [stop("42.30"), stop("42.31")];
+    const google = new URL(googleRouteUrl(start, stops, home)!);
+    expect(google.searchParams.get("destination")).toBe("42.20,-71.40");
+    expect(google.searchParams.get("waypoints")).toBe("42.30,-71.50|42.31,-71.50");
+    expect(new URL(appleRouteUrl(start, stops, home)!).searchParams.getAll("daddr").at(-1)).toBe("42.20,-71.40");
+
+    // Too many open stops for one link: home waits for a later link.
+    const many = Array.from({ length: 12 }, (_, index) => stop(`42.${30 + index}`));
+    expect(new URL(googleRouteUrl(start, many, home)!).searchParams.get("destination")).toBe("42.39,-71.50");
+    // Nothing left to visit: no link, even with a home.
+    expect(googleRouteUrl(start, [stop("42.30", "completed")], home)).toBeNull();
+  });
+
   it("has nothing to open once every stop is done", () => {
     const stops = [stop("42.30", "completed")];
     expect(googleRouteUrl(start, stops)).toBeNull();

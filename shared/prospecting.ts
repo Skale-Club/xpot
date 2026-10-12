@@ -78,6 +78,8 @@ export const prospectingRouteCreateSchema = z.object({
   maxStops: z.number().int().min(1).max(60).default(60),
   shiftDurationMinutes: z.number().int().min(30).max(16 * 60).default(8 * 60),
   defaultVisitMinutes: z.number().int().min(5).max(180).default(20),
+  /** Replace today's route with a new optimization. Only the platform owner may; reps get one per day. */
+  rebuild: z.boolean().default(false),
 }).refine((value) => value.leadIds.length > 0 || value.candidateIds.length > 0 || value.jobId !== undefined, {
   message: "Select leads, candidates, or a completed prospecting job.",
 });

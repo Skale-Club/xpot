@@ -246,6 +246,7 @@ describe("route heuristic", () => {
   it("drops a visit that cannot fit before the return", () => {
     const result = optimizeRouteHeuristic({
       start,
+      end: start,
       plannedStartAt: new Date("2026-10-13T13:00:00.000Z"),
       shiftDurationSeconds: 25 * 60,
       maxStops: 5,
@@ -253,6 +254,23 @@ describe("route heuristic", () => {
     });
     expect(result.stops).toEqual([]);
     expect(result.excludedCandidateIds).toEqual([1]);
+  });
+
+  it("ends at the last visit unless the day must finish at home", () => {
+    // ~5 km away: 20 min visit + ~10 min drive fits 35 min one way, not with the drive back.
+    const input = {
+      start,
+      plannedStartAt: new Date("2026-10-13T13:00:00.000Z"),
+      shiftDurationSeconds: 35 * 60,
+      maxStops: 5,
+      candidates: [candidate(1, 42.39, -71.55)],
+    };
+    const open = optimizeRouteHeuristic(input);
+    expect(open.stops.map((stop) => stop.id)).toEqual([1]);
+    expect(open.returnDurationSeconds).toBe(0);
+
+    const home = optimizeRouteHeuristic({ ...input, end: start });
+    expect(home.stops).toEqual([]);
   });
 });
 
@@ -276,6 +294,9 @@ describe("Google daily route optimization", () => {
     expect(request.model.globalStartTime).toBe("2026-10-13T13:00:00Z");
     expect(request.model.globalEndTime).toBe("2026-10-13T17:00:00Z");
     expect(request.considerRoadTraffic).toBe(true);
+    expect(request.model.vehicles[0]).not.toHaveProperty("endLocation");
+    const home = buildGoogleOptimizeToursRequest({ ...input, end: { lat: 42.3, lng: -71.4 } });
+    expect(home.model.vehicles[0].endLocation).toEqual({ latitude: 42.3, longitude: -71.4 });
   });
 
   it("maps Google's road order, drive times and encoded road line", () => {

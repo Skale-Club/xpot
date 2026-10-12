@@ -23,13 +23,16 @@ export function isAppleMobileDevice(userAgent: string, maxTouchPoints: number) {
  * begun the trip starts wherever the rep is now, which both apps use when no
  * origin is given.
  */
-function remainingTrip(start: LatLng, stops: MapStop[]) {
-  const remaining = stops.filter((stop) => OPEN_STOP_STATUSES.includes(stop.status)).slice(0, MAPS_URL_MAX_STOPS);
-  return { remaining, origin: remaining.length === stops.length ? start : null };
+function remainingTrip(start: LatLng, stops: MapStop[], home?: LatLng | null) {
+  const open = stops.filter((stop) => OPEN_STOP_STATUSES.includes(stop.status));
+  const remaining: LatLng[] = open.slice(0, MAPS_URL_MAX_STOPS);
+  // Home is the last leg, so it only fits when every open stop is already in the link.
+  if (home && open.length && open.length < MAPS_URL_MAX_STOPS) remaining.push(home);
+  return { remaining, origin: open.length === stops.length ? start : null };
 }
 
-export function googleRouteUrl(start: LatLng, stops: MapStop[]) {
-  const { remaining, origin } = remainingTrip(start, stops);
+export function googleRouteUrl(start: LatLng, stops: MapStop[], home?: LatLng | null) {
+  const { remaining, origin } = remainingTrip(start, stops, home);
   if (!remaining.length) return null;
   const params = new URLSearchParams({ api: "1", destination: point(remaining.at(-1)!), travelmode: "driving" });
   if (origin) params.set("origin", point(origin));
@@ -41,8 +44,8 @@ export function googleRouteUrl(start: LatLng, stops: MapStop[]) {
  * Apple Maps takes one `daddr` per stop. Versions that ignore the extra stops
  * still open directions to the next one, which is what the rep needs first.
  */
-export function appleRouteUrl(start: LatLng, stops: MapStop[]) {
-  const { remaining, origin } = remainingTrip(start, stops);
+export function appleRouteUrl(start: LatLng, stops: MapStop[], home?: LatLng | null) {
+  const { remaining, origin } = remainingTrip(start, stops, home);
   if (!remaining.length) return null;
   const params = new URLSearchParams();
   if (origin) params.set("saddr", point(origin));

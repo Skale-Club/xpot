@@ -109,6 +109,11 @@ export const salesReps = pgTable("sales_reps", {
   costPolicyConfiguredByUserId: text("cost_policy_configured_by_user_id"),
   // Account deleted, row kept as an anonymous placeholder; migrations/0020_rep_deleted_at.sql.
   deletedAt: timestamp("deleted_at"),
+  // Where the prospecting day ends (Settings › Route); migrations/0034_rep_home_route.sql.
+  homeAddress: text("home_address"),
+  homeLat: text("home_lat"),
+  homeLng: text("home_lng"),
+  routeReturnHome: boolean("route_return_home").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => ({
