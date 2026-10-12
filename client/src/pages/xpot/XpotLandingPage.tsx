@@ -10,7 +10,6 @@ import {
   ChevronRight,
   Clock3,
   DollarSign,
-  History,
   MapPinned,
   Mic,
   Navigation,
@@ -87,32 +86,29 @@ function SectionHeading({ title, sub }: { title: string; sub: string }) {
 
 function FieldSalesHero({ t }: { t: LandingT }) {
   return (
-    <div className="relative mx-auto w-full max-w-[620px]">
-      <div className="pointer-events-none absolute -inset-8 rounded-[48px] bg-blue-500/10 blur-3xl" />
-      <div className="relative aspect-[4/3] overflow-hidden rounded-[30px] border border-white/10 bg-[#0b1020] shadow-[0_30px_80px_rgba(0,0,0,0.55)]">
-        <img
-          src="/xpot-hero-field-sales-v2.webp"
-          alt={t("heroImageAlt")}
-          width={1672}
-          height={941}
-          loading="eager"
-          decoding="async"
-          className="h-full w-full object-cover object-[64%_center]"
-        />
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#05070f]/85 via-transparent to-[#05070f]/10" />
+    <div className="relative h-full min-h-[380px] w-full overflow-hidden bg-[#0b1020] sm:min-h-[460px] lg:min-h-[620px]">
+      <img
+        src="/xpot-hero-field-sales-v2.webp"
+        alt={t("heroImageAlt")}
+        width={1672}
+        height={941}
+        loading="eager"
+        decoding="async"
+        className="absolute inset-0 h-full w-full object-cover object-[82%_center]"
+      />
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#05070f]/85 via-transparent to-[#05070f]/10 lg:bg-gradient-to-r lg:from-[#05070f]/20 lg:via-transparent lg:to-transparent" />
 
-        <div className="absolute inset-x-4 bottom-4 flex flex-col gap-2.5 sm:inset-x-5 sm:bottom-5 sm:flex-row sm:items-end sm:justify-between">
-          <div className="max-w-[250px] rounded-2xl border border-white/15 bg-[#070b16]/85 p-3.5 shadow-2xl backdrop-blur-md">
-            <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-blue-200">
-              <Route className="h-3.5 w-3.5" />
-              {t("heroRouteCardTitle")}
-            </div>
-            <p className="mt-1.5 text-sm font-semibold text-white">{t("heroRouteCardBody")}</p>
+      <div className="absolute inset-x-4 bottom-4 flex flex-col gap-2.5 sm:inset-x-5 sm:bottom-5 sm:flex-row sm:items-end sm:justify-between lg:inset-x-6 lg:bottom-6">
+        <div className="max-w-[250px] rounded-2xl border border-white/15 bg-[#070b16]/85 p-3.5 shadow-2xl backdrop-blur-md">
+          <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-blue-200">
+            <Route className="h-3.5 w-3.5" />
+            {t("heroRouteCardTitle")}
           </div>
-          <div className="flex items-center gap-2 self-start rounded-full border border-emerald-300/20 bg-emerald-950/80 px-3 py-2 text-xs font-semibold text-emerald-200 shadow-xl backdrop-blur-md sm:self-auto">
-            <Navigation className="h-3.5 w-3.5" />
-            {t("heroRouteCardBadge")}
-          </div>
+          <p className="mt-1.5 text-sm font-semibold text-white">{t("heroRouteCardBody")}</p>
+        </div>
+        <div className="flex items-center gap-2 self-start rounded-full border border-emerald-300/20 bg-emerald-950/80 px-3 py-2 text-xs font-semibold text-emerald-200 shadow-xl backdrop-blur-md sm:self-auto">
+          <Navigation className="h-3.5 w-3.5" />
+          {t("heroRouteCardBadge")}
         </div>
       </div>
     </div>
@@ -279,14 +275,14 @@ export function XpotLandingPage() {
   const steps = [
     { icon: Search, title: t("step1Title"), body: t("step1Body") },
     { icon: Route, title: t("step2Title"), body: t("step2Body") },
-    { icon: MapPinned, title: t("step3Title"), body: t("step3Body") },
-    { icon: Mic, title: t("step4Title"), body: t("step4Body") },
+    { icon: Boxes, title: t("step3Title"), body: t("step3Body") },
+    { icon: Nfc, title: t("step4Title"), body: t("step4Body") },
   ];
 
   const routeHighlights = [
     { icon: Search, title: t("highlight1Title"), body: t("highlight1Body") },
-    { icon: Route, title: t("highlight2Title"), body: t("highlight2Body") },
-    { icon: History, title: t("highlight3Title"), body: t("highlight3Body") },
+    { icon: MapPinned, title: t("highlight2Title"), body: t("highlight2Body") },
+    { icon: Nfc, title: t("highlight3Title"), body: t("highlight3Body") },
   ];
 
   const fieldFlow = [
@@ -372,43 +368,45 @@ export function XpotLandingPage() {
         </header>
 
         <main className="relative mx-auto max-w-6xl space-y-24 px-5 py-14 sm:py-20 lg:space-y-32 lg:px-8 lg:py-24">
-          {/* Photo-led hero: show the work before explaining the software. */}
-          <section className="grid grid-cols-1 items-center gap-14 lg:grid-cols-12 lg:gap-10">
-            <div className="space-y-6 text-center lg:col-span-6 lg:text-left">
-              <div className="inline-flex items-center gap-1.5 rounded-full border border-blue-500/20 bg-blue-500/5 px-3.5 py-1.5 text-xs font-semibold text-blue-300 sm:text-sm">
-                <MapPinned className="h-3.5 w-3.5" />
-                {t("heroBadge")}
+          {/* One split container: copy has breathing room; the photo stays edge-to-edge. */}
+          <section className="overflow-hidden rounded-[32px] border border-white/[0.08] bg-white/[0.025] shadow-[0_30px_90px_rgba(0,0,0,0.28)]">
+            <div className="grid grid-cols-1 items-stretch lg:grid-cols-12">
+              <div className="space-y-6 px-6 py-11 text-center sm:px-10 sm:py-14 lg:col-span-6 lg:flex lg:flex-col lg:justify-center lg:px-12 lg:py-16 lg:text-left">
+                <div className="inline-flex items-center gap-1.5 rounded-full border border-blue-500/20 bg-blue-500/5 px-3.5 py-1.5 text-xs font-semibold text-blue-300 sm:text-sm">
+                  <MapPinned className="h-3.5 w-3.5" />
+                  {t("heroBadge")}
+                </div>
+
+                <h1 className="text-4xl font-extrabold leading-[1.05] tracking-tight text-white sm:text-5xl lg:text-5xl xl:text-6xl">
+                  {t("heroTitleLine1")}
+                  <br />
+                  <span className="bg-gradient-to-r from-blue-300 via-indigo-300 to-blue-400 bg-clip-text text-transparent">{t("heroTitleLine2")}</span>
+                </h1>
+
+                <p className="mx-auto max-w-2xl text-base leading-relaxed text-white/65 sm:text-lg lg:mx-0">{t("heroSub")}</p>
+
+                <div className="flex flex-col justify-center gap-3.5 pt-2 sm:flex-row lg:justify-start">
+                  {primaryCta}
+                  <Button
+                    variant="outline"
+                    onClick={() => scrollTo("how")}
+                    className="h-12 rounded-xl border-white/10 bg-white/5 px-7 text-sm font-semibold text-white transition-all hover:bg-white/10"
+                  >
+                    {t("exploreFeatures")}
+                  </Button>
+                </div>
+                {!me && <p className="text-xs text-white/45">{t("accessNote")}</p>}
               </div>
 
-              <h1 className="text-4xl font-extrabold leading-[1.05] tracking-tight text-white sm:text-5xl lg:text-6xl">
-                {t("heroTitleLine1")}
-                <br />
-                <span className="bg-gradient-to-r from-blue-300 via-indigo-300 to-blue-400 bg-clip-text text-transparent">{t("heroTitleLine2")}</span>
-              </h1>
-
-              <p className="mx-auto max-w-2xl text-base leading-relaxed text-white/65 sm:text-lg lg:mx-0">{t("heroSub")}</p>
-
-              <div className="flex flex-col justify-center gap-3.5 pt-2 sm:flex-row lg:justify-start">
-                {primaryCta}
-                <Button
-                  variant="outline"
-                  onClick={() => scrollTo("how")}
-                  className="h-12 rounded-xl border-white/10 bg-white/5 px-7 text-sm font-semibold text-white transition-all hover:bg-white/10"
-                >
-                  {t("exploreFeatures")}
-                </Button>
-              </div>
-              {!me && <p className="text-xs text-white/45">{t("accessNote")}</p>}
+              <motion.div
+                className="min-h-0 lg:col-span-6"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.15 }}
+              >
+                <FieldSalesHero t={t} />
+              </motion.div>
             </div>
-
-            <motion.div
-              className="lg:col-span-6"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.15 }}
-            >
-              <FieldSalesHero t={t} />
-            </motion.div>
           </section>
 
           {/* Outcome-first proof points, adapted from the industry landing structure. */}
