@@ -6,7 +6,7 @@
  * server without changing any Xpot account or API contract.
  */
 
-const START_TIMEOUT_MS = 30_000;
+export const START_TIMEOUT_MS = 30_000;
 const STATUS_TIMEOUT_MS = 20_000;
 const DOWNLOAD_TIMEOUT_MS = 120_000;
 export const ENGINE_OVERDUE_GRACE_MS = 10 * 60 * 1000;
@@ -34,7 +34,7 @@ export type NormalizedPlace = {
 };
 
 export class ProspectingEngineError extends Error {
-  constructor(message: string, readonly code: "not_configured" | "unreachable" | "rejected" | "bad_response") {
+  constructor(message: string, readonly code: "not_configured" | "unreachable" | "rejected" | "not_found" | "bad_response") {
     super(message);
     this.name = "ProspectingEngineError";
   }
@@ -98,6 +98,9 @@ async function engineRequest(path: string, init: { method: "GET" | "POST"; body?
   }
   if ((response.status >= 300 && response.status < 400) || [401, 403].includes(response.status)) {
     throw new ProspectingEngineError(`The prospecting engine rejected the request (HTTP ${response.status}).`, "rejected");
+  }
+  if (response.status === 404) {
+    throw new ProspectingEngineError("The prospecting engine no longer knows this job (HTTP 404).", "not_found");
   }
   if (!response.ok) {
     throw new ProspectingEngineError(`The prospecting engine is unavailable (HTTP ${response.status}).`, "unreachable");

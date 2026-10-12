@@ -40,7 +40,11 @@ export const prospectingJobCreateSchema = z.object({
   searches: z.array(z.object({
     niche,
     query: z.string().trim().min(2).max(500),
-  })).min(1).max(5),
+  })).min(1).max(5)
+    // "Hair salon, hair-salon" collapse to one niche; one engine run per niche
+    // and area is a database invariant, so a repeat would otherwise be a 500.
+    .transform((searches) => searches.filter((search, index) =>
+      searches.findIndex((other) => other.niche === search.niche) === index)),
   filters: z.record(z.string(), z.unknown()).default({}),
   hypothesis: z.object({
     premise: z.string().trim().min(1).max(2000).optional(),

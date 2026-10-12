@@ -67,10 +67,12 @@ function localDateKey(date = new Date()) {
   return `${year}-${month}-${day}`;
 }
 function sectorSearches(value: string) {
-  return value.split(/[,;\n]/).map((sector) => sector.trim()).filter(Boolean).slice(0, 5).map((query) => ({
+  const searches = value.split(/[,;\n]/).map((sector) => sector.trim()).filter(Boolean).map((query) => ({
     query,
     niche: query.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40),
   })).filter((search) => search.niche.length >= 2);
+  // A repeated sector is one search, and it must not take one of the five slots.
+  return searches.filter((search, index) => searches.findIndex((other) => other.niche === search.niche) === index).slice(0, 5);
 }
 
 function currentPosition(): Promise<{ lat: number; lng: number }> {
@@ -84,15 +86,21 @@ function currentPosition(): Promise<{ lat: number; lng: number }> {
   });
 }
 
+/** Google Maps URLs keep at most nine waypoints; more are silently dropped. */
+const MAPS_URL_MAX_STOPS = 10;
+
 function mapsDirectionsUrl(route: ProspectingRoute, stops: RouteStop[]) {
-  if (!stops.length) return null;
+  // Hand Maps the next stops still to visit. Once the day has started the trip
+  // begins wherever the rep is now, which Maps uses when origin is left out.
+  const remaining = stops.filter((stop) => ["planned", "en_route", "checked_in"].includes(stop.status)).slice(0, MAPS_URL_MAX_STOPS);
+  if (!remaining.length) return null;
   const params = new URLSearchParams({
     api: "1",
-    origin: `${route.startLat},${route.startLng}`,
-    destination: `${stops.at(-1)!.lat},${stops.at(-1)!.lng}`,
+    destination: `${remaining.at(-1)!.lat},${remaining.at(-1)!.lng}`,
     travelmode: "driving",
   });
-  if (stops.length > 1) params.set("waypoints", stops.slice(0, -1).map((stop) => `${stop.lat},${stop.lng}`).join("|"));
+  if (remaining.length === stops.length) params.set("origin", `${route.startLat},${route.startLng}`);
+  if (remaining.length > 1) params.set("waypoints", remaining.slice(0, -1).map((stop) => `${stop.lat},${stop.lng}`).join("|"));
   return `https://www.google.com/maps/dir/?${params.toString()}`;
 }
 
@@ -161,6 +169,9 @@ export function XpotProspecting() {
   const routeQuery = useQuery<RouteDetails>({
     queryKey: ["/api/xpot/prospecting/routes", activeRouteId],
     enabled: activeRouteId !== null,
+    // Check-ins and checkouts happen on the Visits screen; keep the stop states current.
+    refetchOnWindowFocus: true,
+    refetchInterval: (query) => (["published", "in_progress"].includes(query.state.data?.route.status ?? "") ? 60_000 : false),
   });
 
   const createJob = useMutation({
@@ -214,11 +225,13 @@ export function XpotProspecting() {
   const autoRouteJobRef = useRef<number | null>(null);
   useEffect(() => {
     const currentDetails = detailsQuery.data;
+    // Wait for today's routes to load: before that "no route yet" is unknown.
+    if (!routesQuery.isSuccess) return;
     if (!currentDetails || currentDetails.job.status !== "completed" || currentDetails.summary.eligible === 0 || todayRoutes.length > 0) return;
     if (autoRouteJobRef.current === currentDetails.job.id || createRoute.isPending) return;
     autoRouteJobRef.current = currentDetails.job.id;
     createRoute.mutate();
-  }, [detailsQuery.data, todayRoutes.length, createRoute.isPending]);
+  }, [detailsQuery.data, routesQuery.isSuccess, todayRoutes.length, createRoute.isPending]);
 
   const retryJob = useMutation({
     mutationFn: async (jobId: number) => {
