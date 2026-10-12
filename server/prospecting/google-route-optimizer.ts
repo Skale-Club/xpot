@@ -66,6 +66,10 @@ function seconds(value: string | undefined) {
   return Number.isFinite(parsed) ? Math.max(0, Math.round(parsed)) : 0;
 }
 
+function googleTimestamp(date: Date) {
+  return new Date(Math.floor(date.getTime() / 1000) * 1000).toISOString().replace(".000Z", "Z");
+}
+
 export function buildGoogleOptimizeToursRequest(input: OptimizeRouteInput) {
   const endAt = new Date(input.plannedStartAt.getTime() + input.shiftDurationSeconds * 1000);
   return {
@@ -73,8 +77,8 @@ export function buildGoogleOptimizeToursRequest(input: OptimizeRouteInput) {
     considerRoadTraffic: true,
     populatePolylines: true,
     model: {
-      globalStartTime: input.plannedStartAt.toISOString(),
-      globalEndTime: endAt.toISOString(),
+      globalStartTime: googleTimestamp(input.plannedStartAt),
+      globalEndTime: googleTimestamp(endAt),
       shipments: input.candidates.map((candidate) => ({
         label: String(candidate.id),
         loadDemands: { visit_count: { amount: "1" } },
@@ -94,8 +98,8 @@ export function buildGoogleOptimizeToursRequest(input: OptimizeRouteInput) {
           latitude: (input.end ?? input.start).lat,
           longitude: (input.end ?? input.start).lng,
         },
-        startTimeWindows: [{ startTime: input.plannedStartAt.toISOString(), endTime: input.plannedStartAt.toISOString() }],
-        endTimeWindows: [{ startTime: input.plannedStartAt.toISOString(), endTime: endAt.toISOString() }],
+        startTimeWindows: [{ startTime: googleTimestamp(input.plannedStartAt), endTime: googleTimestamp(input.plannedStartAt) }],
+        endTimeWindows: [{ startTime: googleTimestamp(input.plannedStartAt), endTime: googleTimestamp(endAt) }],
         loadLimits: { visit_count: { maxLoad: String(input.maxStops) } },
         costPerKilometer: 1,
         costPerHour: 30,
