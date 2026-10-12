@@ -16,6 +16,7 @@ export function useXpotShared() {
       queryClient.invalidateQueries({ queryKey: ["/api/xpot/sales"] }),
       queryClient.invalidateQueries({ queryKey: ["/api/xpot/consignments"] }),
       queryClient.invalidateQueries({ queryKey: ["/api/xpot/products"] }),
+      queryClient.invalidateQueries({ queryKey: ["/api/xpot/prospecting/routes"] }),
     ]);
   };
 

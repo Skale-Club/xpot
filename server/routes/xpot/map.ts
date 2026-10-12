@@ -25,6 +25,16 @@ const num = (value: unknown) => {
   return Number.isFinite(n) ? n : null;
 };
 
+function routeStops(value: unknown) {
+  if (typeof value !== "string") return [];
+  return value.split("|").slice(0, 20).flatMap((pair) => {
+    const [rawLat, rawLng] = pair.split(",");
+    const lat = Number(rawLat);
+    const lng = Number(rawLng);
+    return Number.isFinite(lat) && Number.isFinite(lng) ? [{ lat, lng }] : [];
+  });
+}
+
 export function createMapRouter() {
   const router = Router();
   router.use(requireXpotUser);
@@ -48,7 +58,9 @@ export function createMapRouter() {
 
     const leadLat = num(req.query.leadLat);
     const leadLng = num(req.query.leadLng);
+    const stops = routeStops(req.query.stops);
     const hasLead = leadLat !== null && leadLng !== null;
+    const hasTargets = hasLead || stops.length > 0;
 
     const width = Math.min(640, Math.max(120, num(req.query.w) ?? 400));
     const height = Math.min(640, Math.max(80, num(req.query.h) ?? 170));
@@ -63,10 +75,17 @@ export function createMapRouter() {
     params.append("markers", `size:mid|color:0x3b82f6|${lat},${lng}`);
     if (hasLead) {
       params.append("markers", `size:mid|color:0x6366f1|label:V|${leadLat},${leadLng}`);
+    } else if (stops.length > 0) {
+      stops.forEach((stop, index) => {
+        const label = index < 9 ? String(index + 1) : String.fromCharCode(65 + Math.min(25, index - 9));
+        params.append("markers", `size:mid|color:0x6366f1|label:${label}|${stop.lat},${stop.lng}`);
+      });
+      params.append("path", `color:0x818cf8|weight:3|${lat},${lng}|${stops.map((stop) => `${stop.lat},${stop.lng}`).join("|")}`);
     } else {
       params.set("center", `${lat},${lng}`);
       params.set("zoom", String(Math.min(20, Math.max(1, Math.round(num(req.query.zoom) ?? 16)))));
     }
+    if (hasTargets) params.delete("zoom");
     for (const style of DARK_STYLE) params.append("style", style);
     params.set("key", apiKey);
 

@@ -2,6 +2,7 @@ import { z } from "zod";
 
 // Base types for validation schemas (avoiding drizzle-zod .pick/.omit breakage)
 export const xpotCheckInSchema = z.object({
+  visitId: z.number().int().positive().optional(),
   leadId: z.number().int().positive(),
   locationId: z.number().int().positive().optional(),
   lat: z.number().min(-90).max(90).optional(),

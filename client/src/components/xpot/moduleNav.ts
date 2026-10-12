@@ -76,6 +76,7 @@ type ShellKey =
   | "tabVisits"
   | "tabLeads"
   | "tabSales"
+  | "tabProspecting"
   | "navManage"
   | "manageTeam"
   | "manageProducts"
@@ -116,6 +117,7 @@ export function moduleGroups(module: XpotModule, viewer: Viewer, l: Labels): Nav
         { href: "/dashboard", label: l.shell("tabDashboard"), icon: Activity, match: starts("/dashboard") },
         { href: "/visits", label: l.shell("tabVisits"), icon: Clock3, match: starts("/visits") },
         { href: "/leads", label: l.shell("tabLeads"), icon: Building2, match: starts("/leads") },
+        { href: "/prospecting", label: l.shell("tabProspecting"), icon: Route, match: starts("/prospecting") },
         { href: "/sales", label: l.shell("tabSales"), icon: DollarSign, match: starts("/sales") },
       ],
     };
