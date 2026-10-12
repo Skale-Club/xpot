@@ -328,7 +328,7 @@ export function XpotProspecting() {
           )}
         </section>
 
-        <section className="rounded-[20px] p-4 sm:rounded-[22px] sm:p-5" style={cardStyle} aria-live="polite">
+        <section className="min-w-0 rounded-[20px] p-4 sm:rounded-[22px] sm:p-5" style={cardStyle} aria-live="polite">
           {detailsQuery.isLoading ? <div className="flex min-h-48 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-indigo-300" /></div> : details ? (
             <div className="space-y-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -338,8 +338,8 @@ export function XpotProspecting() {
               {!details.engine.configured ? <div className="rounded-xl border border-amber-400/20 bg-amber-400/10 p-3 text-xs text-amber-200">{t("engineUnavailable")}</div> : null}
               {details.job.errorMessage ? <div className="rounded-xl border border-red-400/20 bg-red-400/[0.08] p-3 text-xs text-red-200">{details.job.errorMessage}</div> : null}
               {details.job.expansionState?.currentArea ? <div className="rounded-xl border border-sky-400/15 bg-sky-400/[0.07] p-3 text-xs text-sky-200"><div>{t("currentArea", { area: details.job.expansionState.currentArea })}</div><div className="mt-1 text-sky-200/60">{t("expanding")}</div></div> : null}
-              <div className="-mx-4 flex snap-x gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:grid sm:grid-cols-3 sm:overflow-visible sm:px-0 sm:pb-0">
-                {details.candidates.filter((candidate) => candidate.status !== "discarded").slice(0, 6).map((candidate) => <div key={candidate.id} className="w-[72%] shrink-0 snap-start rounded-xl border border-white/[0.06] bg-black/10 p-3 sm:w-auto"><div className="truncate text-xs font-semibold text-white/75">{candidate.name}</div><div className="mt-1 line-clamp-2 text-[10px] leading-4 text-white/30">{candidate.address || "—"}</div></div>)}
+              <div className="flex w-full min-w-0 snap-x gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:grid sm:grid-cols-3 sm:overflow-visible sm:pb-0">
+                {details.candidates.filter((candidate) => candidate.status !== "discarded").slice(0, 6).map((candidate) => <div key={candidate.id} className="max-w-64 basis-[78%] shrink-0 snap-start rounded-xl border border-white/[0.06] bg-black/10 p-3 sm:max-w-none sm:basis-auto"><div className="truncate text-xs font-semibold text-white/75">{candidate.name}</div><div className="mt-1 line-clamp-2 text-[10px] leading-4 text-white/30">{candidate.address || "—"}</div></div>)}
               </div>
               {details.summary.eligible === 0 ? <p className="text-sm text-white/35">{t("emptyCandidates")}</p> : null}
               {hasFailedRuns ? (
