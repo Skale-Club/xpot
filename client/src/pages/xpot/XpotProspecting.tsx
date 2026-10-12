@@ -183,7 +183,6 @@ export function XpotProspecting() {
         plannedStartAt: new Date().toISOString(),
         start,
         jobId: detailsQuery.data.job.id,
-        maxStops: detailsQuery.data.job.targetStops,
         shiftDurationMinutes: detailsQuery.data.job.shiftDurationMinutes,
         defaultVisitMinutes: detailsQuery.data.job.defaultVisitMinutes,
       });
