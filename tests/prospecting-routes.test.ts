@@ -4,6 +4,7 @@ import { haversineMeters, optimizeRouteHeuristic } from "../server/prospecting/r
 import { buildEngineInput, depthForMaxResults, mapEngineStatus, parseEngineResults } from "../server/prospecting/google-maps-engine.js";
 import { evaluateColdEligibility } from "../server/prospecting/eligibility.js";
 import { chooseExpansionArea } from "../server/prospecting/expansion.js";
+import { earliestStartedAt } from "../server/prospecting/job-status.js";
 
 describe("prospecting contracts", () => {
   it("uses eligible result coordinates as a no-GPS route origin", () => {
@@ -152,6 +153,15 @@ describe("cold prospecting eligibility", () => {
 });
 
 describe("automatic area expansion", () => {
+  it("keeps job timestamps as decoded Dates when reconciling run status", () => {
+    expect(earliestStartedAt([
+      new Date("2026-10-12T14:00:00Z"),
+      null,
+      new Date("2026-10-12T13:00:00Z"),
+    ])).toEqual(new Date("2026-10-12T13:00:00Z"));
+    expect(earliestStartedAt([null])).toBeNull();
+  });
+
   it("prefers the strongest nearby city already visible on the result frontier", () => {
     expect(chooseExpansionArea({
       anchor: "Framingham, MA",
