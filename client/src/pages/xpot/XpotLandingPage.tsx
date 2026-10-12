@@ -10,10 +10,14 @@ import {
   ChevronRight,
   Clock3,
   DollarSign,
+  History,
   MapPinned,
   Mic,
+  Navigation,
   Nfc,
   RefreshCw,
+  Route,
+  Search,
   Sparkles,
 } from "lucide-react";
 import { queryClient } from "@/lib/queryClient";
@@ -77,6 +81,40 @@ function SectionHeading({ title, sub }: { title: string; sub: string }) {
     <div className="mx-auto max-w-2xl space-y-3 text-center">
       <h2 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">{title}</h2>
       <p className="text-base text-white/55">{sub}</p>
+    </div>
+  );
+}
+
+function FieldSalesHero({ t }: { t: LandingT }) {
+  return (
+    <div className="relative mx-auto w-full max-w-[620px]">
+      <div className="pointer-events-none absolute -inset-8 rounded-[48px] bg-blue-500/10 blur-3xl" />
+      <div className="relative aspect-[4/3] overflow-hidden rounded-[30px] border border-white/10 bg-[#0b1020] shadow-[0_30px_80px_rgba(0,0,0,0.55)]">
+        <img
+          src="/xpot-hero-field-sales-v2.webp"
+          alt={t("heroImageAlt")}
+          width={1672}
+          height={941}
+          loading="eager"
+          decoding="async"
+          className="h-full w-full object-cover object-[64%_center]"
+        />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#05070f]/85 via-transparent to-[#05070f]/10" />
+
+        <div className="absolute inset-x-4 bottom-4 flex flex-col gap-2.5 sm:inset-x-5 sm:bottom-5 sm:flex-row sm:items-end sm:justify-between">
+          <div className="max-w-[250px] rounded-2xl border border-white/15 bg-[#070b16]/85 p-3.5 shadow-2xl backdrop-blur-md">
+            <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-blue-200">
+              <Route className="h-3.5 w-3.5" />
+              {t("heroRouteCardTitle")}
+            </div>
+            <p className="mt-1.5 text-sm font-semibold text-white">{t("heroRouteCardBody")}</p>
+          </div>
+          <div className="flex items-center gap-2 self-start rounded-full border border-emerald-300/20 bg-emerald-950/80 px-3 py-2 text-xs font-semibold text-emerald-200 shadow-xl backdrop-blur-md sm:self-auto">
+            <Navigation className="h-3.5 w-3.5" />
+            {t("heroRouteCardBadge")}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -232,15 +270,29 @@ export function XpotLandingPage() {
   );
 
   const tools = [
+    { icon: Route, title: t("routesTitle"), items: [t("routes1"), t("routes2"), t("routes3"), t("routes4")], tone: "text-cyan-300 bg-cyan-500/10 border-cyan-500/20" },
     { icon: MapPinned, title: t("visitsTitle"), items: [t("visits1"), t("visits2"), t("visits3"), t("visits4")], tone: "text-blue-300 bg-blue-500/10 border-blue-500/20" },
     { icon: Boxes, title: t("salesTitle"), items: [t("sales1"), t("sales2"), t("sales3"), t("sales4")], tone: "text-emerald-300 bg-emerald-500/10 border-emerald-500/20" },
     { icon: Nfc, title: t("tagsTitle"), items: [t("tags1"), t("tags2"), t("tags3"), t("tags4")], tone: "text-indigo-300 bg-indigo-500/10 border-indigo-500/20" },
   ];
 
   const steps = [
-    { icon: MapPinned, title: t("step1Title"), body: t("step1Body") },
-    { icon: Mic, title: t("step2Title"), body: t("step2Body") },
-    { icon: Sparkles, title: t("step3Title"), body: t("step3Body") },
+    { icon: Search, title: t("step1Title"), body: t("step1Body") },
+    { icon: Route, title: t("step2Title"), body: t("step2Body") },
+    { icon: MapPinned, title: t("step3Title"), body: t("step3Body") },
+    { icon: Mic, title: t("step4Title"), body: t("step4Body") },
+  ];
+
+  const routeHighlights = [
+    { icon: Search, title: t("highlight1Title"), body: t("highlight1Body") },
+    { icon: Route, title: t("highlight2Title"), body: t("highlight2Body") },
+    { icon: History, title: t("highlight3Title"), body: t("highlight3Body") },
+  ];
+
+  const fieldFlow = [
+    t("fieldFlow1"),
+    t("fieldFlow2"),
+    t("fieldFlow3"),
   ];
 
   return (
@@ -320,9 +372,9 @@ export function XpotLandingPage() {
         </header>
 
         <main className="relative mx-auto max-w-6xl space-y-24 px-5 py-14 sm:py-20 lg:space-y-32 lg:px-8 lg:py-24">
-          {/* Hero. The text is static so it paints at once; only the phone animates. */}
+          {/* Photo-led hero: show the work before explaining the software. */}
           <section className="grid grid-cols-1 items-center gap-14 lg:grid-cols-12 lg:gap-10">
-            <div className="space-y-6 text-center lg:col-span-7 lg:text-left">
+            <div className="space-y-6 text-center lg:col-span-6 lg:text-left">
               <div className="inline-flex items-center gap-1.5 rounded-full border border-blue-500/20 bg-blue-500/5 px-3.5 py-1.5 text-xs font-semibold text-blue-300 sm:text-sm">
                 <MapPinned className="h-3.5 w-3.5" />
                 {t("heroBadge")}
@@ -350,13 +402,24 @@ export function XpotLandingPage() {
             </div>
 
             <motion.div
-              className="lg:col-span-5"
+              className="lg:col-span-6"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.15 }}
             >
-              <PhoneMock t={t} />
+              <FieldSalesHero t={t} />
             </motion.div>
+          </section>
+
+          {/* Outcome-first proof points, adapted from the industry landing structure. */}
+          <section aria-label={t("highlightsLabel")} className="grid grid-cols-1 overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.035] md:grid-cols-3">
+            {routeHighlights.map(({ icon: Icon, title, body }, index) => (
+              <div key={title} className={`p-6 sm:p-7 ${index > 0 ? "border-t border-white/[0.07] md:border-l md:border-t-0" : ""}`}>
+                <Icon className="h-5 w-5 text-blue-300" />
+                <h2 className="mt-4 text-base font-bold text-white">{title}</h2>
+                <p className="mt-2 text-sm leading-relaxed text-white/55">{body}</p>
+              </div>
+            ))}
           </section>
 
           {/* How it works */}
@@ -364,7 +427,7 @@ export function XpotLandingPage() {
             <Reveal>
               <SectionHeading title={t("howTitle")} sub={t("howSub")} />
             </Reveal>
-            <ol className="grid grid-cols-1 gap-5 md:grid-cols-3">
+            <ol className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
               {steps.map(({ icon: Icon, title, body }, i) => (
                 <Reveal key={title} delay={i * 0.08}>
                   <li className="relative h-full list-none rounded-2xl border border-white/[0.07] bg-white/[0.035] p-6">
@@ -380,12 +443,37 @@ export function XpotLandingPage() {
             </ol>
           </section>
 
+          {/* Product proof: the photo establishes the job; this shows how Xpot supports it. */}
+          <section className="grid grid-cols-1 items-center gap-12 rounded-[28px] border border-white/[0.07] bg-white/[0.025] p-6 sm:p-10 lg:grid-cols-2 lg:gap-16 lg:p-12">
+            <Reveal className="order-2 lg:order-1">
+              <PhoneMock t={t} />
+            </Reveal>
+            <Reveal className="order-1 lg:order-2">
+              <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-blue-300">
+                <Navigation className="h-4 w-4" />
+                {t("fieldEyebrow")}
+              </div>
+              <h2 className="mt-4 text-3xl font-bold tracking-tight text-white sm:text-4xl">{t("fieldTitle")}</h2>
+              <p className="mt-4 text-base leading-relaxed text-white/60">{t("fieldBody")}</p>
+              <ul className="mt-7 space-y-4">
+                {fieldFlow.map((item) => (
+                  <li key={item} className="flex gap-3 text-sm leading-relaxed text-white/75">
+                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-500/15 text-blue-300">
+                      <Check className="h-3.5 w-3.5" />
+                    </span>
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </Reveal>
+          </section>
+
           {/* Tools */}
           <section id="tools" className="scroll-mt-24 space-y-12">
             <Reveal>
               <SectionHeading title={t("toolsTitle")} sub={t("toolsSub")} />
             </Reveal>
-            <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
               {tools.map(({ icon: Icon, title, items, tone }, i) => (
                 <Reveal key={title} delay={i * 0.08} className="h-full">
                   <div className="h-full rounded-2xl border border-white/[0.07] bg-white/[0.035] p-6">
