@@ -261,7 +261,8 @@ describe("Google daily route optimization", () => {
     expect(request.model.shipments).toHaveLength(2);
     expect(request.model.shipments[0].deliveries[0].duration).toBe("1200s");
     expect(request.model.vehicles[0].loadLimits.visit_count.maxLoad).toBe("60");
-    expect(request.model.globalEndTime).toBe("2026-10-13T17:00:00.000Z");
+    expect(request.model.globalStartTime).toBe("2026-10-13T13:00:00Z");
+    expect(request.model.globalEndTime).toBe("2026-10-13T17:00:00Z");
     expect(request.considerRoadTraffic).toBe(true);
   });
 
