@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { CheckCircle2, ChevronRight, Loader2, MapPin, Navigation, Radar, Route as RouteIcon, Search, ShieldCheck } from "lucide-react";
+import { CheckCircle2, ChevronRight, Clock3, Loader2, MapPin, Navigation, Radar, Route as RouteIcon, Search, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/i18n";
@@ -52,6 +52,8 @@ type RouteStop = {
   lat: string;
   lng: string;
   score: number;
+  travelDurationSeconds: number;
+  estimatedArrivalAt: string | null;
 };
 
 type RouteDetails = { route: ProspectingRoute; stops: RouteStop[] };
@@ -92,6 +94,19 @@ function mapsDirectionsUrl(route: ProspectingRoute, stops: RouteStop[]) {
   });
   if (stops.length > 1) params.set("waypoints", stops.slice(0, -1).map((stop) => `${stop.lat},${stop.lng}`).join("|"));
   return `https://www.google.com/maps/dir/?${params.toString()}`;
+}
+
+function stopDirectionsUrl(stop: RouteStop) {
+  const params = new URLSearchParams({
+    api: "1",
+    destination: `${stop.lat},${stop.lng}`,
+    travelmode: "driving",
+  });
+  return `https://www.google.com/maps/dir/?${params.toString()}`;
+}
+
+function driveMinutes(seconds: number) {
+  return Math.max(1, Math.round(seconds / 60));
 }
 
 function statusLabel(status: ProspectingJob["status"], t: ReturnType<typeof useT<typeof prospectingMessages.en>>) {
@@ -239,49 +254,54 @@ export function XpotProspecting() {
   const hasFailedRuns = details?.runs.some((run) => run.status === "failed") ?? false;
   const routeDetails = routeQuery.data;
   const directionsUrl = routeDetails ? mapsDirectionsUrl(routeDetails.route, routeDetails.stops) : null;
-  const mapSrc = routeDetails && routeDetails.stops.length
+  const mapStops = useMemo(() => routeDetails?.stops.map((stop) => ({
+    lat: Number(stop.lat),
+    lng: Number(stop.lng),
+    label: stop.name,
+  })) ?? [], [routeDetails?.stops]);
+  const mapSrc = useMemo(() => routeDetails && routeDetails.stops.length
     ? `/api/xpot/map?${new URLSearchParams({
         lat: routeDetails.route.startLat,
         lng: routeDetails.route.startLng,
         w: "640",
-        h: "300",
+        h: "360",
         stops: routeDetails.stops.map((stop) => `${stop.lat},${stop.lng}`).join("|"),
       }).toString()}`
-    : null;
+    : null, [routeDetails]);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-5">
-      <section className="overflow-hidden rounded-[24px] p-5 sm:p-7" style={{ ...cardStyle, background: "linear-gradient(135deg, rgba(79,70,229,0.16), rgba(14,165,233,0.06))" }}>
-        <div className="mb-5 flex items-start gap-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-indigo-500/20 text-indigo-300"><Radar className="h-5 w-5" /></div>
+    <div className="mx-auto max-w-6xl space-y-4 sm:space-y-5">
+      <section className="overflow-hidden rounded-[20px] p-4 sm:rounded-[24px] sm:p-7" style={{ ...cardStyle, background: "linear-gradient(135deg, rgba(79,70,229,0.16), rgba(14,165,233,0.06))" }}>
+        <div className="mb-4 flex items-start gap-3 sm:mb-5">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-indigo-500/20 text-indigo-300 sm:h-11 sm:w-11"><Radar className="h-5 w-5" /></div>
           <div>
-            <h1 className="text-xl font-bold text-white">{t("title")}</h1>
-            <p className="mt-1 max-w-2xl text-sm leading-6 text-white/50">{t("subtitle")}</p>
+            <h1 className="text-lg font-bold text-white sm:text-xl">{t("title")}</h1>
+            <p className="mt-1 max-w-2xl text-sm leading-5 text-white/50 sm:leading-6">{t("subtitle")}</p>
           </div>
         </div>
         <form className="grid gap-4 md:grid-cols-[1fr_1fr_auto] md:items-end" onSubmit={(event) => { event.preventDefault(); createJob.mutate(); }}>
           <label className="block">
             <span className="mb-2 block text-xs font-semibold text-white/65">{t("cityLabel")}</span>
-            <div className="relative"><MapPin className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" /><input value={city} onChange={(event) => setCity(event.target.value)} placeholder={t("cityPlaceholder")} autoComplete="address-level2" className="h-11 w-full rounded-xl border border-white/10 bg-black/20 pl-10 pr-3 text-sm text-white outline-none transition focus:border-indigo-400/60" /></div>
+            <div className="relative"><MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" /><input value={city} onChange={(event) => setCity(event.target.value)} placeholder={t("cityPlaceholder")} autoComplete="address-level2" className="h-12 w-full rounded-xl border border-white/10 bg-black/20 pl-10 pr-3 text-base text-white outline-none transition placeholder:text-white/25 focus:border-indigo-400/60 sm:h-11 sm:text-sm" /></div>
           </label>
           <label className="block">
             <span className="mb-2 block text-xs font-semibold text-white/65">{t("sectorsLabel")}</span>
-            <div className="relative"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" /><input value={sectors} onChange={(event) => setSectors(event.target.value)} placeholder={t("sectorsPlaceholder")} className="h-11 w-full rounded-xl border border-white/10 bg-black/20 pl-10 pr-3 text-sm text-white outline-none transition focus:border-indigo-400/60" /></div>
+            <div className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" /><input value={sectors} onChange={(event) => setSectors(event.target.value)} placeholder={t("sectorsPlaceholder")} className="h-12 w-full rounded-xl border border-white/10 bg-black/20 pl-10 pr-3 text-base text-white outline-none transition placeholder:text-white/25 focus:border-indigo-400/60 sm:h-11 sm:text-sm" /></div>
             <span className="mt-1.5 block text-[11px] text-white/30">{t("sectorsHint")}</span>
           </label>
-          <Button type="submit" disabled={createJob.isPending || !city.trim() || parsedSearches.length === 0} className="h-11 rounded-xl bg-indigo-500 px-5 text-white">
+          <Button type="submit" disabled={createJob.isPending || !city.trim() || parsedSearches.length === 0} className="order-4 h-12 w-full touch-manipulation rounded-xl bg-indigo-500 px-5 text-white md:order-none md:h-11 md:w-auto">
             {createJob.isPending ? <><Loader2 className="animate-spin" />{t("creating")}</> : <><RouteIcon />{t("buildToday")}</>}
           </Button>
-          <fieldset className="md:col-span-3">
+          <fieldset className="order-3 md:order-none md:col-span-3">
             <legend className="mb-2 text-xs font-semibold text-white/65">{t("shiftLabel")}</legend>
-            <div className="flex flex-wrap gap-2">
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
               {[2, 4, 6, 8, 10, 12].map((hours) => (
                 <button
                   key={hours}
                   type="button"
                   aria-pressed={shiftHours === hours}
                   onClick={() => setShiftHours(hours)}
-                  className={`rounded-xl border px-4 py-2 text-sm font-semibold transition ${shiftHours === hours ? "border-indigo-400/60 bg-indigo-500/20 text-indigo-100" : "border-white/10 bg-black/10 text-white/45 hover:bg-white/[0.05]"}`}
+                  className={`min-h-11 touch-manipulation rounded-xl border px-2 py-2 text-sm font-semibold transition ${shiftHours === hours ? "border-indigo-400/60 bg-indigo-500/20 text-indigo-100" : "border-white/10 bg-black/10 text-white/45 hover:bg-white/[0.05]"}`}
                 >
                   {t("shiftHours", { hours })}
                 </button>
@@ -293,12 +313,12 @@ export function XpotProspecting() {
       </section>
 
       <div className="grid gap-5 lg:grid-cols-[0.85fr_1.35fr]">
-        <section className="rounded-[22px] p-5" style={cardStyle}>
+        <section className="rounded-[20px] p-4 sm:rounded-[22px] sm:p-5" style={cardStyle}>
           <h2 className="mb-4 text-sm font-bold text-white">{t("recentPlans")}</h2>
           {todayJobs.length === 0 ? <p className="py-8 text-center text-sm text-white/35">{t("noPlans")}</p> : (
             <div className="space-y-2">
               {todayJobs.map((job) => (
-                <button key={job.id} type="button" onClick={() => setSelectedJobId(job.id)} className={`flex w-full items-center gap-3 rounded-2xl border p-3 text-left transition ${activeJobId === job.id ? "border-indigo-400/40 bg-indigo-500/10" : "border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.05]"}`}>
+                <button key={job.id} type="button" onClick={() => setSelectedJobId(job.id)} className={`flex min-h-14 w-full touch-manipulation items-center gap-3 rounded-2xl border p-3 text-left transition ${activeJobId === job.id ? "border-indigo-400/40 bg-indigo-500/10" : "border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.05]"}`}>
                   <div className={`h-2.5 w-2.5 rounded-full ${job.status === "completed" ? "bg-emerald-400" : job.status === "failed" ? "bg-red-400" : "animate-pulse bg-sky-400"}`} />
                   <div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold text-white/85">{job.location}</div><div className="text-[11px] text-white/35">{statusLabel(job.status, t)}</div></div>
                   <ChevronRight className="h-4 w-4 text-white/25" />
@@ -308,7 +328,7 @@ export function XpotProspecting() {
           )}
         </section>
 
-        <section className="rounded-[22px] p-5" style={cardStyle} aria-live="polite">
+        <section className="rounded-[20px] p-4 sm:rounded-[22px] sm:p-5" style={cardStyle} aria-live="polite">
           {detailsQuery.isLoading ? <div className="flex min-h-48 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-indigo-300" /></div> : details ? (
             <div className="space-y-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -318,16 +338,20 @@ export function XpotProspecting() {
               {!details.engine.configured ? <div className="rounded-xl border border-amber-400/20 bg-amber-400/10 p-3 text-xs text-amber-200">{t("engineUnavailable")}</div> : null}
               {details.job.errorMessage ? <div className="rounded-xl border border-red-400/20 bg-red-400/[0.08] p-3 text-xs text-red-200">{details.job.errorMessage}</div> : null}
               {details.job.expansionState?.currentArea ? <div className="rounded-xl border border-sky-400/15 bg-sky-400/[0.07] p-3 text-xs text-sky-200"><div>{t("currentArea", { area: details.job.expansionState.currentArea })}</div><div className="mt-1 text-sky-200/60">{t("expanding")}</div></div> : null}
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                {details.candidates.filter((candidate) => candidate.status !== "discarded").slice(0, 6).map((candidate) => <div key={candidate.id} className="rounded-xl border border-white/[0.06] bg-black/10 p-3"><div className="truncate text-xs font-semibold text-white/75">{candidate.name}</div><div className="mt-1 truncate text-[10px] text-white/30">{candidate.address || "—"}</div></div>)}
+              <div className="-mx-4 flex snap-x gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:grid sm:grid-cols-3 sm:overflow-visible sm:px-0 sm:pb-0">
+                {details.candidates.filter((candidate) => candidate.status !== "discarded").slice(0, 6).map((candidate) => <div key={candidate.id} className="w-[72%] shrink-0 snap-start rounded-xl border border-white/[0.06] bg-black/10 p-3 sm:w-auto"><div className="truncate text-xs font-semibold text-white/75">{candidate.name}</div><div className="mt-1 line-clamp-2 text-[10px] leading-4 text-white/30">{candidate.address || "—"}</div></div>)}
               </div>
               {details.summary.eligible === 0 ? <p className="text-sm text-white/35">{t("emptyCandidates")}</p> : null}
               {hasFailedRuns ? (
-                <Button onClick={() => retryJob.mutate(details.job.id)} disabled={retryJob.isPending || !details.engine.configured} className="w-full rounded-xl bg-amber-500 text-slate-950 hover:bg-amber-400">
+                <Button onClick={() => retryJob.mutate(details.job.id)} disabled={retryJob.isPending || !details.engine.configured} className="h-12 w-full touch-manipulation rounded-xl bg-amber-500 text-slate-950 hover:bg-amber-400 sm:h-10">
                   {retryJob.isPending ? <><Loader2 className="animate-spin" />{t("retrying")}</> : t("tryAgain")}
                 </Button>
+              ) : todayRoutes.length > 0 ? (
+                <Button asChild className="h-12 w-full touch-manipulation rounded-xl bg-indigo-500 text-white sm:h-10">
+                  <a href="#today-route"><Navigation />{t("viewRoute")}</a>
+                </Button>
               ) : (
-                <Button onClick={() => createRoute.mutate()} disabled={createRoute.isPending || details.summary.eligible === 0 || ["queued", "running"].includes(details.job.status)} className="w-full rounded-xl bg-indigo-500 text-white">
+                <Button onClick={() => createRoute.mutate()} disabled={createRoute.isPending || details.summary.eligible === 0 || ["queued", "running"].includes(details.job.status)} className="h-12 w-full touch-manipulation rounded-xl bg-indigo-500 text-white sm:h-10">
                   {createRoute.isPending ? <><Loader2 className="animate-spin" />{t("preparingRoute")}</> : <><Navigation />{t("prepareRoute")}</>}
                 </Button>
               )}
@@ -337,27 +361,57 @@ export function XpotProspecting() {
       </div>
 
       {routeDetails ? (
-        <section className="overflow-hidden rounded-[24px]" style={cardStyle}>
+        <section id="today-route" className="scroll-mt-4 overflow-hidden rounded-[20px] sm:rounded-[24px]" style={cardStyle}>
           <RoutePreviewMap
             start={{ lat: Number(routeDetails.route.startLat), lng: Number(routeDetails.route.startLng) }}
-            stops={routeDetails.stops.map((stop) => ({ lat: Number(stop.lat), lng: Number(stop.lng), label: stop.name }))}
+            stops={mapStops}
             encodedPolyline={routeDetails.route.optimizationMeta.encodedPolyline}
             fallbackSrc={mapSrc}
             alt={t("routeReady")}
           />
-          <div className="grid gap-5 p-5 lg:grid-cols-[1fr_0.9fr] lg:p-6">
+          <div className="grid gap-5 p-4 sm:p-5 lg:grid-cols-[1fr_0.9fr] lg:p-6">
             <div>
               <div className="flex items-center gap-2 text-indigo-300"><RouteIcon className="h-4 w-4" /><span className="text-xs font-bold uppercase tracking-wider">{t("routeReady")}</span></div>
               <h2 className="mt-2 text-xl font-bold text-white">{routeDetails.route.name}</h2>
               <p className="mt-1 text-sm text-white/40">{t("routeSummary", { count: routeDetails.stops.length, hours: `${Math.max(1, Math.round(routeDetails.route.totalDurationSeconds / 360) / 10)}h` })}</p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                {directionsUrl ? <Button asChild variant="outline" className="rounded-xl border-white/10 text-white"><a href={directionsUrl} target="_blank" rel="noreferrer"><Navigation />{t("openMaps")}</a></Button> : null}
-                {routeDetails.route.status === "draft" ? <Button onClick={() => publishRoute.mutate(routeDetails.route.id)} disabled={publishRoute.isPending} className="rounded-xl bg-emerald-500 text-white">{publishRoute.isPending ? <Loader2 className="animate-spin" /> : <ShieldCheck />}{publishRoute.isPending ? t("publishing") : t("publishRoute")}</Button> : <><span className="inline-flex items-center gap-2 rounded-xl bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-300"><CheckCircle2 className="h-4 w-4" />{routeStatusLabel(routeDetails.route.status, t)}</span>{routeDetails.route.status !== "cancelled" ? <Button asChild className="rounded-xl bg-indigo-500 text-white"><Link href="/visits?view=day">{t("openVisits")}</Link></Button> : null}</>}
+              <div className="mt-4 grid gap-2 sm:flex sm:flex-wrap">
+                {routeDetails.route.status === "draft" ? <Button onClick={() => publishRoute.mutate(routeDetails.route.id)} disabled={publishRoute.isPending} className="h-12 w-full touch-manipulation rounded-xl bg-emerald-500 text-white sm:h-10 sm:w-auto">{publishRoute.isPending ? <Loader2 className="animate-spin" /> : <ShieldCheck />}{publishRoute.isPending ? t("publishing") : t("publishRoute")}</Button> : <><span className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-300"><CheckCircle2 className="h-4 w-4" />{routeStatusLabel(routeDetails.route.status, t)}</span>{routeDetails.route.status !== "cancelled" ? <Button asChild className="h-12 w-full touch-manipulation rounded-xl bg-indigo-500 text-white sm:h-10 sm:w-auto"><Link href="/visits?view=day">{t("openVisits")}</Link></Button> : null}</>}
+                {directionsUrl ? <Button asChild variant="outline" className="h-12 w-full touch-manipulation rounded-xl border-white/10 text-white sm:h-10 sm:w-auto"><a href={directionsUrl} target="_blank" rel="noreferrer"><Navigation />{t("openMaps")}</a></Button> : null}
               </div>
             </div>
-            <ol className="space-y-2">
-              {routeDetails.stops.map((stop) => <li key={stop.id} className="flex items-center gap-3 rounded-xl border border-white/[0.06] bg-black/10 p-3"><span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-500/20 text-xs font-bold text-indigo-200">{stop.position}</span><div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold text-white/80">{stop.name}</div><div className="truncate text-[11px] text-white/35">{stop.address || "—"}</div></div><span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-white/35">{stopStatusLabel(stop.status, t)}</span></li>)}
-            </ol>
+            <div>
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h3 className="text-sm font-bold text-white">{t("visitOrder")}</h3>
+                <span className="text-xs text-white/35">{t("stopCount", { count: routeDetails.stops.length })}</span>
+              </div>
+              <ol className="space-y-2">
+                {routeDetails.stops.map((stop) => (
+                  <li key={stop.id} className="grid min-h-[72px] grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-xl border border-white/[0.06] bg-black/10 p-3 [contain-intrinsic-size:72px] [content-visibility:auto]">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-500/20 text-xs font-bold text-indigo-200">{stop.position}</span>
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold text-white/80">{stop.name}</div>
+                      <div className="truncate text-[11px] text-white/35">{stop.address || "—"}</div>
+                      <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[10px] text-white/40">
+                        <Clock3 className="h-3 w-3 shrink-0" />
+                        <span>{t("driveMinutes", { minutes: driveMinutes(stop.travelDurationSeconds) })}</span>
+                        {stop.estimatedArrivalAt ? <><span aria-hidden="true">·</span><span className="truncate">{t("arrivalAt", { time: new Date(stop.estimatedArrivalAt).toLocaleTimeString(t.locale, { hour: "numeric", minute: "2-digit" }) })}</span></> : null}
+                      </div>
+                      <span className="mt-1 block text-[9px] font-semibold uppercase tracking-wide text-white/30">{stopStatusLabel(stop.status, t)}</span>
+                    </div>
+                    <a
+                      href={stopDirectionsUrl(stop)}
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label={t("navigateTo", { name: stop.name })}
+                      className="flex min-h-11 min-w-11 touch-manipulation flex-col items-center justify-center rounded-xl border border-indigo-400/20 bg-indigo-500/10 px-2 text-[10px] font-semibold text-indigo-200 transition hover:bg-indigo-500/20"
+                    >
+                      <Navigation className="h-4 w-4" />
+                      <span className="mt-0.5">{t("go")}</span>
+                    </a>
+                  </li>
+                ))}
+              </ol>
+            </div>
           </div>
         </section>
       ) : null}
