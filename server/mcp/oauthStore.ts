@@ -12,9 +12,9 @@ export const AUTH_CODE_TTL_MS = 60_000; // hosts redeem the code at once
 export const ACCESS_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour; hosts refresh transparently
 export const REFRESH_TOKEN_TTL_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
 
-/** One scope for now: the journey tools, read and write, like a static token. */
-export const SUPPORTED_SCOPES = ["xpot:journey"] as const;
-export const DEFAULT_SCOPE = SUPPORTED_SCOPES.join(" ");
+/** OAuth clients receive only the tool families they explicitly request. */
+export const SUPPORTED_SCOPES = ["xpot:journey", "xpot:prospecting"] as const;
+export const DEFAULT_SCOPE = "xpot:journey";
 
 export const OAUTH_ACCESS_PREFIX = "xpot_at_";
 const OAUTH_REFRESH_PREFIX = "xpot_rt_";
