@@ -5,7 +5,6 @@ import { storage } from "../../storage.js";
 import {
   prospectingJobs,
   prospectingCandidates,
-  prospectingRuns,
   prospectingRoutes,
   prospectingRouteStops,
   salesLeads,
@@ -17,32 +16,17 @@ import {
   prospectingRouteCreateSchema,
   prospectingRouteStatusUpdateSchema,
   prospectingStopUpdateSchema,
-  TODAY_PROSPECTING_POLICY,
 } from "#shared/prospecting.js";
 import { ensureXpotRep, requireXpotUser } from "./middleware.js";
 import { retryFailedProspectingRuns, tickProspectingQueueSafely } from "../../prospecting/queue.js";
 import { isEngineConfigured } from "../../prospecting/google-maps-engine.js";
 import { optimizeRouteHeuristic, type RouteCandidate } from "../../prospecting/route-optimizer.js";
 import { organizationIdForRep } from "../../organizations/service.js";
-
-async function jobDetails(jobId: number, repId: number) {
-  const [job] = await db.select().from(prospectingJobs).where(and(eq(prospectingJobs.id, jobId), eq(prospectingJobs.repId, repId))).limit(1);
-  if (!job) return null;
-  const [runs, candidates] = await Promise.all([
-    db.select().from(prospectingRuns).where(eq(prospectingRuns.jobId, job.id)).orderBy(asc(prospectingRuns.createdAt)),
-    db.select().from(prospectingCandidates).where(eq(prospectingCandidates.jobId, job.id)).orderBy(desc(prospectingCandidates.score)),
-  ]);
-  return {
-    job,
-    runs,
-    candidates,
-    summary: {
-      eligible: candidates.filter((candidate) => candidate.status !== "discarded").length,
-      excluded: candidates.filter((candidate) => candidate.status === "discarded").length,
-    },
-    engine: { configured: isEngineConfigured() },
-  };
-}
+import {
+  createProspectingJobForRep,
+  prospectingJobDetails,
+  ProspectingServiceError,
+} from "../../prospecting/service.js";
 
 function lifecycleScore(lead: Awaited<ReturnType<typeof storage.getSalesLead>>): { score: number; reasons: string[] } {
   if (!lead) return { score: 0, reasons: [] };
@@ -83,45 +67,20 @@ export function createProspectingRouter() {
         eq(prospectingJobs.repId, actor.rep.id),
         eq(prospectingJobs.idempotencyKey, input.idempotencyKey),
       )).limit(1);
-      if (existing) return res.status(200).json(await jobDetails(existing.id, actor.rep.id));
+      if (existing) return res.status(200).json(await prospectingJobDetails(existing.id, actor.rep.id));
     }
-    if (!isEngineConfigured()) {
-      return res.status(503).json({ message: "The prospecting engine is not configured." });
+    try {
+      const result = await createProspectingJobForRep(actor.rep.id, input);
+      return res.status(result.reused ? 200 : 202).json(result.details);
+    } catch (error) {
+      if (error instanceof ProspectingServiceError) return res.status(error.status).json({ message: error.message });
+      throw error;
     }
-
-    const job = await db.transaction(async (tx) => {
-      const [created] = await tx.insert(prospectingJobs).values({
-        repId: actor.rep.id,
-        location: input.location,
-        searches: input.searches,
-        maxResultsPerSearch: TODAY_PROSPECTING_POLICY.maxResultsPerSearch,
-        targetStops: TODAY_PROSPECTING_POLICY.targetStops,
-        shiftDurationMinutes: TODAY_PROSPECTING_POLICY.shiftDurationMinutes,
-        defaultVisitMinutes: TODAY_PROSPECTING_POLICY.defaultVisitMinutes,
-        autoExpand: TODAY_PROSPECTING_POLICY.autoExpand,
-        maxExpansionKm: TODAY_PROSPECTING_POLICY.maxExpansionKm,
-        filters: input.filters,
-        hypothesis: input.hypothesis ?? null,
-        idempotencyKey: input.idempotencyKey ?? null,
-        status: "queued",
-      }).returning();
-      await tx.insert(prospectingRuns).values(input.searches.map((search) => ({
-        jobId: created.id,
-        repId: actor.rep.id,
-        niche: search.niche,
-        query: search.query,
-        location: input.location,
-        requestedMaxResults: TODAY_PROSPECTING_POLICY.maxResultsPerSearch,
-      })));
-      return created;
-    });
-    void tickProspectingQueueSafely();
-    return res.status(202).json(await jobDetails(job.id, actor.rep.id));
   });
 
   router.get("/prospecting/jobs/:id", async (req, res) => {
     const actor = (req as any).xpotActor as NonNullable<Awaited<ReturnType<typeof ensureXpotRep>>>;
-    const details = await jobDetails(Number(req.params.id), actor.rep.id);
+    const details = await prospectingJobDetails(Number(req.params.id), actor.rep.id);
     if (!details) return res.status(404).json({ message: "Prospecting job not found" });
     res.json(details);
   });
@@ -129,15 +88,15 @@ export function createProspectingRouter() {
   router.post("/prospecting/jobs/:id/refresh", async (req, res) => {
     const actor = (req as any).xpotActor as NonNullable<Awaited<ReturnType<typeof ensureXpotRep>>>;
     const jobId = Number(req.params.id);
-    if (!(await jobDetails(jobId, actor.rep.id))) return res.status(404).json({ message: "Prospecting job not found" });
+    if (!(await prospectingJobDetails(jobId, actor.rep.id))) return res.status(404).json({ message: "Prospecting job not found" });
     await tickProspectingQueueSafely();
-    res.json(await jobDetails(jobId, actor.rep.id));
+    res.json(await prospectingJobDetails(jobId, actor.rep.id));
   });
 
   router.post("/prospecting/jobs/:id/retry", async (req, res) => {
     const actor = (req as any).xpotActor as NonNullable<Awaited<ReturnType<typeof ensureXpotRep>>>;
     const jobId = Number(req.params.id);
-    const details = await jobDetails(jobId, actor.rep.id);
+    const details = await prospectingJobDetails(jobId, actor.rep.id);
     if (!details) return res.status(404).json({ message: "Prospecting job not found" });
     if (!isEngineConfigured()) {
       return res.status(503).json({ message: "The prospecting engine is not configured." });
@@ -147,7 +106,7 @@ export function createProspectingRouter() {
       return res.status(409).json({ message: "This prospecting job has no failed search to retry." });
     }
     void tickProspectingQueueSafely();
-    return res.status(202).json(await jobDetails(jobId, actor.rep.id));
+    return res.status(202).json(await prospectingJobDetails(jobId, actor.rep.id));
   });
 
   router.get("/prospecting/routes", async (req, res) => {

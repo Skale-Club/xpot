@@ -221,8 +221,9 @@ starting together never apply one twice. Files are written to be re-runnable
 
 `POST /mcp` serves Streamable HTTP, statelessly: a fresh server per request,
 so any instance can answer any call (`server/mcp/server.ts`). Callers are
-admins only, through an OAuth 2.1 connection or a static token. The tools all
-live in `server/mcp/tools/tagJourney.ts`:
+admins only, through an OAuth 2.1 connection or a static token. Journey tools
+live in `server/mcp/tools/tagJourney.ts`; account-bound prospecting tools live
+in `server/mcp/tools/prospecting.ts`:
 
 | Tool | What it does |
 |---|---|
@@ -235,6 +236,8 @@ live in `server/mcp/tools/tagJourney.ts`:
 | `tags_batch_create` | Create a batch of new pieces in house stock, with fresh codes and an optional face |
 | `tags_batches_list` | List batches with their counts |
 | `tags_get` | Read one piece by id or printed code, with its history |
+| `prospecting_create_today` | Start a cold-prospecting discovery job for the Xpot account that authorized the MCP connection |
+| `prospecting_job_get` | Read the latest or a specific prospecting job, its runs, progress and ranked candidates |
 
 ## 8. Tests
 

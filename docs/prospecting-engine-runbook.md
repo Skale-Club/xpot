@@ -118,6 +118,28 @@ Never copy Cloudflare credentials or raw environment output into an incident rep
 
 No candidate, lead, route or visit migration is necessary during the cutover.
 
+## MCP execution
+
+The same persisted job service used by `POST /api/xpot/prospecting/jobs` is available through the
+Xpot MCP server. The credential is bound to the Xpot user that created the static token or approved
+the OAuth connection, so jobs are created for that user's representative profile:
+
+- `prospecting_create_today`: accepts `location`, 1-5 `sectors` and an optional idempotency key;
+- `prospecting_job_get`: reads a specific job or the newest job for that account.
+
+Example arguments for a small smoke run:
+
+```json
+{
+  "location": "Framingham, MA",
+  "sectors": ["barber shop"],
+  "idempotencyKey": "today:2026-10-12:framingham:barber-shop"
+}
+```
+
+Legacy static tokens without a creator cannot run prospecting. Replace them with a token created by
+the intended Xpot account, or use OAuth. The Tags Journey tools remain available as before.
+
 ## Rollback
 
 Point the environment variables back to the previous worker and redeploy. If no worker is safe,
