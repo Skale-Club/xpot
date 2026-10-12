@@ -35,6 +35,18 @@ describe("prospecting contracts", () => {
     expect(value.searches).toHaveLength(2);
   });
 
+  it("collapses repeated sectors into one search", () => {
+    const value = prospectingJobCreateSchema.parse({
+      location: "Marlborough, MA",
+      searches: [
+        { niche: "hair_salon", query: "Hair salon" },
+        { niche: "barbershop", query: "barbershop" },
+        { niche: "hair_salon", query: "hair-salon" },
+      ],
+    });
+    expect(value.searches.map((search) => search.niche)).toEqual(["hair_salon", "barbershop"]);
+  });
+
   it("rejects display labels as niche identifiers", () => {
     expect(() => prospectingJobCreateSchema.parse({
       location: "Marlborough, MA",
@@ -289,5 +301,26 @@ describe("Google daily route optimization", () => {
     expect(result.returnDurationSeconds).toBe(480);
     expect(result.totalDurationSeconds).toBe(62 * 60);
     expect(result.encodedPolyline).toBe("encoded-road-line");
+  });
+
+  it("keeps the first candidate when Google omits its zero shipment index", () => {
+    // Proto3 JSON drops default values: index 0 arrives with no shipmentIndex.
+    const result = parseGoogleOptimizeToursResponse(input, {
+      routes: [{
+        visits: [
+          { shipmentIndex: 1, shipmentLabel: "22", startTime: "2026-10-13T13:07:00Z" },
+          { shipmentLabel: "11", startTime: "2026-10-13T13:34:00Z" },
+        ],
+        transitions: [{}, {}, {}],
+      }],
+    });
+    expect(result.stops.map((stop) => stop.id)).toEqual([22, 11]);
+    expect(result.excludedCandidateIds).toEqual([]);
+
+    const unlabeled = parseGoogleOptimizeToursResponse(input, {
+      routes: [{ visits: [{ startTime: "2026-10-13T13:07:00Z" }], transitions: [{}, {}] }],
+    });
+    expect(unlabeled.stops.map((stop) => stop.id)).toEqual([11]);
+    expect(unlabeled.excludedCandidateIds).toEqual([22]);
   });
 });

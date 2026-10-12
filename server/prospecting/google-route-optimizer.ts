@@ -11,6 +11,7 @@ const REQUEST_TIMEOUT_MS = 45_000;
 
 type GoogleVisit = {
   shipmentIndex?: number;
+  shipmentLabel?: string;
   startTime?: string;
 };
 
@@ -117,13 +118,17 @@ export function parseGoogleOptimizeToursResponse(
   const transitions = route?.transitions ?? [];
   const visitedIndices = new Set<number>();
   const stops: OptimizedStop[] = [];
+  const indexByLabel = new Map(input.candidates.map((candidate, index) => [String(candidate.id), index]));
 
   for (let position = 0; position < visits.length; position++) {
     const visit = visits[position];
-    const shipmentIndex = visit.shipmentIndex;
-    if (shipmentIndex === undefined) continue;
+    // Proto3 JSON omits zero values, so the first shipment arrives without a
+    // shipmentIndex. The label we sent is the unambiguous identity.
+    const shipmentIndex = (visit.shipmentLabel !== undefined ? indexByLabel.get(visit.shipmentLabel) : undefined)
+      ?? visit.shipmentIndex
+      ?? 0;
     const candidate = input.candidates[shipmentIndex];
-    if (!candidate || stops.length >= input.maxStops) continue;
+    if (!candidate || visitedIndices.has(shipmentIndex) || stops.length >= input.maxStops) continue;
     visitedIndices.add(shipmentIndex);
     const transition = transitions[position] ?? {};
     const arrival = visit.startTime ? new Date(visit.startTime) : input.plannedStartAt;
@@ -136,7 +141,7 @@ export function parseGoogleOptimizeToursResponse(
     });
   }
 
-  const skipped = new Set(response.skippedShipments?.flatMap((item) => item.index === undefined ? [] : [item.index]) ?? []);
+  const skipped = new Set<number>();
   input.candidates.forEach((_, index) => {
     if (!visitedIndices.has(index)) skipped.add(index);
   });

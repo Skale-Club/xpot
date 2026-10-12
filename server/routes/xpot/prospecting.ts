@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, notInArray, sql } from "drizzle-orm";
 import { db } from "../../db.js";
 import { storage } from "../../storage.js";
 import {
@@ -25,7 +25,7 @@ import {
   GoogleRouteOptimizationError,
   optimizeRouteWithGoogle,
 } from "../../prospecting/google-route-optimizer.js";
-import { organizationIdForRep } from "../../organizations/service.js";
+import { OrganizationError, organizationIdForRep } from "../../organizations/service.js";
 import {
   createProspectingJobForRep,
   prospectingJobDetails,
@@ -52,6 +52,46 @@ function lifecycleScore(lead: Awaited<ReturnType<typeof storage.getSalesLead>>):
 }
 
 class NoProspectingStopFitsError extends Error {}
+
+/** A path id that is not a positive integer can't match a row; answer 404, not a SQL error. */
+function pathId(value: string) {
+  const id = Number(value);
+  return Number.isSafeInteger(id) && id > 0 ? id : null;
+}
+
+const UNREACHED_STOP_STATUSES = ["planned", "en_route"] as const;
+
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * A route that ends early (cancelled, or completed by hand) releases the stops
+ * nobody reached: their planned visits leave the agenda as cancelled, and the
+ * discovered businesses go back to the pool for another day. A stop already
+ * checked in keeps its visit; checkout still completes it.
+ */
+async function releaseUnvisitedStops(tx: Tx, routeId: number, reason: string, now: Date) {
+  const open = await tx.select({
+    id: prospectingRouteStops.id,
+    visitId: prospectingRouteStops.visitId,
+    candidateId: prospectingRouteStops.candidateId,
+  }).from(prospectingRouteStops).where(and(
+    eq(prospectingRouteStops.routeId, routeId),
+    inArray(prospectingRouteStops.status, [...UNREACHED_STOP_STATUSES]),
+  ));
+  if (!open.length) return;
+  await tx.update(prospectingRouteStops).set({ status: "skipped", skipReason: reason, completedAt: now, updatedAt: now })
+    .where(inArray(prospectingRouteStops.id, open.map((stop) => stop.id)));
+  const visitIds = open.flatMap((stop) => stop.visitId ? [stop.visitId] : []);
+  if (visitIds.length) {
+    await tx.update(salesVisits).set({ status: "cancelled", updatedAt: now })
+      .where(and(inArray(salesVisits.id, visitIds), eq(salesVisits.status, "planned")));
+  }
+  const candidateIds = open.flatMap((stop) => stop.candidateId ? [stop.candidateId] : []);
+  if (candidateIds.length) {
+    await tx.update(prospectingCandidates).set({ status: "discovered", updatedAt: now })
+      .where(and(inArray(prospectingCandidates.id, candidateIds), eq(prospectingCandidates.status, "scheduled")));
+  }
+}
 
 export function createProspectingRouter() {
   const router = Router();
@@ -86,24 +126,25 @@ export function createProspectingRouter() {
 
   router.get("/prospecting/jobs/:id", async (req, res) => {
     const actor = (req as any).xpotActor as NonNullable<Awaited<ReturnType<typeof ensureXpotRep>>>;
-    const details = await prospectingJobDetails(Number(req.params.id), actor.rep.id);
+    const jobId = pathId(req.params.id);
+    const details = jobId ? await prospectingJobDetails(jobId, actor.rep.id) : null;
     if (!details) return res.status(404).json({ message: "Prospecting job not found" });
     res.json(details);
   });
 
   router.post("/prospecting/jobs/:id/refresh", async (req, res) => {
     const actor = (req as any).xpotActor as NonNullable<Awaited<ReturnType<typeof ensureXpotRep>>>;
-    const jobId = Number(req.params.id);
-    if (!(await prospectingJobDetails(jobId, actor.rep.id))) return res.status(404).json({ message: "Prospecting job not found" });
+    const jobId = pathId(req.params.id);
+    if (!jobId || !(await prospectingJobDetails(jobId, actor.rep.id))) return res.status(404).json({ message: "Prospecting job not found" });
     await tickProspectingQueueSafely();
     res.json(await prospectingJobDetails(jobId, actor.rep.id));
   });
 
   router.post("/prospecting/jobs/:id/retry", async (req, res) => {
     const actor = (req as any).xpotActor as NonNullable<Awaited<ReturnType<typeof ensureXpotRep>>>;
-    const jobId = Number(req.params.id);
-    const details = await prospectingJobDetails(jobId, actor.rep.id);
-    if (!details) return res.status(404).json({ message: "Prospecting job not found" });
+    const jobId = pathId(req.params.id);
+    const details = jobId ? await prospectingJobDetails(jobId, actor.rep.id) : null;
+    if (!jobId || !details) return res.status(404).json({ message: "Prospecting job not found" });
     if (!isEngineConfigured()) {
       return res.status(503).json({ message: "The prospecting engine is not configured." });
     }
@@ -182,19 +223,34 @@ export function createProspectingRouter() {
       });
     }
 
-    let discovered = await db.select().from(prospectingCandidates)
-      .where(eq(prospectingCandidates.repId, actor.rep.id));
-    if (input.jobId !== undefined) {
-      discovered = discovered.filter((candidate) => candidate.jobId === input.jobId);
-    }
-    if (input.candidateIds.length) {
-      const selected = new Set(input.candidateIds);
-      discovered = discovered.filter((candidate) => selected.has(candidate.id));
-    } else if (input.jobId === undefined) {
-      discovered = [];
-    }
-    discovered = discovered.filter((candidate) => candidate.status !== "discarded");
+    // Only the selection is loaded (never the rep's whole history with its raw
+    // payloads). A business already visited, or excluded, is not routed again.
+    const discovered = input.jobId !== undefined || input.candidateIds.length
+      ? await db.select({
+          id: prospectingCandidates.id,
+          jobId: prospectingCandidates.jobId,
+          leadId: prospectingCandidates.leadId,
+          googlePlaceId: prospectingCandidates.googlePlaceId,
+          name: prospectingCandidates.name,
+          address: prospectingCandidates.address,
+          lat: prospectingCandidates.lat,
+          lng: prospectingCandidates.lng,
+          score: prospectingCandidates.score,
+          scoreReasons: prospectingCandidates.scoreReasons,
+        }).from(prospectingCandidates).where(and(
+          eq(prospectingCandidates.repId, actor.rep.id),
+          notInArray(prospectingCandidates.status, ["discarded", "visited"]),
+          input.jobId !== undefined ? eq(prospectingCandidates.jobId, input.jobId) : undefined,
+          input.candidateIds.length ? inArray(prospectingCandidates.id, input.candidateIds) : undefined,
+        )).orderBy(desc(prospectingCandidates.score), asc(prospectingCandidates.id))
+      : [];
+    // One business, one stop: a discovered place linked to a selected CRM lead,
+    // or found again by another job, would otherwise be visited twice.
+    const routedLeadIds = new Set(candidates.map((candidate) => candidate.leadId));
+    const routedPlaceIds = new Set<string>();
     for (const candidate of discovered) {
+      if (candidate.leadId && routedLeadIds.has(candidate.leadId)) continue;
+      if (candidate.googlePlaceId && routedPlaceIds.has(candidate.googlePlaceId)) continue;
       const lat = candidate.lat == null ? NaN : Number(candidate.lat);
       const lng = candidate.lng == null ? NaN : Number(candidate.lng);
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
@@ -213,6 +269,8 @@ export function createProspectingRouter() {
         scoreReasons: candidate.scoreReasons,
         serviceDurationSeconds: input.defaultVisitMinutes * 60,
       });
+      if (candidate.leadId) routedLeadIds.add(candidate.leadId);
+      if (candidate.googlePlaceId) routedPlaceIds.add(candidate.googlePlaceId);
     }
     if (!candidates.length) {
       return res.status(400).json({ message: "None of the selected prospects has usable coordinates.", missingCoordinates });
@@ -309,10 +367,11 @@ export function createProspectingRouter() {
 
   router.get("/prospecting/routes/:id", async (req, res) => {
     const actor = (req as any).xpotActor as NonNullable<Awaited<ReturnType<typeof ensureXpotRep>>>;
-    const [route] = await db.select().from(prospectingRoutes).where(and(
-      eq(prospectingRoutes.id, Number(req.params.id)),
+    const routeId = pathId(req.params.id);
+    const [route] = routeId ? await db.select().from(prospectingRoutes).where(and(
+      eq(prospectingRoutes.id, routeId),
       eq(prospectingRoutes.repId, actor.rep.id),
-    )).limit(1);
+    )).limit(1) : [];
     if (!route) return res.status(404).json({ message: "Route not found" });
     const stops = await db.select().from(prospectingRouteStops)
       .where(eq(prospectingRouteStops.routeId, route.id))
@@ -323,10 +382,11 @@ export function createProspectingRouter() {
   router.patch("/prospecting/routes/:id/status", async (req, res) => {
     const actor = (req as any).xpotActor as NonNullable<Awaited<ReturnType<typeof ensureXpotRep>>>;
     const input = prospectingRouteStatusUpdateSchema.parse(req.body);
-    const [route] = await db.select().from(prospectingRoutes).where(and(
-      eq(prospectingRoutes.id, Number(req.params.id)),
+    const routeId = pathId(req.params.id);
+    const [route] = routeId ? await db.select().from(prospectingRoutes).where(and(
+      eq(prospectingRoutes.id, routeId),
       eq(prospectingRoutes.repId, actor.rep.id),
-    )).limit(1);
+    )).limit(1) : [];
     if (!route) return res.status(404).json({ message: "Route not found" });
 
     const allowed: Record<string, string[]> = {
@@ -339,9 +399,15 @@ export function createProspectingRouter() {
     if (!allowed[route.status]?.includes(input.status)) {
       return res.status(409).json({ message: `Cannot move route from ${route.status} to ${input.status}.` });
     }
-    const organizationId = input.status === "published"
-      ? await organizationIdForRep(actor.rep.id)
-      : null;
+    let organizationId: number | null = null;
+    if (input.status === "published") {
+      try {
+        organizationId = await organizationIdForRep(actor.rep.id);
+      } catch (error) {
+        if (error instanceof OrganizationError) return res.status(error.status).json({ message: error.message });
+        throw error;
+      }
+    }
     const now = new Date();
     const updated = await db.transaction(async (tx) => {
       if (input.status === "published") {
@@ -422,6 +488,9 @@ export function createProspectingRouter() {
             .where(eq(prospectingRouteStops.id, stop.id));
         }
       }
+      if (input.status === "cancelled" || input.status === "completed") {
+        await releaseUnvisitedStops(tx, route.id, input.status === "cancelled" ? "route_cancelled" : "route_completed", now);
+      }
       const [changed] = await tx.update(prospectingRoutes).set({
         status: input.status,
         publishedAt: input.status === "published" ? now : route.publishedAt,
@@ -438,27 +507,35 @@ export function createProspectingRouter() {
   router.patch("/prospecting/routes/:routeId/stops/:stopId", async (req, res) => {
     const actor = (req as any).xpotActor as NonNullable<Awaited<ReturnType<typeof ensureXpotRep>>>;
     const input = prospectingStopUpdateSchema.parse(req.body);
-    const [route] = await db.select().from(prospectingRoutes).where(and(
-      eq(prospectingRoutes.id, Number(req.params.routeId)),
+    const routeId = pathId(req.params.routeId);
+    const stopId = pathId(req.params.stopId);
+    const [route] = routeId ? await db.select().from(prospectingRoutes).where(and(
+      eq(prospectingRoutes.id, routeId),
       eq(prospectingRoutes.repId, actor.rep.id),
-    )).limit(1);
+    )).limit(1) : [];
     if (!route) return res.status(404).json({ message: "Route not found" });
-    const [stop] = await db.select().from(prospectingRouteStops).where(and(
-      eq(prospectingRouteStops.id, Number(req.params.stopId)),
+    const [stop] = stopId ? await db.select().from(prospectingRouteStops).where(and(
+      eq(prospectingRouteStops.id, stopId),
       eq(prospectingRouteStops.routeId, route.id),
-    )).limit(1);
+    )).limit(1) : [];
     if (!stop) return res.status(404).json({ message: "Route stop not found" });
+    if (!["published", "in_progress"].includes(route.status)) {
+      return res.status(409).json({ message: "Only a published route in progress can record stop execution." });
+    }
     if (input.status === "skipped" && !input.skipReason) {
       return res.status(400).json({ message: "A skip reason is required." });
     }
     if (input.visitId) {
-      const [visit] = await db.select({ id: salesVisits.id })
+      const [visit] = await db.select({ id: salesVisits.id, leadId: salesVisits.leadId })
         .from(salesVisits)
         .where(and(
           eq(salesVisits.id, input.visitId),
           eq(salesVisits.repId, actor.rep.id),
         )).limit(1);
       if (!visit) return res.status(400).json({ message: "Visit does not belong to this representative." });
+      if (stop.leadId && visit.leadId !== stop.leadId) {
+        return res.status(400).json({ message: "Visit belongs to a different business than this stop." });
+      }
     }
     const [updated] = await db.update(prospectingRouteStops).set({
       status: input.status,

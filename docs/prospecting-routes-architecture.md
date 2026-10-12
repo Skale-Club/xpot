@@ -91,11 +91,17 @@ edge authentication strategy without exposing secrets to the browser.
 
 - There is at most one `starting` or `running` engine run across all Xpot accounts.
 - A PostgreSQL advisory lock and a partial unique index protect that invariant across replicas.
-- Runs are FIFO by creation time and id. A queued run expires after 24 hours.
-- A running run fails after engine `max_time` plus a ten-minute grace period.
+- Runs are FIFO by creation time and id. A queued run expires after 24 hours. A retried run rejoins
+  the back of the line with a fresh 24-hour allowance.
+- A running run fails after engine `max_time` plus a ten-minute grace period, or as soon as the
+  engine answers 404 for its job.
+- A run left `starting` without an engine job id (the process died while starting it) fails after
+  the start timeout plus two minutes, so it never holds the global slot for the full deadline.
 - Starting a remote job is never automatically retried: a lost response might otherwise create a
   duplicate expensive job. The failure remains visible and the rep can explicitly place only the
   failed physical searches back in the queue.
+- Repeated sectors that normalize to the same niche are collapsed into one search.
+- Automatic expansion counts only eligible candidates with coordinates toward the day's target.
 - Polling is performed by the in-process worker and can also be advanced by the authenticated
   refresh endpoint. A process restart is safe because state and engine job ids live in PostgreSQL.
 - If the engine is not configured or temporarily unavailable, existing candidates, prospects and
@@ -122,6 +128,14 @@ a parallel calendar. Starting a planned visit updates that same row to `in_progr
 does not create duplicate visit history. Check-in moves the linked stop to `checked_in` and starts
 the route; checkout completes the stop, while cancellation skips it. The route closes automatically
 after its final open stop.
+
+A route builds each business at most once: a discovered place linked to a selected CRM lead, or
+the same Google Place found by another job, becomes a single stop, and already visited candidates
+are never routed again. Cancelling a route, or completing it by hand, releases the stops nobody
+reached: they are skipped (`route_cancelled` / `route_completed`), their planned visits become
+`cancelled`, and their candidates return to `discovered`. A stop already checked in keeps its
+visit. Recording stop execution directly is only accepted on a published or in-progress route, and
+a linked visit must belong to the stop's business.
 
 ## API foundation
 

@@ -16,6 +16,8 @@ import {
   getEngineSettings,
   isEngineConfigured,
   parseEngineResults,
+  ProspectingEngineError,
+  START_TIMEOUT_MS,
   startEngineJob,
   type NormalizedPlace,
 } from "./google-maps-engine.js";
@@ -24,6 +26,7 @@ import { chooseExpansionArea } from "./expansion.js";
 import { earliestStartedAt } from "./job-status.js";
 
 const QUEUE_MAX_WAIT_MS = 24 * 60 * 60 * 1000;
+const STARTING_STALE_MS = START_TIMEOUT_MS + 2 * 60 * 1000;
 const DISPATCH_LOCK_KEY = 7_424_002;
 let ticking: Promise<void> | null = null;
 
@@ -42,10 +45,18 @@ async function maybeQueueExpansion(jobId: number, runs: ProspectingRun[]) {
   if (!runs.length || !runs.every((run) => ["completed", "failed", "cancelled"].includes(run.status))) return false;
   const [job] = await db.select().from(prospectingJobs).where(eq(prospectingJobs.id, jobId)).limit(1);
   if (!job?.autoExpand || !runs.some((run) => run.status === "completed")) return false;
-  const eligible = await db.select({ city: prospectingCandidates.city, state: prospectingCandidates.state })
+  const eligible = await db.select({
+    city: prospectingCandidates.city,
+    state: prospectingCandidates.state,
+    lat: prospectingCandidates.lat,
+    lng: prospectingCandidates.lng,
+  })
     .from(prospectingCandidates)
     .where(and(eq(prospectingCandidates.jobId, jobId), ne(prospectingCandidates.status, "discarded")));
-  if (eligible.length >= job.targetStops) return false;
+  // Only a place with coordinates can become a stop; a list padded with
+  // unroutable results must not stop the search short of a full day.
+  const routable = eligible.filter((candidate) => candidate.lat !== null && candidate.lng !== null);
+  if (routable.length >= job.targetStops) return false;
 
   const nextWave = Math.max(...runs.map((run) => run.wave)) + 1;
   const area = chooseExpansionArea({
@@ -75,7 +86,7 @@ async function maybeQueueExpansion(jobId: number, runs: ProspectingRun[]) {
       wave: nextWave,
       currentArea: area.location,
       reason: area.reason,
-      eligibleCandidates: eligible.length,
+      eligibleCandidates: routable.length,
       targetStops: job.targetStops,
     },
     completedAt: null,
@@ -163,6 +174,12 @@ async function saveResults(run: ProspectingRun, places: NormalizedPlace[]) {
   await updateJobStatus(run.jobId);
 }
 
+async function failRun(run: ProspectingRun, errorMessage: string) {
+  await db.update(prospectingRuns).set({ status: "failed", progress: 0, errorMessage, completedAt: new Date(), updatedAt: new Date() })
+    .where(and(eq(prospectingRuns.id, run.id), inArray(prospectingRuns.status, ["starting", "running"])));
+  await updateJobStatus(run.jobId);
+}
+
 async function refreshActiveRun() {
   const [run] = await db.select().from(prospectingRuns)
     .where(inArray(prospectingRuns.status, ["starting", "running"]))
@@ -170,21 +187,35 @@ async function refreshActiveRun() {
   if (!run) return;
   const deadlineMs = getEngineSettings().maxTimeSeconds * 1000 + ENGINE_OVERDUE_GRACE_MS;
   if (run.startedAt && Date.now() - run.startedAt.getTime() > deadlineMs) {
-    await db.update(prospectingRuns).set({ status: "failed", errorMessage: "Prospecting engine job exceeded its time limit.", completedAt: new Date(), updatedAt: new Date() })
-      .where(eq(prospectingRuns.id, run.id));
-    await updateJobStatus(run.jobId);
+    await failRun(run, "Prospecting engine job exceeded its time limit.");
     return;
   }
-  if (!run.engineJobId) return;
-  const state = await getEngineJobStatus(run.engineJobId);
+  if (!run.engineJobId) {
+    // A process that died between claiming the run and recording the engine's
+    // answer leaves it "starting" forever, and the single slot blocks every
+    // account's queue. The start may or may not have reached the engine, so it
+    // is failed (never resent automatically) and the rep can retry it.
+    if (run.status === "starting" && run.startedAt && Date.now() - run.startedAt.getTime() > STARTING_STALE_MS) {
+      await failRun(run, "The prospecting engine did not confirm this search. Try again.");
+    }
+    return;
+  }
+  let state;
+  try {
+    state = await getEngineJobStatus(run.engineJobId);
+  } catch (error) {
+    if (error instanceof ProspectingEngineError && error.code === "not_found") {
+      await failRun(run, "The prospecting engine lost this search. Try again.");
+      return;
+    }
+    throw error;
+  }
   if (state.status === "running") {
     await db.update(prospectingRuns).set({ progress: state.progress, updatedAt: new Date() }).where(eq(prospectingRuns.id, run.id));
     return;
   }
   if (state.status === "failed") {
-    await db.update(prospectingRuns).set({ status: "failed", progress: 0, errorMessage: "Prospecting engine job failed.", completedAt: new Date(), updatedAt: new Date() })
-      .where(eq(prospectingRuns.id, run.id));
-    await updateJobStatus(run.jobId);
+    await failRun(run, "Prospecting engine job failed.");
     return;
   }
   const places = parseEngineResults(await downloadEngineCsv(run.engineJobId), run.requestedMaxResults);
@@ -262,6 +293,9 @@ export async function retryFailedProspectingRuns(jobId: number, repId: number) {
       errorMessage: null,
       startedAt: null,
       completedAt: null,
+      // Back of the FIFO line, with a fresh 24-hour queue allowance: the
+      // original creation time would jump other accounts or expire at once.
+      createdAt: new Date(),
       updatedAt: new Date(),
     }).where(inArray(prospectingRuns.id, ids));
     await tx.update(prospectingJobs).set({

@@ -9,6 +9,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Link } from "wouter";
 import { approximateCandidateCenter } from "#shared/prospecting.js";
 import { RoutePreviewMap } from "./components/RoutePreviewMap";
+import { appleRouteUrl, appleStopUrl, googleRouteUrl, googleStopUrl, isAppleMobileDevice } from "./prospectingMaps";
 
 type ProspectingJob = {
   id: number;
@@ -67,10 +68,12 @@ function localDateKey(date = new Date()) {
   return `${year}-${month}-${day}`;
 }
 function sectorSearches(value: string) {
-  return value.split(/[,;\n]/).map((sector) => sector.trim()).filter(Boolean).slice(0, 5).map((query) => ({
+  const searches = value.split(/[,;\n]/).map((sector) => sector.trim()).filter(Boolean).map((query) => ({
     query,
     niche: query.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40),
   })).filter((search) => search.niche.length >= 2);
+  // A repeated sector is one search, and it must not take one of the five slots.
+  return searches.filter((search, index) => searches.findIndex((other) => other.niche === search.niche) === index).slice(0, 5);
 }
 
 function currentPosition(): Promise<{ lat: number; lng: number }> {
@@ -82,27 +85,6 @@ function currentPosition(): Promise<{ lat: number; lng: number }> {
       { enableHighAccuracy: true, timeout: 12_000, maximumAge: 60_000 },
     );
   });
-}
-
-function mapsDirectionsUrl(route: ProspectingRoute, stops: RouteStop[]) {
-  if (!stops.length) return null;
-  const params = new URLSearchParams({
-    api: "1",
-    origin: `${route.startLat},${route.startLng}`,
-    destination: `${stops.at(-1)!.lat},${stops.at(-1)!.lng}`,
-    travelmode: "driving",
-  });
-  if (stops.length > 1) params.set("waypoints", stops.slice(0, -1).map((stop) => `${stop.lat},${stop.lng}`).join("|"));
-  return `https://www.google.com/maps/dir/?${params.toString()}`;
-}
-
-function stopDirectionsUrl(stop: RouteStop) {
-  const params = new URLSearchParams({
-    api: "1",
-    destination: `${stop.lat},${stop.lng}`,
-    travelmode: "driving",
-  });
-  return `https://www.google.com/maps/dir/?${params.toString()}`;
 }
 
 function driveMinutes(seconds: number) {
@@ -161,6 +143,9 @@ export function XpotProspecting() {
   const routeQuery = useQuery<RouteDetails>({
     queryKey: ["/api/xpot/prospecting/routes", activeRouteId],
     enabled: activeRouteId !== null,
+    // Check-ins and checkouts happen on the Visits screen; keep the stop states current.
+    refetchOnWindowFocus: true,
+    refetchInterval: (query) => (["published", "in_progress"].includes(query.state.data?.route.status ?? "") ? 60_000 : false),
   });
 
   const createJob = useMutation({
@@ -214,11 +199,13 @@ export function XpotProspecting() {
   const autoRouteJobRef = useRef<number | null>(null);
   useEffect(() => {
     const currentDetails = detailsQuery.data;
+    // Wait for today's routes to load: before that "no route yet" is unknown.
+    if (!routesQuery.isSuccess) return;
     if (!currentDetails || currentDetails.job.status !== "completed" || currentDetails.summary.eligible === 0 || todayRoutes.length > 0) return;
     if (autoRouteJobRef.current === currentDetails.job.id || createRoute.isPending) return;
     autoRouteJobRef.current = currentDetails.job.id;
     createRoute.mutate();
-  }, [detailsQuery.data, todayRoutes.length, createRoute.isPending]);
+  }, [detailsQuery.data, routesQuery.isSuccess, todayRoutes.length, createRoute.isPending]);
 
   const retryJob = useMutation({
     mutationFn: async (jobId: number) => {
@@ -253,7 +240,11 @@ export function XpotProspecting() {
   const details = detailsQuery.data;
   const hasFailedRuns = details?.runs.some((run) => run.status === "failed") ?? false;
   const routeDetails = routeQuery.data;
-  const directionsUrl = routeDetails ? mapsDirectionsUrl(routeDetails.route, routeDetails.stops) : null;
+  // Android and desktop navigate with Google Maps; an iPhone or iPad also gets Apple Maps.
+  const appleDevice = useMemo(() => typeof navigator !== "undefined" && isAppleMobileDevice(navigator.userAgent, navigator.maxTouchPoints ?? 0), []);
+  const routeStart = routeDetails ? { lat: routeDetails.route.startLat, lng: routeDetails.route.startLng } : null;
+  const directionsUrl = routeDetails && routeStart ? googleRouteUrl(routeStart, routeDetails.stops) : null;
+  const appleDirectionsUrl = appleDevice && routeDetails && routeStart ? appleRouteUrl(routeStart, routeDetails.stops) : null;
   const mapStops = useMemo(() => routeDetails?.stops.map((stop) => ({
     lat: Number(stop.lat),
     lng: Number(stop.lng),
@@ -377,6 +368,7 @@ export function XpotProspecting() {
               <div className="mt-4 grid gap-2 sm:flex sm:flex-wrap">
                 {routeDetails.route.status === "draft" ? <Button onClick={() => publishRoute.mutate(routeDetails.route.id)} disabled={publishRoute.isPending} className="h-12 w-full touch-manipulation rounded-xl bg-emerald-500 text-white sm:h-10 sm:w-auto">{publishRoute.isPending ? <Loader2 className="animate-spin" /> : <ShieldCheck />}{publishRoute.isPending ? t("publishing") : t("publishRoute")}</Button> : <><span className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-300"><CheckCircle2 className="h-4 w-4" />{routeStatusLabel(routeDetails.route.status, t)}</span>{routeDetails.route.status !== "cancelled" ? <Button asChild className="h-12 w-full touch-manipulation rounded-xl bg-indigo-500 text-white sm:h-10 sm:w-auto"><Link href="/visits?view=day">{t("openVisits")}</Link></Button> : null}</>}
                 {directionsUrl ? <Button asChild variant="outline" className="h-12 w-full touch-manipulation rounded-xl border-white/10 text-white sm:h-10 sm:w-auto"><a href={directionsUrl} target="_blank" rel="noreferrer"><Navigation />{t("openMaps")}</a></Button> : null}
+                {appleDirectionsUrl ? <Button asChild variant="outline" className="h-12 w-full touch-manipulation rounded-xl border-white/10 text-white sm:h-10 sm:w-auto"><a href={appleDirectionsUrl} target="_blank" rel="noreferrer"><Navigation />{t("openAppleMaps")}</a></Button> : null}
               </div>
             </div>
             <div>
@@ -398,16 +390,30 @@ export function XpotProspecting() {
                       </div>
                       <span className="mt-1 block text-[9px] font-semibold uppercase tracking-wide text-white/30">{stopStatusLabel(stop.status, t)}</span>
                     </div>
-                    <a
-                      href={stopDirectionsUrl(stop)}
-                      target="_blank"
-                      rel="noreferrer"
-                      aria-label={t("navigateTo", { name: stop.name })}
-                      className="flex min-h-11 min-w-11 touch-manipulation flex-col items-center justify-center rounded-xl border border-indigo-400/20 bg-indigo-500/10 px-2 text-[10px] font-semibold text-indigo-200 transition hover:bg-indigo-500/20"
-                    >
-                      <Navigation className="h-4 w-4" />
-                      <span className="mt-0.5">{t("go")}</span>
-                    </a>
+                    <div className="flex shrink-0 gap-1.5">
+                      <a
+                        href={googleStopUrl(stop)}
+                        target="_blank"
+                        rel="noreferrer"
+                        aria-label={appleDevice ? t("navigateWithGoogle", { name: stop.name }) : t("navigateTo", { name: stop.name })}
+                        className="flex min-h-11 min-w-11 touch-manipulation flex-col items-center justify-center rounded-xl border border-indigo-400/20 bg-indigo-500/10 px-2 text-[10px] font-semibold text-indigo-200 transition hover:bg-indigo-500/20"
+                      >
+                        <Navigation className="h-4 w-4" />
+                        <span className="mt-0.5">{appleDevice ? t("googleShort") : t("go")}</span>
+                      </a>
+                      {appleDevice ? (
+                        <a
+                          href={appleStopUrl(stop)}
+                          target="_blank"
+                          rel="noreferrer"
+                          aria-label={t("navigateWithApple", { name: stop.name })}
+                          className="flex min-h-11 min-w-11 touch-manipulation flex-col items-center justify-center rounded-xl border border-white/15 bg-white/[0.06] px-2 text-[10px] font-semibold text-white/80 transition hover:bg-white/[0.12]"
+                        >
+                          <Navigation className="h-4 w-4" />
+                          <span className="mt-0.5">{t("appleShort")}</span>
+                        </a>
+                      ) : null}
+                    </div>
                   </li>
                 ))}
               </ol>

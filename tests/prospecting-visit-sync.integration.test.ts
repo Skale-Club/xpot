@@ -90,7 +90,12 @@ test("a planned visit drives its linked prospecting route through completion", a
     UPDATE prospecting_jobs SET status = 'failed', error_message = 'network', completed_at = NOW()
     WHERE id = ${linked.job_id}
   `);
+  await db.execute(sql`UPDATE prospecting_runs SET created_at = NOW() - INTERVAL '2 days' WHERE id = ${linked.run_id}`);
   expect(await retryFailedProspectingRuns(linked.job_id, linked.rep_id)).toBe(1);
+  // A retried search rejoins the back of the line with a fresh 24-hour allowance.
+  expect((await db.execute(sql`
+    SELECT created_at > NOW() - INTERVAL '1 minute' AS fresh FROM prospecting_runs WHERE id = ${linked.run_id}
+  `)).rows[0]).toEqual({ fresh: true });
   expect((await db.execute(sql`
     SELECT status, engine_job_id, progress, result_count, error_message, started_at, completed_at
     FROM prospecting_runs WHERE id = ${linked.run_id}
