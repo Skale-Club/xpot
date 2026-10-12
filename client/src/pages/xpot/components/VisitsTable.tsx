@@ -35,7 +35,8 @@ export function VisitsTable({
         <tbody className="divide-y divide-white/[0.05]">
           {visits.map((visit) => {
             const selected = selectedId === visit.id;
-            const when = visit.checkedInAt ? new Date(visit.checkedInAt) : null;
+            const visitTime = visit.checkedInAt ?? visit.scheduledAt;
+            const when = visitTime ? new Date(visitTime) : null;
             const lead = visit.lead as (typeof visit.lead & { photos?: string[] | null; locations?: { city?: string | null }[] }) | undefined;
             const photo = lead?.photos?.[0];
             const city = lead?.locations?.[0]?.city;

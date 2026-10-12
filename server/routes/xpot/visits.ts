@@ -6,6 +6,7 @@ import { getDistanceMeters, syncVisitToGhl, syncVisitToXphere } from "./helpers.
 import { xpotCheckInSchema, xpotCheckOutSchema, xpotVisitNoteUpsertSchema } from "#shared/xpot.js";
 import { salesStorage } from "../../storage-sales.js";
 import { activeStore, discardFiles, putPrivateFile } from "../../lib/files.js";
+import { markProspectingVisitCheckedIn, markProspectingVisitFinished } from "../../prospecting/visit-sync.js";
 
 export function createVisitsRouter() {
   const router = Router();
@@ -48,6 +49,16 @@ export function createVisitsRouter() {
     const lead = await loadAccessibleLead(req, res, input.leadId);
     if (!lead) return;
 
+    const plannedVisit = input.visitId ? await storage.getSalesVisit(input.visitId) : null;
+    if (input.visitId && (
+      !plannedVisit ||
+      plannedVisit.repId !== actor!.rep.id ||
+      plannedVisit.leadId !== lead.id ||
+      plannedVisit.status !== "planned"
+    )) {
+      return res.status(400).json({ message: "Planned visit is not available for this check-in" });
+    }
+
     const locations = await storage.listSalesLeadLocations(input.leadId);
     const selectedLocation = input.locationId
       ? locations.find((location) => location.id === input.locationId)
@@ -79,12 +90,9 @@ export function createVisitsRouter() {
       return res.status(400).json({ message: "Outside geofence. Manual override reason required." });
     }
 
-    const visit = await storage.createSalesVisit({
-      repId: actor!.rep.id,
-      leadId: lead.id,
+    const checkInValues = {
       locationId: selectedLocation?.id,
-      status: "in_progress",
-      scheduledAt: null,
+      status: "in_progress" as const,
       checkedInAt: new Date(),
       checkedOutAt: null,
       durationSeconds: null,
@@ -96,8 +104,24 @@ export function createVisitsRouter() {
       gpsAccuracyMeters: input.gpsAccuracyMeters ?? null,
       validationStatus,
       manualOverrideReason: input.manualOverrideReason,
-      source: "field-mobile",
-    });
+    };
+    const visit = plannedVisit
+      ? await storage.updateSalesVisit(plannedVisit.id, checkInValues)
+      : await storage.createSalesVisit({
+          repId: actor!.rep.id,
+          leadId: lead.id,
+          scheduledAt: null,
+          source: "field-mobile",
+          ...checkInValues,
+        });
+    if (!visit) {
+      return res.status(409).json({ message: "Planned visit changed before check-in. Reload and try again." });
+    }
+    if (plannedVisit) {
+      await markProspectingVisitCheckedIn(visit.id).catch((error) =>
+        console.error("[check-in] prospecting route sync error:", error)
+      );
+    }
 
     // DAT-04: this used to be two sequential UPDATEs on the same row.
     await storage.updateSalesLead(lead.id, {
@@ -135,6 +159,10 @@ export function createVisitsRouter() {
       lastVisitAt: checkedOutAt,
     });
 
+    await markProspectingVisitFinished(visit.id, false).catch((error) =>
+      console.error("[check-out] prospecting route sync error:", error)
+    );
+
     res.json(updated);
 
     // Fire GHL sync after response — non-blocking, failure is logged to sync_events
@@ -170,6 +198,10 @@ export function createVisitsRouter() {
       durationSeconds,
     });
 
+    await markProspectingVisitFinished(visit.id, true).catch((error) =>
+      console.error("[cancel] prospecting route sync error:", error)
+    );
+
     res.json(updated);
   });
 
@@ -199,6 +231,11 @@ export function createVisitsRouter() {
     const visit = await storage.getSalesVisit(visitId);
     if (!visit || (visit.repId !== actor!.rep.id && !actor!.user.isAdmin)) {
       return res.status(404).json({ message: "Visit not found" });
+    }
+    if (visit.status === "planned") {
+      await markProspectingVisitFinished(visit.id, true).catch((error) =>
+        console.error("[delete visit] prospecting route sync error:", error)
+      );
     }
     const files = await storage.deleteSalesVisit(visitId);
     res.status(204).end();

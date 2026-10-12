@@ -4,6 +4,7 @@ import {
   Clock3,
   DollarSign,
   MapPinned,
+  Route,
 } from "lucide-react";
 import type { GooglePlaceResult, FullSalesLead } from "./types";
 import { currentLocale, translate } from "@/i18n";
@@ -14,6 +15,7 @@ export const tabs = [
   { id: "check-in", labelKey: "tabCheckIn", icon: MapPinned },
   { id: "visits", labelKey: "tabVisits", icon: Clock3 },
   { id: "leads", labelKey: "tabLeads", icon: Building2 },
+  { id: "prospecting", labelKey: "tabProspecting", icon: Route },
   { id: "sales", labelKey: "tabSales", icon: DollarSign },
   { id: "dashboard", labelKey: "tabDashboard", icon: Activity },
 ] as const;
