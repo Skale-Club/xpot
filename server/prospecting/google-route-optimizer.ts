@@ -95,10 +95,8 @@ export function buildGoogleOptimizeToursRequest(input: OptimizeRouteInput) {
       vehicles: [{
         label: "xpot-daily-route",
         startLocation: { latitude: input.start.lat, longitude: input.start.lng },
-        endLocation: {
-          latitude: (input.end ?? input.start).lat,
-          longitude: (input.end ?? input.start).lng,
-        },
+        // No end location: the vehicle's day finishes at its last visit.
+        ...(input.end ? { endLocation: { latitude: input.end.lat, longitude: input.end.lng } } : {}),
         startTimeWindows: [{ startTime: googleTimestamp(input.plannedStartAt), endTime: googleTimestamp(input.plannedStartAt) }],
         endTimeWindows: [{ startTime: googleTimestamp(input.plannedStartAt), endTime: googleTimestamp(endAt) }],
         loadLimits: { visit_count: { maxLoad: String(input.maxStops) } },

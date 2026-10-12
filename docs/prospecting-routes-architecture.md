@@ -166,7 +166,11 @@ Xpot persists the response before presenting it. A unique database index on
 `(rep_id, route_date)` and an API reuse check enforce **one optimization per
 seller per day**. Browser refreshes, retries, a second scrape, and route publish
 actions reuse that row and cannot generate a second Google optimization. The
-web map renders the stored encoded polyline with a referrer-restricted Maps
+one exception is the platform owner (super admin, with admin mode on): they can
+recalculate today's route to test and evaluate it. The replaced route releases its
+unreached stops (`route_rebuilt`: planned visits cancelled, candidates back to
+`discovered`) and is deleted before the new optimization is stored. Any other
+`rebuild` request is refused with 403. The web map renders the stored encoded polyline with a referrer-restricted Maps
 JavaScript key; it does not call Directions or optimize the route again.
 
 Required deployment variables:
@@ -185,11 +189,22 @@ the cost-control boundary.
 All endpoints are rep-scoped and protected by the Visits module gate. Managers do not silently gain
 access to another customer's queue or route through these endpoints.
 
+## Where the day starts and ends
+
+The route starts wherever the rep is when it is built (GPS, or the centre of the
+results when GPS is unavailable). It ends at the last visit, unless the rep turned
+on **End today's route at home** in Settings > Route, which needs a saved home
+address (picked from a place search, so it always has coordinates). With it on,
+the home becomes the route's end: Google keeps the drive back inside the shift,
+the stop list ends with a "Back home" row and its arrival time, and the Maps link
+finishes at home when all open stops fit in it. The home address is personal data
+and is cleared when the account is deleted.
+
 ## Route optimizer
 
 The first version is deterministic and explainable. It combines candidate score with proximity,
 uses Haversine distance and a conservative average speed, and accepts a stop only when the visit
-and return to the configured end still fit inside the shift. Storage and API contracts isolate the
+(and the return to the rep's home, when the route ends there) still fits inside the shift. Storage and API contracts isolate the
 optimizer so a road-time matrix can replace it later.
 
 Recommended evolution:

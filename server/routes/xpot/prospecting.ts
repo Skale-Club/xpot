@@ -179,11 +179,16 @@ export function createProspectingRouter() {
     }
     // A seller gets exactly one paid optimization per calendar day. Reusing the
     // persisted route also makes retries, double-clicks and a second scrape free.
+    // The platform owner (super admin) may replace it, to test and evaluate.
+    if (input.rebuild && !actor.user.isAdmin) {
+      return res.status(403).json({ message: "Only the account owner can recalculate today's route." });
+    }
+    const rebuild = input.rebuild && actor.user.isAdmin;
     const [existingRoute] = await db.select().from(prospectingRoutes).where(and(
       eq(prospectingRoutes.repId, actor.rep.id),
       eq(prospectingRoutes.routeDate, input.routeDate),
     )).orderBy(desc(prospectingRoutes.createdAt)).limit(1);
-    if (existingRoute) {
+    if (existingRoute && !rebuild) {
       const existingStops = await db.select().from(prospectingRouteStops)
         .where(eq(prospectingRouteStops.routeId, existingRoute.id))
         .orderBy(asc(prospectingRouteStops.position));
@@ -277,6 +282,14 @@ export function createProspectingRouter() {
     }
 
     const plannedStartAt = new Date(input.plannedStartAt);
+    // The day starts wherever the rep is. It ends at home only when the rep
+    // asked for that in Settings (and saved a home); otherwise at the last visit.
+    const homeLat = actor.rep.homeLat == null ? NaN : Number(actor.rep.homeLat);
+    const homeLng = actor.rep.homeLng == null ? NaN : Number(actor.rep.homeLng);
+    const home = actor.rep.routeReturnHome && Number.isFinite(homeLat) && Number.isFinite(homeLng)
+      ? { address: actor.rep.homeAddress ?? undefined, lat: homeLat, lng: homeLng }
+      : undefined;
+    const end = input.end ?? home;
     let result;
     try {
       result = await db.transaction(async (tx) => {
@@ -287,7 +300,12 @@ export function createProspectingRouter() {
           eq(prospectingRoutes.repId, actor.rep.id),
           eq(prospectingRoutes.routeDate, input.routeDate),
         )).limit(1);
-        if (lockedExisting) {
+        if (lockedExisting && rebuild) {
+          // The old route's unreached visits leave the agenda and its businesses
+          // return to the pool before the new optimization takes the day.
+          await releaseUnvisitedStops(tx, lockedExisting.id, "route_rebuilt", new Date());
+          await tx.delete(prospectingRoutes).where(eq(prospectingRoutes.id, lockedExisting.id));
+        } else if (lockedExisting) {
           const existingStops = await tx.select().from(prospectingRouteStops)
             .where(eq(prospectingRouteStops.routeId, lockedExisting.id))
             .orderBy(asc(prospectingRouteStops.position));
@@ -296,7 +314,7 @@ export function createProspectingRouter() {
 
         const optimized = await optimizeRouteWithGoogle({
           start: input.start,
-          end: input.end,
+          end,
           plannedStartAt,
           shiftDurationSeconds: input.shiftDurationMinutes * 60,
           maxStops: input.maxStops,
@@ -314,9 +332,9 @@ export function createProspectingRouter() {
           startAddress: input.start.address ?? null,
           startLat: String(input.start.lat),
           startLng: String(input.start.lng),
-          endAddress: input.end?.address ?? input.start.address ?? null,
-          endLat: String(input.end?.lat ?? input.start.lat),
-          endLng: String(input.end?.lng ?? input.start.lng),
+          endAddress: end?.address ?? null,
+          endLat: end ? String(end.lat) : null,
+          endLng: end ? String(end.lng) : null,
           maxStops: input.maxStops,
           defaultVisitMinutes: input.defaultVisitMinutes,
           optimizer: optimized.optimizer,
@@ -324,6 +342,7 @@ export function createProspectingRouter() {
           totalDurationSeconds: optimized.totalDurationSeconds,
           optimizationMeta: {
             shiftDurationMinutes: input.shiftDurationMinutes,
+            returnHome: Boolean(end && !input.end),
             returnDistanceMeters: optimized.returnDistanceMeters,
             returnDurationSeconds: optimized.returnDurationSeconds,
             missingCoordinates,

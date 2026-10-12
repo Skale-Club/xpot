@@ -69,6 +69,17 @@ export type RecentSalesVisit = {
 
 // ─── Storage interface (intentionally narrow) ────────────────────────────────
 
+/** What a rep may change about themselves (PATCH /api/xpot/me). */
+export type SalesRepProfilePatch = {
+  displayName?: string;
+  phone?: string;
+  avatarUrl?: string;
+  homeAddress?: string | null;
+  homeLat?: string | null;
+  homeLng?: string | null;
+  routeReturnHome?: boolean;
+};
+
 export interface IStorage {
   // Settings + integrations (shared with skaleclub today; isolated when Xpot gets its own Supabase)
   getSalesAppSettings(): Promise<SalesAppSettings>;
@@ -95,7 +106,7 @@ export interface IStorage {
   getSalesRep(id: number): Promise<SalesRep | undefined>;
   getSalesRepByUserId(userId: string): Promise<SalesRep | undefined>;
   upsertSalesRep(input: InsertSalesRep): Promise<SalesRep>;
-  updateSalesRepProfile(id: number, data: { displayName?: string; phone?: string; avatarUrl?: string }): Promise<SalesRep>;
+  updateSalesRepProfile(id: number, data: SalesRepProfilePatch): Promise<SalesRep>;
 
   // Users
   updateUserProfile(userId: string, data: { firstName?: string | null; lastName?: string | null; profileImageUrl?: string | null }): Promise<User>;
@@ -319,7 +330,7 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async updateSalesRepProfile(id: number, data: { displayName?: string; phone?: string; avatarUrl?: string }): Promise<SalesRep> {
+  async updateSalesRepProfile(id: number, data: SalesRepProfilePatch): Promise<SalesRep> {
     const [updated] = await db
       .update(salesReps)
       .set({ ...data, updatedAt: new Date() })

@@ -23,26 +23,28 @@ vi.mock("../server/db.js", async () => {
 delete process.env.GOOGLE_ROUTE_OPTIMIZATION_PROJECT_ID;
 
 const { createProspectingRouter } = await import("../server/routes/xpot/prospecting.js");
+const { createAuthRouter } = await import("../server/routes/xpot/auth.js");
 
 const q = async (text: string, params: unknown[] = []) => (await pg.client.query(text, params)).rows as any[];
 const one = async (text: string, params: unknown[] = []) => (await q(text, params))[0];
 
 afterAll(async () => pg.client?.close());
 
-function app() {
+function app(isAdmin: boolean) {
   const server = express();
   server.use(express.json());
   server.use((req, _res, next) => {
-    (req as any).session = { userId: "route-rep", email: "route-rep@x.test", firstName: "Route", isAdmin: false };
+    (req as any).session = { userId: "route-rep", email: "route-rep@x.test", firstName: "Route", isAdmin };
     next();
   });
   server.use("/api/xpot", createProspectingRouter());
+  server.use("/api/xpot", createAuthRouter());
   return server;
 }
 
-async function request(method: string, path: string, body?: unknown) {
+async function request(method: string, path: string, body?: unknown, options: { admin?: boolean } = {}) {
   return new Promise<{ status: number; body: any }>((resolve, reject) => {
-    const server = app().listen(0, async () => {
+    const server = app(options.admin ?? false).listen(0, async () => {
       const { port } = server.address() as { port: number };
       try {
         const response = await fetch(`http://127.0.0.1:${port}${path}`, {
@@ -168,4 +170,45 @@ test("a search stuck while starting frees the global queue", async () => {
   } finally {
     delete process.env.PROSPECTING_ENGINE_URL;
   }
+});
+
+test("a route ends at the last visit, or at home when the rep asked for it", async () => {
+  const open = await request("POST", "/api/xpot/prospecting/routes", routeBody());
+  expect(open.body.route.endLat).toBeNull();
+  expect(open.body.route.optimizationMeta.returnHome).toBe(false);
+
+  // Turning it on needs a saved home first.
+  expect((await request("PATCH", "/api/xpot/me", { routeReturnHome: true })).status).toBe(400);
+  const saved = await request("PATCH", "/api/xpot/me", { home: { address: "9 Elm St, Framingham, MA", lat: 42.28, lng: -71.42 }, routeReturnHome: true });
+  expect(saved.status).toBe(200);
+  expect(saved.body.rep).toMatchObject({ homeAddress: "9 Elm St, Framingham, MA", homeLat: "42.28", homeLng: "-71.42", routeReturnHome: true });
+
+  const home = await request("POST", "/api/xpot/prospecting/routes", { ...routeBody(), routeDate: "2026-10-14" });
+  expect(home.status).toBe(201);
+  expect(home.body.route).toMatchObject({ endAddress: "9 Elm St, Framingham, MA", endLat: "42.28", endLng: "-71.42" });
+  expect(home.body.route.optimizationMeta.returnHome).toBe(true);
+  expect(home.body.route.optimizationMeta.returnDurationSeconds).toBeGreaterThan(0);
+
+  // Removing the home turns the return off with it.
+  const cleared = await request("PATCH", "/api/xpot/me", { home: null });
+  expect(cleared.body.rep).toMatchObject({ homeAddress: null, homeLat: null, routeReturnHome: false });
+});
+
+test("only the platform owner can recalculate today's route", async () => {
+  const first = await request("POST", "/api/xpot/prospecting/routes", routeBody());
+  await request("PATCH", `/api/xpot/prospecting/routes/${first.body.route.id}/status`, { status: "published" });
+
+  // A rep gets the same route back, and cannot force a second optimization.
+  const again = await request("POST", "/api/xpot/prospecting/routes", routeBody());
+  expect(again.status).toBe(200);
+  expect(again.body.route.id).toBe(first.body.route.id);
+  expect((await request("POST", "/api/xpot/prospecting/routes", { ...routeBody(), rebuild: true })).status).toBe(403);
+
+  const rebuilt = await request("POST", "/api/xpot/prospecting/routes", { ...routeBody(), rebuild: true }, { admin: true });
+  expect(rebuilt.status).toBe(201);
+  expect(rebuilt.body.route.id).not.toBe(first.body.route.id);
+  expect(await q(`SELECT id FROM prospecting_routes`)).toEqual([{ id: rebuilt.body.route.id }]);
+  // The replaced route's planned visits left the agenda.
+  expect((await q(`SELECT status FROM sales_visits WHERE source = 'prospecting-route'`)).map((visit) => visit.status))
+    .toEqual(["cancelled", "cancelled"]);
 });
