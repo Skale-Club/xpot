@@ -6,13 +6,19 @@ const niche = z.string().trim().regex(/^[a-z0-9]+(?:_[a-z0-9]+)*$/).min(2).max(4
 /** Internal planning assumptions, intentionally not exposed as form fields. */
 export const TODAY_PROSPECTING_POLICY = {
   maxResultsPerSearch: 30,
-  targetStops: 12,
+  targetStops: 24,
   shiftDurationMinutes: 8 * 60,
   defaultVisitMinutes: 20,
   autoExpand: true,
   maxExpansionKm: 30,
   targetUtilization: 0.85,
 } as const;
+
+export const PROSPECTING_SHIFT_MINUTES = [120, 240, 360, 480, 600, 720] as const;
+
+export function targetStopsForShift(shiftDurationMinutes: number) {
+  return Math.ceil(shiftDurationMinutes / TODAY_PROSPECTING_POLICY.defaultVisitMinutes);
+}
 
 export function approximateCandidateCenter(candidates: Array<{ status: string; lat: string | number | null; lng: string | number | null }>) {
   const points = candidates.flatMap((candidate) => {
@@ -42,6 +48,10 @@ export const prospectingJobCreateSchema = z.object({
     basis: z.string().trim().min(1).max(2000).optional(),
   }).optional(),
   idempotencyKey: z.string().trim().min(8).max(200).optional(),
+  shiftDurationMinutes: z.number().int().refine(
+    (value) => (PROSPECTING_SHIFT_MINUTES as readonly number[]).includes(value),
+    "Choose a 2, 4, 6, 8, 10, or 12 hour shift.",
+  ).default(TODAY_PROSPECTING_POLICY.shiftDurationMinutes),
 });
 
 export const prospectingRouteCreateSchema = z.object({
@@ -61,7 +71,7 @@ export const prospectingRouteCreateSchema = z.object({
   leadIds: z.array(z.number().int().positive()).max(100).default([]),
   candidateIds: z.array(z.number().int().positive()).max(200).default([]),
   jobId: z.number().int().positive().optional(),
-  maxStops: z.number().int().min(1).max(30).default(12),
+  maxStops: z.number().int().min(1).max(60).default(60),
   shiftDurationMinutes: z.number().int().min(30).max(16 * 60).default(8 * 60),
   defaultVisitMinutes: z.number().int().min(5).max(180).default(20),
 }).refine((value) => value.leadIds.length > 0 || value.candidateIds.length > 0 || value.jobId !== undefined, {
