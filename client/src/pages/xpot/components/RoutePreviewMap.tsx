@@ -62,10 +62,13 @@ export function RoutePreviewMap({ start, stops, encodedPolyline, fallbackSrc, al
   useEffect(() => {
     if (!apiKey || !containerRef.current) return;
     let cancelled = false;
+    let map: any = null;
+    let polyline: any = null;
+    const markers: any[] = [];
     loadGoogleMaps(apiKey).then(() => {
       if (cancelled || !containerRef.current) return;
       const google = (window as any).google;
-      const map = new google.maps.Map(containerRef.current, {
+      map = new google.maps.Map(containerRef.current, {
         center: start,
         zoom: 12,
         disableDefaultUI: true,
@@ -82,20 +85,25 @@ export function RoutePreviewMap({ start, stops, encodedPolyline, fallbackSrc, al
       });
       const bounds = new google.maps.LatLngBounds();
       bounds.extend(start);
-      new google.maps.Marker({ map, position: start, title: "Start", label: "S" });
+      markers.push(new google.maps.Marker({ map, position: start, title: "Start", label: "S" }));
       stops.forEach((stop, index) => {
         bounds.extend(stop);
-        new google.maps.Marker({ map, position: stop, title: stop.label, label: String(index + 1) });
+        markers.push(new google.maps.Marker({ map, position: stop, title: stop.label, label: String(index + 1) }));
       });
       const path = encodedPolyline ? decodeGooglePolyline(encodedPolyline) : [start, ...stops];
-      new google.maps.Polyline({ map, path, strokeColor: "#818cf8", strokeOpacity: 0.95, strokeWeight: 5 });
+      polyline = new google.maps.Polyline({ map, path, strokeColor: "#818cf8", strokeOpacity: 0.95, strokeWeight: 5 });
       map.fitBounds(bounds, 40);
     }).catch(() => setFailed(true));
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      markers.forEach((marker) => marker.setMap(null));
+      polyline?.setMap(null);
+      if (map) (window as any).google?.maps?.event?.clearInstanceListeners(map);
+    };
   }, [apiKey, start.lat, start.lng, stops, encodedPolyline]);
 
   if (!apiKey || failed) {
-    return fallbackSrc ? <img src={fallbackSrc} alt={alt} className="h-56 w-full object-cover sm:h-72" /> : null;
+    return fallbackSrc ? <img src={fallbackSrc} alt={alt} className="h-64 w-full bg-slate-950 object-cover sm:h-72" /> : null;
   }
-  return <div ref={containerRef} role="img" aria-label={alt} className="h-56 w-full sm:h-72" />;
+  return <div ref={containerRef} role="img" aria-label={alt} className="h-64 w-full bg-slate-950 sm:h-72" />;
 }
