@@ -13,12 +13,14 @@ export interface McpCaller {
   label: string;
   /** Xpot user that created/authorized the credential; null only for legacy static tokens. */
   userId: string | null;
+  /** Tool families granted to this credential. Static admin tokens receive both. */
+  scopes: string[];
 }
 
 function buildMcpServer(caller: McpCaller): McpServer {
   const server = new McpServer({ name: "xpot", version: "1.0.0" });
-  registerTagJourneyTools(server, caller);
-  registerProspectingTools(server, caller);
+  if (caller.scopes.includes("xpot:journey")) registerTagJourneyTools(server, caller);
+  if (caller.scopes.includes("xpot:prospecting")) registerProspectingTools(server, caller);
   return server;
 }
 

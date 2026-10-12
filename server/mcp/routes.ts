@@ -126,7 +126,13 @@ export function registerMcpRoutes(app: Express) {
       if (looksLikeMcpSecret(secret)) {
         const token = await findActiveMcpToken(secret);
         if (token) {
-          caller = { kind: "token", id: token.id, label: token.tokenPrefix, userId: token.createdByUserId };
+          caller = {
+            kind: "token",
+            id: token.id,
+            label: token.tokenPrefix,
+            userId: token.createdByUserId,
+            scopes: ["xpot:journey", "xpot:prospecting"],
+          };
           // Fire-and-forget: a failed timestamp must not fail the call.
           touchMcpToken(token.id).catch((err) => console.error("[mcp] touch token:", err instanceof Error ? err.message : err));
         }

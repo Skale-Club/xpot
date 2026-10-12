@@ -156,13 +156,8 @@ test.skipIf(!enabled)("mcp oauth: register, consent, PKCE exchange, tools, refre
 
     // ── The access token works on /mcp ──────────────────────────────────────
     const names = await tools(exchanged.json.access_token);
-    assert.ok(
-      names.includes("tags_journey_get")
-      && names.includes("tags_batch_create")
-      && names.includes("prospecting_create_today")
-      && names.includes("prospecting_job_get"),
-      names.join(","),
-    );
+    assert.ok(names.includes("tags_journey_get") && names.includes("tags_batch_create"), names.join(","));
+    assert.ok(!names.includes("prospecting_create_today") && !names.includes("prospecting_job_get"), names.join(","));
 
     // ── Refresh rotates; the old refresh token dies ─────────────────────────
     const refreshed = await token({ grant_type: "refresh_token", client_id: clientId, refresh_token: exchanged.json.refresh_token });

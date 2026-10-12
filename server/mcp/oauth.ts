@@ -127,6 +127,7 @@ export async function authenticateOauthAccess(secret: string): Promise<{ caller:
       id: row.id,
       label: `oauth:${(client?.clientName ?? row.clientId.slice(0, 16)).replace(/\s+/g, "_")}/user:${row.userId}`,
       userId: row.userId,
+      scopes: row.scope.split(/\s+/).filter(Boolean),
     },
   };
 }

@@ -225,6 +225,10 @@ admins only, through an OAuth 2.1 connection or a static token. Journey tools
 live in `server/mcp/tools/tagJourney.ts`; account-bound prospecting tools live
 in `server/mcp/tools/prospecting.ts`:
 
+OAuth connections are least-privilege: `xpot:journey` exposes only the Tags Journey family and
+`xpot:prospecting` exposes only the prospecting family. Static admin tokens retain both families
+for backwards compatibility.
+
 | Tool | What it does |
 |---|---|
 | `tags_journey_get` | Read the Journey timeline and plans, scoped to a batch, tag, kit, lead or reseller |

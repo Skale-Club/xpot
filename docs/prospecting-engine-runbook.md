@@ -122,7 +122,8 @@ No candidate, lead, route or visit migration is necessary during the cutover.
 
 The same persisted job service used by `POST /api/xpot/prospecting/jobs` is available through the
 Xpot MCP server. The credential is bound to the Xpot user that created the static token or approved
-the OAuth connection, so jobs are created for that user's representative profile:
+the OAuth connection, so jobs are created for that user's representative profile. OAuth clients
+should request only the `xpot:prospecting` scope; this does not expose the Tags Journey tools:
 
 - `prospecting_create_today`: accepts `location`, 1-5 `sectors` and an optional idempotency key;
 - `prospecting_job_get`: reads a specific job or the newest job for that account.

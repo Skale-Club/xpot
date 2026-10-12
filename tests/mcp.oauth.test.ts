@@ -33,7 +33,7 @@ test("discovery: protected resource and authorization server metadata, on both p
       const body = await res.json();
       assert.equal(body.resource, `${base}/mcp`);
       assert.deepEqual(body.authorization_servers, [base]);
-      assert.deepEqual(body.scopes_supported, ["xpot:journey"]);
+      assert.deepEqual(body.scopes_supported, ["xpot:journey", "xpot:prospecting"]);
     }
     for (const path of ["/.well-known/oauth-authorization-server", "/.well-known/oauth-authorization-server/mcp"]) {
       const body = await (await fetch(`${base}${path}`)).json();
@@ -144,6 +144,8 @@ test("pkce, scopes, redirect rules and token shapes", async () => {
   }
 
   assert.equal(store.normalizeScope("xpot:journey openid"), "xpot:journey");
+  assert.equal(store.normalizeScope("xpot:prospecting openid"), "xpot:prospecting");
+  assert.equal(store.normalizeScope("xpot:prospecting xpot:journey"), "xpot:prospecting xpot:journey");
   assert.equal(store.normalizeScope("email offline_access"), store.DEFAULT_SCOPE);
   assert.equal(store.normalizeScope(undefined), store.DEFAULT_SCOPE);
 
