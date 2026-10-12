@@ -21,6 +21,7 @@ import {
 } from "./google-maps-engine.js";
 import { evaluateColdEligibility } from "./eligibility.js";
 import { chooseExpansionArea } from "./expansion.js";
+import { earliestStartedAt } from "./job-status.js";
 
 const QUEUE_MAX_WAIT_MS = 24 * 60 * 60 * 1000;
 const DISPATCH_LOCK_KEY = 7_424_002;
@@ -98,7 +99,9 @@ async function updateJobStatus(jobId: number) {
     status,
     resultCount,
     errorMessage: errors.length ? errors.join("; ").slice(0, 2000) : null,
-    startedAt: runs.some((run) => run.startedAt) ? (await db.select({ value: sql<Date>`min(${prospectingRuns.startedAt})` }).from(prospectingRuns).where(eq(prospectingRuns.jobId, jobId)))[0]?.value : null,
+    // Use the already decoded Date values. A raw SQL MIN(timestamp) is returned
+    // as a string by postgres-js and Drizzle's timestamp encoder then rejects it.
+    startedAt: earliestStartedAt(runs.map((run) => run.startedAt)),
     completedAt: ["completed", "failed", "cancelled"].includes(status) ? new Date() : null,
     updatedAt: new Date(),
   }).where(eq(prospectingJobs.id, jobId));
