@@ -27,6 +27,29 @@ export const xpotVisitNoteUpsertSchema = z.object({
   followUpRequired: z.boolean().optional(),
   audioUrl: z.string().nullable().optional(),
   audioDurationSeconds: z.number().int().nullable().optional(),
+  attendeeName: z.string().trim().max(160).nullable().optional(),
+});
+
+export const xpotPushSubscriptionSchema = z.object({
+  endpoint: z.string().url().max(4096),
+  keys: z.object({
+    p256dh: z.string().min(1).max(4096),
+    auth: z.string().min(1).max(1024),
+  }),
+});
+
+export const xpotVisitSummarySchema = z.object({
+  attendeeName: z.string().trim().max(160).nullable().optional(),
+  summary: z.string().trim().max(5000).nullable().optional(),
+  outcome: z.string().trim().max(500).nullable().optional(),
+  nextStep: z.string().trim().max(2000).nullable().optional(),
+  followUpRequired: z.boolean().optional(),
+  quickTask: z.object({
+    title: z.string().trim().min(1).max(240),
+    dueAt: z.string().datetime().nullable().optional(),
+    priority: z.enum(["low", "medium", "high", "urgent"]).optional(),
+    type: z.enum(["follow_up", "return_visit", "call", "delivery", "other"]).optional(),
+  }).nullable().optional(),
 });
 
 // lat/lng live in text columns, but every producer hands us numbers: Google
@@ -137,6 +160,7 @@ export const xpotTaskUpdateSchema = z.object({
 export type XpotCheckInInput = z.infer<typeof xpotCheckInSchema>;
 export type XpotCheckOutInput = z.infer<typeof xpotCheckOutSchema>;
 export type XpotVisitNoteUpsertInput = z.infer<typeof xpotVisitNoteUpsertSchema>;
+export type XpotVisitSummaryInput = z.infer<typeof xpotVisitSummarySchema>;
 export type XpotLeadCreateInput = z.infer<typeof xpotLeadCreateSchema>;
 export type XpotLeadUpdateInput = z.infer<typeof xpotLeadUpdateSchema>;
 export type XpotLeadContactCreateInput = z.infer<typeof xpotLeadContactCreateSchema>;

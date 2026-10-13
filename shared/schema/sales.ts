@@ -259,6 +259,8 @@ export const salesVisitNotes = pgTable("sales_visit_notes", {
   audioUrl: text("audio_url"),
   audioDurationSeconds: integer("audio_duration_seconds"),
   audioTranscription: text("audio_transcription"),
+  attendeeName: text("attendee_name"),
+  summaryCompletedAt: timestamp("summary_completed_at", { withTimezone: true }),
   createdByRepId: integer("created_by_rep_id").references(() => salesReps.id),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -320,6 +322,20 @@ export const salesTasks = pgTable("sales_tasks", {
   opportunityStatusIdx: index("sales_tasks_opportunity_status_idx").on(table.opportunityId, table.status),
   idempotencyIdx: uniqueIndex("sales_tasks_org_source_idempotency_unique").on(table.organizationId, table.source, table.idempotencyKey),
   xphereTaskIdx: uniqueIndex("sales_tasks_org_xphere_task_unique").on(table.organizationId, table.xphereTaskId),
+}));
+
+export const salesPushSubscriptions = pgTable("sales_push_subscriptions", {
+  id: serial("id").primaryKey(),
+  repId: integer("rep_id").notNull().references(() => salesReps.id, { onDelete: "cascade" }),
+  endpoint: text("endpoint").notNull(),
+  p256dh: text("p256dh").notNull(),
+  auth: text("auth").notNull(),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  endpointIdx: uniqueIndex("sales_push_subscriptions_endpoint_unique").on(table.endpoint),
+  repIdx: index("sales_push_subscriptions_rep_idx").on(table.repId),
 }));
 
 export const salesSyncEvents = pgTable("sales_sync_events", {

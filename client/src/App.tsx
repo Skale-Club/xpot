@@ -5,9 +5,7 @@ import { useXpotQueries } from "./pages/xpot/hooks/useXpotQueries";
 import { useVisits } from "./pages/xpot/hooks/useVisits";
 import { GeoProvider } from "./pages/xpot/hooks/GeoProvider";
 import { tabs } from "./pages/xpot/utils";
-import { XpotCheckIn } from "./pages/xpot/XpotCheckIn";
 import { XpotLeads } from "./pages/xpot/XpotLeads";
-import { XpotVisits } from "./pages/xpot/XpotVisits";
 import { XpotSales } from "./pages/xpot/XpotSales";
 import { XpotDashboard } from "./pages/xpot/XpotDashboard";
 import { XpotProspecting } from "./pages/xpot/XpotProspecting";
@@ -29,7 +27,7 @@ import { MobileTabBar } from "@/components/xpot/MobileTabBar";
 import { SessionGate } from "@/components/xpot/SessionGate";
 import { XpotLandingPage } from "./pages/xpot/XpotLandingPage";
 import { getHttpStatus, isStandaloneDisplay, resolveRootView } from "@/lib/pwa";
-import { getXpotHomePath, MODULE_HOME } from "@/lib/xpot";
+import { getXpotHomePath, MODULE_HOME, rememberModuleRoute } from "@/lib/xpot";
 import type { XpotMeResponse } from "./pages/xpot/types";
 import { OrganizationsPage } from "./pages/xpot/OrganizationsPage";
 
@@ -60,7 +58,7 @@ function VisitsGate() {
 }
 
 function XpotAppShell() {
-  const { me, xpotMeQuery, isOnline, activeTab } = useXpotQueries();
+  const { me, xpotMeQuery, isOnline, activeTab, pathname } = useXpotQueries();
   const [, setLocation] = useLocation();
   const t = useT(commonMessages);
   const tShell = useT(shellMessages);
@@ -69,8 +67,24 @@ function XpotAppShell() {
   useVisits();
 
   useEffect(() => {
-    if (visitsAllowed) rememberModule("visits");
-  }, [visitsAllowed]);
+    if (!visitsAllowed) return;
+    rememberModule("visits");
+    const path = pathname.split("?")[0];
+    const search = typeof window !== "undefined" ? window.location.search : "";
+    rememberModuleRoute("visits", `${path}${search}`);
+  }, [pathname, visitsAllowed]);
+
+  useEffect(() => {
+    const path = pathname.split("?")[0];
+    const search = typeof window !== "undefined" ? window.location.search : "";
+    if (path === "/visits" || path.startsWith("/visits/")) {
+      setLocation(`${path.replace(/^\/visits/, "/dashboard/history")}${search}`, { replace: true });
+    } else if (path === "/check-in") {
+      setLocation(`/leads/prospecting${search}`, { replace: true });
+    } else if (path === "/prospecting") {
+      setLocation(`/leads/prospecting${search}`, { replace: true });
+    }
+  }, [pathname, setLocation]);
 
   if (!me) return <SessionGate failed={xpotMeQuery.isError} />;
 
@@ -108,8 +122,6 @@ function XpotAppShell() {
       <div className="space-y-4">
         {activeTab === "dashboard" ? <XpotDashboard /> : null}
         {activeTab === "leads" ? <XpotLeads /> : null}
-        {activeTab === "check-in" ? <XpotCheckIn /> : null}
-        {activeTab === "visits" ? <XpotVisits /> : null}
         {activeTab === "sales" ? <XpotSales /> : null}
         {activeTab === "prospecting" ? <XpotProspecting /> : null}
         {activeTab === "tasks" ? <XpotTasks /> : null}

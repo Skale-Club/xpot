@@ -7,6 +7,7 @@ import {
   Boxes,
   Building2,
   Check,
+  ChevronDown,
   ChevronRight,
   Clock3,
   DollarSign,
@@ -32,12 +33,14 @@ import {
 } from "@/components/ui/dialog";
 import { LanguagePicker } from "@/components/LanguagePicker";
 import { PhoneSignIn } from "@/components/PhoneSignIn";
-import { translate, useT } from "@/i18n";
+import { interpolate, translate, useT } from "@/i18n";
 import { landingMessages } from "@/i18n/messages/landing";
+import { defaultLandingContent } from "@/lib/landingContent";
+import type { LandingContentResponse, LandingPageContent } from "@shared/landingContent";
 import { publicPagePath } from "@shared/seo";
 import { usePublicSeo } from "@/lib/seo";
 
-type LandingT = ReturnType<typeof useT<(typeof landingMessages)["en"]>>;
+type LandingT = ReturnType<typeof useT<typeof landingMessages.en>>;
 
 async function getXpotSession(retryOn401 = true): Promise<{
   ok: boolean;
@@ -120,7 +123,7 @@ function FieldSalesHero({ t }: { t: LandingT }) {
 
 // ─── Product mockups (drawn with the app's own look, no screenshots) ─────────
 
-function PhoneMock({ t }: { t: LandingT }) {
+function PhoneMock({ content }: { content: LandingPageContent["mockup"] }) {
   return (
     <div className="relative mx-auto w-full max-w-[340px]">
       <div className="pointer-events-none absolute -inset-8 rounded-[48px] bg-blue-500/10 blur-3xl" />
@@ -130,20 +133,20 @@ function PhoneMock({ t }: { t: LandingT }) {
           {/* Active visit */}
           <div className="space-y-3 rounded-2xl border border-indigo-400/25 p-4" style={{ background: "linear-gradient(160deg, rgba(59,130,246,0.15), rgba(99,102,241,0.08))" }}>
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-300/80">{t("mockVisit")}</span>
+              <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-300/80">{content.visit}</span>
               <span className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-300">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                {t("mockAtDoor")}
+                {content.atDoor}
               </span>
             </div>
-            <div className="text-center text-4xl font-extrabold tabular-nums tracking-tight text-white">12:48</div>
+            <div className="text-center text-4xl font-extrabold tabular-nums tracking-tight text-white">{content.timer}</div>
             <div className="flex items-center gap-3 rounded-xl bg-black/25 p-2.5">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-indigo-500/20 bg-indigo-500/10">
                 <Building2 className="h-4 w-4 text-indigo-300" />
               </div>
               <div className="min-w-0">
-                <div className="truncate text-sm font-semibold text-white">Bean &amp; Barrel Café</div>
-                <div className="truncate text-[11px] text-white/40">1810 N Franklin St · Tampa</div>
+                <div className="truncate text-sm font-semibold text-white">{content.business}</div>
+                <div className="truncate text-[11px] text-white/40">{content.address}</div>
               </div>
             </div>
           </div>
@@ -152,26 +155,26 @@ function PhoneMock({ t }: { t: LandingT }) {
           <div className="space-y-2 rounded-2xl border border-white/[0.08] bg-white/[0.04] p-3.5">
             <div className="flex items-center gap-2 text-[11px] font-semibold text-white/50">
               <Mic className="h-3.5 w-3.5 text-blue-300" />
-              {t("mockVoice")}
+              {content.voice}
             </div>
-            <p className="text-xs italic leading-relaxed text-white/70">{t("mockQuote")}</p>
+            <p className="text-xs italic leading-relaxed text-white/70">{content.quote}</p>
           </div>
 
           {/* Proposed actions */}
           <div className="space-y-2 rounded-2xl border border-emerald-400/20 bg-emerald-400/[0.05] p-3.5">
             <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-300">
               <Sparkles className="h-3.5 w-3.5" />
-              {t("mockAiFound")}
+              {content.aiFound}
             </div>
             {[
-              { icon: DollarSign, label: t("mockActionSale"), value: "$174.00" },
-              { icon: Clock3, label: t("mockActionFollowUp"), value: "" },
+              { icon: DollarSign, label: content.sale, value: content.saleValue },
+              { icon: Clock3, label: content.followUp, value: "" },
             ].map(({ icon: Icon, label, value }) => (
               <div key={label} className="flex items-center gap-2.5 rounded-xl bg-black/25 px-3 py-2">
                 <Icon className="h-3.5 w-3.5 shrink-0 text-white/50" />
                 <span className="min-w-0 flex-1 truncate text-xs font-medium text-white/85">{label}</span>
                 {value && <span className="text-xs font-semibold tabular-nums text-emerald-300">{value}</span>}
-                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-500/20 text-emerald-300" aria-label={t("mockConfirm")}>
+                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-500/20 text-emerald-300" aria-label={content.confirm}>
                   <Check className="h-3.5 w-3.5" />
                 </span>
               </div>
@@ -188,6 +191,8 @@ function PhoneMock({ t }: { t: LandingT }) {
 export function XpotLandingPage() {
   const [, setLocation] = useLocation();
   const t = useT(landingMessages);
+  const landingQuery = useQuery<LandingContentResponse>({ queryKey: ["/api/landing", t.lang] });
+  const content = landingQuery.data?.content ?? defaultLandingContent(t.lang);
   usePublicSeo("home");
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [error, setError] = useState("");
@@ -254,7 +259,7 @@ export function XpotLandingPage() {
       onClick={goToApp}
       className="group flex h-12 items-center justify-center gap-2 rounded-xl bg-blue-600 px-7 text-sm font-semibold text-white shadow-[0_0_24px_rgba(37,99,235,0.35)] transition-all hover:bg-blue-500"
     >
-      {t("goToDashboard")}
+      {content.account.authenticatedCta}
       <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
     </Button>
   ) : (
@@ -263,7 +268,7 @@ export function XpotLandingPage() {
       className="group flex h-12 items-center justify-center gap-2 rounded-xl bg-blue-600 px-7 text-sm font-semibold text-white shadow-[0_0_24px_rgba(37,99,235,0.35)] transition-all hover:bg-blue-500"
       data-testid="landing-get-started"
     >
-      {t("getStarted")}
+      {content.account.primaryCta}
       <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
     </Button>
   );
@@ -313,8 +318,10 @@ export function XpotLandingPage() {
             </button>
 
             <nav className="hidden items-center gap-6 text-sm text-white/55 md:flex" aria-label="Sections">
-              <button type="button" onClick={() => scrollTo("how")} className="transition-colors hover:text-white">{t("navHow")}</button>
-              <button type="button" onClick={() => scrollTo("tools")} className="transition-colors hover:text-white">{t("navTools")}</button>
+              <button type="button" onClick={() => scrollTo("audience")} className="transition-colors hover:text-white">{content.navigation.audience}</button>
+              <button type="button" onClick={() => scrollTo("how")} className="transition-colors hover:text-white">{content.navigation.how}</button>
+              <button type="button" onClick={() => scrollTo("tools")} className="transition-colors hover:text-white">{content.navigation.tools}</button>
+              <button type="button" onClick={() => scrollTo("faq")} className="transition-colors hover:text-white">{content.navigation.faq}</button>
             </nav>
 
             <div className="flex items-center gap-2">
@@ -326,14 +333,14 @@ export function XpotLandingPage() {
                   size="sm"
                   className="flex items-center gap-1.5 rounded-xl border border-blue-500/30 bg-blue-500/10 px-4 py-2 text-sm font-semibold text-blue-300 transition-all hover:bg-blue-500/20 hover:text-blue-200"
                 >
-                  {t("dashboard")}
+                  {content.account.dashboard}
                   <ChevronRight className="h-3.5 w-3.5" />
                 </Button>
               ) : (
                 <Dialog open={isLoginOpen} onOpenChange={handleDialogChange}>
                   <DialogTrigger asChild>
                     <Button variant="ghost" size="sm" className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-white/90 transition-all hover:border-white/20 hover:bg-white/10 hover:text-white">
-                      {t("signIn")}
+                      {content.account.signIn}
                     </Button>
                   </DialogTrigger>
 
@@ -345,10 +352,10 @@ export function XpotLandingPage() {
                         <img src="/api/branding/favicon" alt="" className="h-full w-full object-cover" />
                       </div>
                       <DialogTitle className="text-center text-2xl font-bold tracking-tight text-white sm:text-3xl">
-                        {t("welcomeTitle")}
+                        {content.account.welcomeTitle}
                       </DialogTitle>
                       <DialogDescription className="mt-2 text-center text-base text-white/60">
-                        {t("welcomeSub")}
+                        {content.account.welcomeSub}
                       </DialogDescription>
                     </DialogHeader>
 
@@ -357,11 +364,11 @@ export function XpotLandingPage() {
                     )}
                     <PhoneSignIn onSignedIn={openXpotWorkspace} />
                     <p className="mt-4 text-center text-xs leading-relaxed text-white/45">
-                      {t("agreeBefore")}{" "}
-                      <Link href={publicPagePath("terms", t.lang)} className="text-white/70 underline-offset-2 hover:underline">{t("termsOfService")}</Link>{" "}
-                      {t("agreeAnd")}{" "}
-                      <Link href={publicPagePath("privacy", t.lang)} className="text-white/70 underline-offset-2 hover:underline">{t("privacyPolicy")}</Link>
-                      {t("agreeAfter")}
+                      {content.account.agreementBefore}{" "}
+                      <Link href={publicPagePath("terms", t.lang)} className="text-white/70 underline-offset-2 hover:underline">{content.footer.termsLabel}</Link>{" "}
+                      {content.account.agreementAnd}{" "}
+                      <Link href={publicPagePath("privacy", t.lang)} className="text-white/70 underline-offset-2 hover:underline">{content.footer.privacyLabel}</Link>
+                      {content.account.agreementAfter}
                     </p>
                   </DialogContent>
                 </Dialog>
@@ -376,16 +383,16 @@ export function XpotLandingPage() {
             <div className="space-y-6 text-center lg:col-span-6 lg:text-left">
               <div className="inline-flex items-center gap-1.5 rounded-full border border-blue-500/20 bg-blue-500/5 px-3.5 py-1.5 text-xs font-semibold text-blue-300 sm:text-sm">
                 <MapPinned className="h-3.5 w-3.5" />
-                {t("heroBadge")}
+                {content.hero.badge}
               </div>
 
               <h1 className="text-4xl font-extrabold leading-[1.05] tracking-tight text-white sm:text-5xl lg:text-6xl">
-                {t("heroTitleLine1")}
+                {content.hero.titleLine1}
                 <br />
-                <span className="bg-gradient-to-r from-blue-300 via-indigo-300 to-blue-400 bg-clip-text text-transparent">{t("heroTitleLine2")}</span>
+                <span className="bg-gradient-to-r from-blue-300 via-indigo-300 to-blue-400 bg-clip-text text-transparent">{content.hero.titleLine2}</span>
               </h1>
 
-              <p className="mx-auto max-w-2xl text-base leading-relaxed text-white/65 sm:text-lg lg:mx-0">{t("heroSub")}</p>
+              <p className="mx-auto max-w-2xl text-base leading-relaxed text-white/65 sm:text-lg lg:mx-0">{content.hero.body}</p>
 
               <div className="flex flex-col justify-center gap-3.5 pt-2 sm:flex-row lg:justify-start">
                 {primaryCta}
@@ -394,10 +401,10 @@ export function XpotLandingPage() {
                   onClick={() => scrollTo("how")}
                   className="h-12 rounded-xl border-white/10 bg-white/5 px-7 text-sm font-semibold text-white transition-all hover:bg-white/10"
                 >
-                  {t("exploreFeatures")}
+                  {content.hero.secondaryCta}
                 </Button>
               </div>
-              {!me && <p className="text-xs text-white/45">{t("accessNote")}</p>}
+              {!me && <p className="text-xs text-white/45">{content.hero.accessNote}</p>}
             </div>
 
             <motion.div
@@ -424,7 +431,7 @@ export function XpotLandingPage() {
           {/* How it works */}
           <section id="how" className="scroll-mt-24 space-y-12">
             <Reveal>
-              <SectionHeading title={t("howTitle")} sub={t("howSub")} />
+              <SectionHeading title={content.how.title} sub={content.how.subtitle} />
             </Reveal>
             <ol className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
               {steps.map(({ icon: Icon, title, body }, i) => (
@@ -445,7 +452,7 @@ export function XpotLandingPage() {
           {/* Product proof: the photo establishes the job; this shows how Xpot supports it. */}
           <section className="grid grid-cols-1 items-center gap-12 rounded-[28px] border border-white/[0.07] bg-white/[0.025] p-6 sm:p-10 lg:grid-cols-2 lg:gap-16 lg:p-12">
             <Reveal className="order-2 lg:order-1">
-              <PhoneMock t={t} />
+              <PhoneMock content={content.mockup} />
             </Reveal>
             <Reveal className="order-1 lg:order-2">
               <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-blue-300">
@@ -470,7 +477,7 @@ export function XpotLandingPage() {
           {/* Tools */}
           <section id="tools" className="scroll-mt-24 space-y-12">
             <Reveal>
-              <SectionHeading title={t("toolsTitle")} sub={t("toolsSub")} />
+              <SectionHeading title={content.tools.title} sub={content.tools.subtitle} />
             </Reveal>
             <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
               {tools.map(({ icon: Icon, title, items, tone }, i) => (
@@ -501,26 +508,46 @@ export function XpotLandingPage() {
                 <RefreshCw className="h-5 w-5 text-blue-300" />
               </div>
               <div>
-                <h2 className="text-lg font-bold text-white">{t("syncTitle")}</h2>
-                <p className="mt-1 text-sm leading-relaxed text-white/60">{t("syncBody")}</p>
+                <h2 className="text-lg font-bold text-white">{content.sync.title}</h2>
+                <p className="mt-1 text-sm leading-relaxed text-white/60">{content.sync.body}</p>
               </div>
             </section>
           </Reveal>
 
+          {/* FAQ */}
+          <section id="faq" className="scroll-mt-24 space-y-12">
+            <Reveal><SectionHeading title={content.faq.title} sub={content.faq.subtitle} /></Reveal>
+            <div className="mx-auto max-w-3xl divide-y divide-white/[0.07] border-y border-white/[0.07]">
+              {content.faq.items.map((item, index) => (
+                <Reveal key={item.id} delay={Math.min(index * 0.04, 0.2)}>
+                  <details className="group">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-6 py-5 text-left text-base font-semibold text-white/90 marker:content-none sm:text-lg">
+                      <span>{item.question}</span>
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.035] text-white/45 transition-colors group-open:border-blue-400/30 group-open:text-blue-300">
+                        <ChevronDown className="h-4 w-4 transition-transform duration-300 group-open:rotate-180" />
+                      </span>
+                    </summary>
+                    <p className="max-w-2xl pb-6 pr-12 text-sm leading-7 text-white/55 sm:text-base">{item.answer}</p>
+                  </details>
+                </Reveal>
+              ))}
+            </div>
+          </section>
+
           {/* Call to action */}
           <Reveal>
             <section className="relative mx-auto max-w-4xl space-y-6 overflow-hidden rounded-2xl border border-blue-500/20 bg-gradient-to-r from-blue-950/30 via-indigo-950/30 to-blue-950/30 p-8 text-center sm:p-12">
-              <h2 className="text-2xl font-bold tracking-tight text-white sm:text-3xl lg:text-4xl">{t("ctaTitle")}</h2>
-              <p className="mx-auto max-w-xl text-sm leading-relaxed text-white/65 sm:text-base lg:text-lg">{t("ctaBody")}</p>
+              <h2 className="text-2xl font-bold tracking-tight text-white sm:text-3xl lg:text-4xl">{content.cta.title}</h2>
+              <p className="mx-auto max-w-xl text-sm leading-relaxed text-white/65 sm:text-base lg:text-lg">{content.cta.body}</p>
               <div className="mx-auto max-w-xs pt-2">
                 {me ? (
                   <Button onClick={goToApp} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-white text-sm font-semibold text-black transition-all hover:bg-white/90">
-                    {t("goToDashboard")}
+                    {content.account.authenticatedCta}
                     <ArrowRight className="h-4 w-4" />
                   </Button>
                 ) : (
                   <Button onClick={() => setIsLoginOpen(true)} className="h-12 w-full rounded-xl bg-white text-sm font-semibold text-black transition-all hover:bg-white/90">
-                    {t("accessApp")}
+                    {content.cta.button}
                   </Button>
                 )}
               </div>
@@ -529,13 +556,13 @@ export function XpotLandingPage() {
         </main>
 
         <footer className="relative border-t border-white/[0.06] py-10 text-center text-sm text-white/50">
-          <p className="font-semibold text-white/60">{t("footerTagline")}</p>
+          <p className="font-semibold text-white/60">{content.footer.tagline}</p>
           <p className="mt-3 flex justify-center gap-4">
-            <Link href={publicPagePath("privacy", t.lang)} className="transition-colors hover:text-white">{t("privacyPolicy")}</Link>
+            <Link href={publicPagePath("privacy", t.lang)} className="transition-colors hover:text-white">{content.footer.privacyLabel}</Link>
             <span aria-hidden>·</span>
-            <Link href={publicPagePath("terms", t.lang)} className="transition-colors hover:text-white">{t("termsOfService")}</Link>
+            <Link href={publicPagePath("terms", t.lang)} className="transition-colors hover:text-white">{content.footer.termsLabel}</Link>
           </p>
-          <p className="mt-2">{t("footerRights", { year: new Date().getFullYear() })}</p>
+          <p className="mt-2">{interpolate(content.footer.rights, { year: new Date().getFullYear() })}</p>
         </footer>
       </div>
     </MotionConfig>

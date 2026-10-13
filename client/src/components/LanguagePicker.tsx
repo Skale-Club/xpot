@@ -17,7 +17,7 @@ export function LanguagePicker({ compact = false }: { compact?: boolean }) {
       <div
         role="radiogroup"
         aria-label={t("language")}
-        className="flex rounded-xl border border-white/10 p-0.5"
+        className="flex rounded-xl p-0.5"
         style={{ background: "rgba(255,255,255,0.04)" }}
       >
         {LANGS.map((l) => (

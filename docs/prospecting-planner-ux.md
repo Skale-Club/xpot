@@ -13,9 +13,9 @@ produce only four useful visits, Xpot searches the next geographically coherent 
 stops without creating a zig-zag route. It stops expanding when the route reaches the requested
 amount of work needed for a useful day. These are planning estimates, not a rigid schedule.
 
-## Mini form
+## Planning form
 
-The first screen deliberately stays small:
+The first screen stays compact while making the available field time explicit:
 
 ```text
 ┌─────────────────────────────────────────────┐
@@ -24,15 +24,17 @@ The first screen deliberately stays small:
 │ Cidade             [ Framingham, MA       ] │
 │ Setores            [ Barbearias          ] │
 │                    [ Salões de beleza     ] │
+│ Turno              [2h][4h][6h][8h][10h][12h]│
 │                                             │
-│          [ Montar minha rota ]              │
+│          [ Buscar oportunidades ]           │
 └─────────────────────────────────────────────┘
 ```
 
-There is no date picker, schedule, visit target, average-duration field, expansion radius or
-prospecting-mode selector. The route is always for today. The first version assumes a normal
-eight-hour field day and a 20-minute planning estimate per stop, but those values are internal
-guidance and do not become appointments or deadlines.
+There is no date picker, visit target, average-duration field, expansion radius or
+prospecting-mode selector. The route is always for today. The rep chooses a 2- to 12-hour shift;
+Xpot keeps the 20-minute planning estimate per stop as internal guidance rather than presenting
+appointments or deadlines. The sector field reports its five-sector limit instead of silently
+discarding extra input.
 
 Starting point is the device's current position. If location permission is unavailable, Xpot uses
 the approximate center of the eligible places found in the chosen territory. The route is guidance:
@@ -114,14 +116,21 @@ understand and prevents customer appointments from being mixed into a discovery 
 
 ## Planning screen after submission
 
-The planner has four visible states:
+The planner has four visible states, presented as one coarse progress stepper rather than false
+precision:
 
-1. **Searching:** current area, sector, wave and queue position.
-2. **Cleaning:** found, duplicate, existing-customer and previously-visited counts.
-3. **Building:** approximate route coverage and why another nearby area is being searched.
-4. **Ready:** numbered map, estimated start/end, visit and drive time, excluded summary and actions
-   to publish, remove/reorder a stop or allow a wider expansion. Publishing sends the ordered stops
-   to today's existing Visits view as planned visits; the planner is not a second agenda.
+1. **Search:** current area, sector, wave and progress for each physical search.
+2. **Quality:** found, duplicate, existing-customer and previously-visited counts while the result
+   set is normalized and expanded.
+3. **Review:** ranked eligible businesses with score reasons, an exclusion breakdown and an explicit
+   selection step. The rep chooses the businesses before the app requests location or spends the
+   day's route optimization.
+4. **Route:** the resulting numbered map shows estimated start/end, visit and drive time.
+   Publishing sends the ordered stops to today's existing Visits view as planned visits; the planner
+   is not a second agenda.
+
+Notification permission is requested only from the visible “notify me when ready” action while a
+job is running. Finishing discovery never triggers location or notification permissions on its own.
 
 The rep should be able to leave the screen. The PostgreSQL-backed job continues and the same state
 is available on another device.

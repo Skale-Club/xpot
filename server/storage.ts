@@ -23,6 +23,7 @@ import {
   integrationSettings,
   xphereIntegrations,
   appBranding,
+  landingPageContents,
   // Inferred types
   type SalesAppSettings,
   type SalesRep,
@@ -53,7 +54,10 @@ import {
   type InsertXphereIntegration,
   type AppBranding,
   type InsertAppBranding,
+  type LandingPageContentRow,
+  type InsertLandingPageContentRow,
 } from "#shared/schema.js";
+import type { LandingLocale } from "#shared/landingContent.js";
 
 // ─── Recent-visits joined shape (used by /api/xpot/admin/recent-visits) ──────
 
@@ -100,6 +104,11 @@ export interface IStorage {
   // App branding (favicon + PWA manifest)
   getAppBranding(): Promise<AppBranding>;
   upsertAppBranding(data: Partial<Omit<InsertAppBranding, "id">>): Promise<AppBranding>;
+
+  // Public landing-page content (one complete document per language)
+  getLandingPageContent(locale: LandingLocale): Promise<LandingPageContentRow | undefined>;
+  listLandingPageContents(): Promise<LandingPageContentRow[]>;
+  upsertLandingPageContent(data: InsertLandingPageContentRow): Promise<LandingPageContentRow>;
 
   // Reps
   listSalesReps(): Promise<SalesRep[]>;
@@ -298,6 +307,29 @@ export class DatabaseStorage implements IStorage {
       .where(eq(appBranding.id, 1))
       .returning();
     return updated;
+  }
+
+  // ── Landing page content ──
+
+  async getLandingPageContent(locale: LandingLocale): Promise<LandingPageContentRow | undefined> {
+    const [row] = await db.select().from(landingPageContents).where(eq(landingPageContents.locale, locale));
+    return row;
+  }
+
+  async listLandingPageContents(): Promise<LandingPageContentRow[]> {
+    return await db.select().from(landingPageContents).orderBy(asc(landingPageContents.locale));
+  }
+
+  async upsertLandingPageContent(data: InsertLandingPageContentRow): Promise<LandingPageContentRow> {
+    const [saved] = await db
+      .insert(landingPageContents)
+      .values({ ...data, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: landingPageContents.locale,
+        set: { content: data.content, updatedAt: new Date() },
+      })
+      .returning();
+    return saved;
   }
 
   // ── Reps ──

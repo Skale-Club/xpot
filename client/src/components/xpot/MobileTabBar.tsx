@@ -4,16 +4,24 @@ import { MODULE_ACCENT } from "./surface";
 
 export type MobileTab = { id: string; label: string; icon: LucideIcon; testId?: string };
 
+/** Keep each module's home dashboard in the same first position. */
+export function orderMobileTabs(tabs: MobileTab[], module: XpotModule): MobileTab[] {
+  const homeId = module === "visits" ? "dashboard" : "/tags";
+  const home = tabs.find((tab) => tab.id === homeId);
+  return home ? [home, ...tabs.filter((tab) => tab.id !== homeId)] : tabs;
+}
+
 /** The phone's floating bottom tab bar (Visits and Tags modules), in the module's colour. */
 export function MobileTabBar({ tabs, activeId, onSelect, module }: { tabs: MobileTab[]; activeId: string; onSelect: (id: string) => void; module: XpotModule }) {
   const accent = MODULE_ACCENT[module];
+  const orderedTabs = orderMobileTabs(tabs, module);
   return (
     <nav className="fixed inset-x-0 bottom-0 z-50 px-4 pt-2" style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 16px)" }}>
       <div
         className="mx-auto flex max-w-md items-center gap-1 rounded-2xl border border-white/10 px-2 py-1.5"
         style={{ background: "rgba(15, 23, 42, 0.85)", backdropFilter: "blur(20px)" }}
       >
-        {tabs.map(({ id, label, icon: Icon, testId }) => {
+        {orderedTabs.map(({ id, label, icon: Icon, testId }) => {
           const isActive = activeId === id;
           return (
             <button

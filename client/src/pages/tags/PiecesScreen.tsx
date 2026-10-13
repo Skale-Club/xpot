@@ -294,22 +294,26 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
                 <button
                   type="button"
                   onClick={() => openPiece(tag.publicCode)}
-                  className="flex min-h-[64px] w-full items-center gap-3 px-4 py-2.5 text-left active:bg-white/10"
+                  className="flex min-h-[88px] w-full items-center gap-3 px-4 py-3 text-left active:bg-white/10"
                 >
                   <TagPieceVisual productType={tag.productType} face={tag.face} title={t(`face_${tag.face ?? "none"}` as "face_none")} />
                   <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-2">
-                      <span className="font-mono text-base font-semibold tracking-[0.12em] text-white">{tag.publicCode}</span>
+                    <span className={`flex min-w-0 items-center gap-1.5 text-sm font-bold ${tag.leadName ? "text-white" : "text-white/40"}`}>
+                      <Building2 className={`h-4 w-4 shrink-0 ${tag.leadName ? "text-violet-300" : "text-white/25"}`} />
+                      <span className="truncate">{tag.leadName ?? t("noCustomer")}</span>
+                    </span>
+                    <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                      <span className="font-mono text-sm font-semibold tracking-[0.12em] text-white/85">{tag.publicCode}</span>
                       <Pill tone={STATUS_TONE[tag.status] ?? "slate"}>{t(`status_${tag.status}` as "status_active")}</Pill>
                       {tag.saleId && <Pill tone={SOLD_TONE}>{t("soldBadge")}</Pill>}
                     </span>
-                    <span className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-white/45">
+                    <span className="mt-1.5 flex min-w-0 items-center gap-1.5 text-xs text-white/35">
                       <TagModelChips productType={tag.productType} face={tag.face} batchCode={tag.batchCode} className="shrink-0" />
-                      <span className="truncate">
-                      {[tag.leadName ?? t(`product_${tag.productType}` as "product_custom"), tag.label, tag.destinationUrl && shortUrl(tag.destinationUrl)]
-                        .filter(Boolean)
-                        .join(" · ")}
-                      </span>
+                      {(tag.label || tag.destinationUrl) && (
+                        <span className="truncate">
+                          {[tag.label, tag.destinationUrl && shortUrl(tag.destinationUrl)].filter(Boolean).join(" · ")}
+                        </span>
+                      )}
                     </span>
                   </span>
                   {tag.status === "active" && (

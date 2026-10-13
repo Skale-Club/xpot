@@ -12,6 +12,7 @@ import { createMapRouter } from "./map.js";
 import { createAdminRouter } from "./admin.js";
 import { createAdminIntegrationsRouter } from "./admin-integrations.js";
 import { createBrandingPublicRouter, createBrandingAdminRouter } from "./branding.js";
+import { createLandingContentAdminRouter, createLandingContentPublicRouter } from "./landing-content.js";
 import { createInboundRouter } from "./inbound.js";
 import { createXphereRouter } from "./xphere.js";
 import { createProductsRouter } from "./products.js";
@@ -26,6 +27,7 @@ import { createOrganizationsRouter } from "./organizations.js";
 export function registerXpotRoutes(app: Express) {
   // Public branding (favicon / manifest / apple-touch) — no auth.
   app.use("/api/branding", createBrandingPublicRouter());
+  app.use("/api/landing", createLandingContentPublicRouter());
 
   // Visits-only APIs refuse a Tags-only reseller before any router runs.
   app.use(VISITS_ONLY_PATHS.map((path) => `/api/xpot${path}`), requireVisitsModule);
@@ -46,6 +48,7 @@ export function registerXpotRoutes(app: Express) {
   app.use("/api/xpot", createAdminRouter());
   app.use("/api/xpot", createAdminIntegrationsRouter());
   app.use("/api/xpot", createBrandingAdminRouter());
+  app.use("/api/xpot", createLandingContentAdminRouter());
   app.use("/api/xpot", createXphereRouter());
   // Sales module: catalog, direct sales, consigned stock.
   app.use("/api/xpot", createProductsRouter());

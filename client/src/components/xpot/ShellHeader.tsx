@@ -11,19 +11,14 @@ import { dashboardMessages } from "@/i18n/messages/dashboard";
 import { shellMessages } from "@/i18n/messages/shell";
 import type { XpotMeResponse } from "@/pages/xpot/types";
 import { AdminModeButton } from "./AdminMode";
+import { UserGreeting } from "./UserGreeting";
+import { subscribeToRoutePush } from "@/lib/pushNotifications";
 
 // The person at the top of every phone screen, in both modules: their photo
 // (tap to change it), the greeting, the date, and the buttons that belong to
 // the whole app rather than one module: admin mode, Settings and sign out.
 // The Visits/Tags switch sits right below it. On desktop the sidebar has the
-// buttons, so the dashboard shows this without them (`actions={false}`).
-
-function greetingKey() {
-  const h = new Date().getHours();
-  if (h < 12) return "greetingMorning" as const;
-  if (h < 18) return "greetingAfternoon" as const;
-  return "greetingEvening" as const;
-}
+// buttons, so the desktop sidebar carries the same identity block.
 
 function useOnline() {
   const [online, setOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
@@ -51,6 +46,11 @@ export function ShellHeader({ module, actions = true }: { module: XpotModule; ac
   const online = useOnline();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { data: me } = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
+  useEffect(() => {
+    if (module === "visits" && "Notification" in window && Notification.permission === "granted") {
+      void subscribeToRoutePush().catch((error) => console.error("[push subscription] failed:", error));
+    }
+  }, [module]);
 
   const name = me
     ? me.rep.displayName || [me.user.firstName, me.user.lastName].filter(Boolean).join(" ").trim() || me.user.email || ""
@@ -118,13 +118,7 @@ export function ShellHeader({ module, actions = true }: { module: XpotModule; ac
         </button>
         <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={onFile} />
 
-        <div className="min-w-0">
-          <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-400/80">{t(greetingKey())}</div>
-          <div className="mb-1.5 truncate text-[26px] font-extrabold leading-none tracking-tight text-white">{firstName} 👋</div>
-          <div className="truncate text-xs font-medium text-white/40">
-            {new Date().toLocaleDateString(t.locale, { weekday: "long", month: "long", day: "numeric" })}
-          </div>
-        </div>
+        <UserGreeting name={firstName} />
       </div>
 
       {actions && (

@@ -17,7 +17,7 @@ import { formatTitle } from "@shared/seo";
 import { useViewerAccess } from "@/lib/adminMode";
 import { AdminBadge } from "./AdminBadge";
 import { rememberModule, useXpotModules } from "@/components/ModuleSwitch";
-import { MODULE_HOME } from "@/lib/xpot";
+import { MODULE_HOME, moduleEntryPath, rememberModuleRoute } from "@/lib/xpot";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { shellMessages } from "@/i18n/messages/shell";
@@ -27,13 +27,14 @@ import type { XpotMeResponse } from "@/pages/xpot/types";
 import { AppBackground } from "./AppBackground";
 import { CommandPalette } from "./CommandPalette";
 import { useDesktopShortcuts } from "./useDesktopShortcuts";
-import { useIsComputer, useIsDesktop } from "@/hooks/use-is-desktop";
+import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { BRAND_GRADIENT, MODULE_ACCENT } from "./surface";
 import { contextOfPath, moduleGroups, organizationItems, starts, type NavGroup, type NavItem, type ShellContext } from "./moduleNav";
 import { XpotMark } from "./XpotMark";
 import { InstallAppSidebarItem } from "./InstallApp";
 import { AdminModeBar, AdminModeSidebarItem } from "./AdminMode";
 import { ScreenErrorBoundary } from "./ScreenErrorBoundary";
+import { UserGreeting } from "./UserGreeting";
 
 // The frame around every rep screen. Below `lg` it is the phone column the app
 // always had (the caller passes its header row and bottom nav). From `lg` up a
@@ -70,15 +71,12 @@ function useShellNav() {
   const tt = useT(tagsMessages);
   const [location] = useLocation();
   const modules = useXpotModules();
-  // A tablet at desktop width can still check in (decision D1 is about computers).
-  const isComputer = useIsComputer();
   // Management items follow admin mode: off, a manager sees the app as a rep does.
   const access = useViewerAccess();
   const me = access.me;
   const viewer = {
     canManage: access.canManage,
     isAdmin: access.isSuperAdmin,
-    isComputer,
   };
   const labels = { shell: t, tags: tt };
 
@@ -144,8 +142,9 @@ function SidebarModuleSwitch({ collapsed, module, modules, label }: {
   if (modules.length === 0) return null;
   const go = (m: XpotModule) => {
     if (m === module) return;
+    if (module) rememberModuleRoute(module, `${window.location.pathname}${window.location.search}`);
     rememberModule(m);
-    navigate(MODULE_HOME[m]);
+    navigate(moduleEntryPath(m));
   };
   return (
     <div
@@ -186,11 +185,13 @@ function DesktopSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
   const [location, navigate] = useLocation();
   const { context, module, modules, groups, moduleLabel, me } = useShellNav();
   const accent = MODULE_ACCENT[module ?? "account"];
+  const online = useOnline();
 
   const name = me
     ? me.rep.displayName || [me.user.firstName, me.user.lastName].filter(Boolean).join(" ").trim() || me.user.email
     : "";
   const initials = name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
+  const firstName = name.split(" ")[0] ?? "";
 
   // One door to the account (profile, and the Organization for managers); its pages list the rest.
   const footer: NavItem[] = context === "account"
@@ -225,6 +226,25 @@ function DesktopSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
       </div>
 
       <div className="px-3 pb-3">
+        <div className={`flex items-center rounded-2xl border border-white/[0.07] bg-white/[0.025] ${collapsed ? "justify-center p-2" : "gap-3 p-3"}`}>
+          <div className="relative shrink-0">
+            {me?.rep.avatarUrl ? (
+              <img src={me.rep.avatarUrl} alt="" className={`${collapsed ? "h-9 w-9 rounded-xl" : "h-11 w-11 rounded-2xl"} border border-white/10 object-cover`} />
+            ) : (
+              <div
+                className={`${collapsed ? "h-9 w-9 rounded-xl text-xs" : "h-11 w-11 rounded-2xl text-sm"} flex items-center justify-center font-bold text-white`}
+                style={{ background: BRAND_GRADIENT }}
+              >
+                {initials}
+              </div>
+            )}
+            <span className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-[#080c18] ${online ? "bg-emerald-400" : "bg-slate-500"}`} />
+          </div>
+          {!collapsed && <UserGreeting name={firstName} compact />}
+        </div>
+      </div>
+
+      <div className="px-3 pb-3">
         <SidebarModuleSwitch collapsed={collapsed} module={module} modules={modules} label={moduleLabel} />
       </div>
 
@@ -251,30 +271,16 @@ function DesktopSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
         {footer.map((item) => (
           <SidebarLink key={item.href} item={item} collapsed={collapsed} active={item.match(location)} accent={MODULE_ACCENT.account} />
         ))}
-        <div className={`mt-2 flex items-center gap-3 rounded-xl py-2 ${collapsed ? "flex-col px-0" : "px-2"}`}>
-          {me?.rep.avatarUrl ? (
-            <img src={me.rep.avatarUrl} alt="" className="h-9 w-9 shrink-0 rounded-xl border border-white/10 object-cover" />
-          ) : (
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-xs font-bold" style={{ background: BRAND_GRADIENT }}>
-              {initials}
-            </div>
-          )}
-          {!collapsed && (
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-semibold text-white">{name}</div>
-              {me?.user.email && <div className="truncate text-[11px] text-white/35">{me.user.email}</div>}
-            </div>
-          )}
-          <button
-            type="button"
-            onClick={() => void signOut(navigate)}
-            title={t("signOut")}
-            aria-label={t("signOut")}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white/35 transition-colors hover:bg-red-500/10 hover:text-red-400"
-          >
-            <LogOut className="h-4 w-4" />
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => void signOut(navigate)}
+          title={collapsed ? t("signOut") : undefined}
+          aria-label={t("signOut")}
+          className={`flex h-10 w-full items-center rounded-xl text-sm font-medium text-white/45 transition-colors hover:bg-red-500/10 hover:text-red-300 ${collapsed ? "justify-center" : "gap-3 px-3"}`}
+        >
+          <LogOut className="h-[18px] w-[18px] shrink-0" />
+          {!collapsed && <span>{t("signOut")}</span>}
+        </button>
       </div>
     </aside>
   );
@@ -345,7 +351,7 @@ function elapsedLabel(since: string | Date | null | undefined) {
   return h ? `${h}h ${String(minutes % 60).padStart(2, "0")}m` : `${minutes}m`;
 }
 
-/** Desktop strip for a visit that was started on the phone. */
+/** Persistent resume strip while a visit is active, on phone and desktop. */
 function ActiveVisitBanner() {
   const t = useT(shellMessages);
   const [location] = useLocation();
@@ -358,13 +364,13 @@ function ActiveVisitBanner() {
     return () => window.clearInterval(id);
   }, [visit]);
 
-  if (!visit || location.startsWith("/check-in")) return null;
+  if (!visit || location.startsWith("/leads/prospecting") || location.startsWith("/check-in")) return null;
   const lead = visit.lead?.name;
   return (
-    <div className="hidden px-8 pt-4 lg:block">
+    <div className="px-4 pt-4 lg:px-8">
       <Link
-        href="/check-in"
-        className="flex items-center gap-3 rounded-2xl border border-emerald-400/25 bg-emerald-400/[0.08] px-4 py-2.5 text-sm text-emerald-100 transition-colors hover:bg-emerald-400/[0.12]"
+        href="/leads/prospecting"
+        className="mx-auto flex max-w-[1400px] items-center gap-3 rounded-2xl border border-emerald-400/25 bg-emerald-400/[0.08] px-4 py-2.5 text-sm text-emerald-100 transition-colors hover:bg-emerald-400/[0.12]"
         data-testid="active-visit-banner"
       >
         <span className="relative flex h-2.5 w-2.5">
@@ -375,7 +381,7 @@ function ActiveVisitBanner() {
           {lead ? t("activeVisitAt", { lead }) : t("activeVisit")}
         </span>
         <span className="tabular-nums text-emerald-200/70">{elapsedLabel(visit.checkedInAt)}</span>
-        <span className="font-semibold text-emerald-300">{t("openVisit")} →</span>
+        <span className="shrink-0 font-semibold text-emerald-300">{t("openVisit")} →</span>
       </Link>
     </div>
   );
@@ -440,6 +446,12 @@ export function AppLayout({
 
   return (
     <AppBackground>
+      <a
+        href="#xpot-main-content"
+        className="fixed left-4 top-4 z-[1000] -translate-y-24 rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white shadow-xl transition-transform focus:translate-y-0"
+      >
+        {tShell("skipToContent")}
+      </a>
       <DesktopSidebar collapsed={collapsed} onToggle={toggle} />
       <div className={`relative ${collapsed ? "lg:pl-[72px]" : "lg:pl-60"}`}>
         <AdminModeBar />
@@ -452,7 +464,7 @@ export function AppLayout({
           style={mobileColumnStyle}
         >
           {mobileHeader ? <div className="lg:hidden">{mobileHeader}</div> : null}
-          <main className="flex-1">
+          <main id="xpot-main-content" tabIndex={-1} className="flex-1">
             <ScreenErrorBoundary resetKey={location}>{children}</ScreenErrorBoundary>
           </main>
         </div>

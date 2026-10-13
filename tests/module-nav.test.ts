@@ -6,9 +6,9 @@ import { describe, expect, it } from "vitest";
 import { contextOfPath, moduleGroups, organizationItems, visitsAdminSection } from "../client/src/components/xpot/moduleNav";
 
 const labels = { shell: (k: string) => k, tags: (k: string) => k } as never;
-const rep = { canManage: false, isAdmin: false, isComputer: false };
-const manager = { canManage: true, isAdmin: false, isComputer: true };
-const admin = { canManage: true, isAdmin: true, isComputer: true };
+const rep = { canManage: false, isAdmin: false };
+const manager = { canManage: true, isAdmin: false };
+const admin = { canManage: true, isAdmin: true };
 const hrefs = (groups: ReturnType<typeof moduleGroups>) => groups.flatMap((g) => g.items.map((i) => i.href));
 
 describe("contextOfPath", () => {
@@ -16,14 +16,14 @@ describe("contextOfPath", () => {
     for (const p of ["/dashboard", "/visits", "/visits/12", "/leads/3", "/prospecting", "/sales/stock", "/check-in"]) expect(contextOfPath(p)).toBe("visits");
   });
   it("puts the reseller app and the Tags management in Tags", () => {
-    for (const p of ["/tags", "/tags/pieces/ABC", "/admin/tags", "/admin/tags/batches/x"]) expect(contextOfPath(p)).toBe("tags");
+    for (const p of ["/tags", "/tags/customers", "/tags/pieces/ABC", "/admin/tags", "/admin/tags/batches/x"]) expect(contextOfPath(p)).toBe("tags");
   });
   it("puts the Visits management in Visits, not in an Admin of its own", () => {
     for (const p of ["/admin", "/admin/overview", "/admin/products", "/admin/settings"]) expect(contextOfPath(p)).toBe("visits");
   });
   it("puts settings and the organization in the account", () => {
     // Xphere is an account integration; its old URL opens Integrations.
-    for (const p of ["/settings", "/admin/reps", "/admin/integrations", "/admin/branding", "/admin/xphere"]) expect(contextOfPath(p)).toBe("account");
+    for (const p of ["/settings", "/admin/reps", "/admin/integrations", "/admin/branding", "/admin/landing", "/admin/xphere"]) expect(contextOfPath(p)).toBe("account");
   });
   it("does not mistake a prefix for a section", () => {
     expect(contextOfPath("/tagsx")).toBe("visits");
@@ -35,11 +35,13 @@ describe("contextOfPath", () => {
 describe("moduleGroups", () => {
   it("a rep sees the module's screens and no Manage group", () => {
     expect(moduleGroups("tags", rep, labels)).toHaveLength(1);
-    expect(hrefs(moduleGroups("visits", rep, labels))).toContain("/check-in");
-    expect(hrefs(moduleGroups("visits", rep, labels))).toContain("/prospecting");
+    expect(hrefs(moduleGroups("visits", rep, labels))).toEqual(["/dashboard", "/leads", "/sales"]);
   });
-  it("a computer cannot start a check-in", () => {
-    expect(hrefs(moduleGroups("visits", manager, labels))).not.toContain("/check-in");
+  it("keeps History and Prospecting inside their parent screens", () => {
+    const visits = hrefs(moduleGroups("visits", manager, labels));
+    expect(visits).not.toContain("/visits");
+    expect(visits).not.toContain("/check-in");
+    expect(visits).toEqual(expect.arrayContaining(["/dashboard", "/leads", "/sales"]));
   });
   it("a manager gets each module's own management, without the global admin's items", () => {
     const tags = hrefs(moduleGroups("tags", manager, labels));
@@ -56,7 +58,7 @@ describe("moduleGroups", () => {
       moduleGroups(m, admin, labels).flatMap((g) => g.items).filter((i) => i.adminOnly).map((i) => i.href);
     expect(extra("tags")).toEqual(["/admin/tags/batches", "/admin/tags/journey", "/admin/tags/provisioners"]);
     expect(extra("visits")).toEqual([]);
-    expect(organizationItems(labels, admin).filter((i) => i.adminOnly).map((i) => i.href)).toEqual(["/admin/integrations", "/admin/branding"]);
+    expect(organizationItems(labels, admin).filter((i) => i.adminOnly).map((i) => i.href)).toEqual(["/admin/integrations", "/admin/branding", "/admin/landing"]);
   });
   it("groups the Admin-tagged items at the end of every list", () => {
     const lists = [

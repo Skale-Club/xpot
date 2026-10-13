@@ -5,11 +5,9 @@ import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { repModules, type XpotModule } from "@shared/modules";
 import type { XpotMeResponse } from "@/pages/xpot/types";
-import { LAST_MODULE_KEY, MODULE_HOME } from "@/lib/xpot";
+import { LAST_MODULE_KEY, moduleEntryPath, rememberModuleRoute } from "@/lib/xpot";
 import { MODULE_ACCENT } from "@/components/xpot/surface";
 
-
-const HOME: Record<XpotModule, string> = MODULE_HOME;
 
 /** The module the signed-in rep may use (managers: both). */
 export function useXpotModules(): XpotModule[] {
@@ -35,7 +33,7 @@ export function homeForModules(modules: XpotModule[]): string {
     last = null;
   }
   const preferred = modules.find((m) => m === last) ?? modules[0] ?? "visits";
-  return HOME[preferred];
+  return moduleEntryPath(preferred);
 }
 
 /**
@@ -71,8 +69,9 @@ export function ModuleSwitch({ current }: { current: XpotModule }) {
             aria-selected={active}
             onClick={() => {
               if (active) return;
+              rememberModuleRoute(current, `${window.location.pathname}${window.location.search}`);
               rememberModule(id);
-              setLocation(HOME[id]);
+              setLocation(moduleEntryPath(id));
             }}
             data-testid={`module-${id}`}
             className={`relative flex min-h-[40px] flex-1 items-center justify-center gap-2 rounded-xl text-sm font-semibold transition-colors ${

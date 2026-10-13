@@ -24,6 +24,7 @@ import {
 import { evaluateColdEligibility } from "./eligibility.js";
 import { chooseExpansionArea } from "./expansion.js";
 import { earliestStartedAt } from "./job-status.js";
+import { sendPushNotification } from "../push-notifications.js";
 
 const QUEUE_MAX_WAIT_MS = 24 * 60 * 60 * 1000;
 const STARTING_STALE_MS = START_TIMEOUT_MS + 2 * 60 * 1000;
@@ -96,6 +97,8 @@ async function maybeQueueExpansion(jobId: number, runs: ProspectingRun[]) {
 }
 
 async function updateJobStatus(jobId: number) {
+  const [previousJob] = await db.select({ repId: prospectingJobs.repId, status: prospectingJobs.status })
+    .from(prospectingJobs).where(eq(prospectingJobs.id, jobId)).limit(1);
   const runs = await db.select().from(prospectingRuns).where(eq(prospectingRuns.jobId, jobId));
   const expanded = await maybeQueueExpansion(jobId, runs);
   if (expanded) return;
@@ -116,6 +119,14 @@ async function updateJobStatus(jobId: number) {
     completedAt: ["completed", "failed", "cancelled"].includes(status) ? new Date() : null,
     updatedAt: new Date(),
   }).where(eq(prospectingJobs.id, jobId));
+  if (previousJob && previousJob.status !== status && ["completed", "failed"].includes(status)) {
+    const ready = status === "completed";
+    void sendPushNotification(previousJob.repId, {
+      title: ready ? "Your prospecting list is ready" : "Prospecting needs attention",
+      body: ready ? "Open Leads to review the prospects and build today's route." : "Open Leads to review the failed search and retry it.",
+      href: "/leads/prospecting",
+    }).catch((error) => console.error("[prospecting push] delivery failed:", error));
+  }
 }
 
 async function saveResults(run: ProspectingRun, places: NormalizedPlace[]) {

@@ -139,20 +139,29 @@
     @apply font-display tracking-tight text-foreground;
   }
 
-  /* Remove default focus outline from all elements */
-  *:focus {
-    outline: none !important;
-  }
-
-  /* Remove focus-visible ring specifically for Shadcn/Tailwind components if needed */
-  .focus-visible\:ring-2,
-  .focus-visible\:ring-offset-2 {
-    --tw-ring-offset-width: 0px !important;
-    --tw-ring-width: 0px !important;
-  }
-
   .dark input[type="date"]::-webkit-calendar-picker-indicator {
     filter: invert(1);
+  }
+}
+
+/* Unlayered so component utilities such as outline-none cannot hide keyboard focus. */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+*:focus-visible {
+  outline: 3px solid hsl(var(--ring)) !important;
+  outline-offset: 3px !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
   }
 }
 

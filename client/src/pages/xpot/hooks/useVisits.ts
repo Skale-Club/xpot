@@ -7,12 +7,14 @@ import { checkinMessages } from "@/i18n/messages/checkin";
 import { useXpotShared } from "./useXpotShared";
 import { useXpotQueries } from "./useXpotQueries";
 import type { EnrichedSalesVisit } from "../types";
+import { useLocation } from "wouter";
 
 export function useVisits() {
   const { toast } = useToast();
   const t = useT(checkinMessages);
   const { geoState, invalidateXpotData } = useXpotShared();
   const { xpotMeQuery } = useXpotQueries();
+  const [, setLocation] = useLocation();
 
   const visitsQuery = useQuery<EnrichedSalesVisit[]>({ queryKey: ["/api/xpot/visits"], enabled: xpotMeQuery.isSuccess });
 
@@ -42,9 +44,10 @@ export function useVisits() {
       });
       return response.json();
     },
-    onSuccess: async () => {
+    onSuccess: async (visit: { id: number }) => {
       toast({ title: t("visitCompleted"), variant: "success" });
       await invalidateXpotData();
+      setLocation(`/dashboard/history/${visit.id}`);
     },
     onError: (error: Error) => {
       toast({ title: t("checkOutFailed"), description: error.message, variant: "destructive" });
@@ -60,6 +63,7 @@ export function useVisits() {
     onSuccess: async () => {
       toast({ title: t("visitCancelled") });
       await invalidateXpotData();
+      setLocation("/leads/prospecting");
     },
     onError: (error: Error) => {
       toast({ title: t("cancelVisitFailed"), description: error.message, variant: "destructive" });

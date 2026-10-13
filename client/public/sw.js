@@ -100,6 +100,30 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+self.addEventListener("push", (event) => {
+  let payload = {};
+  try { payload = event.data?.json() ?? {}; } catch {}
+  event.waitUntil(self.registration.showNotification(payload.title || "Xpot", {
+    body: payload.body || "Your route has an update.",
+    icon: "/favicon.png",
+    badge: "/favicon.png",
+    data: { href: payload.href || "/leads/prospecting" },
+  }));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const href = event.notification.data?.href || "/leads/prospecting";
+  event.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+    const existing = clients.find((client) => new URL(client.url).origin === self.location.origin);
+    if (existing) {
+      existing.navigate(href);
+      return existing.focus();
+    }
+    return self.clients.openWindow(href);
+  }));
+});
+
 self.addEventListener("fetch", (event) => {
   const request = event.request;
   if (request.method !== "GET") return;

@@ -34,7 +34,7 @@ Tags empilhados como grupos na barra lateral, Admin no rodapé) e o DSK-26 (um g
 com um seletor Visitas | Tags no topo; a gestão de cada módulo é o grupo "Gestão"
 dentro dele; Pessoas, Integrações e Marca ficam em Conta › Organização. O mapa de
 onde cada tela vive é `client/src/components/xpot/moduleNav.ts`. O resto deste plano
-(listas com painel de detalhe, ⌘K, check-in passado para o celular) continua valendo.
+(listas com painel de detalhe e ⌘K) continua valendo.
 
 **Revisão pós-entrega** (PR #27): quatro revisões independentes, uma por área,
 acharam ~30 problemas médios e pequenos (painel que sumia ao filtrar, histórico
@@ -43,10 +43,10 @@ leitor USB concatenando códigos, entre outros), todos corrigidos. Também apare
 um bug anterior a este trabalho: o desfecho escolhido no check-out nunca era
 enviado ao servidor (toda visita virava "completed"); corrigido junto.
 
-Desde a revisão, o que depende do **aparelho** (iniciar check-in, botões de
-câmera/NFC) usa `useIsComputer()` — largura de desktop **e** mouse/trackpad —, e
-não só a largura. Um iPad deitado ganha o layout largo mas continua fazendo
-check-in e lendo peças.
+Desde a revisão, o que realmente depende do **aparelho** (câmera e NFC) usa
+`useIsComputer()` considerando largura e mouse ou trackpad. O check-in não faz
+mais essa distinção: qualquer navegador com localização disponível pode iniciar
+e encerrar uma visita.
 
 **Pendências conscientes**
 
@@ -127,8 +127,9 @@ cards abaixo de `md`, tabela acima.
 3. **Lista + detalhe com URL.** No desktop, o detalhe abre num painel ao lado da
    lista. No celular, a mesma rota abre em tela cheia ou diálogo. O link pode ser
    compartilhado e o botão de voltar funciona.
-4. **Desktop é escritório, celular é rua.** No desktop o vendedor ou gerente
-   planeja, revisa, corrige e cadastra em lote. O check-in com GPS é do celular.
+4. **Desktop também pode acompanhar a visita.** No desktop o vendedor ou gerente
+   planeja, revisa, corrige, cadastra em lote e pode iniciar uma visita quando o
+   navegador fornecer localização suficiente para a mesma validação geográfica.
 5. **Componente antes de tela.** Primeiro se extraem os primitivos, depois se
    redesenha cada tela. Assim a versão desktop não vira uma segunda cópia do app.
 
@@ -240,7 +241,7 @@ nenhuma cópia de `GLASS`.
 | ID | Item |
 |---|---|
 | DSK-23 | **`ConfirmSlider` acessível:** suporte a teclado (Enter/Espaço) e ARIA. No desktop, vira botão + confirmação. Vale para o celular também. |
-| DSK-24 | **Check-in fora da navegação principal do desktop.** Ver decisão D1. A visita ativa continua acessível pela faixa do topo (DSK-08), com notas, vendas e desfecho editáveis. |
+| DSK-24 | **Check-in integrado a Leads no desktop.** O fluxo completo fica disponível em Prospecting e usa a mesma validação geográfica do celular. |
 
 ### Fase 7 — Configurações e Admin no mesmo shell
 
@@ -265,7 +266,7 @@ Cada uma tem uma recomendação; se ninguém discordar, a recomendação vale.
 
 | ID | Pergunta | Recomendação |
 |---|---|---|
-| D1 | O desktop pode **iniciar** check-in? | **Não.** O GPS de notebook é por Wi-Fi e impreciso, e validar presença na mesa não faz sentido. O desktop mostra e edita a visita ativa; só o celular inicia e encerra. |
+| D1 | O desktop pode **iniciar** check-in? | **Sim.** O navegador solicita localização e o servidor aplica a mesma validação geográfica usada no celular. Se a localização não estiver disponível, o fluxo continua bloqueado com orientação clara. |
 | D2 | Breakpoint do desktop: `md` (768) ou `lg` (1024)? | **`lg`.** O tablet em retrato continua com o layout de celular, que já funciona bem lá. |
 | D3 | Tema claro no desktop? | **Agora não.** O app força `dark` (`App.tsx`). Os tokens da DSK-02 deixam isso barato depois. |
 | D4 | O gerente ganha uma visão de **equipe** (visitas e vendas de todos os reps) no desktop? | **Sim, como fase própria depois da 8.** Depende da definição de multi-tenancy (BACKLOG, "Funcionalidades a definir" §1) e de VND-15 (relatórios de conversão). |

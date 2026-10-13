@@ -39,7 +39,7 @@ function toLocalDateString(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
-export function XpotVisits() {
+export function XpotVisits({ basePath = "/dashboard/history" }: { basePath?: string }) {
   const t = useT(visitsMessages);
   const tc = useT(commonMessages);
   const { visitsQuery } = useVisits();
@@ -50,7 +50,7 @@ export function XpotVisits() {
   const dateInputRef = useRef<HTMLInputElement>(null);
   const isDesktop = useIsDesktop();
   const [, navigate] = useLocation();
-  const [routeMatch, routeParams] = useRoute("/visits/:id");
+  const [routeMatch, routeParams] = useRoute(`${basePath}/:id`);
   const routeId = routeMatch ? Number(routeParams.id) : null;
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
@@ -107,8 +107,8 @@ export function XpotVisits() {
 
   const selectedVisit = routeId ? allVisits.find((v) => v.id === routeId) ?? null : null;
   // Moving between visits and closing replace history; only the first open pushes.
-  const closeVisit = useCallback(() => navigate("/visits", { replace: true }), [navigate]);
-  const openVisit = (v: EnrichedSalesVisit) => navigate(`/visits/${v.id}`, { replace: routeId != null });
+  const closeVisit = useCallback(() => navigate(basePath, { replace: true }), [basePath, navigate]);
+  const openVisit = (v: EnrichedSalesVisit) => navigate(`${basePath}/${v.id}`, { replace: routeId != null });
 
   // Close the calendar popover on Escape.
   useEffect(() => {

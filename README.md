@@ -24,6 +24,7 @@ New here? Read [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) first.
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the app is put together: modules and roles, the shell, directories, tables, migrations, tests, deploy |
 | [BACKLOG.md](docs/BACKLOG.md) | Open and closed work items with stable codes (`VND-04`, `MOD-19`), in Portuguese |
 | [MODULES.md](docs/MODULES.md) | The plan that split Visits and Tags into distinct panels (#31), and what was decided, in Portuguese |
+| [PROSPECTING_DAILY_ROUTE.md](docs/PROSPECTING_DAILY_ROUTE.md) | Product and implementation contract for the daily prospecting route, direct check-in, post-visit summary and tasks, in Portuguese |
 | [TAG_SALES_EXECUTION_PLAN.md](docs/TAG_SALES_EXECUTION_PLAN.md) | Execution plan for linking physical pieces to sales, Stuscle acquisitions and partner margins, in Portuguese |
 | [DESKTOP.md](docs/DESKTOP.md) | The plan that brought the rep app to the desktop (#17 to #27), in Portuguese |
 | [AUDITORIA.md](docs/AUDITORIA.md) | The 2026-09-01 technical audit; a historical snapshot, in Portuguese |
@@ -102,11 +103,13 @@ Public:
 - `/privacy`, `/terms`: legal pages.
 
 Visits module:
-- `/check-in`: geo-validated visit start (phones and tablets; a computer hands it to the phone).
+- `/check-in`: legacy redirect to Prospecting; geo-validated visits now start directly from a daily route stop.
 - `/dashboard`: KPIs and the day; the Visits home.
 - `/visits`, `/visits/:id`: today's planned route and visit history, with a detail pane on desktop.
 - `/prospecting`: two-field cold-prospecting planner (city + sectors), background discovery and today's route.
 - `/leads`, `/leads/:id`: businesses (Customers and Prospects), with a detail pane.
+- `/leads/prospecting`: one route per rep and day, with asynchronous generation, map, direct check-in and persistent progress.
+- `/leads/prospecting/summary/:visitId`: audio-first summary shown immediately after check-out.
 - `/sales`, `/sales/<tab>[/<id>]`: overview, `sales`, `stock` (consignments) and `pipeline`.
 
 Tags module:
@@ -150,6 +153,7 @@ the `_xpot_migrations` bookkeeping table the migration runner creates.
 - `sales_visit_actions`: what the AI extracted from a voice note, pending confirmation
 - `sales_opportunities_local`: pipeline, mirrored to GoHighLevel when configured
 - `sales_tasks`, `sales_sync_events` (integration audit log), `sales_app_settings` (check-in rules)
+- `sales_daily_routes`, `sales_daily_route_stops`, `sales_route_generation_attempts`, `sales_user_notifications`
 - Sales module (migration 0017): `sales_products`, `sales_product_price_tiers`,
   `sales_sales`, `sales_sale_items`, `sales_consignments`, `sales_consignment_movements`
 - `xphere_integrations`: per-user Xphere keys

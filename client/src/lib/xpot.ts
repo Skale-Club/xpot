@@ -2,20 +2,65 @@
 // goes, and the post-login return target. (Xpot used to live under /xpot/* in the
 // Skale Club monorepo; every page is at its own top-level path now.)
 
+import type { XpotModule } from "@shared/modules";
+
 /** localStorage key of the module used last (sign-in lands there). */
 export const LAST_MODULE_KEY = "xpot.module";
 
 /** The landing page of each module; the one place that says it (sign-in, the module switch, "back"). */
 export const MODULE_HOME = { visits: "/dashboard", tags: "/tags" } as const;
 
+const LAST_ROUTE_KEY: Record<XpotModule, string> = {
+  visits: "xpot.route.v1.visits",
+  tags: "xpot.route.v1.tags",
+};
+
+/** Only primary work screens are restored. Account and management routes are intentional detours. */
+export function isModuleRoute(module: XpotModule, route: string): boolean {
+  const pathname = route.split(/[?#]/, 1)[0];
+  if (module === "tags") return pathname === "/tags" || pathname.startsWith("/tags/");
+  return ["/dashboard", "/leads", "/sales"].some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+}
+
+/** Remember the exact screen and query within a module for this browser session. */
+export function rememberModuleRoute(module: XpotModule, route: string): void {
+  if (typeof window === "undefined" || !isModuleRoute(module, route)) return;
+  try {
+    window.sessionStorage.setItem(LAST_ROUTE_KEY[module], route);
+  } catch {
+    // Storage blocked: the module falls back to its dashboard.
+  }
+}
+
+/** The last valid screen used in a module, or its dashboard. */
+export function moduleEntryPath(module: XpotModule): string {
+  if (typeof window === "undefined") return MODULE_HOME[module];
+  try {
+    const route = window.sessionStorage.getItem(LAST_ROUTE_KEY[module]);
+    return route && isModuleRoute(module, route) ? route : MODULE_HOME[module];
+  } catch {
+    return MODULE_HOME[module];
+  }
+}
+
+/** Do not carry one account's working context into another account in the same tab. */
+export function clearModuleRoutes(): void {
+  if (typeof window === "undefined") return;
+  try {
+    for (const key of Object.values(LAST_ROUTE_KEY)) window.sessionStorage.removeItem(key);
+  } catch {
+    // Storage blocked: there is nothing to clear.
+  }
+}
+
 /** Where a signed-in rep lands: the Tags module if that was the last one used. */
 export function getXpotHomePath() {
   try {
-    if (window.localStorage.getItem(LAST_MODULE_KEY) === "tags") return MODULE_HOME.tags;
+    if (window.localStorage.getItem(LAST_MODULE_KEY) === "tags") return moduleEntryPath("tags");
   } catch {
     // Storage blocked: default to Visits.
   }
-  return MODULE_HOME.visits;
+  return moduleEntryPath("visits");
 }
 
 // Extract the section slug from a pathname — e.g. "/leads" → "leads".

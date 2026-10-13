@@ -1,7 +1,6 @@
 import {
   Activity,
   Building2,
-  Clock3,
   DollarSign,
   MapPinned,
   Route,
@@ -13,13 +12,11 @@ import { shellMessages } from "@/i18n/messages/shell";
 
 /** Bottom-nav tabs; `labelKey` is a key of shellMessages. */
 export const tabs = [
-  { id: "check-in", labelKey: "tabCheckIn", icon: MapPinned },
-  { id: "visits", labelKey: "tabVisits", icon: Clock3 },
+  { id: "dashboard", labelKey: "tabDashboard", icon: Activity },
   { id: "leads", labelKey: "tabLeads", icon: Building2 },
   { id: "prospecting", labelKey: "tabProspecting", icon: Route },
   { id: "tasks", labelKey: "tabTasks", icon: ListTodo },
   { id: "sales", labelKey: "tabSales", icon: DollarSign },
-  { id: "dashboard", labelKey: "tabDashboard", icon: Activity },
 ] as const;
 
 export function formatDateTime(value?: string | Date | null) {

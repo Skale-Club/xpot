@@ -18,6 +18,14 @@ import { CARD, EYEBROW_MUTED } from "./ui";
 const QR_COLOR = "#60a5fa";
 const NFC_COLOR = "#a78bfa";
 
+function formatChartDay(day: string, locale: string, options: Intl.DateTimeFormatOptions): string {
+  const date = new Date(`${day}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return day;
+
+  const formatted = date.toLocaleDateString(locale, { ...options, timeZone: "UTC" });
+  return `${formatted.charAt(0).toLocaleUpperCase(locale)}${formatted.slice(1)}`;
+}
+
 function Stat({ label, value, accent }: { label: string; value: number | string | undefined; accent?: string }) {
   return (
     <div className={`${CARD} px-4 py-3`}>
@@ -73,7 +81,7 @@ export function TagsDashboard() {
 
   const total = data ? data.scans.qr + data.scans.nfc : undefined;
   const chart = (data?.daily ?? []).map((d) => ({
-    day: new Date(`${d.day}T12:00:00Z`).toLocaleDateString(t.locale, { day: "numeric", month: "short" }),
+    day: d.day,
     qr: d.qr,
     nfc: d.nfc,
   }));
@@ -118,10 +126,33 @@ export function TagsDashboard() {
           <div className="mt-3 h-40">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chart} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
-                <XAxis dataKey="day" axisLine={false} tickLine={false} interval="preserveStartEnd" minTickGap={24} tick={{ fill: "rgba(255,255,255,0.35)", fontSize: 10 }} />
+                <XAxis
+                  dataKey="day"
+                  axisLine={false}
+                  tickLine={false}
+                  interval="preserveStartEnd"
+                  minTickGap={24}
+                  tick={{ fill: "rgba(255,255,255,0.35)", fontSize: 10 }}
+                  tickFormatter={(day: string) => formatChartDay(day, t.locale, { day: "numeric", month: "short" })}
+                />
                 <Tooltip
                   cursor={{ fill: "rgba(255,255,255,0.04)" }}
-                  contentStyle={{ background: "#0f172a", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, fontSize: 12, color: "#fff" }}
+                  contentStyle={{
+                    background: "rgba(15,23,42,0.98)",
+                    border: "1px solid rgba(96,165,250,0.28)",
+                    borderRadius: 14,
+                    boxShadow: "0 16px 40px rgba(0,0,0,0.45)",
+                    color: "#fff",
+                    fontSize: 12,
+                    padding: "10px 12px",
+                  }}
+                  itemStyle={{ padding: "2px 0", fontWeight: 650 }}
+                  labelStyle={{ color: "rgba(255,255,255,0.95)", fontSize: 13, fontWeight: 800, marginBottom: 6 }}
+                  labelFormatter={(day) => (
+                    typeof day === "string"
+                      ? formatChartDay(day, t.locale, { weekday: "long", day: "numeric", month: "long", year: "numeric" })
+                      : day
+                  )}
                 />
                 <Bar dataKey="qr" name="QR" stackId="s" fill={QR_COLOR} radius={[0, 0, 0, 0]} />
                 <Bar dataKey="nfc" name="NFC" stackId="s" fill={NFC_COLOR} radius={[3, 3, 0, 0]} />

@@ -3,11 +3,10 @@ import {
   BarChart3,
   Boxes,
   Building2,
-  Clock3,
   DollarSign,
   Factory,
+  FileText,
   LayoutDashboard,
-  MapPinned,
   Nfc,
   Package,
   PackageOpen,
@@ -46,7 +45,7 @@ export const starts = (prefix: string) => (path: string) => path === prefix || p
 
 /** Admin sections that are really Visits management, and the ones that belong to the account. */
 const VISITS_ADMIN = ["overview", "products", "settings"] as const;
-export const ORGANIZATION_SECTIONS = ["reps", "integrations", "branding", "xphere"] as const;
+export const ORGANIZATION_SECTIONS = ["reps", "integrations", "branding", "landing", "xphere"] as const;
 
 /** Which part of the app a path belongs to. */
 export function contextOfPath(path: string): ShellContext {
@@ -67,8 +66,8 @@ export function visitsAdminSection(path: string): (typeof VISITS_ADMIN)[number] 
 
 export type Labels = {
   shell: (key: ShellKey) => string;
-  /** Tags app labels (navHome, navPieces, navDirect). */
-  tags: (key: "navHome" | "navPieces" | "navDirect") => string;
+  /** Tags app labels used by the shared shell. */
+  tags: (key: "navHome" | "navCustomers" | "navPieces" | "navDirect") => string;
 };
 
 type ShellKey =
@@ -92,15 +91,14 @@ type ShellKey =
   | "manageWriters"
   | "orgPeople"
   | "orgIntegrations"
-  | "orgBranding";
+  | "orgBranding"
+  | "orgLanding";
 
 export type Viewer = {
   /** Manager or admin: sees each module's Manage group and the Organization pages. */
   canManage: boolean;
   /** The global admin (isSuperAdmin): sees the items marked adminOnly. */
   isAdmin: boolean;
-  /** A real computer: it cannot start a GPS check-in (docs/DESKTOP.md D1). */
-  isComputer: boolean;
 };
 
 /** The items this viewer may see: adminOnly ones only for the global admin, grouped at the end. */
@@ -115,9 +113,7 @@ export function moduleGroups(module: XpotModule, viewer: Viewer, l: Labels): Nav
     const work: NavGroup = {
       label: "",
       items: [
-        ...(viewer.isComputer ? [] : [{ href: "/check-in", label: l.shell("tabCheckIn"), icon: MapPinned, match: starts("/check-in") }]),
-        { href: "/dashboard", label: l.shell("tabDashboard"), icon: Activity, match: starts("/dashboard") },
-        { href: "/visits", label: l.shell("tabVisits"), icon: Clock3, match: starts("/visits") },
+        { href: "/dashboard", label: l.shell("tabDashboard"), icon: Activity, match: (path) => starts("/dashboard")(path) || starts("/visits")(path) },
         { href: "/leads", label: l.shell("tabLeads"), icon: Building2, match: starts("/leads") },
         { href: "/prospecting", label: l.shell("tabProspecting"), icon: Route, match: starts("/prospecting") },
         { href: "/tasks", label: l.shell("tabTasks"), icon: ListTodo, match: starts("/tasks") },
@@ -144,6 +140,7 @@ export function moduleGroups(module: XpotModule, viewer: Viewer, l: Labels): Nav
     items: [
       // Writing a chip without Xpot (/tags/direct) is reached from the dashboard, not the nav.
       { href: "/tags", label: l.tags("navHome"), icon: LayoutDashboard, match: (p) => p === "/tags" || p.startsWith("/tags/t/") || p.startsWith("/tags/direct") },
+      { href: "/tags/customers", label: l.tags("navCustomers"), icon: Building2, match: starts("/tags/customers") },
       { href: "/tags/pieces", label: l.tags("navPieces"), icon: Package, match: starts("/tags/pieces") },
     ],
   };
@@ -173,5 +170,6 @@ export function organizationItems(l: Labels, viewer: Pick<Viewer, "isAdmin">): N
     { href: "/admin/reps", label: l.shell("orgPeople"), icon: Users, match: section("reps") },
     { href: "/admin/integrations", label: l.shell("orgIntegrations"), icon: Plug, match: (p) => section("integrations")(p) || section("xphere")(p), adminOnly: true },
     { href: "/admin/branding", label: l.shell("orgBranding"), icon: Palette, match: section("branding"), adminOnly: true },
+    { href: "/admin/landing", label: l.shell("orgLanding"), icon: FileText, match: section("landing"), adminOnly: true },
   ]);
 }

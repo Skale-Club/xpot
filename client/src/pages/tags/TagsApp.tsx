@@ -6,6 +6,7 @@ import { useT } from "@/i18n";
 import { tagsMessages } from "@/i18n/messages/tags";
 import type { XpotMeResponse } from "@/pages/xpot/types";
 import DirectScreen from "./DirectScreen";
+import CustomersScreen from "./CustomersScreen";
 import HomeScreen from "./HomeScreen";
 import PiecesScreen from "./PiecesScreen";
 import TagScreen from "./TagScreen";
@@ -15,7 +16,7 @@ import { AppLayout, MODULE_COLUMN } from "@/components/xpot/AppLayout";
 import { TAGS_NAV, TagsTabBar, activeTagsTab } from "./TagsTabBar";
 import { ShellHeader } from "@/components/xpot/ShellHeader";
 import { XpotMark } from "@/components/xpot/XpotMark";
-import { MODULE_HOME } from "@/lib/xpot";
+import { MODULE_HOME, rememberModuleRoute } from "@/lib/xpot";
 import { SessionGate } from "@/components/xpot/SessionGate";
 
 
@@ -29,8 +30,11 @@ export function TagsApp() {
   const isDesktop = useIsDesktop();
 
   useEffect(() => {
-    if (allowed) rememberModule("tags");
-  }, [allowed]);
+    if (!allowed) return;
+    rememberModule("tags");
+    const search = typeof window !== "undefined" ? window.location.search : "";
+    rememberModuleRoute("tags", `${location.split("?")[0]}${search}`);
+  }, [allowed, location]);
 
   if (!meQuery.data) return <SessionGate failed={meQuery.isError} />;
 
@@ -78,6 +82,7 @@ export function TagsApp() {
           {(params) => (isDesktop ? <PiecesScreen selectedCode={decodeURIComponent(params.code)} /> : <Redirect to={tagPath(decodeURIComponent(params.code))} replace />)}
         </Route>
         <Route path={`${APP_BASE}/pieces`}>{() => <PiecesScreen />}</Route>
+        <Route path={`${APP_BASE}/customers`} component={CustomersScreen} />
         <Route path={`${APP_BASE}/direct`} component={DirectScreen} />
         <Route path={APP_BASE} component={HomeScreen} />
         <Route>

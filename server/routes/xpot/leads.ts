@@ -8,6 +8,7 @@ import { syncLeadToGhl, syncLeadToXphere } from "./helpers.js";
 import { salesStorage } from "../../storage-sales.js";
 import { activeStore, discardFiles, putPrivateFile } from "../../lib/files.js";
 import { activeOrganizationIds, canManageOrganizationForActor, managedOrganizationIds, organizationIdForRep } from "../../organizations/service.js";
+import { resolveGoogleApiKey } from "./google.js";
 
 export function createLeadsRouter() {
   const router = Router();
@@ -175,6 +176,55 @@ export function createLeadsRouter() {
     }
 
     res.json({ created: created.length, errors });
+  });
+
+  // The compact visit brief reads the business reputation live from the Place
+  // already linked to this lead. Keeping it out of the lead row avoids stale
+  // ratings while React Query prevents repeated calls during one visit.
+  router.get("/leads/:id/google-profile", async (req, res) => {
+    const actor = (req as any).xpotActor as Awaited<ReturnType<typeof ensureXpotRep>>;
+    const leadId = Number(req.params.id);
+    if (!Number.isFinite(leadId)) return res.status(400).json({ message: "Invalid lead id" });
+
+    const lead = await storage.getSalesLead(leadId);
+    if (!lead) return res.status(404).json({ message: "Lead not found" });
+    if (!(await canAccessLead(actor!, lead))) return res.status(403).json({ message: "Access denied" });
+
+    if (!lead.googlePlaceId) {
+      return res.json({ connected: false, rating: null, reviewCount: null, mapsUrl: null, openNow: null });
+    }
+
+    const apiKey = await resolveGoogleApiKey();
+    if (!apiKey) {
+      return res.json({ connected: true, rating: null, reviewCount: null, mapsUrl: null, openNow: null });
+    }
+
+    try {
+      const response = await fetch(`https://places.googleapis.com/v1/places/${encodeURIComponent(lead.googlePlaceId)}`, {
+        headers: {
+          "X-Goog-Api-Key": apiKey,
+          "X-Goog-FieldMask": "rating,userRatingCount,googleMapsUri,currentOpeningHours.openNow",
+        },
+      });
+      if (!response.ok) return res.status(502).json({ message: "Google business profile could not be loaded" });
+
+      const place = await response.json() as {
+        rating?: number;
+        userRatingCount?: number;
+        googleMapsUri?: string;
+        currentOpeningHours?: { openNow?: boolean };
+      };
+      res.setHeader("Cache-Control", "private, max-age=300");
+      return res.json({
+        connected: true,
+        rating: typeof place.rating === "number" ? place.rating : null,
+        reviewCount: typeof place.userRatingCount === "number" ? place.userRatingCount : null,
+        mapsUrl: place.googleMapsUri || null,
+        openNow: typeof place.currentOpeningHours?.openNow === "boolean" ? place.currentOpeningHours.openNow : null,
+      });
+    } catch (error) {
+      return res.status(502).json({ message: (error as Error).message || "Google business profile could not be loaded" });
+    }
   });
 
   // GET /leads/:id — rep sees own; manager sees any

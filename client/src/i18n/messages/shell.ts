@@ -4,6 +4,7 @@ import type { Dictionary } from "../index";
 // formatters in client/src/pages/xpot/utils.ts.
 
 const en = {
+  skipToContent: "Skip to main content",
   // Bottom navigation
   tabCheckIn: "Check-In",
   tabVisits: "History",
@@ -39,6 +40,7 @@ const en = {
   orgPeople: "People",
   orgIntegrations: "Integrations",
   orgBranding: "Branding",
+  orgLanding: "Landing page",
   backToModule: "Back",
   signOut: "Sign out",
   collapseSidebar: "Collapse sidebar",
@@ -78,6 +80,7 @@ const en = {
 export const shellMessages: Dictionary<typeof en> = {
   en,
   pt: {
+    skipToContent: "Pular para o conteúdo principal",
     tabCheckIn: "Check-in",
     tabVisits: "Histórico",
     tabLeads: "Clientes",
@@ -109,6 +112,7 @@ export const shellMessages: Dictionary<typeof en> = {
     orgPeople: "Pessoas",
     orgIntegrations: "Integrações",
     orgBranding: "Marca",
+    orgLanding: "Landing page",
     backToModule: "Voltar",
     signOut: "Sair",
     collapseSidebar: "Recolher menu",
@@ -143,6 +147,7 @@ export const shellMessages: Dictionary<typeof en> = {
     installDone: "Entendi",
   },
   es: {
+    skipToContent: "Saltar al contenido principal",
     tabCheckIn: "Check-in",
     tabVisits: "Historial",
     tabLeads: "Clientes",
@@ -174,6 +179,7 @@ export const shellMessages: Dictionary<typeof en> = {
     orgPeople: "Personas",
     orgIntegrations: "Integraciones",
     orgBranding: "Marca",
+    orgLanding: "Landing page",
     backToModule: "Volver",
     signOut: "Cerrar sesión",
     collapseSidebar: "Contraer menú",
