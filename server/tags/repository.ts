@@ -1816,6 +1816,26 @@ export async function getTagDashboard(repId: number | null, days = 30, now: Date
     FROM tag_events e WHERE ${inPeriod}
     GROUP BY e.os_family ORDER BY scans DESC LIMIT 4
   `);
+  const recentScans = await rows<{
+    id: number; tag_id: string; public_code: string; product_type: string; face: string | null;
+    batch_face: string | null; batch_code: string | null; lead_name: string | null;
+    access_method: string; occurred_at: Date | string;
+  }>(sql`
+    SELECT recent.* FROM (
+      SELECT DISTINCT ON (t.id)
+             e.id, t.id AS tag_id, t.public_code, t.product_type, t.face,
+             b.face AS batch_face, b.batch_code, l.name AS lead_name,
+             e.access_method, e.occurred_at
+      FROM tag_events e
+      JOIN tags t ON t.id = e.tag_id
+      LEFT JOIN tag_batches b ON b.id = t.batch_id
+      LEFT JOIN sales_leads l ON l.id = t.lead_id
+      WHERE ${COUNTABLE} AND ${eventScope}
+      ORDER BY t.id, e.occurred_at DESC
+    ) recent
+    ORDER BY recent.occurred_at DESC
+    LIMIT 10
+  `);
 
   return {
     days,
@@ -1838,6 +1858,17 @@ export async function getTagDashboard(repId: number | null, days = 30, now: Date
     })),
     topCustomers: topCustomers.map((c) => ({ leadId: Number(c.lead_id), name: c.name, pieces: Number(c.pieces), scans: Number(c.scans) })),
     devices: devices.map((d) => ({ os: d.os ?? "other", scans: Number(d.scans) })),
+    recentScans: recentScans.map((scan) => ({
+      id: Number(scan.id),
+      tagId: scan.tag_id,
+      publicCode: scan.public_code,
+      productType: scan.product_type,
+      face: faceOf(scan),
+      batchCode: scan.batch_code,
+      leadName: scan.lead_name,
+      accessMethod: scan.access_method,
+      occurredAt: iso(scan.occurred_at)!,
+    })),
   };
 }
 

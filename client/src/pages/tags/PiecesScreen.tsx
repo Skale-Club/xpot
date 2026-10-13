@@ -12,6 +12,7 @@ import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { APP_BASE, errorText, shortUrl, tagPath, tagsGet } from "./lib";
 import { CARD, INPUT, Pill, SOLD_TONE, STATUS_TONE, Spinner, TopBar } from "./ui";
+import { WholesaleCard } from "./WholesaleCard";
 
 const FILTERS = [
   { id: "all", status: null, key: "filterAll" },
@@ -325,6 +326,10 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
             ))}
           </ul>
         )}
+      </div>
+
+      <div className="mt-6 max-w-xl">
+        <WholesaleCard />
       </div>
     </>
   );

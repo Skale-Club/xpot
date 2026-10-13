@@ -217,6 +217,18 @@ export interface TagDashboard {
   }>;
   topCustomers: Array<{ leadId: number; name: string; pieces: number; scans: number }>;
   devices: Array<{ os: string; scans: number }>;
+  /** Most recently scanned pieces, one latest event per piece. */
+  recentScans: Array<{
+    id: number;
+    tagId: string;
+    publicCode: string;
+    productType: string;
+    face: string | null;
+    batchCode: string | null;
+    leadName: string | null;
+    accessMethod: string;
+    occurredAt: string;
+  }>;
 }
 
 /** Compact analytics shown on one piece's field-app screen. */

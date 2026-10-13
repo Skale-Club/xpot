@@ -137,6 +137,7 @@ test.skipIf(!enabled)("tags: kits, reseller isolation, sales, scans, report, pro
     assert.equal(dash.inStock, 3);
     assert.equal(dash.daily.length >= 30, true);
     assert.deepEqual(dash.topPieces, []);
+    assert.deepEqual(dash.recentScans, []);
     assert.deepEqual((await api("GET", "/api/xpot/tags/summary", "it-ana")).json, { inStock: 3, active: 0, soldLast30: 0, scansLast30: { qr: 0, nfc: 0 } });
     // Bruno's piece and house stock are out of her reach.
     assert.equal((await api("GET", `/api/xpot/tags/lookup/${b1.publicCode}`, "it-ana")).status, 403);
@@ -234,6 +235,15 @@ test.skipIf(!enabled)("tags: kits, reseller isolation, sales, scans, report, pro
     assert.deepEqual(
       (({ publicCode, productType, face, batchCode }) => ({ publicCode, productType, face, batchCode }))(populatedDash.topPieces[0]),
       { publicCode: a1.publicCode, productType: "keychain", face: "instagram", batchCode: batch.json.batchCode },
+    );
+    assert.deepEqual(
+      populatedDash.recentScans.map(({ publicCode, productType, face, batchCode, leadName, accessMethod }: any) => ({
+        publicCode, productType, face, batchCode, leadName, accessMethod,
+      })),
+      [
+        { publicCode: a2.publicCode, productType: "keychain", face: "instagram", batchCode: batch.json.batchCode, leadName: "Taqueria El Sol", accessMethod: "qr" },
+        { publicCode: a1.publicCode, productType: "keychain", face: "instagram", batchCode: batch.json.batchCode, leadName: "Taqueria El Sol", accessMethod: "qr" },
+      ],
     );
 
     // Pieces per customer for the Visits side: Ana sees her customer, Bruno nothing.

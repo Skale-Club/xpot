@@ -1,13 +1,13 @@
 import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { AlertTriangle, Building2, ChevronRight, Link2, Smartphone, Tag } from "lucide-react";
+import { AlertTriangle, Building2, ChevronRight, Smartphone, Tag } from "lucide-react";
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 import type { TagDashboard } from "@shared/tagsApi";
 import { useT } from "@/i18n";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { TagPieceMention } from "@/components/xpot/TagProductThumbnail";
-import { APP_BASE, directPath, tagPath, tagsGet } from "./lib";
+import { ageOf, APP_BASE, tagPath, tagsGet } from "./lib";
 import { CARD, EYEBROW_MUTED } from "./ui";
 
 // The Tags dashboard, under the scan actions on the module's home: stock and
@@ -85,6 +85,7 @@ export function TagsDashboard() {
     qr: d.qr,
     nfc: d.nfc,
   }));
+  const recentScans = data?.recentScans ?? [];
 
   return (
     <div className="space-y-5" data-testid="tags-dashboard">
@@ -162,6 +163,36 @@ export function TagsDashboard() {
         )}
       </section>
 
+      {recentScans.length > 0 && (
+        <section data-testid="recent-scans">
+          <h2 className={`mb-2 px-1 ${EYEBROW_MUTED}`}>{t("dashRecentScans")}</h2>
+          <ul className={`${CARD} divide-y divide-white/[0.06] overflow-hidden`}>
+            {recentScans.map((scan) => {
+              const age = ageOf(new Date(scan.occurredAt).getTime());
+              return (
+                <li key={scan.id}>
+                  <button
+                    type="button"
+                    onClick={() => navigate(tagPath(scan.publicCode))}
+                    className="flex min-h-[68px] w-full items-center gap-3 px-4 py-2.5 text-left active:bg-white/10"
+                  >
+                    <TagPieceMention
+                      publicCode={scan.publicCode}
+                      productType={scan.productType}
+                      face={scan.face}
+                      batchCode={scan.batchCode}
+                      details={[scan.leadName, scan.accessMethod.toUpperCase()].filter(Boolean).join(" · ")}
+                      className="min-w-0 flex-1"
+                    />
+                    <span className="shrink-0 text-xs text-white/35">{t(age.key, { n: age.n })}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
+
       {data && data.topPieces.length > 0 && (
         <Ranked
           title={t("dashTopPieces")}
@@ -206,20 +237,6 @@ export function TagsDashboard() {
         />
       )}
 
-      {/* The rare case: the customer's own link straight on a chip, without Xpot. */}
-      <button
-        type="button"
-        onClick={() => navigate(directPath())}
-        className="flex w-full items-center gap-3 rounded-2xl border border-white/[0.08] px-4 py-3 text-left text-white/55 active:bg-white/[0.04]"
-        data-testid="dashboard-direct"
-      >
-        <Link2 className="h-4 w-4 shrink-0" />
-        <span className="min-w-0 flex-1">
-          <span className="block text-sm font-semibold">{t("dashDirectWrite")}</span>
-          <span className="block text-xs text-white/35">{t("dashDirectHint")}</span>
-        </span>
-        <ChevronRight className="h-4 w-4 shrink-0 text-white/25" />
-      </button>
     </div>
   );
 }

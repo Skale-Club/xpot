@@ -1,29 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { ArrowRight, Building2, Link2, Nfc, QrCode, ScanLine, Tag, X } from "lucide-react";
+import { ArrowRight, Building2, Link2, Nfc, QrCode, X } from "lucide-react";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
 import QrScanner from "./QrScanner";
-import { WholesaleCard } from "./WholesaleCard";
 import { TagsDashboard } from "./TagsDashboard";
 import {
-  ageOf,
   APP_BASE,
   classify,
-  clearRecents,
   clearSellTo,
   getSellTo,
   directPath,
   errorText,
-  getRecents,
   haptic,
   lookupTag,
   pushRecent,
-  shortUrl,
   tagPath,
   useBanner,
-  type RecentItem,
 } from "./lib";
 import {
   ActionTile,
@@ -33,8 +27,6 @@ import {
   BottomSheet,
   CARD,
   EYEBROW_MUTED,
-  ICON_BLOCK_DIRECT,
-  ICON_BLOCK_XPOT,
   INPUT,
   SHEET_TITLE,
   Spinner,
@@ -59,7 +51,6 @@ export default function HomeScreen() {
   const tc = useT(commonMessages);
   const [, navigate] = useLocation();
   const { banner, show } = useBanner();
-  const [recents, setRecents] = useState<RecentItem[]>(getRecents);
   const [busy, setBusy] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
   const [sheet, setSheet] = useState<Sheet>(null);
@@ -250,60 +241,8 @@ export default function HomeScreen() {
         {isDesktop && <p className="mt-2 text-xs text-white/35">{t("scannerHint")}</p>}
       </form>
 
-      {/* The numbers: scans over time, top pieces and customers, chips to write. */}
+      {/* Real activity: scans over time, recent scans, top pieces and customers. */}
       <TagsDashboard />
-
-      {!isDesktop && <WholesaleCard />}
-
-      <section>
-        <div className="mb-2 flex items-center justify-between px-1">
-          <h2 className={EYEBROW_MUTED}>{t("recent")}</h2>
-          {recents.length > 0 && (
-            <button
-              type="button"
-              onClick={() => {
-                clearRecents();
-                setRecents([]);
-              }}
-              className="min-h-[44px] px-2 text-xs font-semibold text-white/40 active:text-white"
-            >
-              {t("clearRecent")}
-            </button>
-          )}
-        </div>
-        {recents.length === 0 ? (
-          <div className={`${CARD} flex flex-col items-center px-6 py-8 text-center`}>
-            <ScanLine className="h-8 w-8 text-white/25" />
-            <p className="mt-2 text-sm text-white/45">{t("recentEmpty")}</p>
-          </div>
-        ) : (
-          <ul className={`${CARD} divide-y divide-white/[0.06] overflow-hidden`}>
-            {recents.map((item) => {
-              const age = ageOf(item.at);
-              return (
-                <li key={`${item.kind}:${item.value}`}>
-                  <button
-                    type="button"
-                    onClick={() => navigate(item.kind === "xpot" ? tagPath(item.value) : directPath(item.value))}
-                    className="flex min-h-[60px] w-full items-center gap-3 px-4 py-2 text-left active:bg-white/10"
-                  >
-                    <span className={`h-9 w-9 ${item.kind === "xpot" ? ICON_BLOCK_XPOT : ICON_BLOCK_DIRECT}`}>
-                      {item.kind === "xpot" ? <Tag className="h-4 w-4" /> : <Link2 className="h-4 w-4" />}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className={`block truncate text-base font-semibold text-white ${item.kind === "xpot" ? "font-mono tracking-[0.12em]" : ""}`}>
-                        {item.kind === "xpot" ? item.value : shortUrl(item.value)}
-                      </span>
-                      <span className="block text-xs text-white/40">{item.kind === "xpot" ? t("pieceEyebrow") : t("directEyebrow")}</span>
-                    </span>
-                    <span className="shrink-0 text-xs text-white/35">{t(age.key, { n: age.n })}</span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
 
       {qrOpen && (
         <QrScanner
@@ -351,11 +290,5 @@ export default function HomeScreen() {
     </div>
   );
 
-  if (!isDesktop) return main;
-  return (
-    <div className="grid grid-cols-[minmax(0,1fr)_360px] items-start gap-6">
-      {main}
-      <div className="sticky top-[88px]"><WholesaleCard /></div>
-    </div>
-  );
+  return main;
 }
