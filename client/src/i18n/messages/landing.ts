@@ -109,7 +109,7 @@ const en = {
   ctaTitle: "Ready to turn free time into extra income?",
   ctaBody: "Create your account, get approved and use Xpot to plan your route, visit businesses and keep your sales organized.",
   accessApp: "I want to get started",
-  footerTagline: "Xpot | Your route to extra income.",
+  footerTagline: "Your route to extra income.",
   footerRights: "© {year} Xpot.",
 
   // OAuth callback (/login)
@@ -224,7 +224,7 @@ export const landingMessages: Dictionary<typeof en> = {
     ctaTitle: "Pronto para transformar tempo livre em renda extra?",
     ctaBody: "Crie sua conta, receba a aprovação e use o Xpot para planejar sua rota, visitar comércios e organizar suas vendas.",
     accessApp: "Quero começar",
-    footerTagline: "Xpot | Sua rota para uma renda extra.",
+    footerTagline: "Sua rota para uma renda extra.",
     footerRights: "© {year} Xpot.",
 
     finishingSignIn: "Finalizando o login…",
@@ -335,7 +335,7 @@ export const landingMessages: Dictionary<typeof en> = {
     ctaTitle: "¿Listo para convertir tu tiempo libre en ingresos extra?",
     ctaBody: "Crea tu cuenta, recibe la aprobación y usa Xpot para planificar tu ruta, visitar comercios y organizar tus ventas.",
     accessApp: "Quiero empezar",
-    footerTagline: "Xpot | Tu ruta hacia ingresos extra.",
+    footerTagline: "Tu ruta hacia ingresos extra.",
     footerRights: "© {year} Xpot.",
 
     finishingSignIn: "Finalizando el inicio de sesión…",

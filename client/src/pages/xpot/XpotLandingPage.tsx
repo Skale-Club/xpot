@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/dialog";
 import { LanguagePicker } from "@/components/LanguagePicker";
 import { PhoneSignIn } from "@/components/PhoneSignIn";
+import { XpotMark } from "@/components/xpot/XpotMark";
 import { interpolate, translate, useT } from "@/i18n";
 import { landingMessages } from "@/i18n/messages/landing";
 import { defaultLandingContent } from "@/lib/landingContent";
@@ -298,10 +299,10 @@ export function XpotLandingPage() {
         <div className="pointer-events-none absolute left-1/4 top-0 -z-0 h-[480px] w-[480px] rounded-full bg-[#5272F2]/10 blur-[130px]" />
 
         {/* Header: the bar spans the window, its content the page width. */}
-        <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-[#05070f]/70 backdrop-blur-md">
+        <header className="fixed inset-x-0 top-0 z-40 border-b border-white/[0.06] bg-[#05070f]/85 shadow-[0_12px_32px_rgba(0,0,0,0.2)] backdrop-blur-xl">
           <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-4 lg:px-8">
             <button onClick={() => (me ? goToApp() : window.scrollTo({ top: 0, behavior: "smooth" }))} className="flex items-center gap-2.5" aria-label="Xpot">
-              <img src="/api/branding/favicon" alt="" className="h-8 w-8 rounded-xl object-cover" />
+              <XpotMark className="h-8 w-8 rounded-xl" />
               {/* The wordmark gives way on narrow phones, where the language picker and button need the room. */}
               <span className="hidden text-xl font-bold tracking-tight text-white min-[420px]:inline">Xpot</span>
             </button>
@@ -365,7 +366,7 @@ export function XpotLandingPage() {
           </div>
         </header>
 
-        <main className="relative mx-auto max-w-6xl space-y-24 px-5 py-14 sm:py-20 lg:space-y-32 lg:px-8 lg:py-24">
+        <main className="relative mx-auto max-w-6xl space-y-24 px-5 pb-14 pt-[7.5rem] sm:pb-20 sm:pt-[9rem] lg:space-y-32 lg:px-8 lg:pb-24 lg:pt-[10rem]">
           {/* Keep the original open composition; the photo remains a focused proof point. */}
           <section className="grid grid-cols-1 items-center gap-14 lg:grid-cols-12 lg:gap-10">
             <div className="space-y-6 text-center lg:col-span-6 lg:text-left">
@@ -545,7 +546,11 @@ export function XpotLandingPage() {
         </main>
 
         <footer className="relative border-t border-white/[0.06] py-10 text-center text-sm text-white/50">
-          <p className="font-semibold text-white/60">{content.footer.tagline}</p>
+          <div className="flex items-center justify-center gap-2.5">
+            <XpotMark className="h-8 w-8 rounded-xl" />
+            <span className="text-xl font-bold tracking-tight text-white">Xpot</span>
+          </div>
+          <p className="mt-3 font-medium text-white/60">{content.footer.tagline}</p>
           <p className="mt-3 flex justify-center gap-4">
             <Link href={publicPagePath("privacy", t.lang)} className="transition-colors hover:text-white">{content.footer.privacyLabel}</Link>
             <span aria-hidden>·</span>
