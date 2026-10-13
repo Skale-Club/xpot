@@ -13,7 +13,6 @@ import {
   Palette,
   Plug,
   Route,
-  ListTodo,
   ShieldCheck,
   SlidersHorizontal,
   Users,
@@ -115,8 +114,6 @@ export function moduleGroups(module: XpotModule, viewer: Viewer, l: Labels): Nav
       items: [
         { href: "/dashboard", label: l.shell("tabDashboard"), icon: Activity, match: (path) => starts("/dashboard")(path) || starts("/visits")(path) },
         { href: "/leads", label: l.shell("tabLeads"), icon: Building2, match: starts("/leads") },
-        { href: "/prospecting", label: l.shell("tabProspecting"), icon: Route, match: starts("/prospecting") },
-        { href: "/tasks", label: l.shell("tabTasks"), icon: ListTodo, match: starts("/tasks") },
         { href: "/sales", label: l.shell("tabSales"), icon: DollarSign, match: starts("/sales") },
       ],
     };
