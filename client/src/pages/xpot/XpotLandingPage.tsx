@@ -333,11 +333,11 @@ export function XpotLandingPage() {
                     </Button>
                   </DialogTrigger>
 
-                  <DialogContent className="w-[92%] max-w-md rounded-2xl border-white/10 bg-[#070b16]/95 p-5 text-white shadow-[0_24px_80px_rgba(0,0,0,0.65)] backdrop-blur-2xl [&>button]:right-3 [&>button]:top-3 [&>button]:bg-transparent sm:p-6">
+                  <DialogContent className="w-[92%] max-w-md gap-0 rounded-2xl border-white/10 bg-[#070b16]/95 p-5 text-white shadow-[0_24px_80px_rgba(0,0,0,0.65)] backdrop-blur-2xl [&>button]:right-3 [&>button]:top-3 [&>button]:bg-transparent sm:p-7">
                     <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-[linear-gradient(90deg,transparent,#5272F2_38%,#0BB8AF_68%,transparent)]" />
                     <div className="pointer-events-none absolute left-1/2 top-0 h-28 w-48 -translate-x-1/2 rounded-full bg-[#5272F2]/10 blur-3xl" />
 
-                    <DialogHeader className="relative space-y-0 pb-3 text-center sm:text-center">
+                    <DialogHeader className="relative space-y-0 pb-5 text-center sm:text-center">
                       <div className="flex items-center justify-center gap-2.5">
                         <XpotMark className="h-12 w-12" />
                         <span className="text-2xl font-bold tracking-tight text-white">Xpot</span>
@@ -352,12 +352,14 @@ export function XpotLandingPage() {
                       <div className="mb-4 rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-center text-sm text-red-300">{error}</div>
                     )}
                     <PhoneSignIn onSignedIn={openXpotWorkspace} />
-                    <p className="mt-4 text-center text-xs leading-relaxed text-white/45">
-                      {content.account.agreementBefore}{" "}
-                      <Link href={publicPagePath("terms", t.lang)} className="text-white/70 underline-offset-2 hover:underline">{content.footer.termsLabel}</Link>{" "}
-                      {content.account.agreementAnd}{" "}
-                      <Link href={publicPagePath("privacy", t.lang)} className="text-white/70 underline-offset-2 hover:underline">{content.footer.privacyLabel}</Link>
-                      {content.account.agreementAfter}
+                    <p className="mt-5 text-center text-xs leading-relaxed text-white/45">
+                      <span className="block">{content.account.agreementBefore}</span>
+                      <span className="mt-0.5 inline-flex whitespace-nowrap">
+                        <Link href={publicPagePath("terms", t.lang)} className="text-white/70 underline-offset-2 hover:underline">{content.footer.termsLabel}</Link>
+                        <span className="whitespace-pre"> {content.account.agreementAnd} </span>
+                        <Link href={publicPagePath("privacy", t.lang)} className="text-white/70 underline-offset-2 hover:underline">{content.footer.privacyLabel}</Link>
+                        {content.account.agreementAfter}
+                      </span>
                     </p>
                   </DialogContent>
                 </Dialog>
