@@ -418,9 +418,9 @@ export function XpotLandingPage() {
           </section>
 
           {/* Outcome-first proof points, adapted from the industry landing structure. */}
-          <section aria-label={t("highlightsLabel")} className="grid grid-cols-1 overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.035] md:grid-cols-3">
-            {routeHighlights.map(({ icon: Icon, image, title, body }, index) => (
-              <div key={title} className={index > 0 ? "border-t border-white/[0.07] md:border-l md:border-t-0" : ""}>
+          <section aria-label={t("highlightsLabel")} className="grid grid-cols-1 gap-4 md:grid-cols-3 lg:gap-5">
+            {routeHighlights.map(({ icon: Icon, image, title, body }) => (
+              <div key={title} className="overflow-hidden rounded-xl border border-white/[0.07] bg-white/[0.035]">
                 <div className="relative aspect-[16/10] overflow-hidden border-b border-white/[0.07] bg-[#080d19]">
                   <img
                     src={image}
