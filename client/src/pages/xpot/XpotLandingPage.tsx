@@ -16,7 +16,6 @@ import {
   Navigation,
   Nfc,
   Route,
-  Search,
   Sparkles,
 } from "lucide-react";
 import { queryClient } from "@/lib/queryClient";
@@ -272,18 +271,16 @@ export function XpotLandingPage() {
     </Button>
   );
 
-  const tools = [
-    { icon: Route, title: t("routesTitle"), items: [t("routes1"), t("routes2"), t("routes3"), t("routes4")], tone: "text-[#8FA8FF] bg-[#5272F2]/10 border-[#5272F2]/20" },
-    { icon: MapPinned, title: t("visitsTitle"), items: [t("visits1"), t("visits2"), t("visits3"), t("visits4")], tone: "text-[#61D8CE] bg-[#0BB8AF]/10 border-[#0BB8AF]/20" },
-    { icon: Boxes, title: t("salesTitle"), items: [t("sales1"), t("sales2"), t("sales3"), t("sales4")], tone: "text-[#8FA8FF] bg-[#5272F2]/10 border-[#5272F2]/20" },
-    { icon: Nfc, title: t("tagsTitle"), items: [t("tags1"), t("tags2"), t("tags3"), t("tags4")], tone: "text-[#61D8CE] bg-[#0BB8AF]/10 border-[#0BB8AF]/20" },
+  const toolVisuals = [
+    { icon: Route, tone: "text-[#8FA8FF] bg-[#5272F2]/10 border-[#5272F2]/20" },
+    { icon: MapPinned, tone: "text-[#61D8CE] bg-[#0BB8AF]/10 border-[#0BB8AF]/20" },
+    { icon: Boxes, tone: "text-[#8FA8FF] bg-[#5272F2]/10 border-[#5272F2]/20" },
+    { icon: Nfc, tone: "text-[#61D8CE] bg-[#0BB8AF]/10 border-[#0BB8AF]/20" },
   ];
-
-  const routeHighlights = [
-    { icon: Search, image: "/landing/highlights/prospecting-route.webp", title: t("highlight1Title"), body: t("highlight1Body") },
-    { icon: MapPinned, image: "/landing/highlights/visit-note.webp", title: t("highlight2Title"), body: t("highlight2Body") },
-    { icon: Nfc, image: "/landing/highlights/nfc-activation.webp", title: t("highlight3Title"), body: t("highlight3Body") },
-  ];
+  const tools = content.tools.cards.map((card, index) => ({
+    ...card,
+    ...(toolVisuals[index] ?? toolVisuals[0]),
+  }));
 
   const fieldFlow = [
     t("fieldFlow1"),
@@ -408,29 +405,35 @@ export function XpotLandingPage() {
             </motion.div>
           </section>
 
-          {/* Outcome-first proof points, adapted from the industry landing structure. */}
-          <section aria-label={t("highlightsLabel")} className="grid grid-cols-1 gap-4 md:grid-cols-3 lg:gap-5">
-            {routeHighlights.map(({ icon: Icon, image, title, body }) => (
-              <div key={title} className="overflow-hidden rounded-xl border border-white/[0.07] bg-white/[0.035]">
-                <div className="relative aspect-[16/10] overflow-hidden border-b border-white/[0.07] bg-[#080d19]">
-                  <img
-                    src={image}
-                    alt=""
-                    width={1200}
-                    height={900}
-                    loading="lazy"
-                    decoding="async"
-                    className="h-full w-full object-cover transition-transform duration-500 hover:scale-[1.02]"
-                  />
-                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#080d19]/35 via-transparent to-transparent" />
-                </div>
-                <div className="p-6 sm:p-7">
-                  <Icon className="h-5 w-5 text-[#8FA8FF]" />
-                  <h2 className="mt-4 text-base font-bold text-white">{title}</h2>
-                  <p className="mt-2 text-sm leading-relaxed text-white/55">{body}</p>
-                </div>
-              </div>
-            ))}
+          {/* The phase-one audience: independent people looking for flexible extra income. */}
+          <section id="audience" className="scroll-mt-24 space-y-12">
+            <Reveal>
+              <SectionHeading title={content.audience.title} sub={content.audience.subtitle} />
+            </Reveal>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3 lg:gap-5">
+              {content.audience.cards.map(({ imageUrl, title, body }, index) => (
+                <Reveal key={title} delay={index * 0.08}>
+                  <article className="h-full overflow-hidden rounded-xl border border-white/[0.07] bg-white/[0.035]">
+                    <div className="relative aspect-[16/10] overflow-hidden border-b border-white/[0.07] bg-[#080d19]">
+                      <img
+                        src={imageUrl}
+                        alt=""
+                        width={1200}
+                        height={900}
+                        loading="lazy"
+                        decoding="async"
+                        className="h-full w-full object-cover transition-transform duration-500 hover:scale-[1.02]"
+                      />
+                      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#080d19]/35 via-transparent to-transparent" />
+                    </div>
+                    <div className="p-6 sm:p-7">
+                      <h2 className="text-base font-bold text-white">{title}</h2>
+                      <p className="mt-2 text-sm leading-relaxed text-white/55">{body}</p>
+                    </div>
+                  </article>
+                </Reveal>
+              ))}
+            </div>
           </section>
 
           {/* Product proof: the photo establishes the job; this shows how Xpot supports it. */}
@@ -461,7 +464,7 @@ export function XpotLandingPage() {
           {/* The workflow and feature detail live together to avoid repeating the same four stages. */}
           <section id="how" className="scroll-mt-24 space-y-12">
             <Reveal>
-              <SectionHeading title={content.how.title} sub={content.tools.subtitle} />
+              <SectionHeading title={content.how.title} sub={content.how.subtitle} />
             </Reveal>
             <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
               {tools.map(({ icon: Icon, title, items, tone }, i) => (

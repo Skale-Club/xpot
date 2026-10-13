@@ -7,11 +7,11 @@ describe("landing page content", () => {
     for (const locale of LANDING_LOCALES) {
       const content = defaultLandingContent(locale);
       expect(landingPageContentSchema.safeParse(content).success, locale).toBe(true);
-      expect(content.audience.cards).toHaveLength(4);
-      expect(content.how.steps).toHaveLength(3);
-      expect(content.tools.cards).toHaveLength(3);
+      expect(content.audience.cards).toHaveLength(3);
+      expect(content.tools.cards).toHaveLength(4);
       expect(content.faq.items.length).toBeGreaterThanOrEqual(5);
       expect(new Set(content.faq.items.map((item) => item.id)).size).toBe(content.faq.items.length);
+      expect(JSON.stringify(content)).not.toMatch(/\b(?:Skale|CRM|Xphere|GoHighLevel|manager|managers|gestor|gestores|gerente|gerentes|distributor|distributors|distribuidor|distribuidores)\b/i);
     }
   });
 });

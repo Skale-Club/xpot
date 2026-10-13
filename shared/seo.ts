@@ -29,9 +29,9 @@ const HTML_LANG: Record<SeoLang, string> = {
 const COPY: Record<SeoLang, Record<PublicSeoPage, { title: string; description: string }>> = {
   en: {
     home: {
-      title: formatTitle("Xpot", "Field sales, visits and QR/NFC"),
+      title: formatTitle("Xpot", "Extra income with independent field sales"),
       description:
-        "Field sales software for GPS-confirmed visits, AI voice notes, sales, consignment stock and QR/NFC pieces that connect customers to your business.",
+        "Turn free hours into extra income selling selected products to local businesses. Plan routes, confirm visits by GPS and organize sales with Xpot.",
     },
     privacy: {
       title: formatTitle("Privacy Policy", "Xpot"),
@@ -44,9 +44,9 @@ const COPY: Record<SeoLang, Record<PublicSeoPage, { title: string; description: 
   },
   pt: {
     home: {
-      title: formatTitle("Xpot", "Vendas externas, visitas e QR/NFC"),
+      title: formatTitle("Xpot", "Renda extra com vendas na rua"),
       description:
-        "Software de vendas externas com visitas confirmadas por GPS, áudios resumidos por IA, vendas, consignação e peças QR/NFC para seus clientes.",
+        "Transforme horas livres em renda extra vendendo produtos selecionados para comércios locais. Planeje rotas, confirme visitas por GPS e organize vendas no Xpot.",
     },
     privacy: {
       title: formatTitle("Política de Privacidade", "Xpot"),
@@ -59,9 +59,9 @@ const COPY: Record<SeoLang, Record<PublicSeoPage, { title: string; description: 
   },
   es: {
     home: {
-      title: formatTitle("Xpot", "Ventas de campo, visitas y QR/NFC"),
+      title: formatTitle("Xpot", "Ingresos extra con ventas en la calle"),
       description:
-        "Software de ventas de campo con visitas confirmadas por GPS, notas de voz resumidas por IA, ventas, consignación y piezas QR/NFC.",
+        "Convierte horas libres en ingresos extra vendiendo productos seleccionados a comercios locales. Planifica rutas, confirma visitas por GPS y organiza ventas con Xpot.",
     },
     privacy: {
       title: formatTitle("Política de Privacidad", "Xpot"),
@@ -76,22 +76,22 @@ const COPY: Record<SeoLang, Record<PublicSeoPage, { title: string; description: 
 
 const FEATURES: Record<SeoLang, string[]> = {
   en: [
-    "GPS-confirmed field visits",
-    "AI-assisted voice notes and follow-ups",
-    "Sales and consignment stock",
-    "QR and NFC customer pieces",
+    "Flexible selling routes for independent sellers",
+    "GPS-confirmed visits to local businesses",
+    "Sales, stock and earnings tracking",
+    "QR and NFC products for local businesses",
   ],
   pt: [
-    "Visitas externas confirmadas por GPS",
-    "Áudios e retornos assistidos por IA",
-    "Vendas e estoque em consignação",
-    "Peças de cliente com QR e NFC",
+    "Rotas flexíveis para vendedores independentes",
+    "Visitas a comércios locais confirmadas por GPS",
+    "Controle de vendas, estoque e ganhos",
+    "Produtos com QR e NFC para comércios locais",
   ],
   es: [
-    "Visitas de campo confirmadas por GPS",
-    "Notas de voz y seguimientos asistidos por IA",
-    "Ventas y stock en consignación",
-    "Piezas para clientes con QR y NFC",
+    "Rutas flexibles para vendedores independientes",
+    "Visitas a comercios locales confirmadas por GPS",
+    "Control de ventas, stock y ganancias",
+    "Productos con QR y NFC para comercios locales",
   ],
 };
 
@@ -238,7 +238,7 @@ export function renderSeoHead(pathname: string): string {
     meta("og:image", SEO_OG_IMAGE, true),
     meta("og:image:width", "1200", true),
     meta("og:image:height", "630", true),
-    meta("og:image:alt", "Xpot field sales platform", true),
+    meta("og:image:alt", "Xpot for independent sellers earning extra income", true),
     meta("og:locale", seo.locale, true),
     ...alternateLocales,
     meta("twitter:card", "summary_large_image"),

@@ -9,7 +9,6 @@ export function defaultLandingContent(lang: Lang): LandingPageContent {
     navigation: {
       audience: m.navAudience,
       how: m.navHow,
-      tools: m.navTools,
       faq: m.navFaq,
     },
     account: {
@@ -49,31 +48,23 @@ export function defaultLandingContent(lang: Lang): LandingPageContent {
       title: m.audienceTitle,
       subtitle: m.audienceSub,
       cards: [
-        { imageUrl: "/landing/audience/field-reps.webp", title: m.audienceRepTitle, body: m.audienceRepBody },
-        { imageUrl: "/landing/audience/sales-managers.webp", title: m.audienceManagerTitle, body: m.audienceManagerBody },
-        { imageUrl: "/landing/audience/distributors.webp", title: m.audienceDistributorTitle, body: m.audienceDistributorBody },
-        { imageUrl: "/landing/audience/local-businesses.webp", title: m.audienceBusinessTitle, body: m.audienceBusinessBody },
+        { imageUrl: "/landing/highlights/prospecting-route.webp", title: m.audienceExtraTitle, body: m.audienceExtraBody },
+        { imageUrl: "/landing/highlights/visit-note.webp", title: m.audienceMobileTitle, body: m.audienceMobileBody },
+        { imageUrl: "/landing/highlights/nfc-activation.webp", title: m.audienceIndependentTitle, body: m.audienceIndependentBody },
       ],
     },
     how: {
       title: m.howTitle,
       subtitle: m.howSub,
-      steps: [
-        { title: m.step1Title, body: m.step1Body },
-        { title: m.step2Title, body: m.step2Body },
-        { title: m.step3Title, body: m.step3Body },
-      ],
     },
     tools: {
-      title: m.toolsTitle,
-      subtitle: m.toolsSub,
       cards: [
+        { title: m.routesTitle, items: [m.routes1, m.routes2, m.routes3, m.routes4] },
         { title: m.visitsTitle, items: [m.visits1, m.visits2, m.visits3, m.visits4] },
         { title: m.salesTitle, items: [m.sales1, m.sales2, m.sales3, m.sales4] },
         { title: m.tagsTitle, items: [m.tags1, m.tags2, m.tags3, m.tags4] },
       ],
     },
-    sync: { title: m.syncTitle, body: m.syncBody },
     faq: {
       title: m.faqTitle,
       subtitle: m.faqSub,

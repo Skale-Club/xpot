@@ -11,9 +11,9 @@ const INPUT = "w-full rounded-xl border border-white/10 bg-[#080d19] px-3.5 py-2
 const TEXTAREA = `${INPUT} min-h-24 resize-y leading-relaxed`;
 
 const ui = {
-  en: { intro: "Edit every text and image shown on the public landing page.", preview: "Open landing page", save: "Publish language", saved: "Landing page published", failed: "Could not publish", unsaved: "Unsaved changes", published: "Published", addFaq: "Add question", remove: "Remove", question: "Question", answer: "Answer", image: "Image path or URL", item: "Item", sections: ["Navigation & account", "Hero & app preview", "Who it's for", "How it works", "Tools", "CRM sync", "FAQ", "Final call to action", "Footer"] },
-  pt: { intro: "Edite todos os textos e imagens exibidos na landing page pública.", preview: "Abrir landing page", save: "Publicar idioma", saved: "Landing page publicada", failed: "Não foi possível publicar", unsaved: "Alterações não publicadas", published: "Publicado", addFaq: "Adicionar pergunta", remove: "Remover", question: "Pergunta", answer: "Resposta", image: "Caminho ou URL da imagem", item: "Item", sections: ["Navegação e acesso", "Hero e prévia do app", "Para quem é", "Como funciona", "Ferramentas", "Sincronização com CRM", "Perguntas frequentes", "Chamada final", "Rodapé"] },
-  es: { intro: "Edita todos los textos e imágenes de la landing page pública.", preview: "Abrir landing page", save: "Publicar idioma", saved: "Landing page publicada", failed: "No se pudo publicar", unsaved: "Cambios sin publicar", published: "Publicado", addFaq: "Agregar pregunta", remove: "Eliminar", question: "Pregunta", answer: "Respuesta", image: "Ruta o URL de la imagen", item: "Elemento", sections: ["Navegación y acceso", "Hero y vista de la app", "Para quién es", "Cómo funciona", "Herramientas", "Sincronización con CRM", "Preguntas frecuentes", "Llamada final", "Pie de página"] },
+  en: { intro: "Edit every text and image shown on the public landing page.", preview: "Open landing page", save: "Publish language", saved: "Landing page published", failed: "Could not publish", unsaved: "Unsaved changes", published: "Published", addFaq: "Add question", remove: "Remove", question: "Question", answer: "Answer", image: "Image path or URL", item: "Item", sections: ["Navigation & account", "Hero & app preview", "Who it's for", "How it works", "Selling tools", "FAQ", "Final call to action", "Footer"] },
+  pt: { intro: "Edite todos os textos e imagens exibidos na landing page pública.", preview: "Abrir landing page", save: "Publicar idioma", saved: "Landing page publicada", failed: "Não foi possível publicar", unsaved: "Alterações não publicadas", published: "Publicado", addFaq: "Adicionar pergunta", remove: "Remover", question: "Pergunta", answer: "Resposta", image: "Caminho ou URL da imagem", item: "Item", sections: ["Navegação e acesso", "Hero e prévia do app", "Para quem é", "Como funciona", "Ferramentas de venda", "Perguntas frequentes", "Chamada final", "Rodapé"] },
+  es: { intro: "Edita todos los textos e imágenes de la landing page pública.", preview: "Abrir landing page", save: "Publicar idioma", saved: "Landing page publicada", failed: "No se pudo publicar", unsaved: "Cambios sin publicar", published: "Publicado", addFaq: "Agregar pregunta", remove: "Eliminar", question: "Pregunta", answer: "Respuesta", image: "Ruta o URL de la imagen", item: "Elemento", sections: ["Navegación y acceso", "Hero y vista de la app", "Para quién es", "Cómo funciona", "Herramientas de venta", "Preguntas frecuentes", "Llamada final", "Pie de página"] },
 } as const;
 
 function Field({ label, value, onChange, multiline = false }: { label: string; value: string; onChange: (value: string) => void; multiline?: boolean }) {
@@ -95,7 +95,7 @@ function Editor({ rows }: { rows: LandingContentResponse[] }) {
 
       <div className="space-y-3">
         <Section title={copy.sections[0]} open>
-          {(["audience", "how", "tools", "faq"] as const).map((key) => <Field key={key} label={`Menu · ${key}`} value={content.navigation[key]} onChange={setString((next, value) => { next.navigation[key] = value; })} />)}
+          {(["audience", "how", "faq"] as const).map((key) => <Field key={key} label={`Menu · ${key}`} value={content.navigation[key]} onChange={setString((next, value) => { next.navigation[key] = value; })} />)}
           <Field label="Login" value={content.account.signIn} onChange={setString((n, v) => { n.account.signIn = v; })} />
           <Field label="Dashboard" value={content.account.dashboard} onChange={setString((n, v) => { n.account.dashboard = v; })} />
           <Field label="Título do acesso" value={content.account.welcomeTitle} onChange={setString((n, v) => { n.account.welcomeTitle = v; })} />
@@ -126,21 +126,13 @@ function Editor({ rows }: { rows: LandingContentResponse[] }) {
         <Section title={copy.sections[3]}>
           <Field label="Título" value={content.how.title} onChange={setString((n, v) => { n.how.title = v; })} />
           <Field label="Subtítulo" value={content.how.subtitle} multiline onChange={setString((n, v) => { n.how.subtitle = v; })} />
-          {content.how.steps.map((step, index) => <div key={index} className="space-y-3 rounded-xl border border-white/[0.07] p-4"><p className="text-xs font-semibold text-blue-300">{index + 1}</p><Field label="Título" value={step.title} onChange={(v) => change((n) => { n.how.steps[index].title = v; })} /><Field label="Descrição" value={step.body} multiline onChange={(v) => change((n) => { n.how.steps[index].body = v; })} /></div>)}
         </Section>
 
         <Section title={copy.sections[4]}>
-          <Field label="Título" value={content.tools.title} onChange={setString((n, v) => { n.tools.title = v; })} />
-          <Field label="Subtítulo" value={content.tools.subtitle} multiline onChange={setString((n, v) => { n.tools.subtitle = v; })} />
           {content.tools.cards.map((card, cardIndex) => <div key={cardIndex} className="space-y-3 rounded-xl border border-white/[0.07] p-4"><Field label="Título" value={card.title} onChange={(v) => change((n) => { n.tools.cards[cardIndex].title = v; })} />{card.items.map((item, itemIndex) => <Field key={itemIndex} label={`${copy.item} ${itemIndex + 1}`} value={item} onChange={(v) => change((n) => { n.tools.cards[cardIndex].items[itemIndex] = v; })} />)}</div>)}
         </Section>
 
         <Section title={copy.sections[5]}>
-          <Field label="Título" value={content.sync.title} onChange={setString((n, v) => { n.sync.title = v; })} />
-          <Field label="Descrição" value={content.sync.body} multiline onChange={setString((n, v) => { n.sync.body = v; })} />
-        </Section>
-
-        <Section title={copy.sections[6]}>
           <Field label="Título" value={content.faq.title} onChange={setString((n, v) => { n.faq.title = v; })} />
           <Field label="Subtítulo" value={content.faq.subtitle} multiline onChange={setString((n, v) => { n.faq.subtitle = v; })} />
           <div className="space-y-3 sm:col-span-2">
@@ -149,13 +141,13 @@ function Editor({ rows }: { rows: LandingContentResponse[] }) {
           </div>
         </Section>
 
-        <Section title={copy.sections[7]}>
+        <Section title={copy.sections[6]}>
           <Field label="Título" value={content.cta.title} onChange={setString((n, v) => { n.cta.title = v; })} />
           <Field label="Descrição" value={content.cta.body} multiline onChange={setString((n, v) => { n.cta.body = v; })} />
           <Field label="Botão" value={content.cta.button} onChange={setString((n, v) => { n.cta.button = v; })} />
         </Section>
 
-        <Section title={copy.sections[8]}>
+        <Section title={copy.sections[7]}>
           <Field label="Assinatura" value={content.footer.tagline} onChange={setString((n, v) => { n.footer.tagline = v; })} />
           <Field label="Privacidade" value={content.footer.privacyLabel} onChange={setString((n, v) => { n.footer.privacyLabel = v; })} />
           <Field label="Termos" value={content.footer.termsLabel} onChange={setString((n, v) => { n.footer.termsLabel = v; })} />

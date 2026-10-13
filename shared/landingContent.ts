@@ -23,7 +23,6 @@ export const landingPageContentSchema = z.object({
   navigation: z.object({
     audience: shortText,
     how: shortText,
-    tools: shortText,
     faq: shortText,
   }),
   account: z.object({
@@ -62,22 +61,18 @@ export const landingPageContentSchema = z.object({
   audience: z.object({
     title: shortText,
     subtitle: bodyText,
-    cards: z.array(titledBodySchema.extend({ imageUrl: imagePath })).length(4),
+    cards: z.array(titledBodySchema.extend({ imageUrl: imagePath })).length(3),
   }),
   how: z.object({
     title: shortText,
     subtitle: bodyText,
-    steps: z.array(titledBodySchema).length(3),
   }),
   tools: z.object({
-    title: shortText,
-    subtitle: bodyText,
     cards: z.array(z.object({
       title: shortText,
       items: z.array(z.string().trim().min(1).max(300)).length(4),
-    })).length(3),
+    })).length(4),
   }),
-  sync: titledBodySchema,
   faq: z.object({
     title: shortText,
     subtitle: bodyText,

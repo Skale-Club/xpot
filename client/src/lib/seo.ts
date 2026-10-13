@@ -37,7 +37,7 @@ function applyPublicSeo(page: PublicSeoPage, lang: SeoLang) {
     ["property", "og:image", SEO_OG_IMAGE],
     ["property", "og:image:width", "1200"],
     ["property", "og:image:height", "630"],
-    ["property", "og:image:alt", "Xpot field sales platform"],
+    ["property", "og:image:alt", "Xpot for independent sellers earning extra income"],
     ["property", "og:locale", seo.locale],
     ["name", "twitter:card", "summary_large_image"],
     ["name", "twitter:title", seo.title],
