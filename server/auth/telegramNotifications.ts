@@ -1,7 +1,7 @@
 import { and, eq, isNull, lt } from "drizzle-orm";
 import { db } from "../db.js";
 import { authAccessRequests, users } from "#shared/schema.js";
-import { sendSignupTelegram } from "./telegram.js";
+import { escapeTelegramHtml, sendSignupTelegram } from "./telegram.js";
 
 const ABANDONED_AFTER_MS = 30 * 60 * 1000;
 const CHECK_EVERY_MS = 5 * 60 * 1000;
@@ -25,7 +25,11 @@ export function startAbandonedSignupNotifier(): () => void {
       const name = [row.firstName, row.lastName].filter(Boolean).join(" ") || "Name not provided";
       const place = [row.request.workCity, row.request.workRegion].filter(Boolean).join(", ") || "location not provided";
       const sent = await sendSignupTelegram(
-        `Xpot · abandoned sign-up draft\n${name}\n${row.phone ?? "phone unavailable"}\n${place}\nStopped after question ${row.request.draftStep + 1}.`,
+        `📝 <b>RASCUNHO ABANDONADO · XPOT</b>\n\n👤 ${escapeTelegramHtml(name)}\n📱 ${escapeTelegramHtml(row.phone ?? "Telefone indisponível")}\n📍 ${escapeTelegramHtml(place)}\n\n⏸ Parou na pergunta ${row.request.draftStep + 1}.`,
+        {
+          whatsappPhone: row.phone,
+          whatsappText: `Olá, ${name.split(/\s+/)[0]}! Vimos que você começou seu cadastro no Xpot. Posso ajudar?`,
+        },
       );
       if (sent) {
         await db.update(authAccessRequests)

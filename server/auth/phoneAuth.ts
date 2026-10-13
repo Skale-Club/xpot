@@ -11,7 +11,7 @@ import { devCodeForResponse } from "./devPhoneCode.js";
 import { completePhoneCodeVerification } from "./phoneCodeFlow.js";
 import { defaultSmsSender, SmsError, type SmsSender } from "./sms.js";
 import { loadTwilioConfigFromDb } from "./smsConfigDb.js";
-import { sendSignupTelegram } from "./telegram.js";
+import { formatSignupLeadTelegram, sendSignupTelegram } from "./telegram.js";
 
 // Sign-in by phone: a 6-digit code goes out by SMS, the person types it back.
 // No email, no password. What happens next depends on the person:
@@ -493,8 +493,24 @@ export function registerPhoneAuthRoutes(app: Express, sms: SmsSender = defaultSm
       console.log(`[phone-auth] new sign-up pending approval: ${input.displayName} ${phone}`);
       const place = `${input.workCity}, ${input.workRegion}`;
       void notifyTeam(sms, input.displayName, phone, place, req);
-      const origin = process.env.XPOT_PUBLIC_URL || `${req.protocol}://${req.get("host")}`;
-      void sendSignupTelegram(`Xpot · completed access request\n${input.displayName}\n${phone}\n${input.email}\n${place}\n${origin}/admin/reps`);
+      void sendSignupTelegram(formatSignupLeadTelegram({
+        name: input.displayName,
+        phone,
+        email: input.email,
+        workCity: input.workCity,
+        workRegion: input.workRegion,
+        hasVehicle: input.hasVehicle,
+        languages: input.languages,
+        otherLanguages: input.otherLanguages,
+        occupation: input.occupation,
+        salesExperience: input.salesExperience,
+        fieldSalesReadiness: input.fieldSalesReadiness,
+        availability: input.availability,
+        message: input.message,
+      }), {
+        whatsappPhone: phone,
+        whatsappText: `Olá, ${input.displayName.split(/\s+/)[0]}! Recebemos seu cadastro no Xpot e queremos conversar com você.`,
+      });
       res.status(201).json({ status: "pending" satisfies PhoneAuthStatus });
     } catch (err) {
       fail(res, err);
