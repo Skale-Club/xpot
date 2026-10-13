@@ -422,7 +422,6 @@ export function XpotProspecting() {
                 </button>
               ))}
             </div>
-            <p className="mt-2 text-xs leading-5 text-white/60">{t("shiftHint")}</p>
           </fieldset>
         </form>
       </section>
