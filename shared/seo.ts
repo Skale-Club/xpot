@@ -20,46 +20,46 @@ const HTML_LANG: Record<SeoLang, string> = {
 const COPY: Record<SeoLang, Record<PublicSeoPage, { title: string; description: string }>> = {
   en: {
     home: {
-      title: "Xpot — Field sales, visits and QR/NFC",
+      title: "Xpot | Field sales, visits and QR/NFC",
       description:
         "Field sales software for GPS-confirmed visits, AI voice notes, sales, consignment stock and QR/NFC pieces that connect customers to your business.",
     },
     privacy: {
-      title: "Privacy Policy · Xpot",
+      title: "Privacy Policy | Xpot",
       description: "Learn how Xpot collects, uses, protects and deletes account, visit, sales, location and QR/NFC scan data.",
     },
     terms: {
-      title: "Terms of Service · Xpot",
+      title: "Terms of Service | Xpot",
       description: "Read the terms that govern access to and use of the Xpot field sales and QR/NFC platform.",
     },
   },
   pt: {
     home: {
-      title: "Xpot — Vendas externas, visitas e QR/NFC",
+      title: "Xpot | Vendas externas, visitas e QR/NFC",
       description:
         "Software de vendas externas com visitas confirmadas por GPS, áudios resumidos por IA, vendas, consignação e peças QR/NFC para seus clientes.",
     },
     privacy: {
-      title: "Política de Privacidade · Xpot",
+      title: "Política de Privacidade | Xpot",
       description: "Saiba como o Xpot coleta, usa, protege e exclui dados de contas, visitas, vendas, localização e leituras de QR/NFC.",
     },
     terms: {
-      title: "Termos de Uso · Xpot",
+      title: "Termos de Uso | Xpot",
       description: "Leia os termos que regem o acesso e o uso da plataforma Xpot de vendas externas e QR/NFC.",
     },
   },
   es: {
     home: {
-      title: "Xpot — Ventas de campo, visitas y QR/NFC",
+      title: "Xpot | Ventas de campo, visitas y QR/NFC",
       description:
         "Software de ventas de campo con visitas confirmadas por GPS, notas de voz resumidas por IA, ventas, consignación y piezas QR/NFC.",
     },
     privacy: {
-      title: "Política de Privacidad · Xpot",
+      title: "Política de Privacidad | Xpot",
       description: "Conoce cómo Xpot recopila, usa, protege y elimina datos de cuentas, visitas, ventas, ubicación y lecturas QR/NFC.",
     },
     terms: {
-      title: "Términos del Servicio · Xpot",
+      title: "Términos del Servicio | Xpot",
       description: "Lee los términos que rigen el acceso y el uso de la plataforma Xpot de ventas de campo y QR/NFC.",
     },
   },

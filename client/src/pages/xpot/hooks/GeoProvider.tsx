@@ -10,7 +10,7 @@ export type GeoPermission = "unknown" | "prompt" | "granted" | "denied";
 interface GeoContextValue {
   geoState: GeoState;
   setGeoState: Dispatch<SetStateAction<GeoState>>;
-  loadCurrentLocation: () => Promise<void>;
+  loadCurrentLocation: () => Promise<GeoState | undefined>;
   permission: GeoPermission;
   isLocating: boolean;
   hasLocation: boolean;
@@ -29,19 +29,20 @@ export function GeoProvider({ children }: { children: ReactNode }) {
     if (!navigator.geolocation) {
       setGeoState({ error: translate(checkinMessages, "geoUnsupported") });
       setPermission("denied");
-      return;
+      return undefined;
     }
     setIsLocating(true);
-    await new Promise<void>((resolve) => {
+    const result = await new Promise<GeoState | undefined>((resolve) => {
       navigator.geolocation.getCurrentPosition(
         (position) => {
-          setGeoState({
+          const next = {
             lat: position.coords.latitude,
             lng: position.coords.longitude,
             accuracy: Math.round(position.coords.accuracy),
-          });
+          };
+          setGeoState(next);
           setPermission("granted");
-          resolve();
+          resolve(next);
         },
         (error) => {
           // Keep the last known fix: dropping it would bounce a rep who is
@@ -51,12 +52,13 @@ export function GeoProvider({ children }: { children: ReactNode }) {
           // conflating them would send the rep off to fix their iOS settings
           // when all they need is a clearer patch of sky.
           if (error.code === error.PERMISSION_DENIED) setPermission("denied");
-          resolve();
+          resolve(undefined);
         },
         { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 },
       );
     });
     setIsLocating(false);
+    return result;
   }, []);
 
   // Read the current permission up front so the gate can tell "never asked"

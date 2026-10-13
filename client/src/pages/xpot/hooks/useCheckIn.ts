@@ -22,7 +22,7 @@ export function useCheckIn() {
   const { toast } = useToast();
   const t = useT(checkinMessages);
   const { geoState, invalidateXpotData } = useXpotShared();
-  const { xpotMeQuery, activeTab, isOnline } = useXpotQueries();
+  const { xpotMeQuery, isOnline } = useXpotQueries();
   const { leadsQuery, createLeadMutation } = useLeads();
   const { activeVisit, checkingInRef } = useVisits();
 
@@ -32,7 +32,6 @@ export function useCheckIn() {
 
   // Pre-select lead from URL query param ?leadId=
   useEffect(() => {
-    if (activeTab !== "check-in") return;
     const params = new URLSearchParams(window.location.search);
     const leadId = params.get("leadId");
     if (!leadId || !leadsQuery.data) return;
@@ -41,7 +40,7 @@ export function useCheckIn() {
       setSelectedLeadId(lead.id);
       setCheckInSearch(lead.name);
     }
-  }, [activeTab, leadsQuery.data]);
+  }, [leadsQuery.data]);
   const [visitNoteForm, setVisitNoteForm] = useState({ summary: "", outcome: "", nextStep: "", followUpRequired: false });
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
@@ -49,7 +48,7 @@ export function useCheckIn() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
 
-  const checkInPlaceQuery = usePlaceSearch(checkInSearch, xpotMeQuery.isSuccess && activeTab === "check-in", geoState);
+  const checkInPlaceQuery = usePlaceSearch(checkInSearch, xpotMeQuery.isSuccess, geoState);
 
   const selectedLead = useMemo(
     () => (typeof selectedLeadId === "number" ? leadsQuery.data?.find((lead) => lead.id === selectedLeadId) || null : null),
@@ -271,7 +270,7 @@ export function useCheckIn() {
       website: place.website || undefined,
       industry: place.primaryType || undefined,
       source: "google_places",
-      status: "lead",
+      status: "prospect",
       notes: `Imported from Google Places (${place.placeId})`,
       googlePlaceId: place.placeId,
       primaryLocation: {
@@ -300,7 +299,7 @@ export function useCheckIn() {
     const createdLead = await createLeadMutation.mutateAsync({
       name,
       source: "manual",
-      status: "lead",
+      status: "prospect",
       notes: "Created manually during check-in",
       // No address to send: the empty addressLine1 this used to pass failed
       // validation, and the server skips the location row without one anyway.

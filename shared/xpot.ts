@@ -4,6 +4,7 @@ import { z } from "zod";
 export const xpotCheckInSchema = z.object({
   leadId: z.number().int().positive(),
   locationId: z.number().int().positive().optional(),
+  routeStopId: z.number().int().positive().optional(),
   lat: z.number().min(-90).max(90).optional(),
   lng: z.number().min(-180).max(180).optional(),
   gpsAccuracyMeters: z.number().int().nonnegative().nullable().optional(),
@@ -26,6 +27,50 @@ export const xpotVisitNoteUpsertSchema = z.object({
   followUpRequired: z.boolean().optional(),
   audioUrl: z.string().nullable().optional(),
   audioDurationSeconds: z.number().int().nullable().optional(),
+  attendeeName: z.string().trim().max(160).nullable().optional(),
+});
+
+export const xpotDailyRouteCreateSchema = z.object({
+  industry: z.string().trim().min(2).max(120),
+  city: z.string().trim().min(2).max(160),
+  startTime: z.string().regex(/^[0-2][0-9]:[0-5][0-9]$/),
+  durationMinutes: z.number().int().min(60).max(720),
+  routeDate: z.string().date(),
+  timezone: z.string().trim().min(1).max(80),
+  idempotencyKey: z.string().uuid(),
+});
+
+export const xpotDailyRouteStopUpdateSchema = z.object({
+  status: z.enum(["planned", "skipped", "unavailable"]).optional(),
+  skipReason: z.string().trim().max(500).nullable().optional(),
+  sequence: z.number().int().positive().optional(),
+}).refine((input) => Object.keys(input).length > 0, { message: "No route stop changes supplied" });
+
+export const xpotDailyRouteRegenerateSchema = z.object({
+  reason: z.string().trim().min(5).max(500),
+  idempotencyKey: z.string().uuid(),
+});
+
+export const xpotPushSubscriptionSchema = z.object({
+  endpoint: z.string().url().max(4096),
+  keys: z.object({
+    p256dh: z.string().min(1).max(4096),
+    auth: z.string().min(1).max(1024),
+  }),
+});
+
+export const xpotVisitSummarySchema = z.object({
+  attendeeName: z.string().trim().max(160).nullable().optional(),
+  summary: z.string().trim().max(5000).nullable().optional(),
+  outcome: z.string().trim().max(500).nullable().optional(),
+  nextStep: z.string().trim().max(2000).nullable().optional(),
+  followUpRequired: z.boolean().optional(),
+  quickTask: z.object({
+    title: z.string().trim().min(1).max(240),
+    dueAt: z.string().datetime().nullable().optional(),
+    priority: z.enum(["low", "medium", "high", "urgent"]).optional(),
+    type: z.enum(["follow_up", "return_visit", "call", "delivery", "other"]).optional(),
+  }).nullable().optional(),
 });
 
 // lat/lng live in text columns, but every producer hands us numbers: Google
@@ -112,6 +157,7 @@ export const xpotTaskCreateSchema = z.object({
   title: z.string().min(1),
   description: z.string().nullable().optional(),
   dueAt: z.string().optional().transform(val => val ? new Date(val) : undefined),
+  priority: z.enum(["low", "medium", "high", "urgent"]).optional(),
 });
 
 export const xpotTaskUpdateSchema = z.object({
@@ -119,11 +165,17 @@ export const xpotTaskUpdateSchema = z.object({
   description: z.string().nullable().optional(),
   dueAt: z.string().optional().transform(val => val ? new Date(val) : undefined),
   status: z.enum(["completed", "cancelled", "pending"]).optional(),
+  priority: z.enum(["low", "medium", "high", "urgent"]).optional(),
+  type: z.enum(["follow_up", "return_visit", "call", "delivery", "other"]).optional(),
 }).partial();
 
 export type XpotCheckInInput = z.infer<typeof xpotCheckInSchema>;
 export type XpotCheckOutInput = z.infer<typeof xpotCheckOutSchema>;
 export type XpotVisitNoteUpsertInput = z.infer<typeof xpotVisitNoteUpsertSchema>;
+export type XpotDailyRouteCreateInput = z.infer<typeof xpotDailyRouteCreateSchema>;
+export type XpotDailyRouteStopUpdateInput = z.infer<typeof xpotDailyRouteStopUpdateSchema>;
+export type XpotDailyRouteRegenerateInput = z.infer<typeof xpotDailyRouteRegenerateSchema>;
+export type XpotVisitSummaryInput = z.infer<typeof xpotVisitSummarySchema>;
 export type XpotLeadCreateInput = z.infer<typeof xpotLeadCreateSchema>;
 export type XpotLeadUpdateInput = z.infer<typeof xpotLeadUpdateSchema>;
 export type XpotLeadContactCreateInput = z.infer<typeof xpotLeadContactCreateSchema>;

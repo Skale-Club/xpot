@@ -8,6 +8,7 @@ import { AdminOverview } from "./AdminOverview";
 import { AdminReps } from "./AdminReps";
 import { AdminIntegrations } from "./AdminIntegrations";
 import { AdminBranding } from "./AdminBranding";
+import { AdminLandingContent } from "./AdminLandingContent";
 import { AdminTags, CodeLookup } from "./tags/AdminTags";
 import { AdminProducts } from "./AdminProducts";
 import { AdminSettings } from "./AdminSettings";
@@ -15,13 +16,12 @@ import { AppLayout } from "@/components/xpot/AppLayout";
 import { moduleGroups, organizationItems, type NavItem } from "@/components/xpot/moduleNav";
 import { AdminBadge } from "@/components/xpot/AdminBadge";
 import { isSuperAdmin } from "@shared/modules";
-import { useIsComputer } from "@/hooks/use-is-desktop";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { shellMessages } from "@/i18n/messages/shell";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { manageMessages } from "@/i18n/messages/manage";
-import { MODULE_HOME } from "@/lib/xpot";
+import { MODULE_HOME, moduleEntryPath } from "@/lib/xpot";
 import { TagsTabBar } from "@/pages/tags/TagsTabBar";
 import { useViewerAccess } from "@/lib/adminMode";
 
@@ -31,10 +31,10 @@ import { useViewerAccess } from "@/lib/adminMode";
 // branding), and the shell shows it inside that part of the app (moduleNav.ts).
 // The URLs stay /admin/<section> so bookmarks and links keep working.
 
-const SECTIONS = ["overview", "tags", "products", "integrations", "branding", "xphere", "reps", "settings"] as const;
+const SECTIONS = ["overview", "tags", "products", "integrations", "branding", "landing", "xphere", "reps", "settings"] as const;
 type SectionId = (typeof SECTIONS)[number];
 /** The global admin's sections (moduleNav marks them adminOnly). */
-const SUPER_ADMIN_SECTIONS: readonly SectionId[] = ["integrations", "branding", "xphere"];
+const SUPER_ADMIN_SECTIONS: readonly SectionId[] = ["integrations", "branding", "landing", "xphere"];
 
 export function AdminApp({ section }: { section: string }) {
   const [location, setLocation] = useLocation();
@@ -43,7 +43,6 @@ export function AdminApp({ section }: { section: string }) {
   const tt = useT(tagsMessages);
   const tc = useT(commonMessages);
   const tm = useT(manageMessages);
-  const isComputer = useIsComputer();
 
   const me = meQuery.data;
   const active: SectionId = SECTIONS.find((s) => s === section) ?? "overview";
@@ -84,7 +83,7 @@ export function AdminApp({ section }: { section: string }) {
     );
   }
 
-  const viewer = { canManage: true, isAdmin: isSuperAdmin(me), isComputer };
+  const viewer = { canManage: true, isAdmin: isSuperAdmin(me) };
   const labels = { shell: t, tags: tt };
   const organization = organizationItems(labels, viewer);
   const isOrganization = organization.some((i) => i.match(location));
@@ -97,7 +96,7 @@ export function AdminApp({ section }: { section: string }) {
   const tagsManage = moduleGroups("tags", viewer, labels)[1]?.items ?? [];
   const current = [...siblings, ...organization, ...tagsManage].find((i) => i.match(location));
   const title = current?.label ?? t("navManage");
-  const back = active === "tags" ? MODULE_HOME.tags : isOrganization ? "/settings" : MODULE_HOME.visits;
+  const back = active === "tags" ? moduleEntryPath("tags") : isOrganization ? "/settings" : moduleEntryPath("visits");
   const heading = active === "tags" ? `${tc("moduleTags")} · ${t("navManage")}` : isOrganization ? t("navOrganization") : `${tc("moduleVisits")} · ${t("navManage")}`;
 
   return (
@@ -157,6 +156,7 @@ export function AdminApp({ section }: { section: string }) {
       )}
       {(active === "integrations" || active === "xphere") && viewer.isAdmin && <AdminIntegrations initialTab={active === "xphere" ? "xphere" : "providers"} />}
       {active === "branding" && viewer.isAdmin && <AdminBranding />}
+      {active === "landing" && viewer.isAdmin && <AdminLandingContent />}
       {active === "reps" && <AdminReps />}
       {active === "tags" && <AdminTags />}
       {active === "settings" && <AdminSettings />}

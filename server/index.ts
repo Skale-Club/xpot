@@ -6,6 +6,7 @@ import { createApp, log } from "./app.js";
 import { pool } from "./db.js";
 import { ensureUploadBucket } from "./lib/supabase.js";
 import { injectSeoHead } from "./seo.js";
+import { resumePendingDailyRoutes } from "./daily-routes.js";
 
 const PORT = Number(process.env.PORT) || 2110;
 
@@ -16,6 +17,8 @@ const PORT = Number(process.env.PORT) || 2110;
   }
 
   const { app, httpServer } = await createApp();
+  const resumedRoutes = await resumePendingDailyRoutes();
+  if (resumedRoutes) log(`Resumed ${resumedRoutes} pending daily route job(s)`);
 
   // One port for everything (client + API).
   // - dev: Vite runs in middleware mode inside Express (server/vite.ts) and

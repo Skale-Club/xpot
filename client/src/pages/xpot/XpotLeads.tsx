@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRoute } from "wouter";
+import { useLocation, useRoute } from "wouter";
 import {
   Plus,
   Search,
@@ -15,6 +15,9 @@ import {
   Nfc,
   MoreVertical,
   MousePointerClick,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import type { LeadTagSummary } from "@shared/tagsApi";
@@ -58,6 +61,8 @@ import { checkinMessages } from "@/i18n/messages/checkin";
 import { BRAND_GRADIENT, GLASS } from "@/components/xpot/surface";
 import { Segmented } from "@/components/xpot/Segmented";
 import { EmptyState } from "@/components/xpot/EmptyState";
+import { MiniCalendar } from "@/components/xpot/MiniCalendar";
+import { ProspectingRoute } from "./ProspectingRoute";
 
 
 // ─── Shared Add Company Dialog ────────────────────────────────────────────────
@@ -422,13 +427,32 @@ function LeadActionSheet({ lead, isProspect, onClose, onSell, onCheckIn, onPromo
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
+function isSameDay(a: Date, b: Date) {
+  return a.getFullYear() === b.getFullYear()
+    && a.getMonth() === b.getMonth()
+    && a.getDate() === b.getDate();
+}
+
+function toLocalDateString(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
 export function XpotLeads() {
   const t = useT(leadsMessages);
   const { setLocation } = useXpotQueries();
+  const [pathname] = useLocation();
   const isDesktop = useIsDesktop();
   const [routeMatch, routeParams] = useRoute("/leads/:id");
-  const routeId = routeMatch ? Number(routeParams.id) : null;
-  const [tab, setTab] = useState<"leads" | "prospects">("leads");
+  const routeId = routeMatch && /^\d+$/.test(routeParams.id) ? Number(routeParams.id) : null;
+  const [tab, setTab] = useState<"leads" | "prospects">(
+    pathname.startsWith("/leads/prospect") || pathname.startsWith("/check-in") ? "prospects" : "leads",
+  );
+  const prospecting = pathname.startsWith("/leads/prospecting") || pathname.startsWith("/check-in");
+  const prospectingSummary = pathname.startsWith("/leads/prospecting/summary/");
+  const [dateMode, setDateMode] = useState<"all" | "day">("all");
+  const [dayOffset, setDayOffset] = useState(0);
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const dateInputRef = useRef<HTMLInputElement>(null);
   // Selling from the company card, outside any visit — the second entry point.
   const [salesLead, setSalesLead] = useState<FullSalesLead | null>(null);
   const [leadPendingDelete, setLeadPendingDelete] = useState<FullSalesLead | null>(null);
@@ -464,7 +488,7 @@ export function XpotLeads() {
 
   // Visits are already loaded by the shell; group them per company for the
   // "last visit" column and the pane's recent visits.
-  const { data: visits } = useQuery<EnrichedSalesVisit[]>({ queryKey: ["/api/xpot/visits"], enabled: isDesktop });
+  const { data: visits } = useQuery<EnrichedSalesVisit[]>({ queryKey: ["/api/xpot/visits"] });
   const visitsByLead = useMemo(() => {
     const map = new Map<number, EnrichedSalesVisit[]>();
     for (const v of visits ?? []) {
@@ -483,18 +507,69 @@ export function XpotLeads() {
 
   const selectedLead = routeId ? allLeads.find((l) => l.id === routeId) ?? null : null;
 
+  const today = new Date();
+  const selectedDate = new Date();
+  selectedDate.setDate(today.getDate() + dayOffset);
+
+  const pickDay = useCallback((day: Date) => {
+    const picked = new Date(`${toLocalDateString(day)}T12:00:00`);
+    const todayMid = new Date(`${toLocalDateString(new Date())}T12:00:00`);
+    const diff = Math.round((picked.getTime() - todayMid.getTime()) / (24 * 60 * 60 * 1000));
+    setDayOffset(Math.min(0, diff));
+  }, []);
+
+  const handleDateChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.value) pickDay(new Date(`${event.target.value}T12:00:00`));
+  }, [pickDay]);
+
   // A link straight to a prospect opens the Prospects tab.
   useEffect(() => {
     if (selectedLead) setTab(selectedLead.status === "prospect" ? "prospects" : "leads");
   }, [selectedLead?.id, selectedLead?.status]);
 
-  const displayList = tab === "prospects"
+  useEffect(() => {
+    if (pathname.startsWith("/leads/prospect") || pathname.startsWith("/check-in")) setTab("prospects");
+  }, [pathname]);
+
+  const searchedList = tab === "prospects"
     ? prospects.filter((l) => !leadLookupSearch || l.name.toLowerCase().includes(leadLookupSearch.toLowerCase()))
     : filteredLeadsForList.filter((l) => l.status !== "prospect");
 
+  const visitedLeadIds = new Set(
+    (visits ?? [])
+      .filter((visit) => visit.checkedInAt && isSameDay(new Date(visit.checkedInAt), selectedDate))
+      .map((visit) => visit.leadId),
+  );
+  const displayList = dateMode === "day"
+    ? searchedList.filter((lead) => visitedLeadIds.has(lead.id))
+    : searchedList;
+
+  const countsByDay = useMemo(() => {
+    const relevantIds = new Set((tab === "prospects" ? prospects : leads).map((lead) => lead.id));
+    const idsByDay = new Map<string, Set<number>>();
+    for (const visit of visits ?? []) {
+      if (!visit.checkedInAt || !relevantIds.has(visit.leadId)) continue;
+      const key = toLocalDateString(new Date(visit.checkedInAt));
+      if (!idsByDay.has(key)) idsByDay.set(key, new Set());
+      idsByDay.get(key)!.add(visit.leadId);
+    }
+    return new Map(Array.from(idsByDay, ([key, ids]) => [key, ids.size]));
+  }, [leads, prospects, tab, visits]);
+
   // Moving between companies and closing replace history; only the first open pushes.
   const openLead = (lead: FullSalesLead) => setLocation(`/leads/${lead.id}`, { replace: routeId != null });
-  const closeLead = useCallback(() => setLocation("/leads", { replace: true }), [setLocation]);
+  const closeLead = useCallback(() => setLocation(tab === "prospects" ? "/leads/prospects" : "/leads", { replace: true }), [setLocation, tab]);
+
+  const changeTab = (next: "leads" | "prospects") => {
+    setTab(next);
+    setDateMode("all");
+    setLeadLookupSearch("");
+    setLocation(next === "prospects" ? "/leads/prospects" : "/leads");
+  };
+
+  const changeProspectMode = (next: "saved" | "prospecting") => {
+    setLocation(next === "prospecting" ? "/leads/prospecting" : "/leads/prospects");
+  };
 
   const handleDeleteLead = async () => {
     if (!leadPendingDelete) return;
@@ -539,6 +614,93 @@ export function XpotLeads() {
     { id: "prospects" as const, label: t("tabProspects"), count: prospects.length },
   ];
 
+  const PROSPECT_MODES = [
+    { id: "saved" as const, label: t("savedProspects"), count: prospects.length },
+    { id: "prospecting" as const, label: t("prospecting") },
+  ];
+
+  const dateLabel = dayOffset === 0
+    ? t("today")
+    : selectedDate.toLocaleDateString(t.locale, { weekday: "short", month: "short", day: "numeric" });
+
+  const dateFilter = (
+    <div
+      className="space-y-3 rounded-2xl px-3 py-3 lg:flex lg:items-center lg:gap-4 lg:space-y-0"
+      style={{ background: "rgba(255,255,255,0.035)", border: "1px solid rgba(255,255,255,0.07)" }}
+    >
+      <Segmented
+        className="lg:w-72 lg:shrink-0"
+        items={[
+          { id: "all" as const, label: t("allDates"), count: searchedList.length },
+          { id: "day" as const, label: t("byDate"), count: displayList.length },
+        ]}
+        value={dateMode}
+        onChange={setDateMode}
+      />
+
+      {dateMode === "day" && (
+        <div className="relative flex items-center justify-between gap-2 lg:flex-1 lg:justify-center lg:gap-4">
+          <button
+            type="button"
+            onClick={() => setDayOffset((offset) => offset - 1)}
+            aria-label={t("previousDay")}
+            className="flex h-8 w-8 items-center justify-center rounded-xl text-white/40 transition-colors hover:bg-white/8 hover:text-white/80"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => (isDesktop ? setCalendarOpen((open) => !open) : dateInputRef.current?.showPicker())}
+            aria-expanded={isDesktop ? calendarOpen : undefined}
+            aria-label={t("pickDate")}
+            className="relative flex flex-col items-center gap-0.5 rounded-xl px-3 py-1 hover:bg-white/[0.05]"
+          >
+            <span className="text-sm font-semibold text-white">{dateLabel}</span>
+            <span className="text-[11px] text-white/35">{t.plural("companyCount", displayList.length)}</span>
+            <input
+              ref={dateInputRef}
+              type="date"
+              max={toLocalDateString(today)}
+              value={toLocalDateString(selectedDate)}
+              onChange={handleDateChange}
+              className="pointer-events-none absolute h-0 w-0 opacity-0"
+            />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setDayOffset((offset) => Math.min(0, offset + 1))}
+            disabled={dayOffset === 0}
+            aria-label={t("nextDay")}
+            className="flex h-8 w-8 items-center justify-center rounded-xl text-white/40 transition-colors hover:bg-white/8 hover:text-white/80 disabled:cursor-not-allowed disabled:opacity-20"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+
+          {isDesktop && calendarOpen && (
+            <>
+              <button type="button" aria-hidden tabIndex={-1} className="fixed inset-0 z-30 cursor-default" onClick={() => setCalendarOpen(false)} />
+              <div
+                className="absolute left-1/2 top-full z-40 mt-2 w-72 -translate-x-1/2 rounded-2xl p-3 shadow-2xl"
+                style={{ background: "#0e1424", border: "1px solid rgba(255,255,255,0.1)" }}
+              >
+                <MiniCalendar
+                  value={selectedDate}
+                  onChange={(day) => { pickDay(day); setCalendarOpen(false); }}
+                  counts={countsByDay}
+                  max={today}
+                  locale={t.locale}
+                  labels={{ prev: t("previousMonth"), next: t("nextMonth") }}
+                />
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
   const emptyStates = (
     <>
       {/* Empty state for prospects */}
@@ -566,6 +728,14 @@ export function XpotLeads() {
           </button>
         </EmptyState>
       )}
+      {dateMode === "day" && searchedList.length > 0 && displayList.length === 0 && !leadLookupSearch && (
+        <EmptyState
+          icon={CalendarDays}
+          title={t("noCompaniesOnDate")}
+          hint={t("chooseAnotherDate")}
+          cardStyle={GLASS}
+        />
+      )}
       {/* Search returned nothing */}
       {displayList.length === 0 && leadLookupSearch && (
         <EmptyState icon={Search} title={t("noResults", { query: leadLookupSearch })} cardStyle={GLASS} />
@@ -573,11 +743,21 @@ export function XpotLeads() {
     </>
   );
 
+  if (prospecting) {
+    return (
+      <div className="space-y-4">
+        {!prospectingSummary ? <Segmented items={TABS} value="prospects" onChange={changeTab} className="lg:w-80" /> : null}
+        {!prospectingSummary ? <Segmented items={PROSPECT_MODES} value="prospecting" onChange={changeProspectMode} className="lg:w-80" /> : null}
+        <ProspectingRoute />
+      </div>
+    );
+  }
+
   return (
     <>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
         {/* Sub-tabs */}
-        <Segmented items={TABS} value={tab} onChange={setTab} className="lg:w-80 lg:shrink-0" />
+        <Segmented items={TABS} value={tab} onChange={changeTab} className="lg:w-80 lg:shrink-0" />
 
         {/* Search + actions */}
         <div className="flex flex-1 gap-2">
@@ -623,6 +803,12 @@ export function XpotLeads() {
           </button>
         </div>
       </div>
+
+      {tab === "prospects" && (
+        <Segmented items={PROSPECT_MODES} value="saved" onChange={changeProspectMode} className="mt-4 lg:w-80" />
+      )}
+
+      {tab === "leads" && <div className="mt-4">{dateFilter}</div>}
 
       {isDesktop ? (
         <MasterDetail
@@ -688,7 +874,7 @@ export function XpotLeads() {
         isProspect={actionLead?.status === "prospect"}
         onClose={() => setActionLead(null)}
         onSell={() => actionLead && setSalesLead(actionLead)}
-        onCheckIn={() => actionLead && setLocation(`/check-in?leadId=${actionLead.id}`)}
+        onCheckIn={() => actionLead && setLocation(`/leads/prospecting?leadId=${actionLead.id}`)}
         onPromote={() => actionLead && void handlePromote(actionLead)}
         onSyncGhl={() => actionLead && void handleSyncGhl(actionLead)}
         onDelete={() => actionLead && setLeadPendingDelete(actionLead)}

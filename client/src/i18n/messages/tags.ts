@@ -6,8 +6,23 @@ import type { Dictionary } from "../index";
 const en = {
   // Navigation
   navHome: "Dashboard",
+  navCustomers: "Customers",
   navPieces: "My pieces",
   navDirect: "Review link",
+
+  // Customers
+  customersTitle: "Customers",
+  customersCount_one: "{count} customer with pieces",
+  customersCount_other: "{count} customers with pieces",
+  customersSearch: "Search customers",
+  customersEmpty: "No customers yet",
+  customersEmptyHint: "Customers appear here after you sell or link a piece.",
+  customersNoMatch: "No customers match this search.",
+  customersPieces: "Pieces",
+  customersLive: "Live",
+  customersScans30: "Scans (30 days)",
+  customersViewPieces: "View pieces",
+  customerFallback: "Customer #{id}",
 
   // Home
   homeHello: "Hi, {name}",
@@ -372,8 +387,22 @@ export const tagsMessages: Dictionary<typeof en> = {
   en,
   pt: {
     navHome: "Painel",
+    navCustomers: "Clientes",
     navPieces: "Minhas peças",
     navDirect: "Link de review",
+
+    customersTitle: "Clientes",
+    customersCount_one: "{count} cliente com peças",
+    customersCount_other: "{count} clientes com peças",
+    customersSearch: "Buscar clientes",
+    customersEmpty: "Nenhum cliente ainda",
+    customersEmptyHint: "Os clientes aparecem aqui depois que você vende ou vincula uma peça.",
+    customersNoMatch: "Nenhum cliente corresponde à busca.",
+    customersPieces: "Peças",
+    customersLive: "No ar",
+    customersScans30: "Leituras (30 dias)",
+    customersViewPieces: "Ver peças",
+    customerFallback: "Cliente #{id}",
 
     homeHello: "Olá, {name}",
     homeTitle: "Suas peças",
@@ -718,8 +747,22 @@ export const tagsMessages: Dictionary<typeof en> = {
   },
   es: {
     navHome: "Panel",
+    navCustomers: "Clientes",
     navPieces: "Mis piezas",
     navDirect: "Enlace de reseña",
+
+    customersTitle: "Clientes",
+    customersCount_one: "{count} cliente con piezas",
+    customersCount_other: "{count} clientes con piezas",
+    customersSearch: "Buscar clientes",
+    customersEmpty: "Todavía no hay clientes",
+    customersEmptyHint: "Los clientes aparecen aquí después de vender o vincular una pieza.",
+    customersNoMatch: "Ningún cliente coincide con la búsqueda.",
+    customersPieces: "Piezas",
+    customersLive: "Activas",
+    customersScans30: "Escaneos (30 días)",
+    customersViewPieces: "Ver piezas",
+    customerFallback: "Cliente #{id}",
 
     homeHello: "Hola, {name}",
     homeTitle: "Tus piezas",

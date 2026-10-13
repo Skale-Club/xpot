@@ -92,6 +92,8 @@ export const VISITS_ONLY_PATHS = [
   "/tasks",
   "/sync",
   "/map",
+  "/daily-route",
+  "/notifications",
   "/xphere",
   "/products",
   "/sales",

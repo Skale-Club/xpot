@@ -49,6 +49,17 @@ export function createMapRouter() {
     const leadLat = num(req.query.leadLat);
     const leadLng = num(req.query.leadLng);
     const hasLead = leadLat !== null && leadLng !== null;
+    const routeStops = typeof req.query.stops === "string"
+      ? req.query.stops.split(";").slice(0, 18).flatMap((pair) => {
+        const [rawLat, rawLng] = pair.split(",");
+        const stopLat = Number(rawLat);
+        const stopLng = Number(rawLng);
+        return Number.isFinite(stopLat) && Number.isFinite(stopLng) ? [{ lat: stopLat, lng: stopLng }] : [];
+      })
+      : [];
+    const routePolyline = typeof req.query.polyline === "string" && req.query.polyline.length <= 12_000
+      ? req.query.polyline
+      : null;
 
     const width = Math.min(640, Math.max(120, num(req.query.w) ?? 400));
     const height = Math.min(640, Math.max(80, num(req.query.h) ?? 170));
@@ -60,10 +71,20 @@ export function createMapRouter() {
     params.set("maptype", "roadmap");
     // Rep pin (blue). Google auto-frames when center/zoom are omitted, which is
     // what we want as soon as there are two pins to fit.
-    params.append("markers", `size:mid|color:0x3b82f6|${lat},${lng}`);
+    if (routeStops.length) {
+      routeStops.forEach((stop, index) => {
+        const label = index < 9 ? `|label:${index + 1}` : "";
+        params.append("markers", `size:mid|color:0x6366f1${label}|${stop.lat},${stop.lng}`);
+      });
+      params.append("path", routePolyline
+        ? `color:0x60a5facc|weight:4|enc:${routePolyline}`
+        : `color:0x60a5facc|weight:4|${routeStops.map((stop) => `${stop.lat},${stop.lng}`).join("|")}`);
+    } else {
+      params.append("markers", `size:mid|color:0x3b82f6|${lat},${lng}`);
+    }
     if (hasLead) {
       params.append("markers", `size:mid|color:0x6366f1|label:V|${leadLat},${leadLng}`);
-    } else {
+    } else if (!routeStops.length) {
       params.set("center", `${lat},${lng}`);
       params.set("zoom", String(Math.min(20, Math.max(1, Math.round(num(req.query.zoom) ?? 16)))));
     }

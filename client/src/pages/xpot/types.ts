@@ -9,6 +9,8 @@ import type {
   SalesTask,
   SalesSyncEvent,
   SalesAppSettings,
+  SalesDailyRoute,
+  SalesDailyRouteStop,
 } from "#shared/schema.js";
 
 export type {
@@ -22,6 +24,13 @@ export type {
   SalesTask,
   SalesSyncEvent,
   SalesAppSettings,
+  SalesDailyRoute,
+  SalesDailyRouteStop,
+};
+
+export type DailyRouteBundle = {
+  route: SalesDailyRoute;
+  stops: SalesDailyRouteStop[];
 };
 
 export type FullSalesLead = SalesLead & {
@@ -51,6 +60,15 @@ export type GooglePlaceResult = {
   placeId: string;
   lat?: number;
   lng?: number;
+};
+
+/** Live reputation details loaded from the Google Place linked to a lead. */
+export type GoogleBusinessProfile = {
+  connected: boolean;
+  rating: number | null;
+  reviewCount: number | null;
+  mapsUrl: string | null;
+  openNow: boolean | null;
 };
 
 export type SalesLeadPayload = {

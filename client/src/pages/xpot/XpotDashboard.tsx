@@ -1,6 +1,5 @@
 import { MapPinned, DollarSign, Target, Clock3, Footprints, Activity, AlertTriangle, RefreshCw } from "lucide-react";
 import { AreaChart, Area, XAxis, Tooltip, ResponsiveContainer, LabelList } from "recharts";
-import { ShellHeader } from "@/components/xpot/ShellHeader";
 import { useXpotQueries } from "./hooks/useXpotQueries";
 import { useSyncStatus } from "./hooks/useSyncStatus";
 import { VisitRow } from "./components/VisitRow";
@@ -10,6 +9,10 @@ import { useT } from "@/i18n";
 import { dashboardMessages } from "@/i18n/messages/dashboard";
 import { EmptyState } from "@/components/xpot/EmptyState";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
+import { useLocation } from "wouter";
+import { shellMessages } from "@/i18n/messages/shell";
+import { Segmented } from "@/components/xpot/Segmented";
+import { XpotVisits } from "./XpotVisits";
 
 const METRIC_CARDS = [
   {
@@ -42,7 +45,7 @@ const METRIC_CARDS = [
   },
 ] as const;
 
-export function XpotDashboard() {
+function DashboardOverview() {
   const { dashboardQuery, setLocation } = useXpotQueries();
   const t = useT(dashboardMessages);
   const metrics = dashboardQuery.data?.metrics;
@@ -211,12 +214,6 @@ export function XpotDashboard() {
 
   return (
     <div className="space-y-6">
-      {/* The person and the app-wide buttons are the phone's shell header (ShellHeader in
-          every module's header); on desktop the sidebar has the buttons, so only the greeting. */}
-      <div className="hidden lg:block">
-        <ShellHeader module="visits" actions={false} />
-      </div>
-
       {/* Metric cards */}
       <div className="grid grid-cols-4 gap-2 lg:gap-4">
         {METRIC_CARDS.map(({ labelKey, key, icon: Icon, gradient, glow }) => {
@@ -287,6 +284,28 @@ export function XpotDashboard() {
           {recentBlock}
         </>
       )}
+    </div>
+  );
+}
+
+export function XpotDashboard() {
+  const [location, navigate] = useLocation();
+  const t = useT(shellMessages);
+  const view = location.startsWith("/dashboard/history") || location.startsWith("/visits") ? "history" : "overview";
+
+  return (
+    <div className="space-y-6">
+      <Segmented
+        items={[
+          { id: "overview" as const, label: t("tabDashboard") },
+          { id: "history" as const, label: t("tabVisits") },
+        ]}
+        value={view}
+        onChange={(next) => navigate(next === "history" ? "/dashboard/history" : "/dashboard")}
+        className="lg:w-80"
+      />
+
+      {view === "history" ? <XpotVisits basePath="/dashboard/history" /> : <DashboardOverview />}
     </div>
   );
 }

@@ -434,7 +434,7 @@ export function VisitDeleteConfirm({ visitId, open, onOpenChange, onDeleted }: {
 
 /**
  * A visit card. On the phone it opens the visit in a dialog; on desktop it
- * goes to /visits/:id, where the visits screen shows it beside the list.
+ * goes to the History view inside Dashboard, where the visit opens beside the list.
  */
 export function VisitRow({ visit }: { visit: VisitLike }) {
   const [open, setOpen] = useState(false);
@@ -447,7 +447,7 @@ export function VisitRow({ visit }: { visit: VisitLike }) {
     <>
       <button
         type="button"
-        onClick={() => (isDesktop ? navigate(`/visits/${visit.id}`) : setOpen(true))}
+        onClick={() => (isDesktop ? navigate(`/dashboard/history/${visit.id}`) : setOpen(true))}
         className="w-full rounded-2xl p-4 text-left transition-all"
         style={{
           background: "rgba(255,255,255,0.04)",

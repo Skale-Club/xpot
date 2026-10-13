@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   Building2,
   MapPinned,
@@ -18,6 +19,10 @@ import {
   Youtube,
   Link2,
   Nfc,
+  DollarSign,
+  Mic2,
+  CircleCheck,
+  type LucideIcon,
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { useXpotModules } from "@/components/ModuleSwitch";
@@ -31,7 +36,6 @@ import { useVisits } from "./hooks/useVisits";
 import { ConfirmSlider } from "./ConfirmSlider";
 import { usePlaceSearch } from "./usePlaceSearch";
 import { findMatchingLead, formatDateTime } from "./utils";
-import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/i18n";
 import { checkinMessages } from "@/i18n/messages/checkin";
@@ -41,45 +45,124 @@ import { EditLeadDialog } from "./components/EditLeadDialog";
 import { VoiceRecorder } from "./components/VoiceRecorder";
 import { VisitRow } from "./components/VisitRow";
 import { LiveMap } from "./components/LiveMap";
-import { InlineField } from "./components/InlineField";
 import { StatusPicker } from "./components/VisitStatus";
 import type { VisitStatus } from "./components/VisitStatus";
-import type { FullSalesLead, SalesLead } from "./types";
+import type { FullSalesLead, GoogleBusinessProfile, SalesLead } from "./types";
 import { LeadSalesPanel } from "./components/sales/LeadSalesPanel";
 import { VisitActionsPanel } from "./components/sales/VisitActions";
 import { GLASS_RAISED } from "@/components/xpot/surface";
-import { useIsComputer } from "@/hooks/use-is-desktop";
-import { ContinueOnPhone } from "@/pages/tags/ContinueOnPhone";
-import { ModuleBadge } from "@/components/xpot/ModuleBadge";
 import { maskUsPhoneInput } from "./phoneInput";
 
-function ActiveLeadInfo({ lead, onSaved }: { lead: SalesLead; onSaved: () => void }) {
-  const { toast } = useToast();
-  const t = useT(checkinMessages);
-  const [fields, setFields] = useState({
-    name: lead.name || "",
-    phone: lead.phone || "",
-    email: lead.email || "",
-    website: lead.website || "",
-    industry: lead.industry || "",
-  });
+type VisitLead = SalesLead & Partial<Pick<FullSalesLead, "locations" | "openOpportunities" | "unitsOnShelf">>;
 
-  function saveField(key: keyof typeof fields, value: string) {
-    setFields((prev) => ({ ...prev, [key]: value }));
-    apiRequest("PATCH", `/api/xpot/leads/${lead.id}`, { [key]: value || undefined })
-      .then(() => { toast({ title: t("saved"), variant: "success" }); onSaved(); queryClient.invalidateQueries({ queryKey: ["/api/xpot/me"] }); })
-      .catch((err: Error) => toast({ title: t("saveFailed"), description: err.message, variant: "destructive" }));
-  }
+function BriefMetric({ label, value, google }: { label: string; value: string; google?: boolean }) {
+  return (
+    <div className="min-w-0 px-1.5 py-2.5 text-center">
+      <div className="flex min-h-5 items-center justify-center gap-1 text-base font-extrabold tabular-nums text-white">
+        {google && <GoogleLogo className="h-3.5 w-3.5 shrink-0" />}
+        <span className="truncate">{value}</span>
+      </div>
+      <div className="mt-0.5 text-[9px] font-semibold uppercase leading-tight tracking-[0.08em] text-white/35">{label}</div>
+    </div>
+  );
+}
+
+function VisitAction({ icon: Icon, title, hint, onClick, tone = "indigo", testId }: {
+  icon: LucideIcon;
+  title: string;
+  hint: string;
+  onClick: () => void;
+  tone?: "indigo" | "violet" | "emerald";
+  testId?: string;
+}) {
+  const palette = tone === "violet"
+    ? "border-violet-400/20 bg-violet-400/[0.07] text-violet-300"
+    : tone === "emerald"
+      ? "border-emerald-400/20 bg-emerald-400/[0.07] text-emerald-300"
+      : "border-indigo-400/20 bg-indigo-400/[0.07] text-indigo-300";
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex min-h-[66px] min-w-0 items-center gap-2.5 rounded-2xl border p-3 text-left transition-transform active:scale-[0.98] ${palette}`}
+      data-testid={testId}
+    >
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/[0.07]">
+        <Icon className="h-[18px] w-[18px]" />
+      </span>
+      <span className="min-w-0">
+        <strong className="block truncate text-sm font-bold text-white">{title}</strong>
+        <span className="mt-0.5 block truncate text-[10px] text-white/40">{hint}</span>
+      </span>
+    </button>
+  );
+}
+
+function ActiveLeadInfo({ lead, profile, profileLoading }: { lead: VisitLead; profile?: GoogleBusinessProfile; profileLoading: boolean }) {
+  const t = useT(checkinMessages);
+  const location = lead.locations?.[0];
+  const address = location ? [location.addressLine1, location.city, location.state].filter(Boolean).join(", ") : "";
+  const number = new Intl.NumberFormat(t.locale);
+  const unknown = profileLoading ? "..." : t("notAvailable");
+  const rating = profile?.rating != null ? profile.rating.toFixed(1) : unknown;
+  const reviews = profile?.reviewCount != null ? number.format(profile.reviewCount) : unknown;
+  const shelf = lead.unitsOnShelf != null ? number.format(lead.unitsOnShelf) : t("notAvailable");
+  const deals = lead.openOpportunities != null ? number.format(lead.openOpportunities) : t("notAvailable");
+  const websiteHref = lead.website ? (lead.website.startsWith("http") ? lead.website : `https://${lead.website}`) : null;
+  const mapsHref = profile?.mapsUrl || (address ? `https://maps.google.com/?q=${encodeURIComponent(address)}` : null);
 
   return (
-    <div className="space-y-2.5">
-      <InlineField label="" large value={fields.name} onSave={(v) => saveField("name", v)} />
-      <InlineField label={t("fieldPhone")} value={fields.phone} onSave={(v) => saveField("phone", v)} />
-      <InlineField label={t("fieldEmail")} value={fields.email} onSave={(v) => saveField("email", v)} />
-      <InlineField label={t("fieldWebsite")} value={fields.website} onSave={(v) => saveField("website", v)} />
-      <InlineField label={t("fieldIndustry")} value={fields.industry} onSave={(v) => saveField("industry", v)} />
+    <div>
+      <div className="pr-9">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="min-w-0 text-xl font-extrabold leading-tight tracking-tight text-white">{lead.name}</h2>
+          {lead.industry && <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] font-semibold text-white/45">{lead.industry}</span>}
+          {profile?.openNow != null && (
+            <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${profile.openNow ? "bg-emerald-400/10 text-emerald-300" : "bg-amber-400/10 text-amber-300"}`}>
+              {profile.openNow ? t("businessOpen") : t("businessClosed")}
+            </span>
+          )}
+        </div>
+        {address && mapsHref && (
+          <a href={mapsHref} target="_blank" rel="noreferrer" className="mt-1.5 flex min-w-0 items-center gap-1.5 text-xs text-indigo-300/80 hover:text-indigo-200">
+            <MapPinned className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">{address}</span>
+          </a>
+        )}
+      </div>
+
+      <div className="mt-3 grid grid-cols-4 divide-x divide-white/[0.07] rounded-xl bg-black/15" data-testid="visit-brief-metrics">
+        <BriefMetric label={t("briefRating")} value={rating} google />
+        <BriefMetric label={t("briefReviews")} value={reviews} google />
+        <BriefMetric label={t("briefOnShelf")} value={shelf} />
+        <BriefMetric label={t("briefOpenDeals")} value={deals} />
+      </div>
+
+      {(lead.phone || lead.email || websiteHref) && (
+        <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+          {lead.phone && (
+            <a href={`tel:${lead.phone.replace(/[^0-9+]/g, "")}`} className="flex min-w-0 items-center gap-2 rounded-xl bg-white/[0.035] px-3 py-2 text-indigo-200/80">
+              <Phone className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">{lead.phone}</span>
+            </a>
+          )}
+          {websiteHref && (
+            <a href={websiteHref} target="_blank" rel="noreferrer" className="flex min-w-0 items-center gap-2 rounded-xl bg-white/[0.035] px-3 py-2 text-indigo-200/80">
+              <Globe className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">{lead.website}</span>
+            </a>
+          )}
+          {lead.email && (
+            <a href={`mailto:${lead.email}`} className="col-span-2 flex min-w-0 items-center gap-2 rounded-xl bg-white/[0.035] px-3 py-2 text-indigo-200/80">
+              <Mail className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">{lead.email}</span>
+            </a>
+          )}
+        </div>
+      )}
+
       {((lead as any).socialUrls as Array<{platform: string, url: string}>)?.length > 0 && (
-        <div className="flex items-center gap-2 pt-2 mt-2 border-t border-white/5">
+        <div className="mt-3 flex items-center gap-2">
           {((lead as any).socialUrls as Array<{platform: string, url: string}>).map((social, i) => {
             const Icon = social.platform === "instagram" ? Instagram
               : social.platform === "linkedin" ? Linkedin
@@ -89,7 +172,7 @@ function ActiveLeadInfo({ lead, onSaved }: { lead: SalesLead; onSaved: () => voi
               : Link2;
             const url = social.url.startsWith("http") ? social.url : `https://${social.url}`;
             return (
-              <a key={i} href={url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="flex h-8 w-8 items-center justify-center rounded-full bg-white/5 text-indigo-300 hover:bg-indigo-500/20 hover:text-indigo-200 transition-colors">
+              <a key={i} href={url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="flex h-8 w-8 items-center justify-center rounded-full bg-white/5 text-indigo-300 transition-colors hover:bg-indigo-500/20 hover:text-indigo-200">
                 <Icon className="h-4 w-4" />
               </a>
             );
@@ -153,7 +236,7 @@ function CreateLeadDialog({ open, onOpenChange, initialName, onCreated }: {
         website: form.website || undefined,
         industry: form.industry || undefined,
         source: "manual",
-        status: "lead",
+        status: "prospect",
         primaryLocation: form.address ? {
           label: "Main",
           addressLine1: form.address || undefined,
@@ -399,15 +482,13 @@ export function XpotCheckIn() {
   const [, navigate] = useLocation();
   const canSellTags = useXpotModules().includes("tags");
 
-  // Follow the rep while this screen is open; the provider stops the watch on
-  // unmount so the GPS radio isn't pinned on the other tabs.
-  // Not on desktop: it never starts a check-in, so it should not ask for location.
-  const isDesktop = useIsComputer();
+  // Follow the rep while this screen is open on phones and computers. Modern
+  // desktop browsers can provide location too, and the same geofence validation
+  // decides whether the check-in is valid.
   useEffect(() => {
-    if (isDesktop) return;
     setLiveTracking(true);
     return () => setLiveTracking(false);
-  }, [setLiveTracking, isDesktop]);
+  }, [setLiveTracking]);
 
   // Only a lead with real coordinates can be pinned on the map.
   const selectedLeadLocation = (() => {
@@ -420,6 +501,17 @@ export function XpotCheckIn() {
   const [editLeadOpen, setEditLeadOpen] = useState(false);
   const [checkoutStatus, setCheckoutStatus] = useState<VisitStatus>("completed");
   const [createLeadDialogOpen, setCreateLeadDialogOpen] = useState(false);
+  const [activeVisitPanel, setActiveVisitPanel] = useState<"sales" | "note" | "checkout" | null>(null);
+  const activeLeadDetails: VisitLead | null = activeVisit?.lead
+    ? (leadsQuery.data?.find((lead) => lead.id === activeVisit.lead!.id) ?? activeVisit.lead)
+    : null;
+  const googleProfileQuery = useQuery<GoogleBusinessProfile>({
+    queryKey: ["/api/xpot/leads", activeLeadDetails?.id, "google-profile"],
+    enabled: Boolean(activeLeadDetails?.id && activeLeadDetails.googlePlaceId),
+    staleTime: 15 * 60_000,
+    retry: 1,
+    refetchOnWindowFocus: false,
+  });
 
   useEffect(() => {
     if (!activeVisit?.checkedInAt) {
@@ -440,20 +532,19 @@ export function XpotCheckIn() {
     ? `${elapsedHours}:${String(elapsedMins).padStart(2, "0")}:${String(elapsedSecs).padStart(2, "0")}`
     : `${elapsedMins}:${String(elapsedSecs).padStart(2, "0")}`;
 
+  const uploadVisitNote = async ({ audioBlob, durationSeconds }: { audioBlob: Blob; durationSeconds: number }) => {
+    const reader = new FileReader();
+    const audioData = await new Promise<string>((resolve) => {
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.readAsDataURL(audioBlob);
+    });
+    const result = await uploadAudioMutation.mutateAsync({ audioData, durationSeconds } as any);
+    const heard = (result as { visitStatus?: string | null } | undefined)?.visitStatus;
+    if (heard && heard !== "completed") setCheckoutStatus(heard as VisitStatus);
+  };
+
   // A visit already in progress stays reachable even if the fix drops — the rep
   // must always be able to check out. The gate only guards starting one.
-  if (!activeVisit && isDesktop) {
-    return (
-      <div className="rounded-3xl p-6" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)" }} data-testid="desktop-checkin">
-        <ContinueOnPhone
-          url={`${window.location.origin}/check-in${window.location.search}`}
-          title={t("desktopCheckInTitle")}
-          hint={t("desktopCheckInHint")}
-        />
-      </div>
-    );
-  }
-
   if (!activeVisit && !hasLocation) {
     return (
       <LocationGate
@@ -467,9 +558,9 @@ export function XpotCheckIn() {
 
   if (activeVisit) return (
     <div className="space-y-4">
-      {/* Active visit card — immersive */}
+      {/* Active visit brief: customer context first, visit controls after it. */}
       <div
-        className="relative overflow-hidden rounded-3xl p-5 space-y-5"
+        className="relative space-y-3 overflow-hidden rounded-3xl p-4"
         style={{
           background: "linear-gradient(160deg, rgba(59,130,246,0.15) 0%, rgba(99,102,241,0.08) 100%)",
           border: "1px solid rgba(99,102,241,0.25)",
@@ -482,23 +573,23 @@ export function XpotCheckIn() {
           style={{ background: "radial-gradient(circle, #6366f1 0%, transparent 70%)" }}
         />
 
-        {/* Timer */}
-        <div className="relative flex flex-col items-center gap-1 pt-1">
-          <div className="flex items-center gap-1.5 text-indigo-400/70">
-            <Timer className="h-3.5 w-3.5" />
-            <span className="text-[10px] font-medium uppercase tracking-[0.25em]">{t("visitInProgress")}</span>
-          </div>
-          <div
-            className="text-5xl font-mono font-bold tabular-nums text-white"
-            style={{ textShadow: "0 0 30px rgba(99,102,241,0.5)" }}
-          >
-            {elapsedDisplay}
-          </div>
-          {activeVisit.checkedInAt && (
-            <div className="text-[11px] text-white/30">
-              {t("startedAt", { time: formatDateTime(activeVisit.checkedInAt) })}
+        {/* The timer stays visible but no longer consumes the customer's briefing area. */}
+        <div className="relative flex items-center justify-between gap-4 rounded-2xl bg-black/10 px-3.5 py-2.5">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 text-indigo-300/80">
+              <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.7)]" />
+              <span className="truncate text-[10px] font-bold uppercase tracking-[0.18em]">{t("visitInProgress")}</span>
             </div>
-          )}
+            {activeVisit.checkedInAt && (
+              <div className="mt-1 truncate text-[10px] text-white/30">{t("startedAt", { time: formatDateTime(activeVisit.checkedInAt) })}</div>
+            )}
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <Timer className="h-4 w-4 text-indigo-300/60" />
+            <div className="font-mono text-2xl font-bold tabular-nums text-white" style={{ textShadow: "0 0 24px rgba(99,102,241,0.45)" }}>
+              {elapsedDisplay}
+            </div>
+          </div>
         </div>
 
         {/* Company info */}
@@ -516,87 +607,76 @@ export function XpotCheckIn() {
               <PencilLine className="h-3.5 w-3.5" />
             </button>
           )}
-          {activeVisit.lead ? (
-            <ActiveLeadInfo lead={activeVisit.lead} onSaved={() => invalidateXpotData()} />
+          {activeLeadDetails ? (
+            <ActiveLeadInfo
+              lead={activeLeadDetails}
+              profile={googleProfileQuery.data}
+              profileLoading={googleProfileQuery.isLoading && Boolean(activeLeadDetails.googlePlaceId)}
+            />
           ) : (
             <div className="text-center text-base font-semibold text-white">{t("leadNumber", { id: activeVisit.leadId })}</div>
           )}
         </div>
 
-        {/* Sell a QR/NFC piece to the business being visited */}
-        {canSellTags && activeVisit.lead && (
-          <button
-            type="button"
-            onClick={() => {
-              const lead = activeVisit.lead!;
-              setSellTo({ leadId: lead.id, name: lead.name, placeId: lead.googlePlaceId ?? null });
-              navigate("/tags");
-            }}
-            className="relative flex w-full items-center gap-3 rounded-2xl border border-violet-400/25 bg-violet-400/[0.08] p-3 text-left transition-transform active:scale-[0.98]"
-            style={{ WebkitTapHighlightColor: "transparent" }}
-            data-testid="button-sell-piece"
-          >
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-400/15 text-violet-300">
-              <Nfc className="h-5 w-5" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="flex items-center gap-2 text-sm font-bold text-white">
-                {t("sellPiece")}
-                <ModuleBadge module="tags" />
-              </span>
-              <span className="block text-xs text-white/45">{t("sellPieceHint")}</span>
-            </span>
-          </button>
-        )}
-
-        {/* Sales — the point of the visit. Everything created here is linked
-            to this visit, so a sale or a settlement carries its own evidence. */}
-        {activeVisit.lead && (
-          <div className="relative rounded-2xl p-4"
-            style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
-            <LeadSalesPanel
-              leadId={activeVisit.lead.id}
-              leadName={activeVisit.lead.name}
-              visitId={activeVisit.id}
-              compact
+        {/* Actions are one tap away, while the visit brief remains fully visible. */}
+        <div className="relative grid grid-cols-2 gap-2">
+          {activeVisit.lead && (
+            <VisitAction icon={DollarSign} title={t("visitSales")} hint={t("visitSalesHint")} onClick={() => setActiveVisitPanel("sales")} />
+          )}
+          <VisitAction icon={Mic2} title={t("visitNote")} hint={t("visitNoteHint")} onClick={() => setActiveVisitPanel("note")} />
+          {canSellTags && activeVisit.lead && (
+            <VisitAction
+              icon={Nfc}
+              title={t("visitTags")}
+              hint={t("visitTagsHint")}
+              tone="violet"
+              testId="button-sell-piece"
+              onClick={() => {
+                const lead = activeVisit.lead!;
+                setSellTo({ leadId: lead.id, name: lead.name, placeId: lead.googlePlaceId ?? null });
+                navigate("/tags");
+              }}
             />
-          </div>
-        )}
-
-        {/* Voice recorder */}
-        <VoiceRecorder
-          onUpload={async ({ audioBlob, durationSeconds }) => {
-            const reader = new FileReader();
-            const audioData = await new Promise<string>((resolve) => {
-              reader.onloadend = () => resolve(reader.result as string);
-              reader.readAsDataURL(audioBlob);
-            });
-            const result = await uploadAudioMutation.mutateAsync({ audioData, durationSeconds } as any);
-            // Pre-select what the note said happened; the rep still confirms at
-            // check-out. "completed" is the default, so only a specific outcome
-            // moves the picker.
-            const heard = (result as { visitStatus?: string | null } | undefined)?.visitStatus;
-            if (heard && heard !== "completed") setCheckoutStatus(heard as VisitStatus);
-          }}
-        />
-
-        {/* Proposals from the voice note — confirm before they are recorded. */}
-        <VisitActionsPanel visitId={activeVisit.id} onApplied={() => invalidateXpotData()} />
-
-        <StatusPicker value={checkoutStatus} onChange={setCheckoutStatus} />
-
-        <ConfirmSlider
-          label={uploadAudioMutation.isPending ? t("uploadInProgress") : t("slideToCheckOut")}
-          helperText=""
-          loading={checkOutMutation.isPending || cancelVisitMutation.isPending || uploadAudioMutation.isPending}
-          disabled={uploadAudioMutation.isPending}
-          onConfirm={() => checkOutMutation.mutate({ status: checkoutStatus })}
-          onCancel={() => cancelVisitMutation.mutate(undefined as any)}
-        />
+          )}
+          <VisitAction icon={CircleCheck} title={t("finishVisit")} hint={t("finishVisitHint")} tone="emerald" onClick={() => setActiveVisitPanel("checkout")} />
+        </div>
       </div>
+
+      {activeVisit.lead && (
+        <Dialog open={activeVisitPanel === "sales"} onOpenChange={(open) => !open && setActiveVisitPanel(null)}>
+          <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-md overflow-y-auto rounded-3xl border border-white/10 bg-[#0d1424] p-5 text-white">
+            <DialogHeader><DialogTitle>{t("visitSales")}</DialogTitle></DialogHeader>
+            <LeadSalesPanel leadId={activeVisit.lead.id} leadName={activeVisit.lead.name} visitId={activeVisit.id} compact />
+          </DialogContent>
+        </Dialog>
+      )}
+
+      <Dialog open={activeVisitPanel === "note"} onOpenChange={(open) => !open && setActiveVisitPanel(null)}>
+        <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-md overflow-y-auto rounded-3xl border border-white/10 bg-[#0d1424] p-5 text-white">
+          <DialogHeader><DialogTitle>{t("visitNote")}</DialogTitle></DialogHeader>
+          <VoiceRecorder onUpload={uploadVisitNote} />
+          <VisitActionsPanel visitId={activeVisit.id} onApplied={() => invalidateXpotData()} />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={activeVisitPanel === "checkout"} onOpenChange={(open) => !open && setActiveVisitPanel(null)}>
+        <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-md overflow-y-auto rounded-3xl border border-white/10 bg-[#0d1424] p-5 text-white">
+          <DialogHeader><DialogTitle>{t("finishVisit")}</DialogTitle></DialogHeader>
+          <StatusPicker value={checkoutStatus} onChange={setCheckoutStatus} />
+          <ConfirmSlider
+            label={uploadAudioMutation.isPending ? t("uploadInProgress") : t("slideToCheckOut")}
+            helperText=""
+            loading={checkOutMutation.isPending || cancelVisitMutation.isPending || uploadAudioMutation.isPending}
+            disabled={uploadAudioMutation.isPending}
+            onConfirm={() => checkOutMutation.mutate({ status: checkoutStatus })}
+            onCancel={() => cancelVisitMutation.mutate(undefined as any)}
+          />
+        </DialogContent>
+      </Dialog>
+
       {activeVisit.lead && (
         <EditLeadDialog
-          lead={activeVisit.lead}
+          lead={activeLeadDetails ?? activeVisit.lead}
           open={editLeadOpen}
           onOpenChange={setEditLeadOpen}
           onSaved={() => invalidateXpotData()}

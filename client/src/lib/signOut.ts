@@ -1,4 +1,5 @@
 import { queryClient } from "@/lib/queryClient";
+import { clearModuleRoutes } from "@/lib/xpot";
 
 /** Ends the Supabase and server sessions, drops cached data and goes to "/". */
 export async function signOut(navigate: (path: string) => void) {
@@ -11,5 +12,6 @@ export async function signOut(navigate: (path: string) => void) {
   }
   await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
   queryClient.clear();
+  clearModuleRoutes();
   navigate("/");
 }

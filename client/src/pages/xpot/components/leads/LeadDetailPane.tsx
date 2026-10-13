@@ -236,7 +236,7 @@ export function LeadDetailPane({
                 {visits.slice(0, 6).map((v) => (
                   <Link
                     key={v.id}
-                    href={`/visits/${v.id}`}
+                    href={`/dashboard/history/${v.id}`}
                     className="flex items-center justify-between gap-3 rounded-xl px-3 py-2 text-xs hover:bg-white/[0.04]"
                   >
                     <span className="text-white/60">

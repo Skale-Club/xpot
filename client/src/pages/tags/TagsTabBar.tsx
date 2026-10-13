@@ -1,4 +1,4 @@
-import { LayoutDashboard, Package, Shield } from "lucide-react";
+import { Building2, LayoutDashboard, Package, Shield } from "lucide-react";
 import { useLocation } from "wouter";
 import { MobileTabBar } from "@/components/xpot/MobileTabBar";
 import { useT } from "@/i18n";
@@ -7,13 +7,14 @@ import { tagsMessages } from "@/i18n/messages/tags";
 import { useViewerAccess } from "@/lib/adminMode";
 import { APP_BASE } from "./lib";
 
-// The Tags module's bottom bar on a phone: Dashboard and My pieces. Writing a
+// The Tags module's bottom bar on a phone: Dashboard, Customers and My pieces. Writing a
 // chip without Xpot (/tags/direct) is a rare case, reached from the dashboard. Managers in admin mode get a fourth
 // tab, Manage (every piece, batches, kits, resellers), which opens /admin/tags
 // and keeps this bar, so managing pieces sits next to working with them.
 
 export const TAGS_NAV = [
   { href: APP_BASE, key: "navHome", icon: LayoutDashboard },
+  { href: `${APP_BASE}/customers`, key: "navCustomers", icon: Building2 },
   { href: `${APP_BASE}/pieces`, key: "navPieces", icon: Package },
 ] as const;
 
@@ -22,6 +23,7 @@ export const TAGS_MANAGE_HREF = "/admin/tags";
 /** Which tab a path belongs to. */
 export function activeTagsTab(path: string): string {
   if (path === TAGS_MANAGE_HREF || path.startsWith(`${TAGS_MANAGE_HREF}/`)) return TAGS_MANAGE_HREF;
+  if (path.startsWith(`${APP_BASE}/customers`)) return `${APP_BASE}/customers`;
   if (path.startsWith(`${APP_BASE}/pieces`)) return `${APP_BASE}/pieces`;
   return APP_BASE;
 }

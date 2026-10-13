@@ -30,6 +30,7 @@ export function createTasksRouter() {
     const task = await storage.createSalesTask({
       ...input,
       repId: actor!.rep.id,
+      createdByRepId: actor!.rep.id,
       status: "pending",
     });
 

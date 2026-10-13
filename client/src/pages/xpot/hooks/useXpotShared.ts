@@ -16,6 +16,8 @@ export function useXpotShared() {
       queryClient.invalidateQueries({ queryKey: ["/api/xpot/sales"] }),
       queryClient.invalidateQueries({ queryKey: ["/api/xpot/consignments"] }),
       queryClient.invalidateQueries({ queryKey: ["/api/xpot/products"] }),
+      queryClient.invalidateQueries({ predicate: (query) => String(query.queryKey[0] ?? "").startsWith("/api/xpot/daily-route") }),
+      queryClient.invalidateQueries({ queryKey: ["/api/xpot/notifications"] }),
     ]);
   };
 

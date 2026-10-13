@@ -26,6 +26,7 @@ const anything = () =>
 
 const storage = anything();
 (storage as any).getSalesRepByUserId = vi.fn(async (userId: string) => REPS.get(userId));
+(storage as any).getLandingPageContent = vi.fn(async () => undefined);
 // Lead 5 belongs to the Tags-only reseller (rep 2).
 (storage as any).getSalesLead = vi.fn(async (id: number) => (id === 5 ? { id: 5, name: "Shop", ownerRepId: 2, status: "prospect" } : undefined));
 vi.mock("../server/storage.js", () => ({ storage }));
@@ -100,13 +101,18 @@ describe("the composed /api/xpot routers", () => {
     }
   });
 
-  it("integrations, branding and Xphere are the global admin's alone", async () => {
-    for (const path of ["/api/xpot/admin/integrations", "/api/xpot/admin/branding", "/api/xpot/admin/xphere"]) {
+  it("integrations, branding, landing content and Xphere are the global admin's alone", async () => {
+    for (const path of ["/api/xpot/admin/integrations", "/api/xpot/admin/branding", "/api/xpot/admin/landing-content", "/api/xpot/admin/xphere"]) {
       expect((await get(appFor("rep"), path)).status, path).toBe(403);
       const manager = await get(appFor("manager"), path);
       expect([manager.status, manager.code], path).toEqual([403, "super_admin_only"]);
       expect((await get(appFor("platform-admin"), path)).status, path).not.toBe(403);
     }
+  });
+
+  it("serves landing content publicly, with a safe empty fallback before first publish", async () => {
+    const response = await get(appFor(null), "/api/landing/pt");
+    expect(response.status).toBe(200);
   });
 
   it("a Tags-only reseller is refused the Visits-only APIs, by the module gate", async () => {

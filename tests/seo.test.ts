@@ -19,7 +19,7 @@ describe("public SEO routes", () => {
 
   it("renders indexable localized metadata and structured data for the landing", () => {
     const head = renderSeoHead("/pt");
-    expect(head).toContain("Xpot — Vendas externas");
+    expect(head).toContain("Xpot | Vendas externas");
     expect(head).toContain('name="robots" content="index, follow, max-image-preview:large"');
     expect(head).toContain('rel="canonical" href="https://xpot.place/pt"');
     expect(head).toContain('hreflang="es" href="https://xpot.place/es"');
@@ -38,7 +38,7 @@ describe("public SEO routes", () => {
 
   it("injects the route head into the Vite template", () => {
     const html = injectSeoHead(`<html lang="en"><head>${SEO_HEAD_MARKER}</head></html>`, "/es/privacy");
-    expect(html).toContain("Política de Privacidad · Xpot");
+    expect(html).toContain("Política de Privacidad | Xpot");
     expect(html).toContain('<html lang="es-US">');
     expect(html).not.toContain(SEO_HEAD_MARKER);
   });

@@ -4,7 +4,7 @@ import type { XpotModule } from "@shared/modules";
 import { useT } from "@/i18n";
 import { shellMessages } from "@/i18n/messages/shell";
 import { useViewerAccess } from "@/lib/adminMode";
-import { MODULE_HOME } from "@/lib/xpot";
+import { moduleEntryPath, rememberModuleRoute } from "@/lib/xpot";
 import { contextOfPath } from "./moduleNav";
 
 // The two sides of the app, kept visibly apart. Settings is the person's own
@@ -17,13 +17,14 @@ const MANAGE_HOME: Record<XpotModule, string> = { visits: "/admin/overview", tag
 /** The shield on a phone header: enters admin mode at this module's management. Only for people who manage. */
 export function AdminModeButton({ module }: { module: XpotModule }) {
   const t = useT(shellMessages);
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
   const { hasAdminAccess, adminMode, setAdminMode } = useViewerAccess();
   if (!hasAdminAccess) return null;
   return (
     <button
       type="button"
       onClick={() => {
+        rememberModuleRoute(module, `${location.split("?")[0]}${window.location.search}`);
         setAdminMode(true);
         navigate(MANAGE_HOME[module]);
       }}
@@ -56,8 +57,10 @@ export function AdminModeSidebarItem({ collapsed }: { collapsed: boolean }) {
     <button
       type="button"
       onClick={() => {
+        const module = context === "tags" ? "tags" : "visits";
+        rememberModuleRoute(module, `${location.split("?")[0]}${window.location.search}`);
         setAdminMode(true);
-        navigate(MANAGE_HOME[context === "tags" ? "tags" : "visits"]);
+        navigate(MANAGE_HOME[module]);
       }}
       title={collapsed ? label : undefined}
       className={`flex h-10 w-full items-center gap-3 rounded-xl text-sm font-medium text-white/50 transition-colors hover:bg-white/[0.04] hover:text-white/85 ${collapsed ? "justify-center px-0" : "px-3"}`}
@@ -74,7 +77,7 @@ function leave(location: string, navigate: (to: string) => void, setAdminMode: (
   setAdminMode(false);
   if (location.startsWith("/admin")) {
     const context = contextOfPath(location);
-    navigate(MODULE_HOME[context === "tags" ? "tags" : "visits"]);
+    navigate(moduleEntryPath(context === "tags" ? "tags" : "visits"));
   }
 }
 

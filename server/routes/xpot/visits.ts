@@ -2,10 +2,12 @@ import { Router } from "express";
 import { storage } from "../../storage.js";
 import { requireXpotUser, ensureXpotRep, isManagerOrAdmin, loadAccessibleLead, listsEveryone } from "./middleware.js";
 import type { SalesVisitStatus } from "#shared/schema/sales.js";
-import { getDistanceMeters, syncVisitToGhl, syncVisitToXphere } from "./helpers.js";
-import { xpotCheckInSchema, xpotCheckOutSchema, xpotVisitNoteUpsertSchema } from "#shared/xpot.js";
+import { getDistanceMeters, syncTaskToGhl, syncVisitToGhl, syncVisitToXphere } from "./helpers.js";
+import { xpotCheckInSchema, xpotCheckOutSchema, xpotVisitNoteUpsertSchema, xpotVisitSummarySchema } from "#shared/xpot.js";
 import { salesStorage } from "../../storage-sales.js";
 import { activeStore, discardFiles, putPrivateFile } from "../../lib/files.js";
+import { DailyRouteError, finishVisitTransaction, getRouteStopForCheckIn, startRouteVisit } from "../../daily-routes.js";
+import { saveVisitSummaryTransaction } from "../../visit-summary.js";
 
 export function createVisitsRouter() {
   const router = Router();
@@ -41,6 +43,16 @@ export function createVisitsRouter() {
       return res.status(409).json({ message: "Rep already has an active visit" });
     }
 
+    const routeContext = input.routeStopId
+      ? await getRouteStopForCheckIn(actor!.rep.id, input.routeStopId, input.leadId)
+      : undefined;
+    if (input.routeStopId && !routeContext) {
+      return res.status(404).json({ code: "route_stop_not_found", message: "Route stop not found" });
+    }
+    if (routeContext && routeContext.stop.status !== "planned") {
+      return res.status(409).json({ code: "route_stop_unavailable", message: "This route stop is no longer available for check-in" });
+    }
+
     const appSettings = await storage.getSalesAppSettings();
     // SEG-05: this only checked that the lead existed, not that it belonged to
     // the rep checking in. Beyond the visit itself the handler promotes the
@@ -49,8 +61,9 @@ export function createVisitsRouter() {
     if (!lead) return;
 
     const locations = await storage.listSalesLeadLocations(input.leadId);
-    const selectedLocation = input.locationId
-      ? locations.find((location) => location.id === input.locationId)
+    const requestedLocationId = routeContext?.stop.locationId ?? input.locationId;
+    const selectedLocation = requestedLocationId
+      ? locations.find((location) => location.id === requestedLocationId)
       : locations.find((location) => location.isPrimary) || locations[0];
 
     let validationStatus: "valid" | "outside_geofence" | "gps_unavailable" | "manual_override" = "gps_unavailable";
@@ -79,32 +92,52 @@ export function createVisitsRouter() {
       return res.status(400).json({ message: "Outside geofence. Manual override reason required." });
     }
 
-    const visit = await storage.createSalesVisit({
+    const visitInput = {
       repId: actor!.rep.id,
       leadId: lead.id,
       locationId: selectedLocation?.id,
-      status: "in_progress",
-      scheduledAt: null,
       checkedInAt: new Date(),
-      checkedOutAt: null,
-      durationSeconds: null,
-      checkInLat: input.lat?.toString(),
-      checkInLng: input.lng?.toString(),
-      checkOutLat: null,
-      checkOutLng: null,
+      lat: input.lat,
+      lng: input.lng,
       distanceFromTargetMeters: distanceFromTargetMeters ?? null,
       gpsAccuracyMeters: input.gpsAccuracyMeters ?? null,
       validationStatus,
       manualOverrideReason: input.manualOverrideReason,
-      source: "field-mobile",
-    });
-
-    // DAT-04: this used to be two sequential UPDATEs on the same row.
-    await storage.updateSalesLead(lead.id, {
-      ...(lead.status === "prospect" ? { status: "lead" as const } : {}),
-      lastVisitAt: visit.checkedInAt,
-      nextVisitDueAt: null,
-    });
+    };
+    let visit;
+    if (routeContext) {
+      try {
+        visit = await startRouteVisit({ ...visitInput, stopId: routeContext.stop.id });
+      } catch (error) {
+        if (error instanceof DailyRouteError) return res.status(error.code === "route_stop_not_found" ? 404 : 409).json({ code: error.code, message: error.message });
+        throw error;
+      }
+    } else {
+      visit = await storage.createSalesVisit({
+        repId: visitInput.repId,
+        leadId: visitInput.leadId,
+        locationId: visitInput.locationId,
+        status: "in_progress",
+        scheduledAt: null,
+        checkedInAt: visitInput.checkedInAt,
+        checkedOutAt: null,
+        durationSeconds: null,
+        checkInLat: visitInput.lat?.toString(),
+        checkInLng: visitInput.lng?.toString(),
+        checkOutLat: null,
+        checkOutLng: null,
+        distanceFromTargetMeters: visitInput.distanceFromTargetMeters,
+        gpsAccuracyMeters: visitInput.gpsAccuracyMeters,
+        validationStatus,
+        manualOverrideReason: visitInput.manualOverrideReason,
+        source: "field-mobile",
+      });
+      await storage.updateSalesLead(lead.id, {
+        ...(lead.status === "prospect" ? { status: "lead" as const } : {}),
+        lastVisitAt: visit.checkedInAt,
+        nextVisitDueAt: null,
+      });
+    }
 
     res.status(201).json({ visit, lead, location: selectedLocation ?? null });
   });
@@ -123,16 +156,16 @@ export function createVisitsRouter() {
     const checkedInAt = visit.checkedInAt ? new Date(visit.checkedInAt) : checkedOutAt;
     const durationSeconds = Math.max(0, Math.round((checkedOutAt.getTime() - checkedInAt.getTime()) / 1000));
 
-    const updated = await storage.updateSalesVisit(visit.id, {
-      status: (input.status as any) || "completed",
+    const updated = await finishVisitTransaction({
+      visitId: visit.id,
+      leadId: visit.leadId,
+      status: (input.status as SalesVisitStatus) || "completed",
       checkedOutAt,
       durationSeconds,
-      checkOutLat: input.lat?.toString(),
-      checkOutLng: input.lng?.toString(),
-    });
-
-    await storage.updateSalesLead(visit.leadId, {
-      lastVisitAt: checkedOutAt,
+      checkOutLat: input.lat,
+      checkOutLng: input.lng,
+      routeStopStatus: "summary_pending",
+      updateLeadLastVisit: true,
     });
 
     res.json(updated);
@@ -164,10 +197,14 @@ export function createVisitsRouter() {
     const checkedInAt = visit.checkedInAt ? new Date(visit.checkedInAt) : checkedOutAt;
     const durationSeconds = Math.max(0, Math.round((checkedOutAt.getTime() - checkedInAt.getTime()) / 1000));
 
-    const updated = await storage.updateSalesVisit(visit.id, {
+    const updated = await finishVisitTransaction({
+      visitId: visit.id,
+      leadId: visit.leadId,
       status: "cancelled",
       checkedOutAt,
       durationSeconds,
+      routeStopStatus: "planned",
+      updateLeadLastVisit: false,
     });
 
     res.json(updated);
@@ -221,6 +258,26 @@ export function createVisitsRouter() {
       ...input,
     });
     res.json(note);
+  });
+
+  router.post("/visits/:id/summary", async (req, res) => {
+    const actor = (req as any).xpotActor as Awaited<ReturnType<typeof ensureXpotRep>>;
+    const visitId = Number(req.params.id);
+    const input = xpotVisitSummarySchema.parse(req.body);
+    const visit = await storage.getSalesVisit(visitId);
+    if (!visit || visit.repId !== actor!.rep.id) return res.status(404).json({ message: "Visit not found" });
+    if (!visit.checkedOutAt) return res.status(409).json({ code: "visit_still_active", message: "Finish the visit before saving its summary" });
+
+    const { note, task } = await saveVisitSummaryTransaction({
+      repId: actor!.rep.id,
+      visitId,
+      leadId: visit.leadId,
+      input,
+    });
+    res.json({ note, task });
+    if (task) syncTaskToGhl(task.id).then(async (result) => {
+      if (result.synced && result.ghlTaskId) await storage.updateSalesTask(task!.id, { ghlTaskId: result.ghlTaskId });
+    }).catch((error) => console.error("[visit summary] task sync failed:", error));
   });
 
   router.post("/visits/:id/audio", async (req, res) => {
