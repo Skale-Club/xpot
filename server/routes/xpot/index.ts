@@ -23,7 +23,6 @@ import { requireVisitsModule, VISITS_ONLY_PATHS } from "./middleware.js";
 import { createFilesRouter } from "./files.js";
 import { createProspectingRouter } from "./prospecting.js";
 import { createOrganizationsRouter } from "./organizations.js";
-import { createDailyRoutesRouter } from "./daily-routes.js";
 
 export function registerXpotRoutes(app: Express) {
   // Public branding (favicon / manifest / apple-touch) — no auth.
@@ -35,7 +34,6 @@ export function registerXpotRoutes(app: Express) {
   app.use("/api/xpot", createInboundRouter());
   app.use("/api/xpot", createAuthRouter());
   app.use("/api/xpot", createOrganizationsRouter());
-  app.use("/api/xpot", createDailyRoutesRouter());
   app.use("/api/xpot", createDashboardRouter());
   app.use("/api/xpot", createMetricsRouter());
   app.use("/api/xpot", createFilesRouter());

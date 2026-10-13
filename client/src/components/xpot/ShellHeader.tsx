@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { Bell, Camera, LogOut, Settings } from "lucide-react";
+import { Camera, LogOut, Settings } from "lucide-react";
 import type { XpotModule } from "@shared/modules";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { signOut } from "@/lib/signOut";
@@ -9,7 +9,6 @@ import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/i18n";
 import { dashboardMessages } from "@/i18n/messages/dashboard";
 import { shellMessages } from "@/i18n/messages/shell";
-import { prospectingMessages } from "@/i18n/messages/prospecting";
 import type { XpotMeResponse } from "@/pages/xpot/types";
 import { AdminModeButton } from "./AdminMode";
 import { UserGreeting } from "./UserGreeting";
@@ -42,47 +41,16 @@ const ICON_BUTTON =
 export function ShellHeader({ module, actions = true }: { module: XpotModule; actions?: boolean }) {
   const t = useT(dashboardMessages);
   const ts = useT(shellMessages);
-  const tp = useT(prospectingMessages);
   const { toast } = useToast();
   const [, navigate] = useLocation();
   const online = useOnline();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { data: me } = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
-  const seenNotifications = useRef(new Set<number>());
-  const { data: notifications = [] } = useQuery<Array<{ id: number; type: string; title: string; message: string; href?: string | null; readAt?: string | null }>>({
-    queryKey: ["/api/xpot/notifications"],
-    enabled: module === "visits",
-    refetchInterval: 5000,
-    staleTime: 0,
-  });
-  const unread = notifications.filter((item) => !item.readAt);
-
   useEffect(() => {
     if (module === "visits" && "Notification" in window && Notification.permission === "granted") {
       void subscribeToRoutePush().catch((error) => console.error("[push subscription] failed:", error));
     }
   }, [module]);
-
-  useEffect(() => {
-    const latest = unread[0];
-    if (!latest || seenNotifications.current.has(latest.id)) return;
-    seenNotifications.current.add(latest.id);
-    const title = latest.type === "daily_route_ready" ? tp("routeReady") : latest.type === "daily_route_failed" ? tp("routeFailed") : latest.title;
-    const description = latest.type === "daily_route_ready"
-      ? tp("routeReady")
-      : latest.type === "daily_route_failed"
-        ? tp("routeFailedHint")
-        : latest.message;
-    toast({ title, description, variant: latest.type === "daily_route_failed" ? "destructive" : "success" });
-  }, [navigate, toast, tp, unread]);
-
-  const openNotification = async () => {
-    const latest = unread[0];
-    if (!latest) return;
-    await apiRequest("POST", `/api/xpot/notifications/${latest.id}/read`);
-    await queryClient.invalidateQueries({ queryKey: ["/api/xpot/notifications"] });
-    navigate(latest.href || "/leads/prospecting");
-  };
 
   const name = me
     ? me.rep.displayName || [me.user.firstName, me.user.lastName].filter(Boolean).join(" ").trim() || me.user.email || ""
@@ -156,12 +124,6 @@ export function ShellHeader({ module, actions = true }: { module: XpotModule; ac
       {actions && (
         <div className="flex shrink-0 items-center gap-1.5">
           <AdminModeButton module={module} />
-          {module === "visits" && unread.length > 0 ? (
-            <button type="button" onClick={() => void openNotification()} title={unread[0].title} aria-label={unread[0].title} className={`${ICON_BUTTON} relative text-blue-300`}>
-              <Bell className="h-[18px] w-[18px]" />
-              <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-500 px-1 text-[10px] font-black text-white">{Math.min(9, unread.length)}</span>
-            </button>
-          ) : null}
           <button type="button" onClick={() => navigate("/settings")} title={ts("navSettings")} aria-label={ts("navSettings")} className={ICON_BUTTON} data-testid="shell-settings">
             <Settings className="h-[18px] w-[18px]" />
           </button>

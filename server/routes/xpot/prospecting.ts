@@ -31,6 +31,8 @@ import {
   prospectingJobDetails,
   ProspectingServiceError,
 } from "../../prospecting/service.js";
+import { xpotPushSubscriptionSchema } from "#shared/xpot.js";
+import { pushPublicKey, savePushSubscription } from "../../push-notifications.js";
 
 function lifecycleScore(lead: Awaited<ReturnType<typeof storage.getSalesLead>>): { score: number; reasons: string[] } {
   if (!lead) return { score: 0, reasons: [] };
@@ -96,6 +98,16 @@ async function releaseUnvisitedStops(tx: Tx, routeId: number, reason: string, no
 export function createProspectingRouter() {
   const router = Router();
   router.use(requireXpotUser);
+
+  router.get("/notifications/push/public-key", (_req, res) => {
+    res.json({ publicKey: pushPublicKey() });
+  });
+
+  router.post("/notifications/push/subscribe", async (req, res) => {
+    const actor = (req as any).xpotActor as NonNullable<Awaited<ReturnType<typeof ensureXpotRep>>>;
+    const input = xpotPushSubscriptionSchema.parse(req.body);
+    res.status(201).json(await savePushSubscription(actor.rep.id, input, req.get("user-agent")));
+  });
 
   router.get("/prospecting/jobs", async (req, res) => {
     const actor = (req as any).xpotActor as NonNullable<Awaited<ReturnType<typeof ensureXpotRep>>>;

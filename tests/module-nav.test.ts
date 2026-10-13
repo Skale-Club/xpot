@@ -35,8 +35,7 @@ describe("contextOfPath", () => {
 describe("moduleGroups", () => {
   it("a rep sees the module's screens and no Manage group", () => {
     expect(moduleGroups("tags", rep, labels)).toHaveLength(1);
-    expect(hrefs(moduleGroups("visits", rep, labels))).toContain("/check-in");
-    expect(hrefs(moduleGroups("visits", rep, labels))).toContain("/prospecting");
+    expect(hrefs(moduleGroups("visits", rep, labels))).toEqual(["/dashboard", "/leads", "/sales"]);
   });
   it("keeps History and Prospecting inside their parent screens", () => {
     const visits = hrefs(moduleGroups("visits", manager, labels));

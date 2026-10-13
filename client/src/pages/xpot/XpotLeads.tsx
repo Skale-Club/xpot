@@ -62,7 +62,8 @@ import { BRAND_GRADIENT, GLASS } from "@/components/xpot/surface";
 import { Segmented } from "@/components/xpot/Segmented";
 import { EmptyState } from "@/components/xpot/EmptyState";
 import { MiniCalendar } from "@/components/xpot/MiniCalendar";
-import { ProspectingRoute } from "./ProspectingRoute";
+import { XpotProspecting } from "./XpotProspecting";
+import { XpotCheckIn } from "./XpotCheckIn";
 
 
 // ─── Shared Add Company Dialog ────────────────────────────────────────────────
@@ -449,6 +450,7 @@ export function XpotLeads() {
   );
   const prospecting = pathname.startsWith("/leads/prospecting") || pathname.startsWith("/check-in");
   const prospectingSummary = pathname.startsWith("/leads/prospecting/summary/");
+  const prospectingCheckIn = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("leadId");
   const [dateMode, setDateMode] = useState<"all" | "day">("all");
   const [dayOffset, setDayOffset] = useState(0);
   const [calendarOpen, setCalendarOpen] = useState(false);
@@ -748,7 +750,7 @@ export function XpotLeads() {
       <div className="space-y-4">
         {!prospectingSummary ? <Segmented items={TABS} value="prospects" onChange={changeTab} className="lg:w-80" /> : null}
         {!prospectingSummary ? <Segmented items={PROSPECT_MODES} value="prospecting" onChange={changeProspectMode} className="lg:w-80" /> : null}
-        <ProspectingRoute />
+        {prospectingCheckIn ? <XpotCheckIn /> : <XpotProspecting />}
       </div>
     );
   }

@@ -47,7 +47,7 @@ export function useVisits() {
     onSuccess: async (visit: { id: number }) => {
       toast({ title: t("visitCompleted"), variant: "success" });
       await invalidateXpotData();
-      setLocation(`/leads/prospecting/summary/${visit.id}`);
+      setLocation(`/dashboard/history/${visit.id}`);
     },
     onError: (error: Error) => {
       toast({ title: t("checkOutFailed"), description: error.message, variant: "destructive" });

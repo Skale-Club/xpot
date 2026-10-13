@@ -56,6 +56,18 @@ const en = {
   highlight3Title: "Sell and activate NFC",
   highlight3Body: "Record the sale or stock left behind, then set up plaques, displays and tags from the same app.",
 
+  // Audience
+  audienceTitle: "Built for everyone who makes field sales happen",
+  audienceSub: "One shared workflow for the street and the operation behind it.",
+  audienceRepTitle: "Field sales reps",
+  audienceRepBody: "Plan the day, visit businesses and record every result from the phone.",
+  audienceManagerTitle: "Sales managers",
+  audienceManagerBody: "Follow routes, visits, outcomes and next steps without chasing scattered updates.",
+  audienceDistributorTitle: "Distributors",
+  audienceDistributorBody: "Manage direct sales, consigned stock and settlements by customer.",
+  audienceBusinessTitle: "Local businesses",
+  audienceBusinessBody: "Receive the right products and activate review, social and QR/NFC experiences.",
+
   // How it works
   howTitle: "One app before, during and after every visit",
   howSub: "Xpot follows the rep through the entire field-sales workflow.",
@@ -192,6 +204,17 @@ export const landingMessages: Dictionary<typeof en> = {
     highlight3Title: "Venda e ative o NFC",
     highlight3Body: "Registre a venda ou o estoque deixado e configure plaquinhas, displays e tags pelo mesmo app.",
 
+    audienceTitle: "Feito para todos que colocam a venda externa em movimento",
+    audienceSub: "Um fluxo compartilhado para quem está na rua e para a operação que acompanha tudo.",
+    audienceRepTitle: "Vendedores externos",
+    audienceRepBody: "Planeje o dia, visite empresas e registre cada resultado pelo celular.",
+    audienceManagerTitle: "Gestores comerciais",
+    audienceManagerBody: "Acompanhe rotas, visitas, resultados e próximos passos sem cobrar atualizações espalhadas.",
+    audienceDistributorTitle: "Distribuidores",
+    audienceDistributorBody: "Gerencie vendas diretas, estoque consignado e acertos por cliente.",
+    audienceBusinessTitle: "Negócios locais",
+    audienceBusinessBody: "Receba os produtos certos e ative experiências de avaliação, redes sociais e QR/NFC.",
+
     howTitle: "Um app antes, durante e depois de cada visita",
     howSub: "O Xpot acompanha o vendedor em toda a operação de campo.",
     step1Title: "Monte a rota de prospecção de hoje",
@@ -236,6 +259,21 @@ export const landingMessages: Dictionary<typeof en> = {
 
     syncTitle: "A ferramenta da Skale Club feita para a rua",
     syncBody: "O vendedor trabalha no Xpot. Visitas, desfechos e vendas podem seguir para o Xphere e o GoHighLevel em segundo plano, mantendo a operação de campo conectada ao restante do CRM.",
+
+    faqTitle: "Dúvidas antes da primeira visita",
+    faqSub: "O essencial sobre configuração, uso diário e seus dados.",
+    faq1Question: "Para quem o Xpot foi criado?",
+    faq1Answer: "O Xpot foi criado para vendedores externos, gestores, distribuidores e negócios locais que precisam reunir visitas, vendas, estoque consignado e peças QR/NFC.",
+    faq2Question: "O vendedor precisa digitar depois de cada visita?",
+    faq2Answer: "Não. O vendedor grava um áudio curto, o Xpot transforma o conteúdo em resumo e ações propostas, e ele confirma o resultado.",
+    faq3Question: "Como funciona o check-in por GPS?",
+    faq3Answer: "O app compara a localização do celular com o endereço do cliente e o raio definido pela equipe. Gestores podem permitir uma exceção manual justificada.",
+    faq4Question: "O Xpot conecta ao nosso CRM?",
+    faq4Answer: "Sim. O Xpot pode enviar visitas, resultados, vendas e retornos ao Xphere e ao GoHighLevel, com tentativas de sincronização visíveis.",
+    faq5Question: "O que podemos fazer com peças QR e NFC?",
+    faq5Answer: "Você pode vincular cada peça a um cliente, apontá-la para avaliações ou outro destino, gravar chips NFC compatíveis e acompanhar leituras.",
+    faq6Question: "Como novas contas recebem acesso?",
+    faq6Answer: "Uma nova conta é revisada pela equipe do Xpot antes da ativação, mantendo o espaço e os dados limitados a usuários aprovados.",
 
     ctaTitle: "Leve sua operação de campo para o Xpot",
     ctaBody: "Crie sua conta e organize prospecção, rotas, visitas, vendas, estoque e peças NFC em uma única ferramenta da Skale Club.",
@@ -303,6 +341,17 @@ export const landingMessages: Dictionary<typeof en> = {
     highlight3Title: "Vende y activa el NFC",
     highlight3Body: "Registra la venta o el stock dejado y configura placas, exhibidores y tags desde la misma app.",
 
+    audienceTitle: "Hecho para todos los que impulsan las ventas de campo",
+    audienceSub: "Un flujo compartido para la calle y para la operación que la acompaña.",
+    audienceRepTitle: "Vendedores de campo",
+    audienceRepBody: "Planifica el día, visita empresas y registra cada resultado desde el teléfono.",
+    audienceManagerTitle: "Gerentes comerciales",
+    audienceManagerBody: "Sigue rutas, visitas, resultados y próximos pasos sin perseguir actualizaciones dispersas.",
+    audienceDistributorTitle: "Distribuidores",
+    audienceDistributorBody: "Gestiona ventas directas, stock en consignación y liquidaciones por cliente.",
+    audienceBusinessTitle: "Negocios locales",
+    audienceBusinessBody: "Recibe los productos correctos y activa experiencias de reseñas, redes y QR/NFC.",
+
     howTitle: "Una app antes, durante y después de cada visita",
     howSub: "Xpot acompaña al vendedor durante toda la operación de campo.",
     step1Title: "Crea la ruta de prospección de hoy",
@@ -347,6 +396,21 @@ export const landingMessages: Dictionary<typeof en> = {
 
     syncTitle: "La herramienta de Skale Club hecha para la calle",
     syncBody: "El vendedor trabaja en Xpot. Las visitas, los resultados y las ventas pueden pasar a Xphere y GoHighLevel en segundo plano, manteniendo la operación de campo conectada al resto del CRM.",
+
+    faqTitle: "Preguntas antes de la primera visita",
+    faqSub: "Lo esencial sobre configuración, uso diario y tus datos.",
+    faq1Question: "¿Para quién fue creado Xpot?",
+    faq1Answer: "Xpot fue creado para vendedores de campo, gerentes, distribuidores y negocios locales que necesitan reunir visitas, ventas, stock consignado y piezas QR/NFC.",
+    faq2Question: "¿El vendedor necesita escribir después de cada visita?",
+    faq2Answer: "No. El vendedor graba un audio corto, Xpot lo convierte en un resumen y acciones propuestas, y el vendedor confirma el resultado.",
+    faq3Question: "¿Cómo funciona el check-in por GPS?",
+    faq3Answer: "La app compara la ubicación del teléfono con la dirección del cliente y el radio definido por el equipo. Los gerentes pueden permitir una excepción manual justificada.",
+    faq4Question: "¿Xpot se conecta con nuestro CRM?",
+    faq4Answer: "Sí. Xpot puede enviar visitas, resultados, ventas y seguimientos a Xphere y GoHighLevel, con reintentos de sincronización visibles.",
+    faq5Question: "¿Qué podemos hacer con piezas QR y NFC?",
+    faq5Answer: "Puedes vincular cada pieza a un cliente, dirigirla a reseñas u otro destino, grabar chips NFC compatibles y seguir sus lecturas.",
+    faq6Question: "¿Cómo obtienen acceso las cuentas nuevas?",
+    faq6Answer: "El equipo de Xpot revisa cada cuenta nueva antes de activarla, para limitar el espacio y los datos a usuarios aprobados.",
 
     ctaTitle: "Lleva tu operación de campo a Xpot",
     ctaBody: "Crea tu cuenta y organiza prospección, rutas, visitas, ventas, stock y piezas NFC en una sola herramienta de Skale Club.",

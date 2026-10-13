@@ -1,8 +1,8 @@
-ALTER TABLE "sales_daily_routes" ADD COLUMN IF NOT EXISTS "route_polyline" text;
+ALTER TABLE "sales_visit_notes" ADD COLUMN IF NOT EXISTS "attendee_name" text;
+ALTER TABLE "sales_visit_notes" ADD COLUMN IF NOT EXISTS "summary_completed_at" timestamptz;
 
-ALTER TABLE "sales_route_generation_attempts" ADD COLUMN IF NOT EXISTS "provider_payload" jsonb;
-ALTER TABLE "sales_route_generation_attempts" ADD COLUMN IF NOT EXISTS "provider_completed_at" timestamptz;
-
+ALTER TABLE "sales_tasks" ADD COLUMN IF NOT EXISTS "priority" text NOT NULL DEFAULT 'medium';
+ALTER TABLE "sales_tasks" ADD COLUMN IF NOT EXISTS "created_by_rep_id" integer REFERENCES "sales_reps"("id") ON DELETE SET NULL;
 ALTER TABLE "sales_tasks" ADD COLUMN IF NOT EXISTS "idempotency_key" text;
 CREATE UNIQUE INDEX IF NOT EXISTS "sales_tasks_rep_idempotency_unique"
   ON "sales_tasks" ("rep_id", "idempotency_key")

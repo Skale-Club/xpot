@@ -17,9 +17,6 @@ const PORT = Number(process.env.PORT) || 2110;
   }
 
   const { app, httpServer } = await createApp();
-  const resumedRoutes = await resumePendingDailyRoutes();
-  if (resumedRoutes) log(`Resumed ${resumedRoutes} pending daily route job(s)`);
-
   // One port for everything (client + API).
   // - dev: Vite runs in middleware mode inside Express (server/vite.ts) and
   //   serves the client with HMR while Express owns /api/*.

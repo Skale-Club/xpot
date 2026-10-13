@@ -5,7 +5,6 @@ export const xpotCheckInSchema = z.object({
   visitId: z.number().int().positive().optional(),
   leadId: z.number().int().positive(),
   locationId: z.number().int().positive().optional(),
-  routeStopId: z.number().int().positive().optional(),
   lat: z.number().min(-90).max(90).optional(),
   lng: z.number().min(-180).max(180).optional(),
   gpsAccuracyMeters: z.number().int().nonnegative().nullable().optional(),
@@ -29,27 +28,6 @@ export const xpotVisitNoteUpsertSchema = z.object({
   audioUrl: z.string().nullable().optional(),
   audioDurationSeconds: z.number().int().nullable().optional(),
   attendeeName: z.string().trim().max(160).nullable().optional(),
-});
-
-export const xpotDailyRouteCreateSchema = z.object({
-  industry: z.string().trim().min(2).max(120),
-  city: z.string().trim().min(2).max(160),
-  startTime: z.string().regex(/^[0-2][0-9]:[0-5][0-9]$/),
-  durationMinutes: z.number().int().min(60).max(720),
-  routeDate: z.string().date(),
-  timezone: z.string().trim().min(1).max(80),
-  idempotencyKey: z.string().uuid(),
-});
-
-export const xpotDailyRouteStopUpdateSchema = z.object({
-  status: z.enum(["planned", "skipped", "unavailable"]).optional(),
-  skipReason: z.string().trim().max(500).nullable().optional(),
-  sequence: z.number().int().positive().optional(),
-}).refine((input) => Object.keys(input).length > 0, { message: "No route stop changes supplied" });
-
-export const xpotDailyRouteRegenerateSchema = z.object({
-  reason: z.string().trim().min(5).max(500),
-  idempotencyKey: z.string().uuid(),
 });
 
 export const xpotPushSubscriptionSchema = z.object({
@@ -173,9 +151,6 @@ export const xpotTaskUpdateSchema = z.object({
 export type XpotCheckInInput = z.infer<typeof xpotCheckInSchema>;
 export type XpotCheckOutInput = z.infer<typeof xpotCheckOutSchema>;
 export type XpotVisitNoteUpsertInput = z.infer<typeof xpotVisitNoteUpsertSchema>;
-export type XpotDailyRouteCreateInput = z.infer<typeof xpotDailyRouteCreateSchema>;
-export type XpotDailyRouteStopUpdateInput = z.infer<typeof xpotDailyRouteStopUpdateSchema>;
-export type XpotDailyRouteRegenerateInput = z.infer<typeof xpotDailyRouteRegenerateSchema>;
 export type XpotVisitSummaryInput = z.infer<typeof xpotVisitSummarySchema>;
 export type XpotLeadCreateInput = z.infer<typeof xpotLeadCreateSchema>;
 export type XpotLeadUpdateInput = z.infer<typeof xpotLeadUpdateSchema>;

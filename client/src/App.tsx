@@ -80,6 +80,8 @@ function XpotAppShell() {
       setLocation(`${path.replace(/^\/visits/, "/dashboard/history")}${search}`, { replace: true });
     } else if (path === "/check-in") {
       setLocation(`/leads/prospecting${search}`, { replace: true });
+    } else if (path === "/prospecting") {
+      setLocation(`/leads/prospecting${search}`, { replace: true });
     }
   }, [pathname, setLocation]);
 

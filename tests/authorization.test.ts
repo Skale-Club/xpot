@@ -42,6 +42,7 @@ const storage = {
   }),
   getSalesVisit: vi.fn(async (id: number) => store.visits.get(id)),
   createSalesVisit: vi.fn(async (input: any) => ({ id: 900, ...input })),
+  updateSalesVisit: vi.fn(async (id: number, input: any) => ({ id, ...input })),
   getActiveSalesVisitForRep: vi.fn(async () => undefined),
   getSalesAppSettings: vi.fn(async () => ({
     checkInRequiresGps: true,
@@ -89,6 +90,27 @@ vi.mock("../server/storage-sales.js", () => ({
 // admin.ts imports the reseller-account service, which talks to the database
 // directly. The routes exercised here never reach it.
 vi.mock("../server/db.js", () => ({ db: {} }));
+vi.mock("../server/visit-workflow.js", () => ({
+  startVisitTransaction: vi.fn(async (input: any) => {
+    const visit = input.plannedVisitId
+      ? await storage.updateSalesVisit(input.plannedVisitId, input.values)
+      : await storage.createSalesVisit({
+          repId: input.repId,
+          leadId: input.leadId,
+          scheduledAt: null,
+          source: "field-mobile",
+          ...input.values,
+        });
+    const lead = store.leads.get(input.leadId);
+    await storage.updateSalesLead(input.leadId, {
+      ...(lead?.status === "prospect" ? { status: "lead" } : {}),
+      lastVisitAt: visit.checkedInAt,
+      nextVisitDueAt: null,
+    });
+    return visit;
+  }),
+  finishVisitTransaction: vi.fn(async (input: any) => storage.updateSalesVisit(input.visitId, input)),
+}));
 vi.mock("../server/integrations/ghl.js", () => ({ getGHLPipelines: vi.fn() }));
 vi.mock("../server/routes/xpot/helpers.js", () => ({
   // The sync helpers are fire-and-forget in the handlers; they only need to

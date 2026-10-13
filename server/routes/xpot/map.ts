@@ -72,17 +72,7 @@ export function createMapRouter() {
     params.set("maptype", "roadmap");
     // Rep pin (blue). Google auto-frames when center/zoom are omitted, which is
     // what we want as soon as there are two pins to fit.
-    if (routeStops.length) {
-      routeStops.forEach((stop, index) => {
-        const label = index < 9 ? `|label:${index + 1}` : "";
-        params.append("markers", `size:mid|color:0x6366f1${label}|${stop.lat},${stop.lng}`);
-      });
-      params.append("path", routePolyline
-        ? `color:0x60a5facc|weight:4|enc:${routePolyline}`
-        : `color:0x60a5facc|weight:4|${routeStops.map((stop) => `${stop.lat},${stop.lng}`).join("|")}`);
-    } else {
-      params.append("markers", `size:mid|color:0x3b82f6|${lat},${lng}`);
-    }
+    params.append("markers", `size:mid|color:0x3b82f6|${lat},${lng}`);
     if (hasLead) {
       params.append("markers", `size:mid|color:0x6366f1|label:V|${leadLat},${leadLng}`);
     } else if (stops.length > 0) {

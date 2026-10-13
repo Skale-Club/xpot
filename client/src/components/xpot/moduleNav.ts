@@ -111,11 +111,8 @@ export function moduleGroups(module: XpotModule, viewer: Viewer, l: Labels): Nav
     const work: NavGroup = {
       label: "",
       items: [
-        ...(viewer.isComputer ? [] : [{ href: "/check-in", label: l.shell("tabCheckIn"), icon: MapPinned, match: starts("/check-in") }]),
-        { href: "/dashboard", label: l.shell("tabDashboard"), icon: Activity, match: starts("/dashboard") },
-        { href: "/visits", label: l.shell("tabVisits"), icon: Clock3, match: starts("/visits") },
+        { href: "/dashboard", label: l.shell("tabDashboard"), icon: Activity, match: (path) => starts("/dashboard")(path) || starts("/visits")(path) },
         { href: "/leads", label: l.shell("tabLeads"), icon: Building2, match: starts("/leads") },
-        { href: "/prospecting", label: l.shell("tabProspecting"), icon: Route, match: starts("/prospecting") },
         { href: "/sales", label: l.shell("tabSales"), icon: DollarSign, match: starts("/sales") },
       ],
     };

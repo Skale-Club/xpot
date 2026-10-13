@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/i18n";
 import { prospectingMessages } from "@/i18n/messages/prospecting";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { subscribeToRoutePush } from "@/lib/pushNotifications";
 import { useViewerAccess } from "@/lib/adminMode";
 import { Link } from "wouter";
 import { approximateCandidateCenter } from "#shared/prospecting.js";
@@ -51,6 +52,8 @@ type ProspectingRoute = {
 
 type RouteStop = {
   id: number;
+  leadId: number | null;
+  visitId: number | null;
   position: number;
   status: "planned" | "en_route" | "checked_in" | "completed" | "skipped" | "rescheduled";
   name: string;
@@ -169,6 +172,16 @@ export function XpotProspecting() {
       setSelectedJobId(data.job.id);
       await queryClient.invalidateQueries({ queryKey: ["/api/xpot/prospecting/jobs"] });
       toast({ title: t("searchStarted"), description: t("searchStartedBody") });
+      if ("Notification" in window) {
+        const permission = Notification.permission === "default"
+          ? await Notification.requestPermission()
+          : Notification.permission;
+        if (permission === "granted") {
+          void subscribeToRoutePush().catch((error) =>
+            console.error("[prospecting] push subscription failed:", error),
+          );
+        }
+      }
     },
     onError: (error: Error) => toast({ title: t("errorTitle"), description: error.message, variant: "destructive" }),
   });
@@ -406,7 +419,7 @@ export function XpotProspecting() {
                     <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-500/20 text-xs font-bold text-indigo-200">{stop.position}</span>
                     <div className="min-w-0">
                       <div className="truncate text-sm font-semibold text-white/80">{stop.name}</div>
-                      <div className="truncate text-[11px] text-white/35">{stop.address || "—"}</div>
+                      <div className="truncate text-[11px] text-white/35">{stop.address || "No address"}</div>
                       <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[10px] text-white/40">
                         <Clock3 className="h-3 w-3 shrink-0" />
                         <span>{t("driveMinutes", { minutes: driveMinutes(stop.travelDurationSeconds) })}</span>
@@ -415,6 +428,11 @@ export function XpotProspecting() {
                       <span className="mt-1 block text-[9px] font-semibold uppercase tracking-wide text-white/30">{stopStatusLabel(stop.status, t)}</span>
                     </div>
                     <div className="flex shrink-0 gap-1.5">
+                      {stop.leadId && stop.visitId && ["planned", "en_route"].includes(stop.status) ? (
+                        <Button asChild className="min-h-11 touch-manipulation rounded-xl bg-blue-500 px-3 text-xs font-bold text-white">
+                          <Link href={`/leads/prospecting?leadId=${stop.leadId}&visitId=${stop.visitId}`}><MapPin className="h-4 w-4" />{t("checkIn")}</Link>
+                        </Button>
+                      ) : null}
                       <a
                         href={googleStopUrl(stop)}
                         target="_blank"

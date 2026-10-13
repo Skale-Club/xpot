@@ -1,8 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "./db.js";
 import {
-  salesDailyRoutes,
-  salesDailyRouteStops,
   salesLeadContacts,
   salesTasks,
   salesVisitNotes,
@@ -86,22 +84,6 @@ export async function saveVisitSummaryTransaction(input: {
       }
     }
 
-    const [stop] = await tx.update(salesDailyRouteStops).set({ status: "visited", updatedAt: new Date() })
-      .where(eq(salesDailyRouteStops.visitId, input.visitId)).returning();
-    if (stop) {
-      const [route] = await tx.select().from(salesDailyRoutes).where(eq(salesDailyRoutes.id, stop.routeId));
-      if (route) {
-        const [remaining] = await tx.select({ count: sql<number>`count(*)::int` }).from(salesDailyRouteStops).where(and(
-          eq(salesDailyRouteStops.routeId, route.id),
-          eq(salesDailyRouteStops.version, route.version),
-          sql`${salesDailyRouteStops.status} IN ('planned', 'in_progress', 'summary_pending')`,
-        ));
-        if ((remaining?.count ?? 0) === 0) {
-          await tx.update(salesDailyRoutes).set({ status: "completed", completedAt: new Date(), updatedAt: new Date() })
-            .where(eq(salesDailyRoutes.id, route.id));
-        }
-      }
-    }
     return { note, task };
   });
 }

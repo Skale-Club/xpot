@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { bigserial, pgTable, text, serial, integer, timestamp, boolean, jsonb, pgEnum, uniqueIndex, index, date } from "drizzle-orm/pg-core";
+import { bigserial, pgTable, text, serial, integer, timestamp, boolean, jsonb, pgEnum, uniqueIndex, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { users } from "./auth.js";
@@ -312,101 +312,6 @@ export const salesTasks = pgTable("sales_tasks", {
   idempotencyIdx: uniqueIndex("sales_tasks_rep_idempotency_unique").on(table.repId, table.idempotencyKey),
 }));
 
-// One durable route per rep and local calendar day. Route generation is a
-// paid, asynchronous operation, so state and idempotency live in Postgres.
-export const salesDailyRoutes = pgTable("sales_daily_routes", {
-  id: serial("id").primaryKey(),
-  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: "restrict" }),
-  repId: integer("rep_id").notNull().references(() => salesReps.id, { onDelete: "cascade" }),
-  routeDate: date("route_date").notNull(),
-  timezone: text("timezone").notNull().default("America/New_York"),
-  industry: text("industry").notNull(),
-  city: text("city").notNull(),
-  startTime: text("start_time").notNull(),
-  durationMinutes: integer("duration_minutes").notNull(),
-  status: text("status").notNull().default("draft"),
-  generationStage: text("generation_stage").notNull().default("draft"),
-  version: integer("version").notNull().default(1),
-  estimatedReadyAt: timestamp("estimated_ready_at", { withTimezone: true }),
-  generatedAt: timestamp("generated_at", { withTimezone: true }),
-  startedAt: timestamp("started_at", { withTimezone: true }),
-  completedAt: timestamp("completed_at", { withTimezone: true }),
-  errorMessage: text("error_message"),
-  routePolyline: text("route_polyline"),
-  idempotencyKey: text("idempotency_key").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-}, (table) => ({
-  dailyRouteIdx: uniqueIndex("sales_daily_routes_rep_date_unique").on(table.repId, table.routeDate),
-  idempotencyIdx: uniqueIndex("sales_daily_routes_idempotency_unique").on(table.repId, table.idempotencyKey),
-  repStatusIdx: index("sales_daily_routes_rep_status_idx").on(table.repId, table.status),
-}));
-
-export const salesDailyRouteStops = pgTable("sales_daily_route_stops", {
-  id: serial("id").primaryKey(),
-  routeId: integer("route_id").notNull().references(() => salesDailyRoutes.id, { onDelete: "cascade" }),
-  version: integer("version").notNull().default(1),
-  sequence: integer("sequence").notNull(),
-  leadId: integer("lead_id").notNull().references(() => salesLeads.id, { onDelete: "cascade" }),
-  locationId: integer("location_id").references(() => salesLeadLocations.id, { onDelete: "set null" }),
-  visitId: integer("visit_id").references(() => salesVisits.id, { onDelete: "set null" }),
-  nameSnapshot: text("name_snapshot").notNull(),
-  addressSnapshot: text("address_snapshot"),
-  lat: text("lat"),
-  lng: text("lng"),
-  arrivalOffsetMinutes: integer("arrival_offset_minutes").notNull().default(0),
-  driveMinutes: integer("drive_minutes").notNull().default(0),
-  visitMinutes: integer("visit_minutes").notNull().default(20),
-  ratingTenths: integer("rating_tenths"),
-  reviewCount: integer("review_count"),
-  openNow: boolean("open_now"),
-  mapsUrl: text("maps_url"),
-  selectionReason: text("selection_reason"),
-  status: text("status").notNull().default("planned"),
-  skipReason: text("skip_reason"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-}, (table) => ({
-  routeSequenceIdx: uniqueIndex("sales_daily_route_stops_route_version_sequence_unique").on(table.routeId, table.version, table.sequence),
-  routeIdx: index("sales_daily_route_stops_route_idx").on(table.routeId, table.version, table.status),
-  visitIdx: uniqueIndex("sales_daily_route_stops_visit_unique").on(table.visitId),
-}));
-
-export const salesRouteGenerationAttempts = pgTable("sales_route_generation_attempts", {
-  id: serial("id").primaryKey(),
-  routeId: integer("route_id").notNull().references(() => salesDailyRoutes.id, { onDelete: "cascade" }),
-  version: integer("version").notNull(),
-  idempotencyKey: text("idempotency_key").notNull(),
-  initiatedByUserId: text("initiated_by_user_id").references(() => users.id, { onDelete: "set null" }),
-  reason: text("reason"),
-  provider: text("provider").notNull().default("google_places"),
-  providerRequestId: text("provider_request_id"),
-  status: text("status").notNull().default("queued"),
-  creditUnits: integer("credit_units"),
-  providerPayload: jsonb("provider_payload"),
-  providerCompletedAt: timestamp("provider_completed_at", { withTimezone: true }),
-  errorMessage: text("error_message"),
-  startedAt: timestamp("started_at", { withTimezone: true }),
-  completedAt: timestamp("completed_at", { withTimezone: true }),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-}, (table) => ({
-  attemptIdempotencyIdx: uniqueIndex("sales_route_generation_attempts_idempotency_unique").on(table.routeId, table.idempotencyKey),
-  routeIdx: index("sales_route_generation_attempts_route_idx").on(table.routeId, table.version),
-}));
-
-export const salesUserNotifications = pgTable("sales_user_notifications", {
-  id: serial("id").primaryKey(),
-  repId: integer("rep_id").notNull().references(() => salesReps.id, { onDelete: "cascade" }),
-  type: text("type").notNull(),
-  title: text("title").notNull(),
-  message: text("message").notNull(),
-  href: text("href"),
-  readAt: timestamp("read_at", { withTimezone: true }),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-}, (table) => ({
-  repUnreadIdx: index("sales_user_notifications_rep_unread_idx").on(table.repId, table.readAt, table.createdAt),
-}));
-
 export const salesPushSubscriptions = pgTable("sales_push_subscriptions", {
   id: serial("id").primaryKey(),
   repId: integer("rep_id").notNull().references(() => salesReps.id, { onDelete: "cascade" }),
@@ -655,13 +560,6 @@ export type SalesOpportunityStatus = typeof salesOpportunityStatusEnum.enumValue
 export type SalesTask = typeof salesTasks.$inferSelect;
 export type InsertSalesTask = typeof salesTasks.$inferInsert;
 export type SalesTaskStatus = typeof salesTaskStatusEnum.enumValues[number];
-
-export type SalesDailyRoute = typeof salesDailyRoutes.$inferSelect;
-export type InsertSalesDailyRoute = typeof salesDailyRoutes.$inferInsert;
-export type SalesDailyRouteStop = typeof salesDailyRouteStops.$inferSelect;
-export type InsertSalesDailyRouteStop = typeof salesDailyRouteStops.$inferInsert;
-export type SalesRouteGenerationAttempt = typeof salesRouteGenerationAttempts.$inferSelect;
-export type SalesUserNotification = typeof salesUserNotifications.$inferSelect;
 
 export type SalesSyncEvent = typeof salesSyncEvents.$inferSelect;
 export type InsertSalesSyncEvent = typeof salesSyncEvents.$inferInsert;

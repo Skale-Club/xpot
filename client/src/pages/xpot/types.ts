@@ -9,8 +9,6 @@ import type {
   SalesTask,
   SalesSyncEvent,
   SalesAppSettings,
-  SalesDailyRoute,
-  SalesDailyRouteStop,
 } from "#shared/schema.js";
 
 export type {
@@ -24,13 +22,6 @@ export type {
   SalesTask,
   SalesSyncEvent,
   SalesAppSettings,
-  SalesDailyRoute,
-  SalesDailyRouteStop,
-};
-
-export type DailyRouteBundle = {
-  route: SalesDailyRoute;
-  stops: SalesDailyRouteStop[];
 };
 
 export type FullSalesLead = SalesLead & {

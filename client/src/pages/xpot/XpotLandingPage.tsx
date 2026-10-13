@@ -40,6 +40,8 @@ import type { LandingContentResponse, LandingPageContent } from "@shared/landing
 import { publicPagePath } from "@shared/seo";
 import { usePublicSeo } from "@/lib/seo";
 
+type LandingT = ReturnType<typeof useT<typeof landingMessages.en>>;
+
 async function getXpotSession(retryOn401 = true): Promise<{
   ok: boolean;
   status: number;
@@ -450,7 +452,7 @@ export function XpotLandingPage() {
           {/* Product proof: the photo establishes the job; this shows how Xpot supports it. */}
           <section className="grid grid-cols-1 items-center gap-12 rounded-[28px] border border-white/[0.07] bg-white/[0.025] p-6 sm:p-10 lg:grid-cols-2 lg:gap-16 lg:p-12">
             <Reveal className="order-2 lg:order-1">
-              <PhoneMock t={t} />
+              <PhoneMock content={content.mockup} />
             </Reveal>
             <Reveal className="order-1 lg:order-2">
               <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-blue-300">
