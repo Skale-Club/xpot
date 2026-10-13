@@ -11,6 +11,7 @@ describe("landing page content", () => {
       expect(content.tools.cards).toHaveLength(4);
       expect(content.footer.tagline).not.toMatch(/^Xpot\b/i);
       expect(content.account.welcomeTitle).toBe("Xpot");
+      expect(content.account.welcomeSub).not.toMatch(/text you|código|SMS/i);
       expect(content.faq.items.length).toBeGreaterThanOrEqual(5);
       expect(new Set(content.faq.items.map((item) => item.id)).size).toBe(content.faq.items.length);
       expect(JSON.stringify(content)).not.toMatch(/\b(?:Skale|CRM|Xphere|GoHighLevel|manager|managers|gestor|gestores|gerente|gerentes|distributor|distributors|distribuidor|distribuidores)\b/i);
