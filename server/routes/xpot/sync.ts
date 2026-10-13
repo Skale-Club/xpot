@@ -2,7 +2,7 @@ import { Router } from "express";
 import { storage } from "../../storage.js";
 import { requireXpotUser, ensureXpotRep, isManagerOrAdmin, listsEveryone } from "./middleware.js";
 import { syncLeadToGhl, syncLeadToXphere, syncOpportunityToGhl, syncTaskToGhl, syncVisitToGhl } from "./helpers.js";
-import { syncSaleToXphere } from "./xphere-sync.js";
+import { syncSaleToXphere, syncTaskToXphere } from "./xphere-sync.js";
 import { salesStorage } from "../../storage-sales.js";
 
 export function createSyncRouter() {
@@ -24,14 +24,16 @@ export function createSyncRouter() {
     const oppsToSync = canSyncAll
       ? allOpportunities.filter((o) => o.syncStatus !== "synced")
       : allOpportunities.filter((o) => o.syncStatus !== "synced" && o.repId === repId);
+    const visibleTasks = canSyncAll ? allTasks : allTasks.filter((t) => t.repId === repId);
     const tasksToSync = canSyncAll
       ? allTasks.filter((t) => !t.ghlTaskId && t.status === "pending")
       : allTasks.filter((t) => !t.ghlTaskId && t.status === "pending" && t.repId === repId);
 
-    const [leadResults, oppResults, taskResults] = await Promise.all([
+    const [leadResults, oppResults, taskResults, xphereTaskResults] = await Promise.all([
       Promise.all(leadsToSync.map((l) => syncLeadToGhl(l.id))),
       Promise.all(oppsToSync.map((o) => syncOpportunityToGhl(o.id))),
       Promise.all(tasksToSync.map((t) => syncTaskToGhl(t.id))),
+      Promise.all(visibleTasks.map((t) => syncTaskToXphere(t.id))),
     ]);
 
     res.json({
@@ -41,6 +43,8 @@ export function createSyncRouter() {
       opportunitiesSynced: oppResults.filter((r) => r.synced).length,
       tasksProcessed: taskResults.length,
       tasksSynced: taskResults.filter((r) => r.synced).length,
+      xphereTasksProcessed: xphereTaskResults.length,
+      xphereTasksSynced: xphereTaskResults.filter((r) => r.synced).length,
     });
   });
 
@@ -93,6 +97,14 @@ export function createSyncRouter() {
         }
         const result = await syncSaleToXphere(Number(entityId));
         return res.json(result);
+      }
+      case "sales_task": {
+        const task = await storage.getSalesTask(Number(entityId));
+        if (!task || (!isManagerOrAdmin(actor!) && task.repId !== actor!.rep.id)) {
+          return res.status(403).json({ message: "Access denied" });
+        }
+        const [ghl, xphere] = await Promise.all([syncTaskToGhl(task.id), syncTaskToXphere(task.id)]);
+        return res.json({ synced: ghl.synced || xphere.synced, results: { ghl, xphere } });
       }
       default:
         return res.status(400).json({ message: `Unsupported entityType: ${entityType}` });

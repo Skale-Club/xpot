@@ -13,6 +13,7 @@ This milestone establishes one organization-scoped task lifecycle and then expos
 - [x] **Phase 5: Account-Bound MCP Tasks** - Let authorized AI clients operate tasks through explicit OAuth scope and guarded MCP tools.
 - [x] **Phase 6: Operational Task Inbox** - Give reps and admins a dedicated, mobile-first place to find and act on follow-up work.
 - [x] **Phase 7: Release Confidence** - Prove authorization and lifecycle behavior across channels and leave the production build green.
+- [x] **Phase 8: Bidirectional Xphere Sync** - Converge task changes made in either application without duplicates or echo loops.
 
 ## Phase Details
 
@@ -92,9 +93,20 @@ This milestone establishes one organization-scoped task lifecycle and then expos
   3. Type checking, targeted task tests, the full automated test suite, and the production build all pass from a clean run.
 **Plans**: TBD
 
+### Phase 8: Bidirectional Xphere Sync
+**Goal**: A task created or edited in Xpot or Xphere converges to the same logical task in both applications.
+**Depends on**: Phase 7
+**Requirements**: TASK-22, TASK-23
+**Success Criteria** (what must be TRUE):
+  1. Every Xphere task writer is captured by a durable database outbox and retried on transient delivery failure.
+  2. Xpot authenticates inbound Xphere mutations, applies them through the canonical service, and ignores stale retries.
+  3. Stable Xpot ids and Xphere UUIDs survive round trips without producing a duplicate row.
+  4. Mirror callbacks are recognized and suppressed so the two systems cannot create an infinite echo loop.
+**Plans**: 1/1 complete
+
 ## Progress
 
-**Execution Order:** Phase 1 → Phase 2 → Phase 3 → Phase 4 → Phase 5 → Phase 6 → Phase 7
+**Execution Order:** Phase 1 → Phase 2 → Phase 3 → Phase 4 → Phase 5 → Phase 6 → Phase 7 → Phase 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -105,3 +117,4 @@ This milestone establishes one organization-scoped task lifecycle and then expos
 | 5. Account-Bound MCP Tasks | 1/1 | Complete | 2026-10-13 |
 | 6. Operational Task Inbox | 1/1 | Complete | 2026-10-13 |
 | 7. Release Confidence | 1/1 | Complete | 2026-10-13 |
+| 8. Bidirectional Xphere Sync | 1/1 | Complete | 2026-10-13 |

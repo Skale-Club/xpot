@@ -52,7 +52,10 @@ type CreateContext = {
   actor: XpotActor;
   source: TaskSource;
   input: XpotTaskCreateInput;
+  skipXphereSync?: boolean;
 };
+
+type UpdateOptions = { skipXphereSync?: boolean };
 
 async function assertAssignee(organizationId: number, repId: number) {
   const [membership] = await db.select({ repId: organizationMemberships.repId })
@@ -128,8 +131,10 @@ async function enrich(rows: SalesTask[]): Promise<EnrichedTask[]> {
   }));
 }
 
-function syncInBackground(taskId: number) {
-  Promise.allSettled([syncTaskToGhl(taskId), syncTaskToXphere(taskId)])
+function syncInBackground(taskId: number, options: UpdateOptions = {}) {
+  const operations: Promise<unknown>[] = [syncTaskToGhl(taskId)];
+  if (!options.skipXphereSync) operations.push(syncTaskToXphere(taskId));
+  Promise.allSettled(operations)
     .then((results) => results.forEach((result) => {
       if (result.status === "rejected") console.error(`[task:${taskId}] integration sync failed:`, result.reason);
     }));
@@ -192,7 +197,7 @@ export async function getTask(actor: XpotActor, id: number): Promise<EnrichedTas
   return (await enrich([task]))[0];
 }
 
-export async function createTask({ actor, source, input }: CreateContext): Promise<EnrichedTask> {
+export async function createTask({ actor, source, input, skipXphereSync }: CreateContext): Promise<EnrichedTask> {
   const organizationId = await resolveOrganization(actor, input);
   const repId = input.repId ?? actor.rep.id;
   if (repId !== actor.rep.id && !(await canManageOrganizationForActor(actor, organizationId))) {
@@ -225,11 +230,11 @@ export async function createTask({ actor, source, input }: CreateContext): Promi
     dueAt: input.dueAt ? new Date(input.dueAt) : null,
     status: "pending",
   });
-  syncInBackground(task.id);
+  syncInBackground(task.id, { skipXphereSync });
   return (await enrich([task]))[0];
 }
 
-export async function updateTask(actor: XpotActor, id: number, input: XpotTaskUpdateInput): Promise<EnrichedTask> {
+export async function updateTask(actor: XpotActor, id: number, input: XpotTaskUpdateInput, options: UpdateOptions = {}): Promise<EnrichedTask> {
   const existing = await storage.getSalesTask(id);
   if (!existing) throw new TaskServiceError("Task not found", 404);
   if (!(await canManageTask(actor, existing))) throw new TaskServiceError("Access denied", 403);
@@ -258,6 +263,6 @@ export async function updateTask(actor: XpotActor, id: number, input: XpotTaskUp
     } : {}),
   });
   if (!updated) throw new TaskServiceError("Task not found", 404);
-  syncInBackground(updated.id);
+  syncInBackground(updated.id, options);
   return (await enrich([updated]))[0];
 }

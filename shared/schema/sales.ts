@@ -307,6 +307,8 @@ export const salesTasks = pgTable("sales_tasks", {
   completedAt: timestamp("completed_at"),
   cancelledAt: timestamp("cancelled_at"),
   ghlTaskId: text("ghl_task_id"),
+  xphereTaskId: text("xphere_task_id"),
+  xphereUpdatedAt: timestamp("xphere_updated_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => ({
@@ -317,6 +319,7 @@ export const salesTasks = pgTable("sales_tasks", {
   leadStatusIdx: index("sales_tasks_lead_status_idx").on(table.leadId, table.status),
   opportunityStatusIdx: index("sales_tasks_opportunity_status_idx").on(table.opportunityId, table.status),
   idempotencyIdx: uniqueIndex("sales_tasks_org_source_idempotency_unique").on(table.organizationId, table.source, table.idempotencyKey),
+  xphereTaskIdx: uniqueIndex("sales_tasks_org_xphere_task_unique").on(table.organizationId, table.xphereTaskId),
 }));
 
 export const salesSyncEvents = pgTable("sales_sync_events", {

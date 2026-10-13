@@ -46,7 +46,13 @@ retry cannot create the follow-up twice.
 
 ## Integrations
 
-Task changes are best-effort mirrors. Local success never depends on GHL or
-Xphere availability. GHL contact tasks are created/updated when the task has a
-synced lead and due date. Xphere upserts tasks using the stable external id
-`xpot-task-<id>`. Sync attempts are written to `sales_sync_events`.
+Task synchronization with Xphere is bidirectional and last-write-wins. Xpot
+pushes local changes with `xpot-task-<id>` plus the original Xphere UUID when
+applicable. Xphere sends every task mutation through its durable outbox to
+`POST /api/xpot/inbound/tasks`; retries are idempotent and stale deliveries are
+ignored. Mirror callbacks suppress the return leg, preventing echo loops.
+
+Local success never depends on either integration being online. GHL contact
+tasks are created/updated when the task has a synced lead and due date. All
+Xphere attempts are audited in `sales_sync_events`; the Xphere outbox retries
+transient failures with backoff.

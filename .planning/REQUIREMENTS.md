@@ -20,6 +20,8 @@
 - [x] TASK-10 Audio-created tasks preserve visit/lead evidence and due-date intent.
 - [x] TASK-11 Task creation and lifecycle changes synchronize to GHL when configured without blocking local success.
 - [x] TASK-12 Task changes mirror to Xphere when configured with a stable external identity.
+- [x] TASK-22 Xphere-created and Xphere-edited tasks synchronize back to Xpot through a durable retry queue.
+- [x] TASK-23 Bidirectional delivery preserves one logical task, rejects stale events, and prevents echo loops.
 
 ## MCP
 

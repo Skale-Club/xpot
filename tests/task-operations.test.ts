@@ -1,6 +1,8 @@
 import { readdirSync, readFileSync } from "fs";
 import { join } from "path";
 import { beforeAll, describe, expect, it, vi } from "vitest";
+import express from "express";
+import type { AddressInfo } from "net";
 
 process.env.DATABASE_URL ||= "postgresql://test:test@127.0.0.1:1/test";
 
@@ -21,6 +23,7 @@ vi.mock("../server/db.js", async () => {
 
 const { applyAction } = await import("../server/routes/xpot/visit-actions.js");
 const { updateTask } = await import("../server/tasks/service.js");
+const { createInboundRouter } = await import("../server/routes/xpot/inbound.js");
 
 const q = async (text: string, params: unknown[] = []) => (await pg.client.query(text, params)).rows as any[];
 
@@ -30,8 +33,67 @@ beforeAll(async () => {
   const [org] = await q(`INSERT INTO organizations (name, slug) VALUES ('Voice Org', 'voice-org') RETURNING id`);
   await q(`INSERT INTO organization_memberships (organization_id, rep_id, role) VALUES ($1, $2, 'admin')`, [org.id, rep.id]);
   const [lead] = await q(`INSERT INTO sales_leads (organization_id, owner_rep_id, name) VALUES ($1, $2, 'Audio Customer') RETURNING id`, [org.id, rep.id]);
+  await q(`UPDATE sales_leads SET xphere_ref = 'account:11111111-1111-4111-8111-111111111111' WHERE id = $1`, [lead.id]);
   const [visit] = await q(`INSERT INTO sales_visits (rep_id, lead_id, status) VALUES ($1, $2, 'completed') RETURNING id`, [rep.id, lead.id]);
+  await q(`INSERT INTO xphere_integrations (user_id, inbound_api_key, is_enabled) VALUES ('voice-user', 'xpot_bidirectional_test', true)`);
   (globalThis as any).__taskFixture = { rep, org, lead, visit };
+});
+
+describe("Xphere inbound task mirror", () => {
+  it("creates, updates, and ignores stale retries without duplicating the task", async () => {
+    const app = express();
+    app.use(express.json());
+    app.use("/api/xpot", createInboundRouter());
+    const server = app.listen(0);
+    const port = (server.address() as AddressInfo).port;
+    const post = async (body: unknown) => {
+      const response = await fetch(`http://127.0.0.1:${port}/api/xpot/inbound/tasks`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer xpot_bidirectional_test" },
+        body: JSON.stringify(body),
+      });
+      return { status: response.status, body: await response.json() as any };
+    };
+    const externalId = "22222222-2222-4222-8222-222222222222";
+    const base = {
+      externalId,
+      operation: "upsert",
+      occurredAt: "2026-10-13T12:00:00.000Z",
+      task: {
+        title: "Xphere callback",
+        description: "Created in Xphere",
+        dueAt: "2026-10-20T14:00:00.000Z",
+        priority: "high",
+        status: "todo",
+        entityType: "account",
+        entityId: "11111111-1111-4111-8111-111111111111",
+      },
+    };
+    const created = await post(base);
+    expect(created.status).toBe(200);
+    expect(created.body.action).toBe("created");
+
+    const completed = await post({
+      ...base,
+      occurredAt: "2026-10-13T13:00:00.000Z",
+      task: { ...base.task, title: "Completed in Xphere", status: "done" },
+    });
+    expect(completed.status).toBe(200);
+    expect(completed.body).toMatchObject({ action: "updated", taskId: created.body.taskId });
+
+    const stale = await post({
+      ...base,
+      occurredAt: "2026-10-13T12:30:00.000Z",
+      task: { ...base.task, title: "Stale title" },
+    });
+    expect(stale.status).toBe(200);
+    expect(stale.body.action).toBe("stale");
+
+    const rows = await q(`SELECT * FROM sales_tasks WHERE xphere_task_id = $1`, [externalId]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ title: "Completed in Xphere", status: "completed", source: "integration" });
+    server.close();
+  });
 });
 
 describe("canonical task lifecycle from visit audio", () => {
