@@ -8,3 +8,4 @@ export * from "./branding.js";
 export * from "./landing.js";
 export * from "./tags.js";
 export * from "./mcp.js";
+export * from "./prospecting.js";

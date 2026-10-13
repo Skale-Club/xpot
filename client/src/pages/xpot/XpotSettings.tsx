@@ -10,6 +10,7 @@ import {
   EyeOff,
   Languages,
   Loader2,
+  MapPinned,
   Save,
   ShieldCheck,
   UserRound,
@@ -25,6 +26,7 @@ import type { XpotMeResponse } from "./types";
 import { AppLayout } from "@/components/xpot/AppLayout";
 import { homeForModules, useXpotModules } from "@/components/ModuleSwitch";
 import { InstallAppRow } from "@/components/xpot/InstallApp";
+import { RouteSettings } from "./RouteSettings";
 
 const COUNTRIES = [
   { code: "BR", dial: "+55", name: "Brazil" },
@@ -46,7 +48,7 @@ const COUNTRIES = [
   { code: "CN", dial: "+86", name: "China" },
 ];
 
-type SettingsTab = "profile" | "security" | "language" | "account";
+type SettingsTab = "profile" | "route" | "security" | "language" | "account";
 
 /** Country name in the app's language; falls back to the English name. */
 function countryName(code: string, fallback: string, locale: string): string {
@@ -286,6 +288,8 @@ export function XpotSettings() {
   const isSaving = profileMutation.isPending;
   const settingsTabs = [
     { id: "profile", label: t("sectionProfile"), icon: UserRound },
+    // Where the prospecting day ends: only for reps who do field visits.
+    ...(modules.includes("visits") ? [{ id: "route" as const, label: t("sectionRoute"), icon: MapPinned }] : []),
     { id: "security", label: t("sectionSecurity"), icon: ShieldCheck },
     { id: "language", label: tc("language"), icon: Languages },
     { id: "account", label: t("sectionAccount"), icon: BadgeInfo },
@@ -381,6 +385,12 @@ export function XpotSettings() {
                   {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                   <span>{isSaving ? t("saving") : t("saveProfile")}</span>
                 </button>
+              </Section>
+            )}
+
+            {activeTab === "route" && me && (
+              <Section title={t("sectionRoute")}>
+                <RouteSettings rep={me.rep} />
               </Section>
             )}
 

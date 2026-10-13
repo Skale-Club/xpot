@@ -13,6 +13,10 @@ const SCOPE_LABELS: Record<string, { title: string; detail: string }> = {
     title: "Read and write the Tags Journey",
     detail: "Timeline, plans, batches and pieces: read them, record entries and create plans. Entries it marks as proposed wait for an admin.",
   },
+  "xpot:prospecting": {
+    title: "Create and follow your Xpot prospecting searches",
+    detail: "Start cold-prospecting discovery jobs and read their progress and ranked candidates for your own Xpot representative profile.",
+  },
 };
 
 const layout = (title: string, body: string) => `<!doctype html>
@@ -79,7 +83,7 @@ export function renderConsentPage(input: {
   return layout(
     "Connect an AI app - Xpot",
     `<h1>${escapeHtml(input.clientName)} wants to connect to Xpot</h1>
-    <p class="sub">It will act through the MCP tools with your admin permissions.</p>
+    <p class="sub">It will act through the MCP tools with only the permissions shown below.</p>
     <p class="dest">Access goes to <code>${escapeHtml(input.redirectHost)}</code>. Only continue if you started this connection there.</p>
     <ul>${scopes}</ul>
     <div class="who">Connecting as <strong>${escapeHtml(input.userLabel)}</strong>. Revoke it any time in Admin › Tags › Journey › AI access.</div>

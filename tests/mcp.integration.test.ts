@@ -119,9 +119,21 @@ test.skipIf(!enabled)("mcp: token via admin API, tools over Streamable HTTP, rev
     try {
       const tools = (await client.listTools()).tools.map((t) => t.name).sort();
       assert.deepEqual(tools, [
+        "prospecting_create_today", "prospecting_job_get",
         "tags_batch_create", "tags_batch_get", "tags_batch_scan", "tags_batches_list", "tags_get", "tags_journey_get", "tags_journey_record", "tags_journey_review",
         "tags_plan_create", "tags_plan_update", "tags_plans_list",
       ]);
+
+      const noProspectingJob = await call(client, "prospecting_job_get");
+      assert.equal(noProspectingJob.isError, true);
+      assert.match(noProspectingJob.text, /not found/i);
+      const engineUnavailable = await call(client, "prospecting_create_today", {
+        location: "Framingham, MA",
+        sectors: ["barber shop"],
+        idempotencyKey: "integration-framingham-barber",
+      });
+      assert.equal(engineUnavailable.isError, true);
+      assert.match(engineUnavailable.text, /engine is not configured/i);
 
       // Something to document: a batch made through the site's own API.
       const batch = (await api("POST", "/api/xpot/admin/tag-batches", "jm-admin", { name: "MCP run", productType: "keychain", salesProductId, quantity: 4 })).json;

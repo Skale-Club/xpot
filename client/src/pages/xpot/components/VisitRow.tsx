@@ -25,6 +25,7 @@ export type VisitLike = {
   leadId: number;
   lead?: SalesLead & { locations?: any[] };
   status: string;
+  scheduledAt?: string | Date | null;
   checkedInAt?: string | Date | null;
   checkedOutAt?: string | Date | null;
   durationSeconds?: number | null;
@@ -43,6 +44,8 @@ export function VisitDetail({ visit, onDelete, layout = "dialog" }: {
   const { toast } = useToast();
   const t = useT(visitsMessages);
   const tl = useT(leadsMessages);
+  const isDesktop = useIsDesktop();
+  const [, navigate] = useLocation();
   const [status, setStatus] = useState(visit.status);
   // The desktop pane stays open across refetches: follow outcome changes made
   // elsewhere (e.g. a check-out from the active-visit strip).
@@ -309,7 +312,16 @@ export function VisitDetail({ visit, onDelete, layout = "dialog" }: {
 
       {/* Second column: outcome, timings, notes and the destructive action */}
       <div className="space-y-5">
-      <StatusPicker value={status} onChange={handleStatusChange} />
+      {visit.status === "planned" && !isDesktop ? (
+        <button
+          type="button"
+          onClick={() => navigate(`/check-in?leadId=${visit.leadId}&visitId=${visit.id}`)}
+          className="flex w-full items-center justify-center rounded-2xl bg-indigo-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-indigo-400"
+        >
+          {t("startPlannedVisit")}
+        </button>
+      ) : null}
+      {status !== "planned" ? <StatusPicker value={status} onChange={handleStatusChange} /> : null}
 
       {/* Time metadata */}
       <div
@@ -317,8 +329,8 @@ export function VisitDetail({ visit, onDelete, layout = "dialog" }: {
         style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}
       >
         <div>
-          <div className="text-[10px] font-semibold uppercase tracking-widest text-white/30 mb-1">{t("checkIn")}</div>
-          <div className="text-xs text-white/70">{formatDateTime(visit.checkedInAt)}</div>
+          <div className="text-[10px] font-semibold uppercase tracking-widest text-white/30 mb-1">{t(visit.checkedInAt ? "checkIn" : "scheduled")}</div>
+          <div className="text-xs text-white/70">{formatDateTime(visit.checkedInAt ?? visit.scheduledAt)}</div>
         </div>
         <div>
           <div className="text-[10px] font-semibold uppercase tracking-widest text-white/30 mb-1">{t("checkOut")}</div>
@@ -467,7 +479,7 @@ export function VisitRow({ visit }: { visit: VisitLike }) {
           }}
           subtitle={
             <div className="text-[10px] uppercase tracking-wider text-white/25">
-              {formatDateTime(visit.checkedInAt)}
+              {formatDateTime(visit.checkedInAt ?? visit.scheduledAt)}
             </div>
           }
           right={<StatusBadge status={visit.status} />}

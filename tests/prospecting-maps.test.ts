@@ -1,0 +1,69 @@
+import { describe, expect, it } from "vitest";
+import {
+  appleRouteUrl,
+  appleStopUrl,
+  googleRouteUrl,
+  googleStopUrl,
+  isAppleMobileDevice,
+} from "../client/src/pages/xpot/prospectingMaps.js";
+
+const start = { lat: "42.29", lng: "-71.49" };
+const stop = (lat: string, status = "planned") => ({ lat, lng: "-71.50", status });
+
+describe("prospecting navigation links", () => {
+  it("offers Apple Maps only on iPhone and iPad", () => {
+    expect(isAppleMobileDevice("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)", 5)).toBe(true);
+    // iPadOS asks for the desktop site and reports a Mac with touch.
+    expect(isAppleMobileDevice("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)", 5)).toBe(true);
+    expect(isAppleMobileDevice("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)", 0)).toBe(false);
+    expect(isAppleMobileDevice("Mozilla/5.0 (Linux; Android 14; Pixel 8)", 5)).toBe(false);
+  });
+
+  it("starts both apps at the route origin before the day begins", () => {
+    const stops = [stop("42.30"), stop("42.31")];
+    const google = new URL(googleRouteUrl(start, stops)!);
+    expect(google.searchParams.get("origin")).toBe("42.29,-71.49");
+    expect(google.searchParams.get("waypoints")).toBe("42.30,-71.50");
+    expect(google.searchParams.get("destination")).toBe("42.31,-71.50");
+
+    const apple = new URL(appleRouteUrl(start, stops)!);
+    expect(apple.origin).toBe("https://maps.apple.com");
+    expect(apple.searchParams.get("saddr")).toBe("42.29,-71.49");
+    expect(apple.searchParams.getAll("daddr")).toEqual(["42.30,-71.50", "42.31,-71.50"]);
+    expect(apple.searchParams.get("dirflg")).toBe("d");
+  });
+
+  it("continues from the rep's position with only the open stops", () => {
+    const stops = [stop("42.30", "completed"), stop("42.31"), stop("42.32", "skipped"), stop("42.33")];
+    const apple = new URL(appleRouteUrl(start, stops)!);
+    expect(apple.searchParams.has("saddr")).toBe(false);
+    expect(apple.searchParams.getAll("daddr")).toEqual(["42.31,-71.50", "42.33,-71.50"]);
+    expect(new URL(googleRouteUrl(start, stops)!).searchParams.has("origin")).toBe(false);
+  });
+
+  it("finishes the link at home when the route returns there", () => {
+    const home = { lat: "42.20", lng: "-71.40" };
+    const stops = [stop("42.30"), stop("42.31")];
+    const google = new URL(googleRouteUrl(start, stops, home)!);
+    expect(google.searchParams.get("destination")).toBe("42.20,-71.40");
+    expect(google.searchParams.get("waypoints")).toBe("42.30,-71.50|42.31,-71.50");
+    expect(new URL(appleRouteUrl(start, stops, home)!).searchParams.getAll("daddr").at(-1)).toBe("42.20,-71.40");
+
+    // Too many open stops for one link: home waits for a later link.
+    const many = Array.from({ length: 12 }, (_, index) => stop(`42.${30 + index}`));
+    expect(new URL(googleRouteUrl(start, many, home)!).searchParams.get("destination")).toBe("42.39,-71.50");
+    // Nothing left to visit: no link, even with a home.
+    expect(googleRouteUrl(start, [stop("42.30", "completed")], home)).toBeNull();
+  });
+
+  it("has nothing to open once every stop is done", () => {
+    const stops = [stop("42.30", "completed")];
+    expect(googleRouteUrl(start, stops)).toBeNull();
+    expect(appleRouteUrl(start, stops)).toBeNull();
+  });
+
+  it("navigates to a single stop by car", () => {
+    expect(new URL(appleStopUrl(stop("42.30"))).searchParams.get("daddr")).toBe("42.30,-71.50");
+    expect(new URL(googleStopUrl(stop("42.30"))).searchParams.get("travelmode")).toBe("driving");
+  });
+});

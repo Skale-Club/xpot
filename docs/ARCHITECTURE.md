@@ -142,7 +142,7 @@ server/
   storage.ts               Data access for Visits and the account; storage-sales.ts for the sales module
   canonicalHost.ts         301 from xpot.skale.club to xpot.place
 shared/                    Code both sides import
-  schema/                  Drizzle tables: auth, sales, integrations, branding, tags, mcp
+  schema/                  Drizzle tables: auth, sales, prospecting, organizations, integrations, branding, tags, mcp
   modules.ts               XPOT_MODULES, repModules
   tags.ts, tagAccess.ts, tagApp.ts, tagFace.ts, tagJourney.ts, tagProvisioning.ts, tagsApi.ts
                            Tags rules: codes and URLs, who may act, scanned payloads, faces,
@@ -159,16 +159,17 @@ nfc-provisioner/           Electron app that writes and verifies NFC chips over 
 
 ## 5. Tables
 
-39 tables, all in `shared/schema/`, plus `_xpot_migrations`, which the migration
+52 tables, all in `shared/schema/`, plus `_xpot_migrations`, which the migration
 runner creates for its own bookkeeping.
 
 | Group | Tables |
 |---|---|
-| People and businesses (shared by both modules) | `sales_reps`, `sales_leads`, `sales_lead_locations`, `sales_lead_contacts` |
+| People, organizations and businesses | `organizations`, `organization_memberships`, `organization_audit_log`, `sales_reps`, `sales_leads`, `sales_lead_locations`, `sales_lead_contacts` |
 | Visits | `sales_visits`, `sales_visit_notes`, `sales_visit_actions`, `sales_tasks`, `sales_opportunities_local`, `sales_app_settings` |
-| Sales module | `sales_products`, `sales_product_price_tiers`, `sales_sales`, `sales_sale_items`, `sales_consignments`, `sales_consignment_movements` |
+| Prospecting | `prospecting_jobs`, `prospecting_runs`, `prospecting_candidates`, `prospecting_routes`, `prospecting_route_stops` |
+| Sales module | `sales_products`, `sales_product_price_tiers`, `sales_sales`, `sales_sale_items`, `sales_sale_tags`, `sales_consignments`, `sales_consignment_movements` |
 | Integrations | `xphere_integrations`, `sales_sync_events`, `chat_integrations`, `integration_settings` |
-| Tags | `tag_batches`, `tags`, `tag_kits`, `tag_destination_history`, `tag_events`, `tag_direct_writes` |
+| Tags | `tag_batches`, `tags`, `tag_kits`, `tag_destination_history`, `tag_events`, `tag_direct_writes`, `tag_acquisitions`, `tag_acquisition_lines`, `tag_acquisition_units`, `tag_stock_movements` |
 | NFC writer | `tag_provisioning_devices`, `tag_provisioning_jobs`, `tag_provisioning_events` |
 | Tags Journey | `tag_plans`, `tag_journey_entries` |
 | Account | `users`, `sessions`, `auth_phone_codes`, `app_branding` |
@@ -220,8 +221,13 @@ starting together never apply one twice. Files are written to be re-runnable
 
 `POST /mcp` serves Streamable HTTP, statelessly: a fresh server per request,
 so any instance can answer any call (`server/mcp/server.ts`). Callers are
-admins only, through an OAuth 2.1 connection or a static token. The tools all
-live in `server/mcp/tools/tagJourney.ts`:
+admins only, through an OAuth 2.1 connection or a static token. Journey tools
+live in `server/mcp/tools/tagJourney.ts`; account-bound prospecting tools live
+in `server/mcp/tools/prospecting.ts`:
+
+OAuth connections are least-privilege: `xpot:journey` exposes only the Tags Journey family and
+`xpot:prospecting` exposes only the prospecting family. Static admin tokens retain both families
+for backwards compatibility.
 
 | Tool | What it does |
 |---|---|
@@ -234,6 +240,8 @@ live in `server/mcp/tools/tagJourney.ts`:
 | `tags_batch_create` | Create a batch of new pieces in house stock, with fresh codes and an optional face |
 | `tags_batches_list` | List batches with their counts |
 | `tags_get` | Read one piece by id or printed code, with its history |
+| `prospecting_create_today` | Start a cold-prospecting discovery job for the Xpot account that authorized the MCP connection |
+| `prospecting_job_get` | Read the latest or a specific prospecting job, its runs, progress and ranked candidates |
 
 ## 8. Tests
 

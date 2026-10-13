@@ -8,6 +8,7 @@ import { tabs } from "./pages/xpot/utils";
 import { XpotLeads } from "./pages/xpot/XpotLeads";
 import { XpotSales } from "./pages/xpot/XpotSales";
 import { XpotDashboard } from "./pages/xpot/XpotDashboard";
+import { XpotProspecting } from "./pages/xpot/XpotProspecting";
 
 import Login from "./pages/Login";
 import { LegalPage } from "./pages/legal/LegalPage";
@@ -31,7 +32,7 @@ import { OrganizationsPage } from "./pages/xpot/OrganizationsPage";
 
 // Screens redesigned for desktop use the full width there; the rest stay in a
 // narrow column until their turn (docs/DESKTOP.md).
-const WIDE_TABS = new Set<string>(["leads", "dashboard", "sales"]);
+const WIDE_TABS = new Set<string>(["leads", "visits", "dashboard", "sales", "prospecting"]);
 
 /**
  * Decides who gets the Visits screens before any Visits data is asked for: a
@@ -119,6 +120,7 @@ function XpotAppShell() {
         {activeTab === "dashboard" ? <XpotDashboard /> : null}
         {activeTab === "leads" ? <XpotLeads /> : null}
         {activeTab === "sales" ? <XpotSales /> : null}
+        {activeTab === "prospecting" ? <XpotProspecting /> : null}
       </div>
     </AppLayout>
   );

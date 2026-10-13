@@ -6,8 +6,7 @@ import { getDistanceMeters, syncTaskToGhl, syncVisitToGhl, syncVisitToXphere } f
 import { xpotCheckInSchema, xpotCheckOutSchema, xpotVisitNoteUpsertSchema, xpotVisitSummarySchema } from "#shared/xpot.js";
 import { salesStorage } from "../../storage-sales.js";
 import { activeStore, discardFiles, putPrivateFile } from "../../lib/files.js";
-import { DailyRouteError, finishVisitTransaction, getRouteStopForCheckIn, startRouteVisit } from "../../daily-routes.js";
-import { saveVisitSummaryTransaction } from "../../visit-summary.js";
+import { markProspectingVisitCheckedIn, markProspectingVisitFinished } from "../../prospecting/visit-sync.js";
 
 export function createVisitsRouter() {
   const router = Router();
@@ -60,6 +59,16 @@ export function createVisitsRouter() {
     const lead = await loadAccessibleLead(req, res, input.leadId);
     if (!lead) return;
 
+    const plannedVisit = input.visitId ? await storage.getSalesVisit(input.visitId) : null;
+    if (input.visitId && (
+      !plannedVisit ||
+      plannedVisit.repId !== actor!.rep.id ||
+      plannedVisit.leadId !== lead.id ||
+      plannedVisit.status !== "planned"
+    )) {
+      return res.status(400).json({ message: "Planned visit is not available for this check-in" });
+    }
+
     const locations = await storage.listSalesLeadLocations(input.leadId);
     const requestedLocationId = routeContext?.stop.locationId ?? input.locationId;
     const selectedLocation = requestedLocationId
@@ -92,10 +101,9 @@ export function createVisitsRouter() {
       return res.status(400).json({ message: "Outside geofence. Manual override reason required." });
     }
 
-    const visitInput = {
-      repId: actor!.rep.id,
-      leadId: lead.id,
+    const checkInValues = {
       locationId: selectedLocation?.id,
+      status: "in_progress" as const,
       checkedInAt: new Date(),
       lat: input.lat,
       lng: input.lng,
@@ -104,40 +112,30 @@ export function createVisitsRouter() {
       validationStatus,
       manualOverrideReason: input.manualOverrideReason,
     };
-    let visit;
-    if (routeContext) {
-      try {
-        visit = await startRouteVisit({ ...visitInput, stopId: routeContext.stop.id });
-      } catch (error) {
-        if (error instanceof DailyRouteError) return res.status(error.code === "route_stop_not_found" ? 404 : 409).json({ code: error.code, message: error.message });
-        throw error;
-      }
-    } else {
-      visit = await storage.createSalesVisit({
-        repId: visitInput.repId,
-        leadId: visitInput.leadId,
-        locationId: visitInput.locationId,
-        status: "in_progress",
-        scheduledAt: null,
-        checkedInAt: visitInput.checkedInAt,
-        checkedOutAt: null,
-        durationSeconds: null,
-        checkInLat: visitInput.lat?.toString(),
-        checkInLng: visitInput.lng?.toString(),
-        checkOutLat: null,
-        checkOutLng: null,
-        distanceFromTargetMeters: visitInput.distanceFromTargetMeters,
-        gpsAccuracyMeters: visitInput.gpsAccuracyMeters,
-        validationStatus,
-        manualOverrideReason: visitInput.manualOverrideReason,
-        source: "field-mobile",
-      });
-      await storage.updateSalesLead(lead.id, {
-        ...(lead.status === "prospect" ? { status: "lead" as const } : {}),
-        lastVisitAt: visit.checkedInAt,
-        nextVisitDueAt: null,
-      });
+    const visit = plannedVisit
+      ? await storage.updateSalesVisit(plannedVisit.id, checkInValues)
+      : await storage.createSalesVisit({
+          repId: actor!.rep.id,
+          leadId: lead.id,
+          scheduledAt: null,
+          source: "field-mobile",
+          ...checkInValues,
+        });
+    if (!visit) {
+      return res.status(409).json({ message: "Planned visit changed before check-in. Reload and try again." });
     }
+    if (plannedVisit) {
+      await markProspectingVisitCheckedIn(visit.id).catch((error) =>
+        console.error("[check-in] prospecting route sync error:", error)
+      );
+    }
+
+    // DAT-04: this used to be two sequential UPDATEs on the same row.
+    await storage.updateSalesLead(lead.id, {
+      ...(lead.status === "prospect" ? { status: "lead" as const } : {}),
+      lastVisitAt: visit.checkedInAt,
+      nextVisitDueAt: null,
+    });
 
     res.status(201).json({ visit, lead, location: selectedLocation ?? null });
   });
@@ -167,6 +165,10 @@ export function createVisitsRouter() {
       routeStopStatus: "summary_pending",
       updateLeadLastVisit: true,
     });
+
+    await markProspectingVisitFinished(visit.id, false).catch((error) =>
+      console.error("[check-out] prospecting route sync error:", error)
+    );
 
     res.json(updated);
 
@@ -207,6 +209,10 @@ export function createVisitsRouter() {
       updateLeadLastVisit: false,
     });
 
+    await markProspectingVisitFinished(visit.id, true).catch((error) =>
+      console.error("[cancel] prospecting route sync error:", error)
+    );
+
     res.json(updated);
   });
 
@@ -236,6 +242,11 @@ export function createVisitsRouter() {
     const visit = await storage.getSalesVisit(visitId);
     if (!visit || (visit.repId !== actor!.rep.id && !actor!.user.isAdmin)) {
       return res.status(404).json({ message: "Visit not found" });
+    }
+    if (visit.status === "planned") {
+      await markProspectingVisitFinished(visit.id, true).catch((error) =>
+        console.error("[delete visit] prospecting route sync error:", error)
+      );
     }
     const files = await storage.deleteSalesVisit(visitId);
     res.status(204).end();

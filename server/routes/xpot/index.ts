@@ -21,6 +21,7 @@ import { createConsignmentsRouter } from "./consignments.js";
 import { createVisitActionsRouter } from "./visit-actions.js";
 import { requireVisitsModule, VISITS_ONLY_PATHS } from "./middleware.js";
 import { createFilesRouter } from "./files.js";
+import { createProspectingRouter } from "./prospecting.js";
 import { createOrganizationsRouter } from "./organizations.js";
 import { createDailyRoutesRouter } from "./daily-routes.js";
 
@@ -45,6 +46,7 @@ export function registerXpotRoutes(app: Express) {
   app.use("/api/xpot", createSyncRouter());
   app.use("/api/xpot", createPlaceSearchRouter());
   app.use("/api/xpot", createMapRouter());
+  app.use("/api/xpot", createProspectingRouter());
   app.use("/api/xpot", createAdminRouter());
   app.use("/api/xpot", createAdminIntegrationsRouter());
   app.use("/api/xpot", createBrandingAdminRouter());

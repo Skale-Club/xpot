@@ -81,9 +81,14 @@ export async function revokeMcpToken(id: string): Promise<McpTokenItem> {
 }
 
 /** The live (not revoked) token behind a secret, or null. */
-export async function findActiveMcpToken(secret: string): Promise<{ id: string; name: string; tokenPrefix: string } | null> {
+export async function findActiveMcpToken(secret: string): Promise<{ id: string; name: string; tokenPrefix: string; createdByUserId: string | null } | null> {
   const [row] = await db
-    .select({ id: mcpTokens.id, name: mcpTokens.name, tokenPrefix: mcpTokens.tokenPrefix })
+    .select({
+      id: mcpTokens.id,
+      name: mcpTokens.name,
+      tokenPrefix: mcpTokens.tokenPrefix,
+      createdByUserId: mcpTokens.createdByUserId,
+    })
     .from(mcpTokens)
     .where(and(eq(mcpTokens.tokenHash, hashMcpSecret(secret)), isNull(mcpTokens.revokedAt)))
     .limit(1);

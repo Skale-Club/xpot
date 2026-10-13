@@ -43,7 +43,9 @@ export function XpotVisits({ basePath = "/dashboard/history" }: { basePath?: str
   const t = useT(visitsMessages);
   const tc = useT(commonMessages);
   const { visitsQuery } = useVisits();
-  const [viewMode, setViewMode] = useState<"all" | "day">("all");
+  const [viewMode, setViewMode] = useState<"all" | "day">(() =>
+    typeof window !== "undefined" && new URLSearchParams(window.location.search).get("view") === "day" ? "day" : "all"
+  );
   const [dayOffset, setDayOffset] = useState(0);
   const dateInputRef = useRef<HTMLInputElement>(null);
   const isDesktop = useIsDesktop();
@@ -76,10 +78,12 @@ export function XpotVisits({ basePath = "/dashboard/history" }: { basePath?: str
 
   const allVisits = visitsQuery.data || [];
 
-  const visitsForDay = allVisits.filter((visit) => {
-    if (!visit.checkedInAt) return false;
-    return isSameDay(new Date(visit.checkedInAt), selectedDate);
-  });
+  const visitsForDay = allVisits
+    .filter((visit) => {
+      const visitTime = visit.checkedInAt ?? visit.scheduledAt;
+      return Boolean(visitTime && isSameDay(new Date(visitTime), selectedDate));
+    })
+    .sort((a, b) => new Date(a.checkedInAt ?? a.scheduledAt!).getTime() - new Date(b.checkedInAt ?? b.scheduledAt!).getTime());
 
   const isToday = dayOffset === 0;
 
@@ -93,8 +97,9 @@ export function XpotVisits({ basePath = "/dashboard/history" }: { basePath?: str
   const countsByDay = useMemo(() => {
     const map = new Map<string, number>();
     for (const v of allVisits) {
-      if (!v.checkedInAt) continue;
-      const k = toLocalDateString(new Date(v.checkedInAt));
+      const visitTime = v.checkedInAt ?? v.scheduledAt;
+      if (!visitTime) continue;
+      const k = toLocalDateString(new Date(visitTime));
       map.set(k, (map.get(k) ?? 0) + 1);
     }
     return map;
@@ -163,6 +168,7 @@ export function XpotVisits({ basePath = "/dashboard/history" }: { basePath?: str
               { id: "no_answer",       label: t("filterNoAnswer"),     active: "rgba(251,146,60,0.2)",   border: "rgba(251,146,60,0.4)",  text: "#fdba74" },
               { id: "not_interested",  label: t("filterNotInterested"), active: "rgba(248,113,113,0.2)", border: "rgba(248,113,113,0.4)", text: "#fca5a5" },
               { id: "completed",       label: t("filterCompleted"),    active: "rgba(56,189,248,0.2)",   border: "rgba(56,189,248,0.4)",  text: "#7dd3fc" },
+              { id: "planned",         label: t("filterPlanned"),      active: "rgba(148,163,184,0.18)", border: "rgba(148,163,184,0.35)", text: "#cbd5e1" },
               { id: "in_progress",     label: t("filterInProgress"),   active: "rgba(59,130,246,0.2)",   border: "rgba(59,130,246,0.4)",  text: "#60a5fa" },
               { id: "cancelled",       label: t("filterCancelled"),    active: "rgba(239,68,68,0.2)",    border: "rgba(239,68,68,0.4)",   text: "#f87171" },
             ]).map(({ id, label, active, border, text }) => (

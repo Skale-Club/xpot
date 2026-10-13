@@ -105,7 +105,8 @@ Public:
 Visits module:
 - `/check-in`: legacy redirect to Prospecting; geo-validated visits now start directly from a daily route stop.
 - `/dashboard`: KPIs and the day; the Visits home.
-- `/visits`, `/visits/:id`: visit history, with a detail pane on desktop.
+- `/visits`, `/visits/:id`: today's planned route and visit history, with a detail pane on desktop.
+- `/prospecting`: two-field cold-prospecting planner (city + sectors), background discovery and today's route.
 - `/leads`, `/leads/:id`: businesses (Customers and Prospects), with a detail pane.
 - `/leads/prospecting`: one route per rep and day, with asynchronous generation, map, direct check-in and persistent progress.
 - `/leads/prospecting/summary/:visitId`: audio-first summary shown immediately after check-out.
@@ -142,7 +143,7 @@ shell decides which module each one belongs to (`client/src/components/xpot/modu
 
 ## Database
 
-43 tables, all defined in `shared/schema/` (the session store included), plus
+52 tables, all defined in `shared/schema/` (the session store included), plus
 the `_xpot_migrations` bookkeeping table the migration runner creates.
 
 **Visits** (prefix `sales_`)
@@ -156,6 +157,8 @@ the `_xpot_migrations` bookkeeping table the migration runner creates.
 - Sales module (migration 0017): `sales_products`, `sales_product_price_tiers`,
   `sales_sales`, `sales_sale_items`, `sales_consignments`, `sales_consignment_movements`
 - `xphere_integrations`: per-user Xphere keys
+- Prospecting: `prospecting_jobs`, `prospecting_runs`, `prospecting_candidates`,
+  `prospecting_routes`, `prospecting_route_stops`
 
 **Tags**
 - `tag_batches`, `tags`, `tag_kits`, `tag_destination_history`, `tag_events` (scans)

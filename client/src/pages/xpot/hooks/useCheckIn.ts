@@ -27,6 +27,7 @@ export function useCheckIn() {
   const { activeVisit, checkingInRef } = useVisits();
 
   const [selectedLeadId, setSelectedLeadId] = useState<number | "">("");
+  const [plannedVisitId, setPlannedVisitId] = useState<number | null>(null);
   const [checkInSearch, setCheckInSearch] = useState("");
   const [checkInDropdownOpen, setCheckInDropdownOpen] = useState(false);
 
@@ -34,6 +35,8 @@ export function useCheckIn() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const leadId = params.get("leadId");
+    const visitId = Number(params.get("visitId"));
+    setPlannedVisitId(Number.isInteger(visitId) && visitId > 0 ? visitId : null);
     if (!leadId || !leadsQuery.data) return;
     const lead = leadsQuery.data.find((l) => l.id === Number(leadId));
     if (lead) {
@@ -86,11 +89,16 @@ export function useCheckIn() {
     mutationFn: async (input: { leadId: number; lat?: number; lng?: number; gpsAccuracyMeters?: number | null }) => {
       if (!isOnline) throw new Error(t("offlineError"));
       checkingInRef.current = true;
-      const response = await apiRequest("POST", "/api/xpot/visits/check-in", input);
+      const plannedLeadId = Number(new URLSearchParams(window.location.search).get("leadId"));
+      const response = await apiRequest("POST", "/api/xpot/visits/check-in", {
+        ...input,
+        ...(plannedVisitId && plannedLeadId === input.leadId ? { visitId: plannedVisitId } : {}),
+      });
       return response.json();
     },
     onSuccess: async () => {
       toast({ title: t("checkedIn"), variant: "success" });
+      setPlannedVisitId(null);
       await invalidateXpotData();
       setTimeout(() => { checkingInRef.current = false; }, 2000);
     },

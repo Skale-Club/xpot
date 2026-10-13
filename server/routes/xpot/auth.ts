@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { createClient } from "@supabase/supabase-js";
-import { storage } from "../../storage.js";
+import { storage, type SalesRepProfilePatch } from "../../storage.js";
 import { requireXpotUser, ensureXpotRep } from "./middleware.js";
 import { getSupabaseAdmin } from "../../lib/supabase.js";
 import { discardFiles } from "../../lib/files.js";
@@ -46,6 +46,14 @@ export function createAuthRouter() {
     avatarUrl: z.string().url().optional().nullable(),
     firstName: z.string().max(100).optional().nullable(),
     lastName: z.string().max(100).optional().nullable(),
+    // Where the prospecting day ends. The address comes from a place search, so
+    // it always travels with its coordinates; null clears all three.
+    home: z.object({
+      address: z.string().trim().min(3).max(500),
+      lat: z.number().finite().min(-90).max(90),
+      lng: z.number().finite().min(-180).max(180),
+    }).nullable().optional(),
+    routeReturnHome: z.boolean().optional(),
   });
 
   router.patch("/me", async (req, res) => {
@@ -55,8 +63,22 @@ export function createAuthRouter() {
       if (!parsed.success) {
         return res.status(400).json({ message: "Invalid input", errors: parsed.error.flatten() });
       }
-      const { firstName, lastName, ...repData } = parsed.data;
-      const repPatch: { displayName?: string; phone?: string; avatarUrl?: string } = {};
+      const { firstName, lastName, home, routeReturnHome, ...repData } = parsed.data;
+      const repPatch: SalesRepProfilePatch = {};
+      if (home !== undefined) {
+        repPatch.homeAddress = home?.address ?? null;
+        repPatch.homeLat = home ? String(home.lat) : null;
+        repPatch.homeLng = home ? String(home.lng) : null;
+        // Without a home there is nowhere to return to.
+        if (!home) repPatch.routeReturnHome = false;
+      }
+      if (routeReturnHome !== undefined && home !== null) {
+        const hasHome = home !== undefined || Boolean(actor!.rep.homeLat && actor!.rep.homeLng);
+        if (routeReturnHome && !hasHome) {
+          return res.status(400).json({ message: "Save your home address before ending routes there." });
+        }
+        repPatch.routeReturnHome = routeReturnHome;
+      }
       if (repData.displayName !== undefined) repPatch.displayName = repData.displayName;
       if (repData.phone !== undefined) repPatch.phone = repData.phone ?? undefined;
       if (repData.avatarUrl !== undefined) repPatch.avatarUrl = repData.avatarUrl ?? undefined;

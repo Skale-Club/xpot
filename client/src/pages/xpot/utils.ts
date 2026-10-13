@@ -2,6 +2,8 @@ import {
   Activity,
   Building2,
   DollarSign,
+  MapPinned,
+  Route,
 } from "lucide-react";
 import type { GooglePlaceResult, FullSalesLead } from "./types";
 import { currentLocale, translate } from "@/i18n";
@@ -11,6 +13,7 @@ import { shellMessages } from "@/i18n/messages/shell";
 export const tabs = [
   { id: "dashboard", labelKey: "tabDashboard", icon: Activity },
   { id: "leads", labelKey: "tabLeads", icon: Building2 },
+  { id: "prospecting", labelKey: "tabProspecting", icon: Route },
   { id: "sales", labelKey: "tabSales", icon: DollarSign },
 ] as const;
 
