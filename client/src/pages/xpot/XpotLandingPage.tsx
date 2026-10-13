@@ -417,8 +417,7 @@ export function XpotLandingPage() {
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3 lg:gap-5">
               {content.audience.cards.map(({ imageUrl, title, body }, index) => (
                 <Reveal key={title} delay={index * 0.08}>
-                  <article className="relative h-full overflow-hidden rounded-xl border border-white/[0.07] bg-white/[0.035]">
-                    <GradientTopLine className="inset-x-8" />
+                  <article className="h-full overflow-hidden rounded-xl border border-white/[0.07] bg-white/[0.035]">
                     <div className="relative aspect-[16/10] overflow-hidden border-b border-white/[0.07] bg-[#080d19]">
                       <img
                         src={imageUrl}
@@ -430,6 +429,7 @@ export function XpotLandingPage() {
                         className="h-full w-full object-cover transition-transform duration-500 hover:scale-[1.02]"
                       />
                       <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#080d19]/35 via-transparent to-transparent" />
+                      <GradientTopLine className="inset-x-8 bottom-0 top-auto" />
                     </div>
                     <div className="p-6 sm:p-7">
                       <h2 className="text-base font-bold text-white">{title}</h2>
