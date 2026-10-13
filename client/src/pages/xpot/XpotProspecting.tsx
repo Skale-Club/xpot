@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { BellRing, Check, CheckCircle2, ChevronDown, ChevronRight, ChevronUp, Clock3, Home, Loader2, MapPin, Navigation, Radar, RefreshCw, Route as RouteIcon, Search, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowLeft, BellRing, Check, CheckCircle2, ChevronDown, ChevronRight, ChevronUp, Clock3, Home, Loader2, MapPin, Navigation, Radar, RefreshCw, Route as RouteIcon, Search, ShieldCheck, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/i18n";
@@ -13,6 +13,10 @@ import { approximateCandidateCenter } from "#shared/prospecting.js";
 import { RoutePreviewMap } from "./components/RoutePreviewMap";
 import { appleRouteUrl, appleStopUrl, googleRouteUrl, googleStopUrl, isAppleMobileDevice } from "./prospectingMaps";
 import { GLASS } from "@/components/xpot/surface";
+import { GradientTopLine } from "@/components/xpot/GradientTopLine";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { GoogleLogo } from "@/components/ui/google-logo";
+import { usePlaceSearch } from "./usePlaceSearch";
 import {
   exclusionCounts,
   MAX_PROSPECTING_SECTORS,
@@ -85,6 +89,26 @@ type RouteStop = {
 };
 
 type RouteDetails = { route: ProspectingRoute; stops: RouteStop[] };
+type CitySuggestion = { placeId: string; label: string; mainText: string; secondaryText: string };
+
+type PlanningStep = 0 | 1 | 2 | 3;
+
+const ROUTE_DRAFT_KEY = "xpot:route-planning-draft";
+
+function loadRouteDraft(): { city: string; sectors: string; shiftHours: number } {
+  const fallback = { city: "", sectors: "", shiftHours: 8 };
+  if (typeof window === "undefined") return fallback;
+  try {
+    const saved = JSON.parse(window.sessionStorage.getItem(ROUTE_DRAFT_KEY) ?? "null");
+    return {
+      city: typeof saved?.city === "string" ? saved.city : "",
+      sectors: typeof saved?.sectors === "string" ? saved.sectors : "",
+      shiftHours: [2, 4, 6, 8, 10, 12].includes(saved?.shiftHours) ? saved.shiftHours : 8,
+    };
+  } catch {
+    return fallback;
+  }
+}
 
 function localDateKey(date = new Date()) {
   const year = date.getFullYear();
@@ -141,9 +165,14 @@ function stopStatusLabel(status: RouteStop["status"], t: ReturnType<typeof useT<
 export function XpotProspecting() {
   const t = useT(prospectingMessages);
   const { toast } = useToast();
-  const [city, setCity] = useState("");
-  const [sectors, setSectors] = useState("");
-  const [shiftHours, setShiftHours] = useState(8);
+  const [initialDraft] = useState(loadRouteDraft);
+  const [city, setCity] = useState(initialDraft.city);
+  const [sectors, setSectors] = useState(initialDraft.sectors);
+  const [shiftHours, setShiftHours] = useState(initialDraft.shiftHours);
+  const [planningStep, setPlanningStep] = useState<PlanningStep>(0);
+  const [builderOpen, setBuilderOpen] = useState(false);
+  const [citySuggestionsOpen, setCitySuggestionsOpen] = useState(false);
+  const [sectorSuggestionsOpen, setSectorSuggestionsOpen] = useState(false);
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
   const [selectedRouteId, setSelectedRouteId] = useState<number | null>(null);
   const [candidateSelection, setCandidateSelection] = useState<{ jobId: number | null; ids: Set<number>; touched: boolean }>({
@@ -155,6 +184,34 @@ export function XpotProspecting() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const parsedSectors = useMemo(() => parseSectorSearches(sectors), [sectors]);
   const parsedSearches = parsedSectors.searches;
+  const deferredCity = useDeferredValue(city.trim());
+  const citySuggestionsQuery = useQuery<{ suggestions: CitySuggestion[] }>({
+    queryKey: ["/api/xpot/place-autocomplete", deferredCity],
+    enabled: builderOpen && planningStep === 0 && deferredCity.length >= 2,
+    queryFn: async () => {
+      const response = await fetch(`/api/xpot/place-autocomplete?q=${encodeURIComponent(deferredCity)}`, { credentials: "include" });
+      if (!response.ok) throw new Error((await response.text()) || response.statusText);
+      return response.json();
+    },
+  });
+  const sectorFragment = sectors.split(",").at(-1)?.trim() ?? "";
+  const sectorPlacesQuery = usePlaceSearch(
+    sectorFragment && city.trim() ? `${sectorFragment} in ${city.trim()}` : sectorFragment,
+    builderOpen && planningStep === 1 && sectorFragment.length >= 2,
+    {},
+  );
+  const googleSectorSuggestions = useMemo(
+    () => Array.from(new Set((sectorPlacesQuery.data?.results ?? []).map((place) => place.primaryType?.trim()).filter((value): value is string => Boolean(value)))).slice(0, 5),
+    [sectorPlacesQuery.data?.results],
+  );
+
+  useEffect(() => {
+    try {
+      window.sessionStorage.setItem(ROUTE_DRAFT_KEY, JSON.stringify({ city, sectors, shiftHours }));
+    } catch {
+      // Route planning still works when storage is unavailable.
+    }
+  }, [city, sectors, shiftHours]);
 
   const jobsQuery = useQuery<ProspectingJob[]>({
     queryKey: ["/api/xpot/prospecting/jobs"],
@@ -193,6 +250,9 @@ export function XpotProspecting() {
       return response.json() as Promise<ProspectingJobDetails>;
     },
     onSuccess: async (data) => {
+      try { window.sessionStorage.removeItem(ROUTE_DRAFT_KEY); } catch {}
+      setPlanningStep(0);
+      setBuilderOpen(false);
       setSelectedJobId(data.job.id);
       await queryClient.invalidateQueries({ queryKey: ["/api/xpot/prospecting/jobs"] });
       toast({ title: t("searchStarted"), description: t("searchStartedBody") });
@@ -378,71 +438,205 @@ export function XpotProspecting() {
         stops: routeDetails.stops.map((stop) => `${stop.lat},${stop.lng}`).join("|"),
       }).toString()}`
     : null, [routeDetails]);
+  const planningTitles = [t("cityStepTitle"), t("sectorsStepTitle"), t("durationStepTitle"), t("reviewStepTitle")];
+  const planningBodies = [t("cityStepBody"), t("sectorsStepBody"), t("durationStepBody"), t("reviewStepBody")];
+  const canAdvancePlanning = planningStep === 0
+    ? city.trim().length > 0
+    : planningStep === 1
+      ? parsedSearches.length > 0 && parsedSectors.overflow === 0
+      : true;
+  const loadingExistingPlan = jobsQuery.isLoading
+    || routesQuery.isLoading
+    || (activeJobId !== null && detailsQuery.isLoading)
+    || (activeRouteId !== null && routeQuery.isLoading);
+
+  const submitPlanningStep = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!canAdvancePlanning) return;
+    if (planningStep < 3) {
+      setPlanningStep((planningStep + 1) as PlanningStep);
+      return;
+    }
+    createJob.mutate();
+  };
+
+  const pickSectorSuggestion = (suggestion: string) => {
+    const values = sectors.split(",").slice(0, -1).map((value) => value.trim()).filter(Boolean);
+    setSectors([...values, suggestion].join(", "));
+    setSectorSuggestionsOpen(false);
+  };
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 sm:space-y-5">
-      <section className="overflow-hidden rounded-[20px] p-4 sm:rounded-[24px] sm:p-7" style={{ ...GLASS, background: "linear-gradient(135deg, rgba(79,70,229,0.16), rgba(14,165,233,0.06))" }}>
-        <div className="mb-4 flex items-start gap-3 sm:mb-5">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-indigo-500/20 text-indigo-300 sm:h-11 sm:w-11"><Radar className="h-5 w-5" /></div>
-          <div>
-            <h1 className="text-lg font-bold text-white sm:text-xl">{t("title")}</h1>
-            <p className="mt-1 max-w-2xl text-sm leading-5 text-white/65 sm:leading-6">{t("subtitle")}</p>
+      {!loadingExistingPlan && !details && !routeDetails ? (
+        <>
+          <section className="mx-auto flex min-h-[420px] max-w-3xl flex-col items-center justify-center px-2 py-10 text-center sm:min-h-[500px]">
+            <span className="flex h-16 w-16 items-center justify-center rounded-[22px] bg-indigo-500/15 text-indigo-300 shadow-[0_0_40px_rgba(99,102,241,0.12)]"><RouteIcon className="h-8 w-8" /></span>
+            <h1 className="mt-6 text-2xl font-bold tracking-tight text-white sm:text-3xl">{t("title")}</h1>
+            <p className="mt-3 max-w-xl text-sm leading-6 text-white/50 sm:text-base">{t("subtitle")}</p>
+            <button type="button" onClick={() => setBuilderOpen(true)} className="mt-8 flex min-h-[92px] w-full max-w-xl items-center gap-4 rounded-[22px] bg-gradient-to-br from-blue-500 to-indigo-500 p-4 text-left text-white shadow-[0_12px_34px_rgba(59,130,246,0.28)] transition-transform active:scale-[0.985]">
+              <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/15"><RouteIcon className="h-7 w-7" /></span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-lg font-bold tracking-tight">{t("openBuilder")}</span>
+                <span className="mt-1 block text-sm leading-5 text-white/75">{t("openBuilderHint")}</span>
+              </span>
+              <ChevronRight className="h-6 w-6 shrink-0 text-white/90" />
+            </button>
+          </section>
+
+          <Dialog open={builderOpen} onOpenChange={setBuilderOpen}>
+            <DialogContent className="max-h-[calc(100dvh-2rem)] w-[calc(100%-1.5rem)] max-w-2xl overflow-y-auto rounded-[24px] border border-white/10 bg-[#090f1d] p-0 text-white shadow-[0_28px_90px_rgba(0,0,0,0.72)] sm:rounded-[28px]">
+              <GradientTopLine glow />
+              <DialogTitle className="sr-only">{planningTitles[planningStep]}</DialogTitle>
+              <DialogDescription className="sr-only">{planningBodies[planningStep]}</DialogDescription>
+              <div className="min-h-[500px] p-5 sm:p-8">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-indigo-500/15 text-indigo-300"><Radar className="h-5 w-5" /></span>
+              <div>
+                <p className="text-sm font-bold text-white">{t("title")}</p>
+                <p className="text-xs font-medium text-white/45">{t("setupProgress", { current: planningStep + 1, total: 4 })}</p>
+              </div>
+            </div>
+            <span className="text-sm font-bold tabular-nums text-indigo-200">{planningStep + 1}/4</span>
           </div>
-        </div>
-        <form className="grid gap-4 md:grid-cols-[1fr_1fr_auto] md:items-end" onSubmit={(event) => { event.preventDefault(); createJob.mutate(); }}>
-          <label className="block" htmlFor="prospecting-city">
-            <span className="mb-2 block text-xs font-semibold text-white/65">{t("cityLabel")}</span>
-            <div className="relative"><MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/55" /><input id="prospecting-city" value={city} onChange={(event) => setCity(event.target.value)} placeholder={t("cityPlaceholder")} autoComplete="address-level2" className="h-12 w-full rounded-xl border border-white/15 bg-black/20 pl-10 pr-3 text-base text-white transition placeholder:text-white/45 focus:border-indigo-300 sm:h-11 sm:text-sm" /></div>
-          </label>
-          <label className="block" htmlFor="prospecting-sectors">
-            <span className="mb-2 block text-xs font-semibold text-white/65">{t("sectorsLabel")}</span>
-            <div className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/55" /><input id="prospecting-sectors" value={sectors} onChange={(event) => setSectors(event.target.value)} placeholder={t("sectorsPlaceholder")} aria-describedby="prospecting-sectors-help" aria-invalid={parsedSectors.overflow > 0} className={`h-12 w-full rounded-xl border bg-black/20 pl-10 pr-3 text-base text-white transition placeholder:text-white/45 sm:h-11 sm:text-sm ${parsedSectors.overflow > 0 ? "border-red-400/70" : "border-white/15 focus:border-indigo-300"}`} /></div>
-            <div id="prospecting-sectors-help" className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-white/60">
-              <span>{t("sectorsHint")}</span>
-              <span className="font-semibold tabular-nums">{t("sectorsCount", { count: parsedSectors.total, max: MAX_PROSPECTING_SECTORS })}</span>
-            </div>
-            {parsedSectors.duplicateCount > 0 ? <p className="mt-1 text-xs text-sky-200" role="status">{t("duplicateSectors", { count: parsedSectors.duplicateCount })}</p> : null}
-            {parsedSectors.overflow > 0 ? <p className="mt-1 text-xs font-medium text-red-200" role="alert">{t("sectorsOverflow", { count: parsedSectors.overflow, max: MAX_PROSPECTING_SECTORS })}</p> : null}
-          </label>
-          <Button type="submit" disabled={createJob.isPending || !city.trim() || parsedSearches.length === 0 || parsedSectors.overflow > 0} className="order-4 h-12 w-full touch-manipulation rounded-xl bg-indigo-500 px-5 text-white md:order-none md:h-11 md:w-auto">
-            {createJob.isPending ? <><Loader2 className="animate-spin" />{t("creating")}</> : <><RouteIcon />{t("buildToday")}</>}
-          </Button>
-          <fieldset className="order-3 md:order-none md:col-span-3">
-            <legend className="mb-2 text-xs font-semibold text-white/65">{t("shiftLabel")}</legend>
-            <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
-              {[2, 4, 6, 8, 10, 12].map((hours) => (
-                <button
-                  key={hours}
-                  type="button"
-                  aria-pressed={shiftHours === hours}
-                  onClick={() => setShiftHours(hours)}
-                  className={`min-h-11 touch-manipulation rounded-xl border px-2 py-2 text-sm font-semibold transition ${shiftHours === hours ? "border-indigo-300/70 bg-indigo-500/25 text-indigo-50" : "border-white/15 bg-black/10 text-white/65 hover:bg-white/[0.07]"}`}
-                >
-                  {t("shiftHours", { hours })}
-                </button>
-              ))}
-            </div>
-          </fieldset>
-        </form>
-      </section>
 
-      <div className="grid gap-5 lg:grid-cols-[0.85fr_1.35fr]">
-        <section className="rounded-[20px] p-4 sm:rounded-[22px] sm:p-5" style={GLASS}>
-          <h2 className="mb-4 text-sm font-bold text-white">{t("recentPlans")}</h2>
-          {todayJobs.length === 0 ? <p className="py-8 text-center text-sm text-white/60">{t("noPlans")}</p> : (
-            <div className="space-y-2">
-              {todayJobs.map((job) => (
-                <button key={job.id} type="button" aria-current={activeJobId === job.id ? "true" : undefined} onClick={() => setSelectedJobId(job.id)} className={`flex min-h-14 w-full touch-manipulation items-center gap-3 rounded-2xl border p-3 text-left transition ${activeJobId === job.id ? "border-indigo-300/50 bg-indigo-500/15" : "border-white/10 bg-white/[0.025] hover:bg-white/[0.07]"}`}>
-                  <div className={`h-2.5 w-2.5 rounded-full ${job.status === "completed" ? "bg-emerald-400" : job.status === "failed" ? "bg-red-400" : "motion-safe:animate-pulse bg-sky-400"}`} aria-hidden="true" />
-                  <div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold text-white/90">{job.location}</div><div className="mt-0.5 text-xs text-white/60">{statusLabel(job.status, t)}</div></div>
-                  <ChevronRight className="h-4 w-4 text-white/55" aria-hidden="true" />
-                </button>
-              ))}
-            </div>
-          )}
-        </section>
+          <div className="mt-5 grid grid-cols-4 gap-2" aria-hidden="true">
+            {[0, 1, 2, 3].map((step) => <span key={step} className={`h-1 rounded-full transition-colors ${step <= planningStep ? "bg-gradient-to-r from-indigo-400 to-sky-400" : "bg-white/10"}`} />)}
+          </div>
 
-        <section className="min-w-0 rounded-[20px] p-4 sm:rounded-[22px] sm:p-5" style={GLASS}>
+          <form className="flex min-h-[390px] flex-col" onSubmit={submitPlanningStep}>
+            <div className="flex-1 py-9 sm:py-12">
+              <h1 className="max-w-xl text-2xl font-bold tracking-tight text-white sm:text-3xl">{planningTitles[planningStep]}</h1>
+              <p className="mt-3 max-w-xl text-sm leading-6 text-white/55 sm:text-base">{planningBodies[planningStep]}</p>
+
+              {planningStep === 0 ? (
+                <label className="mt-8 block" htmlFor="prospecting-city">
+                  <span className="sr-only">{t("cityLabel")}</span>
+                  <div className="relative">
+                    <MapPin className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-indigo-300" />
+                    <input
+                      autoFocus
+                      id="prospecting-city"
+                      value={city}
+                      onChange={(event) => { setCity(event.target.value); setCitySuggestionsOpen(true); }}
+                      onFocus={() => setCitySuggestionsOpen(true)}
+                      onBlur={() => window.setTimeout(() => setCitySuggestionsOpen(false), 150)}
+                      placeholder={t("cityPlaceholder")}
+                      autoComplete="off"
+                      className="h-14 w-full rounded-2xl border border-white/15 bg-black/20 pl-12 pr-4 text-base text-white outline-none transition placeholder:text-white/30 focus:border-indigo-300/70 focus:bg-black/30"
+                    />
+                    {citySuggestionsOpen && deferredCity.length >= 2 ? (
+                      <div className="absolute inset-x-0 top-[calc(100%+8px)] z-50 overflow-hidden rounded-2xl border border-white/10 bg-[#111827] shadow-[0_18px_44px_rgba(0,0,0,0.55)]">
+                        {citySuggestionsQuery.isFetching ? <div className="flex items-center gap-2 px-4 py-3 text-sm text-white/50"><Loader2 className="h-4 w-4 animate-spin" />{t("googleSuggestions")}</div> : null}
+                        {citySuggestionsQuery.isError ? <div className="px-4 py-3 text-sm leading-5 text-amber-100/70">{t("googleUnavailable")}</div> : null}
+                        {citySuggestionsQuery.data?.suggestions.map((suggestion) => (
+                          <button key={suggestion.placeId} type="button" onClick={() => { setCity(suggestion.label); setCitySuggestionsOpen(false); }} className="flex w-full items-center gap-3 border-t border-white/[0.06] px-4 py-3 text-left transition first:border-t-0 hover:bg-white/[0.06]">
+                            <MapPin className="h-4 w-4 shrink-0 text-indigo-300" />
+                            <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-white/90">{suggestion.mainText}</span><span className="block truncate text-xs text-white/40">{suggestion.secondaryText}</span></span>
+                            <GoogleLogo className="h-4 w-4 shrink-0" />
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                </label>
+              ) : null}
+
+              {planningStep === 1 ? (
+                <label className="mt-8 block" htmlFor="prospecting-sectors">
+                  <span className="sr-only">{t("sectorsLabel")}</span>
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-indigo-300" />
+                    <input
+                      autoFocus
+                      id="prospecting-sectors"
+                      value={sectors}
+                      onChange={(event) => { setSectors(event.target.value); setSectorSuggestionsOpen(true); }}
+                      onFocus={() => setSectorSuggestionsOpen(true)}
+                      onBlur={() => window.setTimeout(() => setSectorSuggestionsOpen(false), 150)}
+                      placeholder={t("sectorsPlaceholder")}
+                      autoComplete="off"
+                      aria-describedby="prospecting-sectors-help"
+                      aria-invalid={parsedSectors.overflow > 0}
+                      className={`h-14 w-full rounded-2xl border bg-black/20 pl-12 pr-4 text-base text-white outline-none transition placeholder:text-white/30 focus:bg-black/30 ${parsedSectors.overflow > 0 ? "border-red-400/70" : "border-white/15 focus:border-indigo-300/70"}`}
+                    />
+                    {sectorSuggestionsOpen && sectorFragment.length >= 2 && (sectorPlacesQuery.isFetching || sectorPlacesQuery.isError || googleSectorSuggestions.length > 0) ? (
+                      <div className="absolute inset-x-0 top-[calc(100%+8px)] z-50 overflow-hidden rounded-2xl border border-white/10 bg-[#111827] shadow-[0_18px_44px_rgba(0,0,0,0.55)]">
+                        {sectorPlacesQuery.isFetching ? <div className="flex items-center gap-2 px-4 py-3 text-sm text-white/50"><Loader2 className="h-4 w-4 animate-spin" />{t("googleSuggestions")}</div> : null}
+                        {sectorPlacesQuery.isError ? <div className="px-4 py-3 text-sm leading-5 text-amber-100/70">{t("googleUnavailable")}</div> : null}
+                        {googleSectorSuggestions.map((suggestion) => (
+                          <button key={suggestion} type="button" onClick={() => pickSectorSuggestion(suggestion)} className="flex w-full items-center gap-3 border-t border-white/[0.06] px-4 py-3 text-left transition first:border-t-0 hover:bg-white/[0.06]">
+                            <Search className="h-4 w-4 shrink-0 text-indigo-300" />
+                            <span className="min-w-0 flex-1 truncate text-sm font-semibold text-white/90">{suggestion}</span>
+                            <GoogleLogo className="h-4 w-4 shrink-0" />
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                  <div id="prospecting-sectors-help" className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-white/50">
+                    <span>{t("sectorsHint")}</span>
+                    <span className="font-semibold tabular-nums">{t("sectorsCount", { count: parsedSectors.total, max: MAX_PROSPECTING_SECTORS })}</span>
+                  </div>
+                  {parsedSectors.duplicateCount > 0 ? <p className="mt-2 text-xs text-sky-200" role="status">{t("duplicateSectors", { count: parsedSectors.duplicateCount })}</p> : null}
+                  {parsedSectors.overflow > 0 ? <p className="mt-2 text-xs font-medium text-red-200" role="alert">{t("sectorsOverflow", { count: parsedSectors.overflow, max: MAX_PROSPECTING_SECTORS })}</p> : null}
+                </label>
+              ) : null}
+
+              {planningStep === 2 ? (
+                <fieldset className="mt-8">
+                  <legend className="sr-only">{t("shiftLabel")}</legend>
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                    {[2, 4, 6, 8, 10, 12].map((hours) => (
+                      <button key={hours} type="button" aria-pressed={shiftHours === hours} onClick={() => setShiftHours(hours)} className={`min-h-16 touch-manipulation rounded-2xl border px-3 py-3 text-base font-bold transition ${shiftHours === hours ? "border-indigo-300/70 bg-indigo-500/25 text-white shadow-[0_0_24px_rgba(99,102,241,0.12)]" : "border-white/12 bg-black/10 text-white/55 hover:bg-white/[0.06] hover:text-white/80"}`}>
+                        {t("shiftHours", { hours })}
+                      </button>
+                    ))}
+                  </div>
+                </fieldset>
+              ) : null}
+
+              {planningStep === 3 ? (
+                <dl className="mt-7 divide-y divide-white/10 border-y border-white/10">
+                  {[
+                    { label: t("areaSummary"), value: city.trim(), step: 0 as PlanningStep },
+                    { label: t("sectorsSummary"), value: parsedSearches.map((search) => search.niche).join(", "), step: 1 as PlanningStep },
+                    { label: t("durationSummary"), value: t("shiftHours", { hours: shiftHours }), step: 2 as PlanningStep },
+                  ].map((item) => (
+                    <div key={item.label} className="flex items-center gap-4 py-4">
+                      <div className="min-w-0 flex-1">
+                        <dt className="text-xs font-semibold uppercase tracking-wider text-white/35">{item.label}</dt>
+                        <dd className="mt-1 truncate text-sm font-semibold capitalize text-white/85">{item.value}</dd>
+                      </div>
+                      <button type="button" onClick={() => setPlanningStep(item.step)} className="text-xs font-bold text-indigo-300 transition hover:text-indigo-200">{t("edit")}</button>
+                    </div>
+                  ))}
+                </dl>
+              ) : null}
+            </div>
+
+            <div className="flex items-center gap-3 border-t border-white/10 pt-5">
+              {planningStep > 0 ? (
+                <button type="button" onClick={() => setPlanningStep((planningStep - 1) as PlanningStep)} className="flex h-12 items-center gap-2 rounded-xl px-3 text-sm font-semibold text-white/55 transition hover:bg-white/[0.05] hover:text-white/80"><ArrowLeft className="h-4 w-4" />{t("back")}</button>
+              ) : <span />}
+              <Button type="submit" disabled={!canAdvancePlanning || createJob.isPending} className="ml-auto h-12 min-w-36 touch-manipulation rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-5 font-bold text-white">
+                {createJob.isPending ? <><Loader2 className="animate-spin" />{t("creating")}</> : planningStep === 3 ? <><RouteIcon />{t("buildToday")}</> : <>{t("continue")}<ChevronRight className="h-4 w-4" /></>}
+              </Button>
+            </div>
+          </form>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </>
+      ) : null}
+
+      {loadingExistingPlan && !details && !routeDetails ? (
+        <section className="flex min-h-[420px] items-center justify-center rounded-[20px]" style={GLASS}><Loader2 className="h-7 w-7 animate-spin text-indigo-300" /></section>
+      ) : null}
+
+      {!routeDetails && details ? (
+        <section className="mx-auto min-w-0 max-w-4xl rounded-[20px] p-4 sm:rounded-[22px] sm:p-6" style={GLASS}>
           {detailsQuery.isLoading ? <div className="flex min-h-48 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-indigo-300" /></div> : details ? (
             <div className="space-y-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -567,7 +761,7 @@ export function XpotProspecting() {
             </div>
           ) : <div className="flex min-h-48 items-center justify-center text-sm text-white/60">{t("noPlans")}</div>}
         </section>
-      </div>
+      ) : null}
 
       {routeDetails ? (
         <section id="today-route" className="scroll-mt-4 overflow-hidden rounded-[20px] sm:rounded-[24px]" style={GLASS}>

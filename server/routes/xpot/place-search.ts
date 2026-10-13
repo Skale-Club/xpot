@@ -6,6 +6,68 @@ export function createPlaceSearchRouter() {
   const router = Router();
   router.use(requireXpotUser);
 
+  router.get("/place-autocomplete", async (req, res) => {
+    const input = typeof req.query.q === "string" ? req.query.q.trim() : "";
+    if (input.length < 2) return res.json({ suggestions: [] });
+
+    const apiKey = await resolveGoogleApiKey();
+    if (!apiKey) {
+      return res.status(503).json({ message: "Google Places is not configured. Please add API key in Admin > Integrations." });
+    }
+
+    try {
+      const response = await fetch("https://places.googleapis.com/v1/places:autocomplete", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Goog-Api-Key": apiKey,
+          "X-Goog-FieldMask": [
+            "suggestions.placePrediction.placeId",
+            "suggestions.placePrediction.text.text",
+            "suggestions.placePrediction.structuredFormat.mainText.text",
+            "suggestions.placePrediction.structuredFormat.secondaryText.text",
+          ].join(","),
+        },
+        body: JSON.stringify({
+          input,
+          includedPrimaryTypes: ["(cities)"],
+          includedRegionCodes: ["us"],
+          languageCode: "en",
+        }),
+      });
+
+      if (!response.ok) {
+        const detail = await response.text();
+        return res.status(502).json({ message: detail || "Google Places autocomplete failed" });
+      }
+
+      const data = await response.json() as {
+        suggestions?: Array<{
+          placePrediction?: {
+            placeId?: string;
+            text?: { text?: string };
+            structuredFormat?: { mainText?: { text?: string }; secondaryText?: { text?: string } };
+          };
+        }>;
+      };
+      res.json({
+        suggestions: (data.suggestions ?? []).flatMap((suggestion) => {
+          const prediction = suggestion.placePrediction;
+          const label = prediction?.text?.text?.trim();
+          if (!prediction?.placeId || !label) return [];
+          return [{
+            placeId: prediction.placeId,
+            label,
+            mainText: prediction.structuredFormat?.mainText?.text?.trim() || label,
+            secondaryText: prediction.structuredFormat?.secondaryText?.text?.trim() || "",
+          }];
+        }),
+      });
+    } catch (err) {
+      return res.status(502).json({ message: (err as Error).message || "Google Places autocomplete failed" });
+    }
+  });
+
   router.get("/place-search", async (req, res) => {
     const query = typeof req.query.q === "string" ? req.query.q.trim() : "";
     if (query.length < 2) {
