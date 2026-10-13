@@ -338,15 +338,14 @@ export function XpotLandingPage() {
                     <div className="pointer-events-none absolute left-1/2 top-0 h-28 w-48 -translate-x-1/2 rounded-full bg-[#5272F2]/10 blur-3xl" />
 
                     <DialogHeader className="relative space-y-0 pb-3 text-center sm:text-center">
-                      <XpotMark className="mx-auto h-12 w-12" />
-                      <div className="pt-4">
-                        <DialogTitle className="text-center text-xl font-bold tracking-tight text-white sm:text-2xl">
-                          {content.account.welcomeTitle}
-                        </DialogTitle>
-                        <DialogDescription className="mx-auto mt-2 max-w-sm text-center text-sm leading-6 text-white/55">
-                          {content.account.welcomeSub}
-                        </DialogDescription>
+                      <div className="flex items-center justify-center gap-2.5">
+                        <XpotMark className="h-12 w-12" />
+                        <span className="text-2xl font-bold tracking-tight text-white">Xpot</span>
                       </div>
+                      <DialogTitle className="sr-only">{content.account.welcomeTitle}</DialogTitle>
+                      <DialogDescription className="mx-auto mt-4 max-w-sm text-center text-sm leading-6 text-white/55">
+                        {content.account.welcomeSub}
+                      </DialogDescription>
                     </DialogHeader>
 
                     {error && (
