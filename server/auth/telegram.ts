@@ -28,29 +28,29 @@ export function formatSignupLeadTelegram(lead: SignupLeadTelegram): string {
   const languages = lead.languages.map((language) => LANGUAGES[language] ?? language);
   if (lead.otherLanguages?.trim()) languages.push(lead.otherLanguages.trim());
   return [
-    lead.test ? "🧪 <b>LEAD DE TESTE · XPOT</b>" : "✨ <b>NOVO LEAD · XPOT</b>",
-    "✅ Formulário concluído",
+    lead.test ? "<b>LEAD DE TESTE · XPOT</b>" : "<b>NOVO LEAD · XPOT</b>",
+    "Formulário concluído",
     "",
     "<b>Contato</b>",
-    `👤 ${escapeTelegramHtml(lead.name)}`,
-    `📱 ${escapeTelegramHtml(lead.phone)}`,
-    `✉️ ${escapeTelegramHtml(lead.email)}`,
+    `Nome: ${escapeTelegramHtml(lead.name)}`,
+    `Telefone: ${escapeTelegramHtml(lead.phone)}`,
+    `E-mail: ${escapeTelegramHtml(lead.email)}`,
     "",
     "<b>Área de atuação</b>",
-    `📍 ${escapeTelegramHtml(lead.workCity)}, ${escapeTelegramHtml(lead.workRegion)}`,
-    `🚗 Veículo próprio: ${lead.hasVehicle ? "Sim" : "Não"}`,
-    `🗣 Idiomas: ${escapeTelegramHtml(languages.join(", "))}`,
+    `Local: ${escapeTelegramHtml(lead.workCity)}, ${escapeTelegramHtml(lead.workRegion)}`,
+    `Veículo próprio: ${lead.hasVehicle ? "Sim" : "Não"}`,
+    `Idiomas: ${escapeTelegramHtml(languages.join(", "))}`,
     "",
     "<b>Perfil</b>",
-    `💼 Ocupação: ${escapeTelegramHtml(lead.occupation)}`,
-    `🤝 Vendas: ${SALES[lead.salesExperience]}`,
-    `🚶 Campo: ${READINESS[lead.fieldSalesReadiness]}`,
-    `🗓 Disponibilidade: ${AVAILABILITY[lead.availability]}`,
+    `Ocupação: ${escapeTelegramHtml(lead.occupation)}`,
+    `Experiência em vendas: ${SALES[lead.salesExperience]}`,
+    `Venda presencial: ${READINESS[lead.fieldSalesReadiness]}`,
+    `Disponibilidade: ${AVAILABILITY[lead.availability]}`,
     "",
     "<b>Confirmações</b>",
-    "✓ Investimento no kit inicial",
-    "✓ Compromisso com atividade em campo",
-    ...(lead.message?.trim() ? ["", "<b>Mensagem</b>", `💬 ${escapeTelegramHtml(lead.message.trim())}`] : []),
+    "Investimento no kit inicial: confirmado",
+    "Atividade em campo: confirmada",
+    ...(lead.message?.trim() ? ["", "<b>Mensagem</b>", escapeTelegramHtml(lead.message.trim())] : []),
   ].join("\n");
 }
 
@@ -68,7 +68,7 @@ export async function sendSignupTelegram(text: string, options: TelegramOptions 
     const phone = options.whatsappPhone?.replace(/\D/g, "") ?? "";
     const replyMarkup = phone.length >= 8 ? {
       inline_keyboard: [[{
-        text: "💬 Chamar no WhatsApp",
+        text: "Chamar no WhatsApp",
         url: `https://wa.me/${phone}?text=${encodeURIComponent(options.whatsappText ?? "Olá! Recebemos seu cadastro no Xpot e queremos conversar com você.")}`,
       }]],
     } : undefined;

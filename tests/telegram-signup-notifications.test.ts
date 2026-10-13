@@ -36,7 +36,7 @@ test("Telegram sign-up notices post to the configured chat", async () => {
     text: "<b>Xpot application</b>",
     parse_mode: "HTML",
     disable_web_page_preview: true,
-    reply_markup: { inline_keyboard: [[{ text: "💬 Chamar no WhatsApp", url: "https://wa.me/15085550199?text=Hello" }]] },
+    reply_markup: { inline_keyboard: [[{ text: "Chamar no WhatsApp", url: "https://wa.me/15085550199?text=Hello" }]] },
   });
 });
 

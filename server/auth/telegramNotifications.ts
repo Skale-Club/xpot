@@ -25,7 +25,7 @@ export function startAbandonedSignupNotifier(): () => void {
       const name = [row.firstName, row.lastName].filter(Boolean).join(" ") || "Name not provided";
       const place = [row.request.workCity, row.request.workRegion].filter(Boolean).join(", ") || "location not provided";
       const sent = await sendSignupTelegram(
-        `📝 <b>RASCUNHO ABANDONADO · XPOT</b>\n\n👤 ${escapeTelegramHtml(name)}\n📱 ${escapeTelegramHtml(row.phone ?? "Telefone indisponível")}\n📍 ${escapeTelegramHtml(place)}\n\n⏸ Parou na pergunta ${row.request.draftStep + 1}.`,
+        `<b>RASCUNHO ABANDONADO · XPOT</b>\n\nNome: ${escapeTelegramHtml(name)}\nTelefone: ${escapeTelegramHtml(row.phone ?? "Indisponível")}\nLocal: ${escapeTelegramHtml(place)}\n\nParou na pergunta ${row.request.draftStep + 1}.`,
         {
           whatsappPhone: row.phone,
           whatsappText: `Olá, ${name.split(/\s+/)[0]}! Vimos que você começou seu cadastro no Xpot. Posso ajudar?`,
