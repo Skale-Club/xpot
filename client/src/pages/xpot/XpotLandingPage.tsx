@@ -510,20 +510,32 @@ export function XpotLandingPage() {
 
           {/* Call to action */}
           <Reveal>
-            <section className="relative mx-auto max-w-4xl space-y-6 overflow-hidden rounded-2xl border border-[#5272F2]/20 bg-[linear-gradient(100deg,rgba(82,114,242,0.12),rgba(11,184,175,0.08),rgba(82,114,242,0.1))] p-8 text-center sm:p-12">
-              <h2 className="text-2xl font-bold tracking-tight text-white sm:text-3xl lg:text-4xl">{content.cta.title}</h2>
-              <p className="mx-auto max-w-xl text-sm leading-relaxed text-white/65 sm:text-base lg:text-lg">{content.cta.body}</p>
-              <div className="mx-auto max-w-xs pt-2">
-                {me ? (
-                  <Button onClick={goToApp} className="xpot-brand-cta flex h-12 w-full items-center justify-center gap-2 rounded-xl text-sm font-semibold text-white transition-all">
-                    {content.account.authenticatedCta}
-                    <ArrowRight className="h-4 w-4" />
-                  </Button>
-                ) : (
-                  <Button onClick={() => setIsLoginOpen(true)} className="xpot-brand-cta h-12 w-full rounded-xl text-sm font-semibold text-white transition-all">
-                    {content.cta.button}
-                  </Button>
-                )}
+            <section className="relative mx-auto max-w-4xl overflow-hidden rounded-2xl border border-[#5272F2]/20 bg-[linear-gradient(100deg,rgba(82,114,242,0.12),rgba(11,184,175,0.08),rgba(82,114,242,0.1))] p-8 text-center sm:p-12">
+              <img
+                src="/landing/cta-route-map.webp"
+                alt=""
+                width={1672}
+                height={941}
+                loading="lazy"
+                decoding="async"
+                className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-45"
+              />
+              <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(100deg,rgba(5,7,15,0.82),rgba(6,14,26,0.68),rgba(5,7,15,0.8))]" />
+              <div className="relative z-10 space-y-6">
+                <h2 className="text-2xl font-bold tracking-tight text-white sm:text-3xl lg:text-4xl">{content.cta.title}</h2>
+                <p className="mx-auto max-w-xl text-sm leading-relaxed text-white/65 sm:text-base lg:text-lg">{content.cta.body}</p>
+                <div className="mx-auto max-w-xs pt-2">
+                  {me ? (
+                    <Button onClick={goToApp} className="xpot-brand-cta flex h-12 w-full items-center justify-center gap-2 rounded-xl text-sm font-semibold text-white transition-all">
+                      {content.account.authenticatedCta}
+                      <ArrowRight className="h-4 w-4" />
+                    </Button>
+                  ) : (
+                    <Button onClick={() => setIsLoginOpen(true)} className="xpot-brand-cta h-12 w-full rounded-xl text-sm font-semibold text-white transition-all">
+                      {content.cta.button}
+                    </Button>
+                  )}
+                </div>
               </div>
             </section>
           </Reveal>
