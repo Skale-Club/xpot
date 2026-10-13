@@ -172,7 +172,7 @@ test("a search stuck while starting frees the global queue", async () => {
   }
 });
 
-test("a route ends at the last visit, or at home when the rep asked for it", async () => {
+test("a selling route always ends at the last visit", async () => {
   const open = await request("POST", "/api/xpot/prospecting/routes", routeBody());
   expect(open.body.route.endLat).toBeNull();
   expect(open.body.route.optimizationMeta.returnHome).toBe(false);
@@ -183,11 +183,10 @@ test("a route ends at the last visit, or at home when the rep asked for it", asy
   expect(saved.status).toBe(200);
   expect(saved.body.rep).toMatchObject({ homeAddress: "9 Elm St, Framingham, MA", homeLat: "42.28", homeLng: "-71.42", routeReturnHome: true });
 
-  const home = await request("POST", "/api/xpot/prospecting/routes", { ...routeBody(), routeDate: "2026-10-14" });
-  expect(home.status).toBe(201);
-  expect(home.body.route).toMatchObject({ endAddress: "9 Elm St, Framingham, MA", endLat: "42.28", endLng: "-71.42" });
-  expect(home.body.route.optimizationMeta.returnHome).toBe(true);
-  expect(home.body.route.optimizationMeta.returnDurationSeconds).toBeGreaterThan(0);
+  const nextRoute = await request("POST", "/api/xpot/prospecting/routes", { ...routeBody(), routeDate: "2026-10-14" });
+  expect(nextRoute.status).toBe(201);
+  expect(nextRoute.body.route).toMatchObject({ endAddress: null, endLat: null, endLng: null });
+  expect(nextRoute.body.route.optimizationMeta.returnHome).toBe(false);
 
   // Removing the home turns the return off with it.
   const cleared = await request("PATCH", "/api/xpot/me", { home: null });

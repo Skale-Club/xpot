@@ -294,14 +294,8 @@ export function createProspectingRouter() {
     }
 
     const plannedStartAt = new Date(input.plannedStartAt);
-    // The day starts wherever the rep is. It ends at home only when the rep
-    // asked for that in Settings (and saved a home); otherwise at the last visit.
-    const homeLat = actor.rep.homeLat == null ? NaN : Number(actor.rep.homeLat);
-    const homeLng = actor.rep.homeLng == null ? NaN : Number(actor.rep.homeLng);
-    const home = actor.rep.routeReturnHome && Number.isFinite(homeLat) && Number.isFinite(homeLng)
-      ? { address: actor.rep.homeAddress ?? undefined, lat: homeLat, lng: homeLng }
-      : undefined;
-    const end = input.end ?? home;
+    // A selling route starts at the rep's live position and ends at the final
+    // visit. A saved home is profile data, not a hidden leg in this route.
     let result;
     try {
       result = await db.transaction(async (tx) => {
@@ -326,7 +320,6 @@ export function createProspectingRouter() {
 
         const optimized = await optimizeRouteWithGoogle({
           start: input.start,
-          end,
           plannedStartAt,
           shiftDurationSeconds: input.shiftDurationMinutes * 60,
           maxStops: input.maxStops,
@@ -344,9 +337,9 @@ export function createProspectingRouter() {
           startAddress: input.start.address ?? null,
           startLat: String(input.start.lat),
           startLng: String(input.start.lng),
-          endAddress: end?.address ?? null,
-          endLat: end ? String(end.lat) : null,
-          endLng: end ? String(end.lng) : null,
+          endAddress: null,
+          endLat: null,
+          endLng: null,
           maxStops: input.maxStops,
           defaultVisitMinutes: input.defaultVisitMinutes,
           optimizer: optimized.optimizer,
@@ -354,9 +347,7 @@ export function createProspectingRouter() {
           totalDurationSeconds: optimized.totalDurationSeconds,
           optimizationMeta: {
             shiftDurationMinutes: input.shiftDurationMinutes,
-            returnHome: Boolean(end && !input.end),
-            returnDistanceMeters: optimized.returnDistanceMeters,
-            returnDurationSeconds: optimized.returnDurationSeconds,
+            returnHome: false,
             missingCoordinates,
             excludedByBudget: optimized.excludedCandidateIds,
             distanceModel: optimized.optimizer === "google_route_optimization_v1" ? "google_road_network" : "haversine",

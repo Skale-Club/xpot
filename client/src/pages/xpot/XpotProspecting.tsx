@@ -1,6 +1,6 @@
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, BellRing, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Clock3, Home, Loader2, MapPin, Navigation, Radar, RefreshCw, Route as RouteIcon, Search, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowLeft, BellRing, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Clock3, Loader2, MapPin, Navigation, Radar, RefreshCw, Route as RouteIcon, Search, ShieldCheck, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/i18n";
@@ -9,7 +9,6 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { subscribeToRoutePush } from "@/lib/pushNotifications";
 import { useViewerAccess } from "@/lib/adminMode";
 import { Link } from "wouter";
-import { approximateCandidateCenter } from "#shared/prospecting.js";
 import { RoutePreviewMap } from "./components/RoutePreviewMap";
 import { appleRouteUrl, appleStopUrl, googleRouteUrl, googleStopUrl, isAppleMobileDevice } from "./prospectingMaps";
 import { GLASS } from "@/components/xpot/surface";
@@ -69,7 +68,7 @@ type ProspectingRoute = {
   plannedEndAt: string | null;
   totalDurationSeconds: number;
   totalDistanceMeters: number;
-  optimizationMeta: { encodedPolyline?: string; returnHome?: boolean; returnDurationSeconds?: number };
+  optimizationMeta: { encodedPolyline?: string; returnHome?: boolean };
   createdAt: string;
 };
 
@@ -284,11 +283,7 @@ export function XpotProspecting() {
       if (!candidateIds.length) throw new Error(t("routeSelectionRequired"));
       let start: { lat: number; lng: number };
       try { start = await currentPosition(); }
-      catch {
-        const fallback = approximateCandidateCenter(detailsQuery.data.candidates);
-        if (!fallback) throw new Error(t("locationError"));
-        start = fallback;
-      }
+      catch { throw new Error(t("locationError")); }
       const response = await apiRequest("POST", "/api/xpot/prospecting/routes", {
         routeDate: today,
         plannedStartAt: new Date().toISOString(),
@@ -435,13 +430,8 @@ export function XpotProspecting() {
   // Android and desktop navigate with Google Maps; an iPhone or iPad also gets Apple Maps.
   const appleDevice = useMemo(() => typeof navigator !== "undefined" && isAppleMobileDevice(navigator.userAgent, navigator.maxTouchPoints ?? 0), []);
   const routeStart = routeDetails ? { lat: routeDetails.route.startLat, lng: routeDetails.route.startLng } : null;
-  // The day ends at home only when the rep turned that on in Settings > Route.
-  const routeHome = routeDetails?.route.optimizationMeta.returnHome && routeDetails.route.endLat && routeDetails.route.endLng
-    ? { lat: routeDetails.route.endLat, lng: routeDetails.route.endLng }
-    : null;
-  const homeDriveSeconds = routeDetails?.route.optimizationMeta.returnDurationSeconds;
-  const directionsUrl = routeDetails && routeStart ? googleRouteUrl(routeStart, routeDetails.stops, routeHome) : null;
-  const appleDirectionsUrl = appleDevice && routeDetails && routeStart ? appleRouteUrl(routeStart, routeDetails.stops, routeHome) : null;
+  const directionsUrl = routeDetails && routeStart ? googleRouteUrl(routeStart, routeDetails.stops) : null;
+  const appleDirectionsUrl = appleDevice && routeDetails && routeStart ? appleRouteUrl(routeStart, routeDetails.stops) : null;
   const mapStops = useMemo(() => routeDetails?.stops.map((stop) => ({
     lat: Number(stop.lat),
     lng: Number(stop.lng),
@@ -849,6 +839,7 @@ export function XpotProspecting() {
             stops={mapStops}
             encodedPolyline={routeDetails.route.optimizationMeta.encodedPolyline}
             alt={routeContextLabel}
+            showCurrentLocation={routeIsToday}
           />
           <div className="grid gap-5 p-4 sm:p-5 lg:grid-cols-[1fr_0.9fr] lg:p-6">
             <div>
@@ -912,19 +903,6 @@ export function XpotProspecting() {
                     </li>
                   );
                 })}
-                {routeHome ? (
-                  <li className="grid min-h-[60px] grid-cols-[auto_minmax(0,1fr)] items-center gap-3 rounded-xl border border-dashed border-white/[0.08] p-3">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/[0.06] text-white/60"><Home className="h-4 w-4" /></span>
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-semibold text-white/85">{t("returnHome")}</div>
-                      <div className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-white/65">
-                        <Clock3 className="h-3 w-3 shrink-0" />
-                        {typeof homeDriveSeconds === "number" ? <span>{t("driveMinutes", { minutes: driveMinutes(homeDriveSeconds) })}</span> : null}
-                        {routeDetails.route.plannedEndAt ? <><span aria-hidden="true">·</span><span className="truncate">{t("arrivalAt", { time: new Date(routeDetails.route.plannedEndAt).toLocaleTimeString(t.locale, { hour: "numeric", minute: "2-digit" }) })}</span></> : null}
-                      </div>
-                    </div>
-                  </li>
-                ) : null}
               </ol>
             </div>
           </div>

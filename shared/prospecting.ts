@@ -67,11 +67,6 @@ export const prospectingRouteCreateSchema = z.object({
     lat: coordinate.min(-90).max(90),
     lng: coordinate.min(-180).max(180),
   }),
-  end: z.object({
-    address: z.string().trim().max(500).optional(),
-    lat: coordinate.min(-90).max(90),
-    lng: coordinate.min(-180).max(180),
-  }).optional(),
   leadIds: z.array(z.number().int().positive()).max(100).default([]),
   candidateIds: z.array(z.number().int().positive()).max(200).default([]),
   jobId: z.number().int().positive().optional(),

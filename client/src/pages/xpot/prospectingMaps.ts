@@ -19,23 +19,18 @@ export function isAppleMobileDevice(userAgent: string, maxTouchPoints: number) {
 }
 
 /**
- * The next stops still to visit, and where the trip starts. Once the day has
- * begun the trip starts wherever the rep is now, which both apps use when no
- * origin is given.
+ * The next stops still to visit. The native map app deliberately receives no
+ * fixed origin so it starts from the phone's live location.
  */
-function remainingTrip(start: LatLng, stops: MapStop[], home?: LatLng | null) {
+function remainingTrip(stops: MapStop[]) {
   const open = stops.filter((stop) => OPEN_STOP_STATUSES.includes(stop.status));
-  const remaining: LatLng[] = open.slice(0, MAPS_URL_MAX_STOPS);
-  // Home is the last leg, so it only fits when every open stop is already in the link.
-  if (home && open.length && open.length < MAPS_URL_MAX_STOPS) remaining.push(home);
-  return { remaining, origin: open.length === stops.length ? start : null };
+  return open.slice(0, MAPS_URL_MAX_STOPS) as LatLng[];
 }
 
-export function googleRouteUrl(start: LatLng, stops: MapStop[], home?: LatLng | null) {
-  const { remaining, origin } = remainingTrip(start, stops, home);
+export function googleRouteUrl(_start: LatLng, stops: MapStop[]) {
+  const remaining = remainingTrip(stops);
   if (!remaining.length) return null;
   const params = new URLSearchParams({ api: "1", destination: point(remaining.at(-1)!), travelmode: "driving" });
-  if (origin) params.set("origin", point(origin));
   if (remaining.length > 1) params.set("waypoints", remaining.slice(0, -1).map(point).join("|"));
   return `https://www.google.com/maps/dir/?${params.toString()}`;
 }
@@ -44,11 +39,10 @@ export function googleRouteUrl(start: LatLng, stops: MapStop[], home?: LatLng | 
  * Apple Maps takes one `daddr` per stop. Versions that ignore the extra stops
  * still open directions to the next one, which is what the rep needs first.
  */
-export function appleRouteUrl(start: LatLng, stops: MapStop[], home?: LatLng | null) {
-  const { remaining, origin } = remainingTrip(start, stops, home);
+export function appleRouteUrl(_start: LatLng, stops: MapStop[]) {
+  const remaining = remainingTrip(stops);
   if (!remaining.length) return null;
   const params = new URLSearchParams();
-  if (origin) params.set("saddr", point(origin));
   for (const stop of remaining) params.append("daddr", point(stop));
   params.set("dirflg", "d");
   return `https://maps.apple.com/?${params.toString()}`;
