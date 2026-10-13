@@ -11,7 +11,7 @@ const en = {
   // Header and sign-in dialog
   dashboard: "Dashboard",
   signIn: "Sign in",
-  welcomeTitle: "Welcome to Xpot",
+  welcomeTitle: "Access Xpot",
   welcomeSub: "Sign in or create your account with your phone number. We'll text you a code.",
   sessionDenied: "Access denied or failed to retrieve session.",
   navAudience: "Who it's for",
@@ -134,7 +134,7 @@ export const landingMessages: Dictionary<typeof en> = {
   pt: {
     dashboard: "Painel",
     signIn: "Entrar",
-    welcomeTitle: "Bem-vindo ao Xpot",
+    welcomeTitle: "Acesse o Xpot",
     welcomeSub: "Entre ou crie sua conta com o número do seu celular. Vamos mandar um código por SMS.",
     sessionDenied: "Acesso negado ou não foi possível abrir a sessão.",
     navAudience: "Para quem é",
@@ -245,7 +245,7 @@ export const landingMessages: Dictionary<typeof en> = {
   es: {
     dashboard: "Panel",
     signIn: "Entrar",
-    welcomeTitle: "Bienvenido a Xpot",
+    welcomeTitle: "Accede a Xpot",
     welcomeSub: "Entra o crea tu cuenta con tu número de celular. Te mandamos un código por SMS.",
     sessionDenied: "Acceso denegado o no se pudo abrir la sesión.",
     navAudience: "Para quién es",

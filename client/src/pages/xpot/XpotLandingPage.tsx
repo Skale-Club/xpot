@@ -333,19 +333,20 @@ export function XpotLandingPage() {
                     </Button>
                   </DialogTrigger>
 
-                  <DialogContent className="w-[92%] max-w-md rounded-2xl border-white/10 bg-[#070b16]/95 p-6 text-white shadow-[0_0_40px_rgba(0,0,0,0.8)] backdrop-blur-2xl sm:p-8">
-                    <div className="absolute left-0 top-0 h-[3px] w-full rounded-t-2xl bg-[linear-gradient(90deg,#4A78F3,#5272F2_58%,#0BB8AF)]" />
+                  <DialogContent className="w-[92%] max-w-md rounded-2xl border-white/10 bg-[#070b16]/95 p-5 text-white shadow-[0_24px_80px_rgba(0,0,0,0.65)] backdrop-blur-2xl [&>button]:right-3 [&>button]:top-3 [&>button]:bg-transparent sm:p-6">
+                    <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-[linear-gradient(90deg,transparent,#5272F2_38%,#0BB8AF_68%,transparent)]" />
+                    <div className="pointer-events-none absolute left-1/2 top-0 h-28 w-48 -translate-x-1/2 rounded-full bg-[#5272F2]/10 blur-3xl" />
 
-                    <DialogHeader className="pb-4 text-center sm:text-center">
-                      <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center overflow-hidden rounded-xl bg-[linear-gradient(135deg,rgba(82,114,242,0.12),rgba(11,184,175,0.1))]">
-                        <img src="/api/branding/favicon" alt="" className="h-full w-full object-cover" />
+                    <DialogHeader className="relative space-y-0 pb-3 text-center sm:text-center">
+                      <XpotMark className="mx-auto h-12 w-12" />
+                      <div className="pt-4">
+                        <DialogTitle className="text-center text-xl font-bold tracking-tight text-white sm:text-2xl">
+                          {content.account.welcomeTitle}
+                        </DialogTitle>
+                        <DialogDescription className="mx-auto mt-2 max-w-sm text-center text-sm leading-6 text-white/55">
+                          {content.account.welcomeSub}
+                        </DialogDescription>
                       </div>
-                      <DialogTitle className="text-center text-2xl font-bold tracking-tight text-white sm:text-3xl">
-                        {content.account.welcomeTitle}
-                      </DialogTitle>
-                      <DialogDescription className="mt-2 text-center text-base text-white/60">
-                        {content.account.welcomeSub}
-                      </DialogDescription>
                     </DialogHeader>
 
                     {error && (

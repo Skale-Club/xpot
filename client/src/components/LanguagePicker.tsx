@@ -40,7 +40,7 @@ export function LanguagePicker({ compact = false }: { compact?: boolean }) {
           aria-expanded={open}
           aria-label={`${t("language")}: ${LANG_LABELS[lang]}`}
           onClick={() => setOpen((value) => !value)}
-          className="flex h-10 items-center gap-2 rounded-xl border border-white/[0.09] bg-white/[0.035] px-3 text-sm font-semibold text-white/80 transition-all hover:border-white/[0.16] hover:bg-white/[0.065] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6F8FFF]/70"
+          className="flex h-10 items-center gap-2 px-2 text-sm font-semibold text-white/70 transition-colors hover:text-white focus-visible:rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6F8FFF]/70"
         >
           <CountryFlag iso={LANG_FLAG[lang]} className="h-4 w-5 rounded-[3px]" />
           <span>{LANG_SHORT[lang]}</span>
