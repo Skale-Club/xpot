@@ -464,11 +464,11 @@ export function XpotLandingPage() {
           </section>
 
           {/* Product proof: the photo establishes the job; this shows how Xpot supports it. */}
-          <section className="grid grid-cols-1 items-center gap-12 rounded-[28px] border border-white/[0.07] bg-white/[0.025] p-6 sm:p-10 lg:grid-cols-2 lg:gap-16 lg:p-12">
-            <Reveal className="order-2 lg:order-1">
+          <section className="grid grid-cols-1 items-center gap-12 rounded-[28px] border border-white/[0.07] bg-white/[0.025] p-6 sm:p-10 md:grid-cols-2 md:gap-10 lg:gap-16 lg:p-12">
+            <Reveal className="order-2 md:order-1">
               <PhoneMock content={content.mockup} />
             </Reveal>
-            <Reveal className="order-1 lg:order-2">
+            <Reveal className="order-1 md:order-2">
               <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-[#8FA8FF]">
                 <Navigation className="h-4 w-4" />
                 {t("fieldEyebrow")}
