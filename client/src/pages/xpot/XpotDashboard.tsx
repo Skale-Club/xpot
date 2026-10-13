@@ -12,6 +12,7 @@ import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { useLocation } from "wouter";
 import { shellMessages } from "@/i18n/messages/shell";
 import { Segmented } from "@/components/xpot/Segmented";
+import { GradientTopLine } from "@/components/xpot/GradientTopLine";
 import { XpotVisits } from "./XpotVisits";
 
 const METRIC_CARDS = [
@@ -70,6 +71,7 @@ function DashboardOverview() {
           boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
         }}
       >
+        <GradientTopLine className="inset-x-12" />
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-indigo-500/20 text-indigo-400">
