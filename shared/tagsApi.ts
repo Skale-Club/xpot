@@ -85,7 +85,17 @@ export interface TagAnalytics {
   totals: TagMetrics & { botHits: number; inactiveScans: number };
   daily: TagDailyPoint[];
   devices: Array<{ deviceType: string; count: number }>;
-  topTags: Array<{ id: string; publicCode: string; face: string | null; leadName: string | null; repName: string | null; qr: number; nfc: number }>;
+  topTags: Array<{
+    id: string;
+    publicCode: string;
+    productType: string;
+    face: string | null;
+    batchCode: string | null;
+    leadName: string | null;
+    repName: string | null;
+    qr: number;
+    nfc: number;
+  }>;
 }
 
 export interface TagOverview {
@@ -99,15 +109,32 @@ export interface TagOverview {
     id: number;
     tagId: string;
     publicCode: string;
+    productType: string;
     face: string | null;
+    batchCode: string | null;
     leadName: string | null;
     accessMethod: string;
     eventType: string;
     deviceType: string | null;
     occurredAt: string;
   }>;
-  recentActivations: Array<{ id: string; publicCode: string; face: string | null; leadName: string | null; repName: string | null; activatedAt: string }>;
-  recentChanges: Array<TagHistoryEntry & { tagId: string; publicCode: string }>;
+  recentActivations: Array<{
+    id: string;
+    publicCode: string;
+    productType: string;
+    face: string | null;
+    batchCode: string | null;
+    leadName: string | null;
+    repName: string | null;
+    activatedAt: string;
+  }>;
+  recentChanges: Array<TagHistoryEntry & {
+    tagId: string;
+    publicCode: string;
+    productType: string;
+    face: string | null;
+    batchCode: string | null;
+  }>;
 }
 
 export interface TagBatchItem {
@@ -178,7 +205,16 @@ export interface TagDashboard {
   /** Assigned or live pieces whose NFC chip holds nothing (or failed): QR only. */
   chipsMissing: number;
   daily: Array<{ day: string; qr: number; nfc: number }>;
-  topPieces: Array<{ id: string; publicCode: string; label: string | null; leadName: string | null; scans: number }>;
+  topPieces: Array<{
+    id: string;
+    publicCode: string;
+    productType: string;
+    face: string | null;
+    batchCode: string | null;
+    label: string | null;
+    leadName: string | null;
+    scans: number;
+  }>;
   topCustomers: Array<{ leadId: number; name: string; pieces: number; scans: number }>;
   devices: Array<{ os: string; scans: number }>;
 }
@@ -237,6 +273,7 @@ export interface TagTeamReport {
     label: string | null;
     productType: string;
     face: string | null;
+    batchCode: string | null;
     leadName: string | null;
     repName: string | null;
     qr: number;

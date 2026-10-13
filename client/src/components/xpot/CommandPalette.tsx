@@ -7,10 +7,19 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { useXpotModules } from "@/components/ModuleSwitch";
 import { useT } from "@/i18n";
 import { shellMessages } from "@/i18n/messages/shell";
+import { TagPieceMention } from "@/components/xpot/TagProductThumbnail";
 import { tagsGet } from "@/pages/tags/lib";
 import type { FullSalesLead } from "@/pages/xpot/types";
 
-type Entry = { key: string; group: string; label: string; sub?: string; icon: LucideIcon; href: string };
+type Entry = {
+  key: string;
+  group: string;
+  label: string;
+  sub?: string;
+  icon: LucideIcon;
+  href: string;
+  piece?: Pick<TagListItem, "publicCode" | "productType" | "face" | "batchCode">;
+};
 
 const LIMIT_PER_GROUP = 8;
 
@@ -84,6 +93,7 @@ export function CommandPalette({
             sub: [p.leadName, p.label].filter(Boolean).join(" · "),
             icon: Tag,
             href: `/tags/pieces/${encodeURIComponent(p.publicCode)}`,
+            piece: p,
           }),
         );
     }
@@ -152,11 +162,22 @@ export function CommandPalette({
                     onClick={() => go(entry)}
                     className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left ${i === index ? "bg-blue-500/15" : ""}`}
                   >
-                    <Icon className={`h-4 w-4 shrink-0 ${i === index ? "text-blue-300" : "text-white/35"}`} />
-                    <span className="min-w-0 flex-1">
-                      <span className={`block truncate text-sm font-semibold text-white ${entry.group === t("groupPieces") ? "font-mono tracking-[0.1em]" : ""}`}>{entry.label}</span>
-                      {entry.sub && <span className="block truncate text-xs text-white/40">{entry.sub}</span>}
-                    </span>
+                    {entry.piece ? (
+                      <TagPieceMention
+                        {...entry.piece}
+                        details={entry.sub}
+                        className="min-w-0 flex-1"
+                        codeClassName="text-sm"
+                      />
+                    ) : (
+                      <>
+                        <Icon className={`h-4 w-4 shrink-0 ${i === index ? "text-blue-300" : "text-white/35"}`} />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-semibold text-white">{entry.label}</span>
+                          {entry.sub && <span className="block truncate text-xs text-white/40">{entry.sub}</span>}
+                        </span>
+                      </>
+                    )}
                     {i === index && <CornerDownLeft className="h-3.5 w-3.5 shrink-0 text-white/35" />}
                   </button>
                 </div>

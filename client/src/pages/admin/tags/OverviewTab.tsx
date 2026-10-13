@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Activity, ArrowRight, History, Power, Trophy } from "lucide-react";
 import type { TagAnalytics, TagOverview } from "@shared/tagsApi";
-import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
+import { TagPieceMention } from "@/components/xpot/TagProductThumbnail";
 import { useT } from "@/i18n";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
 import { shellMessages } from "@/i18n/messages/shell";
@@ -52,12 +52,14 @@ function TopPieces({ go }: { go: (path: string) => void }) {
             <li key={p.id}>
               <button type="button" onClick={() => go(`/pieces/${p.id}`)} className="flex w-full items-center gap-3 py-2 text-left text-sm hover:bg-white/[0.03]">
                 <span className="w-5 shrink-0 text-right text-xs tabular-nums text-white/30">{i + 1}</span>
-                <TagFaceIcon face={p.face} size="sm" />
-                <span className="min-w-0 flex-1 truncate">
-                  <span className="font-mono font-semibold text-white">{p.publicCode}</span>
-                  <span className="ml-2 text-white/50">{p.leadName ?? t("noCustomer")}</span>
-                  {p.repName ? <span className="ml-1 text-xs text-white/30">· {p.repName}</span> : null}
-                </span>
+                <TagPieceMention
+                  publicCode={p.publicCode}
+                  productType={p.productType}
+                  face={p.face}
+                  batchCode={p.batchCode}
+                  details={[p.leadName ?? t("noCustomer"), p.repName].filter(Boolean).join(" · ")}
+                  className="min-w-0 flex-1"
+                />
                 <span className="shrink-0 text-xs tabular-nums text-white/50">
                   <span className="font-semibold text-white">{p.qr + p.nfc}</span> ({p.qr} QR · {p.nfc} NFC)
                 </span>
@@ -134,15 +136,15 @@ export function OverviewTab({ go }: { go: (path: string) => void }) {
               {data.recentEvents.map((e) => (
                 <li key={e.id}>
                   <button type="button" className="flex w-full items-center gap-3 py-2 text-left hover:bg-white/[0.03]" onClick={() => go(`/pieces/${e.tagId}`)}>
-                    <TagFaceIcon face={e.face} size="sm" />
-                    <span className="min-w-0 flex-1">
-                      <span className="font-mono font-semibold text-white">{e.publicCode}</span>
-                      <span className="ml-2 rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-white/60">{e.accessMethod}</span>
-                      <span className="block truncate text-xs text-white/40">
-                        {e.leadName ?? t("noCustomer")} · {labels.event(e.eventType)}
-                        {e.deviceType ? ` · ${e.deviceType}` : ""}
-                      </span>
-                    </span>
+                    <TagPieceMention
+                      publicCode={e.publicCode}
+                      productType={e.productType}
+                      face={e.face}
+                      batchCode={e.batchCode}
+                      details={[e.leadName ?? t("noCustomer"), labels.event(e.eventType), e.deviceType].filter(Boolean).join(" · ")}
+                      className="min-w-0 flex-1"
+                    />
+                    <span className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-white/60">{e.accessMethod}</span>
                     <span className="shrink-0 text-xs text-white/40">{formatDateTime(e.occurredAt)}</span>
                   </button>
                 </li>
@@ -162,12 +164,14 @@ export function OverviewTab({ go }: { go: (path: string) => void }) {
                 {data.recentActivations.map((a) => (
                   <li key={a.id}>
                     <button type="button" className="flex w-full items-center gap-3 py-2 text-left hover:bg-white/[0.03]" onClick={() => go(`/pieces/${a.id}`)}>
-                      <TagFaceIcon face={a.face} size="sm" />
-                      <span className="min-w-0 flex-1 truncate">
-                        <span className="font-mono font-semibold text-white">{a.publicCode}</span>
-                        <span className="ml-2 text-white/50">{a.leadName ?? "—"}</span>
-                        {a.repName ? <span className="ml-1 text-xs text-white/30">· {a.repName}</span> : null}
-                      </span>
+                      <TagPieceMention
+                        publicCode={a.publicCode}
+                        productType={a.productType}
+                        face={a.face}
+                        batchCode={a.batchCode}
+                        details={[a.leadName ?? t("noCustomer"), a.repName].filter(Boolean).join(" · ")}
+                        className="min-w-0 flex-1"
+                      />
                       <span className="shrink-0 text-xs text-white/40">{formatDateTime(a.activatedAt)}</span>
                     </button>
                   </li>
@@ -183,12 +187,10 @@ export function OverviewTab({ go }: { go: (path: string) => void }) {
               <ul className="divide-y divide-white/5 text-sm">
                 {data.recentChanges.map((c) => (
                   <li key={c.id} className="py-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <button type="button" className="font-mono font-semibold text-white hover:underline" onClick={() => go(`/pieces/${c.tagId}`)}>
-                        {c.publicCode}
-                      </button>
+                    <button type="button" className="flex w-full items-center justify-between gap-2 text-left hover:bg-white/[0.03]" onClick={() => go(`/pieces/${c.tagId}`)}>
+                      <TagPieceMention publicCode={c.publicCode} productType={c.productType} face={c.face} batchCode={c.batchCode} />
                       <span className="text-xs text-white/40">{formatDateTime(c.createdAt)}</span>
-                    </div>
+                    </button>
                     <p className="truncate text-xs text-white/40">
                       {c.newUrl ? `${labels.destination(c.newDestinationType)} · ${c.newUrl}` : c.reason ? t("ovDestClearedReason", { reason: c.reason }) : t("ovDestCleared")}
                     </p>

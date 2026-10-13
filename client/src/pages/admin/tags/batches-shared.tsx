@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { BATCH_STAGE_TONE, BATCH_STATUS_TONE, Pill } from "@/components/xpot/StatusPill";
 import type { TagBatchItem, TagListItem } from "@shared/tagsApi";
 import { Loader2 } from "@/components/ui/loader";
-import { TagPieceVisual } from "@/components/xpot/TagProductThumbnail";
+import { TagModelChips, TagPieceVisual } from "@/components/xpot/TagProductThumbnail";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -325,7 +325,10 @@ export function PieceTable({
                   <td className={`${TD} pr-0`}>
                     <TagPieceVisual productType={t.productType} face={t.face} />
                   </td>
-                  <td className={`${TD} font-mono text-white`}>{t.publicCode}</td>
+                  <td className={TD}>
+                    <span className="block font-mono text-white">{t.publicCode}</span>
+                    <TagModelChips productType={t.productType} face={t.face} batchCode={t.batchCode} className="mt-1" />
+                  </td>
                   <td className={`${TD} tabular-nums text-white/50`}>{t.serialNumber ?? "—"}</td>
                   {showBatch && <td className={`${TD} font-mono text-xs`}>{t.batchCode ?? "—"}</td>}
                   <td className={TD}>

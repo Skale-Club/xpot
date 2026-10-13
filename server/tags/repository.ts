@@ -246,16 +246,25 @@ export async function getTagByCode(code: string): Promise<Tag | null> {
   return tag ?? null;
 }
 
-async function historyFor(where: SQL, limit: number): Promise<Array<TagHistoryEntry & { tagId: string; publicCode: string }>> {
+async function historyFor(where: SQL, limit: number): Promise<Array<TagHistoryEntry & {
+  tagId: string;
+  publicCode: string;
+  productType: string;
+  face: string | null;
+  batchCode: string | null;
+}>> {
   const list = await rows<{
-    id: string; tag_id: string; public_code: string; previous_url: string | null; new_url: string | null;
+    id: string; tag_id: string; public_code: string; product_type: string; face: string | null;
+    batch_face: string | null; batch_code: string | null; previous_url: string | null; new_url: string | null;
     previous_destination_type: string | null; new_destination_type: string | null;
     changed_by_user_id: string | null; changed_by_email: string | null; reason: string | null; created_at: Date;
   }>(sql`
-    SELECT h.id, h.tag_id, t.public_code, h.previous_url, h.new_url, h.previous_destination_type,
+    SELECT h.id, h.tag_id, t.public_code, t.product_type, t.face, b.face AS batch_face, b.batch_code,
+           h.previous_url, h.new_url, h.previous_destination_type,
            h.new_destination_type, h.changed_by_user_id, u.email AS changed_by_email, h.reason, h.created_at
     FROM tag_destination_history h
     JOIN tags t ON t.id = h.tag_id
+    LEFT JOIN tag_batches b ON b.id = t.batch_id
     LEFT JOIN users u ON u.id = h.changed_by_user_id
     WHERE ${where}
     ORDER BY h.created_at DESC
@@ -265,6 +274,9 @@ async function historyFor(where: SQL, limit: number): Promise<Array<TagHistoryEn
     id: h.id,
     tagId: h.tag_id,
     publicCode: h.public_code,
+    productType: h.product_type,
+    face: faceOf(h),
+    batchCode: h.batch_code,
     previousUrl: h.previous_url,
     newUrl: h.new_url,
     previousDestinationType: h.previous_destination_type,
@@ -290,7 +302,7 @@ export async function getTagDetail(id: string, baseUrl: string): Promise<TagDeta
     disabledAt: iso(tag.disabledAt),
     updatedAt: iso(tag.updatedAt)!,
     ...buildTagUrls(baseUrl, tag.publicCode),
-    history: history.map(({ tagId: _t, publicCode: _p, ...h }) => h),
+    history: history.map(({ tagId: _t, publicCode: _p, productType: _pt, face: _f, batchCode: _b, ...h }) => h),
   };
 }
 
@@ -1564,10 +1576,10 @@ export async function getAnalytics(scope: AnalyticsScope, from: Date, to: Date):
   `);
 
   const topTags = scope.tagId ? [] : await rows<{
-    id: string; public_code: string; face: string | null; product_type: string; batch_face: string | null;
+    id: string; public_code: string; face: string | null; product_type: string; batch_face: string | null; batch_code: string | null;
     lead_name: string | null; rep_name: string | null; qr: number; nfc: number;
   }>(sql`
-    SELECT t.id, t.public_code, t.face, t.product_type, b.face AS batch_face, l.name AS lead_name, r.display_name AS rep_name,
+    SELECT t.id, t.public_code, t.face, t.product_type, b.face AS batch_face, b.batch_code, l.name AS lead_name, r.display_name AS rep_name,
       count(*) FILTER (WHERE e.access_method = 'qr')::int AS qr,
       count(*) FILTER (WHERE e.access_method = 'nfc')::int AS nfc
     FROM tag_events e
@@ -1576,7 +1588,7 @@ export async function getAnalytics(scope: AnalyticsScope, from: Date, to: Date):
     LEFT JOIN sales_reps r ON r.id = t.rep_id
     LEFT JOIN tag_batches b ON b.id = t.batch_id
     WHERE ${where} AND ${COUNTABLE}
-    GROUP BY t.id, t.public_code, b.face, l.name, r.display_name
+    GROUP BY t.id, t.public_code, b.face, b.batch_code, l.name, r.display_name
     ORDER BY count(*) DESC
     LIMIT 10
   `);
@@ -1606,7 +1618,8 @@ export async function getAnalytics(scope: AnalyticsScope, from: Date, to: Date):
     daily: points,
     devices: devices.map((d) => ({ deviceType: d.device_type ?? "unknown", count: Number(d.count) })),
     topTags: topTags.map((t) => ({
-      id: t.id, publicCode: t.public_code, face: faceOf(t), leadName: t.lead_name, repName: t.rep_name, qr: Number(t.qr), nfc: Number(t.nfc),
+      id: t.id, publicCode: t.public_code, productType: t.product_type, face: faceOf(t), batchCode: t.batch_code,
+      leadName: t.lead_name, repName: t.rep_name, qr: Number(t.qr), nfc: Number(t.nfc),
     })),
   };
 }
@@ -1651,10 +1664,10 @@ export async function getOverview(now: Date = new Date(), timezoneOffsetMinutes 
   `);
 
   const recentEvents = await rows<{
-    id: number; tag_id: string; public_code: string; face: string | null; product_type: string; batch_face: string | null;
+    id: number; tag_id: string; public_code: string; face: string | null; product_type: string; batch_face: string | null; batch_code: string | null;
     lead_name: string | null; access_method: string; event_type: string; device_type: string | null; occurred_at: Date;
   }>(sql`
-    SELECT e.id, e.tag_id, t.public_code, t.face, t.product_type, b.face AS batch_face, l.name AS lead_name,
+    SELECT e.id, e.tag_id, t.public_code, t.face, t.product_type, b.face AS batch_face, b.batch_code, l.name AS lead_name,
            e.access_method, e.event_type, e.device_type, e.occurred_at
     FROM tag_events e
     JOIN tags t ON t.id = e.tag_id
@@ -1666,10 +1679,10 @@ export async function getOverview(now: Date = new Date(), timezoneOffsetMinutes 
   `);
 
   const recentActivations = await rows<{
-    id: string; public_code: string; face: string | null; product_type: string; batch_face: string | null;
+    id: string; public_code: string; face: string | null; product_type: string; batch_face: string | null; batch_code: string | null;
     lead_name: string | null; rep_name: string | null; activated_at: Date;
   }>(sql`
-    SELECT t.id, t.public_code, t.face, t.product_type, b.face AS batch_face, l.name AS lead_name, r.display_name AS rep_name, t.activated_at
+    SELECT t.id, t.public_code, t.face, t.product_type, b.face AS batch_face, b.batch_code, l.name AS lead_name, r.display_name AS rep_name, t.activated_at
     FROM tags t
     LEFT JOIN tag_batches b ON b.id = t.batch_id
     LEFT JOIN sales_leads l ON l.id = t.lead_id
@@ -1689,7 +1702,9 @@ export async function getOverview(now: Date = new Date(), timezoneOffsetMinutes 
       id: Number(e.id),
       tagId: e.tag_id,
       publicCode: e.public_code,
+      productType: e.product_type,
       face: faceOf(e),
+      batchCode: e.batch_code,
       leadName: e.lead_name,
       accessMethod: e.access_method,
       eventType: e.event_type,
@@ -1697,7 +1712,8 @@ export async function getOverview(now: Date = new Date(), timezoneOffsetMinutes 
       occurredAt: iso(e.occurred_at)!,
     })),
     recentActivations: recentActivations.map((a) => ({
-      id: a.id, publicCode: a.public_code, face: faceOf(a), leadName: a.lead_name, repName: a.rep_name, activatedAt: iso(a.activated_at)!,
+      id: a.id, publicCode: a.public_code, productType: a.product_type, face: faceOf(a), batchCode: a.batch_code,
+      leadName: a.lead_name, repName: a.rep_name, activatedAt: iso(a.activated_at)!,
     })),
     recentChanges: await historyFor(sql`true`, 10),
   };
@@ -1774,11 +1790,18 @@ export async function getTagDashboard(repId: number | null, days = 30, now: Date
     LEFT JOIN tag_events e ON e.occurred_at >= d AND e.occurred_at < d + interval '1 day' AND ${COUNTABLE} AND ${eventScope}
     GROUP BY d ORDER BY d
   `);
-  const topPieces = await rows<{ id: string; public_code: string; label: string | null; lead_name: string | null; scans: number }>(sql`
-    SELECT t.id, t.public_code, t.label, l.name AS lead_name, count(*)::int AS scans
-    FROM tag_events e JOIN tags t ON t.id = e.tag_id LEFT JOIN sales_leads l ON l.id = t.lead_id
+  const topPieces = await rows<{
+    id: string; public_code: string; product_type: string; face: string | null; batch_face: string | null;
+    batch_code: string | null; label: string | null; lead_name: string | null; scans: number;
+  }>(sql`
+    SELECT t.id, t.public_code, t.product_type, t.face, b.face AS batch_face, b.batch_code,
+           t.label, l.name AS lead_name, count(*)::int AS scans
+    FROM tag_events e
+    JOIN tags t ON t.id = e.tag_id
+    LEFT JOIN tag_batches b ON b.id = t.batch_id
+    LEFT JOIN sales_leads l ON l.id = t.lead_id
     WHERE ${inPeriod}
-    GROUP BY t.id, t.public_code, t.label, l.name
+    GROUP BY t.id, t.public_code, b.face, b.batch_code, t.label, l.name
     ORDER BY scans DESC LIMIT 5
   `);
   const topCustomers = await rows<{ lead_id: number; name: string; pieces: number; scans: number }>(sql`
@@ -1803,7 +1826,16 @@ export async function getTagDashboard(repId: number | null, days = 30, now: Date
     visitors: Number(scans?.visitors ?? 0),
     chipsMissing: Number(totals?.missing ?? 0),
     daily: daily.map((d) => ({ day: d.day, qr: Number(d.qr), nfc: Number(d.nfc) })),
-    topPieces: topPieces.map((p) => ({ id: p.id, publicCode: p.public_code, label: p.label, leadName: p.lead_name, scans: Number(p.scans) })),
+    topPieces: topPieces.map((p) => ({
+      id: p.id,
+      publicCode: p.public_code,
+      productType: p.product_type,
+      face: faceOf(p),
+      batchCode: p.batch_code,
+      label: p.label,
+      leadName: p.lead_name,
+      scans: Number(p.scans),
+    })),
     topCustomers: topCustomers.map((c) => ({ leadId: Number(c.lead_id), name: c.name, pieces: Number(c.pieces), scans: Number(c.scans) })),
     devices: devices.map((d) => ({ os: d.os ?? "other", scans: Number(d.scans) })),
   };

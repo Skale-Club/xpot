@@ -8,6 +8,7 @@ import { Loading, LoadError } from "./pieces-shared";
 import { useT } from "@/i18n";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { manageTagsPiecesMessages } from "@/i18n/messages/manageTagsPieces";
+import { TagPieceMention } from "@/components/xpot/TagProductThumbnail";
 
 // Range picker + KPIs + daily QR/NFC chart, for the whole fleet (Team tab) or
 // one piece (PieceDetail).
@@ -183,11 +184,15 @@ export function AnalyticsPanel({
             ) : (
               <ul className="space-y-1.5 text-sm">
                 {data.topTags.map((t) => (
-                  <li key={t.id} className="flex items-center justify-between gap-2">
-                    <button type="button" className="min-w-0 truncate text-left font-mono text-white hover:underline" onClick={() => onOpenTag?.(t.id)}>
-                      {t.publicCode}
-                      <span className="ml-2 font-sans text-white/50">{t.leadName ?? tm("noCustomer")}</span>
-                      {t.repName ? <span className="ml-1 font-sans text-xs text-white/30">· {t.repName}</span> : null}
+                  <li key={t.id} className="flex items-center justify-between gap-2 py-1">
+                    <button type="button" className="min-w-0 flex-1 text-left hover:opacity-90" onClick={() => onOpenTag?.(t.id)}>
+                      <TagPieceMention
+                        publicCode={t.publicCode}
+                        productType={t.productType}
+                        face={t.face}
+                        batchCode={t.batchCode}
+                        details={[t.leadName ?? tm("noCustomer"), t.repName].filter(Boolean).join(" · ")}
+                      />
                     </button>
                     <span className="shrink-0 tabular-nums text-white/50">
                       QR {t.qr} · NFC {t.nfc}

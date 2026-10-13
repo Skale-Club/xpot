@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { Wifi } from "lucide-react";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
+import { useT } from "@/i18n";
+import { tagsMessages } from "@/i18n/messages/tags";
 
 const PLAQUE_PRODUCT_TYPES = new Set([
   "large_stand",
@@ -83,9 +85,16 @@ export function TagModelChips({
   fallback?: ReactNode;
   className?: string;
 }) {
+  const t = useT(tagsMessages);
   const { size, model } = tagPlaqueSpec(productType, face, batchCode);
-  if (!size && !model) return fallback ? <>{fallback}</> : null;
   const chip = "inline-flex h-5 items-center rounded-md px-1.5 text-[11px] font-bold uppercase leading-none tracking-wider";
+  if (!size && !model) {
+    return (
+      <span className={`${chip} bg-white/10 text-white/75 ring-1 ring-white/15 ${className}`} data-testid="tag-model-chips">
+        {fallback ?? t(`product_${productType}` as "product_custom")}
+      </span>
+    );
+  }
   return (
     <span className={`inline-flex items-center gap-1 align-middle ${className}`} data-testid="tag-model-chips">
       {model ? <span className={`${chip} bg-white/10 text-white/85 ring-1 ring-white/15`}>{model}</span> : null}
@@ -94,6 +103,44 @@ export function TagModelChips({
           {size}
         </span>
       ) : null}
+    </span>
+  );
+}
+
+/**
+ * The complete identity used whenever a specific piece is mentioned: both
+ * physical/printed icons, its public code, and its model/size chips.
+ */
+export function TagPieceMention({
+  publicCode,
+  productType,
+  face,
+  batchCode,
+  details,
+  size = "sm",
+  className = "",
+  codeClassName = "",
+}: {
+  publicCode: string;
+  productType: string;
+  face: string | null | undefined;
+  batchCode?: string | null;
+  details?: ReactNode;
+  size?: keyof typeof SIZES;
+  className?: string;
+  codeClassName?: string;
+}) {
+  const t = useT(tagsMessages);
+  return (
+    <span className={`inline-flex min-w-0 items-center gap-3 ${className}`} data-testid="tag-piece-mention">
+      <TagPieceVisual productType={productType} face={face} size={size} title={t(`face_${face ?? "none"}` as "face_none")} />
+      <span className="min-w-0">
+        <span className={`block truncate font-mono font-semibold tracking-[0.1em] text-white ${codeClassName}`}>{publicCode}</span>
+        <span className="mt-1 flex min-w-0 items-center gap-1.5">
+          <TagModelChips productType={productType} face={face} batchCode={batchCode} className="shrink-0" />
+          {details ? <span className="min-w-0 truncate text-xs text-white/40">{details}</span> : null}
+        </span>
+      </span>
     </span>
   );
 }

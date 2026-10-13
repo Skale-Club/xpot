@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { AlertTriangle, Building2, ChevronRight, Link2, Smartphone, Tag } from "lucide-react";
@@ -5,6 +6,7 @@ import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 import type { TagDashboard } from "@shared/tagsApi";
 import { useT } from "@/i18n";
 import { tagsMessages } from "@/i18n/messages/tags";
+import { TagPieceMention } from "@/components/xpot/TagProductThumbnail";
 import { APP_BASE, directPath, tagPath, tagsGet } from "./lib";
 import { CARD, EYEBROW_MUTED } from "./ui";
 
@@ -28,7 +30,7 @@ function Stat({ label, value, accent }: { label: string; value: number | string 
 function Ranked({ title, icon: Icon, items }: {
   title: string;
   icon: typeof Tag;
-  items: Array<{ key: string; label: string; sub?: string | null; value: number; onClick?: () => void }>;
+  items: Array<{ key: string; label?: string; sub?: string | null; content?: ReactNode; hideIcon?: boolean; value: number; onClick?: () => void }>;
 }) {
   const max = Math.max(1, ...items.map((i) => i.value));
   return (
@@ -38,10 +40,14 @@ function Ranked({ title, icon: Icon, items }: {
         {items.map((item) => (
           <li key={item.key}>
             <button type="button" onClick={item.onClick} disabled={!item.onClick} className="flex w-full items-center gap-3 px-4 py-3 text-left active:bg-white/10 disabled:active:bg-transparent">
-              <Icon className="h-4 w-4 shrink-0 text-white/40" />
+              {!item.hideIcon && <Icon className="h-4 w-4 shrink-0 text-white/40" />}
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-semibold text-white">{item.label}</span>
-                {item.sub && <span className="block truncate text-xs text-white/40">{item.sub}</span>}
+                {item.content ?? (
+                  <>
+                    <span className="block truncate text-sm font-semibold text-white">{item.label}</span>
+                    {item.sub && <span className="block truncate text-xs text-white/40">{item.sub}</span>}
+                  </>
+                )}
                 <span className="mt-1.5 block h-1 rounded-full bg-white/[0.06]">
                   <span className="block h-1 rounded-full bg-blue-400/70" style={{ width: `${(item.value / max) * 100}%` }} />
                 </span>
@@ -131,8 +137,16 @@ export function TagsDashboard() {
           icon={Tag}
           items={data.topPieces.map((p) => ({
             key: p.id,
-            label: p.publicCode,
-            sub: [p.leadName, p.label].filter(Boolean).join(" · ") || null,
+            hideIcon: true,
+            content: (
+              <TagPieceMention
+                publicCode={p.publicCode}
+                productType={p.productType}
+                face={p.face}
+                batchCode={p.batchCode}
+                details={[p.leadName, p.label].filter(Boolean).join(" · ") || undefined}
+              />
+            ),
             value: p.scans,
             onClick: () => navigate(tagPath(p.publicCode)),
           }))}

@@ -230,6 +230,11 @@ test.skipIf(!enabled)("tags: kits, reseller isolation, sales, scans, report, pro
 
     // Ana's home numbers.
     assert.deepEqual((await api("GET", "/api/xpot/tags/summary", "it-ana")).json, { inStock: 1, active: 2, soldLast30: 2, scansLast30: { qr: 2, nfc: 2 } });
+    const populatedDash = (await api("GET", "/api/xpot/tags/dashboard?days=30", "it-ana")).json;
+    assert.deepEqual(
+      (({ publicCode, productType, face, batchCode }) => ({ publicCode, productType, face, batchCode }))(populatedDash.topPieces[0]),
+      { publicCode: a1.publicCode, productType: "keychain", face: "instagram", batchCode: batch.json.batchCode },
+    );
 
     // Pieces per customer for the Visits side: Ana sees her customer, Bruno nothing.
     assert.deepEqual((await api("GET", "/api/xpot/tags/by-lead", "it-ana")).json, [{ leadId, pieces: 2, live: 2, scansLast30: 4 }]);
@@ -254,9 +259,21 @@ test.skipIf(!enabled)("tags: kits, reseller isolation, sales, scans, report, pro
     assert.equal(report.json.unassigned.inStock, 5);
     assert.equal(report.json.topTags[0].publicCode, a1.publicCode);
     assert.equal(report.json.topTags[0].repName, "Ana");
+    assert.equal(report.json.topTags[0].productType, "keychain");
+    assert.equal(report.json.topTags[0].face, "instagram");
+    assert.equal(report.json.topTags[0].batchCode, batch.json.batchCode);
+    const analytics = await api("GET", "/api/xpot/admin/tags/analytics?range=7d", "it-admin");
+    assert.equal(analytics.json.topTags[0].productType, "keychain");
+    assert.equal(analytics.json.topTags[0].face, "instagram");
+    assert.equal(analytics.json.topTags[0].batchCode, batch.json.batchCode);
     const overview = await api("GET", "/api/xpot/admin/tags/overview", "it-admin");
     assert.deepEqual(overview.json.stock, { house: 5, withResellers: 3 });
     assert.equal(overview.json.counts.active, 2);
+    assert.equal(overview.json.recentEvents[0].productType, "keychain");
+    assert.equal(overview.json.recentEvents[0].face, "instagram");
+    assert.equal(overview.json.recentEvents[0].batchCode, batch.json.batchCode);
+    assert.equal(overview.json.recentActivations[0].productType, "keychain");
+    assert.equal(overview.json.recentChanges[0].productType, "keychain");
 
     // Admin re-activating Ana's piece keeps her credit.
     assert.equal((await api("POST", `/api/xpot/tags/${a2.id}/disable`, "it-ana")).json.status, "disabled");

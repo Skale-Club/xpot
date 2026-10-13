@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { BarChart3, Package, Trophy, Users } from "lucide-react";
 import type { TagRepReportRow, TagTeamReport } from "@shared/tagsApi";
-import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
+import { TagPieceMention } from "@/components/xpot/TagProductThumbnail";
 import { useT } from "@/i18n";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
 import { ADMIN_TAGS_KEY, formatDate, getJson, STALE_MS, withQuery } from "./api";
@@ -39,7 +39,6 @@ function PersonCell({ row }: { row: TagRepReportRow }) {
 /** Per-reseller numbers for the window: sales, activations, stock and the scans their pieces got. */
 function TeamReport({ range, go }: { range: AnalyticsRange; go: Go }) {
   const t = useT(manageTagsMessages);
-  const labels = useTagLabels();
   const url = withQuery("/api/xpot/admin/tags/report", rangeParams(range));
   const { data, isLoading, error } = useQuery<TagTeamReport>({
     queryKey: [ADMIN_TAGS_KEY, "team-report", url],
@@ -120,16 +119,18 @@ function TeamReport({ range, go }: { range: AnalyticsRange; go: Go }) {
                 <li key={p.id}>
                   <button type="button" onClick={() => go(`/pieces/${p.id}`)} className="flex w-full items-center gap-3 py-2 text-left text-sm hover:bg-white/[0.03]">
                     <span className="w-5 shrink-0 text-right text-xs tabular-nums text-white/30">{i + 1}</span>
-                    <TagFaceIcon face={p.face} size="sm" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate font-medium text-white">
-                        <span className="font-mono">{p.publicCode}</span> · {p.leadName ?? t("noCustomer")}
-                      </span>
-                      <span className="block truncate text-xs text-white/40">
-                        {labels.product(p.productType)}
-                        {p.label ? ` · ${p.label}` : ""} · {p.repName ? t("teamSoldBy", { name: p.repName }) : t("teamHouse")}
-                      </span>
-                    </span>
+                    <TagPieceMention
+                      publicCode={p.publicCode}
+                      productType={p.productType}
+                      face={p.face}
+                      batchCode={p.batchCode}
+                      details={[
+                        p.leadName ?? t("noCustomer"),
+                        p.label,
+                        p.repName ? t("teamSoldBy", { name: p.repName }) : t("teamHouse"),
+                      ].filter(Boolean).join(" · ")}
+                      className="min-w-0 flex-1"
+                    />
                     <span className="shrink-0 text-right text-xs tabular-nums text-white/50">
                       <span className="font-semibold text-white">{p.qr + p.nfc}</span> ({p.qr} QR · {p.nfc} NFC)
                     </span>
