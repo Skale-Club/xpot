@@ -470,11 +470,8 @@ export function XpotProspecting() {
     <div className="mx-auto max-w-6xl space-y-4 sm:space-y-5">
       {!loadingExistingPlan && !details && !routeDetails ? (
         <>
-          <section className="mx-auto flex min-h-[420px] max-w-3xl flex-col items-center justify-center px-2 py-10 text-center sm:min-h-[500px]">
-            <span className="flex h-16 w-16 items-center justify-center rounded-[22px] bg-indigo-500/15 text-indigo-300 shadow-[0_0_40px_rgba(99,102,241,0.12)]"><RouteIcon className="h-8 w-8" /></span>
-            <h1 className="mt-6 text-2xl font-bold tracking-tight text-white sm:text-3xl">{t("title")}</h1>
-            <p className="mt-3 max-w-xl text-sm leading-6 text-white/50 sm:text-base">{t("subtitle")}</p>
-            <button type="button" onClick={() => setBuilderOpen(true)} className="mt-8 flex min-h-[92px] w-full max-w-xl items-center gap-4 rounded-[22px] bg-gradient-to-br from-blue-500 to-indigo-500 p-4 text-left text-white shadow-[0_12px_34px_rgba(59,130,246,0.28)] transition-transform active:scale-[0.985]">
+          <section className="mx-auto flex max-w-3xl justify-center px-2 py-5 sm:py-7">
+            <button type="button" onClick={() => setBuilderOpen(true)} className="flex min-h-[92px] w-full max-w-xl items-center gap-4 rounded-[22px] bg-gradient-to-br from-blue-500 to-indigo-500 p-4 text-left text-white shadow-[0_12px_34px_rgba(59,130,246,0.28)] transition-transform active:scale-[0.985]">
               <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/15"><RouteIcon className="h-7 w-7" /></span>
               <span className="min-w-0 flex-1">
                 <span className="block text-lg font-bold tracking-tight">{t("openBuilder")}</span>
