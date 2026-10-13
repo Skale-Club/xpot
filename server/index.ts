@@ -7,6 +7,7 @@ import { pool } from "./db.js";
 import { ensureUploadBucket } from "./lib/supabase.js";
 import { injectSeoHead } from "./seo.js";
 import { startProspectingWorker } from "./prospecting/queue.js";
+import { startAbandonedSignupNotifier } from "./auth/telegramNotifications.js";
 
 const PORT = Number(process.env.PORT) || 2110;
 
@@ -51,12 +52,14 @@ const PORT = Number(process.env.PORT) || 2110;
     log(`Xpot server listening on http://localhost:${PORT}`);
   });
   const stopProspectingWorker = startProspectingWorker();
+  const stopSignupNotifier = startAbandonedSignupNotifier();
 
   // Coolify sends SIGTERM on every redeploy. Stop accepting connections, let
   // in-flight requests finish, drain the pool, then exit.
   const shutdown = (signal: string) => {
     log(`${signal} received, shutting down`);
     stopProspectingWorker();
+    stopSignupNotifier();
     httpServer.close(() => {
       pool.end().catch(() => undefined).finally(() => process.exit(0));
     });

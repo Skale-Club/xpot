@@ -41,6 +41,23 @@ type Rep = {
   blockedAt: string | null;
   blockedReason: string | null;
   createdAt: string | null;
+  application: {
+    email: string | null;
+    workCity: string | null;
+    workRegion: string | null;
+    occupation: string | null;
+    availability: "weekdays" | "evenings" | "weekends" | "flexible" | null;
+    hasVehicle: boolean | null;
+    languages: string[] | null;
+    otherLanguages: string | null;
+    salesExperience: "none" | "some" | "experienced" | null;
+    fieldSalesReadiness: "ready" | "with_support" | "not_ready" | null;
+    kitInvestmentAcknowledged: boolean | null;
+    activeSellerAcknowledged: boolean | null;
+    message: string | null;
+    status: string;
+    submittedAt: string;
+  } | null;
 };
 
 const REPS_KEY = ["/api/xpot/admin/reps"];
@@ -257,29 +274,54 @@ function PendingRow({ rep }: { rep: Rep }) {
   const approve = useRepAction((r) => t("repCanSignInNow", { name: r.displayName }));
   const refuse = useRepAction((r) => t("repRefused", { name: r.displayName }));
   const busy = approve.isPending || refuse.isPending;
+  const availabilityKey = rep.application?.availability ? `applicationAvailability_${rep.application.availability}` as const : null;
+  const experienceKey = rep.application?.salesExperience ? `applicationSales_${rep.application.salesExperience}` as const : null;
+  const readinessKey = rep.application?.fieldSalesReadiness ? `applicationReadiness_${rep.application.fieldSalesReadiness}` as const : null;
   return (
-    <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-amber-400/20 bg-amber-400/[0.04] p-4" data-testid={`rep-${rep.id}`}>
-      <Identity rep={rep} />
-      {rep.createdAt && <span className="text-xs text-white/35">{t("signedUpOn", { date: new Date(rep.createdAt).toLocaleDateString(t.locale) })}</span>}
-      <ModuleChecks value={modules} onChange={setModules} />
-      <button
-        type="button"
-        disabled={busy || modules.length === 0}
-        onClick={() => approve.mutate({ url: `/api/xpot/admin/reps/${rep.id}/approve`, body: { modules }, rep })}
-        className={`${BTN} bg-emerald-500 text-white hover:bg-emerald-600`}
-        data-testid={`approve-${rep.id}`}
-      >
-        {approve.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-        {t("approve")}
-      </button>
-      <InlineAction
-        label={t("refuse")}
-        placeholder={t("reasonOptional")}
-        confirmLabel={t("refuse")}
-        danger
-        busy={busy}
-        onConfirm={(reason) => refuse.mutate({ url: `/api/xpot/admin/reps/${rep.id}/block`, body: { reason: reason || t("signUpRefusedReason") }, rep })}
-      />
+    <div className="rounded-2xl border border-amber-400/20 bg-amber-400/[0.04] p-4" data-testid={`rep-${rep.id}`}>
+      <div className="flex flex-wrap items-center gap-3">
+        <Identity rep={rep} />
+        {rep.createdAt && <span className="text-xs text-white/35">{t("signedUpOn", { date: new Date(rep.createdAt).toLocaleDateString(t.locale) })}</span>}
+        <ModuleChecks value={modules} onChange={setModules} />
+        <button
+          type="button"
+          disabled={busy || modules.length === 0}
+          onClick={() => approve.mutate({ url: `/api/xpot/admin/reps/${rep.id}/approve`, body: { modules }, rep })}
+          className={`${BTN} bg-emerald-500 text-white hover:bg-emerald-600`}
+          data-testid={`approve-${rep.id}`}
+        >
+          {approve.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+          {t("approve")}
+        </button>
+        <InlineAction
+          label={t("refuse")}
+          placeholder={t("reasonOptional")}
+          confirmLabel={t("refuse")}
+          danger
+          busy={busy}
+          onConfirm={(reason) => refuse.mutate({ url: `/api/xpot/admin/reps/${rep.id}/block`, body: { reason: reason || t("signUpRefusedReason") }, rep })}
+        />
+      </div>
+      {rep.application ? (
+        <div className="mt-4 border-t border-white/[0.07] pt-4" data-testid={`application-${rep.id}`}>
+          <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+            <div><dt className="text-xs text-white/35">{t("applicationEmail")}</dt><dd className="mt-0.5 break-words text-white/75">{rep.application.email || "—"}</dd></div>
+            <div><dt className="text-xs text-white/35">{t("applicationCity")}</dt><dd className="mt-0.5 text-white/75">{[rep.application.workCity, rep.application.workRegion].filter(Boolean).join(", ") || "—"}</dd></div>
+            <div><dt className="text-xs text-white/35">{t("applicationOccupation")}</dt><dd className="mt-0.5 text-white/75">{rep.application.occupation || "—"}</dd></div>
+            <div><dt className="text-xs text-white/35">{t("applicationAvailability")}</dt><dd className="mt-0.5 text-white/75">{availabilityKey ? t(availabilityKey) : "—"}</dd></div>
+            <div><dt className="text-xs text-white/35">{t("applicationVehicle")}</dt><dd className="mt-0.5 text-white/75">{rep.application.hasVehicle === null ? "—" : rep.application.hasVehicle ? t("applicationYes") : t("applicationNo")}</dd></div>
+            <div><dt className="text-xs text-white/35">{t("applicationLanguages")}</dt><dd className="mt-0.5 text-white/75">{[...(rep.application.languages ?? []), rep.application.otherLanguages].filter(Boolean).join(", ") || "—"}</dd></div>
+            <div><dt className="text-xs text-white/35">{t("applicationSalesExperience")}</dt><dd className="mt-0.5 text-white/75">{experienceKey ? t(experienceKey) : "—"}</dd></div>
+            <div><dt className="text-xs text-white/35">{t("applicationFieldReadiness")}</dt><dd className="mt-0.5 text-white/75">{readinessKey ? t(readinessKey) : "—"}</dd></div>
+          </dl>
+          <p className="mt-3 text-xs text-white/45">
+            {rep.application.kitInvestmentAcknowledged && rep.application.activeSellerAcknowledged ? `✓ ${t("applicationTermsAcknowledged")}` : t("applicationTermsMissing")}
+          </p>
+          {rep.application.message ? <p className="mt-3 text-sm leading-relaxed text-white/55"><span className="font-medium text-white/70">{t("applicationMessage")}:</span> {rep.application.message}</p> : null}
+        </div>
+      ) : (
+        <p className="mt-4 border-t border-white/[0.07] pt-3 text-xs text-amber-200/70">{t("applicationMissing")}</p>
+      )}
     </div>
   );
 }

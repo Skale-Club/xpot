@@ -1,7 +1,7 @@
 import { eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db.js";
-import { salesReps, users, type SalesRep } from "#shared/schema.js";
+import { authAccessRequests, salesReps, users, type SalesRep } from "#shared/schema.js";
 import { XPOT_MODULES } from "#shared/modules.js";
 import { normalizePhone } from "#shared/phone.js";
 import { storage } from "../../storage.js";
@@ -9,7 +9,7 @@ import { ensureWholesaleCode } from "../../wholesale/index.js";
 import { formatWholesaleCode } from "#shared/wholesale.js";
 import { ensureOrganizationForRep } from "../../organizations/service.js";
 
-// Who may use Xpot is decided by Skale Club. People sign up themselves (by
+// Who may use Xpot is decided by the Xpot team. People sign up themselves (by
 // phone) and wait for approval, or an admin creates their access directly;
 // either way they sign in with a code sent to that phone. Ending a
 // partnership blocks the rep and logs them out everywhere.
@@ -115,6 +115,11 @@ export async function approveRep(repId: number, modules: string[] | undefined, a
   assertMayManage(rep, actor);
   if (rep.blockedAt) throw new AccountError("This rep is blocked. Unblock them instead.", 409);
   const updated = await setAccess(repId, { isActive: true, ...(modules ? { modules } : {}) });
+  await db.update(authAccessRequests).set({
+    status: "approved",
+    reviewedAt: new Date(),
+    reviewedByUserId: actor.userId,
+  }).where(eq(authAccessRequests.userId, rep.userId));
   if (updated.role === "rep") await ensureOrganizationForRep(repId, actor.userId);
   // Approved partners buy kits at wholesale with their own code.
   return { ...updated, wholesaleCode: await ensureWholesaleCode(repId) };
@@ -125,6 +130,11 @@ export async function blockRep(repId: number, reason: string | null | undefined,
   const rep = await repOr404(repId);
   assertMayManage(rep, actor);
   const updated = await setAccess(repId, { isActive: false, blockedAt: new Date(), blockedReason: reason?.trim() || null });
+  await db.update(authAccessRequests).set({
+    status: "declined",
+    reviewedAt: new Date(),
+    reviewedByUserId: actor.userId,
+  }).where(eq(authAccessRequests.userId, rep.userId));
   const ended = await db.execute(sql`DELETE FROM sessions WHERE sess->>'userId' = ${rep.userId}`);
   console.log(`[reps] ${rep.displayName} (#${rep.id}) blocked by ${actor.userId}; ${ended.rowCount ?? 0} session(s) ended`);
   return updated;
@@ -134,6 +144,11 @@ export async function unblockRep(repId: number, actor: Actor) {
   const rep = await repOr404(repId);
   assertMayManage(rep, actor);
   const updated = await setAccess(repId, { isActive: true, blockedAt: null, blockedReason: null });
+  await db.update(authAccessRequests).set({
+    status: "approved",
+    reviewedAt: new Date(),
+    reviewedByUserId: actor.userId,
+  }).where(eq(authAccessRequests.userId, rep.userId));
   return { ...updated, wholesaleCode: await ensureWholesaleCode(repId) };
 }
 
@@ -155,9 +170,10 @@ export type RepAccess = "active" | "pending" | "blocked";
 /** Reps for Admin → Reps, with the phone they sign in with and where they stand. */
 export async function listRepsWithAccess() {
   const list = await db
-    .select({ rep: salesReps, loginPhone: users.phone })
+    .select({ rep: salesReps, loginPhone: users.phone, application: authAccessRequests })
     .from(salesReps)
     .leftJoin(users, eq(users.id, salesReps.userId))
+    .leftJoin(authAccessRequests, eq(authAccessRequests.userId, salesReps.userId))
     // Deleted accounts kept only as placeholders for sales records (server/accountDeletion.ts).
     .where(isNull(salesReps.deletedAt))
     .orderBy(salesReps.createdAt);
@@ -167,10 +183,27 @@ export async function listRepsWithAccess() {
       row.rep = { ...row.rep, wholesaleCode: await ensureWholesaleCode(row.rep.id) };
     }
   }
-  return list.map(({ rep, loginPhone }) => ({
+  return list.map(({ rep, loginPhone, application }) => ({
     ...rep,
     loginPhone,
     wholesaleCode: rep.wholesaleCode ? formatWholesaleCode(rep.wholesaleCode) : null,
     access: (rep.blockedAt ? "blocked" : rep.isActive ? "active" : "pending") as RepAccess,
+    application: application ? {
+      email: application.email,
+      workCity: application.workCity,
+      workRegion: application.workRegion,
+      occupation: application.occupation,
+      availability: application.availability,
+      hasVehicle: application.hasVehicle,
+      languages: application.languages,
+      otherLanguages: application.otherLanguages,
+      salesExperience: application.salesExperience,
+      fieldSalesReadiness: application.fieldSalesReadiness,
+      kitInvestmentAcknowledged: application.kitInvestmentAcknowledged,
+      activeSellerAcknowledged: application.activeSellerAcknowledged,
+      message: application.message,
+      status: application.status,
+      submittedAt: application.submittedAt,
+    } : null,
   }));
 }

@@ -335,7 +335,7 @@ export function XpotLandingPage() {
                     </Button>
                   </DialogTrigger>
 
-                  <DialogContent className="w-[92%] max-w-md gap-0 rounded-2xl border-white/10 bg-[#070b16]/95 p-5 text-white shadow-[0_24px_80px_rgba(0,0,0,0.65)] backdrop-blur-2xl [&>button]:right-3 [&>button]:top-3 [&>button]:bg-transparent sm:p-7">
+                  <DialogContent className="max-h-[92vh] w-[92%] max-w-md gap-0 overflow-y-auto rounded-2xl border-white/10 bg-[#070b16]/95 p-5 text-white shadow-[0_24px_80px_rgba(0,0,0,0.65)] backdrop-blur-2xl [&>button]:right-3 [&>button]:top-3 [&>button]:bg-transparent sm:p-7">
                     <GradientTopLine glow />
 
                     <DialogHeader className="relative space-y-0 pb-5 text-center sm:text-center">

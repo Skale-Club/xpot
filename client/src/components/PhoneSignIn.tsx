@@ -1,15 +1,20 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, Clock3, Loader2, MessageCircle, Phone, ShieldOff } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Clock3, Loader2, MessageCircle, Phone, ShieldOff } from "lucide-react";
 import { formatPhone, normalizePhone } from "@shared/phone";
 import { CountryCodePicker } from "@/components/CountryCodePicker";
 import { useT } from "@/i18n";
 import { signinMessages } from "@/i18n/messages/signin";
 
 // Sign in (or sign up) with a code texted to the phone. Only an approved rep
-// gets in; a new number asks for access and waits for Skale Club.
+// gets in; a new number completes a saved, one-question-at-a-time application.
 
-type Step = "phone" | "code" | "name" | "pending" | "blocked";
+type Step = "phone" | "code" | "application" | "pending" | "blocked";
+type Availability = "weekdays" | "evenings" | "weekends" | "flexible" | "";
+type Language = "en" | "pt" | "es" | "other";
+type SalesExperience = "none" | "some" | "experienced" | "";
+type FieldReadiness = "ready" | "with_support" | "not_ready" | "";
+const APPLICATION_STEPS = 13;
 type ErrorKey = keyof typeof signinMessages.en;
 
 interface ApiError {
@@ -46,6 +51,21 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
   const [code, setCode] = useState("");
   const [devCode, setDevCode] = useState("");
   const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [workCity, setWorkCity] = useState("");
+  const [workRegion, setWorkRegion] = useState("");
+  const [occupation, setOccupation] = useState("");
+  const [availability, setAvailability] = useState<Availability>("");
+  const [hasVehicle, setHasVehicle] = useState<boolean | null>(null);
+  const [languages, setLanguages] = useState<Language[]>([]);
+  const [otherLanguages, setOtherLanguages] = useState("");
+  const [salesExperience, setSalesExperience] = useState<SalesExperience>("");
+  const [fieldSalesReadiness, setFieldSalesReadiness] = useState<FieldReadiness>("");
+  const [kitInvestmentAcknowledged, setKitInvestmentAcknowledged] = useState(false);
+  const [activeSellerAcknowledged, setActiveSellerAcknowledged] = useState(false);
+  const [message, setMessage] = useState("");
+  const [applicationStep, setApplicationStep] = useState(0);
+  const [draftLoading, setDraftLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [resendAt, setResendAt] = useState(0);
@@ -61,6 +81,35 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
 
   useEffect(() => {
     if (step === "code") window.setTimeout(() => codeRef.current?.focus(), 50);
+  }, [step]);
+
+  useEffect(() => {
+    if (step !== "application") return;
+    let cancelled = false;
+    setDraftLoading(true);
+    fetch("/api/auth/phone/application-draft", { credentials: "include" })
+      .then((response) => response.json())
+      .then(({ draft }) => {
+        if (cancelled || !draft) return;
+        setName(draft.displayName ?? "");
+        setEmail(draft.email ?? "");
+        setWorkCity(draft.workCity ?? "");
+        setWorkRegion(draft.workRegion ?? "");
+        setOccupation(draft.occupation ?? "");
+        setAvailability(draft.availability ?? "");
+        setHasVehicle(typeof draft.hasVehicle === "boolean" ? draft.hasVehicle : null);
+        setLanguages(Array.isArray(draft.languages) ? draft.languages : []);
+        setOtherLanguages(draft.otherLanguages ?? "");
+        setSalesExperience(draft.salesExperience ?? "");
+        setFieldSalesReadiness(draft.fieldSalesReadiness ?? "");
+        setKitInvestmentAcknowledged(Boolean(draft.kitInvestmentAcknowledged));
+        setActiveSellerAcknowledged(Boolean(draft.activeSellerAcknowledged));
+        setMessage(draft.message ?? "");
+        setApplicationStep(Math.min(Number(draft.draftStep) || 0, APPLICATION_STEPS - 1));
+      })
+      .catch(() => undefined)
+      .finally(() => { if (!cancelled) setDraftLoading(false); });
+    return () => { cancelled = true; };
   }, [step]);
 
   const showError = (data: ApiError) => {
@@ -102,7 +151,7 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
         return showError(data);
       }
       if (data.status === "active") return void (await onSignedIn());
-      setStep(data.status === "new" ? "name" : data.status);
+      setStep(data.status === "new" ? "application" : data.status);
     } catch {
       setError(t("err_generic"));
     } finally {
@@ -121,9 +170,69 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
     setBusy(true);
     setError("");
     try {
-      const { ok, data } = await post<{ status: Step }>("/api/auth/phone/register", { displayName: name.trim(), lang: t.lang });
+      const { ok, data } = await post<{ status: "active" | "pending" | "blocked" | "new" }>("/api/auth/phone/register", {
+        displayName: name.trim(),
+        email: email.trim(),
+        workCity: workCity.trim(),
+        workRegion: workRegion.trim(),
+        occupation: occupation.trim(),
+        availability,
+        hasVehicle,
+        languages,
+        otherLanguages: otherLanguages.trim(),
+        salesExperience,
+        fieldSalesReadiness,
+        kitInvestmentAcknowledged,
+        activeSellerAcknowledged,
+        message: message.trim(),
+        lang: t.lang,
+      });
       if (!ok) return showError(data);
+      if (data.status === "active") return void (await onSignedIn());
       setStep(data.status === "blocked" ? "blocked" : "pending");
+    } catch {
+      setError(t("err_generic"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const draftPayload = (nextStep: number) => ({
+    ...(name.trim() ? { displayName: name.trim() } : {}),
+    ...(email.trim() ? { email: email.trim() } : {}),
+    ...(workCity.trim() ? { workCity: workCity.trim() } : {}),
+    ...(workRegion.trim() ? { workRegion: workRegion.trim() } : {}),
+    ...(occupation.trim() ? { occupation: occupation.trim() } : {}),
+    ...(availability ? { availability } : {}),
+    ...(hasVehicle !== null ? { hasVehicle } : {}),
+    ...(languages.length ? { languages } : {}),
+    ...(otherLanguages.trim() ? { otherLanguages: otherLanguages.trim() } : {}),
+    ...(salesExperience ? { salesExperience } : {}),
+    ...(fieldSalesReadiness ? { fieldSalesReadiness } : {}),
+    ...(kitInvestmentAcknowledged ? { kitInvestmentAcknowledged } : {}),
+    ...(activeSellerAcknowledged ? { activeSellerAcknowledged } : {}),
+    ...(message.trim() ? { message: message.trim() } : {}),
+    step: nextStep,
+  });
+
+  useEffect(() => {
+    if (step !== "application" || draftLoading) return;
+    const hasAnswer = Boolean(name.trim() || email.trim() || workCity.trim() || workRegion.trim() || occupation.trim() || availability || hasVehicle !== null || languages.length || salesExperience || fieldSalesReadiness || kitInvestmentAcknowledged || activeSellerAcknowledged || message.trim());
+    if (!hasAnswer) return;
+    const timer = window.setTimeout(() => {
+      void put("/api/auth/phone/application-draft", draftPayload(applicationStep));
+    }, 900);
+    return () => window.clearTimeout(timer);
+  }, [step, draftLoading, applicationStep, name, email, workCity, workRegion, occupation, availability, hasVehicle, languages, otherLanguages, salesExperience, fieldSalesReadiness, kitInvestmentAcknowledged, activeSellerAcknowledged, message]);
+
+  const saveAndContinue = async () => {
+    const next = Math.min(applicationStep + 1, APPLICATION_STEPS - 1);
+    setBusy(true);
+    setError("");
+    try {
+      const { ok, data } = await put<{ ok: boolean }>("/api/auth/phone/application-draft", draftPayload(next));
+      if (!ok) return showError(data);
+      setApplicationStep(next);
     } catch {
       setError(t("err_generic"));
     } finally {
@@ -176,33 +285,67 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
     );
   }
 
-  if (step === "name") {
+  if (step === "application") {
+    if (draftLoading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-[#8CA3FF]" /></div>;
+    const valid = [
+      name.trim().length >= 2,
+      /^\S+@\S+\.\S+$/.test(email.trim()),
+      workCity.trim().length >= 2,
+      workRegion.trim().length >= 2,
+      occupation.trim().length >= 2,
+      hasVehicle !== null,
+      languages.length > 0 && (!languages.includes("other") || otherLanguages.trim().length >= 2),
+      Boolean(salesExperience),
+      Boolean(fieldSalesReadiness),
+      Boolean(availability),
+      kitInvestmentAcknowledged,
+      activeSellerAcknowledged,
+      true,
+    ][applicationStep];
+    let question: ReactNode;
+    if (applicationStep === 0) question = <input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("namePlaceholder")} autoComplete="name" autoCapitalize="words" autoFocus className={FIELD} data-testid="input-signup-name" />;
+    else if (applicationStep === 1) question = <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder={t("emailPlaceholder")} type="email" inputMode="email" autoComplete="email" autoFocus className={FIELD} data-testid="input-signup-email" />;
+    else if (applicationStep === 2) question = <input value={workCity} onChange={(e) => setWorkCity(e.target.value)} placeholder={t("workCityPlaceholder")} autoComplete="address-level2" autoCapitalize="words" autoFocus className={FIELD} data-testid="input-signup-city" />;
+    else if (applicationStep === 3) question = <input value={workRegion} onChange={(e) => setWorkRegion(e.target.value)} placeholder={t("workRegionPlaceholder")} autoComplete="address-level1" autoCapitalize="words" autoFocus className={FIELD} data-testid="input-signup-region" />;
+    else if (applicationStep === 4) question = <input value={occupation} onChange={(e) => setOccupation(e.target.value)} placeholder={t("occupationPlaceholder")} autoFocus className={FIELD} data-testid="input-signup-occupation" />;
+    else if (applicationStep === 5) question = <Choices value={hasVehicle === null ? "" : String(hasVehicle)} onChange={(value) => setHasVehicle(value === "true")} options={[{ value: "true", label: t("yes") }, { value: "false", label: t("no") }]} />;
+    else if (applicationStep === 6) question = (
+      <div className="space-y-3">
+        <div className="divide-y divide-white/[0.08] border-y border-white/[0.08]">
+          {(["en", "pt", "es", "other"] as Language[]).map((language) => (
+            <label key={language} className="flex cursor-pointer items-center gap-3 py-3 text-sm text-white/75">
+              <input type="checkbox" checked={languages.includes(language)} onChange={(e) => setLanguages(e.target.checked ? [...languages, language] : languages.filter((item) => item !== language))} className="h-4 w-4 accent-[#5272F2]" />
+              {t(`language_${language}` as keyof typeof signinMessages.en)}
+            </label>
+          ))}
+        </div>
+        {languages.includes("other") ? <input value={otherLanguages} onChange={(e) => setOtherLanguages(e.target.value)} placeholder={t("otherLanguagesPlaceholder")} autoFocus className={FIELD} /> : null}
+      </div>
+    );
+    else if (applicationStep === 7) question = <Choices value={salesExperience} onChange={(value) => setSalesExperience(value as SalesExperience)} options={["none", "some", "experienced"].map((value) => ({ value, label: t(`salesExperience_${value}` as keyof typeof signinMessages.en) }))} />;
+    else if (applicationStep === 8) question = <Choices value={fieldSalesReadiness} onChange={(value) => setFieldSalesReadiness(value as FieldReadiness)} options={["ready", "with_support", "not_ready"].map((value) => ({ value, label: t(`fieldReadiness_${value}` as keyof typeof signinMessages.en) }))} />;
+    else if (applicationStep === 9) question = <Choices value={availability} onChange={(value) => setAvailability(value as Availability)} options={["weekdays", "evenings", "weekends", "flexible"].map((value) => ({ value, label: t(`availability_${value}` as keyof typeof signinMessages.en) }))} />;
+    else if (applicationStep === 10) question = <label className="flex cursor-pointer gap-3 text-sm leading-relaxed text-white/70"><input type="checkbox" checked={kitInvestmentAcknowledged} onChange={(e) => setKitInvestmentAcknowledged(e.target.checked)} className="mt-1 h-4 w-4 shrink-0 accent-[#5272F2]" /><span>{t("kitAcknowledgement")}</span></label>;
+    else if (applicationStep === 11) question = <label className="flex cursor-pointer gap-3 text-sm leading-relaxed text-white/70"><input type="checkbox" checked={activeSellerAcknowledged} onChange={(e) => setActiveSellerAcknowledged(e.target.checked)} className="mt-1 h-4 w-4 shrink-0 accent-[#5272F2]" /><span>{t("activeSellerAcknowledgement")}</span></label>;
+    else question = <textarea value={message} onChange={(e) => setMessage(e.target.value)} placeholder={t("messagePlaceholder")} maxLength={1000} rows={4} autoFocus className={`${FIELD} h-auto resize-none py-3`} data-testid="input-signup-message" />;
+
+    const questionKeys = ["nameQuestion", "emailQuestion", "workCityQuestion", "workRegionQuestion", "occupationQuestion", "vehicleQuestion", "languagesQuestion", "salesExperienceQuestion", "fieldReadinessQuestion", "availabilityQuestion", "kitQuestion", "activeSellerQuestion", "messageQuestion"] as const;
     return (
-      <form onSubmit={register} className="space-y-4" data-testid="signin-name">
+      <form onSubmit={(event) => applicationStep === APPLICATION_STEPS - 1 ? void register(event) : (event.preventDefault(), void saveAndContinue())} className="space-y-5" data-testid="signin-application">
         <div className="text-center">
-          <p className="text-lg font-bold text-white">{t("nameTitle")}</p>
-          <p className="mt-1 text-sm text-white/60">{t("nameSub")}</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8CA3FF]">{t("applicationProgress", { current: applicationStep + 1, total: APPLICATION_STEPS })}</p>
+          <div className="mx-auto mt-2 h-1 w-24 overflow-hidden rounded-full bg-white/10"><div className="h-full bg-gradient-to-r from-[#5272F2] to-[#24C7C1] transition-all" style={{ width: `${((applicationStep + 1) / APPLICATION_STEPS) * 100}%` }} /></div>
+          <p className="mt-5 text-xl font-bold leading-snug text-white">{t(questionKeys[applicationStep])}</p>
         </div>
         {errorBox}
-        <label className="block space-y-2">
-          <span className="text-sm font-medium text-white/80">{t("nameLabel")}</span>
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder={t("namePlaceholder")}
-            autoComplete="name"
-            autoCapitalize="words"
-            autoFocus
-            required
-            minLength={2}
-            className={FIELD}
-            data-testid="input-signup-name"
-          />
-        </label>
-        <button type="submit" disabled={busy || name.trim().length < 2} className={PRIMARY} data-testid="button-request-access">
+        <div className="min-h-32">{question}</div>
+        <button type="submit" disabled={busy || !valid} className={PRIMARY} data-testid={applicationStep === APPLICATION_STEPS - 1 ? "button-request-access" : "button-application-next"}>
           {busy && <Loader2 className="h-4 w-4 animate-spin" />}
-          {t("requestAccess")}
+          {applicationStep === APPLICATION_STEPS - 1 ? t("requestAccess") : t("next")}
+          {!busy && applicationStep < APPLICATION_STEPS - 1 ? <ArrowRight className="h-4 w-4" /> : null}
         </button>
+        {applicationStep > 0 ? <button type="button" disabled={busy} onClick={() => setApplicationStep((value) => Math.max(0, value - 1))} className="mx-auto flex items-center gap-2 text-sm text-white/45 hover:text-white"><ArrowLeft className="h-4 w-4" />{t("previous")}</button> : null}
+        <p className="text-center text-xs text-white/35">{t("draftSaved")}</p>
       </form>
     );
   }
@@ -269,7 +412,7 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
               <input
                 id="signin-phone"
                 value={phoneInput}
-                onChange={(e) => setPhoneInput(e.target.value)}
+                onChange={(e) => setPhoneInput(maskPhoneInput(e.target.value, countryCode))}
                 type="tel"
                 inputMode="tel"
                 autoComplete="tel-national"
@@ -288,5 +431,32 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
           {!busy && <ArrowRight className="h-4 w-4" />}
         </button>
       </form>
+  );
+}
+
+async function put<T>(url: string, body: unknown): Promise<{ ok: boolean; data: T & ApiError }> {
+  const res = await fetch(url, { method: "PUT", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const data = (await res.json().catch(() => ({}))) as T & ApiError;
+  return { ok: res.ok, data };
+}
+
+function maskPhoneInput(value: string, countryCode: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, countryCode === "55" ? 11 : countryCode === "1" ? 10 : 15);
+  if (countryCode === "1") return digits.replace(/^(\d{0,3})(\d{0,3})(\d{0,4}).*/, (_m, a, b, c) => b ? `(${a}) ${b}${c ? `-${c}` : ""}` : a);
+  if (countryCode === "55") return digits.replace(/^(\d{0,2})(\d{0,5})(\d{0,4}).*/, (_m, a, b, c) => b ? `(${a}) ${b}${c ? `-${c}` : ""}` : a);
+  return digits;
+}
+
+function Choices({ options, value, onChange }: { options: Array<{ value: string; label: string }>; value: string; onChange: (value: string) => void }) {
+  return (
+    <div className="divide-y divide-white/[0.08] border-y border-white/[0.08]">
+      {options.map((option) => (
+        <label key={option.value} className="flex cursor-pointer items-center gap-3 py-3 text-sm text-white/75 hover:text-white">
+          <input type="radio" checked={value === option.value} onChange={() => onChange(option.value)} className="h-4 w-4 accent-[#5272F2]" />
+          <span className="flex-1">{option.label}</span>
+          {value === option.value ? <Check className="h-4 w-4 text-cyan-300" /> : null}
+        </label>
+      ))}
+    </div>
   );
 }

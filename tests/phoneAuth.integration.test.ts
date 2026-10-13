@@ -17,12 +17,15 @@ test.skipIf(!enabled)("phone sign-in: code, sign-up pending, approval, blocking"
   const { sql } = await import("drizzle-orm");
 
   const PHONE = "+15550120001";
+  const ADMIN_ID = "phone-auth-integration-admin";
   const clean = async () => {
     await db.execute(sql`DELETE FROM auth_phone_codes WHERE phone LIKE '+1555012%'`);
     await db.execute(sql`DELETE FROM sales_reps WHERE user_id IN (SELECT id FROM users WHERE phone LIKE '+1555012%')`);
     await db.execute(sql`DELETE FROM users WHERE phone LIKE '+1555012%'`);
+    await db.execute(sql`DELETE FROM users WHERE id = ${ADMIN_ID}`);
   };
   await clean();
+  await db.execute(sql`INSERT INTO users (id, first_name, is_admin) VALUES (${ADMIN_ID}, 'Test Admin', true)`);
 
   const sent: Array<{ to: string; body: string }> = [];
   const sms = { live: true, async send(to: string, body: string) { sent.push({ to, body }); } };
@@ -72,15 +75,55 @@ test.skipIf(!enabled)("phone sign-in: code, sign-up pending, approval, blocking"
     // A spent code doesn't work twice.
     assert.equal((await call("POST", "/api/auth/phone/verify", { phone: PHONE, code })).json.code, "code_expired");
 
+    // A partial application is resumable, but is not an approval request yet.
+    assert.equal((await call("PUT", "/api/auth/phone/application-draft", { displayName: "Maria Souza", step: 1 })).status, 200);
+    const savedDraft = await call("GET", "/api/auth/phone/application-draft");
+    assert.equal(savedDraft.json.draft.displayName, "Maria Souza");
+    assert.equal(savedDraft.json.draft.status, "draft");
+    const [{ draftReps }] = (await db.execute(sql`SELECT count(*)::int AS "draftReps" FROM sales_reps r JOIN users u ON u.id = r.user_id WHERE u.phone = ${PHONE}`)).rows as any[];
+    assert.equal(draftReps, 0);
+
     // Sign-up: pending, no session.
-    const reg = await call("POST", "/api/auth/phone/register", { displayName: "Maria Souza" });
+    const application = {
+      displayName: "Maria Souza",
+      email: "maria@example.com",
+      workCity: "Worcester",
+      workRegion: "Massachusetts",
+      occupation: "Delivery driver",
+      availability: "evenings",
+      hasVehicle: true,
+      languages: ["en", "pt"],
+      otherLanguages: "",
+      salesExperience: "some",
+      fieldSalesReadiness: "ready",
+      kitInvestmentAcknowledged: true,
+      activeSellerAcknowledged: true,
+      message: "I want to build a side income.",
+    };
+    const reg = await call("POST", "/api/auth/phone/register", application);
     assert.equal(reg.status, 201);
     assert.equal(reg.json.status, "pending");
     assert.equal((await call("GET", "/whoami")).json.userId, null);
     const [rep] = (await db.execute(sql`SELECT r.id, r.is_active, r.display_name FROM sales_reps r JOIN users u ON u.id = r.user_id WHERE u.phone = ${PHONE}`)).rows as any[];
     assert.deepEqual([rep.is_active, rep.display_name], [false, "Maria Souza"]);
+    const [request] = (await db.execute(sql`SELECT ar.email, ar.work_city, ar.work_region, ar.occupation, ar.availability, ar.has_vehicle, ar.languages, ar.sales_experience, ar.field_sales_readiness, ar.kit_investment_acknowledged, ar.active_seller_acknowledged, ar.message, ar.status FROM auth_access_requests ar JOIN users u ON u.id = ar.user_id WHERE u.phone = ${PHONE}`)).rows as any[];
+    assert.deepEqual(request, {
+      email: application.email,
+      work_city: application.workCity,
+      work_region: application.workRegion,
+      occupation: application.occupation,
+      availability: application.availability,
+      has_vehicle: application.hasVehicle,
+      languages: application.languages,
+      sales_experience: application.salesExperience,
+      field_sales_readiness: application.fieldSalesReadiness,
+      kit_investment_acknowledged: application.kitInvestmentAcknowledged,
+      active_seller_acknowledged: application.activeSellerAcknowledged,
+      message: application.message,
+      status: "pending",
+    });
     // Registering needs a freshly verified number.
-    assert.equal((await call("POST", "/api/auth/phone/register", { displayName: "Someone" })).status, 401);
+    assert.equal((await call("POST", "/api/auth/phone/register", application)).status, 401);
 
     const signIn = async () => {
       await age();
@@ -92,13 +135,17 @@ test.skipIf(!enabled)("phone sign-in: code, sign-up pending, approval, blocking"
     assert.equal((await call("GET", "/whoami")).json.userId, null);
 
     // Approved: signed in.
-    const actor = { userId: "pa-admin", isAdmin: true };
+    const actor = { userId: ADMIN_ID, isAdmin: true };
     await accounts.approveRep(rep.id, undefined, actor);
+    const [approved] = (await db.execute(sql`SELECT status, reviewed_by_user_id FROM auth_access_requests ar JOIN users u ON u.id = ar.user_id WHERE u.phone = ${PHONE}`)).rows as any[];
+    assert.deepEqual(approved, { status: "approved", reviewed_by_user_id: actor.userId });
     assert.equal((await signIn()).json.status, "active");
     assert.ok((await call("GET", "/whoami")).json.userId);
 
     // Blocked: told so, no session.
     await accounts.blockRep(rep.id, "Partnership ended", actor);
+    const [declined] = (await db.execute(sql`SELECT status FROM auth_access_requests ar JOIN users u ON u.id = ar.user_id WHERE u.phone = ${PHONE}`)).rows as any[];
+    assert.equal(declined.status, "declined");
     cookie = "";
     assert.equal((await signIn()).json.status, "blocked");
     assert.equal((await call("GET", "/whoami")).json.userId, null);

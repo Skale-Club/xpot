@@ -18,7 +18,7 @@ describe("production data pull scope", () => {
     for (const table of ["app_branding", "organizations", "sales_leads", "tag_batches", "tags", "prospecting_routes", "mcp_tokens"]) {
       expect(isXpotDataTable(table)).toBe(true);
     }
-    for (const table of ["users", "sessions", "auth_phone_codes", "chat_integrations", "integration_settings", "tenants", "blog_posts"]) {
+    for (const table of ["users", "sessions", "auth_phone_codes", "auth_access_requests", "chat_integrations", "integration_settings", "tenants", "blog_posts"]) {
       expect(isXpotDataTable(table)).toBe(false);
     }
   });

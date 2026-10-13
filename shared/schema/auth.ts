@@ -46,3 +46,33 @@ export const authPhoneCodes = pgTable("auth_phone_codes", {
   expiresAt: timestamp("expires_at").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
+
+// Short application completed after a new phone number is verified. Access is
+// still controlled by sales_reps.is_active; this row keeps the contact/context
+// the team needs to review the request instead of turning signup into access.
+export const authAccessRequests = pgTable("auth_access_requests", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().unique().references(() => users.id, { onDelete: "cascade" }),
+  email: text("email"),
+  workCity: text("work_city"),
+  workRegion: text("work_region"),
+  occupation: text("occupation"),
+  availability: text("availability"),
+  hasVehicle: boolean("has_vehicle"),
+  languages: text("languages").array().default(sql`'{}'::text[]`),
+  otherLanguages: text("other_languages"),
+  salesExperience: text("sales_experience"),
+  fieldSalesReadiness: text("field_sales_readiness"),
+  kitInvestmentAcknowledged: boolean("kit_investment_acknowledged").default(false),
+  activeSellerAcknowledged: boolean("active_seller_acknowledged").default(false),
+  message: text("message"),
+  status: text("status").notNull().default("draft"),
+  draftStep: integer("draft_step").notNull().default(0),
+  lastActivityAt: timestamp("last_activity_at").notNull().defaultNow(),
+  abandonedNotifiedAt: timestamp("abandoned_notified_at"),
+  submittedAt: timestamp("submitted_at"),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewedByUserId: text("reviewed_by_user_id").references(() => users.id, { onDelete: "set null" }),
+}, (table) => [index("auth_access_requests_status_idx").on(table.status, table.submittedAt)]);
+
+export type AuthAccessRequest = typeof authAccessRequests.$inferSelect;

@@ -6,6 +6,7 @@ import { db, pool } from "../db.js";
 import { users } from "#shared/schema.js";
 import { eq } from "drizzle-orm";
 import { usesGoogleAuth } from "./providers.js";
+import { normalizeIpKey, rateLimit } from "../tags/rateLimit.js";
 
 export async function setupSupabaseAuth(app: Express) {
   app.set("trust proxy", 1);
@@ -46,6 +47,9 @@ export async function setupSupabaseAuth(app: Express) {
   // upserts the user row, and creates an Express session cookie.
   app.post("/api/auth/login", async (req: Request, res: Response) => {
     try {
+      if (rateLimit(`supabase-login:${normalizeIpKey(req.ip)}`, { limit: 20, windowMs: 15 * 60_000 })) {
+        return res.status(429).json({ code: "rate_limited", message: "Too many sign-in attempts. Try again later." });
+      }
       const { accessToken } = req.body;
       if (!accessToken) {
         return res.status(400).json({ message: "Access token required" });
