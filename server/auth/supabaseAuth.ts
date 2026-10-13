@@ -5,6 +5,7 @@ import { getSupabaseAdmin } from "../lib/supabase.js";
 import { db, pool } from "../db.js";
 import { users } from "#shared/schema.js";
 import { eq } from "drizzle-orm";
+import { usesGoogleAuth } from "./providers.js";
 
 export async function setupSupabaseAuth(app: Express) {
   app.set("trust proxy", 1);
@@ -57,14 +58,20 @@ export async function setupSupabaseAuth(app: Express) {
         return res.status(401).json({ message: "Invalid token" });
       }
 
+      if (usesGoogleAuth(supabaseUser)) {
+        return res.status(403).json({
+          code: "google_login_disabled",
+          message: "Google sign-in is temporarily disabled.",
+        });
+      }
+
       const email = supabaseUser.email;
       if (!email) {
         return res.status(400).json({ message: "Email not available from Supabase" });
       }
 
-      // Normalize profile metadata across providers (email signup, Google, etc.).
-      // Google fills full_name/name/given_name/family_name/picture; email signup
-      // typically sends first_name/last_name. Pick whichever is present.
+      // Normalize profile metadata across any non-Google Supabase providers that
+      // may be enabled later. Pick whichever common profile fields are present.
       const md = supabaseUser.user_metadata || {};
       const fullName = (md.full_name || md.name || "").trim();
       const [firstFromFull, ...restFromFull] = fullName.split(/\s+/);

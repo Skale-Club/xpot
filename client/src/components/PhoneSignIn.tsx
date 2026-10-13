@@ -5,7 +5,6 @@ import { formatPhone, normalizePhone } from "@shared/phone";
 import { CountryCodePicker } from "@/components/CountryCodePicker";
 import { useT } from "@/i18n";
 import { signinMessages } from "@/i18n/messages/signin";
-import { initSupabase } from "@/lib/supabase";
 
 // Sign in (or sign up) with a code texted to the phone. Only an approved rep
 // gets in; a new number asks for access and waits for Skale Club.
@@ -40,12 +39,6 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
     queryKey: ["/api/auth/phone/config"],
     staleTime: Infinity,
   });
-  // Secondary way in (for when SMS is down): only offered when Supabase auth is configured.
-  const { data: supabaseConfig } = useQuery<{ url?: string; anonKey?: string }>({
-    queryKey: ["/api/supabase-config"],
-    staleTime: Infinity,
-  });
-  const googleAvailable = Boolean(supabaseConfig?.url && supabaseConfig?.anonKey);
   const [step, setStep] = useState<Step>("phone");
   const [countryCode, setCountryCode] = useState<string>("1");
   const [phoneInput, setPhoneInput] = useState("");
@@ -134,23 +127,6 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
     } catch {
       setError(t("err_generic"));
     } finally {
-      setBusy(false);
-    }
-  };
-
-  // /login finishes the job: it exchanges the PKCE code and opens the Express session.
-  const signInWithGoogle = async () => {
-    setBusy(true);
-    setError("");
-    try {
-      const supabase = await initSupabase();
-      const { error: oauthError } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: { redirectTo: `${window.location.origin}/login` },
-      });
-      if (oauthError) throw oauthError;
-    } catch {
-      setError(t("err_google"));
       setBusy(false);
     }
   };
@@ -282,7 +258,6 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
   }
 
   return (
-    <div className="space-y-4">
       <form onSubmit={submitPhone} className="space-y-4" data-testid="signin-phone">
         {errorBox}
         <div className="space-y-2">
@@ -313,17 +288,5 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
           {!busy && <ArrowRight className="h-4 w-4" />}
         </button>
       </form>
-    {googleAvailable && (
-      <button
-        type="button"
-        onClick={() => void signInWithGoogle()}
-        disabled={busy}
-        className="block w-full text-center text-sm text-white/50 transition-colors hover:text-white disabled:opacity-50"
-        data-testid="button-google-signin"
-      >
-        {t("googleSignIn")}
-      </button>
-    )}
-    </div>
   );
 }

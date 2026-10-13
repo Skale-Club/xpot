@@ -38,8 +38,6 @@ const en = {
   err_too_many_attempts: "Too many wrong tries. Ask for a new code.",
   err_not_verified: "Confirm your phone number first.",
   err_generic: "Something went wrong. Try again.",
-  googleSignIn: "Continue with Google",
-  err_google: "We couldn't start Google sign-in. Try again.",
 };
 
 export const signinMessages: Dictionary<typeof en> = {
@@ -80,8 +78,6 @@ export const signinMessages: Dictionary<typeof en> = {
     err_too_many_attempts: "Muitas tentativas erradas. Peça um novo código.",
     err_not_verified: "Confirme o seu número primeiro.",
     err_generic: "Algo deu errado. Tente de novo.",
-    googleSignIn: "Continuar com Google",
-    err_google: "Não foi possível iniciar o login com Google. Tente de novo.",
   },
   es: {
     title: "Entrar a Xpot",
@@ -119,7 +115,5 @@ export const signinMessages: Dictionary<typeof en> = {
     err_too_many_attempts: "Demasiados intentos incorrectos. Pide un código nuevo.",
     err_not_verified: "Confirma tu número primero.",
     err_generic: "Algo salió mal. Inténtalo de nuevo.",
-    googleSignIn: "Continuar con Google",
-    err_google: "No pudimos iniciar el acceso con Google. Inténtalo de nuevo.",
   },
 };
