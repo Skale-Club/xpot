@@ -279,13 +279,6 @@ export function XpotLandingPage() {
     { icon: Nfc, title: t("tagsTitle"), items: [t("tags1"), t("tags2"), t("tags3"), t("tags4")], tone: "text-[#61D8CE] bg-[#0BB8AF]/10 border-[#0BB8AF]/20" },
   ];
 
-  const steps = [
-    { icon: Search, title: t("step1Title"), body: t("step1Body") },
-    { icon: Route, title: t("step2Title"), body: t("step2Body") },
-    { icon: Boxes, title: t("step3Title"), body: t("step3Body") },
-    { icon: Nfc, title: t("step4Title"), body: t("step4Body") },
-  ];
-
   const routeHighlights = [
     { icon: Search, image: "/landing/highlights/prospecting-route.webp", title: t("highlight1Title"), body: t("highlight1Body") },
     { icon: MapPinned, image: "/landing/highlights/visit-note.webp", title: t("highlight2Title"), body: t("highlight2Body") },
@@ -319,7 +312,6 @@ export function XpotLandingPage() {
             <nav className="hidden items-center gap-6 text-sm text-white/55 md:flex" aria-label="Sections">
               <button type="button" onClick={() => scrollTo("audience")} className="transition-colors hover:text-white">{content.navigation.audience}</button>
               <button type="button" onClick={() => scrollTo("how")} className="transition-colors hover:text-white">{content.navigation.how}</button>
-              <button type="button" onClick={() => scrollTo("tools")} className="transition-colors hover:text-white">{content.navigation.tools}</button>
               <button type="button" onClick={() => scrollTo("faq")} className="transition-colors hover:text-white">{content.navigation.faq}</button>
             </nav>
 
@@ -441,27 +433,6 @@ export function XpotLandingPage() {
             ))}
           </section>
 
-          {/* How it works */}
-          <section id="how" className="scroll-mt-24 space-y-12">
-            <Reveal>
-              <SectionHeading title={content.how.title} sub={content.how.subtitle} />
-            </Reveal>
-            <ol className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-              {steps.map(({ icon: Icon, title, body }, i) => (
-                <Reveal key={title} delay={i * 0.08}>
-                  <li className="relative h-full list-none rounded-2xl border border-white/[0.07] bg-white/[0.035] p-6">
-                    <div className="mb-4 flex items-center gap-3">
-                      <span className="flex h-8 w-8 items-center justify-center rounded-full border border-[#5272F2]/30 bg-[#5272F2]/10 text-sm font-bold text-[#9BB0FF]">{i + 1}</span>
-                      <Icon className="h-5 w-5 text-white/35" />
-                    </div>
-                    <h3 className="text-base font-bold text-white">{title}</h3>
-                    <p className="mt-2 text-sm leading-relaxed text-white/60">{body}</p>
-                  </li>
-                </Reveal>
-              ))}
-            </ol>
-          </section>
-
           {/* Product proof: the photo establishes the job; this shows how Xpot supports it. */}
           <section className="grid grid-cols-1 items-center gap-12 rounded-[28px] border border-white/[0.07] bg-white/[0.025] p-6 sm:p-10 md:grid-cols-2 md:gap-10 lg:gap-16 lg:p-12">
             <Reveal className="order-2 md:order-1">
@@ -487,17 +458,20 @@ export function XpotLandingPage() {
             </Reveal>
           </section>
 
-          {/* Tools */}
-          <section id="tools" className="scroll-mt-24 space-y-12">
+          {/* The workflow and feature detail live together to avoid repeating the same four stages. */}
+          <section id="how" className="scroll-mt-24 space-y-12">
             <Reveal>
-              <SectionHeading title={content.tools.title} sub={content.tools.subtitle} />
+              <SectionHeading title={content.how.title} sub={content.tools.subtitle} />
             </Reveal>
             <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
               {tools.map(({ icon: Icon, title, items, tone }, i) => (
                 <Reveal key={title} delay={i * 0.08} className="h-full">
                   <div className="h-full rounded-2xl border border-white/[0.07] bg-white/[0.035] p-6">
-                    <div className={`mb-4 flex h-10 w-10 items-center justify-center rounded-xl border ${tone}`}>
-                      <Icon className="h-5 w-5" />
+                    <div className="mb-4 flex items-center gap-3">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-full border border-[#5272F2]/30 bg-[#5272F2]/10 text-sm font-bold text-[#9BB0FF]">{i + 1}</span>
+                      <div className={`flex h-10 w-10 items-center justify-center rounded-xl border ${tone}`}>
+                        <Icon className="h-5 w-5" />
+                      </div>
                     </div>
                     <h3 className="text-lg font-bold text-white">{title}</h3>
                     <ul className="mt-4 space-y-2.5">
