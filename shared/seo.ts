@@ -1,5 +1,14 @@
 export const SEO_ORIGIN = "https://xpot.place";
 export const SEO_OG_IMAGE = `${SEO_ORIGIN}/og-image.png`;
+export const TITLE_SEPARATOR = " | ";
+
+/** One title convention for browser tabs, SEO and social metadata. */
+export function formatTitle(...parts: Array<string | null | undefined>): string {
+  return parts
+    .map((part) => part?.trim())
+    .filter((part): part is string => Boolean(part))
+    .join(TITLE_SEPARATOR);
+}
 
 export const SEO_LANGS = ["en", "pt", "es"] as const;
 export type SeoLang = (typeof SEO_LANGS)[number];
@@ -20,46 +29,46 @@ const HTML_LANG: Record<SeoLang, string> = {
 const COPY: Record<SeoLang, Record<PublicSeoPage, { title: string; description: string }>> = {
   en: {
     home: {
-      title: "Xpot — Field sales, visits and QR/NFC",
+      title: formatTitle("Xpot", "Field sales, visits and QR/NFC"),
       description:
         "Field sales software for GPS-confirmed visits, AI voice notes, sales, consignment stock and QR/NFC pieces that connect customers to your business.",
     },
     privacy: {
-      title: "Privacy Policy · Xpot",
+      title: formatTitle("Privacy Policy", "Xpot"),
       description: "Learn how Xpot collects, uses, protects and deletes account, visit, sales, location and QR/NFC scan data.",
     },
     terms: {
-      title: "Terms of Service · Xpot",
+      title: formatTitle("Terms of Service", "Xpot"),
       description: "Read the terms that govern access to and use of the Xpot field sales and QR/NFC platform.",
     },
   },
   pt: {
     home: {
-      title: "Xpot — Vendas externas, visitas e QR/NFC",
+      title: formatTitle("Xpot", "Vendas externas, visitas e QR/NFC"),
       description:
         "Software de vendas externas com visitas confirmadas por GPS, áudios resumidos por IA, vendas, consignação e peças QR/NFC para seus clientes.",
     },
     privacy: {
-      title: "Política de Privacidade · Xpot",
+      title: formatTitle("Política de Privacidade", "Xpot"),
       description: "Saiba como o Xpot coleta, usa, protege e exclui dados de contas, visitas, vendas, localização e leituras de QR/NFC.",
     },
     terms: {
-      title: "Termos de Uso · Xpot",
+      title: formatTitle("Termos de Uso", "Xpot"),
       description: "Leia os termos que regem o acesso e o uso da plataforma Xpot de vendas externas e QR/NFC.",
     },
   },
   es: {
     home: {
-      title: "Xpot — Ventas de campo, visitas y QR/NFC",
+      title: formatTitle("Xpot", "Ventas de campo, visitas y QR/NFC"),
       description:
         "Software de ventas de campo con visitas confirmadas por GPS, notas de voz resumidas por IA, ventas, consignación y piezas QR/NFC.",
     },
     privacy: {
-      title: "Política de Privacidad · Xpot",
+      title: formatTitle("Política de Privacidad", "Xpot"),
       description: "Conoce cómo Xpot recopila, usa, protege y elimina datos de cuentas, visitas, ventas, ubicación y lecturas QR/NFC.",
     },
     terms: {
-      title: "Términos del Servicio · Xpot",
+      title: formatTitle("Términos del Servicio", "Xpot"),
       description: "Lee los términos que rigen el acceso y el uso de la plataforma Xpot de ventas de campo y QR/NFC.",
     },
   },

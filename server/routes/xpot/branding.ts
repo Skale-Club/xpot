@@ -6,6 +6,14 @@ import { requireSuperAdmin, requireXpotManager } from "./middleware.js";
 import { getSupabaseAdmin } from "../../lib/supabase.js";
 
 const DEFAULT_FAVICON = "/favicon.png";
+const DEFAULT_BRANDING = {
+  faviconUrl: null,
+  faviconContentType: "image/png",
+  appName: "Xpot",
+  shortName: "Xpot",
+  themeColor: "#09090b",
+  backgroundColor: "#0a0f1e",
+};
 
 // ── Public branding endpoints (no auth) — mounted at /api/branding ──
 // These feed the browser's favicon, the PWA manifest, apple-touch-icon and OG
@@ -14,8 +22,19 @@ const DEFAULT_FAVICON = "/favicon.png";
 export function createBrandingPublicRouter() {
   const router = Router();
 
+  async function publicBranding() {
+    try {
+      return await storage.getAppBranding();
+    } catch (error) {
+      // Branding is public chrome, so a database outage or an incomplete local
+      // schema must never turn the logo, favicon or manifest into a 500.
+      console.error("[GET /api/branding] using built-in fallback", error);
+      return DEFAULT_BRANDING;
+    }
+  }
+
   async function redirectToIcon(res: Response) {
-    const b = await storage.getAppBranding();
+    const b = await publicBranding();
     res.set("Cache-Control", "public, max-age=300");
     res.redirect(302, b.faviconUrl || DEFAULT_FAVICON);
   }
@@ -27,7 +46,7 @@ export function createBrandingPublicRouter() {
   router.get("/apple-touch-icon.png", (_req, res) => redirectToIcon(res));
 
   router.get("/manifest.webmanifest", async (_req, res) => {
-    const b = await storage.getAppBranding();
+    const b = await publicBranding();
     const isSvg = b.faviconContentType === "image/svg+xml";
     const icons = isSvg
       ? [{ src: "/api/branding/icon-512.png", sizes: "any", type: "image/svg+xml", purpose: "any" }]

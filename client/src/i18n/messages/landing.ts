@@ -103,7 +103,7 @@ const en = {
   ctaTitle: "Bring your field operation into Xpot",
   ctaBody: "Create your account and run prospecting, routes, visits, sales, stock and NFC pieces from one Skale Club tool.",
   accessApp: "Create an account",
-  footerTagline: "Xpot · A Skale Club tool for field sales",
+  footerTagline: "Xpot | A Skale Club tool for field sales",
   footerRights: "© {year} Xpot.",
 
   // OAuth callback (/login)
@@ -212,7 +212,7 @@ export const landingMessages: Dictionary<typeof en> = {
     ctaTitle: "Leve sua operação de campo para o Xpot",
     ctaBody: "Crie sua conta e organize prospecção, rotas, visitas, vendas, estoque e peças NFC em uma única ferramenta da Skale Club.",
     accessApp: "Criar conta",
-    footerTagline: "Xpot · Uma ferramenta Skale Club para vendas externas",
+    footerTagline: "Xpot | Uma ferramenta Skale Club para vendas externas",
     footerRights: "© {year} Xpot.",
 
     finishingSignIn: "Finalizando o login…",
@@ -317,7 +317,7 @@ export const landingMessages: Dictionary<typeof en> = {
     ctaTitle: "Lleva tu operación de campo a Xpot",
     ctaBody: "Crea tu cuenta y organiza prospección, rutas, visitas, ventas, stock y piezas NFC en una sola herramienta de Skale Club.",
     accessApp: "Crear cuenta",
-    footerTagline: "Xpot · Una herramienta de Skale Club para ventas de campo",
+    footerTagline: "Xpot | Una herramienta de Skale Club para ventas de campo",
     footerRights: "© {year} Xpot.",
 
     finishingSignIn: "Finalizando el inicio de sesión…",

@@ -13,6 +13,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { XpotModule } from "@shared/modules";
+import { formatTitle } from "@shared/seo";
 import { useViewerAccess } from "@/lib/adminMode";
 import { AdminBadge } from "./AdminBadge";
 import { rememberModule, useXpotModules } from "@/components/ModuleSwitch";
@@ -424,7 +425,7 @@ export function AppLayout({
       ? { label: moduleLabel(module), context: module as ShellContext }
       : null;
   useEffect(() => {
-    if (typeof title === "string") document.title = crumb ? `${title} · ${crumb.label} · Xpot` : `${title} · Xpot`;
+    if (typeof title === "string") document.title = formatTitle(title, crumb?.label, "Xpot");
   }, [title, crumb?.label]);
   const toggle = () => {
     setCollapsed((c) => {
