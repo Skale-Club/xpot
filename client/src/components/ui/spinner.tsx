@@ -14,7 +14,7 @@ export function DotsLoader({ size = "md", tone = "brand", className }: DotsLoade
     lg: { dot: "w-4 h-4", gap: "gap-3" },
   };
   const toneClasses = {
-    brand: "bg-[#406EF1]",
+    brand: "bg-[#5272F2]",
     muted: "bg-muted-foreground/70",
     light: "bg-white",
     current: "bg-current",

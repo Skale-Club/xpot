@@ -18,9 +18,9 @@ interface ApiError {
 }
 
 const FIELD =
-  "h-12 w-full rounded-xl border border-white/10 bg-white/5 px-4 text-base text-white placeholder:text-white/30 outline-none transition-all focus:border-blue-500/50 focus:bg-white/10";
+  "h-12 w-full rounded-xl border border-white/10 bg-white/5 px-4 text-base text-white placeholder:text-white/30 outline-none transition-all focus:border-[#5272F2]/55 focus:bg-white/10";
 const PRIMARY =
-  "flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 text-base font-semibold text-white shadow-[0_4px_15px_rgba(37,99,235,0.3)] transition-all hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50";
+  "flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#5272F2] text-base font-semibold text-white shadow-[0_4px_18px_rgba(82,114,242,0.3)] transition-all hover:bg-[#4869E6] disabled:cursor-not-allowed disabled:opacity-50";
 
 async function post<T>(url: string, body: unknown): Promise<{ ok: boolean; data: T & ApiError }> {
   const res = await fetch(url, {
@@ -164,7 +164,7 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
           <p className="mt-1 text-sm text-white/60">{pending ? t("pendingText") : t("blockedText")}</p>
         </div>
         {link && (
-          <a href={link} target="_blank" rel="noopener noreferrer" className={`${PRIMARY} bg-emerald-600 hover:bg-emerald-500 shadow-none`}>
+          <a href={link} target="_blank" rel="noopener noreferrer" className={`${PRIMARY} !bg-emerald-600 hover:!bg-emerald-500 shadow-none`}>
             <MessageCircle className="h-5 w-5" />
             {t("contactWhatsapp")}
           </a>
@@ -249,7 +249,7 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
           type="button"
           disabled={busy || wait > 0}
           onClick={() => void sendCode(phone)}
-          className="w-full text-sm text-blue-300 hover:text-white disabled:text-white/35"
+          className="w-full text-sm text-[#9BB0FF] hover:text-white disabled:text-white/35"
         >
           {wait > 0 ? t("resendIn", { seconds: wait }) : t("resend")}
         </button>

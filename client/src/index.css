@@ -7,11 +7,15 @@
   --font-sans: 'Inter', sans-serif;
   --font-display: 'Inter', sans-serif;
 
+  /* Xpot mark: sampled from the blue and green halves of the X. */
+  --xpot-blue: #5272F2;
+  --xpot-green: #0BB8AF;
+
   /* Light Mode Colors */
   --background: 0 0% 100%;
   --foreground: 0 0% 11%;
 
-  --primary: 215 71% 37%; /* #1C53A3 */
+  --primary: 228 86% 64%; /* Xpot blue #5272F2 */
   --primary-foreground: 0 0% 100%;
 
   --secondary: 210 40% 96.1%; /* slate-100 */
@@ -29,7 +33,7 @@
   /* Soft hairline border — subtle, never harsh black/white solid */
   --border: hsl(222 20% 8% / 0.08);
   --input: hsl(222 20% 8% / 0.1);
-  --ring: 215 71% 37%;
+  --ring: 228 86% 64%;
   --radius: 0.75rem;
 
   --popover: 0 0% 100%;
@@ -71,7 +75,7 @@
   --background: 0 0% 7%; /* #121212 — neutral charcoal */
   --foreground: 0 0% 95%; /* near-white, no tint */
 
-  --primary: 217 91% 60%; /* keep brand blue for CTAs */
+  --primary: 228 86% 64%; /* Xpot blue #5272F2 */
   --primary-foreground: 0 0% 100%;
 
   --secondary: 0 0% 14%; /* #242424 */
@@ -89,7 +93,7 @@
   /* Soft hairline border — subtle, never harsh white solid */
   --border: hsl(0 0% 100% / 0.06);
   --input: hsl(0 0% 100% / 0.08);
-  --ring: 217 91% 60%;
+  --ring: 228 86% 64%;
 
   --popover: 0 0% 9%;
   --popover-foreground: 0 0% 95%;
@@ -166,6 +170,23 @@
 }
 
 @layer components {
+  .xpot-brand-cta {
+    background-color: var(--xpot-blue);
+    background-image: linear-gradient(112deg, #4A78F3 0%, #5272F2 62%, #0BB8AF 118%);
+    background-size: 118% 100%;
+    box-shadow: 0 0 28px rgb(82 114 242 / 0.3), inset 0 1px 0 rgb(255 255 255 / 0.22);
+  }
+
+  .xpot-brand-cta:hover {
+    background-position: 100% 0;
+    box-shadow: 0 0 34px rgb(82 114 242 / 0.38), 0 8px 28px rgb(11 184 175 / 0.12), inset 0 1px 0 rgb(255 255 255 / 0.25);
+    filter: brightness(1.04);
+  }
+
+  .xpot-brand-gradient-text {
+    background-image: linear-gradient(100deg, #8EB4FF 0%, #718DF7 58%, #35C9BC 112%);
+  }
+
   .container-custom {
     @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
   }

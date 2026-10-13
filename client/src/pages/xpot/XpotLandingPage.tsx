@@ -90,7 +90,7 @@ function SectionHeading({ title, sub }: { title: string; sub: string }) {
 function FieldSalesHero({ t }: { t: LandingT }) {
   return (
     <div className="relative w-full">
-      <div className="pointer-events-none absolute -inset-8 rounded-[48px] bg-blue-500/10 blur-3xl" />
+      <div className="pointer-events-none absolute -inset-8 rounded-[48px] bg-[#5272F2]/10 blur-3xl" />
       <div className="relative aspect-[4/3] overflow-hidden rounded-[30px] border border-white/10 bg-[#0b1020] shadow-[0_30px_80px_rgba(0,0,0,0.55)]">
         <img
           src="/xpot-hero-field-sales-v2.webp"
@@ -105,13 +105,13 @@ function FieldSalesHero({ t }: { t: LandingT }) {
 
         <div className="absolute inset-x-4 bottom-4 flex flex-col gap-2.5 sm:inset-x-5 sm:bottom-5 sm:flex-row sm:items-end sm:justify-between">
           <div className="max-w-[250px] rounded-2xl border border-white/15 bg-[#070b16]/85 p-3.5 shadow-2xl backdrop-blur-md">
-            <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-blue-200">
+            <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[#A9BCFF]">
               <Route className="h-3.5 w-3.5" />
               {t("heroRouteCardTitle")}
             </div>
             <p className="mt-1.5 text-sm font-semibold text-white">{t("heroRouteCardBody")}</p>
           </div>
-          <div className="flex items-center gap-2 self-start rounded-full border border-emerald-300/20 bg-emerald-950/80 px-3 py-2 text-xs font-semibold text-emerald-200 shadow-xl backdrop-blur-md sm:self-auto">
+          <div className="flex items-center gap-2 self-start rounded-full border border-[#0BB8AF]/25 bg-[#063B3A]/80 px-3 py-2 text-xs font-semibold text-[#79E1D8] shadow-xl backdrop-blur-md sm:self-auto">
             <Navigation className="h-3.5 w-3.5" />
             {t("heroRouteCardBadge")}
           </div>
@@ -126,23 +126,23 @@ function FieldSalesHero({ t }: { t: LandingT }) {
 function PhoneMock({ content }: { content: LandingPageContent["mockup"] }) {
   return (
     <div className="relative mx-auto w-full max-w-[340px]">
-      <div className="pointer-events-none absolute -inset-8 rounded-[48px] bg-blue-500/10 blur-3xl" />
+      <div className="pointer-events-none absolute -inset-8 rounded-[48px] bg-[#5272F2]/10 blur-3xl" />
       <div className="relative rounded-[40px] border border-white/10 bg-[#0b1020] p-3 shadow-[0_30px_80px_rgba(0,0,0,0.6)]">
         <div className="mx-auto mb-3 h-1.5 w-20 rounded-full bg-white/10" />
         <div className="space-y-3 rounded-[30px] bg-[#070b16] p-4">
           {/* Active visit */}
-          <div className="space-y-3 rounded-2xl border border-indigo-400/25 p-4" style={{ background: "linear-gradient(160deg, rgba(59,130,246,0.15), rgba(99,102,241,0.08))" }}>
+          <div className="space-y-3 rounded-2xl border border-[#5272F2]/25 p-4" style={{ background: "linear-gradient(160deg, rgba(82,114,242,0.15), rgba(11,184,175,0.06))" }}>
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-300/80">{content.visit}</span>
-              <span className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-300">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+              <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#93A9FF]">{content.visit}</span>
+              <span className="flex items-center gap-1.5 text-[11px] font-semibold text-[#61D8CE]">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#0BB8AF]" />
                 {content.atDoor}
               </span>
             </div>
             <div className="text-center text-4xl font-extrabold tabular-nums tracking-tight text-white">{content.timer}</div>
             <div className="flex items-center gap-3 rounded-xl bg-black/25 p-2.5">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-indigo-500/20 bg-indigo-500/10">
-                <Building2 className="h-4 w-4 text-indigo-300" />
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[#5272F2]/20 bg-[#5272F2]/10">
+                <Building2 className="h-4 w-4 text-[#93A9FF]" />
               </div>
               <div className="min-w-0">
                 <div className="truncate text-sm font-semibold text-white">{content.business}</div>
@@ -154,15 +154,15 @@ function PhoneMock({ content }: { content: LandingPageContent["mockup"] }) {
           {/* Voice note */}
           <div className="space-y-2 rounded-2xl border border-white/[0.08] bg-white/[0.04] p-3.5">
             <div className="flex items-center gap-2 text-[11px] font-semibold text-white/50">
-              <Mic className="h-3.5 w-3.5 text-blue-300" />
+              <Mic className="h-3.5 w-3.5 text-[#93A9FF]" />
               {content.voice}
             </div>
             <p className="text-xs italic leading-relaxed text-white/70">{content.quote}</p>
           </div>
 
           {/* Proposed actions */}
-          <div className="space-y-2 rounded-2xl border border-emerald-400/20 bg-emerald-400/[0.05] p-3.5">
-            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-300">
+          <div className="space-y-2 rounded-2xl border border-[#0BB8AF]/20 bg-[#0BB8AF]/[0.05] p-3.5">
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#61D8CE]">
               <Sparkles className="h-3.5 w-3.5" />
               {content.aiFound}
             </div>
@@ -173,8 +173,8 @@ function PhoneMock({ content }: { content: LandingPageContent["mockup"] }) {
               <div key={label} className="flex items-center gap-2.5 rounded-xl bg-black/25 px-3 py-2">
                 <Icon className="h-3.5 w-3.5 shrink-0 text-white/50" />
                 <span className="min-w-0 flex-1 truncate text-xs font-medium text-white/85">{label}</span>
-                {value && <span className="text-xs font-semibold tabular-nums text-emerald-300">{value}</span>}
-                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-500/20 text-emerald-300" aria-label={content.confirm}>
+                {value && <span className="text-xs font-semibold tabular-nums text-[#61D8CE]">{value}</span>}
+                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-[#0BB8AF]/20 text-[#61D8CE]" aria-label={content.confirm}>
                   <Check className="h-3.5 w-3.5" />
                 </span>
               </div>
@@ -257,7 +257,7 @@ export function XpotLandingPage() {
   const primaryCta = me ? (
     <Button
       onClick={goToApp}
-      className="group flex h-12 items-center justify-center gap-2 rounded-xl bg-blue-600 px-7 text-sm font-semibold text-white shadow-[0_0_24px_rgba(37,99,235,0.35)] transition-all hover:bg-blue-500"
+      className="xpot-brand-cta group flex h-12 items-center justify-center gap-2 rounded-xl px-7 text-sm font-semibold text-white transition-all"
     >
       {content.account.authenticatedCta}
       <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
@@ -265,7 +265,7 @@ export function XpotLandingPage() {
   ) : (
     <Button
       onClick={() => setIsLoginOpen(true)}
-      className="group flex h-12 items-center justify-center gap-2 rounded-xl bg-blue-600 px-7 text-sm font-semibold text-white shadow-[0_0_24px_rgba(37,99,235,0.35)] transition-all hover:bg-blue-500"
+      className="xpot-brand-cta group flex h-12 items-center justify-center gap-2 rounded-xl px-7 text-sm font-semibold text-white transition-all"
       data-testid="landing-get-started"
     >
       {content.account.primaryCta}
@@ -274,10 +274,10 @@ export function XpotLandingPage() {
   );
 
   const tools = [
-    { icon: Route, title: t("routesTitle"), items: [t("routes1"), t("routes2"), t("routes3"), t("routes4")], tone: "text-cyan-300 bg-cyan-500/10 border-cyan-500/20" },
-    { icon: MapPinned, title: t("visitsTitle"), items: [t("visits1"), t("visits2"), t("visits3"), t("visits4")], tone: "text-blue-300 bg-blue-500/10 border-blue-500/20" },
-    { icon: Boxes, title: t("salesTitle"), items: [t("sales1"), t("sales2"), t("sales3"), t("sales4")], tone: "text-emerald-300 bg-emerald-500/10 border-emerald-500/20" },
-    { icon: Nfc, title: t("tagsTitle"), items: [t("tags1"), t("tags2"), t("tags3"), t("tags4")], tone: "text-indigo-300 bg-indigo-500/10 border-indigo-500/20" },
+    { icon: Route, title: t("routesTitle"), items: [t("routes1"), t("routes2"), t("routes3"), t("routes4")], tone: "text-[#8FA8FF] bg-[#5272F2]/10 border-[#5272F2]/20" },
+    { icon: MapPinned, title: t("visitsTitle"), items: [t("visits1"), t("visits2"), t("visits3"), t("visits4")], tone: "text-[#61D8CE] bg-[#0BB8AF]/10 border-[#0BB8AF]/20" },
+    { icon: Boxes, title: t("salesTitle"), items: [t("sales1"), t("sales2"), t("sales3"), t("sales4")], tone: "text-[#8FA8FF] bg-[#5272F2]/10 border-[#5272F2]/20" },
+    { icon: Nfc, title: t("tagsTitle"), items: [t("tags1"), t("tags2"), t("tags3"), t("tags4")], tone: "text-[#61D8CE] bg-[#0BB8AF]/10 border-[#0BB8AF]/20" },
   ];
 
   const steps = [
@@ -301,12 +301,12 @@ export function XpotLandingPage() {
 
   return (
     <MotionConfig reducedMotion="user">
-      <div className="relative min-h-screen overflow-x-hidden text-white selection:bg-blue-500/30" style={{ background: "linear-gradient(160deg, #05070f 0%, #080c18 50%, #040810 100%)" }}>
+      <div className="relative min-h-screen overflow-x-hidden text-white selection:bg-[#5272F2]/30" style={{ background: "linear-gradient(160deg, #05070f 0%, #080c18 50%, #040810 100%)" }}>
         <div
           className="pointer-events-none fixed inset-0 opacity-[0.03]"
           style={{ backgroundImage: "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.8) 1px, transparent 0)", backgroundSize: "32px 32px" }}
         />
-        <div className="pointer-events-none absolute left-1/4 top-0 -z-0 h-[480px] w-[480px] rounded-full bg-blue-500/10 blur-[130px]" />
+        <div className="pointer-events-none absolute left-1/4 top-0 -z-0 h-[480px] w-[480px] rounded-full bg-[#5272F2]/10 blur-[130px]" />
 
         {/* Header: the bar spans the window, its content the page width. */}
         <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-[#05070f]/70 backdrop-blur-md">
@@ -331,7 +331,7 @@ export function XpotLandingPage() {
                   onClick={goToApp}
                   variant="ghost"
                   size="sm"
-                  className="flex items-center gap-1.5 rounded-xl border border-blue-500/30 bg-blue-500/10 px-4 py-2 text-sm font-semibold text-blue-300 transition-all hover:bg-blue-500/20 hover:text-blue-200"
+                  className="flex items-center gap-1.5 rounded-xl border border-[#5272F2]/30 bg-[#5272F2]/10 px-4 py-2 text-sm font-semibold text-[#9BB0FF] transition-all hover:bg-[#5272F2]/20 hover:text-[#BEC9FF]"
                 >
                   {content.account.dashboard}
                   <ChevronRight className="h-3.5 w-3.5" />
@@ -345,10 +345,10 @@ export function XpotLandingPage() {
                   </DialogTrigger>
 
                   <DialogContent className="w-[92%] max-w-md rounded-2xl border-white/10 bg-[#070b16]/95 p-6 text-white shadow-[0_0_40px_rgba(0,0,0,0.8)] backdrop-blur-2xl sm:p-8">
-                    <div className="absolute left-0 top-0 h-[3px] w-full rounded-t-2xl bg-gradient-to-r from-blue-500 via-indigo-500 to-blue-500" />
+                    <div className="absolute left-0 top-0 h-[3px] w-full rounded-t-2xl bg-[linear-gradient(90deg,#4A78F3,#5272F2_58%,#0BB8AF)]" />
 
                     <DialogHeader className="pb-4 text-center sm:text-center">
-                      <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-blue-500/10 to-indigo-500/10">
+                      <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center overflow-hidden rounded-xl bg-[linear-gradient(135deg,rgba(82,114,242,0.12),rgba(11,184,175,0.1))]">
                         <img src="/api/branding/favicon" alt="" className="h-full w-full object-cover" />
                       </div>
                       <DialogTitle className="text-center text-2xl font-bold tracking-tight text-white sm:text-3xl">
@@ -381,7 +381,7 @@ export function XpotLandingPage() {
           {/* Keep the original open composition; the photo remains a focused proof point. */}
           <section className="grid grid-cols-1 items-center gap-14 lg:grid-cols-12 lg:gap-10">
             <div className="space-y-6 text-center lg:col-span-6 lg:text-left">
-              <div className="inline-flex items-center gap-1.5 rounded-full border border-blue-500/20 bg-blue-500/5 px-3.5 py-1.5 text-xs font-semibold text-blue-300 sm:text-sm">
+              <div className="inline-flex items-center gap-1.5 rounded-full border border-[#5272F2]/25 bg-[#5272F2]/[0.07] px-3.5 py-1.5 text-xs font-semibold text-[#8FB3FF] sm:text-sm">
                 <MapPinned className="h-3.5 w-3.5" />
                 {content.hero.badge}
               </div>
@@ -389,7 +389,7 @@ export function XpotLandingPage() {
               <h1 className="text-4xl font-extrabold leading-[1.05] tracking-tight text-white sm:text-5xl lg:text-6xl">
                 {content.hero.titleLine1}
                 <br />
-                <span className="bg-gradient-to-r from-blue-300 via-indigo-300 to-blue-400 bg-clip-text text-transparent">{content.hero.titleLine2}</span>
+                <span className="xpot-brand-gradient-text bg-clip-text text-transparent">{content.hero.titleLine2}</span>
               </h1>
 
               <p className="mx-auto max-w-2xl text-base leading-relaxed text-white/65 sm:text-lg lg:mx-0">{content.hero.body}</p>
@@ -421,7 +421,7 @@ export function XpotLandingPage() {
           <section aria-label={t("highlightsLabel")} className="grid grid-cols-1 overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.035] md:grid-cols-3">
             {routeHighlights.map(({ icon: Icon, title, body }, index) => (
               <div key={title} className={`p-6 sm:p-7 ${index > 0 ? "border-t border-white/[0.07] md:border-l md:border-t-0" : ""}`}>
-                <Icon className="h-5 w-5 text-blue-300" />
+                <Icon className="h-5 w-5 text-[#8FA8FF]" />
                 <h2 className="mt-4 text-base font-bold text-white">{title}</h2>
                 <p className="mt-2 text-sm leading-relaxed text-white/55">{body}</p>
               </div>
@@ -438,7 +438,7 @@ export function XpotLandingPage() {
                 <Reveal key={title} delay={i * 0.08}>
                   <li className="relative h-full list-none rounded-2xl border border-white/[0.07] bg-white/[0.035] p-6">
                     <div className="mb-4 flex items-center gap-3">
-                      <span className="flex h-8 w-8 items-center justify-center rounded-full border border-blue-500/30 bg-blue-500/10 text-sm font-bold text-blue-300">{i + 1}</span>
+                      <span className="flex h-8 w-8 items-center justify-center rounded-full border border-[#5272F2]/30 bg-[#5272F2]/10 text-sm font-bold text-[#9BB0FF]">{i + 1}</span>
                       <Icon className="h-5 w-5 text-white/35" />
                     </div>
                     <h3 className="text-base font-bold text-white">{title}</h3>
@@ -455,7 +455,7 @@ export function XpotLandingPage() {
               <PhoneMock content={content.mockup} />
             </Reveal>
             <Reveal className="order-1 lg:order-2">
-              <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-blue-300">
+              <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-[#8FA8FF]">
                 <Navigation className="h-4 w-4" />
                 {t("fieldEyebrow")}
               </div>
@@ -464,7 +464,7 @@ export function XpotLandingPage() {
               <ul className="mt-7 space-y-4">
                 {fieldFlow.map((item) => (
                   <li key={item} className="flex gap-3 text-sm leading-relaxed text-white/75">
-                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-500/15 text-blue-300">
+                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#5272F2]/15 text-[#9BB0FF]">
                       <Check className="h-3.5 w-3.5" />
                     </span>
                     {item}
@@ -504,8 +504,8 @@ export function XpotLandingPage() {
           {/* CRM sync */}
           <Reveal>
             <section className="flex flex-col items-center gap-5 rounded-2xl border border-white/[0.07] bg-white/[0.035] p-7 text-center sm:flex-row sm:text-left">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-blue-500/20 bg-blue-500/10">
-                <RefreshCw className="h-5 w-5 text-blue-300" />
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-[#5272F2]/20 bg-[#5272F2]/10">
+                <RefreshCw className="h-5 w-5 text-[#8FA8FF]" />
               </div>
               <div>
                 <h2 className="text-lg font-bold text-white">{content.sync.title}</h2>
@@ -523,7 +523,7 @@ export function XpotLandingPage() {
                   <details className="group">
                     <summary className="flex cursor-pointer list-none items-center justify-between gap-6 py-5 text-left text-base font-semibold text-white/90 marker:content-none sm:text-lg">
                       <span>{item.question}</span>
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.035] text-white/45 transition-colors group-open:border-blue-400/30 group-open:text-blue-300">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.035] text-white/45 transition-colors group-open:border-[#5272F2]/35 group-open:text-[#9BB0FF]">
                         <ChevronDown className="h-4 w-4 transition-transform duration-300 group-open:rotate-180" />
                       </span>
                     </summary>
@@ -536,7 +536,7 @@ export function XpotLandingPage() {
 
           {/* Call to action */}
           <Reveal>
-            <section className="relative mx-auto max-w-4xl space-y-6 overflow-hidden rounded-2xl border border-blue-500/20 bg-gradient-to-r from-blue-950/30 via-indigo-950/30 to-blue-950/30 p-8 text-center sm:p-12">
+            <section className="relative mx-auto max-w-4xl space-y-6 overflow-hidden rounded-2xl border border-[#5272F2]/20 bg-[linear-gradient(100deg,rgba(82,114,242,0.12),rgba(11,184,175,0.08),rgba(82,114,242,0.1))] p-8 text-center sm:p-12">
               <h2 className="text-2xl font-bold tracking-tight text-white sm:text-3xl lg:text-4xl">{content.cta.title}</h2>
               <p className="mx-auto max-w-xl text-sm leading-relaxed text-white/65 sm:text-base lg:text-lg">{content.cta.body}</p>
               <div className="mx-auto max-w-xs pt-2">
