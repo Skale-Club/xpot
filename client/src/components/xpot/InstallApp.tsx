@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { useInstallApp } from "@/hooks/use-install-app";
 import { useT } from "@/i18n";
 import { shellMessages } from "@/i18n/messages/shell";
+import { GradientTopLine } from "@/components/xpot/GradientTopLine";
 
 // "Install app", offered where the rep goes looking (sidebar footer, Settings)
 // and nowhere else: no banner, no pop-up on load. Renders nothing when the app
@@ -46,7 +47,8 @@ function InstructionsDialog({ mode, open, onOpenChange }: { mode: "ios" | "safar
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm rounded-2xl border-white/10 bg-[#0b1020] text-white" data-testid="install-instructions">
+      <DialogContent className="max-w-sm overflow-hidden rounded-2xl border-white/10 bg-[#0b1020] text-white" data-testid="install-instructions">
+        <GradientTopLine />
         <DialogHeader>
           <DialogTitle>{mode === "ios" ? t("installIosTitle") : t("installMacTitle")}</DialogTitle>
           <DialogDescription className="text-white/45">{t("installAppHint")}</DialogDescription>

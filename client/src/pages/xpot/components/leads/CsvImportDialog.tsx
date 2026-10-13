@@ -4,6 +4,7 @@ import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { leadsMessages } from "@/i18n/messages/leads";
 import { BRAND_GRADIENT } from "@/components/xpot/surface";
+import { GradientTopLine } from "@/components/xpot/GradientTopLine";
 import type { CsvLeadRow } from "../../csvLeads";
 
 export type { CsvLeadRow };
@@ -31,9 +32,10 @@ export function CsvImportDialog({
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o && !importing) onCancel(); }}>
       <DialogContent
-        className="max-w-[calc(100vw-1.5rem)] rounded-2xl border-0 p-6 sm:max-w-3xl"
+        className="max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-2xl border-0 p-6 sm:max-w-3xl"
         style={{ background: "#0e1117", boxShadow: "0 24px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.07)" }}
       >
+        <GradientTopLine />
         <DialogHeader>
           <DialogTitle className="text-base font-semibold text-white">{t("csvReviewTitle")}</DialogTitle>
         </DialogHeader>

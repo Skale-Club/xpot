@@ -13,6 +13,7 @@ import { useT } from "@/i18n";
 import { leadsMessages } from "@/i18n/messages/leads";
 import { commonMessages } from "@/i18n/messages/common";
 import { BRAND_GRADIENT } from "@/components/xpot/surface";
+import { GradientTopLine } from "@/components/xpot/GradientTopLine";
 
 type LeadLike = SalesLead | FullSalesLead;
 
@@ -213,9 +214,10 @@ export function EditLeadDialog({ lead, open, onOpenChange, onSaved }: {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-w-sm rounded-2xl border-0 p-6"
+        className="max-w-sm overflow-hidden rounded-2xl border-0 p-6"
         style={{ background: "#0e1117", boxShadow: "0 24px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.07)" }}
       >
+        <GradientTopLine />
         <DialogHeader>
           <DialogTitle className="text-base font-semibold text-white">{t("editTitle")}</DialogTitle>
         </DialogHeader>

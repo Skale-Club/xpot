@@ -10,6 +10,7 @@ import { shellMessages } from "@/i18n/messages/shell";
 import { TagPieceMention } from "@/components/xpot/TagProductThumbnail";
 import { tagsGet } from "@/pages/tags/lib";
 import type { FullSalesLead } from "@/pages/xpot/types";
+import { GradientTopLine } from "@/components/xpot/GradientTopLine";
 
 type Entry = {
   key: string;
@@ -120,6 +121,7 @@ export function CommandPalette({
         className="top-[15vh] max-w-xl translate-y-0 gap-0 overflow-hidden rounded-2xl border-white/10 p-0 [&>button]:hidden"
         style={{ background: "#0d1322" }}
       >
+        <GradientTopLine />
         <DialogTitle className="sr-only">{t("searchEverything")}</DialogTitle>
         <div className="flex items-center gap-3 border-b border-white/[0.08] px-4">
           <Search className="h-4 w-4 shrink-0 text-white/35" />

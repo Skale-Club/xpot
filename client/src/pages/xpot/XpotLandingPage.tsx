@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/dialog";
 import { LanguagePicker } from "@/components/LanguagePicker";
 import { PhoneSignIn } from "@/components/PhoneSignIn";
+import { GradientTopLine } from "@/components/xpot/GradientTopLine";
 import { XpotMark } from "@/components/xpot/XpotMark";
 import { interpolate, translate, useT } from "@/i18n";
 import { landingMessages } from "@/i18n/messages/landing";
@@ -334,8 +335,7 @@ export function XpotLandingPage() {
                   </DialogTrigger>
 
                   <DialogContent className="w-[92%] max-w-md gap-0 rounded-2xl border-white/10 bg-[#070b16]/95 p-5 text-white shadow-[0_24px_80px_rgba(0,0,0,0.65)] backdrop-blur-2xl [&>button]:right-3 [&>button]:top-3 [&>button]:bg-transparent sm:p-7">
-                    <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-[linear-gradient(90deg,transparent,#5272F2_38%,#0BB8AF_68%,transparent)]" />
-                    <div className="pointer-events-none absolute left-1/2 top-0 h-28 w-48 -translate-x-1/2 rounded-full bg-[#5272F2]/10 blur-3xl" />
+                    <GradientTopLine glow />
 
                     <DialogHeader className="relative space-y-0 pb-5 text-center sm:text-center">
                       <div className="flex items-center justify-center gap-2.5">
@@ -517,6 +517,7 @@ export function XpotLandingPage() {
           {/* Call to action */}
           <Reveal>
             <section id="cta" className="relative mx-auto max-w-4xl scroll-mt-24 overflow-hidden rounded-2xl border border-[#5272F2]/20 bg-[linear-gradient(100deg,rgba(82,114,242,0.12),rgba(11,184,175,0.08),rgba(82,114,242,0.1))] p-8 text-center sm:p-12">
+              <GradientTopLine className="inset-x-14" />
               <img
                 src="/landing/cta-route-map.webp"
                 alt=""
