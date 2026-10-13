@@ -15,7 +15,6 @@ import {
   Mic,
   Navigation,
   Nfc,
-  RefreshCw,
   Route,
   Search,
   Sparkles,
@@ -514,19 +513,6 @@ export function XpotLandingPage() {
               ))}
             </div>
           </section>
-
-          {/* CRM sync */}
-          <Reveal>
-            <section className="flex flex-col items-center gap-5 rounded-2xl border border-white/[0.07] bg-white/[0.035] p-7 text-center sm:flex-row sm:text-left">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-[#5272F2]/20 bg-[#5272F2]/10">
-                <RefreshCw className="h-5 w-5 text-[#8FA8FF]" />
-              </div>
-              <div>
-                <h2 className="text-lg font-bold text-white">{content.sync.title}</h2>
-                <p className="mt-1 text-sm leading-relaxed text-white/60">{content.sync.body}</p>
-              </div>
-            </section>
-          </Reveal>
 
           {/* FAQ */}
           <section id="faq" className="scroll-mt-24 space-y-12">
