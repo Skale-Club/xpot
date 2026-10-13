@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { ArrowDown, ArrowUp, Building2, Loader2, Nfc, Send, Trash2, UserCheck } from "lucide-react";
+import { ArrowDown, ArrowUp, Building2, Nfc, Trash2 } from "lucide-react";
 import type { LeadTagSummary } from "@shared/tagsApi";
 import { useT } from "@/i18n";
 import { leadsMessages } from "@/i18n/messages/leads";
@@ -24,29 +24,21 @@ function RowAction({ title, onClick, children, hover, disabled }: { title: strin
   );
 }
 
-/** Desktop list of leads or prospects, sortable, one row per company. */
+/** Desktop list of visited leads, sortable, one row per company. */
 export function LeadsTable({
   leads,
-  isProspect,
   selectedId,
   onSelect,
   piecesFor,
   lastVisitFor,
   onDelete,
-  onPromote,
-  onSyncGhl,
-  syncingId,
 }: {
   leads: FullSalesLead[];
-  isProspect: boolean;
   selectedId: number | null;
   onSelect: (lead: FullSalesLead) => void;
   piecesFor: (leadId: number) => LeadTagSummary | undefined;
   lastVisitFor: (leadId: number) => Date | null;
   onDelete: (lead: FullSalesLead) => void;
-  onPromote: (lead: FullSalesLead) => void;
-  onSyncGhl: (lead: FullSalesLead) => void;
-  syncingId: number | null;
 }) {
   const t = useT(leadsMessages);
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: "name", dir: 1 });
@@ -157,16 +149,6 @@ export function LeadsTable({
                 </td>
                 <td className="whitespace-nowrap px-2 py-1.5">
                   <div className="flex items-center justify-end gap-0.5">
-                    {isProspect && (
-                      <RowAction title={t("promote")} onClick={() => onPromote(lead)} hover="hover:bg-purple-500/20 hover:text-purple-400">
-                        <UserCheck className="h-3.5 w-3.5" />
-                      </RowAction>
-                    )}
-                    {isProspect && (
-                      <RowAction title={t("sendGhl")} onClick={() => onSyncGhl(lead)} disabled={syncingId === lead.id} hover="hover:bg-emerald-500/20 hover:text-emerald-400">
-                        {syncingId === lead.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-                      </RowAction>
-                    )}
                     <RowAction title={t("delete")} onClick={() => onDelete(lead)} hover="hover:bg-red-500/20 hover:text-red-400">
                       <Trash2 className="h-3.5 w-3.5" />
                     </RowAction>

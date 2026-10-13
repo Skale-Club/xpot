@@ -624,7 +624,7 @@ export function XpotProspecting() {
                       <div className="col-span-2 grid grid-cols-2 gap-2 sm:col-span-1 sm:flex sm:shrink-0">
                         {stop.leadId && stop.visitId && ["planned", "en_route"].includes(stop.status) ? (
                           <Button asChild className="min-h-11 touch-manipulation rounded-xl bg-blue-500 px-3 text-xs font-bold text-white">
-                            <Link href={`/leads/prospecting?leadId=${stop.leadId}&visitId=${stop.visitId}`}><MapPin className="h-4 w-4" />{t("checkIn")}</Link>
+                            <Link href={`/route/check-in?leadId=${stop.leadId}&visitId=${stop.visitId}`}><MapPin className="h-4 w-4" />{t("checkIn")}</Link>
                           </Button>
                         ) : null}
                         <a

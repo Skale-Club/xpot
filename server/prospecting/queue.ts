@@ -124,7 +124,7 @@ async function updateJobStatus(jobId: number) {
     void sendPushNotification(previousJob.repId, {
       title: ready ? "Your prospecting list is ready" : "Prospecting needs attention",
       body: ready ? "Open Leads to review the prospects and build today's route." : "Open Leads to review the failed search and retry it.",
-      href: "/leads/prospecting",
+      href: "/route",
     }).catch((error) => console.error("[prospecting push] delivery failed:", error));
   }
 }

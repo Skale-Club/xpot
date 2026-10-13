@@ -19,7 +19,7 @@ const LAST_ROUTE_KEY: Record<XpotModule, string> = {
 export function isModuleRoute(module: XpotModule, route: string): boolean {
   const pathname = route.split(/[?#]/, 1)[0];
   if (module === "tags") return pathname === "/tags" || pathname.startsWith("/tags/");
-  return ["/dashboard", "/leads", "/sales"].some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+  return ["/dashboard", "/route", "/leads", "/tasks", "/sales"].some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 
 /** Remember the exact screen and query within a module for this browser session. */

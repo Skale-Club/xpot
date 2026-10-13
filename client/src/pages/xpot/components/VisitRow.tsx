@@ -315,7 +315,7 @@ export function VisitDetail({ visit, onDelete, layout = "dialog" }: {
       {visit.status === "planned" && !isDesktop ? (
         <button
           type="button"
-          onClick={() => navigate(`/check-in?leadId=${visit.leadId}&visitId=${visit.id}`)}
+          onClick={() => navigate(`/route/check-in?leadId=${visit.leadId}&visitId=${visit.id}`)}
           className="flex w-full items-center justify-center rounded-2xl bg-indigo-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-indigo-400"
         >
           {t("startPlannedVisit")}

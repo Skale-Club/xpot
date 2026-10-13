@@ -1,15 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useRoute } from "wouter";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { useRoute } from "wouter";
 import {
   Plus,
   Search,
   Trash2,
   LogIn,
-  Upload,
-  Send,
-  FileUp,
   X,
-  UserCheck,
   MapPinned,
   Building2,
   Nfc,
@@ -18,6 +14,7 @@ import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
+  SlidersHorizontal,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import type { LeadTagSummary } from "@shared/tagsApi";
@@ -52,23 +49,16 @@ import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { BottomSheet } from "@/pages/tags/ui";
 import { LeadsTable } from "./components/leads/LeadsTable";
 import { LeadDetailPane } from "./components/leads/LeadDetailPane";
-import { CsvImportDialog } from "./components/leads/CsvImportDialog";
-import { parseCsvText, type CsvLeadRow } from "./csvLeads";
 import { MasterDetail } from "@/components/xpot/MasterDetail";
 import { useT } from "@/i18n";
 import { leadsMessages } from "@/i18n/messages/leads";
 import { checkinMessages } from "@/i18n/messages/checkin";
 import { BRAND_GRADIENT, GLASS } from "@/components/xpot/surface";
-import { Segmented } from "@/components/xpot/Segmented";
 import { EmptyState } from "@/components/xpot/EmptyState";
 import { MiniCalendar } from "@/components/xpot/MiniCalendar";
-import { XpotProspecting } from "./XpotProspecting";
-import { XpotCheckIn } from "./XpotCheckIn";
 
 
 // ─── Shared Add Company Dialog ────────────────────────────────────────────────
-
-type AddStatus = "prospect" | "lead";
 
 const MANUAL_FIELD_KEYS = {
   name: "fieldBusinessRequired",
@@ -84,12 +74,10 @@ const MANUAL_FIELD_KEYS = {
 function AddCompanyDialog({
   open,
   onOpenChange,
-  status,
   allLeads,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
-  status: AddStatus;
   allLeads: FullSalesLead[];
 }) {
   const { toast } = useToast();
@@ -108,14 +96,12 @@ function AddCompanyDialog({
 
   const inputCls = "w-full h-10 rounded-xl px-3 text-sm text-white placeholder:text-white/25 focus:outline-none transition-colors";
   const inputStyle = { background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.09)" };
-  const isProspect = status === "prospect";
-
   async function createFromPayload(payload: any) {
     setSaving(true);
     try {
-      await apiRequest("POST", "/api/xpot/leads", { ...payload, status, source: payload.source || "manual" });
+      await apiRequest("POST", "/api/xpot/leads", { ...payload, status: "lead", source: payload.source || "manual" });
       await invalidateXpotData();
-      toast({ title: t(isProspect ? "prospectAdded" : "leadAdded"), variant: "success" });
+      toast({ title: t("leadAdded"), variant: "success" });
       onOpenChange(false);
       setSearch("");
       setManualForm(null);
@@ -179,7 +165,7 @@ function AddCompanyDialog({
         style={{ background: "#0e1117", boxShadow: "0 24px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.07)" }}
       >
         <DialogHeader className="px-5 pt-5 pb-0">
-          <DialogTitle className="text-base font-semibold text-white capitalize">{t(isProspect ? "addProspectTitle" : "addLeadTitle")}</DialogTitle>
+          <DialogTitle className="text-base font-semibold text-white capitalize">{t("addLeadTitle")}</DialogTitle>
         </DialogHeader>
 
         <div className="p-5 space-y-4">
@@ -230,7 +216,7 @@ function AddCompanyDialog({
                     </div>
                     <div>
                       <div className="text-sm font-medium text-slate-900">
-                        {search.trim().length >= 2 ? t("createNamed", { name: search.trim() }) : t(isProspect ? "addNewProspect" : "addNewLead")}
+                        {search.trim().length >= 2 ? t("createNamed", { name: search.trim() }) : t("addNewLead")}
                       </div>
                       <div className="text-xs text-slate-500">{t("fillManually")}</div>
                     </div>
@@ -312,7 +298,7 @@ function AddCompanyDialog({
                 style={{ background: "linear-gradient(135deg, #3b82f6, #6366f1)" }}
               >
                 {saving ? <Loader2 className="inline mr-2 h-4 w-4 animate-spin" /> : null}
-                {t(isProspect ? "saveProspect" : "saveLead")}
+                {t("saveLead")}
               </button>
             </div>
           )}
@@ -349,7 +335,7 @@ function LeadCard({ lead, onEdit, onMore, pieces, onOpenPieces }: {
   pieces?: LeadTagSummary;
   onOpenPieces?: () => void;
   onEdit: () => void;
-  /** Opens the action sheet (sell, check in, promote, delete…). */
+  /** Opens the action sheet (sell, check in, delete…). */
   onMore: () => void;
 }) {
   const t = useT(leadsMessages);
@@ -382,26 +368,17 @@ function LeadCard({ lead, onEdit, onMore, pieces, onOpenPieces }: {
   );
 }
 
-function LeadActionSheet({ lead, isProspect, onClose, onSell, onCheckIn, onPromote, onSyncGhl, onDelete }: {
+function LeadActionSheet({ lead, onClose, onSell, onCheckIn, onDelete }: {
   lead: FullSalesLead | null;
-  isProspect: boolean;
   onClose: () => void;
   onSell: () => void;
   onCheckIn: () => void;
-  onPromote: () => void;
-  onSyncGhl: () => void;
   onDelete: () => void;
 }) {
   const t = useT(leadsMessages);
   const items = [
     { key: "sell", label: t("salesAndConsignment"), icon: DollarSign, run: onSell, cls: "text-emerald-300" },
     { key: "checkin", label: t("checkIn"), icon: LogIn, run: onCheckIn, cls: "text-blue-300" },
-    ...(isProspect
-      ? [
-          { key: "promote", label: t("promote"), icon: UserCheck, run: onPromote, cls: "text-purple-300" },
-          { key: "ghl", label: t("sendGhl"), icon: Send, run: onSyncGhl, cls: "text-emerald-300" },
-        ]
-      : []),
     { key: "delete", label: t("delete"), icon: Trash2, run: onDelete, cls: "text-red-400" },
   ];
   return (
@@ -441,16 +418,10 @@ function toLocalDateString(date: Date) {
 export function XpotLeads() {
   const t = useT(leadsMessages);
   const { setLocation } = useXpotQueries();
-  const [pathname] = useLocation();
   const isDesktop = useIsDesktop();
   const [routeMatch, routeParams] = useRoute("/leads/:id");
   const routeId = routeMatch && /^\d+$/.test(routeParams.id) ? Number(routeParams.id) : null;
-  const [tab, setTab] = useState<"leads" | "prospects">(
-    pathname.startsWith("/leads/prospect") || pathname.startsWith("/check-in") ? "prospects" : "leads",
-  );
-  const prospecting = pathname.startsWith("/leads/prospecting") || pathname.startsWith("/check-in");
-  const prospectingSummary = pathname.startsWith("/leads/prospecting/summary/");
-  const prospectingCheckIn = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("leadId");
+  const [leadFilter, setLeadFilter] = useState<"all" | "followup" | "lead" | "customer">("all");
   const [dateMode, setDateMode] = useState<"all" | "day">("all");
   const [dayOffset, setDayOffset] = useState(0);
   const [calendarOpen, setCalendarOpen] = useState(false);
@@ -461,9 +432,6 @@ export function XpotLeads() {
   const [editLead, setEditLead] = useState<FullSalesLead | null>(null);
   const [actionLead, setActionLead] = useState<FullSalesLead | null>(null);
   const [addOpen, setAddOpen] = useState(false);
-  const [syncingId, setSyncingId] = useState<number | null>(null);
-  const [csvRows, setCsvRows] = useState<CsvLeadRow[] | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const {
     leadsQuery,
@@ -471,9 +439,6 @@ export function XpotLeads() {
     deleteLeadMutation,
     leadLookupSearch,
     setLeadLookupSearch,
-    syncToGhlMutation,
-    promoteToLeadMutation,
-    importCsvMutation,
   } = useLeads();
 
   const allLeads = leadsQuery.data ?? [];
@@ -485,12 +450,22 @@ export function XpotLeads() {
     staleTime: 60_000,
   });
   const piecesFor = (leadId: number) => piecesByLead?.find((p) => p.leadId === leadId);
-  const prospects = allLeads.filter((l) => l.status === "prospect");
-  const leads = allLeads.filter((l) => l.status !== "prospect");
 
   // Visits are already loaded by the shell; group them per company for the
   // "last visit" column and the pane's recent visits.
   const { data: visits } = useQuery<EnrichedSalesVisit[]>({ queryKey: ["/api/xpot/visits"] });
+  const checkedInLeadIds = useMemo(
+    () => new Set((visits ?? []).filter((visit) => Boolean(visit.checkedInAt)).map((visit) => visit.leadId)),
+    [visits],
+  );
+  const isWorkedLead = useCallback(
+    (lead: FullSalesLead) => lead.status !== "prospect" || checkedInLeadIds.has(lead.id),
+    [checkedInLeadIds],
+  );
+  // Legacy prospect rows may already have completed visits. A real check-in is
+  // authoritative: the company belongs in the worked-leads portfolio even if
+  // an older record was never promoted from `prospect` in the database.
+  const leads = allLeads.filter(isWorkedLead);
   const visitsByLead = useMemo(() => {
     const map = new Map<number, EnrichedSalesVisit[]>();
     for (const v of visits ?? []) {
@@ -507,7 +482,7 @@ export function XpotLeads() {
     return when ? new Date(when) : null;
   }, [visitsByLead]);
 
-  const selectedLead = routeId ? allLeads.find((l) => l.id === routeId) ?? null : null;
+  const selectedLead = routeId ? leads.find((l) => l.id === routeId) ?? null : null;
 
   const today = new Date();
   const selectedDate = new Date();
@@ -524,18 +499,24 @@ export function XpotLeads() {
     if (event.target.value) pickDay(new Date(`${event.target.value}T12:00:00`));
   }, [pickDay]);
 
-  // A link straight to a prospect opens the Prospects tab.
-  useEffect(() => {
-    if (selectedLead) setTab(selectedLead.status === "prospect" ? "prospects" : "leads");
-  }, [selectedLead?.id, selectedLead?.status]);
-
-  useEffect(() => {
-    if (pathname.startsWith("/leads/prospect") || pathname.startsWith("/check-in")) setTab("prospects");
-  }, [pathname]);
-
-  const searchedList = tab === "prospects"
-    ? prospects.filter((l) => !leadLookupSearch || l.name.toLowerCase().includes(leadLookupSearch.toLowerCase()))
-    : filteredLeadsForList.filter((l) => l.status !== "prospect");
+  const searchedList = useMemo(() => {
+    const filtered = filteredLeadsForList.filter((lead) => {
+      if (!isWorkedLead(lead)) return false;
+      if (leadFilter === "followup") return Boolean(lead.nextVisitDueAt);
+      if (leadFilter === "lead") return ["lead", "active"].includes(lead.status) || (lead.status === "prospect" && checkedInLeadIds.has(lead.id));
+      if (leadFilter === "customer") return lead.status === "customer";
+      return true;
+    });
+    return [...filtered].sort((a, b) => {
+      const aDue = a.nextVisitDueAt ? new Date(a.nextVisitDueAt).getTime() : Number.POSITIVE_INFINITY;
+      const bDue = b.nextVisitDueAt ? new Date(b.nextVisitDueAt).getTime() : Number.POSITIVE_INFINITY;
+      if (aDue !== bDue) return aDue - bDue;
+      const aVisited = a.lastVisitAt ? new Date(a.lastVisitAt).getTime() : 0;
+      const bVisited = b.lastVisitAt ? new Date(b.lastVisitAt).getTime() : 0;
+      if (aVisited !== bVisited) return bVisited - aVisited;
+      return a.name.localeCompare(b.name);
+    });
+  }, [checkedInLeadIds, filteredLeadsForList, isWorkedLead, leadFilter]);
 
   const visitedLeadIds = new Set(
     (visits ?? [])
@@ -547,7 +528,7 @@ export function XpotLeads() {
     : searchedList;
 
   const countsByDay = useMemo(() => {
-    const relevantIds = new Set((tab === "prospects" ? prospects : leads).map((lead) => lead.id));
+    const relevantIds = new Set(leads.map((lead) => lead.id));
     const idsByDay = new Map<string, Set<number>>();
     for (const visit of visits ?? []) {
       if (!visit.checkedInAt || !relevantIds.has(visit.leadId)) continue;
@@ -556,22 +537,11 @@ export function XpotLeads() {
       idsByDay.get(key)!.add(visit.leadId);
     }
     return new Map(Array.from(idsByDay, ([key, ids]) => [key, ids.size]));
-  }, [leads, prospects, tab, visits]);
+  }, [leads, visits]);
 
   // Moving between companies and closing replace history; only the first open pushes.
   const openLead = (lead: FullSalesLead) => setLocation(`/leads/${lead.id}`, { replace: routeId != null });
-  const closeLead = useCallback(() => setLocation(tab === "prospects" ? "/leads/prospects" : "/leads", { replace: true }), [setLocation, tab]);
-
-  const changeTab = (next: "leads" | "prospects") => {
-    setTab(next);
-    setDateMode("all");
-    setLeadLookupSearch("");
-    setLocation(next === "prospects" ? "/leads/prospects" : "/leads");
-  };
-
-  const changeProspectMode = (next: "saved" | "prospecting") => {
-    setLocation(next === "prospecting" ? "/leads/prospecting" : "/leads/prospects");
-  };
+  const closeLead = useCallback(() => setLocation("/leads", { replace: true }), [setLocation]);
 
   const handleDeleteLead = async () => {
     if (!leadPendingDelete) return;
@@ -584,70 +554,46 @@ export function XpotLeads() {
     } catch {}
   };
 
-  const handleSyncGhl = async (lead: FullSalesLead) => {
-    setSyncingId(lead.id);
-    try { await syncToGhlMutation.mutateAsync(lead.id); }
-    finally { setSyncingId(null); }
-  };
-
-  const handlePromote = async (lead: FullSalesLead) => {
-    await promoteToLeadMutation.mutateAsync(lead.id);
-  };
-
-  const handleCsvFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    setCsvRows(parseCsvText(await file.text()));
-  };
-
-  const confirmCsvImport = async () => {
-    if (!csvRows?.length) return;
-    try {
-      await importCsvMutation.mutateAsync(csvRows);
-      setCsvRows(null);
-    } catch {
-      // The hook shows the error; keep the preview open to retry.
-    }
-  };
-
-  const TABS = [
-    { id: "leads" as const, label: t("tabLeads"), count: leads.length },
-    { id: "prospects" as const, label: t("tabProspects"), count: prospects.length },
-  ];
-
-  const PROSPECT_MODES = [
-    { id: "saved" as const, label: t("savedProspects"), count: prospects.length },
-    { id: "prospecting" as const, label: t("prospecting") },
-  ];
-
   const dateLabel = dayOffset === 0
     ? t("today")
     : selectedDate.toLocaleDateString(t.locale, { weekday: "short", month: "short", day: "numeric" });
 
-  const dateFilter = (
-    <div
-      className="space-y-3 rounded-2xl px-3 py-3 lg:flex lg:items-center lg:gap-4 lg:space-y-0"
-      style={{ background: "rgba(255,255,255,0.035)", border: "1px solid rgba(255,255,255,0.07)" }}
-    >
-      <Segmented
-        className="lg:w-72 lg:shrink-0"
-        items={[
-          { id: "all" as const, label: t("allDates"), count: searchedList.length },
-          { id: "day" as const, label: t("byDate"), count: displayList.length },
-        ]}
-        value={dateMode}
-        onChange={setDateMode}
-      />
+  const filterItems = [
+    { id: "all" as const, label: t("filterAll"), count: leads.length },
+    { id: "followup" as const, label: t("filterFollowUp"), count: leads.filter((lead) => Boolean(lead.nextVisitDueAt)).length },
+    { id: "lead" as const, label: t("filterLeads"), count: leads.filter((lead) => ["lead", "active", "prospect"].includes(lead.status) && lead.status !== "customer").length },
+    { id: "customer" as const, label: t("filterCustomers"), count: leads.filter((lead) => lead.status === "customer").length },
+  ];
+
+  const filters = (
+    <div className="space-y-3">
+      <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {filterItems.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => setLeadFilter(item.id)}
+            aria-pressed={leadFilter === item.id}
+            className={`inline-flex h-9 shrink-0 items-center gap-2 rounded-xl px-3 text-xs font-semibold transition-colors ${leadFilter === item.id ? "bg-indigo-500/20 text-indigo-200" : "bg-white/[0.035] text-white/45 hover:bg-white/[0.07] hover:text-white/70"}`}
+          >
+            {item.label}
+            <span className="tabular-nums text-[10px] opacity-60">{item.count}</span>
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={() => setDateMode((mode) => mode === "all" ? "day" : "all")}
+          aria-pressed={dateMode === "day"}
+          className={`inline-flex h-9 shrink-0 items-center gap-2 rounded-xl px-3 text-xs font-semibold transition-colors ${dateMode === "day" ? "bg-indigo-500/20 text-indigo-200" : "bg-white/[0.035] text-white/45 hover:bg-white/[0.07] hover:text-white/70"}`}
+        >
+          <SlidersHorizontal className="h-3.5 w-3.5" />
+          {dateMode === "day" ? dateLabel : t("filterDate")}
+        </button>
+      </div>
 
       {dateMode === "day" && (
-        <div className="relative flex items-center justify-between gap-2 lg:flex-1 lg:justify-center lg:gap-4">
-          <button
-            type="button"
-            onClick={() => setDayOffset((offset) => offset - 1)}
-            aria-label={t("previousDay")}
-            className="flex h-8 w-8 items-center justify-center rounded-xl text-white/40 transition-colors hover:bg-white/8 hover:text-white/80"
-          >
+        <div className="relative flex items-center justify-center gap-3 py-1">
+          <button type="button" onClick={() => setDayOffset((offset) => offset - 1)} aria-label={t("previousDay")} className="flex h-8 w-8 items-center justify-center rounded-xl text-white/40 transition-colors hover:bg-white/[0.06] hover:text-white/80">
             <ChevronLeft className="h-4 w-4" />
           </button>
 
@@ -656,7 +602,7 @@ export function XpotLeads() {
             onClick={() => (isDesktop ? setCalendarOpen((open) => !open) : dateInputRef.current?.showPicker())}
             aria-expanded={isDesktop ? calendarOpen : undefined}
             aria-label={t("pickDate")}
-            className="relative flex flex-col items-center gap-0.5 rounded-xl px-3 py-1 hover:bg-white/[0.05]"
+            className="relative flex min-w-32 flex-col items-center gap-0.5 rounded-xl px-3 py-1 hover:bg-white/[0.05]"
           >
             <span className="text-sm font-semibold text-white">{dateLabel}</span>
             <span className="text-[11px] text-white/35">{t.plural("companyCount", displayList.length)}</span>
@@ -670,13 +616,7 @@ export function XpotLeads() {
             />
           </button>
 
-          <button
-            type="button"
-            onClick={() => setDayOffset((offset) => Math.min(0, offset + 1))}
-            disabled={dayOffset === 0}
-            aria-label={t("nextDay")}
-            className="flex h-8 w-8 items-center justify-center rounded-xl text-white/40 transition-colors hover:bg-white/8 hover:text-white/80 disabled:cursor-not-allowed disabled:opacity-20"
-          >
+          <button type="button" onClick={() => setDayOffset((offset) => Math.min(0, offset + 1))} disabled={dayOffset === 0} aria-label={t("nextDay")} className="flex h-8 w-8 items-center justify-center rounded-xl text-white/40 transition-colors hover:bg-white/[0.06] hover:text-white/80 disabled:cursor-not-allowed disabled:opacity-20">
             <ChevronRight className="h-4 w-4" />
           </button>
 
@@ -705,21 +645,7 @@ export function XpotLeads() {
 
   const emptyStates = (
     <>
-      {/* Empty state for prospects */}
-      {tab === "prospects" && prospects.length === 0 && !leadLookupSearch && (
-        <EmptyState icon={Upload} title={t("noProspects")} hint={t("noProspectsHint")} cardStyle={GLASS}>
-          <div className="flex gap-2 mt-1">
-            <button onClick={() => setAddOpen(true)} className="rounded-xl px-4 py-2 text-xs font-semibold text-white hover:opacity-80" style={{ background: BRAND_GRADIENT }}>
-              {t("addProspect")}
-            </button>
-            <button onClick={() => fileInputRef.current?.click()} className="rounded-xl px-4 py-2 text-xs font-semibold text-white/60 hover:text-white/80 transition-colors" style={{ background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.09)" }}>
-              {t("importCsv")}
-            </button>
-          </div>
-        </EmptyState>
-      )}
-      {/* Leads tab — no leads yet */}
-      {tab === "leads" && leads.length === 0 && !leadLookupSearch && (
+      {leads.length === 0 && !leadLookupSearch && (
         <EmptyState icon={Building2} title={t("noLeads")} hint={t("noLeadsHint")} cardStyle={GLASS}>
           <button
             onClick={() => setAddOpen(true)}
@@ -738,6 +664,9 @@ export function XpotLeads() {
           cardStyle={GLASS}
         />
       )}
+      {dateMode === "all" && leads.length > 0 && searchedList.length === 0 && !leadLookupSearch && (
+        <EmptyState icon={SlidersHorizontal} title={t("noLeadsInFilter")} hint={t("chooseAnotherFilter")} cardStyle={GLASS} />
+      )}
       {/* Search returned nothing */}
       {displayList.length === 0 && leadLookupSearch && (
         <EmptyState icon={Search} title={t("noResults", { query: leadLookupSearch })} cardStyle={GLASS} />
@@ -745,72 +674,35 @@ export function XpotLeads() {
     </>
   );
 
-  if (prospecting) {
-    return (
-      <div className="space-y-4">
-        {!prospectingSummary ? <Segmented items={TABS} value="prospects" onChange={changeTab} className="lg:w-80" /> : null}
-        {!prospectingSummary ? <Segmented items={PROSPECT_MODES} value="prospecting" onChange={changeProspectMode} className="lg:w-80" /> : null}
-        {prospectingCheckIn ? <XpotCheckIn /> : <XpotProspecting />}
-      </div>
-    );
-  }
-
   return (
     <>
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
-        {/* Sub-tabs */}
-        <Segmented items={TABS} value={tab} onChange={changeTab} className="lg:w-80 lg:shrink-0" />
-
-        {/* Search + actions */}
-        <div className="flex flex-1 gap-2">
+      <div className="space-y-3">
+        <div className="flex gap-2">
           <div className="relative flex-1">
             <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
             <input
               value={leadLookupSearch}
               onChange={(e) => setLeadLookupSearch(e.target.value)}
-              placeholder={tab === "prospects" ? t("searchProspects") : t("searchLeads")}
+              placeholder={t("searchLeads")}
               data-shortcut="search"
               className="w-full h-11 rounded-xl pl-10 pr-4 text-sm text-white placeholder:text-white/25 focus:outline-none"
               style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.09)" }}
             />
           </div>
 
-          {/* CSV import — prospects only */}
-          {tab === "prospects" && (
-            <>
-              <button
-                title={t("importCsv")}
-                onClick={() => fileInputRef.current?.click()}
-                disabled={importCsvMutation.isPending}
-                className="flex h-11 w-11 shrink-0 items-center justify-center gap-2 rounded-xl text-sm font-semibold text-white/60 transition-all hover:opacity-80 disabled:opacity-40 lg:w-auto lg:px-4"
-                style={{ background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.09)" }}
-              >
-                {importCsvMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileUp className="h-4 w-4" />}
-                <span className="hidden lg:inline">{t("importCsv")}</span>
-              </button>
-              <input ref={fileInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleCsvFile} />
-            </>
-          )}
-
-          {/* Add button — both tabs */}
           <button
             onClick={() => setAddOpen(true)}
-            title={t(tab === "prospects" ? "newProspect" : "newLead")}
+            title={t("newLead")}
             data-shortcut="new"
             className="flex h-11 w-11 shrink-0 items-center justify-center gap-2 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-80 lg:w-auto lg:px-4"
             style={{ background: BRAND_GRADIENT }}
           >
             <Plus className="h-4 w-4" />
-            <span className="hidden lg:inline">{t(tab === "prospects" ? "newProspect" : "newLead")}</span>
+            <span className="hidden lg:inline">{t("newLead")}</span>
           </button>
         </div>
+        {filters}
       </div>
-
-      {tab === "prospects" && (
-        <Segmented items={PROSPECT_MODES} value="saved" onChange={changeProspectMode} className="mt-4 lg:w-80" />
-      )}
-
-      {tab === "leads" && <div className="mt-4">{dateFilter}</div>}
 
       {isDesktop ? (
         <MasterDetail
@@ -822,15 +714,11 @@ export function XpotLeads() {
               {displayList.length > 0 && (
                 <LeadsTable
                   leads={displayList}
-                  isProspect={tab === "prospects"}
                   selectedId={routeId}
                   onSelect={openLead}
                   piecesFor={piecesFor}
                   lastVisitFor={lastVisitFor}
                   onDelete={setLeadPendingDelete}
-                  onPromote={handlePromote}
-                  onSyncGhl={handleSyncGhl}
-                  syncingId={syncingId}
                 />
               )}
             </>
@@ -839,14 +727,10 @@ export function XpotLeads() {
             <LeadDetailPane
               key={selectedLead.id}
               lead={selectedLead}
-              isProspect={selectedLead.status === "prospect"}
               pieces={piecesFor(selectedLead.id)}
               visits={visitsByLead.get(selectedLead.id) ?? []}
               onClose={closeLead}
               onDelete={() => setLeadPendingDelete(selectedLead)}
-              onPromote={() => handlePromote(selectedLead)}
-              onSyncGhl={() => handleSyncGhl(selectedLead)}
-              isSyncing={syncingId === selectedLead.id}
             />
           ) : leadsQuery.isLoading ? (
             <div className="flex justify-center py-16"><Loader2 className="h-5 w-5 animate-spin text-blue-400" /></div>
@@ -873,12 +757,9 @@ export function XpotLeads() {
 
       <LeadActionSheet
         lead={actionLead}
-        isProspect={actionLead?.status === "prospect"}
         onClose={() => setActionLead(null)}
         onSell={() => actionLead && setSalesLead(actionLead)}
-        onCheckIn={() => actionLead && setLocation(`/leads/prospecting?leadId=${actionLead.id}`)}
-        onPromote={() => actionLead && void handlePromote(actionLead)}
-        onSyncGhl={() => actionLead && void handleSyncGhl(actionLead)}
+        onCheckIn={() => actionLead && setLocation(`/route/check-in?leadId=${actionLead.id}`)}
         onDelete={() => actionLead && setLeadPendingDelete(actionLead)}
       />
 
@@ -891,19 +772,11 @@ export function XpotLeads() {
         {salesLead && <LeadSalesPanel leadId={salesLead.id} leadName={salesLead.name} compact />}
       </SheetDialog>
 
-      {/* Add dialog — shared, status-aware */}
+      {/* Manual creation is reserved for referrals and unplanned encounters. */}
       <AddCompanyDialog
         open={addOpen}
         onOpenChange={setAddOpen}
-        status={tab === "prospects" ? "prospect" : "lead"}
         allLeads={allLeads}
-      />
-
-      <CsvImportDialog
-        rows={csvRows}
-        onCancel={() => setCsvRows(null)}
-        onConfirm={() => void confirmCsvImport()}
-        importing={importCsvMutation.isPending}
       />
 
       {/* Phone: the card opens the edit form; a /leads/:id link does too. */}
@@ -927,7 +800,7 @@ export function XpotLeads() {
         >
           <AlertDialogHeader>
             <AlertDialogTitle className="text-base font-semibold text-white">
-              {t(leadPendingDelete?.status === "prospect" ? "deleteProspectTitle" : "deleteLeadTitle")}
+              {t("deleteLeadTitle")}
             </AlertDialogTitle>
             <AlertDialogDescription className="text-sm text-white/45">
               {leadPendingDelete ? t("deleteNamed", { name: leadPendingDelete.name }) : t("deleteGeneric")}

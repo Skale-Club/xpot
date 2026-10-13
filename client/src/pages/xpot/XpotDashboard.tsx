@@ -1,4 +1,5 @@
-import { MapPinned, DollarSign, Target, Clock3, Footprints, Activity, AlertTriangle, RefreshCw, ArrowLeft, ChevronRight } from "lucide-react";
+import { MapPinned, DollarSign, Target, Clock3, Footprints, Activity, AlertTriangle, RefreshCw, ArrowLeft, ChevronRight, Route as RouteIcon } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { AreaChart, Area, XAxis, Tooltip, ResponsiveContainer, LabelList } from "recharts";
 import { useXpotQueries } from "./hooks/useXpotQueries";
 import { useSyncStatus } from "./hooks/useSyncStatus";
@@ -44,6 +45,16 @@ const METRIC_CARDS = [
   },
 ] as const;
 
+type DashboardRoute = {
+  id: number;
+  routeDate: string;
+  status: "draft" | "published" | "in_progress" | "completed" | "cancelled";
+};
+
+function localDateKey(date = new Date()) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
 function DashboardOverview() {
   const { dashboardQuery, setLocation } = useXpotQueries();
   const t = useT(dashboardMessages);
@@ -51,6 +62,20 @@ function DashboardOverview() {
   const { failedEvents, retryMutation } = useSyncStatus();
   const salesSummary = useSalesSummary(7);
   const isDesktop = useIsDesktop();
+  const routesQuery = useQuery<DashboardRoute[]>({ queryKey: ["/api/xpot/prospecting/routes"] });
+  const todayRoute = routesQuery.data?.find((route) => route.routeDate === localDateKey() && route.status !== "cancelled");
+  const routeTitle = !todayRoute
+    ? t("planRoute")
+    : todayRoute.status === "completed"
+      ? t("routeComplete")
+      : todayRoute.status === "draft"
+        ? t("reviewRoute")
+        : t("continueRoute");
+  const routeHint = !todayRoute
+    ? t("planRouteHint")
+    : todayRoute.status === "completed"
+      ? t("routeCompleteHint")
+      : t("continueRouteHint");
 
   function metricValue(key: typeof METRIC_CARDS[number]["key"]) {
     if (!metrics) return "—";
@@ -222,6 +247,22 @@ function DashboardOverview() {
 
   return (
     <div className="space-y-6">
+      <button
+        type="button"
+        onClick={() => setLocation("/route")}
+        className="group flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left transition-colors hover:bg-indigo-500/[0.09]"
+        style={{ background: "linear-gradient(90deg, rgba(79,70,229,0.11), rgba(14,165,233,0.045))", border: "1px solid rgba(129,140,248,0.18)" }}
+      >
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500/15 text-indigo-300">
+          <RouteIcon className="h-5 w-5" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-bold text-white">{routeTitle}</span>
+          <span className="mt-0.5 block truncate text-xs text-white/45">{routeHint}</span>
+        </span>
+        <ChevronRight className="h-4 w-4 shrink-0 text-white/30 transition-transform group-hover:translate-x-0.5 group-hover:text-white/55" />
+      </button>
+
       {/* Metric cards */}
       <div className="grid grid-cols-4 gap-2 lg:gap-4">
         {METRIC_CARDS.map(({ labelKey, key, icon: Icon, gradient, glow }) => {

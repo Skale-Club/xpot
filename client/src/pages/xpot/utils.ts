@@ -14,7 +14,7 @@ import { shellMessages } from "@/i18n/messages/shell";
 export const tabs = [
   { id: "dashboard", labelKey: "tabDashboard", icon: Activity },
   { id: "leads", labelKey: "tabLeads", icon: Building2 },
-  { id: "prospecting", labelKey: "tabProspecting", icon: Route },
+  { id: "route", labelKey: "tabRoute", icon: Route },
   { id: "tasks", labelKey: "tabTasks", icon: ListTodo },
   { id: "sales", labelKey: "tabSales", icon: DollarSign },
 ] as const;

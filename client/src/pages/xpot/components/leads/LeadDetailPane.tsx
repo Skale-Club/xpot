@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "wouter";
-import { Building2, Globe, Loader2, Mail, MapPinned, Nfc, Pencil, Phone, Send, Tag, Trash2, UserCheck, X } from "lucide-react";
+import { Building2, Globe, Mail, MapPinned, Nfc, Pencil, Phone, Tag, Trash2, X } from "lucide-react";
 import type { LeadTagSummary } from "@shared/tagsApi";
 import { useT } from "@/i18n";
 import { leadsMessages } from "@/i18n/messages/leads";
@@ -53,24 +53,16 @@ function IconButton({ title, onClick, children, tone = "neutral", disabled }: {
 /** Everything about one company, beside the list on desktop. */
 export function LeadDetailPane({
   lead,
-  isProspect,
   pieces,
   visits,
   onClose,
   onDelete,
-  onPromote,
-  onSyncGhl,
-  isSyncing,
 }: {
   lead: FullSalesLead;
-  isProspect: boolean;
   pieces?: LeadTagSummary;
   visits: EnrichedSalesVisit[];
   onClose: () => void;
   onDelete: () => void;
-  onPromote: () => void;
-  onSyncGhl: () => void;
-  isSyncing: boolean;
 }) {
   const t = useT(leadsMessages);
   const tCheckin = useT(checkinMessages);
@@ -99,11 +91,6 @@ export function LeadDetailPane({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-lg font-bold leading-tight text-white">{lead.name}</h2>
-            {isProspect && (
-              <span className="rounded-full bg-purple-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-purple-300">
-                {t("prospectBadge")}
-              </span>
-            )}
             {lead.ghlContactId && (
               <span className="rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-emerald-400" style={{ background: "rgba(16,185,129,0.12)" }}>
                 GHL
@@ -134,16 +121,6 @@ export function LeadDetailPane({
           <IconButton title={t("edit")} onClick={() => setEditing(true)}>
             <Pencil className="h-3.5 w-3.5" /> {t("edit")}
           </IconButton>
-          {isProspect && (
-            <IconButton title={t("promote")} onClick={onPromote} tone="purple">
-              <UserCheck className="h-3.5 w-3.5" /> {t("promote")}
-            </IconButton>
-          )}
-          {isProspect && (
-            <IconButton title={t("sendGhl")} onClick={onSyncGhl} tone="emerald" disabled={isSyncing}>
-              {isSyncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />} {t("sendGhl")}
-            </IconButton>
-          )}
           <IconButton title={t("delete")} onClick={onDelete} tone="danger">
             <Trash2 className="h-3.5 w-3.5" /> {t("delete")}
           </IconButton>

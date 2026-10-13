@@ -63,7 +63,7 @@ export function useVisits() {
     onSuccess: async () => {
       toast({ title: t("visitCancelled") });
       await invalidateXpotData();
-      setLocation("/leads/prospecting");
+      setLocation("/route");
     },
     onError: (error: Error) => {
       toast({ title: t("cancelVisitFailed"), description: error.message, variant: "destructive" });

@@ -1,8 +1,8 @@
 import type { Dictionary } from "../index";
 
 const en = {
-  title: "Prospecting",
-  subtitle: "Choose where to work today. Xpot finds eligible businesses and builds a practical route.",
+  title: "Plan today's route",
+  subtitle: "Choose where to work. Xpot finds eligible businesses, removes conflicts and builds a practical route.",
   cityLabel: "Where do you want to prospect today?",
   cityPlaceholder: "Framingham, MA",
   sectorsLabel: "Which sectors?",
@@ -114,8 +114,8 @@ const en = {
 export const prospectingMessages: Dictionary<typeof en> = {
   en,
   pt: {
-    title: "Prospecção",
-    subtitle: "Escolha onde rodar hoje. O Xpot encontra empresas elegíveis e monta uma rota prática.",
+    title: "Planeje a rota de hoje",
+    subtitle: "Escolha onde trabalhar. O Xpot encontra empresas elegíveis, remove conflitos e monta uma rota prática.",
     cityLabel: "Onde você quer prospectar hoje?",
     cityPlaceholder: "Framingham, MA",
     sectorsLabel: "Quais setores?",
@@ -225,8 +225,8 @@ export const prospectingMessages: Dictionary<typeof en> = {
     errorTitle: "Não foi possível montar a rota",
   },
   es: {
-    title: "Prospección",
-    subtitle: "Elige dónde trabajar hoy. Xpot encuentra empresas elegibles y crea una ruta práctica.",
+    title: "Planifica la ruta de hoy",
+    subtitle: "Elige dónde trabajar. Xpot encuentra empresas elegibles, elimina conflictos y crea una ruta práctica.",
     cityLabel: "¿Dónde quieres prospectar hoy?",
     cityPlaceholder: "Framingham, MA",
     sectorsLabel: "¿Qué sectores?",

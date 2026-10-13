@@ -10,7 +10,7 @@ const en = {
   tabVisits: "History",
   tabLeads: "Leads",
   tabSales: "Sales",
-  tabProspecting: "Prospecting",
+  tabRoute: "Route",
   tabTasks: "Tasks",
   tabDashboard: "Dashboard",
 
@@ -85,7 +85,7 @@ export const shellMessages: Dictionary<typeof en> = {
     tabVisits: "Histórico",
     tabLeads: "Clientes",
     tabSales: "Vendas",
-    tabProspecting: "Prospecção",
+    tabRoute: "Rota",
     tabTasks: "Tarefas",
     tabDashboard: "Painel",
 
@@ -152,7 +152,7 @@ export const shellMessages: Dictionary<typeof en> = {
     tabVisits: "Historial",
     tabLeads: "Clientes",
     tabSales: "Ventas",
-    tabProspecting: "Prospección",
+    tabRoute: "Ruta",
     tabTasks: "Tareas",
     tabDashboard: "Panel",
 

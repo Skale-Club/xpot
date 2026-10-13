@@ -10,6 +10,7 @@ import { XpotSales } from "./pages/xpot/XpotSales";
 import { XpotDashboard } from "./pages/xpot/XpotDashboard";
 import { XpotProspecting } from "./pages/xpot/XpotProspecting";
 import { XpotTasks } from "./pages/xpot/XpotTasks";
+import { XpotCheckIn } from "./pages/xpot/XpotCheckIn";
 
 import Login from "./pages/Login";
 import { LegalPage } from "./pages/legal/LegalPage";
@@ -33,7 +34,7 @@ import { OrganizationsPage } from "./pages/xpot/OrganizationsPage";
 
 // Screens redesigned for desktop use the full width there; the rest stay in a
 // narrow column until their turn (docs/DESKTOP.md).
-const WIDE_TABS = new Set<string>(["leads", "visits", "dashboard", "sales", "prospecting", "tasks"]);
+const WIDE_TABS = new Set<string>(["leads", "visits", "dashboard", "sales", "route", "tasks"]);
 
 /**
  * Decides who gets the Visits screens before any Visits data is asked for: a
@@ -80,9 +81,11 @@ function XpotAppShell() {
     if (path === "/visits" || path.startsWith("/visits/")) {
       setLocation(`${path.replace(/^\/visits/, "/dashboard/history")}${search}`, { replace: true });
     } else if (path === "/check-in") {
-      setLocation(`/leads/prospecting${search}`, { replace: true });
-    } else if (path === "/prospecting") {
-      setLocation(`/leads/prospecting${search}`, { replace: true });
+      setLocation(`/route/check-in${search}`, { replace: true });
+    } else if (path === "/prospecting" || path === "/leads/prospects") {
+      setLocation(`/route${search}`, { replace: true });
+    } else if (path === "/leads/prospecting" || path.startsWith("/leads/prospecting/")) {
+      setLocation(`${path.replace(/^\/leads\/prospecting/, "/route")}${search}`, { replace: true });
     }
   }, [pathname, setLocation]);
 
@@ -123,7 +126,11 @@ function XpotAppShell() {
         {activeTab === "dashboard" ? <XpotDashboard /> : null}
         {activeTab === "leads" ? <XpotLeads /> : null}
         {activeTab === "sales" ? <XpotSales /> : null}
-        {activeTab === "prospecting" ? <XpotProspecting /> : null}
+        {activeTab === "route"
+          ? (pathname.startsWith("/route/check-in") || new URLSearchParams(typeof window !== "undefined" ? window.location.search : "").has("leadId")
+              ? <XpotCheckIn />
+              : <XpotProspecting />)
+          : null}
         {activeTab === "tasks" ? <XpotTasks /> : null}
       </div>
     </AppLayout>

@@ -41,7 +41,7 @@ export function useXpotQueries() {
     const section = getXpotSection(pathname);
     if (!section) return fallback;
     if (section === "visits") return "dashboard";
-    if (section === "check-in") return "leads";
+    if (section === "check-in" || section === "prospecting") return "route";
     return tabs.some((tab) => tab.id === section) ? section : fallback;
   }, [pathname]);
 

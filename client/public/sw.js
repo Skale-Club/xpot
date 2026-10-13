@@ -107,13 +107,13 @@ self.addEventListener("push", (event) => {
     body: payload.body || "Your route has an update.",
     icon: "/favicon.png",
     badge: "/favicon.png",
-    data: { href: payload.href || "/leads/prospecting" },
+    data: { href: payload.href || "/route" },
   }));
 });
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const href = event.notification.data?.href || "/leads/prospecting";
+  const href = event.notification.data?.href || "/route";
   event.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
     const existing = clients.find((client) => new URL(client.url).origin === self.location.origin);
     if (existing) {

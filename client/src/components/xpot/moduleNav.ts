@@ -7,6 +7,7 @@ import {
   Factory,
   FileText,
   LayoutDashboard,
+  ListTodo,
   Nfc,
   Package,
   PackageOpen,
@@ -75,7 +76,7 @@ type ShellKey =
   | "tabVisits"
   | "tabLeads"
   | "tabSales"
-  | "tabProspecting"
+  | "tabRoute"
   | "tabTasks"
   | "navManage"
   | "manageTeam"
@@ -113,7 +114,9 @@ export function moduleGroups(module: XpotModule, viewer: Viewer, l: Labels): Nav
       label: "",
       items: [
         { href: "/dashboard", label: l.shell("tabDashboard"), icon: Activity, match: (path) => starts("/dashboard")(path) || starts("/visits")(path) },
+        { href: "/route", label: l.shell("tabRoute"), icon: Route, match: (path) => starts("/route")(path) || starts("/prospecting")(path) || starts("/check-in")(path) },
         { href: "/leads", label: l.shell("tabLeads"), icon: Building2, match: starts("/leads") },
+        { href: "/tasks", label: l.shell("tabTasks"), icon: ListTodo, match: starts("/tasks") },
         { href: "/sales", label: l.shell("tabSales"), icon: DollarSign, match: starts("/sales") },
       ],
     };

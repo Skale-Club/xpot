@@ -17,9 +17,9 @@ describe("module route persistence", () => {
 
   afterEach(() => vi.unstubAllGlobals());
 
-  it("returns to the exact Visits screen, including Prospecting and its query", () => {
-    rememberModuleRoute("visits", "/leads/prospecting?visit=active");
-    expect(moduleEntryPath("visits")).toBe("/leads/prospecting?visit=active");
+  it("returns to the exact Route screen and its query", () => {
+    rememberModuleRoute("visits", "/route?visit=active");
+    expect(moduleEntryPath("visits")).toBe("/route?visit=active");
   });
 
   it("remembers the last Tags work screen independently", () => {
@@ -37,7 +37,7 @@ describe("module route persistence", () => {
   });
 
   it("clears remembered screens when the user signs out", () => {
-    rememberModuleRoute("visits", "/leads/prospecting");
+    rememberModuleRoute("visits", "/route");
     rememberModuleRoute("tags", "/tags/customers");
     clearModuleRoutes();
     expect(moduleEntryPath("visits")).toBe("/dashboard");
