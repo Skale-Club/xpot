@@ -417,7 +417,8 @@ export function XpotLandingPage() {
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3 lg:gap-5">
               {content.audience.cards.map(({ imageUrl, title, body }, index) => (
                 <Reveal key={title} delay={index * 0.08}>
-                  <article className="h-full overflow-hidden rounded-xl border border-white/[0.07] bg-white/[0.035]">
+                  <article className="relative h-full overflow-hidden rounded-xl border border-white/[0.07] bg-white/[0.035]">
+                    <GradientTopLine className="inset-x-8" />
                     <div className="relative aspect-[16/10] overflow-hidden border-b border-white/[0.07] bg-[#080d19]">
                       <img
                         src={imageUrl}
