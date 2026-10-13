@@ -92,6 +92,7 @@ function FieldSalesHero({ t }: { t: LandingT }) {
     <div className="relative w-full">
       <div className="pointer-events-none absolute -inset-8 rounded-[48px] bg-[#5272F2]/10 blur-3xl" />
       <div className="relative aspect-[4/3] overflow-hidden rounded-[30px] border border-white/10 bg-[#0b1020] shadow-[0_30px_80px_rgba(0,0,0,0.55)]">
+        <GradientTopLine className="inset-x-10" />
         <img
           src="/xpot-hero-field-sales-v2.webp"
           alt={t("heroImageAlt")}
