@@ -541,12 +541,12 @@ export function XpotLandingPage() {
               <p className="mx-auto max-w-xl text-sm leading-relaxed text-white/65 sm:text-base lg:text-lg">{content.cta.body}</p>
               <div className="mx-auto max-w-xs pt-2">
                 {me ? (
-                  <Button onClick={goToApp} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-white text-sm font-semibold text-black transition-all hover:bg-white/90">
+                  <Button onClick={goToApp} className="xpot-brand-cta flex h-12 w-full items-center justify-center gap-2 rounded-xl text-sm font-semibold text-white transition-all">
                     {content.account.authenticatedCta}
                     <ArrowRight className="h-4 w-4" />
                   </Button>
                 ) : (
-                  <Button onClick={() => setIsLoginOpen(true)} className="h-12 w-full rounded-xl bg-white text-sm font-semibold text-black transition-all hover:bg-white/90">
+                  <Button onClick={() => setIsLoginOpen(true)} className="xpot-brand-cta h-12 w-full rounded-xl text-sm font-semibold text-white transition-all">
                     {content.cta.button}
                   </Button>
                 )}
