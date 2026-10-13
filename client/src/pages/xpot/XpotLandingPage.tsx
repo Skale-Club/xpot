@@ -89,7 +89,7 @@ function SectionHeading({ title, sub }: { title: string; sub: string }) {
 
 function FieldSalesHero({ t }: { t: LandingT }) {
   return (
-    <div className="relative mx-auto w-full max-w-[620px]">
+    <div className="relative w-full">
       <div className="pointer-events-none absolute -inset-8 rounded-[48px] bg-blue-500/10 blur-3xl" />
       <div className="relative aspect-[4/3] overflow-hidden rounded-[30px] border border-white/10 bg-[#0b1020] shadow-[0_30px_80px_rgba(0,0,0,0.55)]">
         <img
