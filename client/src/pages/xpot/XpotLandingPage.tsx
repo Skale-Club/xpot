@@ -429,7 +429,6 @@ export function XpotLandingPage() {
                         className="h-full w-full object-cover transition-transform duration-500 hover:scale-[1.02]"
                       />
                       <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#080d19]/35 via-transparent to-transparent" />
-                      <GradientTopLine className="inset-x-8 bottom-0 top-auto" />
                     </div>
                     <div className="p-6 sm:p-7">
                       <h2 className="text-base font-bold text-white">{title}</h2>
