@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, Building2, Link2, Nfc, QrCode, ScanLine, Tag, X } from "lucide-react";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
-import type { XpotMeResponse } from "@/pages/xpot/types";
 import QrScanner from "./QrScanner";
 import { WholesaleCard } from "./WholesaleCard";
 import { TagsDashboard } from "./TagsDashboard";
@@ -20,7 +18,6 @@ import {
   errorText,
   getRecents,
   haptic,
-  isIos,
   lookupTag,
   pushRecent,
   shortUrl,
@@ -62,7 +59,6 @@ export default function HomeScreen() {
   const tc = useT(commonMessages);
   const [, navigate] = useLocation();
   const { banner, show } = useBanner();
-  const { data: me } = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
   const [recents, setRecents] = useState<RecentItem[]>(getRecents);
   const [busy, setBusy] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
@@ -71,7 +67,6 @@ export default function HomeScreen() {
   const [sellTo, setSellToState] = useState(getSellTo);
   const nfcAbort = useRef<AbortController | null>(null);
   const nfcSupported = isWebNfcSupported();
-  const ios = isIos();
   // A computer has no NFC and rarely a usable camera: it types the code, or a
   // USB/Bluetooth scanner "types" the whole QR link followed by Enter.
   const isDesktop = useIsDesktop();
@@ -166,16 +161,6 @@ export default function HomeScreen() {
 
   const main = (
     <div className="space-y-5">
-      <header className="flex items-start justify-between gap-3 lg:hidden">
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-violet-300/80">
-            {me ? t("homeHello", { name: me.rep.displayName.split(" ")[0] }) : "Xpot"}
-          </p>
-          <h1 className="mt-1 text-[26px] font-extrabold leading-tight tracking-tight text-white">{t("homeTitle")}</h1>
-        </div>
-      </header>
-
-
       {sellTo && (
         <div className="flex items-center gap-3 rounded-[20px] border border-emerald-400/25 bg-emerald-400/[0.08] p-4" data-testid="selling-to">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-400/15 text-emerald-300">
@@ -223,8 +208,6 @@ export default function HomeScreen() {
           disabled={busy}
           testId="button-scan-qr"
         />
-        {!nfcSupported && ios && <p className="px-1 text-sm text-white/45">{t("iphoneHint")}</p>}
-        {!nfcSupported && !ios && <p className="px-1 text-sm text-white/45">{t("nfcNoBrowser")}</p>}
       </div>
 
       <form
