@@ -513,7 +513,7 @@ export function XpotLandingPage() {
 
           {/* Call to action */}
           <Reveal>
-            <section className="relative mx-auto max-w-4xl overflow-hidden rounded-2xl border border-[#5272F2]/20 bg-[linear-gradient(100deg,rgba(82,114,242,0.12),rgba(11,184,175,0.08),rgba(82,114,242,0.1))] p-8 text-center sm:p-12">
+            <section id="cta" className="relative mx-auto max-w-4xl scroll-mt-24 overflow-hidden rounded-2xl border border-[#5272F2]/20 bg-[linear-gradient(100deg,rgba(82,114,242,0.12),rgba(11,184,175,0.08),rgba(82,114,242,0.1))] p-8 text-center sm:p-12">
               <img
                 src="/landing/cta-route-map.webp"
                 alt=""
@@ -521,9 +521,9 @@ export function XpotLandingPage() {
                 height={941}
                 loading="lazy"
                 decoding="async"
-                className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-45"
+                className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-90 brightness-110 contrast-125 saturate-125"
               />
-              <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(100deg,rgba(5,7,15,0.82),rgba(6,14,26,0.68),rgba(5,7,15,0.8))]" />
+              <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(100deg,rgba(5,7,15,0.42),rgba(6,14,26,0.24),rgba(5,7,15,0.38))]" />
               <div className="relative z-10 space-y-6">
                 <h2 className="text-2xl font-bold tracking-tight text-white sm:text-3xl lg:text-4xl">{content.cta.title}</h2>
                 <p className="mx-auto max-w-xl text-sm leading-relaxed text-white/65 sm:text-base lg:text-lg">{content.cta.body}</p>
