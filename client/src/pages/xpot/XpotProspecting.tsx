@@ -22,6 +22,7 @@ import {
   MAX_PROSPECTING_SECTORS,
   parseSectorSearches,
   prospectingProgress,
+  routeDisplayName,
   selectableCandidateIds,
 } from "./prospectingUi";
 
@@ -151,6 +152,7 @@ function statusLabel(status: ProspectingJob["status"], t: ReturnType<typeof useT
 }
 
 function routeStatusLabel(status: ProspectingRoute["status"], t: ReturnType<typeof useT<typeof prospectingMessages.en>>) {
+  if (status === "draft") return t("routeDraft");
   if (status === "in_progress") return t("routeInProgress");
   if (status === "completed") return t("routeCompleted");
   if (status === "cancelled") return t("routeCancelled");
@@ -377,6 +379,9 @@ export function XpotProspecting() {
   const details = detailsQuery.data;
   const hasFailedRuns = details?.runs.some((run) => run.status === "failed") ?? false;
   const routeDetails = routeQuery.data;
+  const routeIsToday = routeDetails?.route.routeDate === today;
+  const routeContextLabel = routeIsToday ? t("routeReady") : t("pastRoute");
+  const selectedRouteName = routeDetails ? routeDisplayName(routeDetails.route, t.locale) : "";
   const eligibleCandidates = details?.candidates.filter((candidate) => candidate.status !== "discarded" && candidate.status !== "visited") ?? [];
   const visibleCandidates = showAllCandidates ? eligibleCandidates : eligibleCandidates.slice(0, 6);
   const excludedCounts = useMemo(() => exclusionCounts(details?.candidates ?? []), [details?.candidates]);
@@ -552,8 +557,8 @@ export function XpotProspecting() {
                       <button key={route.id} type="button" onClick={() => { setSelectedJobId(null); setSelectedRouteId(route.id); }} className="flex min-h-[76px] w-full items-center gap-3 py-3 text-left transition hover:bg-white/[0.025]">
                         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-300"><RouteIcon className="h-5 w-5" /></span>
                         <span className="min-w-0 flex-1">
-                          <span className="flex items-center gap-2"><strong className="truncate text-sm text-white/90">{route.name}</strong><span className={`h-1.5 w-1.5 shrink-0 rounded-full ${route.status === "completed" ? "bg-emerald-400" : route.status === "cancelled" ? "bg-red-400" : "bg-sky-400"}`} /></span>
-                          <span className="mt-1 block truncate text-xs text-white/45">{new Date(`${route.routeDate}T12:00:00`).toLocaleDateString(t.locale, { weekday: "short", month: "short", day: "numeric" })} · {t("routeDuration", { hours: durationHours })} · {t("routeDistance", { distance: distanceMiles })}</span>
+                          <span className="flex items-center gap-2"><strong className="truncate capitalize text-sm text-white/90">{routeDisplayName(route, t.locale)}</strong><span className={`h-1.5 w-1.5 shrink-0 rounded-full ${route.status === "completed" ? "bg-emerald-400" : route.status === "cancelled" ? "bg-red-400" : "bg-sky-400"}`} /></span>
+                          <span className="mt-1 block truncate text-xs text-white/45">{routeStatusLabel(route.status, t)} · {t("routeDuration", { hours: durationHours })} · {t("routeDistance", { distance: distanceMiles })}</span>
                         </span>
                         <ChevronRight className="h-4 w-4 shrink-0 text-white/30" />
                       </button>
@@ -853,15 +858,15 @@ export function XpotProspecting() {
             stops={mapStops}
             encodedPolyline={routeDetails.route.optimizationMeta.encodedPolyline}
             fallbackSrc={mapSrc}
-            alt={t("routeReady")}
+            alt={routeContextLabel}
           />
           <div className="grid gap-5 p-4 sm:p-5 lg:grid-cols-[1fr_0.9fr] lg:p-6">
             <div>
-              <div className="flex items-center gap-2 text-indigo-300"><RouteIcon className="h-4 w-4" /><span className="text-xs font-bold uppercase tracking-wider">{t("routeReady")}</span></div>
-              <h2 className="mt-2 text-xl font-bold text-white">{routeDetails.route.name}</h2>
+              <div className="flex items-center gap-2 text-indigo-300"><RouteIcon className="h-4 w-4" /><span className="text-xs font-bold uppercase tracking-wider">{routeContextLabel}</span></div>
+              <h2 className="mt-2 text-xl font-bold capitalize text-white">{selectedRouteName}</h2>
               <p className="mt-1 text-sm text-white/65">{t("routeSummary", { count: routeDetails.stops.length, hours: `${Math.max(1, Math.round(routeDetails.route.totalDurationSeconds / 360) / 10)}h` })}</p>
               <div className="mt-4 grid gap-2 sm:flex sm:flex-wrap">
-                {routeDetails.route.status === "draft" ? <Button onClick={() => publishRoute.mutate(routeDetails.route.id)} disabled={publishRoute.isPending} className="h-12 w-full touch-manipulation rounded-xl bg-emerald-500 text-white sm:h-10 sm:w-auto">{publishRoute.isPending ? <Loader2 className="animate-spin" /> : <ShieldCheck />}{publishRoute.isPending ? t("publishing") : t("publishRoute")}</Button> : <><span className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-300"><CheckCircle2 className="h-4 w-4" />{routeStatusLabel(routeDetails.route.status, t)}</span>{routeDetails.route.status !== "cancelled" ? <Button asChild className="h-12 w-full touch-manipulation rounded-xl bg-indigo-500 text-white sm:h-10 sm:w-auto"><Link href="/visits?view=day">{t("openVisits")}</Link></Button> : null}</>}
+                {routeDetails.route.status === "draft" && routeIsToday ? <Button onClick={() => publishRoute.mutate(routeDetails.route.id)} disabled={publishRoute.isPending} className="h-12 w-full touch-manipulation rounded-xl bg-emerald-500 text-white sm:h-10 sm:w-auto">{publishRoute.isPending ? <Loader2 className="animate-spin" /> : <ShieldCheck />}{publishRoute.isPending ? t("publishing") : t("publishRoute")}</Button> : <><span className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold ${routeDetails.route.status === "completed" ? "bg-emerald-500/10 text-emerald-300" : "bg-white/[0.06] text-white/65"}`}><CheckCircle2 className="h-4 w-4" />{routeStatusLabel(routeDetails.route.status, t)}</span>{routeIsToday && !["cancelled", "draft"].includes(routeDetails.route.status) ? <Button asChild className="h-12 w-full touch-manipulation rounded-xl bg-indigo-500 text-white sm:h-10 sm:w-auto"><Link href="/visits?view=day">{t("openVisits")}</Link></Button> : null}</>}
                 {directionsUrl ? <Button asChild variant="outline" className="h-12 w-full touch-manipulation rounded-xl border-white/10 text-white sm:h-10 sm:w-auto"><a href={directionsUrl} target="_blank" rel="noreferrer"><Navigation />{t("openMaps")}</a></Button> : null}
                 {appleDirectionsUrl ? <Button asChild variant="outline" className="h-12 w-full touch-manipulation rounded-xl border-white/10 text-white sm:h-10 sm:w-auto"><a href={appleDirectionsUrl} target="_blank" rel="noreferrer"><Navigation />{t("openAppleMaps")}</a></Button> : null}
                 {isSuperAdmin && details ? (

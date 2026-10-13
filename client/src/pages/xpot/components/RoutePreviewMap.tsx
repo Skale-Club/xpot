@@ -67,7 +67,10 @@ export function RoutePreviewMap({ start, stops, encodedPolyline, fallbackSrc, al
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [failed, setFailed] = useState(false);
+  const [fallbackFailed, setFallbackFailed] = useState(false);
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined;
+
+  useEffect(() => setFallbackFailed(false), [fallbackSrc]);
 
   useEffect(() => {
     if (!apiKey || !containerRef.current) return;
@@ -113,7 +116,49 @@ export function RoutePreviewMap({ start, stops, encodedPolyline, fallbackSrc, al
   }, [apiKey, start.lat, start.lng, stops, encodedPolyline]);
 
   if (!apiKey || failed) {
-    return fallbackSrc ? <img src={fallbackSrc} alt={alt} className="h-64 w-full bg-slate-950 object-cover sm:h-72" /> : null;
+    if (fallbackSrc && !fallbackFailed) {
+      return <img src={fallbackSrc} alt={alt} onError={() => setFallbackFailed(true)} className="h-64 w-full bg-slate-950 object-cover sm:h-72" />;
+    }
+    return <RouteDiagram start={start} stops={stops} alt={alt} />;
   }
   return <div ref={containerRef} role="img" aria-label={alt} className="h-64 w-full bg-slate-950 sm:h-72" />;
+}
+
+function RouteDiagram({ start, stops, alt }: { start: RoutePoint; stops: RoutePoint[]; alt: string }) {
+  const points = [start, ...stops];
+  const latitudes = points.map((point) => point.lat);
+  const longitudes = points.map((point) => point.lng);
+  const minLat = Math.min(...latitudes);
+  const maxLat = Math.max(...latitudes);
+  const minLng = Math.min(...longitudes);
+  const maxLng = Math.max(...longitudes);
+  const latSpan = Math.max(0.001, maxLat - minLat);
+  const lngSpan = Math.max(0.001, maxLng - minLng);
+  const plotted = points.map((point) => ({
+    x: 56 + ((point.lng - minLng) / lngSpan) * 688,
+    y: 272 - ((point.lat - minLat) / latSpan) * 224,
+  }));
+  const routePath = plotted.map((point) => `${point.x},${point.y}`).join(" ");
+
+  return (
+    <svg role="img" aria-label={alt} viewBox="0 0 800 320" className="h-64 w-full bg-[#070d19] sm:h-72" preserveAspectRatio="xMidYMid slice">
+      <defs>
+        <linearGradient id="route-map-glow" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#111a2c" />
+          <stop offset="1" stopColor="#08111f" />
+        </linearGradient>
+        <filter id="route-line-glow"><feGaussianBlur stdDeviation="5" result="blur" /><feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
+      </defs>
+      <rect width="800" height="320" fill="url(#route-map-glow)" />
+      {[72, 144, 216, 288].map((y) => <path key={`h-${y}`} d={`M0 ${y} C180 ${y - 28}, 320 ${y + 30}, 800 ${y - 8}`} fill="none" stroke="#253248" strokeWidth="1" opacity="0.45" />)}
+      {[130, 280, 430, 590, 730].map((x) => <path key={`v-${x}`} d={`M${x} 0 C${x - 45} 90, ${x + 50} 210, ${x - 15} 320`} fill="none" stroke="#1e2b40" strokeWidth="1" opacity="0.42" />)}
+      {plotted.length > 1 ? <polyline points={routePath} fill="none" stroke="#60a5fa" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" filter="url(#route-line-glow)" /> : null}
+      {plotted.map((point, index) => (
+        <g key={`${point.x}-${point.y}-${index}`} transform={`translate(${point.x} ${point.y})`}>
+          <circle r={index === 0 ? 12 : 10} fill={index === 0 ? "#14b8a6" : "#6366f1"} stroke="#dbeafe" strokeWidth="2" />
+          <text y="4" textAnchor="middle" fill="white" fontSize={index === 0 ? 9 : 10} fontWeight="700">{index === 0 ? "S" : index}</text>
+        </g>
+      ))}
+    </svg>
+  );
 }

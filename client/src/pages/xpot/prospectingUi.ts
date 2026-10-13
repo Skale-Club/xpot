@@ -76,3 +76,14 @@ export function selectableCandidateIds(candidates: Array<{ id: number; status: s
     .slice(0, MAX_ROUTE_CANDIDATES)
     .map((candidate) => candidate.id);
 }
+
+export function routeDateLabel(routeDate: string, locale: string, referenceDate = new Date()) {
+  const date = new Date(`${routeDate}T12:00:00`);
+  const includeYear = date.getFullYear() !== referenceDate.getFullYear();
+  return date.toLocaleDateString(locale, { weekday: "long", month: "long", day: "numeric", year: includeYear ? "numeric" : undefined });
+}
+
+export function routeDisplayName(route: { name: string; routeDate: string }, locale: string, referenceDate = new Date()) {
+  const generatedNames = [`Prospecting — ${route.routeDate}`, `Route — ${route.routeDate}`];
+  return generatedNames.includes(route.name.trim()) ? routeDateLabel(route.routeDate, locale, referenceDate) : route.name;
+}

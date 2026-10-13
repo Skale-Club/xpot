@@ -337,7 +337,7 @@ export function createProspectingRouter() {
         const [route] = await tx.insert(prospectingRoutes).values({
           repId: actor.rep.id,
           jobId: input.jobId ?? discovered[0]?.jobId ?? null,
-          name: input.name ?? `Prospecting — ${input.routeDate}`,
+          name: input.name ?? `Route — ${input.routeDate}`,
           routeDate: input.routeDate,
           plannedStartAt,
           plannedEndAt: new Date(plannedStartAt.getTime() + optimized.totalDurationSeconds * 1000),

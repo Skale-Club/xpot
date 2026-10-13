@@ -3,6 +3,7 @@ import {
   exclusionCounts,
   parseSectorSearches,
   prospectingProgress,
+  routeDisplayName,
   selectableCandidateIds,
 } from "../client/src/pages/xpot/prospectingUi.js";
 
@@ -44,5 +45,15 @@ describe("prospecting UI helpers", () => {
     ])).toEqual({ existing_customer: 2, previously_visited: 1 });
     const candidates = Array.from({ length: 80 }, (_, index) => ({ id: index + 1, status: "discovered" }));
     expect(selectableCandidateIds(candidates)).toHaveLength(60);
+  });
+
+  it("replaces internal generated route names with the human date", () => {
+    const referenceDate = new Date("2026-10-13T12:00:00");
+    expect(routeDisplayName({ name: "Prospecting — 2026-10-12", routeDate: "2026-10-12" }, "en-US", referenceDate))
+      .toBe("Monday, October 12");
+    expect(routeDisplayName({ name: "Route — 2026-10-12", routeDate: "2026-10-12" }, "en-US", referenceDate))
+      .toBe("Monday, October 12");
+    expect(routeDisplayName({ name: "Downtown salons", routeDate: "2026-10-12" }, "en-US", referenceDate))
+      .toBe("Downtown salons");
   });
 });
