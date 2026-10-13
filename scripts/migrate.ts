@@ -12,6 +12,7 @@ import "dotenv/config";
 import { readdirSync, readFileSync } from "fs";
 import { join, resolve } from "path";
 import pg from "pg";
+import { inferLegacySalesBaseline, type SchemaColumn } from "./migration-baseline.js";
 
 const { Client } = pg;
 
@@ -50,6 +51,30 @@ async function main() {
     const applied = new Set(
       (await client.query<{ name: string }>(`SELECT name FROM "_xpot_migrations"`)).rows.map((r) => r.name),
     );
+
+    // The first Xpot development database inherited already-converted sales
+    // tables from Skale Club but not their pre-ledger migration records. Never
+    // replay the destructive account→lead conversion over that populated DB.
+    const schemaColumns = (await client.query<SchemaColumn>(`
+      SELECT table_name, column_name
+      FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name LIKE 'sales_%'
+    `)).rows;
+    const baseline = inferLegacySalesBaseline(schemaColumns, applied);
+    if (baseline.length) {
+      await client.query("BEGIN");
+      try {
+        for (const name of baseline) {
+          await client.query(`INSERT INTO "_xpot_migrations" ("name") VALUES ($1) ON CONFLICT DO NOTHING`, [name]);
+          applied.add(name);
+        }
+        await client.query("COMMIT");
+        console.log(`✓ recognized legacy leads schema; baselined ${baseline.join(", ")}`);
+      } catch (err) {
+        await client.query("ROLLBACK");
+        throw err;
+      }
+    }
 
     const files = readdirSync(MIGRATIONS_DIR)
       .filter((f) => f.endsWith(".sql"))

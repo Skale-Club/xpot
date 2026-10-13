@@ -17,15 +17,24 @@ function lastPullAt(): number {
   }
 }
 
+async function runNpmScript(npmCli: string, script: string): Promise<number | null> {
+  return await new Promise<number | null>((resolve) => {
+    const child = spawn(process.execPath, [npmCli, "run", script], {
+      cwd: projectRoot,
+      env: process.env,
+      stdio: "inherit",
+      windowsHide: true,
+    });
+    child.once("error", () => resolve(1));
+    child.once("exit", resolve);
+  });
+}
+
 /** Best effort: a failed pull never stops the app from opening, it just keeps the data it has. */
 async function pullProductionData(npmCli: string) {
   if (Date.now() - lastPullAt() < PULL_EVERY_MS) return;
   console.log("[local] Refreshing local data from production (npm run db:pull) ...");
-  const code = await new Promise<number | null>((resolve) => {
-    const pull = spawn(process.execPath, [npmCli, "run", "db:pull"], { cwd: projectRoot, env: process.env, stdio: "inherit", windowsHide: true });
-    pull.once("error", () => resolve(1));
-    pull.once("exit", resolve);
-  });
+  const code = await runNpmScript(npmCli, "db:pull");
   if (code !== 0) console.warn("[local] Could not refresh from production; opening with the data already here.");
 }
 
@@ -81,9 +90,16 @@ async function main() {
     throw new Error("Could not locate npm. Run this shortcut with npm run local.");
   }
 
+  // The pull copies only tables shared by local and production. Bring the
+  // local schema fully up to date first so a fresh/legacy database cannot
+  // silently omit newer data such as branding, Tags or landing content.
+  console.log("[local] Ensuring the local database schema is current (npm run migrate) ...");
+  const migrationCode = await runNpmScript(npmCli, "migrate");
+  if (migrationCode !== 0) throw new Error("Local database migration failed; production data was not copied.");
+
   await pullProductionData(npmCli);
 
-  const server = spawn(process.execPath, [npmCli, "run", "dev"], {
+  const server = spawn(process.execPath, [npmCli, "run", "dev:server"], {
     cwd: projectRoot,
     env: process.env,
     stdio: "inherit",

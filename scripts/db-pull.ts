@@ -20,6 +20,7 @@ import { mkdirSync, writeFileSync } from "fs";
 import { createConnection } from "net";
 import { join, resolve } from "path";
 import pg from "pg";
+import { isXpotDataTable, missingRequiredColumns, type DatabaseColumn } from "./db-pull-schema.js";
 
 const PROD_SSH = process.env.XPOT_PROD_SSH;
 const PROD_CONTAINER = process.env.XPOT_PROD_DB_CONTAINER || "7l8mjbkk16mk0ss9dviw9lzj";
@@ -28,9 +29,6 @@ const TUNNEL_PORT = 55432;
 const BACKUP_DIR = resolve(process.cwd(), "..", "xpot-db-backups");
 /** When the last pull succeeded; `npm run local` reads it to pull at most every few hours. */
 const PULL_STAMP = resolve(process.cwd(), ".cache", "db-pull.json");
-
-/** Kept from the local database: your sign-in survives the pull. */
-const KEEP_LOCAL = new Set(["sessions", "auth_phone_codes", "_xpot_migrations"]);
 
 function fail(message: string): never {
   throw new Error(message);
@@ -116,20 +114,97 @@ async function fkOrder(c: pg.Client, names: string[]) {
   return order;
 }
 
+async function userForeignKeys(c: pg.Client, names: string[]) {
+  const { rows } = await c.query(`
+    select tc.table_name, kcu.column_name
+    from information_schema.table_constraints tc
+    join information_schema.key_column_usage kcu
+      on kcu.constraint_name = tc.constraint_name and kcu.table_schema = tc.table_schema
+    join information_schema.constraint_column_usage ccu
+      on ccu.constraint_name = tc.constraint_name and ccu.table_schema = tc.table_schema
+    where tc.constraint_type = 'FOREIGN KEY'
+      and tc.table_schema = 'public'
+      and ccu.table_name = 'users'`);
+  const result = new Map(names.map((name) => [name, new Set<string>()]));
+  for (const { table_name, column_name } of rows) result.get(table_name)?.add(column_name);
+  return result;
+}
+
 async function copy(prod: pg.Client, local: pg.Client) {
   const prodTables = new Set(await tableNames(prod));
-  const tables = (await tableNames(local)).filter((t) => prodTables.has(t) && !KEEP_LOCAL.has(t));
+  const colsOf = async (c: pg.Client, t: string): Promise<DatabaseColumn[]> =>
+    (await c.query<DatabaseColumn>(`
+      select column_name, data_type, is_generated, identity_generation, is_nullable, column_default
+      from information_schema.columns
+      where table_schema='public' and table_name=$1
+      order by ordinal_position`, [t])).rows;
+
+  const candidates = (await tableNames(local)).filter((table) => prodTables.has(table) && isXpotDataTable(table));
+  const tables: string[] = [];
+  const columns = new Map<string, { local: DatabaseColumn[]; production: DatabaseColumn[] }>();
+  for (const table of candidates) {
+    const localColumns = await colsOf(local, table);
+    const productionColumns = await colsOf(prod, table);
+    const missing = missingRequiredColumns(localColumns, productionColumns);
+    if (missing.length) {
+      const productionCount = Number((await prod.query(`select count(*)::int count from "${table}"`)).rows[0]?.count ?? 0);
+      if (productionCount > 0) {
+        console.warn(`! keeping local ${table}: ${productionCount} production row(s) cannot supply required column(s) ${missing.join(", ")}`);
+        continue;
+      }
+      console.warn(`! clearing ${table}: production is empty; incompatible required column(s) will not be inserted (${missing.join(", ")})`);
+    }
+    columns.set(table, { local: localColumns, production: productionColumns });
+    tables.push(table);
+  }
   const order = await fkOrder(local, tables);
-  const colsOf = async (c: pg.Client, t: string) =>
-    (await c.query("select column_name, data_type, is_generated, identity_generation from information_schema.columns where table_schema='public' and table_name=$1 order by ordinal_position", [t])).rows;
+  const userFkColumns = await userForeignKeys(local, tables);
+
+  // Users are shared with other local products, so never truncate them. Merge
+  // production users by id to satisfy Xpot foreign keys while preserving every
+  // unrelated local user and tenant relationship.
+  const localUserColumns = await colsOf(local, "users");
+  const productionUserNames = new Set((await colsOf(prod, "users")).map((column) => column.column_name));
+  const userColumns = localUserColumns
+    .filter((column) => productionUserNames.has(column.column_name) && column.is_generated !== "ALWAYS")
+    .map((column) => column.column_name);
 
   await local.query("BEGIN");
   try {
-    await local.query(`TRUNCATE ${order.map((t) => `"${t}"`).join(", ")} RESTART IDENTITY CASCADE`);
+    const { rows: productionUsers } = await prod.query(`select ${userColumns.map((column) => `"${column}"`).join(",")} from "users"`);
+    const { rows: localUsers } = await local.query(`select "id", lower("email") email from "users"`);
+    const localIds = new Set(localUsers.map((row) => String(row.id)));
+    const localByEmail = new Map(localUsers.filter((row) => row.email).map((row) => [String(row.email), String(row.id)]));
+    const userIdMap = new Map<string, string>();
+    const updateColumns = userColumns.filter((column) => column !== "id");
+    for (const user of productionUsers) {
+      const productionId = String(user.id);
+      const email = typeof user.email === "string" ? user.email.toLowerCase() : null;
+      const localId = localIds.has(productionId) ? productionId : (email ? localByEmail.get(email) : undefined);
+      if (localId) {
+        await local.query(
+          `UPDATE "users" SET ${updateColumns.map((column, index) => `"${column}"=$${index + 1}`).join(",")} WHERE "id"=$${updateColumns.length + 1}`,
+          [...updateColumns.map((column) => user[column]), localId],
+        );
+        userIdMap.set(productionId, localId);
+        continue;
+      }
+      await local.query(
+        `INSERT INTO "users" (${userColumns.map((column) => `"${column}"`).join(",")}) VALUES (${userColumns.map((_, index) => `$${index + 1}`).join(",")})`,
+        userColumns.map((column) => user[column]),
+      );
+      localIds.add(productionId);
+      if (email) localByEmail.set(email, productionId);
+      userIdMap.set(productionId, productionId);
+    }
+
+    // No CASCADE: if a non-Xpot table unexpectedly references this data, fail
+    // and roll back instead of deleting data owned by another local product.
+    await local.query(`TRUNCATE ${order.map((t) => `"${t}"`).join(", ")} RESTART IDENTITY`);
     const counts: string[] = [];
     for (const t of order) {
-      const localCols = await colsOf(local, t);
-      const prodCols = new Set((await colsOf(prod, t)).map((r) => r.column_name));
+      const localCols = columns.get(t)!.local;
+      const prodCols = new Set(columns.get(t)!.production.map((r) => r.column_name));
       const cols = localCols.filter((r) => prodCols.has(r.column_name) && r.is_generated !== "ALWAYS").map((r) => r.column_name as string);
       // json/jsonb go in as text; Postgres arrays (text[] ...) go in as JS arrays.
       const jsonCols = new Set(localCols.filter((r) => r.data_type === "json" || r.data_type === "jsonb").map((r) => r.column_name as string));
@@ -139,6 +214,7 @@ async function copy(prod: pg.Client, local: pg.Client) {
         const values: unknown[] = [];
         const tuples = rows.slice(i, i + 200).map((row) => `(${cols.map((col) => {
           let v = row[col];
+          if (v !== null && userFkColumns.get(t)?.has(col)) v = userIdMap.get(String(v)) ?? v;
           if (v !== null && jsonCols.has(col)) v = JSON.stringify(v);
           values.push(v);
           return `$${values.length}`;
