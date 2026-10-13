@@ -4,6 +4,7 @@ import type { Dictionary } from "../index";
 // formatters in client/src/pages/xpot/utils.ts.
 
 const en = {
+  skipToContent: "Skip to main content",
   // Bottom navigation
   tabCheckIn: "Check-In",
   tabVisits: "History",
@@ -78,6 +79,7 @@ const en = {
 export const shellMessages: Dictionary<typeof en> = {
   en,
   pt: {
+    skipToContent: "Pular para o conteúdo principal",
     tabCheckIn: "Check-in",
     tabVisits: "Histórico",
     tabLeads: "Clientes",
@@ -143,6 +145,7 @@ export const shellMessages: Dictionary<typeof en> = {
     installDone: "Entendi",
   },
   es: {
+    skipToContent: "Saltar al contenido principal",
     tabCheckIn: "Check-in",
     tabVisits: "Historial",
     tabLeads: "Clientes",

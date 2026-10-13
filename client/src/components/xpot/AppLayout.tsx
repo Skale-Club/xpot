@@ -445,6 +445,12 @@ export function AppLayout({
 
   return (
     <AppBackground>
+      <a
+        href="#xpot-main-content"
+        className="fixed left-4 top-4 z-[1000] -translate-y-24 rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white shadow-xl transition-transform focus:translate-y-0"
+      >
+        {tShell("skipToContent")}
+      </a>
       <DesktopSidebar collapsed={collapsed} onToggle={toggle} />
       <div className={`relative ${collapsed ? "lg:pl-[72px]" : "lg:pl-60"}`}>
         <AdminModeBar />
@@ -457,7 +463,7 @@ export function AppLayout({
           style={mobileColumnStyle}
         >
           {mobileHeader ? <div className="lg:hidden">{mobileHeader}</div> : null}
-          <main className="flex-1">
+          <main id="xpot-main-content" tabIndex={-1} className="flex-1">
             <ScreenErrorBoundary resetKey={location}>{children}</ScreenErrorBoundary>
           </main>
         </div>
