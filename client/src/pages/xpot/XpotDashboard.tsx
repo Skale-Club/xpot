@@ -1,4 +1,4 @@
-import { MapPinned, DollarSign, Target, Clock3, Footprints, Activity, AlertTriangle, RefreshCw } from "lucide-react";
+import { MapPinned, DollarSign, Target, Clock3, Footprints, Activity, AlertTriangle, RefreshCw, ArrowLeft, ChevronRight } from "lucide-react";
 import { AreaChart, Area, XAxis, Tooltip, ResponsiveContainer, LabelList } from "recharts";
 import { useXpotQueries } from "./hooks/useXpotQueries";
 import { useSyncStatus } from "./hooks/useSyncStatus";
@@ -10,8 +10,6 @@ import { dashboardMessages } from "@/i18n/messages/dashboard";
 import { EmptyState } from "@/components/xpot/EmptyState";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { useLocation } from "wouter";
-import { shellMessages } from "@/i18n/messages/shell";
-import { Segmented } from "@/components/xpot/Segmented";
 import { GradientTopLine } from "@/components/xpot/GradientTopLine";
 import { XpotVisits } from "./XpotVisits";
 
@@ -62,7 +60,7 @@ function DashboardOverview() {
 
   const chartBlock = (
     <>
-      {/* Timeline Chart */}
+      {/* Revenue timeline for the last seven days. */}
       <div
         className="relative overflow-hidden rounded-[20px] p-5"
         style={{
@@ -203,12 +201,20 @@ function DashboardOverview() {
       {/* Recent visits */}
       <div className="space-y-3">
         <div className="flex items-center justify-between px-1">
-          <div className="text-xs font-semibold uppercase tracking-widest text-white/30">{t("recentVisits")}</div>
+          <div className="text-xs font-semibold uppercase tracking-widest text-white/30">{t("recentHistory")}</div>
+          <button
+            type="button"
+            onClick={() => setLocation("/dashboard/history")}
+            className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-300/80 transition-colors hover:text-indigo-200"
+          >
+            {t("viewHistory")}
+            <ChevronRight className="h-3.5 w-3.5" />
+          </button>
         </div>
         {dashboardQuery.data?.recentVisits?.length
           ? dashboardQuery.data.recentVisits.map((visit) => <VisitRow key={visit.id} visit={visit} />)
           : (
-            <EmptyState icon={Footprints} title={t("noVisitsToday")} hint={t("goToCheckIn")} />
+            <EmptyState icon={Footprints} title={t("noVisitsYet")} hint={t("goToCheckIn")} />
           )}
       </div>
     </>
@@ -292,22 +298,29 @@ function DashboardOverview() {
 
 export function XpotDashboard() {
   const [location, navigate] = useLocation();
-  const t = useT(shellMessages);
+  const t = useT(dashboardMessages);
   const view = location.startsWith("/dashboard/history") || location.startsWith("/visits") ? "history" : "overview";
 
-  return (
-    <div className="space-y-6">
-      <Segmented
-        items={[
-          { id: "overview" as const, label: t("tabDashboard") },
-          { id: "history" as const, label: t("tabVisits") },
-        ]}
-        value={view}
-        onChange={(next) => navigate(next === "history" ? "/dashboard/history" : "/dashboard")}
-        className="lg:w-80"
-      />
+  if (view === "overview") return <DashboardOverview />;
 
-      {view === "history" ? <XpotVisits basePath="/dashboard/history" /> : <DashboardOverview />}
+  return (
+    <div className="space-y-4">
+      <header className="flex items-start gap-3 px-1">
+        <button
+          type="button"
+          onClick={() => navigate("/dashboard")}
+          aria-label={t("backToDashboard")}
+          title={t("backToDashboard")}
+          className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white/45 transition-colors hover:bg-white/[0.06] hover:text-white"
+        >
+          <ArrowLeft className="h-4 w-4" />
+        </button>
+        <div>
+          <h1 className="text-lg font-bold text-white">{t("historyTitle")}</h1>
+          <p className="mt-0.5 text-sm text-white/40">{t("historySubtitle")}</p>
+        </div>
+      </header>
+      <XpotVisits basePath="/dashboard/history" />
     </div>
   );
 }

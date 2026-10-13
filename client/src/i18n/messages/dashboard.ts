@@ -17,7 +17,7 @@ const en = {
   uploadFailed: "Upload failed",
   admin: "Admin",
 
-  visitActivity: "Visit Activity",
+  visitActivity: "Sales Activity",
   last7Days: "Last 7 Days",
   today: "Today",
 
@@ -26,6 +26,12 @@ const en = {
   unknownError: "Unknown error",
 
   recentVisits: "Recent Visits",
+  recentHistory: "Recent history",
+  viewHistory: "View history",
+  historyTitle: "Visit history",
+  historySubtitle: "Review visits, outcomes, notes and recordings.",
+  backToDashboard: "Back to Dashboard",
+  noVisitsYet: "No visits registered yet",
   noVisitsToday: "No visits today",
   goToCheckIn: "Go to Check-In to start your day",
   tagsTitle: "Your pieces",
@@ -62,7 +68,7 @@ export const dashboardMessages: Dictionary<typeof en> = {
     uploadFailed: "Não foi possível enviar",
     admin: "Admin",
 
-    visitActivity: "Suas visitas",
+    visitActivity: "Atividade de vendas",
     last7Days: "Últimos 7 dias",
     today: "Hoje",
 
@@ -71,6 +77,12 @@ export const dashboardMessages: Dictionary<typeof en> = {
     unknownError: "Erro desconhecido",
 
     recentVisits: "Visitas recentes",
+    recentHistory: "Histórico recente",
+    viewHistory: "Ver histórico",
+    historyTitle: "Histórico de visitas",
+    historySubtitle: "Consulte visitas, resultados, anotações e gravações.",
+    backToDashboard: "Voltar ao Painel",
+    noVisitsYet: "Nenhuma visita registrada ainda",
     noVisitsToday: "Nenhuma visita hoje",
     goToCheckIn: "Vá para Check-in para começar o dia",
     tagsTitle: "Suas peças",
@@ -103,7 +115,7 @@ export const dashboardMessages: Dictionary<typeof en> = {
     uploadFailed: "No se pudo subir",
     admin: "Admin",
 
-    visitActivity: "Tus visitas",
+    visitActivity: "Actividad de ventas",
     last7Days: "Últimos 7 días",
     today: "Hoy",
 
@@ -112,6 +124,12 @@ export const dashboardMessages: Dictionary<typeof en> = {
     unknownError: "Error desconocido",
 
     recentVisits: "Visitas recientes",
+    recentHistory: "Historial reciente",
+    viewHistory: "Ver historial",
+    historyTitle: "Historial de visitas",
+    historySubtitle: "Consulta visitas, resultados, notas y grabaciones.",
+    backToDashboard: "Volver al Panel",
+    noVisitsYet: "Aún no hay visitas registradas",
     noVisitsToday: "No hay visitas hoy",
     goToCheckIn: "Ve a Check-in para empezar el día",
     tagsTitle: "Tus piezas",
