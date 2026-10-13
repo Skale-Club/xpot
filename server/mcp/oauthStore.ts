@@ -13,7 +13,7 @@ export const ACCESS_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour; hosts refresh tran
 export const REFRESH_TOKEN_TTL_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
 
 /** OAuth clients receive only the tool families they explicitly request. */
-export const SUPPORTED_SCOPES = ["xpot:journey", "xpot:prospecting"] as const;
+export const SUPPORTED_SCOPES = ["xpot:journey", "xpot:prospecting", "xpot:tasks"] as const;
 export const DEFAULT_SCOPE = "xpot:journey";
 
 export const OAUTH_ACCESS_PREFIX = "xpot_at_";

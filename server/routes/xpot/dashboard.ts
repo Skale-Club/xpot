@@ -18,7 +18,7 @@ export function createDashboardRouter() {
     const activeVisit = visits.find((visit) => visit.status === "in_progress") || null;
     const completedVisits = visits.filter((visit) => visit.status === "completed");
     const openOpportunities = opportunities.filter((item) => item.status === "open");
-    const pendingTasks = tasks.filter((item) => item.status === "pending");
+    const pendingTasks = tasks.filter((item) => item.status === "pending" || item.status === "in_progress");
 
     res.json({
       metrics: {

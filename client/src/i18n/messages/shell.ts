@@ -10,6 +10,7 @@ const en = {
   tabLeads: "Leads",
   tabSales: "Sales",
   tabProspecting: "Prospecting",
+  tabTasks: "Tasks",
   tabDashboard: "Dashboard",
 
   // Formatters
@@ -82,6 +83,7 @@ export const shellMessages: Dictionary<typeof en> = {
     tabLeads: "Clientes",
     tabSales: "Vendas",
     tabProspecting: "Prospecção",
+    tabTasks: "Tarefas",
     tabDashboard: "Painel",
 
     notSet: "Não definido",
@@ -146,6 +148,7 @@ export const shellMessages: Dictionary<typeof en> = {
     tabLeads: "Clientes",
     tabSales: "Ventas",
     tabProspecting: "Prospección",
+    tabTasks: "Tareas",
     tabDashboard: "Panel",
 
     notSet: "Sin definir",

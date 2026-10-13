@@ -1,6 +1,6 @@
 import { storage } from "../../storage.js";
 import { getLLMClient } from "../../lib/ai.js";
-import { getOrCreateGHLContact, createGHLOpportunity, updateGHLOpportunity, createGHLTask, createGHLNote } from "../../integrations/ghl.js";
+import { getOrCreateGHLContact, createGHLOpportunity, updateGHLOpportunity, createGHLTask, updateGHLTask, createGHLNote } from "../../integrations/ghl.js";
 import { z } from "zod";
 
 const visitAudioAnalysisSchema = z.object({
@@ -213,28 +213,62 @@ export async function syncTaskToGhl(taskId: number) {
     return { synced: false, message: "Task not found" };
   }
 
-  if (task.ghlTaskId) {
-    return { synced: true, ghlTaskId: task.ghlTaskId };
-  }
+  const assignee = await storage.getSalesRep(task.repId);
 
   let contactId: string | undefined;
   if (task.leadId) {
     const lead = await storage.getSalesLead(task.leadId);
     contactId = lead?.ghlContactId || undefined;
+    if (lead && !contactId) {
+      const leadSync = await syncLeadToGhl(lead.id);
+      if (leadSync.synced) contactId = leadSync.ghlContactId;
+    }
+  }
+  const record = (status: "synced" | "failed" | "needs_review", lastError: string | null, payload: Record<string, unknown> = {}) =>
+    storage.createSalesSyncEvent({
+      provider: "gohighlevel",
+      entityType: "sales_task",
+      entityId: String(task.id),
+      status,
+      payload: { taskId: task.id, taskStatus: task.status, ...payload },
+      lastError,
+      lastAttemptAt: new Date(),
+    });
+  if (!contactId) {
+    await record("needs_review", "Task needs a GHL-synced lead");
+    return { synced: false, message: "Task needs a GHL-synced lead" };
+  }
+  if (!task.dueAt) {
+    await record("needs_review", "GHL requires a task due date");
+    return { synced: false, message: "GHL requires a task due date" };
   }
 
-  const createResult = await createGHLTask(integration.apiKey, integration.locationId, {
+  if (task.ghlTaskId) {
+    const updateResult = await updateGHLTask(integration.apiKey, contactId, task.ghlTaskId, {
+      name: task.title,
+      description: task.description || undefined,
+      dueDate: task.dueAt ? new Date(task.dueAt).toISOString() : undefined,
+      assignedTo: assignee?.ghlUserId || undefined,
+      completed: task.status === "completed" || task.status === "cancelled",
+    });
+    await record(updateResult.success ? "synced" : "failed", updateResult.success ? null : updateResult.message ?? "Failed to update GHL task", { ghlTaskId: task.ghlTaskId });
+    return updateResult.success ? { synced: true, ghlTaskId: task.ghlTaskId } : { synced: false, message: updateResult.message };
+  }
+
+  const createResult = await createGHLTask(integration.apiKey, contactId, {
     name: task.title,
     description: task.description || undefined,
     dueDate: task.dueAt ? new Date(task.dueAt).toISOString() : undefined,
-    contactId,
+    assignedTo: assignee?.ghlUserId || undefined,
   });
 
   if (!createResult.success || !createResult.taskId) {
+    await record("failed", createResult.message || "Failed to create task in GHL");
     return { synced: false, message: createResult.message || "Failed to create task in GHL" };
   }
 
-  await storage.updateSalesTask(task.id, { ghlTaskId: createResult.taskId, status: "pending" });
+  await storage.updateSalesTask(task.id, { ghlTaskId: createResult.taskId });
+  await record("synced", null, { ghlTaskId: createResult.taskId });
 
   return { synced: true, ghlTaskId: createResult.taskId };
 }

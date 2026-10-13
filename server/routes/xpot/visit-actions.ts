@@ -7,6 +7,7 @@ import { salesStorage } from "../../storage-sales.js";
 import { getLLMClient } from "../../lib/ai.js";
 import { requireXpotUser, isManagerOrAdmin, type XpotActor } from "./middleware.js";
 import { syncInterestToXphere } from "./xphere-sync.js";
+import { createTask } from "../../tasks/service.js";
 import {
   salesVisitActions,
   type SalesVisitAction,
@@ -226,7 +227,7 @@ export function createVisitActionsRouter() {
     const results: { id: number; ok: boolean; resultRef?: string; error?: string }[] = [];
     for (const action of pending) {
       try {
-        const resultRef = await applyAction(action, { repId: actor.rep.id, visitId: visit.id, leadId: visit.leadId });
+        const resultRef = await applyAction(action, { actor, repId: actor.rep.id, visitId: visit.id, leadId: visit.leadId });
         await db.update(salesVisitActions)
           .set({ status: "applied", resultRef, error: null, appliedAt: new Date(), updatedAt: new Date() })
           .where(eq(salesVisitActions.id, action.id));
@@ -260,14 +261,14 @@ async function listActions(visitId: number): Promise<SalesVisitAction[]> {
     .orderBy(asc(salesVisitActions.id));
 }
 
-type ApplyCtx = { repId: number; visitId: number; leadId: number };
+export type ApplyCtx = { actor: XpotActor; repId: number; visitId: number; leadId: number };
 
 /**
  * Execute one confirmed action through the ordinary sales operations. Nothing
  * here reimplements stock or billing logic — it resolves what the rep meant
  * into the arguments those operations already take.
  */
-async function applyAction(row: SalesVisitAction, ctx: ApplyCtx): Promise<string> {
+export async function applyAction(row: SalesVisitAction, ctx: ApplyCtx): Promise<string> {
   const parsed = visitActionSchema.safeParse({ ...row.payload, type: row.type });
   if (!parsed.success) {
     throw new Error("This action's values are no longer valid. Edit it and try again.");
@@ -391,15 +392,22 @@ async function applyAction(row: SalesVisitAction, ctx: ApplyCtx): Promise<string
       const dueAt = action.inDays != null
         ? new Date(Date.now() + action.inDays * 24 * 60 * 60 * 1000)
         : null;
-      const task = await storage.createSalesTask({
-        leadId: ctx.leadId,
-        visitId: ctx.visitId,
-        repId: ctx.repId,
-        type: "follow_up",
-        title: action.title,
-        description: action.interest ? `Interested in: ${action.interest}` : action.evidence ?? null,
-        dueAt,
-        status: "pending",
+      const task = await createTask({
+        actor: ctx.actor,
+        source: "voice",
+        input: {
+          leadId: ctx.leadId,
+          visitId: ctx.visitId,
+          repId: ctx.repId,
+          type: "follow_up",
+          priority: "medium",
+          title: action.title,
+          description: action.interest
+            ? `Interested in: ${action.interest}${action.evidence ? `\n\nEvidence: ${action.evidence}` : ""}`
+            : action.evidence ?? null,
+          dueAt,
+          idempotencyKey: `visit-action-${row.id}`,
+        },
       });
       if (dueAt) await storage.updateSalesLead(ctx.leadId, { nextVisitDueAt: dueAt });
 

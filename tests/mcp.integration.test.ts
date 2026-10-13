@@ -122,6 +122,7 @@ test.skipIf(!enabled)("mcp: token via admin API, tools over Streamable HTTP, rev
         "prospecting_create_today", "prospecting_job_get",
         "tags_batch_create", "tags_batch_get", "tags_batch_scan", "tags_batches_list", "tags_get", "tags_journey_get", "tags_journey_record", "tags_journey_review",
         "tags_plan_create", "tags_plan_update", "tags_plans_list",
+        "tasks_cancel", "tasks_complete", "tasks_create", "tasks_get", "tasks_list", "tasks_reopen", "tasks_start", "tasks_update",
       ]);
 
       const noProspectingJob = await call(client, "prospecting_job_get");

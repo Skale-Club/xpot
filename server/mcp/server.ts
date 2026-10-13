@@ -3,6 +3,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import type { Request, Response } from "express";
 import { registerTagJourneyTools } from "./tools/tagJourney.js";
 import { registerProspectingTools } from "./tools/prospecting.js";
+import { registerTaskTools } from "./tools/tasks.js";
 
 /** What a request was authorised with, for the call log. */
 export interface McpCaller {
@@ -21,6 +22,7 @@ function buildMcpServer(caller: McpCaller): McpServer {
   const server = new McpServer({ name: "xpot", version: "1.0.0" });
   if (caller.scopes.includes("xpot:journey")) registerTagJourneyTools(server, caller);
   if (caller.scopes.includes("xpot:prospecting")) registerProspectingTools(server, caller);
+  if (caller.scopes.includes("xpot:tasks")) registerTaskTools(server, caller);
   return server;
 }
 

@@ -33,7 +33,7 @@ test("discovery: protected resource and authorization server metadata, on both p
       const body = await res.json();
       assert.equal(body.resource, `${base}/mcp`);
       assert.deepEqual(body.authorization_servers, [base]);
-      assert.deepEqual(body.scopes_supported, ["xpot:journey", "xpot:prospecting"]);
+      assert.deepEqual(body.scopes_supported, ["xpot:journey", "xpot:prospecting", "xpot:tasks"]);
     }
     for (const path of ["/.well-known/oauth-authorization-server", "/.well-known/oauth-authorization-server/mcp"]) {
       const body = await (await fetch(`${base}${path}`)).json();

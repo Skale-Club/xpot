@@ -68,6 +68,7 @@ export const salesOpportunityStatusEnum = pgEnum("sales_opportunity_status", [
 
 export const salesTaskStatusEnum = pgEnum("sales_task_status", [
   "pending",
+  "in_progress",
   "completed",
   "cancelled",
 ]);
@@ -289,21 +290,33 @@ export const salesOpportunitiesLocal = pgTable("sales_opportunities_local", {
 
 export const salesTasks = pgTable("sales_tasks", {
   id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: "restrict" }),
   leadId: integer("lead_id").references(() => salesLeads.id),
   visitId: integer("visit_id").references(() => salesVisits.id),
   opportunityId: integer("opportunity_id").references(() => salesOpportunitiesLocal.id),
   repId: integer("rep_id").references(() => salesReps.id).notNull(),
+  createdByRepId: integer("created_by_rep_id").references(() => salesReps.id, { onDelete: "set null" }),
   type: text("type").notNull().default("follow_up"),
+  priority: text("priority").notNull().default("medium"),
+  source: text("source").notNull().default("manual"),
+  idempotencyKey: text("idempotency_key"),
   title: text("title").notNull(),
   description: text("description"),
   dueAt: timestamp("due_at"),
   status: salesTaskStatusEnum("status").notNull().default("pending"),
+  completedAt: timestamp("completed_at"),
+  cancelledAt: timestamp("cancelled_at"),
   ghlTaskId: text("ghl_task_id"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => ({
   repIdx: index("sales_tasks_rep_idx").on(table.repId),
   statusIdx: index("sales_tasks_status_idx").on(table.status),
+  organizationStatusDueIdx: index("sales_tasks_org_status_due_idx").on(table.organizationId, table.status, table.dueAt),
+  organizationRepStatusDueIdx: index("sales_tasks_org_rep_status_due_idx").on(table.organizationId, table.repId, table.status, table.dueAt),
+  leadStatusIdx: index("sales_tasks_lead_status_idx").on(table.leadId, table.status),
+  opportunityStatusIdx: index("sales_tasks_opportunity_status_idx").on(table.opportunityId, table.status),
+  idempotencyIdx: uniqueIndex("sales_tasks_org_source_idempotency_unique").on(table.organizationId, table.source, table.idempotencyKey),
 }));
 
 export const salesSyncEvents = pgTable("sales_sync_events", {
@@ -471,15 +484,22 @@ export const insertSalesOpportunitySchema = z.object({
 });
 
 export const insertSalesTaskSchema = z.object({
+  organizationId: z.number().int().positive(),
   leadId: z.number().int().nullable().optional(),
   visitId: z.number().int().nullable().optional(),
   opportunityId: z.number().int().nullable().optional(),
   repId: z.number().int(),
+  createdByRepId: z.number().int().nullable().optional(),
   type: z.string().default("follow_up"),
+  priority: z.enum(["low", "medium", "high", "urgent"]).default("medium"),
+  source: z.enum(["manual", "voice", "mcp", "automation", "integration"]).default("manual"),
+  idempotencyKey: z.string().nullable().optional(),
   title: z.string().min(1),
   description: z.string().nullable().optional(),
   dueAt: z.union([z.string(), z.date(), z.null()]).optional(),
   status: z.enum(salesTaskStatusEnum.enumValues as [string, ...string[]]).default("pending"),
+  completedAt: z.union([z.string(), z.date(), z.null()]).optional(),
+  cancelledAt: z.union([z.string(), z.date(), z.null()]).optional(),
   ghlTaskId: z.string().nullable().optional(),
 });
 

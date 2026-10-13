@@ -55,13 +55,13 @@ export function createMetricsRouter() {
     });
 
     tasks.forEach((task) => {
-      if (!task.createdAt) return;
-      const dateKey = new Date(task.createdAt).toISOString().split("T")[0];
-      if (tasksByDay[dateKey]) {
-        tasksByDay[dateKey].created++;
-        if (task.status === "completed") {
-          tasksByDay[dateKey].completed++;
-        }
+      if (task.createdAt) {
+        const createdKey = new Date(task.createdAt).toISOString().split("T")[0];
+        if (tasksByDay[createdKey]) tasksByDay[createdKey].created++;
+      }
+      if (task.completedAt) {
+        const completedKey = new Date(task.completedAt).toISOString().split("T")[0];
+        if (tasksByDay[completedKey]) tasksByDay[completedKey].completed++;
       }
     });
 

@@ -630,25 +630,23 @@ export async function updateGHLOpportunity(
 
 export async function createGHLTask(
   apiKey: string,
-  locationId: string,
+  contactId: string,
   options: {
     name: string;
     description?: string;
     dueDate?: string;
-    contactId?: string;
     assignedTo?: string;
   }
 ): Promise<{ success: boolean; taskId?: string; message?: string }> {
   try {
-    const response = await ghlFetch("/tasks", apiKey, {
+    const response = await ghlFetch(`/contacts/${encodeURIComponent(contactId)}/tasks`, apiKey, {
       method: "POST",
       body: JSON.stringify({
-        name: options.name,
-        description: options.description,
+        title: options.name,
+        body: options.description ?? "",
         dueDate: options.dueDate,
-        locationId,
-        ...(options.contactId && { contactId: options.contactId }),
-        ...(options.assignedTo && { assignedToUserId: options.assignedTo }),
+        completed: false,
+        ...(options.assignedTo && { assignedTo: options.assignedTo }),
       }),
     });
 
@@ -661,12 +659,45 @@ export async function createGHLTask(
     }
 
     const data = await response.json();
-    return { success: true, taskId: data.id };
+    return { success: true, taskId: data.task?.id || data.id };
   } catch (error: any) {
     return {
       success: false,
       message: error.message || "Failed to create task",
     };
+  }
+}
+
+export async function updateGHLTask(
+  apiKey: string,
+  contactId: string,
+  taskId: string,
+  options: {
+    name: string;
+    description?: string;
+    dueDate?: string;
+    assignedTo?: string;
+    completed?: boolean;
+  },
+): Promise<{ success: boolean; message?: string }> {
+  try {
+    const response = await ghlFetch(`/contacts/${encodeURIComponent(contactId)}/tasks/${encodeURIComponent(taskId)}`, apiKey, {
+      method: "PUT",
+      body: JSON.stringify({
+        title: options.name,
+        body: options.description ?? "",
+        dueDate: options.dueDate,
+        completed: options.completed ?? false,
+        ...(options.assignedTo && { assignedTo: options.assignedTo }),
+      }),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      return { success: false, message: error.message || `Failed to update task: ${response.status}` };
+    }
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, message: error.message || "Failed to update task" };
   }
 }
 

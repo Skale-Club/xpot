@@ -17,6 +17,10 @@ const SCOPE_LABELS: Record<string, { title: string; detail: string }> = {
     title: "Create and follow your Xpot prospecting searches",
     detail: "Start cold-prospecting discovery jobs and read their progress and ranked candidates for your own Xpot representative profile.",
   },
+  "xpot:tasks": {
+    title: "Manage your Xpot tasks",
+    detail: "List, create, edit, assign, start, complete, reopen, and cancel tasks within the Organizations you can access.",
+  },
 };
 
 const layout = (title: string, body: string) => `<!doctype html>

@@ -139,8 +139,10 @@ describe("deleting a rep's account", () => {
     await visit(a, brunos, `r2:audio/${a}/visit_4.webm`);
     const brunoVisit = await visit(b, brunos, `r2:audio/${b}/visit_5.webm`);
     await q(`UPDATE sales_sales SET visit_id = $1`, [anaOnSold]);
-    await q(`INSERT INTO sales_tasks (rep_id, lead_id, title) VALUES ($1, $2, 'call back')`, [a, brunos]);
-    await q(`INSERT INTO sales_tasks (rep_id, lead_id, visit_id, title) VALUES ($1, $2, $3, 'bruno task')`, [b, brunos, brunoVisit]);
+    await q(`INSERT INTO sales_tasks (organization_id, rep_id, lead_id, title)
+      SELECT organization_id, $1, id, 'call back' FROM sales_leads WHERE id = $2`, [a, brunos]);
+    await q(`INSERT INTO sales_tasks (organization_id, rep_id, lead_id, visit_id, title)
+      SELECT organization_id, $1, id, $3, 'bruno task' FROM sales_leads WHERE id = $2`, [b, brunos, brunoVisit]);
     await q(`INSERT INTO sales_opportunities_local (lead_id, rep_id, title) VALUES ($1, $2, 'deal')`, [brunos, a]);
     await q(`INSERT INTO sessions (sid, sess, expire) VALUES ('s1', '{"userId":"u-a"}', NOW() + interval '1 day'), ('s2', '{"userId":"u-b"}', NOW() + interval '1 day')`);
     await q(`INSERT INTO auth_phone_codes (phone, code_hash, expires_at) VALUES ('+15550000001', 'h', NOW())`);

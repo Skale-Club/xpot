@@ -105,21 +105,33 @@ export const xpotOpportunityUpdateSchema = z.object({
   notes: z.string().nullable().optional(),
 }).partial();
 
+export const xpotTaskTypeSchema = z.enum(["follow_up", "call", "visit", "send_quote", "collect_payment", "check_consignment", "restock", "other"]);
+export const xpotTaskPrioritySchema = z.enum(["low", "medium", "high", "urgent"]);
+export const xpotTaskStatusSchema = z.enum(["pending", "in_progress", "completed", "cancelled"]);
+
 export const xpotTaskCreateSchema = z.object({
   leadId: z.number().int().nullable().optional(),
   visitId: z.number().int().nullable().optional(),
   opportunityId: z.number().int().nullable().optional(),
-  type: z.string().optional(),
-  title: z.string().min(1),
-  description: z.string().nullable().optional(),
-  dueAt: z.string().optional().transform(val => val ? new Date(val) : undefined),
+  repId: z.number().int().positive().optional(),
+  type: xpotTaskTypeSchema.optional(),
+  priority: xpotTaskPrioritySchema.optional(),
+  title: z.string().trim().min(1).max(240),
+  description: z.string().trim().max(5000).nullable().optional(),
+  dueAt: z.string().datetime().nullable().optional().transform(val => val ? new Date(val) : val),
+  idempotencyKey: z.string().trim().min(8).max(200).optional(),
 });
 
 export const xpotTaskUpdateSchema = z.object({
-  title: z.string().optional(),
-  description: z.string().nullable().optional(),
-  dueAt: z.string().optional().transform(val => val ? new Date(val) : undefined),
-  status: z.enum(["completed", "cancelled", "pending"]).optional(),
+  repId: z.number().int().positive().optional(),
+  leadId: z.number().int().positive().nullable().optional(),
+  opportunityId: z.number().int().positive().nullable().optional(),
+  type: xpotTaskTypeSchema.optional(),
+  priority: xpotTaskPrioritySchema.optional(),
+  title: z.string().trim().min(1).max(240).optional(),
+  description: z.string().trim().max(5000).nullable().optional(),
+  dueAt: z.string().datetime().nullable().optional().transform(val => val ? new Date(val) : val),
+  status: xpotTaskStatusSchema.optional(),
 }).partial();
 
 export type XpotCheckInInput = z.infer<typeof xpotCheckInSchema>;

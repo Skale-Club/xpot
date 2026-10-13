@@ -245,3 +245,54 @@ export async function syncInterestToXphere(input: {
 
   return result.ok ? { synced: true } : { synced: false, message: result.message };
 }
+
+/** Mirror the canonical Xpot task with a stable external id. Older Xphere
+ * deployments ignore the optional task object but still keep the audit note. */
+export async function syncTaskToXphere(taskId: number): Promise<Outcome> {
+  const task = await storage.getSalesTask(taskId);
+  if (!task) return { synced: false, message: "Task not found" };
+  if (!task.leadId) return { synced: false, message: "Task has no lead" };
+  const tenant = await tenantFor(task.leadId);
+  if ("error" in tenant) return { synced: false, message: tenant.error };
+  const { lead, apiUrl, apiKey } = tenant;
+  const locations = await db.select().from(salesLeadLocations).where(eq(salesLeadLocations.leadId, lead.id)).limit(1);
+  const result = await postMirror(apiUrl, apiKey, {
+    source: "xpot",
+    event: `task.${task.status}`,
+    occurred_at: new Date().toISOString(),
+    company: {
+      id: String(lead.id),
+      name: lead.name,
+      email: lead.email ?? null,
+      phone: lead.phone ?? null,
+      industry: lead.industry ?? null,
+      website: lead.website ?? null,
+      address: locations[0]?.addressLine1 ?? null,
+    },
+    task: {
+      external_id: `xpot-task-${task.id}`,
+      title: task.title,
+      description: task.description ?? null,
+      status: task.status,
+      priority: task.priority,
+      due_at: task.dueAt ? new Date(task.dueAt).toISOString() : null,
+      assignee_external_id: String(task.repId),
+      source: task.source,
+    },
+    note: {
+      title: `Task — ${task.title}`,
+      content: [task.description, task.dueAt ? `Due: ${new Date(task.dueAt).toISOString()}` : null, `Status: ${task.status}`].filter(Boolean).join("\n"),
+      dedup_id: `xpot-task-${task.id}-${task.updatedAt ? new Date(task.updatedAt).getTime() : task.status}`,
+    },
+  });
+  await storage.createSalesSyncEvent({
+    provider: "xphere",
+    entityType: "sales_task",
+    entityId: String(task.id),
+    status: result.ok ? "synced" : "failed",
+    payload: { leadId: lead.id, taskId: task.id, taskStatus: task.status },
+    lastError: result.ok ? null : result.message,
+    lastAttemptAt: new Date(),
+  });
+  return result.ok ? { synced: true } : { synced: false, message: result.message };
+}
