@@ -447,15 +447,6 @@ export function XpotProspecting() {
     lng: Number(stop.lng),
     label: stop.name,
   })) ?? [], [routeDetails?.stops]);
-  const mapSrc = useMemo(() => routeDetails && routeDetails.stops.length
-    ? `/api/xpot/map?${new URLSearchParams({
-        lat: routeDetails.route.startLat,
-        lng: routeDetails.route.startLng,
-        w: "640",
-        h: "360",
-        stops: routeDetails.stops.map((stop) => `${stop.lat},${stop.lng}`).join("|"),
-      }).toString()}`
-    : null, [routeDetails]);
   const planningTitles = [t("cityStepTitle"), t("sectorsStepTitle"), t("durationStepTitle"), t("reviewStepTitle")];
   const planningBodies = [t("cityStepBody"), t("sectorsStepBody"), t("durationStepBody"), t("reviewStepBody")];
   const canAdvancePlanning = planningStep === 0
@@ -857,7 +848,6 @@ export function XpotProspecting() {
             start={{ lat: Number(routeDetails.route.startLat), lng: Number(routeDetails.route.startLng) }}
             stops={mapStops}
             encodedPolyline={routeDetails.route.optimizationMeta.encodedPolyline}
-            fallbackSrc={mapSrc}
             alt={routeContextLabel}
           />
           <div className="grid gap-5 p-4 sm:p-5 lg:grid-cols-[1fr_0.9fr] lg:p-6">
