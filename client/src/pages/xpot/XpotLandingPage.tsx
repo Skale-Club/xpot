@@ -288,9 +288,9 @@ export function XpotLandingPage() {
   ];
 
   const routeHighlights = [
-    { icon: Search, title: t("highlight1Title"), body: t("highlight1Body") },
-    { icon: MapPinned, title: t("highlight2Title"), body: t("highlight2Body") },
-    { icon: Nfc, title: t("highlight3Title"), body: t("highlight3Body") },
+    { icon: Search, image: "/landing/highlights/prospecting-route.webp", title: t("highlight1Title"), body: t("highlight1Body") },
+    { icon: MapPinned, image: "/landing/highlights/visit-note.webp", title: t("highlight2Title"), body: t("highlight2Body") },
+    { icon: Nfc, image: "/landing/highlights/nfc-activation.webp", title: t("highlight3Title"), body: t("highlight3Body") },
   ];
 
   const fieldFlow = [
@@ -419,11 +419,25 @@ export function XpotLandingPage() {
 
           {/* Outcome-first proof points, adapted from the industry landing structure. */}
           <section aria-label={t("highlightsLabel")} className="grid grid-cols-1 overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.035] md:grid-cols-3">
-            {routeHighlights.map(({ icon: Icon, title, body }, index) => (
-              <div key={title} className={`p-6 sm:p-7 ${index > 0 ? "border-t border-white/[0.07] md:border-l md:border-t-0" : ""}`}>
-                <Icon className="h-5 w-5 text-[#8FA8FF]" />
-                <h2 className="mt-4 text-base font-bold text-white">{title}</h2>
-                <p className="mt-2 text-sm leading-relaxed text-white/55">{body}</p>
+            {routeHighlights.map(({ icon: Icon, image, title, body }, index) => (
+              <div key={title} className={index > 0 ? "border-t border-white/[0.07] md:border-l md:border-t-0" : ""}>
+                <div className="relative aspect-[16/10] overflow-hidden border-b border-white/[0.07] bg-[#080d19]">
+                  <img
+                    src={image}
+                    alt=""
+                    width={1200}
+                    height={900}
+                    loading="lazy"
+                    decoding="async"
+                    className="h-full w-full object-cover transition-transform duration-500 hover:scale-[1.02]"
+                  />
+                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#080d19]/35 via-transparent to-transparent" />
+                </div>
+                <div className="p-6 sm:p-7">
+                  <Icon className="h-5 w-5 text-[#8FA8FF]" />
+                  <h2 className="mt-4 text-base font-bold text-white">{title}</h2>
+                  <p className="mt-2 text-sm leading-relaxed text-white/55">{body}</p>
+                </div>
               </div>
             ))}
           </section>
