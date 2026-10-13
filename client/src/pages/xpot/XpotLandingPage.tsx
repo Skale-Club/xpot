@@ -366,7 +366,7 @@ export function XpotLandingPage() {
           </div>
         </header>
 
-        <main className="relative mx-auto max-w-6xl space-y-24 px-5 pb-14 pt-[7.5rem] sm:pb-20 sm:pt-[9rem] lg:space-y-32 lg:px-8 lg:pb-24 lg:pt-[10rem]">
+        <main className="relative mx-auto max-w-6xl space-y-24 px-5 pb-14 pt-[6.5rem] sm:pb-20 sm:pt-[7.5rem] lg:space-y-32 lg:px-8 lg:pb-24 lg:pt-[8.5rem]">
           {/* Keep the original open composition; the photo remains a focused proof point. */}
           <section className="grid grid-cols-1 items-center gap-14 lg:grid-cols-12 lg:gap-10">
             <div className="space-y-6 text-center lg:col-span-6 lg:text-left">
