@@ -109,7 +109,7 @@ export function createAdminRouter() {
     }
     const costPolicyChanged = input.costPolicy !== undefined &&
       (input.costPolicy !== existing.costPolicy || !existing.costPolicyConfiguredAt);
-    return storage.upsertSalesRep({
+    return storage.updateSalesRepAccountProfile({
       ...input,
       isActive: existing.isActive,
       ...(costPolicyChanged ? { costPolicyConfiguredAt: new Date(), costPolicyConfiguredByUserId: actor.userId } : {}),

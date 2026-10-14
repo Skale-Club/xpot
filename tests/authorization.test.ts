@@ -8,6 +8,10 @@
 import express from "express";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const { fetchGooglePlaceProfile } = vi.hoisted(() => ({
+  fetchGooglePlaceProfile: vi.fn(),
+}));
+
 // ─── Storage double ──────────────────────────────────────────────────────────
 
 const store = {
@@ -33,6 +37,13 @@ const storage = {
     store.reps.set(rep.id, rep);
     return rep;
   }),
+  updateSalesRepAccountProfile: vi.fn(async (input: any) => {
+    store.upserts.push(input);
+    const existing = [...store.reps.values()].find((r) => r.userId === input.userId);
+    const rep = existing ? { ...existing, ...input } : { id: store.reps.size + 100, ...input };
+    store.reps.set(rep.id, rep);
+    return rep;
+  }),
   getSalesLead: vi.fn(async (id: number) => store.leads.get(id)),
   getSalesLeadsByIds: vi.fn(async (ids: number[]) => ids.map((id) => store.leads.get(id)).filter(Boolean)),
   updateSalesLead: vi.fn(async (id: number, data: any) => {
@@ -41,6 +52,7 @@ const storage = {
     store.leads.set(id, lead);
     return lead;
   }),
+  upsertPrimaryLocation: vi.fn(async (leadId: number, data: any) => ({ id: 1, leadId, ...data })),
   getSalesVisit: vi.fn(async (id: number) => store.visits.get(id)),
   createSalesVisit: vi.fn(async (input: any) => ({ id: 900, ...input })),
   updateSalesVisit: vi.fn(async (id: number, input: any) => ({ id, ...input })),
@@ -78,6 +90,7 @@ const storage = {
 };
 
 vi.mock("../server/storage.js", () => ({ storage }));
+vi.mock("../server/routes/xpot/google-place-profile.js", () => ({ fetchGooglePlaceProfile }));
 vi.mock("../server/organizations/service.js", () => ({
   activeOrganizationIds: vi.fn(async () => [1]),
   managedOrganizationIds: vi.fn(async () => []),
@@ -194,6 +207,7 @@ beforeEach(() => {
   store.contacts = [{ id: 1, leadId: 20, name: "B's contact" }];
   store.leadUpdates = [];
   store.upserts = [];
+  fetchGooglePlaceProfile.mockReset();
 });
 
 // ─── SEG-01 ──────────────────────────────────────────────────────────────────
@@ -301,6 +315,78 @@ describe("SEG-06 — lead detail is scoped to the caller", () => {
     const res = await request(appFor(router, "user-m"), "GET", "/leads/10");
     expect(res.status).toBe(200);
     expect(storage.listSalesOpportunities).toHaveBeenCalledWith(expect.objectContaining({ repId: undefined }));
+  });
+});
+
+describe("Google Business Profile linking", () => {
+  const router = createLeadsRouter();
+
+  it("links a place and refreshes the company's canonical contact and location data", async () => {
+    storage.getIntegrationSettings.mockResolvedValueOnce({ isEnabled: true, apiKey: "places-key" });
+    fetchGooglePlaceProfile.mockResolvedValueOnce({
+      placeId: "ChIJ1234567890",
+      name: "Celes Confections",
+      phone: "(617) 555-0199",
+      website: "https://celes.example/",
+      industry: "Bakery",
+      address: {
+        addressLine1: "14 Brighton Avenue",
+        city: "Boston",
+        state: "MA",
+        postalCode: "02134",
+        country: "US",
+        lat: "42.35",
+        lng: "-71.13",
+      },
+      rating: 4.8,
+      reviewCount: 127,
+      mapsUrl: "https://maps.google.com/?cid=123",
+      openNow: true,
+    });
+
+    const res = await request(appFor(router, "user-a"), "POST", "/leads/10/google-profile", {
+      placeId: "ChIJ1234567890",
+    });
+
+    expect(res.status).toBe(200);
+    expect(storage.updateSalesLead).toHaveBeenCalledWith(10, expect.objectContaining({
+      googlePlaceId: "ChIJ1234567890",
+      name: "Celes Confections",
+      phone: "(617) 555-0199",
+      website: "https://celes.example/",
+      industry: "Bakery",
+    }));
+    expect(storage.upsertPrimaryLocation).toHaveBeenCalledWith(10, expect.objectContaining({
+      addressLine1: "14 Brighton Avenue",
+      city: "Boston",
+      state: "MA",
+      postalCode: "02134",
+      lat: "42.35",
+      lng: "-71.13",
+    }));
+    expect(res.body.profile).toMatchObject({ connected: true, rating: 4.8, reviewCount: 127 });
+  });
+
+  it("unlinks without erasing the company data previously synced from Google", async () => {
+    store.leads.set(10, {
+      ...store.leads.get(10),
+      googlePlaceId: "ChIJ1234567890",
+      phone: "(617) 555-0199",
+      website: "https://celes.example/",
+    });
+
+    const res = await request(appFor(router, "user-a"), "POST", "/leads/10/google-profile", {
+      placeId: null,
+    });
+
+    expect(res.status).toBe(200);
+    expect(storage.updateSalesLead).toHaveBeenCalledWith(10, { googlePlaceId: null });
+    expect(fetchGooglePlaceProfile).not.toHaveBeenCalled();
+    expect(res.body.lead).toMatchObject({
+      googlePlaceId: null,
+      phone: "(617) 555-0199",
+      website: "https://celes.example/",
+    });
   });
 });
 

@@ -115,6 +115,7 @@ export interface IStorage {
   getSalesRep(id: number): Promise<SalesRep | undefined>;
   getSalesRepByUserId(userId: string): Promise<SalesRep | undefined>;
   upsertSalesRep(input: InsertSalesRep): Promise<SalesRep>;
+  updateSalesRepAccountProfile(input: InsertSalesRep): Promise<SalesRep>;
   updateSalesRepProfile(id: number, data: SalesRepProfilePatch): Promise<SalesRep>;
 
   // Users
@@ -362,6 +363,32 @@ export class DatabaseStorage implements IStorage {
     }
     const [created] = await db.insert(salesReps).values(input).returning();
     return created;
+  }
+
+  /**
+   * Updates the operational Rep role and the authentication admin bit together.
+   * Super-admin authorization is session-backed from users.is_admin, so changing
+   * only sales_reps.role would leave promoted/demoted accounts inconsistent.
+   */
+  async updateSalesRepAccountProfile(input: InsertSalesRep): Promise<SalesRep> {
+    const existing = await this.getSalesRepByUserId(input.userId);
+    if (!existing) throw new Error("Rep not found");
+    const wasSuperAdmin = existing.role === "admin";
+    const isSuperAdmin = input.role === "admin";
+
+    return db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(salesReps)
+        .set({ ...input, updatedAt: new Date() })
+        .where(eq(salesReps.id, existing.id))
+        .returning();
+      await tx.update(users).set({ isAdmin: isSuperAdmin, updatedAt: new Date() })
+        .where(eq(users.id, input.userId));
+      if (wasSuperAdmin !== isSuperAdmin) {
+        await tx.execute(sql`DELETE FROM sessions WHERE sess->>'userId' = ${input.userId}`);
+      }
+      return updated;
+    });
   }
 
   async updateSalesRepProfile(id: number, data: SalesRepProfilePatch): Promise<SalesRep> {
