@@ -8,6 +8,13 @@ import {
   salesVisits,
 } from "#shared/schema.js";
 import type { SalesVisitStatus } from "#shared/schema/sales.js";
+import {
+  attachAdHocStop,
+  findOpenRouteStopForLead,
+  linkStopToVisit,
+  markBusinessVisited,
+  plannedVisitOfStop,
+} from "./prospecting/route-execution.js";
 
 const OPEN_STOP_STATUSES = ["planned", "en_route", "checked_in"] as const;
 
@@ -30,10 +37,17 @@ export async function startVisitTransaction(input: {
   values: StartValues;
 }) {
   return db.transaction(async (tx) => {
+    // A check-in that did not come from the route (the Check-in search) still
+    // belongs to the route when the business is one of its open stops: it
+    // starts that stop's planned visit instead of creating a second one.
+    const routeStop = input.plannedVisitId ? null : await findOpenRouteStopForLead(tx, input.repId, input.leadId);
+    const plannedVisitId = input.plannedVisitId
+      ?? (routeStop ? (await plannedVisitOfStop(tx, routeStop, input.repId, input.leadId))?.id : undefined);
+
     let visit;
-    if (input.plannedVisitId) {
+    if (plannedVisitId) {
       [visit] = await tx.update(salesVisits).set({ ...input.values, updatedAt: new Date() }).where(and(
-        eq(salesVisits.id, input.plannedVisitId),
+        eq(salesVisits.id, plannedVisitId),
         eq(salesVisits.repId, input.repId),
         eq(salesVisits.leadId, input.leadId),
         eq(salesVisits.status, "planned"),
@@ -48,6 +62,13 @@ export async function startVisitTransaction(input: {
       }).returning();
     }
     if (!visit) return null;
+
+    if (routeStop && routeStop.visitId !== visit.id) {
+      await linkStopToVisit(tx, routeStop, visit.id, input.leadId);
+    } else if (!routeStop && !input.plannedVisitId) {
+      // An opportunity off the plan while a route runs joins it as an extra stop.
+      await attachAdHocStop(tx, visit);
+    }
 
     const [lead] = await tx.select({ status: salesLeads.status }).from(salesLeads)
       .where(eq(salesLeads.id, input.leadId)).limit(1);
@@ -98,6 +119,7 @@ export async function finishVisitTransaction(input: {
       await tx.update(salesLeads).set({ lastVisitAt: input.checkedOutAt, updatedAt: new Date() })
         .where(eq(salesLeads.id, input.leadId));
     }
+    if (input.status !== "cancelled") await markBusinessVisited(tx, visit.repId, input.leadId);
 
     const [linked] = await tx.select({
       stopId: prospectingRouteStops.id,
