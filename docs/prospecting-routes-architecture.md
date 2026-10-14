@@ -129,6 +129,21 @@ does not create duplicate visit history. Check-in moves the linked stop to `chec
 the route; checkout completes the stop, while cancellation skips it. The route closes automatically
 after its final open stop.
 
+
+Visits started outside the route screen still land on the route
+(`server/prospecting/route-execution.ts`, inside the check-in/checkout transactions):
+
+- **A route business checked in from the Check-in search** (for example out of order) is matched to
+  its open stop on a published or running route, by lead or by the Google place of the discovered
+  business behind the stop. It starts that stop's planned visit, or links the new visit to the stop,
+  so there is no duplicate visit and the route still closes on its own.
+- **An opportunity off the plan while a route is running** becomes an extra stop (`origin =
+  ad_hoc`, shown as "Extra") right after the last reached stop. The stops still ahead are re-timed
+  from it with the local travel model, and their planned visits move with them. No paid
+  optimization is spent.
+- **Checking out any visit marks the business visited** in every discovery list of that rep (same
+  lead or same Google place), so a place visited in person is never routed again.
+
 A route builds each business at most once: a discovered place linked to a selected CRM lead, or
 the same Google Place found by another job, becomes a single stop, and already visited candidates
 are never routed again. Cancelling a route, or completing it by hand, releases the stops nobody

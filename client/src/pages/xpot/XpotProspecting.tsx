@@ -87,6 +87,8 @@ type RouteStop = {
   visitId: number | null;
   position: number;
   status: "planned" | "en_route" | "checked_in" | "completed" | "skipped" | "rescheduled";
+  /** "ad_hoc": a visit made off the plan while the route ran. */
+  origin?: "planned" | "ad_hoc";
   name: string;
   address: string | null;
   lat: string;
@@ -1476,7 +1478,10 @@ export function XpotProspecting() {
                             : t("driveMinutes", { minutes: driveMinutes(stop.travelDurationSeconds) })}</span>
                           {stop.estimatedArrivalAt ? <><span aria-hidden="true">·</span><span>{t("arrivalAt", { time: new Date(stop.estimatedArrivalAt).toLocaleTimeString(t.locale, { hour: "numeric", minute: "2-digit" }) })}</span></> : null}
                         </div>
-                        <span className="mt-1.5 block text-xs font-semibold uppercase tracking-wide text-white/60">{stopStatusLabel(stop.status, t)}</span>
+                        <span className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-white/60">
+                          {stopStatusLabel(stop.status, t)}
+                          {stop.origin === "ad_hoc" ? <span className="rounded-full bg-amber-400/15 px-2 py-0.5 text-[10px] text-amber-200">{t("stopExtra")}</span> : null}
+                        </span>
                       </div>
                       <div className="col-start-2 flex self-end justify-end gap-2 px-3 pb-3 sm:col-start-3 sm:row-start-1 sm:shrink-0 sm:self-end sm:pb-3 sm:pl-0 sm:pr-3 sm:pt-12">
                         {["planned", "en_route"].includes(stop.status) ? (

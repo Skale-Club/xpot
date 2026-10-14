@@ -189,6 +189,8 @@ export const prospectingRouteStops = pgTable("prospecting_route_stops", {
   visitId: integer("visit_id").references(() => salesVisits.id, { onDelete: "set null" }),
   position: integer("position").notNull(),
   status: prospectingStopStatusEnum("status").notNull().default("planned"),
+  // "ad_hoc": a visit made off the plan while the route ran; migrations/0050_route_stop_origin.sql.
+  origin: text("origin").$type<"planned" | "ad_hoc">().notNull().default("planned"),
   name: text("name").notNull(),
   address: text("address"),
   lat: text("lat").notNull(),
