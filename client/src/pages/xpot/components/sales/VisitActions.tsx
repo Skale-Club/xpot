@@ -65,7 +65,7 @@ function describeAction(action: VisitAction, t: SalesModuleT): string {
   }
 }
 
-export function VisitActionsPanel({ visitId, onApplied }: { visitId: number; onApplied?: () => void }) {
+export function VisitActionsPanel({ visitId, onApplied, surface = "card" }: { visitId: number; onApplied?: () => void; surface?: "card" | "plain" }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const t = useT(salesModuleMessages);
@@ -120,8 +120,10 @@ export function VisitActionsPanel({ visitId, onApplied }: { visitId: number; onA
   if (!actions.length) return null;
 
   return (
-    <div className="space-y-2.5 rounded-2xl p-3.5"
-      style={{ background: "rgba(99,102,241,0.07)", border: "1px solid rgba(99,102,241,0.22)" }}>
+    <div
+      className={surface === "plain" ? "space-y-2.5 border-b border-white/[0.07] py-6" : "space-y-2.5 rounded-2xl p-3.5"}
+      style={surface === "plain" ? undefined : { background: "rgba(99,102,241,0.07)", border: "1px solid rgba(99,102,241,0.22)" }}
+    >
       <div className="flex items-center gap-2">
         <Sparkles className="h-3.5 w-3.5 text-indigo-300" />
         <span className="text-xs font-bold uppercase tracking-widest text-indigo-300">

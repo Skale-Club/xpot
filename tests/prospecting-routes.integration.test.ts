@@ -114,6 +114,28 @@ test("a route visits each business once and never a visited one", async () => {
   expect(stops.some((stop) => stop.candidateId === seed.visited)).toBe(false);
 });
 
+test("a draft stop can prepare one reusable visit for direct check-in", async () => {
+  const created = await request("POST", "/api/xpot/prospecting/routes", routeBody());
+  expect(created.status).toBe(201);
+  const stop = (created.body.stops as Array<{ id: number; name: string; leadId: number | null; visitId: number | null }>)
+    .find((item) => item.name === "New Barber")!;
+  expect(stop).toMatchObject({ leadId: null, visitId: null });
+
+  const first = await request("POST", `/api/xpot/prospecting/routes/${created.body.route.id}/stops/${stop.id}/prepare-check-in`, {});
+  expect(first.status).toBe(201);
+  expect(first.body).toEqual({ leadId: expect.any(Number), visitId: expect.any(Number) });
+  expect(await one(`SELECT lead_id, visit_id FROM prospecting_route_stops WHERE id = $1`, [stop.id])).toEqual({
+    lead_id: first.body.leadId,
+    visit_id: first.body.visitId,
+  });
+  expect((await one(`SELECT count(*)::int AS count FROM sales_visits WHERE source = 'prospecting-route'`)).count).toBe(1);
+
+  const reused = await request("POST", `/api/xpot/prospecting/routes/${created.body.route.id}/stops/${stop.id}/prepare-check-in`, {});
+  expect(reused.status).toBe(200);
+  expect(reused.body).toEqual(first.body);
+  expect((await one(`SELECT count(*)::int AS count FROM sales_visits WHERE source = 'prospecting-route'`)).count).toBe(1);
+});
+
 test("cancelling a published route releases its unreached visits and businesses", async () => {
   const created = await request("POST", "/api/xpot/prospecting/routes", routeBody());
   const routeId = created.body.route.id;

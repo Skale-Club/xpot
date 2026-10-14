@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { BATCH_STAGE_TONE, BATCH_STATUS_TONE, Pill } from "@/components/xpot/StatusPill";
 import type { TagBatchItem, TagListItem } from "@shared/tagsApi";
 import { Loader2 } from "@/components/ui/loader";
-import { TagModelChips, TagPieceVisual } from "@/components/xpot/TagProductThumbnail";
+import { TagPieceMention } from "@/components/xpot/TagProductThumbnail";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,6 +17,7 @@ import {
 import { ADMIN_TAGS_KEY, STALE_MS, formatDate, getJson, withQuery } from "./api";
 import { BTN_GHOST, CARD, INPUT, PieceStatusPill, TD, TH } from "./ui";
 import { useTagLabels } from "./labels";
+import { ListPager, usePagedList } from "@/components/xpot/pagination";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
@@ -236,7 +237,7 @@ export function ConfirmDialog({
 
 // ─── Pieces table ─────────────────────────────────────────────────────────────
 
-const PAGE = 200;
+const PAGE = 100;
 
 /**
  * Pieces of a batch or a kit. Rows open the piece; with `selectable`, the
@@ -264,9 +265,10 @@ export function PieceTable({
   empty?: ReactNode;
 }) {
   const tm = useT(manageTagsMessages);
-  const [limit, setLimit] = useState(PAGE);
+  // A new list (another filter) starts from the first page again.
+  const paged = usePagedList(pieces, { pageSize: PAGE, resetKey: `${pieces.length}:${pieces[0]?.id ?? ""}` });
   if (pieces.length === 0) return <p className="px-3 py-6 text-center text-sm text-white/40">{empty ?? tm("noPieces")}</p>;
-  const shown = pieces.slice(0, limit);
+  const shown = paged.visible;
   const selectableCodes = selectable ? pieces.filter(selectable).map((t) => t.publicCode) : [];
   const allOn = selectableCodes.length > 0 && selectableCodes.every((c) => selected?.has(c));
 
@@ -288,7 +290,6 @@ export function PieceTable({
                   />
                 </th>
               )}
-              <th className={`${TH} w-20 pr-0`}><span className="sr-only">{tm("printedOnPiece")}</span></th>
               <th className={TH}>{tm("colCode")}</th>
               <th className={TH}>{tm("colSerial")}</th>
               {showBatch && <th className={TH}>{tm("colBatch")}</th>}
@@ -322,12 +323,8 @@ export function PieceTable({
                       )}
                     </td>
                   )}
-                  <td className={`${TD} pr-0`}>
-                    <TagPieceVisual productType={t.productType} face={t.face} />
-                  </td>
                   <td className={TD}>
-                    <span className="block font-mono text-white">{t.publicCode}</span>
-                    <TagModelChips productType={t.productType} face={t.face} batchCode={t.batchCode} className="mt-1" />
+                    <TagPieceMention publicCode={t.publicCode} productType={t.productType} face={t.face} batchCode={t.batchCode} />
                   </td>
                   <td className={`${TD} tabular-nums text-white/50`}>{t.serialNumber ?? "—"}</td>
                   {showBatch && <td className={`${TD} font-mono text-xs`}>{t.batchCode ?? "—"}</td>}
@@ -346,13 +343,7 @@ export function PieceTable({
           </tbody>
         </table>
       </div>
-      {pieces.length > limit && (
-        <div className="flex justify-center border-t border-white/5 p-3">
-          <button type="button" className={BTN_GHOST} onClick={() => setLimit((l) => l + PAGE * 5)}>
-            {tm("showMore", { count: pieces.length - limit })}
-          </button>
-        </div>
-      )}
+      <ListPager className="border-t border-white/5 px-3" shown={paged.shown} total={paged.total} hasMore={paged.hasMore} onMore={paged.showMore} pageSize={PAGE} />
     </div>
   );
 }

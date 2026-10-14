@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { errorMessage, formatDateTime, getJson, invalidateAdminTags, sendJson, withQuery } from "./api";
 import { BTN_GHOST, CARD } from "./ui";
 import { ConfirmDialog, ErrorLine, Loading, PieceTable, isUnsoldWithReseller, usePieces } from "./batches-shared";
+import { ListPager, usePagedList } from "@/components/xpot/pagination";
 import { useT } from "@/i18n";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
 import { manageTagsBatchesMessages } from "@/i18n/messages/manageTagsBatches";
@@ -177,11 +178,15 @@ function KitRow({ kit, go }: { kit: TagKitItem; go: (path: string) => void }) {
 }
 
 export function KitList({ kits, go }: { kits: TagKitItem[]; go: (path: string) => void }) {
+  const paged = usePagedList(kits, { pageSize: 30, resetKey: `${kits.length}:${kits[0]?.id ?? ""}` });
   return (
-    <ul className="space-y-2">
-      {kits.map((kit) => (
-        <KitRow key={kit.id} kit={kit} go={go} />
-      ))}
-    </ul>
+    <>
+      <ul className="space-y-2">
+        {paged.visible.map((kit) => (
+          <KitRow key={kit.id} kit={kit} go={go} />
+        ))}
+      </ul>
+      <ListPager shown={paged.shown} total={paged.total} hasMore={paged.hasMore} onMore={paged.showMore} pageSize={30} />
+    </>
   );
 }

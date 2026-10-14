@@ -14,6 +14,7 @@ import { leadsMessages } from "@/i18n/messages/leads";
 import { commonMessages } from "@/i18n/messages/common";
 import { BRAND_GRADIENT } from "@/components/xpot/surface";
 import { GradientTopLine } from "@/components/xpot/GradientTopLine";
+import { StateSelect } from "@/components/StateSelect";
 
 type LeadLike = SalesLead | FullSalesLead;
 
@@ -174,7 +175,7 @@ export function EditLeadForm({ lead, onSaved, onCancel }: {
             <Field value={form.addressLine1} onChange={f("addressLine1")} placeholder={t("fieldStreet")} />
             <div className="grid grid-cols-2 gap-2">
               <Field value={form.city} onChange={f("city")} placeholder={t("fieldCity")} />
-              <Field value={form.state} onChange={f("state")} placeholder={t("fieldState")} />
+              <StateSelect value={form.state} onValueChange={(state) => setForm((previous) => ({ ...previous, state }))} placeholder={t("fieldState")} />
             </div>
             <Field value={form.postalCode} onChange={f("postalCode")} placeholder={t("fieldPostal")} />
           </FieldGroup>

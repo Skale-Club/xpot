@@ -59,12 +59,13 @@ export function decodeGooglePolyline(encoded: string) {
   return points;
 }
 
-export function RoutePreviewMap({ start, stops, encodedPolyline, alt, showCurrentLocation = false }: {
+export function RoutePreviewMap({ start, stops, encodedPolyline, alt, showCurrentLocation = false, className }: {
   start: RoutePoint;
   stops: RoutePoint[];
   encodedPolyline?: string;
   alt: string;
   showCurrentLocation?: boolean;
+  className?: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [failed, setFailed] = useState(false);
@@ -141,17 +142,18 @@ export function RoutePreviewMap({ start, stops, encodedPolyline, alt, showCurren
   }, [apiKey, start.lat, start.lng, stops, encodedPolyline, showCurrentLocation]);
 
   if (!apiKey || failed) {
-    return <MapLibreRouteMap start={start} stops={stops} encodedPolyline={encodedPolyline} alt={alt} showCurrentLocation={showCurrentLocation} />;
+    return <MapLibreRouteMap start={start} stops={stops} encodedPolyline={encodedPolyline} alt={alt} showCurrentLocation={showCurrentLocation} className={className} />;
   }
-  return <div ref={containerRef} role="img" aria-label={alt} className="h-64 w-full bg-slate-950 sm:h-72" />;
+  return <div ref={containerRef} role="img" aria-label={alt} className={`h-64 w-full bg-slate-950 sm:h-72 ${className ?? ""}`} />;
 }
 
-function MapLibreRouteMap({ start, stops, encodedPolyline, alt, showCurrentLocation }: {
+function MapLibreRouteMap({ start, stops, encodedPolyline, alt, showCurrentLocation, className }: {
   start: RoutePoint;
   stops: RoutePoint[];
   encodedPolyline?: string;
   alt: string;
   showCurrentLocation: boolean;
+  className?: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [unavailable, setUnavailable] = useState(false);
@@ -251,6 +253,6 @@ function MapLibreRouteMap({ start, stops, encodedPolyline, alt, showCurrentLocat
     };
   }, [start.lat, start.lng, stops, encodedPolyline, showCurrentLocation]);
 
-  if (unavailable) return <div role="img" aria-label={alt} className="flex h-64 w-full items-center justify-center bg-slate-100 text-sm font-medium text-slate-500 sm:h-72">Map unavailable</div>;
-  return <div ref={containerRef} role="img" aria-label={alt} className="h-64 w-full bg-slate-100 sm:h-72" />;
+  if (unavailable) return <div role="img" aria-label={alt} className={`flex h-64 w-full items-center justify-center bg-slate-100 text-sm font-medium text-slate-500 sm:h-72 ${className ?? ""}`}>Map unavailable</div>;
+  return <div ref={containerRef} role="img" aria-label={alt} className={`h-64 w-full bg-slate-100 sm:h-72 ${className ?? ""}`} />;
 }

@@ -7,7 +7,6 @@ import {
   Search,
   Timer,
   X,
-  ChevronDown,
   Phone,
   Globe,
   Mail,
@@ -52,6 +51,7 @@ import { LeadSalesPanel } from "./components/sales/LeadSalesPanel";
 import { VisitActionsPanel } from "./components/sales/VisitActions";
 import { GLASS_RAISED } from "@/components/xpot/surface";
 import { maskUsPhoneInput } from "./phoneInput";
+import { findUsStateCode, StateSelect } from "@/components/StateSelect";
 
 type VisitLead = SalesLead & Partial<Pick<FullSalesLead, "locations" | "openOpportunities" | "unitsOnShelf">>;
 
@@ -183,8 +183,6 @@ function ActiveLeadInfo({ lead, profile, profileLoading }: { lead: VisitLead; pr
   );
 }
 
-const US_STATES = ["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY"];
-
 function CreateLeadDialog({ open, onOpenChange, initialName, onCreated }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -207,7 +205,7 @@ function CreateLeadDialog({ open, onOpenChange, initialName, onCreated }: {
 
   function applyPlace(place: import("./types").GooglePlaceResult) {
     const parts = place.address.split(",");
-    const state = parts.find((p) => US_STATES.includes(p.trim()))?.trim() ?? "";
+    const state = parts.map((part) => findUsStateCode(part)).find(Boolean) ?? "";
     const city = parts.length >= 3 ? parts[parts.length - 3].trim() : "";
     const address = parts[0]?.trim() ?? "";
     setForm((prev) => ({
@@ -348,18 +346,7 @@ function CreateLeadDialog({ open, onOpenChange, initialName, onCreated }: {
               className="w-full h-10 rounded-xl px-3 text-[16px] text-white placeholder:text-white/25 focus:outline-none"
               style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.09)" }}
             />
-            <div className="relative">
-              <select
-                value={form.state}
-                onChange={f("state")}
-                className="w-full h-10 appearance-none rounded-xl px-3 pr-8 text-[16px] focus:outline-none"
-                style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.09)", color: form.state ? "white" : "rgba(255,255,255,0.25)" }}
-              >
-                <option value="">{t("statePlaceholder")}</option>
-                {US_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/30" />
-            </div>
+            <StateSelect value={form.state} onValueChange={(state) => setForm((previous) => ({ ...previous, state }))} placeholder={t("statePlaceholder")} selectClassName="text-[16px]" />
           </div>
 
           <button

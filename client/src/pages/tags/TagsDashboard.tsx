@@ -35,10 +35,33 @@ function Stat({ label, value, accent }: { label: string; value: number | string 
   );
 }
 
+/** How a scan arrived, as a small badge in the chart's QR / NFC colours. */
+function AccessBadge({ method }: { method: string }) {
+  const nfc = method === "nfc";
+  return (
+    <span
+      className="inline-flex h-4 items-center rounded px-1 text-[10px] font-bold uppercase leading-none tracking-wide"
+      style={{ color: nfc ? NFC_COLOR : QR_COLOR, backgroundColor: nfc ? "rgba(167,139,250,0.15)" : "rgba(96,165,250,0.15)" }}
+    >
+      {method}
+    </span>
+  );
+}
+
 function Ranked({ title, icon: Icon, items }: {
   title: string;
   icon: typeof Tag;
-  items: Array<{ key: string; label?: string; sub?: string | null; content?: ReactNode; hideIcon?: boolean; value: number; onClick?: () => void }>;
+  items: Array<{
+    key: string;
+    label?: string;
+    sub?: string | null;
+    content?: ReactNode;
+    hideIcon?: boolean;
+    value: number;
+    /** QR / NFC breakdown of `value`: splits the bar in the chart's colours and shows both counts. */
+    split?: { qr: number; nfc: number };
+    onClick?: () => void;
+  }>;
 }) {
   const max = Math.max(1, ...items.map((i) => i.value));
   return (
@@ -56,11 +79,27 @@ function Ranked({ title, icon: Icon, items }: {
                     {item.sub && <span className="block truncate text-xs text-white/40">{item.sub}</span>}
                   </>
                 )}
-                <span className="mt-1.5 block h-1 rounded-full bg-white/[0.06]">
-                  <span className="block h-1 rounded-full bg-blue-400/70" style={{ width: `${(item.value / max) * 100}%` }} />
+                <span className="mt-2 flex h-1 overflow-hidden rounded-full bg-white/[0.06]">
+                  {item.split ? (
+                    <>
+                      <span className="h-1" style={{ width: `${(item.split.qr / max) * 100}%`, backgroundColor: QR_COLOR }} />
+                      <span className="h-1" style={{ width: `${(item.split.nfc / max) * 100}%`, backgroundColor: NFC_COLOR }} />
+                    </>
+                  ) : (
+                    <span className="h-1 rounded-full bg-blue-400/70" style={{ width: `${(item.value / max) * 100}%` }} />
+                  )}
                 </span>
               </span>
-              <span className="shrink-0 text-sm font-bold tabular-nums text-white">{item.value}</span>
+              <span className="shrink-0 text-right tabular-nums">
+                <span className="block text-sm font-bold text-white">{item.value}</span>
+                {item.split && (
+                  <span className="mt-0.5 block text-[10px] font-semibold leading-none">
+                    <span style={{ color: QR_COLOR }}>{item.split.qr}</span>
+                    <span className="text-white/25"> · </span>
+                    <span style={{ color: NFC_COLOR }}>{item.split.nfc}</span>
+                  </span>
+                )}
+              </span>
               {item.onClick && <ChevronRight className="h-4 w-4 shrink-0 text-white/25" />}
             </button>
           </li>
@@ -181,10 +220,13 @@ export function TagsDashboard() {
                       productType={scan.productType}
                       face={scan.face}
                       batchCode={scan.batchCode}
-                      details={[scan.leadName, scan.accessMethod.toUpperCase()].filter(Boolean).join(" · ")}
+                      customer={scan.leadName}
                       className="min-w-0 flex-1"
                     />
-                    <span className="shrink-0 text-xs text-white/35">{t(age.key, { n: age.n })}</span>
+                    <span className="flex shrink-0 flex-col items-end gap-1">
+                      <span className="text-xs text-white/40">{t(age.key, { n: age.n })}</span>
+                      <AccessBadge method={scan.accessMethod} />
+                    </span>
                   </button>
                 </li>
               );
@@ -206,10 +248,12 @@ export function TagsDashboard() {
                 productType={p.productType}
                 face={p.face}
                 batchCode={p.batchCode}
-                details={[p.leadName, p.label].filter(Boolean).join(" · ") || undefined}
+                customer={p.leadName}
+                details={p.label || undefined}
               />
             ),
             value: p.scans,
+            split: { qr: p.qr, nfc: p.nfc },
             onClick: () => navigate(tagPath(p.publicCode)),
           }))}
         />
@@ -224,7 +268,7 @@ export function TagsDashboard() {
             label: c.name,
             sub: t.plural("dashPieces", c.pieces),
             value: c.scans,
-            onClick: () => navigate(`${APP_BASE}/pieces?lead=${c.leadId}&name=${encodeURIComponent(c.name)}`),
+            onClick: () => navigate(`${APP_BASE}/customers/${c.leadId}`),
           }))}
         />
       )}

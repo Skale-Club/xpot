@@ -1,17 +1,20 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { Building2, ChevronDown, ChevronRight, MousePointerClick, Package, RotateCcw, ScanLine, Search, Shapes, X, type LucideIcon } from "lucide-react";
+import { Building2, ChevronRight, Package, ScanLine, Shapes } from "lucide-react";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { MasterDetail } from "@/components/xpot/MasterDetail";
-import { TagModelChips, TagPieceVisual } from "@/components/xpot/TagProductThumbnail";
+import { FilterBar, FilterChips, FilterSearch, FilterSelect, FilterToken } from "@/components/xpot/filters";
+import { currentSearch, useUrlFilters } from "@/hooks/use-url-filters";
+import { ListPager, usePagedList } from "@/components/xpot/pagination";
+import { TagPieceMention } from "@/components/xpot/TagProductThumbnail";
 import TagScreen from "./TagScreen";
 import type { TagListItem } from "@shared/tagsApi";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { APP_BASE, errorText, shortUrl, tagPath, tagsGet } from "./lib";
-import { CARD, INPUT, Pill, SOLD_TONE, STATUS_TONE, Spinner, TopBar } from "./ui";
+import { CARD, Pill, SOLD_TONE, STATUS_TONE, Spinner, TopBar } from "./ui";
 import { WholesaleCard } from "./WholesaleCard";
 
 const FILTERS = [
@@ -25,42 +28,8 @@ const FILTERS = [
 type FilterId = (typeof FILTERS)[number]["id"];
 type ScanFilter = "all" | "with" | "without";
 
-function FilterSelect({
-  value,
-  onChange,
-  label,
-  icon: Icon,
-  options,
-  testId,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  label: string;
-  icon: LucideIcon;
-  options: Array<{ value: string; label: string }>;
-  testId: string;
-}) {
-  return (
-    <label className="relative block min-w-0">
-      <span className="sr-only">{label}</span>
-      <Icon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/35" />
-      <select
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="min-h-[40px] w-full appearance-none truncate rounded-xl border border-white/10 bg-white/[0.035] py-2 pl-9 pr-9 text-sm font-medium text-white/70 [color-scheme:dark] outline-none transition-colors hover:border-white/20 hover:bg-white/[0.055] focus:border-blue-400/60"
-        data-testid={testId}
-      >
-        <option value="" className="bg-[#0d1424]">{label}</option>
-        {options.map((option) => (
-          <option key={option.value} value={option.value} className="bg-[#0d1424]">
-            {option.label}
-          </option>
-        ))}
-      </select>
-      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
-    </label>
-  );
-}
+/** The list endpoint's ceiling: everything a reseller holds fits under it. */
+const LIST_LIMIT = 2000;
 
 /** The reseller's own pieces: kit stock, live and switched off. */
 export default function PiecesScreen({ selectedCode = null }: { selectedCode?: string | null }) {
@@ -71,31 +40,29 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
   // Moving between pieces and closing replace history; only the first open pushes.
   const openPiece = (code: string) =>
     isDesktop
-      ? navigate(`${APP_BASE}/pieces/${encodeURIComponent(code)}${window.location.search}`, { replace: selectedCode != null })
+      ? navigate(`${APP_BASE}/pieces/${encodeURIComponent(code)}${currentSearch()}`, { replace: selectedCode != null })
       : navigate(tagPath(code));
-  const closePiece = useCallback(() => navigate(`${APP_BASE}/pieces${window.location.search}`, { replace: true }), [navigate]);
-  const [filter, setFilter] = useState<FilterId>("all");
-  const [search, setSearch] = useState("");
-  const [companyFilter, setCompanyFilter] = useState("");
-  const [faceFilter, setFaceFilter] = useState("");
-  const [scanFilter, setScanFilter] = useState<ScanFilter>("all");
+  const closePiece = useCallback(() => navigate(`${APP_BASE}/pieces${currentSearch()}`, { replace: true }), [navigate]);
+  // Every filter lives in the URL. ?lead=<id>&name=<name> is one customer's
+  // pieces, opened from a customer card.
+  const filters = useUrlFilters({ status: "all", q: "", company: "", face: "", scan: "all", lead: "", name: "" });
+  const filter: FilterId = FILTERS.some((f) => f.id === filters.values.status) ? (filters.values.status as FilterId) : "all";
+  const search = filters.values.q;
+  const companyFilter = filters.values.company;
+  const faceFilter = filters.values.face;
+  const scanFilter: ScanFilter = filters.values.scan === "with" || filters.values.scan === "without" ? filters.values.scan : "all";
   const status = FILTERS.find((f) => f.id === filter)?.status ?? null;
-  // ?lead=<id>&name=<name>: one customer's pieces, opened from a customer card.
-  const [leadFilter, setLeadFilter] = useState(() => {
-    const params = new URLSearchParams(window.location.search);
-    const id = Number(params.get("lead"));
-    return Number.isInteger(id) && id > 0 ? { id, name: params.get("name") ?? "" } : null;
-  });
+  const leadId = Number(filters.values.lead);
+  const leadFilter = Number.isInteger(leadId) && leadId > 0 ? { id: leadId, name: filters.values.name } : null;
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["tags", "list", status, leadFilter?.id ?? null],
     queryFn: () => {
       // "My pieces": the viewer's own, even for an admin who can reach every piece.
-      const params = new URLSearchParams({ mine: "1" });
+      const params = new URLSearchParams({ mine: "1", limit: String(LIST_LIMIT) });
       if (status) params.set("status", status);
       if (leadFilter) params.set("leadId", String(leadFilter.id));
-      const qs = params.toString();
-      return tagsGet<TagListItem[]>(`/api/xpot/tags${qs ? `?${qs}` : ""}`);
+      return tagsGet<TagListItem[]>(`/api/xpot/tags?${params}`);
     },
     staleTime: 15_000,
     // Keep the table while a new filter loads, so the open piece stays put.
@@ -130,7 +97,13 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
       return true;
     });
   }, [companyFilter, data, faceFilter, filter, query, scanFilter]);
-  const hasListFilters = Boolean(filter !== "all" || search.trim() || companyFilter || faceFilter || scanFilter !== "all");
+  const hasListFilters = filters.activeCount(["status", "q", "company", "face", "scan", "lead"]) > 0;
+  // Render 50 rows at a time; the open piece always stays on the page.
+  const paged = usePagedList(items, {
+    resetKey: JSON.stringify(filters.values),
+    keepIndex: selectedCode ? items.findIndex((tag) => tag.publicCode.toUpperCase() === selectedCode.toUpperCase()) : -1,
+  });
+  const pager = <ListPager shown={paged.shown} total={paged.total} hasMore={paged.hasMore} onMore={paged.showMore} />;
 
   const listLoading = (
     <div className="flex justify-center py-16 text-white/40">
@@ -141,7 +114,7 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
   const listEmpty = (
     <div className={`${CARD} flex flex-col items-center px-6 py-10 text-center`}>
       <Package className="h-8 w-8 text-white/25" />
-      <p className="mt-2 text-sm text-white/45">{(data ?? []).length === 0 && filter === "all" ? t("piecesEmpty") : t("piecesNoMatch")}</p>
+      <p className="mt-2 text-sm text-white/45">{(data ?? []).length === 0 && !hasListFilters ? t("piecesEmpty") : t("piecesNoMatch")}</p>
     </div>
   );
 
@@ -151,136 +124,83 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
         <TopBar title={t("piecesTitle")} eyebrow={data ? t.plural("pieces", data.length) : undefined} />
       </div>
 
-      {leadFilter && (
-        <div className="mb-3 flex items-center gap-2 rounded-2xl border border-blue-400/20 bg-blue-500/10 py-2 pl-4 pr-2" data-testid="lead-filter">
-          <span className="min-w-0 flex-1 truncate text-sm font-semibold text-white">{t("piecesOf", { name: leadFilter.name || `#${leadFilter.id}` })}</span>
-          <button
-            type="button"
-            onClick={() => {
-              setLeadFilter(null);
-              window.history.replaceState(null, "", window.location.pathname);
-            }}
-            className="flex h-9 shrink-0 items-center gap-1 rounded-xl px-2 text-xs font-semibold text-white/60 active:bg-white/10"
-          >
-            <X className="h-4 w-4" />
-            {t("clearFilter")}
-          </button>
-        </div>
-      )}
-
-      {/* Desktop: search, status and the selects share one row (it wraps only when the pane is narrow). */}
-      <div className="lg:flex lg:flex-wrap lg:items-center lg:gap-2">
-      <div className="lg:contents">
-        <div className="relative lg:min-w-[180px] lg:flex-1">
-          <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
-          <input
-            type="search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={t("searchPieces")}
-            className={`${INPUT} pl-10`}
-            data-testid="input-pieces-search"
-            data-shortcut="search"
-          />
-        </div>
-
-        <div role="tablist" className="mt-3 flex gap-1.5 overflow-x-auto pb-1 lg:mt-0 lg:pb-0">
-          {FILTERS.map((f) => (
-            <button
-              key={f.id}
-              type="button"
-              role="tab"
-              aria-current={filter === f.id ? "true" : undefined}
-              onClick={() => setFilter(f.id)}
-              className={`min-h-[36px] shrink-0 rounded-full px-3.5 text-sm font-semibold transition-colors ${
-                filter === f.id ? "bg-blue-500/25 text-white" : "border border-white/10 text-white/50 active:bg-white/10"
-              }`}
-              data-testid={`filter-${f.id}`}
-            >
-              {t(f.key)}
-            </button>
-          ))}
-        </div>
-
-      </div>
-
-      <div className="mt-2.5 flex flex-col gap-2 sm:grid sm:grid-cols-3 lg:mt-0 lg:contents">
-        <div className="grid min-w-0 grid-cols-2 gap-2 sm:col-span-2 sm:grid-cols-2 lg:contents">
-          <div className="min-w-0 lg:w-auto lg:shrink-0">
+      <FilterBar
+        testId="pieces-filters"
+        search={<FilterSearch value={search} onChange={(q) => filters.set({ q })} placeholder={t("searchPieces")} testId="input-pieces-search" />}
+        controls={
+          <>
             <FilterSelect
               value={companyFilter}
-              onChange={setCompanyFilter}
-              label={t("filterAllCompanies")}
+              onChange={(company) => filters.set({ company })}
+              placeholder={t("filterAllCompanies")}
               icon={Building2}
               options={companyOptions}
               testId="filter-company"
             />
-          </div>
-          <div className="min-w-0 lg:w-auto lg:shrink-0">
             <FilterSelect
               value={faceFilter}
-              onChange={setFaceFilter}
-              label={t("filterAllChannels")}
+              onChange={(face) => filters.set({ face })}
+              placeholder={t("filterAllChannels")}
               icon={Shapes}
               options={faceOptions}
               testId="filter-face"
             />
+            <FilterSelect
+              value={scanFilter === "all" ? "" : scanFilter}
+              onChange={(scan) => filters.set({ scan })}
+              placeholder={t("filterAnyActivity")}
+              icon={ScanLine}
+              options={[
+                { value: "with", label: t("filterWithScans") },
+                { value: "without", label: t("filterWithoutScans") },
+              ]}
+              testId="filter-scan-activity"
+            />
+          </>
+        }
+        secondary={
+          <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center">
+            {leadFilter ? (
+              <FilterToken
+                label={t("piecesOf", { name: leadFilter.name || `#${leadFilter.id}` })}
+                onRemove={() => filters.set({ lead: null, name: null })}
+                testId="lead-filter"
+              />
+            ) : null}
+            <div className="min-w-0 flex-1">
+              <FilterChips
+                items={FILTERS.map((f) => ({ id: f.id, label: t(f.key), testId: `filter-${f.id}` }))}
+                value={filter}
+                onChange={(status) => filters.set({ status })}
+                ariaLabel={t("piecesTitle")}
+              />
+            </div>
           </div>
-        </div>
-        <div className="min-w-0 lg:w-auto lg:shrink-0">
-          <FilterSelect
-            value={scanFilter === "all" ? "" : scanFilter}
-            onChange={(value) => setScanFilter((value || "all") as ScanFilter)}
-            label={t("filterAnyActivity")}
-            icon={ScanLine}
-            options={[
-              { value: "with", label: t("filterWithScans") },
-              { value: "without", label: t("filterWithoutScans") },
-            ]}
-            testId="filter-scan-activity"
-          />
-        </div>
-        {hasListFilters && (
-          <button
-            type="button"
-            onClick={() => {
-              setFilter("all");
-              setSearch("");
-              setCompanyFilter("");
-              setFaceFilter("");
-              setScanFilter("all");
-            }}
-            className="inline-flex min-h-[40px] shrink-0 items-center justify-center gap-1.5 rounded-xl px-3 text-xs font-semibold text-white/45 transition-colors hover:bg-white/[0.05] hover:text-white/80 sm:justify-start"
-            data-testid="clear-piece-filters"
-          >
-            <RotateCcw className="h-3.5 w-3.5" />
-            {t("clearListFilters")}
-          </button>
-        )}
-      </div>
-      </div>
+        }
+        summary={{
+          shown: items.length,
+          total: data?.length,
+          active: hasListFilters,
+          onClear: () => filters.reset(),
+        }}
+      />
+
+      {(data?.length ?? 0) >= LIST_LIMIT ? <p className="mt-2 px-1 text-xs text-white/40">{t("piecesListCapped", { limit: LIST_LIMIT })}</p> : null}
 
       <div className="mt-4">
         {isDesktop ? (
           // The pane stays mounted whatever the list shows (loading, empty, error).
           <MasterDetail
+            popup
             closeLabel={t("closePane")}
             onClose={closePiece}
             list={isLoading ? listLoading : error ? listError : items.length === 0 ? listEmpty : (
-              <PiecesTable items={items} selectedCode={selectedCode} onSelect={openPiece} />
+              <>
+                <PiecesTable items={paged.visible} selectedCode={selectedCode} onSelect={openPiece} onCustomer={(id) => navigate(`${APP_BASE}/customers/${id}`)} />
+                {pager}
+              </>
             )}
-            detail={selectedCode ? (
-              <div className={`${CARD} p-5`}>
-                <TagScreen key={selectedCode} code={selectedCode} onClose={closePiece} />
-              </div>
-            ) : null}
-            placeholder={
-              <div className={`${CARD} flex flex-col items-center px-6 py-10 text-center`}>
-                <MousePointerClick className="h-8 w-8 text-indigo-300/60" />
-                <p className="mt-2 text-sm font-semibold text-white/60">{t("pickPiece")}</p>
-                <p className="mt-1 text-xs text-white/35">{t("pickPieceHint")}</p>
-              </div>
-            }
+            detail={selectedCode ? <TagScreen key={selectedCode} code={selectedCode} onClose={closePiece} /> : null}
           />
         ) : isLoading ? (
           listLoading
@@ -289,79 +209,88 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
         ) : items.length === 0 ? (
           listEmpty
         ) : (
+          <>
           <ul className={`${CARD} divide-y divide-white/[0.06] overflow-hidden`} data-testid="pieces-list">
-            {items.map((tag) => (
+            {paged.visible.map((tag) => (
               <li key={tag.id}>
                 <button
                   type="button"
                   onClick={() => openPiece(tag.publicCode)}
                   className="flex min-h-[88px] w-full items-center gap-3 px-4 py-3 text-left active:bg-white/10"
                 >
-                  <TagPieceVisual productType={tag.productType} face={tag.face} title={t(`face_${tag.face ?? "none"}` as "face_none")} />
                   <span className="min-w-0 flex-1">
-                    <span className={`flex min-w-0 items-center gap-1.5 text-sm font-bold ${tag.leadName ? "text-white" : "text-white/40"}`}>
-                      <Building2 className={`h-4 w-4 shrink-0 ${tag.leadName ? "text-violet-300" : "text-white/25"}`} />
-                      <span className="truncate">{tag.leadName ?? t("noCustomer")}</span>
-                    </span>
-                    <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                      <span className="font-mono text-sm font-semibold tracking-[0.12em] text-white/85">{tag.publicCode}</span>
+                    <TagPieceMention
+                      publicCode={tag.publicCode}
+                      productType={tag.productType}
+                      face={tag.face}
+                      batchCode={tag.batchCode}
+                      customer={tag.leadName}
+                      className="w-full"
+                    />
+                    {(tag.label || tag.destinationUrl) && (
+                      <span className="mt-1 block truncate pl-12 text-xs text-white/35">
+                        {[tag.label, tag.destinationUrl && shortUrl(tag.destinationUrl)].filter(Boolean).join(" · ")}
+                      </span>
+                    )}
+                  </span>
+                  <span className="flex shrink-0 flex-col items-end gap-1">
+                    <span className="flex gap-1">
                       <Pill tone={STATUS_TONE[tag.status] ?? "slate"}>{t(`status_${tag.status}` as "status_active")}</Pill>
                       {tag.saleId && <Pill tone={SOLD_TONE}>{t("soldBadge")}</Pill>}
                     </span>
-                    <span className="mt-1.5 flex min-w-0 items-center gap-1.5 text-xs text-white/35">
-                      <TagModelChips productType={tag.productType} face={tag.face} batchCode={tag.batchCode} className="shrink-0" />
-                      {(tag.label || tag.destinationUrl) && (
-                        <span className="truncate">
-                          {[tag.label, tag.destinationUrl && shortUrl(tag.destinationUrl)].filter(Boolean).join(" · ")}
-                        </span>
-                      )}
-                    </span>
+                    {tag.status === "active" && (
+                      <span className="text-xs tabular-nums text-white/40">{tag.qrInteractions + tag.nfcInteractions}</span>
+                    )}
                   </span>
-                  {tag.status === "active" && (
-                    <span className="shrink-0 text-right text-xs text-white/40 tabular-nums">{tag.qrInteractions + tag.nfcInteractions}</span>
-                  )}
                   <ChevronRight className="h-4 w-4 shrink-0 text-white/25" />
                 </button>
               </li>
             ))}
           </ul>
+          {pager}
+          </>
         )}
       </div>
 
-      <div className="mt-6 max-w-xl">
+      <div className="mt-6">
         <WholesaleCard />
       </div>
     </>
   );
 }
 
-/** Desktop list of pieces. */
-function PiecesTable({ items, selectedCode, onSelect }: { items: TagListItem[]; selectedCode: string | null; onSelect: (code: string) => void }) {
+/** Desktop list of pieces: what it is and whose on the left, its state on the right. */
+function PiecesTable({ items, selectedCode, onSelect, onCustomer }: {
+  items: TagListItem[];
+  selectedCode: string | null;
+  onSelect: (code: string) => void;
+  /** Opens the customer's page. */
+  onCustomer: (leadId: number) => void;
+}) {
   const t = useT(tagsMessages);
   return (
     <div className={`${CARD} overflow-hidden`}>
       <table className="w-full table-fixed text-left text-sm" data-testid="pieces-table">
         <colgroup>
-          <col className="w-20" />
-          <col className="w-40" />
-          <col className="w-24" />
+          <col className="w-56" />
           <col />
-          <col className="hidden w-40 xl:table-column" />
-          <col className="w-20" />
+          <col />
+          <col className="w-28" />
+          <col className="w-28" />
         </colgroup>
         <thead className="border-b border-white/[0.07] text-[10px] uppercase tracking-widest text-white/35">
           <tr>
-            <th className="py-3 pl-4 pr-2"><span className="sr-only">{t("colFace")}</span></th>
-            <th className="whitespace-nowrap px-3 py-3 font-semibold">{t("colCode")}</th>
-            <th className="whitespace-nowrap px-3 py-3 font-semibold">{t("colStatus")}</th>
+            <th className="whitespace-nowrap py-3 pl-4 pr-3 font-semibold">{t("colCode")}</th>
             <th className="px-3 py-3 font-semibold">{t("colCustomer")}</th>
-            <th className="hidden px-3 py-3 font-semibold xl:table-cell">{t("colLink")}</th>
+            <th className="px-3 py-3 font-semibold">{t("colLink")}</th>
+            <th className="whitespace-nowrap px-3 py-3 font-semibold">{t("colStatus")}</th>
             <th className="whitespace-nowrap py-3 pl-3 pr-4 text-right font-semibold">{t("colScans")}</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-white/[0.05]">
           {items.map((tag) => {
             const selected = selectedCode?.toUpperCase() === tag.publicCode.toUpperCase();
+            const scans = tag.qrInteractions + tag.nfcInteractions;
             return (
               <tr
                 key={tag.id}
@@ -372,21 +301,42 @@ function PiecesTable({ items, selectedCode, onSelect }: { items: TagListItem[]; 
                 className={`cursor-pointer outline-none transition-colors focus-visible:bg-white/[0.05] ${selected ? "bg-blue-500/[0.12]" : "hover:bg-white/[0.03]"}`}
                 data-testid={`piece-row-${tag.publicCode}`}
               >
-                <td className="py-2 pl-4 pr-0">
-                  <TagPieceVisual productType={tag.productType} face={tag.face} title={t(`face_${tag.face ?? "none"}` as "face_none")} />
+                <td className="py-2.5 pl-4 pr-3">
+                  <TagPieceMention publicCode={tag.publicCode} productType={tag.productType} face={tag.face} batchCode={tag.batchCode} className="max-w-full" />
                 </td>
-                <td className="whitespace-nowrap px-3 py-2.5">
-                  <div className="font-mono font-semibold tracking-[0.12em] text-white">{tag.publicCode}</div>
-                  <TagModelChips productType={tag.productType} face={tag.face} batchCode={tag.batchCode} className="mt-1" />
+                <td className="px-3 py-2.5">
+                  {tag.leadId && tag.leadName ? (
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); onCustomer(tag.leadId!); }}
+                      title={t("openCustomer", { name: tag.leadName })}
+                      className="group inline-flex max-w-full items-center gap-1.5 rounded-md text-left font-medium text-white/90 hover:text-blue-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-400"
+                      data-testid={`piece-customer-${tag.publicCode}`}
+                    >
+                      <Building2 className="h-3.5 w-3.5 shrink-0 text-white/30 group-hover:text-blue-300" />
+                      <span className="truncate group-hover:underline">{tag.leadName}</span>
+                    </button>
+                  ) : (
+                    <span className="text-white/35">{t("noCustomer")}</span>
+                  )}
+                  {tag.label && <div className="mt-0.5 truncate text-xs text-white/35">{tag.label}</div>}
                 </td>
-                <td className="px-3 py-2.5"><div className="flex flex-wrap gap-1"><Pill tone={STATUS_TONE[tag.status] ?? "slate"}>{t(`status_${tag.status}` as "status_active")}</Pill>{tag.saleId && <Pill tone={SOLD_TONE}>{t("soldBadge")}</Pill>}</div></td>
-                <td className="max-w-0 px-3 py-2.5" style={{ width: "40%" }}>
-                  <div className="truncate text-white/85">{tag.leadName ?? t(`product_${tag.productType}` as "product_custom")}</div>
-                  {tag.label && <div className="truncate text-[11px] text-white/35">{tag.label}</div>}
+                <td className="truncate px-3 py-2.5 text-xs text-white/45">{tag.destinationUrl ? shortUrl(tag.destinationUrl) : "—"}</td>
+                <td className="px-3 py-2.5">
+                  <div className="flex flex-wrap gap-1">
+                    <Pill tone={STATUS_TONE[tag.status] ?? "slate"}>{t(`status_${tag.status}` as "status_active")}</Pill>
+                    {tag.saleId && <Pill tone={SOLD_TONE}>{t("soldBadge")}</Pill>}
+                  </div>
                 </td>
-                <td className="hidden max-w-0 truncate px-3 py-3 align-middle text-xs text-white/45 xl:table-cell">{tag.destinationUrl ? shortUrl(tag.destinationUrl) : "—"}</td>
-                <td className="whitespace-nowrap py-3 pl-3 pr-4 text-right align-middle tabular-nums text-white/55">
-                  {tag.status === "active" ? tag.qrInteractions + tag.nfcInteractions : <span className="text-white/20">—</span>}
+                <td className="whitespace-nowrap py-2.5 pl-3 pr-4 text-right tabular-nums">
+                  {tag.status === "active" ? (
+                    <>
+                      <div className="font-semibold text-white">{scans}</div>
+                      <div className="mt-0.5 text-[11px] text-white/40">{tag.qrInteractions} QR · {tag.nfcInteractions} NFC</div>
+                    </>
+                  ) : (
+                    <span className="text-white/20">—</span>
+                  )}
                 </td>
               </tr>
             );

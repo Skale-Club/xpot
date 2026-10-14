@@ -98,16 +98,27 @@ export type XpotMeResponse = {
 export type DashboardResponse = {
   metrics: {
     visitsToday: number;
+    completedVisitsToday: number;
+    remainingVisitsToday: number;
     completedVisits: number;
     activeVisit: SalesVisit | null;
     openOpportunities: number;
     pipelineValue: number;
     pendingTasks: number;
+    tasksToday: number;
+    overdueTasks: number;
     assignedLeads: number;
   };
+  visitActivityDaily: Array<{
+    date: string;
+    visits: number;
+    completed: number;
+  }>;
   recentVisits: (SalesVisit & { lead?: SalesLead; note?: SalesVisitNote })[];
   openOpportunities: (SalesOpportunity & { lead?: SalesLead })[];
   pendingTasks: SalesTask[];
+  tasksToday: (SalesTask & { lead: Pick<SalesLead, "id" | "name"> | null })[];
+  overdueTasks: (SalesTask & { lead: Pick<SalesLead, "id" | "name"> | null })[];
 };
 
 /** Browser geolocation state, shared by GeoProvider and everything that reads a fix. */

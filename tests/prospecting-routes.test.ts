@@ -35,6 +35,23 @@ describe("prospecting contracts", () => {
     expect(value.searches).toHaveLength(2);
   });
 
+  it("accepts up to five city-and-state locations", () => {
+    const value = prospectingJobCreateSchema.parse({
+      location: "New York, NY",
+      locations: ["New York, NY", "Newark, NJ", "Boston, MA"],
+      searches: [{ niche: "hair_salon", query: "Hair salon" }],
+    });
+    expect(value.locations).toEqual(["New York, NY", "Newark, NJ", "Boston, MA"]);
+  });
+
+  it("rejects multi-city entries without a state", () => {
+    expect(() => prospectingJobCreateSchema.parse({
+      location: "New York",
+      locations: ["New York"],
+      searches: [{ niche: "hair_salon", query: "Hair salon" }],
+    })).toThrow();
+  });
+
   it("collapses repeated sectors into one search", () => {
     const value = prospectingJobCreateSchema.parse({
       location: "Marlborough, MA",

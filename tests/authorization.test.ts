@@ -34,6 +34,7 @@ const storage = {
     return rep;
   }),
   getSalesLead: vi.fn(async (id: number) => store.leads.get(id)),
+  getSalesLeadsByIds: vi.fn(async (ids: number[]) => ids.map((id) => store.leads.get(id)).filter(Boolean)),
   updateSalesLead: vi.fn(async (id: number, data: any) => {
     store.leadUpdates.push({ id, data });
     const lead = { ...store.leads.get(id), ...data };
@@ -50,6 +51,7 @@ const storage = {
     allowManualOverride: true,
   })),
   listSalesLeadLocations: vi.fn(async () => []),
+  listSalesLeadLocationsBatch: vi.fn(async () => []),
   listSalesLeadContacts: vi.fn(async (leadId: number) => store.contacts.filter((c) => c.leadId === leadId)),
   createSalesLeadContact: vi.fn(async (input: any) => ({ id: 1, ...input })),
   listSalesTasks: vi.fn(async (filters: any = {}) =>
@@ -72,6 +74,7 @@ const storage = {
   listRecentSalesVisits: vi.fn(async () => ({ data: [], total: 0 })),
   createSalesSyncEvent: vi.fn(async () => ({})),
   getSalesVisitNote: vi.fn(async () => undefined),
+  listSalesVisitNotesBatch: vi.fn(async () => []),
 };
 
 vi.mock("../server/storage.js", () => ({ storage }));

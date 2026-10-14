@@ -34,17 +34,17 @@ export function UserGreeting({ name, compact = false }: { name: string; compact?
 
   return (
     <div className="min-w-0 flex-1">
-      <div className={`${compact ? "mb-0.5 text-[9px]" : "mb-1 text-[10px]"} font-bold uppercase tracking-[0.2em] text-indigo-400/80`}>
+      <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-400/80">
         {t(greetingKey())}
       </div>
       <FadingLine
-        className={`${compact ? "mb-1 text-sm" : "mb-1.5 text-[26px]"} font-extrabold leading-none tracking-tight text-white`}
+        className={`${compact ? "mb-1 text-base" : "mb-1.5 text-[26px]"} font-extrabold leading-none tracking-tight text-white`}
         title={name}
         fade={compact ? 20 : 34}
       >
         {name} <span aria-hidden="true">👋</span>
       </FadingLine>
-      <FadingLine className={`${compact ? "text-[10px]" : "text-xs"} font-medium text-white/40`} title={date} fade={18}>
+      <FadingLine className={`${compact ? "text-[11px] leading-4" : "text-xs"} font-medium text-white/45`} title={date} fade={18}>
         {date}
       </FadingLine>
     </div>

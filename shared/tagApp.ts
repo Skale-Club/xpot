@@ -114,6 +114,99 @@ export function guessDestinationType(rawUrl: string | null | undefined): TagDest
   return "website";
 }
 
+// ─── Social profiles typed as a handle ────────────────────────────────────────
+
+/** Networks whose link the app builds from a handle, so nobody types the domain. */
+export const SOCIAL_NETWORKS = ["instagram", "facebook", "tiktok", "whatsapp"] as const;
+export type SocialNetwork = (typeof SOCIAL_NETWORKS)[number];
+
+/** What precedes the handle in each network's profile link. */
+export const SOCIAL_PREFIX: Record<SocialNetwork, string> = {
+  instagram: "instagram.com/",
+  facebook: "facebook.com/",
+  tiktok: "tiktok.com/@",
+  whatsapp: "wa.me/",
+};
+
+const NETWORK_HOSTS: Record<SocialNetwork, readonly string[]> = {
+  instagram: ["instagram.com"],
+  facebook: ["facebook.com", "fb.com"],
+  tiktok: ["tiktok.com"],
+  whatsapp: ["wa.me", "whatsapp.com"],
+};
+
+export function isSocialNetwork(value: string | null | undefined): value is SocialNetwork {
+  return (SOCIAL_NETWORKS as readonly string[]).includes(value ?? "");
+}
+
+/** The network a profile link belongs to, or null for any other link. */
+export function socialNetworkOf(rawUrl: string | null | undefined): SocialNetwork | null {
+  const host = hostOf(normalizeUrlInput(rawUrl))?.replace(/^www\./, "");
+  if (!host) return null;
+  return SOCIAL_NETWORKS.find((n) => hostMatches(host, NETWORK_HOSTS[n])) ?? null;
+}
+
+/**
+ * Typed text is a link (not a handle) when it has a scheme or a path after a
+ * domain. "celes.confections" stays a handle: Instagram allows dots in names.
+ */
+export function looksLikeLink(text: string): boolean {
+  return /^[a-z][a-z0-9+.-]*:\/\//i.test(text) || /^(www\.)?[^\s/@]+\.[a-z]{2,}\//i.test(text);
+}
+
+/**
+ * The profile link for what was typed: a handle ("@celesconfections",
+ * "celesconfections", a phone for WhatsApp) becomes the network's link; a whole
+ * pasted link is kept as is. Empty stays empty.
+ */
+export function socialUrl(network: SocialNetwork, typed: string): string {
+  const text = typed.trim();
+  if (!text) return "";
+  if (looksLikeLink(text)) return normalizeUrlInput(text);
+  const handle = network === "whatsapp" ? text.replace(/\D/g, "") : text.replace(/^@+/, "").replace(/\s+/g, "");
+  return handle ? `https://${SOCIAL_PREFIX[network]}${handle}` : "";
+}
+
+/**
+ * A phone typed for WhatsApp, masked as it is read: "+1 (305) 555-0142" for
+ * the US/Canada, "+55 (11) 99999-9999" for Brazil, "+<digits>" otherwise.
+ * Takes digits (anything else is dropped), country code first.
+ */
+export function formatPhoneMask(raw: string): string {
+  const d = raw.replace(/\D/g, "").slice(0, 15);
+  if (!d) return "";
+  if (d.startsWith("1")) {
+    const n = d.slice(1, 11);
+    // Bare "+1" until the area code starts, so backspace never fights a "(".
+    if (!n) return "+1";
+    if (n.length <= 3) return `+1 (${n}`;
+    if (n.length <= 6) return `+1 (${n.slice(0, 3)}) ${n.slice(3)}`;
+    return `+1 (${n.slice(0, 3)}) ${n.slice(3, 6)}-${n.slice(6)}`;
+  }
+  if (d.startsWith("55")) {
+    const n = d.slice(2, 13);
+    if (!n) return "+55";
+    if (n.length <= 2) return `+55 (${n}`;
+    const local = n.slice(2);
+    const split = local.length > 8 ? 5 : 4;
+    return local.length <= split ? `+55 (${n.slice(0, 2)}) ${local}` : `+55 (${n.slice(0, 2)}) ${local.slice(0, split)}-${local.slice(split)}`;
+  }
+  return `+${d}`;
+}
+
+/** The handle inside a profile link of that network, for editing it again. */
+export function socialHandleOf(network: SocialNetwork, rawUrl: string | null | undefined): string {
+  if (socialNetworkOf(rawUrl) !== network) return "";
+  let url: URL;
+  try {
+    url = new URL(normalizeUrlInput(rawUrl));
+  } catch {
+    return "";
+  }
+  const first = url.pathname.split("/").filter(Boolean)[0] ?? "";
+  return decodeURIComponent(first).replace(/^@/, "");
+}
+
 // ─── Direct (customer-link) pieces ────────────────────────────────────────────
 
 /** How a direct link reached the chip: written by the phone, or copied into another app. */

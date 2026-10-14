@@ -124,8 +124,8 @@ function TeamReport({ range, go }: { range: AnalyticsRange; go: Go }) {
                       productType={p.productType}
                       face={p.face}
                       batchCode={p.batchCode}
+                      customer={p.leadName}
                       details={[
-                        p.leadName ?? t("noCustomer"),
                         p.label,
                         p.repName ? t("teamSoldBy", { name: p.repName }) : t("teamHouse"),
                       ].filter(Boolean).join(" · ")}

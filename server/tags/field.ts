@@ -133,6 +133,64 @@ export async function quickActivateTag(id: string, input: QuickActivateInput, ac
 }
 
 /**
+ * Point a customer's piece at a new link without touching its state: a
+ * disabled piece stays off, a live one stays live. Used to change a
+ * customer's link across several pieces at once.
+ */
+export async function changeTagDestination(
+  id: string,
+  input: { destinationUrl: string; destinationType: string },
+  actor: TagActor,
+): Promise<Tag> {
+  let before: Tag | null = null;
+  const updated = await db.transaction(async (tx) => {
+    const [tag] = await tx.select().from(tags).where(eq(tags.id, id)).for("update");
+    if (!tag) throw new TagError("Tag not found", 404);
+    assertCanWork(actor, tag);
+    before = tag;
+    if (tag.status === "retired") throw new TagError("A retired tag cannot be edited", 409);
+    if (!tag.leadId) throw new TagError("Choose the customer before setting the link", 409);
+    if (tag.destinationUrl === input.destinationUrl && tag.destinationType === input.destinationType) return tag;
+
+    await tx.insert(tagDestinationHistory).values({
+      tagId: tag.id,
+      previousUrl: tag.destinationUrl,
+      newUrl: input.destinationUrl,
+      previousDestinationType: tag.destinationType,
+      newDestinationType: input.destinationType,
+      changedByUserId: actor.userId,
+      reason: "Changed from the customer page (field app)",
+    });
+    const sameType = tag.destinationType === input.destinationType;
+    const [row] = await tx
+      .update(tags)
+      .set({
+        destinationUrl: input.destinationUrl,
+        destinationType: input.destinationType,
+        utmEnabled: sameType && tag.destinationUrl ? tag.utmEnabled : defaultUtmEnabled(input.destinationType),
+        updatedAt: new Date(),
+      })
+      .where(eq(tags.id, id))
+      .returning();
+    if (input.destinationType === "google_review") await rememberLeadPlace(tx, tag.leadId, placeIdFromReviewUrl(input.destinationUrl));
+    return row;
+  });
+  const old = before as Tag | null;
+  if (old && (old.destinationUrl !== updated.destinationUrl || old.destinationType !== updated.destinationType)) {
+    await recordJourney({
+      kind: "execution",
+      action: "destination_changed",
+      title: `Destination of ${updated.publicCode} changed in the app`,
+      tagId: id,
+      beforeValue: old.destinationUrl,
+      afterValue: updated.destinationUrl,
+      metadata: { previousType: old.destinationType, newType: updated.destinationType },
+    }, journeyContext(actor.userId, "field", actor.repId));
+  }
+  return updated;
+}
+
+/**
  * The phone wrote (or the operator wrote through another app) the tag's NFC
  * URL into the chip. The server decides what that proves — see decidePhoneWrite.
  */

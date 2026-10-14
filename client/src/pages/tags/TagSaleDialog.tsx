@@ -11,7 +11,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useT } from "@/i18n";
 import { salesModuleMessages } from "@/i18n/messages/salesModule";
 import { tagsMessages } from "@/i18n/messages/tags";
-import { TagModelChips, TagPieceVisual } from "@/components/xpot/TagProductThumbnail";
+import { TagPieceMention } from "@/components/xpot/TagProductThumbnail";
 import LeadPicker, { type LeadChoice } from "./LeadPicker";
 import { errorText, getSellTo, haptic, tagsGet, tagsPostIdempotent } from "./lib";
 import { Field, Money, MoneyInput, PrimaryButton, Select, SheetDialog, inputStyle } from "@/pages/xpot/components/sales/ui";
@@ -208,11 +208,13 @@ export default function TagSaleDialog({
           <p className="rounded-2xl border border-white/10 px-4 py-6 text-center text-sm text-white/45">{t("noPiecesToSell")}</p>
         ) : selectedPieces.map((piece) => (
           <div key={piece.id} className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.035] px-3 py-2.5" data-testid="sale-piece">
-            <TagPieceVisual productType={piece.productType} face={piece.face} />
-            <span className="min-w-0 flex-1">
-              <span className="block font-mono text-sm font-semibold tracking-wider text-white">{piece.publicCode}</span>
-              <TagModelChips productType={piece.productType} face={piece.face} batchCode={piece.batchCode} className="mt-1" />
-            </span>
+            <TagPieceMention
+              publicCode={piece.publicCode}
+              productType={piece.productType}
+              face={piece.face}
+              batchCode={piece.batchCode}
+              className="min-w-0 flex-1"
+            />
           </div>
         ))}
 

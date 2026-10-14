@@ -63,6 +63,8 @@ export async function createProspectingJobForRep(repId: number, input: Prospecti
     throw new ProspectingServiceError("The prospecting engine is not configured.", 503);
   }
 
+  const locations = input.locations?.length ? input.locations : [input.location];
+
   const job = await db.transaction(async (tx) => {
     const [created] = await tx.insert(prospectingJobs).values({
       repId,
@@ -74,19 +76,19 @@ export async function createProspectingJobForRep(repId: number, input: Prospecti
       defaultVisitMinutes: TODAY_PROSPECTING_POLICY.defaultVisitMinutes,
       autoExpand: TODAY_PROSPECTING_POLICY.autoExpand,
       maxExpansionKm: TODAY_PROSPECTING_POLICY.maxExpansionKm,
-      filters: input.filters,
+      filters: { ...input.filters, locations },
       hypothesis: input.hypothesis ?? null,
       idempotencyKey: input.idempotencyKey ?? null,
       status: "queued",
     }).returning();
-    await tx.insert(prospectingRuns).values(input.searches.map((search) => ({
+    await tx.insert(prospectingRuns).values(locations.flatMap((location) => input.searches.map((search) => ({
       jobId: created.id,
       repId,
       niche: search.niche,
       query: search.query,
-      location: input.location,
+      location,
       requestedMaxResults: TODAY_PROSPECTING_POLICY.maxResultsPerSearch,
-    })));
+    }))));
     return created;
   });
   void tickProspectingQueueSafely();

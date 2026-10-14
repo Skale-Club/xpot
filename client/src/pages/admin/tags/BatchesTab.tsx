@@ -1,10 +1,11 @@
 import { useState, type FormEvent } from "react";
+import { ListPager, usePagedList } from "@/components/xpot/pagination";
 import { useMutation } from "@tanstack/react-query";
 import { Plus, X } from "lucide-react";
 import { TAG_MAX_BATCH_QUANTITY, TAG_PRODUCT_TYPES } from "@shared/tags";
 import { useToast } from "@/hooks/use-toast";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
-import { TagModelChips, TagPieceVisual } from "@/components/xpot/TagProductThumbnail";
+import { TagBatchMention, TagModelChips } from "@/components/xpot/TagProductThumbnail";
 import { errorMessage, formatDate, invalidateAdminTags, sendJson } from "./api";
 import { BTN, BTN_GHOST, CARD, Empty, INPUT, SectionTitle, Stat, TD, TH } from "./ui";
 import { BatchStagePill, ErrorLine, Field, Loading, SELECT, useBatches, useTagCatalog } from "./batches-shared";
@@ -172,6 +173,7 @@ function NewBatchForm({ onClose, onCreated }: { onClose: () => void; onCreated: 
 /** Production batches from the factory: what was made, how much is still in house. */
 export function BatchesTab({ go }: { go: (path: string) => void }) {
   const { data: batches = [], isLoading, isError } = useBatches();
+  const paged = usePagedList(batches, { resetKey: String(batches.length) });
   const [creating, setCreating] = useState(false);
   const t = useT(manageTagsBatchesMessages);
   const tm = useT(manageTagsMessages);
@@ -222,7 +224,6 @@ export function BatchesTab({ go }: { go: (path: string) => void }) {
             <table className="w-full min-w-[760px]">
               <thead className="border-b border-white/10">
                 <tr>
-                  <th className={`${TH} w-24 pr-0`}><span className="sr-only">{t("fieldPrintedOnPieces")}</span></th>
                   <th className={TH}>{tm("colBatch")}</th>
                   <th className={TH}>{t("fieldProduct")}</th>
                   <th className={TH}>{tm("colStatus")}</th>
@@ -236,22 +237,21 @@ export function BatchesTab({ go }: { go: (path: string) => void }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
-                {batches.map((b) => (
+                {paged.visible.map((b) => (
                   <tr
                     key={b.id}
                     onClick={() => go(`/batches/${b.id}`)}
                     className="cursor-pointer hover:bg-white/[0.03]"
                     data-testid={`admin-tags-batch-${b.batchCode}`}
                   >
-                    <td className={`${TD} pr-0`}>
-                      <TagPieceVisual productType={b.productType} face={b.face} size="md" />
-                    </td>
                     <td className={TD}>
-                      <p className="font-mono font-semibold text-white">{b.batchCode}</p>
-                      <p className="max-w-[240px] truncate text-xs text-white/40">
-                        {b.name}
-                        {b.vendor ? ` · ${b.vendor}` : ""}
-                      </p>
+                      <TagBatchMention
+                        batchCode={b.batchCode}
+                        productType={b.productType}
+                        face={b.face}
+                        details={[b.name, b.vendor].filter(Boolean).join(" · ") || undefined}
+                        className="max-w-[320px]"
+                      />
                     </td>
                     <td className={TD}>
                       {b.face ? <span className="mb-1 block text-sm text-white/85">{labels.face(b.face)}</span> : null}
@@ -273,6 +273,7 @@ export function BatchesTab({ go }: { go: (path: string) => void }) {
                 ))}
               </tbody>
             </table>
+            <ListPager className="border-t border-white/5 px-3" shown={paged.shown} total={paged.total} hasMore={paged.hasMore} onMore={paged.showMore} />
           </div>
         )}
       </section>

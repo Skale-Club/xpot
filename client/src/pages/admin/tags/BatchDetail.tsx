@@ -1,10 +1,12 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Download, Factory, LockKeyhole, PackagePlus, Pencil, RotateCcw, ScanLine } from "lucide-react";
+import { FilterBar, FilterChips } from "@/components/xpot/filters";
+import { useUrlFilters } from "@/hooks/use-url-filters";
 import type { TagListItem } from "@shared/tagsApi";
 import { resolveTagFace } from "@shared/tagFace";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
-import { TagModelChips, TagPieceVisual } from "@/components/xpot/TagProductThumbnail";
+import { CODE_HEADING, TagModelChips, TagPieceVisual } from "@/components/xpot/TagProductThumbnail";
 import { useToast } from "@/hooks/use-toast";
 import { ADMIN_TAGS_KEY, STALE_MS, errorMessage, formatDate, getJson, invalidateAdminTags, percent, sendJson } from "./api";
 import { BTN, BTN_GHOST, CARD, INPUT, SectionTitle, Stat } from "./ui";
@@ -211,7 +213,9 @@ function BatchIntakePanel({ batch }: { batch: BatchDetailData }) {
 export function BatchDetail({ id, go }: { id: string; go: (path: string) => void }) {
   const [editing, setEditing] = useState(false);
   const [giving, setGiving] = useState(false);
-  const [filter, setFilter] = useState<FilterId>("all");
+  // ?pieces=sold — survives opening a piece and coming back.
+  const pieceFilter = useUrlFilters({ pieces: "all" });
+  const filter: FilterId = FILTERS.some((f) => f.id === pieceFilter.values.pieces) ? (pieceFilter.values.pieces as FilterId) : "all";
   const t = useT(manageTagsBatchesMessages);
   const labels = useTagLabels();
   const { toast } = useToast();
@@ -279,7 +283,7 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
             <TagPieceVisual productType={batch.productType} face={face} size="md" />
             <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="font-mono text-xl font-bold text-white">{batch.batchCode}</h2>
+              <h2 className={CODE_HEADING}>{batch.batchCode}</h2>
               <BatchStagePill stage={batch.stage} />
               <BatchStatusPill status={batch.status} />
               <TagModelChips productType={batch.productType} face={face} batchCode={batch.batchCode} />
@@ -366,26 +370,20 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
       </div>
 
       <section>
-        <SectionTitle
-          right={
-            <div className="flex flex-wrap gap-1">
-              {FILTERS.map((f) => (
-                <button
-                  key={f.id}
-                  type="button"
-                  onClick={() => setFilter(f.id)}
-                  className={`rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${
-                    filter === f.id ? "bg-white/10 text-white" : "text-white/45 hover:text-white/80"
-                  }`}
-                >
-                  {t(f.label)}
-                </button>
-              ))}
-            </div>
+        <SectionTitle>{t("piecesHeading", { count: shown.length })}</SectionTitle>
+        <FilterBar
+          className="mb-3"
+          testId="batch-pieces-filters"
+          secondary={
+            <FilterChips
+              items={FILTERS.map((f) => ({ id: f.id, label: t(f.label), count: pieces.filter(f.test).length }))}
+              value={filter}
+              onChange={(pieces) => pieceFilter.set({ pieces })}
+              ariaLabel={t("piecesHeading", { count: total })}
+            />
           }
-        >
-          {t("piecesHeading", { count: shown.length })}
-        </SectionTitle>
+          summary={{ shown: shown.length, total, active: filter !== "all", onClear: () => pieceFilter.reset() }}
+        />
         <div className={`${CARD} overflow-hidden`}>
           <PieceTable pieces={shown} go={go} showBatch={false} empty={t("noPiecesMatch")} />
         </div>

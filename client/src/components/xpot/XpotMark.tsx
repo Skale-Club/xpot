@@ -1,6 +1,6 @@
 /**
- * The Xpot logo: the blue-green X on its dark tile. Served by /api/branding/favicon so an admin
- * upload in Settings › Branding replaces it everywhere at once (default: client/public/favicon.png).
+ * The square Xpot app mark. Served by /api/branding/favicon so Settings › Branding can replace
+ * icon-sized surfaces independently of the fixed horizontal product wordmark.
  */
 export function XpotMark({ className = "h-7 w-7 rounded-lg" }: { className?: string }) {
   return (

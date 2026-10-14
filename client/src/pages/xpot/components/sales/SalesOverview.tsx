@@ -1,13 +1,13 @@
 // What the operation made, and what is sitting on other people's shelves.
 
-import { useState } from "react";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 import { AlertTriangle, Boxes, CalendarClock } from "lucide-react";
 import { formatCents } from "../../utils";
 import { useSalesSummary } from "../../hooks/useSalesModule";
 import { Loader2 } from "@/components/ui/loader";
 import { StatTile } from "./ui";
-import { Segmented } from "@/components/xpot/Segmented";
+import { PeriodSelector } from "@/components/xpot/DashboardKit";
+import { useUrlFilters } from "@/hooks/use-url-filters";
 import { EmptyState } from "@/components/xpot/EmptyState";
 import { useT } from "@/i18n";
 import { salesModuleMessages } from "@/i18n/messages/salesModule";
@@ -16,7 +16,9 @@ const RANGES = [7, 30, 90] as const;
 
 export function SalesOverview({ onGoToConsignments }: { onGoToConsignments?: () => void }) {
   const t = useT(salesModuleMessages);
-  const [days, setDays] = useState<number>(30);
+  // ?range=7|30|90 — the report period, kept across reloads like list filters.
+  const filters = useUrlFilters({ range: "30" });
+  const days = RANGES.find((r) => String(r) === filters.values.range) ?? 30;
   const query = useSalesSummary(days);
   const s = query.data;
 
@@ -43,7 +45,12 @@ export function SalesOverview({ onGoToConsignments }: { onGoToConsignments?: () 
   return (
     <div className="space-y-4">
       {/* Range */}
-      <Segmented variant="chips" className="lg:max-w-md" items={RANGES.map((r) => ({ id: r as number, label: t("rangeDays", { days: r }) }))} value={days} onChange={setDays} />
+      <PeriodSelector
+        value={days}
+        onChange={(next) => filters.set({ range: String(next) })}
+        options={RANGES.map((r) => ({ value: r, label: t("rangeDays", { days: r }) }))}
+        ariaLabel={t("periodLabel")}
+      />
 
       {/* Profit is the headline; revenue sits beside it. */}
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4 lg:gap-4">

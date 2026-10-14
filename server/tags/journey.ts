@@ -170,6 +170,8 @@ export interface JourneyFilters {
   /** Only entries that happened before this instant (paging back in time). */
   before?: Date;
   limit?: number;
+  /** Rows to skip, for "load older"; the order ends on the id so pages never overlap. */
+  offset?: number;
 }
 
 type EntryRow = {
@@ -182,7 +184,7 @@ type EntryRow = {
   status: string; metadata: Record<string, unknown> | null; occurred_at: Date; created_at: Date;
 };
 
-async function listEntriesWhere(where: SQL, limit: number): Promise<TagJourneyEntryItem[]> {
+async function listEntriesWhere(where: SQL, limit: number, offset = 0): Promise<TagJourneyEntryItem[]> {
   const list = await rows<EntryRow>(sql`
     SELECT j.id, j.kind, j.action, j.title, j.content, j.batch_id, b.batch_code, j.tag_id, t.public_code,
            t.serial_number, j.kit_id, j.rep_id, r.display_name AS rep_name, j.lead_id, l.name AS lead_name,
@@ -198,8 +200,8 @@ async function listEntriesWhere(where: SQL, limit: number): Promise<TagJourneyEn
     LEFT JOIN tag_plans p ON p.id = j.plan_id
     LEFT JOIN users u ON u.id = j.actor_user_id
     WHERE ${where}
-    ORDER BY j.occurred_at DESC, j.created_at DESC
-    LIMIT ${limit}
+    ORDER BY j.occurred_at DESC, j.created_at DESC, j.id DESC
+    LIMIT ${limit} OFFSET ${offset}
   `);
   return list.map((r) => ({
     id: r.id,
@@ -271,7 +273,7 @@ export async function listJourneyEntries(filters: JourneyFilters): Promise<TagJo
   if (!filters.includeArchived) where.push(sql`j.status IN ('active', 'needs_review')`);
   if (filters.before) where.push(sql`j.occurred_at < ${filters.before}`);
   const clause = where.length ? sql.join(where, sql` AND `) : sql`TRUE`;
-  return listEntriesWhere(clause, Math.min(Math.max(filters.limit ?? 100, 1), 500));
+  return listEntriesWhere(clause, Math.min(Math.max(filters.limit ?? 100, 1), 500), Math.max(filters.offset ?? 0, 0));
 }
 
 // ─── Plans ────────────────────────────────────────────────────────────────────

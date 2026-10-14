@@ -32,7 +32,7 @@ import {
 import { LanguagePicker } from "@/components/LanguagePicker";
 import { PhoneSignIn } from "@/components/PhoneSignIn";
 import { GradientTopLine } from "@/components/xpot/GradientTopLine";
-import { XpotMark } from "@/components/xpot/XpotMark";
+import { XpotLogo } from "@/components/xpot/XpotLogo";
 import { interpolate, translate, useT } from "@/i18n";
 import { landingMessages } from "@/i18n/messages/landing";
 import { defaultLandingContent } from "@/lib/landingContent";
@@ -84,6 +84,32 @@ function SectionHeading({ title, sub }: { title: string; sub: string }) {
       <h2 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">{title}</h2>
       <p className="text-base text-white/55">{sub}</p>
     </div>
+  );
+}
+
+function LandingBand({
+  children,
+  tone = "base",
+  id,
+  className = "",
+  contentClassName = "",
+}: {
+  children: ReactNode;
+  tone?: "base" | "alternate";
+  id?: string;
+  className?: string;
+  contentClassName?: string;
+}) {
+  const alternate = tone === "alternate";
+
+  return (
+    <section
+      id={id}
+      className={`relative py-24 lg:py-32 ${alternate ? "border-y border-white/[0.02]" : ""} ${className}`}
+      style={alternate ? { background: "linear-gradient(180deg, rgba(255, 255, 255, 0.018) 0%, rgba(148, 163, 184, 0.01) 100%)" } : undefined}
+    >
+      <div className={`relative mx-auto max-w-6xl px-5 lg:px-8 ${contentClassName}`}>{children}</div>
+    </section>
   );
 }
 
@@ -303,10 +329,8 @@ export function XpotLandingPage() {
         {/* Header: the bar spans the window, its content the page width. */}
         <header className="fixed inset-x-0 top-0 z-40 border-b border-white/[0.06] bg-[#05070f]/85 shadow-[0_12px_32px_rgba(0,0,0,0.2)] backdrop-blur-xl">
           <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-4 lg:px-8">
-            <button onClick={() => (me ? goToApp() : window.scrollTo({ top: 0, behavior: "smooth" }))} className="flex items-center gap-2.5" aria-label="Xpot">
-              <XpotMark className="h-8 w-8 rounded-xl" />
-              {/* The wordmark gives way on narrow phones, where the language picker and button need the room. */}
-              <span className="hidden text-xl font-bold tracking-tight text-white min-[420px]:inline">Xpot</span>
+            <button onClick={() => (me ? goToApp() : window.scrollTo({ top: 0, behavior: "smooth" }))} className="flex items-center" aria-label="Xpot">
+              <XpotLogo className="h-8 w-auto" decorative />
             </button>
 
             <nav className="hidden items-center gap-6 text-sm text-white/55 md:flex" aria-label="Sections">
@@ -335,13 +359,18 @@ export function XpotLandingPage() {
                     </Button>
                   </DialogTrigger>
 
-                  <DialogContent className="max-h-[92vh] w-[92%] max-w-md gap-0 overflow-y-auto rounded-2xl border-white/10 bg-[#070b16]/95 p-5 text-white shadow-[0_24px_80px_rgba(0,0,0,0.65)] backdrop-blur-2xl [&>button]:right-3 [&>button]:top-3 [&>button]:bg-transparent sm:p-7">
+                  <DialogContent
+                    className="max-h-[92vh] w-[92%] max-w-md gap-0 overflow-y-auto rounded-2xl border-white/10 bg-[#070b16]/95 p-5 text-white shadow-[0_24px_80px_rgba(0,0,0,0.65)] backdrop-blur-2xl [&>button]:right-3 [&>button]:top-3 [&>button]:bg-transparent sm:p-7"
+                    onPointerDownOutside={(event) => {
+                      const target = event.detail.originalEvent.target;
+                      if (target instanceof Element && target.closest("[data-country-code-picker-popup]")) event.preventDefault();
+                    }}
+                  >
                     <GradientTopLine glow />
 
                     <DialogHeader className="relative space-y-0 pb-5 text-center sm:text-center">
-                      <div className="flex items-center justify-center gap-2.5">
-                        <XpotMark className="h-12 w-12" />
-                        <span className="text-2xl font-bold tracking-tight text-white">Xpot</span>
+                      <div className="flex items-center justify-center">
+                        <XpotLogo className="h-9 w-auto -translate-y-1.5" />
                       </div>
                       <DialogTitle className="sr-only">{content.account.welcomeTitle}</DialogTitle>
                       <DialogDescription className="mx-auto mt-4 max-w-sm text-center text-sm leading-6 text-white/55">
@@ -369,9 +398,9 @@ export function XpotLandingPage() {
           </div>
         </header>
 
-        <main className="relative mx-auto max-w-6xl space-y-24 px-5 pb-14 pt-[6.5rem] sm:pb-20 sm:pt-[7.5rem] lg:space-y-32 lg:px-8 lg:pb-24 lg:pt-[8.5rem]">
+        <main className="relative pt-[6.5rem] sm:pt-[7.5rem] lg:pt-[8.5rem]">
           {/* Keep the original open composition; the photo remains a focused proof point. */}
-          <section className="grid grid-cols-1 items-center gap-14 lg:grid-cols-12 lg:gap-10">
+          <section className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-14 px-5 pb-24 lg:grid-cols-12 lg:gap-10 lg:px-8 lg:pb-32">
             <div className="space-y-6 text-center lg:col-span-6 lg:text-left">
               <div className="inline-flex items-center gap-1.5 rounded-full border border-[#5272F2]/25 bg-[#5272F2]/[0.07] px-3.5 py-1.5 text-xs font-semibold text-[#8FB3FF] sm:text-sm">
                 <MapPinned className="h-3.5 w-3.5" />
@@ -410,7 +439,7 @@ export function XpotLandingPage() {
           </section>
 
           {/* The phase-one audience: independent people looking for flexible extra income. */}
-          <section id="audience" className="scroll-mt-24 space-y-12">
+          <LandingBand id="audience" tone="alternate" className="scroll-mt-24" contentClassName="space-y-12">
             <Reveal>
               <SectionHeading title={content.audience.title} sub={content.audience.subtitle} />
             </Reveal>
@@ -438,35 +467,37 @@ export function XpotLandingPage() {
                 </Reveal>
               ))}
             </div>
-          </section>
+          </LandingBand>
 
           {/* Product proof: the photo establishes the job; this shows how Xpot supports it. */}
-          <section className="grid grid-cols-1 items-center gap-12 rounded-[28px] border border-white/[0.07] bg-white/[0.025] p-6 sm:p-10 md:grid-cols-2 md:gap-10 lg:gap-16 lg:p-12">
-            <Reveal className="order-2 md:order-1">
-              <PhoneMock content={content.mockup} />
-            </Reveal>
-            <Reveal className="order-1 md:order-2">
-              <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-[#8FA8FF]">
-                <Navigation className="h-4 w-4" />
-                {t("fieldEyebrow")}
-              </div>
-              <h2 className="mt-4 text-3xl font-bold tracking-tight text-white sm:text-4xl">{t("fieldTitle")}</h2>
-              <p className="mt-4 text-base leading-relaxed text-white/60">{t("fieldBody")}</p>
-              <ul className="mt-7 space-y-4">
-                {fieldFlow.map((item) => (
-                  <li key={item} className="flex gap-3 text-sm leading-relaxed text-white/75">
-                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#5272F2]/15 text-[#9BB0FF]">
-                      <Check className="h-3.5 w-3.5" />
-                    </span>
-                    {item}
-                  </li>
-                ))}
-              </ul>
-            </Reveal>
-          </section>
+          <LandingBand>
+            <div className="grid grid-cols-1 items-center gap-12 rounded-[28px] border border-white/[0.07] bg-white/[0.025] p-6 sm:p-10 md:grid-cols-2 md:gap-10 lg:gap-16 lg:p-12">
+              <Reveal className="order-2 md:order-1">
+                <PhoneMock content={content.mockup} />
+              </Reveal>
+              <Reveal className="order-1 md:order-2">
+                <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-[#8FA8FF]">
+                  <Navigation className="h-4 w-4" />
+                  {t("fieldEyebrow")}
+                </div>
+                <h2 className="mt-4 text-3xl font-bold tracking-tight text-white sm:text-4xl">{t("fieldTitle")}</h2>
+                <p className="mt-4 text-base leading-relaxed text-white/60">{t("fieldBody")}</p>
+                <ul className="mt-7 space-y-4">
+                  {fieldFlow.map((item) => (
+                    <li key={item} className="flex gap-3 text-sm leading-relaxed text-white/75">
+                      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#5272F2]/15 text-[#9BB0FF]">
+                        <Check className="h-3.5 w-3.5" />
+                      </span>
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </Reveal>
+            </div>
+          </LandingBand>
 
           {/* The workflow and feature detail live together to avoid repeating the same four stages. */}
-          <section id="how" className="scroll-mt-24 space-y-12">
+          <LandingBand id="how" tone="alternate" className="scroll-mt-24" contentClassName="space-y-12">
             <Reveal>
               <SectionHeading title={content.how.title} sub={content.how.subtitle} />
             </Reveal>
@@ -493,10 +524,10 @@ export function XpotLandingPage() {
                 </Reveal>
               ))}
             </div>
-          </section>
+          </LandingBand>
 
           {/* FAQ */}
-          <section id="faq" className="scroll-mt-24 space-y-12">
+          <LandingBand id="faq" className="scroll-mt-24" contentClassName="space-y-12">
             <Reveal><SectionHeading title={content.faq.title} sub={content.faq.subtitle} /></Reveal>
             <div className="mx-auto max-w-3xl divide-y divide-white/[0.07] border-y border-white/[0.07]">
               {content.faq.items.map((item, index) => (
@@ -513,11 +544,12 @@ export function XpotLandingPage() {
                 </Reveal>
               ))}
             </div>
-          </section>
+          </LandingBand>
 
           {/* Call to action */}
-          <Reveal>
-            <section id="cta" className="relative mx-auto max-w-4xl scroll-mt-24 overflow-hidden rounded-2xl border border-[#5272F2]/20 bg-[linear-gradient(100deg,rgba(82,114,242,0.12),rgba(11,184,175,0.08),rgba(82,114,242,0.1))] p-8 text-center sm:p-12">
+          <LandingBand tone="alternate" className="pb-14 sm:pb-20 lg:pb-24">
+            <Reveal>
+              <section id="cta" className="relative mx-auto max-w-4xl scroll-mt-24 overflow-hidden rounded-2xl border border-[#5272F2]/20 bg-[linear-gradient(100deg,rgba(82,114,242,0.12),rgba(11,184,175,0.08),rgba(82,114,242,0.1))] p-8 text-center sm:p-12">
               <GradientTopLine className="inset-x-14" />
               <img
                 src="/landing/cta-route-map.webp"
@@ -526,7 +558,7 @@ export function XpotLandingPage() {
                 height={941}
                 loading="lazy"
                 decoding="async"
-                className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-90 brightness-110 contrast-125 saturate-125"
+                className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-30 brightness-110 contrast-125 saturate-125"
               />
               <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(100deg,rgba(5,7,15,0.42),rgba(6,14,26,0.24),rgba(5,7,15,0.38))]" />
               <div className="relative z-10 space-y-6">
@@ -545,14 +577,14 @@ export function XpotLandingPage() {
                   )}
                 </div>
               </div>
-            </section>
-          </Reveal>
+              </section>
+            </Reveal>
+          </LandingBand>
         </main>
 
         <footer className="relative border-t border-white/[0.06] py-10 text-center text-sm text-white/50">
-          <div className="flex items-center justify-center gap-2.5">
-            <XpotMark className="h-8 w-8 rounded-xl" />
-            <span className="text-xl font-bold tracking-tight text-white">Xpot</span>
+          <div className="flex items-center justify-center">
+            <XpotLogo className="h-8 w-auto" />
           </div>
           <p className="mt-3 font-medium text-white/60">{content.footer.tagline}</p>
           <p className="mt-3 flex justify-center gap-4">

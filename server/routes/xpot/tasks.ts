@@ -36,7 +36,8 @@ export function createTasksRouter() {
         priority,
         search: typeof req.query.search === "string" ? req.query.search : undefined,
         all: req.query.all === "true",
-        limit: typeof req.query.limit === "string" ? Number(req.query.limit) : undefined,
+        limit: typeof req.query.limit === "string" && /^\d+$/.test(req.query.limit) ? Number(req.query.limit) : undefined,
+        offset: typeof req.query.offset === "string" && /^\d+$/.test(req.query.offset) ? Number(req.query.offset) : undefined,
       }));
     } catch (error) {
       answerError(res, error);

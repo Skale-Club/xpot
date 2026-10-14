@@ -5,6 +5,8 @@ import { formatPhone, normalizePhone } from "@shared/phone";
 import { CountryCodePicker } from "@/components/CountryCodePicker";
 import { useT } from "@/i18n";
 import { signinMessages } from "@/i18n/messages/signin";
+import { StateSelect } from "@/components/StateSelect";
+import { phoneCountryCodeFromIso, phoneCountryCodeFromLocales } from "@shared/phoneCountry";
 
 // Sign in (or sign up) with a code texted to the phone. Only an approved rep
 // gets in; a new number completes a saved, one-question-at-a-time application.
@@ -40,12 +42,14 @@ async function post<T>(url: string, body: unknown): Promise<{ ok: boolean; data:
 
 export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<unknown> }) {
   const t = useT(signinMessages);
-  const { data: config } = useQuery<{ smsLive: boolean; supportWhatsapp: string | null }>({
+  const { data: config } = useQuery<{ smsLive: boolean; supportWhatsapp: string | null; countryIso: string | null }>({
     queryKey: ["/api/auth/phone/config"],
     staleTime: Infinity,
   });
   const [step, setStep] = useState<Step>("phone");
-  const [countryCode, setCountryCode] = useState<string>("1");
+  const [countryCode, setCountryCode] = useState<string>(() => phoneCountryCodeFromLocales(
+    typeof navigator === "undefined" ? [] : navigator.languages ?? [navigator.language],
+  ));
   const [phoneInput, setPhoneInput] = useState("");
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
@@ -71,6 +75,13 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
   const [resendAt, setResendAt] = useState(0);
   const [now, setNow] = useState(Date.now());
   const codeRef = useRef<HTMLInputElement>(null);
+  const countryWasChosen = useRef(false);
+
+  useEffect(() => {
+    if (countryWasChosen.current || phoneInput) return;
+    const detected = phoneCountryCodeFromIso(config?.countryIso);
+    if (detected) setCountryCode(detected);
+  }, [config?.countryIso, phoneInput]);
 
   // Resend countdown.
   useEffect(() => {
@@ -306,7 +317,7 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
     if (applicationStep === 0) question = <input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("namePlaceholder")} autoComplete="name" autoCapitalize="words" autoFocus className={FIELD} data-testid="input-signup-name" />;
     else if (applicationStep === 1) question = <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder={t("emailPlaceholder")} type="email" inputMode="email" autoComplete="email" autoFocus className={FIELD} data-testid="input-signup-email" />;
     else if (applicationStep === 2) question = <input value={workCity} onChange={(e) => setWorkCity(e.target.value)} placeholder={t("workCityPlaceholder")} autoComplete="address-level2" autoCapitalize="words" autoFocus className={FIELD} data-testid="input-signup-city" />;
-    else if (applicationStep === 3) question = <input value={workRegion} onChange={(e) => setWorkRegion(e.target.value)} placeholder={t("workRegionPlaceholder")} autoComplete="address-level1" autoCapitalize="words" autoFocus className={FIELD} data-testid="input-signup-region" />;
+    else if (applicationStep === 3) question = <StateSelect value={workRegion} onValueChange={setWorkRegion} placeholder={t("workRegionPlaceholder")} autoFocus selectClassName={FIELD} testId="input-signup-region" />;
     else if (applicationStep === 4) question = <input value={occupation} onChange={(e) => setOccupation(e.target.value)} placeholder={t("occupationPlaceholder")} autoFocus className={FIELD} data-testid="input-signup-occupation" />;
     else if (applicationStep === 5) question = <Choices value={hasVehicle === null ? "" : String(hasVehicle)} onChange={(value) => setHasVehicle(value === "true")} options={[{ value: "true", label: t("yes") }, { value: "false", label: t("no") }]} />;
     else if (applicationStep === 6) question = (
@@ -406,7 +417,15 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
         <div className="space-y-2">
           <label htmlFor="signin-phone" className="block text-sm font-medium text-white/80">{t("phoneLabel")}</label>
           <div className="flex h-12 gap-2">
-            <CountryCodePicker value={countryCode} onChange={setCountryCode} label={t("country")} />
+            <CountryCodePicker
+              value={countryCode}
+              onChange={(nextCountryCode) => {
+                countryWasChosen.current = true;
+                setCountryCode(nextCountryCode);
+                setPhoneInput((currentValue) => maskPhoneInput(currentValue, nextCountryCode));
+              }}
+              label={t("country")}
+            />
             <div className="relative flex-1">
               <Phone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
               <input

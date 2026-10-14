@@ -5,6 +5,7 @@ import { z } from "zod";
 import { db } from "../db.js";
 import { authAccessRequests, authPhoneCodes, salesReps, users, type User } from "#shared/schema.js";
 import { normalizePhone } from "#shared/phone.js";
+import { countryIsoFromHeaders } from "#shared/phoneCountry.js";
 import { storage } from "../storage.js";
 import { normalizeIpKey, rateLimit } from "../tags/rateLimit.js";
 import { devCodeForResponse } from "./devPhoneCode.js";
@@ -296,11 +297,12 @@ function fail(res: Response, err: unknown) {
 
 export function registerPhoneAuthRoutes(app: Express, sms: SmsSender = defaultSmsSender({ loadDbConfig: loadTwilioConfigFromDb })) {
   // What the sign-in screen needs to know.
-  app.get("/api/auth/phone/config", async (_req, res) => {
+  app.get("/api/auth/phone/config", async (req, res) => {
     const smsLive = sms.resolveLive ? await sms.resolveLive().catch(() => sms.live) : sms.live;
     res.json({
       smsLive,
       supportWhatsapp: normalizePhone(process.env.XPOT_SUPPORT_WHATSAPP ?? "") ?? null,
+      countryIso: countryIsoFromHeaders(req.headers),
     });
   });
 

@@ -8,7 +8,7 @@ import { contentKindOf, contentSummary, validateChipContent, type ChipContentKin
 import { guessDestinationType, normalizeUrlInput } from "@shared/tagApp";
 import { buildReviewUrl } from "@shared/reviewLink";
 import type { FullSalesLead } from "@/pages/xpot/types";
-import { TagModelChips, TagPieceVisual, tagPlaqueSpec } from "@/components/xpot/TagProductThumbnail";
+import { CODE_HEADING_TOPBAR, TagModelChips, TagPieceVisual, tagPlaqueSpec } from "@/components/xpot/TagProductThumbnail";
 import { apiRequest } from "@/lib/queryClient";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
@@ -283,7 +283,7 @@ export default function TagScreen({ code, onClose }: {
     <>
       <TopBar
         title={tag.publicCode}
-        titleClassName="font-mono tracking-[0.12em]"
+        titleClassName={CODE_HEADING_TOPBAR}
         back={back}
         right={closeButton}
         picture={<TagPieceVisual productType={tag.productType} face={tag.face} size="md" title={t(`face_${tag.face ?? "none"}` as "face_none")} />}
@@ -527,7 +527,7 @@ export default function TagScreen({ code, onClose }: {
             urlField={
               <div>
                 <FieldLabel>{t("linkField")}</FieldLabel>
-                <LinkInput value={link} onChange={setLink} placeholder={t("linkPlaceholder")} onPasteFailed={() => show({ tone: "error", text: tc("pasteFailed") })} />
+                <LinkInput value={link} onChange={setLink} face={tag.face} placeholder={t("linkPlaceholder")} onPasteFailed={() => show({ tone: "error", text: tc("pasteFailed") })} />
                 <ReviewLinkAssist
                   link={link}
                   onPick={(place) => {

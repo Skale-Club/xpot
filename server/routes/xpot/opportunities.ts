@@ -32,11 +32,10 @@ export function createOpportunitiesRouter() {
       status,
     });
 
-    const result = await Promise.all(opportunities.map(async (item) => ({
-      ...item,
-      lead: await storage.getSalesLead(item.leadId),
-    })));
-    res.json(result);
+    // One query for every lead instead of one per opportunity.
+    const leads = await storage.getSalesLeadsByIds(Array.from(new Set(opportunities.map((item) => item.leadId))));
+    const leadById = new Map(leads.map((lead) => [lead.id, lead]));
+    res.json(opportunities.map((item) => ({ ...item, lead: leadById.get(item.leadId) })));
   });
 
   router.post("/opportunities", async (req, res) => {

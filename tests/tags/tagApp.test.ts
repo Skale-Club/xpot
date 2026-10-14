@@ -1,6 +1,6 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
-import { classifyScan, decidePhoneWrite, guessDestinationType, normalizeUrlInput } from "../../shared/tagApp.js";
+import { classifyScan, decidePhoneWrite, guessDestinationType, formatPhoneMask, normalizeUrlInput, socialHandleOf, socialNetworkOf, socialUrl } from "../../shared/tagApp.js";
 
 test("classifyScan: Xpot tag links, in either access method", () => {
   assert.deepEqual(classifyScan("https://xpot.place/n/A7K3P9X2"), { kind: "xpot", code: "A7K3P9X2", method: "nfc" });
@@ -64,4 +64,43 @@ test("decidePhoneWrite: verified only on an exact read-back", () => {
   const bad = decidePhoneWrite(expected, "https://xpot.place/n/OTHER123");
   assert.equal(bad.ok, false);
   assert.equal(bad.status, "failed");
+});
+
+test("socialUrl builds a profile link from a typed handle", () => {
+  assert.equal(socialUrl("instagram", "@celesconfections"), "https://instagram.com/celesconfections");
+  assert.equal(socialUrl("instagram", " celes.confections "), "https://instagram.com/celes.confections");
+  assert.equal(socialUrl("tiktok", "@celes"), "https://tiktok.com/@celes");
+  assert.equal(socialUrl("facebook", "celes confections"), "https://facebook.com/celesconfections");
+  assert.equal(socialUrl("whatsapp", "+1 (305) 555-0142"), "https://wa.me/13055550142");
+  assert.equal(socialUrl("instagram", ""), "");
+  assert.equal(socialUrl("instagram", "@"), "");
+});
+
+test("socialUrl keeps a whole pasted link", () => {
+  assert.equal(socialUrl("instagram", "https://www.instagram.com/celes/?hl=en"), "https://www.instagram.com/celes/?hl=en");
+  assert.equal(socialUrl("instagram", "instagram.com/celes"), "https://instagram.com/celes");
+  assert.equal(socialUrl("instagram", "celes.com/menu"), "https://celes.com/menu");
+});
+
+test("socialNetworkOf and socialHandleOf read a profile link back", () => {
+  assert.equal(socialNetworkOf("https://www.instagram.com/celes/"), "instagram");
+  assert.equal(socialNetworkOf("https://wa.me/13055550142"), "whatsapp");
+  assert.equal(socialNetworkOf("https://celes.com"), null);
+  assert.equal(socialNetworkOf(""), null);
+  assert.equal(socialHandleOf("instagram", "https://www.instagram.com/celes/?hl=en"), "celes");
+  assert.equal(socialHandleOf("tiktok", "https://tiktok.com/@celes"), "celes");
+  assert.equal(socialHandleOf("facebook", "https://instagram.com/celes"), "");
+});
+
+test("formatPhoneMask masks a WhatsApp phone as it is typed", () => {
+  assert.equal(formatPhoneMask(""), "");
+  assert.equal(formatPhoneMask("1"), "+1");
+  assert.equal(formatPhoneMask("55"), "+55");
+  assert.equal(formatPhoneMask("1305"), "+1 (305");
+  assert.equal(formatPhoneMask("130555"), "+1 (305) 55");
+  assert.equal(formatPhoneMask("+1 305 555 0142"), "+1 (305) 555-0142");
+  assert.equal(formatPhoneMask("5511999998888"), "+55 (11) 99999-8888");
+  assert.equal(formatPhoneMask("551133334444"), "+55 (11) 3333-4444");
+  assert.equal(formatPhoneMask("55119"), "+55 (11) 9");
+  assert.equal(formatPhoneMask("447700900123"), "+447700900123");
 });

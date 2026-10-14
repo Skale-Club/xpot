@@ -43,8 +43,8 @@ const layout = (title: string, body: string) => `<!doctype html>
     border: 1px solid rgba(255,255,255,0.10); background: rgba(15,23,42,0.85);
     box-shadow: 0 24px 60px rgba(0,0,0,0.45);
   }
-  .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; font-size: 14px; font-weight: 600; }
-  .brand img { width: 34px; height: 34px; border-radius: 10px; object-fit: cover; }
+  .brand { display: flex; align-items: center; margin-bottom: 20px; }
+  .brand img { display: block; width: auto; height: 34px; object-fit: contain; }
   h1 { margin: 0 0 6px; font-size: 19px; line-height: 1.3; font-weight: 600; overflow-wrap: anywhere; }
   .sub { margin: 0 0 16px; font-size: 13px; line-height: 1.5; color: rgba(255,255,255,0.55); }
   .dest { margin: 0 0 16px; font-size: 12px; color: rgba(255,255,255,0.55); }
@@ -63,7 +63,7 @@ const layout = (title: string, body: string) => `<!doctype html>
   .hint { margin: 0; font-size: 12px; line-height: 1.5; border-radius: 12px; padding: 10px 12px; border: 1px solid rgba(245,158,11,0.25); background: rgba(245,158,11,0.08); color: #fcd34d; }
 </style>
 </head>
-<body><main class="card"><div class="brand"><img src="/api/branding/favicon" alt="" />Xpot</div>${body}</main></body>
+<body><main class="card"><div class="brand"><img src="/api/branding/logo" alt="Xpot" /></div>${body}</main></body>
 </html>`;
 
 export function renderConsentPage(input: {

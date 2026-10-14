@@ -15,20 +15,25 @@ const PLAQUE_PRODUCT_TYPES = new Set([
   "google_review_sign",
 ]);
 
-// Every size draws the same printed layout top to bottom (NFC mark, artwork,
-// QR) so the plaque reads the same in a table row and in a page header.
+// Every size draws the same printed layout: the NFC mark and the QR side by
+// side on top, the artwork below them, and on a stand the black foot it sits
+// on. The plaque reads the same in a table row and in a page header.
 const SIZES = {
   sm: {
-    frame: "h-8 w-6 rounded-[4px] py-[3px]",
-    wifi: "h-1.5 w-1.5",
-    face: "2xs",
-    qr: "h-[7px] w-[7px]",
+    body: "w-7 gap-[3px] p-[3px] pb-1",
+    corners: "rounded-[5px]",
+    standCorners: "rounded-t-[5px] rounded-b-[2px]",
+    mark: "h-2 w-2",
+    face: "xs",
+    base: "h-[5px] w-[34px] rounded-b-[3px] rounded-t-[1px]",
   },
   md: {
-    frame: "h-12 w-9 rounded-[6px] py-1",
-    wifi: "h-2.5 w-2.5",
-    face: "xs",
-    qr: "h-2.5 w-2.5",
+    body: "w-11 gap-1.5 p-1.5 pb-2",
+    corners: "rounded-[8px]",
+    standCorners: "rounded-t-[8px] rounded-b-[3px]",
+    mark: "h-3 w-3",
+    face: "sm",
+    base: "h-2 w-12 rounded-b-[4px] rounded-t-[1px]",
   },
 } as const;
 
@@ -69,8 +74,9 @@ export function tagPlaqueSpec(
 }
 
 /**
- * Model and size as readable text ("STAND" "LARGE"), kept beside the plaque
- * drawing rather than on it. Products that are not plaques show `fallback`.
+ * Model and size as compact chips ("STAND" plus a coloured "L" or "S"), kept
+ * beside the plaque drawing rather than on it. Products that are not plaques
+ * show `fallback`.
  */
 export function TagModelChips({
   productType,
@@ -87,7 +93,7 @@ export function TagModelChips({
 }) {
   const t = useT(tagsMessages);
   const { size, model } = tagPlaqueSpec(productType, face, batchCode);
-  const chip = "inline-flex h-5 items-center rounded-md px-1.5 text-[11px] font-bold uppercase leading-none tracking-wider";
+  const chip = "inline-flex h-4 items-center rounded px-1 text-[10px] font-bold uppercase leading-none tracking-wide";
   if (!size && !model) {
     return (
       <span className={`${chip} bg-white/10 text-white/75 ring-1 ring-white/15 ${className}`} data-testid="tag-model-chips">
@@ -97,49 +103,99 @@ export function TagModelChips({
   }
   return (
     <span className={`inline-flex items-center gap-1 align-middle ${className}`} data-testid="tag-model-chips">
-      {model ? <span className={`${chip} bg-white/10 text-white/85 ring-1 ring-white/15`}>{model}</span> : null}
+      {model ? <span className={`${chip} bg-white/[0.08] text-white/70`}>{model}</span> : null}
       {size ? (
-        <span className={`${chip} ${size === "Large" ? "bg-blue-500/15 text-blue-300 ring-1 ring-blue-400/30" : "bg-amber-500/15 text-amber-300 ring-1 ring-amber-400/30"}`}>
-          {size}
+        <span
+          className={`${chip} w-4 justify-center px-0 ${size === "Large" ? "bg-blue-500/20 text-blue-300" : "bg-amber-500/20 text-amber-300"}`}
+          title={size}
+          aria-label={size}
+        >
+          {size.charAt(0)}
         </span>
       ) : null}
     </span>
   );
 }
 
+// The type scale every piece and batch mention shares, so a code reads the
+// same size in every list and every header across the app. Screens never size
+// codes themselves: they pick a template below.
+/** A list row's title: the customer's name, or the code when there is none. */
+const LIST_TITLE = "block truncate text-base font-semibold text-white";
+/** The code in monospace, as a list row's title. */
+const LIST_CODE = `${LIST_TITLE} font-mono tracking-[0.1em]`;
+/** The code on a row's second line, under the customer's name. */
+const LIST_SUBCODE = "shrink-0 font-mono text-[13px] font-medium tracking-[0.08em] text-white/55";
+const LIST_DETAILS = "min-w-0 truncate text-xs text-white/40";
+/** A piece's or batch's code as a page / pane heading. */
+export const CODE_HEADING = "font-mono text-[26px] font-extrabold leading-tight tracking-[0.08em] text-white";
+/** Extra classes for `TopBar`'s title (which already sets the heading size) when the title is a code. */
+export const CODE_HEADING_TOPBAR = "font-mono tracking-[0.08em]";
+
 /**
- * The complete identity used whenever a specific piece is mentioned: both
- * physical/printed icons, its public code, and its model/size chips.
+ * The complete identity used whenever a specific piece is mentioned in a list:
+ * its picture, its public code, and its model/size chips. Given a `customer`,
+ * the customer's name leads and the code drops to the second line beside the
+ * chips, so a list reads as "whose piece" first; a piece with no customer leads
+ * with its code.
  */
 export function TagPieceMention({
   publicCode,
   productType,
   face,
   batchCode,
+  customer,
   details,
-  size = "sm",
   className = "",
-  codeClassName = "",
 }: {
   publicCode: string;
   productType: string;
   face: string | null | undefined;
   batchCode?: string | null;
+  customer?: string | null;
   details?: ReactNode;
-  size?: keyof typeof SIZES;
   className?: string;
-  codeClassName?: string;
 }) {
   const t = useT(tagsMessages);
   return (
     <span className={`inline-flex min-w-0 items-center gap-3 ${className}`} data-testid="tag-piece-mention">
-      <TagPieceVisual productType={productType} face={face} size={size} title={t(`face_${face ?? "none"}` as "face_none")} />
+      <TagPieceVisual productType={productType} face={face} title={t(`face_${face ?? "none"}` as "face_none")} />
       <span className="min-w-0">
-        <span className={`block truncate font-mono font-semibold tracking-[0.1em] text-white ${codeClassName}`}>{publicCode}</span>
+        {customer ? <span className={LIST_TITLE}>{customer}</span> : <span className={LIST_CODE}>{publicCode}</span>}
         <span className="mt-1 flex min-w-0 items-center gap-1.5">
+          {customer ? <span className={LIST_SUBCODE}>{publicCode}</span> : null}
           <TagModelChips productType={productType} face={face} batchCode={batchCode} className="shrink-0" />
-          {details ? <span className="min-w-0 truncate text-xs text-white/40">{details}</span> : null}
+          {details ? <span className={LIST_DETAILS}>{details}</span> : null}
         </span>
+      </span>
+    </span>
+  );
+}
+
+/**
+ * A batch in a list, laid out like a piece: the plaque its pieces share, the
+ * batch code as the title, and its name / vendor underneath.
+ */
+export function TagBatchMention({
+  batchCode,
+  productType,
+  face,
+  details,
+  className = "",
+}: {
+  batchCode: string;
+  productType: string;
+  face: string | null | undefined;
+  details?: ReactNode;
+  className?: string;
+}) {
+  const t = useT(tagsMessages);
+  return (
+    <span className={`inline-flex min-w-0 items-center gap-3 ${className}`} data-testid="tag-batch-mention">
+      <TagPieceVisual productType={productType} face={face} title={t(`face_${face ?? "none"}` as "face_none")} />
+      <span className="min-w-0">
+        <span className={LIST_CODE}>{batchCode}</span>
+        {details ? <span className={`mt-1 block ${LIST_DETAILS}`}>{details}</span> : null}
       </span>
     </span>
   );
@@ -159,13 +215,13 @@ function isPlaque(productType: string, face: string | null | undefined): boolean
   return PLAQUE_PRODUCT_TYPES.has(productType) || (productType === "custom" && face === "instagram");
 }
 
-const VISUAL_SLOT = { sm: "w-7", md: "w-12" } as const;
-const VISUAL_FACE_SIZE = { sm: "sm", md: "lg" } as const;
+const VISUAL_SLOT = { sm: "w-9", md: "w-12" } as const;
+const VISUAL_FACE_SIZE = { sm: "md", md: "lg" } as const;
 
 /**
- * The picture of a piece in lists and headers: the face tile (what is printed
- * on it) always, and beside it the plaque drawing when the piece is a plaque.
- * A fixed-width plaque slot keeps rows aligned when there is no plaque.
+ * The picture of a piece in lists and headers: the plaque drawing when the
+ * piece is a plaque (it already carries the printed face), otherwise the face
+ * tile alone. A fixed-width slot keeps rows aligned across both.
  */
 export function TagPieceVisual({
   productType,
@@ -179,11 +235,12 @@ export function TagPieceVisual({
   title?: string;
 }) {
   return (
-    <span className="inline-flex shrink-0 items-center gap-2" title={title}>
-      <TagFaceIcon face={face} size={VISUAL_FACE_SIZE[size]} title={title} />
-      <span className={`inline-flex shrink-0 items-center justify-center ${VISUAL_SLOT[size]}`}>
-        {isPlaque(productType, face) ? <TagProductThumbnail productType={productType} face={face} size={size} /> : null}
-      </span>
+    <span className={`inline-flex shrink-0 items-center justify-center ${VISUAL_SLOT[size]}`} title={title}>
+      {isPlaque(productType, face) ? (
+        <TagProductThumbnail productType={productType} face={face} size={size} />
+      ) : (
+        <TagFaceIcon face={face} size={VISUAL_FACE_SIZE[size]} title={title} />
+      )}
     </span>
   );
 }
@@ -207,14 +264,20 @@ export function TagProductThumbnail({
   if (!isPlaque(productType, face)) return null;
 
   const s = SIZES[size];
+  const stand = plaqueModel(productType, face) === "Stand";
   return (
-    <span
-      className={`inline-flex shrink-0 flex-col items-center justify-between bg-gradient-to-b from-white to-[#ecebe7] text-neutral-800 shadow-[0_1px_3px_rgba(0,0,0,0.35)] ${s.frame} ${className}`}
-      aria-hidden="true"
-    >
-      <Wifi className={`shrink-0 ${s.wifi}`} strokeWidth={2.6} />
-      <TagFaceIcon face={face} size={s.face} className="!shadow-none !ring-0" />
-      <MiniQr className={`shrink-0 ${s.qr}`} />
+    <span className={`inline-flex shrink-0 flex-col items-center ${className}`} aria-hidden="true">
+      <span
+        className={`flex flex-col items-center bg-gradient-to-b from-white to-[#ecebe7] text-neutral-800 shadow-[0_1px_3px_rgba(0,0,0,0.35)] ${s.body} ${stand ? s.standCorners : s.corners}`}
+      >
+        <span className="flex w-full items-center justify-between">
+          <Wifi className={`shrink-0 ${s.mark}`} strokeWidth={2.6} />
+          <MiniQr className={`shrink-0 ${s.mark}`} />
+        </span>
+        <TagFaceIcon face={face} size={s.face} className="!shadow-none !ring-0" />
+      </span>
+      {/* The stand's foot. */}
+      {stand ? <span className={`bg-black ${s.base}`} /> : null}
     </span>
   );
 }

@@ -123,10 +123,11 @@ export function CommandPalette({
       >
         <GradientTopLine />
         <DialogTitle className="sr-only">{t("searchEverything")}</DialogTitle>
-        <div className="flex items-center gap-3 border-b border-white/[0.08] px-4">
-          <Search className="h-4 w-4 shrink-0 text-white/35" />
+        <div className="xpot-command-search group flex items-center gap-3 border-b border-white/[0.08] px-4 transition-[background-color,box-shadow] duration-200 focus-within:bg-white/[0.025] focus-within:shadow-[inset_0_-1px_0_rgba(129,140,248,0.55)]">
+          <Search className="h-4 w-4 shrink-0 text-white/35 transition-colors duration-200 group-focus-within:text-indigo-300" />
           <input
             autoFocus
+            aria-label={t("searchEverything")}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
@@ -169,7 +170,6 @@ export function CommandPalette({
                         {...entry.piece}
                         details={entry.sub}
                         className="min-w-0 flex-1"
-                        codeClassName="text-sm"
                       />
                     ) : (
                       <>

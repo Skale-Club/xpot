@@ -13,3 +13,7 @@ tsbuildinfo
 
 # Vercel CLI link (Xpot no longer deploys there)
 .vercel/
+
+# Local design-tool scratch files and source backups
+.tmp-vectorcraft/
+Xpot Logo-font-backup.svg

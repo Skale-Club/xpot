@@ -158,6 +158,35 @@
   outline-offset: 3px !important;
 }
 
+/* Composite input: the rounded container carries the focus treatment so the
+   text field does not draw a rectangular outline through the adjacent + button. */
+.xpot-sector-combobox input:focus-visible {
+  outline: none !important;
+  outline-offset: 0 !important;
+}
+
+/* The command palette highlights the full search row instead of drawing a
+   harsh rectangular outline around its transparent text field. */
+.xpot-command-search input:focus-visible {
+  outline: none !important;
+  outline-offset: 0 !important;
+}
+
+@keyframes xpot-progress-shimmer {
+  from {
+    transform: translateX(-120%);
+  }
+
+  to {
+    transform: translateX(360%);
+  }
+}
+
+.xpot-progress-shimmer {
+  animation: xpot-progress-shimmer 1.35s ease-in-out infinite;
+  will-change: transform;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

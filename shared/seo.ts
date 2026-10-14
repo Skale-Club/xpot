@@ -1,6 +1,6 @@
 export const SEO_ORIGIN = "https://xpot.place";
 export const SEO_OG_IMAGE = `${SEO_ORIGIN}/og-image.png`;
-export const TITLE_SEPARATOR = " | ";
+export const TITLE_SEPARATOR = " · ";
 
 /** One title convention for browser tabs, SEO and social metadata. */
 export function formatTitle(...parts: Array<string | null | undefined>): string {

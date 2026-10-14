@@ -59,7 +59,11 @@ export function useXpotQueries() {
     }
   }, [xpotMeStatus, setLocation, pathname]);
 
-  const dashboardQuery = useQuery<DashboardResponse>({ queryKey: ["/api/xpot/dashboard"], enabled: xpotMeQuery.isSuccess });
+  const dashboardQuery = useQuery<DashboardResponse>({
+    queryKey: ["/api/xpot/dashboard"],
+    queryFn: async () => (await apiRequest("GET", `/api/xpot/dashboard?timezoneOffset=${new Date().getTimezoneOffset()}`)).json(),
+    enabled: xpotMeQuery.isSuccess,
+  });
 
   const syncMutation = useMutation({
     mutationFn: async () => {

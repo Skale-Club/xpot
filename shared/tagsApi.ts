@@ -214,6 +214,8 @@ export interface TagDashboard {
     label: string | null;
     leadName: string | null;
     scans: number;
+    qr: number;
+    nfc: number;
   }>;
   topCustomers: Array<{ leadId: number; name: string; pieces: number; scans: number }>;
   devices: Array<{ os: string; scans: number }>;

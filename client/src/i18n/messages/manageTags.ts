@@ -45,7 +45,6 @@ const en = {
   colSold: "Sold",
   house: "House",
   noPieces: "No pieces.",
-  showMore: "Show more ({count} left)",
 
   // Batch status
   batchStatus_draft: "Draft",
@@ -70,7 +69,6 @@ const en = {
   event_misconfigured_scan: "Scanned — destination invalid",
 
   // Shared by the screens below
-  noCustomer: "No customer",
   scansTaps: "Scans & taps",
   revoke: "Revoke",
   couldNotCopy: "Could not copy",
@@ -246,7 +244,6 @@ const en = {
   journeyLoadError: "Could not load the journey.",
   journeyEmpty:
     "Nothing recorded yet. Batches, assignments, activations and NFC writes appear here as they happen; production steps and decisions are recorded from the MCP or with Record.",
-  journeyShowingLatest: "Showing the latest {count} entries.",
   plans: "Plans",
   newPlanButton: "Plan",
   plansHiddenRep: "Plans have no Rep, so they are hidden while one is selected.",
@@ -350,7 +347,6 @@ export const manageTagsMessages: Dictionary<typeof en> = {
     colSold: "Vendida",
     house: "Casa",
     noPieces: "Nenhuma peça.",
-    showMore: "Mostrar mais (faltam {count})",
 
     batchStatus_draft: "Rascunho",
     batchStatus_generated: "Gerado",
@@ -372,7 +368,6 @@ export const manageTagsMessages: Dictionary<typeof en> = {
     event_disabled_scan: "Lida enquanto desligada",
     event_misconfigured_scan: "Lida — destino inválido",
 
-    noCustomer: "Sem cliente",
     scansTaps: "Scans e toques",
     revoke: "Revogar",
     couldNotCopy: "Não foi possível copiar",
@@ -543,7 +538,6 @@ export const manageTagsMessages: Dictionary<typeof en> = {
     journeyLoadError: "Não foi possível carregar a jornada.",
     journeyEmpty:
       "Nada registrado ainda. Lotes, atribuições, ativações e gravações NFC aparecem aqui conforme acontecem; etapas de produção e decisões são registradas pelo MCP ou com Registrar.",
-    journeyShowingLatest: "Mostrando os {count} registros mais recentes.",
     plans: "Planos",
     newPlanButton: "Plano",
     plansHiddenRep: "Planos não têm revendedor, então ficam ocultos enquanto um estiver selecionado.",
@@ -642,7 +636,6 @@ export const manageTagsMessages: Dictionary<typeof en> = {
     colSold: "Vendida",
     house: "Casa",
     noPieces: "No hay piezas.",
-    showMore: "Mostrar más (quedan {count})",
 
     batchStatus_draft: "Borrador",
     batchStatus_generated: "Generado",
@@ -664,7 +657,6 @@ export const manageTagsMessages: Dictionary<typeof en> = {
     event_disabled_scan: "Leída mientras estaba apagada",
     event_misconfigured_scan: "Leída — destino no válido",
 
-    noCustomer: "Sin cliente",
     scansTaps: "Escaneos y toques",
     revoke: "Revocar",
     couldNotCopy: "No se pudo copiar",
@@ -835,7 +827,6 @@ export const manageTagsMessages: Dictionary<typeof en> = {
     journeyLoadError: "No se pudo cargar el recorrido.",
     journeyEmpty:
       "Aún no hay nada registrado. Los lotes, asignaciones, activaciones y grabaciones NFC aparecen aquí a medida que ocurren; los pasos de producción y las decisiones se registran desde el MCP o con Registrar.",
-    journeyShowingLatest: "Mostrando las {count} entradas más recientes.",
     plans: "Planes",
     newPlanButton: "Plan",
     plansHiddenRep: "Los planes no tienen revendedor, así que se ocultan mientras haya uno seleccionado.",

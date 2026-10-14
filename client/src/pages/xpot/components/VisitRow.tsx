@@ -1,24 +1,23 @@
-import { useEffect, useState, useRef } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useEffect, useState, type ReactNode } from "react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { StatusBadge, StatusPicker } from "./VisitStatus";
 import type { VisitStatus } from "./VisitStatus";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { VoiceRecorder } from "./VoiceRecorder";
-import { InlineField, validateEmail } from "./InlineField";
+import { InlineField } from "./InlineField";
 import { formatCents, formatDateTime, formatDuration } from "../utils";
 import type { SalesLead, SalesVisitNote } from "../types";
-import { Trash2, Plus, X, Camera } from "lucide-react";
+import { ArrowLeft, Building2, CalendarClock, Clock3, DollarSign, ExternalLink, Mic, Sparkles, Trash2 } from "lucide-react";
 import { LeadCardBody } from "./LeadCardBody";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { leadsMessages } from "@/i18n/messages/leads";
 import { visitsMessages } from "@/i18n/messages/visits";
 import { VisitActionsPanel } from "./sales/VisitActions";
-import { useLocation } from "wouter";
-import { useIsDesktop } from "@/hooks/use-is-desktop";
+import { Link, useLocation } from "wouter";
 import { fileSrc } from "@/lib/files";
+import { CompanyInlineEditor } from "./leads/CompanyInlineEditor";
 
 export type VisitLike = {
   id: number;
@@ -33,68 +32,12 @@ export type VisitLike = {
   visitSales?: { transactions: number; pieces: number; totalCents: number };
 };
 
-
-/** A visit's editable record: lead fields, outcome, timings, notes, voice. */
-export function VisitDetail({ visit, onDelete, layout = "dialog" }: {
-  visit: VisitLike;
-  onDelete: () => void;
-  /** "pane" stacks everything in one column (the desktop side pane is narrow). */
-  layout?: "dialog" | "pane";
-}) {
+function VisitOutcomeEditor({ visit }: { visit: VisitLike }) {
   const { toast } = useToast();
   const t = useT(visitsMessages);
-  const tl = useT(leadsMessages);
-  const isDesktop = useIsDesktop();
-  const [, navigate] = useLocation();
   const [status, setStatus] = useState(visit.status);
-  // The desktop pane stays open across refetches: follow outcome changes made
-  // elsewhere (e.g. a check-out from the active-visit strip).
+
   useEffect(() => setStatus(visit.status), [visit.status]);
-  const [fields, setFields] = useState({
-    name: visit.lead?.name || "",
-    phone: visit.lead?.phone || "",
-    email: visit.lead?.email || "",
-    website: visit.lead?.website || "",
-    industry: visit.lead?.industry || "",
-  });
-  const [socials, setSocials] = useState<{ platform: string; url: string }[]>(
-    ((visit.lead as any)?.socialUrls as { platform: string; url: string }[]) || []
-  );
-  const [photos, setPhotos] = useState<string[]>(
-    ((visit.lead as any)?.photos as string[]) || []
-  );
-  const [uploadingPhoto, setUploadingPhoto] = useState(false);
-  const photoInputRef = useRef<HTMLInputElement>(null);
-
-  async function handlePhotoUpload(file: File) {
-    if (!visit.lead) return;
-    setUploadingPhoto(true);
-    try {
-      const reader = new FileReader();
-      const imageData = await new Promise<string>((resolve) => {
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.readAsDataURL(file);
-      });
-      const res = await apiRequest("POST", `/api/xpot/leads/${visit.lead.id}/photos`, { imageData });
-      const result = await res.json() as { photo: string };
-      setPhotos((prev) => [result.photo, ...prev]);
-      queryClient.invalidateQueries({ queryKey: ["/api/xpot/visits"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/xpot/leads"] });
-      toast({ title: t("photoAdded"), variant: "success" });
-    } catch (err: any) {
-      toast({ title: t("photoUploadFailed"), description: err.message, variant: "destructive" });
-    } finally {
-      setUploadingPhoto(false);
-    }
-  }
-
-  async function handleRemovePhoto(photo: string) {
-    if (!visit.lead) return;
-    setPhotos((prev) => prev.filter((u) => u !== photo));
-    apiRequest("DELETE", `/api/xpot/leads/${visit.lead.id}/photos`, { photo })
-      .then(() => queryClient.invalidateQueries({ queryKey: ["/api/xpot/visits"] }))
-      .catch((err: Error) => toast({ title: t("photoRemoveFailed"), description: err.message, variant: "destructive" }));
-  }
 
   async function handleStatusChange(newStatus: VisitStatus) {
     setStatus(newStatus);
@@ -104,14 +47,58 @@ export function VisitDetail({ visit, onDelete, layout = "dialog" }: {
       queryClient.invalidateQueries({ queryKey: ["/api/xpot/visits"] });
       queryClient.invalidateQueries({ queryKey: ["/api/xpot/dashboard"] });
     } catch (err: any) {
+      setStatus(visit.status);
       toast({ title: t("statusUpdateFailed"), description: err.message, variant: "destructive" });
     }
   }
 
-  function saveField(key: keyof typeof fields, value: string) {
-    if (!visit.lead) return;
-    setFields((prev) => ({ ...prev, [key]: value }));
-    apiRequest("PATCH", `/api/xpot/leads/${visit.lead!.id}`, { [key]: value || undefined })
+  if (status === "planned") return null;
+  return <StatusPicker value={status} onChange={handleStatusChange} layout="wide" />;
+}
+function DetailSection({ title, icon, children }: { title: string; icon: ReactNode; children: ReactNode }) {
+  return (
+    <section className="border-b border-white/[0.07] py-6 first:pt-0 last:border-b-0 last:pb-0">
+      <h2 className="mb-4 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-white/40">
+        {icon}
+        {title}
+      </h2>
+      {children}
+    </section>
+  );
+}
+function VisitMetric({ icon, label, value, detail, className = "" }: { icon: ReactNode; label: string; value: string; detail?: string; className?: string }) {
+  return (
+    <div className={`min-w-0 border-white/[0.06] px-4 py-4 sm:px-5 ${className}`}>
+      <span className="mb-3 flex items-center gap-2 text-indigo-300">
+        {icon}
+        <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-white/35">{label}</span>
+      </span>
+      <span className="min-w-0">
+        <strong className="block truncate text-base font-semibold text-white/90">{value}</strong>
+        {detail ? <span className="mt-0.5 block truncate text-[11px] text-white/35">{detail}</span> : null}
+      </span>
+    </div>
+  );
+}
+
+/** A visit's dedicated history page with its editable record kept in context. */
+export function VisitSummaryPage({ visit, onBack, onDelete }: { visit: VisitLike; onBack: () => void; onDelete: () => void }) {
+  const { toast } = useToast();
+  const t = useT(visitsMessages);
+  const tl = useT(leadsMessages);
+  const lead = visit.lead as (SalesLead & { locations?: { addressLine1?: string | null; city?: string | null; state?: string | null }[]; photos?: string[] | null }) | undefined;
+  const photo = lead?.photos?.[0];
+  const visitAt = visit.checkedInAt ?? visit.scheduledAt;
+  const visitDate = visitAt
+    ? new Date(visitAt).toLocaleDateString(t.locale, { weekday: "long", year: "numeric", month: "long", day: "numeric" })
+    : t("dateNotRecorded");
+  const formatTime = (value?: string | Date | null) => value
+    ? new Date(value).toLocaleTimeString(t.locale, { hour: "numeric", minute: "2-digit" })
+    : "—";
+
+  function handleLeadNameSave(name: string) {
+    if (!lead) return;
+    apiRequest("PATCH", `/api/xpot/leads/${lead.id}`, { name: name || undefined })
       .then(() => {
         toast({ title: t("saved"), variant: "success" });
         queryClient.invalidateQueries({ queryKey: ["/api/xpot/visits"] });
@@ -120,28 +107,7 @@ export function VisitDetail({ visit, onDelete, layout = "dialog" }: {
       .catch((err: Error) => toast({ title: t("saveFailed"), description: err.message, variant: "destructive" }));
   }
 
-  function saveSocials(updated: { platform: string; url: string }[]) {
-    if (!visit.lead) return;
-    setSocials(updated);
-    apiRequest("PATCH", `/api/xpot/leads/${visit.lead.id}`, { socialUrls: updated })
-      .then(() => queryClient.invalidateQueries({ queryKey: ["/api/xpot/visits"] }))
-      .catch((err: Error) => toast({ title: t("saveFailed"), description: err.message, variant: "destructive" }));
-  }
-
-  function saveLocation(value: string) {
-    if (!visit.lead) return;
-    // Optimistic local state update using fields isn't strictly necessary since it uses API data directly on re-render,
-    // but if we had a local 'locations' state we'd update it here.
-    apiRequest("PATCH", `/api/xpot/leads/${visit.lead.id}/location`, { addressLine1: value, label: "Main" })
-      .then(() => {
-        toast({ title: t("addressSaved"), variant: "success" });
-        queryClient.invalidateQueries({ queryKey: ["/api/xpot/visits"] });
-        queryClient.invalidateQueries({ queryKey: ["/api/xpot/dashboard"] });
-      })
-      .catch((err: Error) => toast({ title: t("addressSaveFailed"), description: err.message, variant: "destructive" }));
-  }
-
-  async function handleAudioUpload({ audioBlob, durationSeconds }: { audioBlob: Blob; durationSeconds: number }) {
+  async function handleSummaryAudioUpload({ audioBlob, durationSeconds }: { audioBlob: Blob; durationSeconds: number }) {
     if (audioBlob.size > 3 * 1024 * 1024) {
       toast({ title: t("recordingTooLarge"), description: t("recordingTooLargeDesc"), variant: "destructive" });
       return;
@@ -152,15 +118,14 @@ export function VisitDetail({ visit, onDelete, layout = "dialog" }: {
       reader.readAsDataURL(audioBlob);
     });
     const response = await apiRequest("POST", `/api/xpot/visits/${visit.id}/audio`, { audioData, durationSeconds });
-    const result = await response.json() as { note: SalesVisitNote; transcriptionAvailable: boolean; readyToAnalyze: boolean };
-
+    const result = await response.json() as { readyToAnalyze: boolean };
     let detected = 0;
     if (result.readyToAnalyze) {
       try {
         const analyzed = await apiRequest("POST", `/api/xpot/visits/${visit.id}/analyze`, {});
         detected = ((await analyzed.json()) as { actions?: unknown[] }).actions?.length ?? 0;
       } catch {
-        // Transcript is saved; analysis can be retried without re-recording.
+        // The recording is saved even when analysis needs to be retried later.
       }
     }
     toast({
@@ -168,223 +133,113 @@ export function VisitDetail({ visit, onDelete, layout = "dialog" }: {
       title: detected > 0 ? t.plural("actionsDetected", detected) : t("audioSaved"),
       description: detected > 0 ? t("actionsReviewBelow") : undefined,
     });
-    queryClient.invalidateQueries({ queryKey: ["/api/xpot/visits"] });
-    queryClient.invalidateQueries({ queryKey: ["/api/xpot/visits", visit.id, "actions"] });
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["/api/xpot/visits"] }),
+      queryClient.invalidateQueries({ queryKey: ["/api/xpot/visits", visit.id, "actions"] }),
+    ]);
   }
 
   return (
-    // One column on a phone, two side by side once there is room: the details
-    // are long enough that a single narrow column meant scrolling through a
-    // letterbox on desktop.
-    <div className={visit.lead && layout === "dialog" ? "grid gap-5 sm:grid-cols-2 sm:items-start" : "space-y-5"}>
-      {/* hidden file input */}
-      <input
-        ref={photoInputRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={(e) => { const f = e.target.files?.[0]; if (f) handlePhotoUpload(f); e.target.value = ""; }}
-      />
-
-      {/* Lead fields */}
-      {visit.lead && (
-        <div className="space-y-2.5">
-          <InlineField label="" large value={fields.name} onSave={(v) => saveField("name", v)} />
-          <InlineField label={tl("fieldPhone")} value={fields.phone} onSave={(v) => saveField("phone", v)} linkable linkHref={fields.phone ? `tel:${fields.phone}` : undefined} />
-          
-          <InlineField 
-            label={tl("fieldAddress")} 
-            value={visit.lead.locations?.[0]?.addressLine1 || ""} 
-            onSave={(v) => saveLocation(v)} 
-            linkable={!!visit.lead.locations?.[0]?.addressLine1} 
-            linkHref={visit.lead.locations?.[0]?.addressLine1 ? `https://maps.google.com/?q=${encodeURIComponent(visit.lead.locations[0].addressLine1 + (visit.lead.locations[0].addressLine2 ? " " + visit.lead.locations[0].addressLine2 : "") + (visit.lead.locations[0].city ? " " + visit.lead.locations[0].city : ""))}` : undefined} 
-          />
-
-          <div className="my-1.5 h-px bg-white/[0.04]" />
-          <InlineField label={tl("fieldWebsite")} value={fields.website} onSave={(v) => saveField("website", v)} linkable />
-          <InlineField label={tl("fieldEmail")} value={fields.email} onSave={(v) => saveField("email", v)} linkable linkHref={fields.email ? `mailto:${fields.email}` : undefined} validate={validateEmail} />
-          <InlineField label={tl("fieldIndustry")} value={fields.industry} onSave={(v) => saveField("industry", v)} />
-
-          <div className="my-1.5 h-px bg-white/[0.04]" />
-
-          {/* Social networks */}
-          <div className="space-y-1.5">
-            <div className="text-[10px] font-semibold uppercase tracking-widest text-white/30">{t("socialNetworks")}</div>
-            {socials.map((s, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <select
-                  value={s.platform}
-                  onChange={(e) => {
-                    const updated = socials.map((item, idx) => idx === i ? { ...item, platform: e.target.value } : item);
-                    saveSocials(updated);
-                  }}
-                  className="h-8 w-24 shrink-0 rounded-lg px-2 text-xs text-white/80 outline-none"
-                  style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.09)" }}
-                >
-                  {["instagram","linkedin","facebook","twitter","youtube","tiktok","other"].map((p) => (
-                    <option key={p} value={p} className="bg-[#0e1117] capitalize">{p === "other" ? tl("socialOther") : p.charAt(0).toUpperCase() + p.slice(1)}</option>
-                  ))}
-                </select>
-                <input
-                  value={s.url}
-                  onChange={(e) => {
-                    const updated = socials.map((item, idx) => idx === i ? { ...item, url: e.target.value } : item);
-                    setSocials(updated);
-                  }}
-                  onBlur={() => saveSocials(socials)}
-                  onKeyDown={(e) => { if (e.key === "Enter") saveSocials(socials); }}
-                  placeholder={tl("socialPlaceholder")}
-                  className="flex-1 min-w-0 h-8 rounded-lg px-2 text-xs text-white/80 outline-none placeholder:text-white/25"
-                  style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.09)" }}
-                />
-                <button
-                  type="button"
-                  aria-label={t("removeSocial")}
-                  title={t("removeSocial")}
-                  onClick={() => saveSocials(socials.filter((_, idx) => idx !== i))}
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white/30 hover:text-red-400 transition-colors"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
+    <div className="space-y-6" data-testid="visit-summary-page">
+      <header className="flex flex-col gap-4 border-b border-white/[0.07] pb-5 lg:flex-row lg:items-center">
+        <div className="flex min-w-0 flex-1 items-center gap-3 sm:gap-4">
+          <button
+            type="button"
+            onClick={onBack}
+            aria-label={t("backToHistory")}
+            title={t("backToHistory")}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white/40 transition hover:bg-white/[0.06] hover:text-white"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+          {photo ? (
+            <img src={fileSrc(photo)} alt="" className="h-12 w-12 shrink-0 rounded-xl object-cover" />
+          ) : (
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-indigo-400/15 bg-indigo-500/[0.08] text-indigo-300">
+              <Building2 className="h-5 w-5" />
+            </span>
+          )}
+          <div className="min-w-0">
+            <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.18em] text-indigo-300/75">{t("visitSummary")}</p>
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <div className="min-w-[220px] max-w-xl flex-1">
+                <InlineField label="" large value={lead?.name || tl("leadNumber", { id: visit.leadId })} onSave={handleLeadNameSave} />
               </div>
-            ))}
-            <button
-              type="button"
-              onClick={() => saveSocials([...socials, { platform: "instagram", url: "" }])}
-              className="flex items-center gap-1.5 text-[11px] font-semibold text-indigo-400 hover:text-indigo-300 transition-colors pt-0.5"
-            >
-              <Plus className="h-3 w-3" /> {t("addSocial")}
-            </button>
-          </div>
-
-          <div className="my-1.5 h-px bg-white/[0.04]" />
-
-          {/* Photos */}
-          <div className="space-y-1.5">
-            <div className="text-[10px] font-semibold uppercase tracking-widest text-white/30">{t("photos")}</div>
-            {photos.length > 0 && (
-              <div className="space-y-2">
-                <div className="relative w-full aspect-video rounded-2xl overflow-hidden">
-                  <img src={fileSrc(photos[0])} alt={t("coverAlt")} className="w-full h-full object-cover" />
-                  <button
-                    type="button"
-                    aria-label={t("removePhoto")}
-                    title={t("removePhoto")}
-                    onClick={() => handleRemovePhoto(photos[0])}
-                    className="absolute top-2 right-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/50 text-white/70 hover:text-red-400 transition-colors"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-                {photos.length > 1 && (
-                  <div className="flex gap-2 overflow-x-auto pb-1">
-                    {photos.slice(1).map((url, i) => (
-                      <div key={i} className="relative h-16 w-16 shrink-0 rounded-xl overflow-hidden">
-                        <img src={fileSrc(url)} alt="" className="w-full h-full object-cover" />
-                        <button
-                          type="button"
-                          aria-label={t("removePhoto")}
-                          title={t("removePhoto")}
-                          onClick={() => handleRemovePhoto(url)}
-                          className="absolute top-0.5 right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white/70 hover:text-red-400"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-            <button
-              type="button"
-              onClick={() => photoInputRef.current?.click()}
-              disabled={uploadingPhoto}
-              className="flex w-full items-center justify-center gap-2 rounded-xl py-3 text-xs font-medium text-white/40 transition-colors hover:text-white/60"
-              style={{ border: "1.5px dashed rgba(255,255,255,0.1)" }}
-            >
-              <Camera className="h-3.5 w-3.5" />
-              {uploadingPhoto ? t("uploading") : t("addPhoto")}
-            </button>
+              <StatusBadge status={visit.status} />
+            </div>
+            <p className="mt-1 capitalize text-xs text-white/40">{visitDate}</p>
           </div>
         </div>
-      )}
+        <div className="flex gap-2 pl-12 sm:pl-[7.25rem] lg:pl-0">
+          <Link href={`/leads/${visit.leadId}`} className="inline-flex h-9 items-center gap-2 rounded-lg px-3 text-xs font-semibold text-indigo-300 transition hover:bg-indigo-500/10 hover:text-indigo-200">
+            {t("openCompany")} <ExternalLink className="h-3.5 w-3.5" />
+          </Link>
+        </div>
+      </header>
 
-      {/* Second column: outcome, timings, notes and the destructive action */}
-      <div className="space-y-5">
-      {visit.status === "planned" && !isDesktop ? (
-        <button
-          type="button"
-          onClick={() => navigate(`/route/check-in?leadId=${visit.leadId}&visitId=${visit.id}`)}
-          className="flex w-full items-center justify-center rounded-2xl bg-indigo-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-indigo-400"
-        >
-          {t("startPlannedVisit")}
+      <div className="grid overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.02] sm:grid-cols-2 xl:grid-cols-4">
+        <VisitMetric className="border-b sm:border-r xl:border-b-0" icon={<CalendarClock className="h-3.5 w-3.5" />} label={t("checkIn")} value={formatTime(visit.checkedInAt ?? visit.scheduledAt)} />
+        <VisitMetric className="border-b xl:border-b-0 xl:border-r" icon={<CalendarClock className="h-3.5 w-3.5" />} label={t("checkOut")} value={formatTime(visit.checkedOutAt)} />
+        <VisitMetric className="border-b sm:border-b-0 sm:border-r" icon={<Clock3 className="h-3.5 w-3.5" />} label={t("duration")} value={formatDuration(visit.durationSeconds)} />
+        <VisitMetric icon={<DollarSign className="h-3.5 w-3.5" />} label={t("visitSales")} value={formatCents(visit.visitSales?.totalCents ?? 0)} detail={t("visitSalesCount", { sales: visit.visitSales?.transactions ?? 0, pieces: visit.visitSales?.pieces ?? 0 })} />
+      </div>
+
+      {visit.status !== "planned" ? (
+        <section className="rounded-2xl border border-white/[0.07] bg-white/[0.018] px-5 py-4 sm:px-6">
+          <VisitOutcomeEditor visit={visit} />
+        </section>
+      ) : null}
+
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(400px,0.75fr)] lg:gap-6">
+        <main className="min-w-0 rounded-2xl border border-white/[0.07] bg-white/[0.018] px-5 py-6 sm:px-7">
+          {(visit.note?.summary || visit.note?.outcome || visit.note?.nextStep) ? (
+            <DetailSection title={t("visitSummary")} icon={<Sparkles className="h-3.5 w-3.5 text-indigo-300" />}>
+              {visit.note.summary ? <div className="border-l-2 border-indigo-400/45 pl-4 sm:pl-5"><p className="text-[15px] leading-7 text-white/75">{visit.note.summary}</p></div> : null}
+              {(visit.note.outcome || visit.note.nextStep) ? (
+                <dl className={`${visit.note.summary ? "mt-6" : ""} grid gap-5 sm:grid-cols-2`}>
+                  {visit.note.outcome ? <div><dt className="text-[9px] font-bold uppercase tracking-[0.16em] text-white/30">{t("outcome")}</dt><dd className="mt-1.5 text-sm leading-6 text-white/65">{visit.note.outcome}</dd></div> : null}
+                  {visit.note.nextStep ? <div><dt className="text-[9px] font-bold uppercase tracking-[0.16em] text-white/30">{t("nextStep")}</dt><dd className="mt-1.5 text-sm leading-6 text-white/65">{visit.note.nextStep}</dd></div> : null}
+                </dl>
+              ) : null}
+            </DetailSection>
+          ) : null}
+
+          <DetailSection title={t("voiceNote")} icon={<Mic className="h-3.5 w-3.5 text-indigo-300" />}>
+            {!visit.note?.audioUrl ? (
+              <div className="mb-5">
+                <h3 className="text-base font-semibold text-white/85">{t("recordVisit")}</h3>
+                <p className="mt-1 max-w-xl text-sm leading-6 text-white/40">{t("recordVisitHint")}</p>
+              </div>
+            ) : null}
+            <div className="rounded-2xl border border-indigo-300/15 bg-indigo-500/[0.055] p-4 sm:p-5">
+              <VoiceRecorder
+                onUpload={handleSummaryAudioUpload}
+                existingAudio={fileSrc(visit.note?.audioUrl)}
+                existingDuration={visit.note?.audioDurationSeconds}
+                existingTranscription={visit.note?.audioTranscription}
+              />
+            </div>
+          </DetailSection>
+
+          <VisitActionsPanel visitId={visit.id} surface="plain" />
+        </main>
+
+        <aside className="overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.018]">
+          <div className="border-b border-white/[0.07] px-5 py-4">
+            <h2 className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-white/40"><Building2 className="h-3.5 w-3.5 text-indigo-300" />{t("companyDetails")}</h2>
+          </div>
+          <div className="px-5 py-5">
+            {visit.lead ? <CompanyInlineEditor lead={visit.lead} /> : null}
+          </div>
+        </aside>
+      </div>
+
+      <div className="flex justify-end border-t border-white/[0.06] pt-4">
+        <button type="button" onClick={onDelete} className="flex h-9 items-center justify-center gap-2 rounded-lg px-3 text-xs font-semibold text-red-300/45 transition hover:bg-red-500/[0.07] hover:text-red-300">
+          <Trash2 className="h-3.5 w-3.5" /> {t("deleteVisit")}
         </button>
-      ) : null}
-      {status !== "planned" ? <StatusPicker value={status} onChange={handleStatusChange} /> : null}
-
-      {/* Time metadata */}
-      <div
-        className="grid grid-cols-2 gap-3 rounded-2xl p-3 sm:grid-cols-4"
-        style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}
-      >
-        <div>
-          <div className="text-[10px] font-semibold uppercase tracking-widest text-white/30 mb-1">{t(visit.checkedInAt ? "checkIn" : "scheduled")}</div>
-          <div className="text-xs text-white/70">{formatDateTime(visit.checkedInAt ?? visit.scheduledAt)}</div>
-        </div>
-        <div>
-          <div className="text-[10px] font-semibold uppercase tracking-widest text-white/30 mb-1">{t("checkOut")}</div>
-          <div className="text-xs text-white/70">{formatDateTime(visit.checkedOutAt)}</div>
-        </div>
-        <div>
-          <div className="text-[10px] font-semibold uppercase tracking-widest text-white/30 mb-1">{t("duration")}</div>
-          <div className="text-xs text-white/70">{formatDuration(visit.durationSeconds)}</div>
-        </div>
-        <div>
-          <div className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-white/30">{t("visitSales")}</div>
-          <div className="text-xs font-semibold text-emerald-300">{formatCents(visit.visitSales?.totalCents ?? 0)}</div>
-          <div className="mt-0.5 text-[10px] text-white/35">{t("visitSalesCount", { sales: visit.visitSales?.transactions ?? 0, pieces: visit.visitSales?.pieces ?? 0 })}</div>
-        </div>
       </div>
 
-      {/* AI Summary */}
-      {visit.note?.summary ? (
-        <div
-          className="rounded-2xl p-4"
-          style={{ background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.2)" }}
-        >
-          <div className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-indigo-400/70">{t("aiSummary")}</div>
-          <p className="text-sm text-white/70 leading-relaxed">{visit.note.summary}</p>
-        </div>
-      ) : null}
-
-      {/* What the note asked us to record */}
-      <VisitActionsPanel visitId={visit.id} />
-
-      {/* Voice recorder */}
-      <div
-        className="rounded-2xl p-4"
-        style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}
-      >
-        <VoiceRecorder
-          onUpload={handleAudioUpload}
-          existingAudio={fileSrc(visit.note?.audioUrl)}
-          existingDuration={visit.note?.audioDurationSeconds}
-          existingTranscription={visit.note?.audioTranscription}
-        />
-      </div>
-
-      {/* Delete */}
-      <button
-        type="button"
-        onClick={onDelete}
-        className="flex w-full items-center justify-center gap-2 rounded-2xl py-4 mt-2 text-sm font-medium text-red-500/60 transition-all hover:bg-white/5 hover:text-red-400 active:scale-[0.98] active:bg-white/10 touch-manipulation"
-        style={{ border: "1px solid rgba(255,255,255,0.05)" }}
-      >
-        <Trash2 className="h-4 w-4" />
-        {t("deleteVisit")}
-      </button>
-      </div>
     </div>
   );
 }
@@ -445,60 +300,42 @@ export function VisitDeleteConfirm({ visitId, open, onOpenChange, onDeleted }: {
 }
 
 /**
- * A visit card. On the phone it opens the visit in a dialog; on desktop it
- * goes to the History view inside Dashboard, where the visit opens beside the list.
+ * A visit card. Every viewport opens the same dedicated history route.
  */
-export function VisitRow({ visit }: { visit: VisitLike }) {
-  const [open, setOpen] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const isDesktop = useIsDesktop();
+export function VisitRow({ visit, onOpen }: { visit: VisitLike; onOpen?: () => void }) {
   const [, navigate] = useLocation();
   const tl = useT(leadsMessages);
+  const openVisit = onOpen ?? (() => navigate(`/dashboard/history/${visit.id}`));
 
   return (
-    <>
-      <button
-        type="button"
-        onClick={() => (isDesktop ? navigate(`/dashboard/history/${visit.id}`) : setOpen(true))}
-        className="w-full rounded-2xl p-4 text-left transition-all"
-        style={{
-          background: "rgba(255,255,255,0.04)",
-          border: "1px solid rgba(255,255,255,0.08)",
-          boxShadow: "0 4px 16px rgba(0,0,0,0.2)",
+    <button
+      type="button"
+      onClick={openVisit}
+      className="w-full rounded-2xl p-4 text-left transition-all"
+      style={{
+        background: "rgba(255,255,255,0.04)",
+        border: "1px solid rgba(255,255,255,0.08)",
+        boxShadow: "0 4px 16px rgba(0,0,0,0.2)",
+      }}
+    >
+      <LeadCardBody
+        lead={{
+          name: visit.lead?.name || tl("leadNumber", { id: visit.leadId }),
+          phone: visit.lead?.phone,
+          website: visit.lead?.website,
+          industry: visit.lead?.industry,
+          ghlContactId: (visit.lead as any)?.ghlContactId,
+          photos: (visit.lead as any)?.photos,
+          locations: visit.lead?.locations,
         }}
-      >
-        <LeadCardBody
-          lead={{
-            name: visit.lead?.name || tl("leadNumber", { id: visit.leadId }),
-            phone: visit.lead?.phone,
-            website: visit.lead?.website,
-            industry: visit.lead?.industry,
-            ghlContactId: (visit.lead as any)?.ghlContactId,
-            photos: (visit.lead as any)?.photos,
-            locations: visit.lead?.locations,
-          }}
-          subtitle={
-            <div className="text-[10px] uppercase tracking-wider text-white/25">
-              {formatDateTime(visit.checkedInAt ?? visit.scheduledAt)}
-            </div>
-          }
-          right={<StatusBadge status={visit.status} />}
-        />
-      </button>
-
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent
-          className="max-w-[calc(100vw-1.5rem)] sm:max-w-3xl rounded-3xl border-white/10 max-h-[88vh] overflow-y-auto"
-          style={{ background: "rgba(10,15,30,0.97)", backdropFilter: "blur(20px)" }}
-        >
-          <DialogHeader>
-            <DialogTitle className="sr-only">{visit.lead?.name || tl("leadNumber", { id: visit.leadId })}</DialogTitle>
-          </DialogHeader>
-          <VisitDetail visit={visit} onDelete={() => { setOpen(false); setConfirmDelete(true); }} />
-        </DialogContent>
-      </Dialog>
-
-      <VisitDeleteConfirm visitId={visit.id} open={confirmDelete} onOpenChange={setConfirmDelete} onDeleted={() => setOpen(false)} />
-    </>
+        subtitle={
+          <div className="text-[10px] uppercase tracking-wider text-white/25">
+            {formatDateTime(visit.checkedInAt ?? visit.scheduledAt)}
+          </div>
+        }
+        right={<StatusBadge status={visit.status} />}
+      />
+    </button>
   );
 }
+

@@ -37,6 +37,10 @@ export function approximateCandidateCenter(candidates: Array<{ status: string; l
 
 export const prospectingJobCreateSchema = z.object({
   location: z.string().trim().min(2).max(500),
+  locations: z.array(
+    z.string().trim().min(4).max(500).regex(/,\s*[a-z]{2}(?:,|$)/i, "Each city must include a state code."),
+  ).min(1).max(5).transform((locations) => locations.filter((location, index) =>
+    locations.findIndex((other) => other.toLocaleLowerCase() === location.toLocaleLowerCase()) === index)).optional(),
   searches: z.array(z.object({
     niche,
     query: z.string().trim().min(2).max(500),

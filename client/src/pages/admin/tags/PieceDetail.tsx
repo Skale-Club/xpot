@@ -5,7 +5,7 @@ import { defaultUtmEnabled, planTransition, type TagAction } from "@shared/tags"
 import { contentKindOf, contentSummary, validateChipContent, type ChipContentKind } from "@shared/chipContent";
 import { guessDestinationType, normalizeUrlInput } from "@shared/tagApp";
 import type { TagDetail } from "@shared/tagsApi";
-import { TagModelChips, TagPieceVisual, tagPlaqueSpec } from "@/components/xpot/TagProductThumbnail";
+import { CODE_HEADING, TagModelChips, TagPieceVisual, tagPlaqueSpec } from "@/components/xpot/TagProductThumbnail";
 import { useIsSuperAdmin } from "@/components/xpot/AdminBadge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
@@ -317,6 +317,7 @@ function DestinationStep({ tag }: { tag: TagDetail }) {
             <LinkInput
               value={link}
               onChange={setLink}
+              face={tag.face}
               placeholder={tt("linkPlaceholder")}
               onPasteFailed={() => toast({ title: tc("pasteFailed"), variant: "destructive" })}
             />
@@ -635,7 +636,7 @@ export function PieceDetail({ id, go }: { id: string; go: Go }) {
         <TagPieceVisual productType={tag.productType} face={tag.face} size="md" />
         <div className="min-w-0 flex-1 space-y-1.5">
           <div className="flex flex-wrap items-center gap-2.5">
-            <h2 className="font-mono text-xl font-bold tracking-wider text-white sm:text-2xl" data-testid="admin-piece-code">{tag.publicCode}</h2>
+            <h2 className={CODE_HEADING} data-testid="admin-piece-code">{tag.publicCode}</h2>
             <PieceStatusPill status={tag.status} stockStatus={tag.stockStatus} />
           </div>
           <div className="flex flex-wrap items-center gap-y-1 text-sm text-white/50">

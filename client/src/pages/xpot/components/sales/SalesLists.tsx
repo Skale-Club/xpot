@@ -2,7 +2,7 @@
 // on other people's shelves.
 
 import { useState, type ReactNode } from "react";
-import { MousePointerClick, Package, PackagePlus, X, XCircle } from "lucide-react";
+import { MousePointerClick, Package, PackagePlus, Tag, X, XCircle } from "lucide-react";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { MasterDetail } from "@/components/xpot/MasterDetail";
 import { SalesTable, ConsignmentsTable } from "./tables";
@@ -10,12 +10,14 @@ import { Loader2 } from "@/components/ui/loader";
 import { formatCents } from "../../utils";
 import { useLeads } from "../../hooks/useLeads";
 import {
-  useSalesList, useConsignments, useConsignmentDetail, useSalesMutations,
+  useConsignments, useConsignmentDetail, useSalesMutations,
   usePaymentOptions, type ConsignmentWithRefs, type PaymentMethod, type PaymentStatus, type SaleWithItems,
 } from "../../hooks/useSalesModule";
 import { SaleCard, ConsignmentCard, MovementLedger, SaleDetail } from "./cards";
 import { SaleDialog } from "./SaleDialog";
-import { Segmented } from "@/components/xpot/Segmented";
+import { FilterBar, FilterChips, FilterSelect } from "@/components/xpot/filters";
+import { useUrlFilters } from "@/hooks/use-url-filters";
+import { ListPager, useOffsetPages, usePagedList } from "@/components/xpot/pagination";
 import { EmptyState } from "@/components/xpot/EmptyState";
 import { DepositDialog, SettleDialog, ReturnDialog, AdjustDialog } from "./ConsignmentDialogs";
 import { Field, GhostButton, MoneyInput, PrimaryButton, Select, SheetDialog, StatTile } from "./ui";
@@ -85,9 +87,23 @@ export function SalesList({ selectedId = null, onSelect }: {
 }) {
   const t = useT(salesModuleMessages);
   const tc = useT(commonMessages);
-  const [days, setDays] = useState<number | undefined>(90);
-  const [source, setSource] = useState<"" | "tags">("");
-  const query = useSalesList({ days, source: source || undefined, limit: 100 });
+  // ?period=30|90|all&origin=tags
+  const filters = useUrlFilters({ period: "90", origin: "" });
+  const period = (["30", "90", "all"] as const).find((value) => value === filters.values.period) ?? "90";
+  const days = period === "all" ? undefined : Number(period);
+  const source = filters.values.origin === "tags" ? "tags" : "";
+  // 50 sales at a time; older ones load as you reach the end of the list.
+  const salesPages = useOffsetPages<SaleWithItems>({
+    queryKey: ["/api/xpot/sales", "list", { days, source }],
+    url: (offset, limit) => {
+      const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+      if (days) params.set("days", String(days));
+      if (source) params.set("source", source);
+      return `/api/xpot/sales?${params}`;
+    },
+  });
+  const query = { data: salesPages.isLoading ? undefined : salesPages.items, isLoading: salesPages.isLoading };
+  const salesPager = <ListPager shown={salesPages.items.length} hasMore={salesPages.hasMore} onMore={salesPages.loadMore} loading={salesPages.loadingMore} />;
   const [detail, setDetail] = useState<SaleWithItems | null>(null);
   const isDesktop = useIsDesktop() && Boolean(onSelect);
   const selected = selectedId != null ? query.data?.find((r) => r.sale.id === selectedId) ?? null : null;
@@ -96,24 +112,36 @@ export function SalesList({ selectedId = null, onSelect }: {
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-2 lg:justify-between">
-        <Segmented
-          variant="chips"
-          className="flex-1 lg:max-w-sm"
-          items={[{ id: 30, label: t("daysShort", { days: 30 }) }, { id: 90, label: t("daysShort", { days: 90 }) }, { id: undefined, label: t("rangeAll") }]}
-          value={days}
-          onChange={setDays}
-        />
-        <div className="w-36">
-          <Select value={source} onChange={(value) => setSource(value as "" | "tags")} options={[
-            { value: "", label: t("allOrigins") },
-            { value: "tags", label: t("tagsOrigin") },
-          ]} />
-        </div>
-        <GhostButton onClick={() => setPickerOpen(true)}>
-          <Package className="h-3.5 w-3.5" /> {t("newShort")}
-        </GhostButton>
-      </div>
+      <FilterBar
+        testId="sales-filters"
+        controls={
+          <FilterSelect
+            value={source}
+            onChange={(origin) => filters.set({ origin })}
+            placeholder={t("allOrigins")}
+            icon={Tag}
+            options={[{ value: "tags", label: t("tagsOrigin") }]}
+          />
+        }
+        actions={
+          <GhostButton onClick={() => setPickerOpen(true)} className="h-10">
+            <Package className="h-3.5 w-3.5" /> {t("newShort")}
+          </GhostButton>
+        }
+        secondary={
+          <FilterChips
+            items={[
+              { id: "30", label: t("daysShort", { days: 30 }) },
+              { id: "90", label: t("daysShort", { days: 90 }) },
+              { id: "all", label: t("rangeAll") },
+            ]}
+            value={period}
+            onChange={(next) => filters.set({ period: next })}
+            ariaLabel={t("periodLabel")}
+          />
+        }
+        summary={{ shown: query.data?.length ?? 0, active: filters.activeCount() > 0, onClear: () => filters.reset() }}
+      />
 
       {query.isLoading && <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-blue-400" /></div>}
 
@@ -127,7 +155,10 @@ export function SalesList({ selectedId = null, onSelect }: {
             closeLabel={tc("close")}
             onClose={() => onSelect!(null)}
             list={query.data?.length ? (
-              <SalesTable rows={query.data} selectedId={selectedId} onSelect={(row) => onSelect!(row.sale.id)} />
+              <>
+                <SalesTable rows={query.data} selectedId={selectedId} onSelect={(row) => onSelect!(row.sale.id)} />
+                {salesPager}
+              </>
             ) : (
               <EmptyState compact icon={Package} title={t("noSalesYet")} />
             )}
@@ -144,6 +175,7 @@ export function SalesList({ selectedId = null, onSelect }: {
       ) : (
         <div className="space-y-2">
           {query.data?.map((row) => <SaleCard key={row.sale.id} row={row} onOpen={() => setDetail(row)} />)}
+          {salesPager}
         </div>
       )}
 
@@ -250,7 +282,9 @@ export function ConsignmentsList({ selectedId = null, onSelect }: {
   const t = useT(salesModuleMessages);
   const tc = useT(commonMessages);
   const isDesktop = useIsDesktop() && Boolean(onSelect);
-  const [status, setStatus] = useState<"active" | "closed">("active");
+  // ?state=closed
+  const filters = useUrlFilters({ state: "active" });
+  const status = filters.values.state === "closed" ? "closed" : "active";
   const query = useConsignments({ status });
   const [settleRow, setSettleRow] = useState<ConsignmentWithRefs | null>(null);
   const [returnRow, setReturnRow] = useState<ConsignmentWithRefs | null>(null);
@@ -261,23 +295,34 @@ export function ConsignmentsList({ selectedId = null, onSelect }: {
   const rows = query.data ?? [];
   const overdue = rows.filter((r) => r.consignment.nextVisitDueAt && new Date(r.consignment.nextVisitDueAt) < new Date());
   const rest = rows.filter((r) => !overdue.includes(r));
+  // Overdue first, then the rest; long histories (closed) render 50 at a time.
+  const ordered = [...overdue, ...rest];
+  const pagedRows = usePagedList(ordered, {
+    resetKey: status,
+    keepIndex: selectedId == null ? -1 : ordered.findIndex((r) => r.consignment.id === selectedId),
+  });
+  const pagedRest = usePagedList(rest, { resetKey: status });
   const unitsOut = rows.reduce((sum, r) => sum + r.consignment.quantityOnHand, 0);
   const valueOut = rows.reduce((sum, r) => sum + r.consignment.quantityOnHand * r.consignment.unitPriceCents, 0);
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-2 lg:justify-between">
-        <Segmented
-          variant="chips"
-          className="flex-1 lg:max-w-sm"
-          items={(["active", "closed"] as const).map((v) => ({ id: v, label: t(`status_${v}`) }))}
-          value={status}
-          onChange={setStatus}
-        />
-        <GhostButton onClick={() => setPickerOpen(true)}>
-          <PackagePlus className="h-3.5 w-3.5" /> {t("leaveShort")}
-        </GhostButton>
-      </div>
+      <FilterBar
+        testId="consignments-filters"
+        actions={
+          <GhostButton onClick={() => setPickerOpen(true)} className="h-10">
+            <PackagePlus className="h-3.5 w-3.5" /> {t("leaveShort")}
+          </GhostButton>
+        }
+        secondary={
+          <FilterChips
+            items={(["active", "closed"] as const).map((v) => ({ id: v, label: t(`status_${v}`) }))}
+            value={status}
+            onChange={(state) => filters.set({ state })}
+            ariaLabel={t("statusLabel")}
+          />
+        }
+      />
 
       {status === "active" && rows.length > 0 && (
         <div className="grid grid-cols-2 gap-2 lg:max-w-xl">
@@ -299,14 +344,17 @@ export function ConsignmentsList({ selectedId = null, onSelect }: {
           list={rows.length === 0 ? (
             <EmptyState compact icon={PackagePlus} title={status === "active" ? t("noStockOut") : t("nothingClosed")} />
           ) : (
+            <>
             <ConsignmentsTable
-              rows={[...overdue, ...rest]}
+              rows={pagedRows.visible}
               selectedId={selectedId}
               onSelect={(row) => onSelect!(row.consignment.id)}
               onSettle={status === "active" ? setSettleRow : undefined}
               onRestock={status === "active" ? (row) => setDepositTarget({ id: row.consignment.leadId, name: row.lead?.name ?? "" }) : undefined}
               onReturn={status === "active" ? setReturnRow : undefined}
             />
+            <ListPager shown={pagedRows.shown} total={pagedRows.total} hasMore={pagedRows.hasMore} onMore={pagedRows.showMore} />
+            </>
           )}
           detail={selectedId == null ? null : (
             <ConsignmentDetailBody key={selectedId} id={selectedId} onClose={() => onSelect!(null)} framed />
@@ -332,13 +380,14 @@ export function ConsignmentsList({ selectedId = null, onSelect }: {
       )}
 
       <div className={isDesktop ? "hidden" : "space-y-2"}>
-        {!isDesktop && rest.map((row) => (
+        {!isDesktop && pagedRest.visible.map((row) => (
           <ConsignmentCard key={row.consignment.id} row={row}
             onSettle={status === "active" ? () => setSettleRow(row) : undefined}
             onRestock={status === "active" ? () => setDepositTarget({ id: row.consignment.leadId, name: row.lead?.name ?? "" }) : undefined}
             onReturn={status === "active" ? () => setReturnRow(row) : undefined}
             onOpen={() => setDetailId(row.consignment.id)} />
         ))}
+        {!isDesktop && <ListPager shown={pagedRest.shown} total={pagedRest.total} hasMore={pagedRest.hasMore} onMore={pagedRest.showMore} />}
       </div>
 
       <LeadPickerDialog open={pickerOpen} onOpenChange={setPickerOpen} title={t("leaveStockWhere")} onPick={setDepositTarget} />

@@ -8,46 +8,23 @@ export type SegmentedItem<T extends string | number | undefined> = {
 };
 
 /**
- * One-of-N switch. `tabs` is the track with a gradient on the active segment
- * (Leads/Prospects, All/By day, the Sales tabs); `chips` is a row of separate
- * pills (date ranges, active/closed).
+ * One-of-N view switch: the track with a gradient on the active segment
+ * (All/By day, the Sales tabs). It changes what the screen shows; filters that
+ * narrow a list use FilterChips (components/xpot/filters.tsx) instead.
  */
 export function Segmented<T extends string | number | undefined>({
   items,
   value,
   onChange,
-  variant = "tabs",
   className = "",
   itemClassName = "",
 }: {
   items: ReadonlyArray<SegmentedItem<T>>;
   value: T;
   onChange: (id: T) => void;
-  variant?: "tabs" | "chips";
   className?: string;
   itemClassName?: string;
 }) {
-  if (variant === "chips") {
-    return (
-      <div className={`flex gap-1.5 ${className}`}>
-        {items.map(({ id, label }) => (
-          <button
-            key={String(id)}
-            type="button"
-            onClick={() => onChange(id)}
-            aria-pressed={value === id}
-            className={`flex-1 rounded-xl py-1.5 text-xs font-semibold transition-all ${itemClassName}`}
-            style={value === id
-              ? { background: "rgba(99,102,241,0.25)", color: "white", border: "1px solid rgba(99,102,241,0.4)" }
-              : { background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.35)", border: "1px solid rgba(255,255,255,0.08)" }}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-    );
-  }
-
   return (
     <div
       role="group"

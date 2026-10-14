@@ -6,9 +6,12 @@ import { requireSuperAdmin, requireXpotManager } from "./middleware.js";
 import { getSupabaseAdmin } from "../../lib/supabase.js";
 
 const DEFAULT_FAVICON = "/favicon.png";
+const DEFAULT_LOGO = "/xpot-logo.svg";
 const DEFAULT_BRANDING = {
   faviconUrl: null,
   faviconContentType: "image/png",
+  logoUrl: null,
+  logoContentType: "image/svg+xml",
   appName: "Xpot",
   shortName: "Xpot",
   themeColor: "#09090b",
@@ -44,6 +47,12 @@ export function createBrandingPublicRouter() {
   router.get("/icon-192.png", (_req, res) => redirectToIcon(res));
   router.get("/icon-512.png", (_req, res) => redirectToIcon(res));
   router.get("/apple-touch-icon.png", (_req, res) => redirectToIcon(res));
+
+  router.get("/logo", async (_req, res) => {
+    const b = await publicBranding();
+    res.set("Cache-Control", "public, max-age=300");
+    res.redirect(302, b.logoUrl || DEFAULT_LOGO);
+  });
 
   router.get("/manifest.webmanifest", async (_req, res) => {
     const b = await publicBranding();
@@ -91,6 +100,8 @@ export function createBrandingAdminRouter() {
   const present = (b: Awaited<ReturnType<typeof storage.getAppBranding>>) => ({
     faviconUrl: b.faviconUrl ?? null,
     faviconContentType: b.faviconContentType ?? null,
+    logoUrl: b.logoUrl ?? null,
+    logoContentType: b.logoContentType ?? null,
     appName: b.appName ?? "Xpot",
     shortName: b.shortName ?? "Xpot",
     themeColor: b.themeColor ?? "#09090b",
@@ -111,8 +122,7 @@ export function createBrandingAdminRouter() {
     "image/vnd.microsoft.icon": "ico",
   };
 
-  // Upload a new favicon/icon (base64 data URL, same shape as avatar upload).
-  router.post("/admin/branding/favicon", async (req, res) => {
+  async function uploadBrandAsset(req: Request, res: Response, asset: "favicon" | "logo") {
     try {
       const { imageData } = req.body as { imageData?: string };
       if (!imageData) return res.status(400).json({ message: "imageData is required" });
@@ -133,23 +143,28 @@ export function createBrandingAdminRouter() {
       }
 
       const supabase = getSupabaseAdmin();
-      const filename = `branding/favicon-${Date.now()}_${randomUUID()}.${ext}`;
+      const filename = `branding/${asset}-${Date.now()}_${randomUUID()}.${ext}`;
       const { error: uploadError } = await supabase.storage
         .from("uploads")
         .upload(filename, buffer, { contentType: mimeType, upsert: true });
       if (uploadError) throw new Error(uploadError.message);
 
       const { data: urlData } = supabase.storage.from("uploads").getPublicUrl(filename);
-      const saved = await storage.upsertAppBranding({
-        faviconUrl: urlData.publicUrl,
-        faviconContentType: mimeType,
-      });
+      const saved = await storage.upsertAppBranding(
+        asset === "favicon"
+          ? { faviconUrl: urlData.publicUrl, faviconContentType: mimeType }
+          : { logoUrl: urlData.publicUrl, logoContentType: mimeType },
+      );
       res.json(present(saved));
     } catch (err) {
-      console.error("[POST /admin/branding/favicon]", err);
+      console.error(`[POST /admin/branding/${asset}]`, err);
       res.status(500).json({ message: "Upload failed" });
     }
-  });
+  }
+
+  // The square app icon and horizontal wordmark are intentionally independent.
+  router.post("/admin/branding/favicon", (req, res) => uploadBrandAsset(req, res, "favicon"));
+  router.post("/admin/branding/logo", (req, res) => uploadBrandAsset(req, res, "logo"));
 
   router.put("/admin/branding", async (req, res) => {
     const input = z

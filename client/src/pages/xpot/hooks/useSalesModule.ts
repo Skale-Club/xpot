@@ -87,14 +87,6 @@ export function useProducts(opts: { all?: boolean; enabled?: boolean } = {}) {
   });
 }
 
-export function useSalesList(filters: { leadId?: number; visitId?: number; repId?: number; status?: "completed" | "cancelled"; source?: "sales" | "tags" | "voice" | "visit" | "lead"; days?: number; limit?: number } = {}, enabled = true) {
-  return useQuery<SaleWithItems[]>({
-    queryKey: ["/api/xpot/sales", "list", filters],
-    queryFn: () => getJson(`/api/xpot/sales${qs(filters)}`),
-    enabled,
-  });
-}
-
 export function useSale(id: number | null) {
   return useQuery<SaleWithItems>({
     queryKey: ["/api/xpot/sales", "one", id],

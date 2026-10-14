@@ -97,6 +97,8 @@ export interface TagListFilters {
   method?: "qr" | "nfc";
   search?: string;
   limit?: number;
+  /** Rows to skip, for "load more"; the order ends on t.id so pages never overlap. */
+  offset?: number;
 }
 
 type TagRow = {
@@ -175,7 +177,7 @@ function toListItem(r: TagRow): TagListItem {
   };
 }
 
-function tagListQuery(where: SQL, limit: number): SQL {
+function tagListQuery(where: SQL, limit: number, offset = 0): SQL {
   return sql`
     SELECT t.id, t.public_code, t.serial_number, t.product_type, COALESCE(t.sales_product_id, b.sales_product_id) AS sales_product_id,
            t.face, b.face AS batch_face, t.status, t.stock_status, t.ownership_type, t.custodian_rep_id,
@@ -211,8 +213,8 @@ function tagListQuery(where: SQL, limit: number): SQL {
       WHERE e.tag_id = t.id AND ${COUNTABLE}
     ) s ON true
     WHERE ${where}
-    ORDER BY t.batch_id NULLS LAST, t.serial_number NULLS LAST, t.created_at DESC
-    LIMIT ${limit}
+    ORDER BY t.batch_id NULLS LAST, t.serial_number NULLS LAST, t.created_at DESC, t.id
+    LIMIT ${limit} OFFSET ${offset}
   `;
 }
 
@@ -233,7 +235,8 @@ export async function listTags(filters: TagListFilters): Promise<TagListItem[]> 
     conds.push(sql`(t.public_code ILIKE ${term} OR l.name ILIKE ${term} OR t.label ILIKE ${term} OR b.batch_code ILIKE ${term})`);
   }
   const limit = Math.min(Math.max(filters.limit ?? 500, 1), 2000);
-  return (await rows<TagRow>(tagListQuery(sql.join(conds, sql` AND `), limit))).map(toListItem);
+  const offset = Math.max(filters.offset ?? 0, 0);
+  return (await rows<TagRow>(tagListQuery(sql.join(conds, sql` AND `), limit, offset))).map(toListItem);
 }
 
 export async function getTagRow(id: string): Promise<Tag | null> {
@@ -1792,10 +1795,12 @@ export async function getTagDashboard(repId: number | null, days = 30, now: Date
   `);
   const topPieces = await rows<{
     id: string; public_code: string; product_type: string; face: string | null; batch_face: string | null;
-    batch_code: string | null; label: string | null; lead_name: string | null; scans: number;
+    batch_code: string | null; label: string | null; lead_name: string | null; scans: number; qr: number; nfc: number;
   }>(sql`
     SELECT t.id, t.public_code, t.product_type, t.face, b.face AS batch_face, b.batch_code,
-           t.label, l.name AS lead_name, count(*)::int AS scans
+           t.label, l.name AS lead_name, count(*)::int AS scans,
+           count(*) FILTER (WHERE e.access_method = 'qr')::int AS qr,
+           count(*) FILTER (WHERE e.access_method = 'nfc')::int AS nfc
     FROM tag_events e
     JOIN tags t ON t.id = e.tag_id
     LEFT JOIN tag_batches b ON b.id = t.batch_id
@@ -1855,6 +1860,8 @@ export async function getTagDashboard(repId: number | null, days = 30, now: Date
       label: p.label,
       leadName: p.lead_name,
       scans: Number(p.scans),
+      qr: Number(p.qr),
+      nfc: Number(p.nfc),
     })),
     topCustomers: topCustomers.map((c) => ({ leadId: Number(c.lead_id), name: c.name, pieces: Number(c.pieces), scans: Number(c.scans) })),
     devices: devices.map((d) => ({ os: d.os ?? "other", scans: Number(d.scans) })),

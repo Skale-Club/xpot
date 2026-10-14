@@ -1,11 +1,13 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { PackageCheck, Undo2 } from "lucide-react";
+import { PackageCheck, Undo2, Users } from "lucide-react";
+import { FilterBar, FilterSelect } from "@/components/xpot/filters";
+import { useUrlFilters } from "@/hooks/use-url-filters";
 import type { TagKitItem, TagOverview } from "@shared/tagsApi";
 import { TAG_MAX_BATCH_QUANTITY } from "@shared/tags";
 import { ADMIN_TAGS_KEY, STALE_MS, errorMessage, getJson, invalidateAdminTags, sendJson, withQuery } from "./api";
 import { BTN_GHOST, CARD, Empty, INPUT, SectionTitle, Stat } from "./ui";
-import { ConfirmDialog, ErrorLine, Loading, ResellerSelect } from "./batches-shared";
+import { ConfirmDialog, ErrorLine, Loading, hasTagsModule, useResellers } from "./batches-shared";
 import { GiveKitForm, parseCodes } from "./kits-give-form";
 import { KitList, useReturnToHouse } from "./kits-list";
 import { useT } from "@/i18n";
@@ -154,7 +156,10 @@ function ReturnByCodes() {
  * recorded here), the kits given so far, and returns back to house stock.
  */
 export function KitsTab({ go }: { go: (path: string) => void }) {
-  const [repFilter, setRepFilter] = useState<number | null>(null);
+  // ?kitRep=12 — the kit list's reseller filter.
+  const kitFilters = useUrlFilters({ kitRep: "" });
+  const repFilter = /^\d+$/.test(kitFilters.values.kitRep) ? Number(kitFilters.values.kitRep) : null;
+  const { data: resellers = [] } = useResellers();
   const t = useT(manageTagsBatchesMessages);
   const tm = useT(manageTagsMessages);
   const ts = useT(shellMessages);
@@ -204,15 +209,25 @@ export function KitsTab({ go }: { go: (path: string) => void }) {
       </section>
 
       <section>
-        <SectionTitle
-          right={
-            <div className="w-56">
-              <ResellerSelect value={repFilter} onChange={setRepFilter} includeAll includeInactive />
-            </div>
+        <SectionTitle>{ts("manageKits")}</SectionTitle>
+        <FilterBar
+          className="mb-3"
+          testId="kits-filters"
+          controls={
+            <FilterSelect
+              value={repFilter ? String(repFilter) : ""}
+              onChange={(kitRep) => kitFilters.set({ kitRep })}
+              placeholder={tm("allResellers")}
+              icon={Users}
+              options={resellers.map((r) => ({
+                value: String(r.id),
+                label: `${r.displayName}${r.team ? ` · ${r.team}` : ""}${!r.isActive ? tm("resellerInactive") : !hasTagsModule(r) ? tm("resellerNoTags") : ""}`,
+              }))}
+              testId="admin-tags-reseller-select"
+            />
           }
-        >
-          {ts("manageKits")}
-        </SectionTitle>
+          summary={{ shown: list.length, active: repFilter != null, onClear: () => kitFilters.reset() }}
+        />
         {kits.isLoading ? (
           <Loading />
         ) : kits.isError ? (

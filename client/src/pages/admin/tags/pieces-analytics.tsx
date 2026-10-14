@@ -9,6 +9,7 @@ import { useT } from "@/i18n";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { manageTagsPiecesMessages } from "@/i18n/messages/manageTagsPieces";
 import { TagPieceMention } from "@/components/xpot/TagProductThumbnail";
+import { FilterChips } from "@/components/xpot/filters";
 
 // Range picker + KPIs + daily QR/NFC chart, for the whole fleet (Team tab) or
 // one piece (PieceDetail).
@@ -53,28 +54,32 @@ export function rangeParams(range: AnalyticsRange): Record<string, string | unde
   };
 }
 
-const PILL = "rounded-lg px-2.5 py-1 text-xs font-medium transition-colors";
-const PILL_ON = "bg-blue-500 text-white";
-const PILL_OFF = "border border-white/10 bg-white/5 text-white/60 hover:bg-white/10";
-const DATE_INPUT = "h-7 rounded-lg border border-white/10 bg-[#0a0f1e] px-2 text-xs text-white [color-scheme:dark]";
+// Same parts as the list filters (components/xpot/filters.tsx): the presets are
+// FilterChips, the custom range sits in a 32px control of the same look.
+const DATE_INPUT =
+  "h-8 rounded-lg border border-white/[0.08] bg-black/20 px-2 text-xs text-white/80 outline-none [color-scheme:dark] focus:border-indigo-400/50";
 
 export function RangePicker({ value, onChange }: { value: AnalyticsRange; onChange: (r: AnalyticsRange) => void }) {
   const t = useT(manageTagsPiecesMessages);
   const [custom, setCustom] = useState({ from: value.from ?? "", to: value.to ?? "" });
+  const customOn = value.preset === "custom";
   return (
     <div className="flex flex-wrap items-center gap-2" data-testid="admin-tags-range">
-      {RANGE_PRESETS.map((p) => (
-        <button key={p.id} type="button" className={`${PILL} ${value.preset === p.id ? PILL_ON : PILL_OFF}`} onClick={() => onChange({ preset: p.id })}>
-          {t(p.labelKey)}
-        </button>
-      ))}
-      <div className="flex items-center gap-1">
+      <FilterChips<RangePreset | "custom">
+        items={RANGE_PRESETS.map((p) => ({ id: p.id, label: t(p.labelKey) }))}
+        value={value.preset}
+        onChange={(preset) => onChange({ preset })}
+        ariaLabel={t("rangeLabel")}
+      />
+      <div
+        className={`flex items-center gap-1 rounded-full border py-0.5 pl-1 pr-0.5 ${customOn ? "border-indigo-400/40 bg-indigo-500/[0.12]" : "border-white/[0.08] bg-white/[0.03]"}`}
+      >
         <input type="date" aria-label={t("rangeFrom")} className={DATE_INPUT} value={custom.from} onChange={(e) => setCustom((c) => ({ ...c, from: e.target.value }))} />
         <span className="text-xs text-white/40">–</span>
         <input type="date" aria-label={t("rangeTo")} className={DATE_INPUT} value={custom.to} onChange={(e) => setCustom((c) => ({ ...c, to: e.target.value }))} />
         <button
           type="button"
-          className={`${PILL} ${value.preset === "custom" ? PILL_ON : PILL_OFF} disabled:opacity-40`}
+          className={`h-7 rounded-full px-3 text-xs font-semibold transition-colors disabled:opacity-40 ${customOn ? "bg-indigo-500/30 text-white" : "text-white/60 hover:bg-white/10 hover:text-white"}`}
           disabled={!custom.from}
           onClick={() => onChange({ preset: "custom", from: custom.from, to: custom.to || undefined })}
         >
@@ -191,7 +196,8 @@ export function AnalyticsPanel({
                         productType={t.productType}
                         face={t.face}
                         batchCode={t.batchCode}
-                        details={[t.leadName ?? tm("noCustomer"), t.repName].filter(Boolean).join(" · ")}
+                        customer={t.leadName}
+                        details={t.repName ?? undefined}
                       />
                     </button>
                     <span className="shrink-0 tabular-nums text-white/50">

@@ -1,14 +1,13 @@
-import { useState } from "react";
-import { Search } from "lucide-react";
-import { Switch } from "@/components/ui/switch";
+import { Archive, Layers, Shapes, Users } from "lucide-react";
+import { FilterBar, FilterSearch, FilterSelect, FilterToggle } from "@/components/xpot/filters";
+import { useUrlFilters } from "@/hooks/use-url-filters";
 import { useT } from "@/i18n";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
 import { useBatches } from "./batches-shared";
 import { JourneyPanel } from "./JourneyPanel";
 import { useIsTagAdmin, useJourneyLabels } from "./journey-shared";
-import { Select, useReps } from "./pieces-shared";
+import { useReps } from "./pieces-shared";
 import { useTagLabels } from "./labels";
-import { INPUT } from "./ui";
 
 /**
  * Admin only (the tab is hidden from managers, and the panel and the server
@@ -27,42 +26,34 @@ function JourneyTabBody() {
   const journeyLabels = useJourneyLabels();
   const { data: batches = [] } = useBatches();
   const { data: reps = [] } = useReps();
-  const [batchId, setBatchId] = useState<string | undefined>();
-  const [repId, setRepId] = useState<string | undefined>();
-  const [kind, setKind] = useState<string | undefined>();
-  const [includeArchived, setIncludeArchived] = useState(false);
-  const [search, setSearch] = useState("");
+  // ?batch=…&rep=…&kind=…&archived=1&q=…
+  const filters = useUrlFilters({ batch: "", rep: "", kind: "", archived: "", q: "" });
+  const { batch, rep, kind, q } = filters.values;
+  const includeArchived = filters.values.archived === "1";
 
   const batchOptions = batches.map((b) => ({ value: b.id, label: `${b.batchCode} · ${b.name}` }));
   const repOptions = reps.map((r) => ({ value: String(r.id), label: labels.repOption(r) }));
 
   return (
-    <div className="space-y-6" data-testid="admin-tags-journey-tab">
-      <div className="space-y-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative min-w-[180px] flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
-            <input
-              type="search"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder={t("journeySearch")}
-              className={`${INPUT} pl-9`}
-              data-testid="journey-search"
-            />
-          </div>
-          <Select value={batchId} onChange={setBatchId} placeholder={t("allBatches")} options={batchOptions} className="sm:w-60" testId="journey-filter-batch" />
-          <Select value={repId} onChange={setRepId} placeholder={t("allResellers")} options={repOptions} className="sm:w-40" testId="journey-filter-reseller" />
-          <Select value={kind} onChange={setKind} placeholder={t("allKinds")} options={journeyLabels.kindOptions} className="sm:w-36" testId="journey-filter-kind" />
-          <div className="flex items-center gap-2 px-1">
-            <Switch id="journey-archived" checked={includeArchived} onCheckedChange={setIncludeArchived} />
-            <label htmlFor="journey-archived" className="text-sm text-white/60">
-              {t("showArchived")}
-            </label>
-          </div>
-        </div>
-        <JourneyPanel scope={{ batchId }} filters={{ repId: repId ? Number(repId) : undefined, kind, includeArchived }} search={search} />
-      </div>
+    <div className="space-y-4" data-testid="admin-tags-journey-tab">
+      <FilterBar
+        testId="journey-filters"
+        search={<FilterSearch value={q} onChange={(next) => filters.set({ q: next })} placeholder={t("journeySearch")} testId="journey-search" />}
+        controls={
+          <>
+            <FilterSelect value={batch} onChange={(next) => filters.set({ batch: next })} placeholder={t("allBatches")} options={batchOptions} icon={Layers} testId="journey-filter-batch" />
+            <FilterSelect value={rep} onChange={(next) => filters.set({ rep: next })} placeholder={t("allResellers")} options={repOptions} icon={Users} testId="journey-filter-reseller" />
+            <FilterSelect value={kind} onChange={(next) => filters.set({ kind: next })} placeholder={t("allKinds")} options={journeyLabels.kindOptions} icon={Shapes} testId="journey-filter-kind" />
+            <FilterToggle pressed={includeArchived} onChange={(on) => filters.set({ archived: on ? "1" : null })} label={t("showArchived")} icon={Archive} testId="journey-filter-archived" />
+          </>
+        }
+        summary={{ active: filters.activeCount() > 0, onClear: () => filters.reset() }}
+      />
+      <JourneyPanel
+        scope={{ batchId: batch || undefined }}
+        filters={{ repId: rep ? Number(rep) : undefined, kind: kind || undefined, includeArchived }}
+        search={q}
+      />
     </div>
   );
 }

@@ -12,6 +12,8 @@ import { manageMessages } from "@/i18n/messages/manage";
 type Branding = {
   faviconUrl: string | null;
   faviconContentType: string | null;
+  logoUrl: string | null;
+  logoContentType: string | null;
   appName: string;
   shortName: string;
   themeColor: string;
@@ -40,7 +42,8 @@ export function AdminBranding() {
 function BrandingForm({ branding }: { branding: Branding }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const fileRef = useRef<HTMLInputElement>(null);
+  const faviconFileRef = useRef<HTMLInputElement>(null);
+  const logoFileRef = useRef<HTMLInputElement>(null);
   const t = useT(manageMessages);
   const tc = useT(commonMessages);
   const [appName, setAppName] = useState(branding.appName);
@@ -48,17 +51,32 @@ function BrandingForm({ branding }: { branding: Branding }) {
   const [themeColor, setThemeColor] = useState(branding.themeColor);
   const [backgroundColor, setBackgroundColor] = useState(branding.backgroundColor);
 
-  const previewSrc = branding.faviconUrl
+  const faviconPreviewSrc = branding.faviconUrl
     ? `${branding.faviconUrl}${branding.faviconUrl.includes("?") ? "&" : "?"}t=${branding.updatedAt ?? ""}`
     : "/favicon.png";
+  const logoPreviewSrc = branding.logoUrl
+    ? `${branding.logoUrl}${branding.logoUrl.includes("?") ? "&" : "?"}t=${branding.updatedAt ?? ""}`
+    : "/xpot-logo.svg";
 
-  const upload = useMutation({
+  const faviconUpload = useMutation({
     mutationFn: async (imageData: string) => {
       const res = await apiRequest("POST", "/api/xpot/admin/branding/favicon", { imageData });
       return res.json();
     },
     onSuccess: () => {
       toast({ title: t("iconUpdated") });
+      queryClient.invalidateQueries({ queryKey: ["/api/xpot/admin/branding"] });
+    },
+    onError: (e: Error) => toast({ title: t("uploadError"), description: e.message, variant: "destructive" }),
+  });
+
+  const logoUpload = useMutation({
+    mutationFn: async (imageData: string) => {
+      const res = await apiRequest("POST", "/api/xpot/admin/branding/logo", { imageData });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: t("logoUpdated") });
       queryClient.invalidateQueries({ queryKey: ["/api/xpot/admin/branding"] });
     },
     onError: (e: Error) => toast({ title: t("uploadError"), description: e.message, variant: "destructive" }),
@@ -81,7 +99,7 @@ function BrandingForm({ branding }: { branding: Branding }) {
     onError: (e: Error) => toast({ title: t("errorSaving"), description: e.message, variant: "destructive" }),
   });
 
-  function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+  function onFile(e: React.ChangeEvent<HTMLInputElement>, asset: "favicon" | "logo") {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 2 * 1024 * 1024) {
@@ -89,7 +107,10 @@ function BrandingForm({ branding }: { branding: Branding }) {
       return;
     }
     const reader = new FileReader();
-    reader.onload = () => upload.mutate(reader.result as string);
+    reader.onload = () => {
+      (asset === "favicon" ? faviconUpload : logoUpload).mutate(reader.result as string);
+      e.target.value = "";
+    };
     reader.readAsDataURL(file);
   }
 
@@ -100,30 +121,60 @@ function BrandingForm({ branding }: { branding: Branding }) {
         {t("brandingIntro")}
       </div>
 
-      {/* Upload */}
+      {/* Favicon / app icon */}
       <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-        <h3 className="font-semibold">{t("icon")}</h3>
+        <h3 className="font-semibold">{t("favicon")}</h3>
+        <p className="mt-1 text-sm text-white/45">{t("faviconDescription")}</p>
         <div className="mt-4 flex items-center gap-5">
           <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-[#0a0f1e]">
-            <img src={previewSrc} alt={t("iconAlt")} className="h-16 w-16 object-contain" />
+            <img src={faviconPreviewSrc} alt={t("iconAlt")} className="h-16 w-16 object-contain" />
           </div>
           <div>
             <input
-              ref={fileRef}
+              ref={faviconFileRef}
               type="file"
               accept="image/png,image/jpeg,image/webp,image/svg+xml,image/x-icon,.ico"
-              onChange={onFile}
+              onChange={(event) => onFile(event, "favicon")}
               className="hidden"
             />
             <button
-              onClick={() => fileRef.current?.click()}
-              disabled={upload.isPending}
+              onClick={() => faviconFileRef.current?.click()}
+              disabled={faviconUpload.isPending}
               className="inline-flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-600 disabled:opacity-50"
             >
-              {upload.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+              {faviconUpload.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
               {t("uploadImage")}
             </button>
             <p className="mt-2 text-xs text-white/35">{t("uploadFormats")}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Horizontal logo */}
+      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+        <h3 className="font-semibold">{t("logo")}</h3>
+        <p className="mt-1 text-sm text-white/45">{t("logoDescription")}</p>
+        <div className="mt-4 flex flex-col gap-5 sm:flex-row sm:items-center">
+          <div className="flex h-24 w-full max-w-xs shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-[#0a0f1e] px-5">
+            <img src={logoPreviewSrc} alt={t("logoAlt")} className="max-h-16 w-full object-contain" />
+          </div>
+          <div>
+            <input
+              ref={logoFileRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/svg+xml"
+              onChange={(event) => onFile(event, "logo")}
+              className="hidden"
+            />
+            <button
+              onClick={() => logoFileRef.current?.click()}
+              disabled={logoUpload.isPending}
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-600 disabled:opacity-50"
+            >
+              {logoUpload.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+              {t("uploadImage")}
+            </button>
+            <p className="mt-2 text-xs text-white/35">{t("logoUploadFormats")}</p>
           </div>
         </div>
       </div>

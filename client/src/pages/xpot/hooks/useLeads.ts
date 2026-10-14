@@ -10,6 +10,19 @@ import type { GooglePlaceResult, FullSalesLead, SalesLeadPayload } from "../type
 import { useT } from "@/i18n";
 import { leadsMessages } from "@/i18n/messages/leads";
 
+/** Free-text match over a company's name, sector, phone, email and addresses. */
+export function leadMatchesSearch(lead: FullSalesLead, query: string): boolean {
+  const search = query.trim().toLowerCase();
+  if (!search) return true;
+  return [
+    lead.name,
+    lead.industry,
+    lead.phone,
+    lead.email,
+    lead.locations?.map((location) => `${location.addressLine1} ${location.city || ""} ${location.state || ""}`).join(" "),
+  ].filter(Boolean).join(" ").toLowerCase().includes(search);
+}
+
 export function useLeads() {
   const { toast } = useToast();
   const t = useT(leadsMessages);
@@ -32,21 +45,10 @@ export function useLeads() {
   const leadsQuery = useQuery<FullSalesLead[]>({ queryKey: ["/api/xpot/leads"], enabled: xpotMeQuery.isSuccess });
   const leadPlaceQuery = usePlaceSearch(leadLookupSearch, xpotMeQuery.isSuccess && activeTab === "leads", geoState);
 
-  const filteredLeadsForList = useMemo(() => {
-    const search = leadLookupSearch.trim().toLowerCase();
-    if (!search) return leadsQuery.data || [];
-
-    return (leadsQuery.data || []).filter((lead) => {
-      const haystack = [
-        lead.name,
-        lead.industry,
-        lead.phone,
-        lead.email,
-        lead.locations?.map((location) => `${location.addressLine1} ${location.city || ""} ${location.state || ""}`).join(" "),
-      ].filter(Boolean).join(" ").toLowerCase();
-      return haystack.includes(search);
-    });
-  }, [leadsQuery.data, leadLookupSearch]);
+  const filteredLeadsForList = useMemo(
+    () => (leadsQuery.data || []).filter((lead) => leadMatchesSearch(lead, leadLookupSearch)),
+    [leadsQuery.data, leadLookupSearch],
+  );
 
   const createLeadMutation = useMutation({
     mutationFn: async (payload: SalesLeadPayload) => {

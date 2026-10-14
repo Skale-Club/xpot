@@ -57,7 +57,8 @@ function TopPieces({ go }: { go: (path: string) => void }) {
                   productType={p.productType}
                   face={p.face}
                   batchCode={p.batchCode}
-                  details={[p.leadName ?? t("noCustomer"), p.repName].filter(Boolean).join(" · ")}
+                  customer={p.leadName}
+                  details={p.repName ?? undefined}
                   className="min-w-0 flex-1"
                 />
                 <span className="shrink-0 text-xs tabular-nums text-white/50">
@@ -141,7 +142,8 @@ export function OverviewTab({ go }: { go: (path: string) => void }) {
                       productType={e.productType}
                       face={e.face}
                       batchCode={e.batchCode}
-                      details={[e.leadName ?? t("noCustomer"), labels.event(e.eventType), e.deviceType].filter(Boolean).join(" · ")}
+                      customer={e.leadName}
+                      details={[labels.event(e.eventType), e.deviceType].filter(Boolean).join(" · ")}
                       className="min-w-0 flex-1"
                     />
                     <span className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-white/60">{e.accessMethod}</span>
@@ -169,7 +171,8 @@ export function OverviewTab({ go }: { go: (path: string) => void }) {
                         productType={a.productType}
                         face={a.face}
                         batchCode={a.batchCode}
-                        details={[a.leadName ?? t("noCustomer"), a.repName].filter(Boolean).join(" · ")}
+                        customer={a.leadName}
+                        details={a.repName ?? undefined}
                         className="min-w-0 flex-1"
                       />
                       <span className="shrink-0 text-xs text-white/40">{formatDateTime(a.activatedAt)}</span>

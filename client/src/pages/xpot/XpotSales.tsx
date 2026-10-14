@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
 import { parseSalesPath, salesPath, type SalesTab } from "./salesPath";
+import { currentSearch } from "@/hooks/use-url-filters";
 import {
   Check,
   TrendingUp,
@@ -196,7 +197,7 @@ export function XpotSales() {
   // Moving between items and closing replace history; only the first open pushes,
   // so Back leaves the screen instead of replaying every row J/K visited.
   const select = (which: SalesTab) => (itemId: number | null) =>
-    navigate(salesPath(which, itemId), { replace: id != null });
+    navigate(`${salesPath(which, itemId)}${currentSearch()}`, { replace: id != null });
 
   return (
     <div className="space-y-4">

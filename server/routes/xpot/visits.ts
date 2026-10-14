@@ -20,19 +20,34 @@ export function createVisitsRouter() {
       repId: listsEveryone(req, actor!) ? (req.query.repId ? Number(req.query.repId) : undefined) : actor!.rep.id,
       leadId,
     });
-    const visitSalesById = await salesStorage.visitSalesBatch(visits.map((visit) => visit.id));
-    const result = await Promise.all(visits.map(async (visit) => {
-      const lead = await storage.getSalesLead(visit.leadId);
-      const locations = lead ? await storage.listSalesLeadLocations(visit.leadId) : [];
+    // Four queries for the whole list. This used to read the lead, its
+    // locations and the note one visit at a time: three round trips per visit,
+    // thousands for a rep with a long history.
+    const visitIds = visits.map((visit) => visit.id);
+    const leadIds = Array.from(new Set(visits.map((visit) => visit.leadId)));
+    const [visitSalesById, leads, locations, notes] = await Promise.all([
+      salesStorage.visitSalesBatch(visitIds),
+      storage.getSalesLeadsByIds(leadIds),
+      storage.listSalesLeadLocationsBatch(leadIds),
+      storage.listSalesVisitNotesBatch(visitIds),
+    ]);
+    const leadById = new Map(leads.map((lead) => [lead.id, lead]));
+    const locationsByLead = new Map<number, typeof locations>();
+    for (const location of locations) {
+      if (!locationsByLead.has(location.leadId)) locationsByLead.set(location.leadId, []);
+      locationsByLead.get(location.leadId)!.push(location);
+    }
+    const noteByVisit = new Map(notes.map((note) => [note.visitId, note]));
+
+    res.json(visits.map((visit) => {
+      const lead = leadById.get(visit.leadId);
       return {
         ...visit,
-        lead: lead ? { ...lead, locations } : undefined,
-        note: await storage.getSalesVisitNote(visit.id),
+        lead: lead ? { ...lead, locations: locationsByLead.get(visit.leadId) ?? [] } : undefined,
+        note: noteByVisit.get(visit.id),
         visitSales: visitSalesById.get(visit.id) ?? { transactions: 0, pieces: 0, totalCents: 0 },
       };
     }));
-
-    res.json(result);
   });
 
   router.post("/visits/check-in", async (req, res) => {

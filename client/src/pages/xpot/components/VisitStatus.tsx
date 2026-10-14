@@ -62,13 +62,13 @@ export function StatusBadge({ status }: { status: string }) {
   );
 }
 
-export function StatusPicker({ value, onChange }: { value: string; onChange: (v: VisitStatus) => void }) {
+export function StatusPicker({ value, onChange, layout = "compact" }: { value: string; onChange: (v: VisitStatus) => void; layout?: "compact" | "wide" }) {
   const t = useT(checkinMessages);
   const OUTCOMES = VISIT_STATUSES.filter((s) => !["planned", "in_progress", "invalid", "cancelled"].includes(s.value));
   return (
     <div className="space-y-2">
       <div className="text-xs font-semibold uppercase tracking-widest text-white/30">{t("visitOutcome")}</div>
-      <div className="grid grid-cols-3 gap-2">
+      <div className={layout === "wide" ? "grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6" : "grid grid-cols-3 gap-2"}>
         {OUTCOMES.map((s) => {
           const isActive = value === s.value;
           return (

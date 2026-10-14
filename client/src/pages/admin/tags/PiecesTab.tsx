@@ -1,12 +1,14 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMemo, useState, type FormEvent } from "react";
+import { useMutation } from "@tanstack/react-query";
 import { CHIP_STATUS_TONE, Pill } from "@/components/xpot/StatusPill";
-import { useSearchParams } from "wouter";
-import { Plus, Search, X } from "lucide-react";
+import { Building2, CircleDot, Layers, Package, Plus, ScanLine, Users } from "lucide-react";
+import { FilterBar, FilterSearch, FilterSelect } from "@/components/xpot/filters";
+import { useUrlFilters } from "@/hooks/use-url-filters";
+import { ListPager, useOffsetPages } from "@/components/xpot/pagination";
 import { TAG_PRODUCT_TYPES, TAG_STATUSES } from "@shared/tags";
 import type { TagDetail, TagListItem } from "@shared/tagsApi";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
-import { TagModelChips, TagPieceVisual } from "@/components/xpot/TagProductThumbnail";
+import { TagPieceMention } from "@/components/xpot/TagProductThumbnail";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { ADMIN_TAGS_KEY, errorMessage, formatDateTime, getJson, invalidateAdminTags, sendJson, STALE_MS, withQuery } from "./api";
@@ -20,7 +22,8 @@ import { tagsMessages } from "@/i18n/messages/tags";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
 import { manageTagsPiecesMessages } from "@/i18n/messages/manageTagsPieces";
 
-const LIST_LIMIT = 500;
+/** Pieces per server page; the next page loads as you reach the end. */
+const PAGE = 100;
 
 const METHOD_KEYS = [
   { value: "qr", key: "methodQr" },
@@ -28,24 +31,14 @@ const METHOD_KEYS = [
 ] as const;
 
 /** Filters live in the URL (?status=…&rep=house…) so Overview links and the back button keep them. */
-const FILTER_KEYS = ["status", "product", "rep", "lead", "batch", "method", "search"] as const;
-type FilterKey = (typeof FILTER_KEYS)[number];
-type Filters = Partial<Record<FilterKey, string>>;
-
-function filtersFrom(params: URLSearchParams): Filters {
-  const out: Filters = {};
-  for (const key of FILTER_KEYS) {
-    const v = params.get(key);
-    if (v) out[key] = v;
-  }
-  return out;
-}
+const PIECE_FILTERS = { status: "", product: "", rep: "", lead: "", batch: "", method: "", search: "" };
+type Filters = Record<keyof typeof PIECE_FILTERS, string>;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const posInt = (v: string | undefined) => (v && /^\d+$/.test(v) && Number(v) > 0 ? v : undefined);
 
 /** Translate the URL filters into the list endpoint's query (listQuerySchema), dropping junk. */
-function listUrl(f: Filters): string {
+function listUrl(f: Filters, limit: number, offset: number): string {
   return withQuery("/api/xpot/tags", {
     status: f.status && (TAG_STATUSES as readonly string[]).includes(f.status) ? f.status : undefined,
     stockStatus: f.status === "damaged" ? "damaged" : f.status === "inventory" ? "available" : undefined,
@@ -55,8 +48,9 @@ function listUrl(f: Filters): string {
     leadId: posInt(f.lead),
     batchId: f.batch && UUID.test(f.batch) ? f.batch : undefined,
     method: f.method === "qr" || f.method === "nfc" ? f.method : undefined,
-    search: f.search?.slice(0, 100),
-    limit: LIST_LIMIT,
+    search: f.search.trim().slice(0, 100),
+    limit,
+    offset: offset || undefined,
   });
 }
 
@@ -135,20 +129,20 @@ function PiecesTable({ tags, onOpen }: { tags: TagListItem[]; onOpen: (id: strin
           <li key={t.id}>
             <button type="button" onClick={() => onOpen(t.id)} className={`${CARD} w-full p-3 text-left active:bg-white/[0.06]`} data-testid={`admin-piece-card-${t.publicCode}`}>
               <div className="flex items-center justify-between gap-2">
-                <span className="flex min-w-0 items-center gap-2.5">
-                  <TagPieceVisual productType={t.productType} face={t.face} />
-                  <span className="font-mono font-semibold text-white">{t.publicCode}</span>
-                </span>
+                <TagPieceMention
+                  publicCode={t.publicCode}
+                  productType={t.productType}
+                  face={t.face}
+                  batchCode={t.batchCode}
+                  customer={t.leadName}
+                  className="min-w-0 flex-1"
+                />
                 <PieceStatusPill status={t.status} stockStatus={t.stockStatus} />
               </div>
-              <div className="mt-1.5 text-xs text-white/50">
-                {t.face ? <span className="mr-1.5 text-white/80">{labels.face(t.face)}</span> : null}
-                <TagModelChips productType={t.productType} face={t.face} batchCode={t.batchCode} fallback={labels.product(t.productType)} />
-                {t.leadName ? ` · ${t.leadName}` : ""}
-                {` · ${t.repName ?? tm("houseStock")}`}
-                {t.batchCode ? ` · ${t.batchCode}` : ""}
+              <div className="mt-2 truncate text-xs text-white/50">
+                {[t.repName ?? tm("houseStock"), t.batchCode].filter(Boolean).join(" · ")}
               </div>
-              <div className="mt-1 text-xs tabular-nums text-white/40">
+              <div className="mt-0.5 text-xs tabular-nums text-white/40">
                 {tm("cardStats", { qr: t.qrInteractions, nfc: t.nfcInteractions, chip: labels.chip(t.nfcStatus), last: formatDateTime(t.lastInteractionAt) })}
               </div>
             </button>
@@ -161,9 +155,7 @@ function PiecesTable({ tags, onOpen }: { tags: TagListItem[]; onOpen: (id: strin
         <table className="w-full min-w-[960px]">
           <thead className="border-b border-white/10">
             <tr>
-              <th className={`${TH} w-28 pr-0`}><span className="sr-only">{tg("printedOnPiece")}</span></th>
               <th className={TH}>{tg("colCode")}</th>
-              <th className={TH}>{tm("colProduct")}</th>
               <th className={`${TH} text-center`}>{tg("colStatus")}</th>
               <th className={TH}>{tg("colCustomer")}</th>
               <th className={TH}>{tg("colReseller")}</th>
@@ -178,17 +170,15 @@ function PiecesTable({ tags, onOpen }: { tags: TagListItem[]; onOpen: (id: strin
           <tbody className="divide-y divide-white/5">
             {tags.map((t) => (
               <tr key={t.id} className="cursor-pointer hover:bg-white/[0.04]" onClick={() => onOpen(t.id)} data-testid={`admin-piece-row-${t.publicCode}`}>
-                <td className={`${TD} pr-0`}>
-                  <TagPieceVisual productType={t.productType} face={t.face} />
-                </td>
-                <td className={`${TD} whitespace-nowrap font-mono font-semibold text-white`}>
-                  {t.publicCode}
-                  {t.serialNumber ? <span className="ml-1 font-sans text-xs font-normal text-white/40">#{t.serialNumber}</span> : null}
-                  {t.label ? <span className="block max-w-[160px] truncate font-sans text-xs font-normal text-white/40">{t.label}</span> : null}
-                </td>
-                <td className={TD}>
-                  {t.face ? <span className="mb-1 block text-sm text-white/85">{labels.face(t.face)}</span> : null}
-                  <TagModelChips productType={t.productType} face={t.face} batchCode={t.batchCode} fallback={labels.product(t.productType)} />
+                <td className={`${TD} max-w-[260px]`}>
+                  <TagPieceMention
+                    publicCode={t.publicCode}
+                    productType={t.productType}
+                    face={t.face}
+                    batchCode={t.batchCode}
+                    details={[t.serialNumber ? `#${t.serialNumber}` : null, t.label].filter(Boolean).join(" · ") || undefined}
+                    className="max-w-full"
+                  />
                 </td>
                 <td className={`${TD} text-center`}><PieceStatusPill status={t.status} stockStatus={t.stockStatus} /></td>
                 <td className={`${TD} max-w-[180px] truncate`}>{t.leadName ?? <span className="text-white/30">—</span>}</td>
@@ -213,30 +203,22 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
   const tt = useT(tagsMessages);
   const tg = useT(manageTagsMessages);
   const labels = useTagLabels();
-  const [params, setParams] = useSearchParams();
-  const filters = useMemo(() => filtersFrom(params), [params]);
-  const [searchDraft, setSearchDraft] = useState(filters.search ?? "");
+  const urlFilters = useUrlFilters(PIECE_FILTERS);
+  const filters = urlFilters.values;
+  const set = urlFilters.set;
   const [creating, setCreating] = useState(false);
   const { data: reps = [] } = useReps();
   const { data: leads = [] } = useLeads();
   const { data: batches = [] } = useBatchOptions();
 
-  // Keep the search box in step when the URL changes from outside (back button, Overview link).
-  useEffect(() => setSearchDraft(filters.search ?? ""), [filters.search]);
-
-  const set = (patch: Filters) => {
-    const next = { ...filters, ...patch };
-    const search = new URLSearchParams();
-    for (const key of FILTER_KEYS) if (next[key]) search.set(key, next[key]!);
-    setParams(search, { replace: true });
-  };
-
-  const url = listUrl(filters);
-  const { data: tags = [], isLoading, error } = useQuery<TagListItem[]>({
-    queryKey: [ADMIN_TAGS_KEY, "pieces", url],
-    queryFn: () => getJson(url),
+  const pieces = useOffsetPages<TagListItem>({
+    queryKey: [ADMIN_TAGS_KEY, "pieces", listUrl(filters, PAGE, 0)],
+    url: (offset, limit) => listUrl(filters, limit, offset),
+    pageSize: PAGE,
     staleTime: STALE_MS,
+    fetchPage: (pageUrl) => getJson<TagListItem[]>(pageUrl),
   });
+  const { items: tags, isLoading, error } = pieces;
 
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -247,7 +229,7 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
     return counts;
   }, [tags]);
   const houseCount = useMemo(() => tags.filter((t) => t.repId === null).length, [tags]);
-  const hasFilters = FILTER_KEYS.some((k) => filters[k]);
+  const hasFilters = urlFilters.activeCount() > 0;
 
   const repOptions = [{ value: "house", label: tm("houseStockNoReseller") }, ...reps.map((r) => ({ value: String(r.id), label: labels.repOption(r) }))];
   // A rep/lead/batch in the URL that isn't in the pickers (e.g. still loading) still shows as selected.
@@ -260,50 +242,26 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
 
   return (
     <div className="space-y-4" data-testid="admin-tags-pieces">
-      <div className={`${CARD} space-y-3 p-4`}>
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <form
-            className="flex flex-1 gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              set({ search: searchDraft.trim() || undefined });
-            }}
-          >
-            <input
-              value={searchDraft}
-              onChange={(e) => setSearchDraft(e.target.value)}
-              placeholder={tm("searchPlaceholder")}
-              className={INPUT}
-              maxLength={100}
-              data-testid="admin-pieces-search"
-            />
-            <button type="submit" className={BTN_GHOST} aria-label={tm("search")}><Search className="h-4 w-4" /></button>
-          </form>
-          <button type="button" className={BTN} onClick={() => setCreating(true)} data-testid="admin-pieces-new">
+      <FilterBar
+        testId="admin-pieces-filters"
+        search={<FilterSearch value={filters.search} onChange={(search) => set({ search })} placeholder={tm("searchPlaceholder")} debounceMs={350} testId="admin-pieces-search" />}
+        actions={
+          <button type="button" className={`${BTN} h-10 rounded-xl`} onClick={() => setCreating(true)} data-testid="admin-pieces-new">
             <Plus className="h-4 w-4" />{tm("newPiece")}
           </button>
-        </div>
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-6">
-          <Select value={filters.status} onChange={(v) => set({ status: v })} placeholder={tm("allStatuses")} options={labels.statusOptions} testId="admin-pieces-status" />
-          <Select value={filters.product} onChange={(v) => set({ product: v })} placeholder={tm("allProducts")} options={labels.productOptions} />
-          <Select value={filters.rep} onChange={(v) => set({ rep: v })} placeholder={tg("allResellers")} options={repOptions} testId="admin-pieces-rep" />
-          <Select value={filters.lead} onChange={(v) => set({ lead: v })} placeholder={tm("allCustomers")} options={leadOptions} />
-          <Select value={filters.batch} onChange={(v) => set({ batch: v })} placeholder={tm("allBatches")} options={batchOptions} />
-          <Select value={filters.method} onChange={(v) => set({ method: v })} placeholder={tm("anyMethod")} options={methodOptions} />
-        </div>
-        {hasFilters ? (
-          <button
-            type="button"
-            className="inline-flex items-center gap-1 text-xs text-white/50 hover:text-white"
-            onClick={() => {
-              setSearchDraft("");
-              setParams(new URLSearchParams(), { replace: true });
-            }}
-          >
-            <X className="h-3 w-3" />{tm("clearFilters")}
-          </button>
-        ) : null}
-      </div>
+        }
+        controls={
+          <>
+            <FilterSelect value={filters.status} onChange={(status) => set({ status })} placeholder={tm("allStatuses")} options={labels.statusOptions} icon={CircleDot} testId="admin-pieces-status" />
+            <FilterSelect value={filters.product} onChange={(product) => set({ product })} placeholder={tm("allProducts")} options={labels.productOptions} icon={Package} />
+            <FilterSelect value={filters.rep} onChange={(rep) => set({ rep })} placeholder={tg("allResellers")} options={repOptions} icon={Users} testId="admin-pieces-rep" />
+            <FilterSelect value={filters.lead} onChange={(lead) => set({ lead })} placeholder={tm("allCustomers")} options={leadOptions} icon={Building2} />
+            <FilterSelect value={filters.batch} onChange={(batch) => set({ batch })} placeholder={tm("allBatches")} options={batchOptions} icon={Layers} />
+            <FilterSelect value={filters.method} onChange={(method) => set({ method })} placeholder={tm("anyMethod")} options={methodOptions} icon={ScanLine} />
+          </>
+        }
+        summary={{ shown: tags.length, active: hasFilters, onClear: () => urlFilters.reset() }}
+      />
 
       {isLoading ? (
         <Loading />
@@ -315,7 +273,7 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
         <>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-white/50" data-testid="admin-pieces-counts">
             <span className="font-semibold text-white/80">
-              {tt.plural("pieces", tags.length, tags.length >= LIST_LIMIT ? { count: `${LIST_LIMIT}+` } : undefined)}
+              {tt.plural("pieces", tags.length, pieces.hasMore ? { count: `${tags.length}+` } : undefined)}
             </span>
             {TAG_STATUSES.filter((s) => statusCounts[s]).map((s) => (
               <span key={s} className="tabular-nums">
@@ -325,9 +283,7 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
             <span className="tabular-nums">{tm("inHouse", { count: houseCount })}</span>
           </div>
           <PiecesTable tags={tags} onOpen={(id) => go(`/pieces/${id}`)} />
-          {tags.length >= LIST_LIMIT ? (
-            <p className="text-xs text-white/40">{tm("showingFirst", { limit: LIST_LIMIT })}</p>
-          ) : null}
+          <ListPager shown={tags.length} hasMore={pieces.hasMore} onMore={pieces.loadMore} loading={pieces.loadingMore} pageSize={PAGE} />
         </>
       )}
 

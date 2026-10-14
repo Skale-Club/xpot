@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "wouter";
-import { AlertCircle, ArrowLeft, ArrowRight, Check, ClipboardPaste, Copy, Loader2, X, type LucideIcon } from "lucide-react";
+import { AlertCircle, ArrowLeft, ArrowRight, Check, ChevronDown, ClipboardPaste, Copy, Link2, Loader2, X, type LucideIcon } from "lucide-react";
+import { formatPhoneMask, isSocialNetwork, looksLikeLink, normalizeUrlInput, SOCIAL_NETWORKS, socialHandleOf, socialNetworkOf, socialUrl, type SocialNetwork } from "@shared/tagApp";
+import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { copyToClipboard, haptic, readClipboard, type BannerState } from "./lib";
@@ -187,64 +189,227 @@ export function CopyButton({ text, label, large = false }: { text: string; label
   );
 }
 
-/** URL input with Clear (inside the field) and a Paste button that reads the clipboard. */
+type LinkNetwork = SocialNetwork | "link";
+
+const LINK_NETWORKS: readonly LinkNetwork[] = [...SOCIAL_NETWORKS, "link"];
+/** Networks whose profile is an @handle: the field shows the @ and only the name is typed. */
+const AT_HANDLE: readonly LinkNetwork[] = ["instagram", "tiktok"];
+const FIELD_ICON_BTN =
+  "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white/45 hover:bg-white/10 hover:text-white active:bg-white/10";
+
+function NetworkMark({ network }: { network: LinkNetwork }) {
+  return network === "link" ? (
+    <span className="flex h-5 w-5 shrink-0 items-center justify-center">
+      <Link2 className="h-4 w-4" />
+    </span>
+  ) : (
+    <TagFaceIcon face={network} size="xs" />
+  );
+}
+
+/**
+ * The link field. The network sits inside it on the left, like the country of
+ * a phone field: Instagram, Facebook, TikTok or WhatsApp, and only the profile
+ * (or the phone, masked) is typed; "Other link" takes any address. A piece
+ * printed for a network opens on it. A whole link pasted still works and
+ * switches to its network. Clear and Paste sit inside the field on the right.
+ */
 export function LinkInput({
   value,
   onChange,
   placeholder,
   onPasteFailed,
+  face,
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder: string;
   onPasteFailed?: () => void;
+  /** What is printed on the piece: a social face preselects that network. */
+  face?: string | null;
 }) {
   const t = useT(commonMessages);
+  const fromValue = (n: LinkNetwork, url: string) => (n === "link" ? url : socialHandleOf(n, url));
+  const [network, setNetwork] = useState<LinkNetwork>(() => socialNetworkOf(value) ?? (!value && isSocialNetwork(face) ? face : "link"));
+  // What the person typed: the handle, the phone's digits, or the whole link.
+  const [typed, setTyped] = useState(() => fromValue(network, value));
+  // The last link this field produced; anything else in `value` came from outside (a review link picked, a reset).
+  const emitted = useRef(value);
+  useEffect(() => {
+    if (value === emitted.current) return;
+    emitted.current = value;
+    const n = socialNetworkOf(value) ?? (value ? "link" : network);
+    setNetwork(n);
+    setTyped(fromValue(n, value));
+    // Only an outside change lands here; `network` is read, not tracked.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+
+  const field = useRef<HTMLDivElement>(null);
+  const input = useRef<HTMLInputElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+  // Where the network list opens: fixed to the screen, so a scrolling sheet never clips it.
+  const [menuAt, setMenuAt] = useState<{ left: number; width: number; top?: number; bottom?: number } | null>(null);
+  const openMenu = () => {
+    const r = field.current?.getBoundingClientRect();
+    if (!r) return;
+    const width = Math.min(Math.max(r.width, 220), 280);
+    const below = window.innerHeight - r.bottom;
+    setMenuAt(below >= 260 || below >= r.top ? { left: r.left, width, top: r.bottom + 6 } : { left: r.left, width, bottom: window.innerHeight - r.top + 6 });
+  };
+  useEffect(() => {
+    if (!menuAt) return;
+    const close = () => setMenuAt(null);
+    const outside = (e: PointerEvent) => {
+      const target = e.target as Node;
+      if (!menu.current?.contains(target) && !field.current?.contains(target)) close();
+    };
+    const key = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        close();
+      }
+    };
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("keydown", key, true);
+    window.addEventListener("resize", close);
+    // A scroll of the page or the sheet moves the field away from the list.
+    window.addEventListener("scroll", close, true);
+    return () => {
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("keydown", key, true);
+      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [menuAt]);
+
+  const emit = (url: string) => {
+    emitted.current = url;
+    onChange(url);
+  };
+  const type = (text: string) => {
+    if (network !== "link" && looksLikeLink(text.trim())) {
+      // A whole link landed in the profile box: follow it to its network, or to a plain link.
+      const url = normalizeUrlInput(text);
+      const n = socialNetworkOf(url) ?? "link";
+      setNetwork(n);
+      setTyped(fromValue(n, url));
+      emit(url);
+      return;
+    }
+    const next =
+      network === "whatsapp" ? text.replace(/\D/g, "").slice(0, 15)
+      // The @ is already drawn in the field.
+      : AT_HANDLE.includes(network) ? text.replace(/^@+/, "")
+      : text;
+    setTyped(next);
+    emit(network === "link" ? next : socialUrl(network, next));
+  };
+  const pick = (n: LinkNetwork) => {
+    setMenuAt(null);
+    input.current?.focus();
+    if (n === network) return;
+    setNetwork(n);
+    // A handle carries over between networks (same business, same name); a phone or a link does not.
+    const carry = network !== "link" && network !== "whatsapp" && n !== "whatsapp" && n !== "link" ? typed : "";
+    setTyped(carry);
+    emit(n === "link" ? "" : socialUrl(n, carry));
+  };
+  const nameOf = (n: LinkNetwork) => (n === "link" ? t("linkOther") : NETWORK_NAMES[n]);
+
+  const social = network !== "link";
+  const shown = network === "whatsapp" ? formatPhoneMask(typed) : typed;
+  const hint =
+    network === "whatsapp" ? t("linkPhonePlaceholder")
+    : network === "facebook" ? t("linkPagePlaceholder")
+    : social ? t("linkHandlePlaceholder")
+    : placeholder;
   return (
-    <div className="flex gap-2">
-      <div className="relative min-w-0 flex-1">
+    <>
+      <div ref={field} className={`${INPUT} flex min-w-0 items-center !px-1.5 focus-within:border-blue-400/60`}>
+        <button
+          type="button"
+          onClick={() => (menuAt ? setMenuAt(null) : openMenu())}
+          aria-haspopup="listbox"
+          aria-expanded={!!menuAt}
+          aria-label={`${t("linkNetwork")}: ${nameOf(network)}`}
+          title={nameOf(network)}
+          className={`flex h-10 shrink-0 items-center gap-1 rounded-xl pl-2 pr-1.5 transition-colors hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50 active:bg-white/10 ${menuAt ? "bg-white/[0.06] text-white" : "text-white/45"}`}
+          data-testid="link-network"
+        >
+          <NetworkMark network={network} />
+          <ChevronDown className={`h-3.5 w-3.5 transition-transform ${menuAt ? "rotate-180" : ""}`} />
+        </button>
+        <span className="mx-2 h-6 w-px shrink-0 bg-white/10" aria-hidden="true" />
+        {AT_HANDLE.includes(network) ? <span className="shrink-0 select-none text-white/35">@</span> : null}
         <input
-          type="url"
-          inputMode="url"
+          ref={input}
+          type={network === "whatsapp" ? "tel" : social ? "text" : "url"}
+          inputMode={network === "whatsapp" ? "tel" : social ? "text" : "url"}
           autoCapitalize="none"
           autoCorrect="off"
           spellCheck={false}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-          className={`${INPUT} ${value ? "pr-11" : ""}`}
+          value={shown}
+          onChange={(e) => type(e.target.value)}
+          placeholder={hint}
+          className="min-h-[46px] min-w-0 flex-1 bg-transparent text-base text-white placeholder:text-white/30 focus:outline-none"
           data-testid="input-destination"
         />
-        {value ? (
-          <button
-            type="button"
-            onClick={() => onChange("")}
-            aria-label={t("clearField")}
-            title={t("clearField")}
-            className="absolute right-1.5 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full text-white/45 hover:bg-white/10 hover:text-white active:bg-white/10"
-            data-testid="button-clear-destination"
-          >
+        {typed ? (
+          <button type="button" onClick={() => type("")} aria-label={t("clearField")} title={t("clearField")} className={FIELD_ICON_BTN} data-testid="button-clear-destination">
             <X className="h-4 w-4" />
           </button>
         ) : null}
+        <button
+          type="button"
+          onClick={async () => {
+            const text = await readClipboard();
+            if (text) {
+              type(text);
+              haptic(20);
+            } else onPasteFailed?.();
+          }}
+          aria-label={t("paste")}
+          title={t("paste")}
+          className={FIELD_ICON_BTN}
+          data-testid="button-paste-destination"
+        >
+          <ClipboardPaste className="h-4 w-4" />
+        </button>
       </div>
-      <button
-        type="button"
-        onClick={async () => {
-          const text = await readClipboard();
-          if (text) {
-            onChange(text);
-            haptic(20);
-          } else onPasteFailed?.();
-        }}
-        className="flex min-h-[48px] shrink-0 items-center gap-1.5 rounded-2xl border border-white/10 px-3.5 text-sm font-semibold text-white/80 active:bg-white/10"
-      >
-        <ClipboardPaste className="h-4 w-4" />
-        {t("paste")}
-      </button>
-    </div>
+      {menuAt ? (
+        <div
+          ref={menu}
+          role="listbox"
+          aria-label={t("linkNetwork")}
+          className="fixed z-[70] rounded-2xl border border-white/10 p-1.5 shadow-[0_16px_40px_rgba(0,0,0,0.5)]"
+          style={{ left: menuAt.left, width: menuAt.width, top: menuAt.top, bottom: menuAt.bottom, background: "#111a2e" }}
+        >
+          {LINK_NETWORKS.map((n) => (
+            <button
+              key={n}
+              type="button"
+              role="option"
+              aria-selected={network === n}
+              onClick={() => pick(n)}
+              className={`flex min-h-[44px] w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold transition-colors ${
+                network === n ? "bg-blue-500/15 text-white" : "text-white/75 hover:bg-white/[0.06]"
+              }`}
+              data-testid={`link-network-${n}`}
+            >
+              <NetworkMark network={n} />
+              <span className="min-w-0 flex-1 truncate">{nameOf(n)}</span>
+              {network === n ? <Check className="h-4 w-4 shrink-0 text-blue-300" /> : null}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </>
   );
 }
+
+/** Brand names stay as they are in every language. */
+const NETWORK_NAMES: Record<SocialNetwork, string> = { instagram: "Instagram", facebook: "Facebook", tiktok: "TikTok", whatsapp: "WhatsApp" };
 
 export function FieldLabel({ children }: { children: ReactNode }) {
   return <span className={`mb-1.5 block ${EYEBROW_MUTED}`}>{children}</span>;

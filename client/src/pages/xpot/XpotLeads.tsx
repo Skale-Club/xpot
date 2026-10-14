@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useRoute } from "wouter";
 import {
   Plus,
@@ -10,16 +10,12 @@ import {
   Building2,
   Nfc,
   MoreVertical,
-  MousePointerClick,
   CalendarDays,
-  ChevronLeft,
-  ChevronRight,
   SlidersHorizontal,
 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { LeadTagSummary } from "@shared/tagsApi";
 import { useXpotModules } from "@/components/ModuleSwitch";
-import { EditLeadDialog } from "./components/EditLeadDialog";
 import { LeadCardBody } from "./components/LeadCardBody";
 import {
   AlertDialog,
@@ -33,7 +29,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useXpotQueries } from "./hooks/useXpotQueries";
-import { useLeads } from "./hooks/useLeads";
+import { leadMatchesSearch, useLeads } from "./hooks/useLeads";
 import { useToast } from "@/hooks/use-toast";
 import { usePlaceSearch } from "./usePlaceSearch";
 import { useXpotShared } from "./hooks/useXpotShared";
@@ -43,19 +39,21 @@ import { LeadSalesPanel } from "./components/sales/LeadSalesPanel";
 import { SheetDialog } from "./components/sales/ui";
 import { Loader2 } from '@/components/ui/loader';
 import { GoogleLogo } from "@/components/ui/google-logo";
+import { StateSelect } from "@/components/StateSelect";
 import { parseAddress, findMatchingLead } from "./utils";
 import type { EnrichedSalesVisit, FullSalesLead, GooglePlaceResult } from "./types";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { BottomSheet } from "@/pages/tags/ui";
 import { LeadsTable } from "./components/leads/LeadsTable";
 import { LeadDetailPane } from "./components/leads/LeadDetailPane";
-import { MasterDetail } from "@/components/xpot/MasterDetail";
 import { useT } from "@/i18n";
 import { leadsMessages } from "@/i18n/messages/leads";
 import { checkinMessages } from "@/i18n/messages/checkin";
 import { BRAND_GRADIENT, GLASS } from "@/components/xpot/surface";
 import { EmptyState } from "@/components/xpot/EmptyState";
-import { MiniCalendar } from "@/components/xpot/MiniCalendar";
+import { FilterBar, FilterChips, FilterDay, FilterSearch, FilterToggle, fromDayKey, toDayKey } from "@/components/xpot/filters";
+import { currentSearch, useUrlFilters } from "@/hooks/use-url-filters";
+import { ListPager, usePagedList } from "@/components/xpot/pagination";
 
 
 // ─── Shared Add Company Dialog ────────────────────────────────────────────────
@@ -281,7 +279,7 @@ function AddCompanyDialog({
               >
                 {t("backToSearch")}
               </button>
-              {(["name", "phone", "email", "website", "industry", "address", "city", "state"] as const).map((key) => (
+              {(["name", "phone", "email", "website", "industry", "address", "city"] as const).map((key) => (
                 <input
                   key={key}
                   value={manualForm[key]}
@@ -291,6 +289,11 @@ function AddCompanyDialog({
                   style={inputStyle}
                 />
               ))}
+              <StateSelect
+                value={manualForm.state}
+                onValueChange={(state) => setManualForm((previous) => previous ? { ...previous, state } : previous)}
+                placeholder={t("fieldState")}
+              />
               <button
                 disabled={saving || !manualForm.name.trim()}
                 onClick={saveManual}
@@ -330,11 +333,11 @@ function LeadPiecesChip({ lead, summary, onOpen }: { lead: FullSalesLead; summar
   );
 }
 
-function LeadCard({ lead, onEdit, onMore, pieces, onOpenPieces }: {
+function LeadCard({ lead, onOpen, onMore, pieces, onOpenPieces }: {
   lead: FullSalesLead;
   pieces?: LeadTagSummary;
   onOpenPieces?: () => void;
-  onEdit: () => void;
+  onOpen: () => void;
   /** Opens the action sheet (sell, check in, delete…). */
   onMore: () => void;
 }) {
@@ -345,8 +348,8 @@ function LeadCard({ lead, onEdit, onMore, pieces, onOpenPieces }: {
       tabIndex={0}
       className="w-full cursor-pointer rounded-2xl p-4 text-left transition-all"
       style={{ ...GLASS, boxShadow: "0 4px 20px rgba(0,0,0,0.25)" }}
-      onClick={onEdit}
-      onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onEdit(); } }}
+      onClick={onOpen}
+      onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onOpen(); } }}
     >
       <LeadCardBody
         lead={lead}
@@ -405,41 +408,53 @@ function LeadActionSheet({ lead, onClose, onSell, onCheckIn, onDelete }: {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-function isSameDay(a: Date, b: Date) {
-  return a.getFullYear() === b.getFullYear()
-    && a.getMonth() === b.getMonth()
-    && a.getDate() === b.getDate();
-}
+const LEAD_FILTERS = ["all", "followup", "lead", "customer"] as const;
+type LeadFilter = (typeof LEAD_FILTERS)[number];
+const LEAD_FILTER_LABEL = {
+  all: "filterAll",
+  followup: "filterFollowUp",
+  lead: "filterLeads",
+  customer: "filterCustomers",
+} as const satisfies Record<LeadFilter, string>;
 
-function toLocalDateString(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+/** `lead` covers worked prospects too: a check-in makes a company a lead even if its row still says prospect. */
+function matchesLeadFilter(lead: FullSalesLead, filter: LeadFilter): boolean {
+  if (filter === "followup") return Boolean(lead.nextVisitDueAt);
+  if (filter === "lead") return ["lead", "active", "prospect"].includes(lead.status);
+  if (filter === "customer") return lead.status === "customer";
+  return true;
 }
 
 export function XpotLeads() {
   const t = useT(leadsMessages);
   const { setLocation } = useXpotQueries();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const isDesktop = useIsDesktop();
   const [routeMatch, routeParams] = useRoute("/leads/:id");
   const routeId = routeMatch && /^\d+$/.test(routeParams.id) ? Number(routeParams.id) : null;
-  const [leadFilter, setLeadFilter] = useState<"all" | "followup" | "lead" | "customer">("all");
-  const [dateMode, setDateMode] = useState<"all" | "day">("all");
-  const [dayOffset, setDayOffset] = useState(0);
-  const [calendarOpen, setCalendarOpen] = useState(false);
-  const dateInputRef = useRef<HTMLInputElement>(null);
+  // ?status=customer&day=2026-10-12&q=bakery — survives reloads and opening a company.
+  const filters = useUrlFilters({ status: "all", day: "", q: "" });
+  const leadFilter: LeadFilter = (LEAD_FILTERS as readonly string[]).includes(filters.values.status) ? (filters.values.status as LeadFilter) : "all";
+  const search = filters.values.q;
+  const day = fromDayKey(filters.values.day);
   // Selling from the company card, outside any visit — the second entry point.
   const [salesLead, setSalesLead] = useState<FullSalesLead | null>(null);
   const [leadPendingDelete, setLeadPendingDelete] = useState<FullSalesLead | null>(null);
-  const [editLead, setEditLead] = useState<FullSalesLead | null>(null);
   const [actionLead, setActionLead] = useState<FullSalesLead | null>(null);
   const [addOpen, setAddOpen] = useState(false);
 
-  const {
-    leadsQuery,
-    filteredLeadsForList,
-    deleteLeadMutation,
-    leadLookupSearch,
-    setLeadLookupSearch,
-  } = useLeads();
+  const { leadsQuery, deleteLeadMutation } = useLeads();
+  const convertToCustomer = useMutation({
+    mutationFn: async (leadId: number) => {
+      await apiRequest("PATCH", `/api/xpot/leads/${leadId}`, { status: "customer" });
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["/api/xpot/leads"] });
+      toast({ title: t("promoted"), variant: "success" });
+    },
+    onError: () => toast({ title: t("promoteFailed"), variant: "destructive" }),
+  });
 
   const allLeads = leadsQuery.data ?? [];
   // Pieces sold to each customer, when this rep sells tags.
@@ -484,29 +499,24 @@ export function XpotLeads() {
 
   const selectedLead = routeId ? leads.find((l) => l.id === routeId) ?? null : null;
 
-  const today = new Date();
-  const selectedDate = new Date();
-  selectedDate.setDate(today.getDate() + dayOffset);
+  // Companies visited (checked in) on the chosen day.
+  const visitedOnDay = useMemo(() => {
+    if (!day) return null;
+    const key = toDayKey(day);
+    return new Set(
+      (visits ?? [])
+        .filter((visit) => visit.checkedInAt && toDayKey(new Date(visit.checkedInAt)) === key)
+        .map((visit) => visit.leadId),
+    );
+  }, [day, visits]);
 
-  const pickDay = useCallback((day: Date) => {
-    const picked = new Date(`${toLocalDateString(day)}T12:00:00`);
-    const todayMid = new Date(`${toLocalDateString(new Date())}T12:00:00`);
-    const diff = Math.round((picked.getTime() - todayMid.getTime()) / (24 * 60 * 60 * 1000));
-    setDayOffset(Math.min(0, diff));
-  }, []);
-
-  const handleDateChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    if (event.target.value) pickDay(new Date(`${event.target.value}T12:00:00`));
-  }, [pickDay]);
-
-  const searchedList = useMemo(() => {
-    const filtered = filteredLeadsForList.filter((lead) => {
-      if (!isWorkedLead(lead)) return false;
-      if (leadFilter === "followup") return Boolean(lead.nextVisitDueAt);
-      if (leadFilter === "lead") return ["lead", "active"].includes(lead.status) || (lead.status === "prospect" && checkedInLeadIds.has(lead.id));
-      if (leadFilter === "customer") return lead.status === "customer";
-      return true;
-    });
+  // Search and day narrow first; the status chips count what is left.
+  const baseList = useMemo(
+    () => leads.filter((lead) => leadMatchesSearch(lead, search) && (!visitedOnDay || visitedOnDay.has(lead.id))),
+    [leads, search, visitedOnDay],
+  );
+  const displayList = useMemo(() => {
+    const filtered = baseList.filter((lead) => matchesLeadFilter(lead, leadFilter));
     return [...filtered].sort((a, b) => {
       const aDue = a.nextVisitDueAt ? new Date(a.nextVisitDueAt).getTime() : Number.POSITIVE_INFINITY;
       const bDue = b.nextVisitDueAt ? new Date(b.nextVisitDueAt).getTime() : Number.POSITIVE_INFINITY;
@@ -516,37 +526,32 @@ export function XpotLeads() {
       if (aVisited !== bVisited) return bVisited - aVisited;
       return a.name.localeCompare(b.name);
     });
-  }, [checkedInLeadIds, filteredLeadsForList, isWorkedLead, leadFilter]);
+  }, [baseList, leadFilter]);
 
-  const visitedLeadIds = new Set(
-    (visits ?? [])
-      .filter((visit) => visit.checkedInAt && isSameDay(new Date(visit.checkedInAt), selectedDate))
-      .map((visit) => visit.leadId),
-  );
-  const displayList = dateMode === "day"
-    ? searchedList.filter((lead) => visitedLeadIds.has(lead.id))
-    : searchedList;
+  // Big portfolios render 50 at a time; a new filter starts from the top.
+  const pagedLeads = usePagedList(displayList, { resetKey: `${leadFilter}|${search}|${filters.values.day}` });
 
   const countsByDay = useMemo(() => {
     const relevantIds = new Set(leads.map((lead) => lead.id));
     const idsByDay = new Map<string, Set<number>>();
     for (const visit of visits ?? []) {
       if (!visit.checkedInAt || !relevantIds.has(visit.leadId)) continue;
-      const key = toLocalDateString(new Date(visit.checkedInAt));
+      const key = toDayKey(new Date(visit.checkedInAt));
       if (!idsByDay.has(key)) idsByDay.set(key, new Set());
       idsByDay.get(key)!.add(visit.leadId);
     }
     return new Map(Array.from(idsByDay, ([key, ids]) => [key, ids.size]));
   }, [leads, visits]);
 
-  // Moving between companies and closing replace history; only the first open pushes.
-  const openLead = (lead: FullSalesLead) => setLocation(`/leads/${lead.id}`, { replace: routeId != null });
-  const closeLead = useCallback(() => setLocation("/leads", { replace: true }), [setLocation]);
+  // Moving between companies and closing replace history; only the first open
+  // pushes. The query string rides along so the filters stay put.
+  const openLead = (lead: FullSalesLead) => setLocation(`/leads/${lead.id}${currentSearch()}`, { replace: routeId != null });
+  const closeLead = useCallback(() => setLocation(`/leads${currentSearch()}`, { replace: true }), [setLocation]);
 
   const handleDeleteLead = async () => {
     if (!leadPendingDelete) return;
     try {
-      // Close the pane first: once the list refetches without it, the pane
+      // Close the detail first: once the list refetches without it, the page
       // would flash "not found".
       if (leadPendingDelete.id === routeId) closeLead();
       await deleteLeadMutation.mutateAsync(leadPendingDelete.id);
@@ -554,205 +559,126 @@ export function XpotLeads() {
     } catch {}
   };
 
-  const dateLabel = dayOffset === 0
-    ? t("today")
-    : selectedDate.toLocaleDateString(t.locale, { weekday: "short", month: "short", day: "numeric" });
+  const filterChips = LEAD_FILTERS.map((id) => ({
+    id,
+    label: t(LEAD_FILTER_LABEL[id]),
+    count: baseList.filter((lead) => matchesLeadFilter(lead, id)).length,
+  }));
 
-  const filterItems = [
-    { id: "all" as const, label: t("filterAll"), count: leads.length },
-    { id: "followup" as const, label: t("filterFollowUp"), count: leads.filter((lead) => Boolean(lead.nextVisitDueAt)).length },
-    { id: "lead" as const, label: t("filterLeads"), count: leads.filter((lead) => ["lead", "active", "prospect"].includes(lead.status) && lead.status !== "customer").length },
-    { id: "customer" as const, label: t("filterCustomers"), count: leads.filter((lead) => lead.status === "customer").length },
-  ];
-
-  const filters = (
-    <div className="space-y-3">
-      <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {filterItems.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => setLeadFilter(item.id)}
-            aria-pressed={leadFilter === item.id}
-            className={`inline-flex h-9 shrink-0 items-center gap-2 rounded-xl px-3 text-xs font-semibold transition-colors ${leadFilter === item.id ? "bg-indigo-500/20 text-indigo-200" : "bg-white/[0.035] text-white/45 hover:bg-white/[0.07] hover:text-white/70"}`}
-          >
-            {item.label}
-            <span className="tabular-nums text-[10px] opacity-60">{item.count}</span>
-          </button>
-        ))}
+  const filterBar = (
+    <FilterBar
+      testId="leads-filters"
+      search={<FilterSearch value={search} onChange={(q) => filters.set({ q })} placeholder={t("searchLeads")} />}
+      controls={
+        <FilterToggle
+          pressed={Boolean(day)}
+          onChange={(on) => filters.set({ day: on ? toDayKey(new Date()) : null })}
+          label={t("filterDate")}
+          icon={CalendarDays}
+          testId="leads-filter-day"
+        />
+      }
+      actions={
         <button
-          type="button"
-          onClick={() => setDateMode((mode) => mode === "all" ? "day" : "all")}
-          aria-pressed={dateMode === "day"}
-          className={`inline-flex h-9 shrink-0 items-center gap-2 rounded-xl px-3 text-xs font-semibold transition-colors ${dateMode === "day" ? "bg-indigo-500/20 text-indigo-200" : "bg-white/[0.035] text-white/45 hover:bg-white/[0.07] hover:text-white/70"}`}
+          onClick={() => setAddOpen(true)}
+          title={t("newLead")}
+          data-shortcut="new"
+          className="flex h-10 w-10 shrink-0 items-center justify-center gap-2 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-80 lg:w-auto lg:px-4"
+          style={{ background: BRAND_GRADIENT }}
         >
-          <SlidersHorizontal className="h-3.5 w-3.5" />
-          {dateMode === "day" ? dateLabel : t("filterDate")}
+          <Plus className="h-4 w-4" />
+          <span className="hidden lg:inline">{t("newLead")}</span>
         </button>
-      </div>
-
-      {dateMode === "day" && (
-        <div className="relative flex items-center justify-center gap-3 py-1">
-          <button type="button" onClick={() => setDayOffset((offset) => offset - 1)} aria-label={t("previousDay")} className="flex h-8 w-8 items-center justify-center rounded-xl text-white/40 transition-colors hover:bg-white/[0.06] hover:text-white/80">
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => (isDesktop ? setCalendarOpen((open) => !open) : dateInputRef.current?.showPicker())}
-            aria-expanded={isDesktop ? calendarOpen : undefined}
-            aria-label={t("pickDate")}
-            className="relative flex min-w-32 flex-col items-center gap-0.5 rounded-xl px-3 py-1 hover:bg-white/[0.05]"
-          >
-            <span className="text-sm font-semibold text-white">{dateLabel}</span>
-            <span className="text-[11px] text-white/35">{t.plural("companyCount", displayList.length)}</span>
-            <input
-              ref={dateInputRef}
-              type="date"
-              max={toLocalDateString(today)}
-              value={toLocalDateString(selectedDate)}
-              onChange={handleDateChange}
-              className="pointer-events-none absolute h-0 w-0 opacity-0"
+      }
+      secondary={
+        <div className="space-y-2.5">
+          {day ? (
+            <FilterDay
+              value={day}
+              onChange={(next) => filters.set({ day: toDayKey(next) })}
+              counts={countsByDay}
+              detail={t.plural("companyCount", displayList.length)}
             />
-          </button>
-
-          <button type="button" onClick={() => setDayOffset((offset) => Math.min(0, offset + 1))} disabled={dayOffset === 0} aria-label={t("nextDay")} className="flex h-8 w-8 items-center justify-center rounded-xl text-white/40 transition-colors hover:bg-white/[0.06] hover:text-white/80 disabled:cursor-not-allowed disabled:opacity-20">
-            <ChevronRight className="h-4 w-4" />
-          </button>
-
-          {isDesktop && calendarOpen && (
-            <>
-              <button type="button" aria-hidden tabIndex={-1} className="fixed inset-0 z-30 cursor-default" onClick={() => setCalendarOpen(false)} />
-              <div
-                className="absolute left-1/2 top-full z-40 mt-2 w-72 -translate-x-1/2 rounded-2xl p-3 shadow-2xl"
-                style={{ background: "#0e1424", border: "1px solid rgba(255,255,255,0.1)" }}
-              >
-                <MiniCalendar
-                  value={selectedDate}
-                  onChange={(day) => { pickDay(day); setCalendarOpen(false); }}
-                  counts={countsByDay}
-                  max={today}
-                  locale={t.locale}
-                  labels={{ prev: t("previousMonth"), next: t("nextMonth") }}
-                />
-              </div>
-            </>
-          )}
+          ) : null}
+          <FilterChips items={filterChips} value={leadFilter} onChange={(status) => filters.set({ status })} ariaLabel={t("filterByStatus")} />
         </div>
-      )}
-    </div>
+      }
+      summary={{ shown: displayList.length, total: leads.length, active: filters.activeCount() > 0, onClear: () => filters.reset() }}
+    />
   );
 
-  const emptyStates = (
-    <>
-      {leads.length === 0 && !leadLookupSearch && (
-        <EmptyState icon={Building2} title={t("noLeads")} hint={t("noLeadsHint")} cardStyle={GLASS}>
-          <button
-            onClick={() => setAddOpen(true)}
-            className="rounded-xl px-4 py-2 text-xs font-semibold text-white hover:opacity-80"
-            style={{ background: BRAND_GRADIENT }}
-          >
-            {t("addLead")}
-          </button>
-        </EmptyState>
-      )}
-      {dateMode === "day" && searchedList.length > 0 && displayList.length === 0 && !leadLookupSearch && (
-        <EmptyState
-          icon={CalendarDays}
-          title={t("noCompaniesOnDate")}
-          hint={t("chooseAnotherDate")}
-          cardStyle={GLASS}
-        />
-      )}
-      {dateMode === "all" && leads.length > 0 && searchedList.length === 0 && !leadLookupSearch && (
-        <EmptyState icon={SlidersHorizontal} title={t("noLeadsInFilter")} hint={t("chooseAnotherFilter")} cardStyle={GLASS} />
-      )}
-      {/* Search returned nothing */}
-      {displayList.length === 0 && leadLookupSearch && (
-        <EmptyState icon={Search} title={t("noResults", { query: leadLookupSearch })} cardStyle={GLASS} />
-      )}
-    </>
+  const emptyStates = leads.length === 0 && !search ? (
+    <EmptyState icon={Building2} title={t("noLeads")} hint={t("noLeadsHint")} cardStyle={GLASS}>
+      <button
+        onClick={() => setAddOpen(true)}
+        className="rounded-xl px-4 py-2 text-xs font-semibold text-white hover:opacity-80"
+        style={{ background: BRAND_GRADIENT }}
+      >
+        {t("addLead")}
+      </button>
+    </EmptyState>
+  ) : displayList.length > 0 ? null : search ? (
+    <EmptyState icon={Search} title={t("noResults", { query: search })} hint={t("chooseAnotherFilter")} cardStyle={GLASS} />
+  ) : day ? (
+    <EmptyState icon={CalendarDays} title={t("noCompaniesOnDate")} hint={t("chooseAnotherDate")} cardStyle={GLASS} />
+  ) : (
+    <EmptyState icon={SlidersHorizontal} title={t("noLeadsInFilter")} hint={t("chooseAnotherFilter")} cardStyle={GLASS} />
   );
 
   return (
     <>
-      <div className="space-y-3">
-        <div className="flex gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
-            <input
-              value={leadLookupSearch}
-              onChange={(e) => setLeadLookupSearch(e.target.value)}
-              placeholder={t("searchLeads")}
-              data-shortcut="search"
-              className="w-full h-11 rounded-xl pl-10 pr-4 text-sm text-white placeholder:text-white/25 focus:outline-none"
-              style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.09)" }}
-            />
-          </div>
-
-          <button
-            onClick={() => setAddOpen(true)}
-            title={t("newLead")}
-            data-shortcut="new"
-            className="flex h-11 w-11 shrink-0 items-center justify-center gap-2 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-80 lg:w-auto lg:px-4"
-            style={{ background: BRAND_GRADIENT }}
-          >
-            <Plus className="h-4 w-4" />
-            <span className="hidden lg:inline">{t("newLead")}</span>
-          </button>
-        </div>
-        {filters}
-      </div>
-
-      {isDesktop ? (
-        <MasterDetail
-          closeLabel={t("closePane")}
-          onClose={closeLead}
-          list={
+      {routeId != null ? (
+        selectedLead ? (
+          <LeadDetailPane
+            key={selectedLead.id}
+            lead={selectedLead}
+            pieces={piecesFor(selectedLead.id)}
+            visits={visitsByLead.get(selectedLead.id) ?? []}
+            onClose={closeLead}
+            onDelete={() => setLeadPendingDelete(selectedLead)}
+            onConvertToCustomer={() => convertToCustomer.mutate(selectedLead.id)}
+            converting={convertToCustomer.isPending}
+          />
+        ) : leadsQuery.isLoading ? (
+          <div className="flex justify-center py-16"><Loader2 className="h-5 w-5 animate-spin text-blue-400" /></div>
+        ) : (
+          <EmptyState icon={Building2} title={t("leadNotFound")} cardStyle={GLASS} />
+        )
+      ) : (
+        <>
+          {filterBar}
+          {isDesktop ? (
             <>
               {emptyStates}
               {displayList.length > 0 && (
                 <LeadsTable
-                  leads={displayList}
-                  selectedId={routeId}
+                  leads={pagedLeads.visible}
+                  selectedId={null}
                   onSelect={openLead}
                   piecesFor={piecesFor}
                   lastVisitFor={lastVisitFor}
                   onDelete={setLeadPendingDelete}
                 />
               )}
+              <ListPager shown={pagedLeads.shown} total={pagedLeads.total} hasMore={pagedLeads.hasMore} onMore={pagedLeads.showMore} />
             </>
-          }
-          detail={routeId == null ? null : selectedLead ? (
-            <LeadDetailPane
-              key={selectedLead.id}
-              lead={selectedLead}
-              pieces={piecesFor(selectedLead.id)}
-              visits={visitsByLead.get(selectedLead.id) ?? []}
-              onClose={closeLead}
-              onDelete={() => setLeadPendingDelete(selectedLead)}
-            />
-          ) : leadsQuery.isLoading ? (
-            <div className="flex justify-center py-16"><Loader2 className="h-5 w-5 animate-spin text-blue-400" /></div>
           ) : (
-            <EmptyState icon={Building2} title={t("leadNotFound")} cardStyle={GLASS} />
+            <div className="space-y-2">
+              {emptyStates}
+              {pagedLeads.visible.map((lead) => (
+                <LeadCard
+                  key={lead.id}
+                  lead={lead}
+                  onOpen={() => openLead(lead)}
+                  onMore={() => setActionLead(lead)}
+                  pieces={piecesFor(lead.id)}
+                  onOpenPieces={() => setLocation(`/tags/pieces?lead=${lead.id}&name=${encodeURIComponent(lead.name)}`)}
+                />
+              ))}
+              <ListPager shown={pagedLeads.shown} total={pagedLeads.total} hasMore={pagedLeads.hasMore} onMore={pagedLeads.showMore} />
+            </div>
           )}
-          placeholder={<EmptyState icon={MousePointerClick} title={t("selectLead")} hint={t("selectLeadHint")} cardStyle={GLASS} />}
-        />
-      ) : (
-        <div className="space-y-2">
-          {emptyStates}
-          {displayList.map((lead) => (
-            <LeadCard
-              key={lead.id}
-              lead={lead}
-              onEdit={() => setEditLead(lead)}
-              onMore={() => setActionLead(lead)}
-              pieces={piecesFor(lead.id)}
-              onOpenPieces={() => setLocation(`/tags/pieces?lead=${lead.id}&name=${encodeURIComponent(lead.name)}`)}
-            />
-          ))}
-        </div>
+        </>
       )}
 
       <LeadActionSheet
@@ -778,17 +704,6 @@ export function XpotLeads() {
         onOpenChange={setAddOpen}
         allLeads={allLeads}
       />
-
-      {/* Phone: the card opens the edit form; a /leads/:id link does too. */}
-      {!isDesktop && (editLead || selectedLead) && (
-        <EditLeadDialog
-          key={(editLead ?? selectedLead)!.id}
-          lead={(editLead ?? selectedLead)!}
-          open
-          onOpenChange={(v) => { if (!v) { setEditLead(null); if (routeId) closeLead(); } }}
-          onSaved={() => setEditLead(null)}
-        />
-      )}
 
       <AlertDialog
         open={Boolean(leadPendingDelete)}

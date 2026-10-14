@@ -46,6 +46,8 @@ type TaskListFilters = {
   search?: string;
   all?: boolean;
   limit?: number;
+  /** Rows to skip, for "load more". */
+  offset?: number;
 };
 
 type CreateContext = {
@@ -152,7 +154,8 @@ export async function listTasks(actor: XpotActor, filters: TaskListFilters = {})
       && (!filters.priority || task.priority === filters.priority)
       && (!filters.search || `${task.title} ${task.description ?? ""}`.toLowerCase().includes(filters.search.toLowerCase()))
     );
-    return enrich(selected.slice(0, filters.limit ?? 250));
+    const start = Math.max(filters.offset ?? 0, 0);
+    return enrich(selected.slice(start, start + (filters.limit ?? 250)));
   }
   const conditions = [];
   const organizationIds = await activeOrganizationIds(actor);
@@ -180,13 +183,16 @@ export async function listTasks(actor: XpotActor, filters: TaskListFilters = {})
   if (filters.leadId) conditions.push(eq(salesTasks.leadId, filters.leadId));
   if (filters.priority) conditions.push(eq(salesTasks.priority, filters.priority));
   if (filters.search?.trim()) {
-    const query = `%${filters.search.trim()}%`;
+    // Escape LIKE wildcards so "50%" or "a_b" match literally.
+    const query = `%${filters.search.trim().replace(/[%_\\]/g, (c) => `\\${c}`)}%`;
     conditions.push(or(ilike(salesTasks.title, query), ilike(salesTasks.description, query))!);
   }
   const rows = await db.select().from(salesTasks)
     .where(conditions.length ? and(...conditions) : undefined)
-    .orderBy(asc(salesTasks.dueAt), desc(salesTasks.createdAt))
-    .limit(Math.min(Math.max(filters.limit ?? 250, 1), 500));
+    // Ends on the id so "load more" pages never overlap or skip a task.
+    .orderBy(asc(salesTasks.dueAt), desc(salesTasks.createdAt), desc(salesTasks.id))
+    .limit(Math.min(Math.max(filters.limit ?? 250, 1), 500))
+    .offset(Math.max(filters.offset ?? 0, 0));
   return enrich(rows);
 }
 

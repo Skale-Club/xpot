@@ -28,6 +28,8 @@ test("tag endpoints refuse anonymous callers", async () => {
       ["POST", `/api/xpot/tags/${ID}/activate`],
       ["POST", `/api/xpot/tags/${ID}/disable`],
       ["POST", `/api/xpot/tags/${ID}/nfc-written`],
+      ["POST", `/api/xpot/tags/${ID}/destination`],
+      ["POST", `/api/xpot/tags/${ID}/unassign`],
       ["GET", "/api/xpot/tag-direct-writes"],
       ["POST", "/api/xpot/tag-direct-writes"],
       ["POST", "/api/xpot/tools/review-link"],

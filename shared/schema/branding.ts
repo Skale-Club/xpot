@@ -1,6 +1,5 @@
-// App branding — single-row table holding the admin-uploaded favicon/icon and
-// PWA manifest fields (name, colors). Consumed by the public /api/branding/*
-// endpoints that feed favicon, apple-touch-icon, the web manifest and OG tags.
+// App branding — single-row table holding the independently uploaded square
+// app icon, horizontal product logo and PWA manifest fields (name, colors).
 
 import { integer, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 
@@ -9,6 +8,8 @@ export const appBranding = pgTable("app_branding", {
   id: integer("id").primaryKey().default(1),
   faviconUrl: text("favicon_url"),
   faviconContentType: text("favicon_content_type"),
+  logoUrl: text("logo_url"),
+  logoContentType: text("logo_content_type"),
   appName: text("app_name").default("Xpot"),
   shortName: text("short_name").default("Xpot"),
   themeColor: text("theme_color").default("#09090b"),

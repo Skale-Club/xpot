@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 944.648 332.17" role="img" aria-labelledby="xpot-logo-title">
+  <title id="xpot-logo-title">Xpot</title>
+  <defs>
+    <linearGradient id="xpot-logo-blue" x1="39.45" y1="23.79" x2="275.8" y2="149.01" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#427ef5"/>
+      <stop offset="1" stop-color="#596df2"/>
+    </linearGradient>
+    <linearGradient id="xpot-logo-green" x1="183.03" y1="143.33" x2="158.38" y2="319.41" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0fb98d"/>
+      <stop offset="1" stop-color="#08b6c6"/>
+    </linearGradient>
+  </defs>
+  <path d="M264.39 0 166.08 98.31 67.77 0 0 67.76l113.94 113.94 52.14 52.14 52.14-52.14L332.16 67.76Z" fill="url(#xpot-logo-blue)"/>
+  <path d="m332.16 264.41-67.77 67.76-98.31-98.31-98.309 98.31L0 264.41l98.325-98.325L113.94 181.7l52.14 52.14 52.14-52.14 15.614-15.615Z" fill="url(#xpot-logo-green)"/>
+  <path d="M637.356 59.421c58.909 0 106.664 47.755 106.664 106.664s-47.755 106.664-106.664 106.664-106.664-47.755-106.664-106.664S578.447 59.421 637.356 59.421Zm0 52.689c-29.81 0-53.975 24.166-53.975 53.975 0 29.81 24.165 53.975 53.975 53.975 29.809 0 53.975-24.165 53.975-53.975 0-29.809-24.166-53.975-53.975-53.975Z" fill="#fff"/>
+  <path d="M363.687 61.512h85.044c46.617 0 72.445 25.829 72.445 68.036s-25.828 68.035-72.445 68.035h-34.648v73.075h-50.396Zm50.396 91.344h34.648c21.419 0 32.128-8.189 32.128-23.308s-10.709-23.309-32.128-23.309h-34.648Z" fill="#fff"/>
+  <path d="M755.661 61.512h188.987v45.357h-64.256v163.789h-60.475V106.869h-64.256Z" fill="#fff"/>
+</svg>

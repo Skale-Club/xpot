@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Archive, Bot, Check, ChevronRight, ClipboardList, Cog, History, Plus, User } from "lucide-react";
+import { ListPager } from "@/components/xpot/pagination";
 import { JOURNEY_PRODUCTION_ACTIONS, isClosedPlanStatus } from "@shared/tagJourney";
 import type { TagJourneyEntryItem, TagPlanItem } from "@shared/tagsApi";
 import { useToast } from "@/hooks/use-toast";
@@ -15,7 +16,7 @@ import { Loading } from "./pieces-shared";
 import { NewEntryDialog, NewPlanDialog, PlanStatusDialog } from "./JourneyForms";
 import {
   EntryStatusBadge,
-  JOURNEY_LIMIT,
+  JOURNEY_PAGE,
   KindBadge,
   PlanStatusBadge,
   useIsTagAdmin,
@@ -248,7 +249,7 @@ function JourneyPanelBody({ scope, filters, title, search = "" }: { scope: Journ
   const [entryOpen, setEntryOpen] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
   const [plan, setPlan] = useState<TagPlanItem | null>(null);
-  const { data, isLoading, isError, error } = useJourney({ ...scope, ...filters }, true);
+  const { data, isLoading, isError, error, hasMore, loadingMore, loadMore } = useJourney({ ...scope, ...filters }, true);
   const scopeLabel = scope.tagId ? ("piece" as const) : scope.batchId ? ("batch" as const) : undefined;
   const repFiltered = filters?.repId != null;
   // Search runs over what is loaded: titles, notes, codes, customers, reps.
@@ -294,7 +295,7 @@ function JourneyPanelBody({ scope, filters, title, search = "" }: { scope: Journ
                 </ul>
               </div>
             ))}
-            {data.entries.length >= JOURNEY_LIMIT && <p className="text-xs text-white/40">{t("journeyShowingLatest", { count: JOURNEY_LIMIT })}</p>}
+            <ListPager shown={data.entries.length} hasMore={hasMore} onMore={loadMore} loading={loadingMore} pageSize={JOURNEY_PAGE} />
           </div>
         )}
       </section>

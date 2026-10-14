@@ -101,7 +101,7 @@ export interface IStorage {
   upsertXphereIntegration(userId: string, data: Partial<Omit<InsertXphereIntegration, "userId">>): Promise<XphereIntegration>;
   listXphereIntegrations(): Promise<XphereIntegration[]>;
 
-  // App branding (favicon + PWA manifest)
+  // App branding (favicon, horizontal logo + PWA manifest)
   getAppBranding(): Promise<AppBranding>;
   upsertAppBranding(data: Partial<Omit<InsertAppBranding, "id">>): Promise<AppBranding>;
 
@@ -123,6 +123,7 @@ export interface IStorage {
   // Leads + child tables
   listSalesLeads(filters?: { ownerRepId?: number; organizationIds?: number[]; search?: string }): Promise<SalesLead[]>;
   getSalesLead(id: number): Promise<SalesLead | undefined>;
+  getSalesLeadsByIds(ids: number[]): Promise<SalesLead[]>;
   getSalesLeadByXphereRef(ref: string): Promise<SalesLead | undefined>;
   createSalesLead(input: InsertSalesLead): Promise<SalesLead>;
   updateSalesLead(id: number, input: Partial<InsertSalesLead>): Promise<SalesLead | undefined>;
@@ -151,6 +152,7 @@ export interface IStorage {
   /** The visit whose note holds this voice-note reference. */
   findVisitIdByAudio(ref: string): Promise<number | undefined>;
   getSalesVisitNote(visitId: number): Promise<SalesVisitNote | undefined>;
+  listSalesVisitNotesBatch(visitIds: number[]): Promise<SalesVisitNote[]>;
   upsertSalesVisitNote(input: InsertSalesVisitNote): Promise<SalesVisitNote>;
 
   // Opportunities + tasks
@@ -406,6 +408,11 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(salesLeads).orderBy(desc(salesLeads.updatedAt));
   }
 
+  async getSalesLeadsByIds(ids: number[]): Promise<SalesLead[]> {
+    if (!ids.length) return [];
+    return await db.select().from(salesLeads).where(inArray(salesLeads.id, ids));
+  }
+
   async getSalesLead(id: number): Promise<SalesLead | undefined> {
     const [lead] = await db.select().from(salesLeads).where(eq(salesLeads.id, id));
     return lead;
@@ -659,6 +666,11 @@ export class DatabaseStorage implements IStorage {
       .where(eq(salesVisitNotes.audioUrl, ref))
       .limit(1);
     return row?.visitId;
+  }
+
+  async listSalesVisitNotesBatch(visitIds: number[]): Promise<SalesVisitNote[]> {
+    if (!visitIds.length) return [];
+    return await db.select().from(salesVisitNotes).where(inArray(salesVisitNotes.visitId, visitIds));
   }
 
   async getSalesVisitNote(visitId: number): Promise<SalesVisitNote | undefined> {

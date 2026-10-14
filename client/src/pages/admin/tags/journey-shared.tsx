@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { PILL_BASE } from "@/components/xpot/StatusPill";
 import { isSuperAdmin } from "@shared/modules";
 import { JOURNEY_ENTRY_KINDS, JOURNEY_PRODUCTION_ACTIONS, PLAN_KINDS, PLAN_STATUSES } from "@shared/tagJourney";
@@ -31,24 +31,50 @@ export interface JourneyFilters extends JourneyScope {
   includeArchived?: boolean;
 }
 
-export const JOURNEY_LIMIT = 300;
+/** Entries per page of the timeline; older ones load as you reach the end. */
+export const JOURNEY_PAGE = 100;
 
-/** The timeline and plans of a scope. `enabled` keeps non-admins from firing the request. */
+/**
+ * The timeline and plans of a scope, newest entries first, a page at a time.
+ * `enabled` keeps non-admins from firing the request.
+ */
 export function useJourney(filters: JourneyFilters, enabled: boolean) {
-  const url = withQuery("/api/xpot/admin/tag-journey", {
-    batchId: filters.batchId,
-    tagId: filters.tagId,
-    repId: filters.repId,
-    kind: filters.kind,
-    includeArchived: filters.includeArchived ? "1" : undefined,
-    limit: JOURNEY_LIMIT,
-  });
-  return useQuery<TagJourney>({
-    queryKey: [ADMIN_TAGS_KEY, "journey", url],
-    queryFn: () => getJson(url),
+  const urlFor = (offset: number) =>
+    withQuery("/api/xpot/admin/tag-journey", {
+      batchId: filters.batchId,
+      tagId: filters.tagId,
+      repId: filters.repId,
+      kind: filters.kind,
+      includeArchived: filters.includeArchived ? "1" : undefined,
+      limit: JOURNEY_PAGE,
+      offset: offset || undefined,
+    });
+  const query = useInfiniteQuery({
+    queryKey: [ADMIN_TAGS_KEY, "journey", urlFor(0)],
+    queryFn: ({ pageParam }) => getJson<TagJourney>(urlFor(pageParam)),
+    initialPageParam: 0,
+    getNextPageParam: (last, pages) =>
+      last.entries.length < JOURNEY_PAGE ? undefined : pages.reduce((sum, page) => sum + page.entries.length, 0),
     staleTime: STALE_MS,
     enabled,
   });
+  const pages = query.data?.pages;
+  // Plans come whole with the first page; entries add up page by page.
+  const data = useMemo<TagJourney | undefined>(
+    () => (pages ? { entries: pages.flatMap((page) => page.entries), plans: pages[0]?.plans ?? [] } : undefined),
+    [pages],
+  );
+  return {
+    data,
+    isLoading: query.isLoading,
+    isError: query.isError,
+    error: query.error,
+    hasMore: Boolean(query.hasNextPage),
+    loadingMore: query.isFetchingNextPage,
+    loadMore: () => {
+      if (query.hasNextPage && !query.isFetchingNextPage) void query.fetchNextPage();
+    },
+  };
 }
 
 /**

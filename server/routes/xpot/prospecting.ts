@@ -401,6 +401,123 @@ export function createProspectingRouter() {
     res.json({ route, stops });
   });
 
+  router.post("/prospecting/routes/:id/stops/:stopId/prepare-check-in", async (req, res) => {
+    const actor = (req as any).xpotActor as NonNullable<Awaited<ReturnType<typeof ensureXpotRep>>>;
+    const routeId = pathId(req.params.id);
+    const stopId = pathId(req.params.stopId);
+    const [route] = routeId ? await db.select().from(prospectingRoutes).where(and(
+      eq(prospectingRoutes.id, routeId),
+      eq(prospectingRoutes.repId, actor.rep.id),
+    )).limit(1) : [];
+    if (!route || !stopId) return res.status(404).json({ message: "Route stop not found" });
+
+    const [stop] = await db.select().from(prospectingRouteStops).where(and(
+      eq(prospectingRouteStops.id, stopId),
+      eq(prospectingRouteStops.routeId, route.id),
+    )).limit(1);
+    if (!stop || !["planned", "en_route"].includes(stop.status)) {
+      return res.status(409).json({ message: "This stop is not available for check-in" });
+    }
+
+    if (stop.visitId) {
+      const [visit] = await db.select().from(salesVisits).where(and(
+        eq(salesVisits.id, stop.visitId),
+        eq(salesVisits.repId, actor.rep.id),
+      )).limit(1);
+      if (visit && visit.status === "planned") {
+        return res.json({ leadId: visit.leadId, visitId: visit.id });
+      }
+    }
+
+    const [candidate] = stop.candidateId
+      ? await db.select().from(prospectingCandidates).where(and(
+          eq(prospectingCandidates.id, stop.candidateId),
+          eq(prospectingCandidates.repId, actor.rep.id),
+        )).limit(1)
+      : [undefined];
+    let organizationId: number | null = null;
+    if (!stop.leadId && !candidate?.leadId) {
+      if (!candidate) return res.status(409).json({ message: "This stop cannot be prepared for check-in" });
+      try {
+        organizationId = await organizationIdForRep(actor.rep.id);
+      } catch (error) {
+        if (error instanceof OrganizationError) return res.status(error.status).json({ message: error.message });
+        throw error;
+      }
+    }
+
+    const prepared = await db.transaction(async (tx) => {
+      let leadId = stop.leadId ?? candidate?.leadId ?? null;
+      let locationId: number | null = null;
+
+      if (!leadId && candidate?.googlePlaceId) {
+        const [existing] = await tx.select({ id: salesLeads.id }).from(salesLeads).where(and(
+          eq(salesLeads.ownerRepId, actor.rep.id),
+          eq(salesLeads.googlePlaceId, candidate.googlePlaceId),
+        )).limit(1);
+        leadId = existing?.id ?? null;
+      }
+
+      if (!leadId && candidate) {
+        const [lead] = await tx.insert(salesLeads).values({
+          organizationId: organizationId!,
+          name: candidate.name,
+          website: candidate.website,
+          phone: candidate.phone,
+          email: candidate.email,
+          industry: candidate.industry,
+          source: "prospecting",
+          status: "prospect",
+          ownerRepId: actor.rep.id,
+          territoryName: route.name,
+          googlePlaceId: candidate.googlePlaceId,
+        }).returning({ id: salesLeads.id });
+        leadId = lead.id;
+        const [location] = await tx.insert(salesLeadLocations).values({
+          leadId,
+          addressLine1: candidate.address || "Prospecting location",
+          city: candidate.city,
+          state: candidate.state,
+          postalCode: candidate.postalCode,
+          country: candidate.country || "US",
+          lat: candidate.lat,
+          lng: candidate.lng,
+          isPrimary: true,
+        }).returning({ id: salesLeadLocations.id });
+        locationId = location.id;
+      }
+
+      if (!leadId) throw new Error("Route stop has no lead");
+      if (!locationId) {
+        const [location] = await tx.select({ id: salesLeadLocations.id })
+          .from(salesLeadLocations)
+          .where(eq(salesLeadLocations.leadId, leadId))
+          .orderBy(desc(salesLeadLocations.isPrimary), asc(salesLeadLocations.id))
+          .limit(1);
+        locationId = location?.id ?? null;
+      }
+
+      const [visit] = await tx.insert(salesVisits).values({
+        repId: actor.rep.id,
+        leadId,
+        locationId,
+        status: "planned",
+        scheduledAt: stop.estimatedArrivalAt,
+        source: "prospecting-route",
+      }).returning({ id: salesVisits.id });
+
+      if (candidate) {
+        await tx.update(prospectingCandidates).set({ leadId, status: "scheduled", updatedAt: new Date() })
+          .where(eq(prospectingCandidates.id, candidate.id));
+      }
+      await tx.update(prospectingRouteStops).set({ leadId, visitId: visit.id, updatedAt: new Date() })
+        .where(eq(prospectingRouteStops.id, stop.id));
+      return { leadId, visitId: visit.id };
+    });
+
+    res.status(201).json(prepared);
+  });
+
   router.patch("/prospecting/routes/:id/status", async (req, res) => {
     const actor = (req as any).xpotActor as NonNullable<Awaited<ReturnType<typeof ensureXpotRep>>>;
     const input = prospectingRouteStatusUpdateSchema.parse(req.body);

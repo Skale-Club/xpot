@@ -10,13 +10,13 @@ import {
 import { injectSeoHead, SEO_HEAD_MARKER } from "../server/seo.js";
 
 describe("public SEO routes", () => {
-  it("uses one vertical-bar separator for every browser and SEO title", () => {
-    expect(formatTitle("Dashboard", "Visits", "Xpot")).toBe("Dashboard | Visits | Xpot");
+  it("uses one minimal dot separator for every browser and SEO title", () => {
+    expect(formatTitle("Dashboard", "Visits", "Xpot")).toBe("Dashboard · Visits · Xpot");
     for (const pathname of ["/", "/pt", "/es", "/privacy", "/pt/terms", "/es/privacy"]) {
       const head = renderSeoHead(pathname);
       const title = head.match(/<title>(.*?)<\/title>/)?.[1];
-      expect(title).toContain(" | ");
-      expect(title).not.toMatch(/[—·]/);
+      expect(title).toContain(" · ");
+      expect(title).not.toMatch(/[—|]/);
     }
   });
 
@@ -30,7 +30,7 @@ describe("public SEO routes", () => {
 
   it("renders indexable localized metadata and structured data for the landing", () => {
     const head = renderSeoHead("/pt");
-    expect(head).toContain("Xpot | Renda extra com vendas na rua");
+    expect(head).toContain("Xpot · Renda extra com vendas na rua");
     expect(head).toContain('name="robots" content="index, follow, max-image-preview:large"');
     expect(head).toContain('rel="canonical" href="https://xpot.place/pt"');
     expect(head).toContain('hreflang="es" href="https://xpot.place/es"');
@@ -49,7 +49,7 @@ describe("public SEO routes", () => {
 
   it("injects the route head into the Vite template", () => {
     const html = injectSeoHead(`<html lang="en"><head>${SEO_HEAD_MARKER}</head></html>`, "/es/privacy");
-    expect(html).toContain("Política de Privacidad | Xpot");
+    expect(html).toContain("Política de Privacidad · Xpot");
     expect(html).toContain('<html lang="es-US">');
     expect(html).not.toContain(SEO_HEAD_MARKER);
   });

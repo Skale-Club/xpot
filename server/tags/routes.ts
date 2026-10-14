@@ -136,6 +136,7 @@ export const listQuerySchema = z.object({
   method: z.enum(["qr", "nfc"]).optional(),
   search: z.string().trim().max(100).optional(),
   limit: z.coerce.number().int().min(1).max(2000).optional(),
+  offset: z.coerce.number().int().min(0).max(1_000_000).optional(),
 });
 
 /** What is printed on the piece (shared/tagFace.ts); null clears it back to the batch/product default. */
@@ -162,6 +163,11 @@ const tagPatchSchema = z.object({
 }).strict();
 
 const actionSchema = z.object({ reason: optionalText(300) }).strict();
+
+const destinationChangeSchema = z.object({
+  destinationUrl,
+  destinationType: z.enum(TAG_DESTINATION_TYPES),
+}).strict();
 
 const legacyPublicCode = z
   .string()
@@ -534,6 +540,34 @@ export function registerTagRoutes(app: Express) {
   }
 
   // The phone (or NFC Tools, by hand) wrote this tag's NFC URL into its chip.
+  // A customer's link, changed from the customer page: the piece keeps its state.
+  app.post(`${fieldBase}/:id/destination`, requireTagUser, async (req, res) => {
+    const id = idParam(req, res);
+    if (!id) return;
+    try {
+      const input = destinationChangeSchema.parse(req.body);
+      await field.changeTagDestination(id, input, actorOf(req));
+      res.json(await repo.getTagDetail(id, tagBaseUrl()));
+    } catch (err) {
+      fail(res, err, "Failed to change the link");
+    }
+  });
+
+  // Take a piece away from its customer, back to the reseller's unconfigured
+  // stock. Same rule as the admin: a piece with an active sale stays put.
+  app.post(`${fieldBase}/:id/unassign`, requireTagUser, async (req, res) => {
+    const id = idParam(req, res);
+    if (!id) return;
+    try {
+      if (!(await tagForActor(req, res, id))) return;
+      const { reason } = actionSchema.parse(req.body ?? {});
+      await repo.transitionTag(id, "unassign", actorOf(req), reason ?? "Unlinked from the customer page", "field");
+      res.json(await repo.getTagDetail(id, tagBaseUrl()));
+    } catch (err) {
+      fail(res, err, "Failed to unlink the piece");
+    }
+  });
+
   app.post(`${fieldBase}/:id/nfc-written`, requireTagUser, async (req, res) => {
     const id = idParam(req, res);
     if (!id) return;

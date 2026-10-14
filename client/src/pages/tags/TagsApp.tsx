@@ -7,6 +7,7 @@ import { tagsMessages } from "@/i18n/messages/tags";
 import type { XpotMeResponse } from "@/pages/xpot/types";
 import DirectScreen from "./DirectScreen";
 import CustomersScreen from "./CustomersScreen";
+import CustomerScreen from "./CustomerScreen";
 import HomeScreen from "./HomeScreen";
 import PiecesScreen from "./PiecesScreen";
 import TagScreen from "./TagScreen";
@@ -15,7 +16,7 @@ import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { AppLayout, MODULE_COLUMN } from "@/components/xpot/AppLayout";
 import { TAGS_NAV, TagsTabBar, activeTagsTab } from "./TagsTabBar";
 import { ShellHeader } from "@/components/xpot/ShellHeader";
-import { XpotMark } from "@/components/xpot/XpotMark";
+import { XpotLogo } from "@/components/xpot/XpotLogo";
 import { MODULE_HOME, rememberModuleRoute } from "@/lib/xpot";
 import { SessionGate } from "@/components/xpot/SessionGate";
 
@@ -61,10 +62,7 @@ export function TagsApp() {
             {modules.length > 1 ? (
               <ModuleSwitch current="tags" />
             ) : (
-              <span className="flex items-center gap-2 text-lg font-extrabold tracking-tight text-white">
-                <XpotMark />
-                Xpot
-              </span>
+              <XpotLogo className="h-7 w-auto" />
             )}
           </div>
         </>
@@ -82,6 +80,9 @@ export function TagsApp() {
           {(params) => (isDesktop ? <PiecesScreen selectedCode={decodeURIComponent(params.code)} /> : <Redirect to={tagPath(decodeURIComponent(params.code))} replace />)}
         </Route>
         <Route path={`${APP_BASE}/pieces`}>{() => <PiecesScreen />}</Route>
+        <Route path={`${APP_BASE}/customers/:id`}>
+          {(params) => <CustomerScreen key={params.id} leadId={Number(params.id)} />}
+        </Route>
         <Route path={`${APP_BASE}/customers`} component={CustomersScreen} />
         <Route path={`${APP_BASE}/direct`} component={DirectScreen} />
         <Route path={APP_BASE} component={HomeScreen} />

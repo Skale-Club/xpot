@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import {
   LogOut,
@@ -10,6 +10,7 @@ import {
   Search,
   Settings,
   Building2,
+  Camera,
   type LucideIcon,
 } from "lucide-react";
 import type { XpotModule } from "@shared/modules";
@@ -30,11 +31,14 @@ import { useDesktopShortcuts } from "./useDesktopShortcuts";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { BRAND_GRADIENT, MODULE_ACCENT } from "./surface";
 import { contextOfPath, moduleGroups, organizationItems, starts, type NavGroup, type NavItem, type ShellContext } from "./moduleNav";
-import { XpotMark } from "./XpotMark";
+import { XpotLogo } from "./XpotLogo";
 import { InstallAppSidebarItem } from "./InstallApp";
 import { AdminModeBar, AdminModeSidebarItem } from "./AdminMode";
 import { ScreenErrorBoundary } from "./ScreenErrorBoundary";
 import { UserGreeting } from "./UserGreeting";
+import { dashboardMessages } from "@/i18n/messages/dashboard";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 // The frame around every rep screen. Below `lg` it is the phone column the app
 // always had (the caller passes its header row and bottom nav). From `lg` up a
@@ -107,7 +111,7 @@ function useShellNav() {
 
 type Accent = (typeof MODULE_ACCENT)[ShellContext];
 
-function SidebarLink({ item, collapsed, active, accent }: { item: NavItem; collapsed: boolean; active: boolean; accent: Accent }) {
+function SidebarLink({ item, collapsed, active, accent, warningLabel }: { item: NavItem; collapsed: boolean; active: boolean; accent: Accent; warningLabel?: string }) {
   const Icon = item.icon;
   return (
     <Link
@@ -121,6 +125,14 @@ function SidebarLink({ item, collapsed, active, accent }: { item: NavItem; colla
       {active && <span className="absolute inset-0 rounded-xl" style={{ background: accent.soft }} />}
       <Icon className={`relative h-[18px] w-[18px] shrink-0 ${active ? accent.text : ""}`} />
       {!collapsed && <span className="relative truncate">{item.label}</span>}
+      {warningLabel ? (
+        <span
+          className={`${collapsed ? "absolute right-2 top-2" : "relative ml-auto"} h-2.5 w-2.5 rounded-full bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.65)] ring-4 ring-amber-400/10`}
+          title={warningLabel}
+          aria-label={warningLabel}
+          role="img"
+        />
+      ) : null}
       {item.adminOnly && (collapsed ? <AdminBadge dot className="absolute right-1.5 top-1.5" /> : <AdminBadge className="relative ml-auto" />)}
     </Link>
   );
@@ -182,16 +194,47 @@ function SidebarModuleSwitch({ collapsed, module, modules, label }: {
 
 function DesktopSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
   const t = useT(shellMessages);
+  const td = useT(dashboardMessages);
+  const { toast } = useToast();
+  const avatarInputRef = useRef<HTMLInputElement>(null);
   const [location, navigate] = useLocation();
   const { context, module, modules, groups, moduleLabel, me } = useShellNav();
   const accent = MODULE_ACCENT[module ?? "account"];
   const online = useOnline();
+  const routesQuery = useQuery<Array<{ routeDate: string; status: string }>>({
+    queryKey: ["/api/xpot/prospecting/routes"],
+    enabled: module === "visits",
+  });
+  const today = new Date();
+  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const routeMissingToday = routesQuery.isSuccess && !routesQuery.data.some((route) => route.routeDate === todayKey && route.status !== "cancelled");
 
   const name = me
     ? me.rep.displayName || [me.user.firstName, me.user.lastName].filter(Boolean).join(" ").trim() || me.user.email
     : "";
   const initials = name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
   const firstName = name.split(" ")[0] ?? "";
+
+  const avatarMutation = useMutation({
+    mutationFn: async (imageData: string) => {
+      const response = await apiRequest("POST", "/api/xpot/me/avatar", { imageData });
+      return response.json() as Promise<{ avatarUrl: string }>;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["/api/xpot/me"] });
+      toast({ title: td("photoUpdated") });
+    },
+    onError: (error: Error) => toast({ title: td("uploadFailed"), description: error.message, variant: "destructive" }),
+  });
+
+  const onAvatarFile = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => avatarMutation.mutate(reader.result as string);
+    reader.readAsDataURL(file);
+    event.target.value = "";
+  };
 
   // One door to the account (profile, and the Organization for managers); its pages list the rest.
   const footer: NavItem[] = context === "account"
@@ -209,9 +252,8 @@ function DesktopSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
       <span className="absolute inset-x-0 top-0 h-0.5" style={{ background: MODULE_ACCENT[context].solid }} aria-hidden="true" />
       <div className={`flex h-16 shrink-0 items-center ${collapsed ? "justify-center" : "justify-between px-4"}`}>
         {!collapsed && (
-          <Link href={MODULE_HOME[module ?? modules[0] ?? "visits"]} className="flex items-center gap-2 text-lg font-extrabold tracking-tight text-white">
-            <XpotMark />
-            Xpot
+          <Link href={MODULE_HOME[module ?? modules[0] ?? "visits"]} className="flex items-center" aria-label="Xpot">
+            <XpotLogo className="h-7 w-auto" decorative />
           </Link>
         )}
         <button
@@ -226,8 +268,15 @@ function DesktopSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
       </div>
 
       <div className="px-3 pb-3">
-        <div className={`flex items-center rounded-2xl border border-white/[0.07] bg-white/[0.025] ${collapsed ? "justify-center p-2" : "gap-3 p-3"}`}>
-          <div className="relative shrink-0">
+        <div className={`flex items-center ${collapsed ? "justify-center py-2" : "gap-3 px-2 py-2"}`}>
+          <button
+            type="button"
+            onClick={() => avatarInputRef.current?.click()}
+            disabled={avatarMutation.isPending}
+            title={td("changePhoto")}
+            aria-label={td("changePhoto")}
+            className="group relative shrink-0 touch-manipulation rounded-2xl transition-transform hover:scale-[1.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300/60 active:scale-95 disabled:cursor-wait"
+          >
             {me?.rep.avatarUrl ? (
               <img src={me.rep.avatarUrl} alt="" className={`${collapsed ? "h-9 w-9 rounded-xl" : "h-11 w-11 rounded-2xl"} border border-white/10 object-cover`} />
             ) : (
@@ -238,8 +287,12 @@ function DesktopSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
                 {initials}
               </div>
             )}
+            <span className={`${collapsed ? "rounded-xl" : "rounded-2xl"} absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 ${avatarMutation.isPending ? "opacity-100" : ""}`} aria-hidden="true">
+              {avatarMutation.isPending ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" /> : <Camera className="h-4 w-4 text-white" />}
+            </span>
             <span className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-[#080c18] ${online ? "bg-emerald-400" : "bg-slate-500"}`} />
-          </div>
+          </button>
+          <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={onAvatarFile} />
           {!collapsed && <UserGreeting name={firstName} compact />}
         </div>
       </div>
@@ -259,7 +312,14 @@ function DesktopSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
             )}
             {group.label && collapsed && <div className="mx-auto mb-2 h-px w-6 bg-white/10" aria-hidden="true" />}
             {group.items.map((item) => (
-              <SidebarLink key={item.href} item={item} collapsed={collapsed} active={item.match(location)} accent={accent} />
+              <SidebarLink
+                key={item.href}
+                item={item}
+                collapsed={collapsed}
+                active={item.match(location)}
+                accent={accent}
+                warningLabel={item.href === "/route" && routeMissingToday ? td("noRouteToday") : undefined}
+              />
             ))}
           </div>
         ))}
