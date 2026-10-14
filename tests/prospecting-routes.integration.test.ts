@@ -138,6 +138,33 @@ const routeBody = () => ({
   candidateIds: [seed.linked, seed.placeA, seed.placeB, seed.visited],
 });
 
+test("a published legacy automatic route removes the origin drive from its work window", async () => {
+  const created = await request("POST", "/api/xpot/prospecting/routes", {
+    ...routeBody(),
+    jobId: seed.jobId,
+    routeDate: "2026-10-14",
+  });
+  const routeId = created.body.route.id;
+  expect((await request("PATCH", `/api/xpot/prospecting/routes/${routeId}/status`, { status: "published" })).status).toBe(200);
+  await q(`UPDATE prospecting_jobs SET route_planning_status = 'ready' WHERE id = $1`, [seed.jobId]);
+  const firstBefore = await one(`SELECT id, estimated_arrival_at FROM prospecting_route_stops WHERE route_id = $1 ORDER BY position LIMIT 1`, [routeId]);
+  await q(`UPDATE prospecting_route_stops
+    SET estimated_arrival_at = estimated_arrival_at + interval '60 minutes'
+    WHERE route_id = $1`, [routeId]);
+  await q(`UPDATE prospecting_route_stops SET travel_duration_seconds = 3600, travel_distance_meters = 50000 WHERE id = $1`, [firstBefore.id]);
+  await q(`UPDATE prospecting_routes SET total_duration_seconds = total_duration_seconds + 3600, total_distance_meters = total_distance_meters + 50000 WHERE id = $1`, [routeId]);
+  await q(`UPDATE prospecting_jobs SET route_planning_status = 'failed' WHERE id <> $1`, [seed.jobId]);
+
+  const { processNextAutomaticRoute } = await import("../server/prospecting/auto-route.js");
+  const rebuilt = await processNextAutomaticRoute();
+  expect(rebuilt?.route).toMatchObject({ status: "published", jobId: seed.jobId });
+  expect(rebuilt?.route.id).not.toBe(routeId);
+  expect((await one(`SELECT count(*)::int AS count FROM prospecting_routes WHERE id = $1`, [routeId])).count).toBe(0);
+  const firstRebuilt = await one(`SELECT travel_duration_seconds, travel_distance_meters FROM prospecting_route_stops WHERE route_id = $1 ORDER BY position LIMIT 1`, [rebuilt?.route.id]);
+  expect(firstRebuilt.travel_duration_seconds).toBe(0);
+  expect(firstRebuilt.travel_distance_meters).toBe(0);
+});
+
 test("a route visits each business once and never a visited one", async () => {
   const created = await request("POST", "/api/xpot/prospecting/routes", routeBody());
   expect(created.status).toBe(201);

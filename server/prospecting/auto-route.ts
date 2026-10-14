@@ -1,10 +1,11 @@
-import { and, asc, desc, eq, inArray, notInArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, notInArray, or, sql } from "drizzle-orm";
 import { db } from "../db.js";
 import {
   prospectingCandidates,
   prospectingJobs,
   prospectingRoutes,
   prospectingRouteStops,
+  salesVisits,
   type ProspectingJob,
 } from "#shared/schema.js";
 import type { RouteCandidate } from "./route-optimizer.js";
@@ -29,6 +30,98 @@ function routeDateForJob(job: ProspectingJob) {
   return /^\d{4}-\d{2}-\d{2}$/.test(configured)
     ? configured
     : utcDateKey(job.completedAt ?? job.createdAt);
+}
+
+/**
+ * Older automatic routes stored the drive from the rep's live position as the
+ * first route leg. Keep the current-location marker, but remove that leg from
+ * the work schedule and route line, including already-planned visits.
+ */
+async function repairPublishedAutomaticRouteFirstLeg() {
+  return db.transaction(async (tx) => {
+    const today = utcDateKey(new Date());
+    const [route] = await tx.select().from(prospectingRoutes).where(and(
+      isNotNull(prospectingRoutes.jobId),
+      eq(prospectingRoutes.status, "published"),
+      sql`${prospectingRoutes.routeDate} >= ${today}`,
+      sql`exists (
+        select 1 from ${prospectingRouteStops}
+        where ${prospectingRouteStops.routeId} = ${prospectingRoutes.id}
+          and ${prospectingRouteStops.position} = 1
+          and ${prospectingRouteStops.travelDurationSeconds} > 0
+      )`,
+    )).orderBy(desc(prospectingRoutes.routeDate), desc(prospectingRoutes.id))
+      .limit(1).for("update", { skipLocked: true });
+    if (!route) return null;
+
+    const stops = await tx.select().from(prospectingRouteStops)
+      .where(eq(prospectingRouteStops.routeId, route.id))
+      .orderBy(asc(prospectingRouteStops.position));
+    const first = stops[0];
+    const removedSeconds = first?.travelDurationSeconds ?? 0;
+    if (!first || removedSeconds <= 0) return null;
+
+    const visitIds = stops.flatMap((stop) => stop.visitId ? [stop.visitId] : []);
+    const visits = visitIds.length
+      ? await tx.select({ id: salesVisits.id, status: salesVisits.status }).from(salesVisits)
+          .where(and(inArray(salesVisits.id, visitIds), eq(salesVisits.repId, route.repId)))
+      : [];
+    const canRebuild = stops.every((stop) => stop.status === "planned")
+      && visits.length === visitIds.length
+      && visits.every((visit) => visit.status === "planned");
+    if (canRebuild && route.jobId) {
+      const candidateIds = stops.flatMap((stop) => stop.candidateId ? [stop.candidateId] : []);
+      await tx.delete(prospectingRoutes).where(eq(prospectingRoutes.id, route.id));
+      if (visitIds.length) await tx.delete(salesVisits).where(inArray(salesVisits.id, visitIds));
+      if (candidateIds.length) {
+        await tx.update(prospectingCandidates).set({ status: "discovered", updatedAt: new Date() })
+          .where(inArray(prospectingCandidates.id, candidateIds));
+      }
+      await tx.update(prospectingJobs).set({
+        routePlanningStatus: "pending",
+        routeErrorMessage: null,
+        updatedAt: new Date(),
+      }).where(eq(prospectingJobs.id, route.jobId));
+      return route.id;
+    }
+
+    const now = new Date();
+    for (const stop of stops) {
+      const estimatedArrivalAt = stop.estimatedArrivalAt
+        ? new Date(new Date(stop.estimatedArrivalAt).getTime() - removedSeconds * 1000)
+        : null;
+      await tx.update(prospectingRouteStops).set({
+        ...(stop.id === first.id ? { travelDistanceMeters: 0, travelDurationSeconds: 0 } : {}),
+        estimatedArrivalAt,
+        updatedAt: now,
+      }).where(eq(prospectingRouteStops.id, stop.id));
+      if (stop.visitId && estimatedArrivalAt) {
+        await tx.update(salesVisits).set({ scheduledAt: estimatedArrivalAt, updatedAt: now })
+          .where(and(eq(salesVisits.id, stop.visitId), eq(salesVisits.repId, route.repId)));
+      }
+    }
+
+    const optimizationMeta = { ...(route.optimizationMeta ?? {}) } as Record<string, unknown>;
+    delete optimizationMeta.encodedPolyline;
+    Object.assign(optimizationMeta, {
+      excludesTravelToFirstVisit: true,
+      automaticOrigin: "first_visit",
+      legacyFirstLegRemoved: true,
+    });
+    await tx.update(prospectingRoutes).set({
+      startAddress: first.address,
+      startLat: first.lat,
+      startLng: first.lng,
+      totalDistanceMeters: Math.max(0, route.totalDistanceMeters - first.travelDistanceMeters),
+      totalDurationSeconds: Math.max(0, route.totalDurationSeconds - removedSeconds),
+      plannedEndAt: route.plannedEndAt
+        ? new Date(new Date(route.plannedEndAt).getTime() - removedSeconds * 1000)
+        : null,
+      optimizationMeta,
+      updatedAt: now,
+    }).where(eq(prospectingRoutes.id, route.id));
+    return route.id;
+  });
 }
 
 async function claimNextCompletedJob() {
@@ -207,6 +300,7 @@ async function buildAutomaticRoute(job: ProspectingJob) {
 
 /** Builds at most one route per queue tick so discovery work remains responsive. */
 export async function processNextAutomaticRoute() {
+  await repairPublishedAutomaticRouteFirstLeg();
   const job = await claimNextCompletedJob();
   if (!job) return null;
   try {
