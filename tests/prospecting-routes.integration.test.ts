@@ -63,7 +63,7 @@ async function request(method: string, path: string, body?: unknown, options: { 
   });
 }
 
-let seed: { repId: number; leadId: number; linked: number; placeA: number; placeB: number; visited: number };
+let seed: { repId: number; jobId: number; leadId: number; linked: number; placeA: number; placeB: number; unselected: number; visited: number };
 
 beforeEach(async () => {
   await q(`TRUNCATE prospecting_route_stops, prospecting_routes, prospecting_candidates, prospecting_runs, prospecting_jobs,
@@ -87,19 +87,53 @@ beforeEach(async () => {
       VALUES ($1, $2, $3, $4, $5, $6, $6, $7, $8, '-71.510', 70) RETURNING id`, [job, run, repId, leadId, status, placeId, name, lat])).id as number;
   seed = {
     repId,
+    jobId,
     leadId,
     linked: await candidate(jobId, runId, "discovered", "Known Barber", "place-known", "42.300", leadId),
     placeA: await candidate(jobId, runId, "discovered", "New Barber", "place-new", "42.310"),
     // The same business found again by a second job.
     placeB: await candidate(otherJobId, otherRunId, "discovered", "New Barber", "place-new", "42.310"),
+    unselected: await candidate(otherJobId, otherRunId, "discovered", "Not On Route", "place-unselected", "42.315"),
     visited: await candidate(jobId, runId, "visited", "Visited Barber", "place-visited", "42.320"),
   };
+});
+
+test("a completed search automatically becomes an optimized route", async () => {
+  const { processNextAutomaticRoute } = await import("../server/prospecting/auto-route.js");
+  const result = await processNextAutomaticRoute();
+  expect(result?.route).toMatchObject({ jobId: seed.jobId, status: "published" });
+  expect(Number(result?.route.startLng)).toBeCloseTo(-71.51);
+  const firstStop = await one(`SELECT lat, lng, travel_duration_seconds FROM prospecting_route_stops WHERE route_id = $1 ORDER BY position LIMIT 1`, [result?.route.id]);
+  expect(Number(result?.route.startLat)).toBeCloseTo(Number(firstStop.lat));
+  expect(Number(result?.route.startLng)).toBeCloseTo(Number(firstStop.lng));
+  expect(firstStop.travel_duration_seconds).toBe(0);
+  expect((await one(`SELECT route_planning_status, route_error_message FROM prospecting_jobs WHERE id = $1`, [seed.jobId])))
+    .toEqual({ route_planning_status: "ready", route_error_message: null });
+  expect((await one(`SELECT count(*)::int AS count FROM prospecting_route_stops WHERE route_id = $1`, [result?.route.id])).count).toBe(2);
+  const stops = await q(`SELECT lead_id FROM prospecting_route_stops WHERE route_id = $1 ORDER BY position`, [result?.route.id]);
+  expect(stops.every((stop) => Number.isInteger(stop.lead_id))).toBe(true);
+  expect((await one(`SELECT count(*)::int AS count FROM sales_visits`)).count).toBe(2);
+  expect((await one(`SELECT lead_id FROM prospecting_candidates WHERE id = $1`, [seed.placeA])).lead_id).toEqual(expect.any(Number));
+});
+
+test("a legacy ready job with a draft route is recovered and published automatically", async () => {
+  const created = await request("POST", "/api/xpot/prospecting/routes", {
+    ...routeBody(),
+    jobId: seed.jobId,
+    routeDate: "2026-10-14",
+  });
+  expect(created.body.route.status).toBe("draft");
+  await q(`UPDATE prospecting_jobs SET route_planning_status = 'ready' WHERE id = $1`, [seed.jobId]);
+
+  const { processNextAutomaticRoute } = await import("../server/prospecting/auto-route.js");
+  const result = await processNextAutomaticRoute();
+  expect(result?.route).toMatchObject({ id: created.body.route.id, status: "published" });
+  expect((await one(`SELECT count(*)::int AS count FROM sales_visits WHERE source = 'prospecting-route'`)).count).toBe(2);
 });
 
 const routeBody = () => ({
   routeDate: "2026-10-13",
   plannedStartAt: "2026-10-13T13:00:00.000Z",
-  start: { lat: 42.29, lng: -71.49 },
   leadIds: [seed.leadId],
   candidateIds: [seed.linked, seed.placeA, seed.placeB, seed.visited],
 });
@@ -114,12 +148,30 @@ test("a route visits each business once and never a visited one", async () => {
   expect(stops.some((stop) => stop.candidateId === seed.visited)).toBe(false);
 });
 
+test("building a draft route immediately promotes every selected stop to a CRM lead", async () => {
+  const created = await request("POST", "/api/xpot/prospecting/routes", routeBody());
+  expect(created.status).toBe(201);
+
+  const newBusiness = (created.body.stops as Array<{ name: string; leadId: number | null }>)
+    .find((stop) => stop.name === "New Barber")!;
+  expect(newBusiness.leadId).toEqual(expect.any(Number));
+  expect(await one(`SELECT name, status, owner_rep_id FROM sales_leads WHERE id = $1`, [newBusiness.leadId])).toEqual({
+    name: "New Barber",
+    status: "lead",
+    owner_rep_id: seed.repId,
+  });
+  expect((await one(`SELECT count(*)::int AS count FROM sales_visits`)).count).toBe(0);
+  expect((await one(`SELECT lead_id FROM prospecting_candidates WHERE id = $1`, [seed.placeA])).lead_id).toBe(newBusiness.leadId);
+  expect((await one(`SELECT lead_id FROM prospecting_candidates WHERE id = $1`, [seed.unselected])).lead_id).toBeNull();
+  expect((await one(`SELECT lead_id FROM prospecting_candidates WHERE id = $1`, [seed.visited])).lead_id).toBeNull();
+});
+
 test("a draft stop can prepare one reusable visit for direct check-in", async () => {
   const created = await request("POST", "/api/xpot/prospecting/routes", routeBody());
   expect(created.status).toBe(201);
   const stop = (created.body.stops as Array<{ id: number; name: string; leadId: number | null; visitId: number | null }>)
     .find((item) => item.name === "New Barber")!;
-  expect(stop).toMatchObject({ leadId: null, visitId: null });
+  expect(stop).toMatchObject({ leadId: expect.any(Number), visitId: null });
 
   const first = await request("POST", `/api/xpot/prospecting/routes/${created.body.route.id}/stops/${stop.id}/prepare-check-in`, {});
   expect(first.status).toBe(201);
@@ -136,10 +188,120 @@ test("a draft stop can prepare one reusable visit for direct check-in", async ()
   expect((await one(`SELECT count(*)::int AS count FROM sales_visits WHERE source = 'prospecting-route'`)).count).toBe(1);
 });
 
-test("cancelling a published route releases its unreached visits and businesses", async () => {
+test("route details expose saved Google rating data without a live lookup", async () => {
+  await q(`UPDATE prospecting_candidates SET rating_permille = 4700, review_count = 128, phone = '+15551234567', website = 'https://new.example' WHERE id = $1`, [seed.placeA]);
+  const created = await request("POST", "/api/xpot/prospecting/routes", routeBody());
+  const details = await request("GET", `/api/xpot/prospecting/routes/${created.body.route.id}`);
+  expect(details.status).toBe(200);
+  expect(details.body.stops.find((stop: any) => stop.name === "New Barber")).toMatchObject({
+    googlePlaceId: "place-new",
+    rating: 4.7,
+    reviewCount: 128,
+    phone: "+15551234567",
+    website: "https://new.example",
+  });
+});
+
+test("loading a legacy draft route is read-only and publishing repairs its missing lead", async () => {
+  const created = await request("POST", "/api/xpot/prospecting/routes", routeBody());
+  const stop = created.body.stops.find((item: any) => item.name === "New Barber");
+  await q(`UPDATE prospecting_route_stops SET lead_id = NULL WHERE id = $1`, [stop.id]);
+  await q(`UPDATE prospecting_candidates SET lead_id = NULL WHERE id = $1`, [stop.candidateId]);
+  await q(`DELETE FROM sales_lead_locations WHERE lead_id = $1`, [stop.leadId]);
+  await q(`DELETE FROM sales_leads WHERE id = $1`, [stop.leadId]);
+
+  const details = await request("GET", `/api/xpot/prospecting/routes/${created.body.route.id}`);
+  expect(details.body.stops.find((item: any) => item.id === stop.id).leadId).toBeNull();
+  expect((await one(`SELECT lead_id FROM prospecting_candidates WHERE id = $1`, [stop.candidateId])).lead_id).toBeNull();
+
+  expect((await request("PATCH", `/api/xpot/prospecting/routes/${created.body.route.id}/status`, { status: "published" })).status).toBe(200);
+  const repaired = await one(`SELECT lead_id, visit_id FROM prospecting_route_stops WHERE id = $1`, [stop.id]);
+  expect(repaired.lead_id).toEqual(expect.any(Number));
+  expect(repaired.visit_id).toEqual(expect.any(Number));
+  expect((await one(`SELECT lead_id FROM prospecting_candidates WHERE id = $1`, [stop.candidateId])).lead_id).toBe(repaired.lead_id);
+});
+
+test("a draft route can be reordered locally and drops its stale Google polyline", async () => {
+  const created = await request("POST", "/api/xpot/prospecting/routes", routeBody());
+  const original = created.body.stops as Array<{ id: number; name: string }>;
+  const reversedIds = original.map((stop) => stop.id).reverse();
+  await q(`UPDATE prospecting_routes SET optimization_meta = '{"encodedPolyline":"stale-google-path","trafficAware":true}' WHERE id = $1`, [created.body.route.id]);
+
+  const reordered = await request("PATCH", `/api/xpot/prospecting/routes/${created.body.route.id}/stops/order`, { stopIds: reversedIds });
+  expect(reordered).toEqual({ status: 200, body: { reordered: true } });
+  const details = await request("GET", `/api/xpot/prospecting/routes/${created.body.route.id}`);
+  expect(details.body.stops.map((stop: any) => stop.id)).toEqual(reversedIds);
+  expect(details.body.stops[0]).toMatchObject({ position: 1, travelDurationSeconds: 0 });
+  expect(details.body.route.optimizationMeta).toMatchObject({
+    manuallyReordered: true,
+    distanceModel: "haversine_manual",
+    trafficAware: false,
+  });
+  expect(details.body.route.optimizationMeta).not.toHaveProperty("encodedPolyline");
+});
+
+test("a rep can build a follow-up route after finishing, up to the daily limit", async () => {
+  const finish = async (routeId: number) => {
+    expect((await request("PATCH", `/api/xpot/prospecting/routes/${routeId}/status`, { status: "published" })).status).toBe(200);
+    expect((await request("PATCH", `/api/xpot/prospecting/routes/${routeId}/status`, { status: "in_progress" })).status).toBe(200);
+    expect((await request("PATCH", `/api/xpot/prospecting/routes/${routeId}/status`, { status: "completed" })).status).toBe(200);
+  };
+
+  const first = await request("POST", "/api/xpot/prospecting/routes", routeBody());
+  const blockedByActive = await request("POST", "/api/xpot/prospecting/routes", routeBody());
+  expect(blockedByActive).toMatchObject({ status: 200, body: { reused: true } });
+  expect(blockedByActive.body.route.id).toBe(first.body.route.id);
+
+  await finish(first.body.route.id);
+  const second = await request("POST", "/api/xpot/prospecting/routes", routeBody());
+  expect(second.status).toBe(201);
+  expect(second.body.route.id).not.toBe(first.body.route.id);
+
+  await finish(second.body.route.id);
+  const third = await request("POST", "/api/xpot/prospecting/routes", routeBody());
+  expect(third.status).toBe(201);
+  await finish(third.body.route.id);
+
+  const fourth = await request("POST", "/api/xpot/prospecting/routes", routeBody());
+  expect(fourth.status).toBe(429);
+  expect(fourth.body.message).toContain("up to 3 routes per day");
+});
+
+test("removing an unvisited stop cancels its visit and compacts the remaining route", async () => {
   const created = await request("POST", "/api/xpot/prospecting/routes", routeBody());
   const routeId = created.body.route.id;
   expect((await request("PATCH", `/api/xpot/prospecting/routes/${routeId}/status`, { status: "published" })).status).toBe(200);
+  const target = created.body.stops.find((stop: any) => stop.name === "New Barber");
+  const targetVisit = await one(`SELECT visit_id FROM prospecting_route_stops WHERE id = $1`, [target.id]);
+
+  const removed = await request("DELETE", `/api/xpot/prospecting/routes/${routeId}/stops/${target.id}`);
+  expect(removed).toEqual({ status: 200, body: { removed: true } });
+  expect((await one(`SELECT status FROM sales_visits WHERE id = $1`, [targetVisit.visit_id])).status).toBe("cancelled");
+  expect((await one(`SELECT status FROM prospecting_candidates WHERE id = $1`, [target.candidateId])).status).toBe("discovered");
+
+  const details = await request("GET", `/api/xpot/prospecting/routes/${routeId}`);
+  expect(details.body.stops).toHaveLength(1);
+  expect(details.body.stops[0]).toMatchObject({ position: 1, travelDistanceMeters: 0, travelDurationSeconds: 0 });
+  expect(details.body.route.optimizationMeta).toMatchObject({ lastManualEdit: "stop_removed", trafficAware: false });
+  expect(details.body.route.optimizationMeta).not.toHaveProperty("encodedPolyline");
+});
+
+test("preparing a plaque demo reuses the route prospect and creates no visit", async () => {
+  const created = await request("POST", "/api/xpot/prospecting/routes", routeBody());
+  const stop = created.body.stops.find((item: any) => item.name === "New Barber");
+  const prepared = await request("POST", `/api/xpot/prospecting/routes/${created.body.route.id}/stops/${stop.id}/prepare-demo`, {});
+  expect(prepared.status).toBe(201);
+  expect(prepared.body).toMatchObject({ leadId: stop.leadId, name: "New Barber", placeId: "place-new" });
+  expect((await one(`SELECT count(*)::int AS count FROM sales_visits`)).count).toBe(0);
+  expect((await one(`SELECT lead_id FROM prospecting_route_stops WHERE id = $1`, [stop.id])).lead_id).toBe(prepared.body.leadId);
+});
+
+test("cancelling a published route releases its unreached visits and businesses", async () => {
+  const created = await request("POST", "/api/xpot/prospecting/routes", routeBody());
+  const routeId = created.body.route.id;
+  const leadsBeforePublish = (await one(`SELECT count(*)::int AS count FROM sales_leads`)).count;
+  expect((await request("PATCH", `/api/xpot/prospecting/routes/${routeId}/status`, { status: "published" })).status).toBe(200);
+  expect((await one(`SELECT count(*)::int AS count FROM sales_leads`)).count).toBe(leadsBeforePublish);
   const planned = await q(`SELECT id, status FROM sales_visits WHERE source = 'prospecting-route' ORDER BY id`);
   expect(planned.map((visit) => visit.status)).toEqual(["planned", "planned"]);
   expect((await one(`SELECT status FROM prospecting_candidates WHERE id = $1`, [seed.placeA])).status).toBe("scheduled");

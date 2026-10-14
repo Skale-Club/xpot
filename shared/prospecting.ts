@@ -16,6 +16,14 @@ export const TODAY_PROSPECTING_POLICY = {
 
 export const PROSPECTING_SHIFT_MINUTES = [120, 240, 360, 480, 600, 720] as const;
 
+/**
+ * Route discovery and optimization are paid operations. A rep may finish a
+ * route and build another one on the same local date, but the daily ceiling
+ * keeps retries and automated clients from turning that into an unbounded
+ * workload.
+ */
+export const MAX_DAILY_PROSPECTING_SESSIONS = 3;
+
 export function targetStopsForShift(shiftDurationMinutes: number) {
   return Math.ceil(shiftDurationMinutes / TODAY_PROSPECTING_POLICY.defaultVisitMinutes);
 }
@@ -37,6 +45,9 @@ export function approximateCandidateCenter(candidates: Array<{ status: string; l
 
 export const prospectingJobCreateSchema = z.object({
   location: z.string().trim().min(2).max(500),
+  // Supplied by the browser so "today" follows the rep's local calendar even
+  // when the worker or database runs in another timezone.
+  routeDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   locations: z.array(
     z.string().trim().min(4).max(500).regex(/,\s*[a-z]{2}(?:,|$)/i, "Each city must include a state code."),
   ).min(1).max(5).transform((locations) => locations.filter((location, index) =>
@@ -66,18 +77,20 @@ export const prospectingRouteCreateSchema = z.object({
   name: z.string().trim().min(1).max(160).optional(),
   routeDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   plannedStartAt: z.string().datetime(),
+  // Legacy callers may still send a navigation origin. New selling routes do
+  // not: their time window and saved geometry start at the first visit.
   start: z.object({
     address: z.string().trim().max(500).optional(),
     lat: coordinate.min(-90).max(90),
     lng: coordinate.min(-180).max(180),
-  }),
+  }).optional(),
   leadIds: z.array(z.number().int().positive()).max(100).default([]),
   candidateIds: z.array(z.number().int().positive()).max(200).default([]),
   jobId: z.number().int().positive().optional(),
   maxStops: z.number().int().min(1).max(60).default(60),
   shiftDurationMinutes: z.number().int().min(30).max(16 * 60).default(8 * 60),
   defaultVisitMinutes: z.number().int().min(5).max(180).default(20),
-  /** Replace today's route with a new optimization. Only the platform owner may; reps get one per day. */
+  /** Replace the current route with a new optimization. Reserved for the platform owner. */
   rebuild: z.boolean().default(false),
 }).refine((value) => value.leadIds.length > 0 || value.candidateIds.length > 0 || value.jobId !== undefined, {
   message: "Select leads, candidates, or a completed prospecting job.",
@@ -85,6 +98,11 @@ export const prospectingRouteCreateSchema = z.object({
 
 export const prospectingRouteStatusUpdateSchema = z.object({
   status: z.enum(["published", "in_progress", "completed", "cancelled"]),
+});
+
+export const prospectingRouteReorderSchema = z.object({
+  stopIds: z.array(z.number().int().positive()).min(1).max(60)
+    .refine((ids) => new Set(ids).size === ids.length, "Route stops must be unique."),
 });
 
 export const prospectingStopUpdateSchema = z.object({

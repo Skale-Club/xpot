@@ -1,14 +1,39 @@
 import { Router } from "express";
 import { requireXpotUser } from "./middleware.js";
 import { resolveGoogleApiKey } from "./google.js";
+import { rateLimit } from "../../tags/rateLimit.js";
+
+const placeCache = new Map<string, { expiresAt: number; value: unknown }>();
+const cached = (key: string) => {
+  const hit = placeCache.get(key);
+  if (!hit || hit.expiresAt < Date.now()) {
+    if (hit) placeCache.delete(key);
+    return undefined;
+  }
+  return hit.value;
+};
+const remember = (key: string, value: unknown) => {
+  if (placeCache.size > 500) {
+    const oldest = placeCache.keys().next().value;
+    if (oldest) placeCache.delete(oldest);
+  }
+  placeCache.set(key, { expiresAt: Date.now() + 60_000, value });
+};
 
 export function createPlaceSearchRouter() {
   const router = Router();
   router.use(requireXpotUser);
 
   router.get("/place-autocomplete", async (req, res) => {
+    const actor = (req as any).xpotActor as { rep: { id: number } };
+    if (rateLimit(`places:autocomplete:${actor.rep.id}`, { limit: 60, windowMs: 60_000 })) {
+      return res.status(429).json({ message: "Too many place searches. Please wait a moment." });
+    }
     const input = typeof req.query.q === "string" ? req.query.q.trim() : "";
     if (input.length < 2) return res.json({ suggestions: [] });
+    const cacheKey = `autocomplete:${input.toLowerCase()}`;
+    const cacheHit = cached(cacheKey);
+    if (cacheHit) return res.json(cacheHit);
 
     const apiKey = await resolveGoogleApiKey();
     if (!apiKey) {
@@ -50,7 +75,7 @@ export function createPlaceSearchRouter() {
           };
         }>;
       };
-      res.json({
+      const result = {
         suggestions: (data.suggestions ?? []).flatMap((suggestion) => {
           const prediction = suggestion.placePrediction;
           const label = prediction?.text?.text?.trim();
@@ -62,13 +87,19 @@ export function createPlaceSearchRouter() {
             secondaryText: prediction.structuredFormat?.secondaryText?.text?.trim() || "",
           }];
         }),
-      });
+      };
+      remember(cacheKey, result);
+      res.json(result);
     } catch (err) {
       return res.status(502).json({ message: (err as Error).message || "Google Places autocomplete failed" });
     }
   });
 
   router.get("/place-search", async (req, res) => {
+    const actor = (req as any).xpotActor as { rep: { id: number } };
+    if (rateLimit(`places:search:${actor.rep.id}`, { limit: 30, windowMs: 60_000 })) {
+      return res.status(429).json({ message: "Too many place searches. Please wait a moment." });
+    }
     const query = typeof req.query.q === "string" ? req.query.q.trim() : "";
     if (query.length < 2) {
       return res.json({ results: [] });
@@ -83,6 +114,9 @@ export function createPlaceSearchRouter() {
     try {
       const lat = typeof req.query.lat === "string" ? Number(req.query.lat) : undefined;
       const lng = typeof req.query.lng === "string" ? Number(req.query.lng) : undefined;
+      const cacheKey = `search:${query.toLowerCase()}:${Number.isFinite(lat) ? Number(lat).toFixed(3) : ""}:${Number.isFinite(lng) ? Number(lng).toFixed(3) : ""}`;
+      const cacheHit = cached(cacheKey);
+      if (cacheHit) return res.json(cacheHit);
 
       const payload: Record<string, unknown> = {
         textQuery: query,
@@ -146,7 +180,7 @@ export function createPlaceSearchRouter() {
         }>;
       };
 
-      res.json({
+      const result = {
         results: (data.places || []).map((place) => ({
           placeId: place.id || "",
           name: place.displayName?.text || "Unnamed place",
@@ -157,7 +191,9 @@ export function createPlaceSearchRouter() {
           lat: place.location?.latitude,
           lng: place.location?.longitude,
         })).filter((place) => place.placeId && place.name),
-      });
+      };
+      remember(cacheKey, result);
+      res.json(result);
     } catch (err) {
       return res.status(502).json({ message: (err as Error).message || "Google Places request failed" });
     }

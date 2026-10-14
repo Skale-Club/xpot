@@ -1,12 +1,13 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "wouter";
-import { ArrowLeft, Building2, DollarSign, ExternalLink, MapPinned, Nfc, PackageCheck, Trash2, UserRoundCheck, UsersRound } from "lucide-react";
+import { ArrowLeft, Building2, Camera, DollarSign, ExternalLink, LoaderCircle, MapPinned, Nfc, PackageCheck, Trash2, UserRoundCheck, UsersRound } from "lucide-react";
 import type { LeadTagSummary } from "@shared/tagsApi";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/i18n";
 import { leadsMessages } from "@/i18n/messages/leads";
 import { checkinMessages } from "@/i18n/messages/checkin";
+import { visitsMessages } from "@/i18n/messages/visits";
 import { buildRouteUrl } from "../LeadCardBody";
 import { StatusBadge } from "../VisitStatus";
 import { InlineField } from "../InlineField";
@@ -54,7 +55,82 @@ function CompanyStateBadge({ status }: { status: string }) {
   const labels: Record<string, string> = {
     prospect: t("stateProspect"), lead: t("stateLead"), active: t("stateActive"), inactive: t("stateInactive"), customer: t("stateCustomer"),
   };
-  return <span className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] ${styles[status] ?? styles.inactive}`}>{labels[status] ?? status}</span>;
+  return <span className={`rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] ${styles[status] ?? styles.inactive}`}>{labels[status] ?? status}</span>;
+}
+
+function CompanyCoverPhoto({ lead }: { lead: FullSalesLead }) {
+  const { toast } = useToast();
+  const t = useT(visitsMessages);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const storedPhoto = lead.photos?.[0] ?? null;
+  const [preview, setPreview] = useState<string | undefined>(() => fileSrc(storedPhoto));
+  const [uploading, setUploading] = useState(false);
+
+  useEffect(() => {
+    setPreview(fileSrc(storedPhoto));
+  }, [lead.id, storedPhoto]);
+
+  async function upload(file: File) {
+    const previous = preview;
+    setUploading(true);
+    try {
+      const reader = new FileReader();
+      const imageData = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error ?? new Error("Could not read image"));
+        reader.readAsDataURL(file);
+      });
+      setPreview(imageData);
+      const response = await apiRequest("POST", `/api/xpot/leads/${lead.id}/photos`, { imageData });
+      const result = await response.json() as { photo: string };
+      setPreview(fileSrc(result.photo));
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["/api/xpot/leads"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/xpot/visits"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/xpot/dashboard"] }),
+      ]);
+      toast({ title: t("photoAdded"), variant: "success" });
+    } catch (error) {
+      setPreview(previous);
+      toast({ title: t("photoUploadFailed"), description: (error as Error).message, variant: "destructive" });
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) void upload(file);
+          event.target.value = "";
+        }}
+      />
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        disabled={uploading}
+        aria-label={t("addPhoto")}
+        title={t("addPhoto")}
+        className="group relative h-24 w-24 shrink-0 self-start overflow-hidden rounded-2xl border border-white/10 bg-indigo-500/[0.08] text-indigo-300 shadow-[0_10px_30px_rgba(0,0,0,0.22)] transition-[transform,border-color,box-shadow] hover:border-indigo-300/30 hover:shadow-[0_14px_36px_rgba(0,0,0,0.32)] active:scale-[0.96] disabled:cursor-wait disabled:opacity-70 sm:h-[116px] sm:w-[116px]"
+        data-testid="company-cover-upload"
+      >
+        {preview ? (
+          <img src={preview} alt={t("coverAlt")} className="h-full w-full object-cover ring-1 ring-inset ring-white/10" />
+        ) : (
+          <span className="flex h-full w-full items-center justify-center"><Building2 className="h-7 w-7" /></span>
+        )}
+        <span className="absolute bottom-2 right-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/70 text-white/85 shadow-[0_4px_12px_rgba(0,0,0,0.35)] ring-1 ring-white/15 transition-transform group-hover:scale-105 group-focus-visible:scale-105">
+          {uploading ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />}
+        </span>
+      </button>
+    </>
+  );
 }
 
 /** One company profile. Lead/customer are states of this same record. */
@@ -71,7 +147,6 @@ export function LeadDetailPane({ lead, pieces, visits, onClose, onDelete, onConv
   const t = useT(leadsMessages);
   const tCheckin = useT(checkinMessages);
   const location = lead.locations?.[0];
-  const photo = lead.photos?.[0];
   const routeUrl = buildRouteUrl(location);
   const address = [location?.addressLine1, location?.city, location?.state].filter(Boolean).join(", ");
 
@@ -88,15 +163,17 @@ export function LeadDetailPane({ lead, pieces, visits, onClose, onDelete, onConv
   return (
     <div className="space-y-6" data-testid="lead-detail-pane">
       <header className="flex flex-col gap-4 border-b border-white/[0.07] pb-5 lg:flex-row lg:items-center">
-        <div className="flex min-w-0 flex-1 items-center gap-3 sm:gap-4">
+        <div className="flex min-w-0 flex-1 items-start gap-3 sm:gap-4">
           <button type="button" onClick={onClose} aria-label={t("backToLeads")} title={t("backToLeads")} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white/40 transition hover:bg-white/[0.06] hover:text-white"><ArrowLeft className="h-4 w-4" /></button>
-          {photo ? <img src={fileSrc(photo)} alt="" className="h-14 w-14 shrink-0 rounded-xl object-cover" /> : <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-indigo-400/15 bg-indigo-500/[0.08] text-indigo-300"><Building2 className="h-6 w-6" /></span>}
+          <CompanyCoverPhoto lead={lead} />
           <div className="min-w-0 flex-1">
-            <p className="mb-0.5 text-[10px] font-bold uppercase tracking-[0.18em] text-indigo-300/75">{t("companyProfile")}</p>
+            <div className="mb-0.5 flex min-h-5 flex-wrap items-center gap-2">
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-indigo-300/75">{t("companyProfile")}</p>
+              <CompanyStateBadge status={lead.status} />
+              {lead.ghlContactId ? <span className="rounded-full border border-emerald-300/15 bg-emerald-400/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-emerald-300">GHL</span> : null}
+            </div>
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               <div className="min-w-[220px] max-w-xl flex-1"><InlineField label="" large value={lead.name} onSave={saveName} /></div>
-              <CompanyStateBadge status={lead.status} />
-              {lead.ghlContactId ? <span className="rounded-full border border-emerald-300/15 bg-emerald-400/10 px-2 py-1 text-[9px] font-bold uppercase tracking-wide text-emerald-300">GHL</span> : null}
             </div>
             {address ? <p className="mt-1 truncate text-xs text-white/40">{address}</p> : null}
             <div className="mt-3 flex flex-wrap gap-2">
@@ -105,9 +182,9 @@ export function LeadDetailPane({ lead, pieces, visits, onClose, onDelete, onConv
             </div>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2 pl-12 sm:pl-[7.5rem] lg:pl-0">
-          {routeUrl ? <a href={routeUrl} target="_blank" rel="noopener noreferrer" className="inline-flex h-9 items-center gap-2 rounded-lg px-3 text-xs font-semibold text-indigo-300 transition hover:bg-indigo-500/10 hover:text-indigo-200"><MapPinned className="h-3.5 w-3.5" />{t("directions")}</a> : null}
-          {lead.status !== "customer" && onConvertToCustomer ? <button type="button" onClick={onConvertToCustomer} disabled={converting} className="inline-flex h-9 items-center gap-2 rounded-lg border border-emerald-300/15 bg-emerald-400/[0.07] px-3 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/[0.12] disabled:opacity-40"><UserRoundCheck className="h-3.5 w-3.5" />{t("promote")}</button> : null}
+        <div className="flex flex-wrap gap-2 pl-[8.75rem] sm:pl-[11.5rem] lg:pl-0">
+          {routeUrl ? <a href={routeUrl} target="_blank" rel="noopener noreferrer" className="group inline-flex h-10 items-center gap-2.5 rounded-xl border border-indigo-300/20 bg-indigo-400/[0.08] px-3.5 text-xs font-semibold text-indigo-100 shadow-[0_8px_24px_rgba(49,46,129,0.12)] transition-[transform,background-color,border-color,color,box-shadow] hover:border-indigo-300/35 hover:bg-indigo-400/[0.13] hover:text-white hover:shadow-[0_10px_28px_rgba(49,46,129,0.2)] active:scale-[0.96]"><span className="flex h-6 w-6 items-center justify-center rounded-lg bg-indigo-300/10 text-indigo-300"><MapPinned className="h-3.5 w-3.5" /></span>{t("directions")}<ExternalLink className="h-3 w-3 text-indigo-300/55 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" /></a> : null}
+          {lead.status !== "customer" && onConvertToCustomer ? <button type="button" onClick={onConvertToCustomer} disabled={converting} className="inline-flex h-10 items-center gap-2 rounded-xl border border-emerald-300/15 bg-emerald-400/[0.07] px-3.5 text-xs font-semibold text-emerald-200 transition-[transform,background-color,border-color] hover:border-emerald-300/25 hover:bg-emerald-400/[0.12] active:scale-[0.96] disabled:opacity-40"><UserRoundCheck className="h-3.5 w-3.5" />{t("promote")}</button> : null}
         </div>
       </header>
 

@@ -25,11 +25,13 @@ import { evaluateColdEligibility } from "./eligibility.js";
 import { chooseExpansionArea } from "./expansion.js";
 import { earliestStartedAt } from "./job-status.js";
 import { sendPushNotification } from "../push-notifications.js";
+import { processNextAutomaticRoute } from "./auto-route.js";
 
 const QUEUE_MAX_WAIT_MS = 24 * 60 * 60 * 1000;
 const STARTING_STALE_MS = START_TIMEOUT_MS + 2 * 60 * 1000;
 const DISPATCH_LOCK_KEY = 7_424_002;
 let ticking: Promise<void> | null = null;
+let lastDispatchedRepId: number | null = null;
 
 function scorePlace(place: NormalizedPlace) {
   let score = 35;
@@ -122,8 +124,8 @@ async function updateJobStatus(jobId: number) {
   if (previousJob && previousJob.status !== status && ["completed", "failed"].includes(status)) {
     const ready = status === "completed";
     void sendPushNotification(previousJob.repId, {
-      title: ready ? "Your prospecting list is ready" : "Prospecting needs attention",
-      body: ready ? "Open Leads to review the prospects and build today's route." : "Open Leads to review the failed search and retry it.",
+      title: ready ? "Xpot is optimizing your route" : "Prospecting needs attention",
+      body: ready ? "The search is complete. Xpot is now selecting and ordering today's stops." : "Open Leads to review the failed search and retry it.",
       href: `/route?jobId=${jobId}`,
     }).catch((error) => console.error("[prospecting push] delivery failed:", error));
   }
@@ -245,8 +247,13 @@ async function claimNextRun() {
     const [active] = await tx.select({ id: prospectingRuns.id }).from(prospectingRuns)
       .where(inArray(prospectingRuns.status, ["starting", "running"])).limit(1);
     if (active) return null;
-    const [next] = await tx.select().from(prospectingRuns).where(eq(prospectingRuns.status, "queued"))
-      .orderBy(asc(prospectingRuns.createdAt), asc(prospectingRuns.id)).limit(1).for("update");
+    const [fairNext] = lastDispatchedRepId === null ? [] : await tx.select().from(prospectingRuns).where(and(
+      eq(prospectingRuns.status, "queued"),
+      ne(prospectingRuns.repId, lastDispatchedRepId),
+    )).orderBy(asc(prospectingRuns.createdAt), asc(prospectingRuns.id)).limit(1).for("update", { skipLocked: true });
+    const [fallback] = fairNext ? [] : await tx.select().from(prospectingRuns).where(eq(prospectingRuns.status, "queued"))
+      .orderBy(asc(prospectingRuns.createdAt), asc(prospectingRuns.id)).limit(1).for("update", { skipLocked: true });
+    const next = fairNext ?? fallback;
     if (!next) return null;
     const input = buildEngineInput(next.query, next.location, next.requestedMaxResults);
     const [claimed] = await tx.update(prospectingRuns).set({ status: "starting", engineInput: input, startedAt: new Date(), updatedAt: new Date() })
@@ -258,6 +265,7 @@ async function claimNextRun() {
 async function dispatchNextRun() {
   const run = await claimNextRun();
   if (!run) return;
+  lastDispatchedRepId = run.repId;
   try {
     const engineJobId = await startEngineJob(run.engineInput);
     await db.update(prospectingRuns).set({ status: "running", engineJobId, progress: 10, updatedAt: new Date() })
@@ -271,12 +279,14 @@ async function dispatchNextRun() {
 }
 
 async function tick() {
-  if (!isEngineConfigured()) return;
-  await refreshActiveRun();
-  await dispatchNextRun();
-  const openJobs = await db.select({ id: prospectingJobs.id }).from(prospectingJobs)
-    .where(inArray(prospectingJobs.status, ["queued", "running"]));
-  for (const job of openJobs) await updateJobStatus(job.id);
+  if (isEngineConfigured()) {
+    await refreshActiveRun();
+    await dispatchNextRun();
+    const openJobs = await db.select({ id: prospectingJobs.id }).from(prospectingJobs)
+      .where(inArray(prospectingJobs.status, ["queued", "running"]));
+    for (const job of openJobs) await updateJobStatus(job.id);
+  }
+  await processNextAutomaticRoute();
 }
 
 export function tickProspectingQueueSafely() {
@@ -312,6 +322,8 @@ export async function retryFailedProspectingRuns(jobId: number, repId: number) {
     await tx.update(prospectingJobs).set({
       status: "queued",
       errorMessage: null,
+      routePlanningStatus: "pending",
+      routeErrorMessage: null,
       completedAt: null,
       updatedAt: new Date(),
     }).where(and(eq(prospectingJobs.id, jobId), eq(prospectingJobs.repId, repId)));
@@ -320,7 +332,6 @@ export async function retryFailedProspectingRuns(jobId: number, repId: number) {
 }
 
 export function startProspectingWorker() {
-  if (!isEngineConfigured()) return () => undefined;
   void tickProspectingQueueSafely();
   const pollMs = positivePollMs(process.env.PROSPECTING_ENGINE_POLL_MS);
   const timer = setInterval(() => void tickProspectingQueueSafely(), pollMs);

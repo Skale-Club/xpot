@@ -12,8 +12,10 @@ import {
   salesVisits,
 } from "#shared/schema.js";
 import {
+  MAX_DAILY_PROSPECTING_SESSIONS,
   prospectingJobCreateSchema,
   prospectingRouteCreateSchema,
+  prospectingRouteReorderSchema,
   prospectingRouteStatusUpdateSchema,
   prospectingStopUpdateSchema,
 } from "#shared/prospecting.js";
@@ -33,6 +35,10 @@ import {
 } from "../../prospecting/service.js";
 import { xpotPushSubscriptionSchema } from "#shared/xpot.js";
 import { pushPublicKey, savePushSubscription } from "../../push-notifications.js";
+import { retryAutomaticRoute } from "../../prospecting/auto-route.js";
+import { haversineMeters } from "../../prospecting/route-optimizer.js";
+import { ensureProspectingCandidateLead } from "../../prospecting/lead-materializer.js";
+import { publishProspectingRouteForRep } from "../../prospecting/route-publisher.js";
 
 function lifecycleScore(lead: Awaited<ReturnType<typeof storage.getSalesLead>>): { score: number; reasons: string[] } {
   if (!lead) return { score: 0, reasons: [] };
@@ -54,6 +60,7 @@ function lifecycleScore(lead: Awaited<ReturnType<typeof storage.getSalesLead>>):
 }
 
 class NoProspectingStopFitsError extends Error {}
+class DailyRouteLimitError extends Error {}
 
 /** A path id that is not a positive integer can't match a row; answer 404, not a SQL error. */
 function pathId(value: string) {
@@ -93,6 +100,80 @@ async function releaseUnvisitedStops(tx: Tx, routeId: number, reason: string, no
     await tx.update(prospectingCandidates).set({ status: "discovered", updatedAt: now })
       .where(and(inArray(prospectingCandidates.id, candidateIds), eq(prospectingCandidates.status, "scheduled")));
   }
+}
+
+type RouteRow = typeof prospectingRoutes.$inferSelect;
+type RouteStopRow = typeof prospectingRouteStops.$inferSelect;
+
+/** Rebuilds local timing/geometry after a drag or removal without another paid Google request. */
+async function persistLocalStopOrder(
+  tx: Tx,
+  route: RouteRow,
+  ordered: RouteStopRow[],
+  repId: number,
+  edit: "reordered" | "stop_removed",
+) {
+  const plannedStartAt = new Date(route.plannedStartAt);
+  let elapsedSeconds = 0;
+  let totalDistanceMeters = 0;
+  const recalculated = ordered.map((stop, index) => {
+    const previous = index > 0 ? ordered[index - 1] : null;
+    const distance = previous ? Math.round(haversineMeters(
+      { lat: Number(previous.lat), lng: Number(previous.lng) },
+      { lat: Number(stop.lat), lng: Number(stop.lng) },
+    )) : 0;
+    const travelDurationSeconds = distance > 0 ? Math.max(60, Math.round(distance / (30_000 / 3600))) : 0;
+    elapsedSeconds += travelDurationSeconds;
+    const estimatedArrivalAt = new Date(plannedStartAt.getTime() + elapsedSeconds * 1000);
+    elapsedSeconds += stop.serviceDurationSeconds;
+    totalDistanceMeters += distance;
+    return { stop, position: index + 1, distance, travelDurationSeconds, estimatedArrivalAt };
+  });
+  const now = new Date();
+  const optimizationMeta = { ...(route.optimizationMeta ?? {}) } as Record<string, unknown>;
+  delete optimizationMeta.encodedPolyline;
+  Object.assign(optimizationMeta, {
+    manuallyReordered: true,
+    lastManualEdit: edit,
+    distanceModel: "haversine_manual",
+    trafficAware: false,
+  });
+
+  // Move every row out of the final position range first so the route/position
+  // unique constraint cannot collide while positions are compacted.
+  const temporaryPositionBase = Math.max(...ordered.map((stop) => stop.position), ordered.length) + ordered.length + 1;
+  for (const item of recalculated) {
+    await tx.update(prospectingRouteStops).set({ position: temporaryPositionBase + item.position, updatedAt: now })
+      .where(eq(prospectingRouteStops.id, item.stop.id));
+  }
+  for (const item of recalculated) {
+    await tx.update(prospectingRouteStops).set({
+      position: item.position,
+      travelDistanceMeters: item.distance,
+      travelDurationSeconds: item.travelDurationSeconds,
+      estimatedArrivalAt: item.estimatedArrivalAt,
+      updatedAt: now,
+    }).where(eq(prospectingRouteStops.id, item.stop.id));
+    if (item.stop.visitId) {
+      await tx.update(salesVisits).set({ scheduledAt: item.estimatedArrivalAt, updatedAt: now })
+        .where(and(eq(salesVisits.id, item.stop.visitId), eq(salesVisits.repId, repId)));
+    }
+  }
+  const first = ordered[0];
+  const last = ordered[ordered.length - 1];
+  await tx.update(prospectingRoutes).set({
+    startAddress: first.address,
+    startLat: first.lat,
+    startLng: first.lng,
+    endAddress: last.address,
+    endLat: last.lat,
+    endLng: last.lng,
+    totalDistanceMeters,
+    totalDurationSeconds: elapsedSeconds,
+    plannedEndAt: new Date(plannedStartAt.getTime() + elapsedSeconds * 1000),
+    optimizationMeta,
+    updatedAt: now,
+  }).where(eq(prospectingRoutes.id, route.id));
 }
 
 export function createProspectingRouter() {
@@ -168,6 +249,15 @@ export function createProspectingRouter() {
     return res.status(202).json(await prospectingJobDetails(jobId, actor.rep.id));
   });
 
+  router.post("/prospecting/jobs/:id/route/retry", async (req, res) => {
+    const actor = (req as any).xpotActor as NonNullable<Awaited<ReturnType<typeof ensureXpotRep>>>;
+    const jobId = pathId(req.params.id);
+    const retried = jobId ? await retryAutomaticRoute(jobId, actor.rep.id) : null;
+    if (!retried) return res.status(409).json({ message: "This route is not ready to retry." });
+    void tickProspectingQueueSafely();
+    return res.status(202).json(await prospectingJobDetails(retried.id, actor.rep.id));
+  });
+
   router.get("/prospecting/routes", async (req, res) => {
     const actor = (req as any).xpotActor as NonNullable<Awaited<ReturnType<typeof ensureXpotRep>>>;
     res.json(await db.select().from(prospectingRoutes)
@@ -189,22 +279,25 @@ export function createProspectingRouter() {
         return res.status(409).json({ message: "Wait for prospecting discovery to finish before building the route." });
       }
     }
-    // A seller gets exactly one paid optimization per calendar day. Reusing the
-    // persisted route also makes retries, double-clicks and a second scrape free.
-    // The platform owner (super admin) may replace it, to test and evaluate.
+    // A seller can create a follow-up route after finishing the active one. The
+    // bounded daily allowance protects paid discovery and optimization calls.
     if (input.rebuild && !actor.user.isAdmin) {
       return res.status(403).json({ message: "Only the account owner can recalculate today's route." });
     }
     const rebuild = input.rebuild && actor.user.isAdmin;
-    const [existingRoute] = await db.select().from(prospectingRoutes).where(and(
+    const dailyRoutes = await db.select().from(prospectingRoutes).where(and(
       eq(prospectingRoutes.repId, actor.rep.id),
       eq(prospectingRoutes.routeDate, input.routeDate),
-    )).orderBy(desc(prospectingRoutes.createdAt)).limit(1);
+    )).orderBy(desc(prospectingRoutes.createdAt));
+    const existingRoute = dailyRoutes.find((route) => ["draft", "published", "in_progress"].includes(route.status));
     if (existingRoute && !rebuild) {
       const existingStops = await db.select().from(prospectingRouteStops)
         .where(eq(prospectingRouteStops.routeId, existingRoute.id))
         .orderBy(asc(prospectingRouteStops.position));
       return res.status(200).json({ route: existingRoute, stops: existingStops, reused: true });
+    }
+    if (!rebuild && dailyRoutes.length >= MAX_DAILY_PROSPECTING_SESSIONS) {
+      return res.status(429).json({ message: `You can create up to ${MAX_DAILY_PROSPECTING_SESSIONS} routes per day.` });
     }
     const uniqueLeadIds = Array.from(new Set(input.leadIds));
     const leads = (await storage.listSalesLeads({ ownerRepId: actor.rep.id }))
@@ -294,38 +387,49 @@ export function createProspectingRouter() {
     }
 
     const plannedStartAt = new Date(input.plannedStartAt);
-    // A selling route starts at the rep's live position and ends at the final
-    // visit. A saved home is profile data, not a hidden leg in this route.
+    let organizationId: number;
+    try {
+      organizationId = await organizationIdForRep(actor.rep.id);
+    } catch (error) {
+      if (error instanceof OrganizationError) return res.status(error.status).json({ message: error.message });
+      throw error;
+    }
+    // The selling day starts at visit one. Getting from the rep's current
+    // location to that visit is navigation and never consumes the work window.
     let result;
     try {
       result = await db.transaction(async (tx) => {
         // The database lock covers the external request. Without it, two
         // simultaneous clicks could both be billed before the unique insert.
         await tx.execute(sql`select pg_advisory_xact_lock(${actor.rep.id}, hashtext(${input.routeDate}))`);
-        const [lockedExisting] = await tx.select().from(prospectingRoutes).where(and(
+        const lockedRoutes = await tx.select().from(prospectingRoutes).where(and(
           eq(prospectingRoutes.repId, actor.rep.id),
           eq(prospectingRoutes.routeDate, input.routeDate),
-        )).limit(1);
+        )).orderBy(desc(prospectingRoutes.createdAt));
+        const lockedActive = lockedRoutes.find((route) => ["draft", "published", "in_progress"].includes(route.status));
+        const lockedExisting = lockedActive ?? lockedRoutes[0];
         if (lockedExisting && rebuild) {
           // The old route's unreached visits leave the agenda and its businesses
           // return to the pool before the new optimization takes the day.
           await releaseUnvisitedStops(tx, lockedExisting.id, "route_rebuilt", new Date());
           await tx.delete(prospectingRoutes).where(eq(prospectingRoutes.id, lockedExisting.id));
-        } else if (lockedExisting) {
+        } else if (lockedActive) {
           const existingStops = await tx.select().from(prospectingRouteStops)
-            .where(eq(prospectingRouteStops.routeId, lockedExisting.id))
+            .where(eq(prospectingRouteStops.routeId, lockedActive.id))
             .orderBy(asc(prospectingRouteStops.position));
-          return { route: lockedExisting, stops: existingStops, reused: true as const };
+          return { route: lockedActive, stops: existingStops, reused: true as const };
+        } else if (lockedRoutes.length >= MAX_DAILY_PROSPECTING_SESSIONS) {
+          throw new DailyRouteLimitError();
         }
 
         const optimized = await optimizeRouteWithGoogle({
-          start: input.start,
           plannedStartAt,
           shiftDurationSeconds: input.shiftDurationMinutes * 60,
           maxStops: input.maxStops,
           candidates,
         });
         if (!optimized.stops.length) throw new NoProspectingStopFitsError();
+        const routeStart = optimized.stops[0];
 
         const [route] = await tx.insert(prospectingRoutes).values({
           repId: actor.rep.id,
@@ -334,9 +438,9 @@ export function createProspectingRouter() {
           routeDate: input.routeDate,
           plannedStartAt,
           plannedEndAt: new Date(plannedStartAt.getTime() + optimized.totalDurationSeconds * 1000),
-          startAddress: input.start.address ?? null,
-          startLat: String(input.start.lat),
-          startLng: String(input.start.lng),
+          startAddress: routeStart.address ?? null,
+          startLat: String(routeStart.lat),
+          startLng: String(routeStart.lng),
           endAddress: null,
           endLat: null,
           endLng: null,
@@ -348,6 +452,8 @@ export function createProspectingRouter() {
           optimizationMeta: {
             shiftDurationMinutes: input.shiftDurationMinutes,
             returnHome: false,
+            automaticOrigin: "first_visit",
+            excludesTravelToFirstVisit: true,
             missingCoordinates,
             excludedByBudget: optimized.excludedCandidateIds,
             distanceModel: optimized.optimizer === "google_route_optimization_v1" ? "google_road_network" : "haversine",
@@ -355,7 +461,7 @@ export function createProspectingRouter() {
             encodedPolyline: optimized.encodedPolyline,
           },
         }).returning();
-        const stops = await tx.insert(prospectingRouteStops).values(optimized.stops.map((stop) => ({
+        const insertedStops = await tx.insert(prospectingRouteStops).values(optimized.stops.map((stop) => ({
           routeId: route.id,
           candidateId: stop.candidateId ?? null,
           leadId: stop.leadId,
@@ -371,6 +477,22 @@ export function createProspectingRouter() {
           travelDurationSeconds: stop.travelDurationSeconds,
           estimatedArrivalAt: stop.estimatedArrivalAt,
         }))).returning();
+        const stops = [];
+        for (const stop of insertedStops) {
+          if (stop.leadId || !stop.candidateId) {
+            stops.push(stop);
+            continue;
+          }
+          const leadId = await ensureProspectingCandidateLead(tx, {
+            candidateId: stop.candidateId,
+            repId: actor.rep.id,
+            organizationId,
+            territoryName: route.name,
+          });
+          await tx.update(prospectingRouteStops).set({ leadId, updatedAt: new Date() })
+            .where(eq(prospectingRouteStops.id, stop.id));
+          stops.push({ ...stop, leadId });
+        }
         return { route, stops, optimized };
       });
     } catch (error) {
@@ -379,6 +501,9 @@ export function createProspectingRouter() {
       }
       if (error instanceof NoProspectingStopFitsError) {
         return res.status(400).json({ message: "No selected prospect fits in the route's time budget." });
+      }
+      if (error instanceof DailyRouteLimitError) {
+        return res.status(429).json({ message: `You can create up to ${MAX_DAILY_PROSPECTING_SESSIONS} routes per day.` });
       }
       throw error;
     }
@@ -398,7 +523,207 @@ export function createProspectingRouter() {
     const stops = await db.select().from(prospectingRouteStops)
       .where(eq(prospectingRouteStops.routeId, route.id))
       .orderBy(asc(prospectingRouteStops.position));
-    res.json({ route, stops });
+    const candidateIds = stops.flatMap((stop) => stop.candidateId ? [stop.candidateId] : []);
+    const leadIds = stops.flatMap((stop) => stop.leadId ? [stop.leadId] : []);
+    const candidates = candidateIds.length ? await db.select({
+      id: prospectingCandidates.id,
+      googlePlaceId: prospectingCandidates.googlePlaceId,
+      ratingPermille: prospectingCandidates.ratingPermille,
+      reviewCount: prospectingCandidates.reviewCount,
+      phone: prospectingCandidates.phone,
+      website: prospectingCandidates.website,
+    }).from(prospectingCandidates).where(and(
+      eq(prospectingCandidates.repId, actor.rep.id),
+      inArray(prospectingCandidates.id, candidateIds),
+    )) : [];
+    const leads = leadIds.length ? await db.select({
+      id: salesLeads.id,
+      googlePlaceId: salesLeads.googlePlaceId,
+      phone: salesLeads.phone,
+      website: salesLeads.website,
+    }).from(salesLeads).where(and(
+      eq(salesLeads.ownerRepId, actor.rep.id),
+      inArray(salesLeads.id, leadIds),
+    )) : [];
+    const candidateById = new Map(candidates.map((candidate) => [candidate.id, candidate]));
+    const leadById = new Map(leads.map((lead) => [lead.id, lead]));
+    res.json({
+      route,
+      stops: stops.map((stop) => {
+        const candidate = stop.candidateId ? candidateById.get(stop.candidateId) : undefined;
+        const lead = stop.leadId ? leadById.get(stop.leadId) : undefined;
+        return {
+          ...stop,
+          googlePlaceId: candidate?.googlePlaceId ?? lead?.googlePlaceId ?? null,
+          rating: candidate?.ratingPermille == null ? null : candidate.ratingPermille / 1000,
+          reviewCount: candidate?.reviewCount ?? null,
+          phone: candidate?.phone ?? lead?.phone ?? null,
+          website: candidate?.website ?? lead?.website ?? null,
+        };
+      }),
+    });
+  });
+
+  router.patch("/prospecting/routes/:id/stops/order", async (req, res) => {
+    const actor = (req as any).xpotActor as NonNullable<Awaited<ReturnType<typeof ensureXpotRep>>>;
+    const routeId = pathId(req.params.id);
+    const input = prospectingRouteReorderSchema.parse(req.body);
+    const [route] = routeId ? await db.select().from(prospectingRoutes).where(and(
+      eq(prospectingRoutes.id, routeId),
+      eq(prospectingRoutes.repId, actor.rep.id),
+    )).limit(1) : [];
+    if (!route) return res.status(404).json({ message: "Route not found" });
+    if (!["draft", "published"].includes(route.status)) {
+      return res.status(409).json({ message: "Only a route that has not started can be reordered." });
+    }
+
+    const stops = await db.select().from(prospectingRouteStops)
+      .where(eq(prospectingRouteStops.routeId, route.id));
+    const knownIds = new Set(stops.map((stop) => stop.id));
+    if (input.stopIds.length !== stops.length || input.stopIds.some((id) => !knownIds.has(id))) {
+      return res.status(400).json({ message: "The new order must contain every route stop exactly once." });
+    }
+
+    const byId = new Map(stops.map((stop) => [stop.id, stop]));
+    const ordered = input.stopIds.map((id) => byId.get(id)!);
+    const plannedStartAt = new Date(route.plannedStartAt);
+    let elapsedSeconds = 0;
+    let totalDistanceMeters = 0;
+    const recalculated = ordered.map((stop, index) => {
+      const previous = index > 0 ? ordered[index - 1] : null;
+      const distance = previous ? Math.round(haversineMeters(
+        { lat: Number(previous.lat), lng: Number(previous.lng) },
+        { lat: Number(stop.lat), lng: Number(stop.lng) },
+      )) : 0;
+      // Reordering is intentionally local: use a conservative city-driving estimate,
+      // never a new Google Routes request.
+      const travelDurationSeconds = distance > 0 ? Math.max(60, Math.round(distance / (30_000 / 3600))) : 0;
+      elapsedSeconds += travelDurationSeconds;
+      const estimatedArrivalAt = new Date(plannedStartAt.getTime() + elapsedSeconds * 1000);
+      elapsedSeconds += stop.serviceDurationSeconds;
+      totalDistanceMeters += distance;
+      return { stop, position: index + 1, distance, travelDurationSeconds, estimatedArrivalAt };
+    });
+    const configuredShiftMinutes = Number((route.optimizationMeta as Record<string, unknown> | null)?.shiftDurationMinutes);
+    if (Number.isFinite(configuredShiftMinutes) && configuredShiftMinutes > 0 && elapsedSeconds > configuredShiftMinutes * 60) {
+      return res.status(409).json({
+        message: `This order needs about ${Math.ceil(elapsedSeconds / 60)} minutes and no longer fits the ${configuredShiftMinutes}-minute work window.`,
+      });
+    }
+    await db.transaction((tx) => persistLocalStopOrder(tx, route, ordered, actor.rep.id, "reordered"));
+    return res.json({ reordered: true });
+  });
+
+  router.delete("/prospecting/routes/:routeId/stops/:stopId", async (req, res) => {
+    const actor = (req as any).xpotActor as NonNullable<Awaited<ReturnType<typeof ensureXpotRep>>>;
+    const routeId = pathId(req.params.routeId);
+    const stopId = pathId(req.params.stopId);
+    const [route] = routeId ? await db.select().from(prospectingRoutes).where(and(
+      eq(prospectingRoutes.id, routeId),
+      eq(prospectingRoutes.repId, actor.rep.id),
+    )).limit(1) : [];
+    if (!route) return res.status(404).json({ message: "Route not found" });
+    if (!["draft", "published", "in_progress"].includes(route.status)) {
+      return res.status(409).json({ message: "A finished route can no longer be edited." });
+    }
+    const stops = await db.select().from(prospectingRouteStops)
+      .where(eq(prospectingRouteStops.routeId, route.id))
+      .orderBy(asc(prospectingRouteStops.position));
+    const stop = stops.find((item) => item.id === stopId);
+    if (!stop) return res.status(404).json({ message: "Route stop not found" });
+    if (!["planned", "en_route"].includes(stop.status)) {
+      return res.status(409).json({ message: "A visit that already started cannot be removed from the route." });
+    }
+    if (stops.length === 1) {
+      return res.status(409).json({ message: "A route must keep at least one stop." });
+    }
+
+    await db.transaction(async (tx) => {
+      const now = new Date();
+      if (stop.visitId) {
+        await tx.update(salesVisits).set({ status: "cancelled", updatedAt: now }).where(and(
+          eq(salesVisits.id, stop.visitId),
+          eq(salesVisits.repId, actor.rep.id),
+          eq(salesVisits.status, "planned"),
+        ));
+      }
+      if (stop.candidateId) {
+        await tx.update(prospectingCandidates).set({ status: "discovered", updatedAt: now }).where(and(
+          eq(prospectingCandidates.id, stop.candidateId),
+          eq(prospectingCandidates.repId, actor.rep.id),
+          eq(prospectingCandidates.status, "scheduled"),
+        ));
+      }
+      await tx.delete(prospectingRouteStops).where(eq(prospectingRouteStops.id, stop.id));
+      await persistLocalStopOrder(tx, route, stops.filter((item) => item.id !== stop.id), actor.rep.id, "stop_removed");
+    });
+    return res.json({ removed: true });
+  });
+
+  router.post("/prospecting/routes/:id/stops/:stopId/prepare-demo", async (req, res) => {
+    const actor = (req as any).xpotActor as NonNullable<Awaited<ReturnType<typeof ensureXpotRep>>>;
+    const routeId = pathId(req.params.id);
+    const stopId = pathId(req.params.stopId);
+    const [route] = routeId ? await db.select().from(prospectingRoutes).where(and(
+      eq(prospectingRoutes.id, routeId),
+      eq(prospectingRoutes.repId, actor.rep.id),
+    )).limit(1) : [];
+    if (!route || !stopId) return res.status(404).json({ message: "Route stop not found" });
+    const [stop] = await db.select().from(prospectingRouteStops).where(and(
+      eq(prospectingRouteStops.id, stopId),
+      eq(prospectingRouteStops.routeId, route.id),
+    )).limit(1);
+    if (!stop) return res.status(404).json({ message: "Route stop not found" });
+    const [candidate] = stop.candidateId ? await db.select().from(prospectingCandidates).where(and(
+      eq(prospectingCandidates.id, stop.candidateId),
+      eq(prospectingCandidates.repId, actor.rep.id),
+    )).limit(1) : [undefined];
+    let leadId = stop.leadId ?? candidate?.leadId ?? null;
+    const [existingLead] = leadId ? await db.select({ googlePlaceId: salesLeads.googlePlaceId }).from(salesLeads).where(and(
+      eq(salesLeads.id, leadId),
+      eq(salesLeads.ownerRepId, actor.rep.id),
+    )).limit(1) : [undefined];
+    let organizationId: number | null = null;
+    if (!leadId) {
+      try {
+        organizationId = await organizationIdForRep(actor.rep.id);
+      } catch (error) {
+        if (error instanceof OrganizationError) return res.status(error.status).json({ message: error.message });
+        throw error;
+      }
+    }
+    const prepared = await db.transaction(async (tx) => {
+      if (!leadId && candidate?.googlePlaceId) {
+        const [existing] = await tx.select({ id: salesLeads.id }).from(salesLeads).where(and(
+          eq(salesLeads.ownerRepId, actor.rep.id),
+          eq(salesLeads.googlePlaceId, candidate.googlePlaceId),
+        )).limit(1);
+        leadId = existing?.id ?? null;
+      }
+      if (!leadId && candidate) {
+        const [lead] = await tx.insert(salesLeads).values({
+          organizationId: organizationId!, name: candidate.name, website: candidate.website,
+          phone: candidate.phone, email: candidate.email, industry: candidate.industry,
+          source: "prospecting", status: "lead", ownerRepId: actor.rep.id,
+          territoryName: route.name, googlePlaceId: candidate.googlePlaceId,
+        }).returning({ id: salesLeads.id });
+        leadId = lead.id;
+        await tx.insert(salesLeadLocations).values({
+          leadId, addressLine1: candidate.address || "Prospecting location", city: candidate.city,
+          state: candidate.state, postalCode: candidate.postalCode, country: candidate.country || "US",
+          lat: candidate.lat, lng: candidate.lng, isPrimary: true,
+        });
+      }
+      if (!leadId) throw new Error("Route stop has no lead");
+      if (candidate) {
+        await tx.update(prospectingCandidates).set({ leadId, updatedAt: new Date() })
+          .where(eq(prospectingCandidates.id, candidate.id));
+      }
+      await tx.update(prospectingRouteStops).set({ leadId, updatedAt: new Date() })
+        .where(eq(prospectingRouteStops.id, stop.id));
+      return { leadId, name: stop.name, placeId: candidate?.googlePlaceId ?? existingLead?.googlePlaceId ?? null };
+    });
+    return res.status(201).json(prepared);
   });
 
   router.post("/prospecting/routes/:id/stops/:stopId/prepare-check-in", async (req, res) => {
@@ -467,7 +792,7 @@ export function createProspectingRouter() {
           email: candidate.email,
           industry: candidate.industry,
           source: "prospecting",
-          status: "prospect",
+          status: "lead",
           ownerRepId: actor.rep.id,
           territoryName: route.name,
           googlePlaceId: candidate.googlePlaceId,
@@ -538,10 +863,10 @@ export function createProspectingRouter() {
     if (!allowed[route.status]?.includes(input.status)) {
       return res.status(409).json({ message: `Cannot move route from ${route.status} to ${input.status}.` });
     }
-    let organizationId: number | null = null;
     if (input.status === "published") {
       try {
-        organizationId = await organizationIdForRep(actor.rep.id);
+        const published = await publishProspectingRouteForRep(route.id, actor.rep.id);
+        return res.json(published);
       } catch (error) {
         if (error instanceof OrganizationError) return res.status(error.status).json({ message: error.message });
         throw error;
@@ -549,90 +874,12 @@ export function createProspectingRouter() {
     }
     const now = new Date();
     const updated = await db.transaction(async (tx) => {
-      if (input.status === "published") {
-        const stops = await tx.select().from(prospectingRouteStops)
-          .where(eq(prospectingRouteStops.routeId, route.id))
-          .orderBy(asc(prospectingRouteStops.position));
-        for (const stop of stops) {
-          if (stop.visitId) continue;
-          const [candidate] = stop.candidateId
-            ? await tx.select().from(prospectingCandidates).where(and(
-                eq(prospectingCandidates.id, stop.candidateId),
-                eq(prospectingCandidates.repId, actor.rep.id),
-              )).limit(1)
-            : [undefined];
-          let leadId = stop.leadId ?? candidate?.leadId ?? null;
-          let locationId: number | null = null;
-
-          if (!leadId && candidate?.googlePlaceId) {
-            const [existing] = await tx.select({ id: salesLeads.id }).from(salesLeads).where(and(
-              eq(salesLeads.ownerRepId, actor.rep.id),
-              eq(salesLeads.googlePlaceId, candidate.googlePlaceId),
-            )).limit(1);
-            leadId = existing?.id ?? null;
-          }
-          if (!leadId && candidate) {
-            const [lead] = await tx.insert(salesLeads).values({
-              organizationId: organizationId!,
-              name: candidate.name,
-              website: candidate.website,
-              phone: candidate.phone,
-              email: candidate.email,
-              industry: candidate.industry,
-              source: "prospecting",
-              status: "prospect",
-              ownerRepId: actor.rep.id,
-              territoryName: route.name,
-              googlePlaceId: candidate.googlePlaceId,
-            }).returning({ id: salesLeads.id });
-            leadId = lead.id;
-            const [location] = await tx.insert(salesLeadLocations).values({
-              leadId,
-              addressLine1: candidate.address || "Prospecting location",
-              city: candidate.city,
-              state: candidate.state,
-              postalCode: candidate.postalCode,
-              country: candidate.country || "US",
-              lat: candidate.lat,
-              lng: candidate.lng,
-              isPrimary: true,
-            }).returning({ id: salesLeadLocations.id });
-            locationId = location.id;
-          }
-
-          if (!leadId) continue;
-          if (!locationId) {
-            const [location] = await tx.select({ id: salesLeadLocations.id })
-              .from(salesLeadLocations)
-              .where(eq(salesLeadLocations.leadId, leadId))
-              .orderBy(desc(salesLeadLocations.isPrimary), asc(salesLeadLocations.id))
-              .limit(1);
-            locationId = location?.id ?? null;
-          }
-
-          const [visit] = await tx.insert(salesVisits).values({
-            repId: actor.rep.id,
-            leadId,
-            locationId,
-            status: "planned",
-            scheduledAt: stop.estimatedArrivalAt,
-            source: "prospecting-route",
-          }).returning({ id: salesVisits.id });
-
-          if (candidate) {
-            await tx.update(prospectingCandidates).set({ leadId, status: "scheduled", updatedAt: now })
-              .where(eq(prospectingCandidates.id, candidate.id));
-          }
-          await tx.update(prospectingRouteStops).set({ leadId, visitId: visit.id, updatedAt: now })
-            .where(eq(prospectingRouteStops.id, stop.id));
-        }
-      }
       if (input.status === "cancelled" || input.status === "completed") {
         await releaseUnvisitedStops(tx, route.id, input.status === "cancelled" ? "route_cancelled" : "route_completed", now);
       }
       const [changed] = await tx.update(prospectingRoutes).set({
         status: input.status,
-        publishedAt: input.status === "published" ? now : route.publishedAt,
+        publishedAt: route.publishedAt,
         startedAt: input.status === "in_progress" ? now : route.startedAt,
         completedAt: input.status === "completed" ? now : route.completedAt,
         updatedAt: now,

@@ -60,8 +60,8 @@ function LeadPickerDialog({
 function DetailCard({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   const tc = useT(commonMessages);
   return (
-    <div className="overflow-hidden rounded-2xl" style={{ background: "rgba(255,255,255,0.035)", border: "1px solid rgba(255,255,255,0.08)" }}>
-      <div className="flex items-center gap-3 border-b border-white/[0.06] px-5 py-3">
+    <div className="overflow-hidden rounded-[24px] shadow-[0_20px_60px_rgba(0,0,0,0.24)]" style={{ background: "linear-gradient(145deg, rgba(255,255,255,0.045), rgba(255,255,255,0.022))", border: "1px solid rgba(255,255,255,0.085)" }}>
+      <div className="flex items-center gap-3 border-b border-white/[0.06] bg-black/[0.1] px-5 py-4">
         <h2 className="min-w-0 flex-1 truncate text-sm font-bold text-white">{title}</h2>
         <button type="button" onClick={onClose} aria-label={tc("close")} title={tc("close")}
           className="flex h-8 w-8 items-center justify-center rounded-lg text-white/35 hover:bg-white/10 hover:text-white">
@@ -111,9 +111,10 @@ export function SalesList({ selectedId = null, onSelect }: {
   const [target, setTarget] = useState<{ id: number; name: string } | null>(null);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <FilterBar
         testId="sales-filters"
+        className="rounded-[22px] border-white/[0.075] bg-white/[0.02] p-3"
         controls={
           <FilterSelect
             value={source}
@@ -306,9 +307,10 @@ export function ConsignmentsList({ selectedId = null, onSelect }: {
   const valueOut = rows.reduce((sum, r) => sum + r.consignment.quantityOnHand * r.consignment.unitPriceCents, 0);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <FilterBar
         testId="consignments-filters"
+        className="rounded-[22px] border-white/[0.075] bg-white/[0.02] p-3"
         actions={
           <GhostButton onClick={() => setPickerOpen(true)} className="h-10">
             <PackagePlus className="h-3.5 w-3.5" /> {t("leaveShort")}
@@ -325,7 +327,7 @@ export function ConsignmentsList({ selectedId = null, onSelect }: {
       />
 
       {status === "active" && rows.length > 0 && (
-        <div className="grid grid-cols-2 gap-2 lg:max-w-xl">
+        <div className="grid grid-cols-2 gap-3 lg:max-w-xl">
           <StatTile label={t("unitsOut")} value={unitsOut} sub={t.plural("agreements", rows.length)} />
           <StatTile tone="indigo" label={t("ifAllSells")} value={formatCents(valueOut)} />
         </div>

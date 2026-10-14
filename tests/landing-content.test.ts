@@ -15,6 +15,8 @@ describe("landing page content", () => {
       expect(content.faq.items.length).toBeGreaterThanOrEqual(5);
       expect(new Set(content.faq.items.map((item) => item.id)).size).toBe(content.faq.items.length);
       expect(JSON.stringify(content)).not.toMatch(/\b(?:Skale|CRM|Xphere|GoHighLevel|manager|managers|gestor|gestores|gerente|gerentes|distributor|distributors|distribuidor|distribuidores)\b/i);
+      expect(JSON.stringify(content)).not.toMatch(/side hustle|renda extra|ingresos extra/i);
+      expect(content.audience.subtitle).toMatch(/full-time|atividade principal|actividad principal/i);
     }
   });
 });

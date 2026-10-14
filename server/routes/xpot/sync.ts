@@ -5,6 +5,21 @@ import { syncLeadToGhl, syncLeadToXphere, syncOpportunityToGhl, syncTaskToGhl, s
 import { syncSaleToXphere, syncTaskToXphere } from "./xphere-sync.js";
 import { salesStorage } from "../../storage-sales.js";
 
+const SYNC_BATCH_SIZE = 200;
+const SYNC_CONCURRENCY = 5;
+
+async function mapWithConcurrency<T, R>(items: T[], worker: (item: T) => Promise<R>) {
+  const results = new Array<R>(items.length);
+  let cursor = 0;
+  await Promise.all(Array.from({ length: Math.min(SYNC_CONCURRENCY, items.length) }, async () => {
+    while (cursor < items.length) {
+      const index = cursor++;
+      results[index] = await worker(items[index]);
+    }
+  }));
+  return results;
+}
+
 export function createSyncRouter() {
   const router = Router();
   router.use(requireXpotUser);
@@ -15,25 +30,27 @@ export function createSyncRouter() {
     const repId = actor!.rep.id;
     const canSyncAll = listsEveryone(req, actor!);
 
-    const allLeads = await storage.listSalesLeads(canSyncAll ? {} : { ownerRepId: repId });
-    const allOpportunities = await storage.listSalesOpportunities();
-    const allTasks = await storage.listSalesTasks();
+    const allLeads = await storage.listSalesLeads(canSyncAll
+      ? { limit: SYNC_BATCH_SIZE }
+      : { ownerRepId: repId, limit: SYNC_BATCH_SIZE });
+    const allOpportunities = await storage.listSalesOpportunities(canSyncAll
+      ? { limit: SYNC_BATCH_SIZE }
+      : { repId, limit: SYNC_BATCH_SIZE });
+    const allTasks = await storage.listSalesTasks(canSyncAll
+      ? { limit: SYNC_BATCH_SIZE }
+      : { repId, limit: SYNC_BATCH_SIZE });
 
     // Never sync prospects
-    const leadsToSync = allLeads.filter((l) => !l.ghlContactId && l.status !== "prospect");
-    const oppsToSync = canSyncAll
-      ? allOpportunities.filter((o) => o.syncStatus !== "synced")
-      : allOpportunities.filter((o) => o.syncStatus !== "synced" && o.repId === repId);
-    const visibleTasks = canSyncAll ? allTasks : allTasks.filter((t) => t.repId === repId);
-    const tasksToSync = canSyncAll
-      ? allTasks.filter((t) => !t.ghlTaskId && t.status === "pending")
-      : allTasks.filter((t) => !t.ghlTaskId && t.status === "pending" && t.repId === repId);
+    const leadsToSync = allLeads.filter((l) => !l.ghlContactId && l.status !== "prospect").slice(0, SYNC_BATCH_SIZE);
+    const oppsToSync = allOpportunities.filter((o) => o.syncStatus !== "synced").slice(0, SYNC_BATCH_SIZE);
+    const visibleTasks = allTasks.slice(0, SYNC_BATCH_SIZE);
+    const tasksToSync = allTasks.filter((t) => !t.ghlTaskId && t.status === "pending").slice(0, SYNC_BATCH_SIZE);
 
     const [leadResults, oppResults, taskResults, xphereTaskResults] = await Promise.all([
-      Promise.all(leadsToSync.map((l) => syncLeadToGhl(l.id))),
-      Promise.all(oppsToSync.map((o) => syncOpportunityToGhl(o.id))),
-      Promise.all(tasksToSync.map((t) => syncTaskToGhl(t.id))),
-      Promise.all(visibleTasks.map((t) => syncTaskToXphere(t.id))),
+      mapWithConcurrency(leadsToSync, (lead) => syncLeadToGhl(lead.id)),
+      mapWithConcurrency(oppsToSync, (opportunity) => syncOpportunityToGhl(opportunity.id)),
+      mapWithConcurrency(tasksToSync, (task) => syncTaskToGhl(task.id)),
+      mapWithConcurrency(visibleTasks, (task) => syncTaskToXphere(task.id)),
     ]);
 
     res.json({
@@ -85,7 +102,7 @@ export function createSyncRouter() {
         // failure of either is logged as "sales_lead": retry whichever hasn't landed.
         const results: { synced: boolean; message?: string }[] = [];
         if (!lead.xphereRef) results.push(await syncLeadToXphere(lead.id));
-        if (!lead.ghlContactId) results.push(await syncLeadToGhl(lead.id));
+        if (!lead.ghlContactId && lead.status !== "prospect") results.push(await syncLeadToGhl(lead.id));
         return res.json({ synced: results.every((r) => r.synced), results });
       }
       case "sales_sale": {

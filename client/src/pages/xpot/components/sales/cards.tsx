@@ -24,10 +24,10 @@ export function SaleCard({ row, onOpen }: { row: SaleWithItems; onOpen?: () => v
     <button
       type="button"
       onClick={onOpen}
-      className="w-full rounded-2xl p-4 text-left transition-all active:scale-[0.995]"
+      className="w-full rounded-[22px] p-4 text-left shadow-[inset_3px_0_0_rgba(52,211,153,0.45),0_12px_36px_rgba(0,0,0,0.12)] transition-all hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.995]"
       style={{
-        background: cancelled ? "rgba(255,255,255,0.02)" : "rgba(16,185,129,0.06)",
-        border: `1px solid ${cancelled ? "rgba(255,255,255,0.06)" : "rgba(16,185,129,0.18)"}`,
+        background: cancelled ? "rgba(255,255,255,0.02)" : "linear-gradient(135deg, rgba(16,185,129,0.055), rgba(255,255,255,0.025))",
+        border: `1px solid ${cancelled ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.075)"}`,
         opacity: cancelled ? 0.55 : 1,
       }}
     >
@@ -84,10 +84,11 @@ export function ConsignmentCard({
 
   return (
     <div
-      className="rounded-2xl p-4"
+      className="rounded-[22px] p-4 shadow-[0_12px_36px_rgba(0,0,0,0.12)]"
       style={{
-        background: overdue ? "rgba(239,68,68,0.07)" : "rgba(255,255,255,0.04)",
-        border: `1px solid ${overdue ? "rgba(239,68,68,0.25)" : "rgba(255,255,255,0.09)"}`,
+        background: overdue ? "linear-gradient(135deg, rgba(239,68,68,0.09), rgba(255,255,255,0.025))" : "linear-gradient(135deg, rgba(99,102,241,0.055), rgba(255,255,255,0.025))",
+        border: `1px solid ${overdue ? "rgba(251,113,133,0.24)" : "rgba(255,255,255,0.075)"}`,
+        boxShadow: overdue ? "inset 3px 0 0 rgba(251,113,133,0.55), 0 12px 36px rgba(0,0,0,0.12)" : "inset 3px 0 0 rgba(129,140,248,0.4), 0 12px 36px rgba(0,0,0,0.12)",
         opacity: closed ? 0.6 : 1,
       }}
     >

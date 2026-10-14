@@ -19,7 +19,8 @@ export type OptimizedStop = RouteCandidate & {
 };
 
 export type OptimizeRouteInput = {
-  start: GeoPoint;
+  /** Optional navigation origin. Selling routes omit it so the work clock starts at visit one. */
+  start?: GeoPoint;
   /** Where the day must finish (the rep's home). Without it the route ends at the last visit. */
   end?: GeoPoint;
   plannedStartAt: Date;
@@ -70,34 +71,41 @@ export function optimizeRouteHeuristic(input: OptimizeRouteInput): OptimizeRoute
   const end = input.end ?? null;
   const remaining = [...input.candidates];
   const stops: OptimizedStop[] = [];
-  let current = input.start;
+  let current = input.start ?? null;
   let elapsedSeconds = 0;
   let totalDistanceMeters = 0;
 
   while (remaining.length > 0 && stops.length < input.maxStops) {
     const ranked = remaining
       .map((candidate) => {
-        const distance = haversineMeters(current, candidate);
+        // With no navigation origin, use the candidates' center only to choose
+        // a stable first visit. That virtual distance is never charged to the
+        // work window: the first visit begins at plannedStartAt.
+        const reference = current ?? {
+          lat: remaining.reduce((sum, item) => sum + item.lat, 0) / remaining.length,
+          lng: remaining.reduce((sum, item) => sum + item.lng, 0) / remaining.length,
+        };
+        const distance = haversineMeters(reference, candidate);
         const proximity = 100 / (1 + distance / 1000);
         return { candidate, distance, utility: candidate.score * 0.65 + proximity * 0.35 };
       })
       .sort((a, b) => b.utility - a.utility || a.distance - b.distance || a.candidate.id - b.candidate.id);
 
     const next = ranked.find(({ candidate, distance }) => {
-      const outbound = travelSeconds(distance, speed);
+      const outbound = current ? travelSeconds(distance, speed) : 0;
       const returnTime = end ? travelSeconds(haversineMeters(candidate, end), speed) : 0;
       return elapsedSeconds + outbound + candidate.serviceDurationSeconds + returnTime <= input.shiftDurationSeconds;
     });
     if (!next) break;
 
-    const driveSeconds = travelSeconds(next.distance, speed);
+    const driveSeconds = current ? travelSeconds(next.distance, speed) : 0;
     elapsedSeconds += driveSeconds;
-    totalDistanceMeters += next.distance;
+    totalDistanceMeters += current ? next.distance : 0;
     const estimatedArrivalAt = new Date(input.plannedStartAt.getTime() + elapsedSeconds * 1000);
     stops.push({
       ...next.candidate,
       position: stops.length + 1,
-      travelDistanceMeters: next.distance,
+      travelDistanceMeters: current ? next.distance : 0,
       travelDurationSeconds: driveSeconds,
       estimatedArrivalAt,
     });
@@ -106,7 +114,7 @@ export function optimizeRouteHeuristic(input: OptimizeRouteInput): OptimizeRoute
     remaining.splice(remaining.findIndex((candidate) => candidate.id === next.candidate.id), 1);
   }
 
-  const returnDistanceMeters = stops.length && end ? haversineMeters(current, end) : 0;
+  const returnDistanceMeters = stops.length && end && current ? haversineMeters(current, end) : 0;
   const returnDurationSeconds = stops.length && end ? travelSeconds(returnDistanceMeters, speed) : 0;
   totalDistanceMeters += returnDistanceMeters;
   elapsedSeconds += returnDurationSeconds;

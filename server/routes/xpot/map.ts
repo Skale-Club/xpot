@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { requireXpotUser } from "./middleware.js";
 import { resolveGoogleApiKey } from "./google.js";
+import { rateLimit } from "../../tags/rateLimit.js";
 
 // Dark basemap so the tile doesn't glare out of the app's UI. Google's own
 // night preset, trimmed to the features this small a map actually shows.
@@ -45,6 +46,10 @@ export function createMapRouter() {
   // lead position we let Google frame both pins instead of forcing a zoom —
   // what matters on a check-in screen is "how far am I from the door".
   router.get("/map", async (req, res) => {
+    const actor = (req as any).xpotActor as { rep: { id: number } };
+    if (rateLimit(`maps:static:${actor.rep.id}`, { limit: 60, windowMs: 60_000 })) {
+      return res.status(429).json({ message: "Too many map requests. Please wait a moment." });
+    }
     const lat = num(req.query.lat);
     const lng = num(req.query.lng);
     if (lat === null || lng === null) {

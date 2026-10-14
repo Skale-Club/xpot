@@ -83,8 +83,8 @@ export function ShellHeader({ module, actions = true }: { module: XpotModule; ac
   };
 
   return (
-    <div className="mb-4 flex items-center justify-between gap-3" data-testid="shell-header">
-      <div className="flex min-w-0 items-center gap-4">
+    <div className="mb-4 flex items-center justify-between" data-testid="shell-header">
+      <div className="flex min-w-0 flex-1 items-center gap-4">
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
@@ -122,7 +122,7 @@ export function ShellHeader({ module, actions = true }: { module: XpotModule; ac
       </div>
 
       {actions && (
-        <div className="flex shrink-0 items-center gap-1.5">
+        <div className="relative z-10 flex shrink-0 items-center gap-1.5">
           <AdminModeButton module={module} />
           <button type="button" onClick={() => navigate("/settings")} title={ts("navSettings")} aria-label={ts("navSettings")} className={ICON_BUTTON} data-testid="shell-settings">
             <Settings className="h-[18px] w-[18px]" />

@@ -1,4 +1,4 @@
-import { useMemo, useState, type ComponentType, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ComponentType, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ExternalLink, Link2, MapPin, Package, Plus, Radio, ScanLine, Search, Star, Unlink } from "lucide-react";
@@ -84,18 +84,27 @@ function GoogleProfile({ lead, onDone }: { lead: FullSalesLead; onDone: (text: s
   const [picking, setPicking] = useState(false);
   const [search, setSearch] = useState("");
   const [busy, setBusy] = useState(false);
+  const [connected, setConnected] = useState(Boolean(lead.googlePlaceId));
   const profile = useQuery<GoogleBusinessProfile>({
     queryKey: ["/api/xpot/leads", lead.id, "google-profile"],
-    enabled: !!lead.googlePlaceId,
+    enabled: connected,
     staleTime: 5 * 60_000,
   });
   const results = usePlaceSearch(search, picking, {});
 
+  useEffect(() => {
+    setConnected(Boolean(lead.googlePlaceId));
+  }, [lead.googlePlaceId]);
+
   const savePlace = async (placeId: string | null) => {
     setBusy(true);
     try {
-      await apiRequest("PATCH", `/api/xpot/leads/${lead.id}`, { googlePlaceId: placeId });
+      const response = await apiRequest("POST", `/api/xpot/leads/${lead.id}/google-profile`, { placeId });
+      const data = await response.json() as { profile: GoogleBusinessProfile };
+      setConnected(Boolean(placeId));
+      qc.setQueryData(["/api/xpot/leads", lead.id, "google-profile"], data.profile);
       await qc.invalidateQueries({ queryKey: ["/api/xpot/leads"] });
+      await qc.invalidateQueries({ queryKey: ["/api/xpot/leads", lead.id, "google-profile"] });
       setPicking(false);
       setSearch("");
       onDone(placeId ? t("customerGoogleSaved") : t("customerGoogleRemoved"), true);
@@ -110,14 +119,13 @@ function GoogleProfile({ lead, onDone }: { lead: FullSalesLead; onDone: (text: s
   return (
     <Panel
       title={<span className="flex items-center gap-1.5"><GoogleLogo className="h-3.5 w-3.5" />{t("customerGoogle")}</span>}
-      right={lead.googlePlaceId ? (
-        <span className="flex gap-1.5">
-          <button type="button" className={MINI_BTN} onClick={() => setPicking(true)}>{t("customerGoogleChange")}</button>
-          <button type="button" className={MINI_BTN} disabled={busy} onClick={() => void savePlace(null)}>{t("customerGoogleUnlink")}</button>
-        </span>
+      right={connected ? (
+        <button type="button" disabled={busy} onClick={() => void savePlace(null)} className="text-[11px] font-semibold text-white/25 transition hover:text-red-300 disabled:opacity-40">
+          {t("customerGoogleUnlink")}
+        </button>
       ) : null}
     >
-      {lead.googlePlaceId ? (
+      {connected ? (
         profile.isLoading ? (
           <div className="flex justify-center py-3 text-white/40"><Spinner /></div>
         ) : (

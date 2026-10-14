@@ -182,6 +182,9 @@ export const salesLeads = pgTable("sales_leads", {
   ownerIdx: index("sales_leads_owner_idx").on(table.ownerRepId),
   statusIdx: index("sales_leads_status_idx").on(table.status),
   nameIdx: index("sales_leads_name_idx").on(table.name),
+  organizationGooglePlaceIdx: uniqueIndex("sales_leads_org_google_place_unique")
+    .on(table.organizationId, table.googlePlaceId)
+    .where(sql`${table.googlePlaceId} is not null`),
 }));
 
 export const salesLeadLocations = pgTable("sales_lead_locations", {

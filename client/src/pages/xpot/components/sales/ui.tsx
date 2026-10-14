@@ -74,8 +74,7 @@ export function GhostButton({
       title={title}
       onClick={onClick}
       disabled={disabled}
-      className={`flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-white/70 transition-colors hover:bg-white/8 hover:text-white disabled:opacity-40 touch-manipulation ${className}`}
-      style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.09)" }}
+      className={`flex items-center justify-center gap-1.5 rounded-xl border border-white/[0.08] bg-white/[0.035] px-3 py-2 text-xs font-semibold text-white/65 shadow-[inset_0_1px_0_rgba(255,255,255,0.025)] transition-all hover:border-white/[0.14] hover:bg-white/[0.07] hover:text-white disabled:opacity-40 touch-manipulation ${className}`}
     >
       {children}
     </button>
@@ -197,16 +196,16 @@ export function SheetDialog({
 
 export function StatTile({ label, value, sub, tone = "neutral" }: { label: string; value: ReactNode; sub?: ReactNode; tone?: "neutral" | "green" | "amber" | "red" | "indigo" }) {
   const accent = {
-    neutral: "rgba(255,255,255,0.04)",
-    green: "rgba(16,185,129,0.08)",
-    amber: "rgba(245,158,11,0.08)",
-    red: "rgba(239,68,68,0.08)",
-    indigo: "rgba(99,102,241,0.10)",
+    neutral: { bg: "rgba(255,255,255,0.032)", border: "rgba(255,255,255,0.075)", value: "text-white" },
+    green: { bg: "rgba(16,185,129,0.065)", border: "rgba(52,211,153,0.14)", value: "text-emerald-300" },
+    amber: { bg: "rgba(245,158,11,0.065)", border: "rgba(251,191,36,0.14)", value: "text-amber-300" },
+    red: { bg: "rgba(239,68,68,0.065)", border: "rgba(251,113,133,0.14)", value: "text-rose-300" },
+    indigo: { bg: "rgba(99,102,241,0.075)", border: "rgba(129,140,248,0.16)", value: "text-indigo-200" },
   }[tone];
   return (
-    <div className="rounded-2xl p-3.5" style={{ background: accent, border: "1px solid rgba(255,255,255,0.08)" }}>
-      <div className="text-[10px] font-semibold uppercase tracking-widest text-white/35">{label}</div>
-      <div className="mt-1 text-xl font-bold tabular-nums text-white">{value}</div>
+    <div className="rounded-[20px] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.025)]" style={{ background: accent.bg, border: `1px solid ${accent.border}` }}>
+      <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-white/32">{label}</div>
+      <div className={`mt-2 text-2xl font-bold tracking-[-0.035em] tabular-nums ${accent.value}`}>{value}</div>
       {sub ? <div className="mt-0.5 text-[11px] text-white/40">{sub}</div> : null}
     </div>
   );

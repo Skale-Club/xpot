@@ -63,14 +63,14 @@ async function getXpotSession(retryOn401 = true): Promise<{
   };
 }
 
-/** Fades a section in once it scrolls into view (skipped with reduced motion). */
+/** Keeps content visible from first paint, then settles it into place on scroll. */
 function Reveal({ children, className = "", delay = 0 }: { children: ReactNode; className?: string; delay?: number }) {
   return (
     <motion.div
       className={className}
-      initial={{ opacity: 0, y: 16 }}
+      initial={{ opacity: 1, y: 12 }}
       whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-80px" }}
+      viewport={{ once: true, margin: "-40px" }}
       transition={{ duration: 0.5, delay }}
     >
       {children}
@@ -105,7 +105,7 @@ function LandingBand({
   return (
     <section
       id={id}
-      className={`relative py-24 lg:py-32 ${alternate ? "border-y border-white/[0.02]" : ""} ${className}`}
+      className={`relative py-16 ${alternate ? "border-y border-white/[0.02]" : ""} ${className}`}
       style={alternate ? { background: "linear-gradient(180deg, rgba(255, 255, 255, 0.018) 0%, rgba(148, 163, 184, 0.01) 100%)" } : undefined}
     >
       <div className={`relative mx-auto max-w-6xl px-5 lg:px-8 ${contentClassName}`}>{children}</div>
@@ -115,9 +115,9 @@ function LandingBand({
 
 function FieldSalesHero({ t }: { t: LandingT }) {
   return (
-    <div className="relative w-full">
+    <div className="relative w-full lg:h-full">
       <div className="pointer-events-none absolute -inset-8 rounded-[48px] bg-[#5272F2]/10 blur-3xl" />
-      <div className="relative aspect-[4/3] overflow-hidden rounded-[30px] border border-white/10 bg-[#0b1020] shadow-[0_30px_80px_rgba(0,0,0,0.55)]">
+      <div className="relative aspect-[4/3] overflow-hidden rounded-[30px] border border-white/10 bg-[#0b1020] shadow-[0_30px_80px_rgba(0,0,0,0.55)] lg:h-full lg:aspect-auto">
         <GradientTopLine className="inset-x-10" />
         <img
           src="/xpot-hero-field-sales-v2.webp"
@@ -126,7 +126,7 @@ function FieldSalesHero({ t }: { t: LandingT }) {
           height={941}
           loading="eager"
           decoding="async"
-          className="h-full w-full object-cover object-[64%_center]"
+          className="h-full w-full object-cover object-[75%_center]"
         />
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#05070f]/85 via-transparent to-[#05070f]/10" />
 
@@ -301,10 +301,10 @@ export function XpotLandingPage() {
   );
 
   const toolVisuals = [
-    { icon: Route, tone: "text-[#8FA8FF] bg-[#5272F2]/10 border-[#5272F2]/20" },
-    { icon: MapPinned, tone: "text-[#61D8CE] bg-[#0BB8AF]/10 border-[#0BB8AF]/20" },
-    { icon: Boxes, tone: "text-[#8FA8FF] bg-[#5272F2]/10 border-[#5272F2]/20" },
-    { icon: Nfc, tone: "text-[#61D8CE] bg-[#0BB8AF]/10 border-[#0BB8AF]/20" },
+    { icon: Route, tone: "text-[#8FA8FF] bg-[#5272F2]/10 border-[#5272F2]/20", screenshot: "/landing/product/route-mobile-clean.webp", productPhoto: false, imageClass: "object-contain object-top sm:object-cover" },
+    { icon: MapPinned, tone: "text-[#61D8CE] bg-[#0BB8AF]/10 border-[#0BB8AF]/20", screenshot: "/landing/product/visit-mobile-clean.webp", productPhoto: false, imageClass: "object-contain object-top sm:object-cover" },
+    { icon: Boxes, tone: "text-[#8FA8FF] bg-[#5272F2]/10 border-[#5272F2]/20", screenshot: "/landing/product/sales-mobile-clean.webp", productPhoto: false, imageClass: "origin-top -translate-y-[3%] object-contain object-top scale-[0.94]" },
+    { icon: Nfc, tone: "text-[#61D8CE] bg-[#0BB8AF]/10 border-[#0BB8AF]/20", screenshot: "/landing/product/nfc-stands-barbershop.webp", productPhoto: true, imageClass: "object-cover object-[48%_center] brightness-[0.72] saturate-[0.82]" },
   ];
   const tools = content.tools.cards.map((card, index) => ({
     ...card,
@@ -400,7 +400,7 @@ export function XpotLandingPage() {
 
         <main className="relative pt-[6.5rem] sm:pt-[7.5rem] lg:pt-[8.5rem]">
           {/* Keep the original open composition; the photo remains a focused proof point. */}
-          <section className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-14 px-5 pb-24 lg:grid-cols-12 lg:gap-10 lg:px-8 lg:pb-32">
+          <section className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-14 px-5 pb-16 lg:grid-cols-12 lg:items-stretch lg:gap-10 lg:px-8">
             <div className="space-y-6 text-center lg:col-span-6 lg:text-left">
               <div className="inline-flex items-center gap-1.5 rounded-full border border-[#5272F2]/25 bg-[#5272F2]/[0.07] px-3.5 py-1.5 text-xs font-semibold text-[#8FB3FF] sm:text-sm">
                 <MapPinned className="h-3.5 w-3.5" />
@@ -429,7 +429,7 @@ export function XpotLandingPage() {
             </div>
 
             <motion.div
-              className="lg:col-span-6"
+              className="lg:col-span-6 lg:h-full"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.15 }}
@@ -438,7 +438,7 @@ export function XpotLandingPage() {
             </motion.div>
           </section>
 
-          {/* The phase-one audience: independent people looking for flexible extra income. */}
+          {/* Independent sellers can use Xpot for flexible hours or full-time work. */}
           <LandingBand id="audience" tone="alternate" className="scroll-mt-24" contentClassName="space-y-12">
             <Reveal>
               <SectionHeading title={content.audience.title} sub={content.audience.subtitle} />
@@ -497,30 +497,44 @@ export function XpotLandingPage() {
           </LandingBand>
 
           {/* The workflow and feature detail live together to avoid repeating the same four stages. */}
-          <LandingBand id="how" tone="alternate" className="scroll-mt-24" contentClassName="space-y-12">
+          <LandingBand id="how" tone="alternate" className="scroll-mt-24" contentClassName="space-y-12 lg:space-y-16">
             <Reveal>
               <SectionHeading title={content.how.title} sub={content.how.subtitle} />
             </Reveal>
-            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-              {tools.map(({ icon: Icon, title, items, tone }, i) => (
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+              {tools.map(({ icon: Icon, title, items, tone, screenshot, productPhoto, imageClass }, i) => (
                 <Reveal key={title} delay={i * 0.08} className="h-full">
-                  <div className="h-full rounded-2xl border border-white/[0.07] bg-white/[0.035] p-6">
-                    <div className="mb-4 flex items-center gap-3">
-                      <span className="flex h-8 w-8 items-center justify-center rounded-full border border-[#5272F2]/30 bg-[#5272F2]/10 text-sm font-bold text-[#9BB0FF]">{i + 1}</span>
-                      <div className={`flex h-10 w-10 items-center justify-center rounded-xl border ${tone}`}>
-                        <Icon className="h-5 w-5" />
-                      </div>
+                  <article className="grid h-full grid-cols-[38%_minmax(0,1fr)] overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.035] transition-colors hover:border-white/[0.12] hover:bg-white/[0.05] sm:flex sm:h-[400px] lg:h-[360px] xl:h-[380px]">
+                    <div className="relative min-h-[280px] overflow-hidden border-r border-white/[0.07] bg-[#070b16] sm:aspect-[5/8] sm:h-full sm:min-h-0 sm:w-auto sm:shrink-0">
+                      <img
+                        src={screenshot}
+                        alt={productPhoto ? title : `${title} — mobile screen with demo data`}
+                        width={productPhoto ? 1280 : 800}
+                        height={productPhoto ? 960 : 1280}
+                        loading="eager"
+                        decoding="async"
+                        className={`absolute inset-0 h-full w-full ${imageClass}`}
+                      />
                     </div>
-                    <h3 className="text-lg font-bold text-white">{title}</h3>
-                    <ul className="mt-4 space-y-2.5">
-                      {items.map((item) => (
-                        <li key={item} className="flex gap-2.5 text-sm leading-relaxed text-white/65">
-                          <Check className="mt-0.5 h-4 w-4 shrink-0 text-white/30" />
-                          {item}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
+
+                    <div className="min-w-0 flex-1 p-4 sm:p-6 lg:p-5 xl:p-6">
+                      <div className="mb-4 flex items-center gap-3">
+                        <span className="flex h-8 w-8 items-center justify-center rounded-full border border-[#5272F2]/30 bg-[#5272F2]/10 text-sm font-bold text-[#9BB0FF]">{i + 1}</span>
+                        <div className={`flex h-10 w-10 items-center justify-center rounded-xl border ${tone}`}>
+                          <Icon className="h-5 w-5" />
+                        </div>
+                      </div>
+                      <h3 className="text-base font-bold leading-snug text-white sm:text-lg">{title}</h3>
+                      <ul className="mt-4 space-y-2.5">
+                        {items.map((item) => (
+                          <li key={item} className="flex gap-2.5 text-xs leading-relaxed text-white/65 sm:text-sm">
+                            <Check className="mt-0.5 h-4 w-4 shrink-0 text-white/30" />
+                            {item}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </article>
                 </Reveal>
               ))}
             </div>
@@ -547,18 +561,18 @@ export function XpotLandingPage() {
           </LandingBand>
 
           {/* Call to action */}
-          <LandingBand tone="alternate" className="pb-14 sm:pb-20 lg:pb-24">
+          <LandingBand tone="alternate">
             <Reveal>
               <section id="cta" className="relative mx-auto max-w-4xl scroll-mt-24 overflow-hidden rounded-2xl border border-[#5272F2]/20 bg-[linear-gradient(100deg,rgba(82,114,242,0.12),rgba(11,184,175,0.08),rgba(82,114,242,0.1))] p-8 text-center sm:p-12">
               <GradientTopLine className="inset-x-14" />
               <img
-                src="/landing/cta-route-map.webp"
+                src="/landing/cta-route-map-v2.webp"
                 alt=""
-                width={1672}
-                height={941}
+                width={2172}
+                height={724}
                 loading="lazy"
                 decoding="async"
-                className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-30 brightness-110 contrast-125 saturate-125"
+                className="xpot-cta-search-map pointer-events-none absolute inset-0 h-full w-full object-cover opacity-20 brightness-95 contrast-90 saturate-50"
               />
               <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(100deg,rgba(5,7,15,0.42),rgba(6,14,26,0.24),rgba(5,7,15,0.38))]" />
               <div className="relative z-10 space-y-6">

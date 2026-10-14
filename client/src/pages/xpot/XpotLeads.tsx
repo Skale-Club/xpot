@@ -54,6 +54,7 @@ import { EmptyState } from "@/components/xpot/EmptyState";
 import { FilterBar, FilterChips, FilterDay, FilterSearch, FilterToggle, fromDayKey, toDayKey } from "@/components/xpot/filters";
 import { currentSearch, useUrlFilters } from "@/hooks/use-url-filters";
 import { ListPager, usePagedList } from "@/components/xpot/pagination";
+import { selectLeadForDetail } from "./lead-detail-selection";
 
 
 // ─── Shared Add Company Dialog ────────────────────────────────────────────────
@@ -444,7 +445,17 @@ export function XpotLeads() {
   const [actionLead, setActionLead] = useState<FullSalesLead | null>(null);
   const [addOpen, setAddOpen] = useState(false);
 
-  const { leadsQuery, deleteLeadMutation } = useLeads();
+  const { leadsQuery, deleteLeadMutation } = useLeads(routeId === null);
+  const leadDetailQuery = useQuery<{
+    lead: Omit<FullSalesLead, "locations" | "contacts">;
+    locations: FullSalesLead["locations"];
+    contacts: FullSalesLead["contacts"];
+    visits: EnrichedSalesVisit[];
+    opportunities: Array<{ status: string }>;
+  }>({
+    queryKey: ["/api/xpot/leads", routeId],
+    enabled: routeId !== null,
+  });
   const convertToCustomer = useMutation({
     mutationFn: async (leadId: number) => {
       await apiRequest("PATCH", `/api/xpot/leads/${leadId}`, { status: "customer" });
@@ -497,7 +508,14 @@ export function XpotLeads() {
     return when ? new Date(when) : null;
   }, [visitsByLead]);
 
-  const selectedLead = routeId ? leads.find((l) => l.id === routeId) ?? null : null;
+  const selectedLead = routeId !== null && leadDetailQuery.data
+    ? {
+        ...leadDetailQuery.data.lead,
+        locations: leadDetailQuery.data.locations,
+        contacts: leadDetailQuery.data.contacts,
+        openOpportunities: leadDetailQuery.data.opportunities.filter((opportunity) => opportunity.status === "open").length,
+      } as FullSalesLead
+    : selectLeadForDetail(allLeads, routeId);
 
   // Companies visited (checked in) on the chosen day.
   const visitedOnDay = useMemo(() => {
@@ -639,7 +657,7 @@ export function XpotLeads() {
             onConvertToCustomer={() => convertToCustomer.mutate(selectedLead.id)}
             converting={convertToCustomer.isPending}
           />
-        ) : leadsQuery.isLoading ? (
+        ) : leadDetailQuery.isLoading ? (
           <div className="flex justify-center py-16"><Loader2 className="h-5 w-5 animate-spin text-blue-400" /></div>
         ) : (
           <EmptyState icon={Building2} title={t("leadNotFound")} cardStyle={GLASS} />

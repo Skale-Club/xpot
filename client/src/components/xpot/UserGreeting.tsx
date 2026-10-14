@@ -9,7 +9,7 @@ function greetingKey() {
   return "greetingEvening" as const;
 }
 
-function FadingLine({ children, className, title, fade = 28 }: {
+function FadingName({ children, className, title, fade = 14 }: {
   children: ReactNode;
   className: string;
   title?: string;
@@ -34,19 +34,22 @@ export function UserGreeting({ name, compact = false }: { name: string; compact?
 
   return (
     <div className="min-w-0 flex-1">
-      <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-400/80">
+      <div className={`${compact ? "text-[11px]" : "text-[10px]"} mb-1 font-bold uppercase tracking-[0.2em] text-indigo-400/80`}>
         {t(greetingKey())}
       </div>
-      <FadingLine
-        className={`${compact ? "mb-1 text-base" : "mb-1.5 text-[26px]"} font-extrabold leading-none tracking-tight text-white`}
+      <FadingName
+        className={`${compact ? "mb-1 text-[18px]" : "mb-1.5 text-[26px]"} font-extrabold leading-none tracking-tight text-white`}
         title={name}
-        fade={compact ? 20 : 34}
+        fade={compact ? 12 : 14}
       >
         {name} <span aria-hidden="true">👋</span>
-      </FadingLine>
-      <FadingLine className={`${compact ? "text-[11px] leading-4" : "text-xs"} font-medium text-white/45`} title={date} fade={18}>
+      </FadingName>
+      <div
+        className={`${compact ? "text-xs leading-4" : "text-xs"} whitespace-nowrap font-medium text-white/45`}
+        title={date}
+      >
         {date}
-      </FadingLine>
+      </div>
     </div>
   );
 }

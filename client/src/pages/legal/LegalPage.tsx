@@ -41,7 +41,9 @@ export function LegalPage({ doc }: { doc: "privacy" | "terms" }) {
   });
   const whatsapp = config?.supportWhatsapp ? `https://wa.me/${config.supportWhatsapp.replace(/\D/g, "")}` : null;
 
-  useEffect(() => window.scrollTo(0, 0), [content.title]);
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [content.title]);
 
   return (
     <div className="min-h-screen text-white" style={{ background: "linear-gradient(160deg, #05070f 0%, #080c18 50%, #040810 100%)" }}>

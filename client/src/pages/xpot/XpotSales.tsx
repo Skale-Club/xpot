@@ -3,13 +3,20 @@ import { useLocation } from "wouter";
 import { parseSalesPath, salesPath, type SalesTab } from "./salesPath";
 import { currentSearch } from "@/hooks/use-url-filters";
 import {
+  BarChart3,
+  Boxes,
   Check,
-  TrendingUp,
-  ListTodo,
+  ClipboardCheck,
   ChevronDown,
+  GitBranch,
+  Landmark,
+  ListTodo,
   Plus,
+  ReceiptText,
   Search,
   Building2,
+  TrendingUp,
+  type LucideIcon,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -24,7 +31,6 @@ import type { EnrichedSalesOpportunity } from "./types";
 import { useT } from "@/i18n";
 import { salesMessages } from "@/i18n/messages/sales";
 import { GLASS } from "@/components/xpot/surface";
-import { Segmented } from "@/components/xpot/Segmented";
 import { EmptyState } from "@/components/xpot/EmptyState";
 
 const SYNC_STATUS_KEYS: Record<string, "sync_pending" | "sync_synced" | "sync_failed" | "sync_needs_review"> = {
@@ -37,14 +43,6 @@ const SYNC_STATUS_KEYS: Record<string, "sync_pending" | "sync_synced" | "sync_fa
 
 const inputCls = "w-full h-10 rounded-xl px-3 text-sm text-white placeholder:text-white/25 focus:outline-none transition-colors";
 const inputStyle = { background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.09)", colorScheme: "dark" as const };
-
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex items-center gap-2 px-1">
-      <div className="text-xs font-semibold uppercase tracking-widest text-white/30">{children}</div>
-    </div>
-  );
-}
 
 function LeadPicker({ leads, value, onChange }: {
   leads: { id: number; name: string; industry?: string | null }[];
@@ -182,11 +180,16 @@ function PipelinePicker({ pipelines, pipelineId, stageId, onPipelineChange, onSt
 }
 
 
-const SALES_TABS: { id: SalesTab; labelKey: "tabOverview" | "tabSales" | "tabStock" | "tabPipeline" }[] = [
-  { id: "overview", labelKey: "tabOverview" },
-  { id: "sales", labelKey: "tabSales" },
-  { id: "consignments", labelKey: "tabStock" },
-  { id: "pipeline", labelKey: "tabPipeline" },
+const SALES_TABS: {
+  id: SalesTab;
+  labelKey: "tabOverview" | "tabSales" | "tabStock" | "tabPipeline";
+  descriptionKey: "tabOverviewHint" | "tabSalesHint" | "tabStockHint" | "tabPipelineHint";
+  icon: LucideIcon;
+}[] = [
+  { id: "overview", labelKey: "tabOverview", descriptionKey: "tabOverviewHint", icon: BarChart3 },
+  { id: "sales", labelKey: "tabSales", descriptionKey: "tabSalesHint", icon: ReceiptText },
+  { id: "consignments", labelKey: "tabStock", descriptionKey: "tabStockHint", icon: Boxes },
+  { id: "pipeline", labelKey: "tabPipeline", descriptionKey: "tabPipelineHint", icon: GitBranch },
 ];
 
 export function XpotSales() {
@@ -200,8 +203,62 @@ export function XpotSales() {
     navigate(`${salesPath(which, itemId)}${currentSearch()}`, { replace: id != null });
 
   return (
-    <div className="space-y-4">
-      <Segmented items={SALES_TABS.map(({ id, labelKey }) => ({ id, label: t(labelKey) }))} value={tab} onChange={setTab} className="lg:max-w-xl" />
+    <div className="space-y-5 lg:space-y-6">
+      <section
+        className="relative isolate overflow-hidden rounded-[28px] border border-white/[0.09] px-4 pb-4 pt-5 shadow-[0_24px_80px_rgba(0,0,0,0.28)] sm:px-5 lg:px-7 lg:pb-6 lg:pt-7"
+        style={{ background: "linear-gradient(135deg, rgba(12,24,42,0.98) 0%, rgba(10,17,32,0.96) 48%, rgba(10,30,32,0.92) 100%)" }}
+      >
+        <div className="pointer-events-none absolute -right-20 -top-28 h-72 w-72 rounded-full bg-emerald-400/[0.09] blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-32 left-1/3 h-60 w-60 rounded-full bg-blue-500/[0.08] blur-3xl" />
+        <div
+          className="pointer-events-none absolute inset-0 opacity-[0.12]"
+          style={{ backgroundImage: "radial-gradient(circle at 1px 1px, rgba(255,255,255,.32) 1px, transparent 0)", backgroundSize: "24px 24px" }}
+        />
+
+        <div className="relative mb-5 flex items-start gap-4 lg:mb-7">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-emerald-300/20 bg-emerald-300/[0.09] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+            <Landmark className="h-5 w-5 text-emerald-300" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.24em] text-emerald-300/75">{t("pageEyebrow")}</div>
+            <h2 className="text-xl font-bold tracking-[-0.03em] text-white sm:text-2xl lg:text-[28px]">{t("pageTitle")}</h2>
+            <p className="mt-1 max-w-2xl text-xs leading-relaxed text-white/45 sm:text-sm">{t("pageSubtitle")}</p>
+          </div>
+          <div className="hidden items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.035] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/45 lg:flex">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.8)]" />
+            {t("liveView")}
+          </div>
+        </div>
+
+        <nav className="relative grid grid-cols-2 gap-2 lg:grid-cols-4" aria-label={t("pageTitle")}>
+          {SALES_TABS.map(({ id: itemId, labelKey, descriptionKey, icon: Icon }) => {
+            const active = tab === itemId;
+            return (
+              <button
+                key={itemId}
+                type="button"
+                aria-pressed={active}
+                onClick={() => setTab(itemId)}
+                className={`group flex min-h-[64px] items-center gap-3 rounded-2xl border px-3 py-2.5 text-left transition-all duration-200 lg:min-h-[72px] lg:px-4 ${active
+                  ? "border-emerald-300/25 bg-emerald-300/[0.10] shadow-[0_10px_30px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.08)]"
+                  : "border-white/[0.06] bg-black/[0.12] hover:border-white/[0.12] hover:bg-white/[0.045]"
+                }`}
+              >
+                <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-colors ${active
+                  ? "border-emerald-300/25 bg-emerald-300/[0.12] text-emerald-300"
+                  : "border-white/[0.07] bg-white/[0.035] text-white/35 group-hover:text-white/60"
+                }`}>
+                  <Icon className="h-4 w-4" />
+                </span>
+                <span className="min-w-0">
+                  <span className={`block text-xs font-bold sm:text-sm ${active ? "text-white" : "text-white/55 group-hover:text-white/75"}`}>{t(labelKey)}</span>
+                  <span className={`mt-0.5 hidden truncate text-[10px] lg:block ${active ? "text-emerald-100/45" : "text-white/25"}`}>{t(descriptionKey)}</span>
+                </span>
+              </button>
+            );
+          })}
+        </nav>
+      </section>
 
       {tab === "overview" && <SalesOverview onGoToConsignments={() => setTab("consignments")} />}
       {tab === "sales" && <SalesList selectedId={id} onSelect={select("sales")} />}
@@ -243,18 +300,26 @@ function PipelineTab() {
   const pipelines = pipelinesQuery.data?.pipelines ?? [];
 
   return (
-    <div className="space-y-6 lg:grid lg:grid-cols-2 lg:items-start lg:gap-6 lg:space-y-0">
+    <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
 
       {/* Opportunities section */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between px-1">
-          <SectionLabel>{t("opportunities")}</SectionLabel>
+      <section className="space-y-3 rounded-[26px] border border-white/[0.075] bg-white/[0.025] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.025)] lg:p-5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-emerald-300/15 bg-emerald-300/[0.08]">
+              <TrendingUp className="h-4 w-4 text-emerald-300" />
+            </span>
+            <div>
+              <div className="text-sm font-bold text-white">{t("opportunities")}</div>
+              <div className="text-[10px] font-semibold uppercase tracking-[0.15em] text-white/30">{opportunitiesQuery.data?.length ?? 0}</div>
+            </div>
+          </div>
           <button
             onClick={() => setOppExpanded((v) => !v)}
             aria-label={t("newOpp")}
             title={t("newOpp")}
             aria-expanded={oppExpanded}
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-white/40 transition-colors hover:bg-white/8 hover:text-white/70"
+            className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.035] text-white/45 transition-all hover:border-emerald-300/25 hover:bg-emerald-300/[0.08] hover:text-emerald-200"
           >
             <Plus className="h-3.5 w-3.5" />
           </button>
@@ -317,10 +382,8 @@ function PipelineTab() {
             {opportunitiesQuery.data.map((opp: EnrichedSalesOpportunity) => (
               <div
                 key={opp.id}
-                className="relative overflow-hidden rounded-2xl p-4"
+                className="relative overflow-hidden rounded-2xl border border-white/[0.07] bg-black/[0.13] p-4 shadow-[inset_3px_0_0_rgba(52,211,153,0.45)]"
                 style={{
-                  background: "rgba(16,185,129,0.07)",
-                  border: "1px solid rgba(16,185,129,0.2)",
                   boxShadow: "0 4px 20px rgba(0,0,0,0.2)",
                 }}
               >
@@ -350,18 +413,26 @@ function PipelineTab() {
         ) : !oppExpanded ? (
           <EmptyState compact dense icon={TrendingUp} title={t("noOpps")} cardStyle={GLASS} />
         ) : null}
-      </div>
+      </section>
 
       {/* Tasks section */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between px-1">
-          <SectionLabel>{t("followUpTasks")}</SectionLabel>
+      <section className="space-y-3 rounded-[26px] border border-white/[0.075] bg-white/[0.025] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.025)] lg:p-5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-amber-300/15 bg-amber-300/[0.08]">
+              <ClipboardCheck className="h-4 w-4 text-amber-300" />
+            </span>
+            <div>
+              <div className="text-sm font-bold text-white">{t("followUpTasks")}</div>
+              <div className="text-[10px] font-semibold uppercase tracking-[0.15em] text-white/30">{tasksQuery.data?.length ?? 0}</div>
+            </div>
+          </div>
           <button
             onClick={() => setTaskExpanded((v) => !v)}
             aria-label={t("newTask")}
             title={t("newTask")}
             aria-expanded={taskExpanded}
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-white/40 transition-colors hover:bg-white/8 hover:text-white/70"
+            className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.035] text-white/45 transition-all hover:border-amber-300/25 hover:bg-amber-300/[0.08] hover:text-amber-200"
           >
             <Plus className="h-3.5 w-3.5" />
           </button>
@@ -409,10 +480,9 @@ function PipelineTab() {
               return (
                 <div
                   key={task.id}
-                  className="flex items-center gap-3 rounded-2xl p-4 transition-opacity"
+                  className="flex items-center gap-3 rounded-2xl border border-white/[0.07] bg-black/[0.13] p-4 transition-opacity"
                   style={{
-                    background: done ? "rgba(255,255,255,0.02)" : "rgba(245,158,11,0.07)",
-                    border: `1px solid ${done ? "rgba(255,255,255,0.05)" : "rgba(245,158,11,0.2)"}`,
+                    boxShadow: done ? undefined : "inset 3px 0 0 rgba(251,191,36,0.42)",
                     opacity: done ? 0.5 : 1,
                   }}
                 >
@@ -441,7 +511,7 @@ function PipelineTab() {
         ) : !taskExpanded ? (
           <EmptyState compact dense icon={ListTodo} title={t("noTasks")} cardStyle={GLASS} />
         ) : null}
-      </div>
+      </section>
     </div>
   );
 }

@@ -1,23 +1,11 @@
-import { useEffect, useMemo } from "react";
+import { lazy, Suspense, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Redirect, Route, Router, Switch, useLocation } from "wouter";
 import { useXpotQueries } from "./pages/xpot/hooks/useXpotQueries";
 import { useVisits } from "./pages/xpot/hooks/useVisits";
 import { GeoProvider } from "./pages/xpot/hooks/GeoProvider";
 import { tabs } from "./pages/xpot/utils";
-import { XpotLeads } from "./pages/xpot/XpotLeads";
-import { XpotSales } from "./pages/xpot/XpotSales";
-import { XpotDashboard } from "./pages/xpot/XpotDashboard";
-import { XpotProspecting } from "./pages/xpot/XpotProspecting";
-import { XpotTasks } from "./pages/xpot/XpotTasks";
-import { XpotCheckIn } from "./pages/xpot/XpotCheckIn";
-
-import Login from "./pages/Login";
-import { LegalPage } from "./pages/legal/LegalPage";
 import { Loader2 } from "@/components/ui/loader";
-import { AdminApp } from "./pages/admin/AdminApp";
-import { XpotSettings } from "./pages/xpot/XpotSettings";
-import { TagsApp } from "./pages/tags/TagsApp";
 import { ModuleSwitch, rememberModule, useXpotModules } from "@/components/ModuleSwitch";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
@@ -26,11 +14,32 @@ import { ShellHeader } from "@/components/xpot/ShellHeader";
 import { AppLayout, MODULE_COLUMN } from "@/components/xpot/AppLayout";
 import { MobileTabBar } from "@/components/xpot/MobileTabBar";
 import { SessionGate } from "@/components/xpot/SessionGate";
-import { XpotLandingPage } from "./pages/xpot/XpotLandingPage";
 import { getHttpStatus, isStandaloneDisplay, resolveRootView } from "@/lib/pwa";
 import { getXpotHomePath, MODULE_HOME, rememberModuleRoute } from "@/lib/xpot";
 import type { XpotMeResponse } from "./pages/xpot/types";
-import { OrganizationsPage } from "./pages/xpot/OrganizationsPage";
+import { PersistentRouteProgress } from "@/components/xpot/PersistentRouteProgress";
+
+const XpotLeads = lazy(() => import("./pages/xpot/XpotLeads").then((module) => ({ default: module.XpotLeads })));
+const XpotSales = lazy(() => import("./pages/xpot/XpotSales").then((module) => ({ default: module.XpotSales })));
+const XpotDashboard = lazy(() => import("./pages/xpot/XpotDashboard").then((module) => ({ default: module.XpotDashboard })));
+const XpotProspecting = lazy(() => import("./pages/xpot/XpotProspecting").then((module) => ({ default: module.XpotProspecting })));
+const XpotTasks = lazy(() => import("./pages/xpot/XpotTasks").then((module) => ({ default: module.XpotTasks })));
+const XpotCheckIn = lazy(() => import("./pages/xpot/XpotCheckIn").then((module) => ({ default: module.XpotCheckIn })));
+const Login = lazy(() => import("./pages/Login"));
+const LegalPage = lazy(() => import("./pages/legal/LegalPage").then((module) => ({ default: module.LegalPage })));
+const AdminApp = lazy(() => import("./pages/admin/AdminApp").then((module) => ({ default: module.AdminApp })));
+const XpotSettings = lazy(() => import("./pages/xpot/XpotSettings").then((module) => ({ default: module.XpotSettings })));
+const TagsApp = lazy(() => import("./pages/tags/TagsApp").then((module) => ({ default: module.TagsApp })));
+const XpotLandingPage = lazy(() => import("./pages/xpot/XpotLandingPage").then((module) => ({ default: module.XpotLandingPage })));
+const OrganizationsPage = lazy(() => import("./pages/xpot/OrganizationsPage").then((module) => ({ default: module.OrganizationsPage })));
+
+function PageLoader() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-[#060912]">
+      <Loader2 className="h-7 w-7 animate-spin text-blue-400" />
+    </div>
+  );
+}
 
 // Screens redesigned for desktop use the full width there; the rest stay in a
 // narrow column until their turn (docs/DESKTOP.md).
@@ -111,6 +120,7 @@ function XpotAppShell() {
               <ModuleSwitch current="visits" />
             </div>
           )}
+          <PersistentRouteProgress className="mb-4" />
         </>
       }
       mobileNav={
@@ -181,8 +191,9 @@ export default function App() {
   }, []);
 
   return (
-    <Router>
-      <Switch>
+    <Suspense fallback={<PageLoader />}>
+      <Router>
+        <Switch>
         <Route path="/" component={RootRoute} />
         <Route path="/pt" component={RootRoute} />
         <Route path="/es" component={RootRoute} />
@@ -206,7 +217,8 @@ export default function App() {
         <Route>
           <VisitsGate />
         </Route>
-      </Switch>
-    </Router>
+        </Switch>
+      </Router>
+    </Suspense>
   );
 }

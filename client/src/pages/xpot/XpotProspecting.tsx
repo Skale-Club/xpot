@@ -1,7 +1,7 @@
 import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, BellRing, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Clock3, Loader2, Map as MapIcon, MapPin, MapPinCheck, Navigation, Radar, RefreshCw, Route as RouteIcon, Search, ShieldCheck, Sparkles, X } from "lucide-react";
+import { ArrowLeft, BellRing, Building2, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Clock3, ExternalLink, GripVertical, Loader2, Map as MapIcon, MapPin, MapPinCheck, Navigation, Nfc, Phone, Radar, RefreshCw, Route as RouteIcon, Search, ShieldCheck, Sparkles, Star, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/i18n";
@@ -15,20 +15,27 @@ import { appleRouteUrl, appleStopUrl, googleRouteUrl, googleStopUrl, isAppleMobi
 import { GLASS } from "@/components/xpot/surface";
 import { GradientTopLine } from "@/components/xpot/GradientTopLine";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { GoogleLogo } from "@/components/ui/google-logo";
 import { usePlaceSearch } from "./usePlaceSearch";
+import { setSellTo } from "@/pages/tags/lib";
 import {
   exclusionCounts,
   MAX_PROSPECTING_SECTORS,
+  moveIdByOffset,
   parseSectorSearches,
   prospectingProgress,
+  reorderIdsAroundTarget,
   routeDisplayName,
   selectableCandidateIds,
 } from "./prospectingUi";
+import { MAX_DAILY_PROSPECTING_SESSIONS } from "@shared/prospecting";
 
 type ProspectingJob = {
   id: number;
   status: "draft" | "queued" | "running" | "completed" | "failed" | "cancelled";
+  routePlanningStatus: "pending" | "building" | "ready" | "failed";
+  routeErrorMessage: string | null;
   location: string;
   targetStops: number;
   shiftDurationMinutes: number;
@@ -88,6 +95,11 @@ type RouteStop = {
   travelDurationSeconds: number;
   estimatedArrivalAt: string | null;
   scoreReasons?: string[];
+  googlePlaceId: string | null;
+  rating: number | null;
+  reviewCount: number | null;
+  phone: string | null;
+  website: string | null;
 };
 
 type RouteDetails = { route: ProspectingRoute; stops: RouteStop[] };
@@ -100,6 +112,12 @@ const MAX_PROSPECTING_CITIES = 5;
 const SUGGESTIONS_GAP = 8;
 const SUGGESTIONS_VIEWPORT_GAP = 8;
 const SUGGESTIONS_MAX_HEIGHT = 280;
+
+function stopMarkerTone(stopId: number, currentStopId: number | null, nextStopId: number | null) {
+  if (stopId === currentStopId) return { background: "#3b82f6", border: "#93c5fd", text: "#ffffff" };
+  if (stopId === nextStopId) return { background: "#312e81", border: "#a78bfa", text: "#ede9fe" };
+  return { background: "#1f2937", border: "#475569", text: "#94a3b8" };
+}
 
 function FloatingSuggestions({
   anchorRef,
@@ -214,17 +232,6 @@ function localDateKey(date = new Date()) {
   return `${year}-${month}-${day}`;
 }
 
-function currentPosition(): Promise<{ lat: number; lng: number }> {
-  return new Promise((resolve, reject) => {
-    if (!navigator.geolocation) return reject(new Error("Geolocation unavailable"));
-    navigator.geolocation.getCurrentPosition(
-      (position) => resolve({ lat: position.coords.latitude, lng: position.coords.longitude }),
-      reject,
-      { enableHighAccuracy: true, timeout: 12_000, maximumAge: 60_000 },
-    );
-  });
-}
-
 function driveMinutes(seconds: number) {
   return Math.max(1, Math.round(seconds / 60));
 }
@@ -292,13 +299,13 @@ export function XpotProspecting() {
   const [calendarMonth, setCalendarMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null);
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
-  const [candidateSelection, setCandidateSelection] = useState<{ jobId: number | null; ids: Set<number>; touched: boolean }>({
-    jobId: null,
-    ids: new Set(),
-    touched: false,
-  });
   const [showAllCandidates, setShowAllCandidates] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [selectedStopId, setSelectedStopId] = useState<number | null>(null);
+  const [stopPendingRemoval, setStopPendingRemoval] = useState<RouteStop | null>(null);
+  const [draggedStopId, setDraggedStopId] = useState<number | null>(null);
+  const [dragOverStopId, setDragOverStopId] = useState<number | null>(null);
+  const [dragPlacement, setDragPlacement] = useState<"before" | "after" | null>(null);
   const parsedSectors = useMemo(() => parseSectorSearches(sectors), [sectors]);
   const parsedSearches = parsedSectors.searches;
   const deferredCity = useDeferredValue(city.trim());
@@ -333,12 +340,22 @@ export function XpotProspecting() {
 
   const jobsQuery = useQuery<ProspectingJob[]>({
     queryKey: ["/api/xpot/prospecting/jobs"],
-    refetchInterval: (query) => (query.state.data?.some((job) => ["queued", "running"].includes(job.status)) ? 15_000 : false),
+    refetchInterval: (query) => (query.state.data?.some((job) => ["queued", "running"].includes(job.status)
+      || ["pending", "building"].includes(job.routePlanningStatus)) ? 10_000 : false),
   });
-  const routesQuery = useQuery<ProspectingRoute[]>({ queryKey: ["/api/xpot/prospecting/routes"] });
+  const routesQuery = useQuery<ProspectingRoute[]>({
+    queryKey: ["/api/xpot/prospecting/routes"],
+    refetchOnWindowFocus: true,
+    refetchInterval: jobsQuery.data?.some((job) => job.status === "completed" && ["pending", "building"].includes(job.routePlanningStatus)) ? 10_000 : false,
+  });
   const today = localDateKey();
   const todayJobs = useMemo(() => (jobsQuery.data ?? []).filter((job) => localDateKey(new Date(job.createdAt)) === today), [jobsQuery.data, today]);
   const todayRoutes = useMemo(() => (routesQuery.data ?? []).filter((route) => route.routeDate === today), [routesQuery.data, today]);
+  const activeTodayRoute = todayRoutes.find((route) => ["draft", "published", "in_progress"].includes(route.status));
+  const routeSessionPending = todayJobs.some((job) => ["draft", "queued", "running"].includes(job.status)
+    || ["pending", "building"].includes(job.routePlanningStatus));
+  const dailyRouteLimitReached = todayJobs.length >= MAX_DAILY_PROSPECTING_SESSIONS;
+  const canStartRouteSession = !activeTodayRoute && !routeSessionPending && !dailyRouteLimitReached;
   const requestedJobId = useMemo(() => {
     const jobId = Number(routeParams.get("jobId"));
     return Number.isSafeInteger(jobId) && jobId > 0 ? jobId : null;
@@ -346,7 +363,9 @@ export function XpotProspecting() {
   const recentUnroutedJobId = useMemo(() => {
     const routedJobIds = new Set((routesQuery.data ?? []).map((route) => route.jobId).filter((id): id is number => id !== null));
     const cutoff = Date.now() - 12 * 60 * 60 * 1000;
-    return (jobsQuery.data ?? []).find((job) => !routedJobIds.has(job.id) && new Date(job.createdAt).getTime() >= cutoff)?.id ?? null;
+    return (jobsQuery.data ?? []).find((job) => !routedJobIds.has(job.id)
+      && job.routePlanningStatus !== "ready"
+      && new Date(job.createdAt).getTime() >= cutoff)?.id ?? null;
   }, [jobsQuery.data, routesQuery.data]);
   const activeJobId = requestedJobId ?? selectedJobId ?? (todayRoutes.length === 0 ? todayJobs[0]?.id ?? recentUnroutedJobId : null) ?? null;
   const activeRouteId = useMemo(() => {
@@ -370,6 +389,16 @@ export function XpotProspecting() {
     setRouteParams(next);
   };
 
+  const generatedRoute = (routesQuery.data ?? []).find((route) => route.jobId === activeJobId);
+  useEffect(() => {
+    if (!generatedRoute || activeRouteId === generatedRoute.id) return;
+    setSelectedJobId(null);
+    const next = new URLSearchParams(routeParams);
+    next.delete("jobId");
+    next.set("routeId", String(generatedRoute.id));
+    setRouteParams(next);
+  }, [activeRouteId, generatedRoute?.id]);
+
   const closeRoute = () => {
     const next = new URLSearchParams(routeParams);
     next.delete("routeId");
@@ -379,7 +408,10 @@ export function XpotProspecting() {
   const detailsQuery = useQuery<ProspectingJobDetails>({
     queryKey: ["/api/xpot/prospecting/jobs", activeJobId],
     enabled: activeJobId !== null,
-    refetchInterval: (query) => (["queued", "running"].includes(query.state.data?.job.status ?? "") ? 10_000 : false),
+    refetchInterval: (query) => {
+      const job = query.state.data?.job;
+      return job && (["queued", "running"].includes(job.status) || ["pending", "building"].includes(job.routePlanningStatus)) ? 8_000 : false;
+    },
   });
   const routeQuery = useQuery<RouteDetails>({
     queryKey: ["/api/xpot/prospecting/routes", activeRouteId],
@@ -388,6 +420,14 @@ export function XpotProspecting() {
     refetchOnWindowFocus: true,
     refetchInterval: (query) => (["published", "in_progress"].includes(query.state.data?.route.status ?? "") ? 60_000 : false),
   });
+  const replacementRoute = activeRouteId !== null && routesQuery.isSuccess
+    && !(routesQuery.data ?? []).some((route) => route.id === activeRouteId)
+    ? todayRoutes[0]
+    : null;
+  useEffect(() => {
+    if (!replacementRoute) return;
+    openRoute(replacementRoute.id);
+  }, [replacementRoute?.id]);
 
   const createJob = useMutation({
     mutationFn: async () => {
@@ -396,9 +436,10 @@ export function XpotProspecting() {
       const response = await apiRequest("POST", "/api/xpot/prospecting/jobs", {
         location: cities[0],
         locations: cities,
+        routeDate: today,
         searches,
         shiftDurationMinutes: shiftHours * 60,
-        idempotencyKey: `today:${today}:${shiftHours}h:${compactIdempotencyPart(cities.join("|"))}:${compactIdempotencyPart(searches.map((search) => search.niche).join("|"))}`,
+        idempotencyKey: `today:${today}:session-${todayJobs.length + 1}:${shiftHours}h:${compactIdempotencyPart(cities.join("|"))}:${compactIdempotencyPart(searches.map((search) => search.niche).join("|"))}`,
       });
       return response.json() as Promise<ProspectingJobDetails>;
     },
@@ -418,15 +459,11 @@ export function XpotProspecting() {
     // rebuild replaces today's route; the server only honours it for the platform owner.
     mutationFn: async (options: { rebuild?: boolean } | void) => {
       if (!detailsQuery.data) throw new Error(t("emptyCandidates"));
-      const candidateIds = Array.from(candidateSelection.ids);
+      const candidateIds = selectableCandidateIds(detailsQuery.data.candidates);
       if (!candidateIds.length) throw new Error(t("routeSelectionRequired"));
-      let start: { lat: number; lng: number };
-      try { start = await currentPosition(); }
-      catch { throw new Error(t("locationError")); }
       const response = await apiRequest("POST", "/api/xpot/prospecting/routes", {
         routeDate: today,
         plannedStartAt: new Date().toISOString(),
-        start,
         jobId: detailsQuery.data.job.id,
         candidateIds,
         shiftDurationMinutes: detailsQuery.data.job.shiftDurationMinutes,
@@ -444,20 +481,18 @@ export function XpotProspecting() {
     onError: (error: Error) => toast({ title: t("errorTitle"), description: error.message, variant: "destructive" }),
   });
 
+  const retryAutomaticRoute = useMutation({
+    mutationFn: async (jobId: number) => (await apiRequest("POST", `/api/xpot/prospecting/jobs/${jobId}/route/retry`, {})).json() as Promise<ProspectingJobDetails>,
+    onSuccess: async (data) => {
+      queryClient.setQueryData(["/api/xpot/prospecting/jobs", data.job.id], data);
+      await queryClient.invalidateQueries({ queryKey: ["/api/xpot/prospecting/jobs"] });
+    },
+    onError: (error: Error) => toast({ title: t("errorTitle"), description: error.message, variant: "destructive" }),
+  });
+
   useEffect(() => {
     const currentDetails = detailsQuery.data;
     if (!currentDetails) return;
-    const availableIds = selectableCandidateIds(currentDetails.candidates);
-    setCandidateSelection((current) => {
-      if (current.jobId !== currentDetails.job.id) {
-        return { jobId: currentDetails.job.id, ids: new Set(availableIds), touched: false };
-      }
-      if (current.touched) {
-        const available = new Set(availableIds);
-        return { ...current, ids: new Set(Array.from(current.ids).filter((id) => available.has(id))) };
-      }
-      return { ...current, ids: new Set(availableIds) };
-    });
     setShowAllCandidates(false);
   }, [detailsQuery.data?.job.id, detailsQuery.data?.candidates.length]);
 
@@ -526,6 +561,78 @@ export function XpotProspecting() {
     onError: (error: Error) => toast({ title: t("checkInUnavailable"), description: error.message, variant: "destructive" }),
   });
 
+  const reorderRoute = useMutation({
+    mutationFn: async ({ routeId, stopIds }: { routeId: number; stopIds: number[] }) => {
+      const response = await apiRequest("PATCH", `/api/xpot/prospecting/routes/${routeId}/stops/order`, { stopIds });
+      return response.json() as Promise<{ reordered: true }>;
+    },
+    onMutate: async ({ routeId, stopIds }) => {
+      const queryKey = ["/api/xpot/prospecting/routes", routeId];
+      await queryClient.cancelQueries({ queryKey });
+      const previous = queryClient.getQueryData<RouteDetails>(queryKey);
+      if (previous) {
+        const byId = new Map(previous.stops.map((stop) => [stop.id, stop]));
+        queryClient.setQueryData<RouteDetails>(queryKey, {
+          route: {
+            ...previous.route,
+            optimizationMeta: { ...previous.route.optimizationMeta, encodedPolyline: undefined },
+          },
+          stops: stopIds.map((id, index) => ({ ...byId.get(id)!, position: index + 1 })),
+        });
+      }
+      return { previous, queryKey };
+    },
+    onSuccess: async (_data, { routeId }) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["/api/xpot/prospecting/routes", routeId] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/xpot/prospecting/routes"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/xpot/visits"] }),
+      ]);
+      toast({ title: t("routeReordered") });
+    },
+    onError: (error: Error, _variables, context) => {
+      if (context?.previous) queryClient.setQueryData(context.queryKey, context.previous);
+      toast({ title: t("reorderUnavailable"), description: error.message, variant: "destructive" });
+    },
+  });
+
+  const removeStop = useMutation({
+    mutationFn: async ({ routeId, stopId }: { routeId: number; stopId: number }) => {
+      const response = await apiRequest("DELETE", `/api/xpot/prospecting/routes/${routeId}/stops/${stopId}`);
+      return response.json() as Promise<{ removed: true }>;
+    },
+    onSuccess: async (_data, { routeId }) => {
+      setStopPendingRemoval(null);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["/api/xpot/prospecting/routes", routeId] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/xpot/prospecting/routes"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/xpot/visits"] }),
+      ]);
+      toast({ title: t("stopRemoved") });
+    },
+    onError: (error: Error) => toast({ title: t("removeStopUnavailable"), description: error.message, variant: "destructive" }),
+  });
+
+  const ensureStopLead = useMutation({
+    mutationFn: async ({ routeId, stopId, destination }: { routeId: number; stopId: number; destination: "plaque" | "company" }) => {
+      const response = await apiRequest("POST", `/api/xpot/prospecting/routes/${routeId}/stops/${stopId}/prepare-demo`, {});
+      return response.json() as Promise<{ leadId: number; name: string; placeId: string | null }>;
+    },
+    onSuccess: ({ leadId, name, placeId }, { routeId, destination }) => {
+      void Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["/api/xpot/prospecting/routes", routeId] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/xpot/leads"] }),
+      ]);
+      if (destination === "plaque") {
+        setSellTo({ leadId, name, placeId });
+        navigate("/tags");
+        return;
+      }
+      navigate(`/leads/${leadId}`);
+    },
+    onError: (error: Error, { destination }) => toast({ title: t(destination === "plaque" ? "demoUnavailable" : "companyPanelUnavailable"), description: error.message, variant: "destructive" }),
+  });
+
   const details = detailsQuery.data;
   const hasFailedRuns = details?.runs.some((run) => run.status === "failed") ?? false;
   const routeDetails = routeQuery.data;
@@ -546,8 +653,10 @@ export function XpotProspecting() {
       nextStopId: next?.id ?? null,
     };
   }, [routeDetails]);
+  const selectedStop = routeDetails?.stops.find((stop) => stop.id === selectedStopId) ?? null;
+  const canReorderRoute = routeDetails ? ["draft", "published"].includes(routeDetails.route.status) : false;
   const eligibleCandidates = details?.candidates.filter((candidate) => candidate.status !== "discarded" && candidate.status !== "visited") ?? [];
-  const canReviewCandidates = details?.job.status === "completed";
+  const canShowCandidates = details?.job.status === "completed";
   const visibleCandidates = showAllCandidates ? eligibleCandidates : eligibleCandidates.slice(0, 6);
   const excludedCounts = useMemo(() => exclusionCounts(details?.candidates ?? []), [details?.candidates]);
   const otherExcludedCount = Object.entries(excludedCounts).reduce(
@@ -558,7 +667,8 @@ export function XpotProspecting() {
     jobStatus: details.job.status,
     runs: details.runs,
     eligibleCount: details.summary.eligible,
-    hasRoute: todayRoutes.length > 0,
+    hasRoute: Boolean(generatedRoute),
+    routePlanningStatus: details.job.routePlanningStatus,
   }) : null;
   const progressCopy = progress ? {
     queued: [t("progressQueuedTitle"), t("progressQueuedBody")],
@@ -585,25 +695,11 @@ export function XpotProspecting() {
         location: details.job.expansionState?.currentArea || nextRun.location,
       })
         : progress.stage === "filtering" ? t("activityFiltering", { eligible: details.summary.eligible })
-          : progress.stage === "review" || progress.stage === "route" ? t("activityReady", { count: details.summary.eligible })
+          : progress.stage === "review" ? t("activityOptimizing", { count: details.summary.eligible })
+            : progress.stage === "route" ? t("activityReady", { count: details.summary.eligible })
             : progress.stage === "failed" ? t("activityFailed")
               : t("activityQueued");
 
-  const toggleCandidate = (id: number) => {
-    setCandidateSelection((current) => {
-      const ids = new Set(current.ids);
-      if (ids.has(id)) ids.delete(id);
-      else ids.add(id);
-      return { jobId: details?.job.id ?? current.jobId, ids, touched: true };
-    });
-  };
-  const setAllCandidates = (selected: boolean) => {
-    setCandidateSelection({
-      jobId: details?.job.id ?? null,
-      ids: new Set(selected ? selectableCandidateIds(details?.candidates ?? []) : []),
-      touched: true,
-    });
-  };
   const reasonLabel = (reason: string) => ({
     "route-ready coordinates": t("reasonCoordinates"),
     "phone available": t("reasonPhone"),
@@ -618,10 +714,63 @@ export function XpotProspecting() {
   const directionsUrl = routeDetails && routeStart ? googleRouteUrl(routeStart, routeDetails.stops) : null;
   const appleDirectionsUrl = appleDevice && routeDetails && routeStart ? appleRouteUrl(routeStart, routeDetails.stops) : null;
   const mapStops = useMemo(() => routeDetails?.stops.map((stop) => ({
+    id: stop.id,
     lat: Number(stop.lat),
     lng: Number(stop.lng),
     label: stop.name,
-  })) ?? [], [routeDetails?.stops]);
+    markerColor: stopMarkerTone(stop.id, currentStopId, nextStopId).background,
+    markerBorderColor: stopMarkerTone(stop.id, currentStopId, nextStopId).border,
+    markerTextColor: stopMarkerTone(stop.id, currentStopId, nextStopId).text,
+  })) ?? [], [routeDetails?.stops, currentStopId, nextStopId]);
+  const openStopPreview = useCallback((stopId: number) => setSelectedStopId(stopId), []);
+  const resetDragState = () => {
+    setDraggedStopId(null);
+    setDragOverStopId(null);
+    setDragPlacement(null);
+  };
+  const saveStopOrder = (stopIds: number[]) => {
+    if (!routeDetails || !canReorderRoute || reorderRoute.isPending) return;
+    const currentOrder = routeDetails.stops.map((stop) => stop.id);
+    if (stopIds.every((stopId, index) => stopId === currentOrder[index])) {
+      resetDragState();
+      return;
+    }
+    reorderRoute.mutate({ routeId: routeDetails.route.id, stopIds });
+    resetDragState();
+  };
+  const dropStopAt = (targetStopId: number, sourceStopId = draggedStopId, placement: "before" | "after" = dragPlacement ?? "before") => {
+    if (!routeDetails || sourceStopId === null || sourceStopId === targetStopId || !canReorderRoute || reorderRoute.isPending) {
+      resetDragState();
+      return;
+    }
+    const stopIds = reorderIdsAroundTarget(
+      routeDetails.stops.map((stop) => stop.id),
+      sourceStopId,
+      targetStopId,
+      placement,
+    );
+    saveStopOrder(stopIds);
+  };
+  const moveStopByOffset = (stopId: number, offset: -1 | 1) => {
+    if (!routeDetails || !canReorderRoute || reorderRoute.isPending) return;
+    const stopIds = moveIdByOffset(routeDetails.stops.map((stop) => stop.id), stopId, offset);
+    saveStopOrder(stopIds);
+  };
+  const openPlaqueSetup = (stop: RouteStop) => {
+    if (stop.leadId) {
+      setSellTo({ leadId: stop.leadId, name: stop.name, placeId: stop.googlePlaceId });
+      navigate("/tags");
+      return;
+    }
+    if (routeDetails) ensureStopLead.mutate({ routeId: routeDetails.route.id, stopId: stop.id, destination: "plaque" });
+  };
+  const openCompanyPanel = (stop: RouteStop) => {
+    if (stop.leadId) {
+      navigate(`/leads/${stop.leadId}`);
+      return;
+    }
+    if (routeDetails) ensureStopLead.mutate({ routeId: routeDetails.route.id, stopId: stop.id, destination: "company" });
+  };
   const planningTitles = [t("cityStepTitle"), t("sectorsStepTitle"), t("durationStepTitle"), t("reviewStepTitle")];
   const planningBodies = [t("cityStepBody"), t("sectorsStepBody"), t("durationStepBody"), t("reviewStepBody")];
   const canAdvancePlanning = planningStep === 0
@@ -690,11 +839,17 @@ export function XpotProspecting() {
         <>
           {/* No top padding: the layout already spaces every page from the header. */}
           <section className="flex w-full pb-1">
-            <button type="button" onClick={() => setBuilderOpen(true)} className="flex min-h-[92px] w-full items-center gap-4 rounded-[22px] bg-gradient-to-br from-blue-500 to-indigo-500 p-4 text-left text-white shadow-[0_12px_34px_rgba(59,130,246,0.28)] transition-transform active:scale-[0.985] lg:min-h-20 lg:px-6">
+            <button type="button" onClick={() => setBuilderOpen(true)} disabled={!canStartRouteSession} className="flex min-h-[92px] w-full items-center gap-4 rounded-[22px] bg-gradient-to-br from-blue-500 to-indigo-500 p-4 text-left text-white shadow-[0_12px_34px_rgba(59,130,246,0.28)] transition-[filter,opacity,transform] enabled:active:scale-[0.985] disabled:cursor-not-allowed disabled:saturate-50 disabled:opacity-55 lg:min-h-20 lg:px-6">
               <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/15"><RouteIcon className="h-7 w-7" /></span>
               <span className="min-w-0 flex-1">
-                <span className="block text-lg font-bold tracking-tight">{t("openBuilder")}</span>
-                <span className="mt-1 block text-sm leading-5 text-white/75">{t("openBuilderHint")}</span>
+                <span className="block text-lg font-bold tracking-tight">{todayRoutes.some((route) => route.status === "completed") ? t("openAnotherRoute") : t("openBuilder")}</span>
+                <span className="mt-1 block text-sm leading-5 text-white/75">{dailyRouteLimitReached
+                  ? t("dailyRouteLimit", { count: MAX_DAILY_PROSPECTING_SESSIONS })
+                  : activeTodayRoute
+                    ? t("finishCurrentRoute")
+                    : routeSessionPending
+                      ? t("routeSessionPending")
+                      : t("openBuilderHint")}</span>
               </span>
               <ChevronRight className="h-6 w-6 shrink-0 text-white/90" />
             </button>
@@ -1007,7 +1162,7 @@ export function XpotProspecting() {
           {detailsQuery.isLoading ? <div className="flex min-h-48 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-indigo-300" /></div> : details ? (
             <div className="space-y-4 sm:space-y-5">
               <div className="grid gap-3 sm:flex sm:items-start sm:justify-between">
-                <div className="min-w-0"><div className="text-[11px] font-bold uppercase tracking-[0.14em] text-indigo-300">{statusLabel(details.job.status, t)}</div><h2 className="mt-1 truncate text-xl font-bold text-white [text-wrap:balance]">{details.job.location}</h2></div>
+                <div className="min-w-0"><div className="text-[11px] font-bold uppercase tracking-[0.14em] text-indigo-300">{details.job.status === "completed" && ["pending", "building"].includes(details.job.routePlanningStatus) ? t("preparingRoute") : statusLabel(details.job.status, t)}</div><h2 className="mt-1 truncate text-xl font-bold text-white [text-wrap:balance]">{details.job.location}</h2></div>
                 <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
                   <span className="rounded-xl bg-emerald-500/10 px-3 py-2 text-center text-xs font-semibold tabular-nums text-emerald-200">{t("found", { count: details.summary.eligible })}</span>
                   <span className="rounded-xl bg-white/[0.07] px-3 py-2 text-center text-xs tabular-nums text-white/65">{t("excluded", { count: details.summary.excluded })}</span>
@@ -1027,7 +1182,7 @@ export function XpotProspecting() {
                   <div className="relative mt-4">
                     <div className="absolute inset-x-0 top-3.5 h-1.5 -translate-y-1/2 overflow-hidden rounded-full bg-white/10" role="progressbar" aria-label={progressCopy[0]} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress.percent}>
                       <div className="relative h-full overflow-hidden rounded-full bg-gradient-to-r from-sky-400 to-indigo-400 transition-[width] duration-300" style={{ width: `${progress.percent}%` }}>
-                        {["queued", "running"].includes(details.job.status) ? <span className="xpot-progress-shimmer absolute inset-y-0 left-0 w-2/5 bg-gradient-to-r from-transparent via-white/75 to-transparent" aria-hidden="true" /> : null}
+                        {["queued", "running"].includes(details.job.status) || progress.stage === "review" ? <span className="xpot-progress-shimmer absolute inset-y-0 left-0 w-2/5 bg-gradient-to-r from-transparent via-white/75 to-transparent" aria-hidden="true" /> : null}
                       </div>
                     </div>
                     <ol className="relative z-10 grid grid-cols-4 gap-1 sm:gap-2">
@@ -1043,7 +1198,7 @@ export function XpotProspecting() {
                   </div>
                   <div className="mt-4 space-y-3">
                     <div key={currentActivity} className="flex min-h-10 w-full min-w-0 animate-in items-center gap-2.5 rounded-xl bg-black/15 px-3 py-2 text-xs fade-in slide-in-from-bottom-1 duration-200" role="status" aria-live="polite" aria-atomic="true">
-                      <span className={`h-2 w-2 shrink-0 rounded-full ${["queued", "running"].includes(details.job.status) ? "animate-pulse bg-sky-300 shadow-[0_0_8px_rgba(125,211,252,0.7)]" : details.job.status === "completed" ? "bg-emerald-300" : "bg-amber-300"}`} aria-hidden="true" />
+                      <span className={`h-2 w-2 shrink-0 rounded-full ${["queued", "running"].includes(details.job.status) || progress.stage === "review" ? "animate-pulse bg-sky-300 shadow-[0_0_8px_rgba(125,211,252,0.7)]" : details.job.status === "completed" ? "bg-emerald-300" : "bg-amber-300"}`} aria-hidden="true" />
                       <span className="shrink-0 font-bold uppercase tracking-[0.12em] text-indigo-200">{t("activityLabel")}</span>
                       <span className="min-w-0 break-words leading-5 text-pretty text-white/65">{currentActivity}</span>
                     </div>
@@ -1093,25 +1248,20 @@ export function XpotProspecting() {
                 </details>
               ) : null}
 
-              {canReviewCandidates && eligibleCandidates.length > 0 ? (
+              {canShowCandidates && eligibleCandidates.length > 0 ? (
                 <div className="border-t border-white/[0.07] pt-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <h3 className="text-base font-bold text-white [text-wrap:balance]">{t("candidateReview")}</h3>
                       <p className="mt-1 hidden max-w-xl text-xs leading-5 text-white/60 sm:block">{t("candidateReviewBody")}</p>
                     </div>
-                    <span className="shrink-0 rounded-full bg-indigo-400/10 px-3 py-1.5 text-xs font-semibold tabular-nums text-indigo-100">{t("selectedCandidates", { selected: candidateSelection.ids.size, total: eligibleCandidates.length })}</span>
-                  </div>
-                  <div className="mt-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-                    <button type="button" disabled={todayRoutes.length > 0} onClick={() => setAllCandidates(true)} className="min-h-10 rounded-xl bg-white/[0.055] px-3 text-xs font-semibold text-white/75 transition-colors duration-200 hover:bg-white/[0.09] disabled:cursor-not-allowed disabled:opacity-50 active:scale-[0.96]">{t("selectAll")}</button>
-                    <button type="button" disabled={todayRoutes.length > 0} onClick={() => setAllCandidates(false)} className="min-h-10 rounded-xl bg-white/[0.055] px-3 text-xs font-semibold text-white/75 transition-colors duration-200 hover:bg-white/[0.09] disabled:cursor-not-allowed disabled:opacity-50 active:scale-[0.96]">{t("selectNone")}</button>
+                    <span className="shrink-0 rounded-full bg-indigo-400/10 px-3 py-1.5 text-xs font-semibold tabular-nums text-indigo-100">{t("found", { count: eligibleCandidates.length })}</span>
                   </div>
                   <div className="mt-3 grid gap-2 sm:grid-cols-2">
                     {visibleCandidates.map((candidate) => {
-                      const selected = candidateSelection.ids.has(candidate.id);
                       return (
-                        <label key={candidate.id} className={`flex min-h-20 cursor-pointer items-start gap-3 rounded-2xl p-3 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)] transition-colors duration-200 active:scale-[0.99] ${selected ? "bg-indigo-400/[0.11] shadow-[inset_0_0_0_1px_rgba(165,180,252,0.45)]" : "bg-black/10 hover:bg-white/[0.05]"}`}>
-                          <input type="checkbox" checked={selected} onChange={() => toggleCandidate(candidate.id)} disabled={todayRoutes.length > 0} className="mt-1 h-5 w-5 shrink-0 accent-indigo-500" />
+                        <div key={candidate.id} className="flex min-h-20 items-start gap-3 rounded-2xl bg-indigo-400/[0.08] p-3 shadow-[inset_0_0_0_1px_rgba(165,180,252,0.22)]">
+                          <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-emerald-300 shadow-[0_0_8px_rgba(110,231,183,0.5)]" aria-hidden="true" />
                           <span className="min-w-0 flex-1">
                             <span className="flex items-start justify-between gap-2">
                               <span className="line-clamp-2 text-sm font-semibold text-white/90 [text-wrap:pretty]">{candidate.name}</span>
@@ -1120,7 +1270,7 @@ export function XpotProspecting() {
                             <span className="mt-1 block truncate text-xs leading-5 text-white/55">{candidate.address || "—"}</span>
                             {candidate.scoreReasons.length ? <span className="mt-2 hidden flex-wrap gap-1.5 sm:flex">{candidate.scoreReasons.slice(0, 2).map((reason) => <span key={reason} className="rounded-md bg-emerald-400/[0.09] px-2 py-1 text-xs font-medium text-emerald-100">{reasonLabel(reason)}</span>)}</span> : null}
                           </span>
-                        </label>
+                        </div>
                       );
                     })}
                   </div>
@@ -1130,22 +1280,26 @@ export function XpotProspecting() {
                     </button>
                   ) : null}
                 </div>
-              ) : canReviewCandidates ? <p className="text-sm text-white/60">{t("emptyCandidates")}</p> : null}
+              ) : canShowCandidates ? <p className="text-sm text-white/60">{t("emptyCandidates")}</p> : null}
 
               {hasFailedRuns ? (
                 <Button onClick={() => retryJob.mutate(details.job.id)} disabled={retryJob.isPending || !details.engine.configured} className="h-12 w-full touch-manipulation rounded-xl bg-amber-500 text-slate-950 hover:bg-amber-400 sm:h-10">
                   {retryJob.isPending ? <><Loader2 className="animate-spin" />{t("retrying")}</> : t("tryAgain")}
                 </Button>
-              ) : !canReviewCandidates ? null : todayRoutes.length > 0 ? (
+              ) : !canShowCandidates ? null : generatedRoute ? (
                 <Button asChild className="h-12 w-full touch-manipulation rounded-xl bg-indigo-500 text-white sm:h-10">
                   <a href="#today-route"><Navigation />{t("viewRoute")}</a>
                 </Button>
-              ) : (
-                <div>
-                  <Button onClick={() => createRoute.mutate()} disabled={createRoute.isPending || candidateSelection.ids.size === 0 || ["queued", "running"].includes(details.job.status)} className="h-12 w-full touch-manipulation rounded-xl bg-indigo-500 text-white sm:h-11">
-                  {createRoute.isPending ? <><Loader2 className="animate-spin" />{t("preparingRoute")}</> : <><Navigation />{t("prepareRoute")}</>}
+              ) : details.job.routePlanningStatus === "failed" ? (
+                <div className="space-y-2">
+                  {details.job.routeErrorMessage ? <p className="rounded-xl border border-amber-300/15 bg-amber-300/[0.07] px-3 py-2.5 text-xs leading-5 text-amber-100" role="alert">{details.job.routeErrorMessage}</p> : null}
+                  <Button onClick={() => retryAutomaticRoute.mutate(details.job.id)} disabled={retryAutomaticRoute.isPending} className="h-12 w-full touch-manipulation rounded-xl bg-amber-500 text-slate-950 hover:bg-amber-400 sm:h-10">
+                    {retryAutomaticRoute.isPending ? <><Loader2 className="animate-spin" />{t("retrying")}</> : <><RefreshCw />{t("retryRoute")}</>}
                   </Button>
-                  <p className="mt-2 text-center text-xs leading-5 text-white/60">{candidateSelection.ids.size === 0 ? t("routeSelectionRequired") : t("routeReviewHint")}</p>
+                </div>
+              ) : (
+                <div className="flex min-h-12 items-center justify-center gap-2 rounded-xl border border-indigo-300/15 bg-indigo-400/[0.07] px-4 text-sm font-semibold text-indigo-100" role="status">
+                  <Loader2 className="h-4 w-4 animate-spin" />{t("automaticRouteHint")}
                 </div>
               )}
             </div>
@@ -1166,6 +1320,8 @@ export function XpotProspecting() {
                 encodedPolyline={routeDetails.route.optimizationMeta.encodedPolyline}
                 alt={routeContextLabel}
                 showCurrentLocation={routeIsToday}
+                locateLabel={t("showMyLocation")}
+                onStopClick={openStopPreview}
                 className="lg:h-full"
               />
             </div>
@@ -1192,8 +1348,11 @@ export function XpotProspecting() {
             </div>
             <div className="border-t border-white/[0.08] pt-5">
               <div className="mb-3 flex items-center justify-between gap-3">
-                <h3 className="text-sm font-bold text-white">{t("visitOrder")}</h3>
-                <span className="text-xs text-white/60">{t("stopCount", { count: routeDetails.stops.length })}</span>
+                <div>
+                  <h3 className="text-sm font-bold text-white">{t("visitOrder")}</h3>
+                  {canReorderRoute ? <p className="mt-1 text-xs text-white/45">{t("reorderHint")}</p> : null}
+                </div>
+                <span className="text-xs text-white/60">{reorderRoute.isPending ? t("savingOrder") : t("stopCount", { count: routeDetails.stops.length })}</span>
               </div>
               <ol className="space-y-2">
                 {routeDetails.stops.map((stop) => {
@@ -1208,24 +1367,125 @@ export function XpotProspecting() {
                     : stop.id === nextStopId
                       ? "border border-violet-300/25 bg-violet-400/[0.16] text-violet-100/85 hover:border-violet-200/35 hover:bg-violet-400/[0.24] hover:text-white focus-visible:ring-violet-300/45"
                       : "border border-white/10 bg-white/[0.06] text-white/50 hover:bg-white/[0.1] hover:text-white/80 focus-visible:ring-white/30";
+                  const canRemoveThisStop = routeDetails.stops.length > 1
+                    && ["draft", "published", "in_progress"].includes(routeDetails.route.status)
+                    && ["planned", "en_route"].includes(stop.status);
                   return (
-                    <li key={stop.id} className="grid min-h-[84px] grid-cols-[3.5rem_minmax(0,1fr)] items-stretch overflow-hidden rounded-xl border border-white/10 bg-black/10 sm:grid-cols-[3.5rem_minmax(0,1fr)_auto] [contain-intrinsic-size:84px] [content-visibility:auto]">
+                    <li
+                      key={stop.id}
+                      onDragOver={(event) => {
+                        if (!canReorderRoute) return;
+                        event.preventDefault();
+                        event.dataTransfer.dropEffect = "move";
+                        setDragOverStopId(stop.id);
+                        const bounds = event.currentTarget.getBoundingClientRect();
+                        setDragPlacement(event.clientY >= bounds.top + bounds.height / 2 ? "after" : "before");
+                      }}
+                      onDrop={(event) => {
+                        event.preventDefault();
+                        const bounds = event.currentTarget.getBoundingClientRect();
+                        const placement = event.clientY >= bounds.top + bounds.height / 2 ? "after" : "before";
+                        const transferredStopId = Number(event.dataTransfer.getData("text/plain"));
+                        dropStopAt(stop.id, Number.isSafeInteger(transferredStopId) ? transferredStopId : draggedStopId, placement);
+                      }}
+                      onClick={() => openStopPreview(stop.id)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          openStopPreview(stop.id);
+                        }
+                      }}
+                      role="button"
+                      tabIndex={0}
+                      data-route-stop-id={stop.id}
+                      aria-label={t("openCompanyPreview", { name: stop.name })}
+                      className={`group relative grid min-h-[84px] cursor-pointer grid-cols-[3.5rem_minmax(0,1fr)] items-stretch overflow-hidden rounded-xl border bg-black/10 transition-[border-color,background-color,box-shadow,opacity,transform] hover:bg-white/[0.035] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300/60 sm:grid-cols-[3.5rem_minmax(0,1fr)_auto] [contain-intrinsic-size:84px] [content-visibility:auto] ${dragOverStopId === stop.id && draggedStopId !== stop.id ? "border-indigo-300/70 ring-2 ring-indigo-400/20" : "border-white/10"} ${draggedStopId === stop.id ? "scale-[0.995] opacity-45" : "opacity-100"} ${dragOverStopId === stop.id && draggedStopId !== stop.id && dragPlacement === "before" ? "before:absolute before:inset-x-2 before:top-0 before:z-30 before:h-0.5 before:rounded-full before:bg-indigo-300 before:shadow-[0_0_12px_rgba(165,180,252,0.9)]" : ""} ${dragOverStopId === stop.id && draggedStopId !== stop.id && dragPlacement === "after" ? "after:absolute after:inset-x-2 after:bottom-0 after:z-30 after:h-0.5 after:rounded-full after:bg-indigo-300 after:shadow-[0_0_12px_rgba(165,180,252,0.9)]" : ""}`}
+                    >
                       <span className={`row-span-2 flex w-14 shrink-0 items-center justify-center self-stretch border-r px-2 text-sm font-bold tabular-nums transition-colors sm:row-span-1 ${numberRailClass}`}>{stop.position}</span>
-                      <div className="min-w-0 px-4 py-3">
+                      {canReorderRoute ? (
+                        <button
+                          type="button"
+                          draggable={!reorderRoute.isPending}
+                          aria-label={t("dragStop", { name: stop.name })}
+                          title={t("dragStop", { name: stop.name })}
+                          onClick={(event) => event.stopPropagation()}
+                          onKeyDown={(event) => {
+                            if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+                            event.preventDefault();
+                            event.stopPropagation();
+                            moveStopByOffset(stop.id, event.key === "ArrowUp" ? -1 : 1);
+                          }}
+                          onDragStart={(event) => {
+                            event.stopPropagation();
+                            setDraggedStopId(stop.id);
+                            setDragOverStopId(stop.id);
+                            setDragPlacement(null);
+                            event.dataTransfer.effectAllowed = "move";
+                            event.dataTransfer.setData("text/plain", String(stop.id));
+                          }}
+                          onDragEnd={resetDragState}
+                          onPointerDown={(event) => {
+                            if (event.pointerType === "mouse") return;
+                            event.stopPropagation();
+                            event.currentTarget.setPointerCapture(event.pointerId);
+                            setDraggedStopId(stop.id);
+                            setDragOverStopId(stop.id);
+                            setDragPlacement(null);
+                          }}
+                          onPointerMove={(event) => {
+                            if (event.pointerType === "mouse" || draggedStopId !== stop.id) return;
+                            const target = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>("[data-route-stop-id]");
+                            const targetId = Number(target?.dataset.routeStopId);
+                            if (!Number.isSafeInteger(targetId) || !target) return;
+                            const bounds = target.getBoundingClientRect();
+                            setDragOverStopId(targetId);
+                            setDragPlacement(event.clientY >= bounds.top + bounds.height / 2 ? "after" : "before");
+                          }}
+                          onPointerUp={(event) => {
+                            if (event.pointerType === "mouse") return;
+                            event.stopPropagation();
+                            const target = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>("[data-route-stop-id]");
+                            const targetId = Number(target?.dataset.routeStopId);
+                            if (Number.isSafeInteger(targetId) && target) {
+                              const bounds = target.getBoundingClientRect();
+                              dropStopAt(targetId, stop.id, event.clientY >= bounds.top + bounds.height / 2 ? "after" : "before");
+                            } else {
+                              resetDragState();
+                            }
+                          }}
+                          onPointerCancel={resetDragState}
+                          className="absolute right-2 top-2 z-20 flex h-9 w-9 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg border border-white/[0.08] bg-[#111827]/90 text-white/40 shadow-[0_6px_18px_rgba(0,0,0,0.28)] backdrop-blur transition hover:border-indigo-300/30 hover:bg-indigo-400/15 hover:text-indigo-100 active:cursor-grabbing focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300/60 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          {reorderRoute.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <GripVertical className="h-4 w-4" aria-hidden="true" />}
+                        </button>
+                      ) : null}
+                      <div className="min-w-0 px-4 py-3 pr-12">
                         <div className="line-clamp-2 text-sm font-semibold text-white/90">{stop.name}</div>
                         <div className="mt-0.5 line-clamp-2 text-xs leading-5 text-white/60">{stop.address || "No address"}</div>
+                        {typeof stop.rating === "number" ? (
+                          <div className="mt-1 flex items-center gap-1 text-xs text-amber-300">
+                            <Star className="h-3.5 w-3.5 fill-current" aria-hidden="true" />
+                            <span className="font-semibold tabular-nums">{stop.rating.toFixed(1)}</span>
+                            {typeof stop.reviewCount === "number" ? <span className="text-white/45">({stop.reviewCount.toLocaleString(t.locale)})</span> : null}
+                          </div>
+                        ) : null}
                         <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 text-xs text-white/65">
                           <Clock3 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                          <span>{t("driveMinutes", { minutes: driveMinutes(stop.travelDurationSeconds) })}</span>
+                          <span>{stop.position === 1 && stop.travelDurationSeconds === 0
+                            ? t("routeStartsHere")
+                            : t("driveMinutes", { minutes: driveMinutes(stop.travelDurationSeconds) })}</span>
                           {stop.estimatedArrivalAt ? <><span aria-hidden="true">·</span><span>{t("arrivalAt", { time: new Date(stop.estimatedArrivalAt).toLocaleTimeString(t.locale, { hour: "numeric", minute: "2-digit" }) })}</span></> : null}
                         </div>
                         <span className="mt-1.5 block text-xs font-semibold uppercase tracking-wide text-white/60">{stopStatusLabel(stop.status, t)}</span>
                       </div>
-                      <div className="col-start-2 flex justify-end gap-2 px-3 pb-3 sm:col-start-auto sm:shrink-0 sm:items-center sm:py-3 sm:pl-0">
+                      <div className="col-start-2 flex self-end justify-end gap-2 px-3 pb-3 sm:col-start-3 sm:row-start-1 sm:shrink-0 sm:self-end sm:pb-3 sm:pl-0 sm:pr-3 sm:pt-12">
                         {["planned", "en_route"].includes(stop.status) ? (
                           <Button
                             type="button"
-                            onClick={() => prepareCheckIn.mutate({ routeId: routeDetails.route.id, stopId: stop.id })}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              prepareCheckIn.mutate({ routeId: routeDetails.route.id, stopId: stop.id });
+                            }}
                             disabled={prepareCheckIn.isPending}
                             aria-label={t("checkIn")}
                             title={t("checkIn")}
@@ -1240,10 +1500,25 @@ export function XpotProspecting() {
                           rel="noreferrer"
                           aria-label={appleDevice ? t("navigateWithApple", { name: stop.name }) : t("navigateTo", { name: stop.name })}
                           title={appleDevice ? t("navigateWithApple", { name: stop.name }) : t("navigateTo", { name: stop.name })}
+                          onClick={(event) => event.stopPropagation()}
                           className="flex h-11 w-11 shrink-0 touch-manipulation items-center justify-center rounded-xl border border-indigo-300/30 bg-indigo-500/10 text-indigo-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition hover:-translate-y-0.5 hover:border-indigo-200/50 hover:bg-indigo-500/20 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b1020] active:translate-y-0"
                         >
                           <MapIcon className="h-5 w-5" strokeWidth={2} aria-hidden="true" />
                         </a>
+                        {canRemoveThisStop ? (
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setStopPendingRemoval(stop);
+                            }}
+                            aria-label={t("removeStop", { name: stop.name })}
+                            title={t("removeStop", { name: stop.name })}
+                            className="flex h-11 w-11 shrink-0 touch-manipulation items-center justify-center rounded-xl border border-red-300/20 bg-red-500/[0.08] text-red-200/70 transition hover:-translate-y-0.5 hover:border-red-300/35 hover:bg-red-500/15 hover:text-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b1020] active:translate-y-0"
+                          >
+                            <Trash2 className="h-5 w-5" strokeWidth={2} aria-hidden="true" />
+                          </button>
+                        ) : null}
                       </div>
                     </li>
                   );
@@ -1254,6 +1529,137 @@ export function XpotProspecting() {
           </div>
         </section>
       ) : null}
+
+      <AlertDialog
+        open={stopPendingRemoval !== null}
+        onOpenChange={(open) => { if (!open && !removeStop.isPending) setStopPendingRemoval(null); }}
+      >
+        <AlertDialogContent className="max-w-sm rounded-2xl border border-white/10 bg-[#0d1322] p-6 text-white shadow-[0_24px_70px_rgba(0,0,0,0.7)]">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-lg font-bold text-white">{t("removeStopTitle")}</AlertDialogTitle>
+            <AlertDialogDescription className="text-sm leading-6 text-white/55">
+              {stopPendingRemoval ? t("removeStopDescription", { name: stopPendingRemoval.name }) : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="mt-2 flex-row gap-2 sm:space-x-0">
+            <AlertDialogCancel disabled={removeStop.isPending} className="flex-1 rounded-xl border border-white/10 bg-white/[0.06] text-white/70 hover:bg-white/[0.1] hover:text-white">
+              {t("keepStop")}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={removeStop.isPending || !stopPendingRemoval || !routeDetails}
+              onClick={(event) => {
+                event.preventDefault();
+                if (stopPendingRemoval && routeDetails) removeStop.mutate({ routeId: routeDetails.route.id, stopId: stopPendingRemoval.id });
+              }}
+              className="flex-1 rounded-xl bg-red-500 font-semibold text-white hover:bg-red-400"
+            >
+              {removeStop.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              {t("confirmRemoveStop")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Dialog open={selectedStop !== null} onOpenChange={(open) => { if (!open) setSelectedStopId(null); }}>
+        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto border-white/10 bg-[#0d1322] p-0 text-white shadow-2xl sm:max-w-lg">
+          {selectedStop && routeDetails ? (
+            <>
+              <div className="relative overflow-hidden border-b border-white/[0.08] px-5 pb-5 pt-6 sm:px-6">
+                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(99,102,241,0.2),transparent_50%)]" />
+                <div className="relative flex items-start gap-4 pr-8">
+                  <span
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-2 text-sm font-bold shadow-lg"
+                    style={{
+                      background: stopMarkerTone(selectedStop.id, currentStopId, nextStopId).background,
+                      borderColor: stopMarkerTone(selectedStop.id, currentStopId, nextStopId).border,
+                      color: stopMarkerTone(selectedStop.id, currentStopId, nextStopId).text,
+                    }}
+                  >
+                    {selectedStop.position}
+                  </span>
+                  <div className="min-w-0">
+                    <DialogTitle className="text-xl font-bold leading-tight text-white">{selectedStop.name}</DialogTitle>
+                    <DialogDescription className="mt-1.5 text-sm leading-5 text-white/55">{selectedStop.address || t("noAddress")}</DialogDescription>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-5 px-5 pb-6 sm:px-6">
+                <div className="rounded-2xl border border-white/[0.08] bg-white/[0.035] p-4">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                    <GoogleLogo className="h-5 w-5" />
+                    {typeof selectedStop.rating === "number" ? (
+                      <>
+                        <span className="text-lg font-bold tabular-nums text-white">{selectedStop.rating.toFixed(1)}</span>
+                        <span className="flex items-center gap-0.5" aria-label={t("googleRating", { rating: selectedStop.rating.toFixed(1) })}>
+                          {Array.from({ length: 5 }, (_, index) => (
+                            <Star key={index} className={`h-4 w-4 ${selectedStop.rating! >= index + 0.5 ? "fill-amber-400 text-amber-400" : "fill-white/10 text-white/20"}`} aria-hidden="true" />
+                          ))}
+                        </span>
+                        <span className="text-sm text-white/50">{typeof selectedStop.reviewCount === "number" ? t("googleReviews", { count: selectedStop.reviewCount.toLocaleString(t.locale) }) : t("googleBusiness")}</span>
+                      </>
+                    ) : <span className="text-sm text-white/50">{t("noGoogleRating")}</span>}
+                  </div>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {selectedStop.phone ? (
+                      <a href={`tel:${selectedStop.phone}`} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-white/10 bg-black/15 px-3 text-sm font-semibold text-white/75 transition hover:bg-white/[0.06] hover:text-white">
+                        <Phone className="h-4 w-4" />{selectedStop.phone}
+                      </a>
+                    ) : null}
+                    {selectedStop.website ? (
+                      <a href={/^https?:\/\//i.test(selectedStop.website) ? selectedStop.website : `https://${selectedStop.website}`} target="_blank" rel="noreferrer" className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-white/10 bg-black/15 px-3 text-sm font-semibold text-white/75 transition hover:bg-white/[0.06] hover:text-white">
+                        <ExternalLink className="h-4 w-4" />{t("website")}
+                      </a>
+                    ) : null}
+                  </div>
+                </div>
+
+                {selectedStop.scoreReasons?.length ? (
+                  <div className="flex flex-wrap gap-2">
+                    {selectedStop.scoreReasons.map((reason) => <span key={reason} className="rounded-full bg-emerald-400/[0.1] px-3 py-1.5 text-xs font-semibold text-emerald-200">{reasonLabel(reason)}</span>)}
+                  </div>
+                ) : null}
+
+                <div className="rounded-2xl border border-indigo-300/15 bg-indigo-400/[0.07] p-4">
+                  <div className="flex gap-3">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-400/15 text-indigo-200"><Nfc className="h-5 w-5" /></span>
+                    <div>
+                      <p className="text-sm font-bold text-white">{t("demoPlaqueTitle")}</p>
+                      <p className="mt-1 text-xs leading-5 text-white/50">{t("demoPlaqueBody")}</p>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={() => openPlaqueSetup(selectedStop)}
+                    disabled={ensureStopLead.isPending}
+                    className="mt-4 h-11 w-full rounded-xl bg-indigo-500 text-sm font-bold text-white hover:bg-indigo-400"
+                  >
+                    {ensureStopLead.isPending && ensureStopLead.variables?.destination === "plaque" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Nfc className="h-4 w-4" />}
+                    {ensureStopLead.isPending && ensureStopLead.variables?.destination === "plaque" ? t("preparingDemo") : t("prepareDemoPlaque")}
+                  </Button>
+                </div>
+
+                <div className="space-y-2">
+                  {['planned', 'en_route'].includes(selectedStop.status) ? (
+                    <Button type="button" onClick={() => prepareCheckIn.mutate({ routeId: routeDetails.route.id, stopId: selectedStop.id })} disabled={prepareCheckIn.isPending} className="h-11 w-full rounded-xl bg-blue-500 font-bold text-white shadow-[0_8px_24px_rgba(59,130,246,0.18)] hover:bg-blue-400">
+                      {prepareCheckIn.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <MapPinCheck className="h-4 w-4" />}{t("checkIn")}
+                    </Button>
+                  ) : null}
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button type="button" variant="outline" onClick={() => openCompanyPanel(selectedStop)} disabled={ensureStopLead.isPending} className="h-11 min-w-0 rounded-xl border-white/10 bg-white/[0.04] px-2 text-white hover:bg-white/[0.08] hover:text-white sm:px-4">
+                      {ensureStopLead.isPending && ensureStopLead.variables?.destination === "company" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Building2 className="h-4 w-4" />}{t("openCompanyPanel")}
+                    </Button>
+                    <Button asChild variant="outline" className="h-11 min-w-0 rounded-xl border-white/10 bg-white/[0.04] px-2 text-white hover:bg-white/[0.08] hover:text-white sm:px-4">
+                      <a href={appleDevice ? appleStopUrl(selectedStop) : googleStopUrl(selectedStop)} target="_blank" rel="noreferrer"><Navigation className="h-4 w-4" />{t("googleMaps")}</a>
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { boolean, index, integer, jsonb, pgEnum, pgTable, serial, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { salesLeads, salesReps, salesVisits } from "./sales.js";
 
@@ -49,6 +50,7 @@ export type ProspectingJobStatus = typeof prospectingJobStatusEnum.enumValues[nu
 export type ProspectingRunStatus = typeof prospectingRunStatusEnum.enumValues[number];
 export type ProspectingRouteStatus = typeof prospectingRouteStatusEnum.enumValues[number];
 export type ProspectingStopStatus = typeof prospectingStopStatusEnum.enumValues[number];
+export type ProspectingRoutePlanningStatus = "pending" | "building" | "ready" | "failed";
 
 export const prospectingJobs = pgTable("prospecting_jobs", {
   id: serial("id").primaryKey(),
@@ -67,6 +69,10 @@ export const prospectingJobs = pgTable("prospecting_jobs", {
   filters: jsonb("filters").$type<Record<string, unknown>>().notNull().default({}),
   hypothesis: jsonb("hypothesis").$type<Record<string, unknown> | null>(),
   resultCount: integer("result_count").notNull().default(0),
+  // Discovery and routing are one automatic pipeline. This state keeps route
+  // optimization recoverable without pretending a completed search is stuck.
+  routePlanningStatus: text("route_planning_status").$type<ProspectingRoutePlanningStatus>().notNull().default("pending"),
+  routeErrorMessage: text("route_error_message"),
   idempotencyKey: text("idempotency_key"),
   errorMessage: text("error_message"),
   startedAt: timestamp("started_at", { withTimezone: true }),
@@ -170,8 +176,9 @@ export const prospectingRoutes = pgTable("prospecting_routes", {
 }, (table) => ({
   repDateIdx: index("prospecting_routes_rep_date_idx").on(table.repId, table.routeDate),
   statusIdx: index("prospecting_routes_status_idx").on(table.status),
-  repDateUniqueIdx: uniqueIndex("prospecting_routes_rep_date_unique")
-    .on(table.repId, table.routeDate),
+  activeRepDateUniqueIdx: uniqueIndex("prospecting_routes_rep_date_active_unique")
+    .on(table.repId, table.routeDate)
+    .where(sql`${table.status} in ('draft', 'published', 'in_progress')`),
 }));
 
 export const prospectingRouteStops = pgTable("prospecting_route_stops", {

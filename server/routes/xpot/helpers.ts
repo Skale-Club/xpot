@@ -96,6 +96,9 @@ export async function syncLeadToGhl(leadId: number) {
   if (!lead) {
     return { synced: false, message: "Lead not found" };
   }
+  if (lead.status === "prospect") {
+    return { synced: false, message: "Prospects must be promoted before they can sync to GHL" };
+  }
 
   if (!lead.email && !lead.phone) {
     await storage.createSalesSyncEvent({

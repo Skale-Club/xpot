@@ -39,6 +39,7 @@ import { UserGreeting } from "./UserGreeting";
 import { dashboardMessages } from "@/i18n/messages/dashboard";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { PersistentRouteProgress } from "./PersistentRouteProgress";
 
 // The frame around every rep screen. Below `lg` it is the phone column the app
 // always had (the caller passes its header row and bottom nav). From `lg` up a
@@ -278,16 +279,16 @@ function DesktopSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
             className="group relative shrink-0 touch-manipulation rounded-2xl transition-transform hover:scale-[1.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300/60 active:scale-95 disabled:cursor-wait"
           >
             {me?.rep.avatarUrl ? (
-              <img src={me.rep.avatarUrl} alt="" className={`${collapsed ? "h-9 w-9 rounded-xl" : "h-11 w-11 rounded-2xl"} border border-white/10 object-cover`} />
+              <img src={me.rep.avatarUrl} alt="" className={`${collapsed ? "h-9 w-9 rounded-xl" : "h-12 w-12 rounded-[18px]"} border border-white/10 object-cover`} />
             ) : (
               <div
-                className={`${collapsed ? "h-9 w-9 rounded-xl text-xs" : "h-11 w-11 rounded-2xl text-sm"} flex items-center justify-center font-bold text-white`}
+                className={`${collapsed ? "h-9 w-9 rounded-xl text-xs" : "h-12 w-12 rounded-[18px] text-base"} flex items-center justify-center font-bold text-white`}
                 style={{ background: BRAND_GRADIENT }}
               >
                 {initials}
               </div>
             )}
-            <span className={`${collapsed ? "rounded-xl" : "rounded-2xl"} absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 ${avatarMutation.isPending ? "opacity-100" : ""}`} aria-hidden="true">
+            <span className={`${collapsed ? "rounded-xl" : "rounded-[18px]"} absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 ${avatarMutation.isPending ? "opacity-100" : ""}`} aria-hidden="true">
               {avatarMutation.isPending ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" /> : <Camera className="h-4 w-4 text-white" />}
             </span>
             <span className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-[#080c18] ${online ? "bg-emerald-400" : "bg-slate-500"}`} />
@@ -299,6 +300,7 @@ function DesktopSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
 
       <div className="px-3 pb-3">
         <SidebarModuleSwitch collapsed={collapsed} module={module} modules={modules} label={moduleLabel} />
+        {module === "visits" ? <PersistentRouteProgress collapsed={collapsed} className={collapsed ? "mt-2" : "mt-2.5"} /> : null}
       </div>
 
       <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-2" aria-label={module ? moduleLabel(module) : t("moduleAccount")}>

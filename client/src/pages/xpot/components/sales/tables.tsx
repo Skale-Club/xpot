@@ -10,11 +10,11 @@ import { useT } from "@/i18n";
 import { salesMessages } from "@/i18n/messages/sales";
 import { salesModuleMessages } from "@/i18n/messages/salesModule";
 
-const TABLE_STYLE = { background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" };
-const TH = "whitespace-nowrap px-3 py-2.5 font-semibold";
+const TABLE_STYLE = { background: "linear-gradient(145deg, rgba(255,255,255,0.035), rgba(255,255,255,0.018))", border: "1px solid rgba(255,255,255,0.075)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.025), 0 18px 50px rgba(0,0,0,0.14)" };
+const TH = "whitespace-nowrap px-4 py-3.5 font-bold";
 
 function rowClass(selected: boolean) {
-  return `cursor-pointer outline-none transition-colors focus-visible:bg-white/[0.05] ${selected ? "bg-blue-500/[0.12]" : "hover:bg-white/[0.03]"}`;
+  return `cursor-pointer outline-none transition-colors focus-visible:bg-white/[0.055] ${selected ? "bg-emerald-400/[0.09] shadow-[inset_3px_0_0_rgba(52,211,153,0.55)]" : "hover:bg-white/[0.035]"}`;
 }
 
 function onRowKey(run: () => void) {
@@ -32,9 +32,9 @@ export function SalesTable({ rows, selectedId, onSelect }: {
   const t = useT(salesModuleMessages);
   const ts = useT(salesMessages);
   return (
-    <div className="overflow-hidden rounded-2xl" style={TABLE_STYLE}>
+    <div className="overflow-hidden rounded-[22px]" style={TABLE_STYLE}>
       <table className="w-full text-left text-sm" data-testid="sales-table">
-        <thead className="border-b border-white/[0.07] text-[10px] uppercase tracking-widest text-white/35">
+        <thead className="border-b border-white/[0.065] bg-black/[0.12] text-[9px] uppercase tracking-[0.18em] text-white/32">
           <tr>
             <th className={TH}>{t("date")}</th>
             <th className={TH}>{t("colCompany")}</th>
@@ -59,8 +59,8 @@ export function SalesTable({ rows, selectedId, onSelect }: {
                 className={`${rowClass(selectedId === sale.id)} ${cancelled ? "opacity-50" : ""}`}
                 data-testid={`sale-row-${sale.id}`}
               >
-                <td className="whitespace-nowrap px-3 py-2.5 text-white/60">{formatShortDate(sale.soldAt)}</td>
-                <td className="max-w-0 px-3 py-2.5" style={{ width: "45%" }}>
+                <td className="whitespace-nowrap px-4 py-3.5 text-xs text-white/50">{formatShortDate(sale.soldAt)}</td>
+                <td className="max-w-0 px-4 py-3.5" style={{ width: "45%" }}>
                   <div className="flex items-center gap-2">
                     {settlement
                       ? <Handshake className="h-3.5 w-3.5 shrink-0 text-emerald-400/70" />
@@ -71,10 +71,10 @@ export function SalesTable({ rows, selectedId, onSelect }: {
                     {items.map((i) => `${i.quantity}× ${i.description}`).join(" · ") || "—"}
                   </div>
                 </td>
-                <td className="hidden max-w-0 truncate px-3 py-2.5 text-xs text-white/50 2xl:table-cell">
+                <td className="hidden max-w-0 truncate px-4 py-3.5 text-xs text-white/50 2xl:table-cell">
                   {items.map((i) => `${i.quantity}× ${i.description}`).join(" · ") || "—"}
                 </td>
-                <td className="whitespace-nowrap px-3 py-2.5">
+                <td className="whitespace-nowrap px-4 py-3.5">
                   <div className="flex items-center gap-1.5">
                     {settlement ? <Chip tone="purple">{t("chipSettlement")}</Chip> : null}
                     {cancelled
@@ -82,7 +82,7 @@ export function SalesTable({ rows, selectedId, onSelect }: {
                       : <Chip tone={paymentTone(sale.paymentStatus)}>{t(`payment_${sale.paymentStatus as PaymentStatus}`)}</Chip>}
                   </div>
                 </td>
-                <td className="whitespace-nowrap px-3 py-2.5 text-right">
+                <td className="whitespace-nowrap px-4 py-3.5 text-right">
                   <Money cents={sale.totalCents} currency={sale.currency} className={`font-bold ${cancelled ? "text-white/40 line-through" : "text-emerald-400"}`} />
                 </td>
               </tr>
@@ -105,9 +105,9 @@ export function ConsignmentsTable({ rows, selectedId, onSelect, onSettle, onRest
   const t = useT(salesModuleMessages);
   const ts = useT(salesMessages);
   return (
-    <div className="overflow-hidden rounded-2xl" style={TABLE_STYLE}>
+    <div className="overflow-hidden rounded-[22px]" style={TABLE_STYLE}>
       <table className="w-full text-left text-sm" data-testid="consignments-table">
-        <thead className="border-b border-white/[0.07] text-[10px] uppercase tracking-widest text-white/35">
+        <thead className="border-b border-white/[0.065] bg-black/[0.12] text-[9px] uppercase tracking-[0.18em] text-white/32">
           <tr>
             <th className={TH}>{t("colShop")}</th>
             <th className={TH}>{t("actionSettle")}</th>
@@ -134,13 +134,13 @@ export function ConsignmentsTable({ rows, selectedId, onSelect, onSettle, onRest
                 className={`${rowClass(selectedId === c.id)} ${closed ? "opacity-60" : ""} ${overdue && selectedId !== c.id ? "bg-red-500/[0.05]" : ""}`}
                 data-testid={`consignment-row-${c.id}`}
               >
-                <td className="max-w-0 px-3 py-2.5" style={{ width: "42%" }}>
+                <td className="max-w-0 px-4 py-3.5" style={{ width: "42%" }}>
                   <div className="truncate font-semibold text-white">{row.lead?.name ?? ts("leadNumber", { id: c.leadId })}</div>
                   <div className="truncate text-[11px] text-white/40">
                     {row.product?.name ?? t("productFallback")} · {t("pricePerUnit", { price: formatCents(c.unitPriceCents, c.currency) })}
                   </div>
                 </td>
-                <td className="whitespace-nowrap px-3 py-2.5">
+                <td className="whitespace-nowrap px-4 py-3.5">
                   {closed ? (
                     <Chip tone="neutral">{t("chipClosed")}</Chip>
                   ) : overdue ? (
@@ -153,8 +153,8 @@ export function ConsignmentsTable({ rows, selectedId, onSelect, onSettle, onRest
                     <span className="text-white/20">—</span>
                   )}
                 </td>
-                <td className="whitespace-nowrap px-3 py-2.5 text-right text-lg font-bold tabular-nums text-white">{c.quantityOnHand}</td>
-                <td className="hidden whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-white/60 2xl:table-cell">
+                <td className="whitespace-nowrap px-4 py-3.5 text-right text-lg font-bold tabular-nums text-white">{c.quantityOnHand}</td>
+                <td className="hidden whitespace-nowrap px-4 py-3.5 text-right tabular-nums text-white/60 2xl:table-cell">
                   {formatCents(c.totalSettledCents, c.currency)}
                 </td>
                 <td className="whitespace-nowrap px-2 py-1.5">

@@ -9,6 +9,12 @@ import { salesStorage } from "../../storage-sales.js";
 import { activeStore, discardFiles, putPrivateFile } from "../../lib/files.js";
 import { activeOrganizationIds, canManageOrganizationForActor, managedOrganizationIds, organizationIdForRep } from "../../organizations/service.js";
 import { resolveGoogleApiKey } from "./google.js";
+import { fetchGooglePlaceProfile } from "./google-place-profile.js";
+import { rateLimit } from "../../tags/rateLimit.js";
+
+const googleProfileLinkSchema = z.object({
+  placeId: z.string().regex(/^[A-Za-z0-9_-]{10,300}$/).nullable(),
+});
 
 export function createLeadsRouter() {
   const router = Router();
@@ -33,7 +39,9 @@ export function createLeadsRouter() {
     }
 
     const search = typeof req.query.search === "string" ? req.query.search : undefined;
-    const leads = await storage.listSalesLeads({ ownerRepId, organizationIds, search });
+    const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 100));
+    const offset = Math.max(0, Number(req.query.offset) || 0);
+    const leads = await storage.listSalesLeads({ ownerRepId, organizationIds, search, limit, offset });
 
     if (!leads.length) return res.json([]);
 
@@ -183,6 +191,9 @@ export function createLeadsRouter() {
   // ratings while React Query prevents repeated calls during one visit.
   router.get("/leads/:id/google-profile", async (req, res) => {
     const actor = (req as any).xpotActor as Awaited<ReturnType<typeof ensureXpotRep>>;
+    if (rateLimit(`places:profile:${actor!.rep.id}`, { limit: 60, windowMs: 5 * 60_000 })) {
+      return res.status(429).json({ message: "Too many Google profile requests. Please wait a moment." });
+    }
     const leadId = Number(req.params.id);
     if (!Number.isFinite(leadId)) return res.status(400).json({ message: "Invalid lead id" });
 
@@ -200,30 +211,88 @@ export function createLeadsRouter() {
     }
 
     try {
-      const response = await fetch(`https://places.googleapis.com/v1/places/${encodeURIComponent(lead.googlePlaceId)}`, {
-        headers: {
-          "X-Goog-Api-Key": apiKey,
-          "X-Goog-FieldMask": "rating,userRatingCount,googleMapsUri,currentOpeningHours.openNow",
-        },
-      });
-      if (!response.ok) return res.status(502).json({ message: "Google business profile could not be loaded" });
-
-      const place = await response.json() as {
-        rating?: number;
-        userRatingCount?: number;
-        googleMapsUri?: string;
-        currentOpeningHours?: { openNow?: boolean };
-      };
+      const profile = await fetchGooglePlaceProfile(lead.googlePlaceId, apiKey);
       res.setHeader("Cache-Control", "private, max-age=300");
       return res.json({
         connected: true,
-        rating: typeof place.rating === "number" ? place.rating : null,
-        reviewCount: typeof place.userRatingCount === "number" ? place.userRatingCount : null,
-        mapsUrl: place.googleMapsUri || null,
-        openNow: typeof place.currentOpeningHours?.openNow === "boolean" ? place.currentOpeningHours.openNow : null,
+        rating: profile.rating,
+        reviewCount: profile.reviewCount,
+        mapsUrl: profile.mapsUrl,
+        openNow: profile.openNow,
       });
     } catch (error) {
       return res.status(502).json({ message: (error as Error).message || "Google business profile could not be loaded" });
+    }
+  });
+
+  // Linking is a sync operation, not just an ID update: the selected Google
+  // place becomes the canonical source for the company's public details.
+  router.post("/leads/:id/google-profile", async (req, res) => {
+    const actor = (req as any).xpotActor as Awaited<ReturnType<typeof ensureXpotRep>>;
+    if (rateLimit(`places:profile-link:${actor!.rep.id}`, { limit: 20, windowMs: 60_000 })) {
+      return res.status(429).json({ message: "Too many Google profile updates. Please wait a moment." });
+    }
+    const leadId = Number(req.params.id);
+    if (!Number.isFinite(leadId)) return res.status(400).json({ message: "Invalid lead id" });
+
+    const lead = await storage.getSalesLead(leadId);
+    if (!lead) return res.status(404).json({ message: "Lead not found" });
+    if (!(await canAccessLead(actor!, lead))) return res.status(403).json({ message: "Access denied" });
+
+    const { placeId } = googleProfileLinkSchema.parse(req.body);
+    if (!placeId) {
+      const updated = await storage.updateSalesLead(leadId, { googlePlaceId: null });
+      return res.json({
+        lead: updated,
+        location: null,
+        profile: { connected: false, rating: null, reviewCount: null, mapsUrl: null, openNow: null },
+      });
+    }
+
+    const apiKey = await resolveGoogleApiKey();
+    if (!apiKey) {
+      return res.status(503).json({ message: "Google Places is not configured. Please add API key in Admin > Integrations." });
+    }
+
+    try {
+      const profile = await fetchGooglePlaceProfile(placeId, apiKey);
+      const updated = await storage.updateSalesLead(leadId, {
+        googlePlaceId: profile.placeId,
+        ...(profile.name ? { name: profile.name } : {}),
+        ...(profile.phone ? { phone: profile.phone } : {}),
+        ...(profile.website ? { website: profile.website } : {}),
+        ...(profile.industry ? { industry: profile.industry } : {}),
+      });
+
+      const location = profile.address?.addressLine1
+        ? await storage.upsertPrimaryLocation(leadId, {
+            label: "Main",
+            addressLine1: profile.address.addressLine1,
+            addressLine2: null,
+            city: profile.address.city,
+            state: profile.address.state,
+            postalCode: profile.address.postalCode,
+            country: profile.address.country,
+            lat: profile.address.lat,
+            lng: profile.address.lng,
+            geofenceRadiusMeters: 150,
+            isPrimary: true,
+          })
+        : null;
+
+      return res.json({
+        lead: updated,
+        location,
+        profile: {
+          connected: true,
+          rating: profile.rating,
+          reviewCount: profile.reviewCount,
+          mapsUrl: profile.mapsUrl,
+          openNow: profile.openNow,
+        },
+      });
+    } catch (error) {
+      return res.status(502).json({ message: (error as Error).message || "Google business profile could not be linked" });
     }
   });
 
@@ -334,6 +403,9 @@ export function createLeadsRouter() {
       return res.status(403).json({ message: "Access denied" });
     }
 
+    if (lead.status === "prospect") {
+      await storage.updateSalesLead(leadId, { status: "lead" });
+    }
     const syncResult = await syncLeadToGhl(leadId);
     const updated = await storage.getSalesLead(leadId);
     res.json({ lead: updated, ghl: syncResult });

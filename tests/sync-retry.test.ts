@@ -80,6 +80,7 @@ beforeEach(() => {
     [12, { id: 12, ownerRepId: 1, xphereRef: null, ghlContactId: "ghl-1" }],
     [13, { id: 13, ownerRepId: 1, xphereRef: "account:abc", ghlContactId: "ghl-1" }],
     [20, { id: 20, ownerRepId: 2, xphereRef: null, ghlContactId: null }],
+    [21, { id: 21, ownerRepId: 1, status: "prospect", xphereRef: null, ghlContactId: null }],
   ]);
 });
 
@@ -116,6 +117,12 @@ describe("POST /sync/retry — sales_lead", () => {
     const res = await retry("user-a", 10);
     expect(res.body.synced).toBe(false);
     expect(res.body.results[0]).toEqual({ synced: false, message: "Xphere HTTP 403" });
+  });
+
+  it("never sends an unpromoted prospect to GHL", async () => {
+    await retry("user-a", 21);
+    expect(helpers.syncLeadToXphere).toHaveBeenCalledWith(21);
+    expect(helpers.syncLeadToGhl).not.toHaveBeenCalled();
   });
 
   it("rejects a rep retrying another rep's lead", async () => {

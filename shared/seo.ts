@@ -29,9 +29,9 @@ const HTML_LANG: Record<SeoLang, string> = {
 const COPY: Record<SeoLang, Record<PublicSeoPage, { title: string; description: string }>> = {
   en: {
     home: {
-      title: formatTitle("Xpot", "Extra income with independent field sales"),
+      title: formatTitle("Xpot", "Flexible independent field sales"),
       description:
-        "Turn free hours into extra income selling selected products to local businesses. Plan routes, confirm visits by GPS and organize sales with Xpot.",
+        "Sell selected products to local businesses on your schedule, whether for a few flexible hours or as a full-time business. Plan routes, confirm visits by GPS and organize sales with Xpot.",
     },
     privacy: {
       title: formatTitle("Privacy Policy", "Xpot"),
@@ -44,9 +44,9 @@ const COPY: Record<SeoLang, Record<PublicSeoPage, { title: string; description: 
   },
   pt: {
     home: {
-      title: formatTitle("Xpot", "Renda extra com vendas na rua"),
+      title: formatTitle("Xpot", "Vendas independentes no seu ritmo"),
       description:
-        "Transforme horas livres em renda extra vendendo produtos selecionados para comércios locais. Planeje rotas, confirme visitas por GPS e organize vendas no Xpot.",
+        "Venda produtos selecionados para comércios locais no seu ritmo, por algumas horas ou como atividade principal. Planeje rotas, confirme visitas por GPS e organize vendas no Xpot.",
     },
     privacy: {
       title: formatTitle("Política de Privacidade", "Xpot"),
@@ -59,9 +59,9 @@ const COPY: Record<SeoLang, Record<PublicSeoPage, { title: string; description: 
   },
   es: {
     home: {
-      title: formatTitle("Xpot", "Ingresos extra con ventas en la calle"),
+      title: formatTitle("Xpot", "Ventas independientes a tu ritmo"),
       description:
-        "Convierte horas libres en ingresos extra vendiendo productos seleccionados a comercios locales. Planifica rutas, confirma visitas por GPS y organiza ventas con Xpot.",
+        "Vende productos seleccionados a comercios locales a tu ritmo, por unas horas o como actividad principal. Planifica rutas, confirma visitas por GPS y organiza ventas con Xpot.",
     },
     privacy: {
       title: formatTitle("Política de Privacidad", "Xpot"),
@@ -238,7 +238,7 @@ export function renderSeoHead(pathname: string): string {
     meta("og:image", SEO_OG_IMAGE, true),
     meta("og:image:width", "1200", true),
     meta("og:image:height", "630", true),
-    meta("og:image:alt", "Xpot for independent sellers earning extra income", true),
+    meta("og:image:alt", "Xpot for independent sellers building income on their terms", true),
     meta("og:locale", seo.locale, true),
     ...alternateLocales,
     meta("twitter:card", "summary_large_image"),

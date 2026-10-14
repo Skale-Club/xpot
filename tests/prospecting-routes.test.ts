@@ -82,6 +82,15 @@ describe("prospecting contracts", () => {
     expect(value.shiftDurationMinutes).toBe(480);
   });
 
+  it("does not require the rep's location to build a selling route", () => {
+    const value = prospectingRouteCreateSchema.parse({
+      routeDate: "2026-10-13",
+      plannedStartAt: "2026-10-13T13:00:00.000Z",
+      leadIds: [1],
+    });
+    expect(value.start).toBeUndefined();
+  });
+
   it("accepts a completed discovery job as the route source", () => {
     const value = prospectingRouteCreateSchema.parse({
       routeDate: "2026-10-13",
@@ -289,6 +298,22 @@ describe("route heuristic", () => {
     const home = optimizeRouteHeuristic({ ...input, end: start });
     expect(home.stops).toEqual([]);
   });
+
+  it("starts the work clock at visit one when there is no navigation origin", () => {
+    const result = optimizeRouteHeuristic({
+      plannedStartAt: new Date("2026-10-13T13:00:00.000Z"),
+      shiftDurationSeconds: 41 * 60,
+      maxStops: 5,
+      candidates: [
+        candidate(1, 40.75, -73.99, 95),
+        candidate(2, 40.751, -73.99, 90),
+      ],
+    });
+    expect(result.stops).toHaveLength(2);
+    expect(result.stops[0]).toMatchObject({ travelDistanceMeters: 0, travelDurationSeconds: 0 });
+    expect(result.stops[0].estimatedArrivalAt).toEqual(new Date("2026-10-13T13:00:00.000Z"));
+    expect(result.totalDurationSeconds).toBe(40 * 60 + 60);
+  });
 });
 
 describe("Google daily route optimization", () => {
@@ -312,6 +337,8 @@ describe("Google daily route optimization", () => {
     expect(request.model.globalEndTime).toBe("2026-10-13T17:00:00Z");
     expect(request.considerRoadTraffic).toBe(true);
     expect(request.model.vehicles[0]).not.toHaveProperty("endLocation");
+    const sellingDay = buildGoogleOptimizeToursRequest({ ...input, start: undefined });
+    expect(sellingDay.model.vehicles[0]).not.toHaveProperty("startLocation");
     const home = buildGoogleOptimizeToursRequest({ ...input, end: { lat: 42.3, lng: -71.4 } });
     expect(home.model.vehicles[0].endLocation).toEqual({ latitude: 42.3, longitude: -71.4 });
   });

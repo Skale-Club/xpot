@@ -23,7 +23,7 @@ export function leadMatchesSearch(lead: FullSalesLead, query: string): boolean {
   ].filter(Boolean).join(" ").toLowerCase().includes(search);
 }
 
-export function useLeads() {
+export function useLeads(enabled = true) {
   const { toast } = useToast();
   const t = useT(leadsMessages);
   const { geoState, loadCurrentLocation, invalidateXpotData } = useXpotShared();
@@ -42,7 +42,7 @@ export function useLeads() {
     state: "",
   });
 
-  const leadsQuery = useQuery<FullSalesLead[]>({ queryKey: ["/api/xpot/leads"], enabled: xpotMeQuery.isSuccess });
+  const leadsQuery = useQuery<FullSalesLead[]>({ queryKey: ["/api/xpot/leads"], enabled: xpotMeQuery.isSuccess && enabled });
   const leadPlaceQuery = usePlaceSearch(leadLookupSearch, xpotMeQuery.isSuccess && activeTab === "leads", geoState);
 
   const filteredLeadsForList = useMemo(

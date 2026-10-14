@@ -94,7 +94,9 @@ export function buildGoogleOptimizeToursRequest(input: OptimizeRouteInput) {
       })),
       vehicles: [{
         label: "xpot-daily-route",
-        startLocation: { latitude: input.start.lat, longitude: input.start.lng },
+        // Omitted for selling routes: travel from wherever the rep currently
+        // is to visit one is navigation, not part of their work-hour budget.
+        ...(input.start ? { startLocation: { latitude: input.start.lat, longitude: input.start.lng } } : {}),
         // No end location: the vehicle's day finishes at its last visit.
         ...(input.end ? { endLocation: { latitude: input.end.lat, longitude: input.end.lng } } : {}),
         startTimeWindows: [{ startTime: googleTimestamp(input.plannedStartAt), endTime: googleTimestamp(input.plannedStartAt) }],
