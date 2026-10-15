@@ -1,19 +1,36 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { ApiError, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/i18n";
 import { checkinMessages } from "@/i18n/messages/checkin";
 import { usePlaceSearch } from "../usePlaceSearch";
-import { findMatchingLead, parseAddress } from "../utils";
+import { formatMeters } from "../utils";
 import { useXpotShared } from "./useXpotShared";
 import { useXpotQueries } from "./useXpotQueries";
 import { useLeads } from "./useLeads";
 import { useVisits } from "./useVisits";
+import { usePlaceToLead } from "./usePlaceToLead";
+import type { GeofenceMiss } from "../components/CheckInOverrideDialog";
 import type { GooglePlaceResult, FullSalesLead, SalesLeadPayload, SalesVisitNote } from "../types";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyMutation = ReturnType<typeof useMutation<any, any, any, any>>;
+
+type CheckInInput = { leadId: number; lat?: number; lng?: number; gpsAccuracyMeters?: number | null; manualOverrideReason?: string };
+
+/** The fields the server sends with a 400 outside_geofence (server/routes/xpot/visits.ts). */
+function readGeofenceMiss(error: unknown): (GeofenceMiss & { overrideAllowed: boolean }) | null {
+  if (!(error instanceof ApiError) || !error.body || typeof error.body !== "object") return null;
+  const body = error.body as Record<string, unknown>;
+  if (body.code !== "outside_geofence") return null;
+  return {
+    distanceMeters: Number(body.distanceMeters) || 0,
+    allowedRadiusMeters: Number(body.allowedRadiusMeters) || 0,
+    accuracyMeters: typeof body.accuracyMeters === "number" ? body.accuracyMeters : null,
+    overrideAllowed: body.overrideAllowed === true,
+  };
+}
 
 // Base64 adds a third; 3 MB raw stays under the platform's 4.5 MB request cap.
 const MAX_AUDIO_BYTES = 3 * 1024 * 1024;
@@ -30,6 +47,10 @@ export function useCheckIn() {
   const [plannedVisitId, setPlannedVisitId] = useState<number | null>(null);
   const [checkInSearch, setCheckInSearch] = useState("");
   const [checkInDropdownOpen, setCheckInDropdownOpen] = useState(false);
+  // Set when a check-in needs a reason before it can go through: outside the
+  // radius (miss) or with no location at all (miss null).
+  const [overridePrompt, setOverridePrompt] = useState<{ input: CheckInInput; miss: GeofenceMiss | null } | null>(null);
+  const { resolvePlace } = usePlaceToLead();
 
   // Pre-select lead from URL query param ?leadId=
   useEffect(() => {
@@ -86,7 +107,7 @@ export function useCheckIn() {
   }, [activeVisit?.id, activeVisit?.note]);
 
   const checkInMutation = useMutation({
-    mutationFn: async (input: { leadId: number; lat?: number; lng?: number; gpsAccuracyMeters?: number | null }) => {
+    mutationFn: async (input: CheckInInput) => {
       if (!isOnline) throw new Error(t("offlineError"));
       checkingInRef.current = true;
       const plannedLeadId = Number(new URLSearchParams(window.location.search).get("leadId"));
@@ -99,12 +120,23 @@ export function useCheckIn() {
     onSuccess: async () => {
       toast({ title: t("checkedIn"), variant: "success" });
       setPlannedVisitId(null);
+      setOverridePrompt(null);
       await invalidateXpotData();
       setTimeout(() => { checkingInRef.current = false; }, 2000);
     },
-    onError: (error: Error) => {
+    onError: (error: Error, input) => {
       checkingInRef.current = false;
-      toast({ title: t("checkInFailed"), description: error.message, variant: "destructive" });
+      const miss = readGeofenceMiss(error);
+      if (miss?.overrideAllowed && !input.manualOverrideReason) {
+        // Not a failure the rep has to fix by walking: ask why, then retry.
+        setOverridePrompt({ input, miss });
+        return;
+      }
+      toast({
+        title: t("checkInFailed"),
+        description: miss ? t("outsideFenceBlocked", { distance: formatMeters(miss.distanceMeters), radius: formatMeters(miss.allowedRadiusMeters) }) : error.message,
+        variant: "destructive",
+      });
     },
   });
 
@@ -243,61 +275,15 @@ export function useCheckIn() {
   };
 
   const pickGooglePlaceForCheckIn = async (place: GooglePlaceResult) => {
-    const existingLead = findMatchingLead(place, leadsQuery.data || []);
-    if (existingLead) {
-      setSelectedLeadId(existingLead.id);
-      setCheckInSearch(existingLead.name);
-      // Matched to Google: keep the Place ID so Tags can build its review link.
-      if (!existingLead.googlePlaceId && place.placeId) {
-        apiRequest("PATCH", `/api/xpot/leads/${existingLead.id}`, { googlePlaceId: place.placeId })
-          .then(() => invalidateXpotData())
-          .catch(() => {});
-      }
-      // If the existing lead has no address, save the one from Google Places
-      const hasAddress = existingLead.locations && existingLead.locations.length > 0 && existingLead.locations[0]?.addressLine1;
-      if (!hasAddress && place.address) {
-        const parsedAddress = parseAddress(place.address);
-        apiRequest("PATCH", `/api/xpot/leads/${existingLead.id}/location`, {
-          addressLine1: parsedAddress.addressLine1 || place.address,
-          city: parsedAddress.city || undefined,
-          state: parsedAddress.state || undefined,
-          country: "US",
-          lat: place.lat ?? undefined,
-          lng: place.lng ?? undefined,
-          geofenceRadiusMeters: 150,
-        }).then(() => invalidateXpotData()).catch(() => {});
-      }
-      toast({ title: t("localLeadSelected"), description: existingLead.name, variant: "success" });
-      return;
-    }
+    const lead = await resolvePlace(place);
+    setSelectedLeadId(lead.id);
+    setCheckInSearch(lead.name);
+  };
 
-    const parsedAddress = parseAddress(place.address);
-    const createdLead = await createLeadMutation.mutateAsync({
-      name: place.name,
-      phone: place.phone || undefined,
-      website: place.website || undefined,
-      industry: place.primaryType || undefined,
-      source: "google_places",
-      status: "prospect",
-      notes: `Imported from Google Places (${place.placeId})`,
-      googlePlaceId: place.placeId,
-      primaryLocation: {
-        label: "Main",
-        addressLine1: parsedAddress.addressLine1 || place.address,
-        city: parsedAddress.city || undefined,
-        state: parsedAddress.state || undefined,
-        country: "US",
-        lat: place.lat ?? undefined,
-        lng: place.lng ?? undefined,
-        geofenceRadiusMeters: 150,
-        isPrimary: true,
-      },
-    });
-
-    setSelectedLeadId(createdLead.lead.id);
-    setCheckInSearch(place.name);
-    toast({ title: t("businessImported"), description: place.name, variant: "success" });
-    await invalidateXpotData();
+  /** Retry the check-in the server refused, now with the rep's reason. */
+  const confirmOverride = (reason: string) => {
+    if (!overridePrompt) return;
+    checkInMutation.mutate({ ...overridePrompt.input, manualOverrideReason: reason });
   };
 
   const createNewCompanyFromSearch = async () => {
@@ -335,6 +321,9 @@ export function useCheckIn() {
     pickLocalLeadForCheckIn,
     pickGooglePlaceForCheckIn,
     createNewCompanyFromSearch,
+    overridePrompt,
+    setOverridePrompt,
+    confirmOverride,
     visitNoteForm,
     setVisitNoteForm,
     isRecording,

@@ -11,6 +11,7 @@ import { dashboardMessages } from "@/i18n/messages/dashboard";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { useLocation } from "wouter";
 import { XpotVisits } from "./XpotVisits";
+import { QuickCheckIn } from "./components/QuickCheckIn";
 import { AttentionItem, AttentionList, DashboardSection, EmptyMetricState, KpiTile, MetricSelector, PeriodSelector } from "@/components/xpot/DashboardKit";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -420,6 +421,7 @@ function DashboardOverview() {
 
   return (
     <div className="space-y-5 lg:space-y-6">
+      <QuickCheckIn />
       <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4 lg:gap-4">
         <KpiTile label={t("metricVisitsToday")} value={metrics?.visitsToday ?? 0} icon={MapPinned} accent="blue" detail={t.plural("metricVisitsRemaining", metrics?.remainingVisitsToday ?? 0)} loading={dashboardQuery.isLoading} onClick={() => setLocation("/route")} />
         <KpiTile label={t("metricCompletedToday")} value={metrics?.completedVisitsToday ?? 0} icon={Check} accent="emerald" detail={t.plural("metricVisitsCompleted", metrics?.completedVisitsToday ?? 0)} loading={dashboardQuery.isLoading} onClick={() => setLocation("/dashboard/history?view=day")} />

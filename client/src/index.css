@@ -172,6 +172,13 @@
   outline-offset: 0 !important;
 }
 
+/* The place/customer search (Dashboard, check-in) rings its whole rounded bar
+   on focus, so the text field inside it draws no outline of its own. */
+.xpot-place-search input:focus-visible {
+  outline: none !important;
+  outline-offset: 0 !important;
+}
+
 @keyframes xpot-progress-shimmer {
   from {
     transform: translateX(-120%);

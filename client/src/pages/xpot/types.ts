@@ -93,6 +93,14 @@ export type XpotMeResponse = {
   organizations?: Array<{ id: number; name: string; slug: string; isActive: boolean; membershipRole?: "admin" | "member" }>;
   organizationMemberships?: Array<{ organizationId: number; role: "admin" | "member"; isActive: boolean; blockedAt?: string | null }>;
   activeVisit: (SalesVisit & { lead?: SalesLead; note?: SalesVisitNote }) | null;
+  checkInRules?: CheckInRules;
+};
+
+/** The organization's check-in settings (Manage → Check-in rules). */
+export type CheckInRules = {
+  requiresGps: boolean;
+  allowManualOverride: boolean;
+  defaultGeofenceRadiusMeters: number;
 };
 
 export type DashboardResponse = {

@@ -8,6 +8,7 @@ import { salesStorage } from "../../storage-sales.js";
 import { activeStore, discardFiles, putPrivateFile } from "../../lib/files.js";
 import { finishVisitTransaction, startVisitTransaction } from "../../visit-workflow.js";
 import { saveVisitSummaryTransaction } from "../../visit-summary.js";
+import { evaluateCheckInGeofence } from "../../check-in-geofence.js";
 
 export function createVisitsRouter() {
   const router = Router();
@@ -81,8 +82,8 @@ export function createVisitsRouter() {
       ? locations.find((location) => location.id === requestedLocationId)
       : locations.find((location) => location.isPrimary) || locations[0];
 
-    let validationStatus: "valid" | "outside_geofence" | "gps_unavailable" | "manual_override" = "gps_unavailable";
     let distanceFromTargetMeters: number | undefined;
+    const allowedRadiusMeters = selectedLocation?.geofenceRadiusMeters || appSettings.defaultGeofenceRadiusMeters;
 
     if (
       selectedLocation?.lat && selectedLocation?.lng &&
@@ -95,17 +96,31 @@ export function createVisitsRouter() {
         input.lat,
         input.lng,
       );
-      const allowedRadius = selectedLocation.geofenceRadiusMeters || appSettings.defaultGeofenceRadiusMeters;
-      validationStatus = distanceFromTargetMeters <= allowedRadius ? "valid" : "outside_geofence";
     }
 
-    if (input.manualOverrideReason && appSettings.allowManualOverride) {
-      validationStatus = "manual_override";
-    }
+    const decision = evaluateCheckInGeofence({
+      distanceMeters: distanceFromTargetMeters ?? null,
+      allowedRadiusMeters,
+      requiresGps: appSettings.checkInRequiresGps,
+      allowManualOverride: appSettings.allowManualOverride,
+      manualOverrideReason: input.manualOverrideReason,
+    });
 
-    if (appSettings.checkInRequiresGps && validationStatus === "outside_geofence" && !input.manualOverrideReason) {
-      return res.status(400).json({ message: "Outside geofence. Manual override reason required." });
+    if (!decision.ok) {
+      // The client reads these fields to explain the distance and, when the
+      // organization allows it, ask for a reason and retry.
+      return res.status(400).json({
+        code: decision.code,
+        message: decision.overrideAllowed
+          ? "Outside geofence. Manual override reason required."
+          : "Outside geofence. Move closer to the customer to check in.",
+        distanceMeters: Math.round(distanceFromTargetMeters ?? 0),
+        allowedRadiusMeters,
+        accuracyMeters: input.gpsAccuracyMeters ?? null,
+        overrideAllowed: decision.overrideAllowed,
+      });
     }
+    const { validationStatus } = decision;
 
     const checkInValues = {
       locationId: selectedLocation?.id,
@@ -116,7 +131,7 @@ export function createVisitsRouter() {
       distanceFromTargetMeters: distanceFromTargetMeters ?? null,
       gpsAccuracyMeters: input.gpsAccuracyMeters ?? null,
       validationStatus,
-      manualOverrideReason: input.manualOverrideReason,
+      manualOverrideReason: decision.manualOverrideReason,
     };
     const visit = await startVisitTransaction({
       repId: actor!.rep.id,
