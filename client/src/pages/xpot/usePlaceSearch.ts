@@ -1,4 +1,4 @@
-import { useDeferredValue } from "react";
+import { useEffect, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { GooglePlaceResult } from "./types";
 
@@ -11,12 +11,27 @@ type PlaceSearchResponse = { results: GooglePlaceResult[] };
 // Places call every ~2s — the search UI blinked in step with the GPS.
 export const roundSearchBias = (n: number) => Math.round(n * 1e3) / 1e3;
 
+// How long typing has to pause before a search goes out. useDeferredValue used
+// to stand here, but it only defers rendering: every keystroke past the second
+// still became its own billed Places call. Now the Dashboard carries the search
+// too, so typing "barbershop" should cost one call, not nine.
+export const PLACE_SEARCH_DEBOUNCE_MS = 300;
+
+function useDebouncedValue<T>(value: T, delayMs: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const id = window.setTimeout(() => setDebounced(value), delayMs);
+    return () => window.clearTimeout(id);
+  }, [value, delayMs]);
+  return debounced;
+}
+
 export function usePlaceSearch(
   search: string,
   enabled: boolean,
   geoState: { lat?: number; lng?: number },
 ) {
-  const deferredSearch = useDeferredValue(search.trim());
+  const deferredSearch = useDebouncedValue(search.trim(), PLACE_SEARCH_DEBOUNCE_MS);
   const lat = typeof geoState.lat === "number" ? roundSearchBias(geoState.lat) : undefined;
   const lng = typeof geoState.lng === "number" ? roundSearchBias(geoState.lng) : undefined;
 

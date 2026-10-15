@@ -15,10 +15,11 @@ export function createAuthRouter() {
   router.get("/me", async (req, res) => {
     try {
       const actor = (req as any).xpotActor as Awaited<ReturnType<typeof ensureXpotRep>>;
-      const [activeVisit, organizations, organizationMemberships] = await Promise.all([
+      const [activeVisit, organizations, organizationMemberships, appSettings] = await Promise.all([
         storage.getActiveSalesVisitForRep(actor!.rep.id),
         listOrganizations(actor!),
         membershipsForRep(actor!.rep.id),
+        storage.getSalesAppSettings(),
       ]);
       const enrichedVisit = activeVisit
         ? {
@@ -33,6 +34,12 @@ export function createAuthRouter() {
         organizations,
         organizationMemberships,
         activeVisit: enrichedVisit,
+        // What the check-in screen needs to know before it asks for a reason.
+        checkInRules: {
+          requiresGps: appSettings.checkInRequiresGps,
+          allowManualOverride: appSettings.allowManualOverride,
+          defaultGeofenceRadiusMeters: appSettings.defaultGeofenceRadiusMeters,
+        },
       });
     } catch (err) {
       console.error("[GET /api/xpot/me]", err);

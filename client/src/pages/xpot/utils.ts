@@ -41,6 +41,14 @@ export function formatDuration(seconds?: number | null) {
   return translate(shellMessages, "durationHours", { hours, minutes: remainingMinutes });
 }
 
+/** A distance or GPS accuracy for people: "85 m", "1.4 km". */
+export function formatMeters(meters: number) {
+  const value = Math.max(0, Math.round(meters));
+  if (value < 1000) return `${value} m`;
+  const km = new Intl.NumberFormat(currentLocale(), { maximumFractionDigits: value < 10_000 ? 1 : 0 }).format(value / 1000);
+  return `${km} km`;
+}
+
 export function normalizeSearchValue(value?: string | null) {
   return (value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 }

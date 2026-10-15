@@ -120,7 +120,7 @@ test("a legacy ready job with a draft route is recovered and published automatic
   const created = await request("POST", "/api/xpot/prospecting/routes", {
     ...routeBody(),
     jobId: seed.jobId,
-    routeDate: "2026-10-14",
+    routeDate: todayUtc(),
   });
   expect(created.body.route.status).toBe("draft");
   await q(`UPDATE prospecting_jobs SET route_planning_status = 'ready' WHERE id = $1`, [seed.jobId]);
@@ -130,6 +130,10 @@ test("a legacy ready job with a draft route is recovered and published automatic
   expect(result?.route).toMatchObject({ id: created.body.route.id, status: "published" });
   expect((await one(`SELECT count(*)::int AS count FROM sales_visits WHERE source = 'prospecting-route'`)).count).toBe(2);
 });
+
+// The automation only picks up routes dated today or later (UTC). A fixed date
+// here passed on the day it was written and failed every day after.
+const todayUtc = () => new Date().toISOString().slice(0, 10);
 
 const routeBody = () => ({
   routeDate: "2026-10-13",
@@ -142,7 +146,7 @@ test("a published legacy automatic route removes the origin drive from its work 
   const created = await request("POST", "/api/xpot/prospecting/routes", {
     ...routeBody(),
     jobId: seed.jobId,
-    routeDate: "2026-10-14",
+    routeDate: todayUtc(),
   });
   const routeId = created.body.route.id;
   expect((await request("PATCH", `/api/xpot/prospecting/routes/${routeId}/status`, { status: "published" })).status).toBe(200);

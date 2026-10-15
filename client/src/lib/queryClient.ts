@@ -7,7 +7,8 @@ import { viewHeaders } from "./adminMode";
  * message used to be "400: {\"message\":…}", and that raw text reached users.
  */
 export class ApiError extends Error {
-  constructor(public status: number, message: string) {
+  /** `body` is the parsed JSON the server sent, for errors that carry more than a message. */
+  constructor(public status: number, message: string, public body?: unknown) {
     super(message);
     this.name = "ApiError";
   }
@@ -17,15 +18,17 @@ async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = await res.text();
     let message = text || res.statusText;
+    let parsed: unknown;
     try {
       const body = JSON.parse(text) as { message?: unknown; error?: unknown };
+      parsed = body;
       const said = typeof body.message === "string" ? body.message : typeof body.error === "string" ? body.error : null;
       if (said) message = said;
     } catch {
       // Not JSON (a proxy error page, plain text): keep the text as it came.
     }
     // An empty body over HTTP/2 has no statusText either: never hand a toast an empty sentence.
-    throw new ApiError(res.status, message.trim() || `Request failed (${res.status})`);
+    throw new ApiError(res.status, message.trim() || `Request failed (${res.status})`, parsed);
   }
 }
 
