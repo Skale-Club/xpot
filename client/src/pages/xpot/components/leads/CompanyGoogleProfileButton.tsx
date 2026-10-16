@@ -46,7 +46,11 @@ export function CompanyGoogleProfileButton({ lead }: { lead: FullSalesLead }) {
       toast({ title: googlePlaceId ? t("googleProfileSaved") : t("googleProfileRemoved"), variant: "success" });
       if (googlePlaceId) setOpen(false);
     },
-    onError: () => toast({ title: t("googleProfileSaveFailed"), variant: "destructive" }),
+    onError: (error: Error) => toast({
+      title: t("googleProfileSaveFailed"),
+      description: error.message,
+      variant: "destructive",
+    }),
   });
 
   const p = profile.data;

@@ -92,17 +92,22 @@ function useShellNav() {
   const settingsItem: NavItem = { href: "/settings", label: t("navSettings"), icon: Settings, match: starts("/settings") };
   // On an account page no module is current: the sidebar lists the account itself.
   const module: XpotModule | null = context === "account" ? null : modules.includes(context) ? context : modules[0] ?? null;
+  const groupsFor = (target: XpotModule) => {
+    const listed = moduleGroups(target, viewer, labels);
+    if (target !== "tags" || !modules.includes("visits")) return listed;
+    return listed.map((group) => ({ ...group, items: group.items.filter((item) => item.href !== "/tags/customers") }));
+  };
   const groups: NavGroup[] = context === "account"
     ? [{ label: "", items: [settingsItem] }, ...(organization.length ? [{ label: t("navOrganization"), items: organization }] : [])]
     : module
-      ? moduleGroups(module, viewer, labels)
+      ? groupsFor(module)
       : [];
   const moduleLabel = (m: XpotModule) => (m === "visits" ? tc("moduleVisits") : tc("moduleTags"));
 
   // Every screen for the command palette, grouped by where it lives, this module first.
   const order = module ? [module, ...modules.filter((m) => m !== module)] : modules;
   const pages = [
-    ...order.flatMap((m) => moduleGroups(m, viewer, labels).flatMap((g) => g.items.map((i) => ({ ...i, group: moduleLabel(m) })))),
+    ...order.flatMap((m) => groupsFor(m).flatMap((g) => g.items.map((i) => ({ ...i, group: moduleLabel(m) })))),
     { ...settingsItem, group: t("moduleAccount") },
     ...organization.map((i) => ({ ...i, group: t("moduleAccount") })),
   ];

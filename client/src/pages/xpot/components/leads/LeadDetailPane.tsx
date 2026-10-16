@@ -15,6 +15,7 @@ import { LeadSalesPanel } from "../sales/LeadSalesPanel";
 import { LeadContacts } from "./LeadContacts";
 import { CompanyInlineEditor } from "./CompanyInlineEditor";
 import { CompanyGoogleProfileButton } from "./CompanyGoogleProfileButton";
+import { LeadPiecesPanel } from "./LeadPiecesPanel";
 import { CompanyTaskButton } from "./CompanyTaskButton";
 import type { EnrichedSalesVisit, FullSalesLead } from "../../types";
 import { ModuleBadge } from "@/components/xpot/ModuleBadge";
@@ -204,9 +205,7 @@ export function LeadDetailPane({ lead, pieces, visits, onClose, onDelete, onConv
           <Section title={t("sectionSales")} icon={<DollarSign className="h-3.5 w-3.5" />}><LeadSalesPanel leadId={lead.id} leadName={lead.name} compact /></Section>
           {pieces && pieces.pieces > 0 ? (
             <Section title={t("sectionPieces")} icon={<Nfc className="h-3.5 w-3.5" />} badge={<ModuleBadge module="tags" />}>
-              <Link href={`/tags/pieces?lead=${lead.id}&name=${encodeURIComponent(lead.name)}`} className="flex items-center gap-2 rounded-xl border border-violet-300/10 bg-violet-400/[0.07] px-3 py-3 text-xs font-semibold text-violet-200 transition hover:bg-violet-400/[0.12]">
-                <span className="flex-1">{[t.plural("piecesCount", pieces.pieces), t("piecesLive", { n: pieces.live }), t("piecesScans", { n: pieces.scansLast30 })].join(" · ")}</span>{t("openPieces")}<ExternalLink className="h-3.5 w-3.5" />
-              </Link>
+              <LeadPiecesPanel leadId={lead.id} leadName={lead.name} summary={pieces} />
             </Section>
           ) : null}
           <Section title={t("sectionVisits")} icon={<UsersRound className="h-3.5 w-3.5" />}>

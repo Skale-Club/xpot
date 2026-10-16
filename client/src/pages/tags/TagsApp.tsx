@@ -28,6 +28,7 @@ export function TagsApp() {
   const meQuery = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
   const modules = useXpotModules();
   const allowed = modules.includes("tags");
+  const sharesCompanyProfiles = modules.includes("visits");
   const isDesktop = useIsDesktop();
 
   useEffect(() => {
@@ -81,9 +82,13 @@ export function TagsApp() {
         </Route>
         <Route path={`${APP_BASE}/pieces`}>{() => <PiecesScreen />}</Route>
         <Route path={`${APP_BASE}/customers/:id`}>
-          {(params) => <CustomerScreen key={params.id} leadId={Number(params.id)} />}
+          {(params) => sharesCompanyProfiles
+            ? <Redirect to={`/leads/${params.id}`} replace />
+            : <CustomerScreen key={params.id} leadId={Number(params.id)} />}
         </Route>
-        <Route path={`${APP_BASE}/customers`} component={CustomersScreen} />
+        <Route path={`${APP_BASE}/customers`}>
+          {() => sharesCompanyProfiles ? <Redirect to="/leads?status=customer" replace /> : <CustomersScreen />}
+        </Route>
         <Route path={`${APP_BASE}/direct`} component={DirectScreen} />
         <Route path={APP_BASE} component={HomeScreen} />
         <Route>

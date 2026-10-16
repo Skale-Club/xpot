@@ -5,6 +5,7 @@ import { useT } from "@/i18n";
 import { shellMessages } from "@/i18n/messages/shell";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { useViewerAccess } from "@/lib/adminMode";
+import { useXpotModules } from "@/components/ModuleSwitch";
 import { APP_BASE } from "./lib";
 
 // The Tags module's bottom bar on a phone: Dashboard, Customers and My pieces. Writing a
@@ -32,9 +33,11 @@ export function TagsTabBar() {
   const t = useT(tagsMessages);
   const ts = useT(shellMessages);
   const [location, navigate] = useLocation();
+  const modules = useXpotModules();
   const { canManage } = useViewerAccess();
+  const primary = modules.includes("visits") ? TAGS_NAV.filter((item) => item.href !== `${APP_BASE}/customers`) : TAGS_NAV;
   const tabs = [
-    ...TAGS_NAV.map(({ href, key, icon }) => ({ id: href as string, label: t(key), icon, testId: `tags-nav-${key}` })),
+    ...primary.map(({ href, key, icon }) => ({ id: href as string, label: t(key), icon, testId: `tags-nav-${key}` })),
     ...(canManage ? [{ id: TAGS_MANAGE_HREF, label: ts("navManage"), icon: Shield, testId: "tags-nav-manage" }] : []),
   ];
   return <MobileTabBar module="tags" tabs={tabs} activeId={activeTagsTab(location)} onSelect={navigate} />;
