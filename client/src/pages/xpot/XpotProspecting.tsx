@@ -1,7 +1,7 @@
 import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, BellRing, Building2, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Clock3, ExternalLink, GripVertical, Loader2, Map as MapIcon, MapPin, MapPinCheck, Navigation, Nfc, Phone, Radar, RefreshCw, Route as RouteIcon, Search, ShieldCheck, Sparkles, Star, Trash2, X } from "lucide-react";
+import { ArrowLeft, BellRing, Building2, Check, CheckCircle2, ChevronDown, ChevronRight, ChevronUp, Clock3, ExternalLink, GripVertical, Loader2, Map as MapIcon, MapPin, MapPinCheck, Navigation, Nfc, Phone, Radar, RefreshCw, Route as RouteIcon, Search, ShieldCheck, Sparkles, Star, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/i18n";
@@ -245,17 +245,6 @@ function driveMinutes(seconds: number) {
   return Math.max(1, Math.round(seconds / 60));
 }
 
-function monthGrid(month: Date) {
-  const year = month.getFullYear();
-  const monthIndex = month.getMonth();
-  const leadingDays = new Date(year, monthIndex, 1).getDay();
-  const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
-  return [
-    ...Array.from({ length: leadingDays }, () => null),
-    ...Array.from({ length: daysInMonth }, (_, index) => new Date(year, monthIndex, index + 1)),
-  ];
-}
-
 function statusLabel(status: ProspectingJob["status"], t: ReturnType<typeof useT<typeof prospectingMessages.en>>) {
   if (status === "queued") return t("statusQueued");
   if (status === "running") return t("statusRunning");
@@ -305,8 +294,6 @@ export function XpotProspecting() {
   const [builderOpen, setBuilderOpen] = useState(false);
   const [citySuggestionsOpen, setCitySuggestionsOpen] = useState(false);
   const [sectorSuggestionsOpen, setSectorSuggestionsOpen] = useState(false);
-  const [calendarMonth, setCalendarMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
-  const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null);
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
   const [showAllCandidates, setShowAllCandidates] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
@@ -361,10 +348,9 @@ export function XpotProspecting() {
   const todayJobs = useMemo(() => (jobsQuery.data ?? []).filter((job) => localDateKey(new Date(job.createdAt)) === today), [jobsQuery.data, today]);
   const todayRoutes = useMemo(() => (routesQuery.data ?? []).filter((route) => route.routeDate === today), [routesQuery.data, today]);
   const activeTodayRoute = todayRoutes.find((route) => ["draft", "published", "in_progress"].includes(route.status));
-  const routeSessionPending = todayJobs.some((job) => ["draft", "queued", "running"].includes(job.status)
+  const pendingTodayJob = todayJobs.find((job) => ["draft", "queued", "running"].includes(job.status)
     || ["pending", "building"].includes(job.routePlanningStatus));
   const dailyRouteLimitReached = todayJobs.length >= MAX_DAILY_PROSPECTING_SESSIONS;
-  const canStartRouteSession = !activeTodayRoute && !routeSessionPending && !dailyRouteLimitReached;
   const requestedJobId = useMemo(() => {
     const jobId = Number(routeParams.get("jobId"));
     return Number.isSafeInteger(jobId) && jobId > 0 ? jobId : null;
@@ -813,16 +799,22 @@ export function XpotProspecting() {
     || routesQuery.isLoading
     || (activeJobId !== null && detailsQuery.isLoading)
     || (activeRouteId !== null && routeQuery.isLoading);
-  const routeDateKeys = useMemo(() => new Set((routesQuery.data ?? []).map((route) => route.routeDate)), [routesQuery.data]);
-  const calendarDays = useMemo(() => monthGrid(calendarMonth), [calendarMonth]);
-  const weekdayLabels = useMemo(() => Array.from({ length: 7 }, (_, index) => new Intl.DateTimeFormat(t.locale, { weekday: "narrow" }).format(new Date(2024, 0, 7 + index))), [t.locale]);
-  const visibleRecentRoutes = useMemo(() => {
-    const routes = routesQuery.data ?? [];
-    return (selectedCalendarDate ? routes.filter((route) => route.routeDate === selectedCalendarDate) : routes).slice(0, 5);
-  }, [routesQuery.data, selectedCalendarDate]);
-  const recentRoutesTitle = selectedCalendarDate
-    ? t("routesForDate", { date: new Date(`${selectedCalendarDate}T12:00:00`).toLocaleDateString(t.locale, { month: "short", day: "numeric" }) })
-    : t("recentRoutes");
+  // Routes are built for the current day only (Google API cost), so the page
+  // offers today's route and lists the past ones instead of a calendar.
+  const routeHistory = useMemo(
+    () => (routesQuery.data ?? []).filter((route) => route.id !== activeTodayRoute?.id),
+    [routesQuery.data, activeTodayRoute?.id],
+  );
+  const routeSummaryLine = (route: ProspectingRoute) => t("viewRouteHint", {
+    status: routeStatusLabel(route.status, t, route.routeDate < today),
+    hours: Math.max(0.1, Math.round(route.totalDurationSeconds / 360) / 10),
+    distance: Math.max(0, route.totalDistanceMeters / 1609.344).toLocaleString(t.locale, { maximumFractionDigits: 1 }),
+  });
+  const openTodayAction = () => {
+    if (activeTodayRoute) openRoute(activeTodayRoute.id);
+    else if (pendingTodayJob) openJob(pendingTodayJob.id);
+    else setBuilderOpen(true);
+  };
 
   const submitPlanningStep = (event: React.FormEvent) => {
     event.preventDefault();
@@ -870,80 +862,47 @@ export function XpotProspecting() {
         <>
           {/* No top padding: the layout already spaces every page from the header. */}
           <section className="flex w-full pb-1">
-            <button type="button" onClick={() => setBuilderOpen(true)} disabled={!canStartRouteSession} className="flex min-h-[92px] w-full items-center gap-4 rounded-[22px] bg-gradient-to-br from-blue-500 to-indigo-500 p-4 text-left text-white shadow-[0_12px_34px_rgba(59,130,246,0.28)] transition-[filter,opacity,transform] enabled:active:scale-[0.985] disabled:cursor-not-allowed disabled:saturate-50 disabled:opacity-55 lg:min-h-20 lg:px-6">
-              <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/15"><RouteIcon className="h-7 w-7" /></span>
+            <button type="button" onClick={openTodayAction} disabled={!activeTodayRoute && !pendingTodayJob && dailyRouteLimitReached} className="flex min-h-[92px] w-full items-center gap-4 rounded-[22px] bg-gradient-to-br from-blue-500 to-indigo-500 p-4 text-left text-white shadow-[0_12px_34px_rgba(59,130,246,0.28)] transition-[filter,opacity,transform] enabled:active:scale-[0.985] disabled:cursor-not-allowed disabled:saturate-50 disabled:opacity-55 lg:min-h-20 lg:px-6">
+              <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/15">
+                {pendingTodayJob && !activeTodayRoute ? <Loader2 className="h-7 w-7 animate-spin" /> : activeTodayRoute ? <MapIcon className="h-7 w-7" /> : <RouteIcon className="h-7 w-7" />}
+              </span>
               <span className="min-w-0 flex-1">
-                <span className="block text-lg font-bold tracking-tight">{todayRoutes.some((route) => route.status === "completed") ? t("openAnotherRoute") : t("openBuilder")}</span>
-                <span className="mt-1 block text-sm leading-5 text-white/75">{dailyRouteLimitReached
-                  ? t("dailyRouteLimit", { count: MAX_DAILY_PROSPECTING_SESSIONS })
-                  : activeTodayRoute
-                    ? t("finishCurrentRoute")
-                    : routeSessionPending
-                      ? t("routeSessionPending")
-                      : t("openBuilderHint")}</span>
+                <span className="block text-lg font-bold tracking-tight">{activeTodayRoute
+                  ? t("viewRoute")
+                  : pendingTodayJob
+                    ? t("todayRoutePreparing")
+                    : todayRoutes.some((route) => route.status === "completed") ? t("openAnotherRoute") : t("openBuilder")}</span>
+                <span className="mt-1 block text-sm leading-5 text-white/75">{activeTodayRoute
+                  ? routeSummaryLine(activeTodayRoute)
+                  : pendingTodayJob
+                    ? t("todayRoutePreparingHint")
+                    : dailyRouteLimitReached
+                      ? t("dailyRouteLimit", { count: MAX_DAILY_PROSPECTING_SESSIONS })
+                      : t("todayOnlyHint")}</span>
               </span>
               <ChevronRight className="h-6 w-6 shrink-0 text-white/90" />
             </button>
           </section>
 
-          <section className="grid gap-7 border-t border-white/[0.08] pt-6 lg:grid-cols-[0.85fr_1.15fr] lg:gap-10">
-            <div>
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2 text-white/85">
-                  <CalendarDays className="h-4 w-4 text-indigo-300" />
-                  <h2 className="text-sm font-bold">{t("calendarTitle")}</h2>
-                </div>
-                <div className="flex items-center gap-1">
-                  <button type="button" aria-label={t("previousMonth")} onClick={() => { setCalendarMonth((month) => new Date(month.getFullYear(), month.getMonth() - 1, 1)); setSelectedCalendarDate(null); }} className="flex h-9 w-9 items-center justify-center rounded-full text-white/45 transition hover:bg-white/[0.06] hover:text-white"><ChevronLeft className="h-4 w-4" /></button>
-                  <p className="min-w-28 text-center text-xs font-semibold capitalize text-white/65">{calendarMonth.toLocaleDateString(t.locale, { month: "long", year: "numeric" })}</p>
-                  <button type="button" aria-label={t("nextMonth")} onClick={() => { setCalendarMonth((month) => new Date(month.getFullYear(), month.getMonth() + 1, 1)); setSelectedCalendarDate(null); }} className="flex h-9 w-9 items-center justify-center rounded-full text-white/45 transition hover:bg-white/[0.06] hover:text-white"><ChevronRight className="h-4 w-4" /></button>
-                </div>
-              </div>
-              <div className="mt-4 grid grid-cols-7 gap-y-1 text-center">
-                {weekdayLabels.map((label, index) => <span key={`${label}-${index}`} className="pb-2 text-[10px] font-bold uppercase text-white/30">{label}</span>)}
-                {calendarDays.map((date, index) => {
-                  if (!date) return <span key={`empty-${index}`} aria-hidden="true" className="h-10" />;
-                  const dateKey = localDateKey(date);
-                  const hasRoute = routeDateKeys.has(dateKey);
-                  const selected = selectedCalendarDate === dateKey;
-                  const isToday = dateKey === today;
-                  return (
-                    <button key={dateKey} type="button" aria-pressed={selected} onClick={() => setSelectedCalendarDate((current) => current === dateKey ? null : dateKey)} className={`relative mx-auto flex h-10 w-10 items-center justify-center rounded-full text-xs font-semibold transition ${selected ? "bg-indigo-500 text-white" : isToday ? "border border-indigo-300/50 text-indigo-100" : "text-white/55 hover:bg-white/[0.06] hover:text-white"}`}>
-                      {date.getDate()}
-                      {hasRoute ? <span className={`absolute bottom-1 h-1 w-1 rounded-full ${selected ? "bg-white" : "bg-sky-300"}`} aria-hidden="true" /> : null}
-                    </button>
-                  );
-                })}
-              </div>
+          <section className="border-t border-white/[0.08] pt-6">
+            <div className="flex min-h-9 items-center gap-2 text-white/85">
+              <RouteIcon className="h-4 w-4 text-indigo-300" />
+              <h2 className="text-sm font-bold">{t("routeHistory")}</h2>
             </div>
-
-            <div>
-              <div className="flex min-h-9 items-center justify-between gap-3">
-                <div className="flex items-center gap-2 text-white/85">
-                  <RouteIcon className="h-4 w-4 text-indigo-300" />
-                  <h2 className="text-sm font-bold">{recentRoutesTitle}</h2>
-                </div>
-                {selectedCalendarDate ? <button type="button" onClick={() => setSelectedCalendarDate(null)} className="text-xs font-semibold text-indigo-300 transition hover:text-indigo-200">{t("recentRoutes")}</button> : null}
+            {routeHistory.length ? (
+              <div className="mt-3 divide-y divide-white/[0.08] border-y border-white/[0.08]">
+                {routeHistory.map((route) => (
+                  <button key={route.id} type="button" onClick={() => openRoute(route.id)} className="flex min-h-[76px] w-full items-center gap-3 py-3 text-left transition hover:bg-white/[0.025]">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-300"><RouteIcon className="h-5 w-5" /></span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-2"><strong className="truncate capitalize text-sm text-white/90">{routeDisplayName(route, t.locale)}</strong><span className={`h-1.5 w-1.5 shrink-0 rounded-full ${route.status === "completed" ? "bg-emerald-400" : route.status === "cancelled" ? "bg-red-400" : "bg-sky-400"}`} /></span>
+                      <span className="mt-1 block truncate text-xs text-white/45">{routeSummaryLine(route)}</span>
+                    </span>
+                    <ChevronRight className="h-4 w-4 shrink-0 text-white/30" />
+                  </button>
+                ))}
               </div>
-              {visibleRecentRoutes.length ? (
-                <div className="mt-3 divide-y divide-white/[0.08] border-y border-white/[0.08]">
-                  {visibleRecentRoutes.map((route) => {
-                    const durationHours = Math.max(0.1, Math.round(route.totalDurationSeconds / 360) / 10);
-                    const distanceMiles = Math.max(0, route.totalDistanceMeters / 1609.344).toLocaleString(t.locale, { maximumFractionDigits: 1 });
-                    return (
-                      <button key={route.id} type="button" onClick={() => openRoute(route.id)} className="flex min-h-[76px] w-full items-center gap-3 py-3 text-left transition hover:bg-white/[0.025]">
-                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-300"><RouteIcon className="h-5 w-5" /></span>
-                        <span className="min-w-0 flex-1">
-                          <span className="flex items-center gap-2"><strong className="truncate capitalize text-sm text-white/90">{routeDisplayName(route, t.locale)}</strong><span className={`h-1.5 w-1.5 shrink-0 rounded-full ${route.status === "completed" ? "bg-emerald-400" : route.status === "cancelled" ? "bg-red-400" : "bg-sky-400"}`} /></span>
-                          <span className="mt-1 block truncate text-xs text-white/45">{routeStatusLabel(route.status, t, route.routeDate < today)} · {t("routeDuration", { hours: durationHours })} · {t("routeDistance", { distance: distanceMiles })}</span>
-                        </span>
-                        <ChevronRight className="h-4 w-4 shrink-0 text-white/30" />
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : <p className="mt-3 border-y border-white/[0.08] py-8 text-center text-sm text-white/40">{t("noRecentRoutes")}</p>}
-            </div>
+            ) : <p className="mt-3 border-y border-white/[0.08] py-8 text-center text-sm text-white/40">{t("noRouteHistory")}</p>}
           </section>
 
           <Dialog open={builderOpen} onOpenChange={setBuilderOpen}>
