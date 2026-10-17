@@ -26,12 +26,28 @@ import { chooseExpansionArea } from "./expansion.js";
 import { earliestStartedAt } from "./job-status.js";
 import { sendPushNotification } from "../push-notifications.js";
 import { processNextAutomaticRoute } from "./auto-route.js";
+import { recordSystemEvent, reportSystemEvent } from "../observability/events.js";
 
 const QUEUE_MAX_WAIT_MS = 24 * 60 * 60 * 1000;
 const STARTING_STALE_MS = START_TIMEOUT_MS + 2 * 60 * 1000;
 const DISPATCH_LOCK_KEY = 7_424_002;
 let ticking: Promise<void> | null = null;
 let lastDispatchedRepId: number | null = null;
+
+/** This process's worker loop, for Admin › System health. */
+const workerHealth = {
+  startedAt: null as Date | null,
+  pollMs: 30_000,
+  ticks: 0,
+  lastTickStartedAt: null as Date | null,
+  lastTickFinishedAt: null as Date | null,
+  lastTickDurationMs: null as number | null,
+  lastError: null as { message: string; at: Date } | null,
+  lastSuccessAt: null as Date | null,
+};
+export function getProspectingWorkerHealth() {
+  return { ...workerHealth, ticking: ticking !== null, engineConfigured: isEngineConfigured() };
+}
 
 function scorePlace(place: NormalizedPlace) {
   let score = 35;
@@ -127,7 +143,7 @@ async function updateJobStatus(jobId: number) {
       title: ready ? "Xpot is optimizing your route" : "Prospecting needs attention",
       body: ready ? "The search is complete. Xpot is now selecting and ordering today's stops." : "Open Leads to review the failed search and retry it.",
       href: `/route?jobId=${jobId}`,
-    }).catch((error) => console.error("[prospecting push] delivery failed:", error));
+    }).catch((error) => reportSystemEvent({ level: "warn", source: "push", message: "Prospecting push delivery failed.", error, repId: previousJob.repId, context: { jobId } }));
   }
 }
 
@@ -188,6 +204,12 @@ async function saveResults(run: ProspectingRun, places: NormalizedPlace[]) {
 }
 
 async function failRun(run: ProspectingRun, errorMessage: string) {
+  await recordSystemEvent({
+    source: "prospecting.engine",
+    message: errorMessage,
+    repId: run.repId,
+    context: { jobId: run.jobId, runId: run.id, query: run.query, location: run.location, engineJobId: run.engineJobId, previousStatus: run.status },
+  });
   await db.update(prospectingRuns).set({ status: "failed", progress: 0, errorMessage, completedAt: new Date(), updatedAt: new Date() })
     .where(and(eq(prospectingRuns.id, run.id), inArray(prospectingRuns.status, ["starting", "running"])));
   await updateJobStatus(run.jobId);
@@ -272,6 +294,13 @@ async function dispatchNextRun() {
       .where(and(eq(prospectingRuns.id, run.id), eq(prospectingRuns.status, "starting")));
   } catch (error) {
     const message = error instanceof Error ? error.message : "The prospecting engine could not start the search.";
+    await recordSystemEvent({
+      source: "prospecting.engine",
+      message: `Could not start a search: ${message}`,
+      error,
+      repId: run.repId,
+      context: { jobId: run.jobId, runId: run.id, query: run.query, location: run.location },
+    });
     await db.update(prospectingRuns).set({ status: "failed", errorMessage: message, completedAt: new Date(), updatedAt: new Date() })
       .where(eq(prospectingRuns.id, run.id));
   }
@@ -291,7 +320,20 @@ async function tick() {
 
 export function tickProspectingQueueSafely() {
   if (ticking) return ticking;
-  ticking = tick().catch((error) => console.error("[prospecting queue]", error)).finally(() => { ticking = null; });
+  const started = new Date();
+  workerHealth.ticks += 1;
+  workerHealth.lastTickStartedAt = started;
+  ticking = tick()
+    .then(() => { workerHealth.lastSuccessAt = new Date(); })
+    .catch(async (error) => {
+      workerHealth.lastError = { message: error instanceof Error ? error.message : String(error), at: new Date() };
+      await recordSystemEvent({ source: "prospecting.worker", message: "The prospecting queue tick failed.", error });
+    })
+    .finally(() => {
+      workerHealth.lastTickFinishedAt = new Date();
+      workerHealth.lastTickDurationMs = Date.now() - started.getTime();
+      ticking = null;
+    });
   return ticking;
 }
 
@@ -332,8 +374,10 @@ export async function retryFailedProspectingRuns(jobId: number, repId: number) {
 }
 
 export function startProspectingWorker() {
-  void tickProspectingQueueSafely();
   const pollMs = positivePollMs(process.env.PROSPECTING_ENGINE_POLL_MS);
+  workerHealth.startedAt = new Date();
+  workerHealth.pollMs = pollMs;
+  void tickProspectingQueueSafely();
   const timer = setInterval(() => void tickProspectingQueueSafely(), pollMs);
   timer.unref();
   return () => clearInterval(timer);

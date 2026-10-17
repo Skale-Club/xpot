@@ -6,8 +6,11 @@ import { prospectingMessages } from "@/i18n/messages/prospecting";
 import {
   persistentProspectingJob,
   prospectingProgress,
+  serverNowMs,
   type ProspectingProgressStage,
+  type ProspectingTiming,
 } from "@/pages/xpot/prospectingUi";
+import { useNow } from "@/hooks/use-now";
 
 type ProspectingJob = {
   id: number;
@@ -19,8 +22,9 @@ type ProspectingJob = {
 
 type ProspectingJobDetails = {
   job: ProspectingJob;
-  runs: Array<{ status: string; progress: number; wave: number }>;
+  runs: Array<{ status: string; progress: number; wave: number; startedAt?: string | null }>;
   summary: { eligible: number; excluded: number };
+  timing?: ProspectingTiming;
 };
 
 type ProspectingRoute = { id: number; jobId: number | null; status: string; createdAt: string | null };
@@ -106,6 +110,8 @@ export function PersistentRouteProgress({ collapsed = false, className = "" }: {
     },
   });
   const details = detailsQuery.data;
+  // The bar follows elapsed time between polls, so it moves while a search runs.
+  const now = useNow(5_000, details?.job.status === "running");
 
   if (!shellItem || !details) return null;
 
@@ -115,6 +121,8 @@ export function PersistentRouteProgress({ collapsed = false, className = "" }: {
     eligibleCount: details.summary.eligible,
     hasRoute: Boolean(shellItem.route),
     routePlanningStatus: details.job.routePlanningStatus,
+    typicalRunMs: details.timing?.typicalRunMs,
+    nowMs: serverNowMs(details.timing, detailsQuery.dataUpdatedAt, now),
   });
   const status = stageStatus(progress.stage, t);
   const destination = shellItem.route

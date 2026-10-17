@@ -8,6 +8,10 @@ import {
   reorderIdsAroundTarget,
   routeDisplayName,
   selectableCandidateIds,
+  activeRunTiming,
+  estimatedRunPercent,
+  serverNowMs,
+  wholeMinutes,
 } from "../client/src/pages/xpot/prospectingUi.js";
 import { trimRoutePathToStops } from "../client/src/pages/xpot/components/RoutePreviewMap.js";
 
@@ -52,6 +56,34 @@ describe("prospecting UI helpers", () => {
       .toEqual({ stage: "failed", percent: 100 });
     expect(prospectingProgress({ jobStatus: "completed", runs: [], eligibleCount: 8, hasRoute: true }))
       .toEqual({ stage: "route", percent: 100 });
+  });
+
+  it("moves a running search by its elapsed time against the usual duration", () => {
+    const min = 60_000;
+    expect(estimatedRunPercent(0, 6 * min)).toBe(0);
+    expect(estimatedRunPercent(3 * min, 6 * min)).toBe(60);
+    expect(estimatedRunPercent(6 * min, 6 * min)).toBe(82);
+    expect(estimatedRunPercent(60 * min, 6 * min)).toBe(95);
+    const startedAt = "2026-10-17T13:55:56.000Z";
+    const nowMs = Date.parse(startedAt) + 3 * min;
+    const runs = [{ status: "running", progress: 50, wave: 0, startedAt }];
+    // The engine's flat "50" no longer decides it: 3 of 6 minutes is 14 + 60 * 0.5.
+    expect(prospectingProgress({ jobStatus: "running", runs, eligibleCount: 0, hasRoute: false, typicalRunMs: 6 * min, nowMs }))
+      .toEqual({ stage: "searching", percent: 44 });
+    expect(prospectingProgress({ jobStatus: "running", runs, eligibleCount: 0, hasRoute: false, typicalRunMs: 6 * min, nowMs: nowMs + 2 * min }).percent)
+      .toBeGreaterThan(44);
+    // Without history it keeps the engine's coarse value.
+    expect(prospectingProgress({ jobStatus: "running", runs, eligibleCount: 0, hasRoute: false, typicalRunMs: null, nowMs }).percent).toBe(39);
+    expect(activeRunTiming(runs, 6 * min, nowMs)).toEqual({ elapsedMs: 3 * min, typicalMs: 6 * min });
+    expect(wholeMinutes(10_000)).toBe(1);
+    expect(wholeMinutes(5.2 * min)).toBe(5);
+  });
+
+  it("measures elapsed time on the server's clock", () => {
+    const timing = { typicalRunMs: 1, serverNow: "2026-10-17T14:00:00.000Z" };
+    // Fetched at local 1000, now local 6000: five seconds after the server's answer.
+    expect(serverNowMs(timing, 1000, 6000)).toBe(Date.parse(timing.serverNow) + 5000);
+    expect(serverNowMs(undefined, 1000, 6000)).toBe(6000);
   });
 
   it("keeps active and recent unrouted searches resumable from the shell", () => {

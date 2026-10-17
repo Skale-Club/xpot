@@ -2,6 +2,7 @@ import { Component, type ErrorInfo, type ReactNode } from "react";
 import { AlertTriangle, RotateCw } from "lucide-react";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
+import { reportClientError } from "@/lib/errorReporting";
 
 function CrashCard() {
   const t = useT(commonMessages);
@@ -39,6 +40,7 @@ export class ScreenErrorBoundary extends Component<{ children: ReactNode; resetK
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error("[screen crashed]", error, info.componentStack);
+    reportClientError(error, "render", info.componentStack ?? undefined);
   }
 
   componentDidUpdate(prev: { resetKey: string }) {

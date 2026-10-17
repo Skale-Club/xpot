@@ -6,6 +6,7 @@ import {
   DollarSign,
   Factory,
   FileText,
+  HeartPulse,
   LayoutDashboard,
   ListTodo,
   Nfc,
@@ -45,7 +46,7 @@ export const starts = (prefix: string) => (path: string) => path === prefix || p
 
 /** Admin sections that are really Visits management, and the ones that belong to the account. */
 const VISITS_ADMIN = ["overview", "products", "settings"] as const;
-export const ORGANIZATION_SECTIONS = ["reps", "integrations", "branding", "landing", "xphere"] as const;
+export const ORGANIZATION_SECTIONS = ["reps", "integrations", "branding", "landing", "xphere", "health"] as const;
 
 /** Which part of the app a path belongs to. */
 export function contextOfPath(path: string): ShellContext {
@@ -92,7 +93,8 @@ type ShellKey =
   | "orgPeople"
   | "orgIntegrations"
   | "orgBranding"
-  | "orgLanding";
+  | "orgLanding"
+  | "orgSystemHealth";
 
 export type Viewer = {
   /** Manager or admin: sees each module's Manage group and the Organization pages. */
@@ -171,5 +173,6 @@ export function organizationItems(l: Labels, viewer: Pick<Viewer, "isAdmin">): N
     { href: "/admin/integrations", label: l.shell("orgIntegrations"), icon: Plug, match: (p) => section("integrations")(p) || section("xphere")(p), adminOnly: true },
     { href: "/admin/branding", label: l.shell("orgBranding"), icon: Palette, match: section("branding"), adminOnly: true },
     { href: "/admin/landing", label: l.shell("orgLanding"), icon: FileText, match: section("landing"), adminOnly: true },
+    { href: "/admin/health", label: l.shell("orgSystemHealth"), icon: HeartPulse, match: section("health"), adminOnly: true },
   ]);
 }

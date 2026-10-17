@@ -4,6 +4,7 @@ import { db } from "./db.js";
 import { salesPushSubscriptions } from "#shared/schema.js";
 import type { z } from "zod";
 import type { xpotPushSubscriptionSchema } from "#shared/xpot.js";
+import { reportSystemEvent } from "./observability/events.js";
 
 type PushSubscriptionInput = z.infer<typeof xpotPushSubscriptionSchema>;
 
@@ -50,7 +51,7 @@ export async function sendPushNotification(repId: number, payload: { title: stri
       if (statusCode === 404 || statusCode === 410) {
         await db.delete(salesPushSubscriptions).where(eq(salesPushSubscriptions.id, subscription.id));
       } else {
-        console.error("[push notification] delivery failed:", error);
+        reportSystemEvent({ level: "warn", source: "push", message: "Push delivery failed.", error, repId, context: { statusCode: statusCode ?? null } });
       }
     }
   }));

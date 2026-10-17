@@ -192,9 +192,48 @@ function numberValue(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function firstEmail(value: unknown): string | null {
+/**
+ * Site templates and scraped page assets fill the engine's "emails" column with
+ * addresses nobody reads (user@domain.com, info@example.com, logo@2x.png). They
+ * would score as "email available", so they are dropped here.
+ */
+const PLACEHOLDER_EMAIL_DOMAINS = new Set([
+  "example.com", "example.org", "example.net", "domain.com", "yourdomain.com", "mydomain.com",
+  "email.com", "test.com", "yoursite.com", "yourwebsite.com", "website.com", "company.com",
+  "sentry.io", "sentry.wixpress.com", "sentry-next.wixpress.com",
+]);
+const PLACEHOLDER_EMAIL_USERS = new Set(["user", "username", "your", "yourname", "name", "email", "youremail", "example", "test", "johndoe", "john.doe", "janedoe", "jane.doe"]);
+const ASSET_SUFFIX = /\.(png|jpe?g|gif|webp|svg|bmp|ico|css|js)$/i;
+
+export function isPlaceholderEmail(email: string) {
+  const [user = "", domain = ""] = email.toLowerCase().split("@");
+  return PLACEHOLDER_EMAIL_DOMAINS.has(domain) || PLACEHOLDER_EMAIL_USERS.has(user) || ASSET_SUFFIX.test(domain);
+}
+
+export function firstEmail(value: unknown): string | null {
   const text = typeof value === "string" ? value : Array.isArray(value) ? value.join(" ") : "";
-  return text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0]?.toLowerCase() ?? null;
+  const matches = text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) ?? [];
+  return matches.map((email) => email.toLowerCase()).find((email) => !isPlaceholderEmail(email)) ?? null;
+}
+
+/**
+ * Listing farms copy Google Maps businesses onto throwaway domains
+ * (mapstuk.top/the-barber-lounge-…) and put them in the website field. Such a
+ * link is not the business's site, so the place counts as having none; the raw
+ * value stays in rawPayload.
+ */
+const SPAM_WEBSITE_TLDS = new Set(["top"]);
+
+export function businessWebsite(value: unknown): string | null {
+  const raw = first(value);
+  if (!raw) return null;
+  try {
+    const host = new URL(/^https?:\/\//i.test(raw) ? raw : `http://${raw}`).hostname.toLowerCase();
+    if (SPAM_WEBSITE_TLDS.has(host.split(".").pop() ?? "")) return null;
+  } catch {
+    return null;
+  }
+  return raw;
 }
 
 export function parseEngineResults(csv: string, limit: number): NormalizedPlace[] {
@@ -231,7 +270,7 @@ export function parseEngineResults(csv: string, limit: number): NormalizedPlace[
         lng: numberValue(raw.longitude),
         phone: first(raw.phone),
         email: firstEmail(raw.emails),
-        website: first(raw.website),
+        website: businessWebsite(raw.website),
         industry: first(raw.category),
         rating: numberValue(raw.review_rating),
         reviewCount: numberValue(raw.review_count),
