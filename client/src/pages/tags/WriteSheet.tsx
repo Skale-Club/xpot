@@ -36,7 +36,7 @@ interface Props {
 type Phase = "idle" | "writing" | "verifying" | "saving" | "done" | "error";
 
 /** NFC Tools on iPhone: the record to add depends on what is written. */
-function manualSteps(value: string) {
+export function manualSteps(value: string) {
   const kind = contentKindOf(value);
   if (kind === "vcard") return ["manual1", "manual2", "manual3Contact", "manual4Contact", "manual5"] as const;
   if (kind === "email" || kind === "phone") return ["manual1", "manual2", "manual3Uri", "manual4", "manual5"] as const;
