@@ -17,6 +17,19 @@ export const TODAY_PROSPECTING_POLICY = {
 export const PROSPECTING_SHIFT_MINUTES = [120, 240, 360, 480, 600, 720] as const;
 
 /**
+ * Same-day routes end by 10 PM local time: barbershops and restaurants still
+ * take evening visits, but past that hour the stops would be closed.
+ */
+export const PROSPECTING_DAY_END_HOUR = 22;
+
+/** Minutes left between `now` and the day's end, in the clock `now` is read in. */
+export function minutesUntilProspectingDayEnd(now: Date) {
+  const end = new Date(now);
+  end.setHours(PROSPECTING_DAY_END_HOUR, 0, 0, 0);
+  return Math.max(0, Math.floor((end.getTime() - now.getTime()) / 60_000));
+}
+
+/**
  * Route discovery and optimization are paid operations. A rep may finish a
  * route and build another one on the same local date, but the daily ceiling
  * keeps retries and automated clients from turning that into an unbounded

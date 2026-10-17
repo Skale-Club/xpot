@@ -37,6 +37,7 @@ import { xpotPushSubscriptionSchema } from "#shared/xpot.js";
 import { pushPublicKey, savePushSubscription } from "../../push-notifications.js";
 import { retryAutomaticRoute } from "../../prospecting/auto-route.js";
 import { haversineMeters } from "../../prospecting/route-optimizer.js";
+import { openWindowsOn, secondsUntilDayEnd } from "../../prospecting/opening-hours.js";
 import { ensureProspectingCandidateLead } from "../../prospecting/lead-materializer.js";
 import { publishProspectingRouteForRep } from "../../prospecting/route-publisher.js";
 
@@ -347,6 +348,9 @@ export function createProspectingRouter() {
           lng: prospectingCandidates.lng,
           score: prospectingCandidates.score,
           scoreReasons: prospectingCandidates.scoreReasons,
+          // Only the two fields of the raw payload the schedule needs.
+          openHours: sql<string | null>`${prospectingCandidates.rawPayload}->>'open_hours'`,
+          timeZone: sql<string | null>`${prospectingCandidates.rawPayload}->>'timezone'`,
         }).from(prospectingCandidates).where(and(
           eq(prospectingCandidates.repId, actor.rep.id),
           notInArray(prospectingCandidates.status, ["discarded", "visited"]),
@@ -378,6 +382,7 @@ export function createProspectingRouter() {
         score: candidate.score,
         scoreReasons: candidate.scoreReasons,
         serviceDurationSeconds: input.defaultVisitMinutes * 60,
+        openWindows: openWindowsOn(candidate, new Date(input.plannedStartAt)),
       });
       if (candidate.leadId) routedLeadIds.add(candidate.leadId);
       if (candidate.googlePlaceId) routedPlaceIds.add(candidate.googlePlaceId);
@@ -387,6 +392,9 @@ export function createProspectingRouter() {
     }
 
     const plannedStartAt = new Date(input.plannedStartAt);
+    // Same-day routes end by 10 PM where the businesses are.
+    const dayLeftSeconds = secondsUntilDayEnd(discovered.find((candidate) => candidate.timeZone)?.timeZone, plannedStartAt);
+    const shiftDurationSeconds = Math.min(input.shiftDurationMinutes * 60, dayLeftSeconds ?? Infinity);
     let organizationId: number;
     try {
       organizationId = await organizationIdForRep(actor.rep.id);
@@ -424,7 +432,7 @@ export function createProspectingRouter() {
 
         const optimized = await optimizeRouteWithGoogle({
           plannedStartAt,
-          shiftDurationSeconds: input.shiftDurationMinutes * 60,
+          shiftDurationSeconds,
           maxStops: input.maxStops,
           candidates,
         });

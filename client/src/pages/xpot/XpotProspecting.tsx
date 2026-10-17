@@ -35,7 +35,7 @@ import {
   type ProspectingTiming,
 } from "./prospectingUi";
 import { useNow } from "@/hooks/use-now";
-import { MAX_DAILY_PROSPECTING_SESSIONS } from "@shared/prospecting";
+import { MAX_DAILY_PROSPECTING_SESSIONS, PROSPECTING_DAY_END_HOUR, PROSPECTING_SHIFT_MINUTES, minutesUntilProspectingDayEnd } from "@shared/prospecting";
 
 type ProspectingJob = {
   id: number;
@@ -118,6 +118,7 @@ type PlanningStep = 0 | 1 | 2 | 3;
 
 const ROUTE_DRAFT_KEY = "xpot:route-planning-draft";
 const MAX_PROSPECTING_CITIES = 5;
+const SHIFT_HOUR_OPTIONS = PROSPECTING_SHIFT_MINUTES.map((minutes) => minutes / 60);
 const SUGGESTIONS_GAP = 8;
 const SUGGESTIONS_VIEWPORT_GAP = 8;
 const SUGGESTIONS_MAX_HEIGHT = 280;
@@ -213,7 +214,7 @@ function loadRouteDraft(): { city: string; cities: string[]; sectors: string; sh
       city: migratedCities.length ? "" : legacyCity,
       cities: migratedCities,
       sectors: typeof saved?.sectors === "string" ? saved.sectors : "",
-      shiftHours: [2, 4, 6, 8, 10, 12].includes(saved?.shiftHours) ? saved.shiftHours : 8,
+      shiftHours: SHIFT_HOUR_OPTIONS.includes(saved?.shiftHours) ? saved.shiftHours : 8,
     };
   } catch {
     return fallback;
@@ -292,6 +293,21 @@ export function XpotProspecting() {
   const [shiftHours, setShiftHours] = useState(initialDraft.shiftHours);
   const [planningStep, setPlanningStep] = useState<PlanningStep>(0);
   const [builderOpen, setBuilderOpen] = useState(false);
+  // Routes are same-day and end by 10 PM, so later in the day the longer
+  // shifts gray out. The clock only ticks while the planner is open.
+  const plannerNow = useNow(60_000, builderOpen);
+  const dayEndLabel = useMemo(() => {
+    const end = new Date(plannerNow);
+    end.setHours(PROSPECTING_DAY_END_HOUR, 0, 0, 0);
+    return end.toLocaleTimeString(t.locale, { hour: "numeric", minute: "2-digit" });
+  }, [plannerNow, t.locale]);
+  const minutesLeftToday = minutesUntilProspectingDayEnd(new Date(plannerNow));
+  const availableShiftHours = SHIFT_HOUR_OPTIONS.filter((hours) => hours * 60 <= minutesLeftToday);
+  const latestShiftHours = availableShiftHours[availableShiftHours.length - 1];
+  useEffect(() => {
+    if (latestShiftHours !== undefined && shiftHours > latestShiftHours) setShiftHours(latestShiftHours);
+  }, [latestShiftHours, shiftHours]);
+  const shiftFitsToday = availableShiftHours.includes(shiftHours);
   const [citySuggestionsOpen, setCitySuggestionsOpen] = useState(false);
   const [sectorSuggestionsOpen, setSectorSuggestionsOpen] = useState(false);
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
@@ -789,12 +805,12 @@ export function XpotProspecting() {
     if (routeDetails) ensureStopLead.mutate({ routeId: routeDetails.route.id, stopId: stop.id, destination: "company" });
   };
   const planningTitles = [t("cityStepTitle"), t("sectorsStepTitle"), t("durationStepTitle"), t("reviewStepTitle")];
-  const planningBodies = [t("cityStepBody"), t("sectorsStepBody"), t("durationStepBody"), t("reviewStepBody")];
+  const planningBodies = [t("cityStepBody"), t("sectorsStepBody"), t("durationStepBody", { time: dayEndLabel }), t("reviewStepBody")];
   const canAdvancePlanning = planningStep === 0
     ? cities.length > 0
     : planningStep === 1
-      ? parsedSearches.length > 0 && parsedSectors.overflow === 0
-      : true;
+      ? (parsedSearches.length > 0 || sectorDraft.trim().length > 0) && parsedSectors.overflow === 0
+      : shiftFitsToday;
   const loadingExistingPlan = jobsQuery.isLoading
     || routesQuery.isLoading
     || (activeJobId !== null && detailsQuery.isLoading)
@@ -819,6 +835,8 @@ export function XpotProspecting() {
   const submitPlanningStep = (event: React.FormEvent) => {
     event.preventDefault();
     if (!canAdvancePlanning) return;
+    // A typed but not yet added sector counts, so the in-field button never drops it.
+    if (planningStep === 1 && sectorDraft.trim()) addSector(sectorDraft, false);
     if (planningStep < 3) {
       setPlanningStep((planningStep + 1) as PlanningStep);
       return;
@@ -839,14 +857,28 @@ export function XpotProspecting() {
     setCities((current) => current.filter((value) => value !== label));
   };
 
-  const addSector = (value = sectorDraft) => {
+  const addSector = (value = sectorDraft, refocus = true) => {
     if (!value.trim() || parsedSearches.length >= MAX_PROSPECTING_SECTORS) return;
     const next = parseSectorSearches([sectors, value].filter(Boolean).join(", ")).searches;
     setSectors(next.map((search) => search.query).join(", "));
     setSectorDraft("");
     setSectorSuggestionsOpen(false);
-    window.requestAnimationFrame(() => sectorInputRef.current?.focus());
+    if (refocus) window.requestAnimationFrame(() => sectorInputRef.current?.focus());
   };
+
+  // On phones the keyboard covers the dialog footer, so the text steps also
+  // carry their Continue button inside the field, right next to what is typed.
+  // mousedown is cancelled so the input keeps focus: a blur would close the
+  // keyboard, shift the layout and make the tap miss.
+  const inFieldContinue = canAdvancePlanning ? (
+    <button
+      type="submit"
+      onMouseDown={(event) => event.preventDefault()}
+      className="absolute right-2 top-1/2 flex h-10 -translate-y-1/2 touch-manipulation items-center gap-1 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 pl-3.5 pr-2.5 text-sm font-bold text-white shadow-[0_6px_18px_rgba(79,70,229,0.35)] transition active:scale-[0.96]"
+    >
+      {t("continue")}<ChevronRight className="h-4 w-4" />
+    </button>
+  ) : null;
 
   const removeSector = (niche: string) => {
     setSectors(parsedSearches.filter((search) => search.niche !== niche).map((search) => search.query).join(", "));
@@ -957,8 +989,9 @@ export function XpotProspecting() {
                       aria-controls="prospecting-city-suggestions"
                       aria-expanded={citySuggestionsOpen && cities.length < MAX_PROSPECTING_CITIES && deferredCity.length >= 2}
                       aria-describedby="prospecting-cities-help"
-                      className="h-14 w-full rounded-2xl border border-white/15 bg-black/20 pl-12 pr-4 text-base text-white outline-none transition placeholder:text-white/30 focus:border-indigo-300/70 focus:bg-black/30 disabled:cursor-not-allowed"
+                      className={`h-14 w-full rounded-2xl border border-white/15 bg-black/20 pl-12 text-base text-white outline-none transition placeholder:text-white/30 focus:border-indigo-300/70 focus:bg-black/30 disabled:cursor-not-allowed ${inFieldContinue ? "pr-36" : "pr-4"}`}
                     />
+                    {inFieldContinue}
                     <FloatingSuggestions
                       anchorRef={cityInputRef}
                       id="prospecting-city-suggestions"
@@ -1041,8 +1074,9 @@ export function XpotProspecting() {
                       aria-controls="prospecting-sector-suggestions"
                       aria-expanded={sectorSuggestionsOpen && sectorFragment.length >= 2 && (sectorPlacesQuery.isFetching || sectorPlacesQuery.isError || googleSectorSuggestions.length > 0)}
                       aria-describedby="prospecting-sectors-help"
-                      className="h-14 min-w-0 flex-1 bg-transparent pl-12 pr-4 text-base text-white outline-none placeholder:text-white/30 disabled:cursor-not-allowed"
+                      className={`h-14 min-w-0 flex-1 bg-transparent pl-12 text-base text-white outline-none placeholder:text-white/30 disabled:cursor-not-allowed ${inFieldContinue ? "pr-36" : "pr-4"}`}
                     />
+                    {inFieldContinue}
                     <FloatingSuggestions
                       anchorRef={sectorAnchorRef}
                       id="prospecting-sector-suggestions"
@@ -1100,12 +1134,15 @@ export function XpotProspecting() {
                 <fieldset className="mt-8">
                   <legend className="sr-only">{t("shiftLabel")}</legend>
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                    {[2, 4, 6, 8, 10, 12].map((hours) => (
-                      <button key={hours} type="button" aria-pressed={shiftHours === hours} onClick={() => setShiftHours(hours)} className={`min-h-16 touch-manipulation rounded-2xl border px-3 py-3 text-base font-bold transition ${shiftHours === hours ? "border-indigo-300/70 bg-indigo-500/25 text-white shadow-[0_0_24px_rgba(99,102,241,0.12)]" : "border-white/12 bg-black/10 text-white/55 hover:bg-white/[0.06] hover:text-white/80"}`}>
+                    {SHIFT_HOUR_OPTIONS.map((hours) => (
+                      <button key={hours} type="button" aria-pressed={shiftHours === hours} disabled={!availableShiftHours.includes(hours)} onClick={() => setShiftHours(hours)} className={`min-h-16 touch-manipulation rounded-2xl border px-3 py-3 text-base font-bold transition disabled:cursor-not-allowed disabled:border-white/[0.06] disabled:bg-transparent disabled:text-white/20 disabled:line-through ${shiftHours === hours ? "border-indigo-300/70 bg-indigo-500/25 text-white shadow-[0_0_24px_rgba(99,102,241,0.12)]" : "border-white/12 bg-black/10 text-white/55 enabled:hover:bg-white/[0.06] enabled:hover:text-white/80"}`}>
                         {t("shiftHours", { hours })}
                       </button>
                     ))}
                   </div>
+                  {availableShiftHours.length ? null : (
+                    <p className="mt-4 rounded-2xl bg-amber-400/10 px-4 py-3 text-sm leading-6 text-amber-100/80" role="status">{t("dayOverHint", { time: dayEndLabel })}</p>
+                  )}
                 </fieldset>
               ) : null}
 
