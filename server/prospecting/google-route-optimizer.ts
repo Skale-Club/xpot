@@ -1,6 +1,8 @@
 import { GoogleAuth } from "google-auth-library";
 import {
   optimizeRouteHeuristic,
+  usableOpenWindows,
+  withoutClosedCandidates,
   type OptimizeRouteInput,
   type OptimizeRouteResult,
   type OptimizedStop,
@@ -80,18 +82,28 @@ export function buildGoogleOptimizeToursRequest(input: OptimizeRouteInput) {
     model: {
       globalStartTime: googleTimestamp(input.plannedStartAt),
       globalEndTime: googleTimestamp(endAt),
-      shipments: input.candidates.map((candidate) => ({
-        label: String(candidate.id),
-        loadDemands: { visit_count: { amount: "1" } },
-        deliveries: [{
-          arrivalLocation: { latitude: candidate.lat, longitude: candidate.lng },
-          duration: `${candidate.serviceDurationSeconds}s`,
+      shipments: input.candidates.map((candidate) => {
+        // A visit starts early enough to end before the business closes.
+        const openWindows = usableOpenWindows(candidate, input.plannedStartAt, endAt);
+        return {
           label: String(candidate.id),
-        }],
-        // A missed prospect is expensive enough that the solver first maximizes
-        // useful visits, then minimizes road time. Score resolves close choices.
-        penaltyCost: 100_000 + candidate.score * 100,
-      })),
+          loadDemands: { visit_count: { amount: "1" } },
+          deliveries: [{
+            arrivalLocation: { latitude: candidate.lat, longitude: candidate.lng },
+            duration: `${candidate.serviceDurationSeconds}s`,
+            label: String(candidate.id),
+            ...(openWindows?.length ? {
+              timeWindows: openWindows.map((window) => ({
+                startTime: googleTimestamp(window.start),
+                endTime: googleTimestamp(new Date(window.end.getTime() - candidate.serviceDurationSeconds * 1000)),
+              })),
+            } : {}),
+          }],
+          // A missed prospect is expensive enough that the solver first maximizes
+          // useful visits, then minimizes road time. Score resolves close choices.
+          penaltyCost: 100_000 + candidate.score * 100,
+        };
+      }),
       vehicles: [{
         label: "xpot-daily-route",
         // Omitted for selling routes: travel from wherever the rep currently
@@ -166,9 +178,13 @@ export function parseGoogleOptimizeToursResponse(
   };
 }
 
-export async function optimizeRouteWithGoogle(input: OptimizeRouteInput): Promise<OptimizeRouteResult> {
+export async function optimizeRouteWithGoogle(routeInput: OptimizeRouteInput): Promise<OptimizeRouteResult> {
   const config = getGoogleRouteOptimizationConfig();
-  if (!config) return optimizeRouteHeuristic(input);
+  if (!config) return optimizeRouteHeuristic(routeInput);
+  // A shipment without time windows is unconstrained, so businesses closed all
+  // through the route never reach Google.
+  const { input, closedIds } = withoutClosedCandidates(routeInput);
+  if (!input.candidates.length) return optimizeRouteHeuristic(routeInput);
   try {
     const auth = new GoogleAuth({
       scopes: [ROUTE_OPTIMIZATION_SCOPE],
@@ -181,7 +197,8 @@ export async function optimizeRouteWithGoogle(input: OptimizeRouteInput): Promis
       data: buildGoogleOptimizeToursRequest(input),
       timeout: REQUEST_TIMEOUT_MS,
     });
-    return parseGoogleOptimizeToursResponse(input, response.data);
+    const result = parseGoogleOptimizeToursResponse(input, response.data);
+    return { ...result, excludedCandidateIds: [...result.excludedCandidateIds, ...closedIds] };
   } catch (error) {
     throw new GoogleRouteOptimizationError("Google could not optimize today's route.", error);
   }

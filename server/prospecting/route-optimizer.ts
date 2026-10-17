@@ -1,5 +1,7 @@
 export type GeoPoint = { lat: number; lng: number };
 
+export type TimeWindow = { start: Date; end: Date };
+
 export type RouteCandidate = GeoPoint & {
   id: number;
   leadId: number | null;
@@ -9,6 +11,11 @@ export type RouteCandidate = GeoPoint & {
   score: number;
   scoreReasons: string[];
   serviceDurationSeconds: number;
+  /**
+   * When the business is open that day. A visit must start and finish inside
+   * one window. Absent or null when the hours are unknown; empty when closed.
+   */
+  openWindows?: TimeWindow[] | null;
 };
 
 export type OptimizedStop = RouteCandidate & {
@@ -54,6 +61,60 @@ export function haversineMeters(a: GeoPoint, b: GeoPoint): number {
     + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
   return Math.round(2 * EARTH_RADIUS_METERS * Math.asin(Math.sqrt(h)));
 }
+/** How long the heuristic may wait at the door for a business to open. */
+const MAX_WAIT_SECONDS = 30 * 60;
+
+/**
+ * The open windows a visit could use between `from` and `until`, trimmed to
+ * that span. `null` when the business has no known hours (no constraint).
+ */
+export function usableOpenWindows(candidate: RouteCandidate, from: Date, until: Date): TimeWindow[] | null {
+  if (!candidate.openWindows) return null;
+  const serviceMs = candidate.serviceDurationSeconds * 1000;
+  const trimmed = candidate.openWindows
+    .map((window) => ({
+      start: Math.max(window.start.getTime(), from.getTime()),
+      end: Math.min(window.end.getTime(), until.getTime()),
+    }))
+    .filter((window) => window.end > window.start)
+    .sort((a, b) => a.start - b.start);
+  // Sorted and non-overlapping, as Google's time windows require.
+  const merged: Array<{ start: number; end: number }> = [];
+  for (const window of trimmed) {
+    const last = merged[merged.length - 1];
+    if (last && window.start <= last.end) last.end = Math.max(last.end, window.end);
+    else merged.push({ ...window });
+  }
+  return merged
+    .filter((window) => window.end - window.start >= serviceMs)
+    .map((window) => ({ start: new Date(window.start), end: new Date(window.end) }));
+}
+
+/** Splits off the businesses that are closed for the whole route window. */
+export function withoutClosedCandidates(input: OptimizeRouteInput) {
+  const until = new Date(input.plannedStartAt.getTime() + input.shiftDurationSeconds * 1000);
+  const open: RouteCandidate[] = [];
+  const closedIds: number[] = [];
+  for (const candidate of input.candidates) {
+    const windows = usableOpenWindows(candidate, input.plannedStartAt, until);
+    if (windows && !windows.length) closedIds.push(candidate.id);
+    else open.push(candidate);
+  }
+  return { input: { ...input, candidates: open }, closedIds };
+}
+
+/** When a visit arriving at `arrival` can start, or null when the business will not be open for it. */
+function visitStartFor(candidate: RouteCandidate, arrival: Date, windows: TimeWindow[] | null, maxWaitSeconds: number) {
+  if (!windows) return arrival;
+  const serviceMs = candidate.serviceDurationSeconds * 1000;
+  for (const window of windows) {
+    const start = Math.max(arrival.getTime(), window.start.getTime());
+    if (start - arrival.getTime() > maxWaitSeconds * 1000) continue;
+    if (start + serviceMs <= window.end.getTime()) return new Date(start);
+  }
+  return null;
+}
+
 function travelSeconds(distanceMeters: number, averageSpeedKph: number): number {
   const metersPerSecond = Math.max(5, averageSpeedKph) * 1000 / 3600;
   return Math.max(60, Math.round(distanceMeters / metersPerSecond));
@@ -66,7 +127,9 @@ function travelSeconds(distanceMeters: number, averageSpeedKph: number): number 
  * verifies that visiting it (and returning to the configured end, when there is one) still fits in the shift,
  * and repeats until the stop or time budget is exhausted.
  */
-export function optimizeRouteHeuristic(input: OptimizeRouteInput): OptimizeRouteResult {
+export function optimizeRouteHeuristic(routeInput: OptimizeRouteInput): OptimizeRouteResult {
+  const { input, closedIds } = withoutClosedCandidates(routeInput);
+  const routeEndAt = new Date(input.plannedStartAt.getTime() + input.shiftDurationSeconds * 1000);
   const speed = input.averageSpeedKph ?? 32;
   const end = input.end ?? null;
   const remaining = [...input.candidates];
@@ -91,17 +154,27 @@ export function optimizeRouteHeuristic(input: OptimizeRouteInput): OptimizeRoute
       })
       .sort((a, b) => b.utility - a.utility || a.distance - b.distance || a.candidate.id - b.candidate.id);
 
-    const next = ranked.find(({ candidate, distance }) => {
-      const outbound = current ? travelSeconds(distance, speed) : 0;
-      const returnTime = end ? travelSeconds(haversineMeters(candidate, end), speed) : 0;
-      return elapsedSeconds + outbound + candidate.serviceDurationSeconds + returnTime <= input.shiftDurationSeconds;
-    });
+    let next: (typeof ranked)[number] & { visitStartAt: Date } | undefined;
+    for (const option of ranked) {
+      const outbound = current ? travelSeconds(option.distance, speed) : 0;
+      const returnTime = end ? travelSeconds(haversineMeters(option.candidate, end), speed) : 0;
+      // The visit has to happen while the business is open, waiting briefly at the door if it opens soon.
+      const arrival = new Date(input.plannedStartAt.getTime() + (elapsedSeconds + outbound) * 1000);
+      // Before visit one the rep can simply start later, so only later visits limit the wait.
+      const maxWait = stops.length ? MAX_WAIT_SECONDS : input.shiftDurationSeconds;
+      const visitStartAt = visitStartFor(option.candidate, arrival, usableOpenWindows(option.candidate, input.plannedStartAt, routeEndAt), maxWait);
+      if (!visitStartAt) continue;
+      const startOffsetSeconds = Math.round((visitStartAt.getTime() - input.plannedStartAt.getTime()) / 1000);
+      if (startOffsetSeconds + option.candidate.serviceDurationSeconds + returnTime > input.shiftDurationSeconds) continue;
+      next = { ...option, visitStartAt };
+      break;
+    }
     if (!next) break;
 
     const driveSeconds = current ? travelSeconds(next.distance, speed) : 0;
-    elapsedSeconds += driveSeconds;
     totalDistanceMeters += current ? next.distance : 0;
-    const estimatedArrivalAt = new Date(input.plannedStartAt.getTime() + elapsedSeconds * 1000);
+    const estimatedArrivalAt = next.visitStartAt;
+    elapsedSeconds = Math.round((estimatedArrivalAt.getTime() - input.plannedStartAt.getTime()) / 1000);
     stops.push({
       ...next.candidate,
       position: stops.length + 1,
@@ -121,7 +194,7 @@ export function optimizeRouteHeuristic(input: OptimizeRouteInput): OptimizeRoute
 
   return {
     stops,
-    excludedCandidateIds: remaining.map((candidate) => candidate.id),
+    excludedCandidateIds: [...remaining.map((candidate) => candidate.id), ...closedIds],
     totalDistanceMeters,
     totalDurationSeconds: elapsedSeconds,
     returnDistanceMeters,
