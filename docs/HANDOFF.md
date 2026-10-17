@@ -153,6 +153,18 @@ Dashboard (scans by place/piece over time, etc.). See the answer given in chat; 
   its own banner for errors). A **Chip NFC card** always shows Write and Lock (Lock disabled until the
   chip is written, "Locked" hint when sealed). The editor only opens by itself when selling during a visit.
 
+## Piece screen: chip first, one setup card (PR from `feat/piece-screen-chip-first`)
+
+Owner's order for `TagScreen.tsx`: **NFC chip card at the top** (the loud red "chip not written"
+card is gone; the chip pill says it), then **"Setup / customer link"** (the old destination card,
+now also holding the customer name with rename / change; the separate customer card with "Link a
+customer" is gone; empty state "Not yet written" + "Set up this piece"), then Sell this piece.
+Lock is only a small padlock icon in the chip card header. **Android vs iPhone stay different**:
+Android (Web NFC) writes from the WriteSheet; a phone without Web NFC (iPhone) shows the link, Copy
+and the NFC Tools steps inline, then waits: the chip counts as written only once a tap reads it
+(`confirmNfcFromTap`), and the screen polls every 4 s while the chip is unwritten. No "Mark as
+written" on the iPhone path; the padlock appears there only after the tap confirmed the chip.
+
 ## SEO + Google Search readiness (#61)
 
 - Public, indexable URLs are `/`, `/pt`, `/es`, plus localized Privacy and Terms pages
