@@ -28,6 +28,23 @@ export type ActiveRunHealth = {
   reason: string;
 };
 
+/** One engine search in the "recent searches" timeline, newest first. */
+export type RecentRun = {
+  runId: number;
+  jobId: number;
+  repName: string | null;
+  status: "queued" | "starting" | "running" | "completed" | "failed" | "cancelled";
+  query: string;
+  location: string;
+  wave: number;
+  createdAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  durationMs: number | null;
+  resultCount: number;
+  errorMessage: string | null;
+};
+
 export type StuckJob = {
   jobId: number;
   repId: number;
@@ -72,6 +89,8 @@ export type SystemHealthSnapshot = {
     activeRuns: ActiveRunHealth[];
     openJobs: number;
     stuckJobs: StuckJob[];
+    /** The last searches, newest first, for the red/green timeline. */
+    recentRuns: RecentRun[];
     failedRuns24h: number;
     completedRuns24h: number;
     failedRoutes24h: number;
@@ -83,6 +102,17 @@ export type SystemHealthSnapshot = {
     /** The same problem grouped (fingerprint), last 7 days, most recent first. */
     groups: EventGroup[];
   };
+};
+
+/** GET /api/xpot/admin/system-events/:id — one occurrence and what surrounds it. */
+export type SystemEventDetail = {
+  event: SystemEventRow;
+  /** Every occurrence of the same problem (fingerprint), repeats included. */
+  group: { count: number; firstSeenAt: string; lastSeenAt: string };
+  /** The latest occurrences of the same problem, this one included. */
+  occurrences: Array<{ id: number; createdAt: string; repName: string | null; repeats: number }>;
+  /** The engine search the event is about, when its context names one. */
+  run: RecentRun | null;
 };
 
 export type SystemEventRow = {
