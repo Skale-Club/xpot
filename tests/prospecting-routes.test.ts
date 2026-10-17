@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { approximateCandidateCenter, prospectingJobCreateSchema, prospectingRouteCreateSchema, targetStopsForShift, TODAY_PROSPECTING_POLICY } from "../shared/prospecting.js";
 import { haversineMeters, optimizeRouteHeuristic } from "../server/prospecting/route-optimizer.js";
 import { buildGoogleOptimizeToursRequest, parseGoogleOptimizeToursResponse } from "../server/prospecting/google-route-optimizer.js";
-import { buildEngineInput, depthForMaxResults, mapEngineStatus, parseEngineResults } from "../server/prospecting/google-maps-engine.js";
+import { buildEngineInput, businessWebsite, depthForMaxResults, firstEmail, mapEngineStatus, parseEngineResults } from "../server/prospecting/google-maps-engine.js";
 import { evaluateColdEligibility } from "../server/prospecting/eligibility.js";
 import { chooseExpansionArea } from "../server/prospecting/expansion.js";
 import { earliestStartedAt } from "../server/prospecting/job-status.js";
@@ -134,6 +134,34 @@ describe("direct prospecting engine", () => {
       rating: 4.8,
       reviewCount: 72,
       lat: 42.35,
+    });
+  });
+
+  it("drops template and asset emails and keeps the first real one", () => {
+    expect(firstEmail("user@domain.com")).toBeNull();
+    expect(firstEmail("info@example.com")).toBeNull();
+    expect(firstEmail("logo@2x.png, hello@sentry.wixpress.com")).toBeNull();
+    expect(firstEmail("user@domain.com, Owner@ShopBuffalo.com")).toBe("owner@shopbuffalo.com");
+    expect(firstEmail(["your@email.com", "book@barber.co"])).toBe("book@barber.co");
+  });
+
+  it("treats a listing-farm link as no website", () => {
+    expect(businessWebsite("https://mapstuk.top/the-barber-lounge-prl1vc")).toBeNull();
+    expect(businessWebsite("https://u77a.top/business/chicks-barber-shop")).toBeNull();
+    expect(businessWebsite("http://www.brothersbarber.shop/")).toBe("http://www.brothersbarber.shop/");
+    expect(businessWebsite("barber.com")).toBe("barber.com");
+    expect(businessWebsite("")).toBeNull();
+  });
+
+  it("does not score fake contact data from a scraped row", () => {
+    const csv = [
+      "title,website,emails,place_id",
+      "The Barber Lounge,https://mapstuk.top/the-barber-lounge-prl1vc,info@example.com,ChIJ-lounge",
+    ].join("\n");
+    expect(parseEngineResults(csv, 10)[0]).toMatchObject({
+      website: null,
+      email: null,
+      rawPayload: expect.objectContaining({ website: "https://mapstuk.top/the-barber-lounge-prl1vc" }),
     });
   });
 

@@ -20,6 +20,7 @@ import { GoogleLogo } from "@/components/ui/google-logo";
 import { usePlaceSearch } from "./usePlaceSearch";
 import { setSellTo } from "@/pages/tags/lib";
 import {
+  activeRunTiming,
   exclusionCounts,
   MAX_PROSPECTING_SECTORS,
   moveIdByOffset,
@@ -28,7 +29,11 @@ import {
   reorderIdsAroundTarget,
   routeDisplayName,
   selectableCandidateIds,
+  serverNowMs,
+  wholeMinutes,
+  type ProspectingTiming,
 } from "./prospectingUi";
+import { useNow } from "@/hooks/use-now";
 import { MAX_DAILY_PROSPECTING_SESSIONS } from "@shared/prospecting";
 
 type ProspectingJob = {
@@ -47,7 +52,8 @@ type ProspectingJob = {
 
 type ProspectingJobDetails = {
   job: ProspectingJob;
-  runs: Array<{ id: number; status: string; location: string; niche: string; progress: number; wave: number; resultCount?: number }>;
+  runs: Array<{ id: number; status: string; location: string; niche: string; progress: number; wave: number; resultCount?: number; startedAt?: string | null }>;
+  timing?: ProspectingTiming;
   candidates: Array<{
     id: number;
     status: string;
@@ -415,6 +421,8 @@ export function XpotProspecting() {
       return job && (["queued", "running"].includes(job.status) || ["pending", "building"].includes(job.routePlanningStatus)) ? 8_000 : false;
     },
   });
+  // Progress follows elapsed time between polls, so the bar moves while a search runs.
+  const now = useNow(5_000, detailsQuery.data?.job.status === "running");
   const routeQuery = useQuery<RouteDetails>({
     queryKey: ["/api/xpot/prospecting/routes", activeRouteId],
     enabled: activeRouteId !== null,
@@ -671,7 +679,14 @@ export function XpotProspecting() {
     eligibleCount: details.summary.eligible,
     hasRoute: Boolean(generatedRoute),
     routePlanningStatus: details.job.routePlanningStatus,
+    typicalRunMs: details.timing?.typicalRunMs,
+    nowMs: serverNowMs(details.timing, detailsQuery.dataUpdatedAt, now),
   }) : null;
+  const runTiming = details ? activeRunTiming(details.runs, details.timing?.typicalRunMs, serverNowMs(details.timing, detailsQuery.dataUpdatedAt, now)) : null;
+  const runTimingLabel = !runTiming ? null
+    : runTiming.typicalMs
+      ? t("activityTiming", { elapsed: wholeMinutes(runTiming.elapsedMs), typical: wholeMinutes(runTiming.typicalMs) })
+      : t("activityElapsed", { elapsed: wholeMinutes(runTiming.elapsedMs) });
   const progressCopy = progress ? {
     queued: [t("progressQueuedTitle"), t("progressQueuedBody")],
     searching: [t("progressSearchingTitle"), t("progressSearchingBody")],
@@ -688,10 +703,10 @@ export function XpotProspecting() {
   const activeRun = details?.runs.find((run) => run.status === "running");
   const nextRun = details?.runs.find((run) => run.status === "queued");
   const currentActivity = !details || !progress ? null
-    : activeRun ? t("activitySearching", {
+    : activeRun ? `${t("activitySearching", {
       sector: activeRun.niche.replaceAll("_", " "),
       location: details.job.expansionState?.currentArea || activeRun.location,
-    })
+    })}${runTimingLabel ? ` · ${runTimingLabel}` : ""}`
       : nextRun ? t("activityPreparing", {
         sector: nextRun.niche.replaceAll("_", " "),
         location: details.job.expansionState?.currentArea || nextRun.location,

@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, sql } from "drizzle-orm";
 import { db } from "../db.js";
 import {
   prospectingCandidates,
@@ -14,6 +14,7 @@ import {
 } from "#shared/prospecting.js";
 import { isEngineConfigured } from "./google-maps-engine.js";
 import { tickProspectingQueueSafely } from "./queue.js";
+import { median } from "./job-status.js";
 
 export class ProspectingServiceError extends Error {
   constructor(message: string, readonly status: number) {
@@ -22,14 +23,36 @@ export class ProspectingServiceError extends Error {
   }
 }
 
+const TYPICAL_RUN_TTL_MS = 60_000;
+let typicalRunCache: { at: number; value: number | null } | null = null;
+
+/**
+ * How long one engine search usually takes: the median of the last 20 that
+ * finished. The engine itself only says "working", so the Route screen turns
+ * elapsed time against this into its progress. Cached briefly because every
+ * open Route screen polls the job.
+ */
+export async function typicalRunDurationMs(now = Date.now()) {
+  if (typicalRunCache && now - typicalRunCache.at < TYPICAL_RUN_TTL_MS) return typicalRunCache.value;
+  const recent = await db.select({ startedAt: prospectingRuns.startedAt, completedAt: prospectingRuns.completedAt })
+    .from(prospectingRuns)
+    .where(and(eq(prospectingRuns.status, "completed"), isNotNull(prospectingRuns.startedAt), isNotNull(prospectingRuns.completedAt)))
+    .orderBy(desc(prospectingRuns.completedAt))
+    .limit(20);
+  const value = median(recent.map((run) => run.completedAt!.getTime() - run.startedAt!.getTime()).filter((ms) => ms > 0));
+  typicalRunCache = { at: now, value };
+  return value;
+}
+
 export async function prospectingJobDetails(jobId: number, repId: number) {
   const [job] = await db.select().from(prospectingJobs).where(and(
     eq(prospectingJobs.id, jobId),
     eq(prospectingJobs.repId, repId),
   )).limit(1);
   if (!job) return null;
-  const [runs, candidates] = await Promise.all([
+  const [runs, typicalRunMs, candidates] = await Promise.all([
     db.select().from(prospectingRuns).where(eq(prospectingRuns.jobId, job.id)).orderBy(asc(prospectingRuns.createdAt)),
+    typicalRunDurationMs(),
     db.select({
       id: prospectingCandidates.id,
       jobId: prospectingCandidates.jobId,
@@ -69,6 +92,8 @@ export async function prospectingJobDetails(jobId: number, repId: number) {
       excluded: candidates.filter((candidate) => candidate.status === "discarded").length,
     },
     engine: { configured: isEngineConfigured() },
+    // serverNow lets the client measure elapsed time on the server's clock.
+    timing: { typicalRunMs, serverNow: new Date().toISOString() },
   };
 }
 

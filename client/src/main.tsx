@@ -8,6 +8,9 @@ import { Toaster } from "./components/ui/toaster";
 import "./index.css";
 // Attaches the beforeinstallprompt listener before React mounts (the event can fire first).
 import "./hooks/use-install-app";
+import { installGlobalErrorReporting } from "./lib/errorReporting";
+
+installGlobalErrorReporting();
 
 declare global {
   interface Window {

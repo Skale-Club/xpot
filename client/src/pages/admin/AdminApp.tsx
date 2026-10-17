@@ -12,6 +12,7 @@ import { AdminLandingContent } from "./AdminLandingContent";
 import { AdminTags, CodeLookup } from "./tags/AdminTags";
 import { AdminProducts } from "./AdminProducts";
 import { AdminSettings } from "./AdminSettings";
+import { AdminSystemHealth } from "./AdminSystemHealth";
 import { AppLayout } from "@/components/xpot/AppLayout";
 import { moduleGroups, organizationItems, type NavItem } from "@/components/xpot/moduleNav";
 import { AdminBadge } from "@/components/xpot/AdminBadge";
@@ -31,10 +32,10 @@ import { useViewerAccess } from "@/lib/adminMode";
 // branding), and the shell shows it inside that part of the app (moduleNav.ts).
 // The URLs stay /admin/<section> so bookmarks and links keep working.
 
-const SECTIONS = ["overview", "tags", "products", "integrations", "branding", "landing", "xphere", "reps", "settings"] as const;
+const SECTIONS = ["overview", "tags", "products", "integrations", "branding", "landing", "xphere", "reps", "settings", "health"] as const;
 type SectionId = (typeof SECTIONS)[number];
 /** The global admin's sections (moduleNav marks them adminOnly). */
-const SUPER_ADMIN_SECTIONS: readonly SectionId[] = ["integrations", "branding", "landing", "xphere"];
+const SUPER_ADMIN_SECTIONS: readonly SectionId[] = ["integrations", "branding", "landing", "xphere", "health"];
 
 export function AdminApp({ section }: { section: string }) {
   const [location, setLocation] = useLocation();
@@ -157,6 +158,7 @@ export function AdminApp({ section }: { section: string }) {
       {(active === "integrations" || active === "xphere") && viewer.isAdmin && <AdminIntegrations initialTab={active === "xphere" ? "xphere" : "providers"} />}
       {active === "branding" && viewer.isAdmin && <AdminBranding />}
       {active === "landing" && viewer.isAdmin && <AdminLandingContent />}
+      {active === "health" && viewer.isAdmin && <AdminSystemHealth />}
       {active === "reps" && <AdminReps />}
       {active === "tags" && <AdminTags />}
       {active === "settings" && <AdminSettings />}

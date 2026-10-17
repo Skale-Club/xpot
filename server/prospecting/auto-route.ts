@@ -13,6 +13,7 @@ import { optimizeRouteWithGoogle } from "./google-route-optimizer.js";
 import { sendPushNotification } from "../push-notifications.js";
 import { publishProspectingRouteForRep } from "./route-publisher.js";
 import { MAX_DAILY_PROSPECTING_SESSIONS } from "#shared/prospecting.js";
+import { recordSystemEvent, reportSystemEvent } from "../observability/events.js";
 
 const RECENT_JOB_WINDOW_MS = 24 * 60 * 60 * 1000;
 const STALE_BUILD_MS = 15 * 60 * 1000;
@@ -316,7 +317,7 @@ export async function processNextAutomaticRoute() {
       title: "Today's route is ready",
       body: "Xpot selected the best opportunities and optimized their visit order.",
       href: `/route?routeId=${publishedRoute.id}`,
-    }).catch((error) => console.error("[automatic route push] delivery failed:", error));
+    }).catch((error) => reportSystemEvent({ level: "warn", source: "push", message: "Route-ready push delivery failed.", error, repId: job.repId, context: { jobId: job.id } }));
     return { ...result, route: publishedRoute };
   } catch (error) {
     const message = error instanceof NoAutomaticRouteCandidatesError
@@ -331,7 +332,18 @@ export async function processNextAutomaticRoute() {
       routeErrorMessage: message.slice(0, 2000),
       updatedAt: new Date(),
     }).where(eq(prospectingJobs.id, job.id));
-    console.error(`[automatic route] job ${job.id}:`, error);
+    // No candidates / no room / daily limit are outcomes the rep sees, not faults.
+    const expected = error instanceof NoAutomaticRouteCandidatesError
+      || error instanceof NoAutomaticRouteStopsError
+      || error instanceof DailyRouteLimitError;
+    await recordSystemEvent({
+      level: expected ? "warn" : "error",
+      source: "prospecting.route",
+      message,
+      error,
+      repId: job.repId,
+      context: { jobId: job.id, location: job.location },
+    });
     return null;
   }
 }

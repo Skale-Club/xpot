@@ -23,6 +23,7 @@ import { requireVisitsModule, VISITS_ONLY_PATHS } from "./middleware.js";
 import { createFilesRouter } from "./files.js";
 import { createProspectingRouter } from "./prospecting.js";
 import { createOrganizationsRouter } from "./organizations.js";
+import { createSystemHealthRouter } from "./system-health.js";
 
 export function registerXpotRoutes(app: Express) {
   // Public branding (favicon / manifest / apple-touch) — no auth.
@@ -47,6 +48,7 @@ export function registerXpotRoutes(app: Express) {
   app.use("/api/xpot", createProspectingRouter());
   app.use("/api/xpot", createAdminRouter());
   app.use("/api/xpot", createAdminIntegrationsRouter());
+  app.use("/api/xpot", createSystemHealthRouter());
   app.use("/api/xpot", createBrandingAdminRouter());
   app.use("/api/xpot", createLandingContentAdminRouter());
   app.use("/api/xpot", createXphereRouter());

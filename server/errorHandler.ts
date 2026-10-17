@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import { ZodError } from "zod";
+import { reportSystemEvent } from "./observability/events.js";
 
 /**
  * The last word on any error a route did not answer itself (app.ts mounts it
@@ -10,9 +11,10 @@ import { ZodError } from "zod";
  *   `expose`, e.g. express.json's 413 for a body over its limit or 400 for
  *   malformed JSON) keeps that status and message.
  * - Anything else is ours: 500 "Internal server error", with the cause only in the
- *   log, because a 500's own text can carry SQL or library internals.
+ *   log and in system_events (Admin › System health), because a 500's own text
+ *   can carry SQL or library internals.
  */
-export function apiErrorHandler(err: unknown, _req: Request, res: Response, _next: NextFunction) {
+export function apiErrorHandler(err: unknown, req: Request, res: Response, _next: NextFunction) {
   if (err instanceof ZodError) {
     return res.status(400).json({ message: err.issues[0]?.message ?? "Validation error", errors: err.errors });
   }
@@ -21,6 +23,12 @@ export function apiErrorHandler(err: unknown, _req: Request, res: Response, _nex
   if (Number.isInteger(status) && status >= 400 && status < 500 && http.expose === true) {
     return res.status(status).json({ message: typeof http.message === "string" ? http.message : "Bad request" });
   }
-  console.error("Unhandled error:", err);
+  // Logged to the console by the recorder, and kept for Admin › System health.
+  reportSystemEvent({
+    source: "api",
+    error: err,
+    context: { method: req.method, path: req.path, status: 500 },
+    repId: null,
+  });
   res.status(500).json({ message: "Internal server error" });
 }

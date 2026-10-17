@@ -55,7 +55,43 @@ export function parseSectorSearches(value: string) {
   };
 }
 
-type RunProgress = { status: string; progress: number; wave: number };
+type RunProgress = { status: string; progress: number; wave: number; startedAt?: string | null };
+
+/** From the job details API: the usual length of one engine search, and the server's clock. */
+export type ProspectingTiming = { typicalRunMs: number | null; serverNow: string };
+
+/**
+ * The server's "now" for a details response fetched at `fetchedAt` (local ms):
+ * run start times are server timestamps, so a phone with a wrong clock would
+ * otherwise show a search running for minutes before it began.
+ */
+export function serverNowMs(timing: ProspectingTiming | undefined, fetchedAt: number, localNow = Date.now()) {
+  const serverAtFetch = timing ? Date.parse(timing.serverNow) : NaN;
+  return Number.isFinite(serverAtFetch) && fetchedAt > 0 ? serverAtFetch + (localNow - fetchedAt) : localNow;
+}
+
+/**
+ * The engine only says "working", so a search's progress is its elapsed time
+ * against the usual duration: about 82% at the usual time, easing toward 95%
+ * and never reaching it, so a slow search still moves without claiming done.
+ */
+export function estimatedRunPercent(elapsedMs: number, typicalMs: number) {
+  if (elapsedMs <= 0 || typicalMs <= 0) return 0;
+  return Math.min(95, Math.round(95 * (1 - Math.exp((-2 * elapsedMs) / typicalMs))));
+}
+
+/** Elapsed and usual time of the search running now, for "3 of ~6 min". */
+export function activeRunTiming(runs: RunProgress[], typicalRunMs: number | null | undefined, nowMs: number) {
+  const run = runs.find((candidate) => candidate.status === "running" && candidate.startedAt);
+  if (!run?.startedAt) return null;
+  const elapsedMs = Math.max(0, nowMs - Date.parse(run.startedAt));
+  return { elapsedMs, typicalMs: typicalRunMs ?? null };
+}
+
+/** Whole minutes for the timing line, never "0". */
+export function wholeMinutes(ms: number) {
+  return Math.max(1, Math.round(ms / 60_000));
+}
 
 export type ProspectingProgressStage = "queued" | "searching" | "filtering" | "review" | "route" | "failed";
 
@@ -97,6 +133,9 @@ export function prospectingProgress(input: {
   eligibleCount: number;
   hasRoute: boolean;
   routePlanningStatus?: string;
+  /** With both, a running search's progress is estimated from its elapsed time. */
+  typicalRunMs?: number | null;
+  nowMs?: number;
 }) {
   if (input.hasRoute) return { stage: "route" as const, percent: 100 };
   if (input.routePlanningStatus === "failed") return { stage: "failed" as const, percent: 100 };
@@ -111,7 +150,10 @@ export function prospectingProgress(input: {
     ? runs.reduce((sum, run) => {
         if (run.status === "completed") return sum + 100;
         if (run.status === "failed" || run.status === "cancelled") return sum;
-        return sum + Math.max(5, Math.min(95, run.progress || 0));
+        const estimated = run.status === "running" && run.startedAt && input.typicalRunMs && input.nowMs
+          ? estimatedRunPercent(input.nowMs - Date.parse(run.startedAt), input.typicalRunMs)
+          : run.progress || 0;
+        return sum + Math.max(5, Math.min(95, estimated));
       }, 0) / runs.length
     : 10;
   const searchingPercent = Math.round(14 + average * 0.5);
