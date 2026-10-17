@@ -10,6 +10,8 @@ import {
   selectableCandidateIds,
   activeRunTiming,
   estimatedRunPercent,
+  foundRunPercent,
+  searchPhase,
   serverNowMs,
   wholeMinutes,
 } from "../client/src/pages/xpot/prospectingUi.js";
@@ -42,12 +44,19 @@ describe("prospecting UI helpers", () => {
   it("uses coarse, bounded stages instead of presenting false precision", () => {
     expect(prospectingProgress({ jobStatus: "queued", runs: [], eligibleCount: 0, hasRoute: false }))
       .toEqual({ stage: "queued", percent: 8 });
+    // An expansion wave still running keeps the bar in the search, climbing.
     expect(prospectingProgress({
       jobStatus: "running",
       runs: [{ status: "completed", progress: 100, wave: 0 }, { status: "running", progress: 50, wave: 1 }],
       eligibleCount: 4,
       hasRoute: false,
-    }).stage).toBe("filtering");
+    })).toEqual({ stage: "searching", percent: 64 });
+    expect(prospectingProgress({
+      jobStatus: "running",
+      runs: [{ status: "completed", progress: 100, wave: 0 }],
+      eligibleCount: 4,
+      hasRoute: false,
+    })).toEqual({ stage: "filtering", percent: 83 });
     expect(prospectingProgress({ jobStatus: "completed", runs: [], eligibleCount: 8, hasRoute: false, routePlanningStatus: "pending" }))
       .toEqual({ stage: "review", percent: 88 });
     expect(prospectingProgress({ jobStatus: "completed", runs: [], eligibleCount: 8, hasRoute: false, routePlanningStatus: "building" }))
@@ -67,16 +76,29 @@ describe("prospecting UI helpers", () => {
     const startedAt = "2026-10-17T13:55:56.000Z";
     const nowMs = Date.parse(startedAt) + 3 * min;
     const runs = [{ status: "running", progress: 50, wave: 0, startedAt }];
-    // The engine's flat "50" no longer decides it: 3 of 6 minutes is 14 + 60 * 0.5.
+    // The engine's flat "50" no longer decides it: 3 of 6 minutes is 8 + 60 * 0.75.
     expect(prospectingProgress({ jobStatus: "running", runs, eligibleCount: 0, hasRoute: false, typicalRunMs: 6 * min, nowMs }))
-      .toEqual({ stage: "searching", percent: 44 });
+      .toEqual({ stage: "searching", percent: 53 });
     expect(prospectingProgress({ jobStatus: "running", runs, eligibleCount: 0, hasRoute: false, typicalRunMs: 6 * min, nowMs: nowMs + 2 * min }).percent)
-      .toBeGreaterThan(44);
-    // Without history it keeps the engine's coarse value.
-    expect(prospectingProgress({ jobStatus: "running", runs, eligibleCount: 0, hasRoute: false, typicalRunMs: null, nowMs }).percent).toBe(39);
-    expect(activeRunTiming(runs, 6 * min, nowMs)).toEqual({ elapsedMs: 3 * min, typicalMs: 6 * min });
+      .toBeGreaterThan(53);
+    // Without history it keeps the engine's coarse value...
+    expect(prospectingProgress({ jobStatus: "running", runs, eligibleCount: 0, hasRoute: false, typicalRunMs: null, nowMs }).percent).toBe(46);
+    // ...unless the engine has already found businesses: 27 of 30 is 81%.
+    const found = [{ ...runs[0], resultCount: 27, requestedMaxResults: 30 }];
+    expect(foundRunPercent(found[0])).toBe(81);
+    expect(prospectingProgress({ jobStatus: "running", runs: found, eligibleCount: 0, hasRoute: false, typicalRunMs: null, nowMs }).percent).toBe(69);
+    expect(activeRunTiming(runs, 6 * min, nowMs)).toEqual({ elapsedMs: 3 * min, typicalMs: 6 * min, found: 0, target: null });
     expect(wholeMinutes(10_000)).toBe(1);
     expect(wholeMinutes(5.2 * min)).toBe(5);
+  });
+
+  it("names the step a running search is on", () => {
+    const min = 60_000;
+    expect(searchPhase({ elapsedMs: 10_000, typicalMs: 6 * min, found: 0, target: 30 })).toBe("opening");
+    expect(searchPhase({ elapsedMs: min, typicalMs: 6 * min, found: 0, target: 30 })).toBe("scrolling");
+    expect(searchPhase({ elapsedMs: 2 * min, typicalMs: 6 * min, found: 12, target: 30 })).toBe("collecting");
+    expect(searchPhase({ elapsedMs: 3 * min, typicalMs: 6 * min, found: 30, target: 30 })).toBe("contacts");
+    expect(searchPhase({ elapsedMs: 5 * min, typicalMs: 6 * min, found: 20, target: 30 })).toBe("contacts");
   });
 
   it("measures elapsed time on the server's clock", () => {

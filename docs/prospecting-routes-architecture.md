@@ -81,7 +81,7 @@ PROSPECTING_ENGINE_CF_CLIENT_ID       optional
 PROSPECTING_ENGINE_CF_CLIENT_SECRET   optional
 PROSPECTING_ENGINE_MAX_TIME_SECONDS   default 1800
 PROSPECTING_ENGINE_DEPTH              default 10
-PROSPECTING_ENGINE_POLL_MS            default 30000, minimum 10000
+PROSPECTING_ENGINE_POLL_MS            default 15000, minimum 10000
 ```
 
 The Cloudflare headers are optional so a future hosted worker can use a private network or another

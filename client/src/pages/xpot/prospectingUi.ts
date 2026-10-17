@@ -55,7 +55,15 @@ export function parseSectorSearches(value: string) {
   };
 }
 
-type RunProgress = { status: string; progress: number; wave: number; startedAt?: string | null };
+type RunProgress = {
+  status: string;
+  progress: number;
+  wave: number;
+  startedAt?: string | null;
+  /** While running: businesses the engine has found so far (its partial CSV). */
+  resultCount?: number;
+  requestedMaxResults?: number;
+};
 
 /** From the job details API: the usual length of one engine search, and the server's clock. */
 export type ProspectingTiming = { typicalRunMs: number | null; serverNow: string };
@@ -80,12 +88,36 @@ export function estimatedRunPercent(elapsedMs: number, typicalMs: number) {
   return Math.min(95, Math.round(95 * (1 - Math.exp((-2 * elapsedMs) / typicalMs))));
 }
 
-/** Elapsed and usual time of the search running now, for "3 of ~6 min". */
+/** Businesses found against the run's target, up to 90%: the engine still reads their sites after the last one. */
+export function foundRunPercent(run: Pick<RunProgress, "resultCount" | "requestedMaxResults">) {
+  if (!run.resultCount || !run.requestedMaxResults) return 0;
+  return Math.min(90, Math.round((run.resultCount / run.requestedMaxResults) * 90));
+}
+
+/** Elapsed and usual time of the search running now, for "3 of ~6 min", and what it found so far. */
 export function activeRunTiming(runs: RunProgress[], typicalRunMs: number | null | undefined, nowMs: number) {
   const run = runs.find((candidate) => candidate.status === "running" && candidate.startedAt);
   if (!run?.startedAt) return null;
   const elapsedMs = Math.max(0, nowMs - Date.parse(run.startedAt));
-  return { elapsedMs, typicalMs: typicalRunMs ?? null };
+  return {
+    elapsedMs,
+    typicalMs: typicalRunMs ?? null,
+    found: run.resultCount ?? 0,
+    target: run.requestedMaxResults ?? null,
+  };
+}
+
+/**
+ * What a running search is doing, in the engine's own order: it opens Maps,
+ * scrolls the results, then opens each business and its website. Shown as the
+ * "Now" line so a long search keeps naming a smaller step.
+ */
+export type SearchPhase = "opening" | "scrolling" | "collecting" | "contacts";
+export function searchPhase(timing: { elapsedMs: number; typicalMs: number | null; found: number; target: number | null }): SearchPhase {
+  if (timing.found === 0) return timing.elapsedMs < 25_000 ? "opening" : "scrolling";
+  if (timing.target && timing.found >= timing.target) return "contacts";
+  if (timing.typicalMs && timing.elapsedMs > timing.typicalMs * 0.8) return "contacts";
+  return "collecting";
 }
 
 /** Whole minutes for the timing line, never "0". */
@@ -150,17 +182,24 @@ export function prospectingProgress(input: {
     ? runs.reduce((sum, run) => {
         if (run.status === "completed") return sum + 100;
         if (run.status === "failed" || run.status === "cancelled") return sum;
-        const estimated = run.status === "running" && run.startedAt && input.typicalRunMs && input.nowMs
+        if (run.status !== "running") return sum + Math.max(5, Math.min(95, run.progress || 0));
+        // Whichever says more: what the engine has found, or the time spent against the usual.
+        const byTime = run.startedAt && input.typicalRunMs && input.nowMs
           ? estimatedRunPercent(input.nowMs - Date.parse(run.startedAt), input.typicalRunMs)
           : run.progress || 0;
-        return sum + Math.max(5, Math.min(95, estimated));
+        return sum + Math.max(5, Math.min(95, Math.max(byTime, foundRunPercent(run))));
       }, 0) / runs.length
     : 10;
-  const searchingPercent = Math.round(14 + average * 0.5);
-  if (input.eligibleCount > 0 || runs.some((run) => run.status === "completed")) {
-    return { stage: "filtering" as const, percent: Math.max(58, Math.min(76, searchingPercent)) };
+  // The engine search is almost all of the wall time (minutes, against seconds
+  // for filtering and routing), so it gets most of the bar.
+  const searchingPercent = Math.round(8 + average * 0.75);
+  // Filtering is what happens after the last search: with searches still to go
+  // (more sectors, or an expansion wave) the bar keeps climbing as "searching".
+  const searchesLeft = runs.some((run) => ["queued", "starting", "running"].includes(run.status));
+  if (!searchesLeft && (input.eligibleCount > 0 || runs.some((run) => run.status === "completed"))) {
+    return { stage: "filtering" as const, percent: Math.max(80, Math.min(86, searchingPercent)) };
   }
-  return { stage: "searching" as const, percent: Math.max(14, Math.min(56, searchingPercent)) };
+  return { stage: "searching" as const, percent: Math.max(8, Math.min(80, searchingPercent)) };
 }
 
 export function exclusionCounts(candidates: Array<{ status: string; exclusionReason?: string | null }>) {

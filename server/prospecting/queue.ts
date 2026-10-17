@@ -10,6 +10,7 @@ import {
 } from "#shared/schema.js";
 import {
   buildEngineInput,
+  countEngineResultsSoFar,
   downloadEngineCsv,
   ENGINE_OVERDUE_GRACE_MS,
   getEngineJobStatus,
@@ -37,7 +38,7 @@ let lastDispatchedRepId: number | null = null;
 /** This process's worker loop, for Admin › System health. */
 const workerHealth = {
   startedAt: null as Date | null,
-  pollMs: 30_000,
+  pollMs: 15_000,
   ticks: 0,
   lastTickStartedAt: null as Date | null,
   lastTickFinishedAt: null as Date | null,
@@ -246,7 +247,15 @@ async function refreshActiveRun() {
     throw error;
   }
   if (state.status === "running") {
-    await db.update(prospectingRuns).set({ progress: state.progress, updatedAt: new Date() }).where(eq(prospectingRuns.id, run.id));
+    // Businesses found so far, from the engine's partial CSV: the Route screen
+    // shows "12 of 30" instead of a bar that sits still for the whole search.
+    // The final count replaces it when the run completes.
+    const found = await countEngineResultsSoFar(run.engineJobId);
+    await db.update(prospectingRuns).set({
+      progress: state.progress,
+      ...(found === null ? {} : { resultCount: Math.min(found, run.requestedMaxResults) }),
+      updatedAt: new Date(),
+    }).where(and(eq(prospectingRuns.id, run.id), inArray(prospectingRuns.status, ["starting", "running"])));
     return;
   }
   if (state.status === "failed") {
@@ -385,5 +394,7 @@ export function startProspectingWorker() {
 
 function positivePollMs(value: string | undefined) {
   const parsed = Number(value);
-  return Number.isInteger(parsed) && parsed >= 10_000 ? parsed : 30_000;
+  // 15 s: each tick also reads the running search's partial results, and the
+  // Route screen's "found so far" should not lag half a minute behind.
+  return Number.isInteger(parsed) && parsed >= 10_000 ? parsed : 15_000;
 }
