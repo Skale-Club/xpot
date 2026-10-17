@@ -51,7 +51,7 @@ export default function HomeScreen() {
   const t = useT(tagsMessages);
   const tc = useT(commonMessages);
   const [, navigate] = useLocation();
-  const { banner, show } = useBanner();
+  const { banner, show, clear: clearBanner } = useBanner();
   const [busy, setBusy] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
   const [sheet, setSheet] = useState<Sheet>(null);
@@ -227,7 +227,11 @@ export default function HomeScreen() {
           icon={ScanLine}
           title={t("readPiece")}
           description={t("readPieceHint")}
-          onClick={() => setSheet({ kind: "read" })}
+          onClick={() => {
+            // A message from an earlier read would otherwise reappear inside the chooser.
+            clearBanner();
+            setSheet({ kind: "read" });
+          }}
           disabled={busy}
           testId="button-read-piece"
         />
@@ -250,7 +254,11 @@ export default function HomeScreen() {
 
       <BottomSheet open={sheet?.kind === "read"} onClose={() => setSheet(null)} title={t("readPiece")}>
         <h2 className={SHEET_TITLE}>{t("readPiece")}</h2>
-        <Banner banner={banner} />
+        {banner && (
+          <div className="mt-3">
+            <Banner banner={banner} />
+          </div>
+        )}
         {/* QR first: it always works, while a chip is only found once it has been written. */}
         <div className="mt-4 grid grid-cols-2 gap-3">
           <button
