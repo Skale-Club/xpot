@@ -196,7 +196,6 @@ const en = {
   // Piece screen
   pieceEyebrow: "Xpot piece",
   noCustomer: "No customer yet",
-  customer: "Customer",
   label: "Label",
   setupTitle: "Setup / customer link",
   notYetWritten: "Not yet written",
@@ -206,7 +205,6 @@ const en = {
   sellTitle: "Customer and link",
   configurePiece: "Set up this piece",
   chipTitle: "NFC chip",
-  lockNeedsWrite: "Write the chip first, then lock it.",
   lockedHint: "Locked: nobody can rewrite this chip. Where it opens still changes in Xpot.",
   // iPhone (no Web NFC): NFC Tools steps per content kind, confirmation by tapping, locking
   manual3Uri: "Choose Custom URL / URI.",
@@ -612,7 +610,6 @@ export const tagsMessages: Dictionary<typeof en> = {
 
     pieceEyebrow: "Peça Xpot",
     noCustomer: "Sem cliente ainda",
-    customer: "Cliente",
     label: "Rótulo",
     setupTitle: "Configuração / link do cliente",
     notYetWritten: "Ainda não gravado",
@@ -620,7 +617,6 @@ export const tagsMessages: Dictionary<typeof en> = {
     editDestination: "Alterar o destino",
     configurePiece: "Configurar peça",
     chipTitle: "Chip NFC",
-    lockNeedsWrite: "Grave o chip primeiro, depois lacre.",
     lockedHint: "Lacrado: ninguém consegue regravar este chip. O destino continua mudando pelo Xpot.",
     manual3Uri: "Escolha URL / URI personalizado.",
     manual3Contact: "Escolha Contato.",
@@ -1014,7 +1010,6 @@ export const tagsMessages: Dictionary<typeof en> = {
 
     pieceEyebrow: "Pieza Xpot",
     noCustomer: "Aún sin cliente",
-    customer: "Cliente",
     label: "Etiqueta",
     setupTitle: "Configuración / enlace del cliente",
     notYetWritten: "Aún no grabado",
@@ -1022,7 +1017,6 @@ export const tagsMessages: Dictionary<typeof en> = {
     editDestination: "Cambiar el destino",
     configurePiece: "Configurar pieza",
     chipTitle: "Chip NFC",
-    lockNeedsWrite: "Graba el chip primero y luego séllalo.",
     lockedHint: "Sellado: nadie puede regrabar este chip. El destino sigue cambiando en Xpot.",
     manual3Uri: "Elige URL / URI personalizada.",
     manual3Contact: "Elige Contacto.",

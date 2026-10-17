@@ -443,6 +443,13 @@ export default function TagScreen({ code, onClose }: {
             </button>
           </div>
         )}
+        {/* Set up without a customer (made before the picker was required): Change links one. */}
+        {!tag.leadId && dest && (
+          <p className="mt-2 flex items-center gap-2 text-sm text-white/45" data-testid="text-tag-lead">
+            <Building2 className="h-4 w-4 shrink-0 text-white/30" />
+            {t("noCustomer")}
+          </p>
+        )}
         {dest ? (
           <div className="mt-2 flex items-center gap-3">
             <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-500/20 text-blue-200">
