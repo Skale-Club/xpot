@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { ArrowRight, Building2, Link2, Nfc, QrCode, X } from "lucide-react";
+import { ArrowRight, Building2, Link2, Nfc, QrCode, ScanLine, X } from "lucide-react";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
@@ -35,7 +35,8 @@ import {
 import { isWebNfcSupported, mapNfcError, scanOnce } from "./webNfc";
 import { useIsComputer, useIsDesktop } from "@/hooks/use-is-desktop";
 
-type Sheet = { kind: "empty" } | { kind: "nfc" } | null;
+// "read" is the chooser behind the single Read button: QR, chip or typed code.
+type Sheet = { kind: "read" } | { kind: "empty" } | { kind: "nfc" } | null;
 
 function isOwnHost(url: string) {
   try {
@@ -150,6 +151,48 @@ export default function HomeScreen() {
     void openCode(result.code);
   };
 
+  const codeForm = (
+    <form
+      className={isComputer ? `${CARD} p-4` : ""}
+      onSubmit={(e) => {
+        e.preventDefault();
+        submitCode();
+      }}
+    >
+      <label htmlFor="tag-code" className={`mb-2 block ${EYEBROW_MUTED}`}>
+        {isComputer ? t("typeCode") : t("orTypeCode")}
+      </label>
+      <div className="flex gap-2">
+        <input
+          id="tag-code"
+          value={code}
+          // Scanners send the full link; only a typed code is upper-cased.
+          onChange={(e) => setCode(isDesktop && /[/:.]/.test(e.target.value) ? e.target.value : e.target.value.toUpperCase())}
+          autoFocus={isComputer}
+          placeholder={t("codePlaceholder")}
+          autoCapitalize="characters"
+          autoCorrect="off"
+          spellCheck={false}
+          enterKeyHint="go"
+          maxLength={isDesktop ? 2048 : 14}
+          className={`${INPUT} font-mono tracking-[0.12em] placeholder:font-sans placeholder:tracking-normal`}
+          data-testid="input-tag-code"
+          data-shortcut="search"
+        />
+        <button
+          type="submit"
+          disabled={busy || code.trim().length < 8}
+          aria-label={t("open")}
+          className="flex min-h-[48px] min-w-[48px] shrink-0 items-center justify-center rounded-2xl bg-blue-500 text-white disabled:opacity-40"
+          data-testid="button-open-code"
+        >
+          {busy ? <Spinner /> : <ArrowRight className="h-5 w-5" />}
+        </button>
+      </div>
+      {isDesktop && <p className="mt-2 text-xs text-white/35">{t("scannerHint")}</p>}
+    </form>
+  );
+
   const main = (
     <div className="space-y-5">
       {sellTo && (
@@ -176,70 +219,21 @@ export default function HomeScreen() {
         </div>
       )}
 
-      <Banner banner={banner} />
+      {sheet?.kind !== "read" && <Banner banner={banner} />}
 
-      <div className={`space-y-3 ${isComputer ? "hidden" : ""}`}>
-        {nfcSupported && (
-          <ActionTile
-            primary
-            icon={Nfc}
-            title={t("readPiece")}
-            description={t("readPieceHint")}
-            onClick={() => void startNfc()}
-            disabled={busy}
-            testId="button-scan-nfc"
-          />
-        )}
+      {!isComputer && (
         <ActionTile
-          primary={!nfcSupported}
-          icon={QrCode}
-          title={t("scanQr")}
-          description={t("scanQrHint")}
-          onClick={() => setQrOpen(true)}
+          primary
+          icon={ScanLine}
+          title={t("readPiece")}
+          description={t("readPieceHint")}
+          onClick={() => setSheet({ kind: "read" })}
           disabled={busy}
-          testId="button-scan-qr"
+          testId="button-read-piece"
         />
-      </div>
+      )}
 
-      <form
-        className={`${CARD} p-4`}
-        onSubmit={(e) => {
-          e.preventDefault();
-          submitCode();
-        }}
-      >
-        <label htmlFor="tag-code" className={`mb-2 block ${EYEBROW_MUTED}`}>
-          {t("typeCode")}
-        </label>
-        <div className="flex gap-2">
-          <input
-            id="tag-code"
-            value={code}
-            // Scanners send the full link; only a typed code is upper-cased.
-            onChange={(e) => setCode(isDesktop && /[/:.]/.test(e.target.value) ? e.target.value : e.target.value.toUpperCase())}
-            autoFocus={isDesktop}
-            placeholder={t("codePlaceholder")}
-            autoCapitalize="characters"
-            autoCorrect="off"
-            spellCheck={false}
-            enterKeyHint="go"
-            maxLength={isDesktop ? 2048 : 14}
-            className={`${INPUT} font-mono tracking-[0.12em] placeholder:font-sans placeholder:tracking-normal`}
-            data-testid="input-tag-code"
-            data-shortcut="search"
-          />
-          <button
-            type="submit"
-            disabled={busy || code.trim().length < 8}
-            aria-label={t("open")}
-            className="flex min-h-[48px] min-w-[48px] shrink-0 items-center justify-center rounded-2xl bg-blue-500 text-white disabled:opacity-40"
-            data-testid="button-open-code"
-          >
-            {busy ? <Spinner /> : <ArrowRight className="h-5 w-5" />}
-          </button>
-        </div>
-        {isDesktop && <p className="mt-2 text-xs text-white/35">{t("scannerHint")}</p>}
-      </form>
+      {isComputer && codeForm}
 
       {/* Real activity: scans over time, recent scans, top pieces and customers. */}
       <TagsDashboard />
@@ -253,6 +247,58 @@ export default function HomeScreen() {
           }}
         />
       )}
+
+      <BottomSheet open={sheet?.kind === "read"} onClose={() => setSheet(null)} title={t("readPiece")}>
+        <h2 className={SHEET_TITLE}>{t("readPiece")}</h2>
+        <Banner banner={banner} />
+        {/* QR first: it always works, while a chip is only found once it has been written. */}
+        <div className="mt-4 grid grid-cols-2 gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              setSheet(null);
+              setQrOpen(true);
+            }}
+            disabled={busy}
+            data-testid="button-scan-qr"
+            style={{ WebkitTapHighlightColor: "transparent" }}
+            className="flex min-h-[164px] flex-col items-center justify-center gap-2.5 rounded-[22px] bg-gradient-to-br from-blue-500 to-indigo-500 p-3 text-center text-white shadow-[0_8px_24px_rgba(59,130,246,0.25)] transition-transform active:scale-[0.97] disabled:opacity-60"
+          >
+            <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">
+              {t("recommended")}
+            </span>
+            <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/15">
+              <QrCode className="h-8 w-8" />
+            </span>
+            <span>
+              <span className="block text-base font-bold leading-tight">{t("scanQr")}</span>
+              <span className="mt-1 block text-[11px] leading-snug text-white/75">{t("scanQrHint")}</span>
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => void startNfc()}
+            disabled={busy || !nfcSupported}
+            data-testid="button-scan-nfc"
+            style={{ WebkitTapHighlightColor: "transparent" }}
+            className="flex min-h-[164px] flex-col items-center justify-center gap-2.5 rounded-[22px] border border-white/10 bg-white/[0.04] p-3 text-center text-white transition-transform active:scale-[0.97] disabled:opacity-50"
+          >
+            <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/[0.06] text-blue-300">
+              <Nfc className="h-8 w-8" />
+            </span>
+            <span>
+              <span className="block text-base font-bold leading-tight">{t("readChip")}</span>
+              <span className="mt-1 block text-[11px] leading-snug text-amber-200/80">
+                {nfcSupported ? t("readChipHint") : t("readChipUnavailable")}
+              </span>
+            </span>
+          </button>
+        </div>
+        <div className="mt-5 border-t border-white/10 pt-4">{codeForm}</div>
+        <button type="button" onClick={() => setSheet(null)} className={`mt-4 ${BTN_TERTIARY}`}>
+          {tc("cancel")}
+        </button>
+      </BottomSheet>
 
       <BottomSheet
         open={sheet?.kind === "nfc"}
