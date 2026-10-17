@@ -27,6 +27,7 @@ export function CompanyInlineEditor({ lead }: { lead: CompanyLead }) {
   const { toast } = useToast();
   const t = useT(visitsMessages);
   const tl = useT(leadsMessages);
+  const primaryLocation = lead.locations?.[0];
   const [fields, setFields] = useState({
     phone: lead.phone || "",
     email: lead.email || "",
@@ -34,12 +35,12 @@ export function CompanyInlineEditor({ lead }: { lead: CompanyLead }) {
     industry: lead.industry || "",
   });
   const [location, setLocation] = useState(() => ({
-    addressLine1: lead.locations?.[0]?.addressLine1 || "",
-    addressLine2: lead.locations?.[0]?.addressLine2 || "",
-    city: lead.locations?.[0]?.city || "",
-    state: lead.locations?.[0]?.state || "",
-    postalCode: lead.locations?.[0]?.postalCode || "",
-    country: lead.locations?.[0]?.country || "US",
+    addressLine1: primaryLocation?.addressLine1 || "",
+    addressLine2: primaryLocation?.addressLine2 || "",
+    city: primaryLocation?.city || "",
+    state: primaryLocation?.state || "",
+    postalCode: primaryLocation?.postalCode || "",
+    country: primaryLocation?.country || "US",
   }));
   const [socials, setSocials] = useState<{ platform: string; url: string }[]>(lead.socialUrls ?? []);
   const [photos, setPhotos] = useState<string[]>(lead.photos ?? []);
@@ -48,18 +49,34 @@ export function CompanyInlineEditor({ lead }: { lead: CompanyLead }) {
 
   useEffect(() => {
     setFields({ phone: lead.phone || "", email: lead.email || "", website: lead.website || "", industry: lead.industry || "" });
-    const next = lead.locations?.[0];
+  }, [lead.id, lead.phone, lead.email, lead.website, lead.industry]);
+
+  useEffect(() => {
     setLocation({
-      addressLine1: next?.addressLine1 || "",
-      addressLine2: next?.addressLine2 || "",
-      city: next?.city || "",
-      state: next?.state || "",
-      postalCode: next?.postalCode || "",
-      country: next?.country || "US",
+      addressLine1: primaryLocation?.addressLine1 || "",
+      addressLine2: primaryLocation?.addressLine2 || "",
+      city: primaryLocation?.city || "",
+      state: primaryLocation?.state || "",
+      postalCode: primaryLocation?.postalCode || "",
+      country: primaryLocation?.country || "US",
     });
+  }, [
+    lead.id,
+    primaryLocation?.addressLine1,
+    primaryLocation?.addressLine2,
+    primaryLocation?.city,
+    primaryLocation?.state,
+    primaryLocation?.postalCode,
+    primaryLocation?.country,
+  ]);
+
+  useEffect(() => {
     setSocials(lead.socialUrls ?? []);
+  }, [lead.id, lead.socialUrls]);
+
+  useEffect(() => {
     setPhotos(lead.photos ?? []);
-  }, [lead.id]);
+  }, [lead.id, lead.photos]);
 
   function saved() {
     queryClient.invalidateQueries({ queryKey: ["/api/xpot/leads"] });

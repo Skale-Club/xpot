@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ExternalLink, Phone, Mail, MapPinned } from "lucide-react";
 import { translate } from "@/i18n";
 import { leadsMessages } from "@/i18n/messages/leads";
@@ -17,6 +17,10 @@ export function InlineField({ label, value, onSave, large, linkable, linkHref, v
   const [editing, setEditing] = useState(false);
   const [local, setLocal] = useState(value);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!editing) setLocal(value);
+  }, [editing, value]);
 
   function commit() {
     if (validate) {
