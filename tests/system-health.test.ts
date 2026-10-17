@@ -5,7 +5,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../server/db.js", () => ({ db: {} }));
-import { assessRun, assessWorker, worstVerdict } from "../server/observability/health.js";
+import { assessRun, assessWorker, toRecentRun, worstVerdict } from "../server/observability/health.js";
 import { median } from "../server/prospecting/job-status.js";
 import { describeError, fingerprintOf, REPEAT_WINDOW_MS, takeRepeat } from "../server/observability/events.js";
 
@@ -80,5 +80,24 @@ describe("helpers", () => {
     expect(describeError(new Error("x")).message).toBe("x");
     expect(describeError("plain").message).toBe("plain");
     expect(describeError({ a: 1 }).detail).toBe('{"a":1}');
+  });
+});
+
+describe("toRecentRun", () => {
+  const run = {
+    id: 7, jobId: 3, repId: 1, status: "failed", query: "Barber shop", location: "Buffalo, NY", wave: 0,
+    createdAt: new Date("2026-10-17T13:55:00Z"), startedAt: new Date("2026-10-17T13:55:56Z"),
+    completedAt: new Date("2026-10-17T14:01:08Z"), resultCount: 0, errorMessage: "Prospecting engine job failed.",
+  } as never;
+
+  it("gives the timeline a duration and the reason a search failed", () => {
+    expect(toRecentRun(run, "Rep")).toMatchObject({
+      runId: 7, jobId: 3, repName: "Rep", status: "failed", durationMs: 312_000,
+      startedAt: "2026-10-17T13:55:56.000Z", errorMessage: "Prospecting engine job failed.",
+    });
+  });
+
+  it("has no duration while a search is still running", () => {
+    expect(toRecentRun({ ...(run as object), status: "running", completedAt: null } as never, null).durationMs).toBeNull();
   });
 });

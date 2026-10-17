@@ -1,90 +1,43 @@
 import { useEffect, useState } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { Activity, AlertTriangle, ChevronDown, ChevronRight, Cpu, ListOrdered, RefreshCw, Search } from "lucide-react";
+import { Link, useLocation } from "wouter";
+import { Activity, AlertTriangle, ChevronRight, Cpu, History, ListOrdered, RefreshCw, Search } from "lucide-react";
 import { Loader2 } from "@/components/ui/loader";
 import { Segmented } from "@/components/xpot/Segmented";
 import { apiRequest } from "@/lib/queryClient";
-import { useT, type Translate } from "@/i18n";
+import { useT } from "@/i18n";
 import { systemHealthMessages } from "@/i18n/messages/systemHealth";
 import { SYSTEM_EVENT_SOURCES } from "@shared/schema/observability";
-import type { EventGroup, HealthVerdict, SystemEventRow, SystemHealthSnapshot } from "@shared/system-health";
+import type { EventGroup, RecentRun, SystemEventRow, SystemHealthSnapshot } from "@shared/system-health";
+import { AdminSystemEventDetail } from "./AdminSystemEventDetail";
+import {
+  Card,
+  formatDuration,
+  REFRESH_MS,
+  RUN_STATUS_STYLE,
+  RunStatusChip,
+  sourceLabel,
+  Stat,
+  useAgo,
+  VERDICT_STYLE,
+  VerdictChip,
+  type T,
+} from "./systemHealthUi";
 
-type T = Translate<typeof systemHealthMessages.en>;
-
-const REFRESH_MS = 15_000;
-
-const VERDICT_STYLE: Record<HealthVerdict, { chip: string; dot: string; banner: string }> = {
-  healthy: { chip: "border-emerald-500/30 bg-emerald-500/15 text-emerald-300", dot: "bg-emerald-400", banner: "border-emerald-500/25 bg-emerald-500/[0.07]" },
-  idle: { chip: "border-white/10 bg-white/5 text-white/50", dot: "bg-white/40", banner: "border-white/10 bg-white/[0.03]" },
-  slow: { chip: "border-amber-500/30 bg-amber-500/15 text-amber-300", dot: "bg-amber-400", banner: "border-amber-500/25 bg-amber-500/[0.07]" },
-  stalled: { chip: "border-red-500/30 bg-red-500/15 text-red-300", dot: "bg-red-400", banner: "border-red-500/25 bg-red-500/[0.07]" },
-  down: { chip: "border-red-500/40 bg-red-500/20 text-red-200", dot: "bg-red-500", banner: "border-red-500/30 bg-red-500/[0.1]" },
-};
-
-function useAgo(t: T) {
-  return (value: string | null) => {
-    if (!value) return t("never");
-    const seconds = Math.max(0, Math.round((Date.now() - new Date(value).getTime()) / 1000));
-    if (seconds < 5) return t("justNow");
-    if (seconds < 60) return t("secondsAgo", { n: seconds });
-    if (seconds < 3600) return t("minutesAgo", { n: Math.floor(seconds / 60) });
-    if (seconds < 86_400) return t("hoursAgo", { n: Math.floor(seconds / 3600) });
-    return t("daysAgo", { n: Math.floor(seconds / 86_400) });
-  };
-}
-
-export function formatDuration(ms: number | null) {
-  if (ms === null) return "—";
-  const total = Math.round(ms / 1000);
-  if (total < 60) return `${total}s`;
-  const minutes = Math.floor(total / 60);
-  if (minutes < 60) return `${minutes}m ${String(total % 60).padStart(2, "0")}s`;
-  return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, "0")}m`;
-}
-
-function sourceLabel(t: T, source: string) {
-  const key = `source_${source}` as keyof typeof systemHealthMessages.en;
-  return key in systemHealthMessages.en ? t(key) : source;
-}
-
-function VerdictChip({ verdict, t }: { verdict: HealthVerdict; t: T }) {
-  return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${VERDICT_STYLE[verdict].chip}`}>
-      <span className={`h-1.5 w-1.5 rounded-full ${VERDICT_STYLE[verdict].dot}`} />
-      {t(`verdict_${verdict}`)}
-    </span>
-  );
-}
-
-function Card({ title, icon: Icon, right, children }: { title: string; icon: typeof Activity; right?: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-      <header className="mb-3 flex items-center justify-between gap-2">
-        <h3 className="flex items-center gap-2 text-sm font-semibold text-white/80">
-          <Icon className="h-4 w-4 text-white/45" />
-          {title}
-        </h3>
-        {right}
-      </header>
-      {children}
-    </section>
-  );
-}
-
-function Stat({ label, value, tone }: { label: string; value: React.ReactNode; tone?: "bad" | "warn" }) {
-  return (
-    <div>
-      <p className="text-[11px] text-white/45">{label}</p>
-      <p className={`text-xl font-bold ${tone === "bad" ? "text-red-300" : tone === "warn" ? "text-amber-300" : ""}`}>{value}</p>
-    </div>
-  );
-}
-
+/** /admin/health is the panel; /admin/health/events/:id is one event in full. */
 export function AdminSystemHealth() {
+  const [location] = useLocation();
+  const eventId = /^\/admin\/health\/events\/(\d+)/.exec(location)?.[1];
+  return eventId ? <AdminSystemEventDetail id={Number(eventId)} /> : <SystemHealthOverview />;
+}
+
+
+function SystemHealthOverview() {
   const t = useT(systemHealthMessages);
   const ago = useAgo(t);
   const [, setNow] = useState(0);
   const [fingerprint, setFingerprint] = useState<string | null>(null);
+  const [runFilter, setRunFilter] = useState<number | null>(null);
   const health = useQuery<SystemHealthSnapshot>({
     queryKey: ["/api/xpot/admin/system-health"],
     refetchInterval: REFRESH_MS,
@@ -225,9 +178,124 @@ export function AdminSystemHealth() {
         )}
       </Card>
 
+      <RecentSearches
+        runs={queue.recentRuns}
+        t={t}
+        ago={ago}
+        onShowEvents={(runId) => {
+          setRunFilter(runId);
+          document.getElementById("system-event-log")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }}
+      />
       <ProblemGroups groups={events.groups} t={t} ago={ago} onPick={setFingerprint} />
-      <EventLog t={t} ago={ago} fingerprint={fingerprint} onClearFingerprint={() => setFingerprint(null)} />
+      <EventLog
+        t={t}
+        ago={ago}
+        fingerprint={fingerprint}
+        onClearFingerprint={() => setFingerprint(null)}
+        runId={runFilter}
+        onClearRun={() => setRunFilter(null)}
+      />
     </div>
+  );
+}
+
+/**
+ * The last searches as a strip of bars, oldest on the left: a red streak at the
+ * right end means the engine is failing now, before anyone reads a log.
+ */
+function RecentSearches({ runs, t, ago, onShowEvents }: {
+  runs: RecentRun[];
+  t: T;
+  ago: (v: string | null) => string;
+  onShowEvents: (runId: number) => void;
+}) {
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const timeline = [...runs].reverse();
+  const finished = runs.filter((run) => run.status === "completed" || run.status === "failed");
+  const failed = finished.filter((run) => run.status === "failed");
+  const lastFailure = runs.find((run) => run.status === "failed");
+  const durations = runs.flatMap((run) => (run.status === "completed" && run.durationMs ? [run.durationMs] : []));
+  const average = durations.length ? durations.reduce((sum, ms) => sum + ms, 0) / durations.length : null;
+  const selected = runs.find((run) => run.runId === selectedId) ?? null;
+  const successRate = finished.length ? Math.round(((finished.length - failed.length) / finished.length) * 100) : null;
+
+  return (
+    <Card
+      title={t("timelineTitle")}
+      icon={History}
+      right={successRate !== null ? (
+        <span className={`text-xs font-semibold ${successRate >= 95 ? "text-emerald-300" : successRate >= 80 ? "text-amber-300" : "text-red-300"}`}>
+          {t("timelineSuccessRate", { rate: successRate })}
+        </span>
+      ) : undefined}
+    >
+      {runs.length === 0 ? (
+        <p className="text-sm text-white/45">{t("timelineEmpty")}</p>
+      ) : (
+        <>
+          <div className="flex h-8 items-end justify-end gap-[3px]" role="list" aria-label={t("timelineTitle")} data-testid="search-timeline">
+            {timeline.map((run) => {
+              const active = run.runId === selectedId;
+              const label = `${run.query} · ${run.location} · ${t(`runStatus_${run.status}`)} · ${new Date(run.createdAt).toLocaleString()}${run.errorMessage ? ` · ${run.errorMessage}` : ""}`;
+              return (
+                <button
+                  key={run.runId}
+                  type="button"
+                  role="listitem"
+                  title={label}
+                  aria-label={label}
+                  aria-pressed={active}
+                  onClick={() => setSelectedId(active ? null : run.runId)}
+                  className={`h-full min-w-[4px] max-w-[10px] flex-1 rounded-sm transition-opacity ${RUN_STATUS_STYLE[run.status].bar} ${
+                    selectedId !== null && !active ? "opacity-35" : "hover:opacity-80"
+                  } ${active ? "ring-2 ring-white/70 ring-offset-1 ring-offset-[#0b1020]" : ""}`}
+                />
+              );
+            })}
+          </div>
+          <div className="mt-1 flex justify-between text-[10px] text-white/35">
+            <span>{t("timelineOlder")}</span>
+            <span>{t("timelineNow")}</span>
+          </div>
+          <p className="mt-2 text-xs text-white/50">
+            {t("timelineSummary", { failed: failed.length, total: finished.length })}
+            {lastFailure ? ` · ${t("timelineLastFailure", { time: ago(lastFailure.completedAt ?? lastFailure.createdAt) })}` : ""}
+            {average !== null ? ` · ${t("timelineAverage", { duration: formatDuration(average) })}` : ""}
+          </p>
+
+          {selected && (
+            <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3 text-sm" data-testid="search-timeline-detail">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="font-semibold">{selected.query} · {selected.location}</p>
+                  <p className="text-xs text-white/45">
+                    {t("runJob", { id: selected.jobId })} · #{selected.runId}
+                    {selected.repName ? ` · ${selected.repName}` : ""}
+                    {selected.wave ? ` · wave ${selected.wave}` : ""}
+                  </p>
+                </div>
+                <RunStatusChip status={selected.status} t={t} />
+              </div>
+              <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-xs sm:grid-cols-4">
+                <dt className="text-white/40">{t("runStarted")}</dt>
+                <dd className="text-white/75">{selected.startedAt ? new Date(selected.startedAt).toLocaleString() : "—"}</dd>
+                <dt className="text-white/40">{t("runDuration")}</dt>
+                <dd className="text-white/75">{formatDuration(selected.durationMs)}</dd>
+                <dt className="text-white/40">{t("runResults")}</dt>
+                <dd className="text-white/75">{selected.resultCount}</dd>
+                <dt className="text-white/40">{t("runQueuedAt")}</dt>
+                <dd className="text-white/75">{ago(selected.createdAt)}</dd>
+              </dl>
+              {selected.errorMessage && <p className="mt-2 break-words text-xs text-red-300">{selected.errorMessage}</p>}
+              <button type="button" onClick={() => onShowEvents(selected.runId)} className="mt-3 text-xs font-semibold text-blue-300 hover:text-blue-200">
+                {t("timelineShowEvents")} →
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </Card>
   );
 }
 
@@ -270,17 +338,18 @@ function ProblemGroups({ groups, t, ago, onPick }: { groups: EventGroup[]; t: T;
 
 type EventsPage = { events: SystemEventRow[]; nextBefore: number | null };
 
-function EventLog({ t, ago, fingerprint, onClearFingerprint }: {
+function EventLog({ t, ago, fingerprint, onClearFingerprint, runId, onClearRun }: {
   t: T;
   ago: (v: string | null) => string;
   fingerprint: string | null;
   onClearFingerprint: () => void;
+  runId: number | null;
+  onClearRun: () => void;
 }) {
   const [level, setLevel] = useState<"all" | "error" | "warn">("all");
   const [source, setSource] = useState("");
   const [search, setSearch] = useState("");
   const [q, setQ] = useState("");
-  const [open, setOpen] = useState<number | null>(null);
   useEffect(() => {
     const id = setTimeout(() => setQ(search.trim()), 300);
     return () => clearTimeout(id);
@@ -291,9 +360,10 @@ function EventLog({ t, ago, fingerprint, onClearFingerprint }: {
   if (source) params.set("source", source);
   if (q) params.set("q", q);
   if (fingerprint) params.set("fingerprint", fingerprint);
+  if (runId) params.set("runId", String(runId));
   const base = `/api/xpot/admin/system-events?${params.toString()}`;
   const events = useInfiniteQuery({
-    queryKey: ["/api/xpot/admin/system-events", level, source, q, fingerprint],
+    queryKey: ["/api/xpot/admin/system-events", level, source, q, fingerprint, runId],
     initialPageParam: null as number | null,
     queryFn: async ({ pageParam }): Promise<EventsPage> =>
       (await apiRequest("GET", pageParam ? `${base}&before=${pageParam}` : base)).json(),
@@ -337,10 +407,19 @@ function EventLog({ t, ago, fingerprint, onClearFingerprint }: {
           />
         </label>
       </div>
-      {fingerprint && (
-        <button type="button" onClick={onClearFingerprint} className="mb-3 rounded-full border border-blue-400/30 bg-blue-500/10 px-3 py-1 text-xs text-blue-200">
-          {t("clearFilter")} ✕
-        </button>
+      {(fingerprint || runId) && (
+        <div className="mb-3 flex flex-wrap gap-2">
+          {fingerprint && (
+            <button type="button" onClick={onClearFingerprint} className="rounded-full border border-blue-400/30 bg-blue-500/10 px-3 py-1 text-xs text-blue-200">
+              {t("clearFilter")} ✕
+            </button>
+          )}
+          {runId && (
+            <button type="button" onClick={onClearRun} className="rounded-full border border-blue-400/30 bg-blue-500/10 px-3 py-1 text-xs text-blue-200">
+              {t("filterRun", { id: runId })} ✕
+            </button>
+          )}
+        </div>
       )}
 
       {events.isLoading ? (
@@ -349,41 +428,25 @@ function EventLog({ t, ago, fingerprint, onClearFingerprint }: {
         <p className="py-6 text-center text-sm text-white/45">{t("eventsEmpty")}</p>
       ) : (
         <ul className="divide-y divide-white/5">
-          {rows.map((event) => {
-            const expanded = open === event.id;
-            const Chevron = expanded ? ChevronDown : ChevronRight;
-            return (
-              <li key={event.id}>
-                <button type="button" onClick={() => setOpen(expanded ? null : event.id)} className="flex w-full items-start gap-2 py-2.5 text-left">
-                  <Chevron className="mt-0.5 h-4 w-4 shrink-0 text-white/35" />
-                  <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${event.level === "error" ? "bg-red-400" : "bg-amber-400"}`} />
-                  <span className="min-w-0 flex-1">
-                    <span className="block break-words text-sm text-white/85">{event.message}</span>
-                    <span className="text-xs text-white/40">
-                      {sourceLabel(t, event.source)} · {ago(event.createdAt)} · {new Date(event.createdAt).toLocaleString()}
-                      {event.repName ? ` · ${event.repName}` : ""}
-                    </span>
+          {rows.map((event) => (
+            <li key={event.id}>
+              <Link
+                href={`/admin/health/events/${event.id}`}
+                className="flex w-full items-start gap-2 rounded-lg py-2.5 text-left hover:bg-white/[0.02]"
+                data-testid="system-event-row"
+              >
+                <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${event.level === "error" ? "bg-red-400" : "bg-amber-400"}`} />
+                <span className="min-w-0 flex-1">
+                  <span className="block break-words text-sm text-white/85">{event.message}</span>
+                  <span className="text-xs text-white/40">
+                    {sourceLabel(t, event.source)} · {ago(event.createdAt)} · {new Date(event.createdAt).toLocaleString()}
+                    {event.repName ? ` · ${event.repName}` : ""}
                   </span>
-                </button>
-                {expanded && (
-                  <div className="mb-3 ml-8 space-y-2">
-                    {Object.keys(event.context).length > 0 && (
-                      <div>
-                        <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-white/40">{t("context")}</p>
-                        <pre className="overflow-x-auto rounded-lg bg-black/40 p-2 text-[11px] text-white/70">{JSON.stringify(event.context, null, 2)}</pre>
-                      </div>
-                    )}
-                    {event.detail && (
-                      <div>
-                        <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-white/40">{t("detail")}</p>
-                        <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-black/40 p-2 text-[11px] text-white/70">{event.detail}</pre>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </li>
-            );
-          })}
+                </span>
+                <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-white/30" />
+              </Link>
+            </li>
+          ))}
         </ul>
       )}
       {events.hasNextPage && (

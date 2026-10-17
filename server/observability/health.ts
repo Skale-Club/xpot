@@ -1,7 +1,8 @@
 import { and, desc, eq, gte, inArray, isNotNull, or, sql } from "drizzle-orm";
 import { db } from "../db.js";
 import { prospectingJobs, prospectingRuns, salesReps, systemEvents } from "#shared/schema.js";
-import type { ActiveRunHealth, HealthVerdict, StuckJob, SystemHealthSnapshot } from "#shared/system-health.js";
+import type { ActiveRunHealth, HealthVerdict, RecentRun, StuckJob, SystemHealthSnapshot } from "#shared/system-health.js";
+import type { ProspectingRun } from "#shared/schema.js";
 import { ENGINE_OVERDUE_GRACE_MS, getEngineSettings } from "../prospecting/google-maps-engine.js";
 import { getProspectingWorkerHealth } from "../prospecting/queue.js";
 import { median } from "../prospecting/job-status.js";
@@ -78,6 +79,27 @@ export function assessWorker(input: {
 
 const iso = (date: Date | null | undefined) => (date ? date.toISOString() : null);
 
+/** How many searches the timeline shows. */
+export const RECENT_RUNS = 60;
+
+export function toRecentRun(run: ProspectingRun, repName: string | null): RecentRun {
+  return {
+    runId: run.id,
+    jobId: run.jobId,
+    repName,
+    status: run.status,
+    query: run.query,
+    location: run.location,
+    wave: run.wave,
+    createdAt: run.createdAt.toISOString(),
+    startedAt: iso(run.startedAt),
+    completedAt: iso(run.completedAt),
+    durationMs: run.startedAt && run.completedAt ? run.completedAt.getTime() - run.startedAt.getTime() : null,
+    resultCount: run.resultCount,
+    errorMessage: run.errorMessage,
+  };
+}
+
 export async function systemHealthSnapshot(now = Date.now()): Promise<SystemHealthSnapshot> {
   const worker = getProspectingWorkerHealth();
   const { maxTimeSeconds } = getEngineSettings();
@@ -85,13 +107,14 @@ export async function systemHealthSnapshot(now = Date.now()): Promise<SystemHeal
   const since24h = new Date(now - DAY_MS);
   const since7d = new Date(now - 7 * DAY_MS);
 
-  const [active, queued, recentCompleted, runTotals, openJobs, routeCandidates, failedRoutes, bySource, groups, reps] = await Promise.all([
+  const [active, queued, recentCompleted, recent, runTotals, openJobs, routeCandidates, failedRoutes, bySource, groups, reps] = await Promise.all([
     db.select().from(prospectingRuns).where(inArray(prospectingRuns.status, ["starting", "running"])),
     db.select({ count: sql<number>`count(*)::int`, oldest: sql<Date | null>`min(${prospectingRuns.createdAt})` })
       .from(prospectingRuns).where(eq(prospectingRuns.status, "queued")),
     db.select({ startedAt: prospectingRuns.startedAt, completedAt: prospectingRuns.completedAt }).from(prospectingRuns)
       .where(and(eq(prospectingRuns.status, "completed"), isNotNull(prospectingRuns.startedAt), isNotNull(prospectingRuns.completedAt)))
       .orderBy(desc(prospectingRuns.completedAt)).limit(20),
+    db.select().from(prospectingRuns).orderBy(desc(prospectingRuns.createdAt), desc(prospectingRuns.id)).limit(RECENT_RUNS),
     db.select({ status: prospectingRuns.status, count: sql<number>`count(*)::int` }).from(prospectingRuns)
       .where(gte(prospectingRuns.updatedAt, since24h)).groupBy(prospectingRuns.status),
     db.select({ count: sql<number>`count(*)::int` }).from(prospectingJobs).where(inArray(prospectingJobs.status, ["queued", "running"])),
@@ -206,6 +229,7 @@ export async function systemHealthSnapshot(now = Date.now()): Promise<SystemHeal
       activeRuns,
       openJobs: openJobs[0]?.count ?? 0,
       stuckJobs,
+      recentRuns: recent.map((run) => toRecentRun(run, repName.get(run.repId) ?? null)),
       failedRuns24h: runCount("failed"),
       completedRuns24h: runCount("completed"),
       failedRoutes24h: failedRoutes[0]?.count ?? 0,
