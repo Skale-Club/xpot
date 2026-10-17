@@ -9,6 +9,7 @@
 export const START_TIMEOUT_MS = 30_000;
 const STATUS_TIMEOUT_MS = 20_000;
 const DOWNLOAD_TIMEOUT_MS = 120_000;
+const PARTIAL_DOWNLOAD_TIMEOUT_MS = 10_000;
 export const ENGINE_OVERDUE_GRACE_MS = 10 * 60 * 1000;
 
 export type EngineStatus = "running" | "completed" | "failed";
@@ -148,12 +149,25 @@ export async function getEngineJobStatus(jobId: string): Promise<{ status: Engin
   return mapEngineStatus(body.Status ?? body.status);
 }
 
-export async function downloadEngineCsv(jobId: string) {
+export async function downloadEngineCsv(jobId: string, timeoutMs = DOWNLOAD_TIMEOUT_MS) {
   const response = await engineRequest(`/api/v1/jobs/${encodeURIComponent(jobId)}/download`, {
     method: "GET",
-    timeoutMs: DOWNLOAD_TIMEOUT_MS,
+    timeoutMs,
   });
   return response.text();
+}
+
+/**
+ * The engine writes its CSV while it scrapes, and serves it before the job is
+ * done; the rows so far are the only real progress it has. Best effort: null
+ * when the file is not there yet or the engine is slow to answer.
+ */
+export async function countEngineResultsSoFar(jobId: string) {
+  try {
+    return parseEngineResults(await downloadEngineCsv(jobId, PARTIAL_DOWNLOAD_TIMEOUT_MS), Number.MAX_SAFE_INTEGER).length;
+  } catch {
+    return null;
+  }
 }
 
 export function parseCsv(text: string): string[][] {

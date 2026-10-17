@@ -22,7 +22,7 @@ type ProspectingJob = {
 
 type ProspectingJobDetails = {
   job: ProspectingJob;
-  runs: Array<{ status: string; progress: number; wave: number; startedAt?: string | null }>;
+  runs: Array<{ status: string; progress: number; wave: number; startedAt?: string | null; resultCount?: number }>;
   summary: { eligible: number; excluded: number };
   timing?: ProspectingTiming;
 };
@@ -125,6 +125,9 @@ export function PersistentRouteProgress({ collapsed = false, className = "" }: {
     nowMs: serverNowMs(details.timing, detailsQuery.dataUpdatedAt, now),
   });
   const status = stageStatus(progress.stage, t);
+  const foundSoFar = progress.stage === "searching"
+    ? details.runs.reduce((sum, run) => sum + (run.resultCount ?? 0), 0)
+    : 0;
   const destination = shellItem.route
     ? `/route?routeId=${shellItem.route.id}`
     : `/route?jobId=${details.job.id}`;
@@ -166,7 +169,10 @@ export function PersistentRouteProgress({ collapsed = false, className = "" }: {
             <strong className="min-w-0 flex-1 truncate text-xs font-bold text-white/90">{status}</strong>
             <span className="shrink-0 text-[11px] font-bold tabular-nums text-indigo-100">{progress.percent}%</span>
           </span>
-          <span className="mt-0.5 block truncate text-[11px] leading-4 text-white/45">{details.job.location}</span>
+          <span className="mt-0.5 block truncate text-[11px] leading-4 text-white/45">
+            {details.job.location}
+            {foundSoFar > 0 ? ` · ${t("foundSoFar", { count: foundSoFar })}` : ""}
+          </span>
         </span>
         <ChevronRight className="h-4 w-4 shrink-0 text-white/30 transition-transform group-hover:translate-x-0.5 group-hover:text-indigo-200" aria-hidden="true" />
       </span>

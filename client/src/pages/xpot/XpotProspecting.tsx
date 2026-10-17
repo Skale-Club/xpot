@@ -22,6 +22,7 @@ import { setSellTo } from "@/pages/tags/lib";
 import {
   activeRunTiming,
   exclusionCounts,
+  searchPhase,
   MAX_PROSPECTING_SECTORS,
   moveIdByOffset,
   parseSectorSearches,
@@ -52,7 +53,7 @@ type ProspectingJob = {
 
 type ProspectingJobDetails = {
   job: ProspectingJob;
-  runs: Array<{ id: number; status: string; location: string; niche: string; progress: number; wave: number; resultCount?: number; startedAt?: string | null }>;
+  runs: Array<{ id: number; status: string; location: string; niche: string; progress: number; wave: number; resultCount?: number; requestedMaxResults?: number; startedAt?: string | null }>;
   timing?: ProspectingTiming;
   candidates: Array<{
     id: number;
@@ -702,11 +703,24 @@ export function XpotProspecting() {
         : 0;
   const activeRun = details?.runs.find((run) => run.status === "running");
   const nextRun = details?.runs.find((run) => run.status === "queued");
+  // The running search names its current step (open Maps, scroll, collect, read sites).
+  const runActivity = (run: NonNullable<typeof activeRun>) => {
+    const vars = {
+      sector: run.niche.replaceAll("_", " "),
+      location: details?.job.expansionState?.currentArea || run.location,
+      found: runTiming?.found ?? 0,
+      target: runTiming?.target ?? run.requestedMaxResults ?? 0,
+    };
+    if (!runTiming) return t("activitySearching", vars);
+    return {
+      opening: t("activityOpening", vars),
+      scrolling: t("activityScrolling", vars),
+      collecting: t("activityCollecting", vars),
+      contacts: t("activityContacts", vars),
+    }[searchPhase(runTiming)];
+  };
   const currentActivity = !details || !progress ? null
-    : activeRun ? `${t("activitySearching", {
-      sector: activeRun.niche.replaceAll("_", " "),
-      location: details.job.expansionState?.currentArea || activeRun.location,
-    })}${runTimingLabel ? ` · ${runTimingLabel}` : ""}`
+    : activeRun ? `${runActivity(activeRun)}${runTimingLabel ? ` · ${runTimingLabel}` : ""}`
       : nextRun ? t("activityPreparing", {
         sector: nextRun.niche.replaceAll("_", " "),
         location: details.job.expansionState?.currentArea || nextRun.location,
