@@ -14,7 +14,6 @@ import {
   directPath,
   errorText,
   haptic,
-  isIos,
   lookupTag,
   pushRecent,
   tagPath,
@@ -23,7 +22,6 @@ import {
 import {
   ActionTile,
   BTN_DIRECT,
-  BTN_PRIMARY,
   BTN_TERTIARY,
   Banner,
   BottomSheet,
@@ -38,8 +36,7 @@ import { mapNfcError, nfcMode, scanOnce } from "./webNfc";
 import { useIsComputer, useIsDesktop } from "@/hooks/use-is-desktop";
 
 // "read" is the chooser behind the single Read button: QR, chip or typed code.
-// "phone" explains reading a chip without Web NFC: the phone's own NFC opens the link.
-type Sheet = { kind: "read" } | { kind: "empty" } | { kind: "nfc" } | { kind: "phone" } | null;
+type Sheet = { kind: "read" } | { kind: "empty" } | { kind: "nfc" } | null;
 
 function isOwnHost(url: string) {
   try {
@@ -61,9 +58,10 @@ export default function HomeScreen() {
   const [code, setCode] = useState("");
   const [sellTo, setSellToState] = useState(getSellTo);
   const nfcAbort = useRef<AbortController | null>(null);
-  // Chrome on Android reads chips in the app; another phone opens a written chip by
-  // itself; a computer has no NFC, so it gets no chip option at all.
-  const nfc = nfcMode();
+  // Only Chrome on Android reads a chip in the app. An iPhone's own NFC opens the chip's
+  // public link, which for a live piece is the customer's page, never this piece in
+  // Xpot: there (and on a computer) the chip is no way to find a piece, so no option.
+  const readsChip = nfcMode() === "web";
   // A computer has no NFC and rarely a usable camera: it types the code, or a
   // USB/Bluetooth scanner "types" the whole QR link followed by Enter.
   const isDesktop = useIsDesktop();
@@ -231,7 +229,7 @@ export default function HomeScreen() {
           primary
           icon={ScanLine}
           title={t("readPiece")}
-          description={t("readPieceHint")}
+          description={readsChip ? t("readPieceHint") : t("readPieceHintNoChip")}
           onClick={() => {
             // A message from an earlier read would otherwise reappear inside the chooser.
             clearBanner();
@@ -265,7 +263,7 @@ export default function HomeScreen() {
           </div>
         )}
         {/* QR first: it always works, while a chip is only found once it has been written. */}
-        <div className={`mt-4 grid gap-3 ${nfc === "none" ? "grid-cols-1" : "grid-cols-2"}`}>
+        <div className={`mt-4 grid gap-3 ${readsChip ? "grid-cols-2" : "grid-cols-1"}`}>
           <button
             type="button"
             onClick={() => {
@@ -277,9 +275,11 @@ export default function HomeScreen() {
             style={{ WebkitTapHighlightColor: "transparent" }}
             className="flex min-h-[164px] flex-col items-center justify-center gap-2.5 rounded-[22px] bg-gradient-to-br from-blue-500 to-indigo-500 p-3 text-center text-white shadow-[0_8px_24px_rgba(59,130,246,0.25)] transition-transform active:scale-[0.97] disabled:opacity-60"
           >
-            <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">
-              {t("recommended")}
-            </span>
+            {readsChip && (
+              <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">
+                {t("recommended")}
+              </span>
+            )}
             <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/15">
               <QrCode className="h-8 w-8" />
             </span>
@@ -288,10 +288,10 @@ export default function HomeScreen() {
               <span className="mt-1 block text-[11px] leading-snug text-white/75">{t("scanQrHint")}</span>
             </span>
           </button>
-          {nfc !== "none" && (
+          {readsChip && (
             <button
               type="button"
-              onClick={() => (nfc === "web" ? void startNfc() : setSheet({ kind: "phone" }))}
+              onClick={() => void startNfc()}
               disabled={busy}
               data-testid="button-scan-nfc"
               style={{ WebkitTapHighlightColor: "transparent" }}
@@ -303,7 +303,7 @@ export default function HomeScreen() {
               <span>
                 <span className="block text-base font-bold leading-tight">{t("readChip")}</span>
                 <span className="mt-1 block text-[11px] leading-snug text-amber-200/80">
-                  {nfc === "web" ? t("readChipHint") : t("readChipPhone")}
+                  {t("readChipHint")}
                 </span>
               </span>
             </button>
@@ -334,35 +334,6 @@ export default function HomeScreen() {
         >
           {tc("cancel")}
         </button>
-      </BottomSheet>
-
-      {/* Another phone: the app cannot read, but the phone itself opens a written chip's link. */}
-      <BottomSheet open={sheet?.kind === "phone"} onClose={() => setSheet(null)} title={t("phoneReadTitle")}>
-        <h2 className={SHEET_TITLE}>{t("phoneReadTitle")}</h2>
-        <ol className="mt-4 space-y-2">
-          {([isIos() ? "phoneReadStepIos" : "phoneReadStep", "phoneReadNotice", "phoneReadResult"] as const).map((step, i) => (
-            <li key={step} className="flex gap-3 text-sm text-white/75">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-blue-500/15 text-xs font-bold text-blue-300">{i + 1}</span>
-              <span className="pt-0.5">{t(step)}</span>
-            </li>
-          ))}
-        </ol>
-        <div className="mt-5 space-y-3">
-          <button
-            type="button"
-            onClick={() => {
-              setSheet(null);
-              setQrOpen(true);
-            }}
-            className={BTN_PRIMARY}
-          >
-            <QrCode className="h-5 w-5" />
-            {t("scanQr")}
-          </button>
-          <button type="button" onClick={() => setSheet({ kind: "read" })} className={BTN_TERTIARY}>
-            {tc("back")}
-          </button>
-        </div>
       </BottomSheet>
 
       <BottomSheet open={sheet?.kind === "empty"} onClose={() => setSheet(null)} title={t("chipEmpty")}>
