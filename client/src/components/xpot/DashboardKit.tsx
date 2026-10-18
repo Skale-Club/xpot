@@ -286,7 +286,8 @@ export function AttentionItem({
   title: string;
   detail?: string;
   trailing?: ReactNode;
-  tone?: "neutral" | "blue" | "violet" | "amber" | "emerald";
+  /** Amber needs a step; red is late (overdue). */
+  tone?: "neutral" | "blue" | "violet" | "amber" | "emerald" | "red";
   onClick: () => void;
 }) {
   const tones = {
@@ -295,6 +296,7 @@ export function AttentionItem({
     violet: "bg-violet-500/[0.12] text-violet-300",
     amber: "bg-amber-500/[0.12] text-amber-300",
     emerald: "bg-emerald-500/[0.12] text-emerald-300",
+    red: "bg-red-500/[0.12] text-red-300",
   } as const;
 
   return (

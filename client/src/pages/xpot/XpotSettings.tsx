@@ -616,6 +616,19 @@ export function XpotSettings() {
                     </Section>
                   </div>
                 )}
+
+                {/* A Rep Admin's management mode: their organization's lists, nothing to administer. */}
+                {access.reach === "organization" && (
+                  <Section title={tn("managementMode")}>
+                    <SwitchRow
+                      checked={access.adminMode}
+                      onCheckedChange={access.setAdminMode}
+                      label={tn("managementMode")}
+                      hint={tn("managementModeOrgHint")}
+                      testId="settings-management-mode"
+                    />
+                  </Section>
+                )}
               </div>
             )}
           </div>

@@ -14,12 +14,13 @@ import {
 } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 import { formatCents, formatShortDate } from "../../utils";
-import { MONEY_CHART } from "./moneyPalette";
+import { MONEY_CHART, MONEY_DUE_TONE } from "./moneyPalette";
 import { useSalesSummary } from "../../hooks/useSalesModule";
 import { ListSkeleton } from "@/components/xpot/ListSkeleton";
 import { PeriodSelector } from "@/components/xpot/DashboardKit";
 import { useUrlFilters } from "@/hooks/use-url-filters";
 import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
+import { InlineAlert } from "@/components/xpot/InlineAlert";
 import { useT } from "@/i18n";
 import { salesModuleMessages } from "@/i18n/messages/salesModule";
 
@@ -60,8 +61,9 @@ function SignalCard({
   );
 }
 
-function FinancialMetric({ label, value, accent }: { label: string; value: string; accent?: "emerald" | "red" | "amber" }) {
-  const color = accent === "emerald" ? "text-emerald-300" : accent === "red" ? "text-rose-300" : accent === "amber" ? "text-amber-300" : "text-white";
+/** A figure of the breakdown: profit emerald, money out or not earned the neutral cost tone (moneyPalette). */
+function FinancialMetric({ label, value, accent }: { label: string; value: string; accent?: "profit" | "cost" }) {
+  const color = accent ? MONEY_CHART[accent].text : "text-white";
   return (
     <div className="min-w-0 border-l border-white/[0.075] pl-3 first:border-l-0 first:pl-0 max-sm:odd:border-l-0 max-sm:odd:pl-0 lg:pl-5">
       <div className="truncate text-[9px] font-bold uppercase tracking-[0.17em] text-white/30 sm:text-[10px]">{label}</div>
@@ -150,7 +152,7 @@ export function SalesOverview({ onGoToConsignments }: { onGoToConsignments?: () 
             label={t("outstanding", { amount: formatCents(s.unpaid.cents) })}
             value={s.unpaid.count}
             detail={t.plural("notFullyPaid", s.unpaid.count)}
-            tone={s.unpaid.count > 0 ? "amber" : "neutral"}
+            tone={s.unpaid.count > 0 ? MONEY_DUE_TONE.outstanding : "neutral"}
           />
         </div>
       </section>
@@ -163,20 +165,17 @@ export function SalesOverview({ onGoToConsignments }: { onGoToConsignments?: () 
         {/* Two by two on a phone, where four columns cut the amounts ("$1,05…"). */}
         <div className="grid grid-cols-2 gap-x-3 gap-y-4 sm:grid-cols-4 sm:gap-y-3">
           <FinancialMetric label={t("grossRevenue")} value={formatCents(s.financial.grossCents)} />
-          <FinancialMetric label={t("discountsGiven")} value={formatCents(s.financial.discountCents)} accent="red" />
-          <FinancialMetric label={t("acquisitionCosts")} value={formatCents(s.financial.costCents)} accent="amber" />
-          <FinancialMetric label={t("grossProfitMetric")} value={formatCents(s.financial.grossProfitCents)} accent="emerald" />
+          <FinancialMetric label={t("discountsGiven")} value={formatCents(s.financial.discountCents)} accent="cost" />
+          <FinancialMetric label={t("acquisitionCosts")} value={formatCents(s.financial.costCents)} accent="cost" />
+          <FinancialMetric label={t("grossProfitMetric")} value={formatCents(s.financial.grossProfitCents)} accent="profit" />
         </div>
       </section>
 
+      {/* Outstanding is to be collected, not late: amber like its tile (MONEY_DUE_TONE). */}
       {s.unpaid.count > 0 && (
-        <div className="flex items-center gap-3 rounded-2xl border border-rose-400/20 bg-rose-400/[0.07] px-4 py-3.5 shadow-[inset_3px_0_0_rgba(251,113,133,0.55)]">
-          <AlertTriangle className="h-4 w-4 shrink-0 text-rose-300" />
-          <div className="min-w-0 flex-1">
-            <div className="text-sm font-semibold text-white">{t("outstanding", { amount: formatCents(s.unpaid.cents) })}</div>
-            <div className="text-[11px] text-white/40">{t.plural("notFullyPaid", s.unpaid.count)}</div>
-          </div>
-        </div>
+        <InlineAlert tone="warning" title={t("outstanding", { amount: formatCents(s.unpaid.cents) })}>
+          <span className="text-[11px] text-white/40">{t.plural("notFullyPaid", s.unpaid.count)}</span>
+        </InlineAlert>
       )}
 
       {chart.length > 1 && (
@@ -250,7 +249,7 @@ export function SalesOverview({ onGoToConsignments }: { onGoToConsignments?: () 
           {(s.consignment.dueCount > 0 || s.consignment.dueSoonCount > 0) && (
             <div className="relative mt-5 flex items-center gap-2 border-t border-white/[0.07] pt-3 text-[11px]">
               <CalendarClock className="h-3.5 w-3.5 shrink-0 text-white/35" />
-              <span className={s.consignment.dueCount > 0 ? "text-rose-300" : "text-white/45"}>
+              <span className={s.consignment.dueCount > 0 ? "text-red-300" : "text-white/45"}>
                 {s.consignment.dueCount > 0 ? t.plural("settlementsOverdue", s.consignment.dueCount) : null}
                 {s.consignment.dueCount > 0 && s.consignment.dueSoonCount > 0 ? " · " : null}
                 {s.consignment.dueSoonCount > 0 ? t("dueWithinWeek", { count: s.consignment.dueSoonCount }) : null}

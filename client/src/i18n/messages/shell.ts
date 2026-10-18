@@ -62,6 +62,7 @@ const en = {
   // Management mode (components/xpot/AdminMode.tsx): the management side, apart from personal Settings
   adminModeEnter: "Management mode",
   adminModeOn: "Management mode: lists show the whole team",
+  adminModeOnOrganization: "Management mode: lists show your organization",
   adminModeExit: "Leave management",
 
   // Install the PWA (sidebar footer, Settings)
@@ -132,6 +133,7 @@ export const shellMessages: Dictionary<typeof en> = {
 
     adminModeEnter: "Modo gestão",
     adminModeOn: "Modo gestão: as listas mostram toda a equipe",
+    adminModeOnOrganization: "Modo gestão: as listas mostram a sua organização",
     adminModeExit: "Sair da gestão",
 
     installApp: "Instalar app",
@@ -198,6 +200,7 @@ export const shellMessages: Dictionary<typeof en> = {
 
     adminModeEnter: "Modo gestión",
     adminModeOn: "Modo gestión: las listas muestran a todo el equipo",
+    adminModeOnOrganization: "Modo gestión: las listas muestran tu organización",
     adminModeExit: "Salir de la gestión",
 
     installApp: "Instalar app",
