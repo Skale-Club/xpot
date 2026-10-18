@@ -7,12 +7,10 @@ import { checkinMessages } from "@/i18n/messages/checkin";
 import { GoogleLogo } from "@/components/ui/google-logo";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { usePlaceSearch } from "../usePlaceSearch";
-import { findMatchingLead } from "../utils";
+import { matchSavedLead } from "../utils";
 import { placeTypeLabel } from "@/lib/placeTypes";
-import { leadMatchesSearch } from "../hooks/useLeads";
+import { useLeadLookup } from "../hooks/useLeadLookup";
 import type { FullSalesLead, GeoState, GooglePlaceResult } from "../types";
-
-const MAX_LEADS = 6;
 
 type Item =
   | { kind: "lead"; key: string; lead: FullSalesLead }
@@ -30,7 +28,6 @@ export type PlaceLeadSearchHandle = { focus: () => void };
 export const PlaceLeadSearch = forwardRef<PlaceLeadSearchHandle, {
   value: string;
   onChange: (value: string) => void;
-  leads: FullSalesLead[];
   geoState: GeoState;
   enabled?: boolean;
   placeholder: string;
@@ -38,7 +35,8 @@ export const PlaceLeadSearch = forwardRef<PlaceLeadSearchHandle, {
   /** Shown at the end of the input row, e.g. a keyboard hint. */
   trailing?: ReactNode;
   onPickLead: (lead: FullSalesLead) => void;
-  onPickPlace: (place: GooglePlaceResult) => void;
+  /** `match` is the saved company this Google result already is, when the search can see it. */
+  onPickPlace: (place: GooglePlaceResult, match?: FullSalesLead) => void;
   onCreate: (name: string) => void;
   onNearby: () => void;
   onOpenChange?: (open: boolean) => void;
@@ -46,7 +44,6 @@ export const PlaceLeadSearch = forwardRef<PlaceLeadSearchHandle, {
 }>(function PlaceLeadSearch({
   value,
   onChange,
-  leads,
   geoState,
   enabled = true,
   placeholder,
@@ -74,19 +71,20 @@ export const PlaceLeadSearch = forwardRef<PlaceLeadSearchHandle, {
   };
 
   const query = value.trim();
-  const leadResults = useMemo(
-    () => leads.filter((lead) => leadMatchesSearch(lead, query)).slice(0, MAX_LEADS),
-    [leads, query],
-  );
+  const leadQuery = useLeadLookup(value, enabled && open);
+  const leadResults = leadQuery.data ?? [];
+  // A Google result is "already saved" when one of the companies the server
+  // returned for this text carries its Place ID, or looks like it.
+  const matchFor = (place: GooglePlaceResult) => matchSavedLead(place, leadResults);
   const places = query.length >= 2 ? placeQuery.data?.results ?? [] : [];
 
   // Visual order and keyboard order are the same list.
   const items: Item[] = useMemo(() => [
     ...leadResults.map((lead) => ({ kind: "lead" as const, key: `lead-${lead.id}`, lead })),
     ...(isDesktop ? [{ kind: "create" as const, key: "create" }] : []),
-    ...places.map((place) => ({ kind: "place" as const, key: `place-${place.placeId}`, place, match: findMatchingLead(place, leads) })),
+    ...places.map((place) => ({ kind: "place" as const, key: `place-${place.placeId}`, place, match: matchFor(place) })),
     ...(isDesktop ? [] : [{ kind: "create" as const, key: "create" }]),
-  ], [isDesktop, leadResults, leads, places]);
+  ], [isDesktop, leadResults, places]);
 
   useEffect(() => { setActiveIndex(-1); }, [query]);
 
@@ -94,7 +92,7 @@ export const PlaceLeadSearch = forwardRef<PlaceLeadSearchHandle, {
     setOpen(false);
     inputRef.current?.blur();
     if (item.kind === "lead") onPickLead(item.lead);
-    else if (item.kind === "place") onPickPlace(item.place);
+    else if (item.kind === "place") onPickPlace(item.place, item.match);
     else onCreate(query);
   };
 
@@ -114,6 +112,9 @@ export const PlaceLeadSearch = forwardRef<PlaceLeadSearchHandle, {
     }
     if (event.key === "Enter") {
       event.preventDefault();
+      // With nothing typed the list is just the first saved customers: Enter
+      // alone must not open a check-in at whichever one happens to be first.
+      if (!items[activeIndex] && !query) return;
       const item = items[activeIndex] ?? items.find((candidate) => candidate.kind !== "create");
       if (item) pick(item);
     }
@@ -169,7 +170,7 @@ export const PlaceLeadSearch = forwardRef<PlaceLeadSearchHandle, {
 
   const placeRows = places.map((place) => {
     const key = `place-${place.placeId}`;
-    const match = findMatchingLead(place, leads);
+    const match = matchFor(place);
     const typeLabel = placeTypeLabel(place.primaryType, t.lang, place.primaryTypeName);
     return (
       <button key={key} type="button" id={key} role="option" aria-selected={indexOf(key) === activeIndex} onMouseEnter={() => setActiveIndex(indexOf(key))} onClick={() => pick({ kind: "place", key, place, match })} className={rowClass(key)}>
@@ -253,7 +254,7 @@ export const PlaceLeadSearch = forwardRef<PlaceLeadSearchHandle, {
             title={t("searchNearby")}
           >
             <LocateFixed className="h-4 w-4" />
-            <span className="hidden sm:inline">{t("searchNearby")}</span>
+            <span className="hidden lg:inline">{t("searchNearby")}</span>
           </button>
         </div>
       </div>

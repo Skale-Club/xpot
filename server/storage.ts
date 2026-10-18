@@ -450,12 +450,17 @@ export class DatabaseStorage implements IStorage {
     }
     if (filters.search) {
       const likeValue = `%${filters.search}%`;
+      // What the check-in search matched locally before it asked the server:
+      // the sector and an address or city count too.
       conditions.push(
         or(
           ilike(salesLeads.name, likeValue),
           ilike(salesLeads.legalName, likeValue),
           ilike(salesLeads.email, likeValue),
           ilike(salesLeads.phone, likeValue),
+          ilike(salesLeads.industry, likeValue),
+          sql`EXISTS (SELECT 1 FROM sales_lead_locations l WHERE l.lead_id = ${salesLeads.id}
+            AND (l.address_line_1 ILIKE ${likeValue} OR l.city ILIKE ${likeValue}))`,
         )
       );
     }

@@ -1,8 +1,10 @@
 import { useT, type Translate } from "@/i18n";
 import { checkinMessages } from "@/i18n/messages/checkin";
 import { PILL_BORDERS, PILL_DOTS, PILL_TONES, Pill, VISIT_OUTCOME_TONE, toneOf, type PillTone } from "@/components/xpot/StatusPill";
+import { InlineAlert } from "@/components/xpot/InlineAlert";
 import { EYEBROW } from "@/components/xpot/surface";
-import { visitLocationException } from "../visitRules";
+import { formatMeters } from "../utils";
+import { visitLocationException, type VisitLocationException } from "../visitRules";
 
 export type VisitStatus =
   | "planned"
@@ -54,27 +56,63 @@ export function StatusBadge({ status }: { status: string }) {
   );
 }
 
+/** The check-in fields every visit row carries (shared/schema/sales.ts salesVisits). */
+export type VisitLocationFields = {
+  checkedInAt?: string | Date | null;
+  validationStatus?: string | null;
+  manualOverrideReason?: string | null;
+  distanceFromTargetMeters?: number | null;
+  gpsAccuracyMeters?: number | null;
+};
+
+function exceptionLabel(t: Translate<typeof checkinMessages.en>, exception: VisitLocationException) {
+  return exception === "no_location" ? t("exceptionNoLocation") : t("exceptionOutsideArea");
+}
+
 /**
  * The mark Check-in rules promise: a visit accepted outside the business area
  * (with a reason, or while blocking is off) or with no location to compare.
- * Nothing for a visit validated on site, or one not checked in yet.
+ * Nothing for a visit validated on site, or one not checked in yet. The
+ * history list and table show this; the reason is in its title.
  */
-export function LocationExceptionBadge({ visit }: {
-  visit: { checkedInAt?: string | Date | null; validationStatus?: string | null; manualOverrideReason?: string | null };
-}) {
+export function LocationExceptionBadge({ visit }: { visit: VisitLocationFields }) {
   const t = useT(checkinMessages);
   const exception = visitLocationException(visit);
   if (!exception) return null;
   const reason = visit.manualOverrideReason?.trim();
   const hint = exception === "no_location"
-    ? t("exceptionNoLocationHint")
+    ? reason ? t("exceptionNoLocationReason", { reason }) : t("exceptionNoLocationHint")
     : reason ? t("exceptionOutsideAreaReason", { reason }) : t("exceptionOutsideAreaHint");
   return (
-    <span title={hint} aria-label={hint} className="inline-flex">
-      <Pill tone="amber">
-        {exception === "no_location" ? t("exceptionNoLocation") : t("exceptionOutsideArea")}
-      </Pill>
+    <span title={hint} aria-label={hint} className="inline-flex" data-testid="location-exception">
+      <Pill tone="amber">{exceptionLabel(t, exception)}</Pill>
     </span>
+  );
+}
+
+/**
+ * On the visit page, in place of the badge: the same exception spelled out,
+ * with the rep's reason, the distance and the location's accuracy. The
+ * check-in dialog tells reps their manager sees this reason.
+ */
+export function LocationExceptionNotice({ visit }: { visit: VisitLocationFields }) {
+  const t = useT(checkinMessages);
+  const exception = visitLocationException(visit);
+  if (!exception) return null;
+  const reason = visit.manualOverrideReason?.trim();
+  const facts = [
+    typeof visit.distanceFromTargetMeters === "number" ? t("exceptionDistance", { distance: formatMeters(visit.distanceFromTargetMeters) }) : null,
+    typeof visit.gpsAccuracyMeters === "number" ? t("exceptionAccuracy", { accuracy: formatMeters(visit.gpsAccuracyMeters) }) : null,
+  ].filter(Boolean);
+  return (
+    <div data-testid="location-exception-notice">
+      <InlineAlert tone="warning" title={exceptionLabel(t, exception)}>
+        {reason ? <p><span className="text-white/45">{t("exceptionReason")}: </span>{reason}</p> : (
+          <p>{exception === "no_location" ? t("exceptionNoLocationHint") : t("exceptionOutsideAreaHint")}</p>
+        )}
+        {facts.length ? <p className="mt-0.5 text-xs text-white/45">{facts.join(" · ")}</p> : null}
+      </InlineAlert>
+    </div>
   );
 }
 

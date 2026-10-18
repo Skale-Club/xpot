@@ -22,6 +22,7 @@ const en = {
   statePlaceholder: "State",
   createCompany: "Save company",
   companyCreated: "Company added",
+  companyAlreadySaved: "Already saved as {name}",
   createFailed: "Could not add the company",
 
   // Location gate
@@ -103,6 +104,11 @@ const en = {
   exceptionOutsideAreaReason: "Checked in outside the company's area. Reason: {reason}",
   exceptionNoLocation: "Location not checked",
   exceptionNoLocationHint: "Checked in without a location to compare: no GPS fix, or the company has no map location.",
+  exceptionNoLocationReason: "Checked in without a location to compare. Reason: {reason}",
+  // The visit page's notice about the exception
+  exceptionReason: "Reason given",
+  exceptionDistance: "{distance} from the company",
+  exceptionAccuracy: "location accurate to about {accuracy}",
 
   // Live map
   mapAlt: "Your current location",
@@ -202,6 +208,7 @@ export const checkinMessages: Dictionary<typeof en> = {
     statePlaceholder: "Estado",
     createCompany: "Salvar empresa",
     companyCreated: "Empresa adicionada",
+    companyAlreadySaved: "Já estava salva como {name}",
     createFailed: "Não foi possível adicionar a empresa",
 
     gateHeading: "Check-in",
@@ -278,6 +285,10 @@ export const checkinMessages: Dictionary<typeof en> = {
     exceptionOutsideAreaReason: "Check-in feito fora da área da empresa. Motivo: {reason}",
     exceptionNoLocation: "Exceção: sem localização",
     exceptionNoLocationHint: "Check-in sem localização para comparar: sem sinal de GPS, ou a empresa não tem localização no mapa.",
+    exceptionNoLocationReason: "Check-in sem localização para comparar. Motivo: {reason}",
+    exceptionReason: "Motivo informado",
+    exceptionDistance: "{distance} da empresa",
+    exceptionAccuracy: "localização com precisão de cerca de {accuracy}",
 
     mapAlt: "Sua localização atual",
     mapLive: "Ao vivo",
@@ -367,6 +378,7 @@ export const checkinMessages: Dictionary<typeof en> = {
     statePlaceholder: "Estado",
     createCompany: "Guardar empresa",
     companyCreated: "Empresa agregada",
+    companyAlreadySaved: "Ya estaba guardada como {name}",
     createFailed: "No se pudo agregar la empresa",
 
     gateHeading: "Check-in",
@@ -443,6 +455,10 @@ export const checkinMessages: Dictionary<typeof en> = {
     exceptionOutsideAreaReason: "Check-in hecho fuera de la zona de la empresa. Motivo: {reason}",
     exceptionNoLocation: "Excepción: sin ubicación",
     exceptionNoLocationHint: "Check-in sin ubicación para comparar: sin señal de GPS, o la empresa no tiene ubicación en el mapa.",
+    exceptionNoLocationReason: "Check-in sin ubicación para comparar. Motivo: {reason}",
+    exceptionReason: "Motivo indicado",
+    exceptionDistance: "{distance} de la empresa",
+    exceptionAccuracy: "ubicación con precisión de unos {accuracy}",
 
     mapAlt: "Tu ubicación actual",
     mapLive: "En vivo",

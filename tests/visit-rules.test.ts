@@ -25,6 +25,12 @@ describe("visitLocationException", () => {
     expect(visitLocationException({ checkedInAt, validationStatus: "gps_unavailable" })).toBe("no_location");
   });
 
+  it("tells a reason given outside the area from one given with no location at all", () => {
+    expect(visitLocationException({ checkedInAt, validationStatus: "manual_override", distanceFromTargetMeters: 2200 })).toBe("outside_area");
+    // A computer without location checks in with a reason: nothing was measured.
+    expect(visitLocationException({ checkedInAt, validationStatus: "manual_override", distanceFromTargetMeters: null })).toBe("no_location");
+  });
+
   it("leaves validated and not-yet-started visits alone", () => {
     expect(visitLocationException({ checkedInAt, validationStatus: "valid" })).toBeNull();
     // Planned visits carry the column default gps_unavailable.

@@ -15,7 +15,8 @@ import { useXpotShared } from "../hooks/useXpotShared";
 import { useLeads } from "../hooks/useLeads";
 import { usePlaceSearch } from "../usePlaceSearch";
 import { maskUsPhoneInput } from "../phoneInput";
-import { findMatchingLead } from "../utils";
+import { matchSavedLead } from "../utils";
+import { useLeadLookup } from "../hooks/useLeadLookup";
 import type { GooglePlaceResult } from "../types";
 
 /**
@@ -43,7 +44,11 @@ export function CreateLeadDialog({ open, onOpenChange, initialName, onCreated, s
   // coordinates and Place ID are sent only while that street is kept, so the
   // check-in geofence and the Tags review link work from the first visit.
   const [picked, setPicked] = useState<{ place: GooglePlaceResult; address: string } | null>(null);
-  const { createLeadMutation, leadsQuery } = useLeads();
+  // Only the create mutation: mounted (closed) on the Dashboard, it must not load the company list.
+  const { createLeadMutation } = useLeads(false);
+  // The saved companies matching the typed name, asked of the server while
+  // the dialog is open, to mark a Google result that is already one of them.
+  const savedQuery = useLeadLookup(placeSearch, open);
   const placeQuery = usePlaceSearch(placeSearch, open, geoState);
 
   useEffect(() => {
@@ -96,9 +101,13 @@ export function CreateLeadDialog({ open, onOpenChange, initialName, onCreated, s
           isPrimary: true,
         } : undefined,
       } as any);
-      toast({ title: t("companyCreated"), variant: "success" });
+      // A Google place that is already a company the rep can open comes back
+      // as that company (POST /leads, existing: true) instead of a duplicate.
+      toast(result.existing
+        ? { title: t("companyAlreadySaved", { name: result.lead.name }), variant: "success" }
+        : { title: t("companyCreated"), variant: "success" });
       await invalidateXpotData();
-      onCreated?.(result.lead.id, form.name.trim());
+      onCreated?.(result.lead.id, result.lead.name);
       onOpenChange(false);
       setForm(emptyForm);
       setPicked(null);
@@ -143,7 +152,7 @@ export function CreateLeadDialog({ open, onOpenChange, initialName, onCreated, s
                       <div className="truncate text-xs text-white/35">{place.address}</div>
                     </div>
                     {/* Warn before a duplicate: this business is already saved. */}
-                    {findMatchingLead(place, leadsQuery.data ?? []) ? (
+                    {matchSavedLead(place, savedQuery.data ?? []) ? (
                       <Pill tone="blue" className="shrink-0">{t("badgeMatch")}</Pill>
                     ) : null}
                   </button>

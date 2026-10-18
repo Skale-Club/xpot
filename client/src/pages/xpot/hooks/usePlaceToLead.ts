@@ -3,26 +3,28 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/i18n";
 import { checkinMessages } from "@/i18n/messages/checkin";
-import { findMatchingLead, parseAddress } from "../utils";
+import { parseAddress } from "../utils";
 import { placeTypeLabel } from "@/lib/placeTypes";
 import { useXpotShared } from "./useXpotShared";
 import { useLeads } from "./useLeads";
-import type { GooglePlaceResult } from "../types";
+import type { FullSalesLead, GooglePlaceResult } from "../types";
 
 /**
  * Turns a Google Places result into a customer to check in at: the saved
- * customer it matches (filling in its Place ID and address when they were
- * missing), or a new prospect imported from Google. Shared by the Dashboard
- * search and the check-in screen.
+ * customer the search matched it to (filling in its Place ID and address when
+ * they were missing), or an import. The import is safe to repeat: when the
+ * place is already a company the search could not see, the server answers with
+ * that company instead of a duplicate. Shared by the Dashboard search and the
+ * check-in screen.
  */
 export function usePlaceToLead() {
   const { toast } = useToast();
   const t = useT(checkinMessages);
   const { invalidateXpotData } = useXpotShared();
-  const { leadsQuery, createLeadMutation } = useLeads();
+  // Only for its create mutation: no need to load the rep's whole company list.
+  const { createLeadMutation } = useLeads(false);
 
-  const resolvePlace = useCallback(async (place: GooglePlaceResult): Promise<{ id: number; name: string }> => {
-    const existingLead = findMatchingLead(place, leadsQuery.data || []);
+  const resolvePlace = useCallback(async (place: GooglePlaceResult, existingLead?: FullSalesLead): Promise<{ id: number; name: string }> => {
     if (existingLead) {
       // Matched to Google: keep the Place ID so Tags can build its review link.
       if (!existingLead.googlePlaceId && place.placeId) {
@@ -69,10 +71,10 @@ export function usePlaceToLead() {
         isPrimary: true,
       },
     });
-    toast({ title: t("businessImported"), description: place.name, variant: "success" });
+    toast({ title: t(createdLead.existing ? "localLeadSelected" : "businessImported"), description: createdLead.lead.name, variant: "success" });
     await invalidateXpotData();
-    return { id: createdLead.lead.id, name: place.name };
-  }, [createLeadMutation, invalidateXpotData, leadsQuery.data, t, toast]);
+    return { id: createdLead.lead.id, name: createdLead.lead.name };
+  }, [createLeadMutation, invalidateXpotData, t, toast]);
 
   return { resolvePlace, isResolving: createLeadMutation.isPending };
 }

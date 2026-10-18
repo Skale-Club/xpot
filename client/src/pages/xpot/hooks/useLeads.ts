@@ -39,7 +39,8 @@ export function useLeads(enabled = true, organizationId?: number) {
   const createLeadMutation = useMutation({
     mutationFn: async (payload: SalesLeadPayload) => {
       const response = await apiRequest("POST", "/api/xpot/leads", payload);
-      return response.json() as Promise<{ lead: FullSalesLead }>;
+      // `existing`: the Google place was already this company (POST /leads answers 200 with it, not a duplicate).
+      return response.json() as Promise<{ lead: FullSalesLead; existing?: boolean }>;
     },
     onError: (error: Error) => {
       toast({ title: t("leadCreateFailed"), description: error.message, variant: "destructive" });

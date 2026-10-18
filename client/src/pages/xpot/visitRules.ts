@@ -70,13 +70,18 @@ export type VisitLocationException = "outside_area" | "no_location";
  * the company: outside its area (with a reason, or while blocking is off), or
  * with no location to compare (no GPS fix, or a company without a map
  * location). Planned visits carry the column default and are not flagged.
+ * A reason (manual_override) also lets a check-in through with no location at
+ * all (server/check-in-geofence.ts): that one was never measured, so it is
+ * "no location", not "outside", when the visit says it has no distance.
  */
 export function visitLocationException(visit: {
   checkedInAt?: string | Date | null;
   validationStatus?: string | null;
+  distanceFromTargetMeters?: number | null;
 }): VisitLocationException | null {
   if (!visit.checkedInAt) return null;
-  if (visit.validationStatus === "manual_override" || visit.validationStatus === "outside_geofence") return "outside_area";
+  if (visit.validationStatus === "manual_override") return visit.distanceFromTargetMeters === null ? "no_location" : "outside_area";
+  if (visit.validationStatus === "outside_geofence") return "outside_area";
   if (visit.validationStatus === "gps_unavailable") return "no_location";
   return null;
 }

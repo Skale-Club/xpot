@@ -563,13 +563,12 @@ export function XpotCheckIn() {
           <PlaceLeadSearch
             value={checkInSearch}
             onChange={(next) => { setCheckInSearch(next); if (!next) setSelectedLeadId(""); }}
-            leads={leadsQuery.data || []}
             geoState={geoState}
             placeholder={t("searchPlaceholder")}
             busy={createLeadMutation.isPending}
             onOpenChange={setCheckInDropdownOpen}
             onPickLead={(lead) => pickLocalLeadForCheckIn(lead)}
-            onPickPlace={(place) => { void pickGooglePlaceForCheckIn(place).catch(() => {}); }}
+            onPickPlace={(place, match) => { void pickGooglePlaceForCheckIn(place, match).catch(() => {}); }}
             onCreate={() => setCreateLeadDialogOpen(true)}
             onNearby={() => { void loadCurrentLocation(); setCheckInSearch(t("nearbyQuery")); }}
           />

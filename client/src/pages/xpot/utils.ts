@@ -115,6 +115,15 @@ export function findMatchingLead(place: GooglePlaceResult, leads: FullSalesLead[
   });
 }
 
+/**
+ * The saved company a Google result already is: the one carrying its Place ID,
+ * else one that looks like it (findMatchingLead). Used to mark "already saved"
+ * results and to check in at the company instead of importing it again.
+ */
+export function matchSavedLead(place: GooglePlaceResult, leads: FullSalesLead[]) {
+  return leads.find((lead) => lead.googlePlaceId && lead.googlePlaceId === place.placeId) ?? findMatchingLead(place, leads);
+}
+
 // ─── Money (integer cents) ───────────────────────────────────────────────────
 
 /** Integer cents → "$1,234.50" (lib/format formatMoney). */

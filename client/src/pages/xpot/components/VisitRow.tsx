@@ -5,8 +5,8 @@ import { BackLink } from "@/components/xpot/PageHeader";
 import { EYEBROW, GLASS_CLASS, GLASS_SUBTLE_CLASS } from "@/components/xpot/surface";
 import { formatDate, formatTime } from "@/lib/format";
 import { VisitNoteMarks } from "./VisitsTable";
-import { LocationExceptionBadge, StatusBadge, StatusPicker } from "./VisitStatus";
-import type { VisitStatus } from "./VisitStatus";
+import { LocationExceptionBadge, LocationExceptionNotice, StatusBadge, StatusPicker } from "./VisitStatus";
+import type { VisitLocationFields, VisitStatus } from "./VisitStatus";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { VoiceRecorder } from "./VoiceRecorder";
@@ -35,7 +35,7 @@ export type VisitLike = {
   durationSeconds?: number | null;
   note?: SalesVisitNote | null;
   visitSales?: { transactions: number; pieces: number; totalCents: number };
-};
+} & VisitLocationFields;
 
 function VisitOutcomeEditor({ visit }: { visit: VisitLike }) {
   const { toast } = useToast();
@@ -160,7 +160,6 @@ export function VisitSummaryPage({ visit, onBack, onDelete }: { visit: VisitLike
                 <InlineField label="" large value={lead?.name || tl("leadNumber", { id: visit.leadId })} onSave={handleLeadNameSave} />
               </div>
               <StatusBadge status={visit.status} />
-              <LocationExceptionBadge visit={visit} />
             </div>
             <p className="mt-1 text-xs text-white/40 first-letter:uppercase">{visitDate}</p>
           </div>
@@ -180,6 +179,8 @@ export function VisitSummaryPage({ visit, onBack, onDelete }: { visit: VisitLike
         <VisitMetric className="border-b sm:border-b-0 sm:border-r" icon={<Clock3 className="h-3.5 w-3.5" />} label={t("duration")} value={formatDuration(visit.durationSeconds)} />
         <VisitMetric icon={<DollarSign className="h-3.5 w-3.5" />} label={t("visitSales")} value={formatCents(visit.visitSales?.totalCents ?? 0)} detail={t("visitSalesCount", { sales: visit.visitSales?.transactions ?? 0, pieces: visit.visitSales?.pieces ?? 0 })} />
       </div>
+
+      <LocationExceptionNotice visit={visit} />
 
       {visit.status !== "planned" ? (
         <section className={`rounded-2xl px-4 py-4 sm:px-6 ${GLASS_SUBTLE_CLASS}`}>
