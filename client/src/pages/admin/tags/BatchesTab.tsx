@@ -277,6 +277,7 @@ export function BatchesTab({ go }: { go: (path: string) => void }) {
               value={pendingOnly ? "pending" : "all"}
               onChange={(id) => filters.set({ pending: id === "pending" ? "1" : "" })}
               ariaLabel={ts("manageBatches")}
+              accent="tags"
             />
           }
           summary={{ shown: shown.length, total: batches.length, active: pendingOnly || !!stage, onClear: () => filters.reset() }}

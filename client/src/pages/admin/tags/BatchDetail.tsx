@@ -423,6 +423,7 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
                 value={filter}
                 onChange={(next) => url.set({ pieces: next })}
                 ariaLabel={t("piecesHeading", { count: total })}
+                accent="tags"
               />
             }
             summary={{ shown: shown.length, total, active: filter !== "all", onClear: () => url.set({ pieces: "all" }) }}

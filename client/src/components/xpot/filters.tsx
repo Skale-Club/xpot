@@ -5,7 +5,7 @@ import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { useT } from "@/i18n";
 import { filtersMessages } from "@/i18n/messages/filters";
 import { MiniCalendar } from "./MiniCalendar";
-import { GLASS_SUBTLE_CLASS, SURFACE_MODAL } from "./surface";
+import { GLASS_SUBTLE_CLASS, SURFACE_MODAL, type ModuleAccent } from "./surface";
 
 // The one filter bar of the app. Every list (Leads, Visits, Pieces, Tasks,
 // Sales, the Tags admin) builds its filters from these parts, so they look and
@@ -14,7 +14,8 @@ import { GLASS_SUBTLE_CLASS, SURFACE_MODAL } from "./surface";
 //     (or the day picker), then "Showing 12 of 340 · Clear filters" while
 //     anything is narrowed;
 //   - one height (40px) for search, selects, toggles and the day picker;
-//   - one "on" colour (indigo) for whatever is narrowing the list. Status
+//   - one "on" colour (indigo) for whatever is narrowing the list; the quick
+//     chips take the module accent (`accent="tags"`: violet in Tags). Status
 //     colours only show as a dot, never as the whole chip;
 //   - keyboard focus is the global outline (index.css), no rings of their own.
 
@@ -287,18 +288,32 @@ export type FilterChip<T extends string> = {
   testId?: string;
 };
 
+/**
+ * The chosen chip and its count, per module. Indigo by default (the filter bar's "on" colour); the Tags screens
+ * pass accent="tags" for violet, like their Tabs and Segmented. Static strings so Tailwind keeps them.
+ */
+export const FILTER_CHIP_ON: Record<ModuleAccent, { chip: string; count: string }> = {
+  visits: { chip: "border-indigo-400/40 bg-indigo-500/[0.18] text-white", count: "bg-indigo-400/25 text-indigo-100" },
+  tags: { chip: "border-violet-400/40 bg-violet-500/[0.18] text-white", count: "bg-violet-400/25 text-violet-100" },
+  account: { chip: "border-indigo-400/40 bg-indigo-500/[0.18] text-white", count: "bg-indigo-400/25 text-indigo-100" },
+};
+
 /** One-of-N quick filter. Scrolls sideways on phones, wraps on desktop. */
 export function FilterChips<T extends string>({
   items,
   value,
   onChange,
   ariaLabel,
+  accent = "visits",
 }: {
   items: ReadonlyArray<FilterChip<T>>;
   value: T;
   onChange: (id: T) => void;
   ariaLabel: string;
+  /** The module the list belongs to: `tags` draws the chosen chip violet. */
+  accent?: ModuleAccent;
 }) {
+  const chosen = FILTER_CHIP_ON[accent];
   return (
     <div
       role="group"
@@ -314,14 +329,14 @@ export function FilterChips<T extends string>({
             aria-pressed={on}
             onClick={() => onChange(item.id)}
             className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold outline-none transition-colors ${
-              on ? "border-indigo-400/40 bg-indigo-500/[0.18] text-white" : "border-white/[0.08] bg-white/[0.03] text-white/50 hover:border-white/[0.15] hover:text-white/80"
+              on ? chosen.chip : "border-white/[0.08] bg-white/[0.03] text-white/50 hover:border-white/[0.15] hover:text-white/80"
             }`}
             data-testid={item.testId}
           >
             {item.dot ? <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${item.dot} ${on ? "" : "opacity-70"}`} aria-hidden="true" /> : null}
             {item.label}
             {item.count != null ? (
-              <span className={`rounded-full px-1.5 py-px text-[10px] tabular-nums ${on ? "bg-indigo-400/25 text-indigo-100" : "bg-white/[0.06] text-white/40"}`}>
+              <span className={`rounded-full px-1.5 py-px text-[10px] tabular-nums ${on ? chosen.count : "bg-white/[0.06] text-white/40"}`}>
                 {item.count}
               </span>
             ) : null}

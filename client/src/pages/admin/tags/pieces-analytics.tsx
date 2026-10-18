@@ -69,9 +69,10 @@ export function rangeParams(range: AnalyticsRange): Record<string, string | unde
 }
 
 // Same parts as the list filters (components/xpot/filters.tsx): the presets are
-// FilterChips, the custom range sits in a 32px control of the same look.
+// FilterChips, the custom range sits in a 32px control of the same look. Tags
+// only (Overview, Resellers, a piece's Performance): chosen in violet.
 const DATE_INPUT =
-  "h-8 min-w-0 flex-1 rounded-lg border border-white/[0.08] bg-black/20 px-2 text-xs text-white/80 outline-none [color-scheme:dark] focus:border-indigo-400/50 sm:w-auto sm:flex-none";
+  "h-8 min-w-0 flex-1 rounded-lg border border-white/[0.08] bg-black/20 px-2 text-xs text-white/80 outline-none [color-scheme:dark] focus:border-violet-400/50 sm:w-auto sm:flex-none";
 
 export function RangePicker({ value, onChange }: { value: AnalyticsRange; onChange: (r: AnalyticsRange) => void }) {
   const t = useT(manageTagsPiecesMessages);
@@ -84,16 +85,17 @@ export function RangePicker({ value, onChange }: { value: AnalyticsRange; onChan
         value={value.preset}
         onChange={(preset) => onChange({ preset })}
         ariaLabel={t("rangeLabel")}
+        accent="tags"
       />
       <div
-        className={`flex w-full min-w-0 items-center gap-1 rounded-full border py-0.5 pl-1 pr-0.5 sm:w-auto ${customOn ? "border-indigo-400/40 bg-indigo-500/[0.12]" : "border-white/[0.08] bg-white/[0.03]"}`}
+        className={`flex w-full min-w-0 items-center gap-1 rounded-full border py-0.5 pl-1 pr-0.5 sm:w-auto ${customOn ? "border-violet-400/40 bg-violet-500/[0.12]" : "border-white/[0.08] bg-white/[0.03]"}`}
       >
         <input type="date" aria-label={t("rangeFrom")} className={DATE_INPUT} value={custom.from} onChange={(e) => setCustom((c) => ({ ...c, from: e.target.value }))} />
         <span className="text-xs text-white/40">–</span>
         <input type="date" aria-label={t("rangeTo")} className={DATE_INPUT} value={custom.to} onChange={(e) => setCustom((c) => ({ ...c, to: e.target.value }))} />
         <button
           type="button"
-          className={`h-7 shrink-0 rounded-full px-3 text-xs font-semibold transition-colors disabled:opacity-40 ${customOn ? "bg-indigo-500/30 text-white" : "text-white/60 hover:bg-white/10 hover:text-white"}`}
+          className={`h-7 shrink-0 rounded-full px-3 text-xs font-semibold transition-colors disabled:opacity-40 ${customOn ? "bg-violet-500/30 text-white" : "text-white/60 hover:bg-white/10 hover:text-white"}`}
           disabled={!custom.from}
           onClick={() => onChange({ preset: "custom", from: custom.from, to: custom.to || undefined })}
         >
