@@ -286,7 +286,7 @@ Everyone signs in with their **phone**: a 6-digit code goes out by SMS
 - **Approval:** a new number asks for a name and becomes a *pending* rep. It
   can't sign in until a manager approves it in People (`/admin/reps`); meanwhile
   the sign-in screen says it's under review and offers WhatsApp
-  (`XPOT_SUPPORT_WHATSAPP`). `XPOT_SIGNUP_NOTIFY_PHONES` get a text per sign-up.
+  (`XPOT_SUPPORT_WHATSAPP`). Each completed sign-up is announced on Telegram.
   Admins can also create someone's access directly (active right away).
 - **Blocking:** People → Block turns the rep off and deletes their sessions,
   so they're out immediately; their sign-in screen says access is off.
@@ -566,8 +566,6 @@ comment on each, plus the client's optional `VITE_GOOGLE_MAPS_API_KEY` (see
 | `PORT` | no | Listen port (2110 by default; the Docker image sets 8888) |
 | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` or `TWILIO_MESSAGING_SERVICE_SID` | no | SMS fallback when Platform › Integrations has no Twilio |
 | `XPOT_SUPPORT_WHATSAPP` | no | WhatsApp shown to pending and blocked people |
-| `XPOT_SIGNUP_NOTIFY_PHONES` | no | Who gets a text per sign-up (comma separated) |
-| `XPOT_PUBLIC_URL` | no | Origin for the link in that text (else the request's origin) |
 | `XPOT_WHOLESALE_SECRET`, `STUSCLE_PUBLIC_URL` | no | Stuscle wholesale (see above) |
 | `GOOGLE_PLACES_API_KEY` (alias `GOOGLE_MAPS_API_KEY`) | no | Places fallback when the Integrations panel has no enabled key |
 | `OPENROUTER_API_KEY`, `OPENROUTER_MODEL` | no | LLM; overrides the panel's OpenRouter key |
