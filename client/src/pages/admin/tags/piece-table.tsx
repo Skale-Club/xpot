@@ -197,7 +197,7 @@ export function PieceTable({
                   customer={has("customer") ? p.leadName : null}
                   className="max-w-full"
                 />
-                <PieceStatusPill status={p.status} stockStatus={p.stockStatus} saleId={p.saleId} className="mt-2" />
+                <div className="mt-2"><PieceStatusPill status={p.status} stockStatus={p.stockStatus} saleId={p.saleId} /></div>
                 {meta ? <p className="mt-1.5 truncate text-xs text-white/50">{meta}</p> : null}
                 {has("scans") ? (
                   <p className="mt-0.5 text-xs tabular-nums text-white/40">

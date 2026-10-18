@@ -138,7 +138,7 @@ function TeamReport({ range, go }: { range: AnalyticsRange; go: Go }) {
 
         <SectionCard accent="tags" icon={Package} title={t("teamUnsoldStock")} className="min-w-0">
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-1">
-            <div data-testid="admin-team-house-stock">
+            <div className="grid" data-testid="admin-team-house-stock">
               <KpiTile accent="violet" icon={Warehouse} label={t("teamInHouseNoReseller")} value={u.inStock} detail={t("teamReadyForKit")} onClick={() => go("/pieces?stock=house")} />
             </div>
             <KpiTile accent="violet" icon={Users} label={t("ovWithResellers")} value={withResellers} detail={t("teamUnsoldInKits")} onClick={() => go("/pieces?stock=reps")} />

@@ -108,13 +108,13 @@ export function OverviewTab({ go }: { go: (path: string) => void }) {
     <div className="min-w-0 space-y-4" data-testid="admin-tags-overview">
       <SectionCard accent="tags" icon={Warehouse} title={t("ovStock")} actions={<SectionLink onClick={() => go("/kits")}>{ts("manageKits")}</SectionLink>}>
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-          <div data-testid="overview-stock-house">
+          <div className="grid" data-testid="overview-stock-house">
             <KpiTile accent="violet" icon={Warehouse} label={t("ovInHouse")} value={stock.house} detail={t("ovInHouseHint", { percent: formatShare(stock.house, unsold) })} onClick={() => go("/pieces?stock=house")} />
           </div>
-          <div data-testid="overview-stock-resellers">
+          <div className="grid" data-testid="overview-stock-resellers">
             <KpiTile accent="violet" icon={Users} label={t("ovWithResellers")} value={stock.withResellers} detail={t("ovWithResellersHint", { percent: formatShare(stock.withResellers, unsold) })} onClick={() => go("/pieces?stock=reps")} />
           </div>
-          <div data-testid="overview-total">
+          <div className="grid" data-testid="overview-total">
             <KpiTile
               accent="violet"
               icon={Boxes}
