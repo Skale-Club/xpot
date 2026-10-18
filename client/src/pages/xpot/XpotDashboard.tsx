@@ -451,15 +451,17 @@ function DashboardOverview() {
         <div className="divide-y divide-white/[0.05]" data-testid="dashboard-recent-visits">
           {dashboardQuery.data.recentVisits.map((visit) => {
             const when = formatVisitWhen(visit);
-            // The status is the outcome the rep picked; the note line adds what they wrote, if anything.
-            const noteLine = visit.note?.outcome || visit.note?.nextStep;
+            // The pill is the result the rep picked. The note's outcome is free text
+            // (the rep's or the voice note's words, in any language), so it reads
+            // as a quote beside the pill, never as a second label.
+            const noteLine = visit.note?.outcome?.trim() || visit.note?.nextStep?.trim();
             return (
               <button key={visit.id} type="button" onClick={() => setLocation(`/dashboard/history/${visit.id}`)} className="group flex w-full items-center gap-3 rounded-xl px-2.5 py-3 text-left transition-colors hover:bg-white/[0.03]">
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-semibold text-white/85">{visit.lead?.name ?? tl("leadNumber", { id: visit.leadId })}</span>
                   <span className="mt-1 flex min-w-0 items-center gap-2">
                     <StatusBadge status={visit.status} />
-                    {noteLine ? <span className="min-w-0 truncate text-[11px] text-white/30">{noteLine}</span> : null}
+                    {noteLine ? <span className="min-w-0 truncate text-[11px] italic text-white/40" title={noteLine}>{t("visitNoteQuote", { note: noteLine })}</span> : null}
                   </span>
                 </span>
                 {when ? <span className="shrink-0 text-right text-[11px] leading-relaxed tabular-nums text-white/40">{when.date}<br />{when.time}</span> : null}

@@ -12,7 +12,7 @@ import { TagPieceMention } from "@/components/xpot/TagProductThumbnail";
 import { KpiTile } from "@/components/xpot/DashboardKit";
 import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
 import { ageOf, APP_BASE, errorText, tagPath, tagsGet } from "./lib";
-import { CHART_TICK, CHART_TICK_DAY, chartTooltip, formatChartDay, formatCount, NFC_COLOR, NFC_SOFT, QR_COLOR, QR_SOFT } from "./charts";
+import { CHART_TICK, CHART_TICK_DAY, chartTickInterval, chartTooltip, formatChartDay, formatCount, NFC_COLOR, NFC_SOFT, QR_COLOR, QR_SOFT } from "./charts";
 import { CARD, EYEBROW_MUTED } from "./ui";
 
 // The Tags dashboard, under the scan actions on the module's home: stock and
@@ -172,8 +172,7 @@ export function TagsDashboard() {
                     dataKey="day"
                     axisLine={false}
                     tickLine={false}
-                    interval="preserveStartEnd"
-                    minTickGap={24}
+                    interval={chartTickInterval(chart.length)}
                     tick={CHART_TICK}
                     tickFormatter={(day: string) => formatChartDay(day, t.locale, CHART_TICK_DAY)}
                   />

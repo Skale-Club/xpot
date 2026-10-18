@@ -204,7 +204,7 @@ describe("integrations routes (twilio)", () => {
   it("the Test action reads from Twilio and never POSTs to Messages", async () => {
     await call("PUT", "/admin/integrations/twilio", { accountSid: SID, apiKey: TOKEN, fromNumber: "+15550000001" });
     const result = await call("POST", "/admin/integrations/twilio/test", {});
-    expect(result.json).toMatchObject({ ok: true });
+    expect(result.json).toMatchObject({ ok: true, code: "twilio_ok", params: { from: "+15550000001" } });
     expect(twilioFetch).toHaveBeenCalled();
     for (const [url, init] of twilioFetch.mock.calls) {
       expect(init?.method ?? "GET").toBe("GET");
@@ -216,6 +216,8 @@ describe("integrations routes (twilio)", () => {
     const result = await call("POST", "/admin/integrations/twilio/test", { accountSid: SID });
     expect(result.json.ok).toBe(false);
     expect(result.json.message).toMatch(/Auth Token/);
+    // The screen words it from the code and the field it names.
+    expect(result.json).toMatchObject({ code: "missing_secret", params: { field: "apiKey" } });
     expect(twilioFetch).not.toHaveBeenCalled();
   });
 });

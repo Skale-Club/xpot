@@ -4,6 +4,7 @@ import {
   CHART_TOOLTIP_DAY,
   NFC_COLOR,
   QR_COLOR,
+  chartTickInterval,
   chartTooltip,
   formatChartDay,
   formatCount,
@@ -35,6 +36,20 @@ describe("Tags chart helpers", () => {
     expect(formatCount(1234, "en-US")).toBe("1,234");
     expect(plain(formatCount(1234, "pt-BR"))).toBe("1.234");
     expect(formatCount(Number.NaN, "en-US")).toBe("0");
+  });
+
+  it("label the day axis at a regular step for the range", () => {
+    // recharts' interval N labels every (N+1)th day.
+    expect(chartTickInterval(7)).toBe(0); // every day
+    expect(chartTickInterval(14)).toBe(1); // every other day
+    expect(chartTickInterval(30)).toBe(6); // weekly
+    expect(chartTickInterval(90)).toBe(13); // fortnightly
+    expect(chartTickInterval(365)).toBe(60); // about every two months
+    expect(chartTickInterval(90, 5)).toBe(29);
+    expect(chartTickInterval(0)).toBe(0);
+    for (const points of [7, 14, 30, 60, 90, 180, 365, 400]) {
+      expect(Math.ceil(points / (chartTickInterval(points) + 1))).toBeLessThanOrEqual(7);
+    }
   });
 
   it("keep QR and NFC apart", () => {

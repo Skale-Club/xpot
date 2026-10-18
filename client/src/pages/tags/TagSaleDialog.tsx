@@ -10,7 +10,7 @@ import { GLASS_SUBTLE_CLASS } from "@/components/xpot/surface";
 import { useToast } from "@/hooks/use-toast";
 import type { TagListItem } from "@shared/tagsApi";
 import { computeSaleTotals, resolveUnitPriceCents } from "@shared/pricing";
-import { saleCustomerConflict, suggestSaleCustomer } from "@shared/tagSales";
+import { saleCostPreview, saleCustomerConflict, suggestSaleCustomer } from "@shared/tagSales";
 import { canManage, isSuperAdmin } from "@shared/modules";
 import type { ProductWithTiers, PaymentMethod, PaymentStatus } from "@/pages/xpot/hooks/useSalesModule";
 import { usePaymentOptions } from "@/pages/xpot/hooks/useSalesModule";
@@ -171,13 +171,19 @@ export default function TagSaleDialog({
   const catalogUnavailable = selectedPieces.length > 0 && (
     catalog.isError || !catalog.data || groups.some((group) => !catalog.data.some((product) => product.id === group.productId))
   );
-  const lineInputs = groups.map((group) => ({
-    quantity: group.tags.length,
-    unitPriceCents: prices[group.productId]?.cents ?? 0,
-    unitCostCents: me?.rep.costPolicy === "zero"
-      ? 0
-      : group.tags.reduce((sum, piece) => sum + (piece.acquisitionCostCents ?? 0), 0) / group.tags.length,
-  }));
+  const previewOf = (tags: TagListItem[]) =>
+    saleCostPreview({ viewerRepId: me?.rep.id, sellerRepId, viewerCostPolicy: me?.rep.costPolicy, pieces: tags });
+  // In the holder's name the holder's cost rule applies, which the pieces do not
+  // carry: no cost or profit preview then, only whose cost the server will use.
+  const costPreview = previewOf(selectedPieces);
+  const lineInputs = groups.map((group) => {
+    const preview = previewOf(group.tags);
+    return {
+      quantity: group.tags.length,
+      unitPriceCents: prices[group.productId]?.cents ?? 0,
+      unitCostCents: preview.kind === "own" ? preview.unitCostCents : 0,
+    };
+  });
   const totals = computeSaleTotals(lineInputs, discountCents);
   const partialInvalid = paymentStatus === "partial" && (paidCents <= 0 || paidCents >= totals.totalCents);
   // A piece linked to another customer still opens that customer's link; selling it
@@ -323,8 +329,16 @@ export default function TagSaleDialog({
             <div className="flex items-center justify-between text-xs text-white/45"><span>{ts("subtotal")}</span><Money cents={totals.subtotalCents} /></div>
             <Field label={ts("discount")}><MoneyInput valueCents={discountCents} onChangeCents={(value) => { setDiscountCents(value); attempt.current = null; }} /></Field>
             <div className="flex items-center justify-between border-t border-white/10 pt-2.5"><span className="font-semibold text-white">{ts("total")}</span><Money cents={totals.totalCents} className="text-lg font-bold text-emerald-300" /></div>
-            <div className="flex items-center justify-between text-xs text-white/45"><span>{t("saleCost")}</span><Money cents={totals.costCents} className={MONEY_CHART.cost.text} /></div>
-            <div className="flex items-center justify-between text-xs text-white/45"><span>{t("saleGrossProfit")}</span><Money cents={totals.profitCents} className="font-semibold text-white" /></div>
+            {costPreview.kind === "own" ? (
+              <>
+                <div className="flex items-center justify-between text-xs text-white/45"><span>{t("saleCost")}</span><Money cents={totals.costCents} className={MONEY_CHART.cost.text} /></div>
+                <div className="flex items-center justify-between text-xs text-white/45"><span>{t("saleGrossProfit")}</span><Money cents={totals.profitCents} className="font-semibold text-white" /></div>
+              </>
+            ) : (
+              <p className="text-xs text-white/45" data-testid="sale-seller-cost-note">
+                {costPreview.sellerName ? t("saleSellerCostNote", { name: costPreview.sellerName }) : t("saleSellerCostNoteUnnamed")}
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-2">

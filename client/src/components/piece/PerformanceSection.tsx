@@ -16,7 +16,7 @@ import { manageTagsPiecesMessages } from "@/i18n/messages/manageTagsPieces";
 import { pieceScreenMessages } from "@/i18n/messages/pieceScreen";
 import { RangePicker, rangeParams, type AnalyticsRange } from "@/pages/admin/tags/pieces-analytics";
 import { withQuery } from "@/pages/admin/tags/api";
-import { CHART_TICK, CHART_TICK_DAY, chartTooltip, formatChartDay, formatCount, NFC_COLOR, QR_COLOR } from "@/pages/tags/charts";
+import { CHART_TICK, CHART_TICK_DAY, chartTickInterval, chartTooltip, formatChartDay, formatCount, NFC_COLOR, QR_COLOR } from "@/pages/tags/charts";
 import { errorText } from "@/pages/tags/lib";
 import { CARD, EYEBROW_MUTED } from "@/pages/tags/ui";
 import { usePiece } from "./PieceContext";
@@ -87,8 +87,7 @@ export function PerformanceSection() {
                     dataKey="day"
                     axisLine={false}
                     tickLine={false}
-                    interval="preserveStartEnd"
-                    minTickGap={24}
+                    interval={chartTickInterval(series.length, 5)}
                     tick={CHART_TICK}
                     tickFormatter={(day: string) => formatChartDay(day, t.locale, CHART_TICK_DAY)}
                   />

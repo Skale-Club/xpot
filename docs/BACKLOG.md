@@ -1,6 +1,6 @@
 # Backlog Xpot
 
-**Rev. 5** · base `claude/ux-overhaul` · 83 itens · **56 concluídos** · 3 obsoletos · 24 abertos
+**Rev. 5** · base `claude/ux-overhaul` · 83 itens · **58 concluídos** · 3 obsoletos · 22 abertos
 
 > **Rev. 5 (revisão de UX, 2026-10-18):** entrou a área **UXR**, com o que a
 > revisão de UX fez e o que deixou aberto (resumo em
@@ -44,8 +44,8 @@ Detalhamento e referências completas de arquivo:linha em [`AUDITORIA.md`](./AUD
 | PRF — performance | 5 | 1 | 0 | 4 |
 | DOC — testes e documentação | 5 | 5 | 0 | 0 |
 | MOD — módulos Visitas e Tags | 3 | 3 | 0 | 0 |
-| UXR — revisão de UX (out/2026) | 31 | 25 | 0 | 6 |
-| **Total** | **83** | **56** | **3** | **24** |
+| UXR — revisão de UX (out/2026) | 31 | 27 | 0 | 4 |
+| **Total** | **83** | **58** | **3** | **22** |
 
 ### Novidades desta revisão
 
@@ -235,6 +235,8 @@ O que mudou e por quê, as seis decisões de produto e como conferir:
 | ✅ UXR-26 | Baixo | **Recusas antigas com motivo próprio aparecem como Bloqueado.** Marcador explícito `sales_reps.refused_at` (migração 0055), posto ao recusar e limpo ao desbloquear; preenchido para as recusas com os textos padrão. Recusas antigas com motivo digitado à mão não deixaram rastro que as separe de um bloqueio e continuam como Bloqueado. | ✅ `4fc85c3` |
 | ✅ UXR-29 | Baixo | **Retry de oportunidades em Status › Sync do CRM.** `POST /sync/retry` aceita `sales_opportunity` (reenvia ao GoHighLevel, legado; o Xphere não recebe oportunidades) e registra a tentativa. | ✅ `17da62a` |
 | ✅ UXR-31 | Baixo | **Quem cancela uma venda de Tags.** Decidido: o vendedor que registrou a venda (com Visitas) cancela a própria; gerentes, qualquer uma. A tela da peça mostra "Cancelar venda" a esse vendedor também. | ✅ `13fd2eb` |
+| ✅ UXR-24 | Baixo | **Tipos de lugar do Google sem tradução.** `primaryType` aparece cru na busca de empresas (`PlaceLeadSearch`); não há fonte de tradução. | ✅ `2177dc9`: a busca devolve o código do tipo (Table A); `lib/placeTypes.ts` traduz os tipos comuns (EN/PT/ES, `messages/placeTypes.ts`), senão usa o nome do Google e por fim humaniza o código. Vale para a busca de empresas, as sugestões de setor da rota e o setor da empresa importada |
+| ✅ UXR-25 | Baixo | **Página de consentimento OAuth (MCP) e resultados de "Testar" das integrações em inglês.** | ✅ `3cde97c` (consentimento e recusas em EN/PT/ES pelo Accept-Language), `eddd6bd` e `e9b3a51` (o Testar devolve código e parâmetros, o cartão traduz e guarda o texto do provedor em "Detalhes") |
 
 ### Aberto
 
@@ -242,8 +244,6 @@ O que mudou e por quê, as seis decisões de produto e como conferir:
 |---|---|---|---|
 | UXR-22 | Médio | **Filtro por organização em Inventário, Kits e Empresas.** Sem ele, as abas de Organizações ficam como listas só de leitura. | Empresas feito em 2026-10-18: em modo gestão o gerente filtra Empresas por organização (`?org=`; `GET /leads?organizationId=`, e `GET /sales` aceita o mesmo), ignorado para os demais. Falta Inventário e Kits, e o link da aba Empresas de Organizações para `/leads?org=<id>` |
 | UXR-23 | Baixo | **MasterDetail nas telas de detalhe da gestão** (peça, lote, kit de Tags e outras). Pessoas já usa; as demais abrem página inteira. | A fazer |
-| UXR-24 | Baixo | **Tipos de lugar do Google sem tradução.** `primaryType` aparece cru na busca de empresas (`PlaceLeadSearch`); não há fonte de tradução. | A fazer |
-| UXR-25 | Baixo | **Página de consentimento OAuth (MCP) e resultados de "Testar" das integrações em inglês.** | A fazer |
 | UXR-27 | Baixo | **Linhas do Xphere e o card CRM de Integrações levarem à pessoa** (`/admin/reps/:repId`). | A fazer (conferido em 2026-10-18: nenhuma linha do Xphere leva à pessoa) |
 | UXR-30 | Baixo | **Aviso de alterações não salvas em Integrações** cobre só a troca de provedor; a Landing tem o aviso completo. | A fazer |
 

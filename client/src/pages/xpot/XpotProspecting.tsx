@@ -57,6 +57,7 @@ import {
   type ProspectingTiming,
 } from "./prospectingUi";
 import { useNow } from "@/hooks/use-now";
+import { placeTypeLabel } from "@/lib/placeTypes";
 import { MAX_DAILY_PROSPECTING_SESSIONS, PROSPECTING_DAY_END_HOUR, PROSPECTING_SHIFT_MINUTES, minutesUntilProspectingDayEnd } from "@shared/prospecting";
 
 type ProspectingJob = {
@@ -281,9 +282,13 @@ export function XpotProspecting() {
     builderOpen && planningStep === 1 && sectorFragment.length >= 2,
     {},
   );
+  // Google's place types, as words in the rep's language: picking one adds it as
+  // the sector's search text, so it must read like something a person typed.
   const googleSectorSuggestions = useMemo(
-    () => Array.from(new Set((sectorPlacesQuery.data?.results ?? []).map((place) => place.primaryType?.trim()).filter((value): value is string => Boolean(value)))).slice(0, 5),
-    [sectorPlacesQuery.data?.results],
+    () => Array.from(new Set((sectorPlacesQuery.data?.results ?? [])
+      .map((place) => placeTypeLabel(place.primaryType, t.lang, place.primaryTypeName))
+      .filter((value): value is string => Boolean(value)))).slice(0, 5),
+    [sectorPlacesQuery.data?.results, t.lang],
   );
 
   useEffect(() => {

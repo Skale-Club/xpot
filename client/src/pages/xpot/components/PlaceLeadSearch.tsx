@@ -8,6 +8,7 @@ import { GoogleLogo } from "@/components/ui/google-logo";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { usePlaceSearch } from "../usePlaceSearch";
 import { findMatchingLead } from "../utils";
+import { placeTypeLabel } from "@/lib/placeTypes";
 import { leadMatchesSearch } from "../hooks/useLeads";
 import type { FullSalesLead, GeoState, GooglePlaceResult } from "../types";
 
@@ -169,6 +170,7 @@ export const PlaceLeadSearch = forwardRef<PlaceLeadSearchHandle, {
   const placeRows = places.map((place) => {
     const key = `place-${place.placeId}`;
     const match = findMatchingLead(place, leads);
+    const typeLabel = placeTypeLabel(place.primaryType, t.lang, place.primaryTypeName);
     return (
       <button key={key} type="button" id={key} role="option" aria-selected={indexOf(key) === activeIndex} onMouseEnter={() => setActiveIndex(indexOf(key))} onClick={() => pick({ kind: "place", key, place, match })} className={rowClass(key)}>
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-blue-400/15 bg-blue-500/10 text-blue-300">
@@ -177,9 +179,9 @@ export const PlaceLeadSearch = forwardRef<PlaceLeadSearchHandle, {
         <span className="min-w-0 flex-1">
           <span className={`block text-sm font-semibold text-white/90 ${lineClamp}`}>{place.name}</span>
           <span className={`block text-xs text-white/40 ${lineClamp}`}>{place.address}</span>
-          {place.primaryType || place.phone ? (
+          {typeLabel || place.phone ? (
             <span className="mt-0.5 flex gap-2 truncate text-[10px] font-medium uppercase tracking-wider text-white/30">
-              {place.primaryType ? <span className="truncate">{place.primaryType.replace(/_/g, " ")}</span> : null}
+              {typeLabel ? <span className="truncate">{typeLabel}</span> : null}
               {place.phone ? <span className="shrink-0">{place.phone}</span> : null}
             </span>
           ) : null}

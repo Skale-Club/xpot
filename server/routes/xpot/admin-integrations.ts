@@ -13,6 +13,7 @@ import { invalidateSmsConfig } from "../../auth/sms.js";
 import { checkTwilioConfig } from "../../auth/twilioCheck.js";
 import { maskIntegration, mergeConfigPatch, readConfig } from "./integrationStatus.js";
 import { listProviderStatuses, loadServices, recordIntegrationCheck } from "../../observability/services.js";
+import type { IntegrationTestCode, IntegrationTestResult } from "#shared/integrationTest.js";
 
 const TEST_TIMEOUT_MS = 15000;
 const GHL_BASE_URL = "https://services.leadconnectorhq.com";
@@ -111,8 +112,9 @@ export function createAdminIntegrationsRouter() {
 
       if (!config.apiKey) {
         console.warn(`[admin-integrations] No API key available for ${def.provider}`, { rowId: (row as any)?.id });
-        const secretLabel = def.fields.find((f) => f.secret)?.label ?? "API Key";
-        return res.json({ ok: false, message: `Paste the ${secretLabel} or save one before testing.` });
+        const secret = def.fields.find((f) => f.secret);
+        const secretLabel = secret?.label ?? "API Key";
+        return res.json(testResult(false, "missing_secret", `Paste the ${secretLabel} or save one before testing.`, { field: secret?.key ?? "apiKey" }));
       }
 
       console.log(`[admin-integrations] Calling provider ${def.provider} (key length ${config.apiKey.length})`);
@@ -121,10 +123,16 @@ export function createAdminIntegrationsRouter() {
       return res.json(await withCheck(def.provider, result));
     } catch (err) {
       console.error(`[admin-integrations] Test threw for ${def.provider}:`, err);
-      return res.json(await withCheck(def.provider, {
-        ok: false,
-        message: `Server error while testing: ${(err as Error).message || String(err)}`,
-      }));
+      if (err instanceof TestTimeoutError) {
+        return res.json(await withCheck(def.provider, testResult(false, "timeout", err.message, { seconds: TEST_TIMEOUT_MS / 1000 })));
+      }
+      const reason = (err as Error).message || String(err);
+      // undici's network failure (DNS, refused, TLS): the provider was never reached.
+      if (err instanceof TypeError && reason === "fetch failed") {
+        const cause = (err as Error & { cause?: { message?: string } }).cause?.message;
+        return res.json(await withCheck(def.provider, testResult(false, "unreachable", `Could not reach the provider: ${cause ?? reason}`, undefined, cause ?? reason)));
+      }
+      return res.json(await withCheck(def.provider, testResult(false, "server_error", `Server error while testing: ${reason}`, undefined, reason)));
     }
   });
 
@@ -135,7 +143,7 @@ export function createAdminIntegrationsRouter() {
  * Keeps the result as the provider's "last test" (Integrations and Status show
  * it) and answers with its time. Keeping it must never hide the result itself.
  */
-async function withCheck(provider: string, result: { ok: boolean; message: string }) {
+async function withCheck(provider: string, result: IntegrationTestResult): Promise<IntegrationTestResult> {
   try {
     const saved = await recordIntegrationCheck(provider, result);
     return { ...result, testedAt: saved.checkedAt.toISOString() };
@@ -144,6 +152,24 @@ async function withCheck(provider: string, result: { ok: boolean; message: strin
     return result;
   }
 }
+
+function testResult(
+  ok: boolean,
+  code: IntegrationTestCode,
+  message: string,
+  params?: IntegrationTestResult["params"],
+  detail?: string,
+): IntegrationTestResult {
+  return { ok, code, message, ...(params ? { params } : {}), ...(detail ? { detail } : {}) };
+}
+
+/** A provider's error answer: its status for the sentence, its own words as the detail. */
+async function httpFailure(name: string, r: Response): Promise<IntegrationTestResult> {
+  const detail = await readErrorBody(r);
+  return testResult(false, "http_error", `${name} returned ${r.status}. ${detail}`.trim(), { status: r.status }, detail);
+}
+
+class TestTimeoutError extends Error {}
 
 /** The ConfigFieldKey values present in a request body. */
 function pickConfig(body: Record<string, unknown>): Partial<Record<ConfigFieldKey, string>> {
@@ -190,7 +216,7 @@ async function fetchWithTimeout(url: string, init: RequestInit = {}): Promise<Re
     return await fetch(url, { ...init, signal: controller.signal });
   } catch (err) {
     if ((err as Error).name === "AbortError") {
-      throw new Error(`Provider did not respond within ${TEST_TIMEOUT_MS / 1000}s.`);
+      throw new TestTimeoutError(`Provider did not respond within ${TEST_TIMEOUT_MS / 1000}s.`);
     }
     throw err;
   } finally {
@@ -212,7 +238,7 @@ async function readErrorBody(r: Response): Promise<string> {
 async function testProvider(
   provider: string,
   config: TestConfig
-): Promise<{ ok: boolean; message: string }> {
+): Promise<IntegrationTestResult> {
   const { apiKey } = config;
   switch (provider) {
     case "google_places": {
@@ -225,25 +251,22 @@ async function testProvider(
         },
         body: JSON.stringify({ textQuery: "coffee", pageSize: 1 }),
       });
-      if (r.ok) return { ok: true, message: "Places responded 200." };
-      const detail = await readErrorBody(r);
-      return { ok: false, message: `Places returned ${r.status}. ${detail}`.trim() };
+      if (r.ok) return testResult(true, "ok", "Places responded 200.");
+      return httpFailure("Places", r);
     }
     case "groq": {
       const r = await fetchWithTimeout("https://api.groq.com/openai/v1/models", {
         headers: { Authorization: `Bearer ${apiKey}` },
       });
-      if (r.ok) return { ok: true, message: "Groq authenticated." };
-      const detail = await readErrorBody(r);
-      return { ok: false, message: `Groq returned ${r.status}. ${detail}`.trim() };
+      if (r.ok) return testResult(true, "ok", "Groq authenticated.");
+      return httpFailure("Groq", r);
     }
     case "openai": {
       const r = await fetchWithTimeout("https://api.openai.com/v1/models", {
         headers: { Authorization: `Bearer ${apiKey}` },
       });
-      if (r.ok) return { ok: true, message: "OpenAI authenticated." };
-      const detail = await readErrorBody(r);
-      return { ok: false, message: `OpenAI returned ${r.status}. ${detail}`.trim() };
+      if (r.ok) return testResult(true, "ok", "OpenAI authenticated.");
+      return httpFailure("OpenAI", r);
     }
     case "openrouter": {
       const r = await fetchWithTimeout("https://openrouter.ai/api/v1/key", {
@@ -253,20 +276,18 @@ async function testProvider(
           "X-Title": "Xpot",
         },
       });
-      if (r.ok) return { ok: true, message: "OpenRouter authenticated." };
-      const detail = await readErrorBody(r);
-      return { ok: false, message: `OpenRouter returned ${r.status}. ${detail}`.trim() };
+      if (r.ok) return testResult(true, "ok", "OpenRouter authenticated.");
+      return httpFailure("OpenRouter", r);
     }
     case "gemini": {
       const r = await fetchWithTimeout(
         `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`
       );
-      if (r.ok) return { ok: true, message: "Gemini authenticated." };
-      const detail = await readErrorBody(r);
-      return { ok: false, message: `Gemini returned ${r.status}. ${detail}`.trim() };
+      if (r.ok) return testResult(true, "ok", "Gemini authenticated.");
+      return httpFailure("Gemini", r);
     }
     case "gohighlevel": {
-      if (!config.locationId) return { ok: false, message: "Location ID is required to test GHL." };
+      if (!config.locationId) return testResult(false, "location_required", "Location ID is required to test GHL.");
       const params = new URLSearchParams({ locationId: config.locationId });
       const r = await fetchWithTimeout(`${GHL_BASE_URL}/opportunities/pipelines?${params.toString()}`, {
         headers: {
@@ -275,9 +296,8 @@ async function testProvider(
           "Content-Type": "application/json",
         },
       });
-      if (r.ok) return { ok: true, message: "GHL authenticated." };
-      const detail = await readErrorBody(r);
-      return { ok: false, message: `GHL returned ${r.status}. ${detail}`.trim() };
+      if (r.ok) return testResult(true, "ok", "GHL authenticated.");
+      return httpFailure("GHL", r);
     }
     case "twilio":
       // Read-only calls: the test must never send an SMS.
@@ -291,6 +311,6 @@ async function testProvider(
         fetchWithTimeout,
       );
     default:
-      return { ok: false, message: "No test implemented for this provider." };
+      return testResult(false, "not_implemented", "No test implemented for this provider.");
   }
 }
