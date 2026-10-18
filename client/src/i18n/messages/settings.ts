@@ -16,7 +16,6 @@ const en = {
   lastNamePlaceholder: "Last name",
   displayName: "Display Name",
   displayNamePlaceholder: "Display name",
-  email: "Email",
   phone: "Phone",
   saving: "Saving…",
   saveProfile: "Save Profile",
@@ -25,7 +24,6 @@ const en = {
   noChanges: "No changes to save",
 
   // Security
-  sectionSecurity: "Security",
   currentPassword: "Current Password",
   currentPasswordPlaceholder: "Enter current password",
   newPassword: "New Password",
@@ -56,7 +54,6 @@ const en = {
   // Account info
   sectionAccount: "Memberships",
   role: "Role",
-  team: "Team",
   role_rep: "Rep",
   role_manager: "Manager",
   role_admin: "Xpot admin",
@@ -82,7 +79,6 @@ export const settingsMessages: Dictionary<typeof en> = {
     lastNamePlaceholder: "Sobrenome",
     displayName: "Nome de exibição",
     displayNamePlaceholder: "Nome de exibição",
-    email: "E-mail",
     phone: "Telefone",
     saving: "Salvando…",
     saveProfile: "Salvar perfil",
@@ -90,7 +86,6 @@ export const settingsMessages: Dictionary<typeof en> = {
     profileSaveFailed: "Não foi possível salvar o perfil",
     noChanges: "Nada para salvar",
 
-    sectionSecurity: "Segurança",
     currentPassword: "Senha atual",
     currentPasswordPlaceholder: "Digite a senha atual",
     newPassword: "Nova senha",
@@ -118,7 +113,6 @@ export const settingsMessages: Dictionary<typeof en> = {
     routeSaved: "Preferências de rota salvas",
     sectionAccount: "Vínculos",
     role: "Papel",
-    team: "Equipe",
     role_rep: "Vendedor",
     role_manager: "Gerente",
     role_admin: "Admin Xpot",
@@ -138,7 +132,6 @@ export const settingsMessages: Dictionary<typeof en> = {
     lastNamePlaceholder: "Apellido",
     displayName: "Nombre visible",
     displayNamePlaceholder: "Nombre visible",
-    email: "Correo",
     phone: "Teléfono",
     saving: "Guardando…",
     saveProfile: "Guardar perfil",
@@ -146,7 +139,6 @@ export const settingsMessages: Dictionary<typeof en> = {
     profileSaveFailed: "No se pudo guardar el perfil",
     noChanges: "No hay cambios para guardar",
 
-    sectionSecurity: "Seguridad",
     currentPassword: "Contraseña actual",
     currentPasswordPlaceholder: "Escribe tu contraseña actual",
     newPassword: "Nueva contraseña",
@@ -174,7 +166,6 @@ export const settingsMessages: Dictionary<typeof en> = {
     routeSaved: "Preferencias de ruta guardadas",
     sectionAccount: "Membresías",
     role: "Rol",
-    team: "Equipo",
     role_rep: "Vendedor",
     role_manager: "Gerente",
     role_admin: "Admin Xpot",
