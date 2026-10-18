@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ComponentType, type ReactNode } from
 import { Link, useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ExternalLink, Link2, MapPin, Package, Plus, Radio, ScanLine, Search, Star, Unlink } from "lucide-react";
-import type { TagListItem } from "@shared/tagsApi";
+import type { LeadTagSummary, TagListItem } from "@shared/tagsApi";
 import { validateChipContent } from "@shared/chipContent";
 import { guessDestinationType, normalizeUrlInput } from "@shared/tagApp";
 import { useT } from "@/i18n";
@@ -230,10 +230,10 @@ export default function CustomerScreen({ leadId }: { leadId: number }) {
   });
   const pieces = useMemo(() => (piecesQuery.data ?? []).filter((p) => p.leadId === leadId), [piecesQuery.data, leadId]);
   const freePieces = useMemo(() => (piecesQuery.data ?? []).filter(isFreePiece), [piecesQuery.data]);
-  const totals = useMemo(
-    () => pieces.reduce((sum, p) => ({ live: sum.live + (p.status === "active" ? 1 : 0), scans: sum.scans + p.qrInteractions + p.nfcInteractions }), { live: 0, scans: 0 }),
-    [pieces],
-  );
+  const live = useMemo(() => pieces.filter((p) => p.status === "active").length, [pieces]);
+  // The same 30-day count the Customers list shows; the pieces' own counters are all-time.
+  const summariesQuery = useQuery<LeadTagSummary[]>({ queryKey: ["/api/xpot/tags/by-lead"], staleTime: 15_000 });
+  const scans30 = summariesQuery.data?.find((s) => s.leadId === leadId)?.scansLast30 ?? 0;
 
   const [openCode, setOpenCode] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -485,8 +485,8 @@ export default function CustomerScreen({ leadId }: { leadId: number }) {
         </div>
         <div className="mt-3 grid grid-cols-3 divide-x divide-white/[0.06] rounded-xl border border-white/[0.06] bg-black/[0.12] lg:mt-0 lg:w-[420px] lg:shrink-0">
           <Metric icon={Package} value={pieces.length} label={t("customersPieces")} />
-          <Metric icon={Radio} value={totals.live} label={t("customersLive")} />
-          <Metric icon={ScanLine} value={totals.scans} label={t("customersScans30")} />
+          <Metric icon={Radio} value={live} label={t("customersLive")} />
+          <Metric icon={ScanLine} value={scans30} label={t("customersScans30")} />
         </div>
       </header>
       <Banner banner={banner} />
