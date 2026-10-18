@@ -23,6 +23,7 @@ import LockSheet from "./LockSheet";
 import PieceDashboard from "./PieceDashboard";
 import { isWebNfcSupported } from "./webNfc";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
+import { cameFromInApp } from "@/lib/inAppHistory";
 import { APP_BASE, errorText, getSellTo, haptic, lookupTag, pushRecent, shortUrl, tagPath, tagsGet, tagsPost, useBanner } from "./lib";
 import {
   BTN_PRIMARY,
@@ -156,12 +157,15 @@ export default function TagScreen({ code, onClose }: {
       <X className="h-4 w-4" />
     </button>
   ) : undefined;
-  const back = onClose ? undefined : APP_BASE;
+  // Back returns to where the piece was opened from (a list, a customer, the
+  // dashboard); opened from outside (a scanned QR), it goes to My pieces.
+  const back = onClose ? undefined : `${APP_BASE}/pieces`;
+  const goBack = () => (cameFromInApp() ? window.history.back() : navigate(`${APP_BASE}/pieces`));
 
   if (isLoading) {
     return (
       <>
-        <TopBar title={code} back={back} right={closeButton} />
+        <TopBar title={code} back={back} onBack={back ? goBack : undefined} right={closeButton} />
         <div className="flex justify-center py-20 text-white/40">
           <Spinner className="h-8 w-8" />
         </div>
@@ -173,7 +177,7 @@ export default function TagScreen({ code, onClose }: {
     const title = error ? t("loadFailed") : data?.kind === "not_yours" ? t("notYours") : t("notFound", { code });
     return (
       <>
-        <TopBar title={code} back={back} right={closeButton} />
+        <TopBar title={code} back={back} onBack={back ? goBack : undefined} right={closeButton} />
         <div className={`${CARD} p-6 text-center`}>
           <ScanLine className="mx-auto h-10 w-10 text-white/30" />
           <p className="mt-3 text-lg font-bold text-white" data-testid="text-tag-error">
@@ -320,6 +324,7 @@ export default function TagScreen({ code, onClose }: {
         title={tag.publicCode}
         titleClassName={CODE_HEADING_TOPBAR}
         back={back}
+        onBack={back ? goBack : undefined}
         right={closeButton}
         picture={<TagPieceVisual productType={tag.productType} face={tag.face} size="md" title={t(`face_${tag.face ?? "none"}` as "face_none")} />}
         sub={

@@ -37,6 +37,7 @@ export const ICON_BLOCK_DIRECT = "flex shrink-0 items-center justify-center roun
 export function TopBar({
   title,
   back,
+  onBack,
   eyebrow,
   identity = "xpot",
   right,
@@ -46,6 +47,8 @@ export function TopBar({
 }: {
   title: string;
   back?: string;
+  /** Runs instead of following `back` (which stays the link's address), e.g. to go back in history. */
+  onBack?: () => void;
   eyebrow?: string;
   identity?: Identity;
   right?: ReactNode;
@@ -63,6 +66,7 @@ export function TopBar({
       {back && (
         <Link
           href={back}
+          onClick={onBack ? (e) => { e.preventDefault(); onBack(); } : undefined}
           aria-label={t("back")}
           className="-ml-2 mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/80 active:bg-white/10"
         >
