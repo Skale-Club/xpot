@@ -27,6 +27,7 @@ export function ChipSection({ desktopWriter }: {
   const tc = useT(commonMessages);
   const write = usePieceWrite();
   // A phone without Web NFC (iPhone): written with NFC Tools, confirmed by a real tap.
+  // A computer or an iPad has no NFC: the write continues on the phone (a QR).
   const nfc = nfcMode();
   const manualFlow = nfc === "app";
   const [writeOpen, setWriteOpen] = useState(false);

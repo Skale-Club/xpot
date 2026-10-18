@@ -26,6 +26,8 @@ export default function LockSheet({ open, identity, onClose, onLocked }: {
   const tc = useT(commonMessages);
   const [phase, setPhase] = useState<"idle" | "locking" | "saving" | "done" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
+  // The chip was sealed but recording it failed: a retry only records it (the chip cannot be locked twice).
+  const [chipLocked, setChipLocked] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
   const cancel = useCallback(() => {
@@ -38,6 +40,7 @@ export default function LockSheet({ open, identity, onClose, onLocked }: {
       cancel();
       setPhase("idle");
       setError(null);
+      setChipLocked(false);
     }
     return cancel;
   }, [open, cancel]);
@@ -50,16 +53,16 @@ export default function LockSheet({ open, identity, onClose, onLocked }: {
     setPhase("locking");
     try {
       await lockChip(ctrl.signal);
-      haptic([60, 40, 60]);
-      setPhase("saving");
-      await onLocked?.();
-      setPhase("done");
     } catch (err) {
       const e = mapNfcError(err);
       if (e.silent) return setPhase("idle");
       setError(e.code === "nfcGeneric" ? errorText(err, t("nfcGeneric")) : t(e.code));
       setPhase("error");
+      return;
     }
+    haptic([60, 40, 60]);
+    setChipLocked(true);
+    await markLocked();
   };
 
   /** Another phone: locked with NFC Tools; record it. */
@@ -112,7 +115,7 @@ export default function LockSheet({ open, identity, onClose, onLocked }: {
           {error && <InlineAlert tone="error">{error}</InlineAlert>}
           {canLockChip() ? (
             <SheetActions>
-              <Button type="button" variant="brand" accent="tags" size="lg" onClick={() => void start()} className="w-full" data-testid="button-lock-now">
+              <Button type="button" variant="brand" accent="tags" size="lg" onClick={() => void (chipLocked ? markLocked() : start())} className="w-full" data-testid="button-lock-now">
                 {phase === "error" ? <RotateCw className="!size-5" /> : <Lock className="!size-5" />}
                 {phase === "error" ? tc("retry") : t("lockNow")}
               </Button>

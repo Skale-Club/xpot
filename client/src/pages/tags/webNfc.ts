@@ -64,8 +64,8 @@ export function isWebNfcSupported(): boolean {
 /**
  * How chips are handled on this device, so a screen offers only what works here:
  *   web   Chrome on Android: the app reads, writes and locks chips itself.
- *   app   Any other phone (iPhone, other Android browsers): the phone's own NFC
- *         opens a written chip, and NFC Tools writes and locks it.
+ *   app   Any other phone (iPhone, other Android browsers): NFC Tools writes and
+ *         locks the chip; the app cannot read it.
  *   none  A computer or an iPad: no NFC at all; it hands the job to the phone with a QR.
  */
 export type NfcMode = "web" | "app" | "none";

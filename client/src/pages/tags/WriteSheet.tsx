@@ -57,6 +57,8 @@ export default function WriteSheet({ open, url, identity, onClose, onDone, conti
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
   const [lastVerified, setLastVerified] = useState(false);
+  // The chip is written but saving that failed: a retry saves again instead of asking for another tap.
+  const [unsaved, setUnsaved] = useState<WriteResult | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const cancel = useCallback(() => {
@@ -69,6 +71,7 @@ export default function WriteSheet({ open, url, identity, onClose, onDone, conti
       cancel();
       setPhase("idle");
       setError(null);
+      setUnsaved(null);
     }
     return cancel;
   }, [open, cancel]);
@@ -79,9 +82,11 @@ export default function WriteSheet({ open, url, identity, onClose, onDone, conti
       try {
         await onDone(result);
         haptic([60, 40, 60]);
+        setUnsaved(null);
         setLastVerified(result.verified);
         setPhase("done");
       } catch (err) {
+        setUnsaved(result);
         setError(errorText(err, tc("requestFailed")));
         setPhase("error");
       }
@@ -94,6 +99,7 @@ export default function WriteSheet({ open, url, identity, onClose, onDone, conti
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     setError(null);
+    setUnsaved(null);
     setPhase("writing");
     try {
       await writeContent(url, ctrl.signal);
@@ -211,7 +217,7 @@ export default function WriteSheet({ open, url, identity, onClose, onDone, conti
         <div className="mt-5 space-y-3">
           {errorBox}
           <SheetActions>
-            <Button type="button" variant="brand" accent="tags" size="lg" onClick={() => void startWrite()} className="w-full" data-testid="button-write-now">
+            <Button type="button" variant="brand" accent="tags" size="lg" onClick={() => void (unsaved ? report(unsaved) : startWrite())} className="w-full" data-testid="button-write-now">
               {phase === "error" ? <RotateCw className="!size-5" /> : <Nfc className="!size-5" />}
               {phase === "error" ? tc("retry") : t("writeNow")}
             </Button>

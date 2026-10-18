@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ClipboardEvent, type FormEvent } from "react";
-import jsQR from "jsqr";
+import { useCallback, useRef, useState, type ClipboardEvent, type FormEvent } from "react";
 import { Camera, CameraOff, Plus, Zap, ZapOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/xpot/Field";
@@ -7,18 +6,12 @@ import { InlineAlert } from "@/components/xpot/InlineAlert";
 import { useT } from "@/i18n";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { adminTagsFlowMessages } from "@/i18n/messages/adminTagsFlow";
+import { useQrCamera } from "@/pages/tags/useQrCamera";
 import { splitReads } from "./batches-model";
 
 // The scan station parts shared by Receive (a batch's intake), Hand out and Take back: a camera that stays open and
 // reads one QR after another, a box to type or paste codes (one or many), and the beep + buzz that tells the
-// operator, eyes on the pieces, whether a read went in. Same detection as the field app's QrScanner
-// (pages/tags/QrScanner.tsx): BarcodeDetector where available, jsQR otherwise.
-
-interface BarcodeDetectorLike {
-  detect(source: CanvasImageSource): Promise<Array<{ rawValue: string }>>;
-}
-type BarcodeDetectorCtor = new (opts?: { formats?: string[] }) => BarcodeDetectorLike;
-type TorchTrack = MediaStreamTrack & { getCapabilities?: () => unknown };
+// operator, eyes on the pieces, whether a read went in. Same camera as the field app's QrScanner (useQrCamera).
 
 /** The same QR held in front of the camera reads once, not once per frame. */
 const SAME_READ_MS = 2500;
@@ -26,6 +19,25 @@ const SAME_READ_MS = 2500;
 export type Feedback = "ok" | "warn" | "error";
 
 let audio: AudioContext | null = null;
+
+function audioContext(): AudioContext | null {
+  const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!Ctx) return null;
+  audio ??= new Ctx();
+  return audio;
+}
+
+/**
+ * Call from a tap: iOS keeps an AudioContext silent until one is started inside a user gesture, and a camera read
+ * is not one. (An iPhone has no vibration either, so without this the station would give it no feedback at all.)
+ */
+export function primeFeedback() {
+  try {
+    void audioContext()?.resume?.();
+  } catch {
+    // no sound
+  }
+}
 
 /** A short beep (ok: one high note; warn: two; error: one low) and a buzz on phones. Never throws. */
 export function feedback(kind: Feedback) {
@@ -35,10 +47,8 @@ export function feedback(kind: Feedback) {
     // no vibration
   }
   try {
-    const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!Ctx) return;
-    audio ??= new Ctx();
-    const ctx = audio;
+    const ctx = audioContext();
+    if (!ctx) return;
     void ctx.resume?.();
     const notes = kind === "ok" ? [880] : kind === "warn" ? [620, 620] : [220];
     notes.forEach((freq, i) => {
@@ -59,8 +69,6 @@ export function feedback(kind: Feedback) {
   }
 }
 
-type CameraError = "qrNoCamera" | "qrDenied" | "qrFailed";
-
 /**
  * An inline rear camera that keeps reading: every new QR in view calls `onRead`, the camera stays open in between.
  * `paused` stops reading (e.g. while a read is being sent) without closing the camera.
@@ -68,123 +76,20 @@ type CameraError = "qrNoCamera" | "qrDenied" | "qrFailed";
 export function ContinuousCamera({ onRead, onClose, paused = false }: { onRead: (text: string) => void; onClose: () => void; paused?: boolean }) {
   const tt = useT(tagsMessages);
   const t = useT(adminTagsFlowMessages);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const trackRef = useRef<TorchTrack | null>(null);
-  const onReadRef = useRef(onRead);
-  onReadRef.current = onRead;
-  const pausedRef = useRef(paused);
-  pausedRef.current = paused;
   const lastRef = useRef<{ text: string; at: number } | null>(null);
-  const [error, setError] = useState<CameraError | null>(null);
   const [flash, setFlash] = useState(false);
-  const [torchAvailable, setTorchAvailable] = useState(false);
-  const [torchOn, setTorchOn] = useState(false);
-
-  useEffect(() => {
-    let stream: MediaStream | null = null;
-    let raf = 0;
-    let cancelled = false;
-    const Detector = (window as unknown as { BarcodeDetector?: BarcodeDetectorCtor }).BarcodeDetector;
-    let detector: BarcodeDetectorLike | null = null;
-    try {
-      detector = Detector ? new Detector({ formats: ["qr_code"] }) : null;
-    } catch {
-      detector = null;
-    }
-
-    const found = (text: string) => {
+  const { videoRef, canvasRef, error, torchAvailable, torchOn, toggleTorch } = useQrCamera({
+    paused,
+    onCode: (text) => {
       const now = Date.now();
       const last = lastRef.current;
-      if (last && last.text === text && now - last.at < SAME_READ_MS) {
-        lastRef.current = { text, at: now };
-        return;
-      }
       lastRef.current = { text, at: now };
+      if (last && last.text === text && now - last.at < SAME_READ_MS) return;
       setFlash(true);
       window.setTimeout(() => setFlash(false), 250);
-      onReadRef.current(text);
-    };
-
-    const tick = async () => {
-      if (cancelled) return;
-      const video = videoRef.current;
-      if (!pausedRef.current && video && video.readyState >= 2 && video.videoWidth > 0) {
-        try {
-          if (detector) {
-            const codes = await detector.detect(video);
-            if (codes[0]?.rawValue) found(codes[0].rawValue);
-          } else {
-            const canvas = canvasRef.current;
-            const ctx = canvas?.getContext("2d", { willReadFrequently: true });
-            if (canvas && ctx) {
-              const scale = Math.min(1, 640 / video.videoWidth);
-              canvas.width = Math.round(video.videoWidth * scale);
-              canvas.height = Math.round(video.videoHeight * scale);
-              ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-              const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-              const code = jsQR(img.data, img.width, img.height, { inversionAttempts: "dontInvert" });
-              if (code?.data) found(code.data);
-            }
-          }
-        } catch {
-          // A failed frame is not fatal; try the next one.
-        }
-      }
-      raf = window.requestAnimationFrame(() => void tick());
-    };
-
-    void (async () => {
-      if (!navigator.mediaDevices?.getUserMedia) {
-        setError("qrNoCamera");
-        return;
-      }
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
-          audio: false,
-        });
-        if (cancelled) {
-          stream.getTracks().forEach((track) => track.stop());
-          return;
-        }
-        const track = stream.getVideoTracks()[0] as TorchTrack | undefined;
-        trackRef.current = track ?? null;
-        try {
-          const caps = track?.getCapabilities?.() as { torch?: boolean } | undefined;
-          if (caps?.torch) setTorchAvailable(true);
-        } catch {
-          // no torch info
-        }
-        const video = videoRef.current;
-        if (video) {
-          video.srcObject = stream;
-          await video.play().catch(() => undefined);
-        }
-        raf = window.requestAnimationFrame(() => void tick());
-      } catch (err) {
-        setError((err as { name?: string }).name === "NotAllowedError" ? "qrDenied" : "qrFailed");
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-      window.cancelAnimationFrame(raf);
-      stream?.getTracks().forEach((track) => track.stop());
-      trackRef.current = null;
-    };
-  }, []);
-
-  const toggleTorch = async () => {
-    const track = trackRef.current;
-    if (!track) return;
-    try {
-      await track.applyConstraints({ advanced: [{ torch: !torchOn } as MediaTrackConstraintSet] });
-      setTorchOn((v) => !v);
-    } catch {
-      setTorchAvailable(false);
-    }
-  };
+      onRead(text);
+    },
+  });
 
   if (error) {
     return (
@@ -202,7 +107,7 @@ export function ContinuousCamera({ onRead, onClose, paused = false }: { onRead: 
       className={`relative overflow-hidden rounded-2xl border-2 bg-black transition-colors ${flash ? "border-violet-300" : "border-white/10"}`}
       data-testid="scan-station-camera"
     >
-      <video ref={videoRef} className="aspect-[4/3] max-h-[50vh] w-full object-cover" playsInline muted />
+      <video ref={videoRef} className="aspect-[4/3] max-h-[50vh] w-full object-cover" autoPlay playsInline muted />
       <canvas ref={canvasRef} className="hidden" />
       {/* The aiming square. */}
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
@@ -230,7 +135,14 @@ export function ContinuousCamera({ onRead, onClose, paused = false }: { onRead: 
 export function CameraButton({ on, onToggle, disabled }: { on: boolean; onToggle: () => void; disabled?: boolean }) {
   const t = useT(adminTagsFlowMessages);
   return (
-    <Button type="button" variant="secondary" onClick={onToggle} disabled={disabled} aria-pressed={on} data-testid="scan-station-camera-toggle">
+    <Button
+      type="button"
+      variant="secondary"
+      onClick={() => {
+        primeFeedback();
+        onToggle();
+      }}
+      disabled={disabled} aria-pressed={on} data-testid="scan-station-camera-toggle">
       {on ? <CameraOff className="h-4 w-4" /> : <Camera className="h-4 w-4" />}
       {on ? t("cameraOff") : t("cameraOn")}
     </Button>

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { classifyScan, TAGS_APP_PATH, type ScanClassification } from "@shared/tagApp";
 import { viewHeaders } from "@/lib/adminMode";
-import { serverErrorText } from "@/lib/apiErrors";
 import { currentPlatform } from "@/lib/device";
+import { serverErrorText } from "@/lib/apiErrors";
 
 export const APP_BASE = TAGS_APP_PATH;
 const RECENTS_KEY = "xpot.tags.recents";
