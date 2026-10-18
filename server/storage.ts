@@ -71,6 +71,17 @@ export type RecentSalesVisit = {
   syncLastError: string | null;
 };
 
+/**
+ * The leads a rep's own lists show: every lead of the Organizations they run,
+ * the leads they own in an Organization they belong to (`null`: any), and the
+ * companies holding one of their Tags pieces, whoever created the lead.
+ */
+export type LeadVisibility = {
+  repId: number;
+  managedOrganizationIds: number[];
+  activeOrganizationIds: number[] | null;
+};
+
 // ─── Storage interface (intentionally narrow) ────────────────────────────────
 
 /** What a rep may change about themselves (PATCH /api/xpot/me). */
@@ -122,7 +133,9 @@ export interface IStorage {
   updateUserProfile(userId: string, data: { firstName?: string | null; lastName?: string | null; profileImageUrl?: string | null }): Promise<User>;
 
   // Leads + child tables
-  listSalesLeads(filters?: { ownerRepId?: number; organizationIds?: number[]; search?: string; limit?: number; offset?: number }): Promise<SalesLead[]>;
+  listSalesLeads(filters?: { ownerRepId?: number; organizationIds?: number[]; visibleTo?: LeadVisibility; search?: string; limit?: number; offset?: number }): Promise<SalesLead[]>;
+  /** True when one of this rep's Tags pieces is linked to the lead (the company holds it). */
+  leadHoldsRepPiece(leadId: number, repId: number): Promise<boolean>;
   getSalesLead(id: number): Promise<SalesLead | undefined>;
   getSalesLeadsByIds(ids: number[]): Promise<SalesLead[]>;
   getSalesLeadByXphereRef(ref: string): Promise<SalesLead | undefined>;
@@ -411,12 +424,24 @@ export class DatabaseStorage implements IStorage {
 
   // ── Leads ──
 
-  async listSalesLeads(filters: { ownerRepId?: number; organizationIds?: number[]; search?: string; limit?: number; offset?: number } = {}): Promise<SalesLead[]> {
+  async listSalesLeads(filters: { ownerRepId?: number; organizationIds?: number[]; visibleTo?: LeadVisibility; search?: string; limit?: number; offset?: number } = {}): Promise<SalesLead[]> {
     const conditions: any[] = [];
     if (filters.ownerRepId) conditions.push(eq(salesLeads.ownerRepId, filters.ownerRepId));
     if (filters.organizationIds) {
       if (!filters.organizationIds.length) return [];
       conditions.push(inArray(salesLeads.organizationId, filters.organizationIds));
+    }
+    if (filters.visibleTo) {
+      const { repId, managedOrganizationIds, activeOrganizationIds } = filters.visibleTo;
+      conditions.push(or(
+        managedOrganizationIds.length ? inArray(salesLeads.organizationId, managedOrganizationIds) : undefined,
+        activeOrganizationIds === null
+          ? eq(salesLeads.ownerRepId, repId)
+          : activeOrganizationIds.length
+            ? and(eq(salesLeads.ownerRepId, repId), inArray(salesLeads.organizationId, activeOrganizationIds))
+            : undefined,
+        sql`EXISTS (SELECT 1 FROM tags t WHERE t.lead_id = ${salesLeads.id} AND t.rep_id = ${repId})`,
+      ));
     }
     if (filters.search) {
       const likeValue = `%${filters.search}%`;
@@ -435,6 +460,11 @@ export class DatabaseStorage implements IStorage {
     }
     const query = db.select().from(salesLeads).orderBy(desc(salesLeads.updatedAt));
     return filters.limit ? await query.limit(filters.limit).offset(filters.offset ?? 0) : await query;
+  }
+
+  async leadHoldsRepPiece(leadId: number, repId: number): Promise<boolean> {
+    const found = await db.execute(sql`SELECT 1 FROM tags WHERE lead_id = ${leadId} AND rep_id = ${repId} LIMIT 1`);
+    return found.rows.length > 0;
   }
 
   async getSalesLeadsByIds(ids: number[]): Promise<SalesLead[]> {

@@ -18,7 +18,7 @@ import { InlineField, validateEmail } from "@/pages/xpot/components/InlineField"
 import { InlineStateSelect } from "@/components/StateSelect";
 import { useXpotModules } from "@/components/ModuleSwitch";
 import { LeadContacts } from "@/pages/xpot/components/leads/LeadContacts";
-import type { FullSalesLead, GoogleBusinessProfile } from "@/pages/xpot/types";
+import type { FullSalesLead, GoogleBusinessProfile, SalesLead, SalesLeadContact, SalesLeadLocation } from "@/pages/xpot/types";
 import { usePlaceSearch } from "@/pages/xpot/usePlaceSearch";
 import TagScreen from "./TagScreen";
 import { APP_BASE, errorText, shortUrl, tagPath, tagsGet, tagsPost, useBanner } from "./lib";
@@ -30,6 +30,9 @@ import {
 // profile, all the same lead the Visits app edits) and the pieces it holds,
 // with what can be done to them from here: open, link another, change the
 // link of several at once, unlink.
+
+/** GET /api/xpot/leads/:id. */
+type LeadDetail = { lead: SalesLead; locations: SalesLeadLocation[]; contacts: SalesLeadContact[] };
 
 const MINI_BTN =
   "inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] px-3 text-sm font-semibold text-white/85 transition-colors hover:bg-white/[0.08] active:bg-white/10 disabled:opacity-40";
@@ -212,8 +215,13 @@ export default function CustomerScreen({ leadId }: { leadId: number }) {
   const canEditAddress = useXpotModules().includes("visits");
   const { banner, show } = useBanner();
 
-  const leadsQuery = useQuery<FullSalesLead[]>({ queryKey: ["/api/xpot/leads"], staleTime: 60_000 });
-  const lead = leadsQuery.data?.find((l) => l.id === leadId) ?? null;
+  // The company itself, not a search through the leads list: that list is paged and
+  // scoped, and a customer holding the person's pieces must open whoever created it.
+  const leadQuery = useQuery<LeadDetail>({ queryKey: ["/api/xpot/leads", leadId], staleTime: 60_000 });
+  const lead = useMemo<FullSalesLead | null>(
+    () => (leadQuery.data?.lead ? { ...leadQuery.data.lead, locations: leadQuery.data.locations ?? [], contacts: leadQuery.data.contacts ?? [] } : null),
+    [leadQuery.data],
+  );
   // Every piece the person holds: this customer's, and the free ones that can be linked to it.
   const piecesQuery = useQuery({
     queryKey: ["tags", "list", null, null],
@@ -352,7 +360,7 @@ export default function CustomerScreen({ leadId }: { leadId: number }) {
     }
   };
 
-  if (leadsQuery.isLoading || piecesQuery.isLoading) {
+  if (leadQuery.isLoading || piecesQuery.isLoading) {
     return <div className="flex justify-center py-20 text-white/40"><Spinner className="h-7 w-7" /></div>;
   }
   if (!lead) {

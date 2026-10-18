@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { storage } from "../../storage.js";
+import { storage, type LeadVisibility } from "../../storage.js";
 import { repModules } from "#shared/modules.js";
 import { canAccessLead, requireXpotUser, requireVisitsModule, ensureXpotRep, isManagerOrAdmin, loadAccessibleLead, listsEveryone } from "./middleware.js";
 import { xpotLeadCreateSchema, xpotLeadUpdateSchema, xpotLeadContactCreateSchema } from "#shared/xpot.js";
@@ -25,23 +25,23 @@ export function createLeadsRouter() {
     const actor = (req as any).xpotActor as Awaited<ReturnType<typeof ensureXpotRep>>;
 
     let ownerRepId: number | undefined;
-    let organizationIds: number[] | undefined;
+    let visibleTo: LeadVisibility | undefined;
     if (listsEveryone(req, actor!)) {
       // Manager can filter by a specific rep
       ownerRepId = req.query.repId ? Number(req.query.repId) : undefined;
     } else {
-      const managed = await managedOrganizationIds(actor!);
-      if (managed?.length) organizationIds = managed;
-      else {
-        ownerRepId = actor!.rep.id;
-        organizationIds = (await activeOrganizationIds(actor!)) ?? undefined;
-      }
+      // A Rep Admin's Organization, plus their own leads wherever they belong, plus
+      // the companies holding their Tags pieces. A rep is often Rep Admin of their
+      // personal Organization and a member of another one, so scoping to either
+      // alone hid the customers their pieces were linked to.
+      const [managed, active] = await Promise.all([managedOrganizationIds(actor!), activeOrganizationIds(actor!)]);
+      visibleTo = { repId: actor!.rep.id, managedOrganizationIds: managed ?? [], activeOrganizationIds: active };
     }
 
     const search = typeof req.query.search === "string" ? req.query.search : undefined;
     const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 100));
     const offset = Math.max(0, Number(req.query.offset) || 0);
-    const leads = await storage.listSalesLeads({ ownerRepId, organizationIds, search, limit, offset });
+    const leads = await storage.listSalesLeads({ ownerRepId, visibleTo, search, limit, offset });
 
     if (!leads.length) return res.json([]);
 
@@ -442,7 +442,8 @@ export function createLeadsRouter() {
     const lead = await storage.getSalesLead(leadId);
     if (!lead) return res.status(404).json({ message: "Lead not found" });
 
-    if (!(await canAccessLead(actor!, lead))) {
+    // Holding a piece there lets a rep see and edit a company, not delete someone else's lead.
+    if (!(await canAccessLead(actor!, lead, { viaPieces: false }))) {
       return res.status(403).json({ message: "Access denied" });
     }
 

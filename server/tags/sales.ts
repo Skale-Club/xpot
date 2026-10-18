@@ -22,6 +22,7 @@ import type { TagActor } from "#shared/tagAccess.js";
 import { allocateSaleLineTotals, paymentStatusFor, resolveUnitPriceCents } from "#shared/pricing.js";
 import { resolveTagUnitCost, type TagSaleCreateInput } from "#shared/tagSales.js";
 import { salesStorage } from "../storage-sales.js";
+import { leadUsableBy } from "./repository.js";
 
 export class TagSaleError extends Error {
   constructor(message: string, public status = 400, public code = "tag_sale_invalid") {
@@ -67,7 +68,7 @@ export async function createTagSale(input: TagSaleCreateInput, actor: TagActor, 
       throw new TagSaleError("The seller's Tags cost policy must be confirmed by an administrator", 409, "seller_cost_policy_unconfigured");
     }
     if (!lead) throw new TagSaleError("Customer not found", 404, "lead_not_found");
-    if (!actor.isManager && lead.ownerRepId !== actor.repId) {
+    if (!actor.isManager && !(await leadUsableBy(actor, lead.id, tx))) {
       throw new TagSaleError("This customer is not assigned to you", 403, "lead_forbidden");
     }
     if (input.visitId) {

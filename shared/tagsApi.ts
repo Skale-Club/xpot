@@ -187,6 +187,8 @@ export interface TagKitItem {
 /** Pieces sold to one customer (lead), for the Visits side. */
 export interface LeadTagSummary {
   leadId: number;
+  /** The company's name; null when it was saved blank. */
+  name: string | null;
   pieces: number;
   live: number;
   scansLast30: number;
