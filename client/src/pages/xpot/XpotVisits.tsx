@@ -1,19 +1,20 @@
 import { useState, useCallback, useMemo } from "react";
 import { useLocation, useRoute } from "wouter";
-import { CalendarDays, RefreshCw } from "lucide-react";
+import { CalendarDays } from "lucide-react";
 import { useVisits } from "./hooks/useVisits";
 import { VisitRow, VisitDeleteConfirm, VisitSummaryPage } from "./components/VisitRow";
 import { VisitsTable } from "./components/VisitsTable";
 import { visitStatusLabel, visitStatusTone } from "./components/VisitStatus";
 import { PILL_DOTS } from "@/components/xpot/StatusPill";
 import { checkinMessages } from "@/i18n/messages/checkin";
+import { formatDate } from "@/lib/format";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import type { EnrichedSalesVisit } from "./types";
 import { useT, type Translate } from "@/i18n";
-import { commonMessages } from "@/i18n/messages/common";
 import { visitsMessages } from "@/i18n/messages/visits";
 import { Segmented } from "@/components/xpot/Segmented";
-import { EmptyState } from "@/components/xpot/EmptyState";
+import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
+import { ListSkeleton } from "@/components/xpot/ListSkeleton";
 import { FilterBar, FilterChips, FilterDay, fromDayKey, toDayKey } from "@/components/xpot/filters";
 import { currentSearch, useUrlFilters } from "@/hooks/use-url-filters";
 import { ListPager, usePagedList } from "@/components/xpot/pagination";
@@ -47,7 +48,7 @@ function isYesterday(date: Date) {
 function formatDayLabel(date: Date, t: VisitsT) {
   if (toDayKey(date) === toDayKey(new Date())) return t("today");
   if (isYesterday(date)) return t("yesterday");
-  return date.toLocaleDateString(t.locale, { weekday: "short", month: "short", day: "numeric" });
+  return formatDate(date, { weekday: "short", month: "short", day: "numeric" });
 }
 
 const visitDay = (visit: EnrichedSalesVisit) => {
@@ -57,7 +58,6 @@ const visitDay = (visit: EnrichedSalesVisit) => {
 
 export function XpotVisits({ basePath = "/dashboard/history" }: { basePath?: string }) {
   const t = useT(visitsMessages);
-  const tc = useT(commonMessages);
   const tStatus = useT(checkinMessages);
   const { visitsQuery } = useVisits();
   // ?view=day&day=2026-10-12&status=sale_made
@@ -143,25 +143,13 @@ export function XpotVisits({ basePath = "/dashboard/history" }: { basePath?: str
     return (
       <>
         {visitsQuery.isLoading ? (
-          <div className="flex min-h-72 items-center justify-center rounded-2xl border border-white/[0.07] bg-white/[0.025]">
-            <RefreshCw className="h-5 w-5 animate-spin text-indigo-300" />
-          </div>
+          <ListSkeleton rows={3} rowClassName="h-28 rounded-2xl" />
         ) : visitsQuery.isError ? (
-          <EmptyState
-            tone="red"
-            icon={CalendarDays}
+          <ErrorState
             title={t("loadFailed")}
-            hint={(visitsQuery.error as Error).message || t("loadFailedDesc")}
-          >
-            <button
-              type="button"
-              onClick={() => void visitsQuery.refetch()}
-              className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.06] px-3 py-2 text-sm font-medium text-white"
-            >
-              <RefreshCw className="h-4 w-4" />
-              {tc("retry")}
-            </button>
-          </EmptyState>
+            message={(visitsQuery.error as Error).message || t("loadFailedDesc")}
+            onRetry={() => void visitsQuery.refetch()}
+          />
         ) : selectedVisit ? (
           <VisitSummaryPage
             visit={selectedVisit}
@@ -221,32 +209,13 @@ export function XpotVisits({ basePath = "/dashboard/history" }: { basePath?: str
       />
 
       {visitsQuery.isLoading ? (
-        <div className="space-y-2">
-          {[...Array(4)].map((_, i) => (
-            <div
-              key={i}
-              className="h-16 rounded-2xl animate-pulse"
-              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}
-            />
-          ))}
-        </div>
+        <ListSkeleton rows={4} />
       ) : visitsQuery.isError ? (
-        <EmptyState
-          tone="red"
-          icon={CalendarDays}
+        <ErrorState
           title={t("loadFailed")}
-          hint={(visitsQuery.error as Error).message || t("loadFailedDesc")}
-        >
-          <button
-            type="button"
-            onClick={() => void visitsQuery.refetch()}
-            className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-white transition-colors"
-            style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)" }}
-          >
-            <RefreshCw className="h-4 w-4" />
-            {tc("retry")}
-          </button>
-        </EmptyState>
+          message={(visitsQuery.error as Error).message || t("loadFailedDesc")}
+          onRetry={() => void visitsQuery.refetch()}
+        />
       ) : null}
 
       {/* Every visit opens the same dedicated summary route on desktop and mobile. */}

@@ -15,16 +15,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { LeadTagSummary } from "@shared/tagsApi";
 import { useXpotModules } from "@/components/ModuleSwitch";
 import { LeadCardBody } from "./components/LeadCardBody";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
 import { useXpotQueries } from "./hooks/useXpotQueries";
 import { leadMatchesSearch, useLeads } from "./hooks/useLeads";
 import { useToast } from "@/hooks/use-toast";
@@ -32,18 +24,17 @@ import { apiRequest } from "@/lib/queryClient";
 import { DollarSign } from "lucide-react";
 import { LeadSalesPanel } from "./components/sales/LeadSalesPanel";
 import { SheetDialog } from "./components/sales/ui";
-import { Loader2 } from '@/components/ui/loader';
 import type { EnrichedSalesVisit, FullSalesLead } from "./types";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { BottomSheet } from "@/pages/tags/ui";
 import { leadPiecesPath } from "@/pages/tags/lib";
 import { useViewerAccess } from "@/lib/adminMode";
-import { LeadsTable } from "./components/leads/LeadsTable";
+import { LeadRowFacts, LeadsTable } from "./components/leads/LeadsTable";
 import { LeadDetailPane } from "./components/leads/LeadDetailPane";
 import { CreateLeadDialog } from "./components/CreateLeadDialog";
 import { useT } from "@/i18n";
 import { leadsMessages } from "@/i18n/messages/leads";
-import { BRAND_GRADIENT, GLASS } from "@/components/xpot/surface";
+import { GLASS_CLASS } from "@/components/xpot/surface";
 import { EmptyState } from "@/components/xpot/EmptyState";
 import { ListSkeleton } from "@/components/xpot/ListSkeleton";
 import { RetryButton } from "@/components/xpot/RetryButton";
@@ -77,8 +68,9 @@ function LeadPiecesChip({ lead, summary, onOpen }: { lead: FullSalesLead; summar
   );
 }
 
-function LeadCard({ lead, onOpen, onMore, pieces, onOpenPieces }: {
+function LeadCard({ lead, onOpen, onMore, pieces, onOpenPieces, lastVisit }: {
   lead: FullSalesLead;
+  lastVisit: Date | null;
   pieces?: LeadTagSummary;
   onOpenPieces?: () => void;
   onOpen: () => void;
@@ -90,25 +82,31 @@ function LeadCard({ lead, onOpen, onMore, pieces, onOpenPieces }: {
     <div
       role="button"
       tabIndex={0}
-      className="w-full cursor-pointer rounded-2xl p-4 text-left transition-all"
-      style={{ ...GLASS, boxShadow: "0 4px 20px rgba(0,0,0,0.25)" }}
+      className={`w-full cursor-pointer rounded-2xl p-4 text-left transition-colors hover:bg-white/[0.06] ${GLASS_CLASS}`}
       onClick={onOpen}
       onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onOpen(); } }}
     >
       <LeadCardBody
         lead={lead}
-        subtitle={pieces && onOpenPieces ? <LeadPiecesChip lead={lead} summary={pieces} onOpen={onOpenPieces} /> : undefined}
+        subtitle={
+          <div className="space-y-1.5">
+            <LeadRowFacts lead={lead} lastVisit={lastVisit} />
+            {pieces && onOpenPieces ? <LeadPiecesChip lead={lead} summary={pieces} onOpen={onOpenPieces} /> : null}
+          </div>
+        }
         right={
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="icon"
             title={t("moreActions")}
             aria-label={t("moreActions")}
-            className="flex h-9 w-9 items-center justify-center rounded-xl text-white/40 transition-colors hover:bg-white/10 hover:text-white"
+            className="text-white/45"
             onClick={(e) => { e.stopPropagation(); onMore(); }}
             data-testid={`lead-${lead.id}-more`}
           >
-            <MoreVertical className="h-4 w-4" />
-          </button>
+            <MoreVertical aria-hidden="true" />
+          </Button>
         }
       />
     </div>
@@ -126,7 +124,7 @@ function LeadActionSheet({ lead, onClose, onSell, onCheckIn, onDelete }: {
   const items = [
     { key: "sell", label: t("salesAndConsignment"), icon: DollarSign, run: onSell, cls: "text-emerald-300" },
     { key: "checkin", label: t("checkIn"), icon: LogIn, run: onCheckIn, cls: "text-blue-300" },
-    { key: "delete", label: t("delete"), icon: Trash2, run: onDelete, cls: "text-red-400" },
+    { key: "delete", label: t("delete"), icon: Trash2, run: onDelete, cls: "text-red-300" },
   ];
   return (
     <BottomSheet open={Boolean(lead)} onClose={onClose} title={lead?.name}>
@@ -136,11 +134,10 @@ function LeadActionSheet({ lead, onClose, onSell, onCheckIn, onDelete }: {
             key={key}
             type="button"
             onClick={() => { onClose(); run(); }}
-            className="flex min-h-[52px] w-full items-center gap-3 rounded-2xl px-4 text-left text-[15px] font-semibold text-white/85 active:bg-white/10"
-            style={{ background: "rgba(255,255,255,0.04)" }}
+            className={`flex min-h-[52px] w-full items-center gap-3 rounded-2xl px-4 text-left text-[15px] font-semibold text-white/85 active:bg-white/10 ${GLASS_CLASS}`}
             data-testid={`lead-action-${key}`}
           >
-            <Icon className={`h-5 w-5 ${cls}`} />
+            <Icon className={`h-5 w-5 ${cls}`} aria-hidden="true" />
             {label}
           </button>
         ))}
@@ -324,15 +321,13 @@ export function XpotLeads() {
   const openLead = (lead: FullSalesLead) => setLocation(`/leads/${lead.id}${currentSearch()}`, { replace: routeId != null });
   const closeLead = useCallback(() => setLocation(`/leads${currentSearch()}`, { replace: true }), [setLocation]);
 
+  // Stays open with the loader until the server answers (ConfirmDialog); a failure keeps it open.
   const handleDeleteLead = async () => {
     if (!leadPendingDelete) return;
-    try {
-      // Close the detail first: once the list refetches without it, the page
-      // would flash "not found".
-      if (leadPendingDelete.id === routeId) closeLead();
-      await deleteLeadMutation.mutateAsync(leadPendingDelete.id);
-      setLeadPendingDelete(null);
-    } catch {}
+    // Close the detail first: once the list refetches without it, the page
+    // would flash "not found".
+    if (leadPendingDelete.id === routeId) closeLead();
+    await deleteLeadMutation.mutateAsync(leadPendingDelete.id);
   };
 
   const worked = narrow(leads);
@@ -358,16 +353,18 @@ export function XpotLeads() {
         />
       }
       actions={
-        <button
+        <Button
+          type="button"
+          variant="brand"
           onClick={() => setAddOpen(true)}
           title={t("newLead")}
+          aria-label={t("newLead")}
           data-shortcut="new"
-          className="flex h-10 w-10 shrink-0 items-center justify-center gap-2 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-80 lg:w-auto lg:px-4"
-          style={{ background: BRAND_GRADIENT }}
+          className="w-11 shrink-0 px-0 lg:w-auto lg:px-4"
         >
-          <Plus className="h-4 w-4" />
+          <Plus aria-hidden="true" />
           <span className="hidden lg:inline">{t("newLead")}</span>
-        </button>
+        </Button>
       }
       secondary={
         <div className="space-y-2.5">
@@ -395,23 +392,19 @@ export function XpotLeads() {
       <RetryButton onRetry={() => void leadsQuery.refetch()} busy={leadsQuery.isFetching} />
     </EmptyState>
   ) : leadFilter === "prospect" && prospects.length === 0 ? (
-    <EmptyState icon={Building2} title={t("noProspects")} hint={t("noProspectsHint")} cardStyle={GLASS} />
+    <EmptyState icon={Building2} title={t("noProspects")} hint={t("noProspectsHint")} />
   ) : leads.length === 0 && !search && leadFilter !== "prospect" ? (
-    <EmptyState icon={Building2} title={t("noLeads")} hint={t("noLeadsHint")} cardStyle={GLASS}>
-      <button
-        onClick={() => setAddOpen(true)}
-        className="rounded-xl px-4 py-2 text-xs font-semibold text-white hover:opacity-80"
-        style={{ background: BRAND_GRADIENT }}
-      >
-        {t("addLead")}
-      </button>
+    <EmptyState icon={Building2} title={t("noLeads")} hint={t("noLeadsHint")}>
+      <Button type="button" variant="brand" size="sm" onClick={() => setAddOpen(true)}>
+        <Plus aria-hidden="true" /> {t("addLead")}
+      </Button>
     </EmptyState>
   ) : displayList.length > 0 ? null : search ? (
-    <EmptyState icon={Search} title={t("noResults", { query: search })} hint={t("chooseAnotherFilter")} cardStyle={GLASS} />
+    <EmptyState icon={Search} title={t("noResults", { query: search })} hint={t("chooseAnotherFilter")} />
   ) : day ? (
-    <EmptyState icon={CalendarDays} title={t("noCompaniesOnDate")} hint={t("chooseAnotherDate")} cardStyle={GLASS} />
+    <EmptyState icon={CalendarDays} title={t("noCompaniesOnDate")} hint={t("chooseAnotherDate")} />
   ) : (
-    <EmptyState icon={SlidersHorizontal} title={t("noLeadsInFilter")} hint={t("chooseAnotherFilter")} cardStyle={GLASS} />
+    <EmptyState icon={SlidersHorizontal} title={t("noLeadsInFilter")} hint={t("chooseAnotherFilter")} />
   );
 
   return (
@@ -429,9 +422,9 @@ export function XpotLeads() {
             converting={convertToCustomer.isPending}
           />
         ) : leadDetailQuery.isLoading ? (
-          <div className="flex justify-center py-16"><Loader2 className="h-5 w-5 animate-spin text-blue-400" /></div>
+          <ListSkeleton rows={3} rowClassName="h-28 rounded-2xl" testId="lead-detail-loading" />
         ) : (
-          <EmptyState icon={Building2} title={t("leadNotFound")} cardStyle={GLASS} />
+          <EmptyState icon={Building2} title={t("leadNotFound")} />
         )
       ) : (
         <>
@@ -446,6 +439,8 @@ export function XpotLeads() {
                   onSelect={openLead}
                   piecesFor={piecesFor}
                   lastVisitFor={lastVisitFor}
+                  onSell={setSalesLead}
+                  onCheckIn={(lead) => setLocation(`/route/check-in?leadId=${lead.id}`)}
                   onDelete={setLeadPendingDelete}
                 />
               )}
@@ -460,6 +455,7 @@ export function XpotLeads() {
                   lead={lead}
                   onOpen={() => openLead(lead)}
                   onMore={() => setActionLead(lead)}
+                  lastVisit={lastVisitFor(lead.id)}
                   pieces={piecesFor(lead.id)}
                   onOpenPieces={() => setLocation(leadPiecesPath(lead.id, lead.name, canManage))}
                 />
@@ -482,7 +478,7 @@ export function XpotLeads() {
       <SheetDialog
         open={Boolean(salesLead)}
         onOpenChange={(o) => { if (!o) setSalesLead(null); }}
-        title={salesLead?.name ?? "Sales"}
+        title={salesLead?.name ?? t("salesAndConsignment")}
       >
         {salesLead && <LeadSalesPanel leadId={salesLead.id} leadName={salesLead.name} compact />}
       </SheetDialog>
@@ -492,43 +488,16 @@ export function XpotLeads() {
           status this list shows. */}
       <CreateLeadDialog open={addOpen} onOpenChange={setAddOpen} initialName="" status="lead" />
 
-      <AlertDialog
+      <ConfirmDialog
         open={Boolean(leadPendingDelete)}
-        onOpenChange={(open) => { if (!open && !deleteLeadMutation.isPending) setLeadPendingDelete(null); }}
-      >
-        <AlertDialogContent
-          className="max-w-xs rounded-2xl border-0 p-6"
-          style={{ background: "#0e1117", boxShadow: "0 24px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.07)" }}
-        >
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-base font-semibold text-white">
-              {t("deleteLeadTitle")}
-            </AlertDialogTitle>
-            <AlertDialogDescription className="text-sm text-white/45">
-              {leadPendingDelete ? t("deleteNamed", { name: leadPendingDelete.name }) : t("deleteGeneric")}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="mt-2 flex-row gap-2 sm:space-x-0">
-            <AlertDialogCancel
-              disabled={deleteLeadMutation.isPending}
-              className="flex-1 rounded-xl border-0 text-sm font-medium text-white/60 hover:text-white transition-colors"
-              style={{ background: "rgba(255,255,255,0.07)" }}
-            >
-              {t("keep")}
-            </AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              disabled={deleteLeadMutation.isPending}
-              onClick={(e) => { e.preventDefault(); void handleDeleteLead(); }}
-              className="flex-1 rounded-xl border-0 text-sm font-medium text-white"
-              style={{ background: "rgba(239,68,68,0.85)" }}
-            >
-              {deleteLeadMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              {t("delete")}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        onOpenChange={(open) => { if (!open) setLeadPendingDelete(null); }}
+        tone="danger"
+        title={t("deleteLeadTitle")}
+        description={leadPendingDelete ? t("deleteNamed", { name: leadPendingDelete.name }) : t("deleteGeneric")}
+        confirmLabel={t("delete")}
+        cancelLabel={t("keep")}
+        onConfirm={handleDeleteLead}
+      />
     </>
   );
 }
