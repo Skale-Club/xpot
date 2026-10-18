@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { MapPinOff, ShieldAlert } from "lucide-react";
+import { MapPinOff, MapPinned } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Loader2 } from "@/components/ui/loader";
 import { useT } from "@/i18n";
@@ -13,13 +13,15 @@ export type GeofenceMiss = {
   accuracyMeters: number | null;
 };
 
-type ReasonId = "imprecise" | "address" | "noLocation" | "other";
+type ReasonId = "elsewhere" | "imprecise" | "address" | "noLocation" | "other";
 
 /**
- * Asked when a check-in cannot be validated by location: outside the
- * customer's radius (typical on a computer, which locates by Wi-Fi), or with
- * no location at all. The reason travels with the visit as a manual override,
- * so a manager sees why it was accepted.
+ * Asked when a check-in cannot be validated by location: away from the
+ * customer's address, or with no location at all. Meeting a customer
+ * somewhere else (a coffee shop, an event, a job site) is normal field work,
+ * so it is the first answer and already chosen; nothing here should read as an
+ * error. What the rep picks travels with the visit as a manual override, so a
+ * manager sees how it was recorded.
  */
 export function CheckInOverrideDialog({ open, onOpenChange, miss, leadName, loading, onConfirm }: {
   open: boolean;
@@ -32,24 +34,31 @@ export function CheckInOverrideDialog({ open, onOpenChange, miss, leadName, load
   const t = useT(checkinMessages);
   const reasons: Array<{ id: ReasonId; label: string }> = miss
     ? [
+        { id: "elsewhere", label: t("overrideReasonElsewhere") },
         { id: "imprecise", label: t("overrideReasonImprecise") },
         { id: "address", label: t("overrideReasonAddress") },
         { id: "other", label: t("overrideReasonOther") },
       ]
     : [
         { id: "noLocation", label: t("overrideReasonNoLocation") },
+        { id: "elsewhere", label: t("overrideReasonElsewhere") },
         { id: "other", label: t("overrideReasonOther") },
       ];
   const [reasonId, setReasonId] = useState<ReasonId>(reasons[0].id);
   const [otherText, setOtherText] = useState("");
+  const [where, setWhere] = useState("");
 
   useEffect(() => {
     if (!open) return;
-    setReasonId(miss ? "imprecise" : "noLocation");
+    setReasonId(miss ? "elsewhere" : "noLocation");
     setOtherText("");
+    setWhere("");
   }, [open, miss]);
 
-  const reason = reasonId === "other" ? otherText.trim() : reasons.find((r) => r.id === reasonId)?.label ?? "";
+  const label = reasons.find((r) => r.id === reasonId)?.label ?? "";
+  const reason = reasonId === "other"
+    ? otherText.trim()
+    : reasonId === "elsewhere" && where.trim() ? `${label}: ${where.trim()}` : label;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -59,19 +68,19 @@ export function CheckInOverrideDialog({ open, onOpenChange, miss, leadName, load
       >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2.5 text-base font-semibold text-white">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-400/10 text-amber-300">
-              {miss ? <ShieldAlert className="h-[18px] w-[18px]" /> : <MapPinOff className="h-[18px] w-[18px]" />}
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-500/15 text-blue-300">
+              {miss ? <MapPinned className="h-[18px] w-[18px]" /> : <MapPinOff className="h-[18px] w-[18px]" />}
             </span>
             {t("overrideTitle")}
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="rounded-xl border border-amber-400/15 bg-amber-400/[0.06] px-3.5 py-3 text-sm leading-relaxed text-amber-100/85">
+          <div className="rounded-xl border border-white/[0.08] bg-white/[0.04] px-3.5 py-3 text-sm leading-relaxed text-white/75">
             {miss
               ? t("overrideOutside", { distance: formatMeters(miss.distanceMeters), name: leadName, radius: formatMeters(miss.allowedRadiusMeters) })
               : t("overrideNoLocation", { name: leadName })}
-            {miss?.accuracyMeters ? <span className="mt-1 block text-xs text-amber-100/55">{t("overrideAccuracy", { accuracy: formatMeters(miss.accuracyMeters) })}</span> : null}
+            {miss?.accuracyMeters ? <span className="mt-1 block text-xs text-white/40">{t("overrideAccuracy", { accuracy: formatMeters(miss.accuracyMeters) })}</span> : null}
           </div>
 
           <p className="text-xs leading-relaxed text-white/50">{t("overrideAsk")}</p>
@@ -96,6 +105,16 @@ export function CheckInOverrideDialog({ open, onOpenChange, miss, leadName, load
               );
             })}
           </div>
+
+          {reasonId === "elsewhere" ? (
+            <input
+              value={where}
+              onChange={(event) => setWhere(event.target.value.slice(0, 200))}
+              placeholder={t("overrideWherePlaceholder")}
+              className="h-11 w-full rounded-xl border border-white/[0.09] bg-white/[0.06] px-3 text-[16px] text-white placeholder:text-white/25 focus:border-indigo-400/40 focus:outline-none"
+              data-testid="check-in-override-where"
+            />
+          ) : null}
 
           {reasonId === "other" ? (
             <textarea
