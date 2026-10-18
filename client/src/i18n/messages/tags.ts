@@ -302,6 +302,12 @@ const en = {
   soldFor: "Sold for {amount}",
   saleValueMissing: "Amount not recorded",
   addSaleValue: "Add amount",
+  linkableSalesHint_one: "A sale to this customer is already recorded. Is this piece part of it?",
+  linkableSalesHint_other: "{count} sales to this customer are already recorded. Is this piece part of one?",
+  linkSale: "Link",
+  linkedOfUnits: "{linked} of {quantity} pieces linked",
+  notTheseSales: "None of these: record a new sale",
+  saleLinked: "Sale linked to this piece.",
 
   // Customer (lead) picker
   leadSearch: "Search or type the business name",
@@ -715,6 +721,12 @@ export const tagsMessages: Dictionary<typeof en> = {
     soldFor: "Vendida por {amount}",
     saleValueMissing: "Valor não registrado",
     addSaleValue: "Informar valor",
+    linkableSalesHint_one: "Já existe uma venda registrada para este cliente. Esta peça faz parte dela?",
+    linkableSalesHint_other: "Já existem {count} vendas registradas para este cliente. Esta peça faz parte de alguma?",
+    linkSale: "Vincular",
+    linkedOfUnits: "{linked} de {quantity} peças vinculadas",
+    notTheseSales: "Nenhuma delas: registrar nova venda",
+    saleLinked: "Venda vinculada a esta peça.",
 
     leadSearch: "Buscar ou digitar o nome do estabelecimento",
     leadsLoading: "Carregando clientes",
@@ -1117,6 +1129,12 @@ export const tagsMessages: Dictionary<typeof en> = {
     soldFor: "Vendida por {amount}",
     saleValueMissing: "Monto no registrado",
     addSaleValue: "Agregar monto",
+    linkableSalesHint_one: "Ya hay una venta registrada para este cliente. ¿Esta pieza es parte de ella?",
+    linkableSalesHint_other: "Ya hay {count} ventas registradas para este cliente. ¿Esta pieza es parte de alguna?",
+    linkSale: "Vincular",
+    linkedOfUnits: "{linked} de {quantity} piezas vinculadas",
+    notTheseSales: "Ninguna: registrar una venta nueva",
+    saleLinked: "Venta vinculada a esta pieza.",
 
     leadSearch: "Busca o escribe el nombre del negocio",
     leadsLoading: "Cargando clientes",

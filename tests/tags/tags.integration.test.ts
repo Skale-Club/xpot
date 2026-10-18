@@ -356,6 +356,35 @@ test.skipIf(!enabled)("tags: kits, reseller isolation, sales, scans, report, pro
     const done = await (await device(`/api/provisioner/jobs/${job.id}/complete`, { outcome: "succeeded", readbackUrl: job.expectedUrl })).json();
     assert.equal(done.status, "succeeded");
     assert.equal((await api("GET", `/api/xpot/tags/${a3.id}`, "it-ana")).json.nfcStatus, "verified");
+
+    // A piece handed over in the field whose sale was recorded in Visits joins that sale.
+    assert.equal((await api("POST", `/api/xpot/tags/${a3.id}/quick-activate`, "it-ana", {
+      destinationUrl: "https://elsol.example/menu", destinationType: "menu", leadId,
+    })).status, 200);
+    const [visitSale] = (await db.execute(sql`INSERT INTO sales_sales (organization_id, lead_id, rep_id, kind, status, subtotal_cents, total_cents, paid_cents, sold_at)
+      SELECT organization_id, id, ${repId["it-ana"]}, 'direct', 'completed', 6000, 6000, 6000, NOW() - interval '2 days' FROM sales_leads WHERE id = ${leadId}
+      RETURNING id`)).rows as any[];
+    const [visitLine] = (await db.execute(sql`INSERT INTO sales_sale_items (sale_id, product_id, description, quantity, unit_price_cents, unit_cost_cents, total_cents, net_total_cents)
+      VALUES (${visitSale.id}, ${salesProductId}, 'Integration keychain', 2, 3000, 400, 6000, 6000) RETURNING id`)).rows as any[];
+    assert.equal((await api("GET", `/api/xpot/tags/${a3.id}/linkable-sales`, "it-bruno")).status, 403);
+    // Only the Visits line: the Tags sales of a1 and a2 already name their pieces.
+    const linkable = await api("GET", `/api/xpot/tags/${a3.id}/linkable-sales`, "it-ana");
+    assert.deepEqual(
+      linkable.json.map(({ saleId, saleItemId, quantity, linked, unitNetCents }: any) => ({ saleId, saleItemId, quantity, linked, unitNetCents })),
+      [{ saleId: visitSale.id, saleItemId: visitLine.id, quantity: 2, linked: 0, unitNetCents: 3000 }],
+    );
+    const linked = await api("POST", `/api/xpot/tags/${a3.id}/link-sale`, "it-ana", { saleItemId: visitLine.id });
+    assert.equal(linked.status, 200, linked.text);
+    assert.equal(linked.json.saleId, visitSale.id);
+    assert.equal(linked.json.soldPriceCents, 3000);
+    assert.equal(linked.json.stockStatus, "sold");
+    assert.ok(linked.json.soldAt);
+    assert.deepEqual((await api("GET", `/api/xpot/tags/${a3.id}/linkable-sales`, "it-ana")).json, []);
+    assert.equal((await api("POST", `/api/xpot/tags/${a3.id}/link-sale`, "it-ana", { saleItemId: visitLine.id })).json.code, "tag_already_sold");
+    // Cancelling the sale puts the piece back in stock, still with its customer.
+    await cancelTagLinksForSale(visitSale.id);
+    const unlinked = (await api("GET", `/api/xpot/tags/${a3.id}`, "it-ana")).json;
+    assert.deepEqual([unlinked.saleId, unlinked.stockStatus, unlinked.soldAt, unlinked.leadId], [null, "available", null, leadId]);
   } finally {
     server.close();
     await pool.end();

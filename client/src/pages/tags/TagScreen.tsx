@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeftRight, Building2, Contact, DollarSign, ExternalLink, Link2, Lock, Mail, Nfc, Pencil, Phone, Power, QrCode, ScanLine, Search, Smartphone, X } from "lucide-react";
-import type { TagDetail } from "@shared/tagsApi";
+import type { LinkableSaleItem, TagDetail } from "@shared/tagsApi";
 import { TAG_DESTINATION_TYPES, type TagDestinationType } from "@shared/tags";
 import { contentKindOf, contentSummary, validateChipContent, type ChipContentKind } from "@shared/chipContent";
 import { guessDestinationType, normalizeUrlInput } from "@shared/tagApp";
@@ -10,7 +10,7 @@ import { buildReviewUrl } from "@shared/reviewLink";
 import type { FullSalesLead } from "@/pages/xpot/types";
 import { CODE_HEADING_TOPBAR, TagModelChips, TagPieceVisual, tagPlaqueSpec } from "@/components/xpot/TagProductThumbnail";
 import { apiRequest } from "@/lib/queryClient";
-import { useT } from "@/i18n";
+import { currentLocale, useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
 import LeadPicker, { leadPayload, type LeadChoice } from "./LeadPicker";
@@ -90,6 +90,13 @@ export default function TagScreen({ code, onClose }: {
   });
   const tag = data?.kind === "ok" ? data.tag : null;
   const { data: leads } = useQuery<FullSalesLead[]>({ queryKey: ["/api/xpot/leads"], staleTime: 60_000 });
+  // With a customer but no sale on record: the sales already recorded for that customer (in Visits, say).
+  const linkableKey = ["tags", "piece", code, "linkable-sales"];
+  const { data: linkable } = useQuery({
+    queryKey: linkableKey,
+    queryFn: () => tagsGet<LinkableSaleItem[]>(`/api/xpot/tags/${tag!.id}/linkable-sales`),
+    enabled: !!tag?.leadId && canSellPiece(tag),
+  });
 
   const [link, setLink] = useState("");
   // What the piece opens: a link (above) or an email, phone or contact card (ContentEditor).
@@ -103,7 +110,7 @@ export default function TagScreen({ code, onClose }: {
   const [changingCustomer, setChangingCustomer] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
   const [newName, setNewName] = useState("");
-  const [busy, setBusy] = useState<"save" | "toggle" | "rename" | null>(null);
+  const [busy, setBusy] = useState<"save" | "toggle" | "rename" | "link" | null>(null);
   const [writeOpen, setWriteOpen] = useState(false);
   const [lockOpen, setLockOpen] = useState(false);
   // iPhone: the NFC Tools steps, shown by themselves until the chip is confirmed, then on "Rewrite".
@@ -276,6 +283,20 @@ export default function TagScreen({ code, onClose }: {
     try {
       setDetail(await tagsPost<TagDetail>(`/api/xpot/tags/${tag.id}/${disabled ? "activate" : "disable"}`));
       show({ tone: "ok", text: disabled ? t("switchedOn") : t("switchedOff") });
+    } catch (err) {
+      show({ tone: "error", text: errorText(err, tc("requestFailed")) });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const linkSale = async (saleItemId: number) => {
+    setBusy("link");
+    try {
+      setDetail(await tagsPost<TagDetail>(`/api/xpot/tags/${tag.id}/link-sale`, { saleItemId }));
+      void qc.invalidateQueries({ queryKey: linkableKey });
+      haptic([40, 30, 40]);
+      show({ tone: "ok", text: t("saleLinked") });
     } catch (err) {
       show({ tone: "error", text: errorText(err, tc("requestFailed")) });
     } finally {
@@ -491,25 +512,59 @@ export default function TagScreen({ code, onClose }: {
 
       {isPieceSold(tag) ? (
         // Linked to a customer is sold; the amount shows once a sale records it.
-        <section className="mt-3 flex items-center justify-between gap-4 rounded-[20px] border border-blue-400/20 bg-blue-500/[0.08] p-4" data-testid="sold-card">
-          <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-widest text-blue-300/80">{t("soldBadge")}</p>
-            <p className={`mt-1 text-base font-bold ${tag.saleId ? "text-white" : "text-white/55"}`}>
-              {tag.saleId ? t("soldFor", { amount: formatCents(tag.soldPriceCents) }) : t("saleValueMissing")}
-            </p>
+        <section className="mt-3 rounded-[20px] border border-blue-400/20 bg-blue-500/[0.08] p-4" data-testid="sold-card">
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-widest text-blue-300/80">{t("soldBadge")}</p>
+              <p className={`mt-1 text-base font-bold ${tag.saleId ? "text-white" : "text-white/55"}`}>
+                {tag.saleId ? t("soldFor", { amount: formatCents(tag.soldPriceCents) }) : t("saleValueMissing")}
+              </p>
+            </div>
+            {tag.saleId ? (
+              <span className="font-mono text-xs text-white/40">#{tag.saleId}</span>
+            ) : canSellPiece(tag) && !linkable?.length ? (
+              <button
+                type="button"
+                onClick={() => setSaleOpen(true)}
+                className="flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl border border-emerald-400/30 px-3 text-sm font-semibold text-emerald-200 active:bg-emerald-500/15"
+                data-testid="button-sell-this-piece"
+              >
+                <DollarSign className="h-4 w-4" /> {t("addSaleValue")}
+              </button>
+            ) : null}
           </div>
-          {tag.saleId ? (
-            <span className="font-mono text-xs text-white/40">#{tag.saleId}</span>
-          ) : canSellPiece(tag) ? (
-            <button
-              type="button"
-              onClick={() => setSaleOpen(true)}
-              className="flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl border border-emerald-400/30 px-3 text-sm font-semibold text-emerald-200 active:bg-emerald-500/15"
-              data-testid="button-sell-this-piece"
-            >
-              <DollarSign className="h-4 w-4" /> {t("addSaleValue")}
-            </button>
-          ) : null}
+          {/* A sale for this customer recorded elsewhere (Visits): link the piece to it instead of selling it again. */}
+          {!tag.saleId && canSellPiece(tag) && !!linkable?.length && (
+            <div className="mt-3 space-y-2 border-t border-white/[0.08] pt-3" data-testid="linkable-sales">
+              <p className="text-sm text-white/60">{t.plural("linkableSalesHint", linkable.length)}</p>
+              {linkable.map((item) => (
+                <div key={item.saleItemId} className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-white">
+                      {formatCents(item.unitNetCents, item.currency)} · {item.description}
+                    </p>
+                    <p className="truncate text-xs text-white/45">
+                      #{item.saleId} · {new Date(item.soldAt).toLocaleDateString(currentLocale(), { day: "numeric", month: "short", year: "numeric" })}
+                      {item.quantity > 1 ? ` · ${t("linkedOfUnits", { linked: item.linked, quantity: item.quantity })}` : ""}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void linkSale(item.saleItemId)}
+                    disabled={busy !== null}
+                    className="flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl bg-emerald-500 px-3 text-sm font-semibold text-white active:bg-emerald-600 disabled:opacity-50"
+                    data-testid="button-link-sale"
+                  >
+                    {busy === "link" ? <Spinner className="h-4 w-4" /> : <Link2 className="h-4 w-4" />}
+                    {t("linkSale")}
+                  </button>
+                </div>
+              ))}
+              <button type="button" onClick={() => setSaleOpen(true)} className="w-full py-1 text-center text-sm font-semibold text-white/50 active:text-white" data-testid="button-sell-this-piece">
+                {t("notTheseSales")}
+              </button>
+            </div>
+          )}
         </section>
       ) : canSellPiece(tag) ? (
         <button type="button" onClick={() => setSaleOpen(true)} className={`${BTN_PRIMARY} mt-3 bg-none !bg-emerald-500`} data-testid="button-sell-this-piece">
