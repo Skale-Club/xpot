@@ -2,7 +2,8 @@
 // cards.tsx; both open the same detail.
 
 import { ArrowDownLeft, Handshake, Package, Undo2 } from "lucide-react";
-import { daysUntil, formatCents, formatShortDate } from "../../utils";
+import { formatCents, formatShortDate } from "../../utils";
+import { consignmentDue } from "./consignmentDue";
 import type { ConsignmentWithRefs, PaymentStatus, SaleWithItems } from "../../hooks/useSalesModule";
 import { paymentTone } from "./cards";
 import { Chip, Money } from "./ui";
@@ -119,10 +120,7 @@ export function ConsignmentsTable({ rows, selectedId, onSelect, onSettle, onRest
         <tbody className="divide-y divide-white/[0.05]">
           {rows.map((row) => {
             const c = row.consignment;
-            const due = daysUntil(c.nextVisitDueAt);
-            const closed = c.status === "closed";
-            const overdue = !closed && due !== null && due < 0;
-            const dueSoon = due !== null && due >= 0 && due <= 7;
+            const { closed, overdue, daysOverdue, dueInDays } = consignmentDue(c);
             const open = () => onSelect(row);
             return (
               <tr
@@ -144,9 +142,9 @@ export function ConsignmentsTable({ rows, selectedId, onSelect, onSettle, onRest
                   {closed ? (
                     <Chip tone="neutral">{t("chipClosed")}</Chip>
                   ) : overdue ? (
-                    <Chip tone="red">{t("daysOverdue", { days: Math.abs(due!) })}</Chip>
-                  ) : dueSoon ? (
-                    <Chip tone="amber">{due === 0 ? t("dueToday") : t("dueInDays", { days: due! })}</Chip>
+                    <Chip tone="red">{t("daysOverdue", { days: daysOverdue })}</Chip>
+                  ) : dueInDays !== null ? (
+                    <Chip tone="amber">{dueInDays === 0 ? t("dueToday") : t("dueInDays", { days: dueInDays })}</Chip>
                   ) : c.nextVisitDueAt ? (
                     <span className="text-xs text-white/50">{formatShortDate(c.nextVisitDueAt)}</span>
                   ) : (

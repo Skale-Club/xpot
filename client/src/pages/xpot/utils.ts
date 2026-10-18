@@ -111,9 +111,3 @@ export function formatShortDate(value?: string | Date | null) {
   if (!value) return "—";
   return new Date(value).toLocaleDateString(currentLocale(), { month: "short", day: "numeric" });
 }
-
-/** Days from now (negative = overdue). */
-export function daysUntil(value?: string | Date | null): number | null {
-  if (!value) return null;
-  return Math.round((new Date(value).getTime() - Date.now()) / (24 * 60 * 60 * 1000));
-}

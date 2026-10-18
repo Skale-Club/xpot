@@ -14,6 +14,7 @@ import {
   usePaymentOptions, type ConsignmentWithRefs, type PaymentMethod, type PaymentStatus, type SaleWithItems,
 } from "../../hooks/useSalesModule";
 import { SaleCard, ConsignmentCard, MovementLedger, SaleDetail } from "./cards";
+import { consignmentDue } from "./consignmentDue";
 import { SaleDialog } from "./SaleDialog";
 import { FilterBar, FilterChips, FilterSelect } from "@/components/xpot/filters";
 import { useUrlFilters } from "@/hooks/use-url-filters";
@@ -294,7 +295,8 @@ export function ConsignmentsList({ selectedId = null, onSelect }: {
   const [depositTarget, setDepositTarget] = useState<{ id: number; name: string } | null>(null);
 
   const rows = query.data ?? [];
-  const overdue = rows.filter((r) => r.consignment.nextVisitDueAt && new Date(r.consignment.nextVisitDueAt) < new Date());
+  // Same rule as the cards and the desktop table: never overdue once closed.
+  const overdue = rows.filter((r) => consignmentDue(r.consignment).overdue);
   const rest = rows.filter((r) => !overdue.includes(r));
   // Overdue first, then the rest; long histories (closed) render 50 at a time.
   const ordered = [...overdue, ...rest];
