@@ -113,6 +113,54 @@ export const BATCH_STAGE_TONE: Record<string, PillTone> = {
   cancelled: "red",
 };
 
+/** A paired "Xpot NFC Writer" computer (and an MCP token): revoked is finished, out of play. */
+export const PROVISIONER_STATUS_TONE: Record<string, PillTone> = {
+  active: "green",
+  pairing: "amber",
+  revoked: "muted",
+};
+
+/** A chip-writing job: waiting is idle, writing is in progress, the result is done or broken. */
+export const PROVISIONING_JOB_TONE: Record<string, PillTone> = {
+  pending: "slate",
+  claimed: "blue",
+  writing: "blue",
+  verifying: "blue",
+  succeeded: "green",
+  failed: "red",
+  cancelled: "muted",
+  expired: "muted",
+};
+
+/** The kind of a Tags Journey entry. */
+export const JOURNEY_KIND_TONE: Record<string, PillTone> = {
+  execution: "slate",
+  decision: "blue",
+  insight: "violet",
+  observation: "muted",
+  risk: "amber",
+  result: "green",
+};
+
+/** A Journey entry. "Active" is blue here and in PLAN_STATUS_TONE, so the word has one colour. */
+export const JOURNEY_ENTRY_STATUS_TONE: Record<string, PillTone> = {
+  active: "blue",
+  needs_review: "amber",
+  archived: "muted",
+  superseded: "muted",
+};
+
+/** A Journey plan: in progress blue, paused needs a step, validated/done green. */
+export const PLAN_STATUS_TONE: Record<string, PillTone> = {
+  draft: "slate",
+  active: "blue",
+  paused: "amber",
+  validated: "green",
+  done: "green",
+  invalidated: "red",
+  cancelled: "muted",
+};
+
 // ─── Visits and Sales ─────────────────────────────────────────────────────────
 
 /**
