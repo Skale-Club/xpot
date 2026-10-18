@@ -97,6 +97,11 @@ const en = {
   status_in_progress: "In Progress",
   status_planned: "Planned",
   status_invalid: "Invalid",
+  exceptionOutsideArea: "Outside area",
+  exceptionOutsideAreaHint: "Checked in outside the business area.",
+  exceptionOutsideAreaReason: "Checked in outside the business area. Reason: {reason}",
+  exceptionNoLocation: "Location not checked",
+  exceptionNoLocationHint: "Checked in without a location to compare: no GPS fix, or the company has no map location.",
 
   // Live map
   mapAlt: "Your current location",
@@ -272,6 +277,11 @@ export const checkinMessages: Dictionary<typeof en> = {
     status_in_progress: "Em andamento",
     status_planned: "Planejada",
     status_invalid: "Inválida",
+    exceptionOutsideArea: "Exceção: fora da área",
+    exceptionOutsideAreaHint: "Check-in feito fora da área da empresa.",
+    exceptionOutsideAreaReason: "Check-in feito fora da área da empresa. Motivo: {reason}",
+    exceptionNoLocation: "Exceção: sem localização",
+    exceptionNoLocationHint: "Check-in sem localização para comparar: sem sinal de GPS, ou a empresa não tem localização no mapa.",
 
     mapAlt: "Sua localização atual",
     mapLive: "Ao vivo",
@@ -437,6 +447,11 @@ export const checkinMessages: Dictionary<typeof en> = {
     status_in_progress: "En curso",
     status_planned: "Programada",
     status_invalid: "Inválida",
+    exceptionOutsideArea: "Excepción: fuera de la zona",
+    exceptionOutsideAreaHint: "Check-in hecho fuera de la zona de la empresa.",
+    exceptionOutsideAreaReason: "Check-in hecho fuera de la zona de la empresa. Motivo: {reason}",
+    exceptionNoLocation: "Excepción: sin ubicación",
+    exceptionNoLocationHint: "Check-in sin ubicación para comparar: sin señal de GPS, o la empresa no tiene ubicación en el mapa.",
 
     mapAlt: "Tu ubicación actual",
     mapLive: "En vivo",
