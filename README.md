@@ -85,14 +85,15 @@ export TAGS_INTEGRATION=1
 npm run migrate
 npx vitest run --no-file-parallelism tests/tags/tags.integration.test.ts tests/tags/journey.integration.test.ts \
   tests/mcp.integration.test.ts tests/resellerAccounts.integration.test.ts tests/phoneAuth.integration.test.ts \
-  tests/wholesale.integration.test.ts tests/mcp.oauth.integration.test.ts
+  tests/wholesale.integration.test.ts tests/mcp.oauth.integration.test.ts \
+  tests/tags/stockMetrics.integration.test.ts tests/tags/distribution.integration.test.ts \
+  tests/tags/pieceScreen.integration.test.ts tests/tags/resellerCustomers.integration.test.ts \
+  tests/tags/organizationKits.integration.test.ts
 ```
 
-Four more use the same switch but are not in CI's list
-(`tests/tags/distribution`, `pieceScreen`, `resellerCustomers` and
-`stockMetrics.integration.test.ts`); run them by hand the same way, one file at
-a time (`--no-file-parallelism`), since several truncate the same tables. The
-other integration files run on PGlite, an in-memory Postgres, inside `npm test`.
+Run them one file at a time (`--no-file-parallelism`): several truncate the
+same tables. The other integration files run on PGlite, an in-memory Postgres,
+inside `npm test`.
 
 ## Setup
 
