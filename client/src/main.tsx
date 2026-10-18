@@ -10,6 +10,8 @@ import "./index.css";
 import "./hooks/use-install-app";
 // Marks history entries the app pushes, so Back buttons can return to the previous screen.
 import "./lib/inAppHistory";
+// Its Back / Forward listener must be added before the router's (unsaved-changes guard).
+import "./hooks/useUnsavedChangesGuard";
 import { installGlobalErrorReporting } from "./lib/errorReporting";
 
 installGlobalErrorReporting();

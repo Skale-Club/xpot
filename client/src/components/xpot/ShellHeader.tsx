@@ -10,6 +10,7 @@ import type { XpotMeResponse } from "@/pages/xpot/types";
 import { UserGreeting } from "./UserGreeting";
 import { useAvatarUpload } from "./useAvatarUpload";
 import { subscribeToRoutePush } from "@/lib/pushNotifications";
+import { navigateGuarded } from "@/hooks/useUnsavedChangesGuard";
 
 // The person at the top of every phone screen, in both modules: their photo
 // (tap to change it; Settings › Profile has it too), the greeting, the date,
@@ -97,7 +98,7 @@ export function ShellHeader({ module, actions = true }: { module: XpotModule; ac
 
       {actions && (
         <div className="relative z-10 flex shrink-0 items-center gap-1.5">
-          <button type="button" onClick={() => navigate("/settings")} title={ts("navSettings")} aria-label={ts("navSettings")} className={ICON_BUTTON} data-testid="shell-settings">
+          <button type="button" onClick={() => navigateGuarded("/settings", navigate)} title={ts("navSettings")} aria-label={ts("navSettings")} className={ICON_BUTTON} data-testid="shell-settings">
             <Settings className="h-[18px] w-[18px]" />
           </button>
           <button

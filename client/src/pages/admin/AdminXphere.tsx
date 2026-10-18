@@ -23,6 +23,7 @@ import { manageMessages } from "@/i18n/messages/manage";
 import { integrationsMessages } from "@/i18n/messages/integrations";
 import { isXphereQueryKey, maskInboundKey, visibleXphereRows, XPHERE_KEY, type XphereRow } from "./integrationsUi";
 import { SERVICES_KEY } from "./platform/servicesUi";
+import { useReportUnsaved } from "./unsavedEdits";
 
 /** The read-only value boxes (endpoint, inbound key): the field's shape without being editable. */
 const CODE_BOX = "min-w-0 flex-1 break-all rounded-xl border border-white/10 bg-black/20 px-3.5 py-2.5 font-mono text-xs text-white/75";
@@ -102,6 +103,7 @@ function XphereRowCard({ row }: { row: XphereRow }) {
   const [rotating, setRotating] = useState(false);
   const editable = Boolean(row.userId) && !row.deleted;
   const dirty = apiKey.trim() !== "" || apiUrl.trim() !== row.apiUrl || isEnabled !== row.isEnabled;
+  useReportUnsaved(`xphere:${row.repId}`, dirty);
   const labels: Record<string, string> = { apiUrl: t("apiUrl"), apiKey: t("outboundToken") };
   // The token chip reads like an integration: saved and switched on is live, saved but off is idle.
   const tokenTone = INTEGRATION_TONE[row.apiKeySet ? (row.isEnabled ? "live" : "idle") : "off"];
