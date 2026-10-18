@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Check, Copy } from "lucide-react";
-import type { TagBatchItem } from "@shared/tagsApi";
+import type { TagBatchOption } from "@shared/tagsApi";
 import { Loader2 } from "@/components/ui/loader";
 import { AdminHttpError, ADMIN_TAGS_KEY, errorMessage, getJson, STALE_MS } from "./api";
 import { CARD, INPUT } from "./ui";
@@ -56,10 +56,11 @@ export function useLeads() {
   });
 }
 
+/** Batches for pickers (Pieces filter, Give a kit). Managers can read this list; the Batches screens are the admin's. */
 export function useBatchOptions() {
-  return useQuery<Array<{ id: string; batchCode: string }>>({
+  return useQuery<TagBatchOption[]>({
     queryKey: [ADMIN_TAGS_KEY, "pickers", "batches"],
-    queryFn: async () => (await getJson<TagBatchItem[]>("/api/xpot/admin/tag-batches")).map((b) => ({ id: b.id, batchCode: b.batchCode })),
+    queryFn: () => getJson<TagBatchOption[]>("/api/xpot/admin/tag-batch-options"),
     staleTime: STALE_MS,
   });
 }
@@ -127,7 +128,7 @@ export function LoadError({ what, error }: { what: string; error: unknown }) {
   );
 }
 
-async function copyText(text: string): Promise<boolean> {
+export async function copyText(text: string): Promise<boolean> {
   try {
     await navigator.clipboard.writeText(text);
     return true;

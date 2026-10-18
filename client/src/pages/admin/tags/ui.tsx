@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { useT } from "@/i18n";
-import { Pill, PIECE_STATUS_TONE } from "@/components/xpot/StatusPill";
+import { Pill, PIECE_STATUS_TONE, SOLD_TONE, STOCK_STATUS_TONE } from "@/components/xpot/StatusPill";
 import { tagsMessages } from "@/i18n/messages/tags";
+import { manageTagsMessages } from "@/i18n/messages/manageTags";
 
 // Shared look for the Tags admin, matching the rest of Xpot Admin.
 
@@ -43,9 +44,24 @@ export function StatusPill({ status }: { status: string }) {
   return <Pill tone={PIECE_STATUS_TONE[status] ?? "slate"}>{label === key ? status : label}</Pill>;
 }
 
-/** Physical stock state takes precedence when the piece cannot be used. */
-export function PieceStatusPill({ status, stockStatus }: { status: string; stockStatus: string }) {
-  return <StatusPill status={stockStatus === "damaged" ? "damaged" : status} />;
+/** The physical piece: not received, in stock, damaged…; "Sold" (blue, as in the rep app) once a financial sale is recorded. */
+export function StockPill({ stockStatus, saleId }: { stockStatus: string; saleId: number | null }) {
+  const tt = useT(tagsMessages);
+  const t = useT(manageTagsMessages);
+  if (saleId !== null) return <Pill tone={SOLD_TONE}>{tt("soldBadge")}</Pill>;
+  const key = `stock_${stockStatus}`;
+  const label = t(key as never);
+  return <Pill tone={STOCK_STATUS_TONE[stockStatus] ?? "slate"}>{label === key ? stockStatus : label}</Pill>;
+}
+
+/** Both dimensions of a piece: its digital status (link) and its physical stock status (or its sale). */
+export function PieceStatusPill({ status, stockStatus, saleId }: { status: string; stockStatus: string; saleId: number | null }) {
+  return (
+    <span className="inline-flex flex-wrap items-center justify-center gap-1">
+      <StatusPill status={status} />
+      <StockPill stockStatus={stockStatus} saleId={saleId} />
+    </span>
+  );
 }
 
 export function Empty({ children }: { children: ReactNode }) {

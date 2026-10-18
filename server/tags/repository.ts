@@ -2,6 +2,7 @@ import { and, eq, inArray, isNull, sql, type SQL } from "drizzle-orm";
 import { db } from "../db.js";
 import {
   salesLeads,
+  salesProducts,
   salesReps,
   salesSaleTags,
   tagAcquisitionLines,
@@ -23,6 +24,7 @@ import type {
   LeadTagSummary,
   TagAnalytics,
   TagBatchItem,
+  TagBatchOption,
   TagDetail,
   TagHistoryEntry,
   TagKitItem,
@@ -34,10 +36,12 @@ import type {
 } from "#shared/tagsApi.js";
 import { JOURNEY_PRODUCT_LABELS, tagActionEntry, type JourneySource } from "#shared/tagJourney.js";
 import { resolveTagFace } from "#shared/tagFace.js";
+import type { TagStockMetric } from "#shared/tagMetrics.js";
 import { parseTagIntakeScan } from "#shared/tagIntake.js";
 import { generateUniqueCodes } from "./codes.js";
 import { TagError, pgError } from "./errors.js";
 import { journeyContext, recordJourney } from "./journey.js";
+import { countMetricSql, stockMetricSql } from "./metrics.js";
 import type { PublicTag } from "./publicHandler.js";
 
 // TagError and pgError live in ./errors.ts (journey.ts needs them too, and
@@ -94,6 +98,8 @@ export interface TagListFilters {
   kitId?: string;
   /** Pieces in house stock (no reseller). */
   house?: boolean;
+  /** Only pieces counted by this stock number (shared/tagMetrics.ts), e.g. `house` for the company stock card. */
+  metric?: TagStockMetric;
   method?: "qr" | "nfc";
   search?: string;
   limit?: number;
@@ -228,6 +234,7 @@ export async function listTags(filters: TagListFilters): Promise<TagListItem[]> 
   if (filters.repId !== undefined) conds.push(sql`t.rep_id = ${filters.repId}`);
   if (filters.kitId) conds.push(sql`t.kit_id = ${filters.kitId}`);
   if (filters.house) conds.push(sql`t.rep_id IS NULL`);
+  if (filters.metric) conds.push(stockMetricSql(filters.metric));
   if (filters.method === "qr") conds.push(sql`COALESCE(s.qr, 0) > 0`);
   if (filters.method === "nfc") conds.push(sql`COALESCE(s.nfc, 0) > 0`);
   if (filters.search) {
@@ -334,6 +341,12 @@ export async function writeHistory(
   });
 }
 
+/** A piece can be sold only as a physical catalog product (server/tags/sales.ts maps each piece to one). */
+async function assertPhysicalProduct(executor: typeof db | Tx, productId: number) {
+  const [product] = await executor.select({ kind: salesProducts.kind }).from(salesProducts).where(eq(salesProducts.id, productId));
+  if (!product || product.kind !== "physical") throw new TagError("Choose a physical product from the sales catalog", 400);
+}
+
 export interface TagUpdate {
   label?: string | null;
   productType?: string;
@@ -364,6 +377,13 @@ export async function updateTag(id: string, patch: TagUpdate, userId: string | n
     }
     if (patch.productType && patch.productType !== tag.productType && tag.status !== "inventory") {
       throw new TagError("Product type can only change while the tag is in inventory");
+    }
+    if (patch.salesProductId !== undefined && patch.salesProductId !== tag.salesProductId) {
+      if (patch.salesProductId !== null) await assertPhysicalProduct(tx, patch.salesProductId);
+      const [activeSale] = await tx.select({ id: salesSaleTags.id }).from(salesSaleTags)
+        .where(and(eq(salesSaleTags.tagId, tag.id), eq(salesSaleTags.status, "active")))
+        .limit(1);
+      if (activeSale) throw new TagError("A sold piece keeps the catalog product it was sold as", 409);
     }
     await writeHistory(tx, tag, next, userId, patch.reason ?? null);
     const [updated] = await tx
@@ -406,7 +426,7 @@ export async function updateTag(id: string, patch: TagUpdate, userId: string | n
 export async function transitionTag(
   id: string,
   action: Exclude<TagAction, "assign">,
-  actor: Pick<TagActor, "userId" | "repId">,
+  actor: Pick<TagActor, "userId" | "repId" | "inManagement">,
   reason?: string | null,
   source: JourneySource = "admin",
 ): Promise<Tag> {
@@ -419,7 +439,7 @@ export async function transitionTag(
     const now = new Date();
     const set: Partial<Tag> = { status: plan.status, updatedAt: now };
     if (action === "activate") {
-      Object.assign(set, { activatedAt: now, activatedByRepId: actor.repId, disabledAt: null, ...activationCredit(tag, actor.repId) });
+      Object.assign(set, { activatedAt: now, activatedByRepId: actor.repId, disabledAt: null, ...activationCredit(tag, actor) });
     }
     if (action === "disable") set.disabledAt = now;
     if (action === "retire") set.disabledAt = tag.disabledAt ?? now;
@@ -427,7 +447,7 @@ export async function transitionTag(
       const [activeSale] = await tx.select({ id: salesSaleTags.id }).from(salesSaleTags)
         .where(and(eq(salesSaleTags.tagId, tag.id), eq(salesSaleTags.status, "active")))
         .limit(1);
-      if (activeSale) throw new TagError("Cancel the financial sale before unassigning this piece", 409);
+      if (activeSale) throw new TagError("Cancel the financial sale before clearing this piece's customer", 409);
       // Back to unconfigured stock in the same hands. The previous customer's
       // destination must not follow the piece.
       Object.assign(set, {
@@ -519,17 +539,18 @@ export async function assignTag(
   return updated;
 }
 
-/** Admin: one standalone piece (not part of a manufacturing batch), in house stock. */
+/** Admin: one standalone piece (not part of a manufacturing batch), in house stock. It needs a catalog product to be sellable. */
 export async function createSingleTag(
-  input: { productType: string; salesProductId?: number; face?: string | null; label?: string | null },
+  input: { productType: string; salesProductId: number; face?: string | null; label?: string | null },
   userId: string | null = null,
   source: JourneySource = "admin",
 ): Promise<Tag> {
+  await assertPhysicalProduct(db, input.salesProductId);
   const [code] = await generateUniqueCodes(1, findExistingCodes);
   const organizationId = await companyOrganizationId();
   const [tag] = await db
     .insert(tags)
-    .values({ organizationId, publicCode: code, productType: input.productType, salesProductId: input.salesProductId ?? null, face: input.face ?? null, label: input.label ?? null, status: "inventory" })
+    .values({ organizationId, publicCode: code, productType: input.productType, salesProductId: input.salesProductId, face: input.face ?? null, label: input.label ?? null, status: "inventory" })
     .returning();
   console.log(`[tags] created standalone tag ${code}`);
   await recordJourney({
@@ -550,36 +571,75 @@ async function findExistingCodes(codes: string[]): Promise<Set<string>> {
   return new Set(found.map((r) => r.code));
 }
 
-/** Admin: move a piece (and, if sold, its sale credit) to another reseller or back to the house. */
+/**
+ * Admin "Move": hand one piece to another rep, or take it back to house stock, through the same stock rules as kits
+ * and returns. Back to the house is a `return` movement, as returnToHouse writes it (company stock, no custodian).
+ * To a rep it is a `transfer`: the new rep becomes the custodian of company stock (no cost is captured here, so
+ * nothing is bought). Either way an open acquisition of the previous rep is closed and the piece leaves its kit.
+ * Sold pieces stay with their seller, and a piece set up for a customer must have the customer cleared first, as
+ * for a return.
+ */
 export async function setTagRep(id: string, repId: number | null, userId: string | null, source: JourneySource = "admin"): Promise<Tag> {
   let previous: { repId: number | null; name: string } = { repId: null, name: "house" };
   let next = "house";
   const organizationId = repId === null ? await companyOrganizationId() : await organizationIdForRep(repId);
   const updated = await db.transaction(async (tx) => {
     const tag = await lockTag(tx, id);
+    if (tag.repId === repId) return null;
     const names = async (rid: number | null) =>
       rid === null ? "house" : (await tx.select({ n: salesReps.displayName }).from(salesReps).where(eq(salesReps.id, rid)))[0]?.n ?? `rep ${rid}`;
+    const [activeSale] = await tx.select({ id: salesSaleTags.id }).from(salesSaleTags)
+      .where(and(eq(salesSaleTags.tagId, tag.id), eq(salesSaleTags.status, "active")))
+      .limit(1);
+    if (activeSale) throw new TagError("A sold piece stays with its seller; cancel the sale before moving it", 409);
+    if (tag.stockStatus !== "available") throw new TagError(`A piece in ${tag.stockStatus} stock cannot be moved`, 409);
+    if (tag.status !== "inventory") throw new TagError("Clear the customer before moving this piece", 409);
     previous = { repId: tag.repId, name: await names(tag.repId) };
     next = await names(repId);
+    const now = new Date();
+    await tx
+      .update(tagAcquisitionUnits)
+      .set({ returnedAt: now })
+      .where(and(eq(tagAcquisitionUnits.tagId, tag.id), isNull(tagAcquisitionUnits.returnedAt)));
     const [updated] = await tx
       .update(tags)
-      .set({ organizationId, repId, kitId: repId === tag.repId ? tag.kitId : null, updatedAt: new Date() })
+      .set({
+        organizationId,
+        repId,
+        kitId: null,
+        custodianRepId: repId,
+        ownershipType: "company",
+        stockUpdatedAt: now,
+        updatedAt: now,
+      })
       .where(eq(tags.id, id))
       .returning();
+    await tx.insert(tagStockMovements).values({
+      tagId: tag.id,
+      movementType: repId === null ? "return" : "transfer",
+      fromStockStatus: tag.stockStatus,
+      toStockStatus: updated.stockStatus,
+      fromOwnershipType: tag.ownershipType,
+      toOwnershipType: updated.ownershipType,
+      fromCustodianRepId: tag.custodianRepId,
+      toCustodianRepId: repId,
+      referenceType: tag.kitId ? "kit" : null,
+      referenceId: tag.kitId,
+      actorUserId: userId,
+    });
     console.log(`[tags] ${tag.publicCode} reseller ${tag.repId ?? "house"} → ${repId ?? "house"} (user ${userId ?? "?"})`);
     return updated;
   });
-  if (previous.repId !== repId) {
-    await recordJourney({
-      kind: "execution",
-      action: "reseller_changed",
-      title: `Tag ${updated.publicCode} moved from ${previous.name} to ${next}`,
-      tagId: id,
-      repId,
-      beforeValue: previous.name,
-      afterValue: next,
-    }, journeyContext(userId, source));
-  }
+  if (!updated) return (await getTagRow(id))!;
+  await recordJourney({
+    kind: "execution",
+    action: "reseller_changed",
+    title: `Tag ${updated.publicCode} moved from ${previous.name} to ${next}`,
+    tagId: id,
+    repId,
+    beforeValue: previous.name,
+    afterValue: next,
+  }, journeyContext(userId, source));
   return updated;
 }
 
@@ -634,6 +694,12 @@ export interface KitInput {
   note?: string | null;
   /** Partner's cost per physical piece. Zero is valid for house/owner stock. */
   unitCostCents?: number;
+  /**
+   * Who owns the pieces once handed over. Without a cost they always stay the company's (consignment: the rep is
+   * only the custodian). With a cost they become the rep's (a wholesale purchase) unless the caller says `company`:
+   * a rep on the zero-cost rule holds company stock even when a reference cost is recorded.
+   */
+  ownershipType?: "company" | "rep";
 }
 
 /**
@@ -696,7 +762,7 @@ export async function deliverKit(input: KitInput, userId: string | null, source:
       .values({ organizationId, repId: input.repId, note: input.note ?? null, createdByUserId: userId })
       .returning({ id: tagKits.id });
     const now = new Date();
-    const ownershipType = input.unitCostCents === undefined ? "company" : "rep";
+    const ownershipType = input.unitCostCents === undefined ? "company" : input.ownershipType ?? "rep";
     await tx
       .update(tags)
       .set({
@@ -787,13 +853,13 @@ export async function listKits(filter: { repId?: number; kitId?: string } = {}):
   if (filter.kitId) conds.push(sql`k.id = ${filter.kitId}`);
   const list = await rows<{
     id: string; rep_id: number; rep_name: string | null; note: string | null; created_at: Date; piece_count: number; unsold_count: number;
-    acquisition_source: string | null; unit_cost_cents: number | null;
+    returnable_count: number; sold_count: number; acquisition_source: string | null; unit_cost_cents: number | null;
   }>(sql`
     SELECT k.id, k.rep_id, r.display_name AS rep_name, k.note, k.created_at,
       count(t.id)::int AS piece_count,
-      count(t.id) FILTER (WHERE t.rep_id = k.rep_id AND NOT EXISTS (
-        SELECT 1 FROM sales_sale_tags st WHERE st.tag_id = t.id AND st.status = 'active'
-      ))::int AS unsold_count,
+      count(t.id) FILTER (WHERE t.rep_id = k.rep_id AND ${stockMetricSql("withResellers")})::int AS unsold_count,
+      count(t.id) FILTER (WHERE t.rep_id = k.rep_id AND ${stockMetricSql("returnable")})::int AS returnable_count,
+      ${countMetricSql("sold")} AS sold_count,
       acq.source AS acquisition_source, acq.unit_cost_cents
     FROM tag_kits k
     LEFT JOIN sales_reps r ON r.id = k.rep_id
@@ -819,6 +885,8 @@ export async function listKits(filter: { repId?: number; kitId?: string } = {}):
     createdAt: iso(k.created_at)!,
     pieceCount: Number(k.piece_count),
     unsoldCount: Number(k.unsold_count),
+    returnableCount: Number(k.returnable_count),
+    soldCount: Number(k.sold_count),
     acquisitionSource: k.acquisition_source,
     unitCostCents: k.unit_cost_cents === null ? null : Number(k.unit_cost_cents),
   }));
@@ -859,7 +927,7 @@ export async function returnToHouse(
       throw new TagError(`Already sold, cannot return: ${soldCodes.join(", ")}`, 409);
     }
     const configured = picked.filter((t) => t.status !== "inventory" || t.stockStatus !== "available").map((t) => t.publicCode);
-    if (configured.length) throw new TagError(`Unassign these configured pieces before returning them: ${configured.join(", ")}`, 409);
+    if (configured.length) throw new TagError(`Clear the customer of these set-up pieces before returning them: ${configured.join(", ")}`, 409);
     const alreadyInHouse = picked.filter((t) => t.repId === null).map((t) => t.publicCode);
     const moving = picked.filter((t) => t.repId !== null);
     if (moving.length) {
@@ -1392,16 +1460,31 @@ export async function updateBatch(
   userId: string | null = null,
   source: JourneySource = "admin",
 ) {
-  const [previous] = await db.select({ status: tagBatches.status }).from(tagBatches).where(eq(tagBatches.id, id)).limit(1);
+  const [previous] = await db.select({ status: tagBatches.status, salesProductId: tagBatches.salesProductId }).from(tagBatches).where(eq(tagBatches.id, id)).limit(1);
   if (!previous) throw new TagError("Batch not found", 404);
   const batch = await db.transaction(async (tx) => {
+    const productChanged = input.salesProductId !== undefined && input.salesProductId !== previous.salesProductId;
+    if (productChanged) await assertPhysicalProduct(tx, input.salesProductId!);
     const [updated] = await tx
       .update(tagBatches)
       .set({ ...input, updatedAt: new Date() })
       .where(eq(tagBatches.id, id))
       .returning();
-    if (input.salesProductId !== undefined) {
-      await tx.update(tags).set({ salesProductId: input.salesProductId, updatedAt: new Date() }).where(eq(tags.batchId, id));
+    if (productChanged) {
+      // A new catalog product for the run reaches only the pieces that followed the batch's old one (or had none) and
+      // are not sold: a piece mapped on its own keeps its product, and a sold piece keeps the product it was sold as.
+      const now = new Date();
+      const sold = sql`EXISTS (SELECT 1 FROM sales_sale_tags st WHERE st.tag_id = ${tags.id} AND st.status = 'active')`;
+      const followsBatch = previous.salesProductId === null
+        ? sql`${tags.salesProductId} IS NULL`
+        : sql`(${tags.salesProductId} IS NULL OR ${tags.salesProductId} = ${previous.salesProductId})`;
+      if (previous.salesProductId !== null) {
+        // Sold pieces that only inherited the batch's product are pinned to it before the batch changes.
+        await tx.update(tags).set({ salesProductId: previous.salesProductId, updatedAt: now })
+          .where(and(eq(tags.batchId, id), isNull(tags.salesProductId), sold));
+      }
+      await tx.update(tags).set({ salesProductId: input.salesProductId, updatedAt: now })
+        .where(and(eq(tags.batchId, id), followsBatch, sql`NOT ${sold}`));
     }
     return updated;
   });
@@ -1430,18 +1513,22 @@ const PRODUCTION_STEP_SQL = sql`(
 interface BatchRow {
   id: string; batch_code: string; name: string; product_type: string; sales_product_id: number | null;
   face: string | null; vendor: string | null; quantity: number; status: string; code_source: string;
-  notes: string | null; created_at: Date; tag_count: number; pending_count: number; house_count: number;
-  with_resellers_count: number; active_count: number; nfc_verified_count: number; last_production_action: string | null;
+  notes: string | null; created_at: Date; tag_count: number; pending_count: number; house_count: number; hand_out_count: number;
+  with_resellers_count: number; sold_count: number; damaged_count: number; active_count: number; nfc_verified_count: number;
+  last_production_action: string | null;
 }
 
 const BATCH_SELECT = sql`
   SELECT b.id, b.batch_code, b.name, b.product_type, b.sales_product_id, b.face, b.vendor, count(t.id)::int AS quantity,
     b.status, b.code_source, b.notes, b.created_at, b.created_by_user_id, b.updated_at,
     count(t.id)::int AS tag_count,
-    count(t.id) FILTER (WHERE t.stock_status = 'pending')::int AS pending_count,
-    count(t.id) FILTER (WHERE t.status = 'inventory' AND t.rep_id IS NULL AND t.stock_status = 'available')::int AS house_count,
-    count(t.id) FILTER (WHERE t.rep_id IS NOT NULL)::int AS with_resellers_count,
-    count(t.id) FILTER (WHERE t.status = 'active')::int AS active_count,
+    ${countMetricSql("notReceived")} AS pending_count,
+    ${countMetricSql("house")} AS house_count,
+    ${countMetricSql("handOut")} AS hand_out_count,
+    ${countMetricSql("withResellers")} AS with_resellers_count,
+    ${countMetricSql("sold")} AS sold_count,
+    ${countMetricSql("damaged")} AS damaged_count,
+    ${countMetricSql("live")} AS active_count,
     count(t.id) FILTER (WHERE t.nfc_provisioning_status IN ('verified', 'locked'))::int AS nfc_verified_count,
     ${PRODUCTION_STEP_SQL} AS last_production_action
   FROM tag_batches b
@@ -1470,7 +1557,10 @@ function batchItem(b: BatchRow): TagBatchItem {
     pendingCount,
     receivedCount: tagCount - pendingCount,
     houseCount: Number(b.house_count),
+    handOutCount: Number(b.hand_out_count),
     withResellersCount: Number(b.with_resellers_count),
+    soldCount: Number(b.sold_count),
+    damagedCount: Number(b.damaged_count),
     activeCount: Number(b.active_count),
     nfcVerifiedCount: Number(b.nfc_verified_count),
   };
@@ -1479,6 +1569,19 @@ function batchItem(b: BatchRow): TagBatchItem {
 export async function listBatches(): Promise<TagBatchItem[]> {
   const list = await rows<BatchRow>(sql`${BATCH_SELECT} GROUP BY b.id ORDER BY b.created_at DESC`);
   return list.map(batchItem);
+}
+
+/** What managers need to pick a batch (Give a kit, the Pieces filter): no vendor, notes or production details. */
+export async function listBatchOptions(): Promise<TagBatchOption[]> {
+  return (await listBatches()).map((b) => ({
+    id: b.id,
+    batchCode: b.batchCode,
+    name: b.name,
+    productType: b.productType,
+    face: b.face,
+    houseCount: b.houseCount,
+    handOutCount: b.handOutCount,
+  }));
 }
 
 export async function getBatch(id: string) {
@@ -1635,19 +1738,19 @@ export async function getOverview(now: Date = new Date(), timezoneOffsetMinutes 
   const since7 = new Date(now.getTime() - 7 * 86_400_000);
   const since30 = new Date(now.getTime() - 30 * 86_400_000);
 
+  // Digital statuses count by tags.status alone, so each card matches its
+  // `?status=` list; damaged is the physical stock status (`?stock=damaged`).
   const statusRows = await rows<{ status: string; count: number }>(sql`
-    SELECT CASE WHEN stock_status = 'damaged' THEN 'damaged' ELSE status END AS status, count(*)::int AS count
-    FROM tags GROUP BY CASE WHEN stock_status = 'damaged' THEN 'damaged' ELSE status END
+    SELECT status, count(*)::int AS count FROM tags GROUP BY status
   `);
-  const [stockRow] = await rows<{ house: number; with_resellers: number }>(sql`
-    SELECT
-      count(*) FILTER (WHERE t.rep_id IS NULL)::int AS house,
-      count(*) FILTER (WHERE t.rep_id IS NOT NULL)::int AS with_resellers
+  // The stock numbers every Tags screen shares (shared/tagMetrics.ts).
+  const [stockRow] = await rows<{ house: number; with_resellers: number; damaged: number }>(sql`
+    SELECT ${countMetricSql("house")} AS house,
+           ${countMetricSql("withResellers")} AS with_resellers,
+           ${countMetricSql("damaged")} AS damaged
     FROM tags t
-    WHERE t.status <> 'retired' AND t.stock_status = 'available'
-      AND NOT EXISTS (SELECT 1 FROM sales_sale_tags st WHERE st.tag_id = t.id AND st.status = 'active')
   `);
-  const counts: TagOverview["counts"] = { total: 0, inventory: 0, assigned: 0, active: 0, disabled: 0, retired: 0, damaged: 0 };
+  const counts: TagOverview["counts"] = { total: 0, inventory: 0, assigned: 0, active: 0, disabled: 0, retired: 0, damaged: Number(stockRow?.damaged ?? 0) };
   const stock = { house: Number(stockRow?.house ?? 0), withResellers: Number(stockRow?.with_resellers ?? 0) };
   for (const r of statusRows) {
     counts.total += Number(r.count);

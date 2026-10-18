@@ -103,20 +103,6 @@ export function usePieces(params: { kitId?: string; batchId?: string; house?: "1
   });
 }
 
-/** Unsold and still with the reseller that holds it. */
-export function isUnsoldWithReseller(t: TagListItem): boolean {
-  return t.status === "inventory" && t.repId !== null && t.stockStatus === "available";
-}
-
-export function isHouseStock(t: TagListItem): boolean {
-  return t.status === "inventory" && t.repId === null && t.stockStatus === "available";
-}
-
-/** A code issued for a piece not printed / not delivered yet. */
-export function isPendingPiece(t: TagListItem): boolean {
-  return t.stockStatus === "pending";
-}
-
 // ─── Small UI ─────────────────────────────────────────────────────────────────
 
 export function Loading() {
@@ -190,6 +176,7 @@ export function ConfirmDialog({
   confirmLabel,
   destructive = false,
   busy = false,
+  confirmDisabled = false,
   onConfirm,
 }: {
   open: boolean;
@@ -199,6 +186,8 @@ export function ConfirmDialog({
   confirmLabel: string;
   destructive?: boolean;
   busy?: boolean;
+  /** The confirm button waits for input (e.g. a reason); unlike `busy`, the dialog can still be closed. */
+  confirmDisabled?: boolean;
   onConfirm: () => void;
 }) {
   const t = useT(manageTagsMessages);
@@ -221,7 +210,7 @@ export function ConfirmDialog({
           </AlertDialogCancel>
           <AlertDialogAction
             variant={destructive ? "destructive" : "default"}
-            disabled={busy}
+            disabled={busy || confirmDisabled}
             onClick={(e) => {
               e.preventDefault();
               onConfirm();
@@ -329,7 +318,7 @@ export function PieceTable({
                   <td className={`${TD} tabular-nums text-white/50`}>{t.serialNumber ?? "—"}</td>
                   {showBatch && <td className={`${TD} font-mono text-xs`}>{t.batchCode ?? "—"}</td>}
                   <td className={TD}>
-                    <PieceStatusPill status={t.status} stockStatus={t.stockStatus} />
+                    <PieceStatusPill status={t.status} stockStatus={t.stockStatus} saleId={t.saleId} />
                   </td>
                   {showReseller && <td className={TD}>{t.repName ?? <span className="text-white/35">{tm("house")}</span>}</td>}
                   <td className={TD}>{t.leadName ?? <span className="text-white/35">—</span>}</td>

@@ -146,14 +146,14 @@ function TeamReport({ range, go }: { range: AnalyticsRange; go: Go }) {
             <button
               type="button"
               className={`${CARD} block w-full p-3 text-left hover:bg-white/[0.06]`}
-              onClick={() => go("/pieces?rep=house&status=inventory")}
+              onClick={() => go("/pieces?stock=house")}
               data-testid="admin-team-house-stock"
             >
               <p className="text-[11px] font-semibold uppercase tracking-wider text-white/40">{t("teamInHouseNoReseller")}</p>
               <p className="mt-1 text-2xl font-bold tabular-nums text-white">{u.inStock}</p>
               <p className="text-xs text-white/40">{t("teamReadyForKit")}</p>
             </button>
-            <button type="button" className={`${CARD} block w-full p-3 text-left hover:bg-white/[0.06]`} onClick={() => go("/kits")}>
+            <button type="button" className={`${CARD} block w-full p-3 text-left hover:bg-white/[0.06]`} onClick={() => go("/pieces?stock=reps")}>
               <p className="text-[11px] font-semibold uppercase tracking-wider text-white/40">{t("ovWithResellers")}</p>
               <p className="mt-1 text-2xl font-bold tabular-nums text-white">{withResellers}</p>
               <p className="text-xs text-white/40">{t("teamUnsoldInKits")}</p>

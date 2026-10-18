@@ -137,6 +137,17 @@ export interface TagOverview {
   }>;
 }
 
+/** A batch as a picker shows it (`GET /api/xpot/admin/tag-batch-options`, managers too). */
+export interface TagBatchOption {
+  id: string;
+  batchCode: string;
+  name: string;
+  productType: string;
+  face: string | null;
+  houseCount: number;
+  handOutCount: number;
+}
+
 export interface TagBatchItem {
   id: string;
   batchCode: string;
@@ -163,10 +174,15 @@ export interface TagBatchItem {
   pendingCount: number;
   /** Pieces physically received into stock at some point (tagCount − pendingCount). */
   receivedCount: number;
-  /** Unsold pieces in house stock (received, no reseller). */
+  /** Company stock (shared/tagMetrics.ts `house`): in stock, no rep, not retired, unsold. */
   houseCount: number;
-  /** Pieces handed to resellers (sold or not). */
+  /** House stock that can go into a kit now (`handOut`: also not set up for a customer). */
+  handOutCount: number;
+  /** Unsold pieces in reps' hands (`withResellers`). */
   withResellersCount: number;
+  /** Pieces with a recorded financial sale (`sold`). */
+  soldCount: number;
+  damagedCount: number;
   activeCount: number;
   nfcVerifiedCount: number;
 }
@@ -178,8 +194,12 @@ export interface TagKitItem {
   note: string | null;
   createdAt: string;
   pieceCount: number;
-  /** Pieces from this kit still unsold in the reseller's hands. */
+  /** Pieces from this kit still unsold in the reseller's hands (`withResellers`, held by the kit's rep). */
   unsoldCount: number;
+  /** Of those, the ones "Return unsold" can take back now (`returnable`: not set up for a customer). */
+  returnableCount: number;
+  /** Pieces from this kit with a recorded financial sale. */
+  soldCount: number;
   acquisitionSource: string | null;
   unitCostCents: number | null;
 }

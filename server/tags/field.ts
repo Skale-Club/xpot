@@ -92,7 +92,7 @@ export async function quickActivateTag(id: string, input: QuickActivateInput, ac
         assignedAt: changingOwner || !tag.assignedAt ? now : tag.assignedAt,
         activatedAt: tag.status === "active" ? tag.activatedAt : now,
         activatedByRepId: tag.status === "active" ? tag.activatedByRepId : actor.repId,
-        ...activationCredit(tag, actor.repId),
+        ...activationCredit(tag, actor),
         disabledAt: null,
         updatedAt: now,
       })

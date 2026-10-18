@@ -15,6 +15,11 @@ export interface TagActor {
   organizationIds?: readonly number[];
   /** Organizations where this Rep is a Rep Admin. */
   managedOrganizationIds?: readonly number[];
+  /**
+   * A manager or admin acting from the management side (admin mode on: the request carries no
+   * "X-Xpot-View: rep"). Off, they act as the rep they also are.
+   */
+  inManagement?: boolean;
 }
 
 /**
@@ -40,12 +45,16 @@ export function canUseLead(actor: TagActor, lead: { ownerRepId: number | null; o
 }
 
 /**
- * Operational credit when a piece goes live. Activation does not create a
- * financial sale; the tag sale service owns soldAt and money.
+ * Who holds a piece once it goes live. Activation does not create a financial
+ * sale (the tag sale service owns soldAt and money) and does not move stock:
+ * a piece a rep holds stays theirs, and a house piece put live by management
+ * stays house stock. Only a rep putting a house piece live (a Rep Admin can
+ * reach their Organization's) takes it into their own hands, as before.
  */
 export function activationCredit(
   tag: { repId: number | null },
-  actorRepId: number,
-): { repId: number } {
-  return { repId: tag.repId ?? actorRepId };
+  actor: Pick<TagActor, "repId" | "inManagement">,
+): { repId: number | null } {
+  if (tag.repId !== null) return { repId: tag.repId };
+  return { repId: actor.inManagement ? null : actor.repId };
 }

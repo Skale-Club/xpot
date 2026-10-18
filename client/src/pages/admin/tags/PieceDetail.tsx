@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { AdminHttpError, ADMIN_TAGS_KEY, errorMessage, formatDateTime, getJson, invalidateAdminTags, sendJson, STALE_MS } from "./api";
 import { BTN, BTN_DANGER, BTN_GHOST, CARD, INPUT, PieceStatusPill } from "./ui";
 import { CopyRow, Loading, LoadError, Select, useLeads, useReps } from "./pieces-shared";
+import { ConfirmDialog, useTagCatalog } from "./batches-shared";
 import { useTagLabels } from "./labels";
 import { AnalyticsPanel, RangePicker, type AnalyticsRange } from "./pieces-analytics";
 import { NfcProvisioningCard } from "./pieces-NfcProvisioningCard";
@@ -25,6 +26,7 @@ import { commonMessages } from "@/i18n/messages/common";
 import { shellMessages } from "@/i18n/messages/shell";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
 import { manageTagsPiecesMessages } from "@/i18n/messages/manageTagsPieces";
+import { manageTagsBatchesMessages } from "@/i18n/messages/manageTagsBatches";
 import { tagsMessages } from "@/i18n/messages/tags";
 
 type Go = (path: string) => void;
@@ -392,7 +394,7 @@ function actionUrl(id: string, action: PieceAction): string {
   return action === "activate" || action === "disable" ? `/api/xpot/tags/${id}/${action}` : `/api/xpot/admin/tags/${id}/${action}`;
 }
 
-function ActionDialog({ action, onClose, onConfirm, pending }: { action: PieceAction | null; onClose: () => void; onConfirm: (reason: string) => void; pending: boolean }) {
+function ActionDialog({ action, note, onClose, onConfirm, pending }: { action: PieceAction | null; note?: string | null; onClose: () => void; onConfirm: (reason: string) => void; pending: boolean }) {
   const t = useT(manageTagsPiecesMessages);
   const tc = useT(commonMessages);
   const [reason, setReason] = useState("");
@@ -411,6 +413,7 @@ function ActionDialog({ action, onClose, onConfirm, pending }: { action: PieceAc
           <DialogTitle>{action ? t(`action_${action}_title`) : null}</DialogTitle>
           <DialogDescription className="text-white/50">{action ? t(`action_${action}_description`) : null}</DialogDescription>
         </DialogHeader>
+        {note ? <p className="text-sm text-white/70" data-testid="admin-piece-action-note">{note}</p> : null}
         <input className={INPUT} value={reason} onChange={(e) => setReason(e.target.value)} placeholder={t("reasonPlaceholder")} maxLength={300} data-testid="admin-piece-action-reason" />
         <DialogFooter className="gap-2">
           <button type="button" className={BTN_GHOST} onClick={onClose}>{tc("cancel")}</button>
@@ -440,6 +443,11 @@ function LifecycleStep({ tag }: { tag: TagDetail }) {
   const activatePlan = planTransition(tag, "activate");
   const damaged = tag.stockStatus === "damaged";
   const canDamage = tag.status === "inventory" && tag.repId === null && tag.leadId === null && (tag.stockStatus === "available" || tag.stockStatus === "pending");
+
+  // Going live never moves stock: a rep's piece stays theirs, a house piece stays house stock (shared/tagAccess.ts).
+  const holderNote = tag.repId !== null
+    ? t("activateHolderRep", { name: tag.repName ?? t("resellerNumber", { id: tag.repId }) })
+    : t("activateHolderHouse");
 
   const confirm = (reason: string) => {
     if (!pending) return;
@@ -471,8 +479,9 @@ function LifecycleStep({ tag }: { tag: TagDetail }) {
             <PowerOff className="h-3.5 w-3.5" />{t("action_disable_confirm")}
           </button>
         ) : null}
-        {!damaged && can("unassign") ? (
-          <button type="button" className={BTN_GHOST} disabled={run.isPending} onClick={() => setPending("unassign")}>
+        {/* "Clear customer": the piece keeps its holder. A sold piece keeps its customer (the server refuses). */}
+        {!damaged && can("unassign") && tag.saleId === null ? (
+          <button type="button" className={BTN_GHOST} disabled={run.isPending} onClick={() => setPending("unassign")} data-testid="admin-piece-clear-customer">
             <Undo2 className="h-3.5 w-3.5" />{t("action_unassign_confirm")}
           </button>
         ) : null}
@@ -494,7 +503,8 @@ function LifecycleStep({ tag }: { tag: TagDetail }) {
       </div>
       {!damaged && tag.status !== "active" && tag.status !== "retired" && !activatePlan.ok ? <p className="text-xs text-white/40">{t(activateBlockerKey(tag))}</p> : null}
       {tag.status === "active" ? <p className="text-xs text-emerald-400">{t("liveExplain")}</p> : null}
-      <ActionDialog action={pending} onClose={() => setPending(null)} onConfirm={confirm} pending={run.isPending} />
+      {!damaged && can("unassign") && tag.saleId !== null ? <p className="text-xs text-white/40" data-testid="admin-piece-clear-customer-sold">{t("clearCustomerSold")}</p> : null}
+      <ActionDialog action={pending} note={pending === "activate" ? holderNote : null} onClose={() => setPending(null)} onConfirm={confirm} pending={run.isPending} />
     </div>
   );
 }
@@ -504,12 +514,18 @@ function LifecycleStep({ tag }: { tag: TagDetail }) {
 function DetailsStep({ tag }: { tag: TagDetail }) {
   const t = useT(manageTagsPiecesMessages);
   const tg = useT(manageTagsMessages);
+  const tb = useT(manageTagsBatchesMessages);
   const labels = useTagLabels();
+  const isAdmin = useIsSuperAdmin();
   const [label, setLabel] = useState(tag.label ?? "");
   const [productType, setProductType] = useState<string | undefined>(tag.productType);
   const [face, setFace] = useState<string | undefined>(tag.ownFace ?? undefined);
+  // A piece with no catalog product (its own or its batch's) can never be sold: the admin can map it here.
+  const missingProduct = isAdmin && tag.salesProductId === null;
+  const [salesProductId, setSalesProductId] = useState<string | undefined>(undefined);
+  const { data: catalog = [] } = useTagCatalog();
   const save = usePieceMutation(tag.id, t("pieceSaved"));
-  const dirty = label.trim() !== (tag.label ?? "") || productType !== tag.productType || (face ?? null) !== tag.ownFace;
+  const dirty = label.trim() !== (tag.label ?? "") || productType !== tag.productType || (face ?? null) !== tag.ownFace || !!salesProductId;
   if (tag.status === "retired" || tag.stockStatus === "damaged") return null;
   return (
     <details className="group space-y-3">
@@ -518,6 +534,19 @@ function DetailsStep({ tag }: { tag: TagDetail }) {
         {t("pieceSettings")}
       </summary>
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        {missingProduct ? (
+          <label className="space-y-1 sm:col-span-2">
+            <span className={LABEL}>{tb("fieldCatalogProduct")}</span>
+            <Select
+              value={salesProductId}
+              onChange={setSalesProductId}
+              placeholder={tb("chooseCatalogProduct")}
+              options={catalog.map((p) => ({ value: String(p.id), label: p.sku ? `${p.name} · ${p.sku}` : p.name }))}
+              testId="admin-piece-catalog"
+            />
+            <span className="block text-xs text-amber-300/80">{t("noCatalogProduct")}</span>
+          </label>
+        ) : null}
         <label className="space-y-1">
           <span className={LABEL}>{t("productType")}</span>
           <Select value={productType} onChange={setProductType} placeholder={t("productPlaceholder")} options={labels.productOptions} allowEmpty={false} />
@@ -531,7 +560,7 @@ function DetailsStep({ tag }: { tag: TagDetail }) {
           <input className={INPUT} value={label} onChange={(e) => setLabel(e.target.value)} maxLength={120} placeholder={t("optional")} />
         </label>
       </div>
-      <button type="button" className={BTN_GHOST} disabled={!dirty || !productType || save.isPending} onClick={() => save.mutate({ method: "PATCH", body: { label, productType, face: face ?? null } })}>
+      <button type="button" className={BTN_GHOST} disabled={!dirty || !productType || save.isPending} onClick={() => save.mutate({ method: "PATCH", body: { label, productType, face: face ?? null, ...(salesProductId ? { salesProductId: Number(salesProductId) } : {}) } })}>
         {t("saveDetails")}
       </button>
     </details>
@@ -542,7 +571,10 @@ function DetailsStep({ tag }: { tag: TagDetail }) {
 
 const HOUSE = "house";
 
-/** Move the piece (and, if sold, its sale credit) to another reseller or back to house stock. */
+/**
+ * Move an unsold piece in stock to another reseller (a stock transfer: they become its custodian of company stock)
+ * or back to house stock (a return). Server: setTagRep. Sold and set-up pieces cannot move from here.
+ */
 function ResellerField({ tag }: { tag: TagDetail }) {
   const t = useT(manageTagsPiecesMessages);
   const tg = useT(manageTagsMessages);
@@ -550,15 +582,24 @@ function ResellerField({ tag }: { tag: TagDetail }) {
   const { data: reps = [], error } = useReps();
   const current = tag.repId ? String(tag.repId) : HOUSE;
   const [choice, setChoice] = useState<string>(current);
+  const [confirming, setConfirming] = useState(false);
   const move = usePieceMutation(tag.id, t("resellerUpdated"));
   const options = [{ value: HOUSE, label: t("houseStockNoReseller") }, ...reps.map((r) => ({ value: String(r.id), label: labels.repOption(r) }))];
   if (tag.repId && !options.some((o) => o.value === current)) options.push({ value: current, label: tag.repName ?? t("resellerNumber", { id: tag.repId }) });
+  const target = choice === HOUSE ? t("houseStockTarget") : options.find((o) => o.value === choice)?.label ?? t("thisReseller");
+  // The server's rules (repository setTagRep), said before the click.
+  const blocker = tag.saleId !== null ? t("moveBlockedSold")
+    : tag.stockStatus !== "available" ? t("moveBlockedStock")
+    : tag.status !== "inventory" ? t("moveBlockedSetUp")
+    : null;
+  const consequences = [
+    choice === HOUSE ? t("moveToHouseConsequence") : t("moveToRepConsequence", { target }),
+    tag.kitId ? t("moveLeavesKit") : null,
+  ].filter(Boolean).join(" ");
 
   const submit = () => {
-    if (choice === current) return;
-    const target = choice === HOUSE ? t("houseStockTarget") : options.find((o) => o.value === choice)?.label ?? t("thisReseller");
-    if (!window.confirm(t(tag.soldAt ? "moveConfirmSold" : "moveConfirm", { code: tag.publicCode, target }))) return;
-    move.mutate({ url: `/api/xpot/admin/tags/${tag.id}/rep`, method: "PATCH", body: { repId: choice === HOUSE ? null : Number(choice) } });
+    if (choice === current || blocker) return;
+    setConfirming(true);
   };
 
   return (
@@ -570,11 +611,26 @@ function ResellerField({ tag }: { tag: TagDetail }) {
       </p>
       <div className="flex gap-2">
         <Select value={choice} onChange={(v) => setChoice(v ?? HOUSE)} placeholder={t("houseStock")} options={options} allowEmpty={false} testId="admin-piece-rep" />
-        <button type="button" className={`${BTN_GHOST} shrink-0`} disabled={tag.stockStatus === "damaged" || choice === current || move.isPending} onClick={submit} data-testid="admin-piece-rep-move">
+        <button type="button" className={`${BTN_GHOST} shrink-0`} disabled={!!blocker || choice === current || move.isPending} onClick={submit} data-testid="admin-piece-rep-move">
           <Truck className="h-3.5 w-3.5" />{t("move")}
         </button>
       </div>
+      {blocker ? <p className="text-xs text-white/40" data-testid="admin-piece-move-blocked">{blocker}</p> : null}
       {error ? <p className="text-xs text-red-400">{t("resellersFailed")}</p> : null}
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        title={t("moveTitle", { code: tag.publicCode, target })}
+        description={consequences}
+        confirmLabel={t("move")}
+        busy={move.isPending}
+        onConfirm={() =>
+          move.mutate(
+            { url: `/api/xpot/admin/tags/${tag.id}/rep`, method: "PATCH", body: { repId: choice === HOUSE ? null : Number(choice) } },
+            { onSettled: () => setConfirming(false) },
+          )
+        }
+      />
       {tag.soldAt ? <p className="text-xs text-white/40">{t("saleCounted", { date: formatDateTime(tag.soldAt) })}</p> : null}
     </div>
   );
@@ -637,7 +693,7 @@ export function PieceDetail({ id, go }: { id: string; go: Go }) {
         <div className="min-w-0 flex-1 space-y-1.5">
           <div className="flex flex-wrap items-center gap-2.5">
             <h2 className={CODE_HEADING} data-testid="admin-piece-code">{tag.publicCode}</h2>
-            <PieceStatusPill status={tag.status} stockStatus={tag.stockStatus} />
+            <PieceStatusPill status={tag.status} stockStatus={tag.stockStatus} saleId={tag.saleId} />
           </div>
           <div className="flex flex-wrap items-center gap-y-1 text-sm text-white/50">
             {tagPlaqueSpec(tag.productType, tag.face, tag.batchCode).model ? (

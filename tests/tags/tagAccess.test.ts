@@ -24,8 +24,12 @@ test("canUseLead: a reseller sells only to their own leads", () => {
   assert.equal(canUseLead(manager, { ownerRepId: null }), true);
 });
 
-test("activationCredit: activation keeps the holder but never creates a financial sale", () => {
-  assert.deepEqual(activationCredit({ repId: 10 }, 1), { repId: 10 });
-  // A house piece an admin activates is credited to that admin, without soldAt.
-  assert.deepEqual(activationCredit({ repId: null }, 1), { repId: 1 });
+test("activationCredit: activation keeps the holder and never moves house stock to management", () => {
+  assert.deepEqual(activationCredit({ repId: 10 }, { repId: 1 }), { repId: 10 });
+  assert.deepEqual(activationCredit({ repId: 10 }, { repId: 1, inManagement: true }), { repId: 10 });
+  // A house piece put live by a manager/admin in management stays house stock.
+  assert.deepEqual(activationCredit({ repId: null }, { repId: 1, inManagement: true }), { repId: null });
+  // A rep (or a manager viewing as a rep) putting a house piece live takes it into their hands.
+  assert.deepEqual(activationCredit({ repId: null }, { repId: 1 }), { repId: 1 });
+  assert.deepEqual(activationCredit({ repId: null }, { repId: 1, inManagement: false }), { repId: 1 });
 });

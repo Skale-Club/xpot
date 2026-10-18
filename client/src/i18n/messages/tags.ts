@@ -113,7 +113,7 @@ const en = {
   // Status, chip, product and destination labels
   status_inventory: "Available",
   status_damaged: "Damaged",
-  status_assigned: "Assigned",
+  status_assigned: "Set up, not live",
   status_active: "Live",
   status_disabled: "Disabled",
   status_retired: "Retired",
@@ -219,7 +219,7 @@ const en = {
   lockIphoneDone: "I locked it",
   // Tags dashboard (TagsDashboard.tsx)
   dashScansTitle: "Scans, last 30 days",
-  dashVisitors: "{n} people",
+  dashVisitors: "Est. visitors: {n}",
   dashEmpty: "No scans yet in this period.",
   dashRecentScans: "Recent scans",
   dashTopPieces: "Most scanned pieces",
@@ -530,7 +530,7 @@ export const tagsMessages: Dictionary<typeof en> = {
 
     status_inventory: "Em estoque",
     status_damaged: "Estragada",
-    status_assigned: "Sem link",
+    status_assigned: "Configurada, fora do ar",
     status_active: "No ar",
     status_disabled: "Desligada",
     status_retired: "Aposentada",
@@ -629,7 +629,7 @@ export const tagsMessages: Dictionary<typeof en> = {
     lockIphone3: "Encoste o chip no topo do iPhone até aparecer que terminou.",
     lockIphoneDone: "Já lacrei",
     dashScansTitle: "Leituras, últimos 30 dias",
-    dashVisitors: "{n} pessoas",
+    dashVisitors: "Visitantes (estimativa): {n}",
     dashEmpty: "Nenhuma leitura neste período.",
     dashRecentScans: "Leituras recentes",
     dashTopPieces: "Peças mais lidas",
@@ -930,7 +930,7 @@ export const tagsMessages: Dictionary<typeof en> = {
 
     status_inventory: "En stock",
     status_damaged: "Dañada",
-    status_assigned: "Sin enlace",
+    status_assigned: "Configurada, sin activar",
     status_active: "Activa",
     status_disabled: "Apagada",
     status_retired: "Retirada",
@@ -1029,7 +1029,7 @@ export const tagsMessages: Dictionary<typeof en> = {
     lockIphone3: "Acerca el chip a la parte superior del iPhone hasta que termine.",
     lockIphoneDone: "Ya lo sellé",
     dashScansTitle: "Escaneos, últimos 30 días",
-    dashVisitors: "{n} personas",
+    dashVisitors: "Visitantes (estimación): {n}",
     dashEmpty: "Aún no hay escaneos en este período.",
     dashRecentScans: "Escaneos recientes",
     dashTopPieces: "Piezas más escaneadas",

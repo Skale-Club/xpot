@@ -1,11 +1,12 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { CHIP_STATUS_TONE, Pill } from "@/components/xpot/StatusPill";
-import { Building2, CircleDot, Layers, Package, Plus, ScanLine, Users } from "lucide-react";
+import { Boxes, Building2, CircleDot, Layers, Package, Plus, ScanLine, Users } from "lucide-react";
 import { FilterBar, FilterSearch, FilterSelect } from "@/components/xpot/filters";
 import { useUrlFilters } from "@/hooks/use-url-filters";
 import { ListPager, useOffsetPages } from "@/components/xpot/pagination";
-import { TAG_PRODUCT_TYPES, TAG_STATUSES } from "@shared/tags";
+import { TAG_PRODUCT_TYPES, TAG_STATUSES, TAG_STOCK_STATUSES } from "@shared/tags";
+import { countStockMetric, type TagStockMetric } from "@shared/tagMetrics";
 import type { TagDetail, TagListItem } from "@shared/tagsApi";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
 import { TagPieceMention } from "@/components/xpot/TagProductThumbnail";
@@ -14,6 +15,8 @@ import { useToast } from "@/hooks/use-toast";
 import { ADMIN_TAGS_KEY, errorMessage, formatDateTime, getJson, invalidateAdminTags, sendJson, STALE_MS, withQuery } from "./api";
 import { BTN, BTN_GHOST, CARD, Empty, INPUT, PieceStatusPill, TD, TH } from "./ui";
 import { Loading, LoadError, Select, useBatchOptions, useLeads, useReps } from "./pieces-shared";
+import { useTagCatalog } from "./batches-shared";
+import { useIsSuperAdmin } from "@/components/xpot/AdminBadge";
 import { useTagLabels } from "./labels";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
@@ -21,6 +24,7 @@ import { shellMessages } from "@/i18n/messages/shell";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
 import { manageTagsPiecesMessages } from "@/i18n/messages/manageTagsPieces";
+import { manageTagsBatchesMessages } from "@/i18n/messages/manageTagsBatches";
 
 /** Pieces per server page; the next page loads as you reach the end. */
 const PAGE = 100;
@@ -30,18 +34,25 @@ const METHOD_KEYS = [
   { value: "nfc", key: "methodNfc" },
 ] as const;
 
-/** Filters live in the URL (?status=…&rep=house…) so Overview links and the back button keep them. */
-const PIECE_FILTERS = { status: "", product: "", rep: "", lead: "", batch: "", method: "", search: "" };
+/**
+ * Filters live in the URL (?status=…&stock=house…) so Overview links and the back button keep them. `status` is the
+ * digital status (the link) and `stock` the physical piece, separately: nothing is added behind the user's back.
+ */
+const PIECE_FILTERS = { status: "", stock: "", product: "", rep: "", lead: "", batch: "", method: "", search: "" };
 type Filters = Record<keyof typeof PIECE_FILTERS, string>;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const posInt = (v: string | undefined) => (v && /^\d+$/.test(v) && Number(v) > 0 ? v : undefined);
 
+/** Stock filter values that are a shared stock number (shared/tagMetrics.ts) rather than one stock status. */
+const STOCK_METRIC_FILTERS: Record<string, TagStockMetric> = { house: "house", reps: "withResellers", sold: "sold" };
+
 /** Translate the URL filters into the list endpoint's query (listQuerySchema), dropping junk. */
 function listUrl(f: Filters, limit: number, offset: number): string {
   return withQuery("/api/xpot/tags", {
     status: f.status && (TAG_STATUSES as readonly string[]).includes(f.status) ? f.status : undefined,
-    stockStatus: f.status === "damaged" ? "damaged" : f.status === "inventory" ? "available" : undefined,
+    metric: STOCK_METRIC_FILTERS[f.stock],
+    stockStatus: !STOCK_METRIC_FILTERS[f.stock] && (TAG_STOCK_STATUSES as readonly string[]).includes(f.stock) ? f.stock : undefined,
     productType: f.product && (TAG_PRODUCT_TYPES as readonly string[]).includes(f.product) ? f.product : undefined,
     house: f.rep === "house" ? "1" : undefined,
     repId: f.rep !== "house" ? posInt(f.rep) : undefined,
@@ -60,12 +71,17 @@ function NewPieceDialog({ open, onOpenChange, onCreated }: { open: boolean; onOp
   const tc = useT(commonMessages);
   const ts = useT(shellMessages);
   const tg = useT(manageTagsMessages);
+  const tb = useT(manageTagsBatchesMessages);
   const labels = useTagLabels();
   const [productType, setProductType] = useState<string | undefined>("google_review_sign");
   const [face, setFace] = useState<string | undefined>(undefined);
   const [label, setLabel] = useState("");
+  // Required: without a catalog product the piece could never be sold (server/tags/sales.ts).
+  const [salesProductId, setSalesProductId] = useState<string | undefined>(undefined);
+  const { data: catalog = [] } = useTagCatalog();
+  const catalogOptions = catalog.map((p) => ({ value: String(p.id), label: p.sku ? `${p.name} · ${p.sku}` : p.name }));
   const create = useMutation({
-    mutationFn: () => sendJson<TagDetail>("POST", "/api/xpot/admin/tags", { productType, face: face ?? null, label }),
+    mutationFn: () => sendJson<TagDetail>("POST", "/api/xpot/admin/tags", { productType, salesProductId: Number(salesProductId), face: face ?? null, label }),
     onSuccess: (tag) => {
       void invalidateAdminTags();
       onOpenChange(false);
@@ -78,7 +94,7 @@ function NewPieceDialog({ open, onOpenChange, onCreated }: { open: boolean; onOp
   });
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    if (productType && !create.isPending) create.mutate();
+    if (productType && salesProductId && !create.isPending) create.mutate();
   };
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -93,6 +109,11 @@ function NewPieceDialog({ open, onOpenChange, onCreated }: { open: boolean; onOp
             <Select value={productType} onChange={setProductType} placeholder={t("choose")} options={labels.productOptions} allowEmpty={false} testId="new-piece-product" />
           </label>
           <label className="block space-y-1.5">
+            <span className="text-xs font-medium text-white/60">{tb("fieldCatalogProduct")}</span>
+            <Select value={salesProductId} onChange={setSalesProductId} placeholder={tb("chooseCatalogProduct")} options={catalogOptions} testId="new-piece-catalog" />
+            <span className="block text-[11px] text-white/35">{tb("catalogProductHint")}</span>
+          </label>
+          <label className="block space-y-1.5">
             <span className="text-xs font-medium text-white/60">{tg("printedOnPiece")}</span>
             <div className="flex items-center gap-2">
               <TagFaceIcon face={face ?? (productType === "google_review_sign" ? "google_review" : null)} size="md" />
@@ -105,7 +126,7 @@ function NewPieceDialog({ open, onOpenChange, onCreated }: { open: boolean; onOp
           </label>
           <DialogFooter className="gap-2">
             <button type="button" className={BTN_GHOST} onClick={() => onOpenChange(false)}>{tc("cancel")}</button>
-            <button type="submit" className={BTN} disabled={!productType || create.isPending} data-testid="new-piece-create">{t("createPiece")}</button>
+            <button type="submit" className={BTN} disabled={!productType || !salesProductId || create.isPending} data-testid="new-piece-create">{t("createPiece")}</button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -137,7 +158,7 @@ function PiecesTable({ tags, onOpen }: { tags: TagListItem[]; onOpen: (id: strin
                   customer={t.leadName}
                   className="min-w-0 flex-1"
                 />
-                <PieceStatusPill status={t.status} stockStatus={t.stockStatus} />
+                <PieceStatusPill status={t.status} stockStatus={t.stockStatus} saleId={t.saleId} />
               </div>
               <div className="mt-2 truncate text-xs text-white/50">
                 {[t.repName ?? tm("houseStock"), t.batchCode].filter(Boolean).join(" · ")}
@@ -180,7 +201,7 @@ function PiecesTable({ tags, onOpen }: { tags: TagListItem[]; onOpen: (id: strin
                     className="max-w-full"
                   />
                 </td>
-                <td className={`${TD} text-center`}><PieceStatusPill status={t.status} stockStatus={t.stockStatus} /></td>
+                <td className={`${TD} text-center`}><PieceStatusPill status={t.status} stockStatus={t.stockStatus} saleId={t.saleId} /></td>
                 <td className={`${TD} max-w-[180px] truncate`}>{t.leadName ?? <span className="text-white/30">—</span>}</td>
                 <td className={`${TD} max-w-[160px] truncate`}>{t.repName ?? <span className="text-white/40">{tg("house")}</span>}</td>
                 <td className={TD}>{labels.destination(t.destinationType)}</td>
@@ -207,6 +228,8 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
   const filters = urlFilters.values;
   const set = urlFilters.set;
   const [creating, setCreating] = useState(false);
+  // A piece outside a batch is production, the global admin's (POST /api/xpot/admin/tags is admin-only).
+  const isAdmin = useIsSuperAdmin();
   const { data: reps = [] } = useReps();
   const { data: leads = [] } = useLeads();
   const { data: batches = [] } = useBatchOptions();
@@ -222,13 +245,11 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
 
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    for (const t of tags) {
-      const status = t.stockStatus === "damaged" ? "damaged" : t.status;
-      counts[status] = (counts[status] ?? 0) + 1;
-    }
+    for (const t of tags) counts[t.status] = (counts[t.status] ?? 0) + 1;
     return counts;
   }, [tags]);
-  const houseCount = useMemo(() => tags.filter((t) => t.repId === null).length, [tags]);
+  // Of the loaded pieces, the company stock as Overview counts it.
+  const houseCount = useMemo(() => countStockMetric(tags, "house"), [tags]);
   const hasFilters = urlFilters.activeCount() > 0;
 
   const repOptions = [{ value: "house", label: tm("houseStockNoReseller") }, ...reps.map((r) => ({ value: String(r.id), label: labels.repOption(r) }))];
@@ -246,13 +267,16 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
         testId="admin-pieces-filters"
         search={<FilterSearch value={filters.search} onChange={(search) => set({ search })} placeholder={tm("searchPlaceholder")} debounceMs={350} testId="admin-pieces-search" />}
         actions={
-          <button type="button" className={`${BTN} h-10 rounded-xl`} onClick={() => setCreating(true)} data-testid="admin-pieces-new">
-            <Plus className="h-4 w-4" />{tm("newPiece")}
-          </button>
+          isAdmin ? (
+            <button type="button" className={`${BTN} h-10 rounded-xl`} onClick={() => setCreating(true)} data-testid="admin-pieces-new">
+              <Plus className="h-4 w-4" />{tm("newPiece")}
+            </button>
+          ) : undefined
         }
         controls={
           <>
             <FilterSelect value={filters.status} onChange={(status) => set({ status })} placeholder={tm("allStatuses")} options={labels.statusOptions} icon={CircleDot} testId="admin-pieces-status" />
+            <FilterSelect value={filters.stock} onChange={(stock) => set({ stock })} placeholder={tm("allStock")} options={labels.stockOptions} icon={Boxes} testId="admin-pieces-stock" />
             <FilterSelect value={filters.product} onChange={(product) => set({ product })} placeholder={tm("allProducts")} options={labels.productOptions} icon={Package} />
             <FilterSelect value={filters.rep} onChange={(rep) => set({ rep })} placeholder={tg("allResellers")} options={repOptions} icon={Users} testId="admin-pieces-rep" />
             <FilterSelect value={filters.lead} onChange={(lead) => set({ lead })} placeholder={tm("allCustomers")} options={leadOptions} icon={Building2} />
@@ -287,7 +311,7 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
         </>
       )}
 
-      <NewPieceDialog open={creating} onOpenChange={setCreating} onCreated={(id) => go(`/pieces/${id}`)} />
+      {isAdmin ? <NewPieceDialog open={creating} onOpenChange={setCreating} onCreated={(id) => go(`/pieces/${id}`)} /> : null}
     </div>
   );
 }

@@ -10,7 +10,8 @@ import { CODE_HEADING, TagModelChips, TagPieceVisual } from "@/components/xpot/T
 import { useToast } from "@/hooks/use-toast";
 import { ADMIN_TAGS_KEY, STALE_MS, errorMessage, formatDate, getJson, invalidateAdminTags, percent, sendJson } from "./api";
 import { BTN, BTN_GHOST, CARD, INPUT, SectionTitle, Stat } from "./ui";
-import { BatchStagePill, BatchStatusPill, ErrorLine, Field, Loading, PieceTable, SELECT, isHouseStock, isPendingPiece, isUnsoldWithReseller, useTagCatalog } from "./batches-shared";
+import { countStockMetric, matchesStockMetric, type TagStockMetric } from "@shared/tagMetrics";
+import { BatchStagePill, BatchStatusPill, ConfirmDialog, ErrorLine, Field, Loading, PieceTable, SELECT, useTagCatalog } from "./batches-shared";
 import { useTagLabels } from "./labels";
 import { GiveKitForm } from "./kits-give-form";
 import { JourneyPanel } from "./JourneyPanel";
@@ -41,16 +42,17 @@ interface BatchDetailData {
   tags: TagListItem[];
 }
 
-const FILTERS = [
-  { id: "all", label: "filterAll", test: () => true },
-  { id: "pending", label: "pendingPieces", test: isPendingPiece },
-  { id: "damaged", label: "damaged", test: (t: TagListItem) => t.stockStatus === "damaged" },
-  { id: "house", label: "houseStock", test: isHouseStock },
-  { id: "resellers", label: "withResellers", test: isUnsoldWithReseller },
-  { id: "sold", label: "sold", test: (t: TagListItem) => t.status !== "inventory" && t.stockStatus === "sold" },
-  { id: "live", label: "live", test: (t: TagListItem) => t.status === "active" },
-] as const;
-type FilterId = (typeof FILTERS)[number]["id"];
+/** Each chip is one shared stock number (shared/tagMetrics.ts), the same the stats above and the Batches list count. */
+const FILTERS: ReadonlyArray<{ id: string; label: "filterAll" | "pendingPieces" | "damaged" | "houseStock" | "withResellers" | "sold" | "live"; metric: TagStockMetric | null }> = [
+  { id: "all", label: "filterAll", metric: null },
+  { id: "pending", label: "pendingPieces", metric: "notReceived" },
+  { id: "damaged", label: "damaged", metric: "damaged" },
+  { id: "house", label: "houseStock", metric: "house" },
+  { id: "resellers", label: "withResellers", metric: "withResellers" },
+  { id: "sold", label: "sold", metric: "sold" },
+  { id: "live", label: "live", metric: "live" },
+];
+const passes = (filter: (typeof FILTERS)[number], t: TagListItem) => !filter.metric || matchesStockMetric(t, filter.metric);
 
 function EditBatch({ batch, onClose }: { batch: BatchDetailData; onClose: () => void }) {
   const { toast } = useToast();
@@ -71,7 +73,8 @@ function EditBatch({ batch, onClose }: { batch: BatchDetailData; onClose: () => 
         face: form.face || null,
         vendor: form.vendor || null,
         notes: form.notes || null,
-        salesProductId: Number(form.salesProductId),
+        // Only a real change: the server re-maps the pieces that followed the old product (never sold ones).
+        ...(Number(form.salesProductId) !== batch.salesProductId ? { salesProductId: Number(form.salesProductId) } : {}),
       }),
     onSuccess: () => {
       void invalidateAdminTags();
@@ -213,9 +216,12 @@ function BatchIntakePanel({ batch }: { batch: BatchDetailData }) {
 export function BatchDetail({ id, go }: { id: string; go: (path: string) => void }) {
   const [editing, setEditing] = useState(false);
   const [giving, setGiving] = useState(false);
+  const [stateDialog, setStateDialog] = useState(false);
+  const [reopenReason, setReopenReason] = useState("");
+  const [changingState, setChangingState] = useState(false);
   // ?pieces=sold — survives opening a piece and coming back.
   const pieceFilter = useUrlFilters({ pieces: "all" });
-  const filter: FilterId = FILTERS.some((f) => f.id === pieceFilter.values.pieces) ? (pieceFilter.values.pieces as FilterId) : "all";
+  const filter = FILTERS.some((f) => f.id === pieceFilter.values.pieces) ? pieceFilter.values.pieces : "all";
   const t = useT(manageTagsBatchesMessages);
   const labels = useTagLabels();
   const { toast } = useToast();
@@ -244,32 +250,37 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
 
   const pieces = batch.tags;
   const total = pieces.length;
-  const house = pieces.filter(isHouseStock).length;
-  const withResellers = pieces.filter((p) => p.repId !== null).length;
-  const unsoldInKits = pieces.filter(isUnsoldWithReseller).length;
-  const sold = pieces.filter((p) => p.status !== "inventory").length;
-  const damaged = pieces.filter((p) => p.stockStatus === "damaged").length;
-  const live = pieces.filter((p) => p.status === "active").length;
+  const house = countStockMetric(pieces, "house");
+  const handOut = countStockMetric(pieces, "handOut");
+  const withResellers = countStockMetric(pieces, "withResellers");
+  const sold = countStockMetric(pieces, "sold");
+  const damaged = countStockMetric(pieces, "damaged");
+  const live = countStockMetric(pieces, "live");
   const chipsVerified = pieces.filter((p) => p.nfcStatus === "verified" || p.nfcStatus === "locked").length;
   const exportBase = `/api/xpot/admin/tag-batches/${encodeURIComponent(batch.id)}`;
   const activeFilter = FILTERS.find((f) => f.id === filter) ?? FILTERS[0];
-  const shown = pieces.filter(activeFilter.test);
+  const shown = pieces.filter((p) => passes(activeFilter, p));
   const face = resolveTagFace({ batchFace: batch.face, productType: batch.productType });
 
+  const closing = batch.status === "open";
   const changeState = async () => {
+    if (!closing && !reopenReason.trim()) return;
+    setChangingState(true);
     try {
-      if (batch.status === "open") {
+      if (closing) {
         await sendJson("POST", `/api/xpot/admin/tag-batches/${batch.id}/close`, {});
         toast({ title: t("batchClosed") });
       } else {
-        const reason = window.prompt(t("reopenReasonPrompt"));
-        if (!reason?.trim()) return;
-        await sendJson("POST", `/api/xpot/admin/tag-batches/${batch.id}/reopen`, { reason });
+        await sendJson("POST", `/api/xpot/admin/tag-batches/${batch.id}/reopen`, { reason: reopenReason.trim() });
         toast({ title: t("batchReopened") });
       }
+      setStateDialog(false);
+      setReopenReason("");
       await invalidateAdminTags();
     } catch (err) {
-      toast({ title: batch.status === "open" ? t("couldNotCloseBatch") : t("couldNotReopenBatch"), description: errorMessage(err), variant: "destructive" });
+      toast({ title: closing ? t("couldNotCloseBatch") : t("couldNotReopenBatch"), description: errorMessage(err), variant: "destructive" });
+    } finally {
+      setChangingState(false);
     }
   };
 
@@ -297,7 +308,7 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
           </div>
           </div>
           {!editing && <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => void changeState()} className={BTN_GHOST}>
+            <button type="button" onClick={() => setStateDialog(true)} className={BTN_GHOST} data-testid="admin-batch-state">
               {batch.status === "open" ? <LockKeyhole className="h-4 w-4" /> : <RotateCcw className="h-4 w-4" />}
               {batch.status === "open" ? t("closeBatch") : t("reopenBatch")}
             </button>
@@ -310,11 +321,44 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
         {editing && <EditBatch batch={batch} onClose={() => setEditing(false)} />}
       </div>
 
+      <ConfirmDialog
+        open={stateDialog}
+        onOpenChange={(open) => {
+          setStateDialog(open);
+          if (!open) setReopenReason("");
+        }}
+        title={closing ? t("closeBatchTitle") : t("reopenBatchTitle")}
+        description={
+          closing ? (
+            <>
+              <p>{t("closeBatchDescription")}</p>
+              {batch.pendingCount > 0 ? <p className="mt-2 text-amber-300">{t.plural("closeBatchPending", batch.pendingCount)}</p> : null}
+            </>
+          ) : (
+            <label className="block space-y-1.5">
+              <span>{t("reopenReasonPrompt")}</span>
+              <textarea
+                value={reopenReason}
+                onChange={(e) => setReopenReason(e.target.value)}
+                maxLength={300}
+                rows={2}
+                className={`${INPUT} resize-y`}
+                data-testid="admin-batch-reopen-reason"
+              />
+            </label>
+          )
+        }
+        confirmLabel={closing ? t("closeBatch") : t("reopenBatch")}
+        busy={changingState}
+        confirmDisabled={!closing && !reopenReason.trim()}
+        onConfirm={() => void changeState()}
+      />
+
       <BatchIntakePanel batch={batch} />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <Stat label={t("houseStock")} value={house} hint={t.plural("houseShare", total, { percent: percent(house, total) })} />
-        <Stat label={t("withResellers")} value={withResellers} hint={t.plural("unsoldInKits", unsoldInKits)} />
+        <Stat label={t("withResellers")} value={withResellers} hint={t("withResellersKitHint")} />
         <Stat label={t("sold")} value={sold} hint={t.plural("liveCount", live)} />
         <Stat label={t("damaged")} value={damaged} hint={t("qualityControlSample")} />
         <Stat label={t("nfcVerified")} value={chipsVerified} hint={t("chipsShare", { percent: percent(chipsVerified, total) })} />
@@ -348,18 +392,18 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
             <PackagePlus className="h-4 w-4 text-white/50" />
             {t("givePiecesTitle")}
           </p>
-          {house === 0 ? (
+          {handOut === 0 ? (
             <p className="text-xs text-white/40">{t("noHouseLeft")}</p>
           ) : giving ? (
             <div className="pt-2">
               <GiveKitForm
-                fixedBatch={{ id: batch.id, batchCode: batch.batchCode, houseCount: house }}
+                fixedBatch={{ id: batch.id, batchCode: batch.batchCode, handOutCount: handOut }}
                 onDone={() => setGiving(false)}
               />
             </div>
           ) : (
             <>
-              <p className="mb-3 text-xs text-white/40">{t.plural("giveKitIntro", house)}</p>
+              <p className="mb-3 text-xs text-white/40">{t.plural("giveKitIntro", handOut)}</p>
               <button type="button" onClick={() => setGiving(true)} className={BTN}>
                 <PackagePlus className="h-4 w-4" />
                 {t("giveAKit")}
@@ -376,7 +420,7 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
           testId="batch-pieces-filters"
           secondary={
             <FilterChips
-              items={FILTERS.map((f) => ({ id: f.id, label: t(f.label), count: pieces.filter(f.test).length }))}
+              items={FILTERS.map((f) => ({ id: f.id, label: t(f.label), count: pieces.filter((p) => passes(f, p)).length }))}
               value={filter}
               onChange={(pieces) => pieceFilter.set({ pieces })}
               ariaLabel={t("piecesHeading", { count: total })}
