@@ -216,6 +216,9 @@ function BatchIntakePanel({ batch }: { batch: BatchDetailData }) {
 export function BatchDetail({ id, go }: { id: string; go: (path: string) => void }) {
   const [editing, setEditing] = useState(false);
   const [giving, setGiving] = useState(false);
+  const [stateDialog, setStateDialog] = useState(false);
+  const [reopenReason, setReopenReason] = useState("");
+  const [changingState, setChangingState] = useState(false);
   // ?pieces=sold — survives opening a piece and coming back.
   const pieceFilter = useUrlFilters({ pieces: "all" });
   const filter = FILTERS.some((f) => f.id === pieceFilter.values.pieces) ? pieceFilter.values.pieces : "all";
@@ -259,20 +262,25 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
   const shown = pieces.filter((p) => passes(activeFilter, p));
   const face = resolveTagFace({ batchFace: batch.face, productType: batch.productType });
 
+  const closing = batch.status === "open";
   const changeState = async () => {
+    if (!closing && !reopenReason.trim()) return;
+    setChangingState(true);
     try {
-      if (batch.status === "open") {
+      if (closing) {
         await sendJson("POST", `/api/xpot/admin/tag-batches/${batch.id}/close`, {});
         toast({ title: t("batchClosed") });
       } else {
-        const reason = window.prompt(t("reopenReasonPrompt"));
-        if (!reason?.trim()) return;
-        await sendJson("POST", `/api/xpot/admin/tag-batches/${batch.id}/reopen`, { reason });
+        await sendJson("POST", `/api/xpot/admin/tag-batches/${batch.id}/reopen`, { reason: reopenReason.trim() });
         toast({ title: t("batchReopened") });
       }
+      setStateDialog(false);
+      setReopenReason("");
       await invalidateAdminTags();
     } catch (err) {
-      toast({ title: batch.status === "open" ? t("couldNotCloseBatch") : t("couldNotReopenBatch"), description: errorMessage(err), variant: "destructive" });
+      toast({ title: closing ? t("couldNotCloseBatch") : t("couldNotReopenBatch"), description: errorMessage(err), variant: "destructive" });
+    } finally {
+      setChangingState(false);
     }
   };
 
@@ -300,7 +308,7 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
           </div>
           </div>
           {!editing && <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => void changeState()} className={BTN_GHOST}>
+            <button type="button" onClick={() => setStateDialog(true)} className={BTN_GHOST} data-testid="admin-batch-state">
               {batch.status === "open" ? <LockKeyhole className="h-4 w-4" /> : <RotateCcw className="h-4 w-4" />}
               {batch.status === "open" ? t("closeBatch") : t("reopenBatch")}
             </button>
@@ -312,6 +320,39 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
         </div>
         {editing && <EditBatch batch={batch} onClose={() => setEditing(false)} />}
       </div>
+
+      <ConfirmDialog
+        open={stateDialog}
+        onOpenChange={(open) => {
+          setStateDialog(open);
+          if (!open) setReopenReason("");
+        }}
+        title={closing ? t("closeBatchTitle") : t("reopenBatchTitle")}
+        description={
+          closing ? (
+            <>
+              <p>{t("closeBatchDescription")}</p>
+              {batch.pendingCount > 0 ? <p className="mt-2 text-amber-300">{t.plural("closeBatchPending", batch.pendingCount)}</p> : null}
+            </>
+          ) : (
+            <label className="block space-y-1.5">
+              <span>{t("reopenReasonPrompt")}</span>
+              <textarea
+                value={reopenReason}
+                onChange={(e) => setReopenReason(e.target.value)}
+                maxLength={300}
+                rows={2}
+                className={`${INPUT} resize-y`}
+                data-testid="admin-batch-reopen-reason"
+              />
+            </label>
+          )
+        }
+        confirmLabel={closing ? t("closeBatch") : t("reopenBatch")}
+        busy={changingState}
+        confirmDisabled={!closing && !reopenReason.trim()}
+        onConfirm={() => void changeState()}
+      />
 
       <BatchIntakePanel batch={batch} />
 

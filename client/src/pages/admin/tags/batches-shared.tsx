@@ -176,6 +176,7 @@ export function ConfirmDialog({
   confirmLabel,
   destructive = false,
   busy = false,
+  confirmDisabled = false,
   onConfirm,
 }: {
   open: boolean;
@@ -185,6 +186,8 @@ export function ConfirmDialog({
   confirmLabel: string;
   destructive?: boolean;
   busy?: boolean;
+  /** The confirm button waits for input (e.g. a reason); unlike `busy`, the dialog can still be closed. */
+  confirmDisabled?: boolean;
   onConfirm: () => void;
 }) {
   const t = useT(manageTagsMessages);
@@ -207,7 +210,7 @@ export function ConfirmDialog({
           </AlertDialogCancel>
           <AlertDialogAction
             variant={destructive ? "destructive" : "default"}
-            disabled={busy}
+            disabled={busy || confirmDisabled}
             onClick={(e) => {
               e.preventDefault();
               onConfirm();

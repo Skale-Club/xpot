@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { ADMIN_TAGS_KEY, errorMessage, formatDateTime, getJson, invalidateAdminTags, sendJson, STALE_MS } from "./api";
 import { BTN, BTN_GHOST, CARD } from "./ui";
 import { Select } from "./pieces-shared";
+import { ConfirmDialog } from "./batches-shared";
 import { useTagLabels } from "./labels";
 import { useT } from "@/i18n";
 import { shellMessages } from "@/i18n/messages/shell";
@@ -88,6 +89,8 @@ export function NfcProvisioningCard({
   const t = useT(manageTagsPiecesMessages);
   const ts = useT(shellMessages);
   const [deviceId, setDeviceId] = useState<string | undefined>();
+  // Cancelling a job, or writing a chip that already holds data, waits for a confirm.
+  const [confirming, setConfirming] = useState<"cancel" | "reprogram" | null>(null);
   const devicesQuery = useQuery<ProvisionerDeviceItem[]>({
     queryKey: [ADMIN_TAGS_KEY, "pickers", "provisioners"],
     queryFn: () => getJson("/api/xpot/admin/tag-provisioners"),
@@ -107,11 +110,13 @@ export function NfcProvisioningCard({
     mutationFn: () => sendJson<TagProvisioningState>("POST", `/api/xpot/admin/tags/${tagId}/provisioning-jobs`, { deviceId: deviceId ?? null }),
     onSuccess: () => void invalidateAdminTags(),
     onError: (err) => toast({ title: t("sendFailed"), description: errorMessage(err), variant: "destructive" }),
+    onSettled: () => setConfirming(null),
   });
   const cancel = useMutation({
     mutationFn: (jobId: string) => sendJson("POST", `/api/xpot/admin/tag-provisioning-jobs/${jobId}/cancel`),
     onSuccess: () => void invalidateAdminTags(),
     onError: (err) => toast({ title: t("cancelFailed"), description: errorMessage(err), variant: "destructive" }),
+    onSettled: () => setConfirming(null),
   });
 
   const header = (right?: ReactNode) => (
@@ -160,7 +165,7 @@ export function NfcProvisioningCard({
               ? t("jobOnDeviceExpires", { name: latest.deviceName, date: formatDateTime(latest.expiresAt) })
               : t("jobExpires", { date: formatDateTime(latest.expiresAt) })}
           </p>
-          <button type="button" className={BTN_GHOST} onClick={() => cancel.mutate(latest.id)} disabled={cancel.isPending}>
+          <button type="button" className={BTN_GHOST} onClick={() => setConfirming("cancel")} disabled={cancel.isPending}>
             {t("cancelJob")}
           </button>
         </div>
@@ -189,7 +194,13 @@ export function NfcProvisioningCard({
             options={activeDevices.map((d) => ({ value: d.id, label: d.deviceName }))}
             className="sm:max-w-xs"
           />
-          <button type="button" className={`${BTN} shrink-0`} onClick={() => send.mutate()} disabled={send.isPending} data-testid="admin-nfc-send">
+          <button
+            type="button"
+            className={`${BTN} shrink-0`}
+            onClick={() => (state.status === "not_programmed" ? send.mutate() : setConfirming("reprogram"))}
+            disabled={send.isPending}
+            data-testid="admin-nfc-send"
+          >
             {state.status === "not_programmed" ? t("sendToWriter") : t("programAgain")}
           </button>
         </div>
@@ -229,6 +240,17 @@ export function NfcProvisioningCard({
           <p className="mt-2 text-xs text-white/40">{t("qaHint")}</p>
         ) : null}
       </div>
+
+      <ConfirmDialog
+        open={confirming !== null}
+        onOpenChange={(v) => !v && setConfirming(null)}
+        title={confirming === "cancel" ? t("cancelJobTitle") : t("programAgainTitle", { code: publicCode })}
+        description={confirming === "cancel" ? t("cancelJobDescription") : t("programAgainDescription")}
+        confirmLabel={confirming === "cancel" ? t("cancelJob") : t("programAgain")}
+        destructive={confirming === "cancel"}
+        busy={send.isPending || cancel.isPending}
+        onConfirm={() => (confirming === "cancel" ? latest && cancel.mutate(latest.id) : send.mutate())}
+      />
     </section>
   );
 }
