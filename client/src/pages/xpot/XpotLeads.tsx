@@ -40,7 +40,7 @@ import { GLASS_CLASS } from "@/components/xpot/surface";
 import { EmptyState } from "@/components/xpot/EmptyState";
 import { ListSkeleton } from "@/components/xpot/ListSkeleton";
 import { RetryButton } from "@/components/xpot/RetryButton";
-import { FilterBar, FilterChips, FilterDay, FilterSearch, FilterToggle, fromDayKey, toDayKey } from "@/components/xpot/filters";
+import { FilterBar, FilterChips, FilterDay, FilterSearch, FilterSelect, FilterToggle, fromDayKey, toDayKey } from "@/components/xpot/filters";
 import { currentSearch, useUrlFilters } from "@/hooks/use-url-filters";
 import { ListPager, usePagedList } from "@/components/xpot/pagination";
 import { selectLeadForDetail } from "./lead-detail-selection";
@@ -188,8 +188,13 @@ export function XpotLeads() {
   const { canManage } = useViewerAccess();
   const [routeMatch, routeParams] = useRoute("/leads/:id");
   const routeId = routeMatch && /^\d+$/.test(routeParams.id) ? Number(routeParams.id) : null;
-  // ?status=customer&day=2026-10-12&q=bakery — survives reloads and opening a company.
-  const filters = useUrlFilters({ status: "all", day: "", q: "" });
+  // ?status=customer&day=2026-10-12&q=bakery&org=4 — survives reloads and opening a company.
+  const filters = useUrlFilters({ status: "all", day: "", q: "", org: "" });
+  // One organization's companies: a manager in management mode (the server ignores it for anyone else).
+  const organizationId = canManage && /^\d+$/.test(filters.values.org) ? Number(filters.values.org) : undefined;
+  const organizationOptions = (me?.organizations ?? [])
+    .filter((organization) => !organization.personal || organization.id === organizationId)
+    .map((organization) => ({ value: String(organization.id), label: organization.name }));
   const leadFilter: LeadFilter = (LEAD_FILTERS as readonly string[]).includes(filters.values.status) ? (filters.values.status as LeadFilter) : "all";
   const search = filters.values.q;
   const day = fromDayKey(filters.values.day);
@@ -199,7 +204,7 @@ export function XpotLeads() {
   const [actionLead, setActionLead] = useState<FullSalesLead | null>(null);
   const [addOpen, setAddOpen] = useState(false);
 
-  const { leadsQuery, deleteLeadMutation } = useLeads(routeId === null);
+  const { leadsQuery, deleteLeadMutation } = useLeads(routeId === null, organizationId);
   const leadDetailQuery = useQuery<{
     lead: Omit<FullSalesLead, "locations" | "contacts">;
     locations: FullSalesLead["locations"];
@@ -357,13 +362,25 @@ export function XpotLeads() {
       testId="leads-filters"
       search={<FilterSearch value={search} onChange={(q) => filters.set({ q })} placeholder={t("searchLeads")} />}
       controls={
-        <FilterToggle
-          pressed={Boolean(day)}
-          onChange={(on) => filters.set({ day: on ? toDayKey(new Date()) : null })}
-          label={t("filterDate")}
-          icon={CalendarDays}
-          testId="leads-filter-day"
-        />
+        <>
+          {canManage && organizationOptions.length > 0 ? (
+            <FilterSelect
+              value={organizationId ? String(organizationId) : ""}
+              onChange={(org) => filters.set({ org: org || null })}
+              placeholder={t("filterAllOrganizations")}
+              options={organizationOptions}
+              icon={Building2}
+              testId="leads-filter-organization"
+            />
+          ) : null}
+          <FilterToggle
+            pressed={Boolean(day)}
+            onChange={(on) => filters.set({ day: on ? toDayKey(new Date()) : null })}
+            label={t("filterDate")}
+            icon={CalendarDays}
+            testId="leads-filter-day"
+          />
+        </>
       }
       actions={
         <Button

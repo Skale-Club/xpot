@@ -237,7 +237,7 @@ O que mudou e por quê, as seis decisões de produto e como conferir:
 |---|---|---|---|
 | UXR-20 | Médio | **Cancelar uma busca de prospecção presa.** `server/prospecting/**` não tem cancelamento de job ou run; Status só oferece Retry e "Montar a rota de novo". | A fazer |
 | UXR-21 | Baixo | **Filtro por vendedor no histórico de visitas.** Sem ele, a página da pessoa em Pessoas não tem o atalho "visitas dela" (tem peças e kits). | A fazer |
-| UXR-22 | Médio | **Filtro por organização em Inventário, Kits e Empresas.** Sem ele, as abas de Organizações ficam como listas só de leitura. | A fazer |
+| UXR-22 | Médio | **Filtro por organização em Inventário, Kits e Empresas.** Sem ele, as abas de Organizações ficam como listas só de leitura. | Empresas feito em 2026-10-18: em modo gestão o gerente filtra Empresas por organização (`?org=`; `GET /leads?organizationId=`, e `GET /sales` aceita o mesmo), ignorado para os demais. Falta Inventário e Kits, e o link da aba Empresas de Organizações para `/leads?org=<id>` |
 | UXR-23 | Baixo | **MasterDetail nas telas de detalhe da gestão** (peça, lote, kit de Tags e outras). Pessoas já usa; as demais abrem página inteira. | A fazer |
 | UXR-24 | Baixo | **Tipos de lugar do Google sem tradução.** `primaryType` aparece cru na busca de empresas (`PlaceLeadSearch`); não há fonte de tradução. | A fazer |
 | UXR-25 | Baixo | **Página de consentimento OAuth (MCP) e resultados de "Testar" das integrações em inglês.** | A fazer |

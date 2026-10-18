@@ -4,6 +4,7 @@ import { Package, Handshake, AlertCircle, ArrowDownLeft, SlidersHorizontal, Undo
 import type { SalesConsignmentMovement } from "#shared/schema.js";
 import { formatCents, formatDateTime, formatShortDate } from "../../utils";
 import { consignmentDue } from "./consignmentDue";
+import { MONEY_CHART } from "./moneyPalette";
 import type { ConsignmentWithRefs, PaymentMethod, PaymentStatus, SaleWithItems } from "../../hooks/useSalesModule";
 import { Money } from "./ui";
 import { Button } from "@/components/ui/button";
@@ -15,9 +16,9 @@ import { useT } from "@/i18n";
 import { salesMessages } from "@/i18n/messages/sales";
 import { salesModuleMessages } from "@/i18n/messages/salesModule";
 
-/** Paid green, partly paid amber, unpaid red (PAYMENT_STATUS_TONE). */
+/** Paid green; partly paid and unpaid amber, still to collect (PAYMENT_STATUS_TONE). */
 export function paymentTone(status: string): PillTone {
-  return toneOf(PAYMENT_STATUS_TONE, status, "red");
+  return toneOf(PAYMENT_STATUS_TONE, status, "amber");
 }
 
 /** A settlement is a sale made from stock left on consignment: blue like an active agreement. */
@@ -256,7 +257,7 @@ export function SaleDetail({ row }: { row: SaleWithItems }) {
         {sale.discountCents > 0 && (
           <>
             <Row label={t("subtotal")}><Money cents={sale.subtotalCents} currency={sale.currency} /></Row>
-            <Row label={t("discount")}><Money cents={-sale.discountCents} currency={sale.currency} /></Row>
+            <Row label={t("discount")}><Money cents={-sale.discountCents} currency={sale.currency} className={MONEY_CHART.cost.text} /></Row>
           </>
         )}
         <div className="flex items-center justify-between border-t border-white/10 pt-2">
@@ -275,7 +276,7 @@ export function SaleDetail({ row }: { row: SaleWithItems }) {
         </Row>
         {sale.paymentMethod ? <Row label={t("method")}><span className="text-xs text-white/60">{t(`method_${sale.paymentMethod as PaymentMethod}`)}</span></Row> : null}
         <Row label={t("date")}><span className="text-xs text-white/60">{formatDateTime(sale.soldAt)}</span></Row>
-        {pieces.length > 0 && <Row label={t("costOfGoods")}><Money cents={costCents} currency={sale.currency} /></Row>}
+        {pieces.length > 0 && <Row label={t("costOfGoods")}><Money cents={costCents} currency={sale.currency} className={MONEY_CHART.cost.text} /></Row>}
         {pieces.length > 0 && <Row label={t("grossProfit")}><Money cents={sale.totalCents - costCents} currency={sale.currency} /></Row>}
       </div>
 

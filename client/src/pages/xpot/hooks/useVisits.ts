@@ -8,6 +8,8 @@ import { useXpotShared } from "./useXpotShared";
 import { useXpotQueries } from "./useXpotQueries";
 import type { EnrichedSalesVisit } from "../types";
 import { useLocation } from "wouter";
+import { previousInAppPath } from "@/lib/inAppHistory";
+import { cancelledVisitExit } from "../visitDestination";
 
 export function useVisits() {
   const { toast } = useToast();
@@ -61,10 +63,13 @@ export function useVisits() {
       const response = await apiRequest("POST", `/api/xpot/visits/${activeVisitStable.id}/cancel`);
       return response.json();
     },
-    onSuccess: async () => {
+    onSuccess: async (visit: { routeId?: number | null } | null) => {
       toast({ title: t("visitCancelled") });
+      // Read before anything navigates: the screen the visit was started from.
+      const exit = cancelledVisitExit(visit?.routeId, previousInAppPath());
       await invalidateXpotData();
-      setLocation("/route");
+      if (exit.back) window.history.back();
+      else setLocation(exit.path);
     },
     onError: (error: Error) => {
       toast({ title: t("cancelVisitFailed"), description: error.message, variant: "destructive" });

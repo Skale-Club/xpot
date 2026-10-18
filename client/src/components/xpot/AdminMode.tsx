@@ -18,19 +18,25 @@ export const MANAGE_HOME: Record<XpotModule, string> = { visits: "/admin/overvie
 
 /**
  * Desktop sidebar item that enters admin mode. Leaving is the amber bar's job
- * (on every screen, phone and desktop), so there is one way out, not two.
+ * (on every screen, phone and desktop), so there is one way out, not two. A
+ * manager lands on the module's Manage home; a Rep Admin has no Manage screens
+ * and stays where they are, their lists now showing their organization.
  */
 export function AdminModeSidebarItem({ collapsed }: { collapsed: boolean }) {
   const t = useT(shellMessages);
   const [location, navigate] = useLocation();
-  const { hasAdminAccess, adminMode, setAdminMode } = useViewerAccess();
-  if (!hasAdminAccess || adminMode) return null;
+  const { reach, adminMode, setAdminMode } = useViewerAccess();
+  if (!reach || adminMode) return null;
   const context = contextOfPath(location);
   const label = t("adminModeEnter");
   return (
     <button
       type="button"
       onClick={() => {
+        if (reach === "organization") {
+          setAdminMode(true);
+          return;
+        }
         const module = context === "tags" ? "tags" : "visits";
         rememberModuleRoute(module, `${location.split("?")[0]}${window.location.search}`);
         setAdminMode(true);
@@ -51,7 +57,7 @@ export function AdminModeBar() {
   const t = useT(shellMessages);
   const [location, navigate] = useLocation();
   const modules = useXpotModules();
-  const { adminMode, setAdminMode } = useViewerAccess();
+  const { adminMode, setAdminMode, reach } = useViewerAccess();
   if (!adminMode) return null;
   // A management screen has nothing to show a rep: land on the same module's rep twin.
   const leave = () => {
@@ -68,7 +74,7 @@ export function AdminModeBar() {
       {/* A phone has room for the name only; the lists' scope chip says the rest. */}
       <span className="min-w-0 flex-1 truncate text-sm font-semibold">
         <span className="sm:hidden">{t("adminModeEnter")}</span>
-        <span className="hidden sm:inline">{t("adminModeOn")}</span>
+        <span className="hidden sm:inline">{t(reach === "organization" ? "adminModeOnOrganization" : "adminModeOn")}</span>
       </span>
       <button
         type="button"

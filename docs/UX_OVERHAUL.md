@@ -199,9 +199,15 @@ Conta
 ```
 
 Regras que valem para o app todo: uma tela de peça para todos os papéis; um
-fluxo de venda nos dois módulos; um chip de escopo ("Vendo: todos / só eu") em
-toda lista que o modo gestão amplia (Empresas, Visitas, Vendas, Tarefas, Painel
-e Clientes de Tags; Minhas peças é sempre só da pessoa). As URLs antigas
+fluxo de venda nos dois módulos; um chip de escopo ("Vendo: todos / minha
+organização / só eu") em toda lista que o modo gestão amplia (Empresas,
+Visitas, Vendas, Tarefas, Painel e Clientes de Tags; Minhas peças é sempre só
+da pessoa). Uma regra para todos: modo gestão desligado = só os meus
+registros; ligado = o que eu gerencio. Para o gerente e o admin do Xpot,
+todos; para o admin de uma organização (que também tem o modo gestão), só a
+organização dele em Empresas, Vendas (resumo, vendas, consignações) e
+Tarefas, sem telas de Gestão nem Administração. O Painel é sempre da pessoa.
+Em modo gestão, o gerente filtra Empresas por organização (`?org=`). As URLs antigas
 continuam funcionando (`/visits`, `/prospecting`, `/check-in`, `/admin/xphere`).
 
 ## Como conferir
@@ -215,12 +221,13 @@ Confira cada tela em 1440 px e 390 px (não deve haver rolagem lateral).
 - [ ] Com o modo ligado: barra âmbar, aba Gestão no celular em Visitas e em Tags, chip "Vendo: todos" em Empresas, Visitas, Vendas, Tarefas e no Painel/Clientes de Tags.
 - [ ] Abrir um link `/admin/...` liga o modo com um aviso; sair do modo numa tela de gestão leva à tela de vendedor equivalente; sair da conta desliga.
 - [ ] Gerente não vê Plataforma; abrir `/admin/integrations` mostra acesso restrito.
+- [ ] Admin de uma organização: modo gestão desligado mostra só os registros dele (chip "Vendo: só eu"); ligado, Empresas, Vendas e Tarefas (Toda a equipe) mostram a organização dele e nenhuma outra (chip "Vendo: minha organização"); Visitas, funil e Tags continuam dele; não aparecem telas de Gestão nem Administração.
 
 **Visitas**
 - [ ] Editar o endereço de uma empresa mantém o check-in validado pela área.
 - [ ] Uma visita encerrada como "Venda feita" ou "Retorno" conta em "Finalizadas hoje" e em Últimas visitas.
 - [ ] Check-in fora da área aparece com o selo "Exceção: fora da área".
-- [ ] Cancelar visita pede confirmação; check-out de uma parada volta para a rota.
+- [ ] Cancelar visita pede confirmação e volta para a rota (parada de rota) ou para onde a visita começou (Painel, página da empresa); check-out de uma parada volta para a rota.
 - [ ] Nota de voz gravada no check-in chega à visita.
 - [ ] Página da empresa: tiles e card de vendas mostram os mesmos valores.
 

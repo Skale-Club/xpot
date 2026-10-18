@@ -20,13 +20,21 @@ export function leadMatchesSearch(lead: FullSalesLead, query: string): boolean {
   ].filter(Boolean).join(" ").toLowerCase().includes(search);
 }
 
-export function useLeads(enabled = true) {
+/** The Companies list; `organizationId` narrows a manager's list to one organization (?organizationId=). */
+export function useLeads(enabled = true, organizationId?: number) {
   const { toast } = useToast();
   const t = useT(leadsMessages);
   const { invalidateXpotData } = useXpotShared();
   const { xpotMeQuery } = useXpotQueries();
 
-  const leadsQuery = useQuery<FullSalesLead[]>({ queryKey: ["/api/xpot/leads"], enabled: xpotMeQuery.isSuccess && enabled });
+  // Under the "/api/xpot/leads" prefix, so every lead mutation's invalidation refreshes it too.
+  const leadsQuery = useQuery<FullSalesLead[]>(organizationId
+    ? {
+      queryKey: ["/api/xpot/leads", "organization", organizationId],
+      queryFn: async () => (await apiRequest("GET", `/api/xpot/leads?organizationId=${organizationId}`)).json(),
+      enabled: xpotMeQuery.isSuccess && enabled,
+    }
+    : { queryKey: ["/api/xpot/leads"], enabled: xpotMeQuery.isSuccess && enabled });
 
   const createLeadMutation = useMutation({
     mutationFn: async (payload: SalesLeadPayload) => {

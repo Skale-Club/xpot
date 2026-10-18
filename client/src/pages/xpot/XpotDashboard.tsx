@@ -5,7 +5,7 @@ import { AreaChart, Area, XAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { useXpotQueries } from "./hooks/useXpotQueries";
 import { useSyncStatus } from "./hooks/useSyncStatus";
 import { formatCents, formatVisitWhen } from "./utils";
-import { MONEY_CHART } from "./components/sales/moneyPalette";
+import { MONEY_CHART, MONEY_DUE_TONE } from "./components/sales/moneyPalette";
 import { salesPath } from "./salesPath";
 import { leadsMessages } from "@/i18n/messages/leads";
 import { tasksMessages } from "@/i18n/messages/tasks";
@@ -387,8 +387,9 @@ function DashboardOverview() {
     <DashboardSection title={t("needsAttention")} icon={AlertTriangle} bodyClassName="p-0">
       {sectionPending(2, salesSummary.isLoading) ?? ((metrics?.overdueTasks ?? 0) > 0 || (salesSummary.data?.consignment.dueCount ?? 0) > 0 || (metrics?.openOpportunities ?? 0) > 0 ? (
         <AttentionList>
-          {(metrics?.overdueTasks ?? 0) > 0 ? <AttentionItem icon={Clock3} eyebrow={t("taskOverdue")} title={t("overdueTasksTitle")} detail={t.plural("overdueTasksDetail", metrics?.overdueTasks ?? 0)} tone="amber" onClick={() => setLocation("/tasks")} /> : null}
-          {(salesSummary.data?.consignment.dueCount ?? 0) > 0 ? <AttentionItem icon={DollarSign} eyebrow={t("salesOnStreet")} title={t("settlementsDueTitle")} detail={t.plural("settlementsDueDetail", salesSummary.data?.consignment.dueCount ?? 0)} tone="amber" onClick={() => setLocation(salesPath("consignments"))} /> : null}
+          {/* Late is red, as on the sales card above and TASK_TONE.overdue; amber is only "needs a step". */}
+          {(metrics?.overdueTasks ?? 0) > 0 ? <AttentionItem icon={Clock3} eyebrow={t("taskOverdue")} title={t("overdueTasksTitle")} detail={t.plural("overdueTasksDetail", metrics?.overdueTasks ?? 0)} tone="red" onClick={() => setLocation("/tasks")} /> : null}
+          {(salesSummary.data?.consignment.dueCount ?? 0) > 0 ? <AttentionItem icon={DollarSign} eyebrow={t("salesOnStreet")} title={t("settlementsDueTitle")} detail={t.plural("settlementsDueDetail", salesSummary.data?.consignment.dueCount ?? 0)} tone={MONEY_DUE_TONE.overdue} onClick={() => setLocation(salesPath("consignments"))} /> : null}
           {(metrics?.openOpportunities ?? 0) > 0 ? <AttentionItem icon={Target} eyebrow={t("metricOpportunities")} title={t("openOpportunitiesTitle")} detail={t.plural("openOpportunitiesDetail", metrics?.openOpportunities ?? 0)} tone="blue" onClick={() => setLocation(salesPath("pipeline"))} /> : null}
         </AttentionList>
       ) : (
