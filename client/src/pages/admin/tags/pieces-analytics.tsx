@@ -14,6 +14,8 @@ import { manageTagsPiecesMessages } from "@/i18n/messages/manageTagsPieces";
 import { TagPieceMention } from "@/components/xpot/TagProductThumbnail";
 import { FilterChips } from "@/components/xpot/filters";
 import { BarChart3, Smartphone, Trophy } from "lucide-react";
+// One QR / NFC colour pair everywhere a scan is drawn, the piece screen included.
+import { NFC_COLOR, QR_COLOR } from "@/pages/tags/charts";
 
 // Range picker + KPIs + daily QR/NFC chart, for the whole fleet (Team tab) or
 // one piece (PieceDetail).
@@ -63,7 +65,7 @@ export function rangeParams(range: AnalyticsRange): Record<string, string | unde
 // Same parts as the list filters (components/xpot/filters.tsx): the presets are
 // FilterChips, the custom range sits in a 32px control of the same look.
 const DATE_INPUT =
-  "h-8 rounded-lg border border-white/[0.08] bg-black/20 px-2 text-xs text-white/80 outline-none [color-scheme:dark] focus:border-indigo-400/50";
+  "h-8 min-w-0 flex-1 rounded-lg border border-white/[0.08] bg-black/20 px-2 text-xs text-white/80 outline-none [color-scheme:dark] focus:border-indigo-400/50 sm:w-auto sm:flex-none";
 
 export function RangePicker({ value, onChange }: { value: AnalyticsRange; onChange: (r: AnalyticsRange) => void }) {
   const t = useT(manageTagsPiecesMessages);
@@ -78,14 +80,14 @@ export function RangePicker({ value, onChange }: { value: AnalyticsRange; onChan
         ariaLabel={t("rangeLabel")}
       />
       <div
-        className={`flex items-center gap-1 rounded-full border py-0.5 pl-1 pr-0.5 ${customOn ? "border-indigo-400/40 bg-indigo-500/[0.12]" : "border-white/[0.08] bg-white/[0.03]"}`}
+        className={`flex w-full min-w-0 items-center gap-1 rounded-full border py-0.5 pl-1 pr-0.5 sm:w-auto ${customOn ? "border-indigo-400/40 bg-indigo-500/[0.12]" : "border-white/[0.08] bg-white/[0.03]"}`}
       >
         <input type="date" aria-label={t("rangeFrom")} className={DATE_INPUT} value={custom.from} onChange={(e) => setCustom((c) => ({ ...c, from: e.target.value }))} />
         <span className="text-xs text-white/40">–</span>
         <input type="date" aria-label={t("rangeTo")} className={DATE_INPUT} value={custom.to} onChange={(e) => setCustom((c) => ({ ...c, to: e.target.value }))} />
         <button
           type="button"
-          className={`h-7 rounded-full px-3 text-xs font-semibold transition-colors disabled:opacity-40 ${customOn ? "bg-indigo-500/30 text-white" : "text-white/60 hover:bg-white/10 hover:text-white"}`}
+          className={`h-7 shrink-0 rounded-full px-3 text-xs font-semibold transition-colors disabled:opacity-40 ${customOn ? "bg-indigo-500/30 text-white" : "text-white/60 hover:bg-white/10 hover:text-white"}`}
           disabled={!custom.from}
           onClick={() => onChange({ preset: "custom", from: custom.from, to: custom.to || undefined })}
         >
@@ -96,9 +98,6 @@ export function RangePicker({ value, onChange }: { value: AnalyticsRange; onChan
   );
 }
 
-// Validated for the dark surface (blue / amber: ΔE ≥ 28 under every CVD type).
-const QR_COLOR = "#3b82f6";
-const NFC_COLOR = "#d97706";
 
 export function AnalyticsPanel({
   scopeUrl,
