@@ -9,8 +9,10 @@ import { getHttpStatus } from "@/lib/pwa";
 import { formatDateTime } from "@/lib/dates";
 import { useT } from "@/i18n";
 import { systemHealthMessages } from "@/i18n/messages/systemHealth";
+import { platformAdminMessages } from "@/i18n/messages/platformAdmin";
 import type { SystemEventDetail } from "@shared/system-health";
 import { Card, formatDuration, RunStatusChip, sourceLabel, useAgo } from "./systemHealthUi";
+import { eventScreenPath } from "./platform/servicesUi";
 
 /** Context values the panel can show as plain text; nested ones keep their JSON. */
 function contextValue(value: unknown) {
@@ -19,9 +21,10 @@ function contextValue(value: unknown) {
   return JSON.stringify(value);
 }
 
-/** Admin › System health › one event: what happened, how often, where, and the search it hit. */
+/** Admin › Status › one event: in plain words first (what, how often, who, where), then the details. */
 export function AdminSystemEventDetail({ id }: { id: number }) {
   const t = useT(systemHealthMessages);
+  const tp = useT(platformAdminMessages);
   const ago = useAgo(t);
   const query = useQuery<SystemEventDetail>({ queryKey: [`/api/xpot/admin/system-events/${id}`], retry: false });
 
@@ -52,6 +55,15 @@ export function AdminSystemEventDetail({ id }: { id: number }) {
   const isError = event.level === "error";
   const contextEntries = Object.entries(event.context).filter(([key]) => key !== "componentStack");
   const componentStack = typeof event.context.componentStack === "string" ? event.context.componentStack : null;
+  const screen = eventScreenPath(event.context.url);
+  const summary = [
+    group.count > 1
+      ? tp("summaryMany", { count: group.count, first: ago(group.firstSeenAt), last: ago(group.lastSeenAt) })
+      : tp("summaryOnce", { time: ago(event.createdAt) }),
+    event.repName ? tp("summaryWho", { name: event.repName }) : null,
+    screen ? tp("summaryWhere", { path: screen }) : null,
+    run ? tp("summarySearch", { query: run.query, location: run.location }) : null,
+  ].filter(Boolean).join(" ");
 
   return (
     <div className="space-y-4" data-testid="system-event-detail">
@@ -66,10 +78,11 @@ export function AdminSystemEventDetail({ id }: { id: number }) {
           <span className="text-white/45">#{event.id}</span>
         </div>
         <h2 className="mt-3 break-words text-lg font-semibold text-white">{event.message}</h2>
-        <p className="mt-2 text-xs text-white/50">
-          {formatDateTime(event.createdAt)} · {ago(event.createdAt)}
-          {event.repName ? ` · ${t("rep")}: ${event.repName}` : ""}
+        <p className="mt-2 text-sm text-white/75" data-testid="system-event-summary">
+          <span className="sr-only">{tp("summaryTitle")}: </span>
+          {summary}
         </p>
+        <p className="mt-1 text-xs text-white/45">{formatDateTime(event.createdAt)}</p>
       </section>
 
       <div className="grid gap-4 lg:grid-cols-3">
@@ -158,7 +171,7 @@ export function AdminSystemEventDetail({ id }: { id: number }) {
       </details>
 
       <p className="text-center text-xs text-white/35">
-        <Link href={`/admin/health`} className="hover:text-white/60">{t("backToHealth")}</Link>
+        <Link href="/admin/health" className="hover:text-white/60">{t("backToHealth")}</Link>
       </p>
     </div>
   );
