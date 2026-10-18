@@ -95,3 +95,28 @@ export function resolveTagUnitCost(input: {
   }
   throw new Error("Tag acquisition cost is missing");
 }
+
+/** A customer the sale dialog can start from. */
+export type SaleCustomerChoice = { leadId: number; name: string; placeId: string | null };
+
+/**
+ * Who a piece is sold to by default. The piece's own customer comes first (the
+ * server refuses selling it to anyone else), then the "Selling to" customer the
+ * rep picked, and only for a piece with no customer, the company of the visit in
+ * progress.
+ */
+export function suggestSaleCustomer(input: {
+  piece: SaleCustomerChoice | null;
+  sellingTo: SaleCustomerChoice | null;
+  visit: SaleCustomerChoice | null;
+}): SaleCustomerChoice | null {
+  return input.piece ?? input.sellingTo ?? input.visit;
+}
+
+/**
+ * The first chosen piece that is already linked to a customer other than
+ * `leadId` (a new customer has no id yet, so any linked piece conflicts).
+ */
+export function saleCustomerConflict<T extends { leadId: number | null }>(pieces: readonly T[], leadId: number | null): T | null {
+  return pieces.find((piece) => piece.leadId !== null && piece.leadId !== leadId) ?? null;
+}

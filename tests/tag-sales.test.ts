@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allocateAcquisitionUnitCosts, resolveTagUnitCost, tagSaleCreateSchema } from "../shared/tagSales.js";
+import { allocateAcquisitionUnitCosts, resolveTagUnitCost, saleCustomerConflict, suggestSaleCustomer, tagSaleCreateSchema } from "../shared/tagSales.js";
 
 describe("resolveTagUnitCost", () => {
   it("freezes zero cost for a house seller regardless of catalog or acquisition values", () => {
@@ -62,5 +62,27 @@ describe("allocateAcquisitionUnitCosts", () => {
   it("preserves the exact line subtotal when cents do not divide evenly", () => {
     expect(allocateAcquisitionUnitCosts(2501, 2)).toEqual([1251, 1250]);
     expect(allocateAcquisitionUnitCosts(2501, 2).reduce((sum, cents) => sum + cents, 0)).toBe(2501);
+  });
+});
+
+describe("sale customer", () => {
+  const piece = { leadId: 1, name: "Padaria", placeId: null };
+  const sellingTo = { leadId: 2, name: "Bella Nails", placeId: null };
+  const visit = { leadId: 3, name: "Tony's", placeId: "p3" };
+
+  it("starts from the piece's own customer, then Selling to, then the visit", () => {
+    expect(suggestSaleCustomer({ piece, sellingTo, visit })).toEqual(piece);
+    expect(suggestSaleCustomer({ piece: null, sellingTo, visit })).toEqual(sellingTo);
+    expect(suggestSaleCustomer({ piece: null, sellingTo: null, visit })).toEqual(visit);
+    expect(suggestSaleCustomer({ piece: null, sellingTo: null, visit: null })).toBeNull();
+  });
+
+  it("flags a piece linked to someone else, or to anyone when the customer is new", () => {
+    const linked = { id: "a", leadId: 1 };
+    const free = { id: "b", leadId: null };
+    expect(saleCustomerConflict([linked, free], 1)).toBeNull();
+    expect(saleCustomerConflict([free], 2)).toBeNull();
+    expect(saleCustomerConflict([free, linked], 2)).toBe(linked);
+    expect(saleCustomerConflict([linked], null)).toBe(linked);
   });
 });

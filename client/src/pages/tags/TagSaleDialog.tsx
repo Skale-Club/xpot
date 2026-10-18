@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Package, ShoppingCart } from "lucide-react";
 import type { TagListItem } from "@shared/tagsApi";
 import { computeSaleTotals, resolveUnitPriceCents } from "@shared/pricing";
+import { saleCustomerConflict, suggestSaleCustomer } from "@shared/tagSales";
 import type { ProductWithTiers, PaymentMethod, PaymentStatus } from "@/pages/xpot/hooks/useSalesModule";
 import { usePaymentOptions } from "@/pages/xpot/hooks/useSalesModule";
 import type { FullSalesLead, XpotMeResponse } from "@/pages/xpot/types";
@@ -63,16 +64,13 @@ export default function TagSaleDialog({
     if (!open) return;
     const visitLead = me?.activeVisit?.lead;
     const sellTo = getSellTo();
-    const suggested = visitLead
-      ? { leadId: visitLead.id, name: visitLead.name, placeId: visitLead.googlePlaceId ?? null }
-      : sellTo
-        ? { leadId: sellTo.leadId, name: sellTo.name, placeId: sellTo.placeId }
-        : null;
-    // Selling one piece that already has a customer: that customer, unless a visit says otherwise.
-    const pieceLead = initialTagId ? available.find((piece) => piece.id === initialTagId) : undefined;
-    const fromPiece = pieceLead?.leadId && pieceLead.leadName ? { leadId: pieceLead.leadId, name: pieceLead.leadName, placeId: null } : null;
-    setSelected(new Set(initialTagId && available.some((piece) => piece.id === initialTagId) ? [initialTagId] : []));
-    setLead(suggested ?? fromPiece);
+    const piece = initialTagId ? available.find((item) => item.id === initialTagId) : undefined;
+    setSelected(new Set(piece ? [piece.id] : []));
+    setLead(suggestSaleCustomer({
+      piece: piece?.leadId ? { leadId: piece.leadId, name: piece.leadName ?? "", placeId: null } : null,
+      sellingTo: sellTo ? { leadId: sellTo.leadId, name: sellTo.name, placeId: sellTo.placeId } : null,
+      visit: visitLead ? { leadId: visitLead.id, name: visitLead.name, placeId: visitLead.googlePlaceId ?? null } : null,
+    }));
     setPrices({});
     setDiscountCents(0);
     setPaymentStatus("paid");
@@ -132,7 +130,10 @@ export default function TagSaleDialog({
   }));
   const totals = computeSaleTotals(lineInputs, discountCents);
   const partialInvalid = paymentStatus === "partial" && (paidCents <= 0 || paidCents >= totals.totalCents);
-  const canSubmit = Boolean(lead && selectedPieces.length && !unmapped && !missingCost && !unconfiguredPolicy && !catalogUnavailable && !partialInvalid && totals.totalCents >= 0 && !busy);
+  // A piece linked to another customer still opens that customer's link; selling it
+  // to someone else would leave it there. The server refuses it, so say so up front.
+  const conflict = lead ? saleCustomerConflict(selectedPieces, lead.leadId) : null;
+  const canSubmit = Boolean(lead && selectedPieces.length && !conflict && !unmapped && !missingCost && !unconfiguredPolicy && !catalogUnavailable && !partialInvalid && totals.totalCents >= 0 && !busy);
 
 
   async function resolveLeadId(): Promise<number> {
@@ -197,6 +198,19 @@ export default function TagSaleDialog({
         <Field label={t("customerField")}>
           <LeadPicker value={lead} onChange={(value) => { setLead(value); setError(null); attempt.current = null; }} />
         </Field>
+
+        {conflict && (
+          <div role="alert" className="rounded-xl border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-sm text-amber-100" data-testid="sale-customer-conflict">
+            <p>{t("saleLinkedElsewhere", { code: conflict.publicCode, name: conflict.leadName || t("customerUnnamed") })}</p>
+            <button
+              type="button"
+              className="mt-1.5 text-sm font-semibold text-amber-50 underline underline-offset-2"
+              onClick={() => { setLead({ leadId: conflict.leadId!, name: conflict.leadName ?? "", placeId: null }); attempt.current = null; }}
+            >
+              {t("saleUseLinkedCustomer", { name: conflict.leadName || t("customerUnnamed") })}
+            </button>
+          </div>
+        )}
 
         {me?.activeVisit && lead?.leadId === me.activeVisit.leadId && (
           <div className="flex items-center gap-2 rounded-xl border border-indigo-400/25 bg-indigo-500/10 px-3 py-2 text-xs text-indigo-200">
