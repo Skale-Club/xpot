@@ -1,6 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
-import { formatCurrency } from "@/pages/xpot/utils";
-import { Loader2 } from "@/components/ui/loader";
+import { RefreshCw } from "lucide-react";
+import { formatCurrency } from "@/lib/format";
+import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
+import { ListSkeleton } from "@/components/xpot/ListSkeleton";
+import { SectionCard } from "@/components/xpot/DashboardKit";
+import { Stat } from "@/components/xpot/Stat";
+import { Pill, toneOf, type PillTone } from "@/components/xpot/StatusPill";
 import { useT } from "@/i18n";
 import { manageMessages, type ManageKey } from "@/i18n/messages/manage";
 
@@ -43,19 +48,28 @@ const SYNC_STATUS_KEYS: Record<string, ManageKey> = {
   needs_review: "syncStatus_needs_review",
 };
 
+/** A sync is working when synced, waiting when pending, needs a look otherwise (failed is broken). */
+const SYNC_STATUS_TONE: Record<string, PillTone> = {
+  synced: "green",
+  pending: "slate",
+  needs_review: "amber",
+  failed: "red",
+};
+
 export function AdminOverview() {
   const query = useQuery<OverviewResponse>({ queryKey: ["/api/xpot/admin/overview"] });
   const t = useT(manageMessages);
 
   if (query.isLoading) {
     return (
-      <div className="flex justify-center py-16">
-        <Loader2 className="h-6 w-6 animate-spin text-blue-400" />
+      <div className="space-y-6">
+        <ListSkeleton rows={8} className="grid grid-cols-2 gap-3 sm:grid-cols-4" rowClassName="h-[76px] rounded-2xl" />
+        <ListSkeleton rows={3} />
       </div>
     );
   }
   if (query.isError || !query.data) {
-    return <p className="text-sm text-red-400">{t("overviewLoadFailed")}</p>;
+    return <ErrorState message={t("overviewLoadFailed")} onRetry={() => void query.refetch()} />;
   }
 
   const { metrics, latestSyncEvents } = query.data;
@@ -64,43 +78,37 @@ export function AdminOverview() {
     <div className="space-y-6">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {CARDS.map(({ key, label, money }) => (
-          <div key={key} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-            <p className="text-xs text-white/45">{t(label)}</p>
-            <p className={`mt-1 text-2xl font-bold ${key === "syncIssues" && metrics.syncIssues > 0 ? "text-amber-400" : ""}`}>
-              {money
-                ? formatCurrency(metrics[key] || 0, "USD")
-                : metrics[key] ?? 0}
-            </p>
-          </div>
+          <Stat
+            key={key}
+            card
+            label={t(label)}
+            tone={key === "syncIssues" && metrics.syncIssues > 0 ? "warning" : "neutral"}
+            value={money ? formatCurrency(metrics[key] || 0, "USD") : metrics[key] ?? 0}
+          />
         ))}
       </div>
 
-      <div>
-        <h3 className="mb-3 text-sm font-semibold text-white/70">{t("recentSync")}</h3>
-        <div className="overflow-hidden rounded-2xl border border-white/10">
-          {latestSyncEvents.length === 0 ? (
-            <p className="bg-white/[0.03] px-4 py-6 text-center text-sm text-white/40">{t("noSyncEvents")}</p>
-          ) : (
-            latestSyncEvents.map((ev) => (
-              <div key={ev.id} className="flex items-center justify-between gap-3 border-b border-white/5 bg-white/[0.02] px-4 py-3 last:border-0">
+      <SectionCard title={t("recentSync")} icon={RefreshCw} bodyClassName={latestSyncEvents.length === 0 ? "p-3" : ""}>
+        {latestSyncEvents.length === 0 ? (
+          <EmptyState compact dense icon={RefreshCw} title={t("noSyncEvents")} cardStyle={{}} />
+        ) : (
+          <ul className="divide-y divide-white/[0.06]">
+            {latestSyncEvents.map((ev) => (
+              <li key={ev.id} className="flex items-center justify-between gap-3 px-4 py-3">
                 <div className="min-w-0">
                   <p className="truncate text-sm">
                     {ev.entityType} <span className="text-white/40">#{ev.entityId}</span>
                   </p>
-                  {ev.lastError && <p className="truncate text-xs text-red-400">{ev.lastError}</p>}
+                  {ev.lastError && <p className="truncate text-xs text-red-300">{ev.lastError}</p>}
                 </div>
-                <span
-                  className={`shrink-0 rounded-md px-2 py-0.5 text-[11px] ${
-                    ev.status === "synced" ? "bg-emerald-500/15 text-emerald-300" : "bg-amber-500/15 text-amber-300"
-                  }`}
-                >
+                <Pill tone={toneOf(SYNC_STATUS_TONE, ev.status, "amber")} className="shrink-0">
                   {SYNC_STATUS_KEYS[ev.status] ? t(SYNC_STATUS_KEYS[ev.status]) : ev.status}
-                </span>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
+                </Pill>
+              </li>
+            ))}
+          </ul>
+        )}
+      </SectionCard>
     </div>
   );
 }

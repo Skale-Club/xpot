@@ -1,8 +1,13 @@
 import { useEffect } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { Loader2 } from "@/components/ui/loader";
-import { ShieldAlert, ArrowLeft } from "lucide-react";
+import { ShieldAlert } from "lucide-react";
+import { AppLoader } from "@/components/ui/spinner";
+import { Button } from "@/components/ui/button";
+import { AppBackground } from "@/components/xpot/AppBackground";
+import { EmptyState } from "@/components/xpot/EmptyState";
+import { PageHeader } from "@/components/xpot/PageHeader";
+import { Tabs } from "@/components/xpot/Tabs";
 import type { XpotMeResponse } from "@/pages/xpot/types";
 import { AdminOverview } from "./AdminOverview";
 import { AdminReps } from "./AdminReps";
@@ -55,32 +60,29 @@ export function AdminApp({ section }: { section: string }) {
 
   // Wait for admin mode before any screen fetches: its lists would come back as a rep's.
   if (meQuery.isLoading || (access.hasAdminAccess && !access.adminMode)) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[#060912]">
-        <Loader2 className="h-7 w-7 animate-spin text-blue-400" />
-      </div>
-    );
+    return <AppLoader />;
   }
 
   // Gate: admins and managers only.
   const allowed = !!me && (me.user.isAdmin || ["admin", "manager"].includes(me.rep.role));
   if (!me || !allowed) {
+    const exit = me ? MODULE_HOME.visits : "/";
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#060912] px-6 text-center text-white">
-        <ShieldAlert className="h-10 w-10 text-red-400" />
-        <div>
-          <p className="text-lg font-semibold">{tm("accessRestricted")}</p>
-          <p className="mt-1 text-sm text-white/50">
-            {me ? tm("noAdminPermission") : tm("signInToContinue")}
-          </p>
+      <AppBackground>
+        <div className="mx-auto w-full max-w-md px-4 pb-20 pt-6">
+          <PageHeader backHref={exit} backLabel={me ? tm("backToApp") : tc("goToSignIn")} title={tm("accessRestricted")} />
+          <EmptyState
+            tone="red"
+            icon={ShieldAlert}
+            title={me ? tm("noAdminPermission") : tm("signInToContinue")}
+            action={
+              <Button variant="secondary" onClick={() => setLocation(exit)}>
+                {me ? tm("backToApp") : tc("goToSignIn")}
+              </Button>
+            }
+          />
         </div>
-        <button
-          onClick={() => setLocation(me ? MODULE_HOME.visits : "/")}
-          className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 transition-colors hover:bg-white/10"
-        >
-          {me ? tm("backToApp") : tc("goToSignIn")}
-        </button>
-      </div>
+      </AppBackground>
     );
   }
 
@@ -111,40 +113,19 @@ export function AdminApp({ section }: { section: string }) {
       topBarActions={active === "tags" ? <CodeLookup onFound={(id) => setLocation(`/admin/tags/pieces/${id}`)} /> : undefined}
       mobileHeader={
         <>
-          <div className="mb-6 flex items-center gap-3">
-            <button
-              onClick={() => setLocation(back)}
-              className="rounded-lg border border-white/10 bg-white/5 p-2 text-white/70 transition-colors hover:bg-white/10"
-              title={t("backToModule")}
-              aria-label={t("backToModule")}
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </button>
-            <div>
-              <h1 className="text-xl font-bold tracking-tight">{heading}</h1>
-              <p className="text-xs text-white/40">{me.user.email}</p>
-            </div>
-          </div>
+          <PageHeader backHref={back} backLabel={t("backToModule")} title={heading} description={me.user.email} />
 
           {siblings.length > 0 && (
-            <nav className="mb-6 flex gap-1 overflow-x-auto rounded-2xl border border-white/10 bg-white/[0.03] p-1.5">
-              {siblings.map(({ href, label, icon: Icon, match, adminOnly }) => {
-                const isActive = match(location);
-                return (
-                  <button
-                    key={href}
-                    onClick={() => setLocation(href)}
-                    className={`relative flex items-center gap-2 whitespace-nowrap rounded-xl px-4 py-2 text-sm font-medium transition-colors ${
-                      isActive ? "bg-white/10 text-white" : "text-white/55 hover:bg-white/5 hover:text-white/80"
-                    }`}
-                  >
-                    <Icon className="h-4 w-4" />
-                    {label}
-                    {adminOnly && <AdminBadge />}
-                  </button>
-                );
-              })}
-            </nav>
+            <Tabs
+              className="mb-6"
+              fill={false}
+              accent={isOrganization ? "account" : "visits"}
+              ariaLabel={heading}
+              idPrefix="admin-section"
+              value={siblings.find((item) => item.match(location))?.href ?? ""}
+              onChange={(href) => setLocation(href)}
+              tabs={siblings.map(({ href, label, icon, adminOnly }) => ({ id: href, label, icon, badge: adminOnly ? <AdminBadge /> : undefined }))}
+            />
           )}
         </>
       }
@@ -153,7 +134,7 @@ export function AdminApp({ section }: { section: string }) {
       {active === "products" && <AdminProducts />}
       {/* A manager who types one of these URLs gets nothing (and the API answers 403). */}
       {SUPER_ADMIN_SECTIONS.includes(active) && !viewer.isAdmin && (
-        <p className="py-16 text-center text-sm text-white/50">{tm("noAdminPermission")}</p>
+        <EmptyState icon={ShieldAlert} tone="red" title={tm("accessRestricted")} hint={tm("noAdminPermission")} />
       )}
       {(active === "integrations" || active === "xphere") && viewer.isAdmin && <AdminIntegrations />}
       {active === "branding" && viewer.isAdmin && <AdminBranding />}

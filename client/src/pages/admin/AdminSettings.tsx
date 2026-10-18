@@ -5,15 +5,17 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ShieldAlert } from "lucide-react";
-import { Loader2 } from "@/components/ui/loader";
-import { EmptyState } from "@/components/xpot/EmptyState";
-import { RetryButton } from "@/components/xpot/RetryButton";
+import { Button } from "@/components/ui/button";
+import { ErrorState } from "@/components/xpot/EmptyState";
+import { Field, Input } from "@/components/xpot/Field";
+import { FormFooter } from "@/components/xpot/FormFooter";
+import { ListSkeleton } from "@/components/xpot/ListSkeleton";
+import { SwitchRow } from "@/components/xpot/SwitchRow";
+import { GLASS_CLASS } from "@/components/xpot/surface";
 import { clampGeofenceRadiusInput } from "@/pages/xpot/visitRules";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { SalesAppSettings } from "#shared/schema.js";
-import { Field, PrimaryButton, inputCls, inputStyle } from "@/pages/xpot/components/sales/ui";
 import { useT } from "@/i18n";
 import { manageMessages } from "@/i18n/messages/manage";
 import { shellMessages } from "@/i18n/messages/shell";
@@ -41,14 +43,10 @@ export function AdminSettings() {
   });
 
   if (query.isError) {
-    return (
-      <EmptyState tone="red" icon={ShieldAlert} title={t("settingsLoadFailed")} hint={(query.error as Error).message}>
-        <RetryButton onRetry={() => void query.refetch()} busy={query.isFetching} />
-      </EmptyState>
-    );
+    return <ErrorState title={t("settingsLoadFailed")} message={(query.error as Error).message} onRetry={() => void query.refetch()} />;
   }
   if (!query.data) {
-    return <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-blue-400" /></div>;
+    return <ListSkeleton rows={1} rowClassName="h-40 rounded-2xl" />;
   }
 
   const current = { ...query.data, ...draft };
@@ -62,6 +60,10 @@ export function AdminSettings() {
   };
   // Without blocking there is nothing to override, so the switch is shown off-limits (its value is kept).
   const overrideApplies = current.checkInRequiresGps;
+  // Flipping a switch back, or retyping the same radius, leaves nothing to save.
+  const dirty =
+    (radiusText != null && radiusText.trim() !== String(query.data.defaultGeofenceRadiusMeters)) ||
+    Object.entries(draft ?? {}).some(([key, value]) => query.data[key as keyof SalesAppSettings] !== value);
 
   return (
     <div className="space-y-5">
@@ -70,55 +72,55 @@ export function AdminSettings() {
         <p className="text-xs text-white/40">{t("checkInRulesHint")}</p>
       </div>
 
-      {/* The three rules sit side by side on desktop instead of a narrow column. */}
-      <div className="grid gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 lg:grid-cols-3 lg:items-start">
-        <Field label={t("defaultRadius")} hint={t("defaultRadiusHint")}>
-          <input
-            value={radiusText ?? String(current.defaultGeofenceRadiusMeters)}
-            inputMode="numeric"
-            onChange={(e) => setRadiusText(e.target.value)}
-            onBlur={commitRadius}
-            className={`${inputCls} tabular-nums`}
-            style={inputStyle}
+      <div className={`space-y-4 rounded-2xl ${GLASS_CLASS} p-4`}>
+        {/* The three rules sit side by side on desktop instead of a narrow column. */}
+        <div className="grid gap-3 lg:grid-cols-3 lg:items-start">
+          <Field label={t("defaultRadius")} hint={t("defaultRadiusHint")}>
+            <Input
+              value={radiusText ?? String(current.defaultGeofenceRadiusMeters)}
+              inputMode="numeric"
+              onChange={(e) => setRadiusText(e.target.value)}
+              onBlur={commitRadius}
+              className="tabular-nums"
+            />
+          </Field>
+
+          <SwitchRow
+            checked={current.checkInRequiresGps}
+            onCheckedChange={(checked) => set("checkInRequiresGps", checked)}
+            label={t("requireGps")}
+            hint={t("requireGpsHint")}
           />
-        </Field>
 
-        <label className="flex items-start gap-3 rounded-xl px-3 py-3 cursor-pointer"
-          style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
-          <input type="checkbox" checked={current.checkInRequiresGps}
-            onChange={(e) => set("checkInRequiresGps", e.target.checked)} className="mt-0.5 accent-indigo-500" />
-          <span>
-            <span className="block text-sm text-white/85">{t("requireGps")}</span>
-            <span className="block text-[11px] text-white/40">{t("requireGpsHint")}</span>
-          </span>
-        </label>
+          <SwitchRow
+            checked={current.allowManualOverride}
+            onCheckedChange={(checked) => set("allowManualOverride", checked)}
+            disabled={!overrideApplies}
+            label={t("allowOverride")}
+            hint={t("allowOverrideHint")}
+            note={!overrideApplies ? t("allowOverrideOffHint") : undefined}
+          />
+        </div>
 
-        <label className={`flex items-start gap-3 rounded-xl px-3 py-3 ${overrideApplies ? "cursor-pointer" : "cursor-not-allowed opacity-55"}`}
-          style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
-          <input type="checkbox" checked={current.allowManualOverride} disabled={!overrideApplies}
-            onChange={(e) => set("allowManualOverride", e.target.checked)} className="mt-0.5 accent-indigo-500" />
-          <span>
-            <span className="block text-sm text-white/85">{t("allowOverride")}</span>
-            <span className="block text-[11px] text-white/40">{t("allowOverrideHint")}</span>
-            {!overrideApplies ? <span className="mt-1 block text-[11px] text-amber-300/80">{t("allowOverrideOffHint")}</span> : null}
-          </span>
-        </label>
+        <FormFooter
+          dirty={dirty}
+          onCancel={dirty ? () => { setDraft(null); setRadiusText(null); } : undefined}
+        >
+          <Button
+            variant="brand"
+            disabled={!dirty}
+            loading={save.isPending}
+            onClick={() => {
+              const radius = commitRadius();
+              const body = { ...draft, ...(radius !== query.data.defaultGeofenceRadiusMeters ? { defaultGeofenceRadiusMeters: radius } : {}) };
+              if (Object.keys(body).length) save.mutate(body);
+              else setDraft(null);
+            }}
+          >
+            {t("saveSettings")}
+          </Button>
+        </FormFooter>
       </div>
-
-      <PrimaryButton
-        tone="emerald"
-        disabled={!draft && radiusText == null}
-        loading={save.isPending}
-        onClick={() => {
-          const radius = commitRadius();
-          const body = { ...draft, ...(radius !== query.data.defaultGeofenceRadiusMeters ? { defaultGeofenceRadiusMeters: radius } : {}) };
-          if (Object.keys(body).length) save.mutate(body);
-          else setDraft(null);
-        }}
-        className="!w-auto px-5"
-      >
-        {t("saveSettings")}
-      </PrimaryButton>
     </div>
   );
 }
