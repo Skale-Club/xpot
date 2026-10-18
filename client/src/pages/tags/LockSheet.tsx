@@ -3,12 +3,9 @@ import { Check, Lock, ShieldAlert, X } from "lucide-react";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
-import { errorText, haptic } from "./lib";
+import { errorText, haptic, isIos } from "./lib";
 import { BTN_PRIMARY, BTN_TERTIARY, BottomSheet, SHEET_TITLE, Spinner, TapAnimation, type Identity } from "./ui";
-import { canLockChip, lockChip, mapNfcError } from "./webNfc";
-
-const isIos = () =>
-  typeof navigator !== "undefined" && (/iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1));
+import { canLockChip, lockChip, mapNfcError, nfcMode } from "./webNfc";
 
 /**
  * Makes a written chip read-only for good, so nobody can rewrite it later.
@@ -63,7 +60,7 @@ export default function LockSheet({ open, identity, onClose, onLocked }: {
     }
   };
 
-  /** iPhone: locked with NFC Tools; record it. */
+  /** Another phone: locked with NFC Tools; record it. */
   const markLocked = async () => {
     setError(null);
     setPhase("saving");
@@ -131,11 +128,11 @@ export default function LockSheet({ open, identity, onClose, onLocked }: {
               <Lock className="h-5 w-5" />
               {phase === "error" ? tc("retry") : t("lockNow")}
             </button>
-          ) : isIos() ? (
-            // iPhone: the app cannot lock; NFC Tools can, and the person tells us it is done.
+          ) : nfcMode() === "app" ? (
+            // Another phone: the app cannot lock; NFC Tools can, and the person tells us it is done.
             <>
               <ol className="space-y-2">
-                {(["lockIphone1", "lockIphone2", "lockIphone3"] as const).map((step, i) => (
+                {(["lockIphone1", "lockIphone2", isIos() ? "lockIphone3" : "lockPhone3"] as const).map((step, i) => (
                   <li key={step} className="flex gap-3 text-sm text-white/75">
                     <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-amber-400/15 text-xs font-bold text-amber-300">{i + 1}</span>
                     <span className="pt-0.5">{t(step)}</span>
@@ -147,9 +144,7 @@ export default function LockSheet({ open, identity, onClose, onLocked }: {
                 {t("lockIphoneDone")}
               </button>
             </>
-          ) : (
-            <p className="text-sm text-white/50">{t("lockUnsupported")}</p>
-          )}
+          ) : null}
         </div>
       )}
     </BottomSheet>

@@ -34,7 +34,7 @@ import {
   Spinner,
   TapAnimation,
 } from "./ui";
-import { isWebNfcSupported, mapNfcError, scanOnce } from "./webNfc";
+import { mapNfcError, nfcMode, scanOnce } from "./webNfc";
 import { useIsComputer, useIsDesktop } from "@/hooks/use-is-desktop";
 
 // "read" is the chooser behind the single Read button: QR, chip or typed code.
@@ -61,7 +61,9 @@ export default function HomeScreen() {
   const [code, setCode] = useState("");
   const [sellTo, setSellToState] = useState(getSellTo);
   const nfcAbort = useRef<AbortController | null>(null);
-  const nfcSupported = isWebNfcSupported();
+  // Chrome on Android reads chips in the app; another phone opens a written chip by
+  // itself; a computer has no NFC, so it gets no chip option at all.
+  const nfc = nfcMode();
   // A computer has no NFC and rarely a usable camera: it types the code, or a
   // USB/Bluetooth scanner "types" the whole QR link followed by Enter.
   const isDesktop = useIsDesktop();
@@ -263,7 +265,7 @@ export default function HomeScreen() {
           </div>
         )}
         {/* QR first: it always works, while a chip is only found once it has been written. */}
-        <div className="mt-4 grid grid-cols-2 gap-3">
+        <div className={`mt-4 grid gap-3 ${nfc === "none" ? "grid-cols-1" : "grid-cols-2"}`}>
           <button
             type="button"
             onClick={() => {
@@ -286,24 +288,26 @@ export default function HomeScreen() {
               <span className="mt-1 block text-[11px] leading-snug text-white/75">{t("scanQrHint")}</span>
             </span>
           </button>
-          <button
-            type="button"
-            onClick={() => (nfcSupported ? void startNfc() : setSheet({ kind: "phone" }))}
-            disabled={busy}
-            data-testid="button-scan-nfc"
-            style={{ WebkitTapHighlightColor: "transparent" }}
-            className="flex min-h-[164px] flex-col items-center justify-center gap-2.5 rounded-[22px] border border-white/10 bg-white/[0.04] p-3 text-center text-white transition-transform active:scale-[0.97] disabled:opacity-50"
-          >
-            <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/[0.06] text-blue-300">
-              <Nfc className="h-8 w-8" />
-            </span>
-            <span>
-              <span className="block text-base font-bold leading-tight">{t("readChip")}</span>
-              <span className="mt-1 block text-[11px] leading-snug text-amber-200/80">
-                {nfcSupported ? t("readChipHint") : t("readChipPhone")}
+          {nfc !== "none" && (
+            <button
+              type="button"
+              onClick={() => (nfc === "web" ? void startNfc() : setSheet({ kind: "phone" }))}
+              disabled={busy}
+              data-testid="button-scan-nfc"
+              style={{ WebkitTapHighlightColor: "transparent" }}
+              className="flex min-h-[164px] flex-col items-center justify-center gap-2.5 rounded-[22px] border border-white/10 bg-white/[0.04] p-3 text-center text-white transition-transform active:scale-[0.97] disabled:opacity-50"
+            >
+              <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/[0.06] text-blue-300">
+                <Nfc className="h-8 w-8" />
               </span>
-            </span>
-          </button>
+              <span>
+                <span className="block text-base font-bold leading-tight">{t("readChip")}</span>
+                <span className="mt-1 block text-[11px] leading-snug text-amber-200/80">
+                  {nfc === "web" ? t("readChipHint") : t("readChipPhone")}
+                </span>
+              </span>
+            </button>
+          )}
         </div>
         <div className="mt-5 border-t border-white/10 pt-4">{codeForm}</div>
         <button type="button" onClick={() => setSheet(null)} className={`mt-4 ${BTN_TERTIARY}`}>
@@ -332,7 +336,7 @@ export default function HomeScreen() {
         </button>
       </BottomSheet>
 
-      {/* Without Web NFC the app cannot read, but the phone still opens a written chip's link. */}
+      {/* Another phone: the app cannot read, but the phone itself opens a written chip's link. */}
       <BottomSheet open={sheet?.kind === "phone"} onClose={() => setSheet(null)} title={t("phoneReadTitle")}>
         <h2 className={SHEET_TITLE}>{t("phoneReadTitle")}</h2>
         <ol className="mt-4 space-y-2">
@@ -343,7 +347,6 @@ export default function HomeScreen() {
             </li>
           ))}
         </ol>
-        <p className="mt-4 text-xs text-amber-200/80">{t("phoneReadBlank")}</p>
         <div className="mt-5 space-y-3">
           <button
             type="button"

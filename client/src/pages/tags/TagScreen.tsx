@@ -18,11 +18,10 @@ import TagSaleDialog from "./TagSaleDialog";
 import { formatCents } from "@/pages/xpot/utils";
 import { GenerateReviewButton, ReviewLinkAssist } from "./ReviewLinkSheet";
 import { ContentEditor, type ContentState } from "./ContentEditor";
-import WriteSheet, { manualSteps, type WriteResult } from "./WriteSheet";
+import WriteSheet, { manualSteps, manualTitle, type WriteResult } from "./WriteSheet";
 import LockSheet from "./LockSheet";
 import PieceDashboard from "./PieceDashboard";
-import { isWebNfcSupported } from "./webNfc";
-import { useIsDesktop } from "@/hooks/use-is-desktop";
+import { canLockChip, nfcMode } from "./webNfc";
 import { APP_BASE, errorText, getSellTo, haptic, lookupTag, pushRecent, shortUrl, tagPath, tagsGet, tagsPost, useBanner } from "./lib";
 import {
   BTN_PRIMARY,
@@ -75,9 +74,9 @@ export default function TagScreen({ code, onClose }: {
   const qc = useQueryClient();
   const { banner, show } = useBanner();
   const queryKey = ["tags", "piece", code];
-  // No Web NFC on a phone (iPhone): written with NFC Tools, confirmed by a real tap.
-  const isDesktop = useIsDesktop();
-  const manualFlow = !isWebNfcSupported() && !isDesktop;
+  // A phone without Web NFC (iPhone): written with NFC Tools, confirmed by a real tap.
+  const nfc = nfcMode();
+  const manualFlow = nfc === "app";
   const { data, isLoading, error } = useQuery({
     queryKey,
     queryFn: () => fetchTag(code),
@@ -200,8 +199,9 @@ export default function TagScreen({ code, onClose }: {
   const locked = tag.nfcStatus === "locked";
   const chipMissing = tag.nfcStatus === "not_programmed" || tag.nfcStatus === "failed";
   const chipConfirmed = tag.nfcStatus === "verified";
-  // An iPhone locks only a chip a tap confirmed (lock a wrong chip and it is lost).
-  const canLock = !locked && (manualFlow ? chipConfirmed : !chipMissing);
+  // Another phone locks only a chip a tap confirmed (lock a wrong chip and it is lost);
+  // a computer cannot lock, so it gets no padlock.
+  const canLock = !locked && (manualFlow ? chipConfirmed : nfc === "web" && canLockChip() && !chipMissing);
   const destinationLabel = (value: string) => (isDestinationType(value) ? t(`dest_${value}`) : value);
 
   const save = async () => {
@@ -356,7 +356,7 @@ export default function TagScreen({ code, onClose }: {
             <CopyButton text={tag.nfcUrl} label={t("copyLink")} large />
             <p className="flex items-center gap-2 pt-1 text-sm font-bold text-white">
               <Smartphone className="h-4 w-4" />
-              {t("iphoneTitle")}
+              {t(manualTitle())}
             </p>
             <ol className="space-y-2">
               {[...manualSteps(tag.nfcUrl), "iphoneConfirmTitle" as const].map((step, i) => (

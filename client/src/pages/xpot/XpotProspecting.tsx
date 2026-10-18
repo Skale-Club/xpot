@@ -7,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/i18n";
 import { prospectingMessages } from "@/i18n/messages/prospecting";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { subscribeToRoutePush } from "@/lib/pushNotifications";
+import { routePushSupported, subscribeToRoutePush } from "@/lib/pushNotifications";
 import { useViewerAccess } from "@/lib/adminMode";
 import { Link, useLocation, useSearchParams } from "wouter";
 import { RoutePreviewMap } from "./components/RoutePreviewMap";
@@ -510,10 +510,6 @@ export function XpotProspecting() {
   }, [detailsQuery.data?.job.id, detailsQuery.data?.candidates.length]);
 
   const enableReadyNotification = async () => {
-    if (!("Notification" in window)) {
-      toast({ title: t("notificationsUnavailable") });
-      return;
-    }
     const permission = Notification.permission === "default"
       ? await Notification.requestPermission()
       : Notification.permission;
@@ -1229,7 +1225,7 @@ export function XpotProspecting() {
                       <span className="shrink-0 font-bold uppercase tracking-[0.12em] text-indigo-200">{t("activityLabel")}</span>
                       <span className="min-w-0 break-words leading-5 text-pretty text-white/65">{currentActivity}</span>
                     </div>
-                    {["queued", "running"].includes(details.job.status) ? (
+                    {["queued", "running"].includes(details.job.status) && routePushSupported() ? (
                       <div className="flex justify-end">
                         <Button type="button" variant="outline" disabled={notificationsEnabled} onClick={() => void enableReadyNotification()} className="min-h-10 w-full rounded-xl border-white/12 bg-black/10 text-xs text-white active:scale-[0.96] sm:w-auto">
                           <BellRing className="h-4 w-4" />{notificationsEnabled ? t("notificationsEnabled") : t("notifyWhenReady")}
@@ -1681,7 +1677,7 @@ export function XpotProspecting() {
                       {ensureStopLead.isPending && ensureStopLead.variables?.destination === "company" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Building2 className="h-4 w-4" />}{t("openCompanyPanel")}
                     </Button>
                     <Button asChild variant="outline" className="h-11 min-w-0 rounded-xl border-white/10 bg-white/[0.04] px-2 text-white hover:bg-white/[0.08] hover:text-white sm:px-4">
-                      <a href={appleDevice ? appleStopUrl(selectedStop) : googleStopUrl(selectedStop)} target="_blank" rel="noreferrer"><Navigation className="h-4 w-4" />{t("googleMaps")}</a>
+                      <a href={appleDevice ? appleStopUrl(selectedStop) : googleStopUrl(selectedStop)} target="_blank" rel="noreferrer"><Navigation className="h-4 w-4" />{appleDevice ? t("appleMaps") : t("googleMaps")}</a>
                     </Button>
                   </div>
                 </div>

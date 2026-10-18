@@ -3,10 +3,9 @@ import { Check, Lock, Nfc, Smartphone, X } from "lucide-react";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
-import { errorText, haptic } from "./lib";
+import { errorText, haptic, isIos } from "./lib";
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_TERTIARY, BottomSheet, CopyButton, EYEBROW_MUTED, SHEET_TITLE, Spinner, TapAnimation, type Identity } from "./ui";
-import { isWebNfcSupported, mapNfcError, readBack, writeContent } from "./webNfc";
-import { useIsDesktop } from "@/hooks/use-is-desktop";
+import { canLockChip, mapNfcError, nfcMode, readBack, writeContent } from "./webNfc";
 import { contentKindOf } from "@shared/chipContent";
 import { ContinueOnPhone } from "./ContinueOnPhone";
 
@@ -35,19 +34,24 @@ interface Props {
 
 type Phase = "idle" | "writing" | "verifying" | "saving" | "done" | "error";
 
-/** NFC Tools on iPhone: the record to add depends on what is written. */
+/** NFC Tools on a phone without Web NFC: the record to add depends on what is written. */
 export function manualSteps(value: string) {
   const kind = contentKindOf(value);
-  if (kind === "vcard") return ["manual1", "manual2", "manual3Contact", "manual4Contact", "manual5"] as const;
-  if (kind === "email" || kind === "phone") return ["manual1", "manual2", "manual3Uri", "manual4", "manual5"] as const;
-  return ["manual1", "manual2", "manual3", "manual4", "manual5"] as const;
+  // The chip antenna sits at the top of an iPhone, at the back of an Android phone.
+  const last = isIos() ? "manual5" : "manual5Phone";
+  if (kind === "vcard") return ["manual1", "manual2", "manual3Contact", "manual4Contact", last] as const;
+  if (kind === "email" || kind === "phone") return ["manual1", "manual2", "manual3Uri", "manual4", last] as const;
+  return ["manual1", "manual2", "manual3", "manual4", last] as const;
 }
+
+/** The heading over those steps: "On iPhone…" only on an iPhone. */
+export const manualTitle = (): "iphoneTitle" | "nfcToolsTitle" => (isIos() ? "iphoneTitle" : "nfcToolsTitle");
 
 export default function WriteSheet({ open, url, identity, onClose, onDone, continueUrl, continueHint, onLock, confirmed }: Props) {
   const t = useT(tagsMessages);
   const tc = useT(commonMessages);
-  const supported = isWebNfcSupported();
-  const isDesktop = useIsDesktop();
+  const nfc = nfcMode();
+  const supported = nfc === "web";
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
   const [lastVerified, setLastVerified] = useState(false);
@@ -146,8 +150,8 @@ export default function WriteSheet({ open, url, identity, onClose, onDone, conti
             <Check className="h-10 w-10" />
           </div>
           <p className={`mt-3 ${SHEET_TITLE}`}>{lastVerified ? t("writtenChecked") : t("writtenMarked")}</p>
-          {/* No read-back (iPhone + NFC Tools): a real tap on the chip confirms it on the server. */}
-          {!lastVerified && identity === "xpot" && !supported ? (
+          {/* No read-back (NFC Tools on a phone): a real tap on the chip confirms it on the server. */}
+          {!lastVerified && identity === "xpot" && nfc === "app" ? (
             confirmed ? (
               <p className="mt-2 text-sm font-semibold text-emerald-300" data-testid="iphone-confirmed">{t("iphoneConfirmed")}</p>
             ) : (
@@ -165,8 +169,9 @@ export default function WriteSheet({ open, url, identity, onClose, onDone, conti
           <button type="button" onClick={close} className={`${BTN_PRIMARY} mt-5`}>
             {tc("done")}
           </button>
-          {/* Android locks right away; an iPhone once a real tap confirmed the write (lock a wrong chip and it is lost). */}
-          {onLock && (supported || confirmed) && (
+          {/* Chrome on Android locks right away; another phone once a real tap confirmed the
+              write (lock a wrong chip and it is lost); a computer cannot lock at all. */}
+          {onLock && ((supported && canLockChip()) || (nfc === "app" && confirmed)) && (
             <button
               type="button"
               onClick={() => {
@@ -224,13 +229,13 @@ export default function WriteSheet({ open, url, identity, onClose, onDone, conti
         </div>
       ) : (
         <div className="mt-5">
-          {isDesktop && continueUrl ? (
+          {nfc === "none" && continueUrl ? (
             <ContinueOnPhone url={continueUrl} hint={continueHint} />
           ) : (
             <>
               <div className="flex items-center gap-2 text-sm font-bold text-white">
                 <Smartphone className="h-4 w-4" />
-                {t("iphoneTitle")}
+                {t(manualTitle())}
               </div>
               <ol className="mt-3 space-y-2">
                 {manualSteps(url).map((step, i) => (
