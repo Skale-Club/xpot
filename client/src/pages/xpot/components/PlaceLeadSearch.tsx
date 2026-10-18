@@ -198,7 +198,8 @@ export const PlaceLeadSearch = forwardRef<PlaceLeadSearchHandle, {
   const googleStatus = query.length < 2 ? (
     <div className="px-3 py-6 text-center text-xs text-white/35">{t("searchGoogleHint")}</div>
   ) : placeQuery.error ? (
-    <div className="mx-1 rounded-xl border border-red-400/20 bg-red-500/10 px-3 py-2.5 text-xs text-red-300">{(placeQuery.error as Error).message}</div>
+    // The server's reason is the raw response body, often an admin instruction in English; the rep gets what they can do.
+    <div className="mx-1 rounded-xl border border-red-400/20 bg-red-500/10 px-3 py-2.5 text-xs text-red-300" role="alert">{t("searchGoogleFailed")}</div>
   ) : placeQuery.isFetching && !places.length ? (
     <div className="space-y-1.5 px-1">
       {[0, 1, 2].map((n) => <div key={n} className="h-12 animate-pulse rounded-xl bg-white/[0.04]" />)}
