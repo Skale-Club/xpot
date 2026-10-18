@@ -123,6 +123,29 @@ export function createSyncRouter() {
         const [ghl, xphere] = await Promise.all([syncTaskToGhl(task.id), syncTaskToXphere(task.id)]);
         return res.json({ synced: ghl.synced || xphere.synced, results: { ghl, xphere } });
       }
+      case "sales_opportunity": {
+        // Opportunities only go to GoHighLevel (legacy); Xphere has no opportunity push.
+        const opportunity = await storage.getSalesOpportunity(Number(entityId));
+        if (!opportunity || (!isManagerOrAdmin(actor!) && opportunity.repId !== actor!.rep.id)) {
+          return res.status(403).json({ message: "Access denied" });
+        }
+        // An opportunity needs its company in GHL first; send that too when it is missing.
+        const lead = await storage.getSalesLead(opportunity.leadId);
+        if (lead && !lead.ghlContactId && lead.status !== "prospect") await syncLeadToGhl(lead.id);
+        const result = await syncOpportunityToGhl(opportunity.id);
+        // Unlike the other helpers this one records nothing: log the attempt, so a
+        // record that landed leaves Status › CRM sync and one that did not stays.
+        if (!result.synced) await storage.updateSalesOpportunity(opportunity.id, { syncStatus: "needs_review" });
+        await storage.createSalesSyncEvent({
+          entityType: "sales_opportunity",
+          entityId: String(opportunity.id),
+          status: result.synced ? "synced" : "needs_review",
+          payload: { opportunityId: opportunity.id },
+          lastError: result.synced ? null : result.message ?? "Failed to sync opportunity",
+          lastAttemptAt: new Date(),
+        });
+        return res.json(result);
+      }
       default:
         return res.status(400).json({ message: `Unsupported entityType: ${entityType}` });
     }

@@ -9,7 +9,7 @@ import { systemHealthSnapshot, toRecentRun } from "../../observability/health.js
 import { recordSystemEvent } from "../../observability/events.js";
 import { listSyncProblems } from "../../observability/syncProblems.js";
 import { retryAutomaticRoute } from "../../prospecting/auto-route.js";
-import { tickProspectingQueueSafely } from "../../prospecting/queue.js";
+import { cancelProspectingJob, tickProspectingQueueSafely } from "../../prospecting/queue.js";
 import { rateLimit } from "../../tags/rateLimit.js";
 import { storage } from "../../storage.js";
 
@@ -60,6 +60,21 @@ export function createSystemHealthRouter() {
     if (!retried) return res.status(409).json({ code: "route_not_retryable", message: "This route is not ready to retry." });
     void tickProspectingQueueSafely();
     res.status(202).json({ jobId: retried.id, routePlanningStatus: retried.routePlanningStatus });
+  });
+
+  // A search that is stuck (running, waiting, or finished with no route): stop
+  // it for whichever person owns it, so their queue and their day are free again.
+  router.post("/admin/system-health/jobs/:id/cancel", async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ message: "Invalid job id" });
+    const result = await cancelProspectingJob(id);
+    if (result.outcome === "not_found") return res.status(404).json({ message: "Prospecting job not found" });
+    if (result.outcome === "not_cancellable") {
+      return res.status(409).json({ code: "search_not_cancellable", message: "This search has already finished." });
+    }
+    const actor = (req as any).xpotActor as { user: { userId: string } };
+    console.log(`[prospecting] job #${result.jobId} (rep #${result.repId}) cancelled from Status by ${actor.user.userId}; ${result.cancelledRuns} search(es) stopped`);
+    res.json({ jobId: result.jobId, status: result.status, routePlanningStatus: result.routePlanningStatus, cancelledRuns: result.cancelledRuns });
   });
 
   router.get("/admin/system-events", async (req, res) => {

@@ -81,6 +81,9 @@ test.skipIf(!enabled)("reseller access: create, approve, block, unblock, phone",
     const refused = await accounts.refuseRep(applicant.id, "No car", manager);
     assert.ok(refused.blockedAt);
     assert.equal(refused.blockedReason, "Sign-up refused: No car");
+    // Marked explicitly (refused_at); a plain block left it empty.
+    assert.ok(refused.refusedAt);
+    assert.equal(blocked.refusedAt, null);
     list = await accounts.listRepsWithAccess();
     assert.equal(list.find((r) => r.id === applicant.id)?.access, "blocked");
     assert.equal(list.find((r) => r.id === applicant.id)?.refused, true);

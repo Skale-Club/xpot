@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation, useSearchParams } from "wouter";
-import { Activity, AlertTriangle, ChevronRight, Cpu, History, ListOrdered, RotateCw, ScrollText } from "lucide-react";
+import { Activity, AlertTriangle, Ban, ChevronRight, Cpu, History, ListOrdered, RotateCw, ScrollText } from "lucide-react";
 import { EYEBROW } from "@/components/xpot/surface";
 import { useToast } from "@/hooks/use-toast";
 import { describeApiError } from "@/lib/apiErrors";
@@ -9,6 +9,7 @@ import { platformAdminMessages } from "@/i18n/messages/platformAdmin";
 import { CAUSE_ANCHOR, statusOverview, type StatusCause } from "./platform/servicesUi";
 import { ServicesSection, SyncProblemsSection, useServices, useSyncProblems } from "./platform/StatusSections";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
 import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
 import { FilterBar, FilterChips, FilterSearch, FilterSelect, FilterToken } from "@/components/xpot/filters";
 import { ListSkeleton } from "@/components/xpot/ListSkeleton";
@@ -96,6 +97,42 @@ function RetryRouteButton({ job }: { job: StuckJob }) {
       <RotateCw />
       {tp("retryRoute")}
     </Button>
+  );
+}
+
+/**
+ * Stops a stuck search for whoever owns it (POST /admin/system-health/jobs/:id/cancel):
+ * its waiting and running searches stop, and a route not built yet is marked failed.
+ */
+function CancelSearchButton({ jobId, location, repName }: { jobId: number; location: string; repName: string | null }) {
+  const tp = useT(platformAdminMessages);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const cancel = useMutation({
+    mutationFn: async () => (await apiRequest("POST", `/api/xpot/admin/system-health/jobs/${jobId}/cancel`)).json(),
+    onSuccess: () => toast({ title: tp("searchCancelled"), variant: "success" }),
+    onError: (e: Error) => toast({ title: tp("searchCancelFailed"), description: describeApiError(e), variant: "destructive" }),
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: ["/api/xpot/admin/system-health"] }),
+  });
+  return (
+    <>
+      <Button variant="secondary" size="sm" className="shrink-0" onClick={() => setOpen(true)} data-testid="status-cancel-search">
+        <Ban className="text-red-400" />
+        {tp("cancelSearch")}
+      </Button>
+      <ConfirmDialog
+        open={open}
+        onOpenChange={setOpen}
+        tone="danger"
+        title={tp("cancelSearchTitle", { id: jobId })}
+        description={tp("cancelSearchBody", { location, rep: repName ? ` · ${repName}` : "" })}
+        confirmLabel={tp("cancelSearch")}
+        cancelLabel={tp("cancelSearchKeep")}
+        testId="status-cancel-search-confirm"
+        onConfirm={() => cancel.mutateAsync()}
+      />
+    </>
   );
 }
 
@@ -239,8 +276,11 @@ function SystemHealthOverview() {
                       {` · ${t("runLimit", { duration: formatDuration(limitMs) })}`}
                       {` · ${t("runChecked", { time: ago(run.updatedAt) })}`}
                     </p>
-                    <div title={run.engineJobId ?? undefined}>
-                      <HealthReason t={t} code={run.reasonCode} fallback={run.reason} className="mt-1 text-xs text-white/40" />
+                    <div className="mt-1 flex flex-wrap items-end justify-between gap-2">
+                      <div title={run.engineJobId ?? undefined}>
+                        <HealthReason t={t} code={run.reasonCode} fallback={run.reason} className="text-xs text-white/40" />
+                      </div>
+                      <CancelSearchButton jobId={run.jobId} location={run.location} repName={run.repName} />
                     </div>
                   </li>
                 );
@@ -260,7 +300,10 @@ function SystemHealthOverview() {
                         <span className="text-white/50"> · {reason.text}{job.repName ? ` · ${job.repName}` : ""} · {ago(job.updatedAt)}</span>
                         {reason.todo && <span className="block text-white/40">{t("whatToDo", { action: reason.todo })}</span>}
                       </div>
-                      {job.canRetry && <RetryRouteButton job={job} />}
+                      <div className="flex shrink-0 flex-wrap gap-2">
+                        {job.canRetry && <RetryRouteButton job={job} />}
+                        <CancelSearchButton jobId={job.jobId} location={job.location} repName={job.repName} />
+                      </div>
                     </li>
                   );
                 })}

@@ -1,8 +1,9 @@
 // Refusing a sign-up blocks the account the way ending a partnership does
-// (resellerAccounts.ts); what tells the two apart in People is the block
-// reason, which starts with "Sign-up refused". Refusals made before this
-// marker stored the screen's default text in the admin's language, so those
-// prefixes count too.
+// (resellerAccounts.ts); sales_reps.refused_at tells the two apart in People.
+// The block reason of a refusal starts with "Sign-up refused", followed by the
+// admin's note. Refusals made before that prefix stored the screen's default
+// text in the admin's language, so those prefixes count too: they are what
+// migrations/0055_rep_refused_at.sql backfilled refused_at from.
 
 export const REFUSED_PREFIX = "Sign-up refused";
 const REFUSED_PREFIXES = [REFUSED_PREFIX, "Cadastro recusado", "Registro rechazado"];

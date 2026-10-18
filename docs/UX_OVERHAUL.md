@@ -257,8 +257,10 @@ Confira cada tela em 1440 px e 390 px (não deve haver rolagem lateral).
 
 ## O que ficou aberto
 
-Está no [BACKLOG.md](./BACKLOG.md), área UXR: cancelar uma busca de
-prospecção presa, filtro por vendedor no histórico de visitas, tradução dos
-tipos de lugar do Google, página de consentimento OAuth e
-resultados de Testar em inglês, e recusas antigas com motivo próprio que ainda
-aparecem como Bloqueado.
+Está no [BACKLOG.md](./BACKLOG.md), área UXR: tradução dos tipos de lugar do
+Google, página de consentimento OAuth e resultados de Testar em inglês.
+(Cancelar uma busca presa, o filtro por vendedor no histórico, o filtro por
+organização em Inventário/Kits/Empresas, o painel lateral nas telas de detalhe
+da gestão, as linhas do Xphere levando à pessoa, o aviso de alterações não
+salvas em Integrações, o marcador de recusa, o Retry de oportunidades e quem
+cancela uma venda de Tags foram feitos depois: UXR-20 a 23, 26, 27, 29, 30 e 31.)
