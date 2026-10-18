@@ -1,14 +1,20 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { Check, ChevronDown, ChevronRight, ClipboardList, Copy, Undo2 } from "lucide-react";
+import { ChevronDown, ChevronRight, ClipboardList, Undo2 } from "lucide-react";
 import type { TagKitItem, TagListItem } from "@shared/tagsApi";
 import { matchesStockMetric } from "@shared/tagMetrics";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { CompactDataTable } from "@/components/xpot/CompactDataTable";
+import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
+import { CopyButton } from "@/components/xpot/CopyButton";
+import { EmptyState } from "@/components/xpot/EmptyState";
+import { GLASS_CLASS } from "@/components/xpot/surface";
 import { useToast } from "@/hooks/use-toast";
 import { errorMessage, formatDateTime, getJson, invalidateAdminTags, sendJson, withQuery } from "./api";
-import { BTN_GHOST, CARD, TD, TH } from "./ui";
-import { ConfirmDialog, ErrorLine, Loading, PieceTable, usePieces } from "./batches-shared";
-import { copyText } from "./pieces-shared";
+import { usePieces } from "./batches-shared";
+import { Loading, LoadError } from "./pieces-shared";
+import { PieceTable } from "./piece-table";
 import { useTagLabels } from "./labels";
 import { ListPager, usePagedList } from "@/components/xpot/pagination";
 import { useT } from "@/i18n";
@@ -45,65 +51,53 @@ export function PackingListDialog({ kit, onOpenChange }: { kit: TagKitItem | nul
   const tm = useT(manageTagsMessages);
   const tc = useT(commonMessages);
   const labels = useTagLabels();
-  const [copied, setCopied] = useState(false);
-  const { data: pieces = [], isLoading, isError } = usePieces({ kitId: kit?.id }, !!kit);
+  const { data: pieces = [], isLoading, error, refetch } = usePieces({ kitId: kit?.id }, !!kit);
   const codes = pieces.map((p) => p.publicCode);
   const rep = kit ? kit.repName ?? t("resellerNumber", { id: kit.repId }) : "";
   return (
     <Dialog open={!!kit} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto border-white/10 bg-[#0d1326] text-white" data-testid="kit-packing-list">
+      <DialogContent className="max-h-[90vh] overflow-y-auto" data-testid="kit-packing-list">
         <DialogHeader>
           <DialogTitle>{t("packingListTitle")}</DialogTitle>
-          <DialogDescription className="text-white/50">
+          <DialogDescription>
             {kit ? t("packingListMeta", { name: rep, date: formatDateTime(kit.createdAt) }) : null}
             {kit?.note ? ` · ${kit.note}` : ""}
           </DialogDescription>
         </DialogHeader>
         {isLoading ? (
-          <Loading />
-        ) : isError ? (
-          <ErrorLine>{tm("couldNotLoad", { what: t("theKitPieces") })}</ErrorLine>
+          <Loading rows={3} />
+        ) : error ? (
+          <LoadError compact what={t("theKitPieces")} error={error} onRetry={() => void refetch()} />
         ) : pieces.length === 0 ? (
-          <p className="py-4 text-center text-sm text-white/40">{t("kitAllReturned")}</p>
+          <EmptyState compact dense tone="tags" icon={ClipboardList} title={t("kitAllReturned")} />
         ) : (
-          <div className="overflow-x-auto rounded-xl border border-white/10">
-            <table className="w-full">
-              <thead className="border-b border-white/10">
-                <tr>
-                  <th className={TH}>{tm("colCode")}</th>
-                  <th className={TH}>{t("fieldProduct")}</th>
-                  <th className={TH}>{tm("colBatch")}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/5">
-                {pieces.map((p) => (
-                  <tr key={p.id}>
-                    <td className={`${TD} font-mono`}>{p.publicCode}</td>
-                    <td className={TD}>{[labels.product(p.productType), p.face ? labels.face(p.face) : null].filter(Boolean).join(" · ")}</td>
-                    <td className={`${TD} font-mono text-xs text-white/50`}>{p.batchCode ? `${p.batchCode}${p.serialNumber ? ` #${p.serialNumber}` : ""}` : "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <CompactDataTable
+            columns={[
+              { key: "code", label: tm("colCode"), cellClassName: "font-mono text-white/85", render: (p) => p.publicCode },
+              {
+                key: "product",
+                label: t("fieldProduct"),
+                cellClassName: "text-white/70",
+                render: (p) => [labels.product(p.productType), p.face ? labels.face(p.face) : null].filter(Boolean).join(" · "),
+              },
+              {
+                key: "batch",
+                label: tm("colBatch"),
+                cellClassName: "whitespace-nowrap font-mono text-xs text-white/50",
+                render: (p) => (p.batchCode ? `${p.batchCode}${p.serialNumber ? ` #${p.serialNumber}` : ""}` : "—"),
+              },
+            ]}
+            rows={pieces}
+            getRowKey={(p) => p.id}
+          />
         )}
         <DialogFooter className="gap-2">
-          <button
-            type="button"
-            className={BTN_GHOST}
-            disabled={codes.length === 0}
-            onClick={async () => {
-              if (await copyText(codes.join("\n"))) {
-                setCopied(true);
-                setTimeout(() => setCopied(false), 1500);
-              }
-            }}
-            data-testid="kit-packing-copy"
-          >
-            {copied ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
-            {copied ? t("packingCopied") : t.plural("packingCopyCodes", codes.length)}
-          </button>
-          <button type="button" className={BTN_GHOST} onClick={() => onOpenChange(false)}>{tc("close")}</button>
+          {codes.length > 0 ? (
+            <span data-testid="kit-packing-copy">
+              <CopyButton value={codes.join("\n")} label={t.plural("packingCopyCodes", codes.length)} className="min-h-11" />
+            </span>
+          ) : null}
+          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>{tc("close")}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -112,8 +106,7 @@ export function PackingListDialog({ kit, onOpenChange }: { kit: TagKitItem | nul
 
 function KitPieces({ kit, go }: { kit: TagKitItem; go: (path: string) => void }) {
   const t = useT(manageTagsBatchesMessages);
-  const tm = useT(manageTagsMessages);
-  const { data: pieces = [], isLoading, isError } = usePieces({ kitId: kit.id });
+  const { data: pieces = [], isLoading, error, refetch } = usePieces({ kitId: kit.id });
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirm, setConfirm] = useState(false);
   const ret = useReturnToHouse(() => {
@@ -122,8 +115,8 @@ function KitPieces({ kit, go }: { kit: TagKitItem; go: (path: string) => void })
   });
   const returnable = returnableFrom(kit);
 
-  if (isLoading) return <Loading />;
-  if (isError) return <div className="p-4"><ErrorLine>{tm("couldNotLoad", { what: t("theKitPieces") })}</ErrorLine></div>;
+  if (isLoading) return <div className="p-3"><Loading rows={2} /></div>;
+  if (error) return <div className="p-3"><LoadError compact what={t("theKitPieces")} error={error} onRetry={() => void refetch()} /></div>;
 
   const toggle = (code: string) =>
     setSelected((s) => {
@@ -136,24 +129,22 @@ function KitPieces({ kit, go }: { kit: TagKitItem; go: (path: string) => void })
   const codes = Array.from(selected);
 
   return (
-    <div className="border-t border-white/5 bg-black/10">
+    <div className="space-y-2 border-t border-white/5 bg-black/10 p-3">
       <PieceTable
         pieces={pieces}
-        go={go}
-        showReseller={false}
-        selectable={returnable}
-        selected={selected}
-        onToggle={toggle}
-        onToggleAll={toggleAll}
+        onOpen={(id) => go(`/pieces/${id}`)}
+        columns={["customer", "scans", "sold", "batch"]}
+        selection={{ canSelect: returnable, selected, onToggle: toggle, onToggleAll: toggleAll }}
+        pageSize={25}
         empty={t("kitAllReturned")}
       />
       {pieces.some(returnable) && (
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/5 px-3 py-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
           <p className="text-xs text-white/40">{t("tickToReturn")}</p>
-          <button type="button" className={BTN_GHOST} disabled={codes.length === 0 || ret.isPending} onClick={() => setConfirm(true)}>
+          <Button type="button" variant="secondary" disabled={codes.length === 0 || ret.isPending} onClick={() => setConfirm(true)}>
             <Undo2 className="h-4 w-4" />
             {codes.length ? t.plural("returnSelected", codes.length) : t("returnSelectedNone")}
-          </button>
+          </Button>
         </div>
       )}
       <ConfirmDialog
@@ -200,12 +191,12 @@ function KitRow({ kit, go }: { kit: TagKitItem; go: (path: string) => void }) {
   };
 
   return (
-    <li className={`${CARD} overflow-hidden`} data-testid={`admin-tags-kit-${kit.id}`}>
+    <li className={`overflow-hidden rounded-2xl ${GLASS_CLASS}`} data-testid={`admin-tags-kit-${kit.id}`}>
       <div className="flex flex-wrap items-center gap-3 p-3 sm:flex-nowrap">
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="flex min-w-0 flex-1 items-center gap-3 text-left"
+          className="flex min-h-11 min-w-0 flex-1 basis-48 items-center gap-3 text-left"
           aria-expanded={open}
         >
           {open ? <ChevronDown className="h-4 w-4 shrink-0 text-white/40" /> : <ChevronRight className="h-4 w-4 shrink-0 text-white/40" />}
@@ -217,7 +208,7 @@ function KitRow({ kit, go }: { kit: TagKitItem; go: (path: string) => void }) {
             </p>
           </div>
         </button>
-        <div className="flex shrink-0 items-center gap-4 text-right text-xs tabular-nums">
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-x-4 gap-y-2 text-right text-xs tabular-nums">
           <div>
             <p className="text-base font-bold text-white">{kit.pieceCount}</p>
             <p className="text-white/40">{t("kitPieces")}</p>
@@ -234,20 +225,23 @@ function KitRow({ kit, go }: { kit: TagKitItem; go: (path: string) => void }) {
             <p className="text-base font-bold text-blue-300">{kit.soldCount}</p>
             <p className="text-white/40">{t("kitSold")}</p>
           </div>
-          <button type="button" className={BTN_GHOST} onClick={() => setPacking(true)} title={t("packingListTitle")} data-testid="kit-packing-open">
+          <Button type="button" variant="secondary" size="sm" className="min-h-10" onClick={() => setPacking(true)} title={t("packingListTitle")} aria-label={t("packingListTitle")} data-testid="kit-packing-open">
             <ClipboardList className="h-4 w-4" />
             <span className="hidden sm:inline">{t("packingList")}</span>
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
-            className={BTN_GHOST}
+            variant="secondary"
+            size="sm"
+            className="min-h-10"
+            aria-label={t("returnUnsold")}
             disabled={kit.returnableCount === 0 || ret.isPending || loadingCodes}
             onClick={() => setConfirm(true)}
             title={blockedBySetup ? t("returnBlockedSetUp") : kit.returnableCount === 0 ? t("nothingToReturnDesc") : t("returnUnsoldTitle")}
           >
             <Undo2 className="h-4 w-4" />
             <span className="hidden sm:inline">{t("returnUnsold")}</span>
-          </button>
+          </Button>
         </div>
       </div>
       {blockedBySetup ? <p className="-mt-1 px-3 pb-2 text-right text-[11px] text-white/40">{t("returnBlockedSetUp")}</p> : null}
@@ -274,7 +268,7 @@ export function KitList({ kits, go }: { kits: TagKitItem[]; go: (path: string) =
   const paged = usePagedList(kits, { pageSize: 30, resetKey: `${kits.length}:${kits[0]?.id ?? ""}` });
   return (
     <>
-      <ul className="space-y-2">
+      <ul className="space-y-2" data-testid="admin-tags-kit-list">
         {paged.visible.map((kit) => (
           <KitRow key={kit.id} kit={kit} go={go} />
         ))}

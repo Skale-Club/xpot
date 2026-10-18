@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { PILL_BASE } from "@/components/xpot/StatusPill";
+import { JOURNEY_ENTRY_STATUS_TONE, JOURNEY_KIND_TONE, PLAN_STATUS_TONE, Pill, toneOf } from "@/components/xpot/StatusPill";
 import { isSuperAdmin } from "@shared/modules";
 import { JOURNEY_ENTRY_KINDS, JOURNEY_PRODUCTION_ACTIONS, PLAN_KINDS, PLAN_STATUSES } from "@shared/tagJourney";
 import type { TagJourney } from "@shared/tagsApi";
@@ -69,6 +69,7 @@ export function useJourney(filters: JourneyFilters, enabled: boolean) {
     isLoading: query.isLoading,
     isError: query.isError,
     error: query.error,
+    refetch: query.refetch,
     hasMore: Boolean(query.hasNextPage),
     loadingMore: query.isFetchingNextPage,
     loadMore: () => {
@@ -109,45 +110,19 @@ export function useJourneyLabels() {
   }, [t]);
 }
 
-const KIND_TONES: Record<string, string> = {
-  execution: "bg-white/10 text-white/70",
-  decision: "bg-blue-400/10 text-blue-300",
-  insight: "bg-violet-400/10 text-violet-300",
-  observation: "bg-white/5 text-white/50",
-  risk: "bg-amber-400/10 text-amber-300",
-  result: "bg-emerald-400/10 text-emerald-300",
-};
-
-const ENTRY_STATUS_TONES: Record<string, string> = {
-  active: "bg-emerald-400/10 text-emerald-300",
-  needs_review: "bg-amber-400/10 text-amber-300",
-  archived: "bg-white/5 text-white/40",
-  superseded: "bg-white/5 text-white/40",
-};
-
-const PLAN_STATUS_TONES: Record<string, string> = {
-  draft: "bg-white/10 text-white/60",
-  active: "bg-blue-400/10 text-blue-300",
-  paused: "bg-amber-400/10 text-amber-300",
-  validated: "bg-emerald-400/10 text-emerald-300",
-  done: "bg-emerald-400/10 text-emerald-300",
-  invalidated: "bg-red-400/10 text-red-300",
-  cancelled: "bg-white/5 text-white/40",
-};
-
-const PILL = PILL_BASE;
+// Tones: the kit's maps (components/xpot/StatusPill.tsx), so "active" is one colour for entries and plans.
 
 export function KindBadge({ kind }: { kind: string }) {
   const labels = useJourneyLabels();
-  return <span className={`${PILL} ${KIND_TONES[kind] ?? "bg-white/10 text-white/60"}`}>{labels.kind(kind)}</span>;
+  return <Pill tone={toneOf(JOURNEY_KIND_TONE, kind)}>{labels.kind(kind)}</Pill>;
 }
 
 export function EntryStatusBadge({ status }: { status: string }) {
   const labels = useJourneyLabels();
-  return <span className={`${PILL} ${ENTRY_STATUS_TONES[status] ?? "bg-white/10 text-white/60"}`}>{labels.entryStatus(status)}</span>;
+  return <Pill tone={toneOf(JOURNEY_ENTRY_STATUS_TONE, status)}>{labels.entryStatus(status)}</Pill>;
 }
 
 export function PlanStatusBadge({ status }: { status: string }) {
   const labels = useJourneyLabels();
-  return <span className={`${PILL} ${PLAN_STATUS_TONES[status] ?? "bg-white/10 text-white/60"}`}>{labels.planStatus(status)}</span>;
+  return <Pill tone={toneOf(PLAN_STATUS_TONE, status)}>{labels.planStatus(status)}</Pill>;
 }

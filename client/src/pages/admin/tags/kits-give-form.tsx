@@ -6,9 +6,10 @@ import type { TagKitItem } from "@shared/tagsApi";
 import { TAG_MAX_BATCH_QUANTITY, normalizeTagCode } from "@shared/tags";
 import { KIT_COST_CURRENCY, kitCostRequired, parseKitUnitCost } from "@shared/tagKits";
 import { useToast } from "@/hooks/use-toast";
+import { Button } from "@/components/ui/button";
+import { Field, Input, Select, Textarea } from "@/components/xpot/Field";
 import { errorMessage, invalidateAdminTags, sendJson } from "./api";
-import { BTN, INPUT } from "./ui";
-import { Field, ResellerSelect, SELECT, hasTagsModule, useResellers } from "./batches-shared";
+import { ResellerSelect, hasTagsModule, useResellers } from "./batches-shared";
 import { useBatchOptions } from "./pieces-shared";
 import { PackingListDialog } from "./kits-list";
 import { useTagLabels } from "./labels";
@@ -140,7 +141,7 @@ export function GiveKitForm({
           <ResellerSelect value={repId} onChange={setRepId} />
         </Field>
         <Field label={t("fieldNoteOptional")} hint={t("noteHint")}>
-          <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} placeholder={t("notePlaceholder")} className={INPUT} />
+          <Input value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} placeholder={t("notePlaceholder")} />
         </Field>
         <Field
           label={`${t(costRequired ? "fieldUnitCost" : "fieldUnitCostOptional")} (${KIT_COST_CURRENCY})`}
@@ -150,15 +151,16 @@ export function GiveKitForm({
               : t(costRequired ? "costPolicyAcquisitionHint" : "costPolicyZeroHint")
           }
         >
-          <input
+          <Input
             type="number"
             min="0"
             step="0.01"
+            inputMode="decimal"
             value={unitCost}
             onChange={(e) => setUnitCost(e.target.value)}
             placeholder="0.00"
             required={costRequired}
-            className={`${INPUT} tabular-nums`}
+            className="tabular-nums"
             data-testid="input-kit-unit-cost"
           />
         </Field>
@@ -172,6 +174,7 @@ export function GiveKitForm({
           ariaLabel={t(MODE_KEYS[mode])}
           idPrefix="give-kit"
           fill={false}
+          accent="tags"
         />
       )}
 
@@ -179,31 +182,33 @@ export function GiveKitForm({
         <div className="grid gap-3 sm:grid-cols-[1fr_160px]">
           {fixedBatch ? (
             <Field label={tm("colBatch")}>
-              <p className="py-2 text-sm text-white/80">
+              <p className="flex min-h-11 items-center text-sm text-white/80">
                 <span className="font-mono">{fixedBatch.batchCode}</span>
                 <span className="text-white/40"> · {t("inHouseStockCount", { count: fixedBatch.handOutCount })}</span>
               </p>
             </Field>
           ) : (
             <Field label={tm("colBatch")} hint={batchOptions.length === 0 ? t("noBatchWithHouse") : t("nextHousePieces")}>
-              <select value={batchId} onChange={(e) => setBatchId(e.target.value)} className={SELECT}>
-                <option value="">{t("chooseBatch")}</option>
-                {batchOptions.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.batchCode} · {labels.product(b.productType)}{b.face ? ` · ${labels.face(b.face)}` : ""} · {t("inHouseCount", { count: b.handOutCount })}
-                  </option>
-                ))}
-              </select>
+              <Select
+                value={batchId}
+                onChange={(e) => setBatchId(e.target.value)}
+                placeholder={t("chooseBatch")}
+                options={batchOptions.map((b) => ({
+                  value: b.id,
+                  label: `${b.batchCode} · ${labels.product(b.productType)}${b.face ? ` · ${labels.face(b.face)}` : ""} · ${t("inHouseCount", { count: b.handOutCount })}`,
+                }))}
+              />
             </Field>
           )}
           <Field label={t("fieldPieces")} hint={chosenBatch ? t("upTo", { count: available }) : undefined}>
-            <input
+            <Input
               type="number"
+              inputMode="numeric"
               min={1}
               max={available || undefined}
               value={quantity}
               onChange={(e) => setQuantity(e.target.value)}
-              className={`${INPUT} tabular-nums`}
+              className="tabular-nums"
             />
           </Field>
         </div>
@@ -220,12 +225,12 @@ export function GiveKitForm({
             )
           }
         >
-          <textarea
+          <Textarea
             value={codesText}
             onChange={(e) => setCodesText(e.target.value)}
             rows={5}
             placeholder={"A7K3P9X2\nB8M4Q1Z3, C9N5R2Y4"}
-            className={`${INPUT} resize-y font-mono`}
+            className="font-mono"
             autoCapitalize="characters"
             autoCorrect="off"
             spellCheck={false}
@@ -234,18 +239,16 @@ export function GiveKitForm({
       )}
 
       <div className="flex justify-end">
-        <button type="submit" disabled={!ready || give.isPending} className={BTN} data-testid="admin-tags-give-kit-submit">
+        <Button type="submit" variant="brand" accent="tags" disabled={!ready} loading={give.isPending} data-testid="admin-tags-give-kit-submit">
           <PackagePlus className="h-4 w-4" />
-          {give.isPending
-            ? t("saving")
-            : pieceCount
+          {pieceCount
               ? rep
                 ? t.plural("givePiecesTo", pieceCount, { name: rep.displayName })
                 : t.plural("givePieces", pieceCount)
               : rep
                 ? t("giveNoCountTo", { name: rep.displayName })
                 : t("giveNoCount")}
-        </button>
+        </Button>
       </div>
       <PackingListDialog
         kit={packing}

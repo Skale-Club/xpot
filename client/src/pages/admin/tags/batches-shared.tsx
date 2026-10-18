@@ -1,45 +1,31 @@
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { BATCH_STAGE_TONE, BATCH_STATUS_TONE, Pill } from "@/components/xpot/StatusPill";
+import { BATCH_STAGE_TONE, BATCH_STATUS_TONE, Pill, toneOf } from "@/components/xpot/StatusPill";
+import { Select } from "@/components/xpot/Field";
+import { InlineAlert } from "@/components/xpot/InlineAlert";
 import type { TagBatchItem, TagListItem } from "@shared/tagsApi";
-import { Loader2 } from "@/components/ui/loader";
-import { TagPieceMention } from "@/components/xpot/TagProductThumbnail";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { ADMIN_TAGS_KEY, STALE_MS, formatDate, getJson, withQuery } from "./api";
-import { BTN_GHOST, CARD, INPUT, PieceStatusPill, TD, TH } from "./ui";
+import { ADMIN_TAGS_KEY, STALE_MS, getJson, withQuery } from "./api";
 import { useTagLabels } from "./labels";
-import { ListPager, usePagedList } from "@/components/xpot/pagination";
 import { useT } from "@/i18n";
-import { commonMessages } from "@/i18n/messages/common";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
 
-// Shared bits for the Batches and Kits screens (and their helpers).
+// Shared bits for the Batches and Kits screens (and their helpers). The pieces table is piece-table.tsx.
+
+/** The shared ConfirmDialog; re-exported for JourneyMcpCard until it moves (Tags screens import the kit's). */
+export { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
 
 // ─── Labels ───────────────────────────────────────────────────────────────────
 // Product, face and status names: useTagLabels() in labels.ts.
 
 export function BatchStatusPill({ status }: { status: string }) {
   const labels = useTagLabels();
-  return (
-    <Pill tone={BATCH_STATUS_TONE[status] ?? "slate"}>{labels.batchStatus(status)}</Pill>
-  );
+  return <Pill tone={toneOf(BATCH_STATUS_TONE, status)}>{labels.batchStatus(status)}</Pill>;
 }
 
 /** The derived production stage: codes issued → print file → printed → receiving → in stock. */
 export function BatchStagePill({ stage }: { stage: string }) {
   const labels = useTagLabels();
-  return (
-    <Pill tone={BATCH_STAGE_TONE[stage] ?? "slate"}>{labels.batchStage(stage)}</Pill>
-  );
+  return <Pill tone={toneOf(BATCH_STAGE_TONE, stage)}>{labels.batchStage(stage)}</Pill>;
 }
 
 // ─── Queries ──────────────────────────────────────────────────────────────────
@@ -79,6 +65,11 @@ export function useTagCatalog() {
   });
 }
 
+/** Catalog products as picker options ("Name · SKU"). */
+export function catalogOptions(catalog: readonly TagCatalogProduct[]) {
+  return catalog.map((p) => ({ value: String(p.id), label: p.sku ? `${p.name} · ${p.sku}` : p.name }));
+}
+
 /** Can this person see Tags in the field app? Managers/admins always can. */
 export function hasTagsModule(rep: Reseller): boolean {
   return rep.role === "manager" || rep.role === "admin" || !rep.modules || rep.modules.includes("tags");
@@ -105,31 +96,12 @@ export function usePieces(params: { kitId?: string; batchId?: string; house?: "1
 
 // ─── Small UI ─────────────────────────────────────────────────────────────────
 
-export function Loading() {
-  return (
-    <div className="flex justify-center py-12">
-      <Loader2 className="h-6 w-6 animate-spin text-blue-400" />
-    </div>
-  );
-}
-
+/** @deprecated InlineAlert tone="error"; kept for JourneyMcpCard until it moves. */
 export function ErrorLine({ children }: { children: ReactNode }) {
-  return <p className="text-sm text-red-400">{children}</p>;
+  return <InlineAlert tone="error">{children}</InlineAlert>;
 }
 
-export function Field({ label, hint, children, className = "" }: { label: string; hint?: ReactNode; children: ReactNode; className?: string }) {
-  return (
-    <label className={`block space-y-1.5 ${className}`}>
-      <span className="text-xs font-medium text-white/60">{label}</span>
-      {children}
-      {hint && <span className="block text-[11px] text-white/35">{hint}</span>}
-    </label>
-  );
-}
-
-export const SELECT = `${INPUT} appearance-auto`;
-
-/** Native select of active resellers, flagging those without the Tags module. */
+/** The kit Select of active resellers, flagging those without the Tags module. */
 export function ResellerSelect({
   value,
   onChange,
@@ -147,196 +119,17 @@ export function ResellerSelect({
   const { data: reps = [], isLoading } = useResellers();
   const list = reps.filter((r) => includeInactive || r.isActive || r.id === value);
   return (
-    <select
+    <Select
       id={id}
       value={value ?? ""}
       onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}
-      className={SELECT}
       disabled={isLoading}
       data-testid="admin-tags-reseller-select"
-    >
-      <option value="">{isLoading ? t("loadingOption") : includeAll ? t("allResellers") : t("chooseReseller")}</option>
-      {list.map((r) => (
-        <option key={r.id} value={r.id}>
-          {r.displayName}
-          {r.team ? ` · ${r.team}` : ""}
-          {!r.isActive ? t("resellerInactive") : !hasTagsModule(r) ? t("resellerNoTags") : ""}
-        </option>
-      ))}
-    </select>
+      placeholder={isLoading ? t("loadingOption") : includeAll ? t("allResellers") : t("chooseReseller")}
+      options={list.map((r) => ({
+        value: String(r.id),
+        label: `${r.displayName}${r.team ? ` · ${r.team}` : ""}${!r.isActive ? t("resellerInactive") : !hasTagsModule(r) ? t("resellerNoTags") : ""}`,
+      }))}
+    />
   );
-}
-
-/** Dark confirm dialog in the Xpot admin look. */
-export function ConfirmDialog({
-  open,
-  onOpenChange,
-  title,
-  description,
-  confirmLabel,
-  destructive = false,
-  busy = false,
-  confirmDisabled = false,
-  onConfirm,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  title: string;
-  description: ReactNode;
-  confirmLabel: string;
-  destructive?: boolean;
-  busy?: boolean;
-  /** The confirm button waits for input (e.g. a reason); unlike `busy`, the dialog can still be closed. */
-  confirmDisabled?: boolean;
-  onConfirm: () => void;
-}) {
-  const t = useT(manageTagsMessages);
-  const tc = useT(commonMessages);
-  return (
-    <AlertDialog open={open} onOpenChange={(v) => !busy && onOpenChange(v)}>
-      <AlertDialogContent
-        className="max-w-md rounded-2xl border border-white/10 p-6"
-        style={{ background: "#0e1117", boxShadow: "0 24px 60px rgba(0,0,0,0.7)" }}
-      >
-        <AlertDialogHeader>
-          <AlertDialogTitle className="text-base font-semibold text-white">{title}</AlertDialogTitle>
-          <AlertDialogDescription asChild>
-            <div className="text-sm text-white/55">{description}</div>
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter className="mt-2 gap-2">
-          <AlertDialogCancel disabled={busy} className="border-0 bg-white/5 text-white/70 hover:bg-white/10 hover:text-white">
-            {tc("cancel")}
-          </AlertDialogCancel>
-          <AlertDialogAction
-            variant={destructive ? "destructive" : "default"}
-            disabled={busy || confirmDisabled}
-            onClick={(e) => {
-              e.preventDefault();
-              onConfirm();
-            }}
-          >
-            {busy ? t("working") : confirmLabel}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  );
-}
-
-// ─── Pieces table ─────────────────────────────────────────────────────────────
-
-const PAGE = 100;
-
-/**
- * Pieces of a batch or a kit. Rows open the piece; with `selectable`, the
- * pieces it accepts get a checkbox (e.g. unsold ones, to return them).
- */
-export function PieceTable({
-  pieces,
-  go,
-  showBatch = true,
-  showReseller = true,
-  selectable,
-  selected,
-  onToggle,
-  onToggleAll,
-  empty,
-}: {
-  pieces: TagListItem[];
-  go: (path: string) => void;
-  showBatch?: boolean;
-  showReseller?: boolean;
-  selectable?: (t: TagListItem) => boolean;
-  selected?: Set<string>;
-  onToggle?: (code: string) => void;
-  onToggleAll?: (codes: string[], on: boolean) => void;
-  empty?: ReactNode;
-}) {
-  const tm = useT(manageTagsMessages);
-  // A new list (another filter) starts from the first page again.
-  const paged = usePagedList(pieces, { pageSize: PAGE, resetKey: `${pieces.length}:${pieces[0]?.id ?? ""}` });
-  if (pieces.length === 0) return <p className="px-3 py-6 text-center text-sm text-white/40">{empty ?? tm("noPieces")}</p>;
-  const shown = paged.visible;
-  const selectableCodes = selectable ? pieces.filter(selectable).map((t) => t.publicCode) : [];
-  const allOn = selectableCodes.length > 0 && selectableCodes.every((c) => selected?.has(c));
-
-  return (
-    <div>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[640px]">
-          <thead className="border-b border-white/10">
-            <tr>
-              {selectable && (
-                <th className={`${TH} w-8`}>
-                  <input
-                    type="checkbox"
-                    aria-label={tm("selectAll")}
-                    checked={allOn}
-                    disabled={selectableCodes.length === 0}
-                    onChange={(e) => onToggleAll?.(selectableCodes, e.target.checked)}
-                    className="accent-blue-500"
-                  />
-                </th>
-              )}
-              <th className={TH}>{tm("colCode")}</th>
-              <th className={TH}>{tm("colSerial")}</th>
-              {showBatch && <th className={TH}>{tm("colBatch")}</th>}
-              <th className={TH}>{tm("colStatus")}</th>
-              {showReseller && <th className={TH}>{tm("colReseller")}</th>}
-              <th className={TH}>{tm("colCustomer")}</th>
-              <th className={`${TH} text-right`}>{tm("colQrNfc")}</th>
-              <th className={TH}>{tm("colSold")}</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-white/5">
-            {shown.map((t) => {
-              const canSelect = selectable?.(t) ?? false;
-              return (
-                <tr
-                  key={t.id}
-                  onClick={() => go(`/pieces/${t.id}`)}
-                  className="cursor-pointer hover:bg-white/[0.03]"
-                  data-testid={`admin-tags-piece-${t.publicCode}`}
-                >
-                  {selectable && (
-                    <td className={TD} onClick={(e) => e.stopPropagation()}>
-                      {canSelect && (
-                        <input
-                          type="checkbox"
-                          aria-label={tm("selectCode", { code: t.publicCode })}
-                          checked={selected?.has(t.publicCode) ?? false}
-                          onChange={() => onToggle?.(t.publicCode)}
-                          className="accent-blue-500"
-                        />
-                      )}
-                    </td>
-                  )}
-                  <td className={TD}>
-                    <TagPieceMention publicCode={t.publicCode} productType={t.productType} face={t.face} batchCode={t.batchCode} />
-                  </td>
-                  <td className={`${TD} tabular-nums text-white/50`}>{t.serialNumber ?? "—"}</td>
-                  {showBatch && <td className={`${TD} font-mono text-xs`}>{t.batchCode ?? "—"}</td>}
-                  <td className={TD}>
-                    <PieceStatusPill status={t.status} stockStatus={t.stockStatus} saleId={t.saleId} />
-                  </td>
-                  {showReseller && <td className={TD}>{t.repName ?? <span className="text-white/35">{tm("house")}</span>}</td>}
-                  <td className={TD}>{t.leadName ?? <span className="text-white/35">—</span>}</td>
-                  <td className={`${TD} text-right tabular-nums`}>
-                    {t.qrInteractions} / {t.nfcInteractions}
-                  </td>
-                  <td className={`${TD} text-white/50`}>{formatDate(t.soldAt)}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-      <ListPager className="border-t border-white/5 px-3" shown={paged.shown} total={paged.total} hasMore={paged.hasMore} onMore={paged.showMore} pageSize={PAGE} />
-    </div>
-  );
-}
-
-export function Panel({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <div className={`${CARD} p-4 ${className}`}>{children}</div>;
 }

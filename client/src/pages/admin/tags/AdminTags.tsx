@@ -5,7 +5,8 @@ import { ScanLine } from "lucide-react";
 import { parseTagIntakeScan } from "@shared/tagIntake";
 import { useToast } from "@/hooks/use-toast";
 import { errorMessage, getJson } from "./api";
-import { BTN, INPUT } from "./ui";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/xpot/Field";
 import { OverviewTab } from "./OverviewTab";
 import { PiecesTab } from "./PiecesTab";
 import { PieceDetail } from "./PieceDetail";
@@ -39,7 +40,7 @@ export const ADMIN_TAGS_BASE = "/admin/tags";
  * /tags/t/CODE), and open its record. Same parser as batch intake (shared/tagIntake.ts); the host serving the app
  * counts as a tag host too. On desktop it sits in the top bar (AdminApp).
  */
-export function CodeLookup({ onFound }: { onFound: (id: string) => void }) {
+export function CodeLookup({ onFound, fill = false }: { onFound: (id: string) => void; /** Take the full row (the phone strip). */ fill?: boolean }) {
   const t = useT(manageTagsMessages);
   const { toast } = useToast();
   const [code, setCode] = useState("");
@@ -64,21 +65,22 @@ export function CodeLookup({ onFound }: { onFound: (id: string) => void }) {
     }
   };
   return (
-    <form onSubmit={submit} className="flex gap-2">
-      <input
+    <form onSubmit={submit} className={`flex min-w-0 gap-2 ${fill ? "w-full" : ""}`}>
+      <Input
         value={code}
         onChange={(e) => setCode(e.target.value)}
         placeholder={t("codePlaceholder")}
-        className={`${INPUT} w-48 font-mono`}
+        aria-label={t("codePlaceholder")}
+        className={`min-h-10 min-w-0 font-mono ${fill ? "flex-1" : "w-48"}`}
         autoCapitalize="characters"
         autoCorrect="off"
         spellCheck={false}
         data-testid="admin-tag-code-lookup"
       />
-      <button type="submit" disabled={busy || !code.trim()} className={BTN}>
+      <Button type="submit" variant="brand" accent="tags" className="min-h-10 shrink-0" disabled={!code.trim()} loading={busy}>
         <ScanLine className="h-4 w-4" />
         {t("open")}
-      </button>
+      </Button>
     </form>
   );
 }
@@ -110,9 +112,10 @@ export function AdminTags() {
           ariaLabel={ts("navManage")}
           idPrefix="admin-tags"
           fill={false}
-          className="min-w-0 flex-1"
+          accent="tags"
+          className="min-w-0 basis-full"
         />
-        <CodeLookup onFound={(tagId) => go(`/pieces/${tagId}`)} />
+        <CodeLookup fill onFound={(tagId) => go(`/pieces/${tagId}`)} />
       </div>
 
       {tab === "overview" && <OverviewTab go={go} />}

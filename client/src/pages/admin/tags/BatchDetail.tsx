@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Download, Factory, LockKeyhole, PackagePlus, Pencil, RotateCcw, ScanLine } from "lucide-react";
+import { Camera, Download, Factory, Layers, LockKeyhole, PackagePlus, Pencil, RotateCcw, ScanLine } from "lucide-react";
 import { FilterBar, FilterChips } from "@/components/xpot/filters";
 import { useUrlFilters } from "@/hooks/use-url-filters";
 import type { TagListItem } from "@shared/tagsApi";
@@ -8,10 +8,20 @@ import { resolveTagFace } from "@shared/tagFace";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
 import { CODE_HEADING, TagModelChips, TagPieceVisual } from "@/components/xpot/TagProductThumbnail";
 import { useToast } from "@/hooks/use-toast";
-import { ADMIN_TAGS_KEY, STALE_MS, errorMessage, formatDate, getJson, invalidateAdminTags, percent, sendJson } from "./api";
-import { BTN, BTN_GHOST, CARD, INPUT, SectionTitle, Stat } from "./ui";
+import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
+import { SectionCard } from "@/components/xpot/DashboardKit";
+import { EmptyState } from "@/components/xpot/EmptyState";
+import { Field, Input, Select, Textarea } from "@/components/xpot/Field";
+import { InlineAlert } from "@/components/xpot/InlineAlert";
+import { BackLink } from "@/components/xpot/PageHeader";
+import { Stat } from "@/components/xpot/Stat";
+import { GLASS_CLASS, MODULE_ACCENT } from "@/components/xpot/surface";
+import { AdminHttpError, ADMIN_TAGS_KEY, STALE_MS, errorMessage, formatDate, formatShare, getJson, invalidateAdminTags, sendJson } from "./api";
 import { countStockMetric, matchesStockMetric, type TagStockMetric } from "@shared/tagMetrics";
-import { BatchStagePill, BatchStatusPill, ConfirmDialog, ErrorLine, Field, Loading, PieceTable, SELECT, useTagCatalog } from "./batches-shared";
+import { BatchStagePill, BatchStatusPill, catalogOptions, useTagCatalog } from "./batches-shared";
+import { Loading, LoadError } from "./pieces-shared";
+import { PieceTable } from "./piece-table";
 import { useTagLabels } from "./labels";
 import { GiveKitForm } from "./kits-give-form";
 import { JourneyPanel } from "./JourneyPanel";
@@ -92,43 +102,39 @@ function EditBatch({ batch, onClose }: { batch: BatchDetailData; onClose: () => 
     <form onSubmit={submit} className="space-y-3 border-t border-white/5 pt-4">
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label={t("fieldName")} className="sm:col-span-2">
-          <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} maxLength={120} className={INPUT} />
+          <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} maxLength={120} />
         </Field>
         <Field label={t("fieldCatalogProduct")} hint={t("catalogProductHint")}>
-          <select value={form.salesProductId} onChange={(e) => setForm({ ...form, salesProductId: e.target.value })} className={SELECT} required>
-            <option value="">{t("chooseCatalogProduct")}</option>
-            {catalog.map((product) => (
-              <option key={product.id} value={product.id}>{product.name}{product.sku ? ` · ${product.sku}` : ""}</option>
-            ))}
-          </select>
+          <Select value={form.salesProductId} onChange={(e) => setForm({ ...form, salesProductId: e.target.value })} required placeholder={t("chooseCatalogProduct")} options={catalogOptions(catalog)} />
         </Field>
-        <Field label={t("fieldPrintedOnPieces")} hint={t("printedHintEdit")}>
+        <Field label={t("fieldPrintedOnPieces")} hint={t("printedHintEdit")} id={`batch-face-${batch.id}`}>
           <div className="flex items-center gap-2">
             <TagFaceIcon face={resolveTagFace({ batchFace: form.face || null, productType: batch.productType })} size="sm" />
-            <select value={form.face} onChange={(e) => setForm({ ...form, face: e.target.value })} className={SELECT}>
-              <option value="">{batch.productType === "google_review_sign" ? t("faceFromProduct") : t("faceNotSet")}</option>
-              {labels.faceOptions.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
+            <div className="min-w-0 flex-1">
+              <Select
+                id={`batch-face-${batch.id}`}
+                value={form.face}
+                onChange={(e) => setForm({ ...form, face: e.target.value })}
+                placeholder={batch.productType === "google_review_sign" ? t("faceFromProduct") : t("faceNotSet")}
+                options={labels.faceOptions}
+              />
+            </div>
           </div>
         </Field>
         <Field label={t("fieldVendor")}>
-          <input value={form.vendor} onChange={(e) => setForm({ ...form, vendor: e.target.value })} maxLength={120} className={INPUT} />
+          <Input value={form.vendor} onChange={(e) => setForm({ ...form, vendor: e.target.value })} maxLength={120} />
         </Field>
         <Field label={t("fieldNotes")} className="sm:col-span-2">
-          <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} maxLength={2000} rows={2} className={`${INPUT} resize-y`} />
+          <Textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} maxLength={2000} rows={2} />
         </Field>
       </div>
       <div className="flex justify-end gap-2">
-        <button type="button" onClick={onClose} className={BTN_GHOST}>
+        <Button type="button" variant="ghost" onClick={onClose}>
           {tc("cancel")}
-        </button>
-        <button type="submit" disabled={!form.name.trim() || !form.salesProductId || save.isPending} className={BTN}>
-          {save.isPending ? t("saving") : tc("save")}
-        </button>
+        </Button>
+        <Button type="submit" variant="brand" accent="tags" disabled={!form.name.trim() || !form.salesProductId} loading={save.isPending}>
+          {tc("save")}
+        </Button>
       </div>
     </form>
   );
@@ -167,37 +173,39 @@ function BatchIntakePanel({ batch }: { batch: BatchDetailData }) {
 
   if (batch.status !== "open") return null;
   return (
-    <div className={`${CARD} border border-blue-400/20 p-4`} data-testid="admin-tags-batch-intake">
+    <div className="rounded-2xl border border-violet-400/25 bg-violet-500/[0.06] p-4" data-testid="admin-tags-batch-intake">
       <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="flex items-center gap-2 text-sm font-semibold text-white"><ScanLine className="h-4 w-4 text-blue-300" />{t("addPiecesTitle")}</p>
+          <p className="flex items-center gap-2 text-sm font-semibold text-white"><ScanLine className={`h-4 w-4 ${MODULE_ACCENT.tags.text}`} />{t("addPiecesTitle")}</p>
           <p className="mt-1 text-xs text-white/45">{batch.codeSource === "issued" ? t("receiveIntro") : t("addPiecesIntro")}</p>
         </div>
-        <span className="rounded-full bg-blue-400/10 px-3 py-1 text-sm font-semibold tabular-nums text-blue-200">
+        <span className="rounded-full bg-violet-400/10 px-3 py-1 text-sm font-semibold tabular-nums text-violet-200">
           {batch.codeSource === "issued"
             ? t("receivedCount", { received: batch.receivedCount, total: batch.tagCount })
             : t("registeredCount", { count: batch.quantity })}
         </span>
       </div>
       <form onSubmit={submit} className="flex flex-col gap-2 sm:flex-row">
-        <input
+        <Input
           value={value}
           onChange={(e) => setValue(e.target.value)}
           placeholder={t("scanPlaceholder")}
-          className={`${INPUT} min-w-0 flex-1 font-mono`}
+          aria-label={t("scanPlaceholder")}
+          className="min-w-0 flex-1 font-mono"
           autoCapitalize="characters"
           autoComplete="off"
           spellCheck={false}
           autoFocus
           data-testid="admin-tags-batch-scan-input"
         />
-        <button type="submit" disabled={!value.trim() || add.isPending} className={BTN}>
+        <Button type="submit" variant="brand" accent="tags" disabled={!value.trim()} loading={add.isPending}>
           <ScanLine className="h-4 w-4" />
-          {add.isPending ? t("addingPiece") : t("addPiece")}
-        </button>
-        <button type="button" onClick={() => setCameraOpen(true)} disabled={add.isPending} className={BTN_GHOST}>
+          {t("addPiece")}
+        </Button>
+        <Button type="button" variant="secondary" onClick={() => setCameraOpen(true)} disabled={add.isPending}>
+          <Camera className="h-4 w-4" />
           {t("scanWithCamera")}
-        </button>
+        </Button>
       </form>
       {cameraOpen && (
         <QrScanner
@@ -217,7 +225,6 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
   const [editing, setEditing] = useState(false);
   const [giving, setGiving] = useState(false);
   const [stateDialog, setStateDialog] = useState(false);
-  const [reopenReason, setReopenReason] = useState("");
   const [changingState, setChangingState] = useState(false);
   // ?pieces=sold — survives opening a piece and coming back.
   const pieceFilter = useUrlFilters({ pieces: "all" });
@@ -225,25 +232,25 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
   const t = useT(manageTagsBatchesMessages);
   const labels = useTagLabels();
   const { toast } = useToast();
-  const { data: batch, isLoading, isError } = useQuery<BatchDetailData>({
+  const { data: batch, isLoading, error, refetch } = useQuery<BatchDetailData>({
     queryKey: [ADMIN_TAGS_KEY, "batch", id],
     queryFn: () => getJson(`/api/xpot/admin/tag-batches/${encodeURIComponent(id)}`),
     staleTime: STALE_MS,
   });
 
-  const back = (
-    <button type="button" onClick={() => go("/batches")} className={BTN_GHOST}>
-      <ArrowLeft className="h-4 w-4" />
-      {t("allBatches")}
-    </button>
-  );
+  const back = <BackLink onBack={() => go("/batches")}>{t("allBatches")}</BackLink>;
 
-  if (isLoading) return <Loading />;
-  if (isError || !batch) {
+  if (isLoading) return <Loading rows={5} />;
+  if (error || !batch) {
+    const notFound = error instanceof AdminHttpError && error.status === 404;
     return (
       <div className="space-y-4">
         {back}
-        <ErrorLine>{t("batchNotFound")}</ErrorLine>
+        {notFound || !error ? (
+          <EmptyState tone="tags" icon={Layers} title={t("batchNotFound")} />
+        ) : (
+          <LoadError what={t("theBatches")} error={error} onRetry={() => void refetch()} />
+        )}
       </div>
     );
   }
@@ -263,7 +270,7 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
   const face = resolveTagFace({ batchFace: batch.face, productType: batch.productType });
 
   const closing = batch.status === "open";
-  const changeState = async () => {
+  const changeState = async (reopenReason: string) => {
     if (!closing && !reopenReason.trim()) return;
     setChangingState(true);
     try {
@@ -275,7 +282,6 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
         toast({ title: t("batchReopened") });
       }
       setStateDialog(false);
-      setReopenReason("");
       await invalidateAdminTags();
     } catch (err) {
       toast({ title: closing ? t("couldNotCloseBatch") : t("couldNotReopenBatch"), description: errorMessage(err), variant: "destructive" });
@@ -285,10 +291,10 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
   };
 
   return (
-    <div className="space-y-5">
+    <div className="min-w-0 space-y-5">
       {back}
 
-      <div className={`${CARD} space-y-4 p-5`}>
+      <div className={`space-y-4 rounded-2xl ${GLASS_CLASS} p-4 sm:p-5`}>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex min-w-0 items-start gap-3">
             <TagPieceVisual productType={batch.productType} face={face} size="md" />
@@ -308,14 +314,14 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
           </div>
           </div>
           {!editing && <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => setStateDialog(true)} className={BTN_GHOST} data-testid="admin-batch-state">
+            <Button type="button" variant="secondary" onClick={() => setStateDialog(true)} data-testid="admin-batch-state">
               {batch.status === "open" ? <LockKeyhole className="h-4 w-4" /> : <RotateCcw className="h-4 w-4" />}
               {batch.status === "open" ? t("closeBatch") : t("reopenBatch")}
-            </button>
-            <button type="button" onClick={() => setEditing(true)} className={BTN_GHOST}>
+            </Button>
+            <Button type="button" variant="secondary" onClick={() => setEditing(true)}>
               <Pencil className="h-4 w-4" />
               {t("edit")}
-            </button>
+            </Button>
           </div>}
         </div>
         {editing && <EditBatch batch={batch} onClose={() => setEditing(false)} />}
@@ -323,98 +329,72 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
 
       <ConfirmDialog
         open={stateDialog}
-        onOpenChange={(open) => {
-          setStateDialog(open);
-          if (!open) setReopenReason("");
-        }}
+        onOpenChange={setStateDialog}
         title={closing ? t("closeBatchTitle") : t("reopenBatchTitle")}
-        description={
-          closing ? (
-            <>
-              <p>{t("closeBatchDescription")}</p>
-              {batch.pendingCount > 0 ? <p className="mt-2 text-amber-300">{t.plural("closeBatchPending", batch.pendingCount)}</p> : null}
-            </>
-          ) : (
-            <label className="block space-y-1.5">
-              <span>{t("reopenReasonPrompt")}</span>
-              <textarea
-                value={reopenReason}
-                onChange={(e) => setReopenReason(e.target.value)}
-                maxLength={300}
-                rows={2}
-                className={`${INPUT} resize-y`}
-                data-testid="admin-batch-reopen-reason"
-              />
-            </label>
-          )
-        }
+        description={closing ? t("closeBatchDescription") : undefined}
+        reason={closing ? undefined : "required"}
+        reasonLabel={closing ? undefined : t("reopenReasonPrompt")}
         confirmLabel={closing ? t("closeBatch") : t("reopenBatch")}
         busy={changingState}
-        confirmDisabled={!closing && !reopenReason.trim()}
-        onConfirm={() => void changeState()}
-      />
+        testId="admin-batch-state-confirm"
+        onConfirm={(reason) => void changeState(reason)}
+      >
+        {closing && batch.pendingCount > 0 ? <InlineAlert tone="warning">{t.plural("closeBatchPending", batch.pendingCount)}</InlineAlert> : null}
+      </ConfirmDialog>
 
       <BatchIntakePanel batch={batch} />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-        <Stat label={t("houseStock")} value={house} hint={t.plural("houseShare", total, { percent: percent(house, total) })} />
-        <Stat label={t("withResellers")} value={withResellers} hint={t("withResellersKitHint")} />
-        <Stat label={t("sold")} value={sold} hint={t.plural("liveCount", live)} />
-        <Stat label={t("damaged")} value={damaged} hint={t("qualityControlSample")} />
-        <Stat label={t("nfcVerified")} value={chipsVerified} hint={t("chipsShare", { percent: percent(chipsVerified, total) })} />
+        <Stat card label={t("houseStock")} value={house} detail={t.plural("houseShare", total, { percent: formatShare(house, total) })} />
+        <Stat card label={t("withResellers")} value={withResellers} detail={t("withResellersKitHint")} />
+        <Stat card label={t("sold")} value={sold} detail={t.plural("liveCount", live)} />
+        <Stat card label={t("damaged")} value={damaged} detail={t("qualityControlSample")} />
+        <Stat card label={t("nfcVerified")} value={chipsVerified} detail={t("chipsShare", { percent: formatShare(chipsVerified, total) })} />
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-2">
-        <div className={`${CARD} p-4`}>
-          <p className="mb-1 flex items-center gap-2 text-sm font-semibold text-white">
-            <Factory className="h-4 w-4 text-white/50" />
-            {t("manufacturingPackage")}
-          </p>
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <SectionCard accent="tags" icon={Factory} title={t("manufacturingPackage")}>
           <p className="mb-3 text-xs text-white/40">{t("manufacturingIntro")}</p>
           <div className="flex flex-wrap gap-2">
-            <a href={`${exportBase}/export.csv`} download className={BTN_GHOST}>
-              <Download className="h-4 w-4" />
-              CSV
-            </a>
-            <a href={`${exportBase}/qr-assets.zip`} download className={BTN_GHOST}>
-              <Download className="h-4 w-4" />
-              QR ZIP (SVG)
-            </a>
-            <a href={`${exportBase}/qr-assets.zip?png=1`} download className={BTN_GHOST}>
-              <Download className="h-4 w-4" />
-              QR ZIP (SVG + PNG)
-            </a>
+            <Button asChild variant="secondary">
+              <a href={`${exportBase}/export.csv`} download>
+                <Download className="h-4 w-4" />
+                CSV
+              </a>
+            </Button>
+            <Button asChild variant="secondary">
+              <a href={`${exportBase}/qr-assets.zip`} download>
+                <Download className="h-4 w-4" />
+                QR ZIP (SVG)
+              </a>
+            </Button>
+            <Button asChild variant="secondary">
+              <a href={`${exportBase}/qr-assets.zip?png=1`} download>
+                <Download className="h-4 w-4" />
+                QR ZIP (SVG + PNG)
+              </a>
+            </Button>
           </div>
-        </div>
+        </SectionCard>
 
-        <div className={`${CARD} p-4`}>
-          <p className="mb-1 flex items-center gap-2 text-sm font-semibold text-white">
-            <PackagePlus className="h-4 w-4 text-white/50" />
-            {t("givePiecesTitle")}
-          </p>
+        <SectionCard accent="tags" icon={PackagePlus} title={t("givePiecesTitle")}>
           {handOut === 0 ? (
             <p className="text-xs text-white/40">{t("noHouseLeft")}</p>
           ) : giving ? (
-            <div className="pt-2">
-              <GiveKitForm
-                fixedBatch={{ id: batch.id, batchCode: batch.batchCode, handOutCount: handOut }}
-                onDone={() => setGiving(false)}
-              />
-            </div>
+            <GiveKitForm fixedBatch={{ id: batch.id, batchCode: batch.batchCode, handOutCount: handOut }} onDone={() => setGiving(false)} />
           ) : (
             <>
               <p className="mb-3 text-xs text-white/40">{t.plural("giveKitIntro", handOut)}</p>
-              <button type="button" onClick={() => setGiving(true)} className={BTN}>
+              <Button type="button" variant="brand" accent="tags" onClick={() => setGiving(true)}>
                 <PackagePlus className="h-4 w-4" />
                 {t("giveAKit")}
-              </button>
+              </Button>
             </>
           )}
-        </div>
+        </SectionCard>
       </div>
 
-      <section>
-        <SectionTitle>{t("piecesHeading", { count: shown.length })}</SectionTitle>
+      <SectionCard accent="tags" icon={Layers} title={t("piecesHeading", { count: shown.length })}>
         <FilterBar
           className="mb-3"
           testId="batch-pieces-filters"
@@ -428,10 +408,15 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
           }
           summary={{ shown: shown.length, total, active: filter !== "all", onClear: () => pieceFilter.reset() }}
         />
-        <div className={`${CARD} overflow-hidden`}>
-          <PieceTable pieces={shown} go={go} showBatch={false} empty={t("noPiecesMatch")} />
-        </div>
-      </section>
+        <PieceTable
+          pieces={shown}
+          onOpen={(pieceId) => go(`/pieces/${pieceId}`)}
+          columns={["customer", "reseller", "scans", "sold"]}
+          pageSize={25}
+          empty={t("noPiecesMatch")}
+          testId="admin-batch-pieces"
+        />
+      </SectionCard>
 
       {/* Admin only: renders nothing (and sends no request) for managers. */}
       <JourneyPanel scope={{ batchId: batch.id }} filters={{}} title={t("batchJourney")} />

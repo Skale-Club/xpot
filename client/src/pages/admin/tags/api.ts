@@ -62,7 +62,5 @@ export const STALE_MS = 30_000;
 /** Dates follow the app's language, not the browser's (shared with the other admin screens). */
 export { formatDate, formatDateTime, formatTime } from "@/lib/dates";
 
-export function percent(part: number, total: number): string {
-  if (!total) return "0%";
-  return `${Math.round((part / total) * 100)}%`;
-}
+/** Percentages follow the app's language too ("45%" / "45 %"). */
+export { formatShare } from "@/lib/format";

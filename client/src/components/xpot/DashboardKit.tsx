@@ -9,6 +9,13 @@ import { GLASS_SUBTLE_CLASS, SURFACE_MODAL, type ModuleAccent } from "./surface"
 // tile; Stat in ./Stat.tsx is the plain label + number), EmptyMetricState and
 // the AttentionList rows. Containers use GLASS_SUBTLE; focus is the global outline.
 
+/** Icon tile of a section per module: indigo in Visits and the account pages, violet in Tags. */
+const SECTION_ICON: Record<ModuleAccent, string> = {
+  visits: "bg-indigo-500/[0.12] text-indigo-300",
+  tags: "bg-violet-500/[0.12] text-violet-300",
+  account: "bg-indigo-500/[0.12] text-indigo-300",
+};
+
 export function DashboardSection({
   title,
   icon: Icon,
@@ -16,6 +23,8 @@ export function DashboardSection({
   children,
   className = "",
   bodyClassName = "p-4",
+  accent,
+  testId,
 }: {
   title: ReactNode;
   icon?: LucideIcon;
@@ -23,13 +32,16 @@ export function DashboardSection({
   children: ReactNode;
   className?: string;
   bodyClassName?: string;
+  /** Tints the icon tile with the module accent (violet in Tags); indigo by default. */
+  accent?: ModuleAccent;
+  testId?: string;
 }) {
   return (
-    <section className={`overflow-hidden rounded-2xl ${GLASS_SUBTLE_CLASS} ${className}`}>
-      <header className="flex min-h-12 items-center justify-between gap-3 border-b border-white/[0.06] px-4 py-3">
+    <section className={`overflow-hidden rounded-2xl ${GLASS_SUBTLE_CLASS} ${className}`} data-testid={testId}>
+      <header className="flex min-h-12 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-white/[0.06] px-4 py-3">
         <div className="flex min-w-0 items-center gap-2.5">
           {Icon ? (
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-indigo-500/[0.12] text-indigo-300">
+            <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${SECTION_ICON[accent ?? "visits"]}`}>
               <Icon className="h-3.5 w-3.5" aria-hidden="true" />
             </span>
           ) : null}
