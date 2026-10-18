@@ -29,7 +29,7 @@ const en = {
 
   // Visit detail
   socialNetworks: "Social Networks",
-  addSocial: "Add Social",
+  addSocial: "Add social network",
   photos: "Photos",
   coverAlt: "Cover",
   addPhoto: "Add photo",

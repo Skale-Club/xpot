@@ -10,30 +10,30 @@ const en = {
 
   // Profile
   sectionProfile: "Profile",
-  firstName: "First Name",
+  firstName: "First name",
   firstNamePlaceholder: "First name",
-  lastName: "Last Name",
+  lastName: "Last name",
   lastNamePlaceholder: "Last name",
-  displayName: "Display Name",
+  displayName: "Display name",
   displayNamePlaceholder: "Display name",
   phone: "Phone",
   saving: "Saving…",
-  saveProfile: "Save Profile",
+  saveProfile: "Save profile",
   profileSaved: "Profile saved",
   profileSaveFailed: "Failed to save profile",
   noChanges: "No changes to save",
 
   // Security
-  currentPassword: "Current Password",
+  currentPassword: "Current password",
   currentPasswordPlaceholder: "Enter current password",
-  newPassword: "New Password",
+  newPassword: "New password",
   newPasswordPlaceholder: "At least 8 characters",
-  confirmPassword: "Confirm New Password",
+  confirmPassword: "Confirm new password",
   confirmPasswordPlaceholder: "Re-enter new password",
   passwordsMismatch: "Passwords do not match",
   passwordRequired: "Enter a new password",
   passwordTooShort: "Password must be at least 8 characters",
-  changePassword: "Change Password",
+  changePassword: "Change password",
   passwordChanged: "Password changed",
   passwordChangeFailed: "Failed to change password",
   showPassword: "Show password",
@@ -49,7 +49,7 @@ const en = {
   saveFailed: "Failed to save",
 
   // Generic save button
-  saveChanges: "Save Changes",
+  saveChanges: "Save changes",
 };
 
 export const settingsMessages: Dictionary<typeof en> = {
