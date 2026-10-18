@@ -4,7 +4,6 @@ import { ApiError, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/i18n";
 import { checkinMessages } from "@/i18n/messages/checkin";
-import { usePlaceSearch } from "../usePlaceSearch";
 import { formatMeters } from "../utils";
 import { useXpotShared } from "./useXpotShared";
 import { useXpotQueries } from "./useXpotQueries";
@@ -38,8 +37,8 @@ const MAX_AUDIO_BYTES = 3 * 1024 * 1024;
 export function useCheckIn() {
   const { toast } = useToast();
   const t = useT(checkinMessages);
-  const { geoState, invalidateXpotData } = useXpotShared();
-  const { xpotMeQuery, isOnline } = useXpotQueries();
+  const { invalidateXpotData } = useXpotShared();
+  const { isOnline } = useXpotQueries();
   const { leadsQuery, createLeadMutation } = useLeads();
   const { activeVisit, checkingInRef } = useVisits();
 
@@ -72,28 +71,10 @@ export function useCheckIn() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
 
-  const checkInPlaceQuery = usePlaceSearch(checkInSearch, xpotMeQuery.isSuccess, geoState);
-
   const selectedLead = useMemo(
     () => (typeof selectedLeadId === "number" ? leadsQuery.data?.find((lead) => lead.id === selectedLeadId) || null : null),
     [leadsQuery.data, selectedLeadId],
   );
-
-  const filteredLeadsForCheckIn = useMemo(() => {
-    const search = checkInSearch.trim().toLowerCase();
-    if (!search) return (leadsQuery.data || []).slice(0, 6);
-
-    return (leadsQuery.data || []).filter((lead) => {
-      const haystack = [
-        lead.name,
-        lead.industry,
-        lead.phone,
-        lead.email,
-        lead.locations?.map((location) => `${location.addressLine1} ${location.city || ""} ${location.state || ""}`).join(" "),
-      ].filter(Boolean).join(" ").toLowerCase();
-      return haystack.includes(search);
-    }).slice(0, 6);
-  }, [leadsQuery.data, checkInSearch]);
 
   useEffect(() => {
     if (activeVisit?.note) {
@@ -314,8 +295,6 @@ export function useCheckIn() {
     setCheckInSearch,
     checkInDropdownOpen,
     setCheckInDropdownOpen,
-    filteredLeadsForCheckIn,
-    checkInPlaceQuery,
     checkInMutation,
     createLeadMutation,
     pickLocalLeadForCheckIn,
