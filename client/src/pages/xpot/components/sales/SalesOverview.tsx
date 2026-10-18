@@ -222,7 +222,7 @@ export function SalesOverview({ onGoToConsignments }: { onGoToConsignments?: () 
           type="button"
           onClick={onGoToConsignments}
           disabled={!onGoToConsignments}
-          className={`group relative isolate min-w-0 overflow-hidden rounded-2xl border p-5 text-left transition-colors lg:col-span-5 lg:p-6 ${s.consignment.dueCount > 0 ? "border-red-400/25 bg-red-500/[0.07]" : "border-white/[0.09] bg-white/[0.04] hover:bg-white/[0.06]"}`}
+          className={`group relative isolate flex min-w-0 flex-col overflow-hidden rounded-2xl border p-5 text-left transition-colors lg:col-span-5 lg:p-6 ${s.consignment.dueCount > 0 ? "border-red-400/25 bg-red-500/[0.07]" : "border-white/[0.09] bg-white/[0.04] hover:bg-white/[0.06]"}`}
         >
           <div className="relative flex items-start justify-between gap-4">
             <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.05]">

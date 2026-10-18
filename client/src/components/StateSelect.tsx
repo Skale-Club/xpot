@@ -50,7 +50,8 @@ export function InlineStateSelect({ label, value, onSave, placeholder }: { label
   const [editing, setEditing] = useState(false);
   return (
     <div className="group -mx-2 rounded-xl px-2 py-1.5 transition-colors hover:bg-white/[0.04]">
-      <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-widest text-white/30">{label}</div>
+      {/* Same label and value type as the InlineFields it sits between (city, postal code). */}
+      <div className="mb-0.5 text-xs font-semibold text-white/60">{label}</div>
       {editing ? (
         <StateSelect
           value={value}
@@ -62,7 +63,7 @@ export function InlineStateSelect({ label, value, onSave, placeholder }: { label
           onKeyDown={(event) => { if (event.key === "Escape") setEditing(false); }}
         />
       ) : (
-        <button type="button" onClick={() => setEditing(true)} className="block w-full text-left text-sm text-white/80">
+        <button type="button" onClick={() => setEditing(true)} aria-label={label} className="block min-h-8 w-full text-left text-sm text-white/80">
           {findUsStateCode(value) || value || <span className="italic text-white/20">—</span>}
         </button>
       )}
