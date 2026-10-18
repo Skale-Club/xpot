@@ -20,6 +20,7 @@ import { Tabs } from "@/components/xpot/Tabs";
 import { apiRequest } from "@/lib/queryClient";
 import { describeApiError } from "@/lib/apiErrors";
 import { formatDate } from "@/lib/dates";
+import { formatPhone } from "@/lib/format";
 import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
@@ -282,7 +283,7 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
                       ) : (
                         <p className="truncate font-medium text-white">{member.displayName}</p>
                       )}
-                      <p className="truncate text-xs text-white/40">{member.phone || member.email || t("noContact")}</p>
+                      <p className="truncate text-xs text-white/40">{member.phone ? formatPhone(member.phone) : member.email || t("noContact")}</p>
                     </div>
                     <Pill tone="slate" className="gap-1">
                       {member.membershipRole === "admin" && <ShieldCheck className="h-3 w-3" aria-hidden="true" />}{member.membershipRole === "admin" ? t("roleRepAdmin") : t("roleRep")}
