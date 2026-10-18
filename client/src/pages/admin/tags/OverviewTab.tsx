@@ -192,7 +192,7 @@ function ActivityFeed({ overview, go }: { overview: TagOverview; go: Go }) {
       accent="tags"
       icon={Activity}
       title={tf("activityTitle")}
-      actions={<FilterChips items={ACTIVITY_FILTERS.map((id) => ({ id, label: tf(ACTIVITY_KEYS[id]) }))} value={filter} onChange={setFilter} ariaLabel={tf("activityTitle")} />}
+      actions={<FilterChips items={ACTIVITY_FILTERS.map((id) => ({ id, label: tf(ACTIVITY_KEYS[id]) }))} value={filter} onChange={setFilter} ariaLabel={tf("activityTitle")} accent="tags" />}
       bodyClassName="px-4 py-2"
       testId="overview-activity"
     >

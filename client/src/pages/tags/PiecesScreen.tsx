@@ -186,6 +186,7 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
                     value={pieceFilters.status}
                     onChange={(status) => filters.set({ status })}
                     ariaLabel={t("filterStatusGroup")}
+                    accent="tags"
                   />
                 </div>
               </div>
@@ -197,6 +198,7 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
                     value={pieceFilters.sale}
                     onChange={(sale) => filters.set({ sale })}
                     ariaLabel={t("filterSaleGroup")}
+                    accent="tags"
                   />
                 </div>
               </div>
