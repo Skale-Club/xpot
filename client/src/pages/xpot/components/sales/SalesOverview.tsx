@@ -95,9 +95,9 @@ export function SalesOverview({ onGoToConsignments }: { onGoToConsignments?: () 
 
   return (
     <div className="space-y-4 lg:space-y-5">
-      <section className="grid gap-3 lg:grid-cols-12 lg:gap-4">
+      <section className="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-12 lg:gap-4">
         <div
-          className="relative isolate overflow-hidden rounded-[28px] border border-emerald-300/[0.16] p-5 shadow-[0_24px_70px_rgba(0,0,0,0.24)] sm:p-6 lg:col-span-7 lg:min-h-[248px] lg:p-7"
+          className="relative isolate min-w-0 overflow-hidden rounded-2xl border border-emerald-300/[0.16] p-5 shadow-[0_24px_70px_rgba(0,0,0,0.24)] sm:p-6 lg:col-span-7 lg:min-h-[248px] lg:p-7"
           style={{ background: "linear-gradient(140deg, rgba(11,54,49,0.84) 0%, rgba(11,35,38,0.96) 45%, rgba(9,20,32,0.98) 100%)" }}
         >
           <div className="pointer-events-none absolute -right-20 -top-24 h-72 w-72 rounded-full border-[42px] border-emerald-300/[0.055]" />
@@ -217,21 +217,16 @@ export function SalesOverview({ onGoToConsignments }: { onGoToConsignments?: () 
         </section>
       )}
 
-      <section className="grid gap-4 lg:grid-cols-12">
+      <section className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-12">
         <button
           type="button"
           onClick={onGoToConsignments}
           disabled={!onGoToConsignments}
-          className="group relative isolate overflow-hidden rounded-[26px] border p-5 text-left transition-all hover:-translate-y-0.5 hover:border-indigo-300/30 active:translate-y-0 disabled:hover:translate-y-0 lg:col-span-5 lg:p-6"
-          style={{
-            background: s.consignment.dueCount > 0 ? "linear-gradient(145deg, rgba(74,25,35,0.7), rgba(14,19,34,0.96))" : "linear-gradient(145deg, rgba(29,35,78,0.78), rgba(13,19,36,0.96))",
-            borderColor: s.consignment.dueCount > 0 ? "rgba(251,113,133,0.22)" : "rgba(129,140,248,0.2)",
-          }}
+          className={`group relative isolate min-w-0 overflow-hidden rounded-2xl border p-5 text-left transition-colors lg:col-span-5 lg:p-6 ${s.consignment.dueCount > 0 ? "border-red-400/25 bg-red-500/[0.07]" : "border-white/[0.09] bg-white/[0.04] hover:bg-white/[0.06]"}`}
         >
-          <div className="pointer-events-none absolute -right-14 -top-14 h-44 w-44 rounded-full border-[28px] border-indigo-300/[0.05]" />
           <div className="relative flex items-start justify-between gap-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-indigo-300/15 bg-indigo-300/[0.08]">
-              <Boxes className="h-[18px] w-[18px] text-indigo-300" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.05]">
+              <Boxes className="h-[18px] w-[18px] text-white/60" aria-hidden="true" />
             </div>
             <ArrowRight className="h-4 w-4 text-white/25 transition-transform group-hover:translate-x-1 group-hover:text-white/55" />
           </div>
@@ -262,7 +257,7 @@ export function SalesOverview({ onGoToConsignments }: { onGoToConsignments?: () 
           )}
         </button>
 
-        <div className="rounded-[26px] border border-white/[0.075] bg-white/[0.028] p-5 lg:col-span-7 lg:p-6">
+        <div className="min-w-0 rounded-2xl border border-white/[0.07] bg-white/[0.025] p-4 sm:p-5 lg:col-span-7 lg:p-6">
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
               <div className="text-sm font-bold text-white">{t("byProduct")}</div>
