@@ -59,7 +59,9 @@ export function createAuthRouter() {
     firstName: z.string().max(100).optional().nullable(),
     lastName: z.string().max(100).optional().nullable(),
     // Where the prospecting day ends. The address comes from a place search, so
-    // it always travels with its coordinates; null clears all three.
+    // it always travels with its coordinates; null clears all three. No screen
+    // sets home or routeReturnHome any more (Settings › Route was removed); the
+    // fields stay so existing values and API clients keep working.
     home: z.object({
       address: z.string().trim().min(3).max(500),
       lat: z.number().finite().min(-90).max(90),
