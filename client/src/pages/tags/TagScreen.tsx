@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeftRight, Building2, Contact, DollarSign, ExternalLink, Link2, Lock, Mail, Nfc, Pencil, Phone, Power, QrCode, ScanLine, Search, Smartphone, X } from "lucide-react";
+import { ArrowLeftRight, Building2, Contact, DollarSign, ExternalLink, Link2, Lock, Mail, Nfc, Pencil, Phone, Power, QrCode, ScanLine, Search, Smartphone, Unlink, X } from "lucide-react";
 import type { TagDetail } from "@shared/tagsApi";
 import { stockBlock, TAG_DESTINATION_TYPES, type TagDestinationType } from "@shared/tags";
 import { contentKindOf, contentSummary, validateChipContent, type ChipContentKind } from "@shared/chipContent";
@@ -102,7 +102,8 @@ export default function TagScreen({ code, onClose }: {
   const [changingCustomer, setChangingCustomer] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
   const [newName, setNewName] = useState("");
-  const [busy, setBusy] = useState<"save" | "toggle" | "rename" | null>(null);
+  const [busy, setBusy] = useState<"save" | "toggle" | "rename" | "unlink" | null>(null);
+  const [unlinkOpen, setUnlinkOpen] = useState(false);
   const [writeOpen, setWriteOpen] = useState(false);
   const [lockOpen, setLockOpen] = useState(false);
   // iPhone: the NFC Tools steps, shown by themselves until the chip is confirmed, then on "Rewrite".
@@ -278,6 +279,24 @@ export default function TagScreen({ code, onClose }: {
     try {
       setDetail(await tagsPost<TagDetail>(`/api/xpot/tags/${tag.id}/${disabled ? "activate" : "disable"}`));
       show({ tone: "ok", text: disabled ? t("switchedOn") : t("switchedOff") });
+    } catch (err) {
+      show({ tone: "error", text: errorText(err, tc("requestFailed")) });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  // Back to the person's stock, with no customer and no link. A sold piece stays put (server rule).
+  const unlink = async () => {
+    setBusy("unlink");
+    try {
+      setDetail(await tagsPost<TagDetail>(`/api/xpot/tags/${tag.id}/unassign`, {}));
+      // The Visits company page lists its pieces too.
+      void qc.invalidateQueries({ queryKey: ["tags", "lead-pieces"] });
+      setUnlinkOpen(false);
+      setLink("");
+      setInitialContent(null);
+      show({ tone: "ok", text: t("customerUnlinked") });
     } catch (err) {
       show({ tone: "error", text: errorText(err, tc("requestFailed")) });
     } finally {
@@ -591,6 +610,12 @@ export default function TagScreen({ code, onClose }: {
             {disabled ? t("switchOn") : t("switchOff")}
           </button>
         )}
+        {tag.leadId && !tag.saleId && (
+          <button type="button" onClick={() => setUnlinkOpen(true)} disabled={busy !== null} className={BTN_TERTIARY} data-testid="button-unlink-piece">
+            <Unlink className="h-5 w-5 text-red-400" />
+            {t("unlinkFromCustomer")}
+          </button>
+        )}
         {!onClose && (
           <button
             type="button"
@@ -618,6 +643,31 @@ export default function TagScreen({ code, onClose }: {
           <button type="button" onClick={startCustomerChange} className={BTN_TERTIARY} data-testid="button-rename-change-instead">
             {t("changeCustomer")}
           </button>
+        </div>
+      </BottomSheet>
+
+      <BottomSheet open={unlinkOpen} onClose={() => setUnlinkOpen(false)} title={t("customerUnlinkTitle", { code: tag.publicCode })} banner={banner}>
+        <div className="space-y-4">
+          {tag.leadName && (
+            <p className="flex items-center gap-2 text-sm text-white/70">
+              <Building2 className="h-4 w-4 shrink-0 text-white/40" />
+              <span className="truncate">{tag.leadName}</span>
+            </p>
+          )}
+          <p className="text-sm text-white/55">{t("customerUnlinkHint")}</p>
+          <div className="grid grid-cols-2 gap-2">
+            <button type="button" className={BTN_TERTIARY} onClick={() => setUnlinkOpen(false)}>{tc("cancel")}</button>
+            <button
+              type="button"
+              disabled={busy !== null}
+              onClick={() => void unlink()}
+              className="flex min-h-[48px] items-center justify-center gap-2 rounded-2xl bg-red-500 px-5 text-base font-bold text-white active:bg-red-600 disabled:opacity-50"
+              data-testid="button-unlink-confirm"
+            >
+              {busy === "unlink" ? <Spinner /> : <Unlink className="h-5 w-5" />}
+              {t("customerUnlink")}
+            </button>
+          </div>
         </div>
       </BottomSheet>
 
