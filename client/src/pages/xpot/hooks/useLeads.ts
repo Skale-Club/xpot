@@ -159,7 +159,6 @@ export function useLeads(enabled = true) {
             country: "US",
             lat: selectedLeadPlace?.lat ?? undefined,
             lng: selectedLeadPlace?.lng ?? undefined,
-            geofenceRadiusMeters: 150,
             isPrimary: true,
           }
         : undefined,

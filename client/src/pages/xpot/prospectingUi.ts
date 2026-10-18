@@ -228,3 +228,50 @@ export function routeDisplayName(route: { name: string; routeDate: string }, loc
   const generatedNames = [`Prospecting — ${route.routeDate}`, `Route — ${route.routeDate}`];
   return generatedNames.includes(route.name.trim()) ? routeDateLabel(route.routeDate, locale, referenceDate) : route.name;
 }
+
+const ACTIVE_ROUTE_STATUSES = ["draft", "published", "in_progress"];
+
+/**
+ * "Today's route": the day's open route (draft, published or in progress),
+ * the one the Route screen opens. The Dashboard falls back to a route already
+ * completed today so a finished day still shows its progress.
+ */
+export function todayRouteOf<T extends { routeDate: string; status: string }>(
+  routes: T[] | undefined,
+  day: string,
+  { includeCompleted = false } = {},
+): T | undefined {
+  const ofDay = (routes ?? []).filter((route) => route.routeDate === day);
+  return ofDay.find((route) => ACTIVE_ROUTE_STATUSES.includes(route.status))
+    ?? (includeCompleted ? ofDay.find((route) => route.status === "completed") : undefined);
+}
+
+/** Stops behind the rep: visited or skipped (a cancelled visit skips its stop). */
+export function isStopDone(status: string) {
+  return status === "completed" || status === "skipped";
+}
+
+export function routeStopProgress(stops: { status: string }[]) {
+  const done = stops.filter((stop) => isStopDone(stop.status)).length;
+  return { done, total: stops.length, percent: stops.length ? Math.round((done / stops.length) * 100) : 0 };
+}
+
+export type StopMarkerTone = { background: string; border: string; text: string; glyph: string | null };
+
+/**
+ * How a route stop looks on the map, in the list rail and in its preview:
+ * done and skipped stops are muted with a check / skip glyph so they never
+ * pass for a future stop; the current stop is solid blue and the next one a
+ * lighter blue outline (violet is the Tags accent, not used in Visits).
+ */
+export function stopMarkerTone(
+  stop: { id: number; status: string },
+  currentStopId: number | null,
+  nextStopId: number | null,
+): StopMarkerTone {
+  if (stop.status === "completed") return { background: "#0f172a", border: "#065f46", text: "#34d399", glyph: "✓" };
+  if (stop.status === "skipped") return { background: "#0f172a", border: "#334155", text: "#64748b", glyph: "↷" };
+  if (stop.id === currentStopId) return { background: "#3b82f6", border: "#93c5fd", text: "#ffffff", glyph: null };
+  if (stop.id === nextStopId) return { background: "#172554", border: "#60a5fa", text: "#bfdbfe", glyph: null };
+  return { background: "#1f2937", border: "#475569", text: "#94a3b8", glyph: null };
+}

@@ -7,6 +7,9 @@ import {
   prospectingProgress,
   reorderIdsAroundTarget,
   routeDisplayName,
+  routeStopProgress,
+  stopMarkerTone,
+  todayRouteOf,
   selectableCandidateIds,
   activeRunTiming,
   estimatedRunPercent,
@@ -159,5 +162,55 @@ describe("prospecting UI helpers", () => {
     expect(moveIdByOffset(stops, 2, 1)).toEqual([1, 3, 2]);
     expect(moveIdByOffset(stops, 1, -1)).toBe(stops);
     expect(moveIdByOffset(stops, 3, 1)).toBe(stops);
+  });
+});
+
+describe("todayRouteOf", () => {
+  const routes = [
+    { id: 1, routeDate: "2026-10-18", status: "completed" },
+    { id: 2, routeDate: "2026-10-18", status: "cancelled" },
+    { id: 3, routeDate: "2026-10-18", status: "published" },
+    { id: 4, routeDate: "2026-10-17", status: "in_progress" },
+  ];
+
+  it("picks the open route of the day, like the Route screen", () => {
+    expect(todayRouteOf(routes, "2026-10-18")?.id).toBe(3);
+    expect(todayRouteOf(routes, "2026-10-19")).toBeUndefined();
+  });
+
+  it("falls back to a route completed that day only when asked", () => {
+    const finished = routes.filter((route) => route.id !== 3);
+    expect(todayRouteOf(finished, "2026-10-18")).toBeUndefined();
+    expect(todayRouteOf(finished, "2026-10-18", { includeCompleted: true })?.id).toBe(1);
+  });
+});
+
+describe("routeStopProgress", () => {
+  it("counts completed and skipped stops as done", () => {
+    expect(routeStopProgress([
+      { status: "completed" }, { status: "skipped" }, { status: "planned" }, { status: "checked_in" },
+    ])).toEqual({ done: 2, total: 4, percent: 50 });
+    expect(routeStopProgress([])).toEqual({ done: 0, total: 0, percent: 0 });
+  });
+});
+
+describe("stopMarkerTone", () => {
+  it("mutes done and skipped stops with a glyph so they never look like future ones", () => {
+    const done = stopMarkerTone({ id: 1, status: "completed" }, 2, 3);
+    const skipped = stopMarkerTone({ id: 4, status: "skipped" }, 2, 3);
+    const future = stopMarkerTone({ id: 5, status: "planned" }, 2, 3);
+    expect(done.glyph).toBe("✓");
+    expect(skipped.glyph).toBe("↷");
+    expect(future.glyph).toBeNull();
+    expect(done.background).not.toBe(future.background);
+    expect(skipped.text).not.toBe(future.text);
+  });
+
+  it("marks the next stop in blue, not the Tags violet", () => {
+    const next = stopMarkerTone({ id: 3, status: "planned" }, 2, 3);
+    const current = stopMarkerTone({ id: 2, status: "en_route" }, 2, 3);
+    expect(current.background).toBe("#3b82f6");
+    expect(next.border).toBe("#60a5fa");
+    expect(next.border).not.toBe("#a78bfa");
   });
 });

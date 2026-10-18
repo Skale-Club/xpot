@@ -19,12 +19,14 @@ import {
   Mic2,
   CircleCheck,
   MapPinOff,
+  XCircle,
   type LucideIcon,
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { useXpotModules } from "@/components/ModuleSwitch";
 import { setSellTo } from "@/pages/tags/lib";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useXpotShared } from "./hooks/useXpotShared";
 import { useXpotQueries } from "./hooks/useXpotQueries";
 import { useLeads } from "./hooks/useLeads";
@@ -330,7 +332,7 @@ export function XpotCheckIn() {
   const [editLeadOpen, setEditLeadOpen] = useState(false);
   const [checkoutStatus, setCheckoutStatus] = useState<VisitStatus>("completed");
   const [createLeadDialogOpen, setCreateLeadDialogOpen] = useState(false);
-  const [activeVisitPanel, setActiveVisitPanel] = useState<"sales" | "note" | "checkout" | null>(null);
+  const [activeVisitPanel, setActiveVisitPanel] = useState<"sales" | "note" | "checkout" | "cancel" | null>(null);
   const activeLeadDetails: VisitLead | null = activeVisit?.lead
     ? (leadsQuery.data?.find((lead) => lead.id === activeVisit.lead!.id) ?? activeVisit.lead)
     : null;
@@ -470,7 +472,55 @@ export function XpotCheckIn() {
           )}
           <VisitAction icon={CircleCheck} title={t("finishVisit")} hint={t("finishVisitHint")} tone="emerald" onClick={() => setActiveVisitPanel("checkout")} />
         </div>
+
+        {/* Secondary on purpose: a mistaken check-in is discarded, not checked out with an outcome. */}
+        <div className="relative flex justify-center">
+          <button
+            type="button"
+            onClick={() => setActiveVisitPanel("cancel")}
+            disabled={cancelVisitMutation.isPending || checkOutMutation.isPending}
+            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-white/40 transition-colors hover:bg-white/[0.05] hover:text-white/70 disabled:opacity-40"
+            data-testid="button-cancel-visit"
+          >
+            <XCircle className="h-3.5 w-3.5" aria-hidden="true" />
+            {t("cancelVisit")}
+          </button>
+        </div>
       </div>
+
+      <AlertDialog open={activeVisitPanel === "cancel"} onOpenChange={(open) => !open && setActiveVisitPanel(null)}>
+        <AlertDialogContent
+          className="max-w-xs rounded-2xl border-0 p-6"
+          style={{ background: "#0e1117", boxShadow: "0 24px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.07)" }}
+        >
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-base font-semibold text-white">{t("cancelVisitTitle")}</AlertDialogTitle>
+            <AlertDialogDescription className="text-sm text-white/45">{t("cancelVisitDesc")}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="mt-2 flex-row gap-2 sm:space-x-0">
+            <AlertDialogCancel
+              disabled={cancelVisitMutation.isPending}
+              className="flex-1 rounded-xl border-0 text-sm font-medium text-white/60 hover:text-white transition-colors"
+              style={{ background: "rgba(255,255,255,0.07)" }}
+            >
+              {t("keepVisit")}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={cancelVisitMutation.isPending}
+              onClick={(event) => {
+                // Stay open with a spinner until the server answers; the hook leaves the screen on success.
+                event.preventDefault();
+                cancelVisitMutation.mutate(undefined, { onSettled: () => setActiveVisitPanel(null) });
+              }}
+              className="flex-1 rounded-xl border-0 text-sm font-medium text-white"
+              style={{ background: "rgba(239,68,68,0.85)" }}
+              data-testid="button-confirm-cancel-visit"
+            >
+              {cancelVisitMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : t("cancelVisit")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {activeVisit.lead && (
         <Dialog open={activeVisitPanel === "sales"} onOpenChange={(open) => !open && setActiveVisitPanel(null)}>
@@ -496,10 +546,10 @@ export function XpotCheckIn() {
           <ConfirmSlider
             label={uploadAudioMutation.isPending ? t("uploadInProgress") : t("slideToCheckOut")}
             helperText=""
-            loading={checkOutMutation.isPending || cancelVisitMutation.isPending || uploadAudioMutation.isPending}
-            disabled={uploadAudioMutation.isPending}
+            loading={checkOutMutation.isPending || uploadAudioMutation.isPending}
+            disabled={uploadAudioMutation.isPending || cancelVisitMutation.isPending}
             onConfirm={() => checkOutMutation.mutate({ status: checkoutStatus })}
-            onCancel={() => cancelVisitMutation.mutate(undefined as any)}
+            mode="check-out"
           />
         </DialogContent>
       </Dialog>

@@ -10,22 +10,34 @@ import { useXpotShared } from "../hooks/useXpotShared";
 import { useLeads } from "../hooks/useLeads";
 import { usePlaceSearch } from "../usePlaceSearch";
 import { maskUsPhoneInput } from "../phoneInput";
+import { findMatchingLead } from "../utils";
 import type { GooglePlaceResult } from "../types";
 
-/** "New company" form, autofilled from Google Places. Used by the check-in screen and the Dashboard search. */
-export function CreateLeadDialog({ open, onOpenChange, initialName, onCreated }: {
+/**
+ * The one "New company" form, autofilled from Google Places. Used by the
+ * check-in screen, the Dashboard search and Companies. Check-in and the
+ * Dashboard create a `prospect` (it becomes a lead at check-in); Companies
+ * passes `status="lead"`, the status its list shows.
+ */
+export function CreateLeadDialog({ open, onOpenChange, initialName, onCreated, status = "prospect" }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   initialName: string;
-  onCreated: (leadId: number, name: string) => void;
+  onCreated?: (leadId: number, name: string) => void;
+  status?: "prospect" | "lead";
 }) {
   const { toast } = useToast();
   const t = useT(checkinMessages);
-  const { geoState } = useXpotShared();
-  const [form, setForm] = useState({ name: initialName, phone: "", email: "", website: "", industry: "", address: "", city: "", state: "" });
+  const { geoState, invalidateXpotData } = useXpotShared();
+  const emptyForm = { name: initialName, phone: "", email: "", website: "", industry: "", address: "", city: "", state: "" };
+  const [form, setForm] = useState(emptyForm);
   const [placeSearch, setPlaceSearch] = useState(initialName);
   const [placeDropdownOpen, setPlaceDropdownOpen] = useState(false);
-  const { createLeadMutation } = useLeads();
+  // The Google place the form was filled from, and the street it gave: its
+  // coordinates and Place ID are sent only while that street is kept, so the
+  // check-in geofence and the Tags review link work from the first visit.
+  const [picked, setPicked] = useState<{ place: GooglePlaceResult; address: string } | null>(null);
+  const { createLeadMutation, leadsQuery } = useLeads();
   const placeQuery = usePlaceSearch(placeSearch, open, geoState);
 
   useEffect(() => {
@@ -47,6 +59,7 @@ export function CreateLeadDialog({ open, onOpenChange, initialName, onCreated }:
       city,
       state,
     }));
+    setPicked({ place, address });
     setPlaceSearch(place.name);
     setPlaceDropdownOpen(false);
   }
@@ -56,6 +69,7 @@ export function CreateLeadDialog({ open, onOpenChange, initialName, onCreated }:
 
   async function handleCreate() {
     if (!form.name.trim()) return;
+    const fromPlace = picked && picked.address === form.address ? picked.place : null;
     try {
       const result = await createLeadMutation.mutateAsync({
         name: form.name.trim(),
@@ -63,19 +77,26 @@ export function CreateLeadDialog({ open, onOpenChange, initialName, onCreated }:
         email: form.email || undefined,
         website: form.website || undefined,
         industry: form.industry || undefined,
-        source: "manual",
-        status: "prospect",
+        source: fromPlace ? "google_places" : "manual",
+        status,
+        googlePlaceId: picked?.place.placeId || undefined,
         primaryLocation: form.address ? {
           label: "Main",
           addressLine1: form.address || undefined,
           city: form.city || undefined,
           state: form.state || undefined,
+          lat: fromPlace?.lat ?? undefined,
+          lng: fromPlace?.lng ?? undefined,
           isPrimary: true,
         } : undefined,
       } as any);
       toast({ title: t("companyCreated"), variant: "success" });
-      onCreated(result.lead.id, form.name.trim());
+      await invalidateXpotData();
+      onCreated?.(result.lead.id, form.name.trim());
       onOpenChange(false);
+      setForm(emptyForm);
+      setPicked(null);
+      setPlaceSearch(initialName);
     } catch (err: any) {
       toast({ title: t("createFailed"), description: err.message, variant: "destructive" });
     }
@@ -125,10 +146,14 @@ export function CreateLeadDialog({ open, onOpenChange, initialName, onCreated }:
                     style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}
                   >
                     <Building2 className="h-4 w-4 shrink-0 text-white/30" />
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-medium text-white">{place.name}</div>
                       <div className="truncate text-xs text-white/35">{place.address}</div>
                     </div>
+                    {/* Warn before a duplicate: this business is already saved. */}
+                    {findMatchingLead(place, leadsQuery.data ?? []) ? (
+                      <span className="shrink-0 rounded-full bg-blue-400/10 px-2 py-0.5 text-[10px] font-semibold text-blue-300">{t("badgeMatch")}</span>
+                    ) : null}
                   </button>
                 ))}
               </div>

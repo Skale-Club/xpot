@@ -21,6 +21,7 @@ import type { EnrichedSalesVisit, FullSalesLead } from "../../types";
 import { ModuleBadge } from "@/components/xpot/ModuleBadge";
 import { fileSrc } from "@/lib/files";
 import { formatCents } from "../../utils";
+import { useLeadSalesSnapshot } from "../../hooks/useSalesModule";
 
 function Section({ title, icon, children, badge }: { title: string; icon?: ReactNode; children: ReactNode; badge?: ReactNode }) {
   return (
@@ -150,6 +151,14 @@ export function LeadDetailPane({ lead, pieces, visits, onClose, onDelete, onConv
   const location = lead.locations?.[0];
   const routeUrl = buildRouteUrl(location);
   const address = [location?.addressLine1, location?.city, location?.state].filter(Boolean).join(", ");
+  // The tiles read the same snapshot as the "Sales and stock" card below (one
+  // cached query). They used the list's per-lead totals, which the company
+  // page never has: /leads/:id loads the lead alone, so they always said $0.00 / 0.
+  const salesSnapshot = useLeadSalesSnapshot(lead.id).data;
+  const soldCents = salesSnapshot?.lifetimeCents ?? lead.salesLifetimeCents;
+  const unitsOnShelf = salesSnapshot
+    ? salesSnapshot.activeConsignments.reduce((sum, row) => sum + row.consignment.quantityOnHand, 0)
+    : lead.unitsOnShelf;
 
   function saveName(name: string) {
     apiRequest("PATCH", `/api/xpot/leads/${lead.id}`, { name: name || undefined })
@@ -190,8 +199,8 @@ export function LeadDetailPane({ lead, pieces, visits, onClose, onDelete, onConv
       </header>
 
       <div className="grid overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.02] sm:grid-cols-4">
-        <Metric icon={<DollarSign className="h-3.5 w-3.5" />} label={t("colSold")} value={formatCents(lead.salesLifetimeCents ?? 0)} accent="text-emerald-300" />
-        <Metric icon={<PackageCheck className="h-3.5 w-3.5" />} label={t("colShelf")} value={String(lead.unitsOnShelf ?? 0)} />
+        <Metric icon={<DollarSign className="h-3.5 w-3.5" />} label={t("colSold")} value={soldCents == null ? "—" : formatCents(soldCents)} accent="text-emerald-300" />
+        <Metric icon={<PackageCheck className="h-3.5 w-3.5" />} label={t("colShelf")} value={unitsOnShelf == null ? "—" : String(unitsOnShelf)} />
         <Metric icon={<Nfc className="h-3.5 w-3.5" />} label={t("sectionPieces")} value={String(pieces?.pieces ?? 0)} />
         <Metric icon={<UsersRound className="h-3.5 w-3.5" />} label={t("sectionVisits")} value={String(visits.length)} />
       </div>

@@ -9,6 +9,7 @@ import {
 import type { GooglePlaceResult, FullSalesLead } from "./types";
 import { currentLocale, translate } from "@/i18n";
 import { shellMessages } from "@/i18n/messages/shell";
+import { formatDistanceFor } from "./distance";
 
 /** Bottom-nav tabs; `labelKey` is a key of shellMessages. */
 export const tabs = [
@@ -47,6 +48,11 @@ export function formatMeters(meters: number) {
   if (value < 1000) return `${value} m`;
   const km = new Intl.NumberFormat(currentLocale(), { maximumFractionDigits: value < 10_000 ? 1 : 0 }).format(value / 1000);
   return `${km} km`;
+}
+
+/** A route distance in the reader's units: miles in English, km in Portuguese and Spanish. */
+export function formatDistance(meters: number) {
+  return formatDistanceFor(meters, currentLocale());
 }
 
 export function normalizeSearchValue(value?: string | null) {
@@ -110,10 +116,4 @@ export function centsToInput(cents: number | null | undefined): string {
 export function formatShortDate(value?: string | Date | null) {
   if (!value) return "—";
   return new Date(value).toLocaleDateString(currentLocale(), { month: "short", day: "numeric" });
-}
-
-/** Days from now (negative = overdue). */
-export function daysUntil(value?: string | Date | null): number | null {
-  if (!value) return null;
-  return Math.round((new Date(value).getTime() - Date.now()) / (24 * 60 * 60 * 1000));
 }

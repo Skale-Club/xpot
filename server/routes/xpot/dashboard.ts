@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { storage } from "../../storage.js";
 import { requireXpotUser, ensureXpotRep } from "./middleware.js";
+import { isFinishedVisitStatus } from "#shared/visit-status.js";
 
 function localDateKey(date: Date, timezoneOffset?: number) {
   if (timezoneOffset !== undefined) {
@@ -39,7 +40,7 @@ export function createDashboardRouter() {
     ]);
 
     const activeVisit = visits.find((visit) => visit.status === "in_progress") || null;
-    const completedVisits = visits.filter((visit) => visit.status === "completed");
+    const completedVisits = visits.filter((visit) => isFinishedVisitStatus(visit.status));
     const openOpportunities = opportunities.filter((item) => item.status === "open");
     const pendingTasks = tasks
       .filter((item) => item.status === "pending" || item.status === "in_progress")
@@ -68,7 +69,7 @@ export function createDashboardRouter() {
       const key = localDateKey(date, timezoneOffset);
       const daily = visitActivity.get(key) ?? { visits: 0, completed: 0 };
       daily.visits += 1;
-      if (visit.status === "completed") daily.completed += 1;
+      if (isFinishedVisitStatus(visit.status)) daily.completed += 1;
       visitActivity.set(key, daily);
     }
 
@@ -83,7 +84,7 @@ export function createDashboardRouter() {
     res.json({
       metrics: {
         visitsToday: todayVisits.length,
-        completedVisitsToday: todayVisits.filter((visit) => visit.status === "completed").length,
+        completedVisitsToday: todayVisits.filter((visit) => isFinishedVisitStatus(visit.status)).length,
         remainingVisitsToday: todayVisits.filter((visit) => visit.status === "planned" || visit.status === "in_progress").length,
         completedVisits: completedVisits.length,
         activeVisit,

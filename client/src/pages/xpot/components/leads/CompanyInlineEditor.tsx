@@ -9,6 +9,7 @@ import { useT } from "@/i18n";
 import { leadsMessages } from "@/i18n/messages/leads";
 import { visitsMessages } from "@/i18n/messages/visits";
 import { InlineStateSelect } from "@/components/StateSelect";
+import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
 
 type CompanyLead = SalesLead & {
   locations?: Array<{
@@ -45,6 +46,8 @@ export function CompanyInlineEditor({ lead }: { lead: CompanyLead }) {
   const [socials, setSocials] = useState<{ platform: string; url: string }[]>(lead.socialUrls ?? []);
   const [photos, setPhotos] = useState<string[]>(lead.photos ?? []);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [photoToRemove, setPhotoToRemove] = useState<string | null>(null);
+  const [removingPhoto, setRemovingPhoto] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -126,11 +129,18 @@ export function CompanyInlineEditor({ lead }: { lead: CompanyLead }) {
     }
   }
 
-  function removePhoto(photo: string) {
-    setPhotos((previous) => previous.filter((item) => item !== photo));
-    apiRequest("DELETE", `/api/xpot/leads/${lead.id}/photos`, { photo })
-      .then(saved)
-      .catch((error: Error) => toast({ title: t("photoRemoveFailed"), description: error.message, variant: "destructive" }));
+  async function removePhoto(photo: string) {
+    setRemovingPhoto(true);
+    try {
+      await apiRequest("DELETE", `/api/xpot/leads/${lead.id}/photos`, { photo });
+      setPhotos((previous) => previous.filter((item) => item !== photo));
+      saved();
+    } catch (error: any) {
+      toast({ title: t("photoRemoveFailed"), description: error.message, variant: "destructive" });
+      throw error;
+    } finally {
+      setRemovingPhoto(false);
+    }
   }
 
   return (
@@ -202,7 +212,7 @@ export function CompanyInlineEditor({ lead }: { lead: CompanyLead }) {
             {photos.map((photo, index) => (
               <div key={photo} className={`group relative overflow-hidden rounded-xl ${index === 0 ? "col-span-2 row-span-2 aspect-video" : "aspect-square"}`}>
                 <img src={fileSrc(photo)} alt={index === 0 ? t("coverAlt") : ""} className="h-full w-full object-cover" />
-                <button type="button" onClick={() => removePhoto(photo)} aria-label={t("removePhoto")} className="absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white/70 opacity-0 transition group-hover:opacity-100 hover:text-red-300">
+                <button type="button" onClick={() => setPhotoToRemove(photo)} aria-label={t("removePhoto")} className="absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white/70 opacity-0 transition group-hover:opacity-100 hover:text-red-300">
                   <X className="h-3.5 w-3.5" />
                 </button>
               </div>
@@ -212,6 +222,17 @@ export function CompanyInlineEditor({ lead }: { lead: CompanyLead }) {
         <button type="button" onClick={() => photoInputRef.current?.click()} disabled={uploadingPhoto} className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-white/10 py-3 text-xs font-medium text-white/40 transition hover:border-white/20 hover:text-white/65 disabled:opacity-40">
           <Camera className="h-3.5 w-3.5" /> {uploadingPhoto ? t("uploading") : t("addPhoto")}
         </button>
+        <ConfirmDialog
+          open={photoToRemove !== null}
+          onOpenChange={(open) => { if (!open) setPhotoToRemove(null); }}
+          title={t("removePhotoTitle")}
+          description={t("removePhotoDesc")}
+          confirmLabel={t("removePhoto")}
+          cancelLabel={t("keepPhoto")}
+          destructive
+          pending={removingPhoto}
+          onConfirm={() => (photoToRemove ? removePhoto(photoToRemove) : undefined)}
+        />
       </section>
     </div>
   );

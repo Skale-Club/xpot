@@ -9,7 +9,8 @@ import { salesStorage } from "../../storage-sales.js";
 import { activeStore, discardFiles, putPrivateFile } from "../../lib/files.js";
 import { activeOrganizationIds, canManageOrganizationForActor, managedOrganizationIds, organizationIdForRep } from "../../organizations/service.js";
 import { resolveGoogleApiKey } from "./google.js";
-import { fetchGooglePlaceProfile } from "./google-place-profile.js";
+import { fetchGooglePlaceProfile, geocodeAddress } from "./google-place-profile.js";
+import { planPrimaryLocationUpdate } from "../../lead-location.js";
 import { rateLimit } from "../../tags/rateLimit.js";
 
 const googleProfileLinkSchema = z.object({
@@ -26,6 +27,8 @@ export function createLeadsRouter() {
 
     let ownerRepId: number | undefined;
     let visibleTo: LeadVisibility | undefined;
+    // Whose follow-up tasks count: everyone's for a manager, the rep's own otherwise (as on GET /leads/:id).
+    let taskRepId: number | undefined;
     if (listsEveryone(req, actor!)) {
       // Manager can filter by a specific rep
       ownerRepId = req.query.repId ? Number(req.query.repId) : undefined;
@@ -36,6 +39,8 @@ export function createLeadsRouter() {
       // alone hid the customers their pieces were linked to.
       const [managed, active] = await Promise.all([managedOrganizationIds(actor!), activeOrganizationIds(actor!)]);
       visibleTo = { repId: actor!.rep.id, managedOrganizationIds: managed ?? [], activeOrganizationIds: active };
+      // A Rep Admin sees their Organization's follow-ups; a plain rep only their own.
+      if (!managed?.length) taskRepId = actor!.rep.id;
     }
 
     const search = typeof req.query.search === "string" ? req.query.search : undefined;
@@ -46,11 +51,12 @@ export function createLeadsRouter() {
     if (!leads.length) return res.json([]);
 
     const leadIds = leads.map((l) => l.id);
-    const [allLocations, allContacts, openOpportunitiesMap, salesByLead] = await Promise.all([
+    const [allLocations, allContacts, openOpportunitiesMap, salesByLead, followUps] = await Promise.all([
       storage.listSalesLeadLocationsBatch(leadIds),
       storage.listSalesLeadContactsBatch(leadIds),
       storage.countOpenOpportunitiesByLeadIds(leadIds),
       salesStorage.leadSalesBatch(leadIds),
+      storage.openFollowUpsByLeadIds(leadIds, taskRepId),
     ]);
 
     const locationsByLead = new Map<number, typeof allLocations>();
@@ -72,6 +78,10 @@ export function createLeadsRouter() {
       // What the company card shows at a glance: sold here, and stock on their shelf.
       salesLifetimeCents: salesByLead.get(lead.id)?.lifetimeCents ?? 0,
       unitsOnShelf: salesByLead.get(lead.id)?.unitsOnShelf ?? 0,
+      // Feeds the Companies "Follow-up" chip: nextVisitDueAt alone is only set
+      // by a voice follow-up and is cleared at every check-in.
+      openFollowUp: followUps.has(lead.id),
+      openFollowUpDueAt: followUps.get(lead.id) ?? null,
     }));
 
     res.json(enriched);
@@ -83,6 +93,13 @@ export function createLeadsRouter() {
     const input = xpotLeadCreateSchema.parse(req.body);
     const status = input.status || "lead";
     const organizationId = await organizationIdForRep(actor!.rep.id);
+    // A Google place is unique per organization; say so instead of failing on the index.
+    if (input.googlePlaceId) {
+      const existing = await storage.getSalesLeadByGooglePlace(organizationId, input.googlePlaceId);
+      if (existing) {
+        return res.status(409).json({ code: "duplicate_place", message: `This business is already saved as "${existing.name}".`, leadId: existing.id });
+      }
+    }
 
     const lead = await storage.createSalesLead({
       organizationId,
@@ -113,7 +130,8 @@ export function createLeadsRouter() {
         country: input.primaryLocation.country || "US",
         lat: input.primaryLocation.lat,
         lng: input.primaryLocation.lng,
-        geofenceRadiusMeters: input.primaryLocation.geofenceRadiusMeters || 150,
+        // Omitted: the admin's default radius (storage fills it in).
+        geofenceRadiusMeters: input.primaryLocation.geofenceRadiusMeters || undefined,
         isPrimary: input.primaryLocation.isPrimary ?? true,
       });
     }
@@ -173,7 +191,6 @@ export function createLeadsRouter() {
             state: row.state,
             postalCode: row.postalCode,
             country: "US",
-            geofenceRadiusMeters: 150,
             isPrimary: true,
           });
         }
@@ -275,7 +292,7 @@ export function createLeadsRouter() {
             country: profile.address.country,
             lat: profile.address.lat,
             lng: profile.address.lng,
-            geofenceRadiusMeters: 150,
+            // No radius: an existing location keeps its own, a new one gets the default.
             isPrimary: true,
           })
         : null;
@@ -372,20 +389,20 @@ export function createLeadsRouter() {
       return res.status(403).json({ message: "Access denied" });
     }
 
-    const location = await storage.upsertPrimaryLocation(leadId, {
-      label: req.body.label || "Main",
-      addressLine1: req.body.addressLine1 || "",
-      addressLine2: req.body.addressLine2 ?? null,
-      city: req.body.city ?? null,
-      state: req.body.state ?? null,
-      postalCode: req.body.postalCode ?? null,
-      country: req.body.country || "US",
-      // Callers send numbers (Google Places, geolocation); the column is text.
-      lat: req.body.lat == null ? null : String(req.body.lat),
-      lng: req.body.lng == null ? null : String(req.body.lng),
-      geofenceRadiusMeters: req.body.geofenceRadiusMeters || 150,
-      isPrimary: true,
-    });
+    const [locations, appSettings] = await Promise.all([
+      storage.listSalesLeadLocations(leadId),
+      storage.getSalesAppSettings(),
+    ]);
+    const existing = locations.find((location) => location.isPrimary) ?? null;
+    // Address editors send no coordinates; keep them unless the address moved
+    // (see planPrimaryLocationUpdate for the full rule).
+    const plan = planPrimaryLocationUpdate(existing, req.body ?? {}, appSettings.defaultGeofenceRadiusMeters);
+    if (plan.geocode) {
+      const apiKey = await resolveGoogleApiKey();
+      const coords = apiKey ? await geocodeAddress(plan.geocode, apiKey) : null;
+      if (coords) Object.assign(plan.data, coords);
+    }
+    const location = await storage.upsertPrimaryLocation(leadId, plan.data);
 
     res.json({ location });
   });

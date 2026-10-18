@@ -3,7 +3,7 @@ import { useT } from "@/i18n";
 import { visitsMessages } from "@/i18n/messages/visits";
 import { leadsMessages } from "@/i18n/messages/leads";
 import { formatDuration } from "../utils";
-import { StatusBadge } from "./VisitStatus";
+import { LocationExceptionBadge, StatusBadge } from "./VisitStatus";
 import type { EnrichedSalesVisit } from "../types";
 import { fileSrc } from "@/lib/files";
 
@@ -75,7 +75,7 @@ export function VisitsTable({
                     </div>
                   </div>
                 </td>
-                <td className="whitespace-nowrap px-3 py-2.5"><StatusBadge status={visit.status} /></td>
+                <td className="whitespace-nowrap px-3 py-2.5"><div className="flex items-center gap-1.5"><StatusBadge status={visit.status} /><LocationExceptionBadge visit={visit} /></div></td>
                 <td className="hidden whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-white/55 2xl:table-cell">
                   {visit.durationSeconds ? formatDuration(visit.durationSeconds) : <span className="text-white/20">—</span>}
                 </td>

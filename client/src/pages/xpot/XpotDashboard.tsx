@@ -12,9 +12,13 @@ import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { useLocation } from "wouter";
 import { XpotVisits } from "./XpotVisits";
 import { QuickCheckIn } from "./components/QuickCheckIn";
+import { StatusBadge } from "./components/VisitStatus";
 import { AttentionItem, AttentionList, DashboardSection, EmptyMetricState, KpiTile, MetricSelector, PeriodSelector } from "@/components/xpot/DashboardKit";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { ListSkeleton } from "@/components/xpot/ListSkeleton";
+import { RetryButton } from "@/components/xpot/RetryButton";
+import { routeDisplayName, routeStopProgress, todayRouteOf } from "./prospectingUi";
 
 type DashboardRoute = {
   id: number;
@@ -61,13 +65,16 @@ function DashboardOverview() {
   const routesQuery = useQuery<DashboardRoute[]>({ queryKey: ["/api/xpot/prospecting/routes"] });
   const isDesktop = useIsDesktop();
 
-  const todayRoute = routesQuery.data?.find((route) => route.routeDate === localDateKey() && route.status !== "cancelled");
+  // The same route the Route screen opens; a route finished today still shows its progress.
+  const todayRoute = todayRouteOf(routesQuery.data, localDateKey(), { includeCompleted: true });
+  // The array key is the one every route mutation and invalidateXpotData refresh.
   const routeDetailQuery = useQuery<DashboardRouteDetail>({
-    queryKey: [`/api/xpot/prospecting/routes/${todayRoute?.id ?? "none"}`],
+    queryKey: ["/api/xpot/prospecting/routes", todayRoute?.id],
     enabled: Boolean(todayRoute),
   });
   const routeStops = routeDetailQuery.data?.stops ?? [];
-  const completedStops = routeStops.filter((stop) => stop.status === "completed").length;
+  const stopProgress = routeStopProgress(routeStops);
+  const completedStops = stopProgress.done;
   const nextStop = routeStops.find((stop) => stop.status === "en_route")
     ?? routeStops.find((stop) => stop.status === "planned");
   const tasksToday = dashboardQuery.data?.tasksToday ?? [];
@@ -76,7 +83,7 @@ function DashboardOverview() {
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["/api/xpot/dashboard"] }),
-        queryClient.invalidateQueries({ predicate: (query) => String(query.queryKey[0]).startsWith("/api/xpot/tasks") }),
+        queryClient.invalidateQueries({ predicate: (query) => String(query.queryKey[0]).startsWith("/api/xpot/tasks") || query.queryKey[0] === "/api/xpot/leads" }),
       ]);
       toast({ title: t("taskCompleted"), variant: "success" });
     },
@@ -108,6 +115,22 @@ function DashboardOverview() {
   const activityLoading = activityMetric === "visits" ? dashboardQuery.isLoading : salesSummary.isLoading;
   const activityTone = ACTIVITY_TONES[activityMetric];
   const isCurrencyActivity = activityMetric === "revenue" || activityMetric === "profit";
+
+  // Tasks, Needs attention and Latest visits wait for their data instead of
+  // saying "All clear" / "No visits yet" before it arrives.
+  // `alsoLoading` waits for a secondary source without failing the section on it.
+  function sectionPending(rows: number, alsoLoading = false) {
+    if (dashboardQuery.isLoading || alsoLoading) {
+      return <ListSkeleton rows={rows} rowClassName="h-11 rounded-xl" className="space-y-2 px-4 pb-4 pt-2 lg:px-5" />;
+    }
+    if (!dashboardQuery.isError) return null;
+    return (
+      <div className="flex flex-col items-center gap-3 px-5 py-6 text-center">
+        <div className="text-xs text-red-300/80">{t("sectionLoadFailed")}</div>
+        <RetryButton onRetry={() => void dashboardQuery.refetch()} busy={dashboardQuery.isFetching} />
+      </div>
+    );
+  }
 
   function routeStatusLabel(status: DashboardRoute["status"]) {
     if (status === "draft") return t("routeStatusDraft");
@@ -263,12 +286,12 @@ function DashboardOverview() {
               <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/35">{t("todayRoute")}</span>
               {todayRoute ? <span className="rounded-full bg-white/[0.055] px-2 py-0.5 text-[10px] font-semibold text-white/50">{routeStatusLabel(todayRoute.status)}</span> : null}
             </span>
-            <span className="mt-1 block truncate text-base font-bold text-white/90">{todayRoute?.name ?? t("routeNotCreated")}</span>
+            <span className="mt-1 block truncate text-base font-bold text-white/90 first-letter:uppercase">{todayRoute ? routeDisplayName(todayRoute, t.locale) : t("routeNotCreated")}</span>
             {todayRoute && routeStops.length ? (
               <>
                 <span className="mt-1 block text-xs text-white/40">{nextStop ? t("routeNextStop", { stop: nextStop.name }) : t("routeProgress", { completed: completedStops, total: routeStops.length })}</span>
                 <span className="mt-3 block h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
-                  <span className="block h-full rounded-full bg-gradient-to-r from-blue-400 to-indigo-400 transition-[width]" style={{ width: `${Math.round((completedStops / routeStops.length) * 100)}%` }} />
+                  <span className="block h-full rounded-full bg-gradient-to-r from-blue-400 to-indigo-400 transition-[width]" style={{ width: `${stopProgress.percent}%` }} />
                 </span>
                 <span className="mt-1.5 block text-[10px] font-medium tabular-nums text-white/30">{t("routeProgress", { completed: completedStops, total: routeStops.length })}</span>
               </>
@@ -291,7 +314,7 @@ function DashboardOverview() {
         </button>
       </div>
 
-      {tasksToday.length ? (
+      {sectionPending(3) ?? (tasksToday.length ? (
         <div className="px-2 pb-2 lg:px-3 lg:pb-3">
           {tasksToday.slice(0, 5).map((task) => (
             <div key={task.id} className="group flex items-center gap-2 rounded-xl px-2 py-2 transition-colors hover:bg-white/[0.03]">
@@ -324,13 +347,13 @@ function DashboardOverview() {
           <div className="text-sm font-semibold text-white/55">{t("todayTasksClear")}</div>
           <div className="mt-1 text-xs text-white/28">{t("todayTasksClearHint")}</div>
         </div>
-      )}
+      ))}
     </DashboardSection>
   );
 
   const attentionBlock = (
     <DashboardSection title={t("needsAttention")} icon={AlertTriangle} bodyClassName="p-0">
-      {(metrics?.overdueTasks ?? 0) > 0 || (salesSummary.data?.consignment.dueCount ?? 0) > 0 || (metrics?.openOpportunities ?? 0) > 0 ? (
+      {sectionPending(2, salesSummary.isLoading) ?? ((metrics?.overdueTasks ?? 0) > 0 || (salesSummary.data?.consignment.dueCount ?? 0) > 0 || (metrics?.openOpportunities ?? 0) > 0 ? (
         <AttentionList>
           {(metrics?.overdueTasks ?? 0) > 0 ? <AttentionItem icon={Clock3} eyebrow={t("taskOverdue")} title={t("overdueTasksTitle")} detail={t.plural("overdueTasksDetail", metrics?.overdueTasks ?? 0)} tone="amber" onClick={() => setLocation("/tasks")} /> : null}
           {(salesSummary.data?.consignment.dueCount ?? 0) > 0 ? <AttentionItem icon={DollarSign} eyebrow={t("salesOnStreet")} title={t("settlementsDueTitle")} detail={t.plural("settlementsDueDetail", salesSummary.data?.consignment.dueCount ?? 0)} tone="amber" onClick={() => setLocation("/sales")} /> : null}
@@ -341,7 +364,7 @@ function DashboardOverview() {
           <div className="text-sm font-semibold text-white/60">{t("attentionClear")}</div>
           <div className="mt-1 text-xs text-white/30">{t("attentionClearHint")}</div>
         </div>
-      )}
+      ))}
     </DashboardSection>
   );
 
@@ -395,17 +418,21 @@ function DashboardOverview() {
       bodyClassName="p-2"
       action={<button type="button" onClick={() => setLocation("/dashboard/history")} className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-300/80 transition-colors hover:text-indigo-200">{t("viewHistory")}<ChevronRight className="h-3.5 w-3.5" /></button>}
     >
-      {dashboardQuery.data?.recentVisits?.length ? (
+      {sectionPending(3) ?? (dashboardQuery.data?.recentVisits?.length ? (
         <div className="divide-y divide-white/[0.05]" data-testid="dashboard-recent-visits">
           {dashboardQuery.data.recentVisits.map((visit) => {
             const when = visit.checkedOutAt ?? visit.checkedInAt ?? visit.scheduledAt;
-            const outcome = visit.note?.outcome || visit.note?.nextStep || t("noOutcome");
+            // The status is the outcome the rep picked; the note line adds what they wrote, if anything.
+            const noteLine = visit.note?.outcome || visit.note?.nextStep;
             return (
               <button key={visit.id} type="button" onClick={() => setLocation(`/dashboard/history/${visit.id}`)} className="group flex w-full items-center gap-3 rounded-xl px-2.5 py-3 text-left transition-colors hover:bg-white/[0.03]">
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-indigo-500/10 text-indigo-300"><MapPinned className="h-4 w-4" /></span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-xs font-semibold text-white/78">{visit.lead?.name ?? `#${visit.leadId}`}</span>
-                  <span className="mt-0.5 block truncate text-[11px] text-white/30">{outcome}</span>
+                  <span className="mt-1 flex min-w-0 items-center gap-2">
+                    <StatusBadge status={visit.status} />
+                    {noteLine ? <span className="min-w-0 truncate text-[11px] text-white/30">{noteLine}</span> : null}
+                  </span>
                 </span>
                 {when ? <span className="shrink-0 text-right text-[10px] leading-relaxed tabular-nums text-white/28">{new Date(when).toLocaleDateString(t.locale, { month: "short", day: "numeric" })}<br />{new Date(when).toLocaleTimeString(t.locale, { hour: "numeric", minute: "2-digit" })}</span> : null}
                 <ChevronRight className="h-3.5 w-3.5 shrink-0 text-white/10 transition group-hover:text-white/35" />
@@ -415,7 +442,7 @@ function DashboardOverview() {
         </div>
       ) : (
         <div className="px-4 py-8 text-center"><div className="text-sm font-semibold text-white/55">{t("noVisitsYet")}</div><div className="mt-1 text-xs text-white/28">{t("goToCheckIn")}</div></div>
-      )}
+      ))}
     </DashboardSection>
   );
 

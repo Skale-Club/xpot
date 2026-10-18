@@ -40,6 +40,8 @@ export function ConfirmDialog({
   confirmLabel,
   cancelLabel,
   tone = "default",
+  destructive = false,
+  testId,
   reason,
   reasonLabel,
   reasonPlaceholder,
@@ -61,6 +63,10 @@ export function ConfirmDialog({
   cancelLabel?: ReactNode;
   /** `danger` paints the confirm button red: deleting, cancelling for good. */
   tone?: "default" | "danger";
+  /** Same as tone="danger". */
+  destructive?: boolean;
+  /** data-testid on the confirm button. */
+  testId?: string;
   /** Ask for a reason; "required" keeps the button off until one is written. */
   reason?: "required" | "optional";
   reasonLabel?: string;
@@ -171,7 +177,8 @@ export function ConfirmDialog({
           </AlertDialogCancel>
           <Button
             type="button"
-            variant={tone === "danger" ? "danger" : "brand"}
+            variant={tone === "danger" || destructive ? "danger" : "brand"}
+            data-testid={testId}
             loading={busy}
             disabled={!canConfirm}
             onClick={confirm}

@@ -1,5 +1,7 @@
 import { useT, type Translate } from "@/i18n";
 import { checkinMessages } from "@/i18n/messages/checkin";
+import { Pill } from "@/components/xpot/StatusPill";
+import { visitLocationException } from "../visitRules";
 
 export type VisitStatus =
   | "planned"
@@ -58,6 +60,30 @@ export function StatusBadge({ status }: { status: string }) {
     >
       <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ background: meta.dot }} />
       {statusLabel(t, meta.value, meta.label)}
+    </span>
+  );
+}
+
+/**
+ * The mark Check-in rules promise: a visit accepted outside the business area
+ * (with a reason, or while blocking is off) or with no location to compare.
+ * Nothing for a visit validated on site, or one not checked in yet.
+ */
+export function LocationExceptionBadge({ visit }: {
+  visit: { checkedInAt?: string | Date | null; validationStatus?: string | null; manualOverrideReason?: string | null };
+}) {
+  const t = useT(checkinMessages);
+  const exception = visitLocationException(visit);
+  if (!exception) return null;
+  const reason = visit.manualOverrideReason?.trim();
+  const hint = exception === "no_location"
+    ? t("exceptionNoLocationHint")
+    : reason ? t("exceptionOutsideAreaReason", { reason }) : t("exceptionOutsideAreaHint");
+  return (
+    <span title={hint} aria-label={hint} className="inline-flex">
+      <Pill tone="amber" className="!min-h-0 !py-1 !text-[11px]">
+        {exception === "no_location" ? t("exceptionNoLocation") : t("exceptionOutsideArea")}
+      </Pill>
     </span>
   );
 }

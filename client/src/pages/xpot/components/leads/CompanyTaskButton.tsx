@@ -49,7 +49,7 @@ export function CompanyTaskButton({ lead }: { lead: FullSalesLead }) {
     onSuccess: async () => {
       setOpen(false);
       setForm(emptyForm);
-      await queryClient.invalidateQueries({ predicate: (query) => String(query.queryKey[0]).startsWith("/api/xpot/tasks") });
+      await queryClient.invalidateQueries({ predicate: (query) => String(query.queryKey[0]).startsWith("/api/xpot/tasks") || query.queryKey[0] === "/api/xpot/leads" });
       await queryClient.invalidateQueries({ queryKey: ["/api/xpot/dashboard"] });
       toast({ title: t("taskCreated"), variant: "success" });
     },

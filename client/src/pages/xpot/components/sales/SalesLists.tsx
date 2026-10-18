@@ -14,11 +14,13 @@ import {
   usePaymentOptions, type ConsignmentWithRefs, type PaymentMethod, type PaymentStatus, type SaleWithItems,
 } from "../../hooks/useSalesModule";
 import { SaleCard, ConsignmentCard, MovementLedger, SaleDetail } from "./cards";
+import { consignmentDue } from "./consignmentDue";
 import { SaleDialog } from "./SaleDialog";
 import { FilterBar, FilterChips, FilterSelect } from "@/components/xpot/filters";
 import { useUrlFilters } from "@/hooks/use-url-filters";
 import { ListPager, useOffsetPages, usePagedList } from "@/components/xpot/pagination";
 import { EmptyState } from "@/components/xpot/EmptyState";
+import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
 import { DepositDialog, SettleDialog, ReturnDialog, AdjustDialog } from "./ConsignmentDialogs";
 import { Field, GhostButton, MoneyInput, PrimaryButton, Select, SheetDialog, StatTile } from "./ui";
 import { useT } from "@/i18n";
@@ -203,13 +205,13 @@ function SaleDetailDialog({ row, onClose }: { row: SaleWithItems | null; onClose
 function SaleDetailBody({ row, onDone }: { row: SaleWithItems; onDone: () => void }) {
   const onClose = onDone;
   const t = useT(salesModuleMessages);
-  const tc = useT(commonMessages);
   const { statusOptions, methodOptions } = usePaymentOptions();
   const { cancelSale, updatePayment } = useSalesMutations();
   const [editing, setEditing] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>("paid");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">("");
   const [paidCents, setPaidCents] = useState(0);
+  const [confirmCancel, setConfirmCancel] = useState(false);
 
   const { sale } = row;
 
@@ -228,14 +230,25 @@ function SaleDetailBody({ row, onDone }: { row: SaleWithItems; onDone: () => voi
           <div className="flex gap-2">
             <GhostButton onClick={startEditing} className="flex-1">{t("updatePayment")}</GhostButton>
             {sale.kind === "direct" && (
-              <GhostButton
-                onClick={async () => { await cancelSale.mutateAsync({ id: sale.id }); onClose(); }}
-                disabled={cancelSale.isPending}>
-                <XCircle className="h-3.5 w-3.5" /> {tc("cancel")}
+              <GhostButton onClick={() => setConfirmCancel(true)} disabled={cancelSale.isPending}>
+                <XCircle className="h-3.5 w-3.5" /> {t("cancelSale")}
               </GhostButton>
             )}
           </div>
         )}
+
+        <ConfirmDialog
+          open={confirmCancel}
+          onOpenChange={setConfirmCancel}
+          title={t("cancelSaleTitle")}
+          description={t("cancelSaleDesc")}
+          confirmLabel={t("cancelSale")}
+          cancelLabel={t("keepSale")}
+          destructive
+          pending={cancelSale.isPending}
+          onConfirm={async () => { await cancelSale.mutateAsync({ id: sale.id }); onClose(); }}
+          testId="button-confirm-cancel-sale"
+        />
 
         {sale.kind === "consignment_settlement" && !editing && (
           <p className="text-[11px] text-white/30">{t("settlementBillNote")}</p>
@@ -294,7 +307,8 @@ export function ConsignmentsList({ selectedId = null, onSelect }: {
   const [depositTarget, setDepositTarget] = useState<{ id: number; name: string } | null>(null);
 
   const rows = query.data ?? [];
-  const overdue = rows.filter((r) => r.consignment.nextVisitDueAt && new Date(r.consignment.nextVisitDueAt) < new Date());
+  // Same rule as the cards and the desktop table: never overdue once closed.
+  const overdue = rows.filter((r) => consignmentDue(r.consignment).overdue);
   const rest = rows.filter((r) => !overdue.includes(r));
   // Overdue first, then the rest; long histories (closed) render 50 at a time.
   const ordered = [...overdue, ...rest];
@@ -421,10 +435,10 @@ function ConsignmentDetailDialog({ id, onClose }: { id: number | null; onClose: 
 /** One consignment: the card, corrections and its ledger. `framed` wraps it for the desktop pane. */
 function ConsignmentDetailBody({ id, onClose, framed }: { id: number; onClose: () => void; framed?: boolean }) {
   const t = useT(salesModuleMessages);
-  const tc = useT(commonMessages);
   const query = useConsignmentDetail(id);
   const { closeConsignment } = useSalesMutations();
   const [adjustOpen, setAdjustOpen] = useState(false);
+  const [confirmClose, setConfirmClose] = useState(false);
   const data = query.data;
 
   const body = (
@@ -440,12 +454,21 @@ function ConsignmentDetailBody({ id, onClose, framed }: { id: number; onClose: (
             <div className="flex gap-2">
               <GhostButton onClick={() => setAdjustOpen(true)} className="flex-1">{t("correctStock")}</GhostButton>
               {data.consignment.status === "active" && data.consignment.quantityOnHand === 0 && (
-                <GhostButton disabled={closeConsignment.isPending}
-                  onClick={async () => { await closeConsignment.mutateAsync(data.consignment.id); onClose(); }}>
+                <GhostButton disabled={closeConsignment.isPending} onClick={() => setConfirmClose(true)}>
                   {t("closeAgreement")}
                 </GhostButton>
               )}
             </div>
+            <ConfirmDialog
+              open={confirmClose}
+              onOpenChange={setConfirmClose}
+              title={t("closeAgreementTitle")}
+              description={t("closeAgreementDesc")}
+              confirmLabel={t("closeAgreement")}
+              cancelLabel={t("keepOpen")}
+              pending={closeConsignment.isPending}
+              onConfirm={async () => { await closeConsignment.mutateAsync(data.consignment.id); onClose(); }}
+            />
 
             <div className="space-y-2">
               <div className="px-1 text-xs font-semibold uppercase tracking-widest text-white/30">{t("ledger")}</div>

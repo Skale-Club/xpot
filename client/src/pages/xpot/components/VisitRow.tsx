@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { StatusBadge, StatusPicker } from "./VisitStatus";
+import { LocationExceptionBadge, StatusBadge, StatusPicker } from "./VisitStatus";
 import type { VisitStatus } from "./VisitStatus";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -166,6 +166,7 @@ export function VisitSummaryPage({ visit, onBack, onDelete }: { visit: VisitLike
                 <InlineField label="" large value={lead?.name || tl("leadNumber", { id: visit.leadId })} onSave={handleLeadNameSave} />
               </div>
               <StatusBadge status={visit.status} />
+              <LocationExceptionBadge visit={visit} />
             </div>
             <p className="mt-1 capitalize text-xs text-white/40">{visitDate}</p>
           </div>
@@ -333,7 +334,7 @@ export function VisitRow({ visit, onOpen }: { visit: VisitLike; onOpen?: () => v
             {formatDateTime(visit.checkedInAt ?? visit.scheduledAt)}
           </div>
         }
-        right={<StatusBadge status={visit.status} />}
+        right={<div className="flex flex-col items-end gap-1"><StatusBadge status={visit.status} /><LocationExceptionBadge visit={visit} /></div>}
       />
     </button>
   );

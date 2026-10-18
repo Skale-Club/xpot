@@ -159,6 +159,7 @@ const en = {
 
   // A company's sales panel
   soldHere: "Sold here",
+  companySalesLoadFailed: "Could not load this company's sales.",
   salesCount_one: "{count} sale",
   salesCount_other: "{count} sales",
   lastSale: "last {date}",
@@ -202,7 +203,14 @@ const en = {
   consignment: "Consignment",
   consignmentNotFound: "This consignment was not found.",
   ledger: "Ledger",
-  closeAgreement: "Close",
+  closeAgreement: "Close agreement",
+  closeAgreementTitle: "Close this agreement?",
+  closeAgreementDesc: "Nothing is left on this shelf. The agreement moves to Closed and leaves the active stock list; its ledger is kept.",
+  keepOpen: "Keep open",
+  cancelSale: "Cancel sale",
+  cancelSaleTitle: "Cancel this sale?",
+  cancelSaleDesc: "The sale stays in the history as cancelled and stops counting toward revenue and profit. Pieces sold in it are no longer marked as sold.",
+  keepSale: "Keep sale",
 
   // Overview
   loadFailed: "Could not load sales figures.",
@@ -428,6 +436,7 @@ export const salesModuleMessages: Dictionary<typeof en> = {
     grossProfit: "Lucro bruto",
 
     soldHere: "Vendido aqui",
+    companySalesLoadFailed: "Não foi possível carregar as vendas desta empresa.",
     salesCount_one: "{count} venda",
     salesCount_other: "{count} vendas",
     lastSale: "última em {date}",
@@ -470,7 +479,14 @@ export const salesModuleMessages: Dictionary<typeof en> = {
     consignment: "Consignação",
     consignmentNotFound: "Esta consignação não foi encontrada.",
     ledger: "Movimentações",
-    closeAgreement: "Encerrar",
+    closeAgreement: "Encerrar acordo",
+    closeAgreementTitle: "Encerrar este acordo?",
+    closeAgreementDesc: "Não sobrou nada nesta prateleira. O acordo vai para Encerrados e sai da lista de estoque ativo; o histórico de movimentos é mantido.",
+    keepOpen: "Manter aberto",
+    cancelSale: "Cancelar venda",
+    cancelSaleTitle: "Cancelar esta venda?",
+    cancelSaleDesc: "A venda fica no histórico como cancelada e deixa de contar no faturamento e no lucro. As peças vendidas nela deixam de constar como vendidas.",
+    keepSale: "Manter venda",
 
     loadFailed: "Não foi possível carregar os números de vendas.",
     rangeDays: "{days} dias",
@@ -691,6 +707,7 @@ export const salesModuleMessages: Dictionary<typeof en> = {
     grossProfit: "Ganancia bruta",
 
     soldHere: "Vendido aquí",
+    companySalesLoadFailed: "No se pudieron cargar las ventas de esta empresa.",
     salesCount_one: "{count} venta",
     salesCount_other: "{count} ventas",
     lastSale: "última el {date}",
@@ -733,7 +750,14 @@ export const salesModuleMessages: Dictionary<typeof en> = {
     consignment: "Consignación",
     consignmentNotFound: "No se encontró esta consignación.",
     ledger: "Movimientos",
-    closeAgreement: "Cerrar",
+    closeAgreement: "Cerrar acuerdo",
+    closeAgreementTitle: "¿Cerrar este acuerdo?",
+    closeAgreementDesc: "No queda nada en este estante. El acuerdo pasa a Cerrados y sale de la lista de stock activo; su historial de movimientos se conserva.",
+    keepOpen: "Mantener abierto",
+    cancelSale: "Cancelar venta",
+    cancelSaleTitle: "¿Cancelar esta venta?",
+    cancelSaleDesc: "La venta queda en el historial como cancelada y deja de contar en la facturación y la ganancia. Las piezas vendidas en ella dejan de figurar como vendidas.",
+    keepSale: "Mantener venta",
 
     loadFailed: "No se pudieron cargar las cifras de ventas.",
     rangeDays: "{days} días",

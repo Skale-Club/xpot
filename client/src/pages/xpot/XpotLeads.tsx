@@ -5,8 +5,6 @@ import {
   Search,
   Trash2,
   LogIn,
-  X,
-  MapPinned,
   Building2,
   Nfc,
   MoreVertical,
@@ -27,292 +25,35 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useXpotQueries } from "./hooks/useXpotQueries";
 import { leadMatchesSearch, useLeads } from "./hooks/useLeads";
 import { useToast } from "@/hooks/use-toast";
-import { usePlaceSearch } from "./usePlaceSearch";
-import { useXpotShared } from "./hooks/useXpotShared";
 import { apiRequest } from "@/lib/queryClient";
 import { DollarSign } from "lucide-react";
 import { LeadSalesPanel } from "./components/sales/LeadSalesPanel";
 import { SheetDialog } from "./components/sales/ui";
 import { Loader2 } from '@/components/ui/loader';
-import { GoogleLogo } from "@/components/ui/google-logo";
-import { StateSelect } from "@/components/StateSelect";
-import { parseAddress, findMatchingLead } from "./utils";
-import type { EnrichedSalesVisit, FullSalesLead, GooglePlaceResult } from "./types";
+import type { EnrichedSalesVisit, FullSalesLead } from "./types";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { BottomSheet } from "@/pages/tags/ui";
 import { leadPiecesPath } from "@/pages/tags/lib";
 import { useViewerAccess } from "@/lib/adminMode";
 import { LeadsTable } from "./components/leads/LeadsTable";
 import { LeadDetailPane } from "./components/leads/LeadDetailPane";
+import { CreateLeadDialog } from "./components/CreateLeadDialog";
 import { useT } from "@/i18n";
 import { leadsMessages } from "@/i18n/messages/leads";
-import { checkinMessages } from "@/i18n/messages/checkin";
 import { BRAND_GRADIENT, GLASS } from "@/components/xpot/surface";
 import { EmptyState } from "@/components/xpot/EmptyState";
+import { ListSkeleton } from "@/components/xpot/ListSkeleton";
+import { RetryButton } from "@/components/xpot/RetryButton";
 import { FilterBar, FilterChips, FilterDay, FilterSearch, FilterToggle, fromDayKey, toDayKey } from "@/components/xpot/filters";
 import { currentSearch, useUrlFilters } from "@/hooks/use-url-filters";
 import { ListPager, usePagedList } from "@/components/xpot/pagination";
 import { selectLeadForDetail } from "./lead-detail-selection";
+import { followUpDueTime, isWorkedCompany, needsFollowUp } from "./visitRules";
+import { isFinishedVisitStatus } from "@shared/visit-status";
 
-
-// ─── Shared Add Company Dialog ────────────────────────────────────────────────
-
-const MANUAL_FIELD_KEYS = {
-  name: "fieldBusinessRequired",
-  phone: "fieldPhone",
-  email: "fieldEmail",
-  website: "fieldWebsite",
-  industry: "fieldIndustry",
-  address: "fieldAddress",
-  city: "fieldCity",
-  state: "fieldState",
-} as const;
-
-function AddCompanyDialog({
-  open,
-  onOpenChange,
-  allLeads,
-}: {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-  allLeads: FullSalesLead[];
-}) {
-  const { toast } = useToast();
-  const t = useT(leadsMessages);
-  const tCheckin = useT(checkinMessages);
-  const { geoState, loadCurrentLocation, invalidateXpotData } = useXpotShared();
-  const [search, setSearch] = useState("");
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [manualForm, setManualForm] = useState<null | {
-    name: string; phone: string; email: string; website: string;
-    industry: string; address: string; city: string; state: string;
-  }>(null);
-
-  const placeQuery = usePlaceSearch(search, open, geoState);
-
-  const inputCls = "w-full h-10 rounded-xl px-3 text-sm text-white placeholder:text-white/25 focus:outline-none transition-colors";
-  const inputStyle = { background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.09)" };
-  async function createFromPayload(payload: any) {
-    setSaving(true);
-    try {
-      await apiRequest("POST", "/api/xpot/leads", { ...payload, status: "lead", source: payload.source || "manual" });
-      await invalidateXpotData();
-      toast({ title: t("leadAdded"), variant: "success" });
-      onOpenChange(false);
-      setSearch("");
-      setManualForm(null);
-    } catch (err: any) {
-      toast({ title: t("createFailed"), description: err.message, variant: "destructive" });
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  function pickPlace(place: GooglePlaceResult) {
-    setDropdownOpen(false);
-    const parsed = parseAddress(place.address);
-    setManualForm({
-      name: place.name,
-      phone: place.phone || "",
-      email: "",
-      website: place.website || "",
-      industry: place.primaryType || "",
-      address: parsed.addressLine1,
-      city: parsed.city,
-      state: parsed.state,
-    });
-    setSearch(place.name);
-  }
-
-  function openManual() {
-    setDropdownOpen(false);
-    setManualForm({
-      name: search.trim(),
-      phone: "", email: "", website: "", industry: "", address: "", city: "", state: "",
-    });
-  }
-
-  async function saveManual() {
-    if (!manualForm || !manualForm.name.trim()) return;
-    await createFromPayload({
-      name: manualForm.name.trim(),
-      phone: manualForm.phone || undefined,
-      email: manualForm.email || undefined,
-      website: manualForm.website || undefined,
-      industry: manualForm.industry || undefined,
-      primaryLocation: manualForm.address ? {
-        label: "Main",
-        addressLine1: manualForm.address,
-        city: manualForm.city || undefined,
-        state: manualForm.state || undefined,
-        isPrimary: true,
-      } : undefined,
-    });
-  }
-
-  const mf = (key: keyof NonNullable<typeof manualForm>) =>
-    (e: React.ChangeEvent<HTMLInputElement>) =>
-      setManualForm((p) => p ? { ...p, [key]: e.target.value } : p);
-
-  return (
-    <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) { setSearch(""); setManualForm(null); setDropdownOpen(false); } }}>
-      <DialogContent
-        className="max-w-sm rounded-2xl border-0 p-0 overflow-visible"
-        style={{ background: "#0e1117", boxShadow: "0 24px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.07)" }}
-      >
-        <DialogHeader className="px-5 pt-5 pb-0">
-          <DialogTitle className="text-base font-semibold text-white capitalize">{t("addLeadTitle")}</DialogTitle>
-        </DialogHeader>
-
-        <div className="p-5 space-y-4">
-          {/* Search pill */}
-          {!manualForm && (
-            <div className="relative">
-              <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 z-10" />
-              <input
-                autoFocus
-                value={search}
-                onChange={(e) => { setSearch(e.target.value); setDropdownOpen(true); }}
-                onFocus={() => setDropdownOpen(true)}
-                onBlur={() => setTimeout(() => setDropdownOpen(false), 150)}
-                placeholder={t("searchBusiness")}
-                className={`w-full h-[52px] bg-white pl-10 pr-12 text-[15px] text-slate-900 placeholder:text-slate-400 focus:outline-none shadow-sm ${dropdownOpen ? "rounded-t-2xl" : "rounded-2xl"}`}
-                style={{ border: "1px solid #e2e8f0" }}
-              />
-              <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-0.5">
-                {search && (
-                  <button type="button" onClick={() => setSearch("")} className="p-1.5 text-slate-400 hover:text-slate-600">
-                    <X className="h-4 w-4" />
-                  </button>
-                )}
-                <button
-                  type="button"
-                  className="p-1.5 text-slate-400 hover:text-blue-500 transition-colors"
-                  onClick={async () => { await loadCurrentLocation(); setSearch(tCheckin("nearbyQuery")); setDropdownOpen(true); }}
-                >
-                  <MapPinned className="h-4 w-4" />
-                </button>
-              </div>
-
-              {/* Dropdown */}
-              {dropdownOpen && (
-                <div
-                  className="absolute left-0 right-0 top-full z-50 max-h-64 overflow-y-auto rounded-b-2xl"
-                  style={{ background: "#fff", border: "1px solid #e2e8f0", borderTop: "none", boxShadow: "0 12px 32px rgba(0,0,0,0.12)" }}
-                  onPointerDown={(e) => e.stopPropagation()}
-                >
-                  {/* Manual create */}
-                  <button
-                    type="button"
-                    onClick={openManual}
-                    className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-slate-50 transition-colors"
-                  >
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl" style={{ background: "rgba(99,102,241,0.1)" }}>
-                      <Plus className="h-4 w-4 text-indigo-500" />
-                    </div>
-                    <div>
-                      <div className="text-sm font-medium text-slate-900">
-                        {search.trim().length >= 2 ? t("createNamed", { name: search.trim() }) : t("addNewLead")}
-                      </div>
-                      <div className="text-xs text-slate-500">{t("fillManually")}</div>
-                    </div>
-                  </button>
-
-                  {/* Google Places loading */}
-                  {placeQuery.isFetching && (
-                    <div className="flex items-center gap-2 px-4 py-3 text-sm text-slate-500" style={{ borderTop: "1px solid #f1f5f9" }}>
-                      <Loader2 className="h-4 w-4 animate-spin" />{t("searchingPlaces")}
-                    </div>
-                  )}
-
-                  {/* Google Places results */}
-                  {placeQuery.data?.results.map((place) => {
-                    const existing = findMatchingLead(place, allLeads);
-                    return (
-                      <button
-                        key={place.placeId}
-                        type="button"
-                        onClick={() => pickPlace(place)}
-                        className="flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-slate-50 transition-colors"
-                        style={{ borderTop: "1px solid #f1f5f9" }}
-                      >
-                        {/* Badge under the icon — beside the text it pushed the
-                            name and address into an ellipsis. */}
-                        <div className="flex w-14 shrink-0 flex-col items-center gap-1">
-                          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-50">
-                            <Building2 className="h-4 w-4 text-indigo-500" />
-                          </div>
-                          {existing ? (
-                            <span className="text-[9px] font-bold uppercase tracking-wider text-blue-600">{t("exists")}</span>
-                          ) : (
-                            <span className="flex items-center gap-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-500">
-                              <GoogleLogo className="h-2.5 w-2.5" />
-                              Google
-                            </span>
-                          )}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="text-sm font-medium text-slate-900 break-words">{place.name}</div>
-                          <div className="text-xs text-slate-500 break-words">{place.address}</div>
-                        </div>
-                      </button>
-                    );
-                  })}
-
-                  {!placeQuery.isFetching && !placeQuery.data?.results?.length && search.trim().length < 3 && (
-                    <div className="px-4 py-3 text-sm text-slate-400">{t("typeMore")}</div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Manual form */}
-          {manualForm && (
-            <div className="space-y-2.5">
-              <button
-                type="button"
-                onClick={() => setManualForm(null)}
-                className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 transition-colors mb-1"
-              >
-                {t("backToSearch")}
-              </button>
-              {(["name", "phone", "email", "website", "industry", "address", "city"] as const).map((key) => (
-                <input
-                  key={key}
-                  value={manualForm[key]}
-                  onChange={mf(key)}
-                  placeholder={t(MANUAL_FIELD_KEYS[key])}
-                  className={inputCls}
-                  style={inputStyle}
-                />
-              ))}
-              <StateSelect
-                value={manualForm.state}
-                onValueChange={(state) => setManualForm((previous) => previous ? { ...previous, state } : previous)}
-                placeholder={t("fieldState")}
-              />
-              <button
-                disabled={saving || !manualForm.name.trim()}
-                onClick={saveManual}
-                className="w-full rounded-xl py-2.5 text-sm font-semibold text-white transition-all disabled:opacity-40 mt-1"
-                style={{ background: "linear-gradient(135deg, #3b82f6, #6366f1)" }}
-              >
-                {saving ? <Loader2 className="inline mr-2 h-4 w-4 animate-spin" /> : null}
-                {t("saveLead")}
-              </button>
-            </div>
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
 
 // ─── Lead Card (phone) ────────────────────────────────────────────────────────
 
@@ -410,20 +151,25 @@ function LeadActionSheet({ lead, onClose, onSell, onCheckIn, onDelete }: {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-const LEAD_FILTERS = ["all", "followup", "lead", "customer"] as const;
+const LEAD_FILTERS = ["all", "followup", "lead", "customer", "prospect"] as const;
 type LeadFilter = (typeof LEAD_FILTERS)[number];
 const LEAD_FILTER_LABEL = {
   all: "filterAll",
   followup: "filterFollowUp",
   lead: "filterLeads",
   customer: "filterCustomers",
+  prospect: "tabProspects",
 } as const satisfies Record<LeadFilter, string>;
 
-/** `lead` covers worked prospects too: a check-in makes a company a lead even if its row still says prospect. */
-function matchesLeadFilter(lead: FullSalesLead, filter: LeadFilter): boolean {
-  if (filter === "followup") return Boolean(lead.nextVisitDueAt);
+/**
+ * `lead` covers worked prospects too: a check-in makes a company a lead even if its row still says prospect.
+ * `lastOutcome` is the status of the company's latest finished visit (for "Follow-up").
+ */
+function matchesLeadFilter(lead: FullSalesLead, filter: LeadFilter, lastOutcome?: string | null): boolean {
+  if (filter === "followup") return needsFollowUp(lead, lastOutcome);
   if (filter === "lead") return ["lead", "active", "prospect"].includes(lead.status);
   if (filter === "customer") return lead.status === "customer";
+  // "prospect" lists the unvisited prospects, a separate pool (see `prospects` below).
   return true;
 }
 
@@ -488,13 +234,17 @@ export function XpotLeads() {
     [visits],
   );
   const isWorkedLead = useCallback(
-    (lead: FullSalesLead) => lead.status !== "prospect" || checkedInLeadIds.has(lead.id),
+    (lead: FullSalesLead) => isWorkedCompany(lead, checkedInLeadIds),
     [checkedInLeadIds],
   );
   // Legacy prospect rows may already have completed visits. A real check-in is
   // authoritative: the company belongs in the worked-leads portfolio even if
   // an older record was never promoted from `prospect` in the database.
   const leads = allLeads.filter(isWorkedLead);
+  // Businesses saved (e.g. picked on the Dashboard) but never checked in stay out
+  // of the default view; the Prospects chip is where they can be found.
+  const prospects = allLeads.filter((lead) => !isWorkedLead(lead));
+  const pool = leadFilter === "prospect" ? prospects : leads;
   const visitsByLead = useMemo(() => {
     const map = new Map<number, EnrichedSalesVisit[]>();
     for (const v of visits ?? []) {
@@ -505,6 +255,10 @@ export function XpotLeads() {
     map.forEach((list) => list.sort((a, b) => at(b) - at(a)));
     return map;
   }, [visits]);
+  const lastOutcomeFor = useCallback(
+    (leadId: number) => visitsByLead.get(leadId)?.find((visit) => isFinishedVisitStatus(visit.status))?.status ?? null,
+    [visitsByLead],
+  );
   const lastVisitFor = useCallback((leadId: number) => {
     const v = visitsByLead.get(leadId)?.[0];
     const when = v?.checkedInAt ?? v?.createdAt;
@@ -532,22 +286,23 @@ export function XpotLeads() {
   }, [day, visits]);
 
   // Search and day narrow first; the status chips count what is left.
-  const baseList = useMemo(
-    () => leads.filter((lead) => leadMatchesSearch(lead, search) && (!visitedOnDay || visitedOnDay.has(lead.id))),
-    [leads, search, visitedOnDay],
+  const narrow = useCallback(
+    (list: FullSalesLead[]) => list.filter((lead) => leadMatchesSearch(lead, search) && (!visitedOnDay || visitedOnDay.has(lead.id))),
+    [search, visitedOnDay],
   );
+  const baseList = useMemo(() => narrow(pool), [narrow, pool]);
   const displayList = useMemo(() => {
-    const filtered = baseList.filter((lead) => matchesLeadFilter(lead, leadFilter));
+    const filtered = baseList.filter((lead) => matchesLeadFilter(lead, leadFilter, lastOutcomeFor(lead.id)));
     return [...filtered].sort((a, b) => {
-      const aDue = a.nextVisitDueAt ? new Date(a.nextVisitDueAt).getTime() : Number.POSITIVE_INFINITY;
-      const bDue = b.nextVisitDueAt ? new Date(b.nextVisitDueAt).getTime() : Number.POSITIVE_INFINITY;
+      const aDue = followUpDueTime(a);
+      const bDue = followUpDueTime(b);
       if (aDue !== bDue) return aDue - bDue;
       const aVisited = a.lastVisitAt ? new Date(a.lastVisitAt).getTime() : 0;
       const bVisited = b.lastVisitAt ? new Date(b.lastVisitAt).getTime() : 0;
       if (aVisited !== bVisited) return bVisited - aVisited;
       return a.name.localeCompare(b.name);
     });
-  }, [baseList, leadFilter]);
+  }, [baseList, leadFilter, lastOutcomeFor]);
 
   // Big portfolios render 50 at a time; a new filter starts from the top.
   const pagedLeads = usePagedList(displayList, { resetKey: `${leadFilter}|${search}|${filters.values.day}` });
@@ -580,10 +335,13 @@ export function XpotLeads() {
     } catch {}
   };
 
+  const worked = narrow(leads);
   const filterChips = LEAD_FILTERS.map((id) => ({
     id,
     label: t(LEAD_FILTER_LABEL[id]),
-    count: baseList.filter((lead) => matchesLeadFilter(lead, id)).length,
+    count: id === "prospect"
+      ? narrow(prospects).length
+      : worked.filter((lead) => matchesLeadFilter(lead, id, lastOutcomeFor(lead.id))).length,
   }));
 
   const filterBar = (
@@ -624,11 +382,21 @@ export function XpotLeads() {
           <FilterChips items={filterChips} value={leadFilter} onChange={(status) => filters.set({ status })} ariaLabel={t("filterByStatus")} />
         </div>
       }
-      summary={{ shown: displayList.length, total: leads.length, active: filters.activeCount() > 0, onClear: () => filters.reset() }}
+      summary={{ shown: displayList.length, total: pool.length, active: filters.activeCount() > 0, onClear: () => filters.reset() }}
     />
   );
 
-  const emptyStates = leads.length === 0 && !search ? (
+  // Loading and failure come before any "nothing here" message, which used to
+  // show "No companies yet" (with its Add button) while the list was loading.
+  const emptyStates = leadsQuery.isLoading ? (
+    <ListSkeleton rows={5} testId="leads-loading" />
+  ) : leadsQuery.isError ? (
+    <EmptyState tone="red" icon={Building2} title={t("loadFailed")} hint={(leadsQuery.error as Error).message}>
+      <RetryButton onRetry={() => void leadsQuery.refetch()} busy={leadsQuery.isFetching} />
+    </EmptyState>
+  ) : leadFilter === "prospect" && prospects.length === 0 ? (
+    <EmptyState icon={Building2} title={t("noProspects")} hint={t("noProspectsHint")} cardStyle={GLASS} />
+  ) : leads.length === 0 && !search && leadFilter !== "prospect" ? (
     <EmptyState icon={Building2} title={t("noLeads")} hint={t("noLeadsHint")} cardStyle={GLASS}>
       <button
         onClick={() => setAddOpen(true)}
@@ -719,12 +487,10 @@ export function XpotLeads() {
         {salesLead && <LeadSalesPanel leadId={salesLead.id} leadName={salesLead.name} compact />}
       </SheetDialog>
 
-      {/* Manual creation is reserved for referrals and unplanned encounters. */}
-      <AddCompanyDialog
-        open={addOpen}
-        onOpenChange={setAddOpen}
-        allLeads={allLeads}
-      />
+      {/* The same "New company" dialog as check-in and the Dashboard (Google
+          autofill with coordinates, phone mask); created here as a lead, the
+          status this list shows. */}
+      <CreateLeadDialog open={addOpen} onOpenChange={setAddOpen} initialName="" status="lead" />
 
       <AlertDialog
         open={Boolean(leadPendingDelete)}

@@ -58,6 +58,10 @@ const en = {
   visitTagsHint: "QR or NFC for this customer",
   finishVisit: "Finish visit",
   finishVisitHint: "Outcome and check-out",
+  cancelVisit: "Cancel visit",
+  cancelVisitTitle: "Cancel this visit?",
+  cancelVisitDesc: "The visit is discarded and saved as cancelled, with no outcome. If it is a stop on your route, that stop is marked as skipped.",
+  keepVisit: "Keep visit",
   uploadInProgress: "UPLOAD IN PROGRESS...",
   slideToCheckOut: "SLIDE TO CHECK OUT",
 
@@ -97,6 +101,11 @@ const en = {
   status_in_progress: "In Progress",
   status_planned: "Planned",
   status_invalid: "Invalid",
+  exceptionOutsideArea: "Outside area",
+  exceptionOutsideAreaHint: "Checked in outside the business area.",
+  exceptionOutsideAreaReason: "Checked in outside the business area. Reason: {reason}",
+  exceptionNoLocation: "Location not checked",
+  exceptionNoLocationHint: "Checked in without a location to compare: no GPS fix, or the company has no map location.",
 
   // Live map
   mapAlt: "Your current location",
@@ -236,6 +245,10 @@ export const checkinMessages: Dictionary<typeof en> = {
     visitTagsHint: "QR ou NFC para este cliente",
     finishVisit: "Finalizar visita",
     finishVisitHint: "Resultado e check-out",
+    cancelVisit: "Cancelar visita",
+    cancelVisitTitle: "Cancelar esta visita?",
+    cancelVisitDesc: "A visita é descartada e salva como cancelada, sem resultado. Se for uma parada da sua rota, essa parada fica como pulada.",
+    keepVisit: "Manter visita",
     uploadInProgress: "ENVIANDO ÁUDIO...",
     slideToCheckOut: "DESLIZE PARA FAZER CHECK-OUT",
 
@@ -272,6 +285,11 @@ export const checkinMessages: Dictionary<typeof en> = {
     status_in_progress: "Em andamento",
     status_planned: "Planejada",
     status_invalid: "Inválida",
+    exceptionOutsideArea: "Exceção: fora da área",
+    exceptionOutsideAreaHint: "Check-in feito fora da área da empresa.",
+    exceptionOutsideAreaReason: "Check-in feito fora da área da empresa. Motivo: {reason}",
+    exceptionNoLocation: "Exceção: sem localização",
+    exceptionNoLocationHint: "Check-in sem localização para comparar: sem sinal de GPS, ou a empresa não tem localização no mapa.",
 
     mapAlt: "Sua localização atual",
     mapLive: "Ao vivo",
@@ -401,6 +419,10 @@ export const checkinMessages: Dictionary<typeof en> = {
     visitTagsHint: "QR o NFC para este cliente",
     finishVisit: "Finalizar visita",
     finishVisitHint: "Resultado y check-out",
+    cancelVisit: "Cancelar visita",
+    cancelVisitTitle: "¿Cancelar esta visita?",
+    cancelVisitDesc: "La visita se descarta y se guarda como cancelada, sin resultado. Si es una parada de tu ruta, esa parada queda como omitida.",
+    keepVisit: "Mantener visita",
     uploadInProgress: "SUBIENDO AUDIO...",
     slideToCheckOut: "DESLIZA PARA HACER CHECK-OUT",
 
@@ -437,6 +459,11 @@ export const checkinMessages: Dictionary<typeof en> = {
     status_in_progress: "En curso",
     status_planned: "Programada",
     status_invalid: "Inválida",
+    exceptionOutsideArea: "Excepción: fuera de la zona",
+    exceptionOutsideAreaHint: "Check-in hecho fuera de la zona de la empresa.",
+    exceptionOutsideAreaReason: "Check-in hecho fuera de la zona de la empresa. Motivo: {reason}",
+    exceptionNoLocation: "Excepción: sin ubicación",
+    exceptionNoLocationHint: "Check-in sin ubicación para comparar: sin señal de GPS, o la empresa no tiene ubicación en el mapa.",
 
     mapAlt: "Tu ubicación actual",
     mapLive: "En vivo",

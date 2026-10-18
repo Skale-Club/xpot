@@ -30,6 +30,10 @@ export type FullSalesLead = SalesLead & {
   openOpportunities?: number;
   salesLifetimeCents?: number;
   unitsOnShelf?: number;
+  /** An open follow-up task exists for this company (list endpoint only). */
+  openFollowUp?: boolean;
+  /** Earliest due date among those tasks. */
+  openFollowUpDueAt?: string | null;
 };
 
 export type EnrichedSalesVisit = SalesVisit & {

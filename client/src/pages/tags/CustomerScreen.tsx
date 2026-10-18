@@ -268,9 +268,8 @@ export default function CustomerScreen({ leadId }: { leadId: number }) {
         state: loc?.state ?? null,
         postalCode: loc?.postalCode ?? null,
         country: loc?.country,
-        lat: loc?.lat ?? null,
-        lng: loc?.lng ?? null,
-        geofenceRadiusMeters: loc?.geofenceRadiusMeters,
+        // Coordinates and radius are left out: the server keeps them while the
+        // address is the same and re-places the company when it changes.
         [key]: key === "addressLine1" ? v : v || null,
       });
       await qc.invalidateQueries({ queryKey: ["/api/xpot/leads"] });
