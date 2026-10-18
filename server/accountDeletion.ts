@@ -50,7 +50,7 @@ import { discardFiles, sweepRepFiles, uploaderRepId } from "./lib/files.js";
 import { getSupabaseAdmin } from "./lib/supabase.js";
 
 export class AccountDeletionError extends Error {
-  constructor(message: string, public status: number) {
+  constructor(message: string, public status: number, public code?: string) {
     super(message);
   }
 }
@@ -90,7 +90,7 @@ async function tryDelete(tx: Tx, run: (sp: Tx) => Promise<unknown>): Promise<boo
 export async function deleteRepAccountRows(repId: number) {
   return db.transaction(async (tx) => {
     const [rep] = await tx.select().from(salesReps).where(eq(salesReps.id, repId));
-    if (!rep || rep.deletedAt) throw new AccountDeletionError("Rep not found", 404);
+    if (!rep || rep.deletedAt) throw new AccountDeletionError("Person not found", 404, "rep_not_found");
     const [user] = await tx.select().from(users).where(eq(users.id, rep.userId));
     const files: string[] = [rep.avatarUrl, user?.profileImageUrl].filter((f): f is string => Boolean(f));
 
@@ -215,9 +215,9 @@ export async function deleteRepAccount(
   repId: number,
   actor: { userId: string; isAdmin: boolean },
 ): Promise<AccountDeletionResult> {
-  if (!actor.isAdmin) throw new AccountDeletionError("Only an admin can delete an account.", 403);
+  if (!actor.isAdmin) throw new AccountDeletionError("Only an Xpot admin can delete an account.", 403, "delete_admin_only");
   const [target] = await db.select({ userId: salesReps.userId }).from(salesReps).where(eq(salesReps.id, repId));
-  if (target?.userId === actor.userId) throw new AccountDeletionError("You can't delete your own account here.", 400);
+  if (target?.userId === actor.userId) throw new AccountDeletionError("You can't delete your own account here.", 400, "own_account_delete");
 
   const result = await deleteRepAccountRows(repId);
   const context = `account of rep #${repId} deleted`;

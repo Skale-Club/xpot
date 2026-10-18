@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { refusalBody } from "../../lib/validation.js";
 import { managesEveryOrganization } from "#shared/organizations.js";
 import { XPOT_MODULES } from "#shared/modules.js";
 import { requireXpotUser, type XpotActor } from "./middleware.js";
@@ -38,7 +39,7 @@ function route(handler: (req: any) => Promise<unknown>, status = 200) {
       res.status(status).json(await handler(req));
     } catch (error) {
       if (error instanceof OrganizationError || error instanceof AccountError) {
-        return res.status(error.status).json({ message: error.message });
+        return res.status(error.status).json(refusalBody(error));
       }
       if (error instanceof TagError) return res.status(error.status).json(tagErrorBody(error));
       if (error instanceof z.ZodError) {
@@ -52,12 +53,12 @@ function route(handler: (req: any) => Promise<unknown>, status = 200) {
 
 async function assertRepAdminMayChange(actor: OrganizationActor, organizationId: number, repId: number, nextRole?: "admin" | "member") {
   if (managesEveryOrganization(actor)) return;
-  if (actor.rep.id === repId) throw new OrganizationError("You cannot change your own Organization access.", 400);
-  if (nextRole === "admin") throw new OrganizationError("Only an Admin or Manager can assign Rep Admin access.", 403);
+  if (actor.rep.id === repId) throw new OrganizationError("You can't change your own organization access.", 400, "organization_own_access");
+  if (nextRole === "admin") throw new OrganizationError("Only an Xpot admin or a manager can make someone org admin.", 403, "organization_admin_assign");
   const members = await listOrganizationMembers(organizationId, actor);
   const target = members.find((member) => member.repId === repId);
   if (target?.membershipRole === "admin") {
-    throw new OrganizationError("Only an Admin or Manager can change a Rep Admin.", 403);
+    throw new OrganizationError("Only an Xpot admin or a manager can change an org admin.", 403, "organization_admin_change");
   }
 }
 
@@ -103,7 +104,7 @@ export function createOrganizationsRouter() {
     // person's new companies and pieces land (organizationIdForRep), so the
     // Rep Admin would then see and manage them.
     if (!managesEveryOrganization(actor)) {
-      throw new OrganizationError("An Xpot admin or a manager adds people to an Organization.", 403);
+      throw new OrganizationError("An Xpot admin or a manager adds people to an organization.", 403, "organization_add_people");
     }
     if (existing.success) {
       return addOrganizationMember(organizationId, existing.data.repId, existing.data.membershipRole, actor);
@@ -164,7 +165,7 @@ export function createOrganizationsRouter() {
     }).strict().parse(req.body);
     const members = await listOrganizationMembers(organizationId, actor);
     const target = members.find((member) => member.repId === input.repId && member.isActive && !member.blockedAt);
-    if (!target) throw new OrganizationError("The target Rep is not active in this Organization.", 400);
+    if (!target) throw new OrganizationError("This person is not active in this organization.", 400, "organization_member_inactive");
     // The same cost rule as the Distribution hand-out (server/tags/routes.ts, shared/tagKits.ts): a rep on the
     // zero-cost rule holds company stock even with a reference cost; the acquisition rule needs a cost.
     const rep = await storage.getSalesRep(input.repId);

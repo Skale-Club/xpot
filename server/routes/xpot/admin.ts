@@ -3,7 +3,7 @@ import { z } from "zod";
 import { storage } from "../../storage.js";
 import { isFinishedVisitStatus } from "#shared/visit-status.js";
 import { repModules } from "#shared/modules.js";
-import { sendValidationError } from "../../lib/validation.js";
+import { refusalBody, sendValidationError } from "../../lib/validation.js";
 import { genInboundKey, presentXphere, XPHERE_DEFAULT_URL, xphereConfigSchema } from "./xphere.js";
 import { requireSuperAdmin, requireXpotManager } from "./middleware.js";
 import {
@@ -85,7 +85,7 @@ export function createAdminRouter() {
     try {
       res.status(status).json(await handler(req));
     } catch (err) {
-      if (err instanceof AccountError || err instanceof AccountDeletionError) return res.status(err.status).json({ message: err.message });
+      if (err instanceof AccountError || err instanceof AccountDeletionError) return res.status(err.status).json(refusalBody(err));
       if (err instanceof z.ZodError) return res.status(400).json({ message: err.issues[0]?.message ?? "Invalid input" });
       console.error(`[${req.method} ${req.path}]`, err);
       res.status(500).json({ message: "Something went wrong" });
@@ -94,7 +94,7 @@ export function createAdminRouter() {
   const withRep = (fn: (repId: number, req: any) => Promise<unknown>) =>
     accountRoute(async (req) => {
       const repId = repIdOf(req);
-      if (!repId) throw new AccountError("Invalid rep id", 400);
+      if (!repId) throw new AccountError("Invalid rep id", 400, "invalid_rep_id");
       return fn(repId, req);
     });
 
@@ -116,14 +116,14 @@ export function createAdminRouter() {
     }).parse(req.body);
     const actor = actorOf(req);
     const existing = await storage.getSalesRepByUserId(input.userId);
-    if (!existing) throw new AccountError("Rep not found", 404);
+    if (!existing) throw new AccountError("Person not found", 404, "rep_not_found");
     const role = input.role ?? existing.role;
     if (!actor.isAdmin && (role !== "rep" || existing.role !== "rep")) {
-      throw new AccountError("Only an admin can change a manager's or admin's role.", 403);
+      throw new AccountError("Only an Xpot admin can change a manager's or admin's role.", 403, "role_change_admin_only");
     }
     // Demoting yourself would sign you out of the admin you are using, with nobody to undo it.
     if (existing.userId === actor.userId && role !== existing.role) {
-      throw new AccountError("You can't change your own role.", 400);
+      throw new AccountError("You can't change your own role.", 400, "own_role_locked");
     }
     const costPolicyChanged = input.costPolicy !== undefined &&
       (input.costPolicy !== existing.costPolicy || !existing.costPolicyConfiguredAt);
@@ -154,7 +154,7 @@ export function createAdminRouter() {
   // the Organizations API (organizations.ts), which checks who may do it.
   router.get("/admin/reps/:id/organizations", withRep(async (id) => {
     const rep = await storage.getSalesRep(id);
-    if (!rep || rep.deletedAt) throw new AccountError("Rep not found", 404);
+    if (!rep || rep.deletedAt) throw new AccountError("Person not found", 404, "rep_not_found");
     return organizationsForRep(id);
   }));
 

@@ -51,3 +51,8 @@ export function fieldErrors(error: ZodError, codes: Record<string, string> = {})
 export function sendValidationError(res: Response, error: ZodError, message: string, codes: Record<string, string> = {}) {
   return res.status(400).json({ message, code: "invalid_input", errors: fieldErrors(error, codes) });
 }
+
+/** The JSON body for a coded refusal (AccountError, OrganizationError…): { message, code? }. */
+export function refusalBody(err: { message: string; code?: string }) {
+  return { message: err.message, ...(err.code ? { code: err.code } : {}) };
+}
