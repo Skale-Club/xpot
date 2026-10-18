@@ -63,7 +63,7 @@ function SignalCard({
 function FinancialMetric({ label, value, accent }: { label: string; value: string; accent?: "emerald" | "red" | "amber" }) {
   const color = accent === "emerald" ? "text-emerald-300" : accent === "red" ? "text-rose-300" : accent === "amber" ? "text-amber-300" : "text-white";
   return (
-    <div className="min-w-0 border-l border-white/[0.075] pl-3 first:border-l-0 first:pl-0 lg:pl-5">
+    <div className="min-w-0 border-l border-white/[0.075] pl-3 first:border-l-0 first:pl-0 max-sm:odd:border-l-0 max-sm:odd:pl-0 lg:pl-5">
       <div className="truncate text-[9px] font-bold uppercase tracking-[0.17em] text-white/30 sm:text-[10px]">{label}</div>
       <div className={`mt-2 truncate text-sm font-bold tracking-[-0.02em] tabular-nums sm:text-lg lg:text-xl ${color}`}>{value}</div>
     </div>
@@ -103,7 +103,8 @@ export function SalesOverview({ onGoToConsignments }: { onGoToConsignments?: () 
           <div className="pointer-events-none absolute -right-20 -top-24 h-72 w-72 rounded-full border-[42px] border-emerald-300/[0.055]" />
           <div className="pointer-events-none absolute -bottom-24 right-16 h-52 w-52 rounded-full bg-emerald-300/[0.08] blur-3xl" />
 
-          <div className="relative flex items-start justify-between gap-4">
+          {/* Wraps on a phone: the period picker drops under the figure instead of squeezing "30 days" onto two lines. */}
+          <div className="relative flex flex-wrap items-start justify-between gap-4">
             <div>
               <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-200/60">
                 <TrendingUp className="h-3.5 w-3.5" />
@@ -159,7 +160,8 @@ export function SalesOverview({ onGoToConsignments }: { onGoToConsignments?: () 
           <BarChart3 className="h-3.5 w-3.5 text-emerald-300/60" />
           {t("financialBreakdown")}
         </div>
-        <div className="grid grid-cols-4 gap-3">
+        {/* Two by two on a phone, where four columns cut the amounts ("$1,05…"). */}
+        <div className="grid grid-cols-2 gap-x-3 gap-y-4 sm:grid-cols-4 sm:gap-y-3">
           <FinancialMetric label={t("grossRevenue")} value={formatCents(s.financial.grossCents)} />
           <FinancialMetric label={t("discountsGiven")} value={formatCents(s.financial.discountCents)} accent="red" />
           <FinancialMetric label={t("acquisitionCosts")} value={formatCents(s.financial.costCents)} accent="amber" />

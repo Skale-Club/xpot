@@ -33,7 +33,8 @@ import { LeadStatePill } from "./LeadStatePill";
 
 function Metric({ icon, label, value, accent = "text-white/90" }: { icon: ReactNode; label: string; value: string; accent?: string }) {
   return (
-    <div className="min-w-0 border-b border-white/[0.06] px-4 py-4 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0 sm:px-5">
+    // Two by two on a phone (four stacked rows pushed the details a screen down), one row from sm.
+    <div className="min-w-0 border-white/[0.06] px-4 py-4 max-sm:odd:border-r max-sm:[&:nth-child(-n+2)]:border-b sm:border-r sm:px-5 sm:last:border-r-0">
       <span className="mb-3 flex items-center gap-2 text-white/40">{icon}<span className={EYEBROW}>{label}</span></span>
       <strong className={`block truncate text-lg font-semibold tabular-nums ${accent}`}>{value}</strong>
     </div>
@@ -186,7 +187,7 @@ export function LeadDetailPane({ lead, pieces, visits, onClose, backLabel, onDel
         </div>
       </header>
 
-      <div className={`grid overflow-hidden rounded-2xl sm:grid-cols-4 ${GLASS_SUBTLE_CLASS}`}>
+      <div className={`grid grid-cols-2 overflow-hidden rounded-2xl sm:grid-cols-4 ${GLASS_SUBTLE_CLASS}`}>
         <Metric icon={<DollarSign className="h-3.5 w-3.5" aria-hidden="true" />} label={t("colSold")} value={soldCents == null ? "—" : formatCents(soldCents)} accent="text-emerald-300" />
         <Metric icon={<PackageCheck className="h-3.5 w-3.5" aria-hidden="true" />} label={t("colShelf")} value={unitsOnShelf == null ? "—" : String(unitsOnShelf)} />
         <Metric icon={<Nfc className="h-3.5 w-3.5" aria-hidden="true" />} label={t("sectionPieces")} value={String(pieces?.pieces ?? 0)} />
