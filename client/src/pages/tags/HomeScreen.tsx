@@ -14,6 +14,7 @@ import {
   directPath,
   errorText,
   haptic,
+  isIos,
   lookupTag,
   pushRecent,
   tagPath,
@@ -22,6 +23,7 @@ import {
 import {
   ActionTile,
   BTN_DIRECT,
+  BTN_PRIMARY,
   BTN_TERTIARY,
   Banner,
   BottomSheet,
@@ -36,7 +38,8 @@ import { isWebNfcSupported, mapNfcError, scanOnce } from "./webNfc";
 import { useIsComputer, useIsDesktop } from "@/hooks/use-is-desktop";
 
 // "read" is the chooser behind the single Read button: QR, chip or typed code.
-type Sheet = { kind: "read" } | { kind: "empty" } | { kind: "nfc" } | null;
+// "phone" explains reading a chip without Web NFC: the phone's own NFC opens the link.
+type Sheet = { kind: "read" } | { kind: "empty" } | { kind: "nfc" } | { kind: "phone" } | null;
 
 function isOwnHost(url: string) {
   try {
@@ -285,8 +288,8 @@ export default function HomeScreen() {
           </button>
           <button
             type="button"
-            onClick={() => void startNfc()}
-            disabled={busy || !nfcSupported}
+            onClick={() => (nfcSupported ? void startNfc() : setSheet({ kind: "phone" }))}
+            disabled={busy}
             data-testid="button-scan-nfc"
             style={{ WebkitTapHighlightColor: "transparent" }}
             className="flex min-h-[164px] flex-col items-center justify-center gap-2.5 rounded-[22px] border border-white/10 bg-white/[0.04] p-3 text-center text-white transition-transform active:scale-[0.97] disabled:opacity-50"
@@ -297,7 +300,7 @@ export default function HomeScreen() {
             <span>
               <span className="block text-base font-bold leading-tight">{t("readChip")}</span>
               <span className="mt-1 block text-[11px] leading-snug text-amber-200/80">
-                {nfcSupported ? t("readChipHint") : t("readChipUnavailable")}
+                {nfcSupported ? t("readChipHint") : t("readChipPhone")}
               </span>
             </span>
           </button>
@@ -327,6 +330,36 @@ export default function HomeScreen() {
         >
           {tc("cancel")}
         </button>
+      </BottomSheet>
+
+      {/* Without Web NFC the app cannot read, but the phone still opens a written chip's link. */}
+      <BottomSheet open={sheet?.kind === "phone"} onClose={() => setSheet(null)} title={t("phoneReadTitle")}>
+        <h2 className={SHEET_TITLE}>{t("phoneReadTitle")}</h2>
+        <ol className="mt-4 space-y-2">
+          {([isIos() ? "phoneReadStepIos" : "phoneReadStep", "phoneReadNotice", "phoneReadResult"] as const).map((step, i) => (
+            <li key={step} className="flex gap-3 text-sm text-white/75">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-blue-500/15 text-xs font-bold text-blue-300">{i + 1}</span>
+              <span className="pt-0.5">{t(step)}</span>
+            </li>
+          ))}
+        </ol>
+        <p className="mt-4 text-xs text-amber-200/80">{t("phoneReadBlank")}</p>
+        <div className="mt-5 space-y-3">
+          <button
+            type="button"
+            onClick={() => {
+              setSheet(null);
+              setQrOpen(true);
+            }}
+            className={BTN_PRIMARY}
+          >
+            <QrCode className="h-5 w-5" />
+            {t("scanQr")}
+          </button>
+          <button type="button" onClick={() => setSheet({ kind: "read" })} className={BTN_TERTIARY}>
+            {tc("back")}
+          </button>
+        </div>
       </BottomSheet>
 
       <BottomSheet open={sheet?.kind === "empty"} onClose={() => setSheet(null)} title={t("chipEmpty")}>
