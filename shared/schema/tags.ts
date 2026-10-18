@@ -44,7 +44,7 @@ export const tagKits = pgTable("tag_kits", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: "restrict" }),
   repId: integer("rep_id").notNull().references(() => salesReps.id),
-  /** Short sequential number, shown as K-0001 (shared/tagKits.ts kitCode); migrations/0053_tag_kit_items.sql. */
+  /** Short sequential number, shown as K-0001 (shared/tagKits.ts kitCode); migrations/0054_tag_kit_items.sql. */
   kitNumber: integer("kit_number").notNull().default(sql`nextval('tag_kits_kit_number_seq')`),
   note: text("note"),
   createdByUserId: text("created_by_user_id"),
@@ -150,7 +150,7 @@ export const tagStockMovements = pgTable("tag_stock_movements", {
 /**
  * What a kit handed out, written once at the hand-over (the packing list), so a kit keeps its history after pieces
  * come back or move: left_at / left_reason ('returned' | 'moved') mark a piece that left the reseller's kit.
- * migrations/0053_tag_kit_items.sql.
+ * migrations/0054_tag_kit_items.sql.
  */
 export const tagKitItems = pgTable("tag_kit_items", {
   kitId: uuid("kit_id").notNull().references(() => tagKits.id, { onDelete: "cascade" }),

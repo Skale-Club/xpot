@@ -29,9 +29,9 @@ function RoleBadge({ row }: { row: TagRepReportRow }) {
   return null;
 }
 
-/** People › this person: focused when People supports it, found by name otherwise. */
+/** People › this person (/admin/reps/:repId); a search by name when there is no person id. */
 export function peopleHref(row: { repId: number | null; name: string | null }): string {
-  return withQuery("/admin/reps", { focus: row.repId, search: row.name });
+  return row.repId != null ? `/admin/reps/${row.repId}` : withQuery("/admin/reps", { q: row.name });
 }
 
 function PersonCell({ row, rep, onOpenPerson }: { row: TagRepReportRow; rep: Reseller | undefined; onOpenPerson: (href: string) => void }) {
