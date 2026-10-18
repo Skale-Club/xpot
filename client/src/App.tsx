@@ -4,7 +4,6 @@ import { Redirect, Route, Router, Switch, useLocation } from "wouter";
 import { useXpotQueries } from "./pages/xpot/hooks/useXpotQueries";
 import { useVisits } from "./pages/xpot/hooks/useVisits";
 import { GeoProvider } from "./pages/xpot/hooks/GeoProvider";
-import { tabs } from "./pages/xpot/utils";
 import { Loader2 } from "@/components/ui/loader";
 import { ModuleSwitch, rememberModule, useXpotModules } from "@/components/ModuleSwitch";
 import { useT } from "@/i18n";
@@ -12,7 +11,9 @@ import { commonMessages } from "@/i18n/messages/common";
 import { shellMessages } from "@/i18n/messages/shell";
 import { ShellHeader } from "@/components/xpot/ShellHeader";
 import { AppLayout, MODULE_COLUMN } from "@/components/xpot/AppLayout";
-import { MobileTabBar } from "@/components/xpot/MobileTabBar";
+import { VisitsTabBar } from "@/components/xpot/VisitsTabBar";
+import { visitsScreen, type VisitsScreen } from "@/components/xpot/moduleNav";
+import { navIaMessages } from "@/i18n/messages/navIa";
 import { SessionGate } from "@/components/xpot/SessionGate";
 import { getHttpStatus, isStandaloneDisplay, resolveRootView } from "@/lib/pwa";
 import { getXpotHomePath, MODULE_HOME, rememberModuleRoute } from "@/lib/xpot";
@@ -45,6 +46,16 @@ function PageLoader() {
 // narrow column until their turn (docs/DESKTOP.md).
 const WIDE_TABS = new Set<string>(["leads", "visits", "dashboard", "sales", "route", "tasks"]);
 
+/** The top bar's title of each Visits screen: the sidebar's label (moduleNav), "Visit" for the visit itself. */
+const SCREEN_TITLE: Record<Exclude<VisitsScreen, "manage" | "visit">, "tabDashboard" | "tabRoute" | "tabLeads" | "tabVisits" | "tabTasks" | "tabSales"> = {
+  dashboard: "tabDashboard",
+  route: "tabRoute",
+  leads: "tabLeads",
+  visits: "tabVisits",
+  tasks: "tabTasks",
+  sales: "tabSales",
+};
+
 /**
  * Decides who gets the Visits screens before any Visits data is asked for: a
  * Tags-only reseller is sent to Tags without the dashboard and visits requests
@@ -72,6 +83,7 @@ function XpotAppShell() {
   const [, setLocation] = useLocation();
   const t = useT(commonMessages);
   const tShell = useT(shellMessages);
+  const tNav = useT(navIaMessages);
   const modules = useXpotModules();
   const visitsAllowed = modules.includes("visits");
   useVisits();
@@ -89,7 +101,8 @@ function XpotAppShell() {
     const search = typeof window !== "undefined" ? window.location.search : "";
     if (path === "/visits" || path.startsWith("/visits/")) {
       setLocation(`${path.replace(/^\/visits/, "/dashboard/history")}${search}`, { replace: true });
-    } else if (path === "/check-in") {
+    } else if (path === "/check-in" || (path === "/route" && new URLSearchParams(search).has("leadId"))) {
+      // One URL for the visit screen; /route?leadId= was its second one.
       setLocation(`/route/check-in${search}`, { replace: true });
     } else if (path === "/prospecting" || path === "/leads/prospects") {
       setLocation(`/route${search}`, { replace: true });
@@ -100,11 +113,12 @@ function XpotAppShell() {
 
   if (!me) return <SessionGate failed={xpotMeQuery.isError} />;
 
-  const current = tabs.find((tab) => tab.id === activeTab);
+  const screen = visitsScreen(pathname.split("?")[0]);
+  const title = screen === "visit" ? tNav("visitScreen") : screen === "manage" ? "Xpot" : tShell(SCREEN_TITLE[screen]);
 
   return (
     <AppLayout
-      title={current ? tShell(current.labelKey) : "Xpot"}
+      title={title}
       wide={WIDE_TABS.has(activeTab)}
       mobileColumnClassName={MODULE_COLUMN}
       mobileHeader={
@@ -123,21 +137,14 @@ function XpotAppShell() {
           <PersistentRouteProgress className="mb-4" />
         </>
       }
-      mobileNav={
-        <MobileTabBar
-          module="visits"
-          tabs={tabs.map(({ id, labelKey, icon }) => ({ id, label: tShell(labelKey), icon }))}
-          activeId={activeTab}
-          onSelect={(id) => setLocation(`/${id}`)}
-        />
-      }
+      mobileNav={<VisitsTabBar />}
     >
       <div className="space-y-4">
         {activeTab === "dashboard" ? <XpotDashboard /> : null}
         {activeTab === "leads" ? <XpotLeads /> : null}
         {activeTab === "sales" ? <XpotSales /> : null}
         {activeTab === "route"
-          ? (pathname.startsWith("/route/check-in") || new URLSearchParams(typeof window !== "undefined" ? window.location.search : "").has("leadId")
+          ? (screen === "visit" || new URLSearchParams(typeof window !== "undefined" ? window.location.search : "").has("leadId")
               ? <XpotCheckIn />
               : <XpotProspecting />)
           : null}

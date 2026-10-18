@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { useXpotModules } from "@/components/ModuleSwitch";
 import { useT } from "@/i18n";
 import { shellMessages } from "@/i18n/messages/shell";
+import { navIaMessages } from "@/i18n/messages/navIa";
 import { TagPieceMention } from "@/components/xpot/TagProductThumbnail";
 import { tagsGet } from "@/pages/tags/lib";
 import type { FullSalesLead } from "@/pages/xpot/types";
@@ -25,6 +26,18 @@ type Entry = {
 
 const LIMIT_PER_GROUP = 8;
 
+/**
+ * The shortcuts the screen behind the palette supports (useDesktopShortcuts):
+ * N only where a page marks its "new" button, J/K only over a table of rows.
+ */
+export function availableShortcuts(root: Pick<Document, "querySelector">): Array<"search" | "new" | "rows"> {
+  return [
+    "search",
+    ...(root.querySelector('[data-shortcut="new"]') ? (["new"] as const) : []),
+    ...(root.querySelector("main table tbody tr[tabindex]") ? (["rows"] as const) : []),
+  ];
+}
+
 /** Ctrl/⌘+K: jump to a page, a company or a piece. Desktop only. */
 export function CommandPalette({
   open,
@@ -40,6 +53,7 @@ export function CommandPalette({
   accent?: ModuleAccent;
 }) {
   const t = useT(shellMessages);
+  const tn = useT(navIaMessages);
   const selected = ACCENT_SELECTED[accent];
   const [, navigate] = useLocation();
   const modules = useXpotModules();
@@ -60,12 +74,15 @@ export function CommandPalette({
     staleTime: 15_000,
   });
 
+  const [shortcuts, setShortcuts] = useState<ReturnType<typeof availableShortcuts>>(["search"]);
   useEffect(() => {
     if (open) {
       setQuery("");
       setIndex(0);
+      setShortcuts(availableShortcuts(document));
     }
   }, [open]);
+  const shortcutLabel = { search: tn("shortcutSearch"), new: tn("shortcutNew"), rows: tn("shortcutRows") };
 
   const entries = useMemo<Entry[]>(() => {
     const q = query.trim().toLowerCase();
@@ -193,7 +210,7 @@ export function CommandPalette({
           )}
         </div>
         <div className="border-t border-white/[0.08] px-4 py-2 text-[11px] text-white/30">
-          {t("paletteHint")} · {t("shortcutsHint")}
+          {t("paletteHint")} · {tn("shortcutsLabel")}: {shortcuts.map((key) => shortcutLabel[key]).join(" · ")}
         </div>
       </DialogContent>
     </Dialog>

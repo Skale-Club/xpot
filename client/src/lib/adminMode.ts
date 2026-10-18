@@ -12,9 +12,11 @@ import type { XpotMeResponse } from "../pages/xpot/types";
 // this device, not a permission: the server still decides what each account may
 // do, and the header can only narrow.
 //
-// Off by default. The shield button enters it (AdminModeButton), opening an
-// /admin page turns it on (AdminApp), and the amber bar shown on every screen
-// while it is on leaves it (AdminModeBar).
+// Off by default, and off again after signing out (signOut clears it). The
+// sidebar's "Management mode", the scope chip on the lists (ScopeChip) and the
+// switch in Settings › Memberships enter it; opening an /admin page turns it on
+// with a toast (AdminApp); the amber bar shown on every screen while it is on
+// leaves it (AdminModeBar).
 
 const KEY = "xpot.adminMode";
 const listeners = new Set<() => void>();
@@ -40,6 +42,17 @@ export function setAdminMode(on: boolean) {
     window.localStorage.setItem(KEY, on ? "1" : "0");
   } catch {
     // Not remembered; it lasts until the app reloads.
+  }
+  listeners.forEach((l) => l());
+}
+
+/** Forgets the choice (sign-out): the next account on this device starts with it off. */
+export function clearAdminMode() {
+  current = false;
+  try {
+    window.localStorage.removeItem(KEY);
+  } catch {
+    // Nothing stored.
   }
   listeners.forEach((l) => l());
 }
