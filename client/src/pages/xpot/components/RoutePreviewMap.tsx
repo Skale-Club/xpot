@@ -9,6 +9,8 @@ type RoutePoint = {
   markerColor?: string;
   markerBorderColor?: string;
   markerTextColor?: string;
+  /** Text inside the marker; the stop number when omitted (a check or skip glyph for finished stops). */
+  markerText?: string;
 };
 
 let mapsLoader: Promise<void> | null = null;
@@ -164,7 +166,7 @@ export function RoutePreviewMap({ start, stops, encodedPolyline, alt, showCurren
             scale: 14,
           },
           label: {
-            text: String(index + 1),
+            text: stop.markerText ?? String(index + 1),
             color: stop.markerTextColor ?? "#ffffff",
             fontSize: "11px",
             fontWeight: "700",
@@ -341,7 +343,7 @@ function MapLibreRouteMap({ start, stops, encodedPolyline, alt, showCurrentLocat
         stops.forEach((point, index) => {
           const marker = document.createElement("button");
           marker.type = "button";
-          marker.textContent = String(index + 1);
+          marker.textContent = point.markerText ?? String(index + 1);
           marker.title = point.label ?? `Stop ${index + 1}`;
           marker.setAttribute("aria-label", point.label ?? `Stop ${index + 1}`);
           marker.style.cssText = `display:flex;align-items:center;justify-content:center;width:27px;height:27px;padding:0;border-radius:9999px;background:${point.markerColor ?? "#1f2937"};border:2px solid ${point.markerBorderColor ?? "#64748b"};color:${point.markerTextColor ?? "#ffffff"};font:700 11px/1 system-ui;box-shadow:0 3px 10px rgba(15,23,42,.4);cursor:pointer;`;

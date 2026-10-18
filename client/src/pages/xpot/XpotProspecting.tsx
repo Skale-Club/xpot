@@ -12,6 +12,7 @@ import { useViewerAccess } from "@/lib/adminMode";
 import { Link, useLocation, useSearchParams } from "wouter";
 import { RoutePreviewMap } from "./components/RoutePreviewMap";
 import { appleRouteUrl, appleStopUrl, googleRouteUrl, googleStopUrl, isAppleMobileDevice } from "./prospectingMaps";
+import { formatDistance } from "./utils";
 import { GLASS } from "@/components/xpot/surface";
 import { GradientTopLine } from "@/components/xpot/GradientTopLine";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -29,6 +30,7 @@ import {
   prospectingProgress,
   reorderIdsAroundTarget,
   routeDisplayName,
+  stopMarkerTone,
   todayRouteOf,
   selectableCandidateIds,
   serverNowMs,
@@ -124,11 +126,6 @@ const SUGGESTIONS_GAP = 8;
 const SUGGESTIONS_VIEWPORT_GAP = 8;
 const SUGGESTIONS_MAX_HEIGHT = 280;
 
-function stopMarkerTone(stopId: number, currentStopId: number | null, nextStopId: number | null) {
-  if (stopId === currentStopId) return { background: "#3b82f6", border: "#93c5fd", text: "#ffffff" };
-  if (stopId === nextStopId) return { background: "#312e81", border: "#a78bfa", text: "#ede9fe" };
-  return { background: "#1f2937", border: "#475569", text: "#94a3b8" };
-}
 
 function FloatingSuggestions({
   anchorRef,
@@ -747,15 +744,19 @@ export function XpotProspecting() {
   const routeStart = routeDetails ? { lat: routeDetails.route.startLat, lng: routeDetails.route.startLng } : null;
   const directionsUrl = routeDetails && routeStart ? googleRouteUrl(routeStart, routeDetails.stops) : null;
   const appleDirectionsUrl = appleDevice && routeDetails && routeStart ? appleRouteUrl(routeStart, routeDetails.stops) : null;
-  const mapStops = useMemo(() => routeDetails?.stops.map((stop) => ({
-    id: stop.id,
-    lat: Number(stop.lat),
-    lng: Number(stop.lng),
-    label: stop.name,
-    markerColor: stopMarkerTone(stop.id, currentStopId, nextStopId).background,
-    markerBorderColor: stopMarkerTone(stop.id, currentStopId, nextStopId).border,
-    markerTextColor: stopMarkerTone(stop.id, currentStopId, nextStopId).text,
-  })) ?? [], [routeDetails?.stops, currentStopId, nextStopId]);
+  const mapStops = useMemo(() => routeDetails?.stops.map((stop) => {
+    const tone = stopMarkerTone(stop, currentStopId, nextStopId);
+    return {
+      id: stop.id,
+      lat: Number(stop.lat),
+      lng: Number(stop.lng),
+      label: stop.name,
+      markerColor: tone.background,
+      markerBorderColor: tone.border,
+      markerTextColor: tone.text,
+      markerText: tone.glyph ?? undefined,
+    };
+  }) ?? [], [routeDetails?.stops, currentStopId, nextStopId]);
   const openStopPreview = useCallback((stopId: number) => setSelectedStopId(stopId), []);
   const resetDragState = () => {
     setDraggedStopId(null);
@@ -825,7 +826,7 @@ export function XpotProspecting() {
   const routeSummaryLine = (route: ProspectingRoute) => t("viewRouteHint", {
     status: routeStatusLabel(route.status, t, route.routeDate < today),
     hours: Math.max(0.1, Math.round(route.totalDurationSeconds / 360) / 10),
-    distance: Math.max(0, route.totalDistanceMeters / 1609.344).toLocaleString(t.locale, { maximumFractionDigits: 1 }),
+    distance: formatDistance(route.totalDistanceMeters),
   });
   const openTodayAction = () => {
     if (activeTodayRoute) openRoute(activeTodayRoute.id);
@@ -1385,15 +1386,20 @@ export function XpotProspecting() {
               <ol className="space-y-2">
                 {routeDetails.stops.map((stop) => {
                   const stopUrl = appleDevice ? appleStopUrl(stop) : googleStopUrl(stop);
-                  const numberRailClass = stop.id === currentStopId
-                    ? "border-blue-300/45 bg-blue-500 text-white shadow-[inset_-1px_0_0_rgba(255,255,255,0.12)]"
-                    : stop.id === nextStopId
-                      ? "border-violet-300/20 bg-violet-400/[0.14] text-violet-100/85 shadow-[inset_-1px_0_0_rgba(196,181,253,0.1)]"
-                      : "border-white/10 bg-white/[0.035] text-white/45";
+                  const stopTone = stopMarkerTone(stop, currentStopId, nextStopId);
+                  const numberRailClass = stop.status === "completed"
+                    ? "border-white/[0.06] bg-white/[0.02] text-emerald-300/80"
+                    : stop.status === "skipped"
+                      ? "border-white/[0.06] bg-white/[0.02] text-white/35"
+                      : stop.id === currentStopId
+                        ? "border-blue-300/45 bg-blue-500 text-white shadow-[inset_-1px_0_0_rgba(255,255,255,0.12)]"
+                        : stop.id === nextStopId
+                          ? "border-blue-300/30 bg-blue-400/[0.1] text-blue-100/85 shadow-[inset_-1px_0_0_rgba(147,197,253,0.12)]"
+                          : "border-white/10 bg-white/[0.035] text-white/45";
                   const checkInToneClass = stop.id === currentStopId
                     ? "bg-blue-500 text-white hover:bg-blue-400 focus-visible:ring-blue-300/60"
                     : stop.id === nextStopId
-                      ? "border border-violet-300/25 bg-violet-400/[0.16] text-violet-100/85 hover:border-violet-200/35 hover:bg-violet-400/[0.24] hover:text-white focus-visible:ring-violet-300/45"
+                      ? "border border-blue-300/30 bg-blue-400/[0.12] text-blue-100/85 hover:border-blue-200/40 hover:bg-blue-400/[0.2] hover:text-white focus-visible:ring-blue-300/45"
                       : "border border-white/10 bg-white/[0.06] text-white/50 hover:bg-white/[0.1] hover:text-white/80 focus-visible:ring-white/30";
                   const canRemoveThisStop = routeDetails.stops.length > 1
                     && ["draft", "published", "in_progress"].includes(routeDetails.route.status)
@@ -1429,7 +1435,7 @@ export function XpotProspecting() {
                       aria-label={t("openCompanyPreview", { name: stop.name })}
                       className={`group relative grid min-h-[84px] cursor-pointer grid-cols-[3.5rem_minmax(0,1fr)] items-stretch overflow-hidden rounded-xl border bg-black/10 transition-[border-color,background-color,box-shadow,opacity,transform] hover:bg-white/[0.035] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300/60 sm:grid-cols-[3.5rem_minmax(0,1fr)_auto] [contain-intrinsic-size:84px] [content-visibility:auto] ${dragOverStopId === stop.id && draggedStopId !== stop.id ? "border-indigo-300/70 ring-2 ring-indigo-400/20" : "border-white/10"} ${draggedStopId === stop.id ? "scale-[0.995] opacity-45" : "opacity-100"} ${dragOverStopId === stop.id && draggedStopId !== stop.id && dragPlacement === "before" ? "before:absolute before:inset-x-2 before:top-0 before:z-30 before:h-0.5 before:rounded-full before:bg-indigo-300 before:shadow-[0_0_12px_rgba(165,180,252,0.9)]" : ""} ${dragOverStopId === stop.id && draggedStopId !== stop.id && dragPlacement === "after" ? "after:absolute after:inset-x-2 after:bottom-0 after:z-30 after:h-0.5 after:rounded-full after:bg-indigo-300 after:shadow-[0_0_12px_rgba(165,180,252,0.9)]" : ""}`}
                     >
-                      <span className={`row-span-2 flex w-14 shrink-0 items-center justify-center self-stretch border-r px-2 text-sm font-bold tabular-nums transition-colors sm:row-span-1 ${numberRailClass}`}>{stop.position}</span>
+                      <span className={`row-span-2 flex w-14 shrink-0 items-center justify-center self-stretch border-r px-2 text-sm font-bold tabular-nums transition-colors sm:row-span-1 ${numberRailClass}`}>{stopTone.glyph ?? stop.position}</span>
                       {canReorderRoute ? (
                         <button
                           type="button"
@@ -1602,12 +1608,12 @@ export function XpotProspecting() {
                   <span
                     className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-2 text-sm font-bold shadow-lg"
                     style={{
-                      background: stopMarkerTone(selectedStop.id, currentStopId, nextStopId).background,
-                      borderColor: stopMarkerTone(selectedStop.id, currentStopId, nextStopId).border,
-                      color: stopMarkerTone(selectedStop.id, currentStopId, nextStopId).text,
+                      background: stopMarkerTone(selectedStop, currentStopId, nextStopId).background,
+                      borderColor: stopMarkerTone(selectedStop, currentStopId, nextStopId).border,
+                      color: stopMarkerTone(selectedStop, currentStopId, nextStopId).text,
                     }}
                   >
-                    {selectedStop.position}
+                    {stopMarkerTone(selectedStop, currentStopId, nextStopId).glyph ?? selectedStop.position}
                   </span>
                   <div className="min-w-0">
                     <DialogTitle className="text-xl font-bold leading-tight text-white">{selectedStop.name}</DialogTitle>
@@ -1682,7 +1688,7 @@ export function XpotProspecting() {
                       {ensureStopLead.isPending && ensureStopLead.variables?.destination === "company" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Building2 className="h-4 w-4" />}{t("openCompanyPanel")}
                     </Button>
                     <Button asChild variant="outline" className="h-11 min-w-0 rounded-xl border-white/10 bg-white/[0.04] px-2 text-white hover:bg-white/[0.08] hover:text-white sm:px-4">
-                      <a href={appleDevice ? appleStopUrl(selectedStop) : googleStopUrl(selectedStop)} target="_blank" rel="noreferrer"><Navigation className="h-4 w-4" />{t("googleMaps")}</a>
+                      <a href={appleDevice ? appleStopUrl(selectedStop) : googleStopUrl(selectedStop)} target="_blank" rel="noreferrer"><Navigation className="h-4 w-4" />{appleDevice ? t("appleMaps") : t("googleMaps")}</a>
                     </Button>
                   </div>
                 </div>

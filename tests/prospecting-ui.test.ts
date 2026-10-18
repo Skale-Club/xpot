@@ -8,6 +8,7 @@ import {
   reorderIdsAroundTarget,
   routeDisplayName,
   routeStopProgress,
+  stopMarkerTone,
   todayRouteOf,
   selectableCandidateIds,
   activeRunTiming,
@@ -190,5 +191,26 @@ describe("routeStopProgress", () => {
       { status: "completed" }, { status: "skipped" }, { status: "planned" }, { status: "checked_in" },
     ])).toEqual({ done: 2, total: 4, percent: 50 });
     expect(routeStopProgress([])).toEqual({ done: 0, total: 0, percent: 0 });
+  });
+});
+
+describe("stopMarkerTone", () => {
+  it("mutes done and skipped stops with a glyph so they never look like future ones", () => {
+    const done = stopMarkerTone({ id: 1, status: "completed" }, 2, 3);
+    const skipped = stopMarkerTone({ id: 4, status: "skipped" }, 2, 3);
+    const future = stopMarkerTone({ id: 5, status: "planned" }, 2, 3);
+    expect(done.glyph).toBe("✓");
+    expect(skipped.glyph).toBe("↷");
+    expect(future.glyph).toBeNull();
+    expect(done.background).not.toBe(future.background);
+    expect(skipped.text).not.toBe(future.text);
+  });
+
+  it("marks the next stop in blue, not the Tags violet", () => {
+    const next = stopMarkerTone({ id: 3, status: "planned" }, 2, 3);
+    const current = stopMarkerTone({ id: 2, status: "en_route" }, 2, 3);
+    expect(current.background).toBe("#3b82f6");
+    expect(next.border).toBe("#60a5fa");
+    expect(next.border).not.toBe("#a78bfa");
   });
 });
