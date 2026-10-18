@@ -12,7 +12,7 @@ import { Field, Input } from "@/components/xpot/Field";
 import { FormFooter } from "@/components/xpot/FormFooter";
 import { InlineAlert } from "@/components/xpot/InlineAlert";
 import { INTEGRATION_TONE, Pill } from "@/components/xpot/StatusPill";
-import { GLASS_CLASS } from "@/components/xpot/surface";
+import { DANGER_OUTLINE, GLASS_CLASS } from "@/components/xpot/surface";
 import {
   isConfigFieldKey,
   type IntegrationProviderDef,
@@ -385,7 +385,7 @@ export function ProviderCard({
         {status.hasApiKey && secretField && (
           <Button
             variant="outline"
-            className="border-red-400/30 text-red-300 hover:border-red-400/40 hover:bg-red-500/10 hover:text-red-200"
+            className={DANGER_OUTLINE}
             onClick={() => setConfirming("removeKey")}
             disabled={save.isPending}
             data-testid="integration-remove-key"

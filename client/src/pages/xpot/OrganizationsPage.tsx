@@ -15,11 +15,12 @@ import { BackLink, PageHeader } from "@/components/xpot/PageHeader";
 import { Stat } from "@/components/xpot/Stat";
 import { Pill } from "@/components/xpot/StatusPill";
 import { SwitchRow } from "@/components/xpot/SwitchRow";
-import { GLASS_CLASS, GLASS_SUBTLE_CLASS } from "@/components/xpot/surface";
+import { DANGER_OUTLINE, GLASS_CLASS, GLASS_SUBTLE_CLASS } from "@/components/xpot/surface";
 import { Tabs } from "@/components/xpot/Tabs";
 import { apiRequest } from "@/lib/queryClient";
 import { describeApiError } from "@/lib/apiErrors";
 import { formatDate } from "@/lib/dates";
+import { formatPhone } from "@/lib/format";
 import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
@@ -27,6 +28,7 @@ import { organizationsMessages } from "@/i18n/messages/organizations";
 import { peopleWorkspaceMessages } from "@/i18n/messages/peopleWorkspace";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { repModules } from "@shared/modules";
+import { kitCode } from "@shared/tagKits";
 import type { XpotMeResponse } from "./types";
 
 // Account › Organizations. People are created, approved and blocked only in
@@ -63,8 +65,6 @@ type Person = { id: number; displayName: string; access: "pending" | "active" | 
 /** What a member action does, for its confirmation and its toast. */
 type MemberAction = { member: Member; kind: "suspend" | "reactivate" | "makeAdmin" | "makeRep" | "remove" };
 
-/** The outline button for removing someone; the dialog it opens is the red one. */
-const DANGER_OUTLINE = "border-red-400/30 text-red-300 hover:border-red-400/40 hover:bg-red-500/10 hover:text-red-200";
 // Stored on the membership when it is suspended; managers read it in the audit log.
 const SUSPENDED_REASON = "Suspended by an organization manager";
 
@@ -284,7 +284,7 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
                       ) : (
                         <p className="truncate font-medium text-white">{member.displayName}</p>
                       )}
-                      <p className="truncate text-xs text-white/40">{member.phone || member.email || t("noContact")}</p>
+                      <p className="truncate text-xs text-white/40">{member.phone ? formatPhone(member.phone) : member.email || t("noContact")}</p>
                     </div>
                     <Pill tone="slate" className="gap-1">
                       {member.membershipRole === "admin" && <ShieldCheck className="h-3 w-3" aria-hidden="true" />}{member.membershipRole === "admin" ? t("roleRepAdmin") : t("roleRep")}
@@ -308,7 +308,7 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
         )}
         {tab === "kits" && (
           <RecordList query={kits} empty={t("noKits")} rowHref={(row) => (platformManager ? `/admin/tags/kits${row.repId ? `?kitRep=${row.repId}` : ""}` : "/tags/pieces")}
-            render={(row) => <><span className="text-sm text-white">{t("kitOf", { date: formatDate(row.createdAt) })}{row.note ? <span className="text-white/45"> · {row.note}</span> : null}</span><span className="text-xs text-white/45">{repName(row.repId)}</span></>} />
+            render={(row) => <><span className="text-sm text-white"><span className="font-mono">{kitCode(row.kitNumber)}</span><span className="text-white/45"> · {formatDate(row.createdAt)}</span>{row.note ? <span className="text-white/45"> · {row.note}</span> : null}</span><span className="text-xs text-white/45">{repName(row.repId)}</span></>} />
         )}
         {tab === "customers" && (
           <RecordList query={customers} empty={t("noCustomers")} rowHref={(row) => (usesVisits ? `/leads/${row.id}` : `/tags/customers/${row.id}`)}

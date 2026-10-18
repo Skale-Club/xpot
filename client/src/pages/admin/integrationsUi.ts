@@ -45,6 +45,17 @@ export function visibleXphereRows(rows: XphereRow[], showAll: boolean): XphereRo
   return rows.filter((row) => !row.deleted && row.usesVisits && row.access === "active");
 }
 
+/**
+ * Every cached Xphere query: the list (/api/xpot/admin/xphere) and each
+ * person's connection (/api/xpot/admin/xphere/<userId>, People › Visits).
+ * A save or a new key on either screen refreshes both, so neither shows a
+ * key that no longer works.
+ */
+export function isXphereQueryKey(queryKey: readonly unknown[]): boolean {
+  const head = queryKey[0];
+  return typeof head === "string" && /^\/api\/xpot\/admin\/xphere(\/|$)/.test(head);
+}
+
 /** The inbound key as the list shows it: its prefix and last 4 characters. */
 export function maskInboundKey(key: string): string {
   const prefix = key.startsWith("xpot_") ? "xpot_" : "";

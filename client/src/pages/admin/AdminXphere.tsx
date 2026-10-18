@@ -20,7 +20,8 @@ import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { manageMessages } from "@/i18n/messages/manage";
 import { integrationsMessages } from "@/i18n/messages/integrations";
-import { maskInboundKey, visibleXphereRows, type XphereRow } from "./integrationsUi";
+import { isXphereQueryKey, maskInboundKey, visibleXphereRows, type XphereRow } from "./integrationsUi";
+import { SERVICES_KEY } from "./platform/servicesUi";
 
 const XPHERE_KEY = ["/api/xpot/admin/xphere"];
 /** The read-only value boxes (endpoint, inbound key): the field's shape without being editable. */
@@ -120,7 +121,10 @@ function XphereRowCard({ row }: { row: XphereRow }) {
     onSuccess: () => {
       toast({ title: t("xphereSavedFor", { name: row.displayName }), variant: "success" });
       setApiKey("");
-      queryClient.invalidateQueries({ queryKey: XPHERE_KEY });
+      // The list and the person's own view in People (its key is per user).
+      void queryClient.invalidateQueries({ predicate: (q) => isXphereQueryKey(q.queryKey) });
+      // Integrations › Services and Status count who is connected.
+      void queryClient.invalidateQueries({ queryKey: [...SERVICES_KEY] });
     },
     onError: (e: Error) => toast({ title: tm("errorSaving"), description: describeApiError(e, (path) => labels[path]), variant: "destructive" }),
   });
@@ -131,7 +135,8 @@ function XphereRowCard({ row }: { row: XphereRow }) {
       toast({ title: t("keyRotated", { name: row.displayName }), variant: "success" });
       setRotating(false);
       setRevealed(true);
-      queryClient.invalidateQueries({ queryKey: XPHERE_KEY });
+      // The list and the person's own view in People (its key is per user).
+      void queryClient.invalidateQueries({ predicate: (q) => isXphereQueryKey(q.queryKey) });
     },
     onError: (e: Error) => {
       setRotating(false);

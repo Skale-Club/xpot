@@ -17,7 +17,7 @@ import { FormFooter } from "@/components/xpot/FormFooter";
 import { InlineAlert } from "@/components/xpot/InlineAlert";
 import { ListSkeleton } from "@/components/xpot/ListSkeleton";
 import { INTEGRATION_TONE, Pill, ROLE_TONE, toneOf, type PillTone } from "@/components/xpot/StatusPill";
-import { GLASS_CLASS } from "@/components/xpot/surface";
+import { DANGER_OUTLINE, GLASS_CLASS } from "@/components/xpot/surface";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { XPOT_MODULES, repModules, type XpotModule } from "@shared/modules";
 import { formatPhone } from "@shared/phone";
@@ -30,7 +30,8 @@ import { manageMessages, type ManageKey } from "@/i18n/messages/manage";
 import { peopleWorkspaceMessages } from "@/i18n/messages/peopleWorkspace";
 import { settingsMessages } from "@/i18n/messages/settings";
 import type { XpotMeResponse } from "@/pages/xpot/types";
-import { maskInboundKey } from "./integrationsUi";
+import { isXphereQueryKey, maskInboundKey } from "./integrationsUi";
+import { SERVICES_KEY } from "./platform/servicesUi";
 import { personStatus, type PeopleStatus } from "./peopleFilters";
 
 // One person in Account › People (/admin/reps/:repId): every decision about
@@ -78,9 +79,6 @@ export type Rep = {
 };
 
 export const REPS_KEY = ["/api/xpot/admin/reps"];
-const XPHERE_LIST_KEY = ["/api/xpot/admin/xphere"];
-/** The outline button for a destructive step (block, refuse, delete); the dialog it opens is the red one. */
-export const DANGER_OUTLINE = "border-red-400/30 text-red-300 hover:border-red-400/40 hover:bg-red-500/10 hover:text-red-200";
 export const MODULE_KEYS = { visits: "moduleVisits", tags: "moduleTags" } as const satisfies Record<XpotModule, keyof typeof commonMessages.en>;
 export const ROLES = ["rep", "manager", "admin"] as const;
 export const ROLE_KEYS = { rep: "role_rep", manager: "role_manager", admin: "role_admin" } as const satisfies Record<(typeof ROLES)[number], keyof typeof settingsMessages.en>;
@@ -837,10 +835,8 @@ function XphereConnection({ rep, userId }: { rep: Rep; userId: string }) {
   const [token, setToken] = useState("");
   const [revealed, setRevealed] = useState(false);
   const [rotating, setRotating] = useState(false);
-  const refresh = () => {
-    void queryClient.invalidateQueries({ queryKey: key });
-    void queryClient.invalidateQueries({ queryKey: XPHERE_LIST_KEY });
-  };
+  // This person's connection and the Integrations › Xphere list.
+  const refresh = () => void queryClient.invalidateQueries({ predicate: (q) => isXphereQueryKey(q.queryKey) });
   const fail = (e: Error) => toast({ title: tm("errorSaving"), description: e.message, variant: "destructive" });
 
   const put = useMutation({
@@ -850,6 +846,8 @@ function XphereConnection({ rep, userId }: { rep: Rep; userId: string }) {
       else toast({ title: t("xphereSavedFor", { name: rep.displayName }), variant: "success" });
       setToken("");
       refresh();
+      // Integrations › Services and Status count who is connected.
+      void queryClient.invalidateQueries({ queryKey: [...SERVICES_KEY] });
     },
     onError: fail,
   });
