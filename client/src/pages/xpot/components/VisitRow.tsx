@@ -162,7 +162,7 @@ export function VisitSummaryPage({ visit, onBack, onDelete }: { visit: VisitLike
               <StatusBadge status={visit.status} />
               <LocationExceptionBadge visit={visit} />
             </div>
-            <p className="mt-1 capitalize text-xs text-white/40">{visitDate}</p>
+            <p className="mt-1 text-xs text-white/40 first-letter:uppercase">{visitDate}</p>
           </div>
         </div>
         <div className="flex gap-2">
