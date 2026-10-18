@@ -148,7 +148,8 @@ const faceField = z.enum(TAG_FACES).nullable().optional();
 
 const tagCreateSchema = z.object({
   productType: z.enum(TAG_PRODUCT_TYPES),
-  salesProductId: z.number().int().positive().optional(),
+  // Without a catalog product a piece can never be sold (server/tags/sales.ts).
+  salesProductId: z.number({ required_error: "Choose a sales catalog product" }).int().positive(),
   face: faceField,
   label: optionalText(120),
 }).strict();
@@ -667,7 +668,8 @@ export function registerTagRoutes(app: Express) {
     }
   });
 
-  app.post(adminBase, requireTagManager, async (req, res) => {
+  // A single piece outside any batch: production (batches) is the global admin's, so is this.
+  app.post(adminBase, requireTagAdmin, async (req, res) => {
     try {
       const tag = await repo.createSingleTag(tagCreateSchema.parse(req.body), userIdOf(req));
       res.status(201).json(await repo.getTagDetail(tag.id, tagBaseUrl()));

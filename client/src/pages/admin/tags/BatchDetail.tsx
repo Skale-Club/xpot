@@ -73,7 +73,8 @@ function EditBatch({ batch, onClose }: { batch: BatchDetailData; onClose: () => 
         face: form.face || null,
         vendor: form.vendor || null,
         notes: form.notes || null,
-        salesProductId: Number(form.salesProductId),
+        // Only a real change: the server re-maps the pieces that followed the old product (never sold ones).
+        ...(Number(form.salesProductId) !== batch.salesProductId ? { salesProductId: Number(form.salesProductId) } : {}),
       }),
     onSuccess: () => {
       void invalidateAdminTags();

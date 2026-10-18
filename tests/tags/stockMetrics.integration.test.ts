@@ -45,7 +45,8 @@ test.skipIf(!enabled)("tags: every screen counts the same stock the same way", a
     RETURNING id, user_id`);
   const repId = Object.fromEntries((reps.rows as Array<{ id: number; user_id: string }>).map((r) => [r.user_id, r.id]));
   const products = await db.execute(sql`INSERT INTO sales_products (sku, name, kind, base_price_cents, is_active) VALUES
-    ('SM-TAGS-A', 'Metrics plate A', 'physical', 2500, true), ('SM-TAGS-B', 'Metrics plate B', 'physical', 3000, true)
+    ('SM-TAGS-A', 'Metrics plate A', 'physical', 2500, true), ('SM-TAGS-B', 'Metrics plate B', 'physical', 3000, true),
+    ('SM-TAGS-C', 'Metrics plate C', 'physical', 3500, true)
     ON CONFLICT (sku) DO UPDATE SET name = EXCLUDED.name
     RETURNING id, sku`);
   const productId = Object.fromEntries((products.rows as Array<{ id: number; sku: string }>).map((r) => [r.sku, Number(r.id)]));
@@ -212,6 +213,24 @@ test.skipIf(!enabled)("tags: every screen counts the same stock the same way", a
     assert.equal(returned.movement_type, "return");
     assert.equal((await api("PATCH", `/api/xpot/admin/tags/${p(1).id}/rep`, "sm-manager", { repId: repId["sm-zed"] })).status, 409);
     assert.equal((await api("PATCH", `/api/xpot/admin/tags/${p(3).id}/rep`, "sm-manager", { repId: repId["sm-zed"] })).status, 409);
+
+    // A single piece outside a batch is production: admin only, and it must be sellable (a catalog product).
+    assert.equal((await api("POST", "/api/xpot/admin/tags", "sm-manager", { productType: "keychain", salesProductId: productId["SM-TAGS-B"] })).status, 403);
+    assert.equal((await api("POST", "/api/xpot/admin/tags", "sm-admin", { productType: "keychain" })).status, 400);
+    const single = await ok("POST", "/api/xpot/admin/tags", "sm-admin", { productType: "keychain", salesProductId: productId["SM-TAGS-B"] });
+    assert.equal(single.salesProductId, productId["SM-TAGS-B"]);
+    // A sold piece keeps the product it was sold as.
+    assert.equal((await api("PATCH", `/api/xpot/admin/tags/${p(1).id}`, "sm-admin", { salesProductId: productId["SM-TAGS-B"] })).status, 409);
+
+    // Editing a batch's catalog product re-maps only the pieces that followed the old one and are not sold.
+    await ok("PATCH", `/api/xpot/admin/tags/${p(14).id}`, "sm-admin", { salesProductId: productId["SM-TAGS-C"] });
+    const productOf = async (n: number) => (await ok("GET", `/api/xpot/tags/${p(n).id}`, "sm-admin")).salesProductId;
+    await ok("PATCH", `/api/xpot/admin/tag-batches/${batchA.id}`, "sm-admin", { name: "Metrics A (renamed)" });
+    assert.equal(await productOf(2), productId["SM-TAGS-A"]);
+    await ok("PATCH", `/api/xpot/admin/tag-batches/${batchA.id}`, "sm-admin", { salesProductId: productId["SM-TAGS-B"] });
+    assert.equal(await productOf(2), productId["SM-TAGS-B"]);
+    assert.equal(await productOf(1), productId["SM-TAGS-A"]);
+    assert.equal(await productOf(14), productId["SM-TAGS-C"]);
   } finally {
     server.close();
     await pool.end();

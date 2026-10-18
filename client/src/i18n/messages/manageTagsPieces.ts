@@ -124,6 +124,7 @@ const en = {
   internalLabel: "Internal label",
   optional: "Optional",
   saveDetails: "Save details",
+  noCatalogProduct: "No catalog product: this piece cannot be sold until it has one.",
 
   // Piece screen: reseller
   houseStockTarget: "house stock",
@@ -358,6 +359,7 @@ export const manageTagsPiecesMessages: Dictionary<typeof en> = {
     internalLabel: "Rótulo interno",
     optional: "Opcional",
     saveDetails: "Salvar detalhes",
+    noCatalogProduct: "Sem produto do catálogo: esta peça não pode ser vendida até ter um.",
 
     houseStockTarget: "o estoque da casa",
     thisReseller: "este vendedor",
@@ -584,6 +586,7 @@ export const manageTagsPiecesMessages: Dictionary<typeof en> = {
     internalLabel: "Etiqueta interna",
     optional: "Opcional",
     saveDetails: "Guardar detalles",
+    noCatalogProduct: "Sin producto del catálogo: esta pieza no se puede vender hasta que tenga uno.",
 
     houseStockTarget: "el inventario de la casa",
     thisReseller: "este vendedor",

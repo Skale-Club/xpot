@@ -13,7 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { AdminHttpError, ADMIN_TAGS_KEY, errorMessage, formatDateTime, getJson, invalidateAdminTags, sendJson, STALE_MS } from "./api";
 import { BTN, BTN_DANGER, BTN_GHOST, CARD, INPUT, PieceStatusPill } from "./ui";
 import { CopyRow, Loading, LoadError, Select, useLeads, useReps } from "./pieces-shared";
-import { ConfirmDialog } from "./batches-shared";
+import { ConfirmDialog, useTagCatalog } from "./batches-shared";
 import { useTagLabels } from "./labels";
 import { AnalyticsPanel, RangePicker, type AnalyticsRange } from "./pieces-analytics";
 import { NfcProvisioningCard } from "./pieces-NfcProvisioningCard";
@@ -26,6 +26,7 @@ import { commonMessages } from "@/i18n/messages/common";
 import { shellMessages } from "@/i18n/messages/shell";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
 import { manageTagsPiecesMessages } from "@/i18n/messages/manageTagsPieces";
+import { manageTagsBatchesMessages } from "@/i18n/messages/manageTagsBatches";
 import { tagsMessages } from "@/i18n/messages/tags";
 
 type Go = (path: string) => void;
@@ -511,12 +512,18 @@ function LifecycleStep({ tag }: { tag: TagDetail }) {
 function DetailsStep({ tag }: { tag: TagDetail }) {
   const t = useT(manageTagsPiecesMessages);
   const tg = useT(manageTagsMessages);
+  const tb = useT(manageTagsBatchesMessages);
   const labels = useTagLabels();
+  const isAdmin = useIsSuperAdmin();
   const [label, setLabel] = useState(tag.label ?? "");
   const [productType, setProductType] = useState<string | undefined>(tag.productType);
   const [face, setFace] = useState<string | undefined>(tag.ownFace ?? undefined);
+  // A piece with no catalog product (its own or its batch's) can never be sold: the admin can map it here.
+  const missingProduct = isAdmin && tag.salesProductId === null;
+  const [salesProductId, setSalesProductId] = useState<string | undefined>(undefined);
+  const { data: catalog = [] } = useTagCatalog();
   const save = usePieceMutation(tag.id, t("pieceSaved"));
-  const dirty = label.trim() !== (tag.label ?? "") || productType !== tag.productType || (face ?? null) !== tag.ownFace;
+  const dirty = label.trim() !== (tag.label ?? "") || productType !== tag.productType || (face ?? null) !== tag.ownFace || !!salesProductId;
   if (tag.status === "retired" || tag.stockStatus === "damaged") return null;
   return (
     <details className="group space-y-3">
@@ -525,6 +532,19 @@ function DetailsStep({ tag }: { tag: TagDetail }) {
         {t("pieceSettings")}
       </summary>
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        {missingProduct ? (
+          <label className="space-y-1 sm:col-span-2">
+            <span className={LABEL}>{tb("fieldCatalogProduct")}</span>
+            <Select
+              value={salesProductId}
+              onChange={setSalesProductId}
+              placeholder={tb("chooseCatalogProduct")}
+              options={catalog.map((p) => ({ value: String(p.id), label: p.sku ? `${p.name} · ${p.sku}` : p.name }))}
+              testId="admin-piece-catalog"
+            />
+            <span className="block text-xs text-amber-300/80">{t("noCatalogProduct")}</span>
+          </label>
+        ) : null}
         <label className="space-y-1">
           <span className={LABEL}>{t("productType")}</span>
           <Select value={productType} onChange={setProductType} placeholder={t("productPlaceholder")} options={labels.productOptions} allowEmpty={false} />
@@ -538,7 +558,7 @@ function DetailsStep({ tag }: { tag: TagDetail }) {
           <input className={INPUT} value={label} onChange={(e) => setLabel(e.target.value)} maxLength={120} placeholder={t("optional")} />
         </label>
       </div>
-      <button type="button" className={BTN_GHOST} disabled={!dirty || !productType || save.isPending} onClick={() => save.mutate({ method: "PATCH", body: { label, productType, face: face ?? null } })}>
+      <button type="button" className={BTN_GHOST} disabled={!dirty || !productType || save.isPending} onClick={() => save.mutate({ method: "PATCH", body: { label, productType, face: face ?? null, ...(salesProductId ? { salesProductId: Number(salesProductId) } : {}) } })}>
         {t("saveDetails")}
       </button>
     </details>

@@ -2,6 +2,7 @@ import { and, eq, inArray, isNull, sql, type SQL } from "drizzle-orm";
 import { db } from "../db.js";
 import {
   salesLeads,
+  salesProducts,
   salesReps,
   salesSaleTags,
   tagAcquisitionLines,
@@ -340,6 +341,12 @@ export async function writeHistory(
   });
 }
 
+/** A piece can be sold only as a physical catalog product (server/tags/sales.ts maps each piece to one). */
+async function assertPhysicalProduct(executor: typeof db | Tx, productId: number) {
+  const [product] = await executor.select({ kind: salesProducts.kind }).from(salesProducts).where(eq(salesProducts.id, productId));
+  if (!product || product.kind !== "physical") throw new TagError("Choose a physical product from the sales catalog", 400);
+}
+
 export interface TagUpdate {
   label?: string | null;
   productType?: string;
@@ -370,6 +377,13 @@ export async function updateTag(id: string, patch: TagUpdate, userId: string | n
     }
     if (patch.productType && patch.productType !== tag.productType && tag.status !== "inventory") {
       throw new TagError("Product type can only change while the tag is in inventory");
+    }
+    if (patch.salesProductId !== undefined && patch.salesProductId !== tag.salesProductId) {
+      if (patch.salesProductId !== null) await assertPhysicalProduct(tx, patch.salesProductId);
+      const [activeSale] = await tx.select({ id: salesSaleTags.id }).from(salesSaleTags)
+        .where(and(eq(salesSaleTags.tagId, tag.id), eq(salesSaleTags.status, "active")))
+        .limit(1);
+      if (activeSale) throw new TagError("A sold piece keeps the catalog product it was sold as", 409);
     }
     await writeHistory(tx, tag, next, userId, patch.reason ?? null);
     const [updated] = await tx
@@ -525,17 +539,18 @@ export async function assignTag(
   return updated;
 }
 
-/** Admin: one standalone piece (not part of a manufacturing batch), in house stock. */
+/** Admin: one standalone piece (not part of a manufacturing batch), in house stock. It needs a catalog product to be sellable. */
 export async function createSingleTag(
-  input: { productType: string; salesProductId?: number; face?: string | null; label?: string | null },
+  input: { productType: string; salesProductId: number; face?: string | null; label?: string | null },
   userId: string | null = null,
   source: JourneySource = "admin",
 ): Promise<Tag> {
+  await assertPhysicalProduct(db, input.salesProductId);
   const [code] = await generateUniqueCodes(1, findExistingCodes);
   const organizationId = await companyOrganizationId();
   const [tag] = await db
     .insert(tags)
-    .values({ organizationId, publicCode: code, productType: input.productType, salesProductId: input.salesProductId ?? null, face: input.face ?? null, label: input.label ?? null, status: "inventory" })
+    .values({ organizationId, publicCode: code, productType: input.productType, salesProductId: input.salesProductId, face: input.face ?? null, label: input.label ?? null, status: "inventory" })
     .returning();
   console.log(`[tags] created standalone tag ${code}`);
   await recordJourney({
@@ -1449,16 +1464,31 @@ export async function updateBatch(
   userId: string | null = null,
   source: JourneySource = "admin",
 ) {
-  const [previous] = await db.select({ status: tagBatches.status }).from(tagBatches).where(eq(tagBatches.id, id)).limit(1);
+  const [previous] = await db.select({ status: tagBatches.status, salesProductId: tagBatches.salesProductId }).from(tagBatches).where(eq(tagBatches.id, id)).limit(1);
   if (!previous) throw new TagError("Batch not found", 404);
   const batch = await db.transaction(async (tx) => {
+    const productChanged = input.salesProductId !== undefined && input.salesProductId !== previous.salesProductId;
+    if (productChanged) await assertPhysicalProduct(tx, input.salesProductId!);
     const [updated] = await tx
       .update(tagBatches)
       .set({ ...input, updatedAt: new Date() })
       .where(eq(tagBatches.id, id))
       .returning();
-    if (input.salesProductId !== undefined) {
-      await tx.update(tags).set({ salesProductId: input.salesProductId, updatedAt: new Date() }).where(eq(tags.batchId, id));
+    if (productChanged) {
+      // A new catalog product for the run reaches only the pieces that followed the batch's old one (or had none) and
+      // are not sold: a piece mapped on its own keeps its product, and a sold piece keeps the product it was sold as.
+      const now = new Date();
+      const sold = sql`EXISTS (SELECT 1 FROM sales_sale_tags st WHERE st.tag_id = ${tags.id} AND st.status = 'active')`;
+      const followsBatch = previous.salesProductId === null
+        ? sql`${tags.salesProductId} IS NULL`
+        : sql`(${tags.salesProductId} IS NULL OR ${tags.salesProductId} = ${previous.salesProductId})`;
+      if (previous.salesProductId !== null) {
+        // Sold pieces that only inherited the batch's product are pinned to it before the batch changes.
+        await tx.update(tags).set({ salesProductId: previous.salesProductId, updatedAt: now })
+          .where(and(eq(tags.batchId, id), isNull(tags.salesProductId), sold));
+      }
+      await tx.update(tags).set({ salesProductId: input.salesProductId, updatedAt: now })
+        .where(and(eq(tags.batchId, id), followsBatch, sql`NOT ${sold}`));
     }
     return updated;
   });
