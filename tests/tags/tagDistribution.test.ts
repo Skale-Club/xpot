@@ -26,6 +26,8 @@ test("hand out: only unsold, received, unset house pieces; the first reason wins
   assert.equal(handOutBlocker(piece({ stockStatus: "internal_use" })), "not_in_stock");
   assert.equal(handOutBlocker(piece({ status: "assigned" })), "set_up");
   assert.equal(handOutBlocker(piece({ status: "retired", stockStatus: "retired" })), "not_in_stock");
+  // Retiring keeps the stock status it had: a retired piece still reads "available".
+  assert.equal(handOutBlocker(piece({ status: "retired" })), "not_in_stock");
 });
 
 test("hand out agrees with the shared handOut stock number", () => {
@@ -40,6 +42,7 @@ test("take back: only unsold, unset pieces in a reseller's hands", () => {
   assert.equal(takeBackBlocker(piece()), "not_with_reseller");
   assert.equal(takeBackBlocker(piece({ repId: 3, status: "active" })), "set_up");
   assert.equal(takeBackBlocker(piece({ repId: 3, stockStatus: "damaged" })), "not_in_stock");
+  assert.equal(takeBackBlocker(piece({ repId: 3, status: "retired" })), "not_in_stock");
   const all = [piece({ repId: 3 }), piece(), piece({ repId: 3, status: "assigned" }), piece({ repId: 3, sold: true })];
   const asMetric = all.map((p) => ({ repId: p.repId, status: p.status, stockStatus: p.stockStatus, saleId: p.sold ? 1 : null }));
   assert.equal(all.filter((p) => takeBackBlocker(p) === null).length, countStockMetric(asMetric, "returnable"));
