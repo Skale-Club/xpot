@@ -504,7 +504,9 @@ export default function TagScreen({ code, onClose }: {
             </button>
           </>
         )}
-        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-white/[0.08] pt-3 text-sm text-white/60">
+        {/* Since the piece was made; the 30-day numbers are in the piece dashboard below. */}
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-white/[0.08] pt-3 text-sm text-white/60" data-testid="piece-all-time-scans">
+          <span className={EYEBROW_MUTED}>{t("allTime")}</span>
           <span className="flex items-center gap-1.5">
             <QrCode className="h-4 w-4 text-blue-300" />
             <span className="font-bold tabular-nums text-white">{tag.qrInteractions}</span> {t("qrScans")}
