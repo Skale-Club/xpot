@@ -1,6 +1,5 @@
 import { sql } from "drizzle-orm";
 import { bigserial, pgTable, text, serial, integer, timestamp, boolean, jsonb, pgEnum, uniqueIndex, index } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { users } from "./auth.js";
 // Note: in the source project there was a FK to a `vcards` table (Skale Club's vCard feature).

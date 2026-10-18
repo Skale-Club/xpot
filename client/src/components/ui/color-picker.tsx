@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { Pipette } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SURFACE_MODAL_CLASS } from "@/components/xpot/surface";

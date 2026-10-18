@@ -1,6 +1,6 @@
 // Read-only pieces: a sale in a list, a consignment agreement, and the ledger.
 
-import { Package, Handshake, AlertCircle, ArrowDownLeft, ArrowUpRight, SlidersHorizontal, Undo2 } from "lucide-react";
+import { Package, Handshake, AlertCircle, ArrowDownLeft, SlidersHorizontal, Undo2 } from "lucide-react";
 import type { SalesConsignmentMovement } from "#shared/schema.js";
 import { formatCents, formatDateTime, formatShortDate } from "../../utils";
 import { consignmentDue } from "./consignmentDue";
@@ -52,7 +52,6 @@ export function ConsignmentDuePill({ consignment, emptyAsDash = false }: {
 }
 
 export function SaleCard({ row, onOpen }: { row: SaleWithItems; onOpen?: () => void }) {
-  const t = useT(salesModuleMessages);
   const ts = useT(salesMessages);
   const { sale, items, lead } = row;
   const cancelled = sale.status === "cancelled";

@@ -1,11 +1,9 @@
-import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight } from "lucide-react";
 import type { TagBatchOption } from "@shared/tagsApi";
 import { CopyButton } from "@/components/xpot/CopyButton";
 import { ErrorState } from "@/components/xpot/EmptyState";
 import { ListSkeleton } from "@/components/xpot/ListSkeleton";
-import { EYEBROW, MODULE_ACCENT } from "@/components/xpot/surface";
+import { EYEBROW } from "@/components/xpot/surface";
 import { AdminHttpError, ADMIN_TAGS_KEY, errorMessage, getJson, STALE_MS } from "./api";
 import { useT } from "@/i18n";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
@@ -102,19 +100,5 @@ export function CopyRow({ label, value }: { label: string; value: string }) {
         <CopyButton value={value} iconOnly label={t("copyLabel", { label })} />
       </div>
     </div>
-  );
-}
-
-/** "Kits →": a quiet link in the Tags accent, at the end of a section's title row. */
-export function SectionLink({ onClick, children }: { onClick: () => void; children: ReactNode }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`-my-1 inline-flex min-h-9 shrink-0 items-center gap-1 rounded-lg px-2 text-xs font-semibold ${MODULE_ACCENT.tags.text} transition-colors hover:bg-white/[0.05] hover:text-violet-200`}
-    >
-      {children}
-      <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-    </button>
   );
 }

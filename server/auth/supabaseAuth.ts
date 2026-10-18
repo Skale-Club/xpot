@@ -1,4 +1,4 @@
-import type { Express, Request, Response, NextFunction, RequestHandler } from "express";
+import type { Express, Request, Response, RequestHandler } from "express";
 import session from "express-session";
 import connectPg from "connect-pg-simple";
 import { getSupabaseAdmin } from "../lib/supabase.js";

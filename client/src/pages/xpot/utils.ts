@@ -2,7 +2,6 @@ import {
   Activity,
   Building2,
   DollarSign,
-  MapPinned,
   Route,
   ListTodo,
 } from "lucide-react";

@@ -1,8 +1,5 @@
 import { useT } from "@/i18n";
-import { buttonVariants } from "@/components/ui/button";
-import { FIELD_CONTROL } from "@/components/xpot/Field";
 import { Pill, PIECE_STATUS_TONE, SOLD_TONE, STOCK_STATUS_TONE, toneOf } from "@/components/xpot/StatusPill";
-import { GLASS_CLASS } from "@/components/xpot/surface";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
 
@@ -37,16 +34,3 @@ export function PieceStatusPill({ status, stockStatus, saleId, className = "" }:
     </span>
   );
 }
-
-// ─── Kept for JourneyMcpCard (moving to Integrations) ─────────────────────────
-// Thin class aliases over the kit so that file keeps compiling until it moves;
-// nothing in the Tags admin uses them. Delete once JourneyMcpCard stops importing them.
-
-/** @deprecated GLASS_CLASS card. */
-export const CARD = `rounded-2xl ${GLASS_CLASS}`;
-/** @deprecated The kit Input (components/xpot/Field). */
-export const INPUT = `${FIELD_CONTROL} py-2`;
-/** @deprecated <Button variant="brand">. */
-export const BTN = buttonVariants({ variant: "brand" });
-/** @deprecated <Button variant="danger">. */
-export const BTN_DANGER = buttonVariants({ variant: "danger" });

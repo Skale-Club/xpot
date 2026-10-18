@@ -42,14 +42,8 @@ export const GLASS_RAISED = {
 /** Primary action fill. */
 export const BRAND_GRADIENT = "linear-gradient(135deg, #3b82f6, #6366f1)";
 
-/** The solid brand blue: the start of BRAND_GRADIENT, same as --primary and --ring. */
-export const BRAND_BLUE = "#3b82f6";
-
 /** Money and success actions ("New sale", "Record payment"). Green means money; never use it for anything else. */
 export const SUCCESS_GRADIENT = "linear-gradient(135deg, #10b981, #06b6d4)";
-
-/** Destructive actions (delete, cancel a sale). */
-export const DANGER_GRADIENT = "linear-gradient(135deg, #ef4444, #e11d48)";
 
 /** Tinted red surface for error boxes and the danger zone of a form. */
 export const DANGER_SURFACE = {

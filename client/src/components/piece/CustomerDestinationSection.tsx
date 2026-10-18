@@ -16,7 +16,6 @@ import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { manageTagsPiecesMessages } from "@/i18n/messages/manageTagsPieces";
-import { pieceScreenMessages } from "@/i18n/messages/pieceScreen";
 import LeadPicker, { leadPayload, type LeadChoice } from "@/pages/tags/LeadPicker";
 import { GenerateReviewButton, ReviewLinkAssist } from "@/pages/tags/ReviewLinkSheet";
 import { ContentEditor, type ContentState } from "@/pages/tags/ContentEditor";
@@ -43,7 +42,6 @@ export function CustomerDestinationSection() {
   const t = useT(tagsMessages);
   const tc = useT(commonMessages);
   const tm = useT(manageTagsPiecesMessages);
-  const tp = useT(pieceScreenMessages);
   const qc = useQueryClient();
   const write = usePieceWrite();
   const manage = viewer.surface === "admin";
