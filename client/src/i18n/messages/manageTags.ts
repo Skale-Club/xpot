@@ -290,9 +290,6 @@ const en = {
 
   // AI access (MCP)
   mcpTitle: "AI access (MCP)",
-  mcpIntro:
-    "An AI session with access can read the journey and plans and record what it does (art, slicing, printing, decisions). Entries it marks as proposed wait for your approval. This access only works on /mcp, never on this admin.",
-  hideSecret: "Hide the secret",
   tokenCreatedNotice: "Token “{name}” created. Copy the secret now: it is shown only once and cannot be recovered.",
   secretLabel: "Secret",
   endpointLabel: "Endpoint",
@@ -593,9 +590,6 @@ export const manageTagsMessages: Dictionary<typeof en> = {
     outcomePlaceholder: "O que isso mostrou?",
 
     mcpTitle: "Acesso de IA (MCP)",
-    mcpIntro:
-      "Uma sessão de IA com acesso pode ler a jornada e os planos e registrar o que faz (arte, fatiamento, impressão, decisões). Os registros que ela marca como propostos aguardam a sua aprovação. Esse acesso só funciona em /mcp, nunca nestas telas de gestão.",
-    hideSecret: "Ocultar o segredo",
     tokenCreatedNotice: "Token “{name}” criado. Copie o segredo agora: ele é mostrado só uma vez e não pode ser recuperado.",
     secretLabel: "Segredo",
     endpointLabel: "Endpoint",
@@ -893,9 +887,6 @@ export const manageTagsMessages: Dictionary<typeof en> = {
     outcomePlaceholder: "¿Qué mostró?",
 
     mcpTitle: "Acceso de IA (MCP)",
-    mcpIntro:
-      "Una sesión de IA con acceso puede leer el recorrido y los planes y registrar lo que hace (arte, laminado, impresión, decisiones). Las entradas que marca como propuestas esperan tu aprobación. Este acceso solo funciona en /mcp, nunca en estas pantallas de gestión.",
-    hideSecret: "Ocultar el secreto",
     tokenCreatedNotice: "Token “{name}” creado. Copia el secreto ahora: se muestra solo una vez y no se puede recuperar.",
     secretLabel: "Secreto",
     endpointLabel: "Endpoint",

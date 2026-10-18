@@ -54,6 +54,59 @@ describe("assessWorker", () => {
   });
 });
 
+describe("reason codes", () => {
+  const now = Date.now();
+  const worker = {
+    engineConfigured: true,
+    startedAt: new Date(now - 60 * MIN),
+    lastTickFinishedAt: new Date(now - 10_000),
+    lastSuccessAt: new Date(now - 10_000),
+    lastError: null,
+    ticking: false,
+    pollMs: 30_000,
+    now,
+  };
+  const codes = [
+    assessRun({ ...base, elapsedMs: 5 * MIN, sinceUpdateMs: 10_000 }),
+    assessRun({ ...base, elapsedMs: 14 * MIN, sinceUpdateMs: 10_000 }),
+    assessRun({ ...base, elapsedMs: 5 * MIN, sinceUpdateMs: 2 * MIN }),
+    assessRun({ ...base, status: "starting", engineJobId: null, elapsedMs: 3 * MIN, sinceUpdateMs: 10_000 }),
+    assessRun({ ...base, elapsedMs: 31 * MIN, sinceUpdateMs: 10_000 }),
+    assessWorker(worker),
+    assessWorker({ ...worker, engineConfigured: false }),
+    assessWorker({ ...worker, startedAt: null }),
+    assessWorker({ ...worker, lastTickFinishedAt: new Date(now - 5 * MIN) }),
+    assessWorker({ ...worker, ticking: true, lastTickFinishedAt: new Date(now - 5 * MIN) }),
+    assessWorker({ ...worker, lastSuccessAt: new Date(now - 40_000), lastError: { message: "boom", at: new Date(now - 10_000) } }),
+  ].map((a) => a.reasonCode);
+
+  it("name each verdict with a stable code, not only English text", () => {
+    expect(codes).toEqual([
+      "running_normally",
+      "slower_than_usual",
+      "run_not_checked",
+      "engine_never_confirmed",
+      "past_time_limit",
+      "ticking_normally",
+      "engine_not_configured",
+      "worker_not_running",
+      "worker_not_ticking",
+      "tick_running_long",
+      "last_tick_failed",
+    ]);
+  });
+
+  it("are all worded on screen, with a what-to-do line for each problem", async () => {
+    const { systemHealthMessages } = await import("../client/src/i18n/messages/systemHealth");
+    const all = [...codes, "route_building_stuck", "route_not_built"];
+    const healthy = new Set(["running_normally", "ticking_normally"]);
+    for (const code of all) {
+      expect(systemHealthMessages.en, code).toHaveProperty(`reason_${code}`);
+      if (!healthy.has(code)) expect(systemHealthMessages.en, code).toHaveProperty(`todo_${code}`);
+    }
+  });
+});
+
 describe("helpers", () => {
   it("picks the worst verdict", () => {
     expect(worstVerdict(["healthy", "slow", "healthy"])).toBe("slow");

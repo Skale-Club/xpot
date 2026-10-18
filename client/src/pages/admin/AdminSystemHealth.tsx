@@ -5,7 +5,9 @@ import { Activity, AlertTriangle, ChevronRight, Cpu, History, ListOrdered, Refre
 import { Loader2 } from "@/components/ui/loader";
 import { Segmented } from "@/components/xpot/Segmented";
 import { apiRequest } from "@/lib/queryClient";
+import { formatDateTime } from "@/lib/dates";
 import { useT } from "@/i18n";
+import { commonMessages } from "@/i18n/messages/common";
 import { systemHealthMessages } from "@/i18n/messages/systemHealth";
 import { SYSTEM_EVENT_SOURCES } from "@shared/schema/observability";
 import type { EventGroup, RecentRun, SystemEventRow, SystemHealthSnapshot } from "@shared/system-health";
@@ -13,6 +15,8 @@ import { AdminSystemEventDetail } from "./AdminSystemEventDetail";
 import {
   Card,
   formatDuration,
+  HealthReason,
+  healthReason,
   REFRESH_MS,
   RUN_STATUS_STYLE,
   RunStatusChip,
@@ -34,6 +38,7 @@ export function AdminSystemHealth() {
 
 function SystemHealthOverview() {
   const t = useT(systemHealthMessages);
+  const tc = useT(commonMessages);
   const ago = useAgo(t);
   const [, setNow] = useState(0);
   const [fingerprint, setFingerprint] = useState<string | null>(null);
@@ -56,7 +61,16 @@ function SystemHealthOverview() {
       </div>
     );
   }
-  if (health.isError || !health.data) return <p className="text-sm text-red-400">{t("loadFailed")}</p>;
+  if (health.isError || !health.data) {
+    return (
+      <div className="flex flex-wrap items-center gap-3 text-sm text-red-400">
+        {t("loadFailed")}
+        <button type="button" onClick={() => void health.refetch()} className="rounded-lg border border-white/10 px-3 py-1 text-white/70 hover:bg-white/5" data-testid="system-health-retry">
+          {tc("retry")}
+        </button>
+      </div>
+    );
+  }
 
   const data = health.data;
   const { worker, queue, events } = data;
@@ -80,13 +94,12 @@ function SystemHealthOverview() {
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card title={t("workerTitle")} icon={Cpu} right={<VerdictChip verdict={worker.verdict} t={t} />}>
-          <p className="text-sm text-white/70">{worker.reason}</p>
+          <HealthReason t={t} code={worker.reasonCode} fallback={worker.reason} />
           <p className="mt-2 text-xs text-white/45">
             {t("workerLastTick", { time: ago(worker.lastTickFinishedAt) })}
             {worker.lastTickDurationMs !== null && ` · ${t("workerTickTook", { duration: formatDuration(worker.lastTickDurationMs) })}`}
             {` · ${t("workerEvery", { seconds: Math.round(worker.pollMs / 1000) })}`}
           </p>
-          {!worker.engineConfigured && <p className="mt-2 text-xs text-red-300">{t("engineNotConfigured")}</p>}
           {worker.lastError && (
             <p className="mt-2 break-words text-xs text-red-300/80">
               {t("workerLastError", { time: ago(worker.lastError.at), message: worker.lastError.message })}
@@ -142,7 +155,7 @@ function SystemHealthOverview() {
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold">{run.query} · {run.location}</p>
                       <p className="text-xs text-white/45">
-                        {t("runJob", { id: run.jobId })}{run.repName ? ` · ${run.repName}` : ""}{run.wave ? ` · wave ${run.wave}` : ""}
+                        {t("runJob", { id: run.jobId })}{run.repName ? ` · ${run.repName}` : ""}{run.wave ? ` · ${t("runWave", { wave: run.wave })}` : ""}
                       </p>
                     </div>
                     <VerdictChip verdict={run.verdict} t={t} />
@@ -157,7 +170,9 @@ function SystemHealthOverview() {
                     {` · ${t("runLimit", { duration: formatDuration(limitMs) })}`}
                     {` · ${t("runChecked", { time: ago(run.updatedAt) })}`}
                   </p>
-                  <p className="mt-1 text-xs text-white/40">{run.reason}{run.engineJobId ? ` · ${run.engineJobId}` : ""}</p>
+                  <div title={run.engineJobId ?? undefined}>
+                    <HealthReason t={t} code={run.reasonCode} fallback={run.reason} className="mt-1 text-xs text-white/40" />
+                  </div>
                 </li>
               );
             })}
@@ -170,7 +185,10 @@ function SystemHealthOverview() {
               {queue.stuckJobs.map((job) => (
                 <li key={job.jobId} className="rounded-xl border border-red-500/20 bg-red-500/[0.05] px-3 py-2 text-xs">
                   <span className="font-semibold">{t("runJob", { id: job.jobId })} · {job.location}</span>
-                  <span className="text-white/50"> · {job.reason} · {ago(job.updatedAt)}</span>
+                  <span className="text-white/50"> · {healthReason(t, job.reasonCode, job.reason).text} · {ago(job.updatedAt)}</span>
+                  {healthReason(t, job.reasonCode, job.reason).todo && (
+                    <span className="block text-white/40">{t("whatToDo", { action: healthReason(t, job.reasonCode, job.reason).todo! })}</span>
+                  )}
                 </li>
               ))}
             </ul>
@@ -237,7 +255,7 @@ function RecentSearches({ runs, t, ago, onShowEvents }: {
           <div className="flex h-8 items-end justify-end gap-[3px]" role="list" aria-label={t("timelineTitle")} data-testid="search-timeline">
             {timeline.map((run) => {
               const active = run.runId === selectedId;
-              const label = `${run.query} · ${run.location} · ${t(`runStatus_${run.status}`)} · ${new Date(run.createdAt).toLocaleString()}${run.errorMessage ? ` · ${run.errorMessage}` : ""}`;
+              const label = `${run.query} · ${run.location} · ${t(`runStatus_${run.status}`)} · ${formatDateTime(run.createdAt)}${run.errorMessage ? ` · ${run.errorMessage}` : ""}`;
               return (
                 <button
                   key={run.runId}
@@ -272,14 +290,14 @@ function RecentSearches({ runs, t, ago, onShowEvents }: {
                   <p className="text-xs text-white/45">
                     {t("runJob", { id: selected.jobId })} · #{selected.runId}
                     {selected.repName ? ` · ${selected.repName}` : ""}
-                    {selected.wave ? ` · wave ${selected.wave}` : ""}
+                    {selected.wave ? ` · ${t("runWave", { wave: selected.wave })}` : ""}
                   </p>
                 </div>
                 <RunStatusChip status={selected.status} t={t} />
               </div>
               <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-xs sm:grid-cols-4">
                 <dt className="text-white/40">{t("runStarted")}</dt>
-                <dd className="text-white/75">{selected.startedAt ? new Date(selected.startedAt).toLocaleString() : "—"}</dd>
+                <dd className="text-white/75">{formatDateTime(selected.startedAt)}</dd>
                 <dt className="text-white/40">{t("runDuration")}</dt>
                 <dd className="text-white/75">{formatDuration(selected.durationMs)}</dd>
                 <dt className="text-white/40">{t("runResults")}</dt>
@@ -439,7 +457,7 @@ function EventLog({ t, ago, fingerprint, onClearFingerprint, runId, onClearRun }
                 <span className="min-w-0 flex-1">
                   <span className="block break-words text-sm text-white/85">{event.message}</span>
                   <span className="text-xs text-white/40">
-                    {sourceLabel(t, event.source)} · {ago(event.createdAt)} · {new Date(event.createdAt).toLocaleString()}
+                    {sourceLabel(t, event.source)} · {ago(event.createdAt)} · {formatDateTime(event.createdAt)}
                     {event.repName ? ` · ${event.repName}` : ""}
                   </span>
                 </span>

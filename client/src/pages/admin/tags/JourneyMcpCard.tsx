@@ -1,20 +1,23 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Bot, Check, Copy, KeyRound, Link2, X } from "lucide-react";
-import type { McpConnectionItem, McpTokenCreated, McpTokenItem } from "@shared/tagsApi";
+import { Bot, Check, Copy, KeyRound, Link2 } from "lucide-react";
+import { MCP_TOKEN_SCOPES, type McpConnectionItem, type McpTokenCreated, type McpTokenItem } from "@shared/tagsApi";
 import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/i18n";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
+import { integrationsMessages } from "@/i18n/messages/integrations";
 import { ADMIN_TAGS_KEY, STALE_MS, errorMessage, formatDateTime, getJson, sendJson } from "./api";
 import { BTN, BTN_DANGER, CARD, INPUT } from "./ui";
 import { ConfirmDialog, ErrorLine } from "./batches-shared";
 import { Loading } from "./pieces-shared";
 import { queryClient } from "@/lib/queryClient";
 
-// "AI access (MCP)": two ways for an AI session to reach /mcp and read and
-// record the journey. Apps that connect themselves (Claude, ChatGPT) sign in
-// over OAuth and show up under "Connected apps"; clients that take a pasted
-// header (Claude Code) use a token, whose secret is shown once.
+// Account › Integrations › "AI access (MCP)": two ways for an AI session to
+// reach /mcp (the Tags journey, prospecting and tasks, acting as the admin who
+// connected it). Apps that connect themselves (Claude, ChatGPT) sign in over
+// OAuth and show up under "Connected apps" with what they were granted;
+// clients that take a pasted header (Claude Code) use a token, whose secret is
+// shown once.
 
 const TOKENS_KEY = [ADMIN_TAGS_KEY, "mcp-tokens"];
 const CONNECTIONS_KEY = [ADMIN_TAGS_KEY, "mcp-connections"];
@@ -49,22 +52,47 @@ function CopyField({ label, value }: { label: string; value: string }) {
   );
 }
 
-/** The new token's secret, the endpoint and the command to connect Claude Code. Shown once. */
+/** What an app or token may do, in the same words as the intro. */
+const SCOPE_KEYS: Record<string, "scope_journey" | "scope_prospecting" | "scope_tasks"> = {
+  "xpot:journey": "scope_journey",
+  "xpot:prospecting": "scope_prospecting",
+  "xpot:tasks": "scope_tasks",
+};
+
+function Scopes({ scopes }: { scopes: readonly string[] }) {
+  const ti = useT(integrationsMessages);
+  if (!scopes.length) return null;
+  return (
+    <p className="text-[11px] text-white/45" data-testid="journey-mcp-scopes">
+      {ti("scopesLabel")} {scopes.map((scope) => (SCOPE_KEYS[scope] ? ti(SCOPE_KEYS[scope]) : scope)).join(" · ")}
+    </p>
+  );
+}
+
+/**
+ * The new token's secret, the endpoint and the command to connect Claude Code.
+ * Shown once, so it closes only on an explicit "I've copied it".
+ */
 function SecretPanel({ created, onClose }: { created: McpTokenCreated; onClose: () => void }) {
   const t = useT(manageTagsMessages);
+  const ti = useT(integrationsMessages);
   const endpoint = `${window.location.origin}/mcp`;
   const command = `claude mcp add --transport http xpot ${endpoint} --header "Authorization: Bearer ${created.secret}"`;
   return (
-    <div className="relative space-y-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/[0.06] p-4" data-testid="journey-mcp-secret">
-      <button type="button" onClick={onClose} aria-label={t("hideSecret")} className="absolute right-3 top-3 rounded-md p-1 text-white/40 hover:bg-white/10 hover:text-white">
-        <X className="h-4 w-4" />
-      </button>
-      <p className="pr-8 text-sm font-semibold text-emerald-200">
+    <div className="space-y-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/[0.06] p-4" data-testid="journey-mcp-secret">
+      <p className="text-sm font-semibold text-emerald-200">
         {t("tokenCreatedNotice", { name: created.token.name })}
       </p>
       <CopyField label={t("secretLabel")} value={created.secret} />
       <CopyField label={t("endpointLabel")} value={endpoint} />
       <CopyField label={t("addToClaudeCode")} value={command} />
+      <div className="flex flex-wrap items-center gap-3 border-t border-emerald-500/20 pt-3">
+        <button type="button" onClick={onClose} className={BTN} data-testid="journey-mcp-secret-done">
+          <Check className="h-4 w-4" />
+          {ti("secretCopied")}
+        </button>
+        <span className="text-xs text-emerald-100/60">{ti("secretCopiedHint")}</span>
+      </div>
     </div>
   );
 }
@@ -154,6 +182,7 @@ function ConnectedApps() {
                   {t("approvedBy", { user: c.userLabel ?? t("deletedUser"), date: formatDateTime(c.connectedAt) })} ·{" "}
                   {c.lastUsedAt ? t("lastUsedAt", { date: formatDateTime(c.lastUsedAt) }) : t("neverUsed")}
                 </p>
+                <Scopes scopes={c.scopes ?? []} />
               </div>
               <button type="button" className={BTN_DANGER} onClick={() => setRevoking(c)} data-testid="journey-mcp-connection-revoke">
                 {t("revoke")}
@@ -176,11 +205,14 @@ function ConnectedApps() {
   );
 }
 
+
 export function JourneyMcpCard() {
   const t = useT(manageTagsMessages);
+  const ti = useT(integrationsMessages);
   const { toast } = useToast();
   const [created, setCreated] = useState<McpTokenCreated | null>(null);
   const [revoking, setRevoking] = useState<McpTokenItem | null>(null);
+  const [showRevoked, setShowRevoked] = useState(false);
   const { data: tokens, isLoading, isError, error } = useQuery<McpTokenItem[]>({
     queryKey: TOKENS_KEY,
     queryFn: () => getJson("/api/xpot/admin/mcp-tokens"),
@@ -195,6 +227,8 @@ export function JourneyMcpCard() {
     },
     onError: (err) => toast({ title: t("couldNotRevokeToken"), description: errorMessage(err), variant: "destructive" }),
   });
+  const revokedCount = tokens?.filter((tok) => tok.revokedAt).length ?? 0;
+  const listed = (tokens ?? []).filter((tok) => showRevoked || !tok.revokedAt);
 
   return (
     <section className={`${CARD} min-w-0 space-y-4 p-4`} data-testid="journey-mcp-card">
@@ -204,7 +238,7 @@ export function JourneyMcpCard() {
           {t("mcpTitle")}
         </h3>
         <p className="mt-1 text-xs text-white/40">
-          {t("mcpIntro")}
+          {ti("mcpIntro")}
         </p>
       </div>
 
@@ -216,6 +250,7 @@ export function JourneyMcpCard() {
           {t("tokens")}
         </h4>
         <p className="mt-1 text-xs text-white/40">{t("tokensHint")}</p>
+        <Scopes scopes={MCP_TOKEN_SCOPES} />
       </div>
       {created && <SecretPanel created={created} onClose={() => setCreated(null)} />}
       <CreateForm onCreated={setCreated} />
@@ -227,29 +262,43 @@ export function JourneyMcpCard() {
       ) : !tokens || tokens.length === 0 ? (
         <p className="text-sm text-white/40">{t("noTokens")}</p>
       ) : (
-        <ul className="divide-y divide-white/5">
-          {tokens.map((tok) => (
-            <li key={tok.id} className={`flex flex-wrap items-center justify-between gap-2 py-2.5 ${tok.revokedAt ? "opacity-50" : ""}`} data-testid="journey-mcp-token">
-              <div className="min-w-0">
-                <p className="break-words text-sm font-medium text-white">
-                  {tok.name}
-                  {tok.revokedAt && <span className="ml-2 rounded-full bg-red-400/10 px-2 py-0.5 text-xs font-semibold text-red-300">{t("tokenRevokedBadge")}</span>}
-                </p>
-                <p className="break-all font-mono text-[11px] text-white/45">{tok.tokenPrefix}…</p>
-                <p className="text-[11px] text-white/40">
-                  {t("tokenCreatedAt", { date: formatDateTime(tok.createdAt) })} ·{" "}
-                  {tok.lastUsedAt ? t("lastUsedAt", { date: formatDateTime(tok.lastUsedAt) }) : t("neverUsed")}
-                  {tok.revokedAt ? ` · ${t("tokenRevokedAt", { date: formatDateTime(tok.revokedAt) })}` : ""}
-                </p>
-              </div>
-              {!tok.revokedAt && (
-                <button type="button" className={BTN_DANGER} onClick={() => setRevoking(tok)} data-testid="journey-mcp-revoke">
-                  {t("revoke")}
-                </button>
-              )}
-            </li>
-          ))}
-        </ul>
+        <>
+          {listed.length > 0 && (
+            <ul className="divide-y divide-white/5">
+              {listed.map((tok) => (
+                <li key={tok.id} className={`flex flex-wrap items-center justify-between gap-2 py-2.5 ${tok.revokedAt ? "opacity-50" : ""}`} data-testid="journey-mcp-token">
+                  <div className="min-w-0">
+                    <p className="break-words text-sm font-medium text-white">
+                      {tok.name}
+                      {tok.revokedAt && <span className="ml-2 rounded-full bg-red-400/10 px-2 py-0.5 text-xs font-semibold text-red-300">{t("tokenRevokedBadge")}</span>}
+                    </p>
+                    <p className="break-all font-mono text-[11px] text-white/45">{tok.tokenPrefix}…</p>
+                    <p className="text-[11px] text-white/40">
+                      {t("tokenCreatedAt", { date: formatDateTime(tok.createdAt) })} ·{" "}
+                      {tok.lastUsedAt ? t("lastUsedAt", { date: formatDateTime(tok.lastUsedAt) }) : t("neverUsed")}
+                      {tok.revokedAt ? ` · ${t("tokenRevokedAt", { date: formatDateTime(tok.revokedAt) })}` : ""}
+                    </p>
+                  </div>
+                  {!tok.revokedAt && (
+                    <button type="button" className={BTN_DANGER} onClick={() => setRevoking(tok)} data-testid="journey-mcp-revoke">
+                      {t("revoke")}
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          {revokedCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowRevoked((v) => !v)}
+              className="text-xs font-semibold text-white/45 hover:text-white/75"
+              data-testid="journey-mcp-show-revoked"
+            >
+              {showRevoked ? ti("hideRevoked") : ti("showRevoked", { count: revokedCount })}
+            </button>
+          )}
+        </>
       )}
 
       <ConfirmDialog

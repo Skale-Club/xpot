@@ -42,7 +42,8 @@ New here? Read [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) first.
   password change. Business photos and voice notes are private, on Cloudflare
   R2 (see "Files"). Nothing is shared with Skale Club.
 - **Integrations:**
-  - Xphere CRM: prospects in, leads, sales and visit outcomes out (per-user keys).
+  - Xphere CRM: prospects in, leads, sales and visit outcomes out (per-person keys,
+    set by the global admin in Organization › Integrations › Xphere).
   - GoHighLevel: legacy pipeline sync, configured in Organization › Integrations.
   - Twilio: SMS for sign-in codes.
   - Stuscle: the store where approved reps buy kits at wholesale with a personal code.
@@ -85,7 +86,9 @@ use the same switch but are not in CI's list; run them by hand the same way.
    Supabase keys and `SESSION_SECRET` (the server refuses to boot without them).
    Integrations (Xphere, GoHighLevel, Twilio, Google Places, the AI providers)
    are set in the app, under Organization › Integrations (`/admin/integrations`),
-   or per user for Xphere; the matching env vars are only fallbacks.
+   per person for Xphere. The matching env vars are fallbacks, except the
+   OpenRouter and Gemini keys, which override the panel; each card says when
+   the server environment is the one in force.
 2. `npm install`
 3. `npm run migrate`. Locally you run it whenever new files appear in
    `migrations/`; in production the container runs it on every start (see "Deploy").
@@ -119,7 +122,7 @@ Tags module:
 - `/tags/direct`: write the customer's own link to a chip, with no Xpot code (`tag_direct_writes`).
 
 Account:
-- `/settings`: profile, language, password change, Xphere (with Visits).
+- `/settings`: profile, language, password change.
 
 Management (managers and admins). The URLs keep their old `/admin` prefix; the
 shell decides which module each one belongs to (`client/src/components/xpot/moduleNav.ts`):
@@ -375,7 +378,8 @@ Two ways in:
   blocked. Discovery: `/.well-known/oauth-protected-resource` and
   `/.well-known/oauth-authorization-server`. Tables: `migrations/0018_mcp_oauth.sql`.
 - **Static tokens** for clients that take a header (Claude Code): created in
-  Tags › Manage › Journey › AI access; the secret is shown once
+  Organization › Integrations › AI access (MCP) (`/admin/integrations/mcp`);
+  the secret is shown once
   (`migrations/0015_mcp_tokens.sql`).
 
 Both are listed and revocable in that same card. Codes, tokens and client
@@ -413,8 +417,9 @@ comment on each.
 | `SOURCE_COMMIT` | no | Set by Coolify; reported by `/api/version` |
 | `MIGRATIONS_DIR` | no | Where the migration runner looks (default `./migrations`) |
 
-The voice providers (Groq, OpenAI Whisper) and GoHighLevel are read from the
-Integrations panel only; they have no env var.
+The voice providers (Groq first, OpenAI Whisper as its fallback, each only when
+switched on) and GoHighLevel are read from the Integrations panel only; they
+have no env var.
 
 ## Deploy (Coolify)
 

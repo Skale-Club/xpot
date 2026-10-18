@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { describeApiError } from "@/lib/apiErrors";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "@/components/ui/loader";
 import { ColorField } from "@/components/ui/color-picker";
@@ -50,6 +51,10 @@ function BrandingForm({ branding }: { branding: Branding }) {
   const [shortName, setShortName] = useState(branding.shortName);
   const [themeColor, setThemeColor] = useState(branding.themeColor);
   const [backgroundColor, setBackgroundColor] = useState(branding.backgroundColor);
+  const fieldLabel = (path: string) =>
+    ({ appName: t("appName"), shortName: t("shortName"), themeColor: t("themeColor"), backgroundColor: t("backgroundColor") })[path];
+  // The public icon, logo and manifest are cached for 5 minutes (branding.ts), so "done" needs that caveat.
+  const saved = (title: string) => toast({ title, description: t("brandingCacheNote"), variant: "success" });
 
   const faviconPreviewSrc = branding.faviconUrl
     ? `${branding.faviconUrl}${branding.faviconUrl.includes("?") ? "&" : "?"}t=${branding.updatedAt ?? ""}`
@@ -64,7 +69,7 @@ function BrandingForm({ branding }: { branding: Branding }) {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: t("iconUpdated") });
+      saved(t("iconUpdated"));
       queryClient.invalidateQueries({ queryKey: ["/api/xpot/admin/branding"] });
     },
     onError: (e: Error) => toast({ title: t("uploadError"), description: e.message, variant: "destructive" }),
@@ -76,7 +81,7 @@ function BrandingForm({ branding }: { branding: Branding }) {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: t("logoUpdated") });
+      saved(t("logoUpdated"));
       queryClient.invalidateQueries({ queryKey: ["/api/xpot/admin/branding"] });
     },
     onError: (e: Error) => toast({ title: t("uploadError"), description: e.message, variant: "destructive" }),
@@ -93,10 +98,10 @@ function BrandingForm({ branding }: { branding: Branding }) {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: t("brandingSaved") });
+      saved(t("brandingSaved"));
       queryClient.invalidateQueries({ queryKey: ["/api/xpot/admin/branding"] });
     },
-    onError: (e: Error) => toast({ title: t("errorSaving"), description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: t("errorSaving"), description: describeApiError(e, fieldLabel), variant: "destructive" }),
   });
 
   function onFile(e: React.ChangeEvent<HTMLInputElement>, asset: "favicon" | "logo") {
@@ -182,6 +187,7 @@ function BrandingForm({ branding }: { branding: Branding }) {
       {/* Metadata */}
       <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
         <h3 className="font-semibold">{t("appAndColors")}</h3>
+        <p className="mt-1 text-sm text-white/45">{t("appAndColorsHint")}</p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <div>
             <label className="mb-1 block text-xs font-medium text-white/50">{t("appName")}</label>

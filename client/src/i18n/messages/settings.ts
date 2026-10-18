@@ -61,19 +61,7 @@ const en = {
   role_manager: "Manager",
   role_admin: "Admin",
 
-  // Xphere integration
-  xphereTitle: "Xphere Integration",
-  xphereIntro: "Connect your Xpot account to Xphere so new leads sync automatically and field visits show up on the prospect timeline.",
-  enabled: "Enabled",
-  inboundKey: "Inbound key (give this to Xphere)",
-  outboundToken: "Outbound token (xph_...)",
-  keepCurrentKey: "•••••••• (keep current)",
-  xphereApiUrl: "Xphere API URL",
-  rotateKey: "Rotate inbound key",
-  xphereSaved: "Xphere integration saved",
   saveFailed: "Failed to save",
-  keyRotated: "Inbound key rotated",
-  rotateFailed: "Failed to rotate key",
 
 
   // Generic save button
@@ -135,18 +123,7 @@ export const settingsMessages: Dictionary<typeof en> = {
     role_manager: "Gerente",
     role_admin: "Admin",
 
-    xphereTitle: "Integração com Xphere",
-    xphereIntro: "Conecte sua conta Xpot ao Xphere para que novos clientes sincronizem sozinhos e as visitas apareçam no histórico de cada cliente.",
-    enabled: "Ativado",
-    inboundKey: "Chave de entrada (passe para o Xphere)",
-    outboundToken: "Token de saída (xph_...)",
-    keepCurrentKey: "•••••••• (manter a atual)",
-    xphereApiUrl: "URL da API do Xphere",
-    rotateKey: "Gerar nova chave de entrada",
-    xphereSaved: "Integração com Xphere salva",
     saveFailed: "Não foi possível salvar",
-    keyRotated: "Nova chave de entrada gerada",
-    rotateFailed: "Não foi possível gerar uma nova chave",
     saveChanges: "Salvar alterações",
   },
   es: {
@@ -202,18 +179,7 @@ export const settingsMessages: Dictionary<typeof en> = {
     role_manager: "Gerente",
     role_admin: "Admin",
 
-    xphereTitle: "Integración con Xphere",
-    xphereIntro: "Conecta tu cuenta de Xpot a Xphere para que los clientes nuevos se sincronicen solos y las visitas aparezcan en el historial de cada cliente.",
-    enabled: "Activado",
-    inboundKey: "Clave de entrada (dásela a Xphere)",
-    outboundToken: "Token de salida (xph_...)",
-    keepCurrentKey: "•••••••• (mantener la actual)",
-    xphereApiUrl: "URL de la API de Xphere",
-    rotateKey: "Generar nueva clave de entrada",
-    xphereSaved: "Integración con Xphere guardada",
     saveFailed: "No se pudo guardar",
-    keyRotated: "Nueva clave de entrada generada",
-    rotateFailed: "No se pudo generar una nueva clave",
     saveChanges: "Guardar cambios",
   },
 };

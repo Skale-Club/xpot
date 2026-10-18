@@ -85,7 +85,7 @@ function leave(location: string, navigate: (to: string) => void, setAdminMode: (
 export function AdminModeBar() {
   const t = useT(shellMessages);
   const [location, navigate] = useLocation();
-  const { adminMode, setAdminMode } = useViewerAccess();
+  const { adminMode, setAdminMode, canManage } = useViewerAccess();
   if (!adminMode) return null;
   return (
     <div
@@ -95,7 +95,7 @@ export function AdminModeBar() {
     >
       <Shield className="h-4 w-4 shrink-0 text-amber-300" />
       <span className="min-w-0 flex-1 truncate text-sm font-semibold">{t("adminModeOn")}</span>
-      {!location.startsWith("/organizations") && (
+      {canManage && !location.startsWith("/organizations") && (
         <button
           type="button"
           onClick={() => navigate("/organizations")}

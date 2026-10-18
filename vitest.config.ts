@@ -1,6 +1,14 @@
 import { defineConfig } from "vitest/config";
+import path from "path";
 
 export default defineConfig({
+  // The client's aliases (vite.config.ts), so tests can load client modules as they are.
+  resolve: {
+    alias: {
+      "@": path.resolve(import.meta.dirname, "client", "src"),
+      "@shared": path.resolve(import.meta.dirname, "shared"),
+    },
+  },
   test: {
     environment: "node",
     globals: true,

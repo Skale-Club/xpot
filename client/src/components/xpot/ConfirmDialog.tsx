@@ -46,8 +46,10 @@ export function ConfirmDialog({
   reasonLabel,
   reasonPlaceholder,
   confirmWord,
-  pending = false,
-  autoClose = true,
+  pending: pendingProp,
+  busy: busyProp,
+  confirmDisabled = false,
+  autoClose,
   error,
   onConfirm,
 }: {
@@ -75,11 +77,15 @@ export function ConfirmDialog({
   confirmWord?: string;
   /** The action is running (when the caller drives it); the dialog can't close. */
   pending?: boolean;
-  /** Close as soon as a void onConfirm returns (default). */
+  /** Same as `pending`; passing either makes the caller close the dialog (autoClose off). */
+  busy?: boolean;
+  /** Keep the confirm button off (a condition in `children` is not met yet). */
+  confirmDisabled?: boolean;
+  /** Close as soon as a void onConfirm returns. Defaults to on, off when the caller drives `pending`/`busy`. */
   autoClose?: boolean;
   /** An error from the last attempt, shown above the buttons. */
   error?: ReactNode;
-  onConfirm: (reason: string) => void | Promise<unknown>;
+  onConfirm: (reason: string) => unknown;
 }) {
   const t = useT(kitMessages);
   const tc = useT(commonMessages);
@@ -88,6 +94,9 @@ export function ConfirmDialog({
   const [reasonText, setReasonText] = useState("");
   const [typed, setTyped] = useState("");
   const [running, setRunning] = useState(false);
+  const pending = Boolean(pendingProp || busyProp);
+  const callerDriven = pendingProp !== undefined || busyProp !== undefined;
+  const closesItself = autoClose ?? !callerDriven;
   const busy = pending || running;
 
   // A fresh form every time it opens.
@@ -100,7 +109,7 @@ export function ConfirmDialog({
 
   const reasonMissing = reason === "required" && reasonText.trim() === "";
   const wordMissing = Boolean(confirmWord) && typed.trim().toLowerCase() !== confirmWord!.trim().toLowerCase();
-  const canConfirm = !busy && !reasonMissing && !wordMissing;
+  const canConfirm = !busy && !reasonMissing && !wordMissing && !confirmDisabled;
 
   const setOpen = (next: boolean) => {
     if (!next && busy) return;
@@ -119,7 +128,7 @@ export function ConfirmDialog({
         },
         () => setRunning(false),
       );
-    } else if (autoClose) {
+    } else if (closesItself) {
       onOpenChange(false);
     }
   };

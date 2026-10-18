@@ -8,6 +8,7 @@ import { storage } from "../../storage.js";
 import { ensureWholesaleCode } from "../../wholesale/index.js";
 import { formatWholesaleCode } from "#shared/wholesale.js";
 import { ensureOrganizationForRep } from "../../organizations/service.js";
+import { isRefusal, refusalReason } from "#shared/repAccess.js";
 
 // Who may use Xpot is decided by the Xpot team. People sign up themselves (by
 // phone) and wait for approval, or an admin creates their access directly;
@@ -140,6 +141,16 @@ export async function blockRep(repId: number, reason: string | null | undefined,
   return updated;
 }
 
+/**
+ * Sign-up turned down: blocked like an ended partnership, with a reason that
+ * marks it as a refusal so People can list it as "Refused" (shared/repAccess.ts).
+ */
+export async function refuseRep(repId: number, reason: string | null | undefined, actor: Actor) {
+  const rep = await repOr404(repId);
+  if (rep.isActive || rep.blockedAt) throw new AccountError("Only a sign-up waiting for approval can be refused.", 409);
+  return blockRep(repId, refusalReason(reason), actor);
+}
+
 export async function unblockRep(repId: number, actor: Actor) {
   const rep = await repOr404(repId);
   assertMayManage(rep, actor);
@@ -188,6 +199,8 @@ export async function listRepsWithAccess() {
     loginPhone,
     wholesaleCode: rep.wholesaleCode ? formatWholesaleCode(rep.wholesaleCode) : null,
     access: (rep.blockedAt ? "blocked" : rep.isActive ? "active" : "pending") as RepAccess,
+    // A blocked sign-up that was never approved: listed as "Refused", not "Blocked".
+    refused: Boolean(rep.blockedAt) && isRefusal(rep.blockedReason),
     application: application ? {
       email: application.email,
       workCity: application.workCity,

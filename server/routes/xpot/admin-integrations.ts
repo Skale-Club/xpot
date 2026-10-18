@@ -5,10 +5,10 @@ import { requireSuperAdmin, requireXpotManager } from "./middleware.js";
 import {
   INTEGRATION_PROVIDERS,
   getProviderDef,
-  getMutexSiblings,
   isConfigFieldKey,
   type ConfigFieldKey,
 } from "#shared/integrations-registry.js";
+import { sendValidationError } from "../../lib/validation.js";
 import { invalidateSmsConfig } from "../../auth/sms.js";
 import { checkTwilioConfig } from "../../auth/twilioCheck.js";
 import { maskIntegration, mergeConfigPatch, readConfig } from "./integrationStatus.js";
@@ -26,8 +26,12 @@ const putSchema = z.object({
   fromNumber: z.string().trim().regex(/^(\+[1-9]\d{6,14})?$/, "From number must be in E.164 format, e.g. +15085550100").optional(),
   messagingServiceSid: z.string().trim().regex(/^(MG[0-9a-zA-Z]{32})?$/, "Messaging Service SID starts with MG and has 34 characters").optional(),
   enabled: z.boolean().optional(),
+  // "Remove key": an empty apiKey keeps the stored secret, so removing it is explicit.
+  clearApiKey: z.boolean().optional(),
 });
-const testSchema = putSchema.omit({ enabled: true });
+const testSchema = putSchema.omit({ enabled: true, clearApiKey: true });
+// Codes the panel words itself (client/src/lib/apiErrors.ts) instead of "invalid format".
+const FIELD_CODES = { accountSid: "invalid_twilio_sid", fromNumber: "invalid_e164", messagingServiceSid: "invalid_twilio_mg_sid" };
 
 export function createAdminIntegrationsRouter() {
   const router = Router();
@@ -54,37 +58,27 @@ export function createAdminIntegrationsRouter() {
     res.json({ providers: INTEGRATION_PROVIDERS, status: items });
   });
 
-  // Upsert one provider. Empty/omitted apiKey keeps the stored secret.
+  // Upsert one provider. Empty/omitted apiKey keeps the stored secret; clearApiKey removes it.
   router.put("/admin/integrations/:provider", async (req, res) => {
     const def = getProviderDef(req.params.provider);
     if (!def) return res.status(404).json({ message: "Unknown provider" });
 
     const parsed = putSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ message: "Invalid input", errors: parsed.error.flatten() });
-    }
+    if (!parsed.success) return sendValidationError(res, parsed.error, "Invalid input", FIELD_CODES);
     const body = parsed.data;
 
     if (def.table === "chat") {
       const data: Record<string, unknown> = {};
-      if (body.apiKey) data.apiKey = body.apiKey;
+      if (body.clearApiKey) data.apiKey = null;
+      else if (body.apiKey) data.apiKey = body.apiKey;
       if (body.model !== undefined) data.model = body.model;
       if (body.enabled !== undefined) data.enabled = body.enabled;
       const saved = await storage.upsertChatIntegration(def.provider, data);
-      // Mutex enforcement: enabling this provider disables siblings in the same group.
-      if (body.enabled === true) {
-        for (const sibling of getMutexSiblings(def.provider)) {
-          if (sibling.table === "chat") {
-            await storage.upsertChatIntegration(sibling.provider, { enabled: false });
-          } else {
-            await storage.upsertIntegrationSettings(sibling.provider, { isEnabled: false });
-          }
-        }
-      }
       return res.json(maskIntegration(def.provider, saved));
     } else {
       const data: Record<string, unknown> = {};
-      if (body.apiKey) data.apiKey = body.apiKey;
+      if (body.clearApiKey) data.apiKey = null;
+      else if (body.apiKey) data.apiKey = body.apiKey;
       if (body.locationId !== undefined) data.locationId = body.locationId;
       if (body.calendarId !== undefined) data.calendarId = body.calendarId;
       if (body.enabled !== undefined) data.isEnabled = body.enabled;
@@ -94,15 +88,6 @@ export function createAdminIntegrationsRouter() {
         data.config = mergeConfigPatch(def.provider, existing?.config, configPatch);
       }
       const saved = await storage.upsertIntegrationSettings(def.provider, data);
-      if (body.enabled === true) {
-        for (const sibling of getMutexSiblings(def.provider)) {
-          if (sibling.table === "chat") {
-            await storage.upsertChatIntegration(sibling.provider, { enabled: false });
-          } else {
-            await storage.upsertIntegrationSettings(sibling.provider, { isEnabled: false });
-          }
-        }
-      }
       if (def.provider === "twilio") invalidateSmsConfig();
       return res.json(maskIntegration(def.provider, saved));
     }
@@ -118,7 +103,7 @@ export function createAdminIntegrationsRouter() {
 
     const parsed = testSchema.safeParse(req.body ?? {});
     if (!parsed.success) {
-      return res.status(400).json({ ok: false, message: "Invalid test input", errors: parsed.error.flatten() });
+      return sendValidationError(res, parsed.error, "Invalid test input", FIELD_CODES);
     }
 
     console.log(`[admin-integrations] Test starting for ${def.provider}`);

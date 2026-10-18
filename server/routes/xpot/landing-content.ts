@@ -7,6 +7,7 @@ import {
 } from "#shared/landingContent.js";
 import { storage } from "../../storage.js";
 import { requireSuperAdmin, requireXpotManager } from "./middleware.js";
+import { sendValidationError } from "../../lib/validation.js";
 
 function present(locale: (typeof LANDING_LOCALES)[number], row: Awaited<ReturnType<typeof storage.getLandingPageContent>>): LandingContentResponse {
   return {
@@ -48,9 +49,8 @@ export function createLandingContentAdminRouter() {
     if (!locale.success) return res.status(404).json({ message: "Unsupported locale" });
 
     const content = landingPageContentSchema.safeParse(req.body);
-    if (!content.success) {
-      return res.status(400).json({ message: "Invalid landing-page content", errors: content.error.flatten() });
-    }
+    // Each error carries its field path ("faq.items.2.answer") so the editor can name the field.
+    if (!content.success) return sendValidationError(res, content.error, "Invalid landing-page content");
 
     const saved = await storage.upsertLandingPageContent({ locale: locale.data, content: content.data });
     res.json(present(locale.data, saved));

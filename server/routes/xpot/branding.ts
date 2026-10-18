@@ -4,6 +4,7 @@ import { randomUUID } from "crypto";
 import { storage } from "../../storage.js";
 import { requireSuperAdmin, requireXpotManager } from "./middleware.js";
 import { getSupabaseAdmin } from "../../lib/supabase.js";
+import { sendValidationError } from "../../lib/validation.js";
 
 const DEFAULT_FAVICON = "/favicon.png";
 const DEFAULT_LOGO = "/xpot-logo.svg";
@@ -17,6 +18,21 @@ const DEFAULT_BRANDING = {
   themeColor: "#09090b",
   backgroundColor: "#0a0f1e",
 };
+
+/**
+ * The manifest's icons. The icon URLs redirect to whatever was uploaded, so the
+ * declared `type` must be that file's own (a JPG declared as image/png makes
+ * some installers drop the icon).
+ */
+export function manifestIcons(contentType: string | null | undefined) {
+  const type = contentType === "image/vnd.microsoft.icon" ? "image/x-icon" : contentType || "image/png";
+  if (type === "image/svg+xml") return [{ src: "/api/branding/icon-512.png", sizes: "any", type, purpose: "any" }];
+  return [
+    { src: "/api/branding/icon-192.png", sizes: "192x192", type, purpose: "any" },
+    { src: "/api/branding/icon-512.png", sizes: "512x512", type, purpose: "any" },
+    { src: "/api/branding/icon-512.png", sizes: "512x512", type, purpose: "maskable" },
+  ];
+}
 
 // ── Public branding endpoints (no auth) — mounted at /api/branding ──
 // These feed the browser's favicon, the PWA manifest, apple-touch-icon and OG
@@ -56,14 +72,7 @@ export function createBrandingPublicRouter() {
 
   router.get("/manifest.webmanifest", async (_req, res) => {
     const b = await publicBranding();
-    const isSvg = b.faviconContentType === "image/svg+xml";
-    const icons = isSvg
-      ? [{ src: "/api/branding/icon-512.png", sizes: "any", type: "image/svg+xml", purpose: "any" }]
-      : [
-          { src: "/api/branding/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
-          { src: "/api/branding/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
-          { src: "/api/branding/icon-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
-        ];
+    const icons = manifestIcons(b.faviconContentType);
 
     res.set("Content-Type", "application/manifest+json; charset=utf-8");
     res.set("Cache-Control", "public, max-age=300");
@@ -176,7 +185,7 @@ export function createBrandingAdminRouter() {
       })
       .safeParse(req.body);
     if (!input.success) {
-      return res.status(400).json({ message: "Invalid input", errors: input.error.flatten() });
+      return sendValidationError(res, input.error, "Invalid input", { themeColor: "invalid_color", backgroundColor: "invalid_color" });
     }
     const saved = await storage.upsertAppBranding(input.data);
     res.json(present(saved));

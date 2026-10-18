@@ -6,6 +6,25 @@ import type { SystemEventLevel } from "./schema/observability.js";
 /** healthy → slow → stalled/down: "slow" still moves, "stalled" has stopped moving. */
 export type HealthVerdict = "healthy" | "slow" | "stalled" | "down" | "idle";
 
+/** Why a verdict was given, stable across languages (the screen words it and says what to do). */
+export type HealthReasonCode =
+  // one search
+  | "engine_never_confirmed"
+  | "run_not_checked"
+  | "past_time_limit"
+  | "slower_than_usual"
+  | "running_normally"
+  // the worker
+  | "engine_not_configured"
+  | "worker_not_running"
+  | "worker_not_ticking"
+  | "tick_running_long"
+  | "last_tick_failed"
+  | "ticking_normally"
+  // a finished search with no route
+  | "route_building_stuck"
+  | "route_not_built";
+
 export type ActiveRunHealth = {
   runId: number;
   jobId: number;
@@ -25,6 +44,7 @@ export type ActiveRunHealth = {
   /** Median duration of recent completed runs, the "normal" to compare against. */
   typicalMs: number | null;
   verdict: HealthVerdict;
+  reasonCode: HealthReasonCode;
   reason: string;
 };
 
@@ -53,6 +73,7 @@ export type StuckJob = {
   status: string;
   routePlanningStatus: string;
   updatedAt: string;
+  reasonCode: HealthReasonCode;
   reason: string;
 };
 
@@ -72,6 +93,7 @@ export type SystemHealthSnapshot = {
   overall: HealthVerdict;
   worker: {
     verdict: HealthVerdict;
+    reasonCode: HealthReasonCode;
     reason: string;
     engineConfigured: boolean;
     pollMs: number;

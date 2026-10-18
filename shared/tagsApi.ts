@@ -474,4 +474,9 @@ export interface McpConnectionItem {
   userLabel: string | null;
   connectedAt: string;
   lastUsedAt: string | null;
+  /** What it was granted, e.g. ["xpot:journey", "xpot:tasks"]. */
+  scopes: string[];
 }
+
+/** What a static MCP token may do: every tool family (server/mcp/routes.ts). */
+export const MCP_TOKEN_SCOPES = ["xpot:journey", "xpot:prospecting", "xpot:tasks"] as const;

@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import type { Activity } from "lucide-react";
 import type { Translate } from "@/i18n";
 import { systemHealthMessages } from "@/i18n/messages/systemHealth";
-import type { HealthVerdict, RecentRun } from "@shared/system-health";
+import type { HealthReasonCode, HealthVerdict, RecentRun } from "@shared/system-health";
 
 // Pieces shared by Admin › System health and its event detail page.
 
@@ -42,6 +42,30 @@ export function formatDuration(ms: number | null) {
 export function sourceLabel(t: T, source: string) {
   const key = `source_${source}` as keyof typeof systemHealthMessages.en;
   return key in systemHealthMessages.en ? t(key) : source;
+}
+
+/**
+ * Why a verdict was given, in the admin's language, from the server's stable
+ * code (health.ts); the English `fallback` only for a code this screen does not know.
+ */
+export function healthReason(t: T, code: HealthReasonCode | undefined, fallback: string): { text: string; todo: string | null } {
+  const reasonKey = `reason_${code}` as keyof typeof systemHealthMessages.en;
+  const todoKey = `todo_${code}` as keyof typeof systemHealthMessages.en;
+  return {
+    text: code && reasonKey in systemHealthMessages.en ? t(reasonKey) : fallback,
+    todo: code && todoKey in systemHealthMessages.en ? t(todoKey) : null,
+  };
+}
+
+/** The reason line, with "What to do: …" under it when there is something to do. */
+export function HealthReason({ t, code, fallback, className = "text-sm text-white/70" }: { t: T; code: HealthReasonCode | undefined; fallback: string; className?: string }) {
+  const { text, todo } = healthReason(t, code, fallback);
+  return (
+    <>
+      <p className={className}>{text}</p>
+      {todo && <p className="mt-1 text-xs text-white/50">{t("whatToDo", { action: todo })}</p>}
+    </>
+  );
 }
 
 export function VerdictChip({ verdict, t }: { verdict: HealthVerdict; t: T }) {
