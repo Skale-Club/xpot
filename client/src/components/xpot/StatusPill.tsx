@@ -190,15 +190,18 @@ export const INTEGRATION_TONE: Record<string, PillTone> = {
   broken: "red",
 };
 
-/** System health checks and job runs. */
+/** System health checks and job runs; the verdicts (healthy, stalled, down) too. */
 export const HEALTH_TONE: Record<string, PillTone> = {
   ok: "green",
+  healthy: "green",
   completed: "green",
   running: "blue",
   starting: "blue",
   slow: "amber",
   stuck: "amber",
   failed: "red",
+  stalled: "red",
+  down: "red",
   idle: "slate",
   queued: "slate",
   cancelled: "muted",
