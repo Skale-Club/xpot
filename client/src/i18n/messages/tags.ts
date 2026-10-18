@@ -312,6 +312,12 @@ const en = {
   saleCatalogUnavailable: "The sales catalog could not price these pieces. Try again before confirming the sale.",
   soldBadge: "Sold",
   soldFor: "Sold for {amount}",
+  linkableSalesHint_one: "A sale to this customer is already recorded. Is this piece part of it?",
+  linkableSalesHint_other: "{count} sales to this customer are already recorded. Is this piece part of one?",
+  linkSale: "Link",
+  linkedOfUnits: "{linked} of {quantity} pieces linked",
+  notTheseSales: "None of these: record a new sale",
+  saleLinked: "Sale linked to this piece.",
 
   // Customer (lead) picker
   leadSearch: "Search companies or type a new name",
@@ -728,6 +734,12 @@ export const tagsMessages: Dictionary<typeof en> = {
     saleCatalogUnavailable: "O catálogo de vendas não conseguiu precificar estas peças. Tente novamente antes de confirmar a venda.",
     soldBadge: "Vendida",
     soldFor: "Vendida por {amount}",
+    linkableSalesHint_one: "Já existe uma venda registrada para este cliente. Esta peça faz parte dela?",
+    linkableSalesHint_other: "Já existem {count} vendas registradas para este cliente. Esta peça faz parte de alguma?",
+    linkSale: "Vincular",
+    linkedOfUnits: "{linked} de {quantity} peças vinculadas",
+    notTheseSales: "Nenhuma delas: registrar nova venda",
+    saleLinked: "Venda vinculada a esta peça.",
 
     leadSearch: "Buscar empresas ou digitar um nome novo",
     leadsLoading: "Carregando clientes",
@@ -1133,6 +1145,12 @@ export const tagsMessages: Dictionary<typeof en> = {
     saleCatalogUnavailable: "El catálogo de ventas no pudo calcular el precio de estas piezas. Inténtalo de nuevo antes de confirmar la venta.",
     soldBadge: "Vendida",
     soldFor: "Vendida por {amount}",
+    linkableSalesHint_one: "Ya hay una venta registrada para este cliente. ¿Esta pieza es parte de ella?",
+    linkableSalesHint_other: "Ya hay {count} ventas registradas para este cliente. ¿Esta pieza es parte de alguna?",
+    linkSale: "Vincular",
+    linkedOfUnits: "{linked} de {quantity} piezas vinculadas",
+    notTheseSales: "Ninguna: registrar una venta nueva",
+    saleLinked: "Venta vinculada a esta pieza.",
 
     leadSearch: "Buscar empresas o escribir un nombre nuevo",
     leadsLoading: "Cargando clientes",

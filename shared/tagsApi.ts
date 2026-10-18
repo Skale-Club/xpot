@@ -64,6 +64,24 @@ export interface TagHistoryEntry {
   createdAt: string;
 }
 
+/**
+ * A line of a sale already recorded for the piece's customer (in Visits, say)
+ * that the piece can be linked to: same customer, same product or none, and
+ * fewer pieces linked than units sold.
+ */
+export interface LinkableSaleItem {
+  saleId: number;
+  saleItemId: number;
+  soldAt: string;
+  description: string;
+  quantity: number;
+  /** Pieces already linked to this line. */
+  linked: number;
+  /** The line's net total divided by its quantity. */
+  unitNetCents: number;
+  currency: string;
+}
+
 export interface TagDetail extends TagListItem {
   utmEnabled: boolean;
   utmCampaign: string | null;

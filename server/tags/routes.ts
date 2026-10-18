@@ -40,7 +40,7 @@ import { getTeamReport } from "./report.js";
 import { getPieceActivity } from "./pieceActivity.js";
 import { ReviewLinkError, resolveReviewLink } from "./reviewLink.js";
 import { tagSaleCreateSchema } from "#shared/tagSales.js";
-import { createTagSale, TagSaleError } from "./sales.js";
+import { createTagSale, linkTagToSale, listLinkableSales, TagSaleError } from "./sales.js";
 import { syncSaleToXphere } from "../routes/xpot/xphere-sync.js";
 import { fulfillAcquisition, listAcquisitions } from "./acquisitions.js";
 import { salesStorage } from "../storage-sales.js";
@@ -300,6 +300,7 @@ export function analyticsWindow(query: { range?: string; from?: string; to?: str
 
 function fail(res: Response, err: unknown, fallback: string) {
   if (err instanceof repo.TagError) return res.status(err.status).json(repo.tagErrorBody(err));
+  if (err instanceof TagSaleError) return res.status(err.status).json({ code: err.code, message: err.message, ...(err.params ? { params: err.params } : {}) });
   if (err instanceof z.ZodError) {
     return res.status(400).json({ message: err.issues[0]?.message ?? "Validation error", errors: err.errors });
   }
@@ -552,6 +553,32 @@ export function registerTagRoutes(app: Express) {
       res.json(await repo.getTagDetail(id, tagBaseUrl()));
     } catch (err) {
       fail(res, err, "Failed to activate tag");
+    }
+  });
+
+  // A piece handed to a customer whose sale was recorded elsewhere (Visits):
+  // the sales it can join, and joining one.
+  app.get(`${fieldBase}/:id/linkable-sales`, requireTagUser, async (req, res) => {
+    const id = idParam(req, res);
+    if (!id) return;
+    try {
+      if (!(await tagForActor(req, res, id))) return;
+      res.json(await listLinkableSales(id));
+    } catch (err) {
+      fail(res, err, "Failed to load sales");
+    }
+  });
+
+  app.post(`${fieldBase}/:id/link-sale`, requireTagUser, async (req, res) => {
+    const id = idParam(req, res);
+    if (!id) return;
+    try {
+      if (!(await tagForActor(req, res, id))) return;
+      const { saleItemId } = z.object({ saleItemId: z.number().int().positive() }).strict().parse(req.body);
+      await linkTagToSale(id, saleItemId, actorOf(req));
+      res.json(await repo.getTagDetail(id, tagBaseUrl()));
+    } catch (err) {
+      fail(res, err, "Failed to link the sale");
     }
   });
 

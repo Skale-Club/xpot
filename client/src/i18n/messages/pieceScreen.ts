@@ -94,6 +94,7 @@ const en = {
   reason_reassigned: "Moved to another customer",
   reason_unlinked: "Customer removed",
   reason_sale_cancelled: "Sale cancelled",
+  reason_sale_linked: "Linked to a sale already recorded",
   reason_intake_undone: "Read undone at the intake station",
 };
 
@@ -184,6 +185,7 @@ export const pieceScreenMessages: Dictionary<typeof en> = {
     reason_reassigned: "Passou para outro cliente",
     reason_unlinked: "Cliente removido",
     reason_sale_cancelled: "Venda cancelada",
+    reason_sale_linked: "Vinculada a uma venda já registrada",
     reason_intake_undone: "Leitura desfeita na estação de recebimento",
   },
   es: {
@@ -271,6 +273,7 @@ export const pieceScreenMessages: Dictionary<typeof en> = {
     reason_reassigned: "Pasó a otro cliente",
     reason_unlinked: "Cliente quitado",
     reason_sale_cancelled: "Venta cancelada",
+    reason_sale_linked: "Vinculada a una venta ya registrada",
     reason_intake_undone: "Lectura deshecha en la estación de recepción",
   },
 };
