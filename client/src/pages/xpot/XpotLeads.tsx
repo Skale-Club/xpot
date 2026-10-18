@@ -57,7 +57,7 @@ import { FilterBar, FilterChips, FilterDay, FilterSearch, FilterToggle, fromDayK
 import { currentSearch, useUrlFilters } from "@/hooks/use-url-filters";
 import { ListPager, usePagedList } from "@/components/xpot/pagination";
 import { selectLeadForDetail } from "./lead-detail-selection";
-import { followUpDueTime, needsFollowUp } from "./visitRules";
+import { followUpDueTime, isWorkedCompany, needsFollowUp } from "./visitRules";
 import { isFinishedVisitStatus } from "@shared/visit-status";
 
 
@@ -413,13 +413,14 @@ function LeadActionSheet({ lead, onClose, onSell, onCheckIn, onDelete }: {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-const LEAD_FILTERS = ["all", "followup", "lead", "customer"] as const;
+const LEAD_FILTERS = ["all", "followup", "lead", "customer", "prospect"] as const;
 type LeadFilter = (typeof LEAD_FILTERS)[number];
 const LEAD_FILTER_LABEL = {
   all: "filterAll",
   followup: "filterFollowUp",
   lead: "filterLeads",
   customer: "filterCustomers",
+  prospect: "tabProspects",
 } as const satisfies Record<LeadFilter, string>;
 
 /**
@@ -430,6 +431,7 @@ function matchesLeadFilter(lead: FullSalesLead, filter: LeadFilter, lastOutcome?
   if (filter === "followup") return needsFollowUp(lead, lastOutcome);
   if (filter === "lead") return ["lead", "active", "prospect"].includes(lead.status);
   if (filter === "customer") return lead.status === "customer";
+  // "prospect" lists the unvisited prospects, a separate pool (see `prospects` below).
   return true;
 }
 
@@ -492,13 +494,17 @@ export function XpotLeads() {
     [visits],
   );
   const isWorkedLead = useCallback(
-    (lead: FullSalesLead) => lead.status !== "prospect" || checkedInLeadIds.has(lead.id),
+    (lead: FullSalesLead) => isWorkedCompany(lead, checkedInLeadIds),
     [checkedInLeadIds],
   );
   // Legacy prospect rows may already have completed visits. A real check-in is
   // authoritative: the company belongs in the worked-leads portfolio even if
   // an older record was never promoted from `prospect` in the database.
   const leads = allLeads.filter(isWorkedLead);
+  // Businesses saved (e.g. picked on the Dashboard) but never checked in stay out
+  // of the default view; the Prospects chip is where they can be found.
+  const prospects = allLeads.filter((lead) => !isWorkedLead(lead));
+  const pool = leadFilter === "prospect" ? prospects : leads;
   const visitsByLead = useMemo(() => {
     const map = new Map<number, EnrichedSalesVisit[]>();
     for (const v of visits ?? []) {
@@ -540,10 +546,11 @@ export function XpotLeads() {
   }, [day, visits]);
 
   // Search and day narrow first; the status chips count what is left.
-  const baseList = useMemo(
-    () => leads.filter((lead) => leadMatchesSearch(lead, search) && (!visitedOnDay || visitedOnDay.has(lead.id))),
-    [leads, search, visitedOnDay],
+  const narrow = useCallback(
+    (list: FullSalesLead[]) => list.filter((lead) => leadMatchesSearch(lead, search) && (!visitedOnDay || visitedOnDay.has(lead.id))),
+    [search, visitedOnDay],
   );
+  const baseList = useMemo(() => narrow(pool), [narrow, pool]);
   const displayList = useMemo(() => {
     const filtered = baseList.filter((lead) => matchesLeadFilter(lead, leadFilter, lastOutcomeFor(lead.id)));
     return [...filtered].sort((a, b) => {
@@ -588,10 +595,13 @@ export function XpotLeads() {
     } catch {}
   };
 
+  const worked = narrow(leads);
   const filterChips = LEAD_FILTERS.map((id) => ({
     id,
     label: t(LEAD_FILTER_LABEL[id]),
-    count: baseList.filter((lead) => matchesLeadFilter(lead, id, lastOutcomeFor(lead.id))).length,
+    count: id === "prospect"
+      ? narrow(prospects).length
+      : worked.filter((lead) => matchesLeadFilter(lead, id, lastOutcomeFor(lead.id))).length,
   }));
 
   const filterBar = (
@@ -632,7 +642,7 @@ export function XpotLeads() {
           <FilterChips items={filterChips} value={leadFilter} onChange={(status) => filters.set({ status })} ariaLabel={t("filterByStatus")} />
         </div>
       }
-      summary={{ shown: displayList.length, total: leads.length, active: filters.activeCount() > 0, onClear: () => filters.reset() }}
+      summary={{ shown: displayList.length, total: pool.length, active: filters.activeCount() > 0, onClear: () => filters.reset() }}
     />
   );
 
@@ -644,7 +654,9 @@ export function XpotLeads() {
     <EmptyState tone="red" icon={Building2} title={t("loadFailed")} hint={(leadsQuery.error as Error).message}>
       <RetryButton onRetry={() => void leadsQuery.refetch()} busy={leadsQuery.isFetching} />
     </EmptyState>
-  ) : leads.length === 0 && !search ? (
+  ) : leadFilter === "prospect" && prospects.length === 0 ? (
+    <EmptyState icon={Building2} title={t("noProspects")} hint={t("noProspectsHint")} cardStyle={GLASS} />
+  ) : leads.length === 0 && !search && leadFilter !== "prospect" ? (
     <EmptyState icon={Building2} title={t("noLeads")} hint={t("noLeadsHint")} cardStyle={GLASS}>
       <button
         onClick={() => setAddOpen(true)}

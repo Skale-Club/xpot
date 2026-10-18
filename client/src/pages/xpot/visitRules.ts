@@ -15,6 +15,14 @@ export function clampGeofenceRadiusInput(raw: string, fallback: number): number 
   return Math.max(GEOFENCE_RADIUS_MIN, Math.min(GEOFENCE_RADIUS_MAX, parsed));
 }
 
+/**
+ * Companies list split: a company is "worked" once it is past prospect or has
+ * been checked in; the rest are unvisited prospects (the Prospects chip).
+ */
+export function isWorkedCompany(lead: { id: number; status: string }, checkedInLeadIds: ReadonlySet<number>): boolean {
+  return lead.status !== "prospect" || checkedInLeadIds.has(lead.id);
+}
+
 type FollowUpLead = {
   nextVisitDueAt?: string | Date | null;
   openFollowUp?: boolean;

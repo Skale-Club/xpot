@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clampGeofenceRadiusInput, followUpDueTime, needsFollowUp, visitLocationException } from "../client/src/pages/xpot/visitRules";
+import { clampGeofenceRadiusInput, followUpDueTime, isWorkedCompany, needsFollowUp, visitLocationException } from "../client/src/pages/xpot/visitRules";
 
 describe("clampGeofenceRadiusInput", () => {
   it("keeps typed values in the 10-5000 range the server accepts", () => {
@@ -51,5 +51,15 @@ describe("followUpDueTime", () => {
     expect(followUpDueTime({ nextVisitDueAt: "2026-11-02T00:00:00Z", openFollowUpDueAt: "2026-11-01T00:00:00Z" }))
       .toBe(Date.parse("2026-11-01T00:00:00Z"));
     expect(followUpDueTime({ openFollowUp: true, openFollowUpDueAt: null })).toBe(Number.POSITIVE_INFINITY);
+  });
+});
+
+describe("isWorkedCompany", () => {
+  it("keeps never-visited prospects out of the default Companies view", () => {
+    const checkedIn = new Set([2]);
+    expect(isWorkedCompany({ id: 1, status: "prospect" }, checkedIn)).toBe(false);
+    expect(isWorkedCompany({ id: 2, status: "prospect" }, checkedIn)).toBe(true);
+    expect(isWorkedCompany({ id: 3, status: "lead" }, checkedIn)).toBe(true);
+    expect(isWorkedCompany({ id: 4, status: "customer" }, checkedIn)).toBe(true);
   });
 });
