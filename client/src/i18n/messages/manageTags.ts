@@ -21,7 +21,7 @@ const en = {
   copyLabel: "Copy {label}",
 
   // Pickers
-  repOff: "{name} (off)",
+  repOff: "{name} (inactive)",
   loadingOption: "Loading…",
   allResellers: "All resellers",
   chooseReseller: "Choose a reseller…",
@@ -99,9 +99,9 @@ const en = {
   // Team
   whatTeamReport: "the reseller performance",
   teamIntro: "Who sells, who activates, and how the pieces are used.",
-  teamRepOff: "Off",
+  teamRepOff: "Inactive",
   role_admin: "Xpot admin",
-  role_manager: "manager",
+  role_manager: "Manager",
   teamNoReseller: "House stock",
   teamResellerN: "Reseller #{id}",
   teamPiecesSold: "Pieces sold",
@@ -300,7 +300,7 @@ export const manageTagsMessages: Dictionary<typeof en> = {
     couldNotLoad: "Não foi possível carregar {what}.",
     copyLabel: "Copiar {label}",
 
-    repOff: "{name} (desativado)",
+    repOff: "{name} (inativo)",
     loadingOption: "Carregando…",
     allResellers: "Todos os revendedores",
     chooseReseller: "Escolha um revendedor…",
@@ -371,9 +371,9 @@ export const manageTagsMessages: Dictionary<typeof en> = {
 
     whatTeamReport: "o desempenho por revendedor",
     teamIntro: "Quem vende, quem ativa e como as peças são usadas.",
-    teamRepOff: "Desativado",
-    role_admin: "Admin Xpot",
-    role_manager: "gerente",
+    teamRepOff: "Inativo",
+    role_admin: "Admin do Xpot",
+    role_manager: "Gerente",
     teamNoReseller: "Estoque da casa",
     teamResellerN: "Revendedor nº {id}",
     teamPiecesSold: "Peças vendidas",
@@ -564,7 +564,7 @@ export const manageTagsMessages: Dictionary<typeof en> = {
     couldNotLoad: "No se pudo cargar {what}.",
     copyLabel: "Copiar {label}",
 
-    repOff: "{name} (desactivado)",
+    repOff: "{name} (inactivo)",
     loadingOption: "Cargando…",
     allResellers: "Todos los revendedores",
     chooseReseller: "Elige un revendedor…",
@@ -608,7 +608,7 @@ export const manageTagsMessages: Dictionary<typeof en> = {
     batchStage_built: "Archivo listo",
     batchStage_printed: "Impreso",
     batchStage_receiving: "Recibiendo",
-    batchStage_received: "En inventario",
+    batchStage_received: "En stock",
     batchStage_cancelled: "Cancelado",
 
     event_redirect: "Abrió el destino",
@@ -635,9 +635,9 @@ export const manageTagsMessages: Dictionary<typeof en> = {
 
     whatTeamReport: "el rendimiento por revendedor",
     teamIntro: "Quién vende, quién activa y cómo se usan las piezas.",
-    teamRepOff: "Desactivado",
-    role_admin: "Admin Xpot",
-    role_manager: "gerente",
+    teamRepOff: "Inactivo",
+    role_admin: "Admin de Xpot",
+    role_manager: "Gerente",
     teamNoReseller: "Stock de la casa",
     teamResellerN: "Revendedor n.º {id}",
     teamPiecesSold: "Piezas vendidas",

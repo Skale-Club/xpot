@@ -94,7 +94,7 @@ export const shellMessages: Dictionary<typeof en> = {
 
     navSettings: "Configurações",
     navManage: "Gestão",
-    superAdminTag: "Admin Xpot",
+    superAdminTag: "Admin do Xpot",
     superAdminHint: "Só o admin do Xpot vê isto",
     navOrganization: "Administração",
     navOrganizations: "Organizações",
@@ -160,7 +160,7 @@ export const shellMessages: Dictionary<typeof en> = {
 
     navSettings: "Ajustes",
     navManage: "Gestión",
-    superAdminTag: "Admin Xpot",
+    superAdminTag: "Admin de Xpot",
     superAdminHint: "Solo el admin de Xpot ve esto",
     navOrganization: "Administración",
     navOrganizations: "Organizaciones",
