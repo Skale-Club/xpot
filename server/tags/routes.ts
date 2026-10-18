@@ -36,6 +36,7 @@ import * as repo from "./repository.js";
 import * as field from "./field.js";
 import * as provisioning from "./provisioning.js";
 import { getTeamReport } from "./report.js";
+import { getPieceActivity } from "./pieceActivity.js";
 import { ReviewLinkError, resolveReviewLink } from "./reviewLink.js";
 import { tagSaleCreateSchema } from "#shared/tagSales.js";
 import { createTagSale, TagSaleError } from "./sales.js";
@@ -513,6 +514,34 @@ export function registerTagRoutes(app: Express) {
       res.json(await repo.getTagPieceDashboard(id, days));
     } catch (err) {
       fail(res, err, "Failed to load piece dashboard");
+    }
+  });
+
+  // The piece screen's Performance (same numbers and range presets as the admin analytics),
+  // for anyone who can open the piece.
+  app.get(`${fieldBase}/:id/analytics`, requireTagUser, async (req, res) => {
+    const id = idParam(req, res);
+    if (!id) return;
+    try {
+      if (!(await tagForActor(req, res, id))) return;
+      const { range, from, to } = analyticsQuerySchema.parse(req.query);
+      const window = analyticsWindow({ range, from, to });
+      res.json(await repo.getAnalytics({ tagId: id }, window.from, window.to));
+    } catch (err) {
+      fail(res, err, "Failed to load piece analytics");
+    }
+  });
+
+  // The piece screen's Sale and Activity: its sales (active and cancelled) and, on the
+  // management side, its stock movements.
+  app.get(`${fieldBase}/:id/activity`, requireTagUser, async (req, res) => {
+    const id = idParam(req, res);
+    if (!id) return;
+    try {
+      if (!(await tagForActor(req, res, id))) return;
+      res.json(await getPieceActivity(id, { withMovements: listActor(req).isManager }));
+    } catch (err) {
+      fail(res, err, "Failed to load piece activity");
     }
   });
 

@@ -308,7 +308,14 @@ export async function createTagSale(input: TagSaleCreateInput, actor: TagActor, 
   return { ...sale, pieces, replayed: transactionResult.replayed };
 }
 
-export async function cancelTagLinksForSale(saleId: number) {
+/**
+ * A cancelled sale gives its pieces back: the sale links end, and each piece still marked
+ * sold by this sale returns to stock in its seller's hands (rep_id is the seller since the
+ * sale), with the ownership it had before the sale, recorded as a `restore` movement that
+ * points at the sale. A piece whose stock moved on since (damaged, lost) keeps that status.
+ * It keeps its customer and destination; removing the customer is a separate step.
+ */
+export async function cancelTagLinksForSale(saleId: number, actorUserId: string | null = null) {
   await db.transaction(async (tx) => {
     const links = await tx
       .select({ tagId: salesSaleTags.tagId })
@@ -317,7 +324,41 @@ export async function cancelTagLinksForSale(saleId: number) {
       .for("update");
     if (!links.length) return;
     const now = new Date();
+    const tagIds = links.map((link) => link.tagId);
     await tx.update(salesSaleTags).set({ status: "cancelled", endedAt: now }).where(and(eq(salesSaleTags.saleId, saleId), eq(salesSaleTags.status, "active")));
-    await tx.update(tags).set({ soldAt: null, updatedAt: now }).where(inArray(tags.id, links.map((link) => link.tagId)));
+    await tx.update(tags).set({ soldAt: null, updatedAt: now }).where(inArray(tags.id, tagIds));
+
+    const [pieces, saleMovements] = await Promise.all([
+      tx.select({ id: tags.id, repId: tags.repId, stockStatus: tags.stockStatus, ownershipType: tags.ownershipType, custodianRepId: tags.custodianRepId })
+        .from(tags).where(inArray(tags.id, tagIds)).for("update"),
+      tx.select({ tagId: tagStockMovements.tagId, fromOwnershipType: tagStockMovements.fromOwnershipType })
+        .from(tagStockMovements)
+        .where(and(inArray(tagStockMovements.tagId, tagIds), eq(tagStockMovements.movementType, "sale"), eq(tagStockMovements.referenceType, "sale"), eq(tagStockMovements.referenceId, String(saleId)))),
+    ]);
+    const ownershipBefore = new Map(saleMovements.map((m) => [m.tagId, m.fromOwnershipType]));
+    for (const piece of pieces) {
+      if (piece.stockStatus !== "sold") continue;
+      const ownershipType = ownershipBefore.get(piece.id) ?? "company";
+      await tx.update(tags).set({
+        stockStatus: "available",
+        ownershipType,
+        custodianRepId: piece.repId,
+        stockUpdatedAt: now,
+      }).where(eq(tags.id, piece.id));
+      await tx.insert(tagStockMovements).values({
+        tagId: piece.id,
+        movementType: "restore",
+        fromStockStatus: piece.stockStatus,
+        toStockStatus: "available",
+        fromOwnershipType: piece.ownershipType,
+        toOwnershipType: ownershipType,
+        fromCustodianRepId: piece.custodianRepId,
+        toCustodianRepId: piece.repId,
+        referenceType: "sale",
+        referenceId: String(saleId),
+        actorUserId,
+        reason: "Sale cancelled",
+      });
+    }
   });
 }

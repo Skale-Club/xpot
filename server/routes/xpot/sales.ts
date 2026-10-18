@@ -232,7 +232,7 @@ export function createSalesRouter() {
       cancelledAt: new Date(),
       cancelReason: reason ?? null,
     });
-    if (existing.sale.source === "tags") await cancelTagLinksForSale(existing.sale.id);
+    if (existing.sale.source === "tags") await cancelTagLinksForSale(existing.sale.id, actor.user.userId);
     res.json(await salesStorage.getSale(existing.sale.id));
   });
 

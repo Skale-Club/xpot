@@ -72,6 +72,45 @@ export interface TagDetail extends TagListItem {
   history: TagHistoryEntry[];
 }
 
+/** One financial sale a piece was part of (sales_sale_tags + sales_sales). */
+export interface TagPieceSale {
+  saleId: number;
+  /** "cancelled" once the sale was cancelled (the link ended). */
+  status: "active" | "cancelled";
+  soldAt: string;
+  endedAt: string | null;
+  /** This piece's share of the sale, after discount. */
+  priceCents: number | null;
+  currency: string;
+  sellerRepId: number;
+  sellerName: string | null;
+  paymentStatus: string;
+  cancelReason: string | null;
+}
+
+/** One stock movement of a piece (tag_stock_movements). Management only. */
+export interface TagStockMovementItem {
+  id: string;
+  movementType: string;
+  fromStockStatus: string | null;
+  toStockStatus: string;
+  fromOwnershipType: string | null;
+  toOwnershipType: string;
+  fromCustodianName: string | null;
+  toCustodianName: string | null;
+  referenceType: string | null;
+  referenceId: string | null;
+  reason: string | null;
+  actorEmail: string | null;
+  createdAt: string;
+}
+
+/** GET /api/xpot/tags/:id/activity: the piece's sales, and its stock movements for the management side (else null). */
+export interface TagPieceActivity {
+  sales: TagPieceSale[];
+  movements: TagStockMovementItem[] | null;
+}
+
 export interface TagDailyPoint {
   day: string; // YYYY-MM-DD (UTC)
   qr: number;
