@@ -44,8 +44,8 @@ Detalhamento e referências completas de arquivo:linha em [`AUDITORIA.md`](./AUD
 | PRF — performance | 5 | 1 | 0 | 4 |
 | DOC — testes e documentação | 5 | 5 | 0 | 0 |
 | MOD — módulos Visitas e Tags | 3 | 3 | 0 | 0 |
-| UXR — revisão de UX (out/2026) | 31 | 20 | 0 | 11 |
-| **Total** | **83** | **51** | **3** | **29** |
+| UXR — revisão de UX (out/2026) | 31 | 24 | 0 | 7 |
+| **Total** | **83** | **55** | **3** | **25** |
 
 ### Novidades desta revisão
 
@@ -230,6 +230,10 @@ O que mudou e por quê, as seis decisões de produto e como conferir:
 | ✅ UXR-18 | Baixo | **Código morto** (Fase 4a): `RouteSettings`, importação CSV sem tela, a API Xphere do vendedor, `markLeadCustomer`, `/tags/summary`, 216 chaves de i18n sem uso (com teste que impede novas). As rotas-alias antigas ficam, por causa de favoritos. | ✅ Fase 4a (`f9ecb66`, `f63cfcd`, `85a38d5`) |
 | ✅ UXR-19 | Baixo | **README e docs desatualizados** (local do MCP, Xphere em Configurações, "por usuário", `PROSPECTING_DAILY_ROUTE.md` inexistente). | ✅ Fase 4b |
 | ✅ UXR-28 | Baixo | **`GET /api/xpot/tags/:id/dashboard` sem chamadores** desde a tela única de peça. Remover. | ✅ Fase 4a (`36e1951`) |
+| ✅ UXR-22 | Médio | **Filtro por organização em Inventário, Kits e Empresas.** As abas de Organizações eram listas só de leitura. | ✅ Empresas (`?org=`, `GET /leads?organizationId=`) no merge do modo gestão; Inventário e Kits: `63d789d`, `e675b77` (`organizationId` em `GET /api/xpot/tags` e `GET /api/xpot/admin/tag-kits`, só para gerente/admin em modo gestão, ignorado para os demais; filtro Organização em `?org=`); as abas Estoque, Kits e Empresas de Organizações levam à lista filtrada: `e675b77`, `7312a8d` |
+| ✅ UXR-23 | Baixo | **MasterDetail nas telas de detalhe da gestão.** No computador, a peça do Inventário abre no painel lateral (`?piece=<id>`) e o evento do log de Status também (`?event=<id>`), com "Abrir em página inteira"; as páginas `/admin/tags/pieces/:id` e `/admin/health/events/:id` continuam. Esc fecha e o foco volta à linha (vale para todo MasterDetail). Celular: página inteira. O lote fica em página inteira: é uma área de trabalho (leitura de entrada, recebimento, impressão), não um registro para consultar de passagem. | ✅ `d4b26a2` |
+| ✅ UXR-27 | Baixo | **Linhas do Xphere e o card CRM de Integrações levam à pessoa** (`/admin/reps/:repId`); o card CRM lista quem está conectado. | ✅ `78d8a3e` |
+| ✅ UXR-30 | Baixo | **Aviso de alterações não salvas em Integrações** em toda saída: troca de aba, menu lateral, paleta, Voltar/Avançar do navegador, fechar a aba (cards de provedor e linhas do Xphere). O Voltar/Avançar e a paleta passaram a valer também para a Landing. | ✅ `8008315` |
 
 ### Aberto
 
@@ -237,14 +241,10 @@ O que mudou e por quê, as seis decisões de produto e como conferir:
 |---|---|---|---|
 | UXR-20 | Médio | **Cancelar uma busca de prospecção presa.** `server/prospecting/**` não tem cancelamento de job ou run; Status só oferece Retry e "Montar a rota de novo". | A fazer |
 | UXR-21 | Baixo | **Filtro por vendedor no histórico de visitas.** Sem ele, a página da pessoa em Pessoas não tem o atalho "visitas dela" (tem peças e kits). | A fazer |
-| UXR-22 | Médio | **Filtro por organização em Inventário, Kits e Empresas.** Sem ele, as abas de Organizações ficam como listas só de leitura. | Empresas feito em 2026-10-18: em modo gestão o gerente filtra Empresas por organização (`?org=`; `GET /leads?organizationId=`, e `GET /sales` aceita o mesmo), ignorado para os demais. Falta Inventário e Kits, e o link da aba Empresas de Organizações para `/leads?org=<id>` |
-| UXR-23 | Baixo | **MasterDetail nas telas de detalhe da gestão** (peça, lote, kit de Tags e outras). Pessoas já usa; as demais abrem página inteira. | A fazer |
 | UXR-24 | Baixo | **Tipos de lugar do Google sem tradução.** `primaryType` aparece cru na busca de empresas (`PlaceLeadSearch`); não há fonte de tradução. | A fazer |
 | UXR-25 | Baixo | **Página de consentimento OAuth (MCP) e resultados de "Testar" das integrações em inglês.** | A fazer |
 | UXR-26 | Baixo | **Recusas antigas com motivo próprio aparecem como Bloqueado.** Só o texto padrão é reconhecido como recusa; não há marcador para as demais. | A fazer |
-| UXR-27 | Baixo | **Linhas do Xphere e o card CRM de Integrações levarem à pessoa** (`/admin/reps/:repId`). | A fazer (conferido em 2026-10-18: nenhuma linha do Xphere leva à pessoa) |
 | UXR-29 | Baixo | **Retry de oportunidades em Status › Sync do CRM.** Elas aparecem na lista, mas `POST /api/xpot/sync/retry` não as aceita. | A fazer |
-| UXR-30 | Baixo | **Aviso de alterações não salvas em Integrações** cobre só a troca de provedor; a Landing tem o aviso completo. | A fazer |
 | UXR-31 | Baixo | **Quem cancela uma venda de Tags.** A tela mostra "Cancelar venda" só a gerentes; o servidor também deixa o próprio vendedor (com Visitas) cancelar. | Decidir |
 
 ---

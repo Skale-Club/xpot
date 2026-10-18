@@ -258,8 +258,7 @@ Confira cada tela em 1440 px e 390 px (não deve haver rolagem lateral).
 ## O que ficou aberto
 
 Está no [BACKLOG.md](./BACKLOG.md), área UXR: cancelar uma busca de
-prospecção presa, filtro por vendedor no histórico de visitas, filtro por
-organização em Inventário/Kits/Empresas, MasterDetail nas telas de detalhe da
-gestão, tradução dos tipos de lugar do Google, página de consentimento OAuth e
+prospecção presa, filtro por vendedor no histórico de visitas, tradução dos
+tipos de lugar do Google, página de consentimento OAuth e
 resultados de Testar em inglês, e recusas antigas com motivo próprio que ainda
 aparecem como Bloqueado.
