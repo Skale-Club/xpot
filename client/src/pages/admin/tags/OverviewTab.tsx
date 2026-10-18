@@ -40,7 +40,7 @@ import { ADMIN_TAGS_KEY, formatDateTime, formatShare, getJson, STALE_MS, withQue
 import { Loading, LoadError, useBatchOptions, useLeads, useReps } from "./pieces-shared";
 import { useTagLabels } from "./labels";
 import { PieceTable } from "./piece-table";
-import { AnalyticsPanel, RangePicker, type AnalyticsRange } from "./pieces-analytics";
+import { AnalyticsPanel, RangePicker, useDeviceLabel, type AnalyticsRange } from "./pieces-analytics";
 import {
   ACTIVITY_FILTERS,
   activityFeed,
@@ -181,6 +181,7 @@ function ActivityFeed({ overview, go }: { overview: TagOverview; go: Go }) {
   const t = useT(manageTagsMessages);
   const tf = useT(adminTagsFlowMessages);
   const labels = useTagLabels();
+  const deviceLabel = useDeviceLabel();
   const [filter, setFilter] = useState<ActivityFilter>("all");
   const items = activityFeed(overview, filter);
   return (
@@ -206,7 +207,7 @@ function ActivityFeed({ overview, go }: { overview: TagOverview; go: Go }) {
                     face={item.event.face}
                     batchCode={item.event.batchCode}
                     customer={item.event.leadName}
-                    details={[labels.event(item.event.eventType), item.event.deviceType].filter(Boolean).join(" · ")}
+                    details={[labels.event(item.event.eventType), item.event.deviceType && deviceLabel(item.event.deviceType)].filter(Boolean).join(" · ")}
                     className="min-w-0 flex-1"
                   />
                   <span className="flex shrink-0 flex-col items-end gap-1">
@@ -231,18 +232,25 @@ function ActivityFeed({ overview, go }: { overview: TagOverview; go: Go }) {
                   </span>
                 </button>
               ) : (
-                <button type="button" className={`${FEED_ROW} flex-wrap`} onClick={() => go(`/pieces/${item.change.tagId}`)}>
-                  <TagPieceMention publicCode={item.change.publicCode} productType={item.change.productType} face={item.change.face} batchCode={item.change.batchCode} className="min-w-0 flex-1" />
+                <button type="button" className={FEED_ROW} onClick={() => go(`/pieces/${item.change.tagId}`)}>
+                  {/* The new destination sits under the code, like a scan's details, not on a line of its own. */}
+                  <TagPieceMention
+                    publicCode={item.change.publicCode}
+                    productType={item.change.productType}
+                    face={item.change.face}
+                    batchCode={item.change.batchCode}
+                    details={
+                      item.change.newUrl
+                        ? `${labels.destination(item.change.newDestinationType)} · ${item.change.newUrl}`
+                        : item.change.reason
+                          ? t("ovDestClearedReason", { reason: item.change.reason })
+                          : t("ovDestCleared")
+                    }
+                    className="min-w-0 flex-1"
+                  />
                   <span className="flex shrink-0 flex-col items-end gap-1">
                     <Pill tone="slate">{tf("activityDestinationPill")}</Pill>
                     <span className={FEED_DATE}>{formatDateTime(item.at)}</span>
-                  </span>
-                  <span className="block w-full min-w-0 truncate text-xs text-white/40">
-                    {item.change.newUrl
-                      ? `${labels.destination(item.change.newDestinationType)} · ${item.change.newUrl}`
-                      : item.change.reason
-                        ? t("ovDestClearedReason", { reason: item.change.reason })
-                        : t("ovDestCleared")}
                   </span>
                 </button>
               )}
