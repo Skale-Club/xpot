@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo } from "react";
 import { useLocation, useRoute } from "wouter";
-import { CalendarDays } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { CalendarDays, UserRound } from "lucide-react";
 import { useVisits } from "./hooks/useVisits";
 import { VisitRow, VisitDeleteConfirm, VisitSummaryPage } from "./components/VisitRow";
 import { VisitsTable } from "./components/VisitsTable";
@@ -15,7 +16,9 @@ import { visitsMessages } from "@/i18n/messages/visits";
 import { Segmented } from "@/components/xpot/Segmented";
 import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
 import { ListSkeleton } from "@/components/xpot/ListSkeleton";
-import { FilterBar, FilterChips, FilterDay, fromDayKey, toDayKey } from "@/components/xpot/filters";
+import { FilterBar, FilterChips, FilterDay, FilterSelect, fromDayKey, toDayKey } from "@/components/xpot/filters";
+import { useViewerAccess } from "@/lib/adminMode";
+import { apiRequest } from "@/lib/queryClient";
 import { currentSearch, useUrlFilters } from "@/hooks/use-url-filters";
 import { ListPager, usePagedList } from "@/components/xpot/pagination";
 
@@ -59,9 +62,26 @@ const visitDay = (visit: EnrichedSalesVisit) => {
 export function XpotVisits({ basePath = "/dashboard/history" }: { basePath?: string }) {
   const t = useT(visitsMessages);
   const tStatus = useT(checkinMessages);
-  const { visitsQuery } = useVisits();
-  // ?view=day&day=2026-10-12&status=sale_made
-  const filters = useUrlFilters({ view: "all", day: "", status: "all" });
+  const { visitsQuery: everyVisitQuery } = useVisits();
+  // ?view=day&day=2026-10-12&status=sale_made&rep=12
+  const filters = useUrlFilters({ view: "all", day: "", status: "all", rep: "" });
+  // A manager in management mode sees everyone's visits and may narrow them to
+  // one seller (People's "Their visits" opens it with ?rep=); the server only
+  // honours ?repId= for them, so the filter is not offered to anyone else.
+  const { canManage } = useViewerAccess();
+  const repParam = Number(filters.values.rep);
+  const repFilter = canManage && Number.isInteger(repParam) && repParam > 0 ? repParam : null;
+  const peopleQuery = useQuery<Array<{ id: number; displayName: string }>>({ queryKey: ["/api/xpot/admin/reps"], enabled: canManage });
+  const sellerOptions = useMemo(
+    () => [...(peopleQuery.data ?? [])].sort((a, b) => a.displayName.localeCompare(b.displayName)).map((person) => ({ value: String(person.id), label: person.displayName })),
+    [peopleQuery.data],
+  );
+  const sellerVisitsQuery = useQuery<EnrichedSalesVisit[]>({
+    queryKey: ["/api/xpot/visits", { repId: repFilter }],
+    queryFn: async () => (await apiRequest("GET", `/api/xpot/visits?repId=${repFilter}`)).json(),
+    enabled: repFilter !== null,
+  });
+  const visitsQuery = repFilter !== null ? sellerVisitsQuery : everyVisitQuery;
   const viewMode: "all" | "day" = filters.values.view === "day" ? "day" : "all";
   const selectedDate = fromDayKey(filters.values.day) ?? new Date();
   const selectedKey = toDayKey(selectedDate);
@@ -88,7 +108,7 @@ export function XpotVisits({ basePath = "/dashboard/history" }: { basePath?: str
   const visitsToRender = statusFilter === "all" ? viewVisits : viewVisits.filter((v) => v.status === statusFilter);
   // A long history renders 50 at a time; the open visit is always on the page.
   const pagedVisits = usePagedList(visitsToRender, {
-    resetKey: `${viewMode}|${selectedKey}|${statusFilter}`,
+    resetKey: `${viewMode}|${selectedKey}|${statusFilter}|${repFilter ?? ""}`,
     keepIndex: routeId == null ? -1 : visitsToRender.findIndex((v) => v.id === routeId),
   });
   const visitsPager = <ListPager shown={pagedVisits.shown} total={pagedVisits.total} hasMore={pagedVisits.hasMore} onMore={pagedVisits.showMore} />;
@@ -176,7 +196,7 @@ export function XpotVisits({ basePath = "/dashboard/history" }: { basePath?: str
     <div className="space-y-4">
       <FilterBar
         testId="visits-filters"
-        controls={
+        controls={<>
           <Segmented
             className="col-span-2 sm:w-72"
             items={[
@@ -186,7 +206,18 @@ export function XpotVisits({ basePath = "/dashboard/history" }: { basePath?: str
             value={viewMode}
             onChange={(view) => filters.set({ view, day: view === "day" ? filters.values.day : null })}
           />
-        }
+          {canManage ? (
+            <FilterSelect
+              className="col-span-2 sm:w-56"
+              icon={UserRound}
+              value={repFilter === null ? "" : String(repFilter)}
+              onChange={(rep) => filters.set({ rep })}
+              placeholder={t("allSellers")}
+              options={sellerOptions}
+              testId="visits-filter-seller"
+            />
+          ) : null}
+        </>}
         secondary={
           <div className="space-y-2.5">
             {viewMode === "day" ? (
@@ -203,8 +234,8 @@ export function XpotVisits({ basePath = "/dashboard/history" }: { basePath?: str
         summary={{
           shown: visitsToRender.length,
           total: viewVisits.length,
-          active: statusFilter !== "all",
-          onClear: () => filters.set({ status: null }),
+          active: statusFilter !== "all" || repFilter !== null,
+          onClear: () => filters.set({ status: null, rep: null }),
         }}
       />
 

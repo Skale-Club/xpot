@@ -18,8 +18,11 @@ export function createVisitsRouter() {
   router.get("/visits", async (req, res) => {
     const actor = (req as any).xpotActor as Awaited<ReturnType<typeof ensureXpotRep>>;
     const leadId = typeof req.query.leadId === "string" ? Number(req.query.leadId) : undefined;
+    // ?repId= narrows the list to one person (the history's "Seller" filter,
+    // People's "Their visits"); it is only honoured where the list spans everyone.
+    const repFilter = Number(req.query.repId);
     const visits = await storage.listSalesVisits({
-      repId: listsEveryone(req, actor!) ? (req.query.repId ? Number(req.query.repId) : undefined) : actor!.rep.id,
+      repId: listsEveryone(req, actor!) ? (Number.isInteger(repFilter) && repFilter > 0 ? repFilter : undefined) : actor!.rep.id,
       leadId,
     });
     // Four queries for the whole list. This used to read the lead, its
