@@ -32,6 +32,8 @@ import { useT } from "@/i18n";
 import { salesMessages } from "@/i18n/messages/sales";
 import { GLASS } from "@/components/xpot/surface";
 import { EmptyState } from "@/components/xpot/EmptyState";
+import { ListSkeleton } from "@/components/xpot/ListSkeleton";
+import { RetryButton } from "@/components/xpot/RetryButton";
 
 const SYNC_STATUS_KEYS: Record<string, "sync_pending" | "sync_synced" | "sync_failed" | "sync_needs_review"> = {
   pending: "sync_pending",
@@ -376,8 +378,14 @@ function PipelineTab() {
           </div>
         )}
 
-        {/* Opportunities list */}
-        {opportunitiesQuery.data?.length ? (
+        {/* Opportunities list; loading and failure come before "No opportunities yet". */}
+        {opportunitiesQuery.isLoading ? (
+          <ListSkeleton rows={2} />
+        ) : opportunitiesQuery.isError ? (
+          <EmptyState compact dense tone="red" icon={TrendingUp} title={t("listLoadFailed")}>
+            <RetryButton onRetry={() => void opportunitiesQuery.refetch()} busy={opportunitiesQuery.isFetching} />
+          </EmptyState>
+        ) : opportunitiesQuery.data?.length ? (
           <div className="space-y-2">
             {opportunitiesQuery.data.map((opp: EnrichedSalesOpportunity) => (
               <div
@@ -473,7 +481,13 @@ function PipelineTab() {
         )}
 
         {/* Tasks list */}
-        {tasksQuery.data?.length ? (
+        {tasksQuery.isLoading ? (
+          <ListSkeleton rows={2} />
+        ) : tasksQuery.isError ? (
+          <EmptyState compact dense tone="red" icon={ListTodo} title={t("listLoadFailed")}>
+            <RetryButton onRetry={() => void tasksQuery.refetch()} busy={tasksQuery.isFetching} />
+          </EmptyState>
+        ) : tasksQuery.data?.length ? (
           <div className="space-y-2">
             {tasksQuery.data.map((task) => {
               const done = task.status === "completed";

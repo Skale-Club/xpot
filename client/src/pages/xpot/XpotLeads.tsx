@@ -51,6 +51,8 @@ import { leadsMessages } from "@/i18n/messages/leads";
 import { checkinMessages } from "@/i18n/messages/checkin";
 import { BRAND_GRADIENT, GLASS } from "@/components/xpot/surface";
 import { EmptyState } from "@/components/xpot/EmptyState";
+import { ListSkeleton } from "@/components/xpot/ListSkeleton";
+import { RetryButton } from "@/components/xpot/RetryButton";
 import { FilterBar, FilterChips, FilterDay, FilterSearch, FilterToggle, fromDayKey, toDayKey } from "@/components/xpot/filters";
 import { currentSearch, useUrlFilters } from "@/hooks/use-url-filters";
 import { ListPager, usePagedList } from "@/components/xpot/pagination";
@@ -625,7 +627,15 @@ export function XpotLeads() {
     />
   );
 
-  const emptyStates = leads.length === 0 && !search ? (
+  // Loading and failure come before any "nothing here" message, which used to
+  // show "No companies yet" (with its Add button) while the list was loading.
+  const emptyStates = leadsQuery.isLoading ? (
+    <ListSkeleton rows={5} testId="leads-loading" />
+  ) : leadsQuery.isError ? (
+    <EmptyState tone="red" icon={Building2} title={t("loadFailed")} hint={(leadsQuery.error as Error).message}>
+      <RetryButton onRetry={() => void leadsQuery.refetch()} busy={leadsQuery.isFetching} />
+    </EmptyState>
+  ) : leads.length === 0 && !search ? (
     <EmptyState icon={Building2} title={t("noLeads")} hint={t("noLeadsHint")} cardStyle={GLASS}>
       <button
         onClick={() => setAddOpen(true)}

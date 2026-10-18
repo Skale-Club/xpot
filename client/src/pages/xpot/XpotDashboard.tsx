@@ -16,6 +16,8 @@ import { StatusBadge } from "./components/VisitStatus";
 import { AttentionItem, AttentionList, DashboardSection, EmptyMetricState, KpiTile, MetricSelector, PeriodSelector } from "@/components/xpot/DashboardKit";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { ListSkeleton } from "@/components/xpot/ListSkeleton";
+import { RetryButton } from "@/components/xpot/RetryButton";
 import { routeDisplayName, routeStopProgress, todayRouteOf } from "./prospectingUi";
 
 type DashboardRoute = {
@@ -113,6 +115,22 @@ function DashboardOverview() {
   const activityLoading = activityMetric === "visits" ? dashboardQuery.isLoading : salesSummary.isLoading;
   const activityTone = ACTIVITY_TONES[activityMetric];
   const isCurrencyActivity = activityMetric === "revenue" || activityMetric === "profit";
+
+  // Tasks, Needs attention and Latest visits wait for their data instead of
+  // saying "All clear" / "No visits yet" before it arrives.
+  // `alsoLoading` waits for a secondary source without failing the section on it.
+  function sectionPending(rows: number, alsoLoading = false) {
+    if (dashboardQuery.isLoading || alsoLoading) {
+      return <ListSkeleton rows={rows} rowClassName="h-11 rounded-xl" className="space-y-2 px-4 pb-4 pt-2 lg:px-5" />;
+    }
+    if (!dashboardQuery.isError) return null;
+    return (
+      <div className="flex flex-col items-center gap-3 px-5 py-6 text-center">
+        <div className="text-xs text-red-300/80">{t("sectionLoadFailed")}</div>
+        <RetryButton onRetry={() => void dashboardQuery.refetch()} busy={dashboardQuery.isFetching} />
+      </div>
+    );
+  }
 
   function routeStatusLabel(status: DashboardRoute["status"]) {
     if (status === "draft") return t("routeStatusDraft");
@@ -296,7 +314,7 @@ function DashboardOverview() {
         </button>
       </div>
 
-      {tasksToday.length ? (
+      {sectionPending(3) ?? (tasksToday.length ? (
         <div className="px-2 pb-2 lg:px-3 lg:pb-3">
           {tasksToday.slice(0, 5).map((task) => (
             <div key={task.id} className="group flex items-center gap-2 rounded-xl px-2 py-2 transition-colors hover:bg-white/[0.03]">
@@ -329,13 +347,13 @@ function DashboardOverview() {
           <div className="text-sm font-semibold text-white/55">{t("todayTasksClear")}</div>
           <div className="mt-1 text-xs text-white/28">{t("todayTasksClearHint")}</div>
         </div>
-      )}
+      ))}
     </DashboardSection>
   );
 
   const attentionBlock = (
     <DashboardSection title={t("needsAttention")} icon={AlertTriangle} bodyClassName="p-0">
-      {(metrics?.overdueTasks ?? 0) > 0 || (salesSummary.data?.consignment.dueCount ?? 0) > 0 || (metrics?.openOpportunities ?? 0) > 0 ? (
+      {sectionPending(2, salesSummary.isLoading) ?? ((metrics?.overdueTasks ?? 0) > 0 || (salesSummary.data?.consignment.dueCount ?? 0) > 0 || (metrics?.openOpportunities ?? 0) > 0 ? (
         <AttentionList>
           {(metrics?.overdueTasks ?? 0) > 0 ? <AttentionItem icon={Clock3} eyebrow={t("taskOverdue")} title={t("overdueTasksTitle")} detail={t.plural("overdueTasksDetail", metrics?.overdueTasks ?? 0)} tone="amber" onClick={() => setLocation("/tasks")} /> : null}
           {(salesSummary.data?.consignment.dueCount ?? 0) > 0 ? <AttentionItem icon={DollarSign} eyebrow={t("salesOnStreet")} title={t("settlementsDueTitle")} detail={t.plural("settlementsDueDetail", salesSummary.data?.consignment.dueCount ?? 0)} tone="amber" onClick={() => setLocation("/sales")} /> : null}
@@ -346,7 +364,7 @@ function DashboardOverview() {
           <div className="text-sm font-semibold text-white/60">{t("attentionClear")}</div>
           <div className="mt-1 text-xs text-white/30">{t("attentionClearHint")}</div>
         </div>
-      )}
+      ))}
     </DashboardSection>
   );
 
@@ -400,7 +418,7 @@ function DashboardOverview() {
       bodyClassName="p-2"
       action={<button type="button" onClick={() => setLocation("/dashboard/history")} className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-300/80 transition-colors hover:text-indigo-200">{t("viewHistory")}<ChevronRight className="h-3.5 w-3.5" /></button>}
     >
-      {dashboardQuery.data?.recentVisits?.length ? (
+      {sectionPending(3) ?? (dashboardQuery.data?.recentVisits?.length ? (
         <div className="divide-y divide-white/[0.05]" data-testid="dashboard-recent-visits">
           {dashboardQuery.data.recentVisits.map((visit) => {
             const when = visit.checkedOutAt ?? visit.checkedInAt ?? visit.scheduledAt;
@@ -424,7 +442,7 @@ function DashboardOverview() {
         </div>
       ) : (
         <div className="px-4 py-8 text-center"><div className="text-sm font-semibold text-white/55">{t("noVisitsYet")}</div><div className="mt-1 text-xs text-white/28">{t("goToCheckIn")}</div></div>
-      )}
+      ))}
     </DashboardSection>
   );
 

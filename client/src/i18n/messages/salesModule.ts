@@ -159,6 +159,7 @@ const en = {
 
   // A company's sales panel
   soldHere: "Sold here",
+  companySalesLoadFailed: "Could not load this company's sales.",
   salesCount_one: "{count} sale",
   salesCount_other: "{count} sales",
   lastSale: "last {date}",
@@ -435,6 +436,7 @@ export const salesModuleMessages: Dictionary<typeof en> = {
     grossProfit: "Lucro bruto",
 
     soldHere: "Vendido aqui",
+    companySalesLoadFailed: "Não foi possível carregar as vendas desta empresa.",
     salesCount_one: "{count} venda",
     salesCount_other: "{count} vendas",
     lastSale: "última em {date}",
@@ -705,6 +707,7 @@ export const salesModuleMessages: Dictionary<typeof en> = {
     grossProfit: "Ganancia bruta",
 
     soldHere: "Vendido aquí",
+    companySalesLoadFailed: "No se pudieron cargar las ventas de esta empresa.",
     salesCount_one: "{count} venta",
     salesCount_other: "{count} ventas",
     lastSale: "última el {date}",

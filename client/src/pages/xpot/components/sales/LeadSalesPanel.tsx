@@ -13,6 +13,8 @@ import { SaleDialog } from "./SaleDialog";
 import { DepositDialog, SettleDialog, ReturnDialog } from "./ConsignmentDialogs";
 import { ConsignmentCard } from "./cards";
 import { SectionLabel } from "./ui";
+import { ListSkeleton } from "@/components/xpot/ListSkeleton";
+import { RetryButton } from "@/components/xpot/RetryButton";
 import { useT } from "@/i18n";
 import { salesMessages } from "@/i18n/messages/sales";
 import { salesModuleMessages } from "@/i18n/messages/salesModule";
@@ -42,7 +44,16 @@ export function LeadSalesPanel({
     <div className="space-y-3">
       {!compact && <SectionLabel>{ts("tabSales")}</SectionLabel>}
 
-      {/* Lifetime with this company */}
+      {/* Lifetime with this company; never a $0.00 placeholder while it loads. */}
+      {snapshot.isLoading ? (
+        <ListSkeleton rows={2} className="flex items-stretch gap-2" rowClassName="h-[76px] flex-1 rounded-2xl" testId="lead-sales-loading" />
+      ) : snapshot.isError ? (
+        <div className="flex flex-col items-center gap-2.5 rounded-2xl px-4 py-4 text-center"
+          style={{ background: "rgba(239,68,68,0.05)", border: "1px solid rgba(239,68,68,0.18)" }}>
+          <div className="text-xs text-red-300/80">{t("companySalesLoadFailed")}</div>
+          <RetryButton onRetry={refresh} busy={snapshot.isFetching} />
+        </div>
+      ) : (
       <div className="flex items-stretch gap-2">
         <div className="flex-1 rounded-2xl px-3.5 py-3"
           style={{ background: "rgba(16,185,129,0.07)", border: "1px solid rgba(16,185,129,0.18)" }}>
@@ -64,6 +75,7 @@ export function LeadSalesPanel({
           <div className="text-[10px] text-white/35">{t("afterProductionCost")}</div>
         </div>
       </div>
+      )}
 
       {/* The two actions */}
       <div className="flex gap-2">
