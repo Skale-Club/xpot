@@ -40,9 +40,9 @@ touched. Each file has a header comment with usage; this page is the index.
 | `SURFACE_MODAL` / `SURFACE_MODAL_CLASS` | `#0d1322` | Dialogs, sheets, popovers, menus, `<option>` |
 | `OVERLAY_CLASS` | `bg-black/60 backdrop-blur-sm` | Behind dialogs and sheets |
 | `PAGE_GRADIENT` / `PAGE_BASE` | `#060912` base | Page background, boot screen, `theme-color` |
-| `BRAND_GRADIENT` / `BRAND_BLUE` | `#3b82f6 → #6366f1` | Primary action |
+| `BRAND_GRADIENT` | `#3b82f6 → #6366f1` | Primary action |
 | `SUCCESS_GRADIENT` | `#10b981 → #06b6d4` | Money actions |
-| `DANGER_GRADIENT` / `DANGER_SURFACE` | `#ef4444 → #e11d48` | Destructive action / error box |
+| `DANGER_SURFACE` | `#ef4444` tint | Error box, danger zone of a form |
 | `MODULE_ACCENT` | visits blue, tags violet, account slate | Where you are |
 | `ACCENT_GRADIENT`, `ACCENT_SELECTED` | per module | Primary fill and "selected" state per module |
 | `EYEBROW`, `TABLE_HEAD` | 10px uppercase, white/40 | Small labels, table headers |

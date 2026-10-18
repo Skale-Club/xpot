@@ -45,7 +45,6 @@ export async function pieceSend<T>(method: "POST" | "PATCH", url: string, body: 
 export function invalidatePieceViews(qc: QueryClient) {
   void qc.invalidateQueries({ queryKey: ["tags"] });
   void qc.invalidateQueries({ queryKey: ["admin-tags"] });
-  void qc.invalidateQueries({ queryKey: ["/api/xpot/tags/summary"] });
   void qc.invalidateQueries({ queryKey: ["/api/xpot/tags/dashboard"] });
   void qc.invalidateQueries({ queryKey: ["/api/xpot/tags/by-lead"] });
 }

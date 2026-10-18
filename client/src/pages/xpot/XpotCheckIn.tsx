@@ -317,17 +317,7 @@ export function XpotCheckIn() {
     overridePrompt,
     setOverridePrompt,
     confirmOverride,
-    visitNoteForm,
-    setVisitNoteForm,
-    isRecording,
-    recordingTime,
-    audioBlob,
-    setAudioBlob,
-    setRecordingTime,
-    startRecording,
-    stopRecording,
     uploadAudioMutation,
-    saveNoteMutation,
   } = useCheckIn();
   const { leadsQuery } = useLeads();
   const { activeVisit, checkOutMutation, cancelVisitMutation, visitsQuery } = useVisits();

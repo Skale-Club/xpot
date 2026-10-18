@@ -12,8 +12,6 @@ export type LegalBlock = string | { list: string[] } | { lead: string; text: str
 export type LegalSection = { heading: string; body: LegalBlock[] };
 export type LegalDoc = { title: string; updated: string; intro: string; sections: LegalSection[] };
 
-export const LEGAL_UPDATED = "2026-10-05";
-
 const privacyEn: LegalDoc = {
   title: "Privacy Policy",
   updated: "Last updated: October 5, 2026",

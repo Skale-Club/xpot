@@ -80,10 +80,10 @@ async function get(app: express.Express, path: string, init?: { method: string; 
   });
 }
 
-const REP_PATHS = ["/api/xpot/products", "/api/xpot/sales", "/api/xpot/consignments", "/api/xpot/xphere/config", "/api/xpot/visits/1/actions"];
+const REP_PATHS = ["/api/xpot/products", "/api/xpot/sales", "/api/xpot/consignments", "/api/xpot/visits/1/actions"];
 
 describe("the composed /api/xpot routers", () => {
-  it("a plain rep reaches the Sales, Consignments, Products, Xphere and Visit-action APIs", async () => {
+  it("a plain rep reaches the Sales, Consignments, Products and Visit-action APIs", async () => {
     const app = appFor("rep");
     for (const path of REP_PATHS) {
       const res = await get(app, path);
@@ -108,6 +108,12 @@ describe("the composed /api/xpot routers", () => {
       expect([manager.status, manager.code], path).toEqual([403, "super_admin_only"]);
       expect((await get(appFor("platform-admin"), path)).status, path).not.toBe(403);
     }
+  });
+
+  it("has no rep-side Xphere config: only the admin's /admin/xphere sets it", async () => {
+    expect((await get(appFor("rep"), "/api/xpot/xphere/config")).status).toBe(404);
+    expect((await get(appFor("rep"), "/api/xpot/xphere/config", { method: "PUT", body: "{}" })).status).toBe(404);
+    expect((await get(appFor("rep"), "/api/xpot/xphere/config/rotate-inbound-key", { method: "POST", body: "{}" })).status).toBe(404);
   });
 
   it("serves landing content publicly, with a safe empty fallback before first publish", async () => {

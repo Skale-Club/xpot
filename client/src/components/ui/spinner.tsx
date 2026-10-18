@@ -42,49 +42,6 @@ export function DotsLoader({ size = "md", tone = "brand", className, label }: Do
   );
 }
 
-interface SectionLoaderProps extends DotsLoaderProps {
-  centerClassName?: string;
-}
-
-export function SectionLoader({
-  size = "md",
-  tone = "brand",
-  className,
-  centerClassName,
-  label,
-}: SectionLoaderProps) {
-  return (
-    <div className={cn("flex w-full items-center justify-center py-12", centerClassName)}>
-      <DotsLoader size={size} tone={tone} className={className} label={label} />
-    </div>
-  );
-}
-
-export function InlineLoader({
-  size = "xs",
-  tone = "brand",
-  className,
-  label,
-}: DotsLoaderProps) {
-  return <DotsLoader size={size} tone={tone} label={label} className={cn("inline-flex shrink-0", className)} />;
-}
-
-/**
- * PageLoader — hardcoded dark splash for pre-React boot states.
- * Use this only as the Suspense fallback during initial route transitions,
- * where the theme class has not been applied yet and we want a consistent
- * dark splash regardless of the user's preference. For any in-app
- * "waiting" state (auth check, route guard, initial data fetch) use
- * <AppLoader /> instead — it respects the active theme.
- */
-export function PageLoader() {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#060912]">
-      <DotsLoader size="lg" tone="brand" />
-    </div>
-  );
-}
-
 /**
  * AppLoader — full-screen, theme-aware loader.
  *
@@ -110,32 +67,5 @@ export function AppLoader() {
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-background" style={{ background: PAGE_GRADIENT }}>
       <DotsLoader size="lg" tone="brand" />
     </div>
-  );
-}
-
-// Keep Spinner for other use cases
-interface SpinnerProps {
-  size?: "sm" | "md" | "lg";
-  className?: string;
-}
-
-export function Spinner({ size = "md", className }: SpinnerProps) {
-  const t = useT(commonMessages);
-  const sizeClasses = {
-    sm: "h-4 w-4 border-2",
-    md: "h-8 w-8 border-[3px]",
-    lg: "h-12 w-12 border-4",
-  };
-
-  return (
-    <div
-      className={cn(
-        "animate-spin rounded-full border-solid border-primary border-t-transparent",
-        sizeClasses[size],
-        className
-      )}
-      role="status"
-      aria-label={t("loading")}
-    />
   );
 }

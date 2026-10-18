@@ -33,8 +33,6 @@ import type {
   TagListItem,
   TagOverview,
   TagDashboard,
-  TagPieceDashboard,
-  TagRepSummary,
 } from "#shared/tagsApi.js";
 import { JOURNEY_PRODUCT_LABELS, tagActionEntry, type JourneySource } from "#shared/tagJourney.js";
 import { resolveTagFace } from "#shared/tagFace.js";
@@ -685,14 +683,6 @@ export async function rememberLeadPlace(tx: Tx, leadId: number, placeId: string 
     .update(salesLeads)
     .set({ googlePlaceId: placeId, updatedAt: new Date() })
     .where(and(eq(salesLeads.id, leadId), isNull(salesLeads.googlePlaceId)));
-}
-
-/** A lead that bought a piece is a customer. */
-export async function markLeadCustomer(tx: Tx, leadId: number) {
-  await tx
-    .update(salesLeads)
-    .set({ status: "customer", updatedAt: new Date() })
-    .where(and(eq(salesLeads.id, leadId), sql`${salesLeads.status} <> 'customer'`));
 }
 
 // ─── Kits (pieces handed to a reseller) ───────────────────────────────────────
@@ -2271,74 +2261,6 @@ export async function getTagDashboard(repId: number | null, days = 30, now: Date
       accessMethod: scan.access_method,
       occurredAt: iso(scan.occurred_at)!,
     })),
-  };
-}
-
-/** A single piece's recent traffic, kept deliberately smaller than the fleet dashboard. */
-export async function getTagPieceDashboard(tagId: string, days = 30, now: Date = new Date()): Promise<TagPieceDashboard> {
-  const since = new Date(now.getTime() - (days - 1) * 86_400_000);
-  since.setUTCHours(0, 0, 0, 0);
-  const inPeriod = sql`e.tag_id = ${tagId} AND e.occurred_at >= ${since} AND ${COUNTABLE}`;
-
-  const [scans] = await rows<{ qr: number; nfc: number; visitors: number; last_interaction_at: Date | null }>(sql`
-    SELECT count(*) FILTER (WHERE e.access_method = 'qr')::int AS qr,
-           count(*) FILTER (WHERE e.access_method = 'nfc')::int AS nfc,
-           count(DISTINCT e.visitor_day_key)::int AS visitors,
-           max(e.occurred_at) AS last_interaction_at
-    FROM tag_events e WHERE ${inPeriod}
-  `);
-  const daily = await rows<{ day: string; qr: number; nfc: number }>(sql`
-    SELECT to_char(d, 'YYYY-MM-DD') AS day,
-           count(e.id) FILTER (WHERE e.access_method = 'qr')::int AS qr,
-           count(e.id) FILTER (WHERE e.access_method = 'nfc')::int AS nfc
-    FROM generate_series(${since}::timestamptz, ${now}::timestamptz, interval '1 day') d
-    LEFT JOIN tag_events e ON e.tag_id = ${tagId}
-      AND e.occurred_at >= d AND e.occurred_at < d + interval '1 day'
-      AND ${COUNTABLE}
-    GROUP BY d ORDER BY d
-  `);
-  const devices = await rows<{ os: string | null; scans: number }>(sql`
-    SELECT e.os_family AS os, count(*)::int AS scans
-    FROM tag_events e WHERE ${inPeriod}
-    GROUP BY e.os_family ORDER BY scans DESC LIMIT 3
-  `);
-
-  return {
-    days,
-    scans: { qr: Number(scans?.qr ?? 0), nfc: Number(scans?.nfc ?? 0) },
-    visitors: Number(scans?.visitors ?? 0),
-    lastInteractionAt: iso(scans?.last_interaction_at),
-    daily: daily.map((d) => ({ day: d.day, qr: Number(d.qr), nfc: Number(d.nfc) })),
-    devices: devices.map((d) => ({ os: d.os ?? "other", scans: Number(d.scans) })),
-  };
-}
-
-export async function getRepSummary(repId: number, now: Date = new Date()): Promise<TagRepSummary> {
-  const since30 = new Date(now.getTime() - 30 * 86_400_000);
-  const [t] = await rows<{ in_stock: number; active: number; sold30: number }>(sql`
-    SELECT
-      count(*) FILTER (WHERE t.status <> 'retired' AND sold.sold_at IS NULL)::int AS in_stock,
-      count(*) FILTER (WHERE t.status = 'active')::int AS active,
-      count(*) FILTER (WHERE sold.sold_at >= ${since30})::int AS sold30
-    FROM tags t
-    LEFT JOIN LATERAL (
-      SELECT st.sold_at FROM sales_sale_tags st
-      WHERE st.tag_id = t.id AND st.status = 'active'
-      ORDER BY st.sold_at DESC LIMIT 1
-    ) sold ON true
-    WHERE t.rep_id = ${repId}
-  `);
-  const [e] = await rows<{ qr: number; nfc: number }>(sql`
-    SELECT count(*) FILTER (WHERE e.access_method = 'qr')::int AS qr,
-           count(*) FILTER (WHERE e.access_method = 'nfc')::int AS nfc
-    FROM tag_events e
-    WHERE e.rep_id = ${repId} AND e.occurred_at >= ${since30} AND ${COUNTABLE}
-  `);
-  return {
-    inStock: Number(t?.in_stock ?? 0),
-    active: Number(t?.active ?? 0),
-    soldLast30: Number(t?.sold30 ?? 0),
-    scansLast30: { qr: Number(e?.qr ?? 0), nfc: Number(e?.nfc ?? 0) },
   };
 }
 

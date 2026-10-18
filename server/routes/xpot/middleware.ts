@@ -93,7 +93,6 @@ export const VISITS_ONLY_PATHS = [
   "/sync",
   "/map",
   "/prospecting",
-  "/xphere",
   "/products",
   "/sales",
   "/consignments",

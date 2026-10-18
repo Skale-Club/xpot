@@ -1,8 +1,6 @@
-import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { BATCH_STAGE_TONE, BATCH_STATUS_TONE, Pill, toneOf } from "@/components/xpot/StatusPill";
 import { Select } from "@/components/xpot/Field";
-import { InlineAlert } from "@/components/xpot/InlineAlert";
 import type { TagBatchItem, TagListItem } from "@shared/tagsApi";
 import { resellerHasTags } from "@shared/tagDistribution";
 import { ADMIN_TAGS_KEY, STALE_MS, getJson, withQuery } from "./api";
@@ -11,9 +9,6 @@ import { useT } from "@/i18n";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
 
 // Shared bits for the Batches and Kits screens (and their helpers). The pieces table is piece-table.tsx.
-
-/** The shared ConfirmDialog; re-exported for JourneyMcpCard until it moves (Tags screens import the kit's). */
-export { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
 
 // ─── Labels ───────────────────────────────────────────────────────────────────
 // Product, face and status names: useTagLabels() in labels.ts.
@@ -100,11 +95,6 @@ export function usePieces(params: { kitId?: string; batchId?: string; house?: "1
 }
 
 // ─── Small UI ─────────────────────────────────────────────────────────────────
-
-/** @deprecated InlineAlert tone="error"; kept for JourneyMcpCard until it moves. */
-export function ErrorLine({ children }: { children: ReactNode }) {
-  return <InlineAlert tone="error">{children}</InlineAlert>;
-}
 
 /** The kit Select of active resellers, flagging those without the Tags module. */
 export function ResellerSelect({

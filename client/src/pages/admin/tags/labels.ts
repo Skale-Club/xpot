@@ -77,5 +77,3 @@ export function useTagLabels() {
     };
   }, [tt, t]);
 }
-
-export type TagLabels = ReturnType<typeof useTagLabels>;
