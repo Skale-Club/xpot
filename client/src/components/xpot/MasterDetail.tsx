@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode } from "react";
+import { OVERLAY_CLASS, SURFACE_MODAL_CLASS } from "./surface";
 
 /** From xl, without `popup`: the pop-up turns back into a sticky column beside the list. */
 const SIDE_COLUMN =
@@ -61,11 +62,11 @@ export function MasterDetail({
       <div className="min-w-0 space-y-2">{list}</div>
       {open ? (
         <>
-          <button type="button" aria-label={closeLabel} onClick={onClose} className={`fixed inset-0 z-40 bg-black/50 ${popup ? "" : "xl:hidden"}`} />
+          <button type="button" aria-label={closeLabel} onClick={onClose} className={`fixed inset-0 z-40 ${OVERLAY_CLASS} ${popup ? "" : "xl:hidden"}`} />
           <aside
             ref={asideRef}
             tabIndex={-1}
-            className={`fixed left-1/2 top-1/2 z-50 max-h-[88vh] w-[560px] max-w-[92vw] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-[24px] border border-white/10 bg-[#080c18] p-4 shadow-2xl outline-none ${popup ? "" : SIDE_COLUMN}`}
+            className={`fixed left-1/2 top-1/2 z-50 max-h-[88vh] w-[560px] max-w-[92vw] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-3xl ${SURFACE_MODAL_CLASS} p-4 shadow-2xl outline-none ${popup ? "" : SIDE_COLUMN}`}
           >
             {detail}
           </aside>

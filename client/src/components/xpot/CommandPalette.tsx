@@ -11,6 +11,7 @@ import { TagPieceMention } from "@/components/xpot/TagProductThumbnail";
 import { tagsGet } from "@/pages/tags/lib";
 import type { FullSalesLead } from "@/pages/xpot/types";
 import { GradientTopLine } from "@/components/xpot/GradientTopLine";
+import { ACCENT_SELECTED, SURFACE_MODAL, type ModuleAccent } from "@/components/xpot/surface";
 
 type Entry = {
   key: string;
@@ -29,13 +30,17 @@ export function CommandPalette({
   open,
   onOpenChange,
   pages,
+  accent = "visits",
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Screens to jump to; `group` names the module they belong to (current module first). */
   pages: Array<{ href: string; label: string; icon: LucideIcon; group?: string }>;
+  /** Highlight colour of the selected row: the module the palette was opened from. */
+  accent?: ModuleAccent;
 }) {
   const t = useT(shellMessages);
+  const selected = ACCENT_SELECTED[accent];
   const [, navigate] = useLocation();
   const modules = useXpotModules();
   const [query, setQuery] = useState("");
@@ -119,7 +124,7 @@ export function CommandPalette({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         className="top-[15vh] max-w-xl translate-y-0 gap-0 overflow-hidden rounded-2xl border-white/10 p-0 [&>button]:hidden"
-        style={{ background: "#0d1322" }}
+        style={{ background: SURFACE_MODAL }}
       >
         <GradientTopLine />
         <DialogTitle className="sr-only">{t("searchEverything")}</DialogTitle>
@@ -163,7 +168,7 @@ export function CommandPalette({
                     data-index={i}
                     onMouseMove={() => setIndex(i)}
                     onClick={() => go(entry)}
-                    className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left ${i === index ? "bg-blue-500/15" : ""}`}
+                    className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left ${i === index ? selected.row : ""}`}
                   >
                     {entry.piece ? (
                       <TagPieceMention
@@ -173,7 +178,7 @@ export function CommandPalette({
                       />
                     ) : (
                       <>
-                        <Icon className={`h-4 w-4 shrink-0 ${i === index ? "text-blue-300" : "text-white/35"}`} />
+                        <Icon className={`h-4 w-4 shrink-0 ${i === index ? selected.icon : "text-white/35"}`} />
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-sm font-semibold text-white">{entry.label}</span>
                           {entry.sub && <span className="block truncate text-xs text-white/40">{entry.sub}</span>}

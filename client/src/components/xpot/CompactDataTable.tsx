@@ -1,4 +1,8 @@
 import type { CSSProperties, KeyboardEvent, ReactNode } from "react";
+import { GLASS_SUBTLE_CLASS, TABLE_HEAD } from "./surface";
+
+// The one data table of the app: GLASS_SUBTLE container, TABLE_HEAD header
+// cells, optional clickable rows (Enter / Space open them).
 
 export type CompactDataColumn<T> = {
   key: string;
@@ -35,16 +39,16 @@ export function CompactDataTable<T>({
   }
 
   return (
-    <div className={`overflow-x-auto rounded-2xl border border-white/[0.08] bg-white/[0.025] ${className}`}>
+    <div className={`overflow-x-auto rounded-2xl ${GLASS_SUBTLE_CLASS} ${className}`}>
       <table className="w-full text-left text-sm" data-testid={testId}>
-        <thead className="border-b border-white/[0.07] text-[10px] uppercase tracking-[0.14em] text-white/30">
+        <thead className={`border-b border-white/[0.07] ${TABLE_HEAD}`}>
           <tr>
             {columns.map((column) => (
               <th
                 key={column.key}
                 scope="col"
                 style={column.width ? { width: column.width } : undefined}
-                className={`whitespace-nowrap px-4 py-2.5 font-semibold ${column.headerClassName ?? ""}`}
+                className={`whitespace-nowrap px-4 py-2.5 ${column.headerClassName ?? ""}`}
               >
                 {column.label}
               </th>
@@ -61,7 +65,7 @@ export function CompactDataTable<T>({
                 aria-label={getRowAriaLabel?.(row)}
                 onClick={interactive ? () => onRowClick?.(row) : undefined}
                 onKeyDown={interactive ? (event) => handleKeyDown(event, row) : undefined}
-                className={`${interactive ? "cursor-pointer outline-none hover:bg-white/[0.03] focus-visible:bg-white/[0.05]" : ""} transition-colors`}
+                className={`${interactive ? "cursor-pointer hover:bg-white/[0.03] focus-visible:bg-white/[0.05] focus-visible:!-outline-offset-2" : ""} transition-colors`}
               >
                 {columns.map((column) => (
                   <td

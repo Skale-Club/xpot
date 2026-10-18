@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useInfiniteQuery, type QueryKey } from "@tanstack/react-query";
-import { ChevronDown, Loader2 } from "lucide-react";
+import { ChevronDown } from "lucide-react";
+import { Loader2 } from "@/components/ui/loader";
 import { apiRequest } from "@/lib/queryClient";
 import { useT } from "@/i18n";
 import { filtersMessages } from "@/i18n/messages/filters";
@@ -145,7 +146,7 @@ export function ListPager({
           className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-white/[0.08] bg-black/20 px-3.5 text-xs font-semibold text-white/70 transition-colors hover:border-white/[0.15] hover:bg-white/[0.04] hover:text-white disabled:opacity-60"
           data-testid="list-pager-more"
         >
-          {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />}
+          {loading ? <Loader2 className="h-3.5 w-3.5" aria-hidden="true" /> : <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />}
           {loading ? t("pagerLoading") : remaining != null && remaining > 0 ? t("pagerMore", { count: remaining }) : t("pagerLoadMore")}
         </button>
       ) : null}

@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss";
+import { OPACITY_STEPS, RADIUS } from "./client/src/components/xpot/surface";
 
 export default {
   darkMode: ["class"],
@@ -9,6 +10,16 @@ export default {
         lg: ".5625rem",
         md: ".375rem",
         sm: ".1875rem",
+        // The Xpot radius scale (components/xpot/surface.ts RADIUS):
+        // rounded-control (inputs, buttons), rounded-card, rounded-sheet (dialogs, sheets).
+        ...RADIUS,
+      },
+      // Off-scale alpha steps the screens use (text-white/32, border-white/12…).
+      // Tailwind 3 only generates multiples of 5, so without these the classes
+      // silently render nothing.
+      opacity: OPACITY_STEPS,
+      boxShadow: {
+        xs: "0 1px 2px 0 rgb(0 0 0 / 0.25)",
       },
       colors: {
         background: "hsl(var(--background) / <alpha-value>)",
@@ -80,11 +91,17 @@ export default {
           "25%": { transform: "translateX(-4px)" },
           "75%": { transform: "translateX(4px)" },
         },
+        // DotsLoader (components/ui/spinner.tsx): each dot swells and brightens in turn.
+        "dot-pulse": {
+          "0%, 80%, 100%": { transform: "scale(0.6)", opacity: "0.4" },
+          "40%": { transform: "scale(1)", opacity: "1" },
+        },
       },
       animation: {
         "fade-in": "fade-in 0.3s ease-out",
         "fade-out": "fade-out 0.3s ease-out",
         "form-shake": "form-shake 0.4s ease-in-out",
+        "dot-pulse": "dot-pulse 1.2s ease-in-out infinite both",
       },
     },
   },
