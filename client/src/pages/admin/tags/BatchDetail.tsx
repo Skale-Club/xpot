@@ -356,6 +356,7 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
       </div>
 
       <ConfirmDialog
+        accent="tags"
         open={stateDialog}
         onOpenChange={setStateDialog}
         title={closing ? t("closeBatchTitle") : t("reopenBatchTitle")}

@@ -256,6 +256,7 @@ export function NfcProvisioningCard({
       </div>
 
       <ConfirmDialog
+        accent="tags"
         open={confirming !== null}
         onOpenChange={(v) => !v && setConfirming(null)}
         title={confirming === "cancel" ? t("cancelJobTitle") : t("programAgainTitle", { code: publicCode })}

@@ -471,6 +471,7 @@ export function CustomerDestinationSection() {
       </BottomSheet>
 
       <ConfirmDialog
+        accent="tags"
         open={confirm !== null}
         onOpenChange={(open) => !open && setConfirm(null)}
         tone={confirm === "activate" ? "default" : "danger"}

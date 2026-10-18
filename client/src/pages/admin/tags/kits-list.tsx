@@ -167,6 +167,7 @@ function KitPieces({ kit, go }: { kit: TagKitItem; go: (path: string) => void })
         </div>
       )}
       <ConfirmDialog
+        accent="tags"
         open={confirm}
         onOpenChange={setConfirm}
         title={t.plural("returnConfirmTitle", codes.length)}
@@ -280,6 +281,7 @@ function KitRow({ kit, go }: { kit: TagKitItem; go: (path: string) => void }) {
       {blockedBySetup ? <p className="-mt-1 px-3 pb-2 text-right text-[11px] text-white/40">{t("returnBlockedSetUp")}</p> : null}
       {open && <KitPieces kit={kit} go={go} />}
       <ConfirmDialog
+        accent="tags"
         open={confirm}
         onOpenChange={setConfirm}
         title={t("returnUnsoldConfirmTitle")}
