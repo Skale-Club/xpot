@@ -573,24 +573,19 @@ async function findExistingCodes(codes: string[]): Promise<Set<string>> {
 
 /**
  * Admin "Move": hand one piece to another rep, or take it back to house stock, through the same stock rules as kits
- * and returns. Back to the house is a return (returnToHouse). To a rep it is a `transfer` movement: the new rep
- * becomes the custodian of company stock (no cost is captured here, so nothing is bought; an open acquisition of the
- * previous rep is closed) and the piece leaves its kit. Sold pieces stay with their seller, and a piece set up for a
- * customer must have the customer cleared first, as for a return.
+ * and returns. Back to the house is a `return` movement, as returnToHouse writes it (company stock, no custodian).
+ * To a rep it is a `transfer`: the new rep becomes the custodian of company stock (no cost is captured here, so
+ * nothing is bought). Either way an open acquisition of the previous rep is closed and the piece leaves its kit.
+ * Sold pieces stay with their seller, and a piece set up for a customer must have the customer cleared first, as
+ * for a return.
  */
 export async function setTagRep(id: string, repId: number | null, userId: string | null, source: JourneySource = "admin"): Promise<Tag> {
-  const current = await getTagRow(id);
-  if (!current) throw new TagError("Tag not found", 404);
-  if (current.repId === repId) return current;
-  if (repId === null) {
-    await returnToHouse([current.publicCode], userId, source);
-    return (await getTagRow(id))!;
-  }
   let previous: { repId: number | null; name: string } = { repId: null, name: "house" };
-  let next = "";
-  const organizationId = await organizationIdForRep(repId);
+  let next = "house";
+  const organizationId = repId === null ? await companyOrganizationId() : await organizationIdForRep(repId);
   const updated = await db.transaction(async (tx) => {
     const tag = await lockTag(tx, id);
+    if (tag.repId === repId) return null;
     const names = async (rid: number | null) =>
       rid === null ? "house" : (await tx.select({ n: salesReps.displayName }).from(salesReps).where(eq(salesReps.id, rid)))[0]?.n ?? `rep ${rid}`;
     const [activeSale] = await tx.select({ id: salesSaleTags.id }).from(salesSaleTags)
@@ -621,7 +616,7 @@ export async function setTagRep(id: string, repId: number | null, userId: string
       .returning();
     await tx.insert(tagStockMovements).values({
       tagId: tag.id,
-      movementType: "transfer",
+      movementType: repId === null ? "return" : "transfer",
       fromStockStatus: tag.stockStatus,
       toStockStatus: updated.stockStatus,
       fromOwnershipType: tag.ownershipType,
@@ -632,9 +627,10 @@ export async function setTagRep(id: string, repId: number | null, userId: string
       referenceId: tag.kitId,
       actorUserId: userId,
     });
-    console.log(`[tags] ${tag.publicCode} reseller ${tag.repId ?? "house"} → ${repId} (user ${userId ?? "?"})`);
+    console.log(`[tags] ${tag.publicCode} reseller ${tag.repId ?? "house"} → ${repId ?? "house"} (user ${userId ?? "?"})`);
     return updated;
   });
+  if (!updated) return (await getTagRow(id))!;
   await recordJourney({
     kind: "execution",
     action: "reseller_changed",

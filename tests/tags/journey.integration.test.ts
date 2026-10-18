@@ -266,7 +266,7 @@ test.skipIf(!enabled)("journey: trail, stories, plans, append-only, admin-only A
     assert.deepEqual([moves[0].beforeValue, moves[0].afterValue, moves[0].repId], ["house", "Bruno", repId["jt-bruno"]]);
     assert.deepEqual([moves[1].beforeValue, moves[1].afterValue, moves[1].repId], ["Bruno", "house", null]);
 
-    const single = await api("POST", "/api/xpot/admin/tags", "jt-admin", { productType: "custom", label: "Demo piece" });
+    const single = await api("POST", "/api/xpot/admin/tags", "jt-admin", { productType: "custom", salesProductId, label: "Demo piece" });
     assert.equal(single.status, 201, single.text);
     const singleStory = await story(`tagId=${single.json.id}`);
     assert.deepEqual(actions(singleStory), ["tag_created"]);
