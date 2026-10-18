@@ -1,6 +1,6 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
-import { classifyScan, decidePhoneWrite, guessDestinationType, formatPhoneMask, normalizeUrlInput, socialHandleOf, socialNetworkOf, socialUrl } from "../../shared/tagApp.js";
+import { chipNeedsWriting, classifyScan, decidePhoneWrite, matchesPieceFilters, parsePieceFilters, guessDestinationType, formatPhoneMask, normalizeUrlInput, socialHandleOf, socialNetworkOf, socialUrl } from "../../shared/tagApp.js";
 
 test("classifyScan: Xpot tag links, in either access method", () => {
   assert.deepEqual(classifyScan("https://xpot.place/n/A7K3P9X2"), { kind: "xpot", code: "A7K3P9X2", method: "nfc" });
@@ -103,4 +103,37 @@ test("formatPhoneMask masks a WhatsApp phone as it is typed", () => {
   assert.equal(formatPhoneMask("551133334444"), "+55 (11) 3333-4444");
   assert.equal(formatPhoneMask("55119"), "+55 (11) 9");
   assert.equal(formatPhoneMask("447700900123"), "+447700900123");
+});
+
+test("My pieces filters: status and sale are separate axes", () => {
+  const live = { status: "active", saleId: null, nfcStatus: "verified" };
+  const liveSold = { status: "active", saleId: 7, nfcStatus: "verified" };
+  const kit = { status: "inventory", saleId: null, nfcStatus: "not_programmed" };
+  const linked = { status: "assigned", saleId: null, nfcStatus: "failed" };
+  const off = { status: "disabled", saleId: 3, nfcStatus: "programmed" };
+  const pick = (values: Record<string, string>) =>
+    [live, liveSold, kit, linked, off].filter((tag) => matchesPieceFilters(tag, parsePieceFilters(values)));
+
+  assert.deepEqual(pick({}), [live, liveSold, kit, linked, off]);
+  assert.deepEqual(pick({ status: "setup" }), [kit, linked]);
+  assert.deepEqual(pick({ status: "active" }), [live, liveSold]);
+  assert.deepEqual(pick({ status: "off" }), [off]);
+  // "Not sold" includes live pieces given out without a recorded sale.
+  assert.deepEqual(pick({ sale: "unsold" }), [live, kit, linked]);
+  assert.deepEqual(pick({ status: "active", sale: "sold" }), [liveSold]);
+  // Older links put the sale axis in `status`.
+  assert.deepEqual(pick({ status: "stock" }), [live, kit, linked]);
+  assert.deepEqual(pick({ status: "sold" }), [liveSold, off]);
+  assert.deepEqual(parsePieceFilters({ status: "bogus", sale: "bogus", chip: "x" }), { status: "all", sale: "all", chip: "all" });
+});
+
+test("chip filter: set-up pieces whose chip still needs writing, as the dashboard counts them", () => {
+  assert.equal(chipNeedsWriting({ status: "active", nfcStatus: "not_programmed" }), true);
+  assert.equal(chipNeedsWriting({ status: "assigned", nfcStatus: "failed" }), true);
+  assert.equal(chipNeedsWriting({ status: "active", nfcStatus: "programmed" }), false);
+  // A piece still in the kit is not an alert yet.
+  assert.equal(chipNeedsWriting({ status: "inventory", nfcStatus: "not_programmed" }), false);
+  const filters = parsePieceFilters({ chip: "missing" });
+  assert.equal(matchesPieceFilters({ status: "active", saleId: null, nfcStatus: "failed" }, filters), true);
+  assert.equal(matchesPieceFilters({ status: "active", saleId: null, nfcStatus: "verified" }, filters), false);
 });

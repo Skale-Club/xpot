@@ -31,6 +31,13 @@ export const PIECE_STATUS_TONE: Record<string, PillTone> = {
   retired: "muted",
 };
 
+/** A piece's stock, shown only when it keeps the piece from being set up or sold. */
+export const STOCK_STATUS_TONE: Record<string, PillTone> = {
+  pending: "amber",
+  damaged: "red",
+  lost: "red",
+};
+
 /** A sold piece; blue so it never reads as "Live". */
 export const SOLD_TONE: PillTone = "blue";
 

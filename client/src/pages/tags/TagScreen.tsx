@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeftRight, Building2, Contact, DollarSign, ExternalLink, Link2, Lock, Mail, Nfc, Pencil, Phone, Power, QrCode, ScanLine, Search, Smartphone, X } from "lucide-react";
 import type { TagDetail } from "@shared/tagsApi";
-import { TAG_DESTINATION_TYPES, type TagDestinationType } from "@shared/tags";
+import { stockBlock, TAG_DESTINATION_TYPES, type TagDestinationType } from "@shared/tags";
 import { contentKindOf, contentSummary, validateChipContent, type ChipContentKind } from "@shared/chipContent";
 import { guessDestinationType, normalizeUrlInput } from "@shared/tagApp";
 import { buildReviewUrl } from "@shared/reviewLink";
@@ -39,8 +39,8 @@ import {
   INPUT,
   LinkInput,
   Pill,
+  PieceStatusPills,
   SHEET_TITLE,
-  SOLD_TONE, STATUS_TONE,
   Spinner,
   TopBar,
 } from "./ui";
@@ -203,6 +203,9 @@ export default function TagScreen({ code, onClose }: {
   // An iPhone locks only a chip a tap confirmed (lock a wrong chip and it is lost).
   const canLock = !locked && (manualFlow ? chipConfirmed : !chipMissing);
   const destinationLabel = (value: string) => (isDestinationType(value) ? t(`dest_${value}`) : value);
+  // Not received, damaged or lost: neither set up nor sold until the stock is fixed.
+  const stock = stockBlock(tag.stockStatus);
+  const sellable = tag.stockStatus === "available";
 
   const save = async () => {
     const check = kind === "url"
@@ -304,8 +307,7 @@ export default function TagScreen({ code, onClose }: {
         sub={
           // The piece's state, then (after a dot) what it is. The face is the picture's job.
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
-            <Pill tone={STATUS_TONE[tag.status] ?? "slate"}>{t(`status_${tag.status}` as "status_active")}</Pill>
-            {tag.saleId && <Pill tone={SOLD_TONE}>{t("soldBadge")}</Pill>}
+            <PieceStatusPills tag={tag} />
             <span className="text-white/20" aria-hidden="true">·</span>
             {tagPlaqueSpec(tag.productType, tag.face, tag.batchCode).model ? (
               <TagModelChips productType={tag.productType} face={tag.face} batchCode={tag.batchCode} className="shrink-0" />
@@ -471,7 +473,9 @@ export default function TagScreen({ code, onClose }: {
         ) : (
           <>
             <p className="mt-2 text-lg font-bold text-white/55">{t("notYetWritten")}</p>
-            <button type="button" onClick={() => setEditing(true)} className={`${BTN_PRIMARY} mt-3`} data-testid="button-setup-piece">
+            {/* The server refuses setting up a piece that is not in stock (shared/tags.ts planTransition). */}
+            {stock && <p className="mt-2 text-sm text-amber-100/85" data-testid="text-stock-blocked">{t(`stockBlocked_${stock}`)}</p>}
+            <button type="button" onClick={() => setEditing(true)} disabled={!!stock} className={`${BTN_PRIMARY} mt-3`} data-testid="button-setup-piece">
               <Power className="h-5 w-5" />
               {t("configurePiece")}
             </button>
@@ -498,9 +502,15 @@ export default function TagScreen({ code, onClose }: {
           <span className="font-mono text-xs text-white/40">#{tag.saleId}</span>
         </section>
       ) : (
-        <button type="button" onClick={() => setSaleOpen(true)} className={`${BTN_PRIMARY} mt-3 bg-none !bg-emerald-500`} data-testid="button-sell-this-piece">
-          <DollarSign className="h-5 w-5" /> {t("sellThisPiece")}
-        </button>
+        <>
+          <button type="button" onClick={() => setSaleOpen(true)} disabled={!sellable} className={`${BTN_PRIMARY} mt-3 bg-none !bg-emerald-500`} data-testid="button-sell-this-piece">
+            <DollarSign className="h-5 w-5" /> {t("sellThisPiece")}
+          </button>
+          {/* Only stock in hand sells (server/tags/sales.ts); said once, under the setup card when it is the same reason. */}
+          {!sellable && !(stock && !dest) && (
+            <p className="mt-2 px-1 text-sm text-white/50" data-testid="text-sell-blocked">{stock ? t(`stockBlocked_${stock}`) : t("stockNotForSale")}</p>
+          )}
+        </>
       )}
 
       <PieceDashboard tagId={tag.id} />

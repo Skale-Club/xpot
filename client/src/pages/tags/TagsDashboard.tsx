@@ -131,7 +131,7 @@ export function TagsDashboard() {
       {data && data.chipsMissing > 0 && (
         <button
           type="button"
-          onClick={() => navigate(`${APP_BASE}/pieces`)}
+          onClick={() => navigate(`${APP_BASE}/pieces?chip=missing`)}
           className="flex w-full items-center gap-3 rounded-[20px] border border-red-400/40 bg-red-500/[0.12] p-4 text-left"
           data-testid="dashboard-chips-missing"
         >

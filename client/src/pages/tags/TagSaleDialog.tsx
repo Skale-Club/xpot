@@ -47,7 +47,7 @@ export default function TagSaleDialog({
     staleTime: 5 * 60_000,
   });
   // One sale per piece, opened from that piece (like activating it).
-  const available = useMemo(() => pieces.filter((piece) => !piece.saleId && piece.status !== "retired"), [pieces]);
+  const available = useMemo(() => pieces.filter((piece) => !piece.saleId && piece.status !== "retired" && piece.stockStatus === "available"), [pieces]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [lead, setLead] = useState<LeadChoice>(null);
   const [prices, setPrices] = useState<PriceState>({});

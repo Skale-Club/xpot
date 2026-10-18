@@ -238,6 +238,18 @@ export function resolveRedirectTarget(
   return applyTagUtm(tag.destinationUrl, { method, campaign: tag.utmCampaign, code: tag.publicCode });
 }
 
+/** Stock states that keep a piece from being set up or sold, until an admin fixes the stock. */
+export const BLOCKING_STOCK_STATUSES = ["pending", "damaged", "lost"] as const;
+export type BlockingStockStatus = (typeof BLOCKING_STOCK_STATUSES)[number];
+
+/**
+ * Why the piece can't be set up (assigned or activated, see planTransition) nor
+ * sold right now, from its stock; null when its stock allows it.
+ */
+export function stockBlock(stockStatus: string | null | undefined): BlockingStockStatus | null {
+  return (BLOCKING_STOCK_STATUSES as readonly string[]).includes(stockStatus ?? "") ? stockStatus as BlockingStockStatus : null;
+}
+
 // ─── State machine ────────────────────────────────────────────────────────────
 
 export const TAG_ACTIONS = ["assign", "unassign", "activate", "disable", "retire", "restore"] as const;

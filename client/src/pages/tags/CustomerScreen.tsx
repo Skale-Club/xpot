@@ -5,6 +5,7 @@ import { ArrowLeft, ExternalLink, Link2, MapPin, Package, Plus, Radio, ScanLine,
 import type { LeadTagSummary, TagListItem } from "@shared/tagsApi";
 import { validateChipContent } from "@shared/chipContent";
 import { guessDestinationType, normalizeUrlInput } from "@shared/tagApp";
+import { stockBlock } from "@shared/tags";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
@@ -23,7 +24,7 @@ import { usePlaceSearch } from "@/pages/xpot/usePlaceSearch";
 import TagScreen from "./TagScreen";
 import { APP_BASE, errorText, shortUrl, tagPath, tagsGet, tagsPost, useBanner } from "./lib";
 import {
-  Banner, BottomSheet, BTN_PRIMARY, BTN_TERTIARY, CARD, EYEBROW_MUTED, INPUT, LinkInput, Pill, SHEET_TITLE, SOLD_TONE, STATUS_TONE, Spinner,
+  Banner, BottomSheet, BTN_PRIMARY, BTN_TERTIARY, CARD, EYEBROW_MUTED, INPUT, LinkInput, ChipMark, PieceStatusPills, SHEET_TITLE, Spinner,
 } from "./ui";
 
 // One customer of the reseller: the company (its details, contacts and Google
@@ -39,7 +40,7 @@ const MINI_BTN =
 
 /** Pieces this person can link to a customer: their own, unconfigured, physically in hand. */
 function isFreePiece(tag: TagListItem) {
-  return !tag.leadId && tag.status === "inventory" && tag.stockStatus !== "pending";
+  return !tag.leadId && tag.status === "inventory" && !stockBlock(tag.stockStatus);
 }
 
 /** The link most of a customer's pieces already open, offered as the default for a new one. */
@@ -434,12 +435,12 @@ export default function CustomerScreen({ leadId }: { leadId: number }) {
               />
               <TagPieceMention publicCode={p.publicCode} productType={p.productType} face={p.face} batchCode={p.batchCode} details={p.label ?? undefined} className="min-w-0 flex-1" />
               <span className="hidden w-48 truncate text-xs text-white/45 md:block">{p.destinationUrl ? shortUrl(p.destinationUrl) : "—"}</span>
-              <span className="flex w-24 flex-wrap gap-1">
-                <Pill tone={STATUS_TONE[p.status] ?? "slate"}>{t(`status_${p.status}` as "status_active")}</Pill>
-                {p.saleId && <Pill tone={SOLD_TONE}>{t("soldBadge")}</Pill>}
+              <span className="flex w-24 flex-wrap items-center gap-1">
+                <PieceStatusPills tag={p} />
+                <ChipMark tag={p} />
               </span>
               <span className="w-20 text-right tabular-nums">
-                {p.status === "active" ? (
+                {p.qrInteractions + p.nfcInteractions > 0 ? (
                   <>
                     <span className="block font-semibold text-white">{p.qrInteractions + p.nfcInteractions}</span>
                     <span className="block text-[11px] text-white/40">{p.qrInteractions} QR · {p.nfcInteractions} NFC</span>

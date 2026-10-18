@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "wouter";
-import { AlertCircle, ArrowLeft, ArrowRight, Check, ChevronDown, ClipboardPaste, Copy, Link2, Loader2, X, type LucideIcon } from "lucide-react";
-import { formatPhoneMask, isSocialNetwork, looksLikeLink, normalizeUrlInput, SOCIAL_NETWORKS, socialHandleOf, socialNetworkOf, socialUrl, type SocialNetwork } from "@shared/tagApp";
+import { AlertCircle, ArrowLeft, ArrowRight, Check, ChevronDown, ClipboardPaste, Copy, Link2, Loader2, Nfc, X, type LucideIcon } from "lucide-react";
+import { chipNeedsWriting, formatPhoneMask, isSocialNetwork, looksLikeLink, normalizeUrlInput, SOCIAL_NETWORKS, socialHandleOf, socialNetworkOf, socialUrl, type SocialNetwork } from "@shared/tagApp";
+import { stockBlock } from "@shared/tags";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
+import { CHIP_STATUS_TONE, PIECE_STATUS_TONE, Pill, SOLD_TONE, STOCK_STATUS_TONE } from "@/components/xpot/StatusPill";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
+import { tagsMessages } from "@/i18n/messages/tags";
 import { copyToClipboard, haptic, readClipboard, type BannerState } from "./lib";
 
 // Class kit for the Tags screens, in Xpot's dark glass style. Blue/indigo is an
@@ -149,7 +152,45 @@ export function Spinner({ className = "h-5 w-5" }: { className?: string }) {
 
 // Status pills: one shape and palette for admin and app (components/xpot/StatusPill.tsx).
 export { Pill, type PillTone } from "@/components/xpot/StatusPill";
-export { PIECE_STATUS_TONE as STATUS_TONE, CHIP_STATUS_TONE as CHIP_TONE, SOLD_TONE } from "@/components/xpot/StatusPill";
+export { PIECE_STATUS_TONE as STATUS_TONE, CHIP_STATUS_TONE as CHIP_TONE, STOCK_STATUS_TONE as STOCK_TONE, SOLD_TONE } from "@/components/xpot/StatusPill";
+
+/**
+ * A piece's state wherever it is listed: where it is in its life, a stock problem
+ * that keeps it from being set up or sold (not received, damaged, lost), and sold.
+ */
+export function PieceStatusPills({ tag }: { tag: { status: string; stockStatus: string; saleId: number | null } }) {
+  const t = useT(tagsMessages);
+  const stock = stockBlock(tag.stockStatus);
+  return (
+    <>
+      <Pill tone={PIECE_STATUS_TONE[tag.status] ?? "slate"}>{t(`status_${tag.status}` as "status_active")}</Pill>
+      {stock && <Pill tone={STOCK_STATUS_TONE[stock]}>{t(`stock_${stock}`)}</Pill>}
+      {tag.saleId && <Pill tone={SOLD_TONE}>{t("soldBadge")}</Pill>}
+    </>
+  );
+}
+
+/** The NFC chip of a listed piece: a red pill when it still needs writing, else a small coloured mark. */
+export function ChipMark({ tag }: { tag: { status: string; nfcStatus: string } }) {
+  const t = useT(tagsMessages);
+  const label = t(`chip_${tag.nfcStatus}` as "chip_verified");
+  if (chipNeedsWriting(tag)) {
+    return (
+      <Pill tone="red" className="gap-1">
+        <Nfc className="h-3 w-3" aria-hidden="true" />
+        {label}
+      </Pill>
+    );
+  }
+  const tone = CHIP_STATUS_TONE[tag.nfcStatus] ?? "slate";
+  const color = tone === "green" ? "text-emerald-300/80" : tone === "amber" ? "text-amber-300/80" : tone === "red" ? "text-red-300/80" : "text-white/30";
+  return (
+    <span className={`inline-flex h-6 w-6 items-center justify-center ${color}`} title={label} data-chip={tag.nfcStatus}>
+      <Nfc className="h-3.5 w-3.5" aria-hidden="true" />
+      <span className="sr-only">{label}</span>
+    </span>
+  );
+}
 
 export function CopyButton({ text, label, large = false }: { text: string; label: string; large?: boolean }) {
   const t = useT(commonMessages);
