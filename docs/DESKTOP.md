@@ -34,7 +34,10 @@ Tags empilhados como grupos na barra lateral, Admin no rodapé) e o DSK-26 (um g
 com um seletor Visitas | Tags no topo; a gestão de cada módulo é o grupo "Gestão"
 dentro dele; Pessoas, Integrações e Marca ficam em Conta › Organização. O mapa de
 onde cada tela vive é `client/src/components/xpot/moduleNav.ts`. O resto deste plano
-(listas com painel de detalhe e ⌘K) continua valendo.
+(listas com painel de detalhe e ⌘K) continua valendo. *(Nota 2026-10-18, revisão de
+UX: "Conta › Organização" não existe mais. Pessoas e Organizações ficam em
+Administração (gerentes); Integrações, Marca e site público e Status ficam em
+Plataforma (admin do Xpot). Ver [`UX_OVERHAUL.md`](./UX_OVERHAUL.md).)*
 
 **Revisão pós-entrega** (PR #27): quatro revisões independentes, uma por área,
 acharam ~30 problemas médios e pequenos (painel que sumia ao filtrar, histórico
