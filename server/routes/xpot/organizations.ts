@@ -94,19 +94,20 @@ export function createOrganizationsRouter() {
       repId: z.number().int().positive(),
       membershipRole: membershipRole.default("member"),
     }).strict().safeParse(req.body);
+    // Only platform management adds people (the Organizations screen offers it
+    // to them alone). A Rep Admin could otherwise pull anyone on the platform,
+    // by id, into their Organization: the newest membership is where that
+    // person's new companies and pieces land (organizationIdForRep), so the
+    // Rep Admin would then see and manage them.
+    if (!managesEveryOrganization(actor)) {
+      throw new OrganizationError("An Xpot admin or a manager adds people to an Organization.", 403);
+    }
     if (existing.success) {
-      if (!managesEveryOrganization(actor) && existing.data.membershipRole === "admin") {
-        throw new OrganizationError("Only an Admin or Manager can assign Rep Admin access.", 403);
-      }
       return addOrganizationMember(organizationId, existing.data.repId, existing.data.membershipRole, actor);
     }
 
     // New people are created in People (/admin/reps), where access is decided.
-    // This older body (name + phone) stays for API callers with platform
-    // management; an org admin only adds people who already have an account.
-    if (!managesEveryOrganization(actor)) {
-      throw new OrganizationError("Add an existing person. New people are created in People.", 403);
-    }
+    // This older body (name + phone) stays for API callers with platform management.
     const created = resellerAccountSchema.extend({
       role: z.literal("rep").default("rep"),
       modules: z.array(z.enum(XPOT_MODULES)).min(1).default([...XPOT_MODULES]),
