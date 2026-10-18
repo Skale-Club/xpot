@@ -55,3 +55,29 @@ export function googleStopUrl(stop: LatLng) {
 export function appleStopUrl(stop: LatLng) {
   return `https://maps.apple.com/?${new URLSearchParams({ daddr: point(stop), dirflg: "d" }).toString()}`;
 }
+
+/** This device is an iPhone or iPad (reads the browser; false outside one). */
+export function isAppleMobile() {
+  return typeof navigator !== "undefined" && isAppleMobileDevice(navigator.userAgent, navigator.maxTouchPoints ?? 0);
+}
+
+/** Driving directions to one stop in the device's maps app: Apple Maps on an iPhone or iPad, Google Maps elsewhere. */
+export function stopNavigationUrl(stop: LatLng, apple = isAppleMobile()) {
+  return apple ? appleStopUrl(stop) : googleStopUrl(stop);
+}
+
+/** A place on the map (an address or coordinates), not directions. */
+export function googlePlaceUrl(place: string | LatLng) {
+  const query = typeof place === "string" ? place : point(place);
+  return `https://www.google.com/maps/search/?${new URLSearchParams({ api: "1", query }).toString()}`;
+}
+
+export function applePlaceUrl(place: string | LatLng) {
+  const params: Record<string, string> = typeof place === "string" ? { q: place } : { ll: point(place), q: point(place) };
+  return `https://maps.apple.com/?${new URLSearchParams(params).toString()}`;
+}
+
+/** A place in the device's maps app, for "open in maps" links (the check-in address, the live map). */
+export function placeUrl(place: string | LatLng, apple = isAppleMobile()) {
+  return apple ? applePlaceUrl(place) : googlePlaceUrl(place);
+}

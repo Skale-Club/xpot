@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import "maplibre-gl/dist/maplibre-gl.css";
+import { useT } from "@/i18n";
+import { prospectingMessages } from "@/i18n/messages/prospecting";
+import { prospectingUiMessages } from "@/i18n/messages/prospectingUi";
+import { MAP_POINT_TONES } from "../prospectingUi";
+import { MapSkeleton, MapUnavailable, MAP_SURFACE_CLASS } from "./MapStatus";
 
 type RoutePoint = {
   lat: number;
@@ -12,6 +17,51 @@ type RoutePoint = {
   /** Text inside the marker; the stop number when omitted (a check or skip glyph for finished stops). */
   markerText?: string;
 };
+
+/** A point on the route that is not a stop: where it starts (when that is not stop 1) and the rep's home. */
+export type RouteLandmark = { kind: "start" | "home"; lat: number; lng: number };
+
+/**
+ * Line and marker look shared by the Google map and the MapLibre fallback, so
+ * the route reads the same whichever one draws it.
+ */
+export const ROUTE_MAP = {
+  line: "#6674ff",
+  lineWidth: 5,
+  casing: "rgba(6,9,18,0.85)",
+  casingWidth: 9,
+  /** Stop marker diameter in px. */
+  markerSize: 28,
+  /** Start / home marker diameter in px. */
+  landmarkSize: 24,
+  markerFont: "700 11px/1 system-ui, sans-serif",
+  markerShadow: "0 3px 10px rgba(15,23,42,.45)",
+  /** Both maps: one finger scrolls the page on a phone, two fingers move the map. */
+  cooperativeGestures: true,
+} as const;
+
+/** The glyph inside the start and home markers. */
+const LANDMARK_GLYPH: Record<RouteLandmark["kind"], string> = { start: "▸", home: "⌂" };
+
+const GOOGLE_DARK_STYLE = [
+  { elementType: "geometry", stylers: [{ color: "#0f1729" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#94a3b8" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#0f1729" }] },
+  { featureType: "road", elementType: "geometry", stylers: [{ color: "#273449" }] },
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#07101f" }] },
+];
+
+/**
+ * OpenStreetMap only serves light tiles; these raster settings invert and
+ * desaturate them into the same dark navy as the Google style.
+ */
+const MAPLIBRE_DARK_PAINT = {
+  "raster-brightness-min": 0.72,
+  "raster-brightness-max": 0.06,
+  "raster-hue-rotate": 180,
+  "raster-saturation": -0.55,
+  "raster-contrast": 0.1,
+} as const;
 
 let mapsLoader: Promise<void> | null = null;
 
@@ -75,15 +125,27 @@ function distanceSquared(a: RoutePoint, b: RoutePoint) {
   return lat * lat + lng * lng;
 }
 
+/** The "show my location" button, dark like the map it sits on (40px tap target). */
 function createLocateButton(label: string, onClick: () => void) {
   const button = document.createElement("button");
   button.type = "button";
   button.title = label;
   button.setAttribute("aria-label", label);
-  button.style.cssText = "position:absolute;z-index:3;top:12px;left:12px;display:flex;align-items:center;justify-content:center;width:40px;height:40px;border:1px solid rgba(148,163,184,.45);border-radius:10px;background:rgba(255,255,255,.96);color:#1e293b;box-shadow:0 3px 12px rgba(15,23,42,.28);cursor:pointer;";
+  button.style.cssText = "position:absolute;z-index:3;top:12px;left:12px;display:flex;align-items:center;justify-content:center;width:40px;height:40px;border:1px solid rgba(255,255,255,.14);border-radius:12px;background:rgba(13,19,34,.92);color:#e2e8f0;box-shadow:0 3px 12px rgba(0,0,0,.4);cursor:pointer;";
   button.innerHTML = '<svg aria-hidden="true" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3"></path><circle cx="12" cy="12" r="8"></circle></svg>';
   button.addEventListener("click", onClick);
   return button;
+}
+
+/** A round HTML marker (MapLibre) in the shared look. */
+function markerElement(tag: "button" | "div", size: number, colors: { background: string; border: string; text: string }, text: string, label: string) {
+  const element = document.createElement(tag);
+  if (element instanceof HTMLButtonElement) element.type = "button";
+  element.textContent = text;
+  element.title = label;
+  element.setAttribute("aria-label", label);
+  element.style.cssText = `display:flex;align-items:center;justify-content:center;width:${size}px;height:${size}px;padding:0;border-radius:9999px;background:${colors.background};border:2px solid ${colors.border};color:${colors.text};font:${ROUTE_MAP.markerFont};box-shadow:${ROUTE_MAP.markerShadow};${tag === "button" ? "cursor:pointer;" : ""}`;
+  return element;
 }
 
 /** Removes a legacy navigation leg before visit one (and after the last visit). */
@@ -104,9 +166,22 @@ export function trimRoutePathToStops(path: RoutePoint[], stops: RoutePoint[]) {
   return visible.length > 1 ? visible : stops;
 }
 
-export function RoutePreviewMap({ start, stops, encodedPolyline, alt, showCurrentLocation = false, locateLabel = "Show my location", onStopClick, className }: {
+type MapLabels = { you: string; stop: (number: number) => string; landmark: (kind: RouteLandmark["kind"]) => string };
+
+function useMapLabels(): MapLabels {
+  const t = useT(prospectingUiMessages);
+  return {
+    you: t("yourLocation"),
+    stop: (number) => t("stopNumber", { number }),
+    landmark: (kind) => (kind === "home" ? t("home") : t("routeStart")),
+  };
+}
+
+export function RoutePreviewMap({ start, stops, landmarks = [], encodedPolyline, alt, showCurrentLocation = false, locateLabel, onStopClick, className }: {
   start: RoutePoint;
   stops: RoutePoint[];
+  /** Start (when it is not stop 1) and home markers. */
+  landmarks?: RouteLandmark[];
   encodedPolyline?: string;
   alt: string;
   showCurrentLocation?: boolean;
@@ -114,20 +189,25 @@ export function RoutePreviewMap({ start, stops, encodedPolyline, alt, showCurren
   onStopClick?: (stopId: number) => void;
   className?: string;
 }) {
+  const tp = useT(prospectingMessages);
+  const labels = useMapLabels();
+  const locate = locateLabel ?? tp("showMyLocation");
   const containerRef = useRef<HTMLDivElement>(null);
   const [failed, setFailed] = useState(false);
+  const [ready, setReady] = useState(false);
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined;
+  const landmarkKey = landmarks.map((point) => `${point.kind}:${point.lat},${point.lng}`).join("|");
 
   useEffect(() => {
     if (!apiKey || !containerRef.current) return;
     let cancelled = false;
     let map: any = null;
-    let polyline: any = null;
     let currentLocationMarker: any = null;
     let currentLocation: RoutePoint | null = null;
     let locateButton: HTMLButtonElement | null = null;
     let locationWatchId: number | undefined;
     const markers: any[] = [];
+    const lines: any[] = [];
     loadGoogleMaps(apiKey).then(() => {
       if (cancelled || !containerRef.current) return;
       const google = (window as any).google;
@@ -137,25 +217,26 @@ export function RoutePreviewMap({ start, stops, encodedPolyline, alt, showCurren
         zoom: 12,
         disableDefaultUI: true,
         zoomControl: true,
-        gestureHandling: "cooperative",
+        gestureHandling: ROUTE_MAP.cooperativeGestures ? "cooperative" : "greedy",
         mapTypeControl: false,
-        styles: [
-          { elementType: "geometry", stylers: [{ color: "#0f1729" }] },
-          { elementType: "labels.text.fill", stylers: [{ color: "#94a3b8" }] },
-          { elementType: "labels.text.stroke", stylers: [{ color: "#0f1729" }] },
-          { featureType: "road", elementType: "geometry", stylers: [{ color: "#273449" }] },
-          { featureType: "water", elementType: "geometry", stylers: [{ color: "#07101f" }] },
-        ],
+        backgroundColor: "#0b1020",
+        styles: GOOGLE_DARK_STYLE,
       });
+      // "idle" also fires when tiles fail, so the skeleton never covers Google's own error.
+      const markReady = () => { if (!cancelled) setReady(true); };
+      google.maps.event.addListenerOnce(map, "tilesloaded", markReady);
+      google.maps.event.addListenerOnce(map, "idle", markReady);
       const decodedPath = encodedPolyline ? decodeGooglePolyline(encodedPolyline) : stops;
       const path = trimRoutePathToStops(decodedPath, visibleStops);
       const bounds = new google.maps.LatLngBounds();
       visibleStops.forEach((point) => bounds.extend(point));
+      landmarks.forEach((point) => bounds.extend(point));
+      const radius = (size: number) => size / 2;
       stops.forEach((stop, index) => {
         const marker = new google.maps.Marker({
           map,
           position: stop,
-          title: stop.label,
+          title: stop.label ?? labels.stop(index + 1),
           zIndex: 10 + stops.length - index,
           icon: {
             path: google.maps.SymbolPath.CIRCLE,
@@ -163,7 +244,7 @@ export function RoutePreviewMap({ start, stops, encodedPolyline, alt, showCurren
             fillOpacity: 1,
             strokeColor: stop.markerBorderColor ?? "#64748b",
             strokeWeight: 2,
-            scale: 14,
+            scale: radius(ROUTE_MAP.markerSize),
           },
           label: {
             text: stop.markerText ?? String(index + 1),
@@ -175,14 +256,28 @@ export function RoutePreviewMap({ start, stops, encodedPolyline, alt, showCurren
         if (stop.id !== undefined && onStopClick) marker.addListener("click", () => onStopClick(stop.id!));
         markers.push(marker);
       });
-      polyline = new google.maps.Polyline({
-        map,
-        path,
-        strokeColor: "#6674ff",
-        strokeOpacity: 1,
-        strokeWeight: 7,
-        zIndex: 4,
+      landmarks.forEach((point) => {
+        const tone = MAP_POINT_TONES[point.kind];
+        markers.push(new google.maps.Marker({
+          map,
+          position: point,
+          title: labels.landmark(point.kind),
+          zIndex: 5,
+          icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            fillColor: tone.background,
+            fillOpacity: 1,
+            strokeColor: tone.border,
+            strokeWeight: 2,
+            scale: radius(ROUTE_MAP.landmarkSize),
+          },
+          label: { text: LANDMARK_GLYPH[point.kind], color: tone.text, fontSize: "12px", fontWeight: "700" },
+        }));
       });
+      lines.push(
+        new google.maps.Polyline({ map, path, strokeColor: ROUTE_MAP.casing, strokeOpacity: 1, strokeWeight: ROUTE_MAP.casingWidth, zIndex: 3 }),
+        new google.maps.Polyline({ map, path, strokeColor: ROUTE_MAP.line, strokeOpacity: 1, strokeWeight: ROUTE_MAP.lineWidth, zIndex: 4 }),
+      );
       map.fitBounds(bounds, 40);
 
       if (showCurrentLocation && navigator.geolocation) {
@@ -190,7 +285,7 @@ export function RoutePreviewMap({ start, stops, encodedPolyline, alt, showCurren
           map.panTo(current);
           if ((map.getZoom?.() ?? 0) < 14) map.setZoom(14);
         };
-        locateButton = createLocateButton(locateLabel, () => {
+        locateButton = createLocateButton(locate, () => {
           if (currentLocation) return focusCurrentLocation(currentLocation);
           navigator.geolocation.getCurrentPosition((position) => {
             currentLocation = { lat: position.coords.latitude, lng: position.coords.longitude };
@@ -206,13 +301,13 @@ export function RoutePreviewMap({ start, stops, encodedPolyline, alt, showCurren
             currentLocationMarker = new google.maps.Marker({
               map,
               position: current,
-              title: "Current location",
+              title: labels.you,
               zIndex: 1000,
               icon: {
                 path: google.maps.SymbolPath.CIRCLE,
-                fillColor: "#2563eb",
+                fillColor: MAP_POINT_TONES.you.background,
                 fillOpacity: 1,
-                strokeColor: "#ffffff",
+                strokeColor: MAP_POINT_TONES.you.border,
                 strokeWeight: 3,
                 scale: 8,
               },
@@ -229,29 +324,41 @@ export function RoutePreviewMap({ start, stops, encodedPolyline, alt, showCurren
       markers.forEach((marker) => marker.setMap(null));
       currentLocationMarker?.setMap(null);
       locateButton?.remove();
-      polyline?.setMap(null);
+      lines.forEach((line) => line.setMap(null));
       if (map) (window as any).google?.maps?.event?.clearInstanceListeners(map);
     };
-  }, [apiKey, start.lat, start.lng, stops, encodedPolyline, showCurrentLocation, locateLabel, onStopClick]);
+    // labels only change with the language; the effect keys on what it draws.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiKey, start.lat, start.lng, stops, landmarkKey, encodedPolyline, showCurrentLocation, locate, onStopClick]);
 
   if (!apiKey || failed) {
-    return <MapLibreRouteMap start={start} stops={stops} encodedPolyline={encodedPolyline} alt={alt} showCurrentLocation={showCurrentLocation} locateLabel={locateLabel} onStopClick={onStopClick} className={className} />;
+    return <MapLibreRouteMap start={start} stops={stops} landmarks={landmarks} landmarkKey={landmarkKey} encodedPolyline={encodedPolyline} alt={alt} showCurrentLocation={showCurrentLocation} locateLabel={locate} onStopClick={onStopClick} className={className} labels={labels} />;
   }
-  return <div ref={containerRef} role="img" aria-label={alt} className={`h-64 w-full bg-slate-950 sm:h-72 ${className ?? ""}`} />;
+  return (
+    <div className={`relative h-64 w-full overflow-hidden sm:h-72 ${MAP_SURFACE_CLASS} ${className ?? ""}`}>
+      <div ref={containerRef} role="img" aria-label={alt} className="absolute inset-0" />
+      {ready ? null : <MapSkeleton className="pointer-events-none absolute inset-0" />}
+    </div>
+  );
 }
 
-function MapLibreRouteMap({ start, stops, encodedPolyline, alt, showCurrentLocation, locateLabel, onStopClick, className }: {
+function MapLibreRouteMap({ start, stops, landmarks, landmarkKey, encodedPolyline, alt, showCurrentLocation, locateLabel, onStopClick, className, labels }: {
   start: RoutePoint;
   stops: RoutePoint[];
+  landmarks: RouteLandmark[];
+  landmarkKey: string;
   encodedPolyline?: string;
   alt: string;
   showCurrentLocation: boolean;
   locateLabel: string;
   onStopClick?: (stopId: number) => void;
   className?: string;
+  labels: MapLabels;
 }) {
+  const t = useT(prospectingUiMessages);
   const containerRef = useRef<HTMLDivElement>(null);
   const [unavailable, setUnavailable] = useState(false);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -270,10 +377,11 @@ function MapLibreRouteMap({ start, stops, encodedPolyline, alt, showCurrentLocat
       const visibleStops = stops.length ? stops : [start];
       const decodedPath = encodedPolyline ? decodeGooglePolyline(encodedPolyline) : stops;
       const routePoints = trimRoutePathToStops(decodedPath, visibleStops);
-      const bounds = visibleStops.reduce(
+      const bounds = [...visibleStops, ...landmarks].reduce(
         (current, point) => current.extend([point.lng, point.lat]),
         new maplibregl.LngLatBounds([visibleStops[0].lng, visibleStops[0].lat], [visibleStops[0].lng, visibleStops[0].lat]),
       );
+      const pointCount = visibleStops.length + landmarks.length;
 
       map = new maplibregl.Map({
         container: containerRef.current,
@@ -288,16 +396,24 @@ function MapLibreRouteMap({ start, stops, encodedPolyline, alt, showCurrentLocat
               maxzoom: 19,
             },
           },
-          layers: [{ id: "openstreetmap", type: "raster", source: "openstreetmap" }],
+          layers: [
+            { id: "background", type: "background", paint: { "background-color": "#0b1020" } },
+            { id: "openstreetmap", type: "raster", source: "openstreetmap", paint: MAPLIBRE_DARK_PAINT },
+          ],
         },
-        bounds: visibleStops.length > 1 ? bounds : undefined,
+        bounds: pointCount > 1 ? bounds : undefined,
         fitBoundsOptions: { padding: 44, maxZoom: 15 },
-        center: visibleStops.length === 1 ? [visibleStops[0].lng, visibleStops[0].lat] : undefined,
-        zoom: visibleStops.length === 1 ? 14 : undefined,
+        center: pointCount === 1 ? [visibleStops[0].lng, visibleStops[0].lat] : undefined,
+        zoom: pointCount === 1 ? 14 : undefined,
         attributionControl: false,
         dragRotate: false,
         pitchWithRotate: false,
-        cooperativeGestures: false,
+        cooperativeGestures: ROUTE_MAP.cooperativeGestures,
+        locale: {
+          "CooperativeGesturesHandler.WindowsHelpText": t("gestureWindows"),
+          "CooperativeGesturesHandler.MacHelpText": t("gestureMac"),
+          "CooperativeGesturesHandler.MobileHelpText": t("gestureMobile"),
+        },
       });
       map.touchZoomRotate.disableRotation();
       map.addControl(new maplibregl.NavigationControl({ showCompass: false, showZoom: true }), "top-right");
@@ -305,23 +421,23 @@ function MapLibreRouteMap({ start, stops, encodedPolyline, alt, showCurrentLocat
 
       map.on("load", () => {
         if (!map || cancelled) return;
+        setReady(true);
         if (routePoints.length > 1) {
           const svgNamespace = "http://www.w3.org/2000/svg";
           routeOverlay = document.createElementNS(svgNamespace, "svg");
           routeOverlay.setAttribute("aria-hidden", "true");
           routeOverlay.style.cssText = "position:absolute;inset:0;z-index:1;width:100%;height:100%;pointer-events:none;overflow:visible;";
-          const casing = document.createElementNS(svgNamespace, "polyline");
-          casing.setAttribute("fill", "none");
-          casing.setAttribute("stroke", "rgba(255,255,255,.94)");
-          casing.setAttribute("stroke-width", "8");
-          casing.setAttribute("stroke-linecap", "round");
-          casing.setAttribute("stroke-linejoin", "round");
-          const routeLine = document.createElementNS(svgNamespace, "polyline");
-          routeLine.setAttribute("fill", "none");
-          routeLine.setAttribute("stroke", "#4f46e5");
-          routeLine.setAttribute("stroke-width", "4");
-          routeLine.setAttribute("stroke-linecap", "round");
-          routeLine.setAttribute("stroke-linejoin", "round");
+          const line = (stroke: string, width: number) => {
+            const element = document.createElementNS(svgNamespace, "polyline");
+            element.setAttribute("fill", "none");
+            element.setAttribute("stroke", stroke);
+            element.setAttribute("stroke-width", String(width));
+            element.setAttribute("stroke-linecap", "round");
+            element.setAttribute("stroke-linejoin", "round");
+            return element;
+          };
+          const casing = line(ROUTE_MAP.casing, ROUTE_MAP.casingWidth);
+          const routeLine = line(ROUTE_MAP.line, ROUTE_MAP.lineWidth);
           routeOverlay.append(casing, routeLine);
           map.getContainer().appendChild(routeOverlay);
           renderRouteOverlay = () => {
@@ -340,13 +456,20 @@ function MapLibreRouteMap({ start, stops, encodedPolyline, alt, showCurrentLocat
           map.on("resize", renderRouteOverlay);
         }
 
+        landmarks.forEach((point) => {
+          const element = markerElement("div", ROUTE_MAP.landmarkSize, MAP_POINT_TONES[point.kind], LANDMARK_GLYPH[point.kind], labels.landmark(point.kind));
+          element.style.zIndex = "5";
+          markers.push(new maplibregl.Marker({ element, anchor: "center" }).setLngLat([point.lng, point.lat]).addTo(map!));
+        });
+
         stops.forEach((point, index) => {
-          const marker = document.createElement("button");
-          marker.type = "button";
-          marker.textContent = point.markerText ?? String(index + 1);
-          marker.title = point.label ?? `Stop ${index + 1}`;
-          marker.setAttribute("aria-label", point.label ?? `Stop ${index + 1}`);
-          marker.style.cssText = `display:flex;align-items:center;justify-content:center;width:27px;height:27px;padding:0;border-radius:9999px;background:${point.markerColor ?? "#1f2937"};border:2px solid ${point.markerBorderColor ?? "#64748b"};color:${point.markerTextColor ?? "#ffffff"};font:700 11px/1 system-ui;box-shadow:0 3px 10px rgba(15,23,42,.4);cursor:pointer;`;
+          const marker = markerElement(
+            "button",
+            ROUTE_MAP.markerSize,
+            { background: point.markerColor ?? "#1f2937", border: point.markerBorderColor ?? "#64748b", text: point.markerTextColor ?? "#ffffff" },
+            point.markerText ?? String(index + 1),
+            point.label ?? labels.stop(index + 1),
+          );
           marker.style.zIndex = String(10 + stops.length - index);
           if (point.id !== undefined && onStopClick) marker.addEventListener("click", (event) => {
             event.stopPropagation();
@@ -373,9 +496,9 @@ function MapLibreRouteMap({ start, stops, encodedPolyline, alt, showCurrentLocat
             currentLocation = current;
             if (!currentLocationMarker) {
               const marker = document.createElement("div");
-              marker.title = "Current location";
-              marker.setAttribute("aria-label", "Current location");
-              marker.style.cssText = "width:18px;height:18px;border-radius:9999px;background:#2563eb;border:3px solid white;box-shadow:0 0 0 6px rgba(37,99,235,.22),0 4px 14px rgba(15,23,42,.45);";
+              marker.title = labels.you;
+              marker.setAttribute("aria-label", labels.you);
+              marker.style.cssText = `width:18px;height:18px;border-radius:9999px;background:${MAP_POINT_TONES.you.background};border:3px solid ${MAP_POINT_TONES.you.border};box-shadow:0 0 0 6px rgba(37,99,235,.22),0 4px 14px rgba(15,23,42,.45);`;
               marker.style.zIndex = "2";
               currentLocationMarker = new maplibregl.Marker({ element: marker, anchor: "center" }).setLngLat(current).addTo(map);
             } else {
@@ -401,8 +524,15 @@ function MapLibreRouteMap({ start, stops, encodedPolyline, alt, showCurrentLocat
       routeOverlay?.remove();
       map?.remove();
     };
-  }, [start.lat, start.lng, stops, encodedPolyline, showCurrentLocation, locateLabel, onStopClick]);
+    // labels and t only change with the language; the effect keys on what it draws.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [start.lat, start.lng, stops, landmarkKey, encodedPolyline, showCurrentLocation, locateLabel, onStopClick]);
 
-  if (unavailable) return <div role="img" aria-label={alt} className={`flex h-64 w-full items-center justify-center bg-slate-100 text-sm font-medium text-slate-500 sm:h-72 ${className ?? ""}`}>Map unavailable</div>;
-  return <div ref={containerRef} role="img" aria-label={alt} className={`h-64 w-full bg-slate-100 sm:h-72 ${className ?? ""}`} />;
+  if (unavailable) return <MapUnavailable label={alt} hint={t("mapUnavailableHint")} className={`h-64 sm:h-72 ${className ?? ""}`} />;
+  return (
+    <div className={`relative h-64 w-full overflow-hidden sm:h-72 ${MAP_SURFACE_CLASS} ${className ?? ""}`}>
+      <div ref={containerRef} role="img" aria-label={alt} className="absolute inset-0" />
+      {ready ? null : <MapSkeleton className="pointer-events-none absolute inset-0" />}
+    </div>
+  );
 }

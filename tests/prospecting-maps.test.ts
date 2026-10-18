@@ -5,6 +5,8 @@ import {
   googleRouteUrl,
   googleStopUrl,
   isAppleMobileDevice,
+  placeUrl,
+  stopNavigationUrl,
 } from "../client/src/pages/xpot/prospectingMaps.js";
 
 const start = { lat: "42.29", lng: "-71.49" };
@@ -50,5 +52,23 @@ describe("prospecting navigation links", () => {
   it("navigates to a single stop by car", () => {
     expect(new URL(appleStopUrl(stop("42.30"))).searchParams.get("daddr")).toBe("42.30,-71.50");
     expect(new URL(googleStopUrl(stop("42.30"))).searchParams.get("travelmode")).toBe("driving");
+  });
+
+  it("picks the device's maps app for one stop", () => {
+    expect(new URL(stopNavigationUrl(stop("42.30"), true)).origin).toBe("https://maps.apple.com");
+    expect(new URL(stopNavigationUrl(stop("42.30"), false)).pathname).toBe("/maps/dir/");
+  });
+
+  it("opens a place (address or coordinates) without directions", () => {
+    const google = new URL(placeUrl("1 Main St, Framingham, MA", false));
+    expect(google.pathname).toBe("/maps/search/");
+    expect(google.searchParams.get("query")).toBe("1 Main St, Framingham, MA");
+    expect(new URL(placeUrl({ lat: 42.3, lng: -71.5 }, false)).searchParams.get("query")).toBe("42.3,-71.5");
+
+    const apple = new URL(placeUrl({ lat: 42.3, lng: -71.5 }, true));
+    expect(apple.origin).toBe("https://maps.apple.com");
+    expect(apple.searchParams.get("ll")).toBe("42.3,-71.5");
+    expect(apple.searchParams.has("daddr")).toBe(false);
+    expect(new URL(placeUrl("1 Main St", true)).searchParams.get("q")).toBe("1 Main St");
   });
 });

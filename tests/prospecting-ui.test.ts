@@ -9,6 +9,19 @@ import {
   routeDisplayName,
   routeStopProgress,
   stopMarkerTone,
+  STOP_MARKER_TONES,
+  ROUTE_STATUS_ICON,
+  ROUTE_STATUS_TONE,
+  STOP_STATUS_TONE,
+  routeStatusLabel,
+  routeStatusTone,
+  routeStatusIcon,
+  stopStatusLabelKey,
+  stopStatusTone,
+  isStopOpen,
+  eligibleCandidates,
+  routeFill,
+  samePlace,
   todayRouteOf,
   selectableCandidateIds,
   activeRunTiming,
@@ -212,5 +225,68 @@ describe("stopMarkerTone", () => {
     expect(current.background).toBe("#3b82f6");
     expect(next.border).toBe("#60a5fa");
     expect(next.border).not.toBe("#a78bfa");
+  });
+
+  it("draws the map legend from the same colours", () => {
+    expect(stopMarkerTone({ id: 1, status: "completed" }, null, null)).toBe(STOP_MARKER_TONES.done);
+    expect(stopMarkerTone({ id: 9, status: "planned" }, 2, 3)).toBe(STOP_MARKER_TONES.planned);
+  });
+});
+
+describe("route status", () => {
+  const t = (key: string) => `<${key}>`;
+
+  it("has one label per status; a past draft was never started", () => {
+    expect(routeStatusLabel("draft", t)).toBe("<routeDraft>");
+    expect(routeStatusLabel("draft", t, true)).toBe("<routeNotStarted>");
+    expect(routeStatusLabel("published", t)).toBe("<published>");
+    expect(routeStatusLabel("in_progress", t)).toBe("<routeInProgress>");
+    expect(routeStatusLabel("completed", t)).toBe("<routeCompleted>");
+    expect(routeStatusLabel("cancelled", t)).toBe("<routeCancelled>");
+  });
+
+  it("is green only when completed and checks only a completed route", () => {
+    expect(routeStatusTone("completed")).toBe("green");
+    expect(routeStatusTone("draft")).toBe("slate");
+    expect(routeStatusTone("cancelled")).toBe("slate");
+    expect(routeStatusTone("in_progress")).toBe("blue");
+    expect(ROUTE_STATUS_TONE.published).toBe("blue");
+    const icons = Object.entries(ROUTE_STATUS_ICON).filter(([, icon]) => icon === ROUTE_STATUS_ICON.completed).map(([status]) => status);
+    expect(icons).toEqual(["completed"]);
+    expect(routeStatusIcon("unknown")).toBe(ROUTE_STATUS_ICON.draft);
+  });
+
+  it("names and colours stops from one map", () => {
+    expect(stopStatusLabelKey("checked_in")).toBe("stopCheckedIn");
+    expect(stopStatusLabelKey("whatever")).toBe("stopPlanned");
+    expect(stopStatusTone("completed")).toBe(STOP_STATUS_TONE.completed);
+    expect(stopStatusTone("skipped")).toBe("muted");
+    expect(isStopOpen("planned")).toBe(true);
+    expect(isStopOpen("en_route")).toBe(true);
+    expect(isStopOpen("checked_in")).toBe(false);
+  });
+});
+
+describe("search results", () => {
+  it("counts the places a route can use, the same ones it sends", () => {
+    const candidates = [
+      { id: 1, status: "eligible" },
+      { id: 2, status: "discarded" },
+      { id: 3, status: "visited" },
+      { id: 4, status: "selected" },
+    ];
+    expect(eligibleCandidates(candidates).map((candidate) => candidate.id)).toEqual(selectableCandidateIds(candidates));
+  });
+
+  it("tells a short route from a full one", () => {
+    expect(routeFill(0, 20)).toBe("none");
+    expect(routeFill(8, 20)).toBe("short");
+    expect(routeFill(20, 20)).toBe("full");
+    expect(routeFill(5, 0)).toBe("full");
+  });
+
+  it("treats points ~50 m apart as one place", () => {
+    expect(samePlace({ lat: 42.3, lng: -71.5 }, { lat: 42.3001, lng: -71.5001 })).toBe(true);
+    expect(samePlace({ lat: 42.3, lng: -71.5 }, { lat: 42.31, lng: -71.5 })).toBe(false);
   });
 });
