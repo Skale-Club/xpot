@@ -43,6 +43,7 @@ touched. Each file has a header comment with usage; this page is the index.
 | `BRAND_GRADIENT` | `#3b82f6 → #6366f1` | Primary action |
 | `SUCCESS_GRADIENT` | `#10b981 → #06b6d4` | Money actions |
 | `DANGER_SURFACE` | `#ef4444` tint | Error box, danger zone of a form |
+| `DANGER_OUTLINE` | red text and border | Classes for the outline Button that opens a destructive ConfirmDialog (block, remove, revoke) |
 | `MODULE_ACCENT` | visits blue, tags violet, account slate | Where you are |
 | `ACCENT_GRADIENT`, `ACCENT_SELECTED` | per module | Primary fill and "selected" state per module |
 | `EYEBROW`, `TABLE_HEAD` | 10px uppercase, white/40 | Small labels, table headers |
@@ -79,7 +80,7 @@ opacity steps in multiples of 5, so the extra steps the screens use
 | `Pill` | `xpot/StatusPill.tsx` | `tone`, optional `dot` and `bordered`. |
 | `EmptyState`, `ErrorState` | `xpot/EmptyState.tsx` | Tones `indigo` (default, Visits and account), `tags` (violet), `red`; `action`, `onRetry` / `retryLabel`; `compact` inside sections. ErrorState has `role="alert"` and its own Retry. |
 | `ListSkeleton` | `xpot/ListSkeleton.tsx` | Placeholder rows while a list loads (`rows`, `rowClassName`), so an empty state never flashes first. |
-| `RetryButton` | `xpot/RetryButton.tsx` | The "Try again" action under a failed load (`onRetry`, `busy`). |
+| `RetryButton` | `xpot/RetryButton.tsx` | The "Try again" action under a failed load (`onRetry`, `busy`, `label`); EmptyState/ErrorState draw this same one for `onRetry`. |
 | `InlineAlert` | `xpot/InlineAlert.tsx` | `info`, `success`, `warning`, `error`, with icon and role. |
 | `KpiTile`, `Stat` | `xpot/DashboardKit.tsx`, `xpot/Stat.tsx` | KpiTile is the dashboard tile (a button when it has `onClick`, a plain card without); `accent` `blue` (default), `emerald` (money), `violet` (Tags), `amber`; `loading`. Stat is label over value. |
 | `SectionCard` / `DashboardSection` | `xpot/DashboardKit.tsx` | Card with a title row and actions; `accent` tints the icon tile with the module accent (violet in Tags); `testId`. The title row wraps instead of overflowing. |

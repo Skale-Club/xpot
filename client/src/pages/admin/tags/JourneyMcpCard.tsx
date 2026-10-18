@@ -10,7 +10,7 @@ import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
 import { Input } from "@/components/xpot/Field";
 import { ListSkeleton } from "@/components/xpot/ListSkeleton";
 import { Pill } from "@/components/xpot/StatusPill";
-import { EYEBROW, GLASS_CLASS } from "@/components/xpot/surface";
+import { DANGER_OUTLINE, EYEBROW, GLASS_CLASS } from "@/components/xpot/surface";
 import { formatDateTime } from "@/lib/format";
 import { useT } from "@/i18n";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
@@ -24,9 +24,6 @@ import { queryClient } from "@/lib/queryClient";
 // OAuth and show up under "Connected apps" with what they were granted;
 // clients that take a pasted header (Claude Code) use a token, whose secret is
 // shown once. Account page: the shared kit only (not the Tags admin's own parts).
-
-/** The outline button that opens a revoke confirmation. */
-const DANGER_OUTLINE = "border-red-400/30 text-red-300 hover:border-red-400/40 hover:bg-red-500/10 hover:text-red-200";
 
 const TOKENS_KEY = [ADMIN_TAGS_KEY, "mcp-tokens"];
 const CONNECTIONS_KEY = [ADMIN_TAGS_KEY, "mcp-connections"];

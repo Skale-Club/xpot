@@ -15,7 +15,7 @@ import { BackLink, PageHeader } from "@/components/xpot/PageHeader";
 import { Stat } from "@/components/xpot/Stat";
 import { Pill } from "@/components/xpot/StatusPill";
 import { SwitchRow } from "@/components/xpot/SwitchRow";
-import { GLASS_CLASS, GLASS_SUBTLE_CLASS } from "@/components/xpot/surface";
+import { DANGER_OUTLINE, GLASS_CLASS, GLASS_SUBTLE_CLASS } from "@/components/xpot/surface";
 import { Tabs } from "@/components/xpot/Tabs";
 import { apiRequest } from "@/lib/queryClient";
 import { describeApiError } from "@/lib/apiErrors";
@@ -63,8 +63,6 @@ type Person = { id: number; displayName: string; access: "pending" | "active" | 
 /** What a member action does, for its confirmation and its toast. */
 type MemberAction = { member: Member; kind: "suspend" | "reactivate" | "makeAdmin" | "makeRep" | "remove" };
 
-/** The outline button for removing someone; the dialog it opens is the red one. */
-const DANGER_OUTLINE = "border-red-400/30 text-red-300 hover:border-red-400/40 hover:bg-red-500/10 hover:text-red-200";
 // Stored on the membership when it is suspended; managers read it in the audit log.
 const SUSPENDED_REASON = "Suspended by an organization manager";
 

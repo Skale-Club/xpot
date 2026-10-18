@@ -120,7 +120,8 @@ const AlertDialogCancel = React.forwardRef<
   <AlertDialogPrimitive.Cancel
     ref={ref}
     className={cn(
-      buttonVariants({ variant: "secondary" }),
+      // "Cancel" in a dialog is the ghost button (docs/UI_KIT.md), as in FormFooter.
+      buttonVariants({ variant: "ghost" }),
       "mt-2 sm:mt-0",
       className
     )}

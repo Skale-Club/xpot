@@ -51,6 +51,13 @@ export const DANGER_SURFACE = {
   border: "1px solid rgba(239,68,68,0.2)",
 } as const;
 
+/**
+ * Classes for a `<Button variant="outline">` that opens a destructive step
+ * (block, refuse, remove, revoke): red text and border; the ConfirmDialog it
+ * opens carries the solid red button.
+ */
+export const DANGER_OUTLINE = "border-red-400/30 text-red-300 hover:border-red-400/40 hover:bg-red-500/10 hover:text-red-200";
+
 /** Page background behind every shell (app, tags, settings, admin). */
 export const PAGE_GRADIENT = "linear-gradient(160deg, #060912 0%, #090f1c 50%, #060c14 100%)";
 

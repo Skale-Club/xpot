@@ -17,7 +17,7 @@ import { FormFooter } from "@/components/xpot/FormFooter";
 import { InlineAlert } from "@/components/xpot/InlineAlert";
 import { ListSkeleton } from "@/components/xpot/ListSkeleton";
 import { INTEGRATION_TONE, Pill, ROLE_TONE, toneOf, type PillTone } from "@/components/xpot/StatusPill";
-import { GLASS_CLASS } from "@/components/xpot/surface";
+import { DANGER_OUTLINE, GLASS_CLASS } from "@/components/xpot/surface";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { XPOT_MODULES, repModules, type XpotModule } from "@shared/modules";
 import { formatPhone } from "@shared/phone";
@@ -78,8 +78,6 @@ export type Rep = {
 };
 
 export const REPS_KEY = ["/api/xpot/admin/reps"];
-/** The outline button for a destructive step (block, refuse, delete); the dialog it opens is the red one. */
-export const DANGER_OUTLINE = "border-red-400/30 text-red-300 hover:border-red-400/40 hover:bg-red-500/10 hover:text-red-200";
 export const MODULE_KEYS = { visits: "moduleVisits", tags: "moduleTags" } as const satisfies Record<XpotModule, keyof typeof commonMessages.en>;
 export const ROLES = ["rep", "manager", "admin"] as const;
 export const ROLE_KEYS = { rep: "role_rep", manager: "role_manager", admin: "role_admin" } as const satisfies Record<(typeof ROLES)[number], keyof typeof settingsMessages.en>;
