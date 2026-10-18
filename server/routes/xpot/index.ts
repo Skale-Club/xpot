@@ -14,7 +14,6 @@ import { createAdminIntegrationsRouter } from "./admin-integrations.js";
 import { createBrandingPublicRouter, createBrandingAdminRouter } from "./branding.js";
 import { createLandingContentAdminRouter, createLandingContentPublicRouter } from "./landing-content.js";
 import { createInboundRouter } from "./inbound.js";
-import { createXphereRouter } from "./xphere.js";
 import { createProductsRouter } from "./products.js";
 import { createSalesRouter } from "./sales.js";
 import { createConsignmentsRouter } from "./consignments.js";
@@ -51,7 +50,6 @@ export function registerXpotRoutes(app: Express) {
   app.use("/api/xpot", createSystemHealthRouter());
   app.use("/api/xpot", createBrandingAdminRouter());
   app.use("/api/xpot", createLandingContentAdminRouter());
-  app.use("/api/xpot", createXphereRouter());
   // Sales module: catalog, direct sales, consigned stock.
   app.use("/api/xpot", createProductsRouter());
   app.use("/api/xpot", createSalesRouter());

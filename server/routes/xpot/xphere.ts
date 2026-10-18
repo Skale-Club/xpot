@@ -1,8 +1,9 @@
-import { Router, type Request, type Response } from "express";
+// Shared by the admin's Xphere routes (admin.ts): only the global admin
+// configures Xphere, for every user.
+
 import { randomBytes } from "crypto";
 import { z } from "zod";
 import { storage } from "../../storage.js";
-import { requireXpotUser } from "./middleware.js";
 
 export const XPHERE_DEFAULT_URL = "https://xphere.app";
 
@@ -29,44 +30,4 @@ export function presentXphere(integration: Awaited<ReturnType<typeof storage.get
     apiKeySet: Boolean(integration?.apiKey),
     isEnabled: Boolean(integration?.isEnabled),
   };
-}
-
-// Per-user (tenant) Xphere integration config — each authenticated user's own
-// credentials. Mounted under /api/xpot. The screens use the admin routes
-// (admin.ts, the global admin sets everyone's); these stay for API clients.
-export function createXphereRouter() {
-  const router = Router();
-  router.use(requireXpotUser);
-
-  router.get("/xphere/config", async (req: Request, res: Response) => {
-    const actor = (req as any).xpotActor;
-    const integration = await storage.getXphereIntegrationByUserId(actor.user.userId);
-    res.json(presentXphere(integration));
-  });
-
-  router.put("/xphere/config", async (req: Request, res: Response) => {
-    const actor = (req as any).xpotActor;
-    const input = xphereConfigSchema.parse(req.body);
-
-    const existing = await storage.getXphereIntegrationByUserId(actor.user.userId);
-    const data: Record<string, unknown> = {};
-    if (input.apiKey !== undefined) data.apiKey = input.apiKey || null;
-    if (input.apiUrl !== undefined) data.apiUrl = input.apiUrl || XPHERE_DEFAULT_URL;
-    if (input.isEnabled !== undefined) data.isEnabled = input.isEnabled;
-    // Generate the inbound key on first save so the user can configure Xphere.
-    if (!existing?.inboundApiKey) data.inboundApiKey = genInboundKey();
-
-    const saved = await storage.upsertXphereIntegration(actor.user.userId, data);
-    res.json(presentXphere(saved));
-  });
-
-  router.post("/xphere/config/rotate-inbound-key", async (req: Request, res: Response) => {
-    const actor = (req as any).xpotActor;
-    const saved = await storage.upsertXphereIntegration(actor.user.userId, {
-      inboundApiKey: genInboundKey(),
-    });
-    res.json(presentXphere(saved));
-  });
-
-  return router;
 }
