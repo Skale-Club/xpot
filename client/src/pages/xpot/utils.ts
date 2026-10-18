@@ -75,9 +75,10 @@ export function phoneHref(raw?: string | null): string | undefined {
 /** A distance or GPS accuracy for people: "85 m", "1.4 km". */
 export function formatMeters(meters: number) {
   const value = Math.max(0, Math.round(meters));
-  if (value < 1000) return `${value} m`;
+  // A non-breaking space: "150 m" must not wrap with the unit alone on the next line.
+  if (value < 1000) return `${value}\u00a0m`;
   const km = new Intl.NumberFormat(currentLocale(), { maximumFractionDigits: value < 10_000 ? 1 : 0 }).format(value / 1000);
-  return `${km} km`;
+  return `${km}\u00a0km`;
 }
 
 export function normalizeSearchValue(value?: string | null) {
