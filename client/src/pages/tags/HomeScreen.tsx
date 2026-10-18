@@ -30,7 +30,7 @@ import {
   TAGS_FILL,
   TapAnimation,
 } from "./ui";
-import { isWebNfcSupported, mapNfcError, scanOnce } from "./webNfc";
+import { mapNfcError, nfcMode, scanOnce } from "./webNfc";
 import { useIsComputer, useIsDesktop } from "@/hooks/use-is-desktop";
 
 // "read" is the chooser behind the single Read button: QR, chip or typed code.
@@ -56,7 +56,10 @@ export default function HomeScreen() {
   const [code, setCode] = useState("");
   const [sellTo, setSellToState] = useState(getSellTo);
   const nfcAbort = useRef<AbortController | null>(null);
-  const nfcSupported = isWebNfcSupported();
+  // Only Chrome on Android reads a chip in the app. An iPhone's own NFC opens the chip's
+  // public link, which for a live piece is the customer's page, never this piece in
+  // Xpot: there (and on a computer) the chip is no way to find a piece, so no option.
+  const readsChip = nfcMode() === "web";
   // A computer has no NFC and rarely a usable camera: it types the code, or a
   // USB/Bluetooth scanner "types" the whole QR link followed by Enter.
   const isDesktop = useIsDesktop();
@@ -228,7 +231,7 @@ export default function HomeScreen() {
           primary
           icon={ScanLine}
           title={t("readPiece")}
-          description={t("readPieceHint")}
+          description={readsChip ? t("readPieceHint") : t("readPieceHintNoChip")}
           onClick={() => {
             // A message from an earlier read would otherwise reappear inside the chooser.
             clearBanner();
@@ -256,7 +259,7 @@ export default function HomeScreen() {
 
       <BottomSheet open={sheet?.kind === "read"} onClose={() => setSheet(null)} title={t("readPiece")} banner={banner}>
         {/* QR first: it always works, while a chip is only found once it has been written. */}
-        <div className="mt-1 grid grid-cols-2 gap-3">
+        <div className={`mt-1 grid gap-3 ${readsChip ? "grid-cols-2" : "grid-cols-1"}`}>
           <button
             type="button"
             onClick={() => {
@@ -268,9 +271,11 @@ export default function HomeScreen() {
             style={{ WebkitTapHighlightColor: "transparent" }}
             className={`flex min-h-[164px] flex-col items-center justify-center gap-2.5 rounded-2xl p-3 text-center text-white transition-transform active:scale-[0.97] disabled:opacity-60 ${TAGS_FILL}`}
           >
-            <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">
-              {t("recommended")}
-            </span>
+            {readsChip && (
+              <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">
+                {t("recommended")}
+              </span>
+            )}
             <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/15">
               <QrCode className="h-8 w-8" />
             </span>
@@ -279,25 +284,24 @@ export default function HomeScreen() {
               <span className="mt-1 block text-[11px] leading-snug text-white/75">{t("scanQrHint")}</span>
             </span>
           </button>
-          <button
-            type="button"
-            onClick={() => void startNfc()}
-            disabled={busy || !nfcSupported}
-            data-testid="button-scan-nfc"
-            style={{ WebkitTapHighlightColor: "transparent" }}
-            className={`${CARD} flex min-h-[164px] flex-col items-center justify-center gap-2.5 p-3 text-center text-white transition-transform active:scale-[0.97] disabled:opacity-50`}
-          >
-            <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/[0.06] text-violet-300">
-              <Nfc className="h-8 w-8" />
-            </span>
-            <span>
-              <span className="block text-base font-bold leading-tight">{t("readChip")}</span>
-              {/* Amber only when it is a warning: this phone cannot read chips. */}
-              <span className={`mt-1 block text-[11px] leading-snug ${nfcSupported ? "text-white/50" : "text-amber-200/80"}`}>
-                {nfcSupported ? t("readChipHint") : t("readChipUnavailable")}
+          {readsChip && (
+            <button
+              type="button"
+              onClick={() => void startNfc()}
+              disabled={busy}
+              data-testid="button-scan-nfc"
+              style={{ WebkitTapHighlightColor: "transparent" }}
+              className={`${CARD} flex min-h-[164px] flex-col items-center justify-center gap-2.5 p-3 text-center text-white transition-transform active:scale-[0.97] disabled:opacity-50`}
+            >
+              <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/[0.06] text-violet-300">
+                <Nfc className="h-8 w-8" />
               </span>
-            </span>
-          </button>
+              <span>
+                <span className="block text-base font-bold leading-tight">{t("readChip")}</span>
+                <span className="mt-1 block text-[11px] leading-snug text-white/50">{t("readChipHint")}</span>
+              </span>
+            </button>
+          )}
         </div>
         <div className="mt-5 border-t border-white/10 pt-4">{codeForm}</div>
         <Button type="button" variant="ghost" size="lg" onClick={() => setSheet(null)} className="mt-4 w-full">

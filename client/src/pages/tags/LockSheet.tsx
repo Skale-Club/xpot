@@ -5,12 +5,9 @@ import { InlineAlert } from "@/components/xpot/InlineAlert";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
-import { errorText, haptic } from "./lib";
+import { errorText, haptic, isIos } from "./lib";
 import { BottomSheet, SHEET_TITLE, SheetActions, Spinner, StepList, TapAnimation, type Identity } from "./ui";
-import { canLockChip, lockChip, mapNfcError } from "./webNfc";
-
-const isIos = () =>
-  typeof navigator !== "undefined" && (/iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1));
+import { canLockChip, lockChip, mapNfcError, nfcMode } from "./webNfc";
 
 /**
  * Makes a written chip read-only for good, so nobody can rewrite it later.
@@ -65,7 +62,7 @@ export default function LockSheet({ open, identity, onClose, onLocked }: {
     }
   };
 
-  /** iPhone: locked with NFC Tools; record it. */
+  /** Another phone: locked with NFC Tools; record it. */
   const markLocked = async () => {
     setError(null);
     setPhase("saving");
@@ -123,10 +120,10 @@ export default function LockSheet({ open, identity, onClose, onLocked }: {
                 {tc("cancel")}
               </Button>
             </SheetActions>
-          ) : isIos() ? (
-            // iPhone: the app cannot lock; NFC Tools can, and the person tells us it is done.
+          ) : nfcMode() === "app" ? (
+            // Another phone: the app cannot lock; NFC Tools can, and the person tells us it is done.
             <>
-              <StepList steps={(["lockIphone1", "lockIphone2", "lockIphone3"] as const).map((step) => ({ key: step, text: t(step) }))} />
+              <StepList steps={(["lockIphone1", "lockIphone2", isIos() ? "lockIphone3" : "lockPhone3"] as const).map((step) => ({ key: step, text: t(step) }))} />
               <SheetActions>
                 <Button type="button" variant="brand" accent="tags" size="lg" onClick={() => void markLocked()} className="w-full" data-testid="button-lock-marked">
                   <Lock className="!size-5" />
@@ -137,9 +134,7 @@ export default function LockSheet({ open, identity, onClose, onLocked }: {
                 </Button>
               </SheetActions>
             </>
-          ) : (
-            <p className="text-sm text-white/50">{t("lockUnsupported")}</p>
-          )}
+          ) : null}
         </div>
       )}
     </BottomSheet>

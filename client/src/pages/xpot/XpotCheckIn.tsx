@@ -56,6 +56,13 @@ import { PlaceLeadSearch } from "./components/PlaceLeadSearch";
 import { CreateLeadDialog } from "./components/CreateLeadDialog";
 import { CheckInOverrideDialog } from "./components/CheckInOverrideDialog";
 import { placeUrl } from "./prospectingMaps";
+import { currentPlatform } from "@/lib/device";
+
+const LOCATION_FIX = {
+  ios: { step1: "iphoneStep1", path: "iphonePath", step2: "iphoneStep2", option: "iphoneOption" },
+  android: { step1: "androidStep1", path: "androidPath", step2: "androidStep2", option: "androidOption" },
+  other: { step1: "computerStep1", path: "computerPath", step2: "computerStep2", option: "computerOption" },
+} as const;
 
 type VisitLead = SalesLead & Partial<Pick<FullSalesLead, "locations" | "openOpportunities" | "unitsOnShelf">>;
 
@@ -243,6 +250,8 @@ function LocationGate({
 }) {
   const t = useT(checkinMessages);
   const blocked = permission === "denied";
+  // Only the steps for the device in hand: the setting lives somewhere else on each.
+  const fix = LOCATION_FIX[currentPlatform()];
 
   return (
     <div className="space-y-4">
@@ -263,8 +272,8 @@ function LocationGate({
 
         {blocked ? (
           <div className={`rounded-2xl px-4 py-3 text-left text-xs leading-relaxed text-white/60 ${GLASS_CLASS}`}>
-            {t("iphoneStep1")} <span className="text-white/80">{t("iphonePath")}</span>{t("iphoneStep2")}{" "}
-            <span className="text-white/80">{t("iphoneOption")}</span>{t("iphoneStep3")}
+            {t(fix.step1)} <span className="text-white/80">{t(fix.path)}</span>{t(fix.step2)}{" "}
+            <span className="text-white/80">{t(fix.option)}</span>{t("iphoneStep3")}
           </div>
         ) : null}
 

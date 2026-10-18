@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { classifyScan, TAGS_APP_PATH, type ScanClassification } from "@shared/tagApp";
 import { viewHeaders } from "@/lib/adminMode";
+import { currentPlatform } from "@/lib/device";
 import { serverErrorText } from "@/lib/apiErrors";
 
 export const APP_BASE = TAGS_APP_PATH;
@@ -111,7 +112,7 @@ export function haptic(pattern: number | number[] = 40) {
 }
 
 export function isIos(): boolean {
-  return /iphone|ipad|ipod/i.test(navigator.userAgent);
+  return currentPlatform() === "ios";
 }
 
 /** Current position for "near me" searches; null when refused or slow. */

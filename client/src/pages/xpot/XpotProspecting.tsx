@@ -8,7 +8,7 @@ import { useT } from "@/i18n";
 import { prospectingMessages } from "@/i18n/messages/prospecting";
 import { prospectingUiMessages } from "@/i18n/messages/prospectingUi";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { subscribeToRoutePush } from "@/lib/pushNotifications";
+import { routePushSupported, subscribeToRoutePush } from "@/lib/pushNotifications";
 import { useViewerAccess } from "@/lib/adminMode";
 import { formatDistance, formatDuration, formatTime } from "@/lib/format";
 import { Link, useLocation, useSearchParams } from "wouter";
@@ -459,10 +459,6 @@ export function XpotProspecting() {
   }, [detailsQuery.data?.job.id, detailsQuery.data?.candidates.length]);
 
   const enableReadyNotification = async () => {
-    if (!("Notification" in window)) {
-      toast({ title: t("notificationsUnavailable") });
-      return;
-    }
     const permission = Notification.permission === "default"
       ? await Notification.requestPermission()
       : Notification.permission;
@@ -1215,14 +1211,14 @@ export function XpotProspecting() {
                       <span className="shrink-0 font-bold uppercase tracking-[0.12em] text-indigo-200">{t("activityLabel")}</span>
                       <span className="min-w-0 break-words leading-5 text-pretty text-white/65">{currentActivity}</span>
                     </div>
-                    {["queued", "running"].includes(details.job.status) || canCancelJob ? (
+                    {(["queued", "running"].includes(details.job.status) && routePushSupported()) || canCancelJob ? (
                       <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                         {canCancelJob ? (
                           <Button type="button" variant="ghost" onClick={() => setCancelSearchOpen(true)} className="w-full text-xs text-white/60 sm:w-auto" data-testid="button-cancel-search">
                             <X />{t("cancelSearch")}
                           </Button>
                         ) : null}
-                        {["queued", "running"].includes(details.job.status) ? (
+                        {["queued", "running"].includes(details.job.status) && routePushSupported() ? (
                           <Button type="button" variant="outline" disabled={notificationsEnabled} onClick={() => void enableReadyNotification()} className="w-full text-xs sm:w-auto">
                             <BellRing />{notificationsEnabled ? t("notificationsEnabled") : t("notifyWhenReady")}
                           </Button>

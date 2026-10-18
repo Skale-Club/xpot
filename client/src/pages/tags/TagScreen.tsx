@@ -15,8 +15,7 @@ import { useViewerAccess } from "@/lib/adminMode";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
-import { isWebNfcSupported } from "./webNfc";
-import { useIsDesktop } from "@/hooks/use-is-desktop";
+import { nfcMode } from "./webNfc";
 import { cameFromInApp } from "@/lib/inAppHistory";
 import { APP_BASE, errorText, lookupTag, pushRecent, tagsGet, useBanner } from "./lib";
 import { Banner, Spinner, TopBar } from "./ui";
@@ -48,9 +47,8 @@ export default function TagScreen({ code, onClose }: {
   const access = useViewerAccess();
   const modules = useXpotModules();
   const queryKey = ["tags", "piece", code];
-  // No Web NFC on a phone (iPhone): written with NFC Tools, confirmed by a real tap.
-  const isDesktop = useIsDesktop();
-  const manualFlow = !isWebNfcSupported() && !isDesktop;
+  // A phone without Web NFC (iPhone): written with NFC Tools, confirmed by a real tap.
+  const manualFlow = nfcMode() === "app";
   const { data, isLoading, error, refetch } = useQuery({
     queryKey,
     queryFn: () => fetchTag(code),
