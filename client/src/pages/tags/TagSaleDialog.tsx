@@ -4,6 +4,7 @@ import { Check, Package, ShoppingCart } from "lucide-react";
 import type { TagListItem } from "@shared/tagsApi";
 import { computeSaleTotals, resolveUnitPriceCents } from "@shared/pricing";
 import { saleCustomerConflict, suggestSaleCustomer } from "@shared/tagSales";
+import { canManage, isSuperAdmin } from "@shared/modules";
 import type { ProductWithTiers, PaymentMethod, PaymentStatus } from "@/pages/xpot/hooks/useSalesModule";
 import { usePaymentOptions } from "@/pages/xpot/hooks/useSalesModule";
 import type { FullSalesLead, XpotMeResponse } from "@/pages/xpot/types";
@@ -250,9 +251,11 @@ export default function TagSaleDialog({
           );
         })}
 
-        {unmapped > 0 && <p className="rounded-xl border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">{t.plural("missingProductMapping", unmapped)}</p>}
-        {missingCost > 0 && <p className="rounded-xl border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">{t.plural("missingAcquisitionCost", missingCost)}</p>}
-        {unconfiguredPolicy && <p className="rounded-xl border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">{t("unconfiguredCostPolicy")}</p>}
+        {/* Each block names who fixes it: batches are the global admin's, separation and the
+            cost rule a manager's. The person who can act reads where; a rep reads who to ask. */}
+        {unmapped > 0 && <p className="rounded-xl border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">{t.plural(isSuperAdmin(me) ? "missingProductMappingAdmin" : "missingProductMapping", unmapped)}</p>}
+        {missingCost > 0 && <p className="rounded-xl border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">{t.plural(canManage(me) ? "missingAcquisitionCostManager" : "missingAcquisitionCost", missingCost)}</p>}
+        {unconfiguredPolicy && <p className="rounded-xl border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">{t(canManage(me) ? "unconfiguredCostPolicyManager" : "unconfiguredCostPolicy")}</p>}
         {catalogUnavailable && <p className="rounded-xl border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">{t("saleCatalogUnavailable")}</p>}
 
         <div className="space-y-3 rounded-2xl border border-emerald-400/20 bg-emerald-500/[0.06] p-3.5">
