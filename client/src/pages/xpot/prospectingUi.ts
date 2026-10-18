@@ -249,6 +249,17 @@ export function todayRouteOf<T extends { routeDate: string; status: string }>(
     ?? (includeCompleted ? ofDay.find((route) => route.status === "completed") : undefined);
 }
 
+/**
+ * The route built from a search (job). No job, no route: a route whose job is
+ * gone (the link is cleared when a job is deleted) or that was built without
+ * one has jobId null, and must not count as the route of "no job", or it
+ * would open itself every time the Route screen shows its list.
+ */
+export function routeOfJob<T extends { jobId: number | null }>(routes: T[] | undefined, jobId: number | null): T | undefined {
+  if (jobId === null) return undefined;
+  return (routes ?? []).find((route) => route.jobId === jobId);
+}
+
 /** Stops behind the rep: visited or skipped (a cancelled visit skips its stop). */
 export function isStopDone(status: string) {
   return status === "completed" || status === "skipped";

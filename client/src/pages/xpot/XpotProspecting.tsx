@@ -49,6 +49,7 @@ import {
   stopStatusTone,
   STOP_MARKER_TONES,
   MAP_POINT_TONES,
+  routeOfJob,
   todayRouteOf,
   selectableCandidateIds,
   serverNowMs,
@@ -341,7 +342,7 @@ export function XpotProspecting() {
     setRouteParams(next);
   };
 
-  const generatedRoute = (routesQuery.data ?? []).find((route) => route.jobId === activeJobId);
+  const generatedRoute = routeOfJob(routesQuery.data, activeJobId);
   useEffect(() => {
     if (!generatedRoute || activeRouteId === generatedRoute.id) return;
     setSelectedJobId(null);
