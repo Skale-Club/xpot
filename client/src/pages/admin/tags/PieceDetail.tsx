@@ -479,8 +479,9 @@ function LifecycleStep({ tag }: { tag: TagDetail }) {
             <PowerOff className="h-3.5 w-3.5" />{t("action_disable_confirm")}
           </button>
         ) : null}
-        {!damaged && can("unassign") ? (
-          <button type="button" className={BTN_GHOST} disabled={run.isPending} onClick={() => setPending("unassign")}>
+        {/* "Clear customer": the piece keeps its holder. A sold piece keeps its customer (the server refuses). */}
+        {!damaged && can("unassign") && tag.saleId === null ? (
+          <button type="button" className={BTN_GHOST} disabled={run.isPending} onClick={() => setPending("unassign")} data-testid="admin-piece-clear-customer">
             <Undo2 className="h-3.5 w-3.5" />{t("action_unassign_confirm")}
           </button>
         ) : null}
@@ -502,6 +503,7 @@ function LifecycleStep({ tag }: { tag: TagDetail }) {
       </div>
       {!damaged && tag.status !== "active" && tag.status !== "retired" && !activatePlan.ok ? <p className="text-xs text-white/40">{t(activateBlockerKey(tag))}</p> : null}
       {tag.status === "active" ? <p className="text-xs text-emerald-400">{t("liveExplain")}</p> : null}
+      {!damaged && can("unassign") && tag.saleId !== null ? <p className="text-xs text-white/40" data-testid="admin-piece-clear-customer-sold">{t("clearCustomerSold")}</p> : null}
       <ActionDialog action={pending} note={pending === "activate" ? holderNote : null} onClose={() => setPending(null)} onConfirm={confirm} pending={run.isPending} />
     </div>
   );

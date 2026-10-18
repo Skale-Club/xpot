@@ -447,7 +447,7 @@ export async function transitionTag(
       const [activeSale] = await tx.select({ id: salesSaleTags.id }).from(salesSaleTags)
         .where(and(eq(salesSaleTags.tagId, tag.id), eq(salesSaleTags.status, "active")))
         .limit(1);
-      if (activeSale) throw new TagError("Cancel the financial sale before unassigning this piece", 409);
+      if (activeSale) throw new TagError("Cancel the financial sale before clearing this piece's customer", 409);
       // Back to unconfigured stock in the same hands. The previous customer's
       // destination must not follow the piece.
       Object.assign(set, {
@@ -931,7 +931,7 @@ export async function returnToHouse(
       throw new TagError(`Already sold, cannot return: ${soldCodes.join(", ")}`, 409);
     }
     const configured = picked.filter((t) => t.status !== "inventory" || t.stockStatus !== "available").map((t) => t.publicCode);
-    if (configured.length) throw new TagError(`Unassign these configured pieces before returning them: ${configured.join(", ")}`, 409);
+    if (configured.length) throw new TagError(`Clear the customer of these set-up pieces before returning them: ${configured.join(", ")}`, 409);
     const alreadyInHouse = picked.filter((t) => t.repId === null).map((t) => t.publicCode);
     const moving = picked.filter((t) => t.repId !== null);
     if (moving.length) {
