@@ -71,11 +71,14 @@ export default function TagSaleDialog({
   onOpenChange,
   pieces,
   initialTagId,
+  sellerRepId,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   pieces: TagListItem[];
   initialTagId?: string;
+  /** Management recording the sale in a reseller's name (the piece's holder); the viewer by default. */
+  sellerRepId?: number;
 }) {
   const t = useT(tagsMessages);
   const ts = useT(salesModuleMessages);
@@ -157,10 +160,12 @@ export default function TagSaleDialog({
   }, [catalog.data, groupSignature, open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const unmapped = selectedPieces.filter((piece) => !piece.salesProductId).length;
-  const missingCost = me?.rep.costPolicy === "acquisition"
+  // Selling in someone else's name: their cost rule applies, and the server checks it (its answer shows here).
+  const forOther = sellerRepId !== undefined && !!me && sellerRepId !== me.rep.id;
+  const missingCost = !forOther && me?.rep.costPolicy === "acquisition"
     ? selectedPieces.filter((piece) => piece.acquisitionCostCents == null).length
     : 0;
-  const unconfiguredPolicy = me ? !me.rep.costPolicyConfiguredAt : false;
+  const unconfiguredPolicy = me && !forOther ? !me.rep.costPolicyConfiguredAt : false;
   const catalogUnavailable = selectedPieces.length > 0 && (
     catalog.isError || !catalog.data || groups.some((group) => !catalog.data.some((product) => product.id === group.productId))
   );
@@ -197,6 +202,7 @@ export default function TagSaleDialog({
       const leadId = await resolveLeadId();
       const visitId = me?.activeVisit?.leadId === leadId ? me.activeVisit.id : null;
       const body = {
+        ...(forOther ? { sellerRepId } : {}),
         leadId,
         visitId,
         lines: groups.map((group) => ({
