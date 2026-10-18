@@ -4,7 +4,7 @@ import type { Dictionary } from "../index";
 // Organization screens (people, branding): client/src/pages/admin/Admin*.tsx.
 // Integrations (services, Xphere, AI access) are in integrations.ts.
 // Page titles come from shell.ts, roles from settings.ts, module names from common.ts.
-// Vocabulary: rep = vendedor, reseller = revendedor, lead = cliente.
+// Vocabulary: rep = vendedor, reseller = revendedor, company = empresa, everyone = pessoas.
 
 const en = {
   // Access gate
@@ -25,7 +25,7 @@ const en = {
   metricActiveReps: "Active reps",
   metricLeads: "Companies",
   metricVisitsInProgress: "Visits in progress",
-  metricCompletedVisits: "Completed visits",
+  metricCompletedVisits: "Finished visits",
   metricOpenOpportunities: "Open opportunities",
   metricPipeline: "Pipeline",
   metricPendingTasks: "Pending tasks",
@@ -257,7 +257,7 @@ export const manageMessages: Dictionary<typeof en> = {
     metricActiveReps: "Vendedores ativos",
     metricLeads: "Empresas",
     metricVisitsInProgress: "Visitas em andamento",
-    metricCompletedVisits: "Visitas concluídas",
+    metricCompletedVisits: "Visitas finalizadas",
     metricOpenOpportunities: "Negócios em aberto",
     metricPipeline: "Valor em aberto",
     metricPendingTasks: "Tarefas pendentes",
@@ -479,7 +479,7 @@ export const manageMessages: Dictionary<typeof en> = {
     metricActiveReps: "Vendedores activos",
     metricLeads: "Empresas",
     metricVisitsInProgress: "Visitas en curso",
-    metricCompletedVisits: "Visitas completadas",
+    metricCompletedVisits: "Visitas finalizadas",
     metricOpenOpportunities: "Negocios abiertos",
     metricPipeline: "Valor en curso",
     metricPendingTasks: "Tareas pendientes",

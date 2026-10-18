@@ -66,7 +66,7 @@ const en = {
   unassigned: "Unassigned",
   customer_prospect: "Prospect",
   customer_lead: "Lead",
-  customer_active: "Active",
+  customer_active: "Customer",
   customer_inactive: "Inactive",
   customer_customer: "Customer",
 
@@ -139,7 +139,7 @@ export const organizationsMessages: Dictionary<typeof en> = {
     unassigned: "Sem responsável",
     customer_prospect: "Prospecto",
     customer_lead: "Em negociação",
-    customer_active: "Ativo",
+    customer_active: "Cliente",
     customer_inactive: "Inativo",
     customer_customer: "Cliente",
 
@@ -209,7 +209,7 @@ export const organizationsMessages: Dictionary<typeof en> = {
     unassigned: "Sin responsable",
     customer_prospect: "Prospecto",
     customer_lead: "En negociación",
-    customer_active: "Activo",
+    customer_active: "Cliente",
     customer_inactive: "Inactivo",
     customer_customer: "Cliente",
 

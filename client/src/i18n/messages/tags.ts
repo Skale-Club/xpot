@@ -421,8 +421,8 @@ const en = {
   daysAgo: "{n} d",
 
   // Selling during a visit / customer context
-  sellingTo: "Selling to {name}",
-  sellingToHint: "Pieces you open now go to this customer.",
+  sellingTo: "Setting up for {name}",
+  sellingToHint: "Pieces you open now are set up for this company.",
   stopSelling: "Stop",
   reviewFromLead: "Use the Google review link of {name}",
   reviewFromLeadDone: "Google review link of {name} filled in. Check it and save.",
@@ -847,8 +847,8 @@ export const tagsMessages: Dictionary<typeof en> = {
     hoursAgo: "{n} h",
     daysAgo: "{n} d",
 
-    sellingTo: "Vendendo para {name}",
-    sellingToHint: "As peças que você abrir agora vão para este cliente.",
+    sellingTo: "Configurando para {name}",
+    sellingToHint: "As peças que você abrir agora serão configuradas para esta empresa.",
     stopSelling: "Parar",
     reviewFromLead: "Usar o link de avaliação Google de {name}",
     reviewFromLeadDone: "Link de avaliação Google de {name} preenchido. Confira e salve.",
@@ -1270,8 +1270,8 @@ export const tagsMessages: Dictionary<typeof en> = {
     hoursAgo: "{n} h",
     daysAgo: "{n} d",
 
-    sellingTo: "Vendiendo a {name}",
-    sellingToHint: "Las piezas que abras ahora van a este cliente.",
+    sellingTo: "Configurando para {name}",
+    sellingToHint: "Las piezas que abras ahora se configuran para esta empresa.",
     stopSelling: "Parar",
     reviewFromLead: "Usar el enlace de reseña de Google de {name}",
     reviewFromLeadDone: "Enlace de reseña de Google de {name} listo. Revísalo y guarda.",
