@@ -15,9 +15,10 @@ import { isRefusal, refusalReason } from "#shared/repAccess.js";
 // either way they sign in with a code sent to that phone. Ending a
 // partnership blocks the rep and logs them out everywhere.
 
+/** A refusal People shows: `message` is the English fallback, `code` the stable key the client words (srv_<code>). */
 export class AccountError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, public code?: string) {
     super(message);
     this.status = status;
   }
@@ -49,13 +50,13 @@ export interface Actor {
 
 function parsePhone(input: string, countryCode?: string): string {
   const phone = normalizePhone(input, countryCode);
-  if (!phone) throw new AccountError("Enter a valid phone number, with the country code if it isn't a US number.", 400);
+  if (!phone) throw new AccountError("Enter a valid phone number, with the country code if it isn't a US number.", 400, "phone_invalid");
   return phone;
 }
 
 async function assertPhoneFree(phone: string, exceptUserId?: string) {
   const [taken] = await db.select({ id: users.id }).from(users).where(eq(users.phone, phone)).limit(1);
-  if (taken && taken.id !== exceptUserId) throw new AccountError("This phone already has an Xpot account. Find it in the list below.", 409);
+  if (taken && taken.id !== exceptUserId) throw new AccountError("This phone already has an Xpot account. Find it in the list below.", 409, "phone_taken");
 }
 
 function splitName(displayName: string): { firstName: string; lastName: string | null } {
@@ -69,7 +70,7 @@ export async function createResellerAccount(
   actor: Actor,
   options: { createOrganization?: boolean } = {},
 ): Promise<SalesRep> {
-  if (input.role === "admin" && !actor.isAdmin) throw new AccountError("Only an admin can create another admin.", 403);
+  if (input.role === "admin" && !actor.isAdmin) throw new AccountError("Only an Xpot admin can create another Xpot admin.", 403, "admin_create_admin_only");
   const phone = parsePhone(input.phone, input.countryCode);
   await assertPhoneFree(phone);
   const { firstName, lastName } = splitName(input.displayName);
@@ -95,14 +96,14 @@ export async function createResellerAccount(
 
 async function repOr404(repId: number): Promise<SalesRep> {
   const rep = await storage.getSalesRep(repId);
-  if (!rep || rep.deletedAt) throw new AccountError("Rep not found", 404);
+  if (!rep || rep.deletedAt) throw new AccountError("Person not found", 404, "rep_not_found");
   return rep;
 }
 
 /** Managers handle reps; only an admin may act on a manager or an admin. */
 function assertMayManage(rep: SalesRep, actor: Actor) {
-  if (rep.userId === actor.userId) throw new AccountError("You can't change your own access.", 400);
-  if (rep.role !== "rep" && !actor.isAdmin) throw new AccountError("Only an admin can change a manager's or admin's access.", 403);
+  if (rep.userId === actor.userId) throw new AccountError("You can't change your own access.", 400, "own_access_locked");
+  if (rep.role !== "rep" && !actor.isAdmin) throw new AccountError("Only an Xpot admin can change a manager's or admin's access.", 403, "access_change_admin_only");
 }
 
 async function setAccess(repId: number, patch: Partial<Pick<SalesRep, "isActive" | "blockedAt" | "blockedReason" | "modules">>) {
@@ -114,7 +115,7 @@ async function setAccess(repId: number, patch: Partial<Pick<SalesRep, "isActive"
 export async function approveRep(repId: number, modules: string[] | undefined, actor: Actor) {
   const rep = await repOr404(repId);
   assertMayManage(rep, actor);
-  if (rep.blockedAt) throw new AccountError("This rep is blocked. Unblock them instead.", 409);
+  if (rep.blockedAt) throw new AccountError("This person is blocked. Unblock them instead.", 409, "rep_blocked_unblock_first");
   const updated = await setAccess(repId, { isActive: true, ...(modules ? { modules } : {}) });
   await db.update(authAccessRequests).set({
     status: "approved",
@@ -147,7 +148,7 @@ export async function blockRep(repId: number, reason: string | null | undefined,
  */
 export async function refuseRep(repId: number, reason: string | null | undefined, actor: Actor) {
   const rep = await repOr404(repId);
-  if (rep.isActive || rep.blockedAt) throw new AccountError("Only a sign-up waiting for approval can be refused.", 409);
+  if (rep.isActive || rep.blockedAt) throw new AccountError("Only a sign-up waiting for approval can be refused.", 409, "refuse_pending_only");
   return blockRep(repId, refusalReason(reason), actor);
 }
 
@@ -167,7 +168,7 @@ export async function unblockRep(repId: number, actor: Actor) {
 export async function changeRepPhone(repId: number, input: z.infer<typeof phoneChangeSchema>, actor: Actor) {
   const rep = await repOr404(repId);
   if (rep.role !== "rep" && !actor.isAdmin && rep.userId !== actor.userId) {
-    throw new AccountError("Only an admin can change a manager's or admin's phone.", 403);
+    throw new AccountError("Only an Xpot admin can change a manager's or admin's phone.", 403, "phone_change_admin_only");
   }
   const phone = parsePhone(input.phone, input.countryCode);
   await assertPhoneFree(phone, rep.userId);

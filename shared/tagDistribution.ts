@@ -55,6 +55,8 @@ export function handOutBlocker(piece: DistributionPiece): HandOutBlocker | null 
   if (piece.stockStatus === "pending") return "not_received";
   if (piece.stockStatus === "damaged") return "damaged";
   if (piece.stockStatus !== "available") return "not_in_stock";
+  // Retiring a piece leaves its stock status as it was ("available"): retired is out of stock, not "set up".
+  if (piece.status === "retired") return "not_in_stock";
   if (piece.status !== "inventory") return "set_up";
   return null;
 }
@@ -63,6 +65,7 @@ export function handOutBlocker(piece: DistributionPiece): HandOutBlocker | null 
 export function takeBackBlocker(piece: DistributionPiece): TakeBackBlocker | null {
   if (piece.sold) return "sold";
   if (piece.repId === null) return "not_with_reseller";
+  if (piece.status === "retired") return "not_in_stock";
   if (piece.status !== "inventory") return "set_up";
   if (piece.stockStatus !== "available") return "not_in_stock";
   return null;

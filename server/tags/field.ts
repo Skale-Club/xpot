@@ -3,6 +3,7 @@ import { db } from "../db.js";
 import { salesLeads, tagDestinationHistory, tagDirectWrites, tagProvisioningEvents, tags, type Tag } from "#shared/schema.js";
 import { buildTagUrls, defaultUtmEnabled, PENDING_PIECE_ERROR } from "#shared/tags.js";
 import { activationCredit, canWorkOnTag, type TagActor } from "#shared/tagAccess.js";
+import { tagSystemReason } from "#shared/tagReasons.js";
 import { decidePhoneWrite, type DirectWriteMethod } from "#shared/tagApp.js";
 import type { DirectWriteItem } from "#shared/tagsApi.js";
 import { createLeadForSale, leadUsableBy, rememberLeadPlace, TagError, type Tx } from "./repository.js";
@@ -72,7 +73,7 @@ export async function quickActivateTag(id: string, input: QuickActivateInput, ac
         previousDestinationType: tag.destinationType,
         newDestinationType: input.destinationType,
         changedByUserId: actor.userId,
-        reason: changingOwner && tag.leadId ? "Re-assigned to another customer (field app)" : "Configured in the field app",
+        reason: tagSystemReason(changingOwner && tag.leadId ? "reassigned" : "configured_field"),
       });
     }
 
@@ -159,7 +160,7 @@ export async function changeTagDestination(
       previousDestinationType: tag.destinationType,
       newDestinationType: input.destinationType,
       changedByUserId: actor.userId,
-      reason: "Changed from the customer page (field app)",
+      reason: tagSystemReason("changed_field"),
     });
     const sameType = tag.destinationType === input.destinationType;
     const [row] = await tx

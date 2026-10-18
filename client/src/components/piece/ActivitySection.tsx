@@ -16,6 +16,7 @@ import { JourneyPanel } from "@/pages/admin/tags/JourneyPanel";
 import { errorText } from "@/pages/tags/lib";
 import { usePiece, usePieceActivity } from "./PieceContext";
 import { mergePieceTimeline, type PieceTimelineEvent } from "./pieceView";
+import { useReasonText } from "./reasonText";
 
 // Activity: one timeline, newest first, of everything that happened to the piece
 // that the viewer may read: destination changes, sales and their cancels, stock
@@ -80,6 +81,7 @@ function TimelineRow({ event }: { event: PieceTimelineEvent }) {
   const tm = useT(manageTagsPiecesMessages);
   const tg = useT(manageTagsMessages);
   const labels = useTagLabels();
+  const reasonText = useReasonText();
   const Icon = ICON[event.kind];
   let title = "";
   let detail: string | null = null;
@@ -91,7 +93,7 @@ function TimelineRow({ event }: { event: PieceTimelineEvent }) {
       const after = entry.newUrl ? `${labels.destination(entry.newDestinationType)}: ${entry.newUrl}` : tm("historyCleared");
       detail = entry.previousUrl ? `${labels.destination(entry.previousDestinationType)}: ${entry.previousUrl} → ${after}` : after;
       who = entry.changedByEmail;
-      if (entry.reason) detail += ` · “${entry.reason}”`;
+      if (entry.reason) detail += ` · “${reasonText(entry.reason)}”`;
       break;
     }
     case "sale":
@@ -111,7 +113,7 @@ function TimelineRow({ event }: { event: PieceTimelineEvent }) {
         : tp(key as never);
       title = named === key ? tp("movementGeneric", { from: labels.stock(m.fromStockStatus ?? "—"), to: labels.stock(m.toStockStatus) }) : named;
       who = m.actorEmail;
-      detail = m.reason;
+      detail = reasonText(m.reason);
       break;
     }
     case "journey":

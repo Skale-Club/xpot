@@ -90,3 +90,42 @@ describe("every code the server sends from these flows has a translation", () =>
     expect(missing).toEqual([]);
   });
 });
+
+describe("People and Organizations refusals carry a translated code", () => {
+  const files = [
+    "../server/routes/xpot/admin.ts",
+    "../server/routes/xpot/resellerAccounts.ts",
+    "../server/routes/xpot/organizations.ts",
+    "../server/organizations/service.ts",
+    "../server/accountDeletion.ts",
+  ].map((f) => join(__dirname, f));
+  // new AccountError("…", 4xx, "code") and its OrganizationError / AccountDeletionError siblings.
+  const thrown = files.flatMap((file) =>
+    [...readFileSync(file, "utf8").matchAll(/new (?:AccountError|OrganizationError|AccountDeletionError)\(("(?:[^"\\]|\\.)*"), (\d{3})(?:, "(\w+)")?\)/g)]
+      .map((m) => ({ message: m[1], status: Number(m[2]), code: m[3] ?? null })));
+
+  it("finds them", () => {
+    expect(thrown.length).toBeGreaterThan(25);
+  });
+
+  it("gives every 4xx a code with a translation", () => {
+    const refusals = thrown.filter((t) => t.status < 500);
+    expect(refusals.filter((t) => !t.code).map((t) => t.message)).toEqual([]);
+    expect(refusals.filter((t) => t.code && !translated.has(t.code)).map((t) => t.code)).toEqual([]);
+  });
+
+  it("no longer says Rep Admin", () => {
+    expect(thrown.filter((t) => /Rep Admin/.test(t.message)).map((t) => t.message)).toEqual([]);
+  });
+
+  it("sends the code in the body, and words it in PT", async () => {
+    const { refusalBody } = await import("../server/lib/validation");
+    // An AccountError's shape (the class lives next to the database code).
+    const body = refusalBody(Object.assign(new Error("You can't change your own role."), { status: 400, code: "own_role_locked" }));
+    expect(body).toEqual({ message: "You can't change your own role.", code: "own_role_locked" });
+    expect(refusalBody({ message: "Plain" })).toEqual({ message: "Plain" });
+    lang.current = "pt";
+    expect(serverErrorText(body, "x")).toBe("Você não pode mudar o seu próprio papel.");
+    lang.current = "en";
+  });
+});

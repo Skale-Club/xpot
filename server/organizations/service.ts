@@ -22,8 +22,9 @@ import {
 
 export type OrganizationActor = OrganizationViewer & { user: { userId: string; isAdmin: boolean } };
 
+/** `message` is the English fallback; `code` is the stable key the client words (srv_<code>). */
 export class OrganizationError extends Error {
-  constructor(message: string, public status = 400) {
+  constructor(message: string, public status = 400, public code?: string) {
     super(message);
   }
 }
@@ -64,7 +65,7 @@ export async function organizationIdForRep(repId: number): Promise<number> {
   // An explicitly blocked/removed Rep must not escape that decision by getting
   // a fresh Organization. Only accounts that have never been assigned get the
   // backwards-compatible individual Organization.
-  if (memberships.length > 0) throw new OrganizationError("This Rep has no active Organization.", 403);
+  if (memberships.length > 0) throw new OrganizationError("This person has no active organization.", 403, "no_active_organization");
   return ensureOrganizationForRep(repId);
 }
 
@@ -75,7 +76,7 @@ export async function organizationIdForRep(repId: number): Promise<number> {
  */
 export async function ensureOrganizationForRep(repId: number, actorUserId?: string): Promise<number> {
   const [rep] = await db.select().from(salesReps).where(eq(salesReps.id, repId));
-  if (!rep || rep.deletedAt) throw new OrganizationError("Rep not found", 404);
+  if (!rep || rep.deletedAt) throw new OrganizationError("Person not found", 404, "rep_not_found");
   const slug = `rep-${rep.id}`;
   return db.transaction(async (tx) => {
     const current = await tx.select({
@@ -87,7 +88,7 @@ export async function ensureOrganizationForRep(repId: number, actorUserId?: stri
       .orderBy(desc(organizationMemberships.updatedAt));
     const active = current.find((membership) => membership.isActive && !membership.blockedAt);
     if (active) return active.organizationId;
-    if (current.length > 0) throw new OrganizationError("This Rep has no active Organization.", 403);
+    if (current.length > 0) throw new OrganizationError("This person has no active organization.", 403, "no_active_organization");
 
     // HTTP actors always reference a real user. Integration/import callers may
     // provide a service identifier instead; fall back to the Rep's own user so
@@ -150,12 +151,12 @@ export async function activeOrganizationIds(actor: OrganizationActor): Promise<n
 
 export async function assertOrganizationAccess(actor: OrganizationActor, organizationId: number, manage = false) {
   const [organization] = await db.select().from(organizations).where(eq(organizations.id, organizationId));
-  if (!organization) throw new OrganizationError("Organization not found", 404);
+  if (!organization) throw new OrganizationError("Organization not found", 404, "organization_not_found");
   const memberships = managesEveryOrganization(actor) ? [] : await membershipsForRep(actor.rep.id);
   const allowed = manage
     ? canManageOrganization(actor, memberships, organizationId)
     : canViewOrganization(actor, memberships, organizationId);
-  if (!allowed) throw new OrganizationError("You do not have access to this Organization.", 403);
+  if (!allowed) throw new OrganizationError("You do not have access to this organization.", 403, "organization_access_denied");
   return { organization, memberships };
 }
 
@@ -232,9 +233,9 @@ function slugBase(name: string) {
 }
 
 export async function createOrganization(input: { name: string; repAdminId: number }, actor: OrganizationActor) {
-  if (!managesEveryOrganization(actor)) throw new OrganizationError("Manager access required", 403);
+  if (!managesEveryOrganization(actor)) throw new OrganizationError("Only an Xpot admin or a manager can do this.", 403, "manager_required");
   const [rep] = await db.select().from(salesReps).where(eq(salesReps.id, input.repAdminId));
-  if (!rep || rep.deletedAt) throw new OrganizationError("Rep not found", 404);
+  if (!rep || rep.deletedAt) throw new OrganizationError("Person not found", 404, "rep_not_found");
   const slug = `${slugBase(input.name)}-${randomBytes(3).toString("hex")}`;
   return db.transaction(async (tx) => {
     const [organization] = await tx.insert(organizations).values({
@@ -264,7 +265,7 @@ export async function updateOrganization(
   input: { name?: string; isActive?: boolean },
   actor: OrganizationActor,
 ) {
-  if (!managesEveryOrganization(actor)) throw new OrganizationError("Manager access required", 403);
+  if (!managesEveryOrganization(actor)) throw new OrganizationError("Only an Xpot admin or a manager can do this.", 403, "manager_required");
   await assertOrganizationAccess(actor, organizationId, true);
   const [updated] = await db.update(organizations).set({ ...input, updatedAt: new Date() })
     .where(eq(organizations.id, organizationId)).returning();
@@ -305,12 +306,12 @@ export async function addOrganizationMember(
 ) {
   await assertOrganizationAccess(actor, organizationId, true);
   const [rep] = await db.select().from(salesReps).where(eq(salesReps.id, repId));
-  if (!rep || rep.deletedAt) throw new OrganizationError("Rep not found", 404);
+  if (!rep || rep.deletedAt) throw new OrganizationError("Person not found", 404, "rep_not_found");
   const [existing] = await db.select().from(organizationMemberships).where(and(
     eq(organizationMemberships.organizationId, organizationId),
     eq(organizationMemberships.repId, repId),
   ));
-  if (existing) throw new OrganizationError("This Rep already belongs to the Organization.", 409);
+  if (existing) throw new OrganizationError("This person already belongs to the organization.", 409, "organization_member_exists");
   const [membership] = await db.insert(organizationMemberships).values({
     organizationId,
     repId,
@@ -329,7 +330,7 @@ async function assertNotLastAdmin(organizationId: number, repId: number) {
     sql`${organizationMemberships.blockedAt} IS NULL`,
   ));
   if (admins.length === 1 && admins[0].repId === repId) {
-    throw new OrganizationError("Assign another Rep Admin before removing or blocking the last one.", 409);
+    throw new OrganizationError("Make someone else org admin before removing or suspending the last one.", 409, "organization_last_admin");
   }
 }
 
@@ -344,7 +345,7 @@ export async function updateOrganizationMember(
     eq(organizationMemberships.organizationId, organizationId),
     eq(organizationMemberships.repId, repId),
   ));
-  if (!current) throw new OrganizationError("Organization member not found", 404);
+  if (!current) throw new OrganizationError("Organization member not found", 404, "organization_member_not_found");
   const removesAdmin = current.role === "admin" && (
     input.role === "member" || input.isActive === false || input.blockedReason !== undefined
   );
@@ -370,7 +371,7 @@ export async function removeOrganizationMember(organizationId: number, repId: nu
     eq(organizationMemberships.organizationId, organizationId),
     eq(organizationMemberships.repId, repId),
   ));
-  if (!current) throw new OrganizationError("Organization member not found", 404);
+  if (!current) throw new OrganizationError("Organization member not found", 404, "organization_member_not_found");
   if (current.role === "admin") await assertNotLastAdmin(organizationId, repId);
   await db.delete(organizationMemberships).where(eq(organizationMemberships.id, current.id));
   await audit(organizationId, "member_removed", actor, repId, {});

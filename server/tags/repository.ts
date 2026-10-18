@@ -38,6 +38,7 @@ import { JOURNEY_PRODUCT_LABELS, tagActionEntry, type JourneySource } from "#sha
 import { resolveTagFace } from "#shared/tagFace.js";
 import type { TagStockMetric } from "#shared/tagMetrics.js";
 import { kitCode } from "#shared/tagKits.js";
+import { tagSystemReason } from "#shared/tagReasons.js";
 import { checkCodes, handOutBlocker, takeBackBlocker, type DistributionCheck, type DistributionPiece } from "#shared/tagDistribution.js";
 import type { TagPieceQueue } from "#shared/tagQueues.js";
 import { parseTagIntakeScan } from "#shared/tagIntake.js";
@@ -464,7 +465,7 @@ export async function transitionTag(
         leadId: null, destinationUrl: null, destinationType: null, utmEnabled: false, utmCampaign: null,
         assignedAt: null, activatedAt: null, disabledAt: null, soldAt: null, activatedByRepId: null,
       });
-      await writeHistory(tx, tag, { destinationUrl: null, destinationType: null }, actor.userId, reason ?? "Unassigned");
+      await writeHistory(tx, tag, { destinationUrl: null, destinationType: null }, actor.userId, reason ?? tagSystemReason("unlinked"));
     }
     const [updated] = await tx.update(tags).set(set).where(eq(tags.id, id)).returning();
     console.log(`[tags] ${action} ${tag.publicCode}: ${tag.status} → ${plan.status} (user ${actor.userId})`);
@@ -529,7 +530,7 @@ export async function assignTag(
     if (changingOwner && tag.leadId && (tag.destinationUrl || tag.destinationType)) {
       if (tag.status === "active") throw new TagError("Disable the tag before moving it to another customer", 409, "tag_pause_before_move");
       Object.assign(set, { destinationUrl: null, destinationType: null, utmEnabled: false, utmCampaign: null });
-      await writeHistory(tx, tag, { destinationUrl: null, destinationType: null }, userId, "Re-assigned to another customer");
+      await writeHistory(tx, tag, { destinationUrl: null, destinationType: null }, userId, tagSystemReason("reassigned"));
     }
     const [updated] = await tx.update(tags).set(set).where(eq(tags.id, id)).returning();
     console.log(`[tags] assign ${tag.publicCode} → lead ${leadId} (user ${userId ?? "?"})`);
@@ -2157,13 +2158,16 @@ export async function getTagDashboard(repId: number | null, days = 30, now: Date
   const eventScope = repId === null ? sql`true` : sql`e.rep_id = ${repId}`;
   const inPeriod = sql`e.occurred_at >= ${since} AND ${COUNTABLE} AND ${eventScope}`;
 
-  // Every rep's: the stock is what sits in resellers' kits ("Pieces with resellers"), not the house's.
-  const withRep = repId === null ? sql`AND t.rep_id IS NOT NULL` : sql``;
+  // The shared stock numbers (shared/tagMetrics.ts), so the dashboard reads what Overview, Inventory and
+  // Resellers read: "in stock" is the unsold stock in resellers' hands (the rep's own, for a rep), set-up and
+  // live pieces included; "sold" is an active financial sale in the period (as the Resellers report counts it).
   const [totals] = await rows<{ in_stock: number; active: number; sold: number; missing: number }>(sql`
     SELECT
-      count(*) FILTER (WHERE t.status = 'inventory' AND t.stock_status = 'available' ${withRep})::int AS in_stock,
+      ${countMetricSql("withResellers")} AS in_stock,
       count(*) FILTER (WHERE t.status = 'active')::int AS active,
-      count(*) FILTER (WHERE t.sold_at >= ${since})::int AS sold,
+      count(*) FILTER (WHERE EXISTS (
+        SELECT 1 FROM sales_sale_tags st WHERE st.tag_id = t.id AND st.status = 'active' AND st.sold_at >= ${since}
+      ))::int AS sold,
       count(*) FILTER (WHERE t.status IN ('assigned', 'active') AND t.nfc_provisioning_status IN ('not_programmed', 'failed'))::int AS missing
     FROM tags t WHERE ${tagScope}
   `);

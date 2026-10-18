@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { refusalBody } from "../../lib/validation.js";
 import { and, asc, desc, eq, inArray, notInArray, sql } from "drizzle-orm";
 import { db } from "../../db.js";
 import { storage } from "../../storage.js";
@@ -400,7 +401,7 @@ export function createProspectingRouter() {
     try {
       organizationId = await organizationIdForRep(actor.rep.id);
     } catch (error) {
-      if (error instanceof OrganizationError) return res.status(error.status).json({ message: error.message });
+      if (error instanceof OrganizationError) return res.status(error.status).json(refusalBody(error));
       throw error;
     }
     // The selling day starts at visit one. Getting from the rep's current
@@ -697,7 +698,7 @@ export function createProspectingRouter() {
       try {
         organizationId = await organizationIdForRep(actor.rep.id);
       } catch (error) {
-        if (error instanceof OrganizationError) return res.status(error.status).json({ message: error.message });
+        if (error instanceof OrganizationError) return res.status(error.status).json(refusalBody(error));
         throw error;
       }
     }
@@ -776,7 +777,7 @@ export function createProspectingRouter() {
       try {
         organizationId = await organizationIdForRep(actor.rep.id);
       } catch (error) {
-        if (error instanceof OrganizationError) return res.status(error.status).json({ message: error.message });
+        if (error instanceof OrganizationError) return res.status(error.status).json(refusalBody(error));
         throw error;
       }
     }
@@ -879,7 +880,7 @@ export function createProspectingRouter() {
         const published = await publishProspectingRouteForRep(route.id, actor.rep.id);
         return res.json(published);
       } catch (error) {
-        if (error instanceof OrganizationError) return res.status(error.status).json({ message: error.message });
+        if (error instanceof OrganizationError) return res.status(error.status).json(refusalBody(error));
         throw error;
       }
     }
