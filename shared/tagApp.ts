@@ -228,3 +228,48 @@ export function decidePhoneWrite(expectedUrl: string, readbackUrl: string | null
   if (readbackUrl === expectedUrl) return { ok: true, status: "verified" };
   return { ok: false, status: "failed", error: `Chip holds ${JSON.stringify(readbackUrl)}, expected ${expectedUrl}` };
 }
+
+// ─── "My pieces" filters ──────────────────────────────────────────────────────
+
+/** A set-up piece (linked or live) whose chip holds nothing yet: the dashboard's "chip not written" alert. */
+export function chipNeedsWriting(tag: { status: string; nfcStatus: string }): boolean {
+  return (tag.status === "assigned" || tag.status === "active") && (tag.nfcStatus === "not_programmed" || tag.nfcStatus === "failed");
+}
+
+/** Where the piece is in its life. "setup": not live yet (in the kit, or linked without a link). */
+export const PIECE_STATUS_FILTERS = ["all", "setup", "active", "off"] as const;
+export type PieceStatusFilter = (typeof PIECE_STATUS_FILTERS)[number];
+/** Whether a financial sale was recorded; independent of the status. */
+export const PIECE_SALE_FILTERS = ["all", "sold", "unsold"] as const;
+export type PieceSaleFilter = (typeof PIECE_SALE_FILTERS)[number];
+
+export interface PieceFilters {
+  status: PieceStatusFilter;
+  sale: PieceSaleFilter;
+  /** "missing": only pieces whose chip still needs writing (chipNeedsWriting). */
+  chip: "all" | "missing";
+}
+
+/**
+ * Reads the list's URL values. Older links mixed both axes in `status`
+ * ("stock" meant unsold, "sold" meant sold); they still land on the same pieces.
+ */
+export function parsePieceFilters(values: { status?: string | null; sale?: string | null; chip?: string | null }): PieceFilters {
+  const legacySale = values.status === "stock" ? "unsold" : values.status === "sold" ? "sold" : null;
+  const status = (PIECE_STATUS_FILTERS as readonly string[]).includes(values.status ?? "") ? values.status as PieceStatusFilter : "all";
+  const sale = (PIECE_SALE_FILTERS as readonly string[]).includes(values.sale ?? "") ? values.sale as PieceSaleFilter : legacySale ?? "all";
+  return { status, sale, chip: values.chip === "missing" ? "missing" : "all" };
+}
+
+export function matchesPieceFilters(
+  tag: { status: string; saleId: number | null; nfcStatus: string },
+  filters: PieceFilters,
+): boolean {
+  if (filters.status === "setup" && tag.status !== "inventory" && tag.status !== "assigned") return false;
+  if (filters.status === "active" && tag.status !== "active") return false;
+  if (filters.status === "off" && tag.status !== "disabled") return false;
+  if (filters.sale === "sold" && !tag.saleId) return false;
+  if (filters.sale === "unsold" && tag.saleId) return false;
+  if (filters.chip === "missing" && !chipNeedsWriting(tag)) return false;
+  return true;
+}

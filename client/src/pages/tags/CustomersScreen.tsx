@@ -51,7 +51,7 @@ export default function CustomersScreen() {
         const location = lead?.locations?.[0];
         const place = [location?.city, location?.state].filter(Boolean).join(", ");
         const detail = place || lead?.industry || lead?.phone || null;
-        const name = lead?.name || t("customerFallback", { id: summary.leadId });
+        const name = summary.name || lead?.name?.trim() || t("customerUnnamed");
         return {
           ...summary,
           name,

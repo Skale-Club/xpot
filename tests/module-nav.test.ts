@@ -33,6 +33,14 @@ describe("contextOfPath", () => {
 });
 
 describe("moduleGroups", () => {
+  it("an open piece keeps My pieces selected, not the dashboard", () => {
+    const [work] = moduleGroups("tags", rep, labels);
+    const active = (path: string) => work.items.filter((item) => item.match(path)).map((item) => item.href);
+    expect(active("/tags/t/A7K3P9X2")).toEqual(["/tags/pieces"]);
+    expect(active("/tags/pieces/A7K3P9X2")).toEqual(["/tags/pieces"]);
+    expect(active("/tags")).toEqual(["/tags"]);
+    expect(active("/tags/direct")).toEqual(["/tags"]);
+  });
   it("a rep sees the module's screens and no Manage group", () => {
     expect(moduleGroups("tags", rep, labels)).toHaveLength(1);
     expect(hrefs(moduleGroups("visits", rep, labels))).toEqual(["/dashboard", "/route", "/leads", "/tasks", "/sales"]);

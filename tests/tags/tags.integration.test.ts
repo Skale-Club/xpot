@@ -249,7 +249,7 @@ test.skipIf(!enabled)("tags: kits, reseller isolation, sales, scans, report, pro
     );
 
     // Pieces per customer for the Visits side: Ana sees her customer, Bruno nothing.
-    assert.deepEqual((await api("GET", "/api/xpot/tags/by-lead", "it-ana")).json, [{ leadId, pieces: 2, live: 2, scansLast30: 4 }]);
+    assert.deepEqual((await api("GET", "/api/xpot/tags/by-lead", "it-ana")).json, [{ leadId, name: "Taqueria El Sol", pieces: 2, live: 2, scansLast30: 4 }]);
     assert.deepEqual((await api("GET", "/api/xpot/tags/by-lead", "it-bruno")).json, []);
     // Selling a Google review piece kept the business's Place ID on the lead.
     const [place] = (await db.execute(sql`SELECT google_place_id FROM sales_leads WHERE id = ${leadId}`)).rows as any[];

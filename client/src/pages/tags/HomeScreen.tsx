@@ -28,7 +28,6 @@ import {
   CARD,
   EYEBROW_MUTED,
   INPUT,
-  SHEET_TITLE,
   Spinner,
   TapAnimation,
 } from "./ui";
@@ -252,15 +251,9 @@ export default function HomeScreen() {
         />
       )}
 
-      <BottomSheet open={sheet?.kind === "read"} onClose={() => setSheet(null)} title={t("readPiece")}>
-        <h2 className={SHEET_TITLE}>{t("readPiece")}</h2>
-        {banner && (
-          <div className="mt-3">
-            <Banner banner={banner} />
-          </div>
-        )}
+      <BottomSheet open={sheet?.kind === "read"} onClose={() => setSheet(null)} title={t("readPiece")} banner={banner}>
         {/* QR first: it always works, while a chip is only found once it has been written. */}
-        <div className="mt-4 grid grid-cols-2 gap-3">
+        <div className="mt-1 grid grid-cols-2 gap-3">
           <button
             type="button"
             onClick={() => {
@@ -330,8 +323,7 @@ export default function HomeScreen() {
       </BottomSheet>
 
       <BottomSheet open={sheet?.kind === "empty"} onClose={() => setSheet(null)} title={t("chipEmpty")}>
-        <h2 className={SHEET_TITLE}>{t("chipEmpty")}</h2>
-        <div className="mt-5 space-y-3">
+        <div className="mt-2 space-y-3">
           <button type="button" onClick={() => navigate(directPath())} className={BTN_DIRECT}>
             <Link2 className="h-5 w-5" />
             {t("openDirect")}

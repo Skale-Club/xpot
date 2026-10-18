@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "wouter";
-import { AlertCircle, ArrowLeft, ArrowRight, Check, ChevronDown, ClipboardPaste, Copy, Link2, Loader2, X, type LucideIcon } from "lucide-react";
-import { formatPhoneMask, isSocialNetwork, looksLikeLink, normalizeUrlInput, SOCIAL_NETWORKS, socialHandleOf, socialNetworkOf, socialUrl, type SocialNetwork } from "@shared/tagApp";
+import { AlertCircle, ArrowLeft, ArrowRight, Check, ChevronDown, ClipboardPaste, Copy, Link2, Loader2, Nfc, X, type LucideIcon } from "lucide-react";
+import { chipNeedsWriting, formatPhoneMask, isSocialNetwork, looksLikeLink, normalizeUrlInput, SOCIAL_NETWORKS, socialHandleOf, socialNetworkOf, socialUrl, type SocialNetwork } from "@shared/tagApp";
+import { stockBlock } from "@shared/tags";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
+import { CHIP_STATUS_TONE, PIECE_STATUS_TONE, Pill, SOLD_TONE, STOCK_STATUS_TONE } from "@/components/xpot/StatusPill";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
+import { tagsMessages } from "@/i18n/messages/tags";
 import { copyToClipboard, haptic, readClipboard, type BannerState } from "./lib";
 
 // Class kit for the Tags screens, in Xpot's dark glass style. Blue/indigo is an
@@ -34,6 +37,7 @@ export const ICON_BLOCK_DIRECT = "flex shrink-0 items-center justify-center roun
 export function TopBar({
   title,
   back,
+  onBack,
   eyebrow,
   identity = "xpot",
   right,
@@ -43,6 +47,8 @@ export function TopBar({
 }: {
   title: string;
   back?: string;
+  /** Runs instead of following `back` (which stays the link's address), e.g. to go back in history. */
+  onBack?: () => void;
   eyebrow?: string;
   identity?: Identity;
   right?: ReactNode;
@@ -60,6 +66,7 @@ export function TopBar({
       {back && (
         <Link
           href={back}
+          onClick={onBack ? (e) => { e.preventDefault(); onBack(); } : undefined}
           aria-label={t("back")}
           className="-ml-2 mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/80 active:bg-white/10"
         >
@@ -149,7 +156,45 @@ export function Spinner({ className = "h-5 w-5" }: { className?: string }) {
 
 // Status pills: one shape and palette for admin and app (components/xpot/StatusPill.tsx).
 export { Pill, type PillTone } from "@/components/xpot/StatusPill";
-export { PIECE_STATUS_TONE as STATUS_TONE, CHIP_STATUS_TONE as CHIP_TONE, SOLD_TONE } from "@/components/xpot/StatusPill";
+export { PIECE_STATUS_TONE as STATUS_TONE, CHIP_STATUS_TONE as CHIP_TONE, STOCK_STATUS_TONE as STOCK_TONE, SOLD_TONE } from "@/components/xpot/StatusPill";
+
+/**
+ * A piece's state wherever it is listed: where it is in its life, a stock problem
+ * that keeps it from being set up or sold (not received, damaged, lost), and sold.
+ */
+export function PieceStatusPills({ tag }: { tag: { status: string; stockStatus: string; saleId: number | null } }) {
+  const t = useT(tagsMessages);
+  const stock = stockBlock(tag.stockStatus);
+  return (
+    <>
+      <Pill tone={PIECE_STATUS_TONE[tag.status] ?? "slate"}>{t(`status_${tag.status}` as "status_active")}</Pill>
+      {stock && <Pill tone={STOCK_STATUS_TONE[stock]}>{t(`stock_${stock}`)}</Pill>}
+      {tag.saleId && <Pill tone={SOLD_TONE}>{t("soldBadge")}</Pill>}
+    </>
+  );
+}
+
+/** The NFC chip of a listed piece: a red pill when it still needs writing, else a small coloured mark. */
+export function ChipMark({ tag }: { tag: { status: string; nfcStatus: string } }) {
+  const t = useT(tagsMessages);
+  const label = t(`chip_${tag.nfcStatus}` as "chip_verified");
+  if (chipNeedsWriting(tag)) {
+    return (
+      <Pill tone="red" className="gap-1">
+        <Nfc className="h-3 w-3" aria-hidden="true" />
+        {label}
+      </Pill>
+    );
+  }
+  const tone = CHIP_STATUS_TONE[tag.nfcStatus] ?? "slate";
+  const color = tone === "green" ? "text-emerald-300/80" : tone === "amber" ? "text-amber-300/80" : tone === "red" ? "text-red-300/80" : "text-white/30";
+  return (
+    <span className={`inline-flex h-6 w-6 items-center justify-center ${color}`} title={label} data-chip={tag.nfcStatus}>
+      <Nfc className="h-3.5 w-3.5" aria-hidden="true" />
+      <span className="sr-only">{label}</span>
+    </span>
+  );
+}
 
 export function CopyButton({ text, label, large = false }: { text: string; label: string; large?: boolean }) {
   const t = useT(commonMessages);
@@ -415,16 +460,62 @@ export function FieldLabel({ children }: { children: ReactNode }) {
   return <span className={`mb-1.5 block ${EYEBROW_MUTED}`}>{children}</span>;
 }
 
-/** Slide-up sheet with a dimmed backdrop; a centred dialog from `lg` up. */
-/** A pop-up, centered on phone and desktop. (Named for when it slid up from the bottom.) */
-export function BottomSheet({ open, onClose, children, title }: { open: boolean; onClose: () => void; children: ReactNode; title?: string }) {
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/**
+ * A pop-up, centered on phone and desktop. (Named for when it slid up from the bottom.)
+ * With a `title` it draws the title row and its X; `banner` repeats the screen's
+ * message inside, since the page banner sits behind the pop-up. Escape closes it,
+ * focus starts inside and Tab stays inside until it closes.
+ */
+export function BottomSheet({ open, onClose, children, title, icon, banner }: {
+  open: boolean;
+  onClose: () => void;
+  children: ReactNode;
+  title?: string;
+  /** Shown before the title. */
+  icon?: ReactNode;
+  banner?: BannerState;
+}) {
   const t = useT(commonMessages);
+  const panel = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
   useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    const opener = document.activeElement as HTMLElement | null;
+    // The first field or button, unless something inside asked for focus (autoFocus).
+    const node = panel.current;
+    if (node && !node.contains(document.activeElement)) {
+      const first = Array.from(node.querySelectorAll<HTMLElement>(FOCUSABLE)).find((el) => el.dataset.sheetClose === undefined);
+      (first ?? node).focus();
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        // Only the top-most sheet closes, and nothing behind it (a desktop pane) does too.
+        e.stopPropagation();
+        closeRef.current();
+        return;
+      }
+      if (e.key !== "Tab" || !panel.current) return;
+      const items = Array.from(panel.current.querySelectorAll<HTMLElement>(FOCUSABLE));
+      if (!items.length) return;
+      const [first, last] = [items[0], items[items.length - 1]];
+      if (e.shiftKey && (document.activeElement === first || !panel.current.contains(document.activeElement))) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    node?.addEventListener("keydown", onKey);
     return () => {
+      node?.removeEventListener("keydown", onKey);
       document.body.style.overflow = prev;
+      if (opener && document.contains(opener)) opener.focus();
     };
   }, [open]);
   if (!open) return null;
@@ -437,8 +528,32 @@ export function BottomSheet({ open, onClose, children, title }: { open: boolean;
       aria-modal="true"
       aria-label={title}
     >
-      <button type="button" aria-label={t("close")} onClick={onClose} className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
-      <div className="relative max-h-full w-full max-w-md overflow-y-auto rounded-[28px] border border-white/10 px-5 pb-5 pt-5 lg:max-w-lg lg:pt-6" style={{ background: "#0d1424" }}>
+      <button type="button" tabIndex={-1} aria-label={t("close")} onClick={onClose} className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+      <div
+        ref={panel}
+        tabIndex={-1}
+        className="relative max-h-full w-full max-w-md overflow-y-auto rounded-[28px] border border-white/10 px-5 pb-5 pt-5 outline-none lg:max-w-lg lg:pt-6"
+        style={{ background: "#0d1424" }}
+      >
+        {title ? (
+          <div className="-mr-2 -mt-1 mb-3 flex items-center justify-between gap-2">
+            <h2 className={`${SHEET_TITLE} flex min-w-0 items-center gap-2`}>
+              {icon}
+              <span className="min-w-0 break-words">{title}</span>
+            </h2>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label={t("close")}
+              data-sheet-close=""
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/60 hover:bg-white/10 active:bg-white/10"
+              data-testid="button-sheet-close"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+        ) : null}
+        {banner ? <Banner banner={banner} /> : null}
         {children}
       </div>
     </div>

@@ -14,7 +14,7 @@ import { ContentQr } from "./ContentQr";
 import LockSheet from "./LockSheet";
 import WriteSheet, { type WriteResult } from "./WriteSheet";
 import { ageOf, pushRecent, shortUrl, tagsGet, tagsPost, useBanner, directPath } from "./lib";
-import { BTN_DIRECT, Banner, CARD, CopyButton, EYEBROW_MUTED, FieldLabel, ICON_BLOCK_DIRECT, INPUT, LinkInput, Pill, TopBar } from "./ui";
+import { BTN_DIRECT, Banner, CARD, CHIP_TONE, CopyButton, EYEBROW_MUTED, FieldLabel, ICON_BLOCK_DIRECT, INPUT, LinkInput, Pill, TopBar } from "./ui";
 
 const WRITES_KEY = ["/api/xpot/tag-direct-writes"];
 
@@ -221,7 +221,8 @@ export default function DirectScreen() {
                       <span className="block truncate text-xs text-white/40">{[w.leadName, w.label].filter(Boolean).join(" · ") || t("noCustomer")}</span>
                     </button>
                     <div className="flex shrink-0 flex-col items-end gap-1">
-                      <Pill tone={w.verified ? "green" : "slate"}>{w.verified ? t("checked") : t("written")}</Pill>
+                      {/* The piece screen's chip vocabulary: written but unchecked needs a test (amber). */}
+                      <Pill tone={w.verified ? CHIP_TONE.verified : CHIP_TONE.programmed}>{w.verified ? t("chip_verified") : t("chip_programmed")}</Pill>
                       <span className="text-xs text-white/35">{t(age.key, { n: age.n })}</span>
                     </div>
                   </li>

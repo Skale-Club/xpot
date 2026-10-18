@@ -2,9 +2,10 @@ import { useEffect, useMemo, useState, type ComponentType, type ReactNode } from
 import { Link, useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ExternalLink, Link2, MapPin, Package, Plus, Radio, ScanLine, Search, Star, Unlink } from "lucide-react";
-import type { TagListItem } from "@shared/tagsApi";
+import type { LeadTagSummary, TagListItem } from "@shared/tagsApi";
 import { validateChipContent } from "@shared/chipContent";
 import { guessDestinationType, normalizeUrlInput } from "@shared/tagApp";
+import { stockBlock } from "@shared/tags";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
@@ -18,12 +19,12 @@ import { InlineField, validateEmail } from "@/pages/xpot/components/InlineField"
 import { InlineStateSelect } from "@/components/StateSelect";
 import { useXpotModules } from "@/components/ModuleSwitch";
 import { LeadContacts } from "@/pages/xpot/components/leads/LeadContacts";
-import type { FullSalesLead, GoogleBusinessProfile } from "@/pages/xpot/types";
+import type { FullSalesLead, GoogleBusinessProfile, SalesLead, SalesLeadContact, SalesLeadLocation } from "@/pages/xpot/types";
 import { usePlaceSearch } from "@/pages/xpot/usePlaceSearch";
 import TagScreen from "./TagScreen";
-import { APP_BASE, errorText, shortUrl, tagPath, tagsGet, tagsPost, useBanner } from "./lib";
+import { APP_BASE, errorText, shortUrl, tagPath, tagsGet, tagsPost, useBanner, type BannerState } from "./lib";
 import {
-  Banner, BottomSheet, BTN_PRIMARY, BTN_TERTIARY, CARD, EYEBROW_MUTED, INPUT, LinkInput, Pill, SHEET_TITLE, SOLD_TONE, STATUS_TONE, Spinner,
+  Banner, BottomSheet, BTN_PRIMARY, BTN_TERTIARY, CARD, EYEBROW_MUTED, INPUT, LinkInput, ChipMark, PieceStatusPills, Spinner,
 } from "./ui";
 
 // One customer of the reseller: the company (its details, contacts and Google
@@ -31,12 +32,15 @@ import {
 // with what can be done to them from here: open, link another, change the
 // link of several at once, unlink.
 
+/** GET /api/xpot/leads/:id. */
+type LeadDetail = { lead: SalesLead; locations: SalesLeadLocation[]; contacts: SalesLeadContact[] };
+
 const MINI_BTN =
   "inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] px-3 text-sm font-semibold text-white/85 transition-colors hover:bg-white/[0.08] active:bg-white/10 disabled:opacity-40";
 
 /** Pieces this person can link to a customer: their own, unconfigured, physically in hand. */
 function isFreePiece(tag: TagListItem) {
-  return !tag.leadId && tag.status === "inventory" && tag.stockStatus !== "pending";
+  return !tag.leadId && tag.status === "inventory" && !stockBlock(tag.stockStatus);
 }
 
 /** The link most of a customer's pieces already open, offered as the default for a new one. */
@@ -72,12 +76,8 @@ function Panel({ title, right, children }: { title: ReactNode; right?: ReactNode
   );
 }
 
-function SheetHeading({ children }: { children: ReactNode }) {
-  return children ? <h2 className={`${SHEET_TITLE} mb-4`}>{children}</h2> : null;
-}
-
 /** The company's Google Business Profile: live rating when linked, a search to link it when not. */
-function GoogleProfile({ lead, onDone }: { lead: FullSalesLead; onDone: (text: string, ok: boolean) => void }) {
+function GoogleProfile({ lead, onDone, banner }: { lead: FullSalesLead; onDone: (text: string, ok: boolean) => void; banner: BannerState }) {
   const t = useT(tagsMessages);
   const tc = useT(commonMessages);
   const qc = useQueryClient();
@@ -159,8 +159,7 @@ function GoogleProfile({ lead, onDone }: { lead: FullSalesLead; onDone: (text: s
         </>
       )}
 
-      <BottomSheet open={picking} onClose={() => setPicking(false)} title={t("customerGoogleLink")}>
-        <SheetHeading>{t("customerGoogleLink")}</SheetHeading>
+      <BottomSheet open={picking} onClose={() => setPicking(false)} title={t("customerGoogleLink")} banner={banner}>
         <div className="relative">
           <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
           <input
@@ -212,8 +211,13 @@ export default function CustomerScreen({ leadId }: { leadId: number }) {
   const canEditAddress = useXpotModules().includes("visits");
   const { banner, show } = useBanner();
 
-  const leadsQuery = useQuery<FullSalesLead[]>({ queryKey: ["/api/xpot/leads"], staleTime: 60_000 });
-  const lead = leadsQuery.data?.find((l) => l.id === leadId) ?? null;
+  // The company itself, not a search through the leads list: that list is paged and
+  // scoped, and a customer holding the person's pieces must open whoever created it.
+  const leadQuery = useQuery<LeadDetail>({ queryKey: ["/api/xpot/leads", leadId], staleTime: 60_000 });
+  const lead = useMemo<FullSalesLead | null>(
+    () => (leadQuery.data?.lead ? { ...leadQuery.data.lead, locations: leadQuery.data.locations ?? [], contacts: leadQuery.data.contacts ?? [] } : null),
+    [leadQuery.data],
+  );
   // Every piece the person holds: this customer's, and the free ones that can be linked to it.
   const piecesQuery = useQuery({
     queryKey: ["tags", "list", null, null],
@@ -222,10 +226,10 @@ export default function CustomerScreen({ leadId }: { leadId: number }) {
   });
   const pieces = useMemo(() => (piecesQuery.data ?? []).filter((p) => p.leadId === leadId), [piecesQuery.data, leadId]);
   const freePieces = useMemo(() => (piecesQuery.data ?? []).filter(isFreePiece), [piecesQuery.data]);
-  const totals = useMemo(
-    () => pieces.reduce((sum, p) => ({ live: sum.live + (p.status === "active" ? 1 : 0), scans: sum.scans + p.qrInteractions + p.nfcInteractions }), { live: 0, scans: 0 }),
-    [pieces],
-  );
+  const live = useMemo(() => pieces.filter((p) => p.status === "active").length, [pieces]);
+  // The same 30-day count the Customers list shows; the pieces' own counters are all-time.
+  const summariesQuery = useQuery<LeadTagSummary[]>({ queryKey: ["/api/xpot/tags/by-lead"], staleTime: 15_000 });
+  const scans30 = summariesQuery.data?.find((s) => s.leadId === leadId)?.scansLast30 ?? 0;
 
   const [openCode, setOpenCode] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -352,7 +356,7 @@ export default function CustomerScreen({ leadId }: { leadId: number }) {
     }
   };
 
-  if (leadsQuery.isLoading || piecesQuery.isLoading) {
+  if (leadQuery.isLoading || piecesQuery.isLoading) {
     return <div className="flex justify-center py-20 text-white/40"><Spinner className="h-7 w-7" /></div>;
   }
   if (!lead) {
@@ -426,12 +430,12 @@ export default function CustomerScreen({ leadId }: { leadId: number }) {
               />
               <TagPieceMention publicCode={p.publicCode} productType={p.productType} face={p.face} batchCode={p.batchCode} details={p.label ?? undefined} className="min-w-0 flex-1" />
               <span className="hidden w-48 truncate text-xs text-white/45 md:block">{p.destinationUrl ? shortUrl(p.destinationUrl) : "—"}</span>
-              <span className="flex w-24 flex-wrap gap-1">
-                <Pill tone={STATUS_TONE[p.status] ?? "slate"}>{t(`status_${p.status}` as "status_active")}</Pill>
-                {p.saleId && <Pill tone={SOLD_TONE}>{t("soldBadge")}</Pill>}
+              <span className="flex w-24 flex-wrap items-center gap-1">
+                <PieceStatusPills tag={p} />
+                <ChipMark tag={p} />
               </span>
               <span className="w-20 text-right tabular-nums">
-                {p.status === "active" ? (
+                {p.qrInteractions + p.nfcInteractions > 0 ? (
                   <>
                     <span className="block font-semibold text-white">{p.qrInteractions + p.nfcInteractions}</span>
                     <span className="block text-[11px] text-white/40">{p.qrInteractions} QR · {p.nfcInteractions} NFC</span>
@@ -477,8 +481,8 @@ export default function CustomerScreen({ leadId }: { leadId: number }) {
         </div>
         <div className="mt-3 grid grid-cols-3 divide-x divide-white/[0.06] rounded-xl border border-white/[0.06] bg-black/[0.12] lg:mt-0 lg:w-[420px] lg:shrink-0">
           <Metric icon={Package} value={pieces.length} label={t("customersPieces")} />
-          <Metric icon={Radio} value={totals.live} label={t("customersLive")} />
-          <Metric icon={ScanLine} value={totals.scans} label={t("customersScans30")} />
+          <Metric icon={Radio} value={live} label={t("customersLive")} />
+          <Metric icon={ScanLine} value={scans30} label={t("customersScans30")} />
         </div>
       </header>
       <Banner banner={banner} />
@@ -526,12 +530,11 @@ export default function CustomerScreen({ leadId }: { leadId: number }) {
             </div>
           </Panel>
 
-          <GoogleProfile lead={lead} onDone={(text, ok) => show({ tone: ok ? "ok" : "error", text })} />
+          <GoogleProfile lead={lead} banner={banner} onDone={(text, ok) => show({ tone: ok ? "ok" : "error", text })} />
         </div>
       </div>
 
-      <BottomSheet open={linking} onClose={() => setLinking(false)} title={t("customerLinkPieceTitle", { name: lead.name })}>
-        <SheetHeading>{t("customerLinkPieceTitle", { name: lead.name })}</SheetHeading>
+      <BottomSheet open={linking} onClose={() => setLinking(false)} title={t("customerLinkPieceTitle", { name: lead.name })} banner={banner}>
         {freePieces.length === 0 ? (
           <p className="py-6 text-center text-sm text-white/45">{t("customerNoStock")}</p>
         ) : (
@@ -557,8 +560,7 @@ export default function CustomerScreen({ leadId }: { leadId: number }) {
         )}
       </BottomSheet>
 
-      <BottomSheet open={changing} onClose={() => setChanging(false)} title={t.plural("customerChangeLinkTitle", targets.length)}>
-        <SheetHeading>{t.plural("customerChangeLinkTitle", targets.length)}</SheetHeading>
+      <BottomSheet open={changing} onClose={() => setChanging(false)} title={t.plural("customerChangeLinkTitle", targets.length)} banner={banner}>
         <div className="space-y-4">
           <p className="text-sm text-white/50">{t("customerChangeLinkHint")}</p>
           <LinkInput value={link} onChange={setLink} face={targets[0]?.face} placeholder={t("linkPlaceholder")} onPasteFailed={() => show({ tone: "error", text: tc("pasteFailed") })} />
@@ -569,8 +571,7 @@ export default function CustomerScreen({ leadId }: { leadId: number }) {
         </div>
       </BottomSheet>
 
-      <BottomSheet open={unlinking != null} onClose={() => setUnlinking(null)} title={unlinking ? t("customerUnlinkTitle", { code: unlinking.publicCode }) : undefined}>
-        <SheetHeading>{unlinking ? t("customerUnlinkTitle", { code: unlinking.publicCode }) : undefined}</SheetHeading>
+      <BottomSheet open={unlinking != null} onClose={() => setUnlinking(null)} title={unlinking ? t("customerUnlinkTitle", { code: unlinking.publicCode }) : undefined} banner={banner}>
         <div className="space-y-4">
           <p className="text-sm text-white/55">{t("customerUnlinkHint")}</p>
           <div className="grid grid-cols-2 gap-2">

@@ -6,7 +6,8 @@ import { TagPieceMention } from "@/components/xpot/TagProductThumbnail";
 import { useT } from "@/i18n";
 import { leadsMessages } from "@/i18n/messages/leads";
 import { tagsMessages } from "@/i18n/messages/tags";
-import { tagsGet } from "@/pages/tags/lib";
+import { leadPiecesPath, tagsGet } from "@/pages/tags/lib";
+import { useViewerAccess } from "@/lib/adminMode";
 
 function compactUrl(url: string): string {
   return url.replace(/^https?:\/\/(www\.)?/i, "").replace(/\/$/, "");
@@ -34,7 +35,9 @@ export function LeadPiecesPanel({ leadId, leadName, summary }: {
     staleTime: 15_000,
   });
   const items = pieces.data ?? [];
-  const allHref = `/tags/pieces?lead=${leadId}&name=${encodeURIComponent(leadName)}`;
+  // Same scope as the counts above: everyone's pieces in management mode.
+  const { canManage } = useViewerAccess();
+  const allHref = leadPiecesPath(leadId, leadName, canManage);
 
   return (
     <div className="space-y-3" data-testid="lead-pieces-panel">

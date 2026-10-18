@@ -10,6 +10,7 @@ import {
   encodeTagCode,
   normalizeTagCode,
   planTransition,
+  stockBlock,
   resolveRedirectTarget,
   validateDestinationUrl,
 } from "../../shared/tags.js";
@@ -72,6 +73,16 @@ test("UTMs are only appended when enabled, and off by default for Google Review"
   assert.equal(defaultUtmEnabled("google_review"), false);
   assert.equal(defaultUtmEnabled("website"), true);
   assert.equal(defaultUtmEnabled(null), false);
+});
+
+test("stockBlock: the stock states the app shows as blocking set up and sale", () => {
+  assert.equal(stockBlock("pending"), "pending");
+  assert.equal(stockBlock("damaged"), "damaged");
+  assert.equal(stockBlock("lost"), "lost");
+  for (const stock of ["available", "sold", "internal_use", "reserved", null, undefined]) assert.equal(stockBlock(stock), null);
+  // Same rule as the server's state machine: what stockBlock flags cannot be set up.
+  const base = { status: "inventory", leadId: null, destinationUrl: null, destinationType: null };
+  for (const stock of ["pending", "damaged", "lost"]) assert.equal(planTransition({ ...base, stockStatus: stock }, "assign").ok, false);
 });
 
 test("state machine: inventory → assigned → active ⇄ disabled → retired", () => {

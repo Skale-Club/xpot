@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeftRight, Building2, Contact, DollarSign, ExternalLink, Link2, Lock, Mail, Nfc, Pencil, Phone, Power, QrCode, ScanLine, Search, Smartphone, X } from "lucide-react";
+import { ArrowLeftRight, Building2, Contact, DollarSign, ExternalLink, Link2, Lock, Mail, Nfc, Pencil, Phone, Power, QrCode, ScanLine, Search, Smartphone, Unlink, X } from "lucide-react";
 import type { TagDetail } from "@shared/tagsApi";
-import { TAG_DESTINATION_TYPES, type TagDestinationType } from "@shared/tags";
+import { stockBlock, TAG_DESTINATION_TYPES, type TagDestinationType } from "@shared/tags";
 import { contentKindOf, contentSummary, validateChipContent, type ChipContentKind } from "@shared/chipContent";
 import { guessDestinationType, normalizeUrlInput } from "@shared/tagApp";
 import { buildReviewUrl } from "@shared/reviewLink";
@@ -23,6 +23,7 @@ import LockSheet from "./LockSheet";
 import PieceDashboard from "./PieceDashboard";
 import { isWebNfcSupported } from "./webNfc";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
+import { cameFromInApp } from "@/lib/inAppHistory";
 import { APP_BASE, errorText, getSellTo, haptic, lookupTag, pushRecent, shortUrl, tagPath, tagsGet, tagsPost, useBanner } from "./lib";
 import {
   BTN_PRIMARY,
@@ -39,8 +40,7 @@ import {
   INPUT,
   LinkInput,
   Pill,
-  SHEET_TITLE,
-  SOLD_TONE, STATUS_TONE,
+  PieceStatusPills,
   Spinner,
   TopBar,
 } from "./ui";
@@ -103,7 +103,8 @@ export default function TagScreen({ code, onClose }: {
   const [changingCustomer, setChangingCustomer] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
   const [newName, setNewName] = useState("");
-  const [busy, setBusy] = useState<"save" | "toggle" | "rename" | null>(null);
+  const [busy, setBusy] = useState<"save" | "toggle" | "rename" | "unlink" | null>(null);
+  const [unlinkOpen, setUnlinkOpen] = useState(false);
   const [writeOpen, setWriteOpen] = useState(false);
   const [lockOpen, setLockOpen] = useState(false);
   // iPhone: the NFC Tools steps, shown by themselves until the chip is confirmed, then on "Rewrite".
@@ -156,12 +157,15 @@ export default function TagScreen({ code, onClose }: {
       <X className="h-4 w-4" />
     </button>
   ) : undefined;
-  const back = onClose ? undefined : APP_BASE;
+  // Back returns to where the piece was opened from (a list, a customer, the
+  // dashboard); opened from outside (a scanned QR), it goes to My pieces.
+  const back = onClose ? undefined : `${APP_BASE}/pieces`;
+  const goBack = () => (cameFromInApp() ? window.history.back() : navigate(`${APP_BASE}/pieces`));
 
   if (isLoading) {
     return (
       <>
-        <TopBar title={code} back={back} right={closeButton} />
+        <TopBar title={code} back={back} onBack={back ? goBack : undefined} right={closeButton} />
         <div className="flex justify-center py-20 text-white/40">
           <Spinner className="h-8 w-8" />
         </div>
@@ -173,7 +177,7 @@ export default function TagScreen({ code, onClose }: {
     const title = error ? t("loadFailed") : data?.kind === "not_yours" ? t("notYours") : t("notFound", { code });
     return (
       <>
-        <TopBar title={code} back={back} right={closeButton} />
+        <TopBar title={code} back={back} onBack={back ? goBack : undefined} right={closeButton} />
         <div className={`${CARD} p-6 text-center`}>
           <ScanLine className="mx-auto h-10 w-10 text-white/30" />
           <p className="mt-3 text-lg font-bold text-white" data-testid="text-tag-error">
@@ -203,6 +207,9 @@ export default function TagScreen({ code, onClose }: {
   // An iPhone locks only a chip a tap confirmed (lock a wrong chip and it is lost).
   const canLock = !locked && (manualFlow ? chipConfirmed : !chipMissing);
   const destinationLabel = (value: string) => (isDestinationType(value) ? t(`dest_${value}`) : value);
+  // Not received, damaged or lost: neither set up nor sold until the stock is fixed.
+  const stock = stockBlock(tag.stockStatus);
+  const sellable = tag.stockStatus === "available";
 
   const save = async () => {
     const check = kind === "url"
@@ -283,6 +290,24 @@ export default function TagScreen({ code, onClose }: {
     }
   };
 
+  // Back to the person's stock, with no customer and no link. A sold piece stays put (server rule).
+  const unlink = async () => {
+    setBusy("unlink");
+    try {
+      setDetail(await tagsPost<TagDetail>(`/api/xpot/tags/${tag.id}/unassign`, {}));
+      // The Visits company page lists its pieces too.
+      void qc.invalidateQueries({ queryKey: ["tags", "lead-pieces"] });
+      setUnlinkOpen(false);
+      setLink("");
+      setInitialContent(null);
+      show({ tone: "ok", text: t("customerUnlinked") });
+    } catch (err) {
+      show({ tone: "error", text: errorText(err, tc("requestFailed")) });
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const onWritten = async (result: WriteResult) => {
     setDetail(await tagsPost<TagDetail>(`/api/xpot/tags/${tag.id}/nfc-written`, { readbackUrl: result.readbackUrl, method: result.method }));
   };
@@ -299,13 +324,13 @@ export default function TagScreen({ code, onClose }: {
         title={tag.publicCode}
         titleClassName={CODE_HEADING_TOPBAR}
         back={back}
+        onBack={back ? goBack : undefined}
         right={closeButton}
         picture={<TagPieceVisual productType={tag.productType} face={tag.face} size="md" title={t(`face_${tag.face ?? "none"}` as "face_none")} />}
         sub={
           // The piece's state, then (after a dot) what it is. The face is the picture's job.
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
-            <Pill tone={STATUS_TONE[tag.status] ?? "slate"}>{t(`status_${tag.status}` as "status_active")}</Pill>
-            {tag.saleId && <Pill tone={SOLD_TONE}>{t("soldBadge")}</Pill>}
+            <PieceStatusPills tag={tag} />
             <span className="text-white/20" aria-hidden="true">·</span>
             {tagPlaqueSpec(tag.productType, tag.face, tag.batchCode).model ? (
               <TagModelChips productType={tag.productType} face={tag.face} batchCode={tag.batchCode} className="shrink-0" />
@@ -471,13 +496,17 @@ export default function TagScreen({ code, onClose }: {
         ) : (
           <>
             <p className="mt-2 text-lg font-bold text-white/55">{t("notYetWritten")}</p>
-            <button type="button" onClick={() => setEditing(true)} className={`${BTN_PRIMARY} mt-3`} data-testid="button-setup-piece">
+            {/* The server refuses setting up a piece that is not in stock (shared/tags.ts planTransition). */}
+            {stock && <p className="mt-2 text-sm text-amber-100/85" data-testid="text-stock-blocked">{t(`stockBlocked_${stock}`)}</p>}
+            <button type="button" onClick={() => setEditing(true)} disabled={!!stock} className={`${BTN_PRIMARY} mt-3`} data-testid="button-setup-piece">
               <Power className="h-5 w-5" />
               {t("configurePiece")}
             </button>
           </>
         )}
-        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-white/[0.08] pt-3 text-sm text-white/60">
+        {/* Since the piece was made; the 30-day numbers are in the piece dashboard below. */}
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-white/[0.08] pt-3 text-sm text-white/60" data-testid="piece-all-time-scans">
+          <span className={EYEBROW_MUTED}>{t("allTime")}</span>
           <span className="flex items-center gap-1.5">
             <QrCode className="h-4 w-4 text-blue-300" />
             <span className="font-bold tabular-nums text-white">{tag.qrInteractions}</span> {t("qrScans")}
@@ -498,24 +527,23 @@ export default function TagScreen({ code, onClose }: {
           <span className="font-mono text-xs text-white/40">#{tag.saleId}</span>
         </section>
       ) : (
-        <button type="button" onClick={() => setSaleOpen(true)} className={`${BTN_PRIMARY} mt-3 bg-none !bg-emerald-500`} data-testid="button-sell-this-piece">
-          <DollarSign className="h-5 w-5" /> {t("sellThisPiece")}
-        </button>
+        <>
+          <button type="button" onClick={() => setSaleOpen(true)} disabled={!sellable} className={`${BTN_PRIMARY} mt-3 bg-none !bg-emerald-500`} data-testid="button-sell-this-piece">
+            <DollarSign className="h-5 w-5" /> {t("sellThisPiece")}
+          </button>
+          {/* Only stock in hand sells (server/tags/sales.ts); said once, under the setup card when it is the same reason. */}
+          {!sellable && !(stock && !dest) && (
+            <p className="mt-2 px-1 text-sm text-white/50" data-testid="text-sell-blocked">{stock ? t(`stockBlocked_${stock}`) : t("stockNotForSale")}</p>
+          )}
+        </>
       )}
 
       <PieceDashboard tagId={tag.id} />
 
       {/* The editor, as a pop-up: the customer first (when choosing one), then what the piece opens. */}
-      <BottomSheet open={editing} onClose={closeEditor} title={changingCustomer ? t("changeCustomer") : dest ? t("editDestination") : t("configurePiece")}>
+      {/* Messages (a bad link, a save error) show inside each pop-up too: the page banner is behind it. */}
+      <BottomSheet open={editing} onClose={closeEditor} title={changingCustomer ? t("changeCustomer") : dest ? t("editDestination") : t("configurePiece")} banner={banner}>
         <div className="space-y-4" data-testid="destination-editor">
-          <div className="flex items-center justify-between gap-2">
-            <h2 className={SHEET_TITLE}>{changingCustomer ? t("changeCustomer") : dest ? t("editDestination") : t("configurePiece")}</h2>
-            <button type="button" onClick={closeEditor} aria-label={tc("close")} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/60 active:bg-white/10">
-              <X className="h-5 w-5" />
-            </button>
-          </div>
-          {/* Messages (a bad link, a save error) show here too: the page banner is behind the pop-up. */}
-          <Banner banner={banner} />
           {!needsLead && tag.leadName && (
             <p className="flex items-center gap-2 text-sm text-white/60">
               <Building2 className="h-4 w-4 shrink-0 text-white/40" />
@@ -589,6 +617,12 @@ export default function TagScreen({ code, onClose }: {
             {disabled ? t("switchOn") : t("switchOff")}
           </button>
         )}
+        {tag.leadId && !tag.saleId && (
+          <button type="button" onClick={() => setUnlinkOpen(true)} disabled={busy !== null} className={BTN_TERTIARY} data-testid="button-unlink-piece">
+            <Unlink className="h-5 w-5 text-red-400" />
+            {t("unlinkFromCustomer")}
+          </button>
+        )}
         {!onClose && (
           <button
             type="button"
@@ -602,9 +636,8 @@ export default function TagScreen({ code, onClose }: {
       </div>
 
       {/* Rename the customer, or move the piece to another one. */}
-      <BottomSheet open={renameOpen} onClose={() => setRenameOpen(false)} title={t("renameCustomer")}>
-        <h2 className={SHEET_TITLE}>{t("renameCustomer")}</h2>
-        <div className="mt-4 space-y-3">
+      <BottomSheet open={renameOpen} onClose={() => setRenameOpen(false)} title={t("renameCustomer")} banner={banner}>
+        <div className="space-y-3">
           <div>
             <FieldLabel>{t("customerName")}</FieldLabel>
             <input value={newName} onChange={(e) => setNewName(e.target.value)} maxLength={200} autoCapitalize="words" className={INPUT} data-testid="input-customer-name" />
@@ -617,6 +650,31 @@ export default function TagScreen({ code, onClose }: {
           <button type="button" onClick={startCustomerChange} className={BTN_TERTIARY} data-testid="button-rename-change-instead">
             {t("changeCustomer")}
           </button>
+        </div>
+      </BottomSheet>
+
+      <BottomSheet open={unlinkOpen} onClose={() => setUnlinkOpen(false)} title={t("customerUnlinkTitle", { code: tag.publicCode })} banner={banner}>
+        <div className="space-y-4">
+          {tag.leadName && (
+            <p className="flex items-center gap-2 text-sm text-white/70">
+              <Building2 className="h-4 w-4 shrink-0 text-white/40" />
+              <span className="truncate">{tag.leadName}</span>
+            </p>
+          )}
+          <p className="text-sm text-white/55">{t("customerUnlinkHint")}</p>
+          <div className="grid grid-cols-2 gap-2">
+            <button type="button" className={BTN_TERTIARY} onClick={() => setUnlinkOpen(false)}>{tc("cancel")}</button>
+            <button
+              type="button"
+              disabled={busy !== null}
+              onClick={() => void unlink()}
+              className="flex min-h-[48px] items-center justify-center gap-2 rounded-2xl bg-red-500 px-5 text-base font-bold text-white active:bg-red-600 disabled:opacity-50"
+              data-testid="button-unlink-confirm"
+            >
+              {busy === "unlink" ? <Spinner /> : <Unlink className="h-5 w-5" />}
+              {t("customerUnlink")}
+            </button>
+          </div>
         </div>
       </BottomSheet>
 

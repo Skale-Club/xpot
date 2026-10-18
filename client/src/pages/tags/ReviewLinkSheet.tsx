@@ -7,7 +7,7 @@ import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { errorText, getPosition, haptic, readClipboard, tagsPost } from "./lib";
-import { BTN_PRIMARY, BottomSheet, CARD, EYEBROW_MUTED, INPUT, SHEET_TITLE, Spinner } from "./ui";
+import { BTN_PRIMARY, BottomSheet, CARD, EYEBROW_MUTED, INPUT, Spinner } from "./ui";
 
 /**
  * Finds a business on Google (by name, or from a Maps / share link) and hands
@@ -83,12 +83,8 @@ export default function ReviewLinkSheet({
   const isLink = !!extractFirstUrl(query);
 
   return (
-    <BottomSheet open={open} onClose={onClose} title={t("reviewTitle")}>
-      <div className="flex items-center gap-2">
-        <Star className="h-5 w-5 fill-amber-400 text-amber-400" />
-        <h2 className={SHEET_TITLE}>{t("reviewTitle")}</h2>
-      </div>
-      <p className="mt-1 text-sm text-white/50">{t("reviewHint")}</p>
+    <BottomSheet open={open} onClose={onClose} title={t("reviewTitle")} icon={<Star className="h-5 w-5 shrink-0 fill-amber-400 text-amber-400" />}>
+      <p className="text-sm text-white/50">{t("reviewHint")}</p>
 
       <form
         className="mt-4 space-y-3"

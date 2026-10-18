@@ -183,8 +183,21 @@ export function requireSuperAdmin(req: Request, res: Response, next: NextFunctio
 
 export type XpotActor = NonNullable<Awaited<ReturnType<typeof ensureXpotRep>>>;
 
-export async function canAccessLead(actor: XpotActor, lead: { ownerRepId: number | null; organizationId: number }): Promise<boolean> {
+export async function canAccessLead(
+  actor: XpotActor,
+  lead: { id?: number; ownerRepId: number | null; organizationId: number },
+  options: { viaPieces?: boolean } = {},
+): Promise<boolean> {
   if (isManagerOrAdmin(actor)) return true;
+  if (await ownsOrManagesLead(actor, lead)) return true;
+  // The company holding one of the rep's Tags pieces is their customer too, even
+  // when someone else created the lead (a manager linked the piece, or the lead
+  // landed in another of the rep's Organizations). Reading and editing it is
+  // allowed; destructive calls pass viaPieces: false.
+  return options.viaPieces !== false && lead.id != null && storage.leadHoldsRepPiece(lead.id, actor.rep.id);
+}
+
+async function ownsOrManagesLead(actor: XpotActor, lead: { ownerRepId: number | null; organizationId: number }): Promise<boolean> {
   // Transitional compatibility for isolated unit-test fixtures and pre-migration rows.
   // Production migration 0023 makes organization_id NOT NULL.
   if (!lead.organizationId) return lead.ownerRepId === actor.rep.id;

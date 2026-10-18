@@ -141,9 +141,10 @@ export function moduleGroups(module: XpotModule, viewer: Viewer, l: Labels): Nav
     label: "",
     items: [
       // Writing a chip without Xpot (/tags/direct) is reached from the dashboard, not the nav.
-      { href: "/tags", label: l.tags("navHome"), icon: LayoutDashboard, match: (p) => p === "/tags" || p.startsWith("/tags/t/") || p.startsWith("/tags/direct") },
+      { href: "/tags", label: l.tags("navHome"), icon: LayoutDashboard, match: (p) => p === "/tags" || p.startsWith("/tags/direct") },
       { href: "/tags/customers", label: l.tags("navCustomers"), icon: Building2, match: starts("/tags/customers") },
-      { href: "/tags/pieces", label: l.tags("navPieces"), icon: Package, match: starts("/tags/pieces") },
+      // A piece (/tags/t/<code>) belongs to My pieces, wherever it was opened from.
+      { href: "/tags/pieces", label: l.tags("navPieces"), icon: Package, match: (p) => starts("/tags/pieces")(p) || p.startsWith("/tags/t/") },
     ],
   };
   if (!viewer.canManage) return [work];

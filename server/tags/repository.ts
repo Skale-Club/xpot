@@ -645,10 +645,17 @@ export async function setTagRep(id: string, repId: number | null, userId: string
 
 // ─── Leads (the businesses pieces are sold to) ────────────────────────────────
 
-/** True when the actor may sell pieces to this lead (see canUseLead). */
+/**
+ * True when the actor may sell pieces to this lead (see canUseLead), or when the
+ * company already holds one of the actor's pieces: a lead a manager created and
+ * linked a reseller's piece to is that reseller's customer too.
+ */
 export async function leadUsableBy(actor: TagActor, leadId: number, executor: typeof db | Tx = db): Promise<boolean> {
   const [lead] = await executor.select({ organizationId: salesLeads.organizationId, ownerRepId: salesLeads.ownerRepId }).from(salesLeads).where(eq(salesLeads.id, leadId));
-  return !!lead && canUseLead(actor, lead);
+  if (!lead) return false;
+  if (canUseLead(actor, lead)) return true;
+  const [held] = await executor.select({ id: tags.id }).from(tags).where(and(eq(tags.leadId, leadId), eq(tags.repId, actor.repId))).limit(1);
+  return !!held;
 }
 
 /** A business met while configuring a piece. It becomes a customer only after a financial sale. */
@@ -1833,8 +1840,9 @@ export async function getOverview(now: Date = new Date(), timezoneOffsetMinutes 
 export async function getLeadTagSummaries(actor: TagActor, now: Date = new Date()): Promise<LeadTagSummary[]> {
   const since30 = new Date(now.getTime() - 30 * 86_400_000);
   const scope = actor.isManager ? sql`true` : sql`t.rep_id = ${actor.repId}`;
-  const list = await rows<{ lead_id: number; pieces: number; live: number; scans30: number }>(sql`
+  const list = await rows<{ lead_id: number; name: string | null; pieces: number; live: number; scans30: number }>(sql`
     SELECT t.lead_id,
+           (SELECT l.name FROM sales_leads l WHERE l.id = t.lead_id) AS name,
            count(*)::int AS pieces,
            count(*) FILTER (WHERE t.status = 'active')::int AS live,
            COALESCE(sum(s.n), 0)::int AS scans30
@@ -1846,7 +1854,7 @@ export async function getLeadTagSummaries(actor: TagActor, now: Date = new Date(
     WHERE t.lead_id IS NOT NULL AND ${scope}
     GROUP BY t.lead_id
   `);
-  return list.map((r) => ({ leadId: r.lead_id, pieces: r.pieces, live: r.live, scansLast30: r.scans30 }));
+  return list.map((r) => ({ leadId: r.lead_id, name: r.name?.trim() || null, pieces: r.pieces, live: r.live, scansLast30: r.scans30 }));
 }
 
 /**
@@ -1874,9 +1882,11 @@ export async function getTagDashboard(repId: number | null, days = 30, now: Date
   const eventScope = repId === null ? sql`true` : sql`e.rep_id = ${repId}`;
   const inPeriod = sql`e.occurred_at >= ${since} AND ${COUNTABLE} AND ${eventScope}`;
 
+  // Every rep's: the stock is what sits in resellers' kits ("Pieces with resellers"), not the house's.
+  const withRep = repId === null ? sql`AND t.rep_id IS NOT NULL` : sql``;
   const [totals] = await rows<{ in_stock: number; active: number; sold: number; missing: number }>(sql`
     SELECT
-      count(*) FILTER (WHERE t.status = 'inventory' AND t.stock_status = 'available')::int AS in_stock,
+      count(*) FILTER (WHERE t.status = 'inventory' AND t.stock_status = 'available' ${withRep})::int AS in_stock,
       count(*) FILTER (WHERE t.status = 'active')::int AS active,
       count(*) FILTER (WHERE t.sold_at >= ${since})::int AS sold,
       count(*) FILTER (WHERE t.status IN ('assigned', 'active') AND t.nfc_provisioning_status IN ('not_programmed', 'failed'))::int AS missing

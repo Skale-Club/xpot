@@ -45,6 +45,7 @@ const storage = {
     return rep;
   }),
   getSalesLead: vi.fn(async (id: number) => store.leads.get(id)),
+  leadHoldsRepPiece: vi.fn(async () => false),
   getSalesLeadsByIds: vi.fn(async (ids: number[]) => ids.map((id) => store.leads.get(id)).filter(Boolean)),
   updateSalesLead: vi.fn(async (id: number, data: any) => {
     store.leadUpdates.push({ id, data });

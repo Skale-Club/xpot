@@ -44,6 +44,8 @@ import { parseAddress, findMatchingLead } from "./utils";
 import type { EnrichedSalesVisit, FullSalesLead, GooglePlaceResult } from "./types";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { BottomSheet } from "@/pages/tags/ui";
+import { leadPiecesPath } from "@/pages/tags/lib";
+import { useViewerAccess } from "@/lib/adminMode";
 import { LeadsTable } from "./components/leads/LeadsTable";
 import { LeadDetailPane } from "./components/leads/LeadDetailPane";
 import { useT } from "@/i18n";
@@ -387,7 +389,6 @@ function LeadActionSheet({ lead, onClose, onSell, onCheckIn, onDelete }: {
   ];
   return (
     <BottomSheet open={Boolean(lead)} onClose={onClose} title={lead?.name}>
-      <p className="mb-3 truncate px-1 text-base font-bold text-white">{lead?.name}</p>
       <div className="space-y-1.5 pb-1">
         {items.map(({ key, label, icon: Icon, run, cls }) => (
           <button
@@ -432,6 +433,8 @@ export function XpotLeads() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const isDesktop = useIsDesktop();
+  // Management mode: the piece chips count every rep's pieces (getLeadTagSummaries).
+  const { canManage } = useViewerAccess();
   const [routeMatch, routeParams] = useRoute("/leads/:id");
   const routeId = routeMatch && /^\d+$/.test(routeParams.id) ? Number(routeParams.id) : null;
   // ?status=customer&day=2026-10-12&q=bakery — survives reloads and opening a company.
@@ -690,7 +693,7 @@ export function XpotLeads() {
                   onOpen={() => openLead(lead)}
                   onMore={() => setActionLead(lead)}
                   pieces={piecesFor(lead.id)}
-                  onOpenPieces={() => setLocation(`/tags/pieces?lead=${lead.id}&name=${encodeURIComponent(lead.name)}`)}
+                  onOpenPieces={() => setLocation(leadPiecesPath(lead.id, lead.name, canManage))}
                 />
               ))}
               <ListPager shown={pagedLeads.shown} total={pagedLeads.total} hasMore={pagedLeads.hasMore} onMore={pagedLeads.showMore} />
