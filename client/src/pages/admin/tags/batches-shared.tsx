@@ -315,7 +315,7 @@ export function PieceTable({
                   <td className={`${TD} tabular-nums text-white/50`}>{t.serialNumber ?? "—"}</td>
                   {showBatch && <td className={`${TD} font-mono text-xs`}>{t.batchCode ?? "—"}</td>}
                   <td className={TD}>
-                    <PieceStatusPill status={t.status} stockStatus={t.stockStatus} />
+                    <PieceStatusPill status={t.status} stockStatus={t.stockStatus} saleId={t.saleId} />
                   </td>
                   {showReseller && <td className={TD}>{t.repName ?? <span className="text-white/35">{tm("house")}</span>}</td>}
                   <td className={TD}>{t.leadName ?? <span className="text-white/35">—</span>}</td>

@@ -9,6 +9,7 @@ import { ADMIN_TAGS_KEY, formatDateTime, getJson, STALE_MS } from "./api";
 import { CARD, SectionTitle, Stat } from "./ui";
 import { Loading, LoadError, Panel } from "./pieces-shared";
 import { useTagLabels } from "./labels";
+import { useIsSuperAdmin } from "@/components/xpot/AdminBadge";
 
 const LINK = "inline-flex items-center gap-1 text-xs font-medium text-blue-400 hover:text-blue-300";
 
@@ -77,6 +78,8 @@ export function OverviewTab({ go }: { go: (path: string) => void }) {
   const t = useT(manageTagsMessages);
   const ts = useT(shellMessages);
   const labels = useTagLabels();
+  // Batches are the global admin's; a manager's "Total pieces" opens the pieces instead.
+  const isAdmin = useIsSuperAdmin();
   const { data, isLoading, error } = useQuery<TagOverview>({
     queryKey: [ADMIN_TAGS_KEY, "overview"],
     queryFn: () => getJson(`/api/xpot/admin/tags/overview?timezoneOffset=${new Date().getTimezoneOffset()}`),
@@ -98,9 +101,15 @@ export function OverviewTab({ go }: { go: (path: string) => void }) {
           {t("ovStock")}
         </SectionTitle>
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-          <StatButton label={t("ovInHouse")} value={stock.house} hint={t("ovInHouseHint", { percent: percent(stock.house, unsold) })} onClick={() => go("/pieces?rep=house&status=inventory")} testId="overview-stock-house" />
-          <StatButton label={t("ovWithResellers")} value={stock.withResellers} hint={t("ovWithResellersHint", { percent: percent(stock.withResellers, unsold) })} onClick={() => go("/kits")} testId="overview-stock-resellers" />
-          <StatButton label={t("ovTotalPieces")} value={counts.total} hint={t.plural("ovTotalHint", counts.retired)} onClick={() => go("/batches")} />
+          <StatButton label={t("ovInHouse")} value={stock.house} hint={t("ovInHouseHint", { percent: percent(stock.house, unsold) })} onClick={() => go("/pieces?stock=house")} testId="overview-stock-house" />
+          <StatButton label={t("ovWithResellers")} value={stock.withResellers} hint={t("ovWithResellersHint", { percent: percent(stock.withResellers, unsold) })} onClick={() => go("/pieces?stock=reps")} testId="overview-stock-resellers" />
+          <StatButton
+            label={t("ovTotalPieces")}
+            value={counts.total}
+            hint={t.plural(isAdmin ? "ovTotalHint" : "ovTotalHintPieces", counts.retired)}
+            onClick={() => go(isAdmin ? "/batches" : "/pieces")}
+            testId="overview-total"
+          />
         </div>
       </section>
 
@@ -114,7 +123,7 @@ export function OverviewTab({ go }: { go: (path: string) => void }) {
           <StatButton label={labels.status("active")} value={counts.active} hint={t("ovActiveHint")} onClick={() => go("/pieces?status=active")} />
           <StatButton label={labels.status("disabled")} value={counts.disabled} onClick={() => go("/pieces?status=disabled")} />
           <StatButton label={labels.status("retired")} value={counts.retired} onClick={() => go("/pieces?status=retired")} />
-          <StatButton label={labels.status("damaged")} value={counts.damaged} onClick={() => go("/pieces?status=damaged")} />
+          <StatButton label={labels.status("damaged")} value={counts.damaged} onClick={() => go("/pieces?stock=damaged")} />
         </div>
       </section>
 

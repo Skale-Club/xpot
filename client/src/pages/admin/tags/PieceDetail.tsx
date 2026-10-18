@@ -691,7 +691,7 @@ export function PieceDetail({ id, go }: { id: string; go: Go }) {
         <div className="min-w-0 flex-1 space-y-1.5">
           <div className="flex flex-wrap items-center gap-2.5">
             <h2 className={CODE_HEADING} data-testid="admin-piece-code">{tag.publicCode}</h2>
-            <PieceStatusPill status={tag.status} stockStatus={tag.stockStatus} />
+            <PieceStatusPill status={tag.status} stockStatus={tag.stockStatus} saleId={tag.saleId} />
           </div>
           <div className="flex flex-wrap items-center gap-y-1 text-sm text-white/50">
             {tagPlaqueSpec(tag.productType, tag.face, tag.batchCode).model ? (
