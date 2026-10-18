@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { randomBytes } from "crypto";
 import { storage } from "../../storage.js";
+import { isFinishedVisitStatus } from "#shared/visit-status.js";
 import { requireSuperAdmin, requireXpotManager } from "./middleware.js";
 import {
   AccountError,
@@ -50,7 +51,7 @@ export function createAdminRouter() {
         activeReps: reps.filter((rep) => rep.isActive).length,
         leads: leads.length,
         visitsInProgress: visits.filter((visit) => visit.status === "in_progress").length,
-        completedVisits: visits.filter((visit) => visit.status === "completed").length,
+        completedVisits: visits.filter((visit) => isFinishedVisitStatus(visit.status)).length,
         openOpportunities: opportunities.filter((item) => item.status === "open").length,
         pipelineValue: opportunities.filter((item) => item.status === "open").reduce((sum, item) => sum + (item.value || 0), 0),
         pendingTasks: tasks.filter((item) => item.status === "pending").length,

@@ -12,6 +12,7 @@ import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { useLocation } from "wouter";
 import { XpotVisits } from "./XpotVisits";
 import { QuickCheckIn } from "./components/QuickCheckIn";
+import { StatusBadge } from "./components/VisitStatus";
 import { AttentionItem, AttentionList, DashboardSection, EmptyMetricState, KpiTile, MetricSelector, PeriodSelector } from "@/components/xpot/DashboardKit";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -399,13 +400,17 @@ function DashboardOverview() {
         <div className="divide-y divide-white/[0.05]" data-testid="dashboard-recent-visits">
           {dashboardQuery.data.recentVisits.map((visit) => {
             const when = visit.checkedOutAt ?? visit.checkedInAt ?? visit.scheduledAt;
-            const outcome = visit.note?.outcome || visit.note?.nextStep || t("noOutcome");
+            // The status is the outcome the rep picked; the note line adds what they wrote, if anything.
+            const noteLine = visit.note?.outcome || visit.note?.nextStep;
             return (
               <button key={visit.id} type="button" onClick={() => setLocation(`/dashboard/history/${visit.id}`)} className="group flex w-full items-center gap-3 rounded-xl px-2.5 py-3 text-left transition-colors hover:bg-white/[0.03]">
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-indigo-500/10 text-indigo-300"><MapPinned className="h-4 w-4" /></span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-xs font-semibold text-white/78">{visit.lead?.name ?? `#${visit.leadId}`}</span>
-                  <span className="mt-0.5 block truncate text-[11px] text-white/30">{outcome}</span>
+                  <span className="mt-1 flex min-w-0 items-center gap-2">
+                    <StatusBadge status={visit.status} />
+                    {noteLine ? <span className="min-w-0 truncate text-[11px] text-white/30">{noteLine}</span> : null}
+                  </span>
                 </span>
                 {when ? <span className="shrink-0 text-right text-[10px] leading-relaxed tabular-nums text-white/28">{new Date(when).toLocaleDateString(t.locale, { month: "short", day: "numeric" })}<br />{new Date(when).toLocaleTimeString(t.locale, { hour: "numeric", minute: "2-digit" })}</span> : null}
                 <ChevronRight className="h-3.5 w-3.5 shrink-0 text-white/10 transition group-hover:text-white/35" />
