@@ -105,7 +105,7 @@ Pick a pill's tone from a map, never on the screen: `toneOf(MAP, status)`.
 | Map | Values |
 | --- | --- |
 | `VISIT_OUTCOME_TONE` | sale_made green; follow_up, came_back_later amber; no_answer, planned, cancelled slate; not_interested, invalid red; completed sky; in_progress blue |
-| `PAYMENT_STATUS_TONE` | paid green, partial amber, unpaid red |
+| `PAYMENT_STATUS_TONE` | paid green; partial and unpaid amber (money still to collect is a step; a sale has no due date, so it is never red — red is for overdue consignment settlements) |
 | `SALE_STATUS_TONE` | completed green, cancelled muted |
 | `CONSIGNMENT_STATUS_TONE` | active blue, closed muted |
 | `TASK_TONE` | overdue red, due_today amber, upcoming/open slate, done green |

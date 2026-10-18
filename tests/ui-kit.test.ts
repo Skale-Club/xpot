@@ -51,7 +51,9 @@ describe("tone maps", () => {
     const green = Object.entries(VISIT_OUTCOME_TONE).filter(([, tone]) => tone === "green").map(([key]) => key);
     expect(green).toEqual(["sale_made"]);
     expect(PAYMENT_STATUS_TONE.paid).toBe("green");
-    expect(PAYMENT_STATUS_TONE.unpaid).toBe("red");
+    // Still to collect is a step, not a problem: sales have no due date to be late against.
+    expect(PAYMENT_STATUS_TONE.unpaid).toBe("amber");
+    expect(PAYMENT_STATUS_TONE.partial).toBe("amber");
   });
 
   it("mark late tasks red and today's amber", () => {

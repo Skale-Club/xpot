@@ -16,9 +16,9 @@ import { useT } from "@/i18n";
 import { salesMessages } from "@/i18n/messages/sales";
 import { salesModuleMessages } from "@/i18n/messages/salesModule";
 
-/** Paid green, partly paid amber, unpaid red (PAYMENT_STATUS_TONE). */
+/** Paid green; partly paid and unpaid amber, still to collect (PAYMENT_STATUS_TONE). */
 export function paymentTone(status: string): PillTone {
-  return toneOf(PAYMENT_STATUS_TONE, status, "red");
+  return toneOf(PAYMENT_STATUS_TONE, status, "amber");
 }
 
 /** A settlement is a sale made from stock left on consignment: blue like an active agreement. */

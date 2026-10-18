@@ -180,11 +180,16 @@ export const VISIT_OUTCOME_TONE: Record<string, PillTone> = {
   invalid: "red",
 };
 
-/** How much of a sale is paid. */
+/**
+ * How much of a sale is paid. Money still to collect needs a step, so partly
+ * paid and unpaid are both amber (the label tells them apart); a sale has no
+ * due date, so nothing here is "late". Red is kept for overdue consignment
+ * settlements, which do have one (MONEY_DUE_TONE).
+ */
 export const PAYMENT_STATUS_TONE: Record<string, PillTone> = {
   paid: "green",
   partial: "amber",
-  unpaid: "red",
+  unpaid: "amber",
 };
 
 /** A recorded sale. A cancelled one is out of play. */
