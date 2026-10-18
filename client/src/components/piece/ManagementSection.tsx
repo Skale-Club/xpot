@@ -207,6 +207,7 @@ function TransferField() {
       {blocker ? <p className="text-xs text-white/40" data-testid="admin-piece-move-blocked">{blocker}</p> : null}
       {error ? <p className="text-xs text-red-300">{tm("resellersFailed")}</p> : null}
       <ConfirmDialog
+        accent="tags"
         open={confirming}
         onOpenChange={setConfirming}
         title={toHouse ? tp("takeBackTitle", { code: tag.publicCode }) : tm("moveTitle", { code: tag.publicCode, target })}
@@ -353,6 +354,7 @@ function HeavyActions() {
       </BottomSheet>
 
       <ConfirmDialog
+        accent="tags"
         open={pending !== null}
         onOpenChange={(v) => !v && setPending(null)}
         title={pending ? tm(`action_${pending}_title`) : ""}

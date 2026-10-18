@@ -93,6 +93,13 @@
   outline-offset: 3px !important;
 }
 
+/* A pane that takes focus only so the keyboard starts inside it (the opened
+   item of a list) is not a control: ringing the whole pane read as a thick
+   blue border around the piece. Its controls keep their outline. */
+[data-focus-container]:focus-visible {
+  outline: none !important;
+}
+
 /* Text fields sit inside tight layouts (filter bars, dialogs), so their outline
    hugs the field instead of floating 3px away from it. */
 input:focus-visible,

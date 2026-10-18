@@ -259,7 +259,8 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
                       </span>
                     )}
                   </span>
-                  <span className="flex shrink-0 flex-col items-end gap-1">
+                  {/* At most half the row: with Live, Sold and "Chip not written" on one line the customer's name was cut to one letter on a phone; the pills wrap instead. */}
+                  <span className="flex max-w-[50%] shrink-0 flex-col items-end gap-1">
                     <span className="flex flex-wrap justify-end gap-1">
                       <PieceStatusPills tag={tag} />
                       <ChipMark tag={tag} />

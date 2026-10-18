@@ -495,7 +495,7 @@ export default function CustomerScreen({ leadId }: { leadId: number }) {
               )}
               <div className="col-span-2 mt-3 border-t border-white/[0.06] pt-3">
                 <h3 className={`${EYEBROW_MUTED} mb-2.5`}>{t("customerContacts")}</h3>
-                <LeadContacts leadId={lead.id} contacts={lead.contacts ?? []} />
+                <LeadContacts leadId={lead.id} contacts={lead.contacts ?? []} accent="tags" />
               </div>
             </div>
           </Panel>

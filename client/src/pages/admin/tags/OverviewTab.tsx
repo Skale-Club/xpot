@@ -36,11 +36,12 @@ import { useIsSuperAdmin } from "@/components/xpot/AdminBadge";
 import { useT } from "@/i18n";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
 import { adminTagsFlowMessages } from "@/i18n/messages/adminTagsFlow";
-import { ADMIN_TAGS_KEY, formatDateTime, formatShare, getJson, STALE_MS, withQuery } from "./api";
+import { ADMIN_TAGS_KEY, formatShare, getJson, STALE_MS, withQuery } from "./api";
+import { formatDate } from "@/lib/format";
 import { Loading, LoadError, useBatchOptions, useLeads, useReps } from "./pieces-shared";
 import { useTagLabels } from "./labels";
 import { PieceTable } from "./piece-table";
-import { AnalyticsPanel, RangePicker, type AnalyticsRange } from "./pieces-analytics";
+import { AnalyticsPanel, RangePicker, useDeviceLabel, type AnalyticsRange } from "./pieces-analytics";
 import {
   ACTIVITY_FILTERS,
   activityFeed,
@@ -57,6 +58,8 @@ type Go = (path: string) => void;
 /** A row of the feed: the piece on the left, a date (and chips) on the right. Never wider than the screen. */
 const FEED_ROW = "flex w-full min-w-0 items-center gap-3 py-2 text-left transition-colors hover:bg-white/[0.03]";
 const FEED_DATE = "shrink-0 whitespace-nowrap text-[11px] tabular-nums text-white/40";
+/** "Oct 17, 8:38 PM": the feed is recent, and on a phone the year ("17 de out. de 2026, 20:38") left the details one letter. */
+const feedDate = (at: string) => formatDate(at, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
 const QUEUE_ICONS: Record<QueueId, LucideIcon> = {
   stuscleOrders: Inbox,
@@ -181,6 +184,7 @@ function ActivityFeed({ overview, go }: { overview: TagOverview; go: Go }) {
   const t = useT(manageTagsMessages);
   const tf = useT(adminTagsFlowMessages);
   const labels = useTagLabels();
+  const deviceLabel = useDeviceLabel();
   const [filter, setFilter] = useState<ActivityFilter>("all");
   const items = activityFeed(overview, filter);
   return (
@@ -206,12 +210,12 @@ function ActivityFeed({ overview, go }: { overview: TagOverview; go: Go }) {
                     face={item.event.face}
                     batchCode={item.event.batchCode}
                     customer={item.event.leadName}
-                    details={[labels.event(item.event.eventType), item.event.deviceType].filter(Boolean).join(" · ")}
+                    details={[labels.event(item.event.eventType), item.event.deviceType && deviceLabel(item.event.deviceType)].filter(Boolean).join(" · ")}
                     className="min-w-0 flex-1"
                   />
                   <span className="flex shrink-0 flex-col items-end gap-1">
                     <Pill tone="slate" className="uppercase">{item.event.accessMethod}</Pill>
-                    <span className={FEED_DATE}>{formatDateTime(item.at)}</span>
+                    <span className={FEED_DATE}>{feedDate(item.at)}</span>
                   </span>
                 </button>
               ) : item.kind === "activated" ? (
@@ -227,7 +231,7 @@ function ActivityFeed({ overview, go }: { overview: TagOverview; go: Go }) {
                   />
                   <span className="flex shrink-0 flex-col items-end gap-1">
                     <Pill tone="green">{tf("activityLive")}</Pill>
-                    <span className={FEED_DATE}>{formatDateTime(item.at)}</span>
+                    <span className={FEED_DATE}>{feedDate(item.at)}</span>
                   </span>
                 </button>
               ) : (
@@ -235,9 +239,10 @@ function ActivityFeed({ overview, go }: { overview: TagOverview; go: Go }) {
                   <TagPieceMention publicCode={item.change.publicCode} productType={item.change.productType} face={item.change.face} batchCode={item.change.batchCode} className="min-w-0 flex-1" />
                   <span className="flex shrink-0 flex-col items-end gap-1">
                     <Pill tone="slate">{tf("activityDestinationPill")}</Pill>
-                    <span className={FEED_DATE}>{formatDateTime(item.at)}</span>
+                    <span className={FEED_DATE}>{feedDate(item.at)}</span>
                   </span>
-                  <span className="block w-full min-w-0 truncate text-xs text-white/40">
+                  {/* Its own line (a link needs the width on a phone), indented under the code, past the piece's picture. */}
+                  <span className="block w-full min-w-0 truncate pl-12 text-xs text-white/40">
                     {item.change.newUrl
                       ? `${labels.destination(item.change.newDestinationType)} · ${item.change.newUrl}`
                       : item.change.reason

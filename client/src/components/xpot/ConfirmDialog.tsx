@@ -40,6 +40,7 @@ export function ConfirmDialog({
   confirmLabel,
   cancelLabel,
   tone = "default",
+  accent,
   destructive = false,
   testId,
   reason,
@@ -65,6 +66,8 @@ export function ConfirmDialog({
   cancelLabel?: ReactNode;
   /** `danger` paints the confirm button red: deleting, cancelling for good. */
   tone?: "default" | "danger";
+  /** `tags` turns a non-danger confirm violet, like the Tags button that opened it. */
+  accent?: "tags";
   /** Same as tone="danger". */
   destructive?: boolean;
   /** data-testid on the confirm button. */
@@ -187,6 +190,7 @@ export function ConfirmDialog({
           <Button
             type="button"
             variant={tone === "danger" || destructive ? "danger" : "brand"}
+            accent={accent}
             data-testid={testId}
             loading={busy}
             disabled={!canConfirm}

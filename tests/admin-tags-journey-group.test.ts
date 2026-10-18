@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { TagJourneyEntryItem } from "../shared/tagsApi";
-import { groupJourneyRows, journeyGroupKey } from "../client/src/pages/admin/tags/journey-group";
+import { groupJourneyRows, journeyGroupKey, journeyValueKind } from "../client/src/pages/admin/tags/journey-group";
 
 let next = 0;
 function entry(patch: Partial<TagJourneyEntryItem> = {}): TagJourneyEntryItem {
@@ -53,5 +53,19 @@ describe("groupJourneyRows", () => {
 
   it("handles an empty list", () => {
     expect(groupJourneyRows([])).toEqual([]);
+  });
+});
+
+describe("journeyValueKind", () => {
+  it("reads a tag_* change as digital statuses and a piece_* change as physical stock", () => {
+    expect(journeyValueKind("tag_activated")).toBe("status");
+    expect(journeyValueKind("piece_internal_use")).toBe("stock");
+    expect(journeyValueKind("piece_damaged")).toBe("stock");
+  });
+
+  it("leaves other entries as free text", () => {
+    expect(journeyValueKind("batch_status_changed")).toBeNull();
+    expect(journeyValueKind(null)).toBeNull();
+    expect(journeyValueKind(undefined)).toBeNull();
   });
 });

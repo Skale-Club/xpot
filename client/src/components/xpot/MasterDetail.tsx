@@ -66,6 +66,7 @@ export function MasterDetail({
           <aside
             ref={asideRef}
             tabIndex={-1}
+            data-focus-container
             className={`fixed left-1/2 top-1/2 z-50 max-h-[88vh] w-[560px] max-w-[92vw] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-3xl ${SURFACE_MODAL_CLASS} p-4 shadow-2xl outline-none ${popup ? "" : SIDE_COLUMN}`}
           >
             {detail}

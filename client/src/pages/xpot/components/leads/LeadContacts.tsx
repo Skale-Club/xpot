@@ -17,7 +17,8 @@ import { Pill } from "@/components/xpot/StatusPill";
 const EMPTY = { name: "", jobTitle: "", phone: "", email: "" };
 
 /** People at the company (owner, buyer). The API only creates; there is no edit yet. */
-export function LeadContacts({ leadId, contacts }: { leadId: number; contacts: SalesLeadContact[] }) {
+/** `accent="tags"` when shown inside Tags (a customer's page), so its actions are violet, not Visits blue. */
+export function LeadContacts({ leadId, contacts, accent }: { leadId: number; contacts: SalesLeadContact[]; accent?: "tags" }) {
   const t = useT(leadsMessages);
   const tc = useT(commonMessages);
   const { toast } = useToast();
@@ -98,13 +99,13 @@ export function LeadContacts({ leadId, contacts }: { leadId: number; contacts: S
             <Button type="button" variant="ghost" size="sm" onClick={() => setForm(null)} disabled={addMutation.isPending}>
               {tc("cancel")}
             </Button>
-            <Button type="submit" variant="brand" size="sm" disabled={!form.name.trim()} loading={addMutation.isPending}>
+            <Button type="submit" variant="brand" accent={accent} size="sm" disabled={!form.name.trim()} loading={addMutation.isPending}>
               {t("saveContact")}
             </Button>
           </div>
         </form>
       ) : (
-        <Button type="button" variant="ghost" size="sm" onClick={() => setForm(EMPTY)} className="-ml-2 text-blue-300">
+        <Button type="button" variant="ghost" size="sm" onClick={() => setForm(EMPTY)} className={`-ml-2 ${accent === "tags" ? "text-violet-300" : "text-blue-300"}`}>
           <Plus aria-hidden="true" /> {t("addContact")}
         </Button>
       )}

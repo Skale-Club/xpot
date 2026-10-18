@@ -38,6 +38,12 @@ const DEVICE_KEYS = {
 
 const isDevice = (value: string): value is keyof typeof DEVICE_KEYS => value in DEVICE_KEYS;
 
+/** "mobile" → "Mobile", in the language in use; an unknown type stays as it came. */
+export function useDeviceLabel() {
+  const tm = useT(manageTagsPiecesMessages);
+  return (value: string) => (isDevice(value) ? tm(DEVICE_KEYS[value]) : value);
+}
+
 /** "2026-10-04" (a UTC day) in the language in use (lib/format). */
 function formatDay(day: string, opts: Intl.DateTimeFormatOptions): string {
   const date = new Date(`${day}T00:00:00Z`);

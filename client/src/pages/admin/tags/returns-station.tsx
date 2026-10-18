@@ -95,6 +95,7 @@ export function ReturnsStation() {
         </Button>
       </div>
       <ConfirmDialog
+        accent="tags"
         open={confirm}
         onOpenChange={setConfirm}
         title={tb.plural("returnConfirmTitle", okCodes.length)}
