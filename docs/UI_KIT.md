@@ -12,7 +12,11 @@ touched. Each file has a header comment with usage; this page is the index.
   - Green (`SUCCESS_GRADIENT`, emerald) is money and success only: a sale, a payment, "paid", "done". Never a module, never "selected".
   - Violet (`MODULE_ACCENT.tags`) is the Tags module only. Visits and the account pages never use it.
   - Amber means "needs a step" (follow up, due today, not received, incomplete).
-  - Red is destructive or broken.
+    Money still to collect (outstanding, sold and not fully paid, not late) is
+    amber everywhere, on a tile and a banner alike.
+  - Red is destructive, broken or late: an overdue task or settlement is red.
+  - Money going out or not earned (acquisition cost, cost of goods, discounts)
+    is the neutral cost tone (`MONEY_CHART.cost`, slate), never amber or rose.
   - Slate is idle or neutral; muted is finished and out of play.
 - **One of each.** One button (`ui/button`), one pill (`Pill`), one empty
   state (`EmptyState` / `ErrorState`), one confirmation (`ConfirmDialog`), one
@@ -127,7 +131,8 @@ Pick a pill's tone from a map, never on the screen: `toneOf(MAP, status)`.
 
 | Palette | File | Values |
 | --- | --- | --- |
-| `MONEY_CHART` | `pages/xpot/components/sales/moneyPalette.ts` | The one money palette of the Visits charts and tiles (Dashboard and Sales): revenue cyan (`#22d3ee` / `#06b6d4`), profit emerald (`#34d399` / `#10b981`). Counts that are not money stay neutral |
+| `MONEY_CHART` | `pages/xpot/components/sales/moneyPalette.ts` | The one money palette of the Visits charts and tiles (Dashboard and Sales; the sale detail and the Tags sale dialog take its `text`): revenue cyan (`#22d3ee` / `#06b6d4`), profit emerald (`#34d399` / `#10b981`), cost slate (`#94a3b8` / `#64748b`, `text-slate-300`) for acquisition cost, cost of goods and discounts. Cost stays readable beside the other two on the page base (contrast above 7:1, `tests/ui-kit.test.ts`) and reads as neutral, not as a warning. Counts that are not money stay neutral |
+| `MONEY_DUE_TONE` | same file | Money still to come in: `outstanding` amber (collect it), `overdue` red (a settlement past its date). The Sales tile and banner and the Dashboard's attention list take it |
 | `QR_COLOR`, `NFC_COLOR` | `pages/tags/charts.ts` | Tags scans: QR blue `#60a5fa`, NFC violet `#a78bfa`, on every Tags chart, counter and the admin analytics. The same file has `formatChartDay`, `chartTooltip` and `formatCount` (Intl) |
 
 ## Formatters (`lib/format.ts`)
