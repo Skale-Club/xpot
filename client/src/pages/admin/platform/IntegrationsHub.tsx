@@ -8,7 +8,7 @@ import { ErrorState } from "@/components/xpot/EmptyState";
 import { InlineAlert } from "@/components/xpot/InlineAlert";
 import { ListSkeleton } from "@/components/xpot/ListSkeleton";
 import { INTEGRATION_TONE, Pill } from "@/components/xpot/StatusPill";
-import { GLASS_CLASS } from "@/components/xpot/surface";
+import { EYEBROW, GLASS_CLASS } from "@/components/xpot/surface";
 import {
   INFRA_SERVICES,
   INTEGRATION_PROVIDERS,
@@ -31,6 +31,43 @@ import {
   type IntegrationsResponse,
 } from "./ProviderCard";
 import { activeInChain, serviceAnchor, servicesNeedingAttention, SERVICES_KEY } from "./servicesUi";
+import { connectedXphereRows, XPHERE_KEY, type XphereRow } from "../integrationsUi";
+
+/** How many connected people the CRM card names before "+N more". */
+const XPHERE_PEOPLE_SHOWN = 8;
+
+/** The people connected to Xphere (the services count), each opening their page in People. */
+function XphereConnectedPeople() {
+  const tp = useT(platformAdminMessages);
+  const { data } = useQuery<XphereRow[]>({ queryKey: XPHERE_KEY });
+  const connected = connectedXphereRows(data ?? []);
+  if (connected.length === 0) return null;
+  const chip = "inline-flex min-h-9 items-center rounded-full border border-white/10 bg-white/[0.04] px-3 text-xs text-white/80";
+  return (
+    <div className="mt-3" data-testid="xphere-connected-people">
+      <p className={EYEBROW}>{tp("xphereConnectedLabel")}</p>
+      <ul className="mt-1.5 flex flex-wrap gap-1.5">
+        {connected.slice(0, XPHERE_PEOPLE_SHOWN).map((row) => (
+          <li key={row.repId}>
+            {/* A deleted account's placeholder has no page in People. */}
+            {row.deleted ? (
+              <span className={`${chip} text-white/45`}>{row.displayName}</span>
+            ) : (
+              <Link href={`/admin/reps/${row.repId}`} className={`${chip} hover:bg-white/[0.08] hover:text-white`}>{row.displayName}</Link>
+            )}
+          </li>
+        ))}
+        {connected.length > XPHERE_PEOPLE_SHOWN && (
+          <li>
+            <Link href="/admin/integrations/xphere" className={`${chip} text-white/55 hover:bg-white/[0.08]`}>
+              {tp("xphereMorePeople", { count: connected.length - XPHERE_PEOPLE_SHOWN })}
+            </Link>
+          </li>
+        )}
+      </ul>
+    </div>
+  );
+}
 
 // Admin › Integrations › Services: one section per job Xpot needs done, not per
 // vendor. Each provider card says whether it works with the same words Status
@@ -219,6 +256,7 @@ export function IntegrationsHub() {
             <Meta label={tp("lastSuccess")}>{xphere?.lastSuccessAt ? lines.ago(xphere.lastSuccessAt) : "—"}</Meta>
             {lines.lastError(xphere) && <Meta label={tp("lastError")} tone="bad">{lines.lastError(xphere)}</Meta>}
           </dl>
+          <XphereConnectedPeople />
         </SummaryRow>
         <details className={`group rounded-2xl ${GLASS_CLASS}`} data-testid="integrations-legacy">
           <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 marker:content-none">

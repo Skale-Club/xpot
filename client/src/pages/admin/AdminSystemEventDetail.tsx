@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import { AlertTriangle, Clock, FileText, History, Search } from "lucide-react";
 import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
 import { ListSkeleton } from "@/components/xpot/ListSkeleton";
+import { PaneBar } from "@/components/xpot/MasterDetail";
 import { BackLink } from "@/components/xpot/PageHeader";
 import { Pill } from "@/components/xpot/StatusPill";
 import { getHttpStatus } from "@/lib/pwa";
@@ -21,14 +22,21 @@ function contextValue(value: unknown) {
   return JSON.stringify(value);
 }
 
-/** Admin › Status › one event: in plain words first (what, how often, who, where), then the details. */
-export function AdminSystemEventDetail({ id }: { id: number }) {
+/**
+ * Admin › Status › one event: in plain words first (what, how often, who, where), then the details.
+ * In the event log's side pane (`onClose`, a computer) it is one column with "Open full page" and
+ * Close on top, and another occurrence opens in the pane (`onOpen`) rather than on its own page.
+ */
+export function AdminSystemEventDetail({ id, onClose, onOpen }: { id: number; onClose?: () => void; onOpen?: (id: number) => void }) {
   const t = useT(systemHealthMessages);
   const tp = useT(platformAdminMessages);
   const ago = useAgo(t);
   const query = useQuery<SystemEventDetail>({ queryKey: [`/api/xpot/admin/system-events/${id}`], retry: false });
+  const pane = Boolean(onClose);
 
-  const back = <BackLink href="/admin/health">{t("backToHealth")}</BackLink>;
+  const back = onClose
+    ? <PaneBar fullHref={`/admin/health/events/${id}`} onClose={onClose} testId="system-event-pane" />
+    : <BackLink href="/admin/health">{t("backToHealth")}</BackLink>;
 
   if (query.isLoading) {
     return (
@@ -85,7 +93,7 @@ export function AdminSystemEventDetail({ id }: { id: number }) {
         <p className="mt-1 text-xs text-white/45">{formatDateTime(event.createdAt)}</p>
       </section>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className={`grid gap-4 ${pane ? "" : "lg:grid-cols-3"}`}>
         <Card title={t("detailFrequency")} icon={History}>
           <p className="text-2xl font-bold tabular-nums">{t("groupCount", { count: group.count })}</p>
           <p className="mt-1 text-xs text-white/50">{t("detailFirstSeen", { time: ago(group.firstSeenAt) })}</p>
@@ -115,6 +123,13 @@ export function AdminSystemEventDetail({ id }: { id: number }) {
               <li key={item.id}>
                 <Link
                   href={`/admin/health/events/${item.id}`}
+                  onClick={(e) => {
+                    // In the pane another occurrence replaces this one; a new-tab click still opens its page.
+                    if (!onOpen || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+                    e.preventDefault();
+                    onOpen(item.id);
+                  }}
+                  aria-current={item.id === event.id ? "true" : undefined}
                   className={`flex min-h-9 items-center justify-between gap-2 rounded-lg px-2 py-1 ${item.id === event.id ? "bg-white/10 text-white" : "text-white/60 hover:bg-white/5"}`}
                 >
                   <span>{formatDateTime(item.createdAt)}</span>
@@ -170,9 +185,11 @@ export function AdminSystemEventDetail({ id }: { id: number }) {
         </div>
       </details>
 
-      <p className="text-center text-xs text-white/35">
-        <Link href="/admin/health" className="hover:text-white/60">{t("backToHealth")}</Link>
-      </p>
+      {!pane && (
+        <p className="text-center text-xs text-white/35">
+          <Link href="/admin/health" className="hover:text-white/60">{t("backToHealth")}</Link>
+        </p>
+      )}
     </div>
   );
 }

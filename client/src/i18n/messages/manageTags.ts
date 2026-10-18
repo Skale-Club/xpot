@@ -27,6 +27,8 @@ const en = {
   chooseReseller: "Choose a reseller…",
   resellerInactive: " (inactive)",
   resellerNoTags: " (Tags module off)",
+  allOrganizations: "All organizations",
+  organizationNumber: "Organization #{id}",
 
   // Confirm dialog
   working: "Working…",
@@ -306,6 +308,8 @@ export const manageTagsMessages: Dictionary<typeof en> = {
     chooseReseller: "Escolha um revendedor…",
     resellerInactive: " (inativo)",
     resellerNoTags: " (sem o módulo Tags)",
+    allOrganizations: "Todas as organizações",
+    organizationNumber: "Organização nº {id}",
 
     working: "Processando…",
 
@@ -570,6 +574,8 @@ export const manageTagsMessages: Dictionary<typeof en> = {
     chooseReseller: "Elige un revendedor…",
     resellerInactive: " (inactivo)",
     resellerNoTags: " (sin el módulo Tags)",
+    allOrganizations: "Todas las organizaciones",
+    organizationNumber: "Organización n.º {id}",
 
     working: "Procesando…",
 

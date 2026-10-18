@@ -52,6 +52,7 @@ import { dashboardMessages } from "@/i18n/messages/dashboard";
 import { PersistentRouteProgress } from "./PersistentRouteProgress";
 import { ScopeChip } from "./ScopeChip";
 import { useAvatarUpload } from "./useAvatarUpload";
+import { navigateGuarded } from "@/hooks/useUnsavedChangesGuard";
 
 // The frame around every rep screen. Below `lg` it is the phone column the app
 // always had (the caller passes its header row and bottom nav). From `lg` up a
@@ -195,7 +196,7 @@ function SidebarModuleSwitch({ collapsed, module, modules, label }: {
     if (m === module) return;
     if (module) rememberModuleRoute(module, `${window.location.pathname}${window.location.search}`);
     rememberModule(m);
-    navigate(moduleEntryPath(m));
+    navigateGuarded(moduleEntryPath(m), navigate);
   };
   return (
     <div

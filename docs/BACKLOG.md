@@ -1,6 +1,6 @@
 # Backlog Xpot
 
-**Rev. 5** · base `claude/ux-overhaul` · 83 itens · **58 concluídos** · 3 obsoletos · 22 abertos
+**Rev. 5** · base `claude/ux-overhaul` · 83 itens · **62 concluídos** · 3 obsoletos · 18 abertos
 
 > **Rev. 5 (revisão de UX, 2026-10-18):** entrou a área **UXR**, com o que a
 > revisão de UX fez e o que deixou aberto (resumo em
@@ -44,8 +44,8 @@ Detalhamento e referências completas de arquivo:linha em [`AUDITORIA.md`](./AUD
 | PRF — performance | 5 | 1 | 0 | 4 |
 | DOC — testes e documentação | 5 | 5 | 0 | 0 |
 | MOD — módulos Visitas e Tags | 3 | 3 | 0 | 0 |
-| UXR — revisão de UX (out/2026) | 31 | 27 | 0 | 4 |
-| **Total** | **83** | **58** | **3** | **22** |
+| UXR — revisão de UX (out/2026) | 31 | 31 | 0 | 0 |
+| **Total** | **83** | **62** | **3** | **18** |
 
 ### Novidades desta revisão
 
@@ -237,15 +237,16 @@ O que mudou e por quê, as seis decisões de produto e como conferir:
 | ✅ UXR-31 | Baixo | **Quem cancela uma venda de Tags.** Decidido: o vendedor que registrou a venda (com Visitas) cancela a própria; gerentes, qualquer uma. A tela da peça mostra "Cancelar venda" a esse vendedor também. | ✅ `13fd2eb` |
 | ✅ UXR-24 | Baixo | **Tipos de lugar do Google sem tradução.** `primaryType` aparece cru na busca de empresas (`PlaceLeadSearch`); não há fonte de tradução. | ✅ `2177dc9`: a busca devolve o código do tipo (Table A); `lib/placeTypes.ts` traduz os tipos comuns (EN/PT/ES, `messages/placeTypes.ts`), senão usa o nome do Google e por fim humaniza o código. Vale para a busca de empresas, as sugestões de setor da rota e o setor da empresa importada |
 | ✅ UXR-25 | Baixo | **Página de consentimento OAuth (MCP) e resultados de "Testar" das integrações em inglês.** | ✅ `3cde97c` (consentimento e recusas em EN/PT/ES pelo Accept-Language), `eddd6bd` e `e9b3a51` (o Testar devolve código e parâmetros, o cartão traduz e guarda o texto do provedor em "Detalhes") |
+| ✅ UXR-22 | Médio | **Filtro por organização em Inventário, Kits e Empresas.** As abas de Organizações eram listas só de leitura. | ✅ Empresas (`?org=`, `GET /leads?organizationId=`) no merge do modo gestão; Inventário e Kits: `63d789d`, `e675b77` (`organizationId` em `GET /api/xpot/tags` e `GET /api/xpot/admin/tag-kits`, só para gerente/admin em modo gestão, ignorado para os demais; filtro Organização em `?org=`); as abas Estoque, Kits e Empresas de Organizações levam à lista filtrada: `e675b77`, `7312a8d` |
+| ✅ UXR-23 | Baixo | **MasterDetail nas telas de detalhe da gestão.** No computador, a peça do Inventário abre no painel lateral (`?piece=<id>`) e o evento do log de Status também (`?event=<id>`), com "Abrir em página inteira"; as páginas `/admin/tags/pieces/:id` e `/admin/health/events/:id` continuam. Esc fecha e o foco volta à linha (vale para todo MasterDetail). Celular: página inteira. O lote fica em página inteira: é uma área de trabalho (leitura de entrada, recebimento, impressão), não um registro para consultar de passagem. | ✅ `d4b26a2` |
+| ✅ UXR-27 | Baixo | **Linhas do Xphere e o card CRM de Integrações levam à pessoa** (`/admin/reps/:repId`); o card CRM lista quem está conectado. | ✅ `78d8a3e` |
+| ✅ UXR-30 | Baixo | **Aviso de alterações não salvas em Integrações** em toda saída: troca de aba, menu lateral, paleta, Voltar/Avançar do navegador, fechar a aba (cards de provedor e linhas do Xphere). O Voltar/Avançar e a paleta passaram a valer também para a Landing. | ✅ `8008315` |
 
 ### Aberto
 
 | ID | Sev | Item | Estado |
 |---|---|---|---|
-| UXR-22 | Médio | **Filtro por organização em Inventário, Kits e Empresas.** Sem ele, as abas de Organizações ficam como listas só de leitura. | Empresas feito em 2026-10-18: em modo gestão o gerente filtra Empresas por organização (`?org=`; `GET /leads?organizationId=`, e `GET /sales` aceita o mesmo), ignorado para os demais. Falta Inventário e Kits, e o link da aba Empresas de Organizações para `/leads?org=<id>` |
-| UXR-23 | Baixo | **MasterDetail nas telas de detalhe da gestão** (peça, lote, kit de Tags e outras). Pessoas já usa; as demais abrem página inteira. | A fazer |
-| UXR-27 | Baixo | **Linhas do Xphere e o card CRM de Integrações levarem à pessoa** (`/admin/reps/:repId`). | A fazer (conferido em 2026-10-18: nenhuma linha do Xphere leva à pessoa) |
-| UXR-30 | Baixo | **Aviso de alterações não salvas em Integrações** cobre só a troca de provedor; a Landing tem o aviso completo. | A fazer |
+| — | — | Nenhum item da área UXR em aberto. | — |
 
 ---
 

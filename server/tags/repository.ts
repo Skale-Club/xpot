@@ -101,6 +101,8 @@ export interface TagListFilters {
   /** Only this reseller's pieces (always set for a reseller). */
   repId?: number;
   kitId?: string;
+  /** Only this organization's pieces (tags.organization_id). */
+  organizationId?: number;
   /** Pieces in house stock (no reseller). */
   house?: boolean;
   /** Only pieces counted by this stock number (shared/tagMetrics.ts), e.g. `house` for the company stock card. */
@@ -243,6 +245,7 @@ export async function listTags(filters: TagListFilters): Promise<TagListItem[]> 
   if (filters.batchId) conds.push(sql`t.batch_id = ${filters.batchId}`);
   if (filters.repId !== undefined) conds.push(sql`t.rep_id = ${filters.repId}`);
   if (filters.kitId) conds.push(sql`t.kit_id = ${filters.kitId}`);
+  if (filters.organizationId !== undefined) conds.push(sql`t.organization_id = ${filters.organizationId}`);
   if (filters.house) conds.push(sql`t.rep_id IS NULL`);
   if (filters.metric) conds.push(stockMetricSql(filters.metric));
   if (filters.queue) conds.push(pieceQueueSql(filters.queue));
@@ -896,9 +899,10 @@ export async function deliverKit(input: KitInput, userId: string | null, source:
   return kit;
 }
 
-export async function listKits(filter: { repId?: number; kitId?: string } = {}): Promise<TagKitItem[]> {
+export async function listKits(filter: { repId?: number; kitId?: string; organizationId?: number } = {}): Promise<TagKitItem[]> {
   const conds: SQL[] = [sql`true`];
   if (filter.repId !== undefined) conds.push(sql`k.rep_id = ${filter.repId}`);
+  if (filter.organizationId !== undefined) conds.push(sql`k.organization_id = ${filter.organizationId}`);
   if (filter.kitId) conds.push(sql`k.id = ${filter.kitId}`);
   const list = await rows<{
     id: string; kit_number: number; rep_id: number; rep_name: string | null; note: string | null; created_at: Date; piece_count: number;

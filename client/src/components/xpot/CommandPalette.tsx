@@ -12,6 +12,7 @@ import { TagPieceMention } from "@/components/xpot/TagProductThumbnail";
 import { tagsGet } from "@/pages/tags/lib";
 import type { FullSalesLead } from "@/pages/xpot/types";
 import { GradientTopLine } from "@/components/xpot/GradientTopLine";
+import { navigateGuarded } from "@/hooks/useUnsavedChangesGuard";
 import { ACCENT_SELECTED, SURFACE_MODAL, type ModuleAccent } from "@/components/xpot/surface";
 
 type Entry = {
@@ -133,7 +134,8 @@ export function CommandPalette({
   const go = (entry: Entry | undefined) => {
     if (!entry) return;
     onOpenChange(false);
-    navigate(entry.href);
+    // A screen with unsaved changes (Landing, Integrations) asks before the palette leaves it.
+    navigateGuarded(entry.href, navigate);
   };
 
   let lastGroup = "";

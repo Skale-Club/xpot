@@ -16,14 +16,15 @@ import { ListPager, usePagedList } from "@/components/xpot/pagination";
 import { INTEGRATION_TONE, Pill } from "@/components/xpot/StatusPill";
 import { GLASS_CLASS } from "@/components/xpot/surface";
 import { Eye, EyeOff, RotateCw, Users, Webhook } from "lucide-react";
+import { Link } from "wouter";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { manageMessages } from "@/i18n/messages/manage";
 import { integrationsMessages } from "@/i18n/messages/integrations";
-import { isXphereQueryKey, maskInboundKey, visibleXphereRows, type XphereRow } from "./integrationsUi";
+import { isXphereQueryKey, maskInboundKey, visibleXphereRows, XPHERE_KEY, type XphereRow } from "./integrationsUi";
 import { SERVICES_KEY } from "./platform/servicesUi";
+import { useReportUnsaved } from "./unsavedEdits";
 
-const XPHERE_KEY = ["/api/xpot/admin/xphere"];
 /** The read-only value boxes (endpoint, inbound key): the field's shape without being editable. */
 const CODE_BOX = "min-w-0 flex-1 break-all rounded-xl border border-white/10 bg-black/20 px-3.5 py-2.5 font-mono text-xs text-white/75";
 
@@ -102,6 +103,7 @@ function XphereRowCard({ row }: { row: XphereRow }) {
   const [rotating, setRotating] = useState(false);
   const editable = Boolean(row.userId) && !row.deleted;
   const dirty = apiKey.trim() !== "" || apiUrl.trim() !== row.apiUrl || isEnabled !== row.isEnabled;
+  useReportUnsaved(`xphere:${row.repId}`, dirty);
   const labels: Record<string, string> = { apiUrl: t("apiUrl"), apiKey: t("outboundToken") };
   // The token chip reads like an integration: saved and switched on is live, saved but off is idle.
   const tokenTone = INTEGRATION_TONE[row.apiKeySet ? (row.isEnabled ? "live" : "idle") : "off"];
@@ -149,7 +151,16 @@ function XphereRowCard({ row }: { row: XphereRow }) {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="font-semibold">{row.displayName}</h3>
+            {/* The person (access, role, modules) is in People; a deleted account's placeholder has no page there. */}
+            {row.deleted ? (
+              <h3 className="font-semibold">{row.displayName}</h3>
+            ) : (
+              <h3 className="font-semibold">
+                <Link href={`/admin/reps/${row.repId}`} className="hover:text-blue-200 hover:underline" data-testid={`xphere-person-${row.repId}`}>
+                  {row.displayName}
+                </Link>
+              </h3>
+            )}
             <Pill tone={tokenTone}>{row.apiKeySet ? t("tokenSaved") : t("noToken")}</Pill>
             {row.access === "blocked" && <Pill tone="red">{t("statusBlocked")}</Pill>}
             {row.access === "pending" && <Pill tone="amber">{t("statusPending")}</Pill>}

@@ -56,6 +56,7 @@ const en = {
 
   noPieces: "No pieces in this organization.",
   noKits: "No kits in this organization.",
+  seeAllIn: "See all in {screen}",
   noCustomers: "No companies in this organization.",
   unassigned: "Unassigned",
   customer_prospect: "Prospect",
@@ -123,6 +124,7 @@ export const organizationsMessages: Dictionary<typeof en> = {
 
     noPieces: "Nenhuma peça nesta organização.",
     noKits: "Nenhum kit nesta organização.",
+    seeAllIn: "Ver tudo em {screen}",
     noCustomers: "Nenhuma empresa nesta organização.",
     unassigned: "Sem responsável",
     customer_prospect: "Prospecto",
@@ -187,6 +189,7 @@ export const organizationsMessages: Dictionary<typeof en> = {
 
     noPieces: "No hay piezas en esta organización.",
     noKits: "No hay kits en esta organización.",
+    seeAllIn: "Ver todo en {screen}",
     noCustomers: "No hay empresas en esta organización.",
     unassigned: "Sin responsable",
     customer_prospect: "Prospecto",

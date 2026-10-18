@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Ban } from "lucide-react";
+import { PaneBar } from "@/components/xpot/MasterDetail";
 import type { TagDetail } from "@shared/tagsApi";
 import { useXpotModules } from "@/components/ModuleSwitch";
 import { EmptyState } from "@/components/xpot/EmptyState";
@@ -22,6 +23,8 @@ import { manageTagsPiecesMessages } from "@/i18n/messages/manageTagsPieces";
 // Admin › Tags › a piece: the management side of the one piece screen
 // (components/piece), with every section. On a computer the working sections
 // sit left and Management right; Performance and Activity run across the bottom.
+// In Inventory's side pane (`onClose`) the sections stack in one column, with
+// "Open full page" (this same page at /admin/tags/pieces/:id) and Close on top.
 
 type Go = (path: string) => void;
 
@@ -34,7 +37,7 @@ function Back({ go }: { go: Go }) {
   );
 }
 
-export function PieceDetail({ id, go }: { id: string; go: Go }) {
+export function PieceDetail({ id, go, onClose }: { id: string; go: Go; /** Shown in Inventory's side pane. */ onClose?: () => void }) {
   const t = useT(manageTagsPiecesMessages);
   const { toast } = useToast();
   const access = useViewerAccess();
@@ -53,12 +56,13 @@ export function PieceDetail({ id, go }: { id: string; go: Go }) {
     [access.hasAdminAccess, access.isSuperAdmin, modules, access.me?.rep.id],
   );
 
-  if (isLoading) return <Loading rows={5} />;
+  const top = onClose ? <PaneBar fullHref={`/admin/tags/pieces/${encodeURIComponent(id)}`} onClose={onClose} testId="admin-piece-pane" /> : <Back go={go} />;
+  if (isLoading) return onClose ? <div className="space-y-3">{top}<Loading rows={5} /></div> : <Loading rows={5} />;
   if (error || !tag) {
     const notFound = error instanceof AdminHttpError && error.status === 404;
     return (
       <div className="space-y-3">
-        <Back go={go} />
+        {top}
         {notFound ? (
           <EmptyState tone="tags" icon={Ban} title={t("notFound")} />
         ) : (
@@ -79,10 +83,10 @@ export function PieceDetail({ id, go }: { id: string; go: Go }) {
   return (
     <PieceProvider value={context}>
       <div className="min-w-0 space-y-4" data-testid="admin-piece-detail">
-        <Back go={go} />
+        {top}
         <PieceHeader tag={tag} />
         <PieceBody
-          layout="columns"
+          layout={onClose ? "stack" : "columns"}
           desktopWriter={
             <NfcProvisioningCard
               tagId={tag.id}

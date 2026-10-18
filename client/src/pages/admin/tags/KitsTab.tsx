@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Inbox, PackageCheck, PackageOpen, Users } from "lucide-react";
+import { Inbox, Network, PackageCheck, PackageOpen, Users } from "lucide-react";
 import { FilterBar, FilterSelect } from "@/components/xpot/filters";
 import { useUrlFilters } from "@/hooks/use-url-filters";
 import type { TagKitItem } from "@shared/tagsApi";
@@ -13,7 +13,8 @@ import { GLASS_CLASS } from "@/components/xpot/surface";
 import { formatMoney } from "@/lib/format";
 import { ADMIN_TAGS_KEY, STALE_MS, errorMessage, getJson, invalidateAdminTags, sendJson, withQuery } from "./api";
 import { hasTagsModule, useResellers } from "./batches-shared";
-import { Loading, LoadError } from "./pieces-shared";
+import { Loading, LoadError, organizationFilterOptions, useOrganizations } from "./pieces-shared";
+import { useViewerAccess } from "@/lib/adminMode";
 import { HandOutFlow, parseCodes } from "./kits-give-form";
 import { KitList } from "./kits-list";
 import { ReturnsStation } from "./returns-station";
@@ -110,14 +111,17 @@ function AcquisitionInbox() {
   );
 }
 
-/** The kits handed out so far, newest first, filtered by reseller (?kitRep=12). */
+/** The kits handed out so far, newest first, filtered by reseller (?kitRep=12) and, for platform management, organization (?org=3). */
 function KitsView({ go }: { go: (path: string) => void }) {
-  const kitFilters = useUrlFilters({ kitRep: "" });
+  const kitFilters = useUrlFilters({ kitRep: "", org: "" });
   const repFilter = /^\d+$/.test(kitFilters.values.kitRep) ? Number(kitFilters.values.kitRep) : null;
+  const { canManage } = useViewerAccess();
+  const orgFilter = canManage && /^[1-9]\d*$/.test(kitFilters.values.org) ? Number(kitFilters.values.org) : null;
   const { data: resellers = [] } = useResellers();
+  const { data: organizations = [] } = useOrganizations(canManage);
   const t = useT(manageTagsBatchesMessages);
   const tm = useT(manageTagsMessages);
-  const kitsUrl = withQuery("/api/xpot/admin/tag-kits", { repId: repFilter });
+  const kitsUrl = withQuery("/api/xpot/admin/tag-kits", { repId: repFilter, organizationId: orgFilter });
   const kits = useQuery<TagKitItem[]>({
     queryKey: [ADMIN_TAGS_KEY, "kits", kitsUrl],
     queryFn: () => getJson(kitsUrl),
@@ -129,26 +133,38 @@ function KitsView({ go }: { go: (path: string) => void }) {
       <FilterBar
         testId="kits-filters"
         controls={
-          <FilterSelect
-            value={repFilter ? String(repFilter) : ""}
-            onChange={(kitRep) => kitFilters.set({ kitRep })}
-            placeholder={tm("allResellers")}
-            icon={Users}
-            options={resellers.map((r) => ({
-              value: String(r.id),
-              label: `${r.displayName}${r.team ? ` · ${r.team}` : ""}${!r.isActive ? tm("resellerInactive") : !hasTagsModule(r) ? tm("resellerNoTags") : ""}`,
-            }))}
-            testId="admin-tags-reseller-select"
-          />
+          <>
+            <FilterSelect
+              value={repFilter ? String(repFilter) : ""}
+              onChange={(kitRep) => kitFilters.set({ kitRep })}
+              placeholder={tm("allResellers")}
+              icon={Users}
+              options={resellers.map((r) => ({
+                value: String(r.id),
+                label: `${r.displayName}${r.team ? ` · ${r.team}` : ""}${!r.isActive ? tm("resellerInactive") : !hasTagsModule(r) ? tm("resellerNoTags") : ""}`,
+              }))}
+              testId="admin-tags-reseller-select"
+            />
+            {canManage ? (
+              <FilterSelect
+                value={orgFilter ? String(orgFilter) : ""}
+                onChange={(org) => kitFilters.set({ org })}
+                placeholder={tm("allOrganizations")}
+                icon={Network}
+                options={organizationFilterOptions(organizations, orgFilter ? String(orgFilter) : "", (id) => tm("organizationNumber", { id }))}
+                testId="admin-kits-org"
+              />
+            ) : null}
+          </>
         }
-        summary={{ shown: list.length, active: repFilter != null, onClear: () => kitFilters.reset() }}
+        summary={{ shown: list.length, active: repFilter != null || orgFilter != null, onClear: () => kitFilters.reset() }}
       />
       {kits.isLoading ? (
         <Loading rows={3} />
       ) : kits.isError ? (
         <LoadError what={t("theKits")} error={kits.error} onRetry={() => void kits.refetch()} />
       ) : list.length === 0 ? (
-        <EmptyState compact tone="tags" icon={PackageOpen} title={repFilter ? t("noKitsForReseller") : t("noKitsYet")} cardStyle={{}} />
+        <EmptyState compact tone="tags" icon={PackageOpen} title={orgFilter ? t("noKitsMatch") : repFilter ? t("noKitsForReseller") : t("noKitsYet")} cardStyle={{}} />
       ) : (
         <KitList kits={list} go={go} />
       )}

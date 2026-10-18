@@ -141,6 +141,8 @@ export const listQuerySchema = z.object({
   queue: z.enum(TAG_PIECE_QUEUES).optional(),
   /** Only the viewer's own pieces, even for a manager (the phone app's Pieces screen). */
   mine: z.enum(["1", "true"]).transform(() => true).optional(),
+  /** One organization's pieces; honoured only for platform management (a reseller's list is theirs anyway). */
+  organizationId: z.coerce.number().int().positive().optional(),
   method: z.enum(["qr", "nfc"]).optional(),
   search: z.string().trim().max(100).optional(),
   limit: z.coerce.number().int().min(1).max(2000).optional(),
@@ -463,9 +465,11 @@ export function registerTagRoutes(app: Express) {
       // A reseller's list is their own pieces, whatever filter they send. A manager gets
       // every piece (the admin screens), unless asking for their own: a piece is theirs
       // once it is in their kit or they activated it, not because they can reach it.
-      const { mine, ...rest } = filters;
-      const own = !actor.isManager || mine || viewsAsRep(req);
-      res.json(await repo.listTags(own ? { ...rest, repId: actor.repId, house: undefined } : rest));
+      // Tags have no organization scope: like listScope's `everyone` (routes/xpot/middleware.ts),
+      // only a manager or admin in management mode gets every piece, and ?organizationId= narrows that alone.
+      const { mine, organizationId, ...rest } = filters;
+      const own = mine || !actor.inManagement;
+      res.json(await repo.listTags(own ? { ...rest, repId: actor.repId, house: undefined } : { ...rest, organizationId }));
     } catch (err) {
       fail(res, err, "Failed to load tags");
     }
@@ -825,8 +829,12 @@ export function registerTagRoutes(app: Express) {
   // Kits: pieces handed to a reseller.
   app.get("/api/xpot/admin/tag-kits", requireTagManager, async (req, res) => {
     try {
-      const { repId } = z.object({ repId: z.coerce.number().int().positive().optional() }).parse(req.query);
-      res.json(await repo.listKits({ repId }));
+      const { repId, organizationId } = z.object({
+        repId: z.coerce.number().int().positive().optional(),
+        organizationId: z.coerce.number().int().positive().optional(),
+      }).parse(req.query);
+      // The organization filter is platform management's; viewing as a rep it is ignored, as on the pieces list.
+      res.json(await repo.listKits({ repId, organizationId: actorOf(req).inManagement ? organizationId : undefined }));
     } catch (err) {
       fail(res, err, "Failed to load kits");
     }

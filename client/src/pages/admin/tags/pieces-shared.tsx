@@ -56,6 +56,29 @@ export function useLeads() {
   });
 }
 
+export interface OrganizationOption {
+  id: number;
+  name: string;
+  /** A rep's one-person workspace (shared/organizations.ts isPersonalOrganization). */
+  personal: boolean;
+}
+
+/** Every organization (platform management lists them all), for the Inventory and Kits organization filter. */
+export function useOrganizations(enabled = true) {
+  // The Organizations screen's own query, so a rename there shows here too.
+  return useQuery<OrganizationOption[]>({ queryKey: ["/api/xpot/organizations"], staleTime: STALE_MS, enabled });
+}
+
+/**
+ * The organization filter's options: the real organizations, not the reps' personal workspaces (the Organizations
+ * list hides those too), plus the one in the URL whatever it is (an Organizations tab can link to a personal one).
+ */
+export function organizationFilterOptions(list: readonly OrganizationOption[], selected: string, unknownLabel: (id: string) => string) {
+  const options = list.filter((o) => !o.personal || String(o.id) === selected).map((o) => ({ value: String(o.id), label: o.name }));
+  if (selected && !options.some((o) => o.value === selected)) options.push({ value: selected, label: unknownLabel(selected) });
+  return options;
+}
+
 /** Batches for pickers (Pieces filter, Give a kit). Managers can read this list; the Batches screens are the admin's. */
 export function useBatchOptions() {
   return useQuery<TagBatchOption[]>({

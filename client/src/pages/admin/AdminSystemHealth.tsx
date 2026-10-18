@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useLocation } from "wouter";
+import { Link, useLocation, useSearchParams } from "wouter";
 import { Activity, AlertTriangle, Ban, ChevronRight, Cpu, History, ListOrdered, RotateCw, ScrollText } from "lucide-react";
 import { EYEBROW } from "@/components/xpot/surface";
 import { useToast } from "@/hooks/use-toast";
@@ -14,6 +14,9 @@ import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
 import { FilterBar, FilterChips, FilterSearch, FilterSelect, FilterToken } from "@/components/xpot/filters";
 import { ListSkeleton } from "@/components/xpot/ListSkeleton";
 import { ListPager } from "@/components/xpot/pagination";
+import { MasterDetail } from "@/components/xpot/MasterDetail";
+import { useIsDesktop } from "@/hooks/use-is-desktop";
+import { commonMessages } from "@/i18n/messages/common";
 import { Pill, PILL_DOTS } from "@/components/xpot/StatusPill";
 import { apiRequest } from "@/lib/queryClient";
 import { formatDateTime } from "@/lib/dates";
@@ -39,11 +42,37 @@ import {
   type T,
 } from "./systemHealthUi";
 
-/** /admin/health is Status; /admin/health/events/:id is one event in full. */
+/** The event open in the event log's side pane (?event=<id>), when there is one. */
+function useEventPane() {
+  const [params, setParams] = useSearchParams();
+  const raw = params.get("event");
+  const id = raw && /^\d+$/.test(raw) ? Number(raw) : null;
+  // Moving between events and closing replace history; only the first open pushes.
+  const set = useCallback(
+    (next: number | null) =>
+      setParams((current) => {
+        const out = new URLSearchParams(current);
+        if (next) out.set("event", String(next));
+        else out.delete("event");
+        return out;
+      }, { replace: next == null || new URLSearchParams(window.location.search).has("event") }),
+    [setParams],
+  );
+  return { id, open: set, close: useCallback(() => set(null), [set]) };
+}
+
+/**
+ * /admin/health is Status; /admin/health/events/:id is one event in full. On a computer an event
+ * from the log opens in a side pane (?event=<id>); a phone shows that link as the event's page.
+ */
 export function AdminSystemHealth() {
   const [location] = useLocation();
+  const isDesktop = useIsDesktop();
+  const pane = useEventPane();
   const eventId = /^\/admin\/health\/events\/(\d+)/.exec(location)?.[1];
-  return eventId ? <AdminSystemEventDetail id={Number(eventId)} /> : <SystemHealthOverview />;
+  if (eventId) return <AdminSystemEventDetail id={Number(eventId)} />;
+  if (!isDesktop && pane.id) return <AdminSystemEventDetail id={pane.id} />;
+  return <SystemHealthOverview />;
 }
 
 
@@ -495,77 +524,100 @@ function EventLog({ t, ago, fingerprint, onClearFingerprint, runId, onClearRun }
     refetchInterval: REFRESH_MS,
   });
   const rows = events.data?.pages.flatMap((page) => page.events) ?? [];
+  const isDesktop = useIsDesktop();
+  const tc = useT(commonMessages);
+  const pane = useEventPane();
+
+  const card = (
+    <Card title={t("eventsTitle")} icon={ScrollText}>
+      <FilterBar
+        className="mb-3"
+        search={<FilterSearch value={query} onChange={setQ} debounceMs={300} placeholder={t("searchPlaceholder")} shortcut={false} />}
+        controls={
+          <FilterSelect
+            value={source}
+            onChange={setSource}
+            placeholder={t("allSources")}
+            options={SYSTEM_EVENT_SOURCES.map((s) => ({ value: s, label: sourceLabel(t, s) }))}
+          />
+        }
+        secondary={
+          <div className="flex flex-wrap items-center gap-2">
+            <FilterChips
+              ariaLabel={t("eventsTitle")}
+              value={level}
+              onChange={setLevel}
+              items={[
+                { id: "all", label: t("filterAll") },
+                { id: "error", label: t("filterErrors"), dot: PILL_DOTS.red },
+                { id: "warn", label: t("filterWarnings"), dot: PILL_DOTS.amber },
+              ]}
+            />
+            {fingerprint && <FilterToken label={t("clearFilter")} onRemove={onClearFingerprint} />}
+            {runId && <FilterToken label={t("filterRun", { id: runId })} onRemove={onClearRun} />}
+          </div>
+        }
+      />
+
+      {events.isLoading ? (
+        <ListSkeleton rows={4} rowClassName="h-12 rounded-xl" />
+      ) : events.isError ? (
+        <ErrorState compact message={t("loadFailed")} onRetry={() => void events.refetch()} />
+      ) : rows.length === 0 ? (
+        <EmptyState compact dense icon={ScrollText} title={t("eventsEmpty")} cardStyle={{}} />
+      ) : (
+        <ul className="divide-y divide-white/5">
+          {rows.map((event) => (
+            <li key={event.id}>
+              <Link
+                href={`/admin/health/events/${event.id}`}
+                onClick={(e) => {
+                  // A computer opens the event beside the log; a new-tab click still opens its page.
+                  if (!isDesktop || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+                  e.preventDefault();
+                  pane.open(event.id);
+                }}
+                aria-current={pane.id === event.id ? "true" : undefined}
+                className={`flex min-h-11 w-full items-start gap-2 rounded-lg py-2.5 text-left focus-visible:!-outline-offset-2 ${pane.id === event.id ? "bg-white/[0.06]" : "hover:bg-white/[0.02]"}`}
+                data-testid="system-event-row"
+              >
+                <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${event.level === "error" ? PILL_DOTS.red : PILL_DOTS.amber}`} />
+                <span className="min-w-0 flex-1">
+                  <span className="block break-words text-sm text-white/85">{event.message}</span>
+                  <span className="text-xs text-white/40">
+                    {sourceLabel(t, event.source)} · {ago(event.createdAt)} · {formatDateTime(event.createdAt)}
+                    {event.repName ? ` · ${event.repName}` : ""}
+                  </span>
+                </span>
+                <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-white/30" />
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+      <ListPager
+        shown={rows.length}
+        hasMore={Boolean(events.hasNextPage)}
+        onMore={() => {
+          if (!events.isFetchingNextPage) void events.fetchNextPage();
+        }}
+        loading={events.isFetchingNextPage}
+      />
+    </Card>
+  );
 
   return (
     <div id="system-event-log" className="scroll-mt-4">
-      <Card title={t("eventsTitle")} icon={ScrollText}>
-        <FilterBar
-          className="mb-3"
-          search={<FilterSearch value={query} onChange={setQ} debounceMs={300} placeholder={t("searchPlaceholder")} shortcut={false} />}
-          controls={
-            <FilterSelect
-              value={source}
-              onChange={setSource}
-              placeholder={t("allSources")}
-              options={SYSTEM_EVENT_SOURCES.map((s) => ({ value: s, label: sourceLabel(t, s) }))}
-            />
-          }
-          secondary={
-            <div className="flex flex-wrap items-center gap-2">
-              <FilterChips
-                ariaLabel={t("eventsTitle")}
-                value={level}
-                onChange={setLevel}
-                items={[
-                  { id: "all", label: t("filterAll") },
-                  { id: "error", label: t("filterErrors"), dot: PILL_DOTS.red },
-                  { id: "warn", label: t("filterWarnings"), dot: PILL_DOTS.amber },
-                ]}
-              />
-              {fingerprint && <FilterToken label={t("clearFilter")} onRemove={onClearFingerprint} />}
-              {runId && <FilterToken label={t("filterRun", { id: runId })} onRemove={onClearRun} />}
-            </div>
-          }
+      {isDesktop ? (
+        <MasterDetail
+          closeLabel={tc("close")}
+          onClose={pane.close}
+          list={card}
+          detail={pane.id ? <AdminSystemEventDetail key={pane.id} id={pane.id} onClose={pane.close} onOpen={pane.open} /> : null}
         />
-
-        {events.isLoading ? (
-          <ListSkeleton rows={4} rowClassName="h-12 rounded-xl" />
-        ) : events.isError ? (
-          <ErrorState compact message={t("loadFailed")} onRetry={() => void events.refetch()} />
-        ) : rows.length === 0 ? (
-          <EmptyState compact dense icon={ScrollText} title={t("eventsEmpty")} cardStyle={{}} />
-        ) : (
-          <ul className="divide-y divide-white/5">
-            {rows.map((event) => (
-              <li key={event.id}>
-                <Link
-                  href={`/admin/health/events/${event.id}`}
-                  className="flex min-h-11 w-full items-start gap-2 rounded-lg py-2.5 text-left hover:bg-white/[0.02]"
-                  data-testid="system-event-row"
-                >
-                  <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${event.level === "error" ? PILL_DOTS.red : PILL_DOTS.amber}`} />
-                  <span className="min-w-0 flex-1">
-                    <span className="block break-words text-sm text-white/85">{event.message}</span>
-                    <span className="text-xs text-white/40">
-                      {sourceLabel(t, event.source)} · {ago(event.createdAt)} · {formatDateTime(event.createdAt)}
-                      {event.repName ? ` · ${event.repName}` : ""}
-                    </span>
-                  </span>
-                  <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-white/30" />
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-        <ListPager
-          shown={rows.length}
-          hasMore={Boolean(events.hasNextPage)}
-          onMore={() => {
-            if (!events.isFetchingNextPage) void events.fetchNextPage();
-          }}
-          loading={events.isFetchingNextPage}
-        />
-      </Card>
+      ) : (
+        card
+      )}
     </div>
   );
 }

@@ -32,6 +32,7 @@ import { SearchableSelect } from "./SearchableSelect";
 import { integrationTestText } from "./integrationTestText";
 import type { IntegrationTestResult } from "@shared/integrationTest";
 import { SERVICES_KEY, serviceAnchor } from "./servicesUi";
+import { useReportUnsaved } from "../unsavedEdits";
 
 // One provider of the Integrations hub: what it is, whether it works (the same
 // status, source, last test and last error Status shows), what stops if it is
@@ -179,6 +180,7 @@ export function ProviderCard({
     return value !== savedFieldValue(f.key, status);
   });
   const dirty = fieldsDirty || enabled !== status.enabled;
+  useReportUnsaved(`provider:${def.provider}`, dirty);
 
   const labelOfPath = (path: string) => {
     const field = def.fields.find((f) => f.key === path);
