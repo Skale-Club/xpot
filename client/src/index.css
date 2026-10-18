@@ -5,6 +5,7 @@
 :root {
   --font-sans: 'Inter', sans-serif;
   --font-display: 'Inter', sans-serif;
+  --font-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
 
   /* Xpot mark: sampled from the blue half of the X (the landing's brand CTA). */
   --xpot-blue: #5272F2;

@@ -128,12 +128,16 @@ pontinhos" do loader e o hover dos botões não existiam (classes CSS ausentes).
 
 ### Fase 4: limpeza
 
-- **4a, código morto** (feito em paralelo com esta documentação; confira o
-  merge): a tela `RouteSettings` que nenhuma rota abria, o diálogo de
-  importação CSV sem tela, código morto dos hooks de empresas e check-in,
-  exportações e aliases do kit sem uso, imports não usados. Alvos do plano
-  ainda a conferir no merge: a API Xphere do vendedor, `markLeadCustomer`,
-  chaves de i18n sem uso e rotas-alias antigas.
+- **4a, código morto:** a tela `RouteSettings` que nenhuma rota abria, o
+  diálogo de importação CSV sem tela, código morto dos hooks de empresas e
+  check-in (inclusive uma busca do Google Places paga que rodava sem ser
+  lida), exportações e aliases do kit sem uso, imports não usados, a API
+  Xphere do vendedor (`/api/xpot/xphere/config`), os endpoints
+  `/tags/summary` e `/tags/:id/dashboard`, `markLeadCustomer`, tokens de
+  Tailwind e variáveis CSS sem uso e 216 chaves de i18n sem uso. Um teste
+  novo (`tests/i18n-unused-keys.test.ts`, script
+  `scripts/i18n-unused-keys.ts`) falha quando uma chave fica sem uso. As
+  rotas-alias antigas continuam, para não quebrar favoritos.
 - **4b, documentação:** README, [ARCHITECTURE.md](./ARCHITECTURE.md),
   [UI_KIT.md](./UI_KIT.md), [BACKLOG.md](./BACKLOG.md) (área UXR) e este
   documento; linhas que ficaram falsas em [MODULES.md](./MODULES.md),
@@ -148,7 +152,7 @@ cada uma pode ser desfeita.
 | # | Pergunta | O que foi feito | Como reverter |
 |---|---|---|---|
 | 1 | Organizações já são para o usuário? | Ficam no modelo de dados. A tela `/organizations` sai da navegação de quem não gerencia e fica em Administração para gerentes e admins; foi traduzida e o escopo foi corrigido (revendedor vê as empresas que têm peças dele). Organizações não cria contas: só vincula pessoas existentes; criar é em Pessoas. A criação automática de espaços pessoais continua | Para tirar a tela de vez: remover o item `/organizations` de `administrationItems()` (`client/src/components/xpot/moduleNav.ts`) e a rota em `App.tsx`. Para mostrar a quem não gerencia: devolver o item ao grupo do menu dessa pessoa em `accountGroups()`. Para parar a criação automática: `ensureOrganizationForRep` em `server/organizations/service.ts` |
-| 2 | Xphere: configurado pelo vendedor ou só pelo admin? | Só pelo admin do Xpot: Plataforma › Integrações › Xphere ou a seção Xphere da pessoa em Pessoas. Chaves de entrada mascaradas, com mostrar, copiar e trocar. Os textos do vendedor em Configurações saíram | Para o vendedor configurar: uma seção em Configurações chamando `GET/PUT /api/xpot/xphere/config` (rotas do vendedor em `server/routes/xpot/xphere.ts`; se a limpeza da Fase 4 as removeu, recuperar do histórico) |
+| 2 | Xphere: configurado pelo vendedor ou só pelo admin? | Só pelo admin do Xpot: Plataforma › Integrações › Xphere ou a seção Xphere da pessoa em Pessoas. Chaves de entrada mascaradas, com mostrar, copiar e trocar. Os textos do vendedor em Configurações saíram | Para o vendedor configurar: uma seção em Configurações chamando `GET/PUT /api/xpot/xphere/config` (rotas do vendedor removidas na Fase 4a, commit `85a38d5`; recuperar do histórico) |
 | 3 | GoHighLevel ainda é usado? | Continua funcionando, marcado "Legado": na seção CRM de Integrações fica dobrado sob "Legado"; Vendas › Pipeline explica quando não está conectado | Tirar os rótulos: chaves `legacyBadge` / `legacyTitle` (`i18n/messages/integrations.ts`, `platformAdmin.ts`) e a dobra em `client/src/pages/admin/platform/IntegrationsHub.tsx`. Remover o GHL de vez é outra tarefa (`server/integrations/ghl.ts`, sync, selo nas empresas) |
 | 4 | Custo do kit de Tags | Obrigatório só quando a política do revendedor é custo por aquisição, ou quando o kit é uma compra. Na consignação de estoque da casa, um custo informado fica registrado como referência e a peça continua da empresa | A regra está num só lugar, `shared/tagKits.ts`, usado pelo formulário e pela rota |
 | 5 | Ativar uma peça conta como venda? | **Nunca.** Só uma venda registrada (`sales_sale_tags` ativa) conta como vendida, em todas as telas e relatórios (`shared/tagMetrics.ts`). O diálogo de ativação diz isso. A venda de Tags aparece em Vendas | Contraria o plano (`TAG_SALES_EXECUTION_PLAN.md` §14, "transformar ativação da peça em venda automática" está fora do escopo). Exigiria criar a venda na ativação e mudar a métrica `sold` em `shared/tagMetrics.ts`. Não recomendado |

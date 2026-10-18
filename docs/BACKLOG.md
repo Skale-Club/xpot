@@ -1,6 +1,6 @@
 # Backlog Xpot
 
-**Rev. 5** · base `claude/ux-overhaul` · 83 itens · **49 concluídos** · 3 obsoletos · 31 abertos
+**Rev. 5** · base `claude/ux-overhaul` · 83 itens · **51 concluídos** · 3 obsoletos · 29 abertos
 
 > **Rev. 5 (revisão de UX, 2026-10-18):** entrou a área **UXR**, com o que a
 > revisão de UX fez e o que deixou aberto (resumo em
@@ -44,8 +44,8 @@ Detalhamento e referências completas de arquivo:linha em [`AUDITORIA.md`](./AUD
 | PRF — performance | 5 | 1 | 0 | 4 |
 | DOC — testes e documentação | 5 | 5 | 0 | 0 |
 | MOD — módulos Visitas e Tags | 3 | 3 | 0 | 0 |
-| UXR — revisão de UX (out/2026) | 31 | 18 | 0 | 13 |
-| **Total** | **83** | **49** | **3** | **31** |
+| UXR — revisão de UX (out/2026) | 31 | 20 | 0 | 11 |
+| **Total** | **83** | **51** | **3** | **29** |
 
 ### Novidades desta revisão
 
@@ -233,7 +233,7 @@ O que mudou e por quê, as seis decisões de produto e como conferir:
 
 | ID | Sev | Item | Estado |
 |---|---|---|---|
-| UXR-18 | Baixo | **Código morto** (Fase 4a): `RouteSettings`, importação CSV sem tela, a API Xphere do vendedor, `markLeadCustomer`, chaves de i18n sem uso, rotas-alias antigas. | A fazer (Fase 4a em branch própria; conferir no merge) |
+| UXR-18 | Baixo | **Código morto** (Fase 4a): `RouteSettings`, importação CSV sem tela, a API Xphere do vendedor, `markLeadCustomer`, `/tags/summary`, 216 chaves de i18n sem uso (com teste que impede novas). As rotas-alias antigas ficam, por causa de favoritos. | Feito (Fase 4a) |
 | UXR-20 | Médio | **Cancelar uma busca de prospecção presa.** `server/prospecting/**` não tem cancelamento de job ou run; Status só oferece Retry e "Montar a rota de novo". | A fazer |
 | UXR-21 | Baixo | **Filtro por vendedor no histórico de visitas.** Sem ele, a página da pessoa em Pessoas não tem o atalho "visitas dela" (tem peças e kits). | A fazer |
 | UXR-22 | Médio | **Filtro por organização em Inventário, Kits e Empresas.** Sem ele, as abas de Organizações ficam como listas só de leitura. | A fazer |
@@ -242,7 +242,7 @@ O que mudou e por quê, as seis decisões de produto e como conferir:
 | UXR-25 | Baixo | **Página de consentimento OAuth (MCP) e resultados de "Testar" das integrações em inglês.** | A fazer |
 | UXR-26 | Baixo | **Recusas antigas com motivo próprio aparecem como Bloqueado.** Só o texto padrão é reconhecido como recusa; não há marcador para as demais. | A fazer |
 | UXR-27 | Baixo | **Linhas do Xphere e o card CRM de Integrações levarem à pessoa** (`/admin/reps/:repId`). | A fazer (conferir no merge da 4a) |
-| UXR-28 | Baixo | **`GET /api/xpot/tags/:id/dashboard` sem chamadores** desde a tela única de peça. Remover. | A fazer (conferir no merge da 4a) |
+| UXR-28 | Baixo | **`GET /api/xpot/tags/:id/dashboard` sem chamadores** desde a tela única de peça. Remover. | Feito (Fase 4a, `36e1951`) |
 | UXR-29 | Baixo | **Retry de oportunidades em Status › Sync do CRM.** Elas aparecem na lista, mas `POST /api/xpot/sync/retry` não as aceita. | A fazer |
 | UXR-30 | Baixo | **Aviso de alterações não salvas em Integrações** cobre só a troca de provedor; a Landing tem o aviso completo. | A fazer |
 | UXR-31 | Baixo | **Quem cancela uma venda de Tags.** A tela mostra "Cancelar venda" só a gerentes; o servidor também deixa o próprio vendedor (com Visitas) cancelar. | Decidir |
