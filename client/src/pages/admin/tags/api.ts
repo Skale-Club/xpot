@@ -1,5 +1,5 @@
 import { queryClient } from "@/lib/queryClient";
-import { currentLocale, translate } from "@/i18n";
+import { translate } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 
 // Fetch helpers for the Tags admin (/api/xpot/admin/tag*). The server answers
@@ -59,21 +59,8 @@ export function invalidateAdminTags() {
 
 export const STALE_MS = 30_000;
 
-/** Dates follow the app's language, not the browser's. */
-export function formatDateTime(value: string | null | undefined): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleString(currentLocale(), { dateStyle: "medium", timeStyle: "short" });
-}
-
-export function formatTime(value: string | null | undefined): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleTimeString(currentLocale(), { timeStyle: "short" });
-}
-
-export function formatDate(value: string | null | undefined): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleDateString(currentLocale(), { dateStyle: "medium" });
-}
+/** Dates follow the app's language, not the browser's (shared with the other admin screens). */
+export { formatDate, formatDateTime, formatTime } from "@/lib/dates";
 
 export function percent(part: number, total: number): string {
   if (!total) return "0%";

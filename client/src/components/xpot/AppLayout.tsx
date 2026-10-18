@@ -88,7 +88,8 @@ function useShellNav() {
   const context = contextOfPath(location);
   const workspaceItem: NavItem = { href: "/organizations", label: t("navOrganization"), icon: Building2, match: starts("/organizations") };
   const managementItems = viewer.canManage ? organizationItems(labels, viewer) : [];
-  const organization = me ? [workspaceItem, ...managementItems] : [];
+  // /organizations is a management page: plain reps don't get it in their navigation.
+  const organization = me && viewer.canManage ? [workspaceItem, ...managementItems] : [];
   const settingsItem: NavItem = { href: "/settings", label: t("navSettings"), icon: Settings, match: starts("/settings") };
   // On an account page no module is current: the sidebar lists the account itself.
   const module: XpotModule | null = context === "account" ? null : modules.includes(context) ? context : modules[0] ?? null;
