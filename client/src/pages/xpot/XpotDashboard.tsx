@@ -1,10 +1,20 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { MapPinned, DollarSign, Target, Clock3, Footprints, Activity, AlertTriangle, RefreshCw, ArrowLeft, ChevronRight, Route as RouteIcon, ListTodo, Check, Plus, CalendarClock } from "lucide-react";
+import { MapPinned, DollarSign, Target, Clock3, Activity, AlertTriangle, RotateCw, ChevronRight, Route as RouteIcon, ListTodo, Check, Plus, CalendarClock, CalendarDays } from "lucide-react";
 import { AreaChart, Area, XAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { useXpotQueries } from "./hooks/useXpotQueries";
 import { useSyncStatus } from "./hooks/useSyncStatus";
-import { formatCents } from "./utils";
+import { formatCents, formatVisitWhen } from "./utils";
+import { MONEY_CHART } from "./components/sales/moneyPalette";
+import { leadsMessages } from "@/i18n/messages/leads";
+import { tasksMessages } from "@/i18n/messages/tasks";
+import { visitsUiMessages } from "@/i18n/messages/visitsUi";
+import { formatDate, formatTime } from "@/lib/format";
+import { Button } from "@/components/ui/button";
+import { DotsLoader } from "@/components/ui/spinner";
+import { EmptyState } from "@/components/xpot/EmptyState";
+import { PageHeader } from "@/components/xpot/PageHeader";
+import { DANGER_SURFACE, EYEBROW } from "@/components/xpot/surface";
 import { useSalesSummary } from "./hooks/useSalesModule";
 import { useT } from "@/i18n";
 import { dashboardMessages } from "@/i18n/messages/dashboard";
@@ -42,12 +52,17 @@ type DashboardRouteDetail = {
 
 type ActivityMetric = "visits" | "revenue" | "profit" | "sales";
 
-const ACTIVITY_TONES: Record<ActivityMetric, { stroke: string; fill: string }> = {
-  visits: { stroke: "#60a5fa", fill: "#3b82f6" },
-  revenue: { stroke: "#818cf8", fill: "#6366f1" },
-  profit: { stroke: "#34d399", fill: "#10b981" },
-  sales: { stroke: "#c084fc", fill: "#a855f7" },
+// Visits are the brand blue; money uses the one money palette (the same
+// colours as the Sales chart); the number of sales is a count, so neutral.
+const ACTIVITY_TONES: Record<ActivityMetric, { stroke: string; fill: string; swatch: string }> = {
+  visits: { stroke: "#60a5fa", fill: "#3b82f6", swatch: "bg-blue-400" },
+  revenue: MONEY_CHART.revenue,
+  profit: MONEY_CHART.profit,
+  sales: { stroke: "#cbd5e1", fill: "#94a3b8", swatch: "bg-slate-300" },
 };
+
+/** An empty section body: the kit EmptyState without a second card around it. */
+const SECTION_EMPTY = { background: "transparent", border: "none" } as const;
 
 function localDateKey(date = new Date()) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -57,6 +72,9 @@ function DashboardOverview() {
   const { dashboardQuery, setLocation } = useXpotQueries();
   const { toast } = useToast();
   const t = useT(dashboardMessages);
+  const tl = useT(leadsMessages);
+  const tt = useT(tasksMessages);
+  const tu = useT(visitsUiMessages);
   const metrics = dashboardQuery.data?.metrics;
   const { failedEvents, retryMutation } = useSyncStatus();
   const [periodDays, setPeriodDays] = useState(7);
@@ -87,13 +105,14 @@ function DashboardOverview() {
       ]);
       toast({ title: t("taskCompleted"), variant: "success" });
     },
+    onError: (error: Error) => toast({ title: tt("changeFailed"), description: error.message, variant: "destructive" }),
   });
   const allDaily = salesSummary.data?.daily ?? [];
   const activityOptions = [
-    { value: "visits" as const, label: t("activityVisits"), swatchClassName: "bg-blue-400" },
-    { value: "revenue" as const, label: t("activityRevenue"), swatchClassName: "bg-indigo-400" },
-    { value: "profit" as const, label: t("activityProfit"), swatchClassName: "bg-emerald-400" },
-    { value: "sales" as const, label: t("activitySales"), swatchClassName: "bg-violet-400" },
+    { value: "visits" as const, label: t("activityVisits"), swatchClassName: ACTIVITY_TONES.visits.swatch },
+    { value: "revenue" as const, label: t("activityRevenue"), swatchClassName: ACTIVITY_TONES.revenue.swatch },
+    { value: "profit" as const, label: t("activityProfit"), swatchClassName: ACTIVITY_TONES.profit.swatch },
+    { value: "sales" as const, label: t("activitySales"), swatchClassName: ACTIVITY_TONES.sales.swatch },
   ];
   const activityLabel = activityOptions.find((option) => option.value === activityMetric)?.label ?? t("activityVisits");
   const activityDaily = activityMetric === "visits"
@@ -132,6 +151,11 @@ function DashboardOverview() {
     );
   }
 
+  function syncEntityLabel(entityType: string) {
+    const key = `syncEntity_${entityType.replace(/^sales_/, "")}`;
+    return key in visitsUiMessages.en ? tu(key as keyof typeof visitsUiMessages.en) : tu("syncEntityOther");
+  }
+
   function routeStatusLabel(status: DashboardRoute["status"]) {
     if (status === "draft") return t("routeStatusDraft");
     if (status === "published") return t("routeStatusPublished");
@@ -142,7 +166,7 @@ function DashboardOverview() {
 
   function taskTimeLabel(value: Date | string | null | undefined) {
     if (!value) return t("taskNoDueDate");
-    return new Date(value).toLocaleTimeString(t.locale, { hour: "numeric", minute: "2-digit" });
+    return formatTime(value);
   }
 
   const chartBlock = (
@@ -183,7 +207,7 @@ function DashboardOverview() {
             icon={Activity}
             title={t("noMetricActivity", { metric: activityLabel.toLocaleLowerCase(t.locale) })}
             hint={t("noMetricActivityHint")}
-            action={<button type="button" onClick={() => setLocation(activityMetric === "visits" ? "/dashboard/history" : "/sales")} className="text-xs font-semibold text-indigo-300 transition-colors hover:text-indigo-200">{activityMetric === "visits" ? t("openVisits") : t("openSales")}</button>}
+            action={<Button type="button" variant="ghost" size="sm" onClick={() => setLocation(activityMetric === "visits" ? "/dashboard/history" : "/sales")} className="text-blue-300">{activityMetric === "visits" ? t("openVisits") : t("openSales")}</Button>}
           />
         </div>
       ) : (
@@ -192,7 +216,7 @@ function DashboardOverview() {
             <AreaChart data={chartDaily.map((day, index, values) => ({
               day: index === values.length - 1
                 ? t("today")
-                : new Date(`${day.date}T12:00:00`).toLocaleDateString(t.locale, { weekday: "short" }),
+                : formatDate(`${day.date}T12:00:00`, { weekday: "short" }),
               value: day.value,
             }))} margin={{ top: 18, right: 8, left: 8, bottom: 0 }}>
               <defs>
@@ -233,8 +257,8 @@ function DashboardOverview() {
         >
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-[10px] font-semibold uppercase tracking-widest text-white/35">{t("salesKeptMonth")}</div>
-              <div className="mt-0.5 text-2xl font-bold tabular-nums text-emerald-400">
+              <div className={EYEBROW}>{t("salesKeptMonth")}</div>
+              <div className="mt-0.5 text-2xl font-bold tabular-nums text-emerald-300">
                 {formatCents(salesSummary.data.profit.monthToDateCents)}
               </div>
               <div className="text-[11px] text-white/35">
@@ -242,7 +266,7 @@ function DashboardOverview() {
               </div>
             </div>
             <div className="text-right">
-              <div className="text-[10px] font-semibold uppercase tracking-widest text-white/35">{t("salesOnStreet")}</div>
+              <div className={EYEBROW}>{t("salesOnStreet")}</div>
               <div className="mt-0.5 text-2xl font-bold tabular-nums text-white">
                 {salesSummary.data.consignment.unitsOnHand}
               </div>
@@ -267,9 +291,9 @@ function DashboardOverview() {
       icon={CalendarClock}
       bodyClassName="p-0"
       action={(
-        <button type="button" onClick={() => setLocation(todayRoute ? `/route?routeId=${todayRoute.id}` : "/route")} className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-300 transition-colors hover:text-indigo-200">
-          {t("viewRoute")} <ChevronRight className="h-3.5 w-3.5" />
-        </button>
+        <Button type="button" variant="ghost" size="sm" onClick={() => setLocation(todayRoute ? `/route?routeId=${todayRoute.id}` : "/route")} className="text-blue-300">
+          {t("viewRoute")} <ChevronRight aria-hidden="true" />
+        </Button>
       )}
     >
       <button
@@ -283,7 +307,7 @@ function DashboardOverview() {
           </span>
           <span className="min-w-0 flex-1">
             <span className="flex flex-wrap items-center gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/35">{t("todayRoute")}</span>
+              <span className={EYEBROW}>{t("todayRoute")}</span>
               {todayRoute ? <span className="rounded-full bg-white/[0.055] px-2 py-0.5 text-[10px] font-semibold text-white/50">{routeStatusLabel(todayRoute.status)}</span> : null}
             </span>
             <span className="mt-1 block truncate text-base font-bold text-white/90 first-letter:uppercase">{todayRoute ? routeDisplayName(todayRoute, t.locale) : t("routeNotCreated")}</span>
@@ -306,27 +330,33 @@ function DashboardOverview() {
       <div className="flex items-center justify-between gap-3 px-4 pb-2 pt-4 lg:px-5">
         <div className="flex items-center gap-2">
           <ListTodo className="h-4 w-4 text-blue-300" aria-hidden="true" />
-          <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-white/50">{t("tasksTodayTitle")}</h3>
+          <h3 className={EYEBROW}>{t("tasksTodayTitle")}</h3>
           <span className="rounded-full bg-blue-500/10 px-2 py-0.5 text-[10px] font-bold tabular-nums text-blue-300">{metrics?.tasksToday ?? 0}</span>
         </div>
-        <button type="button" onClick={() => setLocation("/tasks?new=1")} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold text-indigo-300 transition-colors hover:bg-indigo-500/10 hover:text-indigo-200">
-          <Plus className="h-3.5 w-3.5" /> {t("addTask")}
-        </button>
+        <Button type="button" variant="ghost" size="sm" onClick={() => setLocation("/tasks?new=1")} className="text-blue-300">
+          <Plus aria-hidden="true" /> {t("addTask")}
+        </Button>
       </div>
 
       {sectionPending(3) ?? (tasksToday.length ? (
         <div className="px-2 pb-2 lg:px-3 lg:pb-3">
-          {tasksToday.slice(0, 5).map((task) => (
-            <div key={task.id} className="group flex items-center gap-2 rounded-xl px-2 py-2 transition-colors hover:bg-white/[0.03]">
+          {tasksToday.slice(0, 5).map((task) => {
+            // Only the row being completed shows the loader and turns off.
+            const completing = completeTask.isPending && completeTask.variables === task.id;
+            return (
+            <div key={task.id} className="group flex items-center gap-2 rounded-xl px-2 py-1.5 transition-colors hover:bg-white/[0.03]">
               <button
                 type="button"
                 onClick={() => completeTask.mutate(task.id)}
-                disabled={completeTask.isPending}
+                disabled={completing}
+                aria-busy={completing || undefined}
                 aria-label={t("completeTask", { task: task.title })}
                 title={t("completeTask", { task: task.title })}
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/15 text-transparent transition-colors hover:border-emerald-400/60 hover:bg-emerald-400/10 hover:text-emerald-300 disabled:opacity-40"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-transparent transition-colors hover:text-emerald-300"
               >
-                <Check className="h-3.5 w-3.5" />
+                <span className="flex h-7 w-7 items-center justify-center rounded-full border border-white/15 transition-colors group-hover:border-white/25">
+                  {completing ? <DotsLoader size="xs" tone="light" /> : <Check className="h-3.5 w-3.5" aria-hidden="true" />}
+                </span>
               </button>
               <button type="button" onClick={() => setLocation(task.leadId ? `/leads/${task.leadId}` : "/tasks")} className="min-w-0 flex-1 text-left">
                 <span className="block truncate text-sm font-semibold text-white/82">{task.title}</span>
@@ -337,16 +367,16 @@ function DashboardOverview() {
               </button>
               <ChevronRight className="h-3.5 w-3.5 shrink-0 text-white/10 transition group-hover:text-white/35" aria-hidden="true" />
             </div>
-          ))}
-          <button type="button" onClick={() => setLocation("/tasks")} className="mt-1 flex w-full items-center justify-center gap-1 rounded-xl border-t border-white/[0.05] px-3 pt-3 text-xs font-semibold text-indigo-300/75 transition-colors hover:text-indigo-200">
-            {t("viewAllTasks")} <ChevronRight className="h-3.5 w-3.5" />
-          </button>
+            );
+          })}
+          <div className="mt-1 border-t border-white/[0.05] pt-1">
+            <Button type="button" variant="ghost" size="sm" onClick={() => setLocation("/tasks")} className="w-full text-blue-300">
+              {t("viewAllTasks")} <ChevronRight aria-hidden="true" />
+            </Button>
+          </div>
         </div>
       ) : (
-        <div className="px-5 pb-5 pt-2 text-center">
-          <div className="text-sm font-semibold text-white/55">{t("todayTasksClear")}</div>
-          <div className="mt-1 text-xs text-white/28">{t("todayTasksClearHint")}</div>
-        </div>
+        <EmptyState compact dense icon={ListTodo} title={t("todayTasksClear")} hint={t("todayTasksClearHint")} cardStyle={SECTION_EMPTY} />
       ))}
     </DashboardSection>
   );
@@ -357,13 +387,10 @@ function DashboardOverview() {
         <AttentionList>
           {(metrics?.overdueTasks ?? 0) > 0 ? <AttentionItem icon={Clock3} eyebrow={t("taskOverdue")} title={t("overdueTasksTitle")} detail={t.plural("overdueTasksDetail", metrics?.overdueTasks ?? 0)} tone="amber" onClick={() => setLocation("/tasks")} /> : null}
           {(salesSummary.data?.consignment.dueCount ?? 0) > 0 ? <AttentionItem icon={DollarSign} eyebrow={t("salesOnStreet")} title={t("settlementsDueTitle")} detail={t.plural("settlementsDueDetail", salesSummary.data?.consignment.dueCount ?? 0)} tone="amber" onClick={() => setLocation("/sales")} /> : null}
-          {(metrics?.openOpportunities ?? 0) > 0 ? <AttentionItem icon={Target} eyebrow={t("metricOpportunities")} title={t("openOpportunitiesTitle")} detail={t.plural("openOpportunitiesDetail", metrics?.openOpportunities ?? 0)} tone="violet" onClick={() => setLocation("/sales")} /> : null}
+          {(metrics?.openOpportunities ?? 0) > 0 ? <AttentionItem icon={Target} eyebrow={t("metricOpportunities")} title={t("openOpportunitiesTitle")} detail={t.plural("openOpportunitiesDetail", metrics?.openOpportunities ?? 0)} tone="blue" onClick={() => setLocation("/sales")} /> : null}
         </AttentionList>
       ) : (
-        <div className="px-5 py-7 text-center">
-          <div className="text-sm font-semibold text-white/60">{t("attentionClear")}</div>
-          <div className="mt-1 text-xs text-white/30">{t("attentionClearHint")}</div>
-        </div>
+        <EmptyState compact dense icon={Check} title={t("attentionClear")} hint={t("attentionClearHint")} cardStyle={SECTION_EMPTY} />
       ))}
     </DashboardSection>
   );
@@ -372,13 +399,10 @@ function DashboardOverview() {
     <>
       {/* Sync failures */}
       {failedEvents.length > 0 && (
-        <div
-          className="rounded-[18px] p-4 space-y-2"
-          style={{ background: "rgba(239,68,68,0.07)", border: "1px solid rgba(239,68,68,0.2)" }}
-        >
-          <div className="flex items-center gap-2 mb-3">
-            <AlertTriangle className="h-4 w-4 text-red-400 shrink-0" />
-            <div className="text-xs font-bold uppercase tracking-widest text-red-400">
+        <div className="space-y-2 rounded-2xl p-4" style={DANGER_SURFACE} role="alert">
+          <div className="mb-3 flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 shrink-0 text-red-300" aria-hidden="true" />
+            <div className={`${EYEBROW} !text-red-300`}>
               {t.plural("syncFailures", failedEvents.length)}
             </div>
           </div>
@@ -390,20 +414,22 @@ function DashboardOverview() {
             >
               <div className="min-w-0 flex-1">
                 <div className="text-xs font-semibold text-white/80 truncate">
-                  {event.entityType.replace("sales_", "").replace("_", " ")} #{event.entityId}
+                  {tu("syncEntityLine", { type: syncEntityLabel(event.entityType), id: event.entityId })}
                 </div>
-                <div className="text-[10px] text-red-400/70 truncate">{event.lastError ?? t("unknownError")}</div>
+                <div className="truncate text-[11px] text-red-300/80">{event.lastError ?? t("unknownError")}</div>
               </div>
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="icon"
                 onClick={() => retryMutation.mutate({ entityType: event.entityType, entityId: event.entityId })}
-                disabled={retryMutation.isPending}
+                loading={retryMutation.isPending && retryMutation.variables?.entityId === event.entityId && retryMutation.variables?.entityType === event.entityType}
                 aria-label={t("retrySync")}
                 title={t("retrySync")}
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-white/40 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-40"
+                className="text-white/50"
               >
-                <RefreshCw className={`h-3.5 w-3.5 ${retryMutation.isPending ? "animate-spin" : ""}`} />
-              </button>
+                <RotateCw aria-hidden="true" />
+              </Button>
             </div>
           ))}
         </div>
@@ -414,34 +440,33 @@ function DashboardOverview() {
   const recentBlock = (
     <DashboardSection
       title={t("latestVisits")}
-      icon={Footprints}
+      icon={CalendarDays}
       bodyClassName="p-2"
-      action={<button type="button" onClick={() => setLocation("/dashboard/history")} className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-300/80 transition-colors hover:text-indigo-200">{t("viewHistory")}<ChevronRight className="h-3.5 w-3.5" /></button>}
+      action={<Button type="button" variant="ghost" size="sm" onClick={() => setLocation("/dashboard/history")} className="text-blue-300">{t("viewHistory")}<ChevronRight aria-hidden="true" /></Button>}
     >
       {sectionPending(3) ?? (dashboardQuery.data?.recentVisits?.length ? (
         <div className="divide-y divide-white/[0.05]" data-testid="dashboard-recent-visits">
           {dashboardQuery.data.recentVisits.map((visit) => {
-            const when = visit.checkedOutAt ?? visit.checkedInAt ?? visit.scheduledAt;
+            const when = formatVisitWhen(visit);
             // The status is the outcome the rep picked; the note line adds what they wrote, if anything.
             const noteLine = visit.note?.outcome || visit.note?.nextStep;
             return (
               <button key={visit.id} type="button" onClick={() => setLocation(`/dashboard/history/${visit.id}`)} className="group flex w-full items-center gap-3 rounded-xl px-2.5 py-3 text-left transition-colors hover:bg-white/[0.03]">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-indigo-500/10 text-indigo-300"><MapPinned className="h-4 w-4" /></span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-xs font-semibold text-white/78">{visit.lead?.name ?? `#${visit.leadId}`}</span>
+                  <span className="block truncate text-sm font-semibold text-white/85">{visit.lead?.name ?? tl("leadNumber", { id: visit.leadId })}</span>
                   <span className="mt-1 flex min-w-0 items-center gap-2">
                     <StatusBadge status={visit.status} />
                     {noteLine ? <span className="min-w-0 truncate text-[11px] text-white/30">{noteLine}</span> : null}
                   </span>
                 </span>
-                {when ? <span className="shrink-0 text-right text-[10px] leading-relaxed tabular-nums text-white/28">{new Date(when).toLocaleDateString(t.locale, { month: "short", day: "numeric" })}<br />{new Date(when).toLocaleTimeString(t.locale, { hour: "numeric", minute: "2-digit" })}</span> : null}
+                {when ? <span className="shrink-0 text-right text-[11px] leading-relaxed tabular-nums text-white/40">{when.date}<br />{when.time}</span> : null}
                 <ChevronRight className="h-3.5 w-3.5 shrink-0 text-white/10 transition group-hover:text-white/35" />
               </button>
             );
           })}
         </div>
       ) : (
-        <div className="px-4 py-8 text-center"><div className="text-sm font-semibold text-white/55">{t("noVisitsYet")}</div><div className="mt-1 text-xs text-white/28">{t("goToCheckIn")}</div></div>
+        <EmptyState compact dense icon={CalendarDays} title={t("noVisitsYet")} hint={t("goToCheckIn")} cardStyle={SECTION_EMPTY} />
       ))}
     </DashboardSection>
   );
@@ -451,9 +476,9 @@ function DashboardOverview() {
       <QuickCheckIn />
       <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4 lg:gap-4">
         <KpiTile label={t("metricVisitsToday")} value={metrics?.visitsToday ?? 0} icon={MapPinned} accent="blue" detail={t.plural("metricVisitsRemaining", metrics?.remainingVisitsToday ?? 0)} loading={dashboardQuery.isLoading} onClick={() => setLocation("/route")} />
-        <KpiTile label={t("metricCompletedToday")} value={metrics?.completedVisitsToday ?? 0} icon={Check} accent="emerald" detail={t.plural("metricVisitsCompleted", metrics?.completedVisitsToday ?? 0)} loading={dashboardQuery.isLoading} onClick={() => setLocation("/dashboard/history?view=day")} />
+        <KpiTile label={t("metricCompletedToday")} value={metrics?.completedVisitsToday ?? 0} icon={Check} accent="blue" detail={t.plural("metricVisitsCompleted", metrics?.completedVisitsToday ?? 0)} loading={dashboardQuery.isLoading} onClick={() => setLocation("/dashboard/history?view=day")} />
         <KpiTile label={t("metricTasksToday")} value={metrics?.tasksToday ?? 0} icon={ListTodo} accent="amber" detail={t.plural("metricTasksOverdue", metrics?.overdueTasks ?? 0)} loading={dashboardQuery.isLoading} onClick={() => setLocation("/tasks")} />
-        <KpiTile label={t("metricSalesToday")} value={salesSummary.data ? formatCents(salesSummary.data.revenue.todayCents) : "—"} icon={DollarSign} accent="violet" detail={salesSummary.data ? t("metricSalesProfit", { amount: formatCents(salesSummary.data.profit.todayCents) }) : undefined} loading={salesSummary.isLoading} onClick={() => setLocation("/sales")} />
+        <KpiTile label={t("metricSalesToday")} value={salesSummary.data ? formatCents(salesSummary.data.revenue.todayCents) : "—"} icon={DollarSign} accent="emerald" detail={salesSummary.data ? t("metricSalesProfit", { amount: formatCents(salesSummary.data.profit.todayCents) }) : undefined} loading={salesSummary.isLoading} onClick={() => setLocation("/sales")} />
       </div>
 
       {isDesktop ? (
@@ -495,21 +520,16 @@ export function XpotDashboard() {
 
   return (
     <div className="space-y-4">
-      {!visitDetailOpen ? <header className="flex items-start gap-3 px-1">
-        <button
-          type="button"
-          onClick={() => navigate("/dashboard")}
-          aria-label={t("backToDashboard")}
-          title={t("backToDashboard")}
-          className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white/45 transition-colors hover:bg-white/[0.06] hover:text-white"
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </button>
-        <div>
-          <h1 className="text-lg font-bold text-white">{t("historyTitle")}</h1>
-          <p className="mt-0.5 text-sm text-white/40">{t("historySubtitle")}</p>
-        </div>
-      </header> : null}
+      {!visitDetailOpen ? (
+        <PageHeader
+          safeArea={false}
+          className="!mb-1"
+          onBack={() => navigate("/dashboard")}
+          backLabel={t("backToDashboard")}
+          title={t("historyTitle")}
+          description={t("historySubtitle")}
+        />
+      ) : null}
       <XpotVisits basePath="/dashboard/history" />
     </div>
   );

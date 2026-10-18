@@ -13,12 +13,13 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis } from "recharts";
-import { formatCents } from "../../utils";
+import { formatCents, formatShortDate } from "../../utils";
+import { MONEY_CHART } from "./moneyPalette";
 import { useSalesSummary } from "../../hooks/useSalesModule";
-import { Loader2 } from "@/components/ui/loader";
+import { ListSkeleton } from "@/components/xpot/ListSkeleton";
 import { PeriodSelector } from "@/components/xpot/DashboardKit";
 import { useUrlFilters } from "@/hooks/use-url-filters";
-import { EmptyState } from "@/components/xpot/EmptyState";
+import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
 import { useT } from "@/i18n";
 import { salesModuleMessages } from "@/i18n/messages/salesModule";
 
@@ -77,22 +78,14 @@ export function SalesOverview({ onGoToConsignments }: { onGoToConsignments?: () 
   const s = query.data;
 
   if (query.isLoading && !s) {
-    return (
-      <div className="flex justify-center py-20">
-        <Loader2 className="h-6 w-6 animate-spin text-emerald-300" />
-      </div>
-    );
+    return <ListSkeleton rows={3} rowClassName="h-32 rounded-2xl" className="space-y-3" />;
   }
   if (!s) {
-    return (
-      <p className="rounded-3xl border border-white/[0.08] bg-white/[0.035] px-4 py-8 text-center text-sm text-white/40">
-        {t("loadFailed")}
-      </p>
-    );
+    return <ErrorState message={t("loadFailed")} onRetry={() => void query.refetch()} />;
   }
 
   const chart = s.daily.map((d) => ({
-    day: new Date(`${d.date}T12:00:00`).toLocaleDateString(t.locale, { month: "short", day: "numeric" }),
+    day: formatShortDate(`${d.date}T12:00:00`),
     profit: d.profitCents / 100,
     revenue: d.revenueCents / 100,
   }));
@@ -148,7 +141,7 @@ export function SalesOverview({ onGoToConsignments }: { onGoToConsignments?: () 
         </div>
 
         <div className="grid grid-cols-2 gap-3 lg:col-span-5 lg:grid-cols-2 lg:gap-4">
-          <SignalCard icon={CircleDollarSign} label={t("today")} value={formatCents(s.revenue.todayCents)} detail={t("keptAmount", { amount: formatCents(s.profit.todayCents) })} tone="blue" />
+          <SignalCard icon={CircleDollarSign} label={t("today")} value={formatCents(s.revenue.todayCents)} detail={t("keptAmount", { amount: formatCents(s.profit.todayCents) })} tone="emerald" />
           <SignalCard icon={ShoppingBag} label={t("salesPeriod", { days })} value={s.sales.periodCount} detail={t.plural("units", s.sales.unitsSold)} />
           <SignalCard icon={ReceiptText} label={t("grossRevenue")} value={formatCents(s.financial.grossCents)} detail={t("lastNDays", { days })} tone="emerald" />
           <SignalCard
@@ -192,8 +185,8 @@ export function SalesOverview({ onGoToConsignments }: { onGoToConsignments?: () 
               <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/28">{t("lastNDays", { days })}</div>
             </div>
             <div className="flex items-center gap-4 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/40">
-              <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-400" />{t("kept")}</span>
-              <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-sky-400/60" />{t("billed")}</span>
+              <span className="flex items-center gap-1.5"><span className={`h-2 w-2 rounded-full ${MONEY_CHART.profit.swatch}`} />{t("kept")}</span>
+              <span className="flex items-center gap-1.5"><span className={`h-2 w-2 rounded-full ${MONEY_CHART.revenue.swatch}`} />{t("billed")}</span>
             </div>
           </div>
           <div className="h-52 w-full px-1 pb-3 pt-5 sm:h-60 lg:h-[300px] lg:px-3">
@@ -201,12 +194,12 @@ export function SalesOverview({ onGoToConsignments }: { onGoToConsignments?: () 
               <AreaChart data={chart} margin={{ top: 8, right: 12, left: 12, bottom: 0 }}>
                 <defs>
                   <linearGradient id="salesProfitFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#34d399" stopOpacity={0.34} />
-                    <stop offset="80%" stopColor="#34d399" stopOpacity={0.02} />
+                    <stop offset="0%" stopColor={MONEY_CHART.profit.stroke} stopOpacity={0.34} />
+                    <stop offset="80%" stopColor={MONEY_CHART.profit.stroke} stopOpacity={0.02} />
                   </linearGradient>
                   <linearGradient id="salesRevenueFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#38bdf8" stopOpacity={0.12} />
-                    <stop offset="90%" stopColor="#38bdf8" stopOpacity={0} />
+                    <stop offset="0%" stopColor={MONEY_CHART.revenue.stroke} stopOpacity={0.12} />
+                    <stop offset="90%" stopColor={MONEY_CHART.revenue.stroke} stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid vertical={false} stroke="rgba(255,255,255,0.055)" strokeDasharray="3 5" />
@@ -216,8 +209,8 @@ export function SalesOverview({ onGoToConsignments }: { onGoToConsignments?: () 
                   formatter={(v: number, name) => [formatCents(Math.round(v * 100)), name === "profit" ? t("kept") : t("billed")]}
                   cursor={{ stroke: "rgba(255,255,255,0.12)", strokeWidth: 1, strokeDasharray: "4 4" }}
                 />
-                <Area type="monotone" dataKey="revenue" stroke="#38bdf8" strokeOpacity={0.48} strokeWidth={1.5} fill="url(#salesRevenueFill)" />
-                <Area type="monotone" dataKey="profit" stroke="#34d399" strokeWidth={2.5} fill="url(#salesProfitFill)" />
+                <Area type="monotone" dataKey="revenue" stroke={MONEY_CHART.revenue.stroke} strokeOpacity={0.6} strokeWidth={1.5} fill="url(#salesRevenueFill)" />
+                <Area type="monotone" dataKey="profit" stroke={MONEY_CHART.profit.stroke} strokeWidth={2.5} fill="url(#salesProfitFill)" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
