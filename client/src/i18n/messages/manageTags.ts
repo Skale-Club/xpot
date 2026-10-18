@@ -9,10 +9,10 @@ import type { Dictionary } from "../index";
 
 const en = {
   // Code lookup (top bar / phone strip)
-  codePlaceholder: "Code, e.g. A7K3P9X2",
+  codePlaceholder: "Code or scanned link",
   open: "Open",
   invalidCode: "Invalid code",
-  invalidCodeHint: "Codes are 8 letters/numbers, e.g. A7K3P9X2.",
+  invalidCodeHint: "Type the 8-character code (e.g. A7K3P9X2) or paste the piece's link, e.g. https://xpot.place/q/A7K3P9X2.",
   pieceNotFound: "Piece not found",
 
   // Loading and errors
@@ -326,10 +326,10 @@ const en = {
 export const manageTagsMessages: Dictionary<typeof en> = {
   en,
   pt: {
-    codePlaceholder: "Código, ex.: A7K3P9X2",
+    codePlaceholder: "Código ou link lido",
     open: "Abrir",
     invalidCode: "Código inválido",
-    invalidCodeHint: "Os códigos têm 8 letras/números, ex.: A7K3P9X2.",
+    invalidCodeHint: "Digite o código de 8 caracteres (ex.: A7K3P9X2) ou cole o link da peça, ex.: https://xpot.place/q/A7K3P9X2.",
     pieceNotFound: "Peça não encontrada",
 
     noAccessHere: "Você não tem acesso a isto.",
@@ -626,10 +626,10 @@ export const manageTagsMessages: Dictionary<typeof en> = {
     revokeTokenDesc: "Qualquer sessão de IA que use este token perde o acesso na hora. Isso não pode ser desfeito.",
   },
   es: {
-    codePlaceholder: "Código, p. ej. A7K3P9X2",
+    codePlaceholder: "Código o enlace leído",
     open: "Abrir",
     invalidCode: "Código no válido",
-    invalidCodeHint: "Los códigos tienen 8 letras/números, p. ej. A7K3P9X2.",
+    invalidCodeHint: "Escribe el código de 8 caracteres (p. ej. A7K3P9X2) o pega el enlace de la pieza, p. ej. https://xpot.place/q/A7K3P9X2.",
     pieceNotFound: "Pieza no encontrada",
 
     noAccessHere: "No tienes acceso a esto.",

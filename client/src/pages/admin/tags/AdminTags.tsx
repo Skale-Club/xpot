@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Tabs } from "@/components/xpot/Tabs";
 import { useLocation } from "wouter";
 import { ScanLine } from "lucide-react";
-import { normalizeTagCode } from "@shared/tags";
+import { parseTagIntakeScan } from "@shared/tagIntake";
 import { useToast } from "@/hooks/use-toast";
 import { errorMessage, getJson } from "./api";
 import { BTN, INPUT } from "./ui";
@@ -34,7 +34,11 @@ type TabId = (typeof TABS)[number]["id"];
 
 export const ADMIN_TAGS_BASE = "/admin/tags";
 
-/** Type the code printed on a piece, open its record. On desktop it sits in the top bar (AdminApp). */
+/**
+ * Type the code printed on a piece, or paste what its QR / chip holds (https://xpot.place/q/CODE, /n/CODE, the app's
+ * /tags/t/CODE), and open its record. Same parser as batch intake (shared/tagIntake.ts); the host serving the app
+ * counts as a tag host too. On desktop it sits in the top bar (AdminApp).
+ */
 export function CodeLookup({ onFound }: { onFound: (id: string) => void }) {
   const t = useT(manageTagsMessages);
   const { toast } = useToast();
@@ -42,7 +46,8 @@ export function CodeLookup({ onFound }: { onFound: (id: string) => void }) {
   const [busy, setBusy] = useState(false);
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    const normalized = normalizeTagCode(code);
+    const scan = parseTagIntakeScan(code, [window.location.hostname]);
+    const normalized = scan.ok ? scan.publicCode : null;
     if (!normalized) {
       toast({ title: t("invalidCode"), description: t("invalidCodeHint"), variant: "destructive" });
       return;
@@ -62,7 +67,7 @@ export function CodeLookup({ onFound }: { onFound: (id: string) => void }) {
     <form onSubmit={submit} className="flex gap-2">
       <input
         value={code}
-        onChange={(e) => setCode(e.target.value.toUpperCase())}
+        onChange={(e) => setCode(e.target.value)}
         placeholder={t("codePlaceholder")}
         className={`${INPUT} w-48 font-mono`}
         autoCapitalize="characters"
