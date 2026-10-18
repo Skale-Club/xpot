@@ -1,7 +1,9 @@
 import { Router } from "express";
 import { z } from "zod";
-import { randomBytes } from "crypto";
 import { storage } from "../../storage.js";
+import { repModules } from "#shared/modules.js";
+import { sendValidationError } from "../../lib/validation.js";
+import { genInboundKey, presentXphere, XPHERE_DEFAULT_URL, xphereConfigSchema } from "./xphere.js";
 import { requireSuperAdmin, requireXpotManager } from "./middleware.js";
 import {
   AccountError,
@@ -24,8 +26,6 @@ export function createAdminRouter() {
   // Only the /admin paths: this router is mounted at /api/xpot, so a bare router.use would guard
   // every route mounted after it (sales, consignments, products...) and lock plain reps out.
   router.use("/admin", requireXpotManager);
-
-  const genInboundKey = () => `xpot_${randomBytes(24).toString("base64url")}`;
 
   router.get("/admin/overview", async (_req, res) => {
     const [reps, leads, visits, opportunities, tasks, syncEvents] = await Promise.all([
@@ -166,6 +166,8 @@ export function createAdminRouter() {
   // ── Xphere per-user config, managed by the global admin across all reps ──
   router.use("/admin/xphere", requireSuperAdmin);
 
+  // Everyone is listed; the screen hides deleted placeholders, Tags-only people
+  // (Xphere syncs Visits) and anyone blocked or pending until "Show all".
   router.get("/admin/xphere", async (_req, res) => {
     const [reps, configs] = await Promise.all([
       storage.listSalesReps(),
@@ -175,46 +177,51 @@ export function createAdminRouter() {
     const items = reps.map((rep) => {
       const cfg = rep.userId ? byUser.get(rep.userId) : undefined;
       return {
+        ...presentXphere(cfg),
         userId: rep.userId,
         repId: rep.id,
         displayName: rep.displayName,
         email: rep.email,
-        inboundApiKey: cfg?.inboundApiKey ?? null,
-        apiUrl: cfg?.apiUrl ?? "https://xphere.app",
-        apiKeySet: Boolean(cfg?.apiKey),
-        isEnabled: Boolean(cfg?.isEnabled),
+        access: rep.blockedAt ? "blocked" : rep.isActive ? "active" : "pending",
+        deleted: Boolean(rep.deletedAt),
+        usesVisits: repModules(rep).includes("visits"),
       };
     });
     res.json(items);
   });
 
+  // An account that may hold an Xphere connection: a real, not deleted, person.
+  const xphereTarget = async (userId: string) => {
+    const rep = userId ? await storage.getSalesRepByUserId(userId) : undefined;
+    return rep && !rep.deletedAt ? rep : null;
+  };
+
   router.put("/admin/xphere/:userId", async (req, res) => {
     const userId = req.params.userId;
-    if (!userId) return res.status(400).json({ message: "userId required" });
+    if (!(await xphereTarget(userId))) return res.status(404).json({ message: "Person not found" });
 
-    const input = z
-      .object({
-        apiKey: z.string().trim().nullable().optional(),
-        apiUrl: z.string().url().nullable().optional(),
-        isEnabled: z.boolean().optional(),
-      })
-      .parse(req.body);
+    const parsed = xphereConfigSchema.safeParse(req.body ?? {});
+    if (!parsed.success) return sendValidationError(res, parsed.error, "Invalid input");
+    const input = parsed.data;
 
     const existing = await storage.getXphereIntegrationByUserId(userId);
     const data: Record<string, unknown> = {};
     if (input.apiKey !== undefined) data.apiKey = input.apiKey || null;
-    if (input.apiUrl !== undefined) data.apiUrl = input.apiUrl || "https://xphere.app";
+    // Empty means "the default address", not an invalid URL.
+    if (input.apiUrl !== undefined) data.apiUrl = input.apiUrl || XPHERE_DEFAULT_URL;
     if (input.isEnabled !== undefined) data.isEnabled = input.isEnabled;
     if (!existing?.inboundApiKey) data.inboundApiKey = genInboundKey();
 
     const saved = await storage.upsertXphereIntegration(userId, data);
-    res.json({
-      userId,
-      inboundApiKey: saved.inboundApiKey ?? null,
-      apiUrl: saved.apiUrl ?? "https://xphere.app",
-      apiKeySet: Boolean(saved.apiKey),
-      isEnabled: Boolean(saved.isEnabled),
-    });
+    res.json({ userId, ...presentXphere(saved) });
+  });
+
+  // A leaked key can be replaced: the old one stops working at once (inbound.ts looks keys up).
+  router.post("/admin/xphere/:userId/rotate-inbound-key", async (req, res) => {
+    const userId = req.params.userId;
+    if (!(await xphereTarget(userId))) return res.status(404).json({ message: "Person not found" });
+    const saved = await storage.upsertXphereIntegration(userId, { inboundApiKey: genInboundKey() });
+    res.json({ userId, ...presentXphere(saved) });
   });
 
   return router;

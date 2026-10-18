@@ -286,7 +286,8 @@ function PipelineTab() {
     updateTaskStatus,
   } = useSales();
 
-  const pipelinesQuery = useQuery<{ pipelines: GHLPipeline[] }>({
+  // `_reason` is set when GoHighLevel (legacy) is not set up (opportunities.ts).
+  const pipelinesQuery = useQuery<{ pipelines: GHLPipeline[]; _reason?: string }>({
     queryKey: ["/api/xpot/opportunities/pipelines"],
     queryFn: async () => (await apiRequest("GET", "/api/xpot/opportunities/pipelines")).json(),
     enabled: xpotMeQuery.isSuccess,
@@ -298,9 +299,16 @@ function PipelineTab() {
   const [taskLeadId, setTaskLeadId] = useState("");
 
   const pipelines = pipelinesQuery.data?.pipelines ?? [];
+  const ghlOff = Boolean(pipelinesQuery.data?._reason);
 
   return (
     <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+      {ghlOff && (
+        <div className="rounded-2xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 lg:col-span-2" data-testid="pipeline-ghl-off">
+          <p className="text-sm font-semibold text-white/80">{t("ghlOffTitle")}</p>
+          <p className="mt-1 text-xs leading-relaxed text-white/45">{t("ghlOffBody")}</p>
+        </div>
+      )}
 
       {/* Opportunities section */}
       <section className="space-y-3 rounded-[26px] border border-white/[0.075] bg-white/[0.025] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.025)] lg:p-5">

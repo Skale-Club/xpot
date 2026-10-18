@@ -527,3 +527,51 @@ describe("MOD-01 — Visits APIs refuse a Tags-only reseller", () => {
     expect(VISITS_ONLY_PATHS).not.toContain("/place-search");
   });
 });
+
+// ─── Xphere, set by the global admin ────────────────────────────────────────
+
+describe("Admin › Integrations › Xphere", () => {
+  const router = createAdminRouter();
+  const admin = () => appFor(router, "user-m", true);
+
+  it("treats an empty API URL as the default address, not as an invalid URL", async () => {
+    storage.upsertXphereIntegration.mockClear();
+    const res = await request(admin(), "PUT", "/admin/xphere/user-a", { apiUrl: "  ", isEnabled: true });
+    expect(res.status).toBe(200);
+    expect(storage.upsertXphereIntegration).toHaveBeenCalledWith("user-a", expect.objectContaining({ apiUrl: "https://xphere.app", isEnabled: true }));
+  });
+
+  it("names the field when the API URL is not a URL", async () => {
+    const res = await request(admin(), "PUT", "/admin/xphere/user-a", { apiUrl: "xphere" });
+    expect(res.status).toBe(400);
+    expect(res.body.errors[0]).toMatchObject({ path: "apiUrl", code: "invalid_url" });
+  });
+
+  it("rotates a person's inbound key", async () => {
+    storage.upsertXphereIntegration.mockClear();
+    const res = await request(admin(), "POST", "/admin/xphere/user-a/rotate-inbound-key");
+    expect(res.status).toBe(200);
+    const [, data] = storage.upsertXphereIntegration.mock.calls[0] as unknown as [string, { inboundApiKey: string }];
+    expect(data.inboundApiKey).toMatch(/^xpot_[\w-]{32}$/);
+  });
+
+  it("refuses deleted placeholders and unknown people", async () => {
+    store.reps.set(9, { id: 9, userId: "user-gone", displayName: "Deleted account", role: "rep", isActive: false, deletedAt: new Date() });
+    expect((await request(admin(), "PUT", "/admin/xphere/user-gone", { isEnabled: true })).status).toBe(404);
+    expect((await request(admin(), "POST", "/admin/xphere/nobody/rotate-inbound-key")).status).toBe(404);
+  });
+
+  it("lists who can use it: access, Visits and deleted placeholders", async () => {
+    store.reps.set(1, { ...REP_A, modules: ["tags"] });
+    store.reps.set(2, { ...REP_B, isActive: false, blockedAt: new Date() });
+    const res = await request(admin(), "GET", "/admin/xphere");
+    const byRep = new Map(res.body.map((row: any) => [row.repId, row]));
+    expect(byRep.get(1)).toMatchObject({ usesVisits: false, access: "active", deleted: false });
+    expect(byRep.get(2)).toMatchObject({ usesVisits: true, access: "blocked" });
+    expect(byRep.get(3)).toMatchObject({ usesVisits: true, access: "active" });
+  });
+
+  it("is the global admin's alone", async () => {
+    expect((await request(appFor(router, "user-m"), "POST", "/admin/xphere/user-a/rotate-inbound-key")).status).toBe(403);
+  });
+});
