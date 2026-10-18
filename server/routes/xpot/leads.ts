@@ -409,7 +409,18 @@ export function createLeadsRouter() {
       (input.status !== undefined && input.status !== lead.status);
     if (ownerLevelChange && !(await ownsLead(actor!, lead))) return refuseNotOwner(res);
 
-    const updated = await storage.updateSalesLead(leadId, input);
+    let updated;
+    try {
+      updated = await storage.updateSalesLead(leadId, input);
+    } catch (err) {
+      // Linking a Google place another company of the organization already has (unique index):
+      // say so, without naming that company, as POST /leads does.
+      const clash = err as { code?: string; cause?: { code?: string } };
+      if (input.googlePlaceId && (clash.code === "23505" || clash.cause?.code === "23505")) {
+        return res.status(409).json({ code: "lead_exists", message: "This place is already saved as another company." });
+      }
+      throw err;
+    }
     res.json({ lead: updated });
   });
 

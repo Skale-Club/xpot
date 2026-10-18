@@ -140,3 +140,13 @@ test("the company lookup never shows another rep's companies", async () => {
   expect(await lookup("rep-b", "downtown")).toEqual([]);
   expect(await lookup("rep-b", "orlando")).toEqual([]);
 });
+
+test("linking a company to a Google place another company already has is a clear 409, not a 500", async () => {
+  await request("rep-a", "POST", "/api/xpot/leads", place("ChIJ-downtown-barber"));
+  const { googlePlaceId: _drop, ...manual } = place("unused");
+  const second = await request("rep-a", "POST", "/api/xpot/leads", { ...manual, name: "Barber (typed by hand)" });
+  const linked = await request("rep-a", "PATCH", `/api/xpot/leads/${second.body.lead.id}`, { googlePlaceId: "ChIJ-downtown-barber" });
+  expect(linked.status).toBe(409);
+  expect(linked.body).toMatchObject({ code: "lead_exists" });
+  expect(linked.body.lead).toBeUndefined();
+});
