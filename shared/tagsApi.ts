@@ -449,6 +449,8 @@ export interface TagJourneyEntryItem {
   publicCode: string | null;
   serialNumber: number | null;
   kitId: string | null;
+  /** "K-0001" (shared/tagKits.ts kitCode) when the entry is about a kit. */
+  kitCode: string | null;
   repId: number | null;
   repName: string | null;
   leadId: number | null;

@@ -115,7 +115,8 @@ function TeamReport({ range, go }: { range: AnalyticsRange; go: Go }) {
   });
   const columns: CompactDataColumn<TagRepReportRow>[] = [
     { key: "rep", label: t("colReseller"), cellClassName: "max-w-[260px]", render: (r) => <PersonCell row={r} rep={r.repId === null ? undefined : repById.get(r.repId)} onOpenPerson={setLocation} /> },
-    num("sold", t("teamColSold"), (r) => r.soldInRange, "stock=sold", true),
+    // Period numbers have no link: Inventory has no date filter, so its list would be the all-time one.
+    num("sold", t("teamColSold"), (r) => r.soldInRange, null, true),
     num("activated", t("teamColActivated"), (r) => r.activationsInRange, null),
     // Unsold stock: the reseller's (withResellers), or company stock on the no-reseller row (shared/tagMetrics.ts).
     num("stock", t("teamColInStock"), (r) => r.inStock, (r) => (r.repId === null ? "stock=house" : "stock=reps")),

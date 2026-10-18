@@ -191,8 +191,9 @@ export default function CustomerScreen({ leadId }: { leadId: number }) {
   );
   // Every piece the person holds: this customer's, and the free ones that can be linked to it.
   const piecesQuery = useQuery({
+    // The same key and request as My pieces (PiecesScreen): whichever screen fills the cache, it holds every piece.
     queryKey: ["tags", "list", null, null],
-    queryFn: () => tagsGet<TagListItem[]>("/api/xpot/tags?mine=1"),
+    queryFn: () => tagsGet<TagListItem[]>("/api/xpot/tags?mine=1&limit=2000"),
     staleTime: 15_000,
   });
   const pieces = useMemo(() => (piecesQuery.data ?? []).filter((p) => p.leadId === leadId), [piecesQuery.data, leadId]);
@@ -424,16 +425,21 @@ export default function CustomerScreen({ leadId }: { leadId: number }) {
               <span className="hidden w-24 text-right sm:block">
                 <ScanCounts qr={p.qrInteractions} nfc={p.nfcInteractions} />
               </span>
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); setUnlinkError(null); setUnlinking(p); }}
-                aria-label={t("customerUnlink")}
-                title={t("customerUnlink")}
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white/35 hover:bg-white/[0.08] hover:text-red-300"
-                data-testid={`customer-unlink-${p.publicCode}`}
-              >
-                <Unlink className="h-4 w-4" />
-              </button>
+              {/* A sold piece keeps its customer until the sale is cancelled (the server refuses; the piece screen hides it too). */}
+              {p.saleId !== null ? (
+                <span className="w-10 shrink-0" aria-hidden="true" />
+              ) : (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setUnlinkError(null); setUnlinking(p); }}
+                  aria-label={t("customerUnlink")}
+                  title={t("customerUnlink")}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white/35 hover:bg-white/[0.08] hover:text-red-300"
+                  data-testid={`customer-unlink-${p.publicCode}`}
+                >
+                  <Unlink className="h-4 w-4" />
+                </button>
+              )}
             </li>
           ))}
         </ul>

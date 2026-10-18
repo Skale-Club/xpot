@@ -17,6 +17,7 @@ import { adminTagsUiMessages } from "@/i18n/messages/adminTagsUi";
 import { errorMessage, formatDate, formatDateTime, formatTime, invalidateAdminTags, sendJson } from "./api";
 import { Loading } from "./pieces-shared";
 import { groupJourneyRows, journeyValueKind } from "./journey-group";
+import { kitShort } from "@/components/piece/pieceView";
 import { useTagLabels } from "./labels";
 import { NewEntryDialog, NewPlanDialog, PlanStatusDialog } from "./JourneyForms";
 import {
@@ -152,7 +153,7 @@ function EntryRow({ entry, showScope }: { entry: TagJourneyEntryItem; showScope:
             {entry.serialNumber ? ` #${entry.serialNumber}` : ""}
           </button>
         )}
-        {entry.kitId && <span className="font-mono">{t("kitShort", { id: entry.kitId.slice(0, 8) })}</span>}
+        {entry.kitId && <span className="font-mono">{t("kitShort", { id: kitShort(entry.kitId, entry.kitCode) ?? "" })}</span>}
         {entry.repName && entry.repName !== actorName && <span>{entry.repName}</span>}
         {entry.leadName && <span className="text-white/60">{entry.leadName}</span>}
         {entry.planTitle && (
