@@ -109,7 +109,7 @@ export function XpotTasks() {
     },
     onSuccess: async () => {
       setOpen(false); setEditing(null); setForm(emptyForm);
-      await queryClient.invalidateQueries({ predicate: (query) => String(query.queryKey[0]).startsWith("/api/xpot/tasks") });
+      await queryClient.invalidateQueries({ predicate: (query) => String(query.queryKey[0]).startsWith("/api/xpot/tasks") || query.queryKey[0] === "/api/xpot/leads" });
       await queryClient.invalidateQueries({ queryKey: ["/api/xpot/dashboard"] });
       toast({ title: editing ? t("taskUpdated") : t("taskCreated"), variant: "success" });
     },
@@ -119,7 +119,7 @@ export function XpotTasks() {
   const changeStatus = useMutation({
     mutationFn: async ({ id, action }: { id: number; action: string }) => (await apiRequest("POST", `/api/xpot/tasks/${id}/${action}`)).json(),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ predicate: (query) => String(query.queryKey[0]).startsWith("/api/xpot/tasks") });
+      await queryClient.invalidateQueries({ predicate: (query) => String(query.queryKey[0]).startsWith("/api/xpot/tasks") || query.queryKey[0] === "/api/xpot/leads" });
       await queryClient.invalidateQueries({ queryKey: ["/api/xpot/dashboard"] });
     },
     onError: (error: Error) => toast({ title: t("changeFailed"), description: error.message, variant: "destructive" }),

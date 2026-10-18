@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clampGeofenceRadiusInput, visitLocationException } from "../client/src/pages/xpot/visitRules";
+import { clampGeofenceRadiusInput, followUpDueTime, needsFollowUp, visitLocationException } from "../client/src/pages/xpot/visitRules";
 
 describe("clampGeofenceRadiusInput", () => {
   it("keeps typed values in the 10-5000 range the server accepts", () => {
@@ -29,5 +29,27 @@ describe("visitLocationException", () => {
     expect(visitLocationException({ checkedInAt, validationStatus: "valid" })).toBeNull();
     // Planned visits carry the column default gps_unavailable.
     expect(visitLocationException({ checkedInAt: null, validationStatus: "gps_unavailable" })).toBeNull();
+  });
+});
+
+describe("needsFollowUp", () => {
+  it("matches an open follow-up task, a return date, or a 'come back' result", () => {
+    expect(needsFollowUp({ openFollowUp: true })).toBe(true);
+    expect(needsFollowUp({ nextVisitDueAt: "2026-10-20T00:00:00Z" })).toBe(true);
+    expect(needsFollowUp({}, "follow_up")).toBe(true);
+    expect(needsFollowUp({}, "came_back_later")).toBe(true);
+  });
+
+  it("leaves out companies with nothing pending", () => {
+    expect(needsFollowUp({ openFollowUp: false, nextVisitDueAt: null }, "sale_made")).toBe(false);
+    expect(needsFollowUp({})).toBe(false);
+  });
+});
+
+describe("followUpDueTime", () => {
+  it("sorts by the earliest known date", () => {
+    expect(followUpDueTime({ nextVisitDueAt: "2026-11-02T00:00:00Z", openFollowUpDueAt: "2026-11-01T00:00:00Z" }))
+      .toBe(Date.parse("2026-11-01T00:00:00Z"));
+    expect(followUpDueTime({ openFollowUp: true, openFollowUpDueAt: null })).toBe(Number.POSITIVE_INFINITY);
   });
 });

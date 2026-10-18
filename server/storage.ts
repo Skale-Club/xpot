@@ -141,6 +141,8 @@ export interface IStorage {
   listSalesLeadContactsBatch(leadIds: number[]): Promise<SalesLeadContact[]>;
   createSalesLeadContact(input: InsertSalesLeadContact): Promise<SalesLeadContact>;
   countOpenOpportunitiesByLeadIds(leadIds: number[]): Promise<Record<number, number>>;
+  /** Leads with an open follow-up task, and the earliest due date among them (null when none is dated). */
+  openFollowUpsByLeadIds(leadIds: number[], repId?: number): Promise<Map<number, Date | null>>;
 
   // Visits
   listSalesVisits(filters?: { repId?: number; leadId?: number; activeOnly?: boolean }): Promise<SalesVisit[]>;
@@ -558,6 +560,22 @@ export class DatabaseStorage implements IStorage {
       .where(and(inArray(salesOpportunitiesLocal.leadId, leadIds), eq(salesOpportunitiesLocal.status, "open")))
       .groupBy(salesOpportunitiesLocal.leadId);
     return Object.fromEntries(rows.map((r) => [r.leadId, r.count]));
+  }
+
+  async openFollowUpsByLeadIds(leadIds: number[], repId?: number): Promise<Map<number, Date | null>> {
+    if (!leadIds.length) return new Map();
+    const conditions = [
+      inArray(salesTasks.leadId, leadIds),
+      eq(salesTasks.type, "follow_up"),
+      inArray(salesTasks.status, ["pending", "in_progress"]),
+    ];
+    if (repId) conditions.push(eq(salesTasks.repId, repId));
+    const rows = await db
+      .select({ leadId: salesTasks.leadId, dueAt: sql<string | null>`min(${salesTasks.dueAt})` })
+      .from(salesTasks)
+      .where(and(...conditions))
+      .groupBy(salesTasks.leadId);
+    return new Map(rows.filter((row) => row.leadId != null).map((row) => [row.leadId!, row.dueAt ? new Date(row.dueAt) : null]));
   }
 
   // ── Visits ──

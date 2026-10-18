@@ -15,6 +15,35 @@ export function clampGeofenceRadiusInput(raw: string, fallback: number): number 
   return Math.max(GEOFENCE_RADIUS_MIN, Math.min(GEOFENCE_RADIUS_MAX, parsed));
 }
 
+type FollowUpLead = {
+  nextVisitDueAt?: string | Date | null;
+  openFollowUp?: boolean;
+  openFollowUpDueAt?: string | Date | null;
+};
+
+/** Visit results that mean "come back": the company stays on the follow-up list until the next visit. */
+export const FOLLOW_UP_OUTCOMES = ["follow_up", "came_back_later"];
+
+/**
+ * Whether a company belongs under the Companies "Follow-up" chip: an open
+ * follow-up task, a voice-set return date (nextVisitDueAt), or a last visit
+ * that ended as Follow up / Come back later. The return date alone almost
+ * never matched: only a voice follow-up sets it and every check-in clears it,
+ * and the check-out result picker collects no date.
+ */
+export function needsFollowUp(lead: FollowUpLead, lastVisitStatus?: string | null): boolean {
+  return Boolean(lead.nextVisitDueAt || lead.openFollowUp || (lastVisitStatus && FOLLOW_UP_OUTCOMES.includes(lastVisitStatus)));
+}
+
+/** The earliest known follow-up date, for sorting (Infinity when none). */
+export function followUpDueTime(lead: FollowUpLead): number {
+  const times = [lead.nextVisitDueAt, lead.openFollowUpDueAt]
+    .filter((value): value is string | Date => Boolean(value))
+    .map((value) => new Date(value).getTime())
+    .filter((time) => Number.isFinite(time));
+  return times.length ? Math.min(...times) : Number.POSITIVE_INFINITY;
+}
+
 export type VisitLocationException = "outside_area" | "no_location";
 
 /**

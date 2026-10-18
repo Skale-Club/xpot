@@ -83,7 +83,7 @@ function DashboardOverview() {
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["/api/xpot/dashboard"] }),
-        queryClient.invalidateQueries({ predicate: (query) => String(query.queryKey[0]).startsWith("/api/xpot/tasks") }),
+        queryClient.invalidateQueries({ predicate: (query) => String(query.queryKey[0]).startsWith("/api/xpot/tasks") || query.queryKey[0] === "/api/xpot/leads" }),
       ]);
       toast({ title: t("taskCompleted"), variant: "success" });
     },

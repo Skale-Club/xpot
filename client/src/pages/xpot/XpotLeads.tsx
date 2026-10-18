@@ -57,6 +57,8 @@ import { FilterBar, FilterChips, FilterDay, FilterSearch, FilterToggle, fromDayK
 import { currentSearch, useUrlFilters } from "@/hooks/use-url-filters";
 import { ListPager, usePagedList } from "@/components/xpot/pagination";
 import { selectLeadForDetail } from "./lead-detail-selection";
+import { followUpDueTime, needsFollowUp } from "./visitRules";
+import { isFinishedVisitStatus } from "@shared/visit-status";
 
 
 // ─── Shared Add Company Dialog ────────────────────────────────────────────────
@@ -420,9 +422,12 @@ const LEAD_FILTER_LABEL = {
   customer: "filterCustomers",
 } as const satisfies Record<LeadFilter, string>;
 
-/** `lead` covers worked prospects too: a check-in makes a company a lead even if its row still says prospect. */
-function matchesLeadFilter(lead: FullSalesLead, filter: LeadFilter): boolean {
-  if (filter === "followup") return Boolean(lead.nextVisitDueAt);
+/**
+ * `lead` covers worked prospects too: a check-in makes a company a lead even if its row still says prospect.
+ * `lastOutcome` is the status of the company's latest finished visit (for "Follow-up").
+ */
+function matchesLeadFilter(lead: FullSalesLead, filter: LeadFilter, lastOutcome?: string | null): boolean {
+  if (filter === "followup") return needsFollowUp(lead, lastOutcome);
   if (filter === "lead") return ["lead", "active", "prospect"].includes(lead.status);
   if (filter === "customer") return lead.status === "customer";
   return true;
@@ -504,6 +509,10 @@ export function XpotLeads() {
     map.forEach((list) => list.sort((a, b) => at(b) - at(a)));
     return map;
   }, [visits]);
+  const lastOutcomeFor = useCallback(
+    (leadId: number) => visitsByLead.get(leadId)?.find((visit) => isFinishedVisitStatus(visit.status))?.status ?? null,
+    [visitsByLead],
+  );
   const lastVisitFor = useCallback((leadId: number) => {
     const v = visitsByLead.get(leadId)?.[0];
     const when = v?.checkedInAt ?? v?.createdAt;
@@ -536,17 +545,17 @@ export function XpotLeads() {
     [leads, search, visitedOnDay],
   );
   const displayList = useMemo(() => {
-    const filtered = baseList.filter((lead) => matchesLeadFilter(lead, leadFilter));
+    const filtered = baseList.filter((lead) => matchesLeadFilter(lead, leadFilter, lastOutcomeFor(lead.id)));
     return [...filtered].sort((a, b) => {
-      const aDue = a.nextVisitDueAt ? new Date(a.nextVisitDueAt).getTime() : Number.POSITIVE_INFINITY;
-      const bDue = b.nextVisitDueAt ? new Date(b.nextVisitDueAt).getTime() : Number.POSITIVE_INFINITY;
+      const aDue = followUpDueTime(a);
+      const bDue = followUpDueTime(b);
       if (aDue !== bDue) return aDue - bDue;
       const aVisited = a.lastVisitAt ? new Date(a.lastVisitAt).getTime() : 0;
       const bVisited = b.lastVisitAt ? new Date(b.lastVisitAt).getTime() : 0;
       if (aVisited !== bVisited) return bVisited - aVisited;
       return a.name.localeCompare(b.name);
     });
-  }, [baseList, leadFilter]);
+  }, [baseList, leadFilter, lastOutcomeFor]);
 
   // Big portfolios render 50 at a time; a new filter starts from the top.
   const pagedLeads = usePagedList(displayList, { resetKey: `${leadFilter}|${search}|${filters.values.day}` });
@@ -582,7 +591,7 @@ export function XpotLeads() {
   const filterChips = LEAD_FILTERS.map((id) => ({
     id,
     label: t(LEAD_FILTER_LABEL[id]),
-    count: baseList.filter((lead) => matchesLeadFilter(lead, id)).length,
+    count: baseList.filter((lead) => matchesLeadFilter(lead, id, lastOutcomeFor(lead.id))).length,
   }));
 
   const filterBar = (

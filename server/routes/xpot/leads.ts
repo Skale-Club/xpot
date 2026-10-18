@@ -27,6 +27,8 @@ export function createLeadsRouter() {
 
     let ownerRepId: number | undefined;
     let organizationIds: number[] | undefined;
+    // Whose follow-up tasks count: everyone's for a manager, the rep's own otherwise (as on GET /leads/:id).
+    let taskRepId: number | undefined;
     if (listsEveryone(req, actor!)) {
       // Manager can filter by a specific rep
       ownerRepId = req.query.repId ? Number(req.query.repId) : undefined;
@@ -35,6 +37,7 @@ export function createLeadsRouter() {
       if (managed?.length) organizationIds = managed;
       else {
         ownerRepId = actor!.rep.id;
+        taskRepId = actor!.rep.id;
         organizationIds = (await activeOrganizationIds(actor!)) ?? undefined;
       }
     }
@@ -47,11 +50,12 @@ export function createLeadsRouter() {
     if (!leads.length) return res.json([]);
 
     const leadIds = leads.map((l) => l.id);
-    const [allLocations, allContacts, openOpportunitiesMap, salesByLead] = await Promise.all([
+    const [allLocations, allContacts, openOpportunitiesMap, salesByLead, followUps] = await Promise.all([
       storage.listSalesLeadLocationsBatch(leadIds),
       storage.listSalesLeadContactsBatch(leadIds),
       storage.countOpenOpportunitiesByLeadIds(leadIds),
       salesStorage.leadSalesBatch(leadIds),
+      storage.openFollowUpsByLeadIds(leadIds, taskRepId),
     ]);
 
     const locationsByLead = new Map<number, typeof allLocations>();
@@ -73,6 +77,10 @@ export function createLeadsRouter() {
       // What the company card shows at a glance: sold here, and stock on their shelf.
       salesLifetimeCents: salesByLead.get(lead.id)?.lifetimeCents ?? 0,
       unitsOnShelf: salesByLead.get(lead.id)?.unitsOnShelf ?? 0,
+      // Feeds the Companies "Follow-up" chip: nextVisitDueAt alone is only set
+      // by a voice follow-up and is cleared at every check-in.
+      openFollowUp: followUps.has(lead.id),
+      openFollowUpDueAt: followUps.get(lead.id) ?? null,
     }));
 
     res.json(enriched);
