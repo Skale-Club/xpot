@@ -2,7 +2,9 @@ import type { CSSProperties, KeyboardEvent, ReactNode } from "react";
 import { GLASS_SUBTLE_CLASS, TABLE_HEAD } from "./surface";
 
 // The one data table of the app: GLASS_SUBTLE container, TABLE_HEAD header
-// cells, optional clickable rows (Enter / Space open them).
+// cells, optional clickable rows (Enter / Space open them). `selectedKey`
+// marks the open row with the neutral highlight (never a module colour);
+// `align: "right"` right-aligns a numeric column, header and cells.
 
 export type CompactDataColumn<T> = {
   key: string;
@@ -11,6 +13,10 @@ export type CompactDataColumn<T> = {
   width?: CSSProperties["width"];
   headerClassName?: string;
   cellClassName?: string;
+  /** "right" for numbers and money. */
+  align?: "left" | "right";
+  /** aria-sort of the header cell, for a sortable column. */
+  ariaSort?: "ascending" | "descending" | "none";
 };
 
 export function CompactDataTable<T>({
@@ -19,6 +25,9 @@ export function CompactDataTable<T>({
   getRowKey,
   onRowClick,
   getRowAriaLabel,
+  selectedKey,
+  getRowClassName,
+  getRowTestId,
   className = "",
   testId,
 }: {
@@ -27,6 +36,11 @@ export function CompactDataTable<T>({
   getRowKey: (row: T) => string | number;
   onRowClick?: (row: T) => void;
   getRowAriaLabel?: (row: T) => string;
+  /** The row shown in a detail pane: highlighted and aria-current. */
+  selectedKey?: string | number | null;
+  /** Extra classes for a row (dimmed when cancelled, tinted when late). */
+  getRowClassName?: (row: T) => string;
+  getRowTestId?: (row: T) => string;
   className?: string;
   testId?: string;
 }) {
@@ -48,7 +62,8 @@ export function CompactDataTable<T>({
                 key={column.key}
                 scope="col"
                 style={column.width ? { width: column.width } : undefined}
-                className={`whitespace-nowrap px-4 py-2.5 ${column.headerClassName ?? ""}`}
+                aria-sort={column.ariaSort}
+                className={`whitespace-nowrap px-4 py-2.5 ${column.align === "right" ? "text-right" : ""} ${column.headerClassName ?? ""}`}
               >
                 {column.label}
               </th>
@@ -58,20 +73,24 @@ export function CompactDataTable<T>({
         <tbody className="divide-y divide-white/[0.05]">
           {rows.map((row) => {
             const interactive = Boolean(onRowClick);
+            const key = getRowKey(row);
+            const selected = selectedKey != null && key === selectedKey;
             return (
               <tr
-                key={getRowKey(row)}
+                key={key}
                 tabIndex={interactive ? 0 : undefined}
                 aria-label={getRowAriaLabel?.(row)}
+                aria-current={selected ? "true" : undefined}
+                data-testid={getRowTestId?.(row)}
                 onClick={interactive ? () => onRowClick?.(row) : undefined}
                 onKeyDown={interactive ? (event) => handleKeyDown(event, row) : undefined}
-                className={`${interactive ? "cursor-pointer hover:bg-white/[0.03] focus-visible:bg-white/[0.05] focus-visible:!-outline-offset-2" : ""} transition-colors`}
+                className={`${selected ? "bg-white/[0.06]" : interactive ? "hover:bg-white/[0.03]" : ""} ${interactive ? "cursor-pointer focus-visible:bg-white/[0.05] focus-visible:!-outline-offset-2" : ""} transition-colors ${getRowClassName?.(row) ?? ""}`}
               >
                 {columns.map((column) => (
                   <td
                     key={column.key}
                     style={column.width ? { width: column.width } : undefined}
-                    className={`px-4 py-3 ${column.cellClassName ?? ""}`}
+                    className={`px-4 py-3 ${column.align === "right" ? "text-right tabular-nums" : ""} ${column.cellClassName ?? ""}`}
                   >
                     {column.render(row)}
                   </td>

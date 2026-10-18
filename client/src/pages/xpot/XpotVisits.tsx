@@ -4,6 +4,9 @@ import { CalendarDays, RefreshCw } from "lucide-react";
 import { useVisits } from "./hooks/useVisits";
 import { VisitRow, VisitDeleteConfirm, VisitSummaryPage } from "./components/VisitRow";
 import { VisitsTable } from "./components/VisitsTable";
+import { visitStatusLabel, visitStatusTone } from "./components/VisitStatus";
+import { PILL_DOTS } from "@/components/xpot/StatusPill";
+import { checkinMessages } from "@/i18n/messages/checkin";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import type { EnrichedSalesVisit } from "./types";
 import { useT, type Translate } from "@/i18n";
@@ -19,18 +22,20 @@ type VisitsT = Translate<(typeof visitsMessages)["en"]>;
 
 // VND-12: the picker could set sale_made / follow_up / no_answer /
 // not_interested / came_back_later, and none were filterable — a rep could
-// not list where they sold or where they need to go back. The dot is the
-// status colour; the chip itself turns indigo like every other filter.
+// not list where they sold or where they need to go back. Each chip takes
+// its dot and its name from the status badge (VisitStatus.tsx), so the filter
+// and the rows always say the same; the chip itself turns blue like every
+// other filter.
 const STATUS_FILTERS = [
-  { id: "sale_made", labelKey: "filterSold", dot: "bg-emerald-400" },
-  { id: "follow_up", labelKey: "filterFollowUp", dot: "bg-violet-300" },
-  { id: "came_back_later", labelKey: "filterComeBack", dot: "bg-amber-300" },
-  { id: "no_answer", labelKey: "filterNoAnswer", dot: "bg-orange-400" },
-  { id: "not_interested", labelKey: "filterNotInterested", dot: "bg-red-300" },
-  { id: "completed", labelKey: "filterCompleted", dot: "bg-sky-300" },
-  { id: "planned", labelKey: "filterPlanned", dot: "bg-slate-300" },
-  { id: "in_progress", labelKey: "filterInProgress", dot: "bg-blue-400" },
-  { id: "cancelled", labelKey: "filterCancelled", dot: "bg-red-500" },
+  "sale_made",
+  "follow_up",
+  "came_back_later",
+  "no_answer",
+  "not_interested",
+  "completed",
+  "planned",
+  "in_progress",
+  "cancelled",
 ] as const;
 
 function isYesterday(date: Date) {
@@ -53,6 +58,7 @@ const visitDay = (visit: EnrichedSalesVisit) => {
 export function XpotVisits({ basePath = "/dashboard/history" }: { basePath?: string }) {
   const t = useT(visitsMessages);
   const tc = useT(commonMessages);
+  const tStatus = useT(checkinMessages);
   const { visitsQuery } = useVisits();
   // ?view=day&day=2026-10-12&status=sale_made
   const filters = useUrlFilters({ view: "all", day: "", status: "all" });
@@ -91,7 +97,7 @@ export function XpotVisits({ basePath = "/dashboard/history" }: { basePath?: str
   // rep with three outcomes sees three chips, not ten.
   const statusChips = [
     { id: "all", label: t("filterAll"), count: viewVisits.length },
-    ...STATUS_FILTERS.map(({ id, labelKey, dot }) => ({ id, label: t(labelKey), dot, count: viewVisits.filter((v) => v.status === id).length }))
+    ...STATUS_FILTERS.map((id) => ({ id, label: visitStatusLabel(tStatus, id), dot: PILL_DOTS[visitStatusTone(id)], count: viewVisits.filter((v) => v.status === id).length }))
       .filter((chip) => chip.count > 0 || chip.id === statusFilter),
   ];
 
