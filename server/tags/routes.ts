@@ -589,7 +589,8 @@ export function registerTagRoutes(app: Express) {
     try {
       if (!(await tagForActor(req, res, id))) return;
       const { reason } = actionSchema.parse(req.body ?? {});
-      await repo.transitionTag(id, "unassign", actorOf(req), reason ?? "Unlinked from the customer page", "field");
+      // No reason typed: the history row gets the "customer removed" code (transitionTag), worded by the app.
+      await repo.transitionTag(id, "unassign", actorOf(req), reason ?? null, "field");
       res.json(await repo.getTagDetail(id, tagBaseUrl()));
     } catch (err) {
       fail(res, err, "Failed to unlink the piece");

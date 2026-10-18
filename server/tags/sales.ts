@@ -19,6 +19,7 @@ import {
   tags,
 } from "#shared/schema.js";
 import { canWorkOnTag, type TagActor } from "#shared/tagAccess.js";
+import { tagSystemReason } from "#shared/tagReasons.js";
 import { allocateSaleLineTotals, paymentStatusFor, resolveUnitPriceCents } from "#shared/pricing.js";
 import { resolveTagUnitCost, type TagSaleCreateInput } from "#shared/tagSales.js";
 import { salesStorage } from "../storage-sales.js";
@@ -363,7 +364,7 @@ export async function cancelTagLinksForSale(saleId: number, actorUserId: string 
         referenceType: "sale",
         referenceId: String(saleId),
         actorUserId,
-        reason: "Sale cancelled",
+        reason: tagSystemReason("sale_cancelled"),
       });
     }
   });

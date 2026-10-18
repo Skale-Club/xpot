@@ -88,6 +88,13 @@ const en = {
   movement_sale: "Left with the customer",
   movementGeneric: "Stock: {from} → {to}",
   productionLog: "Production log: record entries and plans",
+  // Reasons the server writes itself (shared/tagReasons.ts).
+  reason_configured_field: "Set up in the field app",
+  reason_changed_field: "Changed from the customer page",
+  reason_reassigned: "Moved to another customer",
+  reason_unlinked: "Customer removed",
+  reason_sale_cancelled: "Sale cancelled",
+  reason_intake_undone: "Read undone at the intake station",
 };
 
 export const pieceScreenMessages: Dictionary<typeof en> = {
@@ -172,6 +179,12 @@ export const pieceScreenMessages: Dictionary<typeof en> = {
     movement_sale: "Saiu com o cliente",
     movementGeneric: "Estoque: {from} → {to}",
     productionLog: "Diário de produção: registrar entradas e planos",
+    reason_configured_field: "Configurada no app de campo",
+    reason_changed_field: "Alterado pela página do cliente",
+    reason_reassigned: "Passou para outro cliente",
+    reason_unlinked: "Cliente removido",
+    reason_sale_cancelled: "Venda cancelada",
+    reason_intake_undone: "Leitura desfeita na estação de recebimento",
   },
   es: {
     dimDigital: "Digital",
@@ -253,5 +266,11 @@ export const pieceScreenMessages: Dictionary<typeof en> = {
     movement_sale: "Salió con el cliente",
     movementGeneric: "Stock: {from} → {to}",
     productionLog: "Diario de producción: registrar entradas y planes",
+    reason_configured_field: "Configurada en la app de campo",
+    reason_changed_field: "Cambiado desde la página del cliente",
+    reason_reassigned: "Pasó a otro cliente",
+    reason_unlinked: "Cliente quitado",
+    reason_sale_cancelled: "Venta cancelada",
+    reason_intake_undone: "Lectura deshecha en la estación de recepción",
   },
 };

@@ -26,6 +26,7 @@ import {
 import type { TagListItem, TagOverview } from "@shared/tagsApi";
 import type { TagPieceQueue } from "@shared/tagQueues";
 import { TagPieceMention } from "@/components/xpot/TagProductThumbnail";
+import { useReasonText } from "@/components/piece/reasonText";
 import { KpiTile, SectionCard } from "@/components/xpot/DashboardKit";
 import { EmptyState } from "@/components/xpot/EmptyState";
 import { FilterBar, FilterChips, FilterSelect } from "@/components/xpot/filters";
@@ -184,6 +185,7 @@ function ActivityFeed({ overview, go }: { overview: TagOverview; go: Go }) {
   const t = useT(manageTagsMessages);
   const tf = useT(adminTagsFlowMessages);
   const labels = useTagLabels();
+  const reasonText = useReasonText();
   const deviceLabel = useDeviceLabel();
   const [filter, setFilter] = useState<ActivityFilter>("all");
   const items = activityFeed(overview, filter);
@@ -246,7 +248,7 @@ function ActivityFeed({ overview, go }: { overview: TagOverview; go: Go }) {
                     {item.change.newUrl
                       ? `${labels.destination(item.change.newDestinationType)} · ${item.change.newUrl}`
                       : item.change.reason
-                        ? t("ovDestClearedReason", { reason: item.change.reason })
+                        ? t("ovDestClearedReason", { reason: reasonText(item.change.reason) ?? "" })
                         : t("ovDestCleared")}
                   </span>
                 </button>

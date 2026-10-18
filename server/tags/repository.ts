@@ -38,6 +38,7 @@ import { JOURNEY_PRODUCT_LABELS, tagActionEntry, type JourneySource } from "#sha
 import { resolveTagFace } from "#shared/tagFace.js";
 import type { TagStockMetric } from "#shared/tagMetrics.js";
 import { kitCode } from "#shared/tagKits.js";
+import { tagSystemReason } from "#shared/tagReasons.js";
 import { checkCodes, handOutBlocker, takeBackBlocker, type DistributionCheck, type DistributionPiece } from "#shared/tagDistribution.js";
 import type { TagPieceQueue } from "#shared/tagQueues.js";
 import { parseTagIntakeScan } from "#shared/tagIntake.js";
@@ -464,7 +465,7 @@ export async function transitionTag(
         leadId: null, destinationUrl: null, destinationType: null, utmEnabled: false, utmCampaign: null,
         assignedAt: null, activatedAt: null, disabledAt: null, soldAt: null, activatedByRepId: null,
       });
-      await writeHistory(tx, tag, { destinationUrl: null, destinationType: null }, actor.userId, reason ?? "Unassigned");
+      await writeHistory(tx, tag, { destinationUrl: null, destinationType: null }, actor.userId, reason ?? tagSystemReason("unlinked"));
     }
     const [updated] = await tx.update(tags).set(set).where(eq(tags.id, id)).returning();
     console.log(`[tags] ${action} ${tag.publicCode}: ${tag.status} → ${plan.status} (user ${actor.userId})`);
@@ -529,7 +530,7 @@ export async function assignTag(
     if (changingOwner && tag.leadId && (tag.destinationUrl || tag.destinationType)) {
       if (tag.status === "active") throw new TagError("Disable the tag before moving it to another customer", 409, "tag_pause_before_move");
       Object.assign(set, { destinationUrl: null, destinationType: null, utmEnabled: false, utmCampaign: null });
-      await writeHistory(tx, tag, { destinationUrl: null, destinationType: null }, userId, "Re-assigned to another customer");
+      await writeHistory(tx, tag, { destinationUrl: null, destinationType: null }, userId, tagSystemReason("reassigned"));
     }
     const [updated] = await tx.update(tags).set(set).where(eq(tags.id, id)).returning();
     console.log(`[tags] assign ${tag.publicCode} → lead ${leadId} (user ${userId ?? "?"})`);
