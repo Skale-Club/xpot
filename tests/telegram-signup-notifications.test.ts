@@ -53,3 +53,21 @@ test("completed lead formatting is structured and escapes user content", async (
   assert.match(text, /Ready &amp; available/);
   assert.match(text, /<b>Área de atuação<\/b>/);
 });
+
+test("a refused Telegram notice logs Telegram's reason without the token", async () => {
+  process.env.XPOT_TELEGRAM_BOT_TOKEN = "secret-token";
+  process.env.XPOT_TELEGRAM_CHAT_ID = "-123";
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+    ok: false,
+    status: 400,
+    json: async () => ({ ok: false, description: "Bad Request: group chat was upgraded to a supergroup chat", parameters: { migrate_to_chat_id: -100123 } }),
+  }));
+  const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  const { sendSignupTelegram } = await import("../server/auth/telegram.js");
+  assert.equal(await sendSignupTelegram("lead"), false);
+  const logged = errorSpy.mock.calls.flat().join(" ");
+  errorSpy.mockRestore();
+  assert.match(logged, /upgraded to a supergroup/);
+  assert.match(logged, /XPOT_TELEGRAM_CHAT_ID to -100123/);
+  assert.doesNotMatch(logged, /secret-token/);
+});

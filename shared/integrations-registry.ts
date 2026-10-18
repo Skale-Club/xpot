@@ -155,7 +155,7 @@ export const INTEGRATION_PROVIDERS: IntegrationProviderDef[] = [
   {
     provider: "twilio",
     label: "Twilio",
-    description: "Sign-in codes and team notices by SMS. Needs the Account SID, the Auth Token and a From number or a Messaging Service.",
+    description: "Sign-in codes by SMS. Needs the Account SID, the Auth Token and a From number or a Messaging Service.",
     table: "settings",
     category: "Messaging",
     envMode: "fallback",

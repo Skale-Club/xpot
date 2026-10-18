@@ -276,18 +276,6 @@ async function ensureDraftUser(phone: string, displayName?: string) {
   return (await db.insert(users).values({ phone, firstName, lastName, isAdmin: false }).returning())[0];
 }
 
-/** Text to the Xpot team when someone signs up (XPOT_SIGNUP_NOTIFY_PHONES, comma separated). */
-async function notifyTeam(sms: SmsSender, name: string, phone: string, city: string, req: Request) {
-  const to = (process.env.XPOT_SIGNUP_NOTIFY_PHONES ?? "")
-    .split(",")
-    .map((p) => normalizePhone(p))
-    .filter((p): p is string => !!p);
-  if (!to.length) return;
-  const origin = process.env.XPOT_PUBLIC_URL || `${req.protocol}://${req.get("host")}`;
-  const body = `Xpot: new access request from ${name} (${phone}, ${city}). ${origin}/admin/reps`;
-  await Promise.all(to.map((p) => sms.send(p, body).catch((err) => console.error("[phone-auth] team notice failed", err))));
-}
-
 function fail(res: Response, err: unknown) {
   if (err instanceof PhoneAuthError) return res.status(err.status).json({ code: err.code, message: err.message, ...err.extra });
   if (err instanceof z.ZodError) return res.status(400).json({ code: "invalid_phone", message: "Invalid input" });
@@ -493,8 +481,6 @@ export function registerPhoneAuthRoutes(app: Express, sms: SmsSender = defaultSm
       delete (req.session as any).verifiedPhone;
       await new Promise<void>((resolve) => req.session.save(() => resolve()));
       console.log(`[phone-auth] new sign-up pending approval: ${input.displayName} ${phone}`);
-      const place = `${input.workCity}, ${input.workRegion}`;
-      void notifyTeam(sms, input.displayName, phone, place, req);
       void sendSignupTelegram(formatSignupLeadTelegram({
         name: input.displayName,
         phone,

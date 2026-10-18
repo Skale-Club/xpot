@@ -78,10 +78,16 @@ export async function sendSignupTelegram(text: string, options: TelegramOptions 
       body: JSON.stringify({ chat_id: chatId, text, parse_mode: "HTML", disable_web_page_preview: true, ...(replyMarkup ? { reply_markup: replyMarkup } : {}) }),
       signal: AbortSignal.timeout(8_000),
     });
-    if (!response.ok) throw new Error(`Telegram answered ${response.status}`);
+    if (!response.ok) {
+      // Telegram's own reason ("chat not found", a group upgraded to a supergroup...); it never echoes the token.
+      const answer = await response.json().catch(() => null) as { description?: string; parameters?: { migrate_to_chat_id?: number } } | null;
+      const migrated = answer?.parameters?.migrate_to_chat_id;
+      console.error(`[signup-telegram] Telegram refused (${response.status}): ${answer?.description ?? "no reason given"}${migrated ? `; set XPOT_TELEGRAM_CHAT_ID to ${migrated}` : ""}`);
+      return false;
+    }
     return true;
-  } catch {
-    console.error("[signup-telegram] delivery failed");
+  } catch (error) {
+    console.error(`[signup-telegram] delivery failed: ${error instanceof Error ? error.name : "unknown error"}`);
     return false;
   }
 }
