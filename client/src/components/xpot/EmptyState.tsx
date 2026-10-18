@@ -1,9 +1,9 @@
 import type { CSSProperties, ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
-import { AlertTriangle, RotateCw } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import { useT } from "@/i18n";
-import { commonMessages } from "@/i18n/messages/common";
 import { kitMessages } from "@/i18n/messages/kit";
+import { RetryButton } from "./RetryButton";
 import { GLASS } from "./surface";
 
 // The one "nothing here" and "could not load" block of the app. Lists, panels
@@ -21,20 +21,6 @@ const TONES = {
 } as const;
 
 export type EmptyStateTone = keyof typeof TONES;
-
-function RetryButton({ onRetry, label }: { onRetry: () => void; label?: string }) {
-  const tc = useT(commonMessages);
-  return (
-    <button
-      type="button"
-      onClick={onRetry}
-      className="inline-flex min-h-9 items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.06] px-3 text-[13px] font-semibold text-white/85 transition-colors hover:bg-white/10 hover:text-white"
-    >
-      <RotateCw className="h-3.5 w-3.5" aria-hidden="true" />
-      {label ?? tc("retry")}
-    </button>
-  );
-}
 
 /**
  * "Nothing here" block. The default shows the icon in a tinted tile with a
