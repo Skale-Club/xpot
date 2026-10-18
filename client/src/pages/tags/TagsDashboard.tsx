@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { AlertTriangle, Building2, ChevronRight, Smartphone, Tag } from "lucide-react";
+import { AlertTriangle, Building2, ChevronRight, Smartphone, Tag, Users } from "lucide-react";
+import { useViewerAccess } from "@/lib/adminMode";
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 import type { TagDashboard } from "@shared/tagsApi";
 import { useT } from "@/i18n";
@@ -112,6 +113,8 @@ function Ranked({ title, icon: Icon, items }: {
 export function TagsDashboard() {
   const t = useT(tagsMessages);
   const [, navigate] = useLocation();
+  // Management mode: the server answers with every rep's pieces (routes.ts, listActor).
+  const fleet = useViewerAccess().canManage;
   const { data } = useQuery({
     queryKey: ["/api/xpot/tags/dashboard"],
     queryFn: () => tagsGet<TagDashboard>("/api/xpot/tags/dashboard?days=30"),
@@ -128,10 +131,17 @@ export function TagsDashboard() {
 
   return (
     <div className="space-y-5" data-testid="tags-dashboard">
+      {fleet && (
+        <p className="inline-flex items-center gap-1.5 rounded-full border border-violet-400/25 bg-violet-500/10 px-3 py-1 text-xs font-semibold text-violet-200" data-testid="dashboard-fleet-scope">
+          <Users className="h-3.5 w-3.5" aria-hidden="true" />
+          {t("fleetViewing")}
+        </p>
+      )}
       {data && data.chipsMissing > 0 && (
         <button
           type="button"
-          onClick={() => navigate(`${APP_BASE}/pieces?chip=missing`)}
+          // Every rep's count in management mode: "My pieces" would hold only the viewer's.
+          onClick={() => navigate(fleet ? "/admin/tags/pieces" : `${APP_BASE}/pieces?chip=missing`)}
           className="flex w-full items-center gap-3 rounded-[20px] border border-red-400/40 bg-red-500/[0.12] p-4 text-left"
           data-testid="dashboard-chips-missing"
         >
@@ -145,7 +155,7 @@ export function TagsDashboard() {
       )}
 
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4 lg:gap-4" data-testid="tags-summary">
-        <Stat label={t("statInStock")} value={data?.inStock} />
+        <Stat label={fleet ? t("statWithResellers") : t("statInStock")} value={data?.inStock} />
         <Stat label={t("statActive")} value={data?.active} />
         <Stat label={t("statSold30")} value={data?.soldInPeriod} />
         <Stat label={t("statScans30")} value={total} accent="text-blue-200" />

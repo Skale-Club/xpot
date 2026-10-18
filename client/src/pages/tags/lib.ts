@@ -219,6 +219,15 @@ export function tagPath(code: string): string {
   return `${APP_BASE}/t/${encodeURIComponent(code)}`;
 }
 
+/**
+ * A company's pieces. In management mode its piece counts cover every rep, so
+ * they open the full inventory filtered by that customer; "My pieces" would
+ * show only the viewer's own.
+ */
+export function leadPiecesPath(leadId: number, leadName: string, fleet: boolean): string {
+  return fleet ? `/admin/tags/pieces?lead=${leadId}` : `${APP_BASE}/pieces?lead=${leadId}&name=${encodeURIComponent(leadName)}`;
+}
+
 // ─── Hooks ────────────────────────────────────────────────────────────────────
 
 export type BannerState = { tone: "ok" | "error"; text: string } | null;

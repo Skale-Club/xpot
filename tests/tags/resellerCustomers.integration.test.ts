@@ -82,6 +82,13 @@ test.skipIf(!enabled)("reseller customers: approved reseller activates a piece, 
     }
     const kit = await api("POST", "/api/xpot/admin/tag-kits", "rc-admin", { repId: carla.id, codes, unitCostCents: 0 });
     assert.equal(kit.status, 201, kit.text);
+    // A third piece stays in house stock. The admin's dashboard counts the pieces with
+    // resellers, not the house's; viewing as a rep, the admin holds none.
+    const houseCode = generateTagCode();
+    assert.equal((await api("POST", `/api/xpot/admin/tag-batches/${batch.json.id}/scan`, "rc-admin", { value: houseCode, idempotencyKey: `rc-${houseCode}` })).status, 201);
+    assert.equal((await api("GET", "/api/xpot/tags/dashboard", "rc-admin")).json.inStock, 2);
+    assert.equal((await api("GET", "/api/xpot/tags/dashboard", "rc-carla")).json.inStock, 2);
+    assert.equal((await api("GET", "/api/xpot/tags/dashboard", "rc-admin", undefined, { "x-xpot-view": "rep" })).json.inStock, 0);
     const [own, linkedByAdmin] = await Promise.all(codes.map(async (code) => (await api("GET", `/api/xpot/tags/lookup/${code}`, "rc-carla")).json));
 
     // She sets up a piece for a business met in the field.
