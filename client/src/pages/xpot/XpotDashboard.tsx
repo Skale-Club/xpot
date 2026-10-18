@@ -71,7 +71,7 @@ function localDateKey(date = new Date()) {
 }
 
 function DashboardOverview() {
-  const { dashboardQuery, setLocation } = useXpotQueries();
+  const { dashboardQuery, setLocation, me } = useXpotQueries();
   const { toast } = useToast();
   const t = useT(dashboardMessages);
   const tp = useT(prospectingMessages);
@@ -82,7 +82,10 @@ function DashboardOverview() {
   const { failedEvents, retryMutation } = useSyncStatus();
   const [periodDays, setPeriodDays] = useState(7);
   const [activityMetric, setActivityMetric] = useState<ActivityMetric>("visits");
-  const salesSummary = useSalesSummary(periodDays * 2);
+  // The Dashboard is the person's own day (its visits and tasks are theirs in
+  // every mode), so its money is too: management mode would otherwise widen
+  // only these tiles to the team, with no scope chip to say so.
+  const salesSummary = useSalesSummary(periodDays * 2, me?.rep.id, Boolean(me));
   const routesQuery = useQuery<DashboardRoute[]>({ queryKey: ["/api/xpot/prospecting/routes"] });
   const isDesktop = useIsDesktop();
 
