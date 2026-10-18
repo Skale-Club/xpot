@@ -25,11 +25,11 @@ import { formatDistanceFor } from "./distance";
 // shape everywhere). These names stay because the Visits screens and a few
 // admin/Tags screens import them from here.
 
-/** Bottom-nav tabs; `labelKey` is a key of shellMessages. */
+/** Bottom-nav tabs, in the sidebar's order (moduleNav VISITS_TAB_ORDER); `labelKey` is a key of shellMessages. */
 export const tabs = [
   { id: "dashboard", labelKey: "tabDashboard", icon: Activity },
-  { id: "leads", labelKey: "tabLeads", icon: Building2 },
   { id: "route", labelKey: "tabRoute", icon: Route },
+  { id: "leads", labelKey: "tabLeads", icon: Building2 },
   { id: "tasks", labelKey: "tabTasks", icon: ListTodo },
   { id: "sales", labelKey: "tabSales", icon: DollarSign },
 ] as const;

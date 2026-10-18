@@ -107,7 +107,8 @@ test("checking in from the search lands on the business's open route stop", asyn
   // No extra stop: it was already on the route.
   expect((await q(`SELECT id FROM prospecting_route_stops WHERE route_id = $1`, [ids.route])).length).toBe(3);
 
-  await checkOut(visit!);
+  // The check-out answer names the route, so the app goes back to it for the next stop.
+  expect((await checkOut(visit!))?.routeId).toBe(ids.route);
   expect((await one(`SELECT status FROM prospecting_route_stops WHERE id = $1`, [ids.stop2])).status).toBe("completed");
   expect((await one(`SELECT status FROM prospecting_candidates WHERE id = $1`, [ids.candB])).status).toBe("visited");
 });
@@ -154,5 +155,6 @@ test("a stop's planned visit is started, not duplicated, and the last one closes
 test("with no route running, an ad-hoc visit stays a plain visit", async () => {
   const visit = await checkIn(ids.leadAdHoc);
   expect(await q(`SELECT id FROM prospecting_route_stops WHERE visit_id = $1`, [visit!.id])).toEqual([]);
-  await checkOut(visit!);
+  // No route to go back to: the app shows the visit summary.
+  expect((await checkOut(visit!))?.routeId).toBeNull();
 });

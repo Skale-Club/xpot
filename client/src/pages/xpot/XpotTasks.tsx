@@ -7,6 +7,7 @@ import { ListPager, useOffsetPages } from "@/components/xpot/pagination";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useXpotQueries } from "./hooks/useXpotQueries";
+import { useViewerAccess } from "@/lib/adminMode";
 import type { FullSalesLead, SalesTask } from "./types";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -65,7 +66,9 @@ export function XpotTasks() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<Form>(emptyForm);
   const organizationId = me?.organizations?.[0]?.id;
-  const canManage = Boolean(me?.user.isAdmin || me?.rep.role === "manager" || me?.rep.role === "admin" || me?.organizations?.some((org) => org.membershipRole === "admin"));
+  // The team's tasks and assigning to others are management: only in management mode,
+  // like every other list (the server narrows "all" to the person's own outside it).
+  const { canManage } = useViewerAccess();
   const team = canManage && filters.values.team === "1";
 
   const taskParams = new URLSearchParams({ status: status === "open" ? "pending,in_progress" : status });

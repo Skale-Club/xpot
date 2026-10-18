@@ -1349,7 +1349,7 @@ export function XpotProspecting() {
                     <ShieldCheck />{t("publishRoute")}
                   </Button>
                 ) : routeIsToday && !["cancelled", "draft"].includes(routeDetails.route.status) ? (
-                  <Button asChild variant="brand" className="w-full sm:w-auto"><Link href="/visits?view=day">{t("openVisits")}</Link></Button>
+                  <Button asChild variant="brand" className="w-full sm:w-auto"><Link href="/dashboard/history?view=day">{t("openVisits")}</Link></Button>
                 ) : null}
                 {directionsUrl ? <Button asChild variant="secondary" className="w-full sm:w-auto"><a href={directionsUrl} target="_blank" rel="noreferrer"><Navigation />{t("openMaps")}</a></Button> : null}
                 {appleDirectionsUrl ? <Button asChild variant="secondary" className="w-full sm:w-auto"><a href={appleDirectionsUrl} target="_blank" rel="noreferrer"><Navigation />{t("openAppleMaps")}</a></Button> : null}

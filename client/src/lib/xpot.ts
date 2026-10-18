@@ -15,10 +15,16 @@ const LAST_ROUTE_KEY: Record<XpotModule, string> = {
   tags: "xpot.route.v1.tags",
 };
 
-/** Only primary work screens are restored. Account and management routes are intentional detours. */
+/**
+ * Only primary work screens are restored. Account and management routes are
+ * intentional detours, and the visit screen (/route/check-in, or /route with a
+ * leadId) is a moment: once the visit is over, going "back" there is stale.
+ */
 export function isModuleRoute(module: XpotModule, route: string): boolean {
-  const pathname = route.split(/[?#]/, 1)[0];
+  const [pathname, query = ""] = route.split("#", 1)[0].split("?", 2);
   if (module === "tags") return pathname === "/tags" || pathname.startsWith("/tags/");
+  if (pathname === "/route/check-in" || pathname.startsWith("/route/check-in/") || pathname === "/check-in") return false;
+  if (pathname === "/route" && new URLSearchParams(query).has("leadId")) return false;
   return ["/dashboard", "/route", "/leads", "/tasks", "/sales"].some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 

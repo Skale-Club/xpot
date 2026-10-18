@@ -1,7 +1,8 @@
 import { queryClient } from "@/lib/queryClient";
 import { clearModuleRoutes } from "@/lib/xpot";
+import { clearAdminMode } from "@/lib/adminMode";
 
-/** Ends the Supabase and server sessions, drops cached data and goes to "/". */
+/** Ends the Supabase and server sessions, drops cached data and this device's management mode, and goes to "/". */
 export async function signOut(navigate: (path: string) => void) {
   try {
     const { initSupabase } = await import("@/lib/supabase");
@@ -13,5 +14,6 @@ export async function signOut(navigate: (path: string) => void) {
   await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
   queryClient.clear();
   clearModuleRoutes();
+  clearAdminMode();
   navigate("/");
 }

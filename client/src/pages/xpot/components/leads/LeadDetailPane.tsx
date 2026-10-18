@@ -117,11 +117,13 @@ function CompanyCoverPhoto({ lead }: { lead: FullSalesLead }) {
 }
 
 /** One company profile. Lead/customer are states of this same record. */
-export function LeadDetailPane({ lead, pieces, visits, onClose, onDelete, onConvertToCustomer, converting = false }: {
+export function LeadDetailPane({ lead, pieces, visits, onClose, backLabel, onDelete, onConvertToCustomer, converting = false }: {
   lead: FullSalesLead;
   pieces?: LeadTagSummary;
   visits: EnrichedSalesVisit[];
   onClose: () => void;
+  /** The back link's text when it does not go to the companies list (opened from the Route, a task, a visit). */
+  backLabel?: string;
   onDelete: () => void;
   onConvertToCustomer?: () => void;
   converting?: boolean;
@@ -152,7 +154,7 @@ export function LeadDetailPane({ lead, pieces, visits, onClose, onDelete, onConv
 
   return (
     <div className="min-w-0 space-y-6" data-testid="lead-detail-pane">
-      <BackLink onBack={onClose}>{t("backToLeads")}</BackLink>
+      <BackLink onBack={onClose}>{backLabel ?? t("backToLeads")}</BackLink>
       <header className="flex flex-col gap-4 border-b border-white/[0.07] pb-5 lg:flex-row lg:items-center">
         <div className="flex min-w-0 flex-1 items-start gap-3 sm:gap-4">
           <CompanyCoverPhoto lead={lead} />

@@ -7,6 +7,9 @@ import { getSupabaseAdmin } from "../../lib/supabase.js";
 import { discardFiles } from "../../lib/files.js";
 import { randomUUID } from "crypto";
 import { listOrganizations, membershipsForRep } from "../../organizations/service.js";
+import { eq } from "drizzle-orm";
+import { db } from "../../db.js";
+import { users } from "#shared/schema.js";
 
 export function createAuthRouter() {
   const router = Router();
@@ -15,11 +18,12 @@ export function createAuthRouter() {
   router.get("/me", async (req, res) => {
     try {
       const actor = (req as any).xpotActor as Awaited<ReturnType<typeof ensureXpotRep>>;
-      const [activeVisit, organizations, organizationMemberships, appSettings] = await Promise.all([
+      const [activeVisit, organizations, organizationMemberships, appSettings, [account]] = await Promise.all([
         storage.getActiveSalesVisitForRep(actor!.rep.id),
         listOrganizations(actor!),
         membershipsForRep(actor!.rep.id),
         storage.getSalesAppSettings(),
+        db.select({ phone: users.phone }).from(users).where(eq(users.id, actor!.user.userId)).limit(1),
       ]);
       const enrichedVisit = activeVisit
         ? {
@@ -29,7 +33,8 @@ export function createAuthRouter() {
           }
         : null;
       res.json({
-        user: actor!.user,
+        // The sign-in phone (users.phone) is not the profile's contact phone (rep.phone); Settings shows both.
+        user: { ...actor!.user, phone: account?.phone ?? null },
         rep: actor!.rep,
         organizations,
         organizationMemberships,
