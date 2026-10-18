@@ -1,5 +1,5 @@
 import { useState, type FormEvent, type ReactNode } from "react";
-import { Ban, Check, Copy, KeyRound, Pencil, Phone, RotateCcw, Trash2, UserPlus, type LucideIcon } from "lucide-react";
+import { AlertTriangle, Ban, Check, Copy, KeyRound, Pencil, Phone, RotateCcw, Search, Trash2, UserPlus, type LucideIcon } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "@/components/ui/loader";
@@ -13,13 +13,18 @@ import { settingsMessages } from "@/i18n/messages/settings";
 import { signinMessages } from "@/i18n/messages/signin";
 import { AdminBadge, useIsSuperAdmin } from "@/components/xpot/AdminBadge";
 import { Pill, type PillTone } from "@/components/xpot/StatusPill";
+import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
 import type { XpotMeResponse } from "@/pages/xpot/types";
+import { blockNote } from "@shared/repAccess";
+import { filterPeople, NO_PEOPLE_FILTERS, type PeopleFilters } from "./peopleFilters";
 
 // Who may use Xpot. People sign up with their phone and wait here for
 // approval; an admin can also create someone's access directly. Everyone
 // signs in with a code texted to their phone. Blocking ends the partnership
-// and logs the rep out everywhere. A blocked rep's account can then be deleted
-// on their request (admins only; server/accountDeletion.ts).
+// and logs the rep out everywhere; refusing a sign-up blocks it too but is
+// listed apart, as "Refused". A blocked rep's account can then be deleted
+// on their request (admins only; server/accountDeletion.ts). Managers act on
+// reps only: the controls the server would refuse them (403) are not shown.
 
 type Access = "pending" | "active" | "blocked";
 
@@ -38,6 +43,8 @@ type Rep = {
   isActive: boolean;
   modules: string[];
   access: Access;
+  /** Blocked because their sign-up was refused (shared/repAccess.ts). */
+  refused: boolean;
   blockedAt: string | null;
   blockedReason: string | null;
   createdAt: string | null;
@@ -64,6 +71,7 @@ const REPS_KEY = ["/api/xpot/admin/reps"];
 const MODULE_KEYS = { visits: "moduleVisits", tags: "moduleTags" } as const satisfies Record<XpotModule, keyof typeof commonMessages.en>;
 const ROLES = ["rep", "manager", "admin"] as const;
 const ROLE_KEYS = { rep: "role_rep", manager: "role_manager", admin: "role_admin" } as const satisfies Record<(typeof ROLES)[number], keyof typeof settingsMessages.en>;
+const SELECT = "rounded-lg border border-white/10 bg-[#0a0f1e] px-3 py-2 text-sm text-white outline-none focus:border-blue-500/50";
 const FIELD =
   "w-full rounded-lg border border-white/10 bg-[#0a0f1e] px-3 py-2 text-sm text-white placeholder-white/25 outline-none focus:border-blue-500/50";
 const BTN = "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-40";
@@ -121,6 +129,7 @@ function ModuleChecks({ value, onChange, disabled }: { value: string[]; onChange
 export function AdminReps() {
   const query = useQuery<Rep[]>({ queryKey: REPS_KEY });
   const t = useT(manageMessages);
+  const [filters, setFilters] = useState<PeopleFilters>(NO_PEOPLE_FILTERS);
 
   if (query.isLoading) {
     return (
@@ -133,13 +142,18 @@ export function AdminReps() {
     return <p className="text-sm text-red-400">{t("repsLoadFailed")}</p>;
   }
 
-  const pending = query.data.filter((r) => r.access === "pending");
-  const active = query.data.filter((r) => r.access === "active");
-  const blocked = query.data.filter((r) => r.access === "blocked");
+  const people = filterPeople(query.data, filters);
+  const filtering = JSON.stringify(filters) !== JSON.stringify(NO_PEOPLE_FILTERS);
+  const pending = people.filter((r) => r.access === "pending");
+  const active = people.filter((r) => r.access === "active");
+  const blocked = people.filter((r) => r.access === "blocked" && !r.refused);
+  const refused = people.filter((r) => r.access === "blocked" && r.refused);
 
   return (
     <div className="space-y-6">
       <NewResellerForm />
+      <PeopleToolbar value={filters} onChange={setFilters} />
+      {filtering && people.length === 0 && <p className="text-sm text-white/45">{t("noPeopleMatch")}</p>}
 
       {/* Only when someone is waiting: an empty "waiting" block is noise. */}
       {pending.length > 0 && (
@@ -154,14 +168,20 @@ export function AdminReps() {
         </section>
       )}
 
-      <section className="space-y-3" data-testid="reps-active">
-        <h2 className="text-sm font-semibold text-white/80">{t("activeCount", { count: active.length })}</h2>
-        <div className="divide-y divide-white/[0.06] rounded-2xl border border-white/10 bg-white/[0.03]">
-          {active.map((rep) => (
-            <ActiveRow key={rep.id} rep={rep} />
-          ))}
-        </div>
-      </section>
+      {(active.length > 0 || !filtering) && (
+        <section className="space-y-3" data-testid="reps-active">
+          <h2 className="text-sm font-semibold text-white/80">{t("activeCount", { count: active.length })}</h2>
+          {active.length === 0 ? (
+            <p className="text-sm text-white/40">{t("noActivePeople")}</p>
+          ) : (
+            <div className="divide-y divide-white/[0.06] rounded-2xl border border-white/10 bg-white/[0.03]">
+              {active.map((rep) => (
+                <ActiveRow key={rep.id} rep={rep} />
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       {blocked.length > 0 && (
         <section className="space-y-3" data-testid="reps-blocked">
@@ -171,6 +191,50 @@ export function AdminReps() {
           ))}
         </section>
       )}
+
+      {refused.length > 0 && (
+        <section className="space-y-3" data-testid="reps-refused">
+          <h2 className="text-sm font-semibold text-white/55">{t("refusedCount", { count: refused.length })}</h2>
+          {refused.map((rep) => (
+            <BlockedRow key={rep.id} rep={rep} />
+          ))}
+        </section>
+      )}
+    </div>
+  );
+}
+
+/** Search box and the status, role and module filters. */
+function PeopleToolbar({ value, onChange }: { value: PeopleFilters; onChange: (next: PeopleFilters) => void }) {
+  const t = useT(manageMessages);
+  const tc = useT(commonMessages);
+  const tse = useT(settingsMessages);
+  const set = <K extends keyof PeopleFilters>(key: K, v: PeopleFilters[K]) => onChange({ ...value, [key]: v });
+  return (
+    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center" data-testid="people-toolbar">
+      <label className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-white/10 bg-[#0a0f1e] px-3 py-2 sm:min-w-[16rem]">
+        <Search className="h-4 w-4 shrink-0 text-white/35" />
+        <input
+          value={value.search}
+          onChange={(e) => set("search", e.target.value)}
+          placeholder={t("searchPeople")}
+          aria-label={t("searchPeople")}
+          className="w-full min-w-0 bg-transparent text-sm text-white placeholder-white/25 outline-none"
+          data-testid="people-search"
+        />
+      </label>
+      <select value={value.status} onChange={(e) => set("status", e.target.value as PeopleFilters["status"])} className={SELECT} aria-label={t("filterStatus")} data-testid="people-filter-status">
+        <option value="all">{t("filterStatus")}: {t("filterAll")}</option>
+        {(["pending", "active", "blocked", "refused"] as const).map((s) => <option key={s} value={s}>{t(`status_${s}`)}</option>)}
+      </select>
+      <select value={value.role} onChange={(e) => set("role", e.target.value as PeopleFilters["role"])} className={SELECT} aria-label={t("filterRole")}>
+        <option value="all">{t("filterRole")}: {t("filterAll")}</option>
+        {ROLES.map((r) => <option key={r} value={r}>{tse(ROLE_KEYS[r])}</option>)}
+      </select>
+      <select value={value.module} onChange={(e) => set("module", e.target.value as PeopleFilters["module"])} className={SELECT} aria-label={t("filterModule")}>
+        <option value="all">{t("filterModule")}: {t("filterAll")}</option>
+        {XPOT_MODULES.map((m) => <option key={m} value={m}>{tc(MODULE_KEYS[m])}</option>)}
+      </select>
     </div>
   );
 }
@@ -270,7 +334,8 @@ function InlineAction({
 
 function PendingRow({ rep }: { rep: Rep }) {
   const t = useT(manageMessages);
-  const [modules, setModules] = useState<string[]>(rep.modules?.length ? rep.modules : [...XPOT_MODULES]);
+  // Nothing preselected: the module choice is made on purpose (the same as creating access).
+  const [modules, setModules] = useState<string[]>([]);
   const approve = useRepAction((r) => t("repCanSignInNow", { name: r.displayName }));
   const refuse = useRepAction((r) => t("repRefused", { name: r.displayName }));
   const busy = approve.isPending || refuse.isPending;
@@ -283,6 +348,7 @@ function PendingRow({ rep }: { rep: Rep }) {
         <Identity rep={rep} />
         {rep.createdAt && <span className="text-xs text-white/35">{t("signedUpOn", { date: new Date(rep.createdAt).toLocaleDateString(t.locale) })}</span>}
         <ModuleChecks value={modules} onChange={setModules} />
+        {modules.length === 0 && <span className="text-xs text-amber-200/70">{t("chooseModules")}</span>}
         <button
           type="button"
           disabled={busy || modules.length === 0}
@@ -299,7 +365,7 @@ function PendingRow({ rep }: { rep: Rep }) {
           confirmLabel={t("refuse")}
           danger
           busy={busy}
-          onConfirm={(reason) => refuse.mutate({ url: `/api/xpot/admin/reps/${rep.id}/block`, body: { reason: reason || t("signUpRefusedReason") }, rep })}
+          onConfirm={(reason) => refuse.mutate({ url: `/api/xpot/admin/reps/${rep.id}/refuse`, body: { reason: reason || null }, rep })}
         />
       </div>
       {rep.application ? (
@@ -332,8 +398,11 @@ function ActiveRow({ rep }: { rep: Rep }) {
   const tc = useT(commonMessages);
   const tse = useT(settingsMessages);
   const [open, setOpen] = useState(false);
+  const isSuperAdmin = useIsSuperAdmin();
   const effective = repModules({ role: rep.role, modules: rep.modules });
   const roleKey = ROLE_KEYS[rep.role as (typeof ROLES)[number]];
+  // A manager may only act on reps (the server answers 403 for managers and admins).
+  const canEdit = isSuperAdmin || rep.role === "rep";
   return (
     <div data-testid={`rep-${rep.id}`}>
       <div className="flex flex-wrap items-center gap-3 px-4 py-3">
@@ -341,12 +410,14 @@ function ActiveRow({ rep }: { rep: Rep }) {
         <Pill tone={ROLE_TONE[rep.role] ?? "slate"}>{roleKey ? tse(roleKey) : rep.role}</Pill>
         <span className="text-xs text-white/45">{effective.map((m) => tc(MODULE_KEYS[m as XpotModule])).join(" · ")}</span>
         {rep.team ? <span className="text-xs text-white/45">{rep.team}</span> : null}
-        <button type="button" onClick={() => setOpen((v) => !v)} className={`${BTN} border border-white/10 text-white/70 hover:bg-white/5`} aria-expanded={open} data-testid={`edit-${rep.id}`}>
-          <Pencil className="h-4 w-4" />
-          {open ? tc("close") : t("edit")}
-        </button>
+        {canEdit && (
+          <button type="button" onClick={() => setOpen((v) => !v)} className={`${BTN} border border-white/10 text-white/70 hover:bg-white/5`} aria-expanded={open} data-testid={`edit-${rep.id}`}>
+            <Pencil className="h-4 w-4" />
+            {open ? tc("close") : t("edit")}
+          </button>
+        )}
       </div>
-      {open ? <RepEditor rep={rep} onDone={() => setOpen(false)} /> : null}
+      {open && canEdit ? <RepEditor rep={rep} onDone={() => setOpen(false)} /> : null}
     </div>
   );
 }
@@ -360,20 +431,38 @@ function RepEditor({ rep, onDone }: { rep: Rep; onDone: () => void }) {
   const [role, setRole] = useState(rep.role);
   const [team, setTeam] = useState(rep.team ?? "");
   const [modules, setModules] = useState<string[]>(rep.modules ?? [...XPOT_MODULES]);
-  const [costPolicy, setCostPolicy] = useState<"zero" | "acquisition">(rep.costPolicy ?? "acquisition");
+  // Never configured: "Not set" until someone picks a rule on purpose (saving no longer picks one for them).
+  const [costPolicy, setCostPolicy] = useState<"zero" | "acquisition" | "">(rep.costPolicyConfiguredAt ? rep.costPolicy ?? "acquisition" : "");
+  const [confirmAdmin, setConfirmAdmin] = useState(false);
+  const isSuperAdmin = useIsSuperAdmin();
   const isManager = role === "manager" || role === "admin";
   const sameModules = [...modules].sort().join() === [...(rep.modules ?? XPOT_MODULES)].sort().join();
-  const dirty = role !== rep.role || (team || "") !== (rep.team || "") || !sameModules || costPolicy !== rep.costPolicy || !rep.costPolicyConfiguredAt;
+  const costChanged = costPolicy !== "" && (costPolicy !== rep.costPolicy || !rep.costPolicyConfiguredAt);
+  const dirty = role !== rep.role || (team || "") !== (rep.team || "") || !sameModules || costChanged;
+  // The "admin" role is the global Xpot admin (storage.updateSalesRepAccountProfile): changing it signs them out.
+  const adminChanges = (role === "admin") !== (rep.role === "admin");
 
   const save = useMutation({
     mutationFn: () =>
-      send("/api/xpot/admin/reps", { userId: rep.userId, displayName: rep.displayName, email: rep.email, role, team: team || null, modules, costPolicy }),
+      send("/api/xpot/admin/reps", {
+        userId: rep.userId,
+        displayName: rep.displayName,
+        email: rep.email,
+        role,
+        team: team || null,
+        modules,
+        ...(costPolicy ? { costPolicy } : {}),
+      }),
     onSuccess: () => {
+      setConfirmAdmin(false);
       toast({ title: t("repUpdated", { name: rep.displayName }) });
       void queryClient.invalidateQueries({ queryKey: REPS_KEY });
       onDone();
     },
-    onError: (e: Error) => toast({ title: t("error"), description: e.message, variant: "destructive" }),
+    onError: (e: Error) => {
+      setConfirmAdmin(false);
+      toast({ title: t("error"), description: e.message, variant: "destructive" });
+    },
   });
   const block = useRepAction((r) => t("repBlocked", { name: r.displayName }));
   const phone = useRepAction((r) => t("repPhoneChanged", { name: r.displayName }));
@@ -382,23 +471,32 @@ function RepEditor({ rep, onDone }: { rep: Rep; onDone: () => void }) {
   // Blocking yourself would lock you out of the admin you are using.
   const { data: me } = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
   const isSelf = !!me && rep.id === me.rep.id;
-  const SELECT = "w-full rounded-lg border border-white/10 bg-[#0a0f1e] px-3 py-2 text-sm text-white outline-none focus:border-blue-500/50";
+  // Your own role is locked (you'd sign yourself out), and only the global admin changes roles at all.
+  const roleLocked = isSelf || !isSuperAdmin;
+  const FULL_SELECT = `w-full ${SELECT} disabled:opacity-50`;
 
   return (
     <div className="space-y-5 border-t border-white/[0.06] bg-black/10 px-4 py-4" data-testid={`rep-editor-${rep.id}`}>
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label={t("fieldRole")}>
-          <select value={role} onChange={(e) => setRole(e.target.value)} className={SELECT}>
+        <Field label={t("fieldRole")} hint={isSelf ? t("ownRoleLocked") : !isSuperAdmin ? t("roleAdminOnly") : undefined}>
+          <select value={role} onChange={(e) => setRole(e.target.value)} className={FULL_SELECT} disabled={roleLocked} data-testid={`role-${rep.id}`}>
             {ROLES.map((r) => (
               <option key={r} value={r}>{tse(ROLE_KEYS[r])}</option>
             ))}
           </select>
+          {adminChanges && (
+            <p className="flex items-start gap-1.5 rounded-lg border border-amber-400/25 bg-amber-400/[0.07] px-2.5 py-2 text-xs text-amber-200" data-testid={`admin-warning-${rep.id}`}>
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              {role === "admin" ? t("adminRoleWarning") : t("adminRoleRemovedWarning")}
+            </p>
+          )}
         </Field>
         <Field label={t("fieldTeam")}>
           <input value={team} onChange={(e) => setTeam(e.target.value)} placeholder={t("teamPlaceholder")} className={FIELD} />
         </Field>
         <Field label={t("costPolicyTitle")} hint={t("costPolicyHint")}>
-          <select value={costPolicy} onChange={(e) => setCostPolicy(e.target.value as "zero" | "acquisition")} className={SELECT} data-testid={`cost-policy-${rep.id}`}>
+          <select value={costPolicy} onChange={(e) => setCostPolicy(e.target.value as "zero" | "acquisition")} className={FULL_SELECT} data-testid={`cost-policy-${rep.id}`}>
+            {costPolicy === "" && <option value="" disabled>{t("costPolicyNotSet")}</option>}
             <option value="zero">{t("costPolicyZero")}</option>
             <option value="acquisition">{t("costPolicyAcquisition")}</option>
           </select>
@@ -410,7 +508,13 @@ function RepEditor({ rep, onDone }: { rep: Rep; onDone: () => void }) {
         </Field>
       </div>
       <div className="flex gap-2">
-        <button type="button" onClick={() => save.mutate()} disabled={!dirty || save.isPending || modules.length === 0} className={`${BTN} bg-blue-500 text-white hover:bg-blue-600`}>
+        <button
+          type="button"
+          onClick={() => (adminChanges ? setConfirmAdmin(true) : save.mutate())}
+          disabled={!dirty || save.isPending || modules.length === 0}
+          className={`${BTN} bg-blue-500 text-white hover:bg-blue-600`}
+          data-testid={`save-${rep.id}`}
+        >
           {save.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
           {tc("save")}
         </button>
@@ -472,6 +576,18 @@ function RepEditor({ rep, onDone }: { rep: Rep; onDone: () => void }) {
           testId={`block-${rep.id}`}
         />
       </div>}
+
+      <ConfirmDialog
+        open={confirmAdmin}
+        onOpenChange={setConfirmAdmin}
+        title={role === "admin" ? t("confirmAdminTitle", { name: rep.displayName }) : t("confirmAdminRemoveTitle", { name: rep.displayName })}
+        description={role === "admin" ? t("adminRoleWarning") : t("adminRoleRemovedWarning")}
+        confirmLabel={t("confirmAdminAction")}
+        destructive={role !== "admin"}
+        busy={save.isPending}
+        onConfirm={() => save.mutate()}
+        testId={`confirm-admin-${rep.id}`}
+      />
     </div>
   );
 }
@@ -485,10 +601,13 @@ function DeleteAccountButton({ rep }: { rep: Rep }) {
   const queryClient = useQueryClient();
   const isSuperAdmin = useIsSuperAdmin();
   const word = t("deleteAccountWord");
+  const [open, setOpen] = useState(false);
+  const [typed, setTyped] = useState("");
   const remove = useMutation({
     // The API's own guard word is always "DELETE"; the one typed is localized.
     mutationFn: () => send<DeletionResult>(`/api/xpot/admin/reps/${rep.id}`, { confirm: "DELETE" }, "DELETE"),
     onSuccess: (r) => {
+      setOpen(false);
       toast({
         title: t("accountDeleted", { name: rep.displayName }),
         description: [
@@ -505,43 +624,79 @@ function DeleteAccountButton({ rep }: { rep: Rep }) {
   // The global admin only, like the server (requireSuperAdmin), so it carries the "Admin" tag.
   if (!isSuperAdmin) return null;
   return (
-    <button
-      type="button"
-      disabled={remove.isPending}
-      onClick={() => {
-        const typed = window.prompt(t("deleteAccountPrompt", { name: rep.displayName, word }), "");
-        if (typed === word) remove.mutate();
-        else if (typed !== null) toast({ title: t("notDeleted"), description: t("notDeletedHint", { word }) });
-      }}
-      className={`${BTN} border border-red-500/30 text-red-300 hover:bg-red-500/10`}
-      data-testid={`delete-${rep.id}`}
-    >
-      {remove.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-      {t("deleteAccount")}
-      <AdminBadge />
-    </button>
+    <>
+      <button
+        type="button"
+        disabled={remove.isPending}
+        onClick={() => {
+          setTyped("");
+          setOpen(true);
+        }}
+        className={`${BTN} border border-red-500/30 text-red-300 hover:bg-red-500/10`}
+        data-testid={`delete-${rep.id}`}
+      >
+        {remove.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+        {t("deleteAccount")}
+        <AdminBadge />
+      </button>
+      <ConfirmDialog
+        open={open}
+        onOpenChange={setOpen}
+        title={t("deleteAccountTitle", { name: rep.displayName })}
+        description={t("deleteAccountBody")}
+        confirmLabel={t("deleteAccount")}
+        destructive
+        busy={remove.isPending}
+        // The word is typed in the admin's language and in capitals, like the hint says.
+        confirmDisabled={typed.trim() !== word}
+        onConfirm={() => remove.mutate()}
+        testId={`delete-dialog-${rep.id}`}
+      >
+        <label className="block space-y-1.5">
+          <span className="text-xs text-white/55">{t("deleteAccountTypeHint", { word })}</span>
+          <input
+            autoFocus
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
+            placeholder={word}
+            className={FIELD}
+            data-testid={`delete-word-${rep.id}`}
+          />
+        </label>
+      </ConfirmDialog>
+    </>
   );
 }
 
+/** A blocked person, or a refused sign-up (labelled "Refused", with the admin's note). */
 function BlockedRow({ rep }: { rep: Rep }) {
   const t = useT(manageMessages);
+  const isSuperAdmin = useIsSuperAdmin();
   const unblock = useRepAction((r) => t("repCanSignInAgain", { name: r.displayName }));
+  const date = rep.blockedAt ? new Date(rep.blockedAt).toLocaleDateString(t.locale) : "";
+  const note = blockNote(rep.blockedReason);
   return (
-    <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-red-500/15 bg-red-500/[0.03] p-4 opacity-80" data-testid={`rep-${rep.id}`}>
+    <div
+      className={`flex flex-wrap items-center gap-3 rounded-2xl border p-4 opacity-80 ${rep.refused ? "border-white/10 bg-white/[0.02]" : "border-red-500/15 bg-red-500/[0.03]"}`}
+      data-testid={`rep-${rep.id}`}
+    >
       <Identity rep={rep} />
+      {rep.refused && <Pill tone="slate">{t("refusedPill")}</Pill>}
       <span className="text-xs text-white/40">
-        {t("blockedOn", { date: rep.blockedAt ? new Date(rep.blockedAt).toLocaleDateString(t.locale) : "" }).trim()}
-        {rep.blockedReason ? ` · ${rep.blockedReason}` : ""}
+        {(rep.refused ? t("refusedOn", { date }) : t("blockedOn", { date })).trim()}
+        {note ? ` · ${note}` : ""}
       </span>
-      <button
-        type="button"
-        disabled={unblock.isPending}
-        onClick={() => unblock.mutate({ url: `/api/xpot/admin/reps/${rep.id}/unblock`, rep })}
-        className={`${BTN} border border-white/10 text-white/70 hover:bg-white/5`}
-      >
-        <RotateCcw className="h-4 w-4" />
-        {t("unblock")}
-      </button>
+      {(isSuperAdmin || rep.role === "rep") && (
+        <button
+          type="button"
+          disabled={unblock.isPending}
+          onClick={() => unblock.mutate({ url: `/api/xpot/admin/reps/${rep.id}/unblock`, rep })}
+          className={`${BTN} border border-white/10 text-white/70 hover:bg-white/5`}
+        >
+          <RotateCcw className="h-4 w-4" />
+          {t("unblock")}
+        </button>
+      )}
       <DeleteAccountButton rep={rep} />
     </div>
   );
@@ -558,12 +713,15 @@ function NewResellerForm() {
   const [displayName, setDisplayName] = useState("");
   const [countryCode, setCountryCode] = useState("1");
   const [phone, setPhone] = useState("");
-  const [modules, setModules] = useState<string[]>(["tags"]);
-  const [costPolicy, setCostPolicy] = useState<"zero" | "acquisition">("acquisition");
+  // Nothing preselected (the same as approving a sign-up): modules and, for Tags, the cost rule are chosen on purpose.
+  const [modules, setModules] = useState<string[]>([]);
+  const [costPolicy, setCostPolicy] = useState<"zero" | "acquisition" | "">("");
   const [created, setCreated] = useState<string | null>(null);
+  const needsCostPolicy = modules.includes("tags") && !costPolicy;
 
   const create = useMutation({
-    mutationFn: () => send<Rep>("/api/xpot/admin/reps/accounts", { displayName, phone, countryCode, modules, costPolicy }),
+    mutationFn: () =>
+      send<Rep>("/api/xpot/admin/reps/accounts", { displayName, phone, countryCode, modules, ...(costPolicy ? { costPolicy } : {}) }),
     onSuccess: (rep) => {
       setCreated(welcomeMessage(t, displayName, rep.phone ?? phone));
       void queryClient.invalidateQueries({ queryKey: REPS_KEY });
@@ -575,8 +733,8 @@ function NewResellerForm() {
   const reset = () => {
     setDisplayName("");
     setPhone("");
-    setModules(["tags"]);
-    setCostPolicy("acquisition");
+    setModules([]);
+    setCostPolicy("");
     setCreated(null);
   };
 
@@ -640,16 +798,22 @@ function NewResellerForm() {
       <div className="flex flex-wrap items-center gap-4">
         <span className="text-xs uppercase tracking-wider text-white/40">{t("modules")}</span>
         <ModuleChecks value={modules} onChange={setModules} />
-        <select value={costPolicy} onChange={(event) => setCostPolicy(event.target.value as "zero" | "acquisition")}
-          className="rounded-lg border border-white/10 bg-[#0a0f1e] px-3 py-2 text-sm text-white outline-none focus:border-blue-500/50">
-          <option value="zero">{t("costPolicyZero")}</option>
-          <option value="acquisition">{t("costPolicyAcquisition")}</option>
-        </select>
+        {modules.length === 0 && <span className="text-xs text-amber-200/70">{t("chooseModules")}</span>}
       </div>
+      {modules.includes("tags") && (
+        <label className="flex flex-wrap items-center gap-3">
+          <span className="text-xs uppercase tracking-wider text-white/40">{t("costPolicyTitle")}</span>
+          <select value={costPolicy} onChange={(event) => setCostPolicy(event.target.value as "zero" | "acquisition")} className={SELECT} data-testid="new-reseller-cost-policy">
+            {costPolicy === "" && <option value="" disabled>{t("costPolicyNotSet")}</option>}
+            <option value="zero">{t("costPolicyZero")}</option>
+            <option value="acquisition">{t("costPolicyAcquisition")}</option>
+          </select>
+        </label>
+      )}
       <div className="flex gap-2">
         <button
           type="submit"
-          disabled={create.isPending || modules.length === 0}
+          disabled={create.isPending || modules.length === 0 || needsCostPolicy}
           className={`${BTN} bg-blue-500 py-2 text-white hover:bg-blue-600`}
           data-testid="button-create-reseller"
         >

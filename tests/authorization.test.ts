@@ -457,6 +457,20 @@ describe("SEG-07 — a manager cannot escalate through the reps endpoint", () =>
     expect(store.upserts.at(-1)).toMatchObject({ displayName: "Renamed", isActive: false });
   });
 
+  it("refuses a change to your own role, even for the platform admin", async () => {
+    const res = await request(appFor(router, "user-m", true), "POST", "/admin/reps", {
+      userId: "user-m", displayName: "Manager", role: "rep",
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/own role/);
+    expect(store.reps.get(3).role).toBe("manager");
+    // Saving your own profile with the same role still works.
+    const same = await request(appFor(router, "user-m", true), "POST", "/admin/reps", {
+      userId: "user-m", displayName: "Manager M", role: "manager",
+    });
+    expect(same.status).toBe(200);
+  });
+
   it("lets a platform admin change someone else's role", async () => {
     const res = await request(appFor(router, "user-m", true), "POST", "/admin/reps", {
       userId: "user-a", displayName: "Rep A", role: "manager",

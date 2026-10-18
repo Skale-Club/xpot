@@ -15,6 +15,7 @@ import {
   createResellerAccount,
   listRepsWithAccess,
   phoneChangeSchema,
+  refuseRep,
   resellerAccountSchema,
   unblockRep,
   type Actor,
@@ -107,6 +108,10 @@ export function createAdminRouter() {
     if (!actor.isAdmin && (input.role !== "rep" || existing.role !== "rep")) {
       throw new AccountError("Only an admin can change a manager's or admin's role.", 403);
     }
+    // Demoting yourself would sign you out of the admin you are using, with nobody to undo it.
+    if (existing.userId === actor.userId && input.role !== existing.role) {
+      throw new AccountError("You can't change your own role.", 400);
+    }
     const costPolicyChanged = input.costPolicy !== undefined &&
       (input.costPolicy !== existing.costPolicy || !existing.costPolicyConfiguredAt);
     return storage.updateSalesRepAccountProfile({
@@ -120,6 +125,7 @@ export function createAdminRouter() {
   router.post("/admin/reps/accounts", accountRoute((req) => createResellerAccount(resellerAccountSchema.parse(req.body), actorOf(req)), 201));
   router.post("/admin/reps/:id/approve", withRep((id, req) => approveRep(id, approveSchema.parse(req.body ?? {}).modules, actorOf(req))));
   router.post("/admin/reps/:id/block", withRep((id, req) => blockRep(id, blockSchema.parse(req.body ?? {}).reason, actorOf(req))));
+  router.post("/admin/reps/:id/refuse", withRep((id, req) => refuseRep(id, blockSchema.parse(req.body ?? {}).reason, actorOf(req))));
   router.post("/admin/reps/:id/unblock", withRep((id, req) => unblockRep(id, actorOf(req))));
   router.post("/admin/reps/:id/phone", withRep((id, req) => changeRepPhone(id, phoneChangeSchema.parse(req.body), actorOf(req))));
   // Delete the account and its data on the person's request (server/accountDeletion.ts).
