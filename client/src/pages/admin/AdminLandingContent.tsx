@@ -1,37 +1,42 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, FileText, Plus, Save, Trash2 } from "lucide-react";
-import { Loader2 } from "@/components/ui/loader";
+import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
+import { ErrorState } from "@/components/xpot/EmptyState";
+import { Field as KitField, Input, Textarea } from "@/components/xpot/Field";
+import { FormFooter, UnsavedNote } from "@/components/xpot/FormFooter";
+import { ListSkeleton } from "@/components/xpot/ListSkeleton";
+import { GLASS_CLASS, GLASS_SUBTLE_CLASS } from "@/components/xpot/surface";
+import { Tabs } from "@/components/xpot/Tabs";
 import { apiRequest } from "@/lib/queryClient";
 import { describeApiError } from "@/lib/apiErrors";
 import { formatDate } from "@/lib/dates";
 import { defaultLandingContent } from "@/lib/landingContent";
 import { useUnsavedChangesGuard } from "@/hooks/useUnsavedChangesGuard";
 import { LANG_LABELS, LANGS, useI18n, useT, type Lang } from "@/i18n";
-import { commonMessages } from "@/i18n/messages/common";
 import { landingAdminMessages } from "@/i18n/messages/landingAdmin";
 import { useToast } from "@/hooks/use-toast";
 import type { LandingContentResponse, LandingPageContent } from "@shared/landingContent";
 import { landingField, landingFieldLabel, type LandingSection } from "./landingFields";
 
-const INPUT = "w-full rounded-xl border border-white/10 bg-[#080d19] px-3.5 py-2.5 text-sm text-white outline-none transition-colors placeholder:text-white/20 focus:border-blue-500/60";
-const TEXTAREA = `${INPUT} min-h-24 resize-y leading-relaxed`;
-
+/** One text of the page: the kit's Field with an Input, or a Textarea for the long ones. */
 function Field({ label, value, onChange, multiline = false }: { label: string; value: string; onChange: (value: string) => void; multiline?: boolean }) {
-  const Control = multiline ? "textarea" : "input";
   return (
-    <label className="block space-y-1.5">
-      <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/40">{label}</span>
-      <Control value={value} onChange={(event) => onChange(event.target.value)} className={multiline ? TEXTAREA : INPUT} />
-    </label>
+    <KitField label={label}>
+      {multiline ? (
+        <Textarea value={value} onChange={(event) => onChange(event.target.value)} />
+      ) : (
+        <Input value={value} onChange={(event) => onChange(event.target.value)} />
+      )}
+    </KitField>
   );
 }
 
 function Section({ title, children, open = false }: { title: string; children: ReactNode; open?: boolean }) {
   return (
-    <details open={open} className="group rounded-2xl border border-white/10 bg-white/[0.025]">
-      <summary className="flex cursor-pointer list-none items-center justify-between px-5 py-4 text-sm font-semibold text-white/85 marker:content-none">
+    <details open={open} className={`group rounded-2xl ${GLASS_SUBTLE_CLASS}`}>
+      <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between px-5 py-3 text-sm font-semibold text-white/85 marker:content-none">
         {title}
         <span className="text-lg font-light text-white/35 transition-transform group-open:rotate-45">+</span>
       </summary>
@@ -109,30 +114,44 @@ function Editor({ rows }: { rows: LandingContentResponse[] }) {
     />
   );
   const sectionTitle = (section: LandingSection) => t(`section_${section}`);
-  const status = dirty[locale]
-    ? { text: t("unsaved"), tone: "text-amber-300" }
-    : publishedAt[locale]
-      ? { text: t("publishedOn", { date: formatDate(publishedAt[locale]) }), tone: "text-emerald-300/70" }
-      : { text: t("usingDefault"), tone: "text-white/45" };
+  const status = dirty[locale] ? (
+    <UnsavedNote label={t("unsaved")} />
+  ) : (
+    <span className={`text-xs ${publishedAt[locale] ? "text-emerald-300/70" : "text-white/45"}`}>
+      {publishedAt[locale] ? t("publishedOn", { date: formatDate(publishedAt[locale]) }) : t("usingDefault")}
+    </span>
+  );
 
   return (
-    // Bottom padding so the floating Publish button never covers the last fields.
-    <div className="space-y-5 pb-24" data-testid="admin-landing-content">
-      <div className="flex flex-col gap-4 rounded-2xl border border-blue-500/20 bg-blue-500/[0.055] p-5 sm:flex-row sm:items-center sm:justify-between">
+    <div className="space-y-5" data-testid="admin-landing-content">
+      {/* An account page: the intro card is neutral, not the Visits blue. */}
+      <div className={`flex flex-col gap-4 rounded-2xl ${GLASS_CLASS} p-5 sm:flex-row sm:items-center sm:justify-between`}>
         <div className="flex gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-blue-400/20 bg-blue-500/10"><FileText className="h-5 w-5 text-blue-300" /></div>
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.06]"><FileText className="h-5 w-5 text-slate-200" /></div>
           <div><p className="text-sm font-semibold text-white">{t("title")}</p><p className="mt-1 text-xs leading-relaxed text-white/45">{t("intro")}</p></div>
         </div>
-        <a href={path} target="_blank" rel="noreferrer" className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3.5 py-2 text-xs font-semibold text-white/70 hover:bg-white/10 hover:text-white">
-          <ExternalLink className="h-3.5 w-3.5" />{t("openPage")}
-        </a>
+        <Button asChild variant="secondary" size="sm" className="shrink-0">
+          <a href={path} target="_blank" rel="noreferrer">
+            <ExternalLink />{t("openPage")}
+          </a>
+        </Button>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex rounded-xl border border-white/10 bg-white/[0.03] p-1">
-          {LANGS.map((item) => <button key={item} type="button" onClick={() => setLocale(item)} className={`relative rounded-lg px-3.5 py-2 text-xs font-semibold transition-colors ${locale === item ? "bg-white/10 text-white" : "text-white/45 hover:text-white/75"}`}>{LANG_LABELS[item]}{dirty[item] && <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-amber-400" />}</button>)}
-        </div>
-        <span className={`text-xs ${status.tone}`} data-testid="landing-status">{status.text}</span>
+        <Tabs
+          fill={false}
+          accent="account"
+          ariaLabel={t("title")}
+          idPrefix="landing-lang"
+          value={locale}
+          onChange={setLocale}
+          tabs={LANGS.map((item) => ({
+            id: item,
+            label: LANG_LABELS[item],
+            badge: dirty[item] ? <span className="h-1.5 w-1.5 rounded-full bg-amber-400" aria-hidden="true" /> : undefined,
+          }))}
+        />
+        <span data-testid="landing-status">{status}</span>
       </div>
 
       <div className="space-y-3">
@@ -183,27 +202,28 @@ function Editor({ rows }: { rows: LandingContentResponse[] }) {
                   {field(`faq.items.${index}.question`)}
                   {field(`faq.items.${index}.answer`)}
                 </div>
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
+                  size="icon"
                   disabled={content.faq.items.length === 1}
                   onClick={() => change((n) => { n.faq.items.splice(index, 1); })}
-                  className="self-start rounded-lg p-2 text-white/35 hover:bg-red-500/10 hover:text-red-300 disabled:opacity-20"
+                  className="self-start text-white/40 hover:bg-red-500/10 hover:text-red-300"
                   title={t("removeFaq", { number: index + 1 })}
                   aria-label={t("removeFaq", { number: index + 1 })}
                 >
-                  <Trash2 className="h-4 w-4" />
-                </button>
+                  <Trash2 />
+                </Button>
               </div>
             ))}
             {content.faq.items.length < 12 && (
-              <button
-                type="button"
+              <Button
+                variant="outline"
                 // The new entry starts in the language being edited, not the admin's.
                 onClick={() => change((n) => { n.faq.items.push({ id: `faq-${Date.now()}`, question: landingAdminMessages[locale].newFaqQuestion, answer: landingAdminMessages[locale].newFaqAnswer }); })}
-                className="inline-flex items-center gap-2 rounded-xl border border-dashed border-white/15 px-4 py-2.5 text-xs font-semibold text-white/55 hover:border-blue-400/40 hover:text-blue-300"
+                className="border-dashed"
               >
-                <Plus className="h-4 w-4" />{t("addFaq")}
-              </button>
+                <Plus />{t("addFaq")}
+              </Button>
             )}
           </div>
         </Section>
@@ -217,11 +237,12 @@ function Editor({ rows }: { rows: LandingContentResponse[] }) {
         </Section>
       </div>
 
-      <div className="sticky bottom-4 z-10 flex justify-end">
-        <button type="button" disabled={!dirty[locale] || save.isPending} onClick={() => save.mutate({ locale, content })} className="inline-flex items-center gap-2 rounded-xl bg-blue-500 px-5 py-3 text-sm font-semibold text-white shadow-[0_16px_40px_rgba(0,0,0,0.45)] hover:bg-blue-400 disabled:cursor-not-allowed disabled:opacity-45" data-testid="landing-publish">
-          {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}{t("publish", { language: LANG_LABELS[locale] })}
-        </button>
-      </div>
+      {/* The one sticky footer of the admin: the editor is long, Publish stays in reach. */}
+      <FormFooter sticky status={status}>
+        <Button variant="brand" disabled={!dirty[locale]} loading={save.isPending} onClick={() => save.mutate({ locale, content })} data-testid="landing-publish">
+          <Save />{t("publish", { language: LANG_LABELS[locale] })}
+        </Button>
+      </FormFooter>
 
       <ConfirmDialog
         open={!!guard.pendingHref}
@@ -238,16 +259,10 @@ function Editor({ rows }: { rows: LandingContentResponse[] }) {
 
 export function AdminLandingContent() {
   const t = useT(landingAdminMessages);
-  const tc = useT(commonMessages);
   const query = useQuery<LandingContentResponse[]>({ queryKey: ["/api/xpot/admin/landing-content"] });
-  if (query.isLoading) return <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-blue-400" /></div>;
+  if (query.isLoading) return <ListSkeleton rows={5} rowClassName="h-14 rounded-2xl" />;
   if (query.isError || !query.data) {
-    return (
-      <div className="flex flex-col items-center gap-3 py-12 text-center text-sm text-red-300">
-        {t("loadFailed")}
-        <button type="button" onClick={() => void query.refetch()} className="rounded-lg border border-white/10 px-3 py-1 text-white/70 hover:bg-white/5">{tc("retry")}</button>
-      </div>
-    );
+    return <ErrorState message={t("loadFailed")} onRetry={() => void query.refetch()} />;
   }
   return <Editor rows={query.data} />;
 }
