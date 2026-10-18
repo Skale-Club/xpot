@@ -23,11 +23,14 @@ import { useT, type Translate } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { manageMessages } from "@/i18n/messages/manage";
 import { integrationsMessages } from "@/i18n/messages/integrations";
+import { integrationTestMessages } from "@/i18n/messages/integrationTests";
 import { platformAdminMessages } from "@/i18n/messages/platformAdmin";
 import { systemHealthMessages } from "@/i18n/messages/systemHealth";
 import { useAgo } from "../systemHealthUi";
 import { integrationStatusKey, locksOutSignIn, type StatusKey } from "../integrationsUi";
 import { SearchableSelect } from "./SearchableSelect";
+import { integrationTestText } from "./integrationTestText";
+import type { IntegrationTestResult } from "@shared/integrationTest";
 import { SERVICES_KEY, serviceAnchor } from "./servicesUi";
 
 // One provider of the Integrations hub: what it is, whether it works (the same
@@ -150,13 +153,15 @@ export function ProviderCard({
   const tp = useT(platformAdminMessages);
   const tm = useT(manageMessages);
   const tc = useT(commonMessages);
+  const tt = useT(integrationTestMessages);
   const lines = useServiceLines();
   // The job is the section's title, so the card is just the vendor ("Groq", "Twilio").
   const label = serviceName(tp, def.provider);
   const [fields, setFields] = useState<Record<string, string>>({});
   const [enabled, setEnabled] = useState<boolean>(status.enabled);
   const [replacingKey, setReplacingKey] = useState(false);
-  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
+  // A network failure has no code: its message is already in the user's language.
+  const [testResult, setTestResult] = useState<(Pick<IntegrationTestResult, "ok" | "message"> & Partial<IntegrationTestResult>) | null>(null);
   const [confirming, setConfirming] = useState<"signInOff" | "removeKey" | null>(null);
   const secretField = def.fields.find((f) => f.secret);
   const statusKey = integrationStatusKey(status);
@@ -234,7 +239,7 @@ export function ProviderCard({
         if (value) body[f.key] = value;
       }
       const res = await apiRequest("POST", `/api/xpot/admin/integrations/${def.provider}/test`, body);
-      return res.json() as Promise<{ ok: boolean; message: string }>;
+      return res.json() as Promise<IntegrationTestResult>;
     },
     onSuccess: (r) => {
       setTestResult(r);
@@ -366,7 +371,20 @@ export function ProviderCard({
 
       {testResult && (
         <InlineAlert tone={testResult.ok ? "success" : "error"} className="mt-4">
-          <span className="block whitespace-pre-wrap break-words">{testResult.message}</span>
+          <span className="block whitespace-pre-wrap break-words">
+            {testResult.code
+              ? integrationTestText({ code: testResult.code, params: testResult.params, message: testResult.message }, tt.lang, {
+                  provider: label,
+                  field: labelOfPath(String(testResult.params?.field ?? "")) ?? undefined,
+                })
+              : testResult.message}
+          </span>
+          {testResult.detail ? (
+            <details className="mt-2 text-xs opacity-80">
+              <summary className="cursor-pointer select-none font-medium">{tt("details")}</summary>
+              <span className="mt-1 block whitespace-pre-wrap break-words font-mono">{testResult.detail}</span>
+            </details>
+          ) : null}
         </InlineAlert>
       )}
 
