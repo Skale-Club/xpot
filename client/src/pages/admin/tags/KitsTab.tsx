@@ -1,29 +1,27 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Inbox, PackageCheck, PackageOpen, PackagePlus, Undo2, Users } from "lucide-react";
+import { Inbox, PackageCheck, PackageOpen, Users } from "lucide-react";
 import { FilterBar, FilterSelect } from "@/components/xpot/filters";
 import { useUrlFilters } from "@/hooks/use-url-filters";
-import type { TagKitItem, TagOverview } from "@shared/tagsApi";
-import { TAG_MAX_BATCH_QUANTITY } from "@shared/tags";
+import type { TagKitItem } from "@shared/tagsApi";
 import { Button } from "@/components/ui/button";
-import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
-import { SectionCard } from "@/components/xpot/DashboardKit";
 import { EmptyState } from "@/components/xpot/EmptyState";
 import { Textarea } from "@/components/xpot/Field";
-import { Stat } from "@/components/xpot/Stat";
+import { Segmented } from "@/components/xpot/Segmented";
 import { Pill } from "@/components/xpot/StatusPill";
-import { EYEBROW, GLASS_CLASS, MODULE_ACCENT } from "@/components/xpot/surface";
+import { GLASS_CLASS } from "@/components/xpot/surface";
 import { formatMoney } from "@/lib/format";
 import { ADMIN_TAGS_KEY, STALE_MS, errorMessage, getJson, invalidateAdminTags, sendJson, withQuery } from "./api";
 import { hasTagsModule, useResellers } from "./batches-shared";
 import { Loading, LoadError } from "./pieces-shared";
-import { GiveKitForm, parseCodes } from "./kits-give-form";
-import { KitList, useReturnToHouse } from "./kits-list";
+import { HandOutFlow, parseCodes } from "./kits-give-form";
+import { KitList } from "./kits-list";
+import { ReturnsStation } from "./returns-station";
+import { distributionView, type DistributionView } from "./distribution-model";
 import { useT } from "@/i18n";
-import { shellMessages } from "@/i18n/messages/shell";
-import { tagsMessages } from "@/i18n/messages/tags";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
 import { manageTagsBatchesMessages } from "@/i18n/messages/manageTagsBatches";
+import { adminTagsFlowMessages } from "@/i18n/messages/adminTagsFlow";
 import { useToast } from "@/hooks/use-toast";
 
 type AcquisitionInboxItem = {
@@ -46,15 +44,21 @@ type AcquisitionInboxItem = {
   }>;
 };
 
-function AcquisitionInbox() {
-  const t = useT(manageTagsBatchesMessages);
-  const { toast } = useToast();
-  const [codesById, setCodesById] = useState<Record<string, string>>({});
-  const query = useQuery<AcquisitionInboxItem[]>({
+/** Wholesale orders (Stuscle) waiting for their physical pieces; shared by the inbox and its tab's count. */
+function useAcquisitions() {
+  return useQuery<AcquisitionInboxItem[]>({
     queryKey: [ADMIN_TAGS_KEY, "acquisitions"],
     queryFn: () => getJson("/api/xpot/admin/tag-acquisitions"),
     staleTime: STALE_MS,
   });
+}
+const pendingOf = (list: AcquisitionInboxItem[] | undefined) => (list ?? []).filter((item) => item.acquisition.status === "pending");
+
+function AcquisitionInbox() {
+  const t = useT(manageTagsBatchesMessages);
+  const { toast } = useToast();
+  const [codesById, setCodesById] = useState<Record<string, string>>({});
+  const query = useAcquisitions();
   const fulfill = useMutation({
     mutationFn: ({ id, codes }: { id: string; codes: string[] }) =>
       sendJson("POST", `/api/xpot/admin/tag-acquisitions/${id}/fulfill`, { codes }),
@@ -64,12 +68,12 @@ function AcquisitionInbox() {
     },
     onError: (err) => toast({ title: t("acquisitionFulfillFailed"), description: errorMessage(err), variant: "destructive" }),
   });
-  const pending = (query.data ?? []).filter((item) => item.acquisition.status === "pending");
+  const pending = pendingOf(query.data);
   if (query.isLoading) return <Loading rows={2} />;
   if (query.isError) return <LoadError compact what={t("acquisitionsLoadFailed")} error={query.error} onRetry={() => void query.refetch()} />;
   if (!pending.length) return <EmptyState compact dense tone="tags" icon={Inbox} title={t("noPendingAcquisitions")} cardStyle={{}} />;
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" data-testid="admin-tags-stuscle-orders">
       {pending.map((item) => {
         const expected = item.lines.reduce((sum, line) => sum + line.quantity, 0);
         const total = item.lines.reduce((sum, line) => sum + line.subtotalCents, 0);
@@ -106,149 +110,84 @@ function AcquisitionInbox() {
   );
 }
 
-/** Return pieces a reseller handed back, by the codes printed on them. */
-function ReturnByCodes() {
-  const t = useT(manageTagsBatchesMessages);
-  const [text, setText] = useState("");
-  const [confirm, setConfirm] = useState(false);
-  const parsed = useMemo(() => parseCodes(text), [text]);
-  const ret = useReturnToHouse(() => {
-    setText("");
-    setConfirm(false);
-  });
-  const valid = parsed.codes.length > 0 && parsed.invalid.length === 0 && parsed.codes.length <= TAG_MAX_BATCH_QUANTITY;
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
-    if (valid) setConfirm(true);
-  };
-  return (
-    <form onSubmit={submit} className="space-y-3">
-      <Textarea
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        rows={3}
-        placeholder={t("returnCodesPlaceholder")}
-        aria-label={t("returnCodesPlaceholder")}
-        className="font-mono"
-        autoCapitalize="characters"
-        autoCorrect="off"
-        spellCheck={false}
-      />
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs text-white/40">
-          {parsed.invalid.length > 0 ? (
-            <span className="text-red-300">{t("notACode", { codes: parsed.invalid.slice(0, 6).join(", ") })}</span>
-          ) : (
-            t.plural("returnCodesCount", parsed.codes.length)
-          )}
-        </p>
-        <Button type="submit" variant="secondary" disabled={!valid || ret.isPending}>
-          <Undo2 className="h-4 w-4" />
-          {t("returnToHouseStock")}
-        </Button>
-      </div>
-      <ConfirmDialog
-        open={confirm}
-        onOpenChange={setConfirm}
-        title={t.plural("returnConfirmTitle", parsed.codes.length)}
-        description={t("returnByCodesDesc")}
-        confirmLabel={t("returnToHouse")}
-        busy={ret.isPending}
-        onConfirm={() => ret.mutate(parsed.codes)}
-      />
-    </form>
-  );
-}
-
-/**
- * Kits: pieces handed from house stock to a reseller (agreed over WhatsApp,
- * recorded here), the kits given so far, and returns back to house stock.
- */
-export function KitsTab({ go }: { go: (path: string) => void }) {
-  // ?kitRep=12 — the kit list's reseller filter.
+/** The kits handed out so far, newest first, filtered by reseller (?kitRep=12). */
+function KitsView({ go }: { go: (path: string) => void }) {
   const kitFilters = useUrlFilters({ kitRep: "" });
   const repFilter = /^\d+$/.test(kitFilters.values.kitRep) ? Number(kitFilters.values.kitRep) : null;
   const { data: resellers = [] } = useResellers();
   const t = useT(manageTagsBatchesMessages);
   const tm = useT(manageTagsMessages);
-  const ts = useT(shellMessages);
-  const tt = useT(tagsMessages);
-
-  const stock = useQuery<TagOverview>({
-    queryKey: [ADMIN_TAGS_KEY, "kits", "stock"],
-    queryFn: () => getJson("/api/xpot/admin/tags/overview"),
-    staleTime: STALE_MS,
-  });
   const kitsUrl = withQuery("/api/xpot/admin/tag-kits", { repId: repFilter });
   const kits = useQuery<TagKitItem[]>({
     queryKey: [ADMIN_TAGS_KEY, "kits", kitsUrl],
     queryFn: () => getJson(kitsUrl),
     staleTime: STALE_MS,
   });
-
   const list = kits.data ?? [];
-  const totals = list.reduce((acc, k) => ({ pieces: acc.pieces + k.pieceCount, unsold: acc.unsold + k.unsoldCount }), { pieces: 0, unsold: 0 });
+  return (
+    <div className="space-y-3">
+      <FilterBar
+        testId="kits-filters"
+        controls={
+          <FilterSelect
+            value={repFilter ? String(repFilter) : ""}
+            onChange={(kitRep) => kitFilters.set({ kitRep })}
+            placeholder={tm("allResellers")}
+            icon={Users}
+            options={resellers.map((r) => ({
+              value: String(r.id),
+              label: `${r.displayName}${r.team ? ` · ${r.team}` : ""}${!r.isActive ? tm("resellerInactive") : !hasTagsModule(r) ? tm("resellerNoTags") : ""}`,
+            }))}
+            testId="admin-tags-reseller-select"
+          />
+        }
+        summary={{ shown: list.length, active: repFilter != null, onClear: () => kitFilters.reset() }}
+      />
+      {kits.isLoading ? (
+        <Loading rows={3} />
+      ) : kits.isError ? (
+        <LoadError what={t("theKits")} error={kits.error} onRetry={() => void kits.refetch()} />
+      ) : list.length === 0 ? (
+        <EmptyState compact tone="tags" icon={PackageOpen} title={repFilter ? t("noKitsForReseller") : t("noKitsYet")} cardStyle={{}} />
+      ) : (
+        <KitList kits={list} go={go} />
+      )}
+    </div>
+  );
+}
+
+const VIEW_LABELS = { handout: "viewHandOut", orders: "viewOrders", kits: "viewKits", returns: "viewReturns" } as const satisfies Record<DistributionView, string>;
+
+/**
+ * Distribution (/admin/tags/kits): pieces from house stock to resellers and back. Views, kept in `?view=`: Hand out
+ * (step by step), Stuscle orders (wholesale orders waiting for their pieces), Kits (what each hand-over gave, for
+ * good) and Take back (a scan station).
+ */
+export function KitsTab({ go }: { go: (path: string) => void }) {
+  const t = useT(adminTagsFlowMessages);
+  const url = useUrlFilters({ view: "handout" });
+  const view = distributionView(url.values.view);
+  const orders = useAcquisitions();
+  const pendingOrders = pendingOf(orders.data).length;
 
   return (
-    <div className="min-w-0 space-y-5">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {/* The number this screen is about, in the Tags accent. */}
-        <div className="col-span-2 min-w-0 rounded-2xl border border-violet-400/25 bg-violet-500/[0.07] p-4" data-testid="admin-tags-house-stock">
-          <p className={EYEBROW.replace("text-white/40", MODULE_ACCENT.tags.text)}>{t("houseStock")}</p>
-          <p className="mt-1 text-3xl font-bold tabular-nums text-white">{stock.data ? stock.data.stock.house : "—"}</p>
-          <p className="mt-0.5 text-xs text-white/45">{t("houseStockCardHint")}</p>
-        </div>
-        <Stat card label={t("withResellers")} value={stock.data ? stock.data.stock.withResellers : "—"} detail={t("withResellersKitHint")} />
-        <Stat
-          card
-          label={repFilter ? t("thisResellersKits") : t("kitsGiven")}
-          value={kits.data ? list.length : "—"}
-          detail={kits.data ? `${tt.plural("pieces", totals.pieces)} · ${t.plural("unsoldCount", totals.unsold)}` : undefined}
-        />
+    <div className="min-w-0 space-y-4" data-testid="admin-tags-distribution">
+      <div className="min-w-0 space-y-1">
+        <h1 className="text-lg font-semibold text-white">{t("distributionTitle")}</h1>
+        <p className="text-sm text-white/50">{t("distributionIntro")}</p>
       </div>
-      {stock.isError ? <LoadError compact what={t("houseStock")} error={stock.error} onRetry={() => void stock.refetch()} /> : null}
-
-      <SectionCard accent="tags" icon={Inbox} title={t("stuscleInbox")}>
-        <AcquisitionInbox />
-      </SectionCard>
-
-      <SectionCard accent="tags" icon={PackagePlus} title={t("giveAKit")}>
-        <GiveKitForm />
-      </SectionCard>
-
-      <SectionCard accent="tags" icon={PackageOpen} title={ts("manageKits")}>
-        <FilterBar
-          className="mb-3"
-          testId="kits-filters"
-          controls={
-            <FilterSelect
-              value={repFilter ? String(repFilter) : ""}
-              onChange={(kitRep) => kitFilters.set({ kitRep })}
-              placeholder={tm("allResellers")}
-              icon={Users}
-              options={resellers.map((r) => ({
-                value: String(r.id),
-                label: `${r.displayName}${r.team ? ` · ${r.team}` : ""}${!r.isActive ? tm("resellerInactive") : !hasTagsModule(r) ? tm("resellerNoTags") : ""}`,
-              }))}
-              testId="admin-tags-reseller-select"
-            />
-          }
-          summary={{ shown: list.length, active: repFilter != null, onClear: () => kitFilters.reset() }}
-        />
-        {kits.isLoading ? (
-          <Loading rows={3} />
-        ) : kits.isError ? (
-          <LoadError what={t("theKits")} error={kits.error} onRetry={() => void kits.refetch()} />
-        ) : list.length === 0 ? (
-          <EmptyState compact tone="tags" icon={PackageOpen} title={repFilter ? t("noKitsForReseller") : t("noKitsYet")} cardStyle={{}} />
-        ) : (
-          <KitList kits={list} go={go} />
-        )}
-      </SectionCard>
-
-      <SectionCard accent="tags" icon={Undo2} title={t("returnByCode")}>
-        <ReturnByCodes />
-      </SectionCard>
+      <Segmented<DistributionView>
+        items={(Object.keys(VIEW_LABELS) as DistributionView[]).map((id) => ({ id, label: t(VIEW_LABELS[id]), count: id === "orders" ? pendingOrders : undefined }))}
+        value={view}
+        onChange={(next) => url.set({ view: next, ...(next !== "handout" ? { batch: null } : {}) } as never)}
+        accent="tags"
+        ariaLabel={t("distributionTitle")}
+        className="max-w-2xl"
+      />
+      {view === "handout" && <HandOutFlow />}
+      {view === "orders" && <AcquisitionInbox />}
+      {view === "kits" && <KitsView go={go} />}
+      {view === "returns" && <ReturnsStation />}
     </div>
   );
 }

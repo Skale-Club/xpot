@@ -1,9 +1,9 @@
 import { useState, type FormEvent } from "react";
-import { ListPager, usePagedList } from "@/components/xpot/pagination";
 import { useMutation } from "@tanstack/react-query";
-import { Factory, Plus, X } from "lucide-react";
+import { ChevronRight, Factory, Plus, X } from "lucide-react";
 import { TAG_MAX_BATCH_QUANTITY, TAG_PRODUCT_TYPES } from "@shared/tags";
 import { useToast } from "@/hooks/use-toast";
+import { useUrlFilters } from "@/hooks/use-url-filters";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
 import { TagBatchMention, TagModelChips } from "@/components/xpot/TagProductThumbnail";
 import { Button } from "@/components/ui/button";
@@ -11,18 +11,20 @@ import { CompactDataTable } from "@/components/xpot/CompactDataTable";
 import { SectionCard } from "@/components/xpot/DashboardKit";
 import { EmptyState } from "@/components/xpot/EmptyState";
 import { Field, Input, Select, Textarea } from "@/components/xpot/Field";
-import { Stat } from "@/components/xpot/Stat";
+import { FilterBar, FilterChips } from "@/components/xpot/filters";
 import { GLASS_CLASS } from "@/components/xpot/surface";
 import type { TagBatchItem } from "@shared/tagsApi";
 import { errorMessage, formatDate, invalidateAdminTags, sendJson } from "./api";
 import { BatchStagePill, catalogOptions, useBatches, useTagCatalog } from "./batches-shared";
 import { Loading, LoadError } from "./pieces-shared";
 import { useTagLabels } from "./labels";
+import { BATCH_PIPELINE, groupBatchesByStage, isAwaitingPieces } from "./batches-model";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { shellMessages } from "@/i18n/messages/shell";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
 import { manageTagsBatchesMessages } from "@/i18n/messages/manageTagsBatches";
+import { adminTagsFlowMessages } from "@/i18n/messages/adminTagsFlow";
 
 const EMPTY_FORM = {
   name: "",
@@ -168,20 +170,34 @@ function NewBatchForm({ onClose, onCreated }: { onClose: () => void; onCreated: 
   );
 }
 
-/** Production batches from the factory: what was made, how much is still in house. */
+/** One "Pieces received/total" column: issued codes not received yet show amber. */
+function PiecesCell({ batch }: { batch: TagBatchItem }) {
+  return (
+    <span className={`tabular-nums ${batch.pendingCount ? "text-amber-300" : "text-white/85"}`}>
+      {batch.receivedCount}/{batch.tagCount}
+    </span>
+  );
+}
+
+/**
+ * Production batches as a pipeline: Codes issued → Print file ready → Printed → Receiving → In stock (then cancelled),
+ * each stage its own group. `?stage=` shows one stage; `?pending=1` the batches still waiting for pieces (the
+ * Overview's "Needs action" card). The stock split lives in Inventory.
+ */
 export function BatchesTab({ go }: { go: (path: string) => void }) {
   const { data: batches = [], isLoading, error, refetch } = useBatches();
-  const paged = usePagedList(batches, { resetKey: String(batches.length) });
   const [creating, setCreating] = useState(false);
+  const filters = useUrlFilters({ stage: "", pending: "" });
   const t = useT(manageTagsBatchesMessages);
+  const tf = useT(adminTagsFlowMessages);
   const tm = useT(manageTagsMessages);
   const ts = useT(shellMessages);
   const labels = useTagLabels();
-
-  const totals = batches.reduce(
-    (acc, b) => ({ pieces: acc.pieces + b.tagCount, house: acc.house + b.houseCount, out: acc.out + b.withResellersCount, active: acc.active + b.activeCount }),
-    { pieces: 0, house: 0, out: 0, active: 0 },
-  );
+  const pendingOnly = filters.values.pending === "1";
+  const stage = (BATCH_PIPELINE as readonly string[]).includes(filters.values.stage) || filters.values.stage === "cancelled" ? filters.values.stage : "";
+  const shown = batches.filter((b) => (!pendingOnly || isAwaitingPieces(b)) && (!stage || b.stage === stage));
+  const groups = groupBatchesByStage(shown);
+  const countIn = (s: string) => batches.filter((b) => b.stage === s).length;
 
   const columns = [
     {
@@ -208,32 +224,13 @@ export function BatchesTab({ go }: { go: (path: string) => void }) {
         </>
       ),
     },
-    { key: "stage", label: tm("colStatus"), render: (b: TagBatchItem) => <BatchStagePill stage={b.stage} /> },
-    { key: "qty", label: t("colQty"), align: "right" as const, render: (b: TagBatchItem) => b.quantity },
-    {
-      key: "received",
-      label: t("colReceived"),
-      align: "right" as const,
-      render: (b: TagBatchItem) => (b.pendingCount ? <span className="text-amber-300">{`${b.receivedCount}/${b.tagCount}`}</span> : b.receivedCount),
-    },
-    { key: "house", label: tm("house"), align: "right" as const, cellClassName: "font-semibold text-white", render: (b: TagBatchItem) => b.houseCount },
-    { key: "reps", label: t("withResellers"), align: "right" as const, render: (b: TagBatchItem) => b.withResellersCount },
-    { key: "live", label: t("live"), align: "right" as const, render: (b: TagBatchItem) => b.activeCount },
+    { key: "pieces", label: tf("colPiecesReceived"), align: "right" as const, render: (b: TagBatchItem) => <PiecesCell batch={b} /> },
     { key: "nfc", label: t("nfcVerified"), align: "right" as const, render: (b: TagBatchItem) => b.nfcVerifiedCount },
     { key: "created", label: t("colCreated"), cellClassName: "whitespace-nowrap text-white/50", render: (b: TagBatchItem) => formatDate(b.createdAt) },
   ];
 
   return (
-    <div className="min-w-0 space-y-5">
-      {batches.length > 0 && (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <Stat card label={ts("manageBatches")} value={batches.length} detail={t.plural("piecesMade", totals.pieces)} />
-          <Stat card label={t("inHouseStock")} value={totals.house} detail={t("inHouseStockHint")} />
-          <Stat card label={t("withResellers")} value={totals.out} detail={t("withResellersHint")} />
-          <Stat card label={t("live")} value={totals.active} detail={t("liveHint")} />
-        </div>
-      )}
-
+    <div className="min-w-0 space-y-4" data-testid="admin-tags-batches">
       {creating ? <NewBatchForm onClose={() => setCreating(false)} onCreated={(id) => go(`/batches/${id}`)} /> : null}
 
       <SectionCard
@@ -249,23 +246,67 @@ export function BatchesTab({ go }: { go: (path: string) => void }) {
           )
         }
       >
+        {/* The pipeline at a glance; a stage opens its batches. */}
+        {batches.length > 0 ? (
+          <ol className="mb-4 flex min-w-0 flex-wrap items-center gap-1 text-xs" aria-label={tf("pipelineLabel")} data-testid="batches-pipeline">
+            {BATCH_PIPELINE.map((s, i) => (
+              <li key={s} className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => filters.set({ stage: stage === s ? "" : s })}
+                  aria-pressed={stage === s}
+                  className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 font-semibold transition-colors ${stage === s ? "border-violet-400/40 bg-violet-500/[0.15] text-white" : "border-white/[0.08] bg-white/[0.03] text-white/60 hover:text-white"}`}
+                >
+                  {labels.batchStage(s)}
+                  <span className="tabular-nums text-white/45">{countIn(s)}</span>
+                </button>
+                {i < BATCH_PIPELINE.length - 1 ? <ChevronRight className="h-3.5 w-3.5 text-white/25" aria-hidden="true" /> : null}
+              </li>
+            ))}
+          </ol>
+        ) : null}
+        <FilterBar
+          className="mb-3"
+          testId="batches-filters"
+          secondary={
+            <FilterChips
+              items={[
+                { id: "all", label: t("filterAll"), count: batches.length },
+                { id: "pending", label: tf("filterAwaitingPieces"), count: batches.filter(isAwaitingPieces).length },
+              ]}
+              value={pendingOnly ? "pending" : "all"}
+              onChange={(id) => filters.set({ pending: id === "pending" ? "1" : "" })}
+              ariaLabel={ts("manageBatches")}
+            />
+          }
+          summary={{ shown: shown.length, total: batches.length, active: pendingOnly || !!stage, onClear: () => filters.reset() }}
+        />
         {isLoading ? (
           <Loading rows={4} />
         ) : error ? (
           <LoadError what={t("theBatches")} error={error} onRetry={() => void refetch()} />
         ) : batches.length === 0 ? (
           <EmptyState compact tone="tags" icon={Factory} title={t("noBatchesYet")} cardStyle={{}} />
+        ) : groups.length === 0 ? (
+          <EmptyState compact tone="tags" icon={Factory} title={tf("noBatchesMatch")} cardStyle={{}} />
         ) : (
-          <div className="space-y-2">
-            <CompactDataTable
-              columns={columns}
-              rows={paged.visible}
-              getRowKey={(b) => b.id}
-              onRowClick={(b) => go(`/batches/${b.id}`)}
-              getRowAriaLabel={(b) => b.batchCode}
-              getRowTestId={(b) => `admin-tags-batch-${b.batchCode}`}
-            />
-            <ListPager shown={paged.shown} total={paged.total} hasMore={paged.hasMore} onMore={paged.showMore} />
+          <div className="space-y-5">
+            {groups.map((group) => (
+              <section key={group.stage} className="min-w-0 space-y-2" data-testid={`batches-stage-${group.stage}`}>
+                <h3 className="flex items-center gap-2 text-sm font-semibold text-white/85">
+                  <BatchStagePill stage={group.stage} />
+                  <span className="text-xs font-normal text-white/40">{tf.plural("batchCount", group.batches.length)}</span>
+                </h3>
+                <CompactDataTable
+                  columns={columns}
+                  rows={group.batches}
+                  getRowKey={(b) => b.id}
+                  onRowClick={(b) => go(`/batches/${b.id}`)}
+                  getRowAriaLabel={(b) => b.batchCode}
+                  getRowTestId={(b) => `admin-tags-batch-${b.batchCode}`}
+                />
+              </section>
+            ))}
           </div>
         )}
       </SectionCard>

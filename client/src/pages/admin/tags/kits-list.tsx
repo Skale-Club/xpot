@@ -1,17 +1,20 @@
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight, ClipboardList, Undo2 } from "lucide-react";
-import type { TagKitItem, TagListItem } from "@shared/tagsApi";
+import type { TagKitItem, TagKitPiece, TagListItem } from "@shared/tagsApi";
 import { matchesStockMetric } from "@shared/tagMetrics";
+import { KIT_COST_CURRENCY } from "@shared/tagKits";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { CompactDataTable } from "@/components/xpot/CompactDataTable";
 import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
 import { CopyButton } from "@/components/xpot/CopyButton";
 import { EmptyState } from "@/components/xpot/EmptyState";
+import { Pill, SOLD_TONE, type PillTone } from "@/components/xpot/StatusPill";
 import { GLASS_CLASS } from "@/components/xpot/surface";
+import { formatMoney } from "@/lib/format";
 import { useToast } from "@/hooks/use-toast";
-import { errorMessage, formatDateTime, getJson, invalidateAdminTags, sendJson, withQuery } from "./api";
+import { ADMIN_TAGS_KEY, STALE_MS, errorMessage, formatDateTime, getJson, invalidateAdminTags, sendJson, withQuery } from "./api";
 import { usePieces } from "./batches-shared";
 import { Loading, LoadError } from "./pieces-shared";
 import { PieceTable } from "./piece-table";
@@ -21,6 +24,7 @@ import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
 import { manageTagsBatchesMessages } from "@/i18n/messages/manageTagsBatches";
+import { adminTagsFlowMessages } from "@/i18n/messages/adminTagsFlow";
 
 /** Send unsold pieces back to house stock. Sold pieces are refused by the server (409). */
 export function useReturnToHouse(onDone?: (returned: number) => void) {
@@ -39,26 +43,40 @@ export function useReturnToHouse(onDone?: (returned: number) => void) {
   });
 }
 
-/** What "Return unsold" takes back: still with the kit's rep, unsold and not set up (shared/tagMetrics.ts). */
+/** What "Take back unsold" takes: still with the kit's rep, unsold and not set up (shared/tagMetrics.ts). */
 const returnableFrom = (kit: TagKitItem) => (p: TagListItem) => matchesStockMetric(p, "returnable") && p.repId === kit.repId;
 
+const PIECE_STATE_TONE: Record<TagKitPiece["state"], PillTone> = { in_kit: "violet", sold: SOLD_TONE, returned: "muted", moved: "slate" };
+const PIECE_STATE_KEY = { in_kit: "pieceInKit", sold: "pieceSold", returned: "pieceReturned", moved: "pieceMoved" } as const;
+
+/** A kit's packing list (tag_kit_items): what it handed out, for good, with where each piece is now. */
+export function useKitItems(kitId: string | undefined) {
+  return useQuery<TagKitPiece[]>({
+    queryKey: [ADMIN_TAGS_KEY, "kit-items", kitId],
+    queryFn: () => getJson(`/api/xpot/admin/tag-kits/${encodeURIComponent(kitId!)}/items`),
+    enabled: !!kitId,
+    staleTime: STALE_MS,
+  });
+}
+
 /**
- * The kit's packing list: the exact codes to put in the box, with product, rep and date. Opens right after a kit
- * is given (Give a kit) and from each kit row. Lists the pieces still in the kit.
+ * The kit's packing list: the exact codes that went into the box, with product and batch. Opens right after a kit is
+ * handed out and from each kit row; it lists what was handed out, also after pieces come back.
  */
 export function PackingListDialog({ kit, onOpenChange }: { kit: TagKitItem | null; onOpenChange: (open: boolean) => void }) {
   const t = useT(manageTagsBatchesMessages);
+  const tf = useT(adminTagsFlowMessages);
   const tm = useT(manageTagsMessages);
   const tc = useT(commonMessages);
   const labels = useTagLabels();
-  const { data: pieces = [], isLoading, error, refetch } = usePieces({ kitId: kit?.id }, !!kit);
-  const codes = pieces.map((p) => p.publicCode);
+  const { data: pieces = [], isLoading, error, refetch } = useKitItems(kit?.id);
+  const codes = pieces.map((p) => p.code);
   const rep = kit ? kit.repName ?? t("resellerNumber", { id: kit.repId }) : "";
   return (
     <Dialog open={!!kit} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto" data-testid="kit-packing-list">
         <DialogHeader>
-          <DialogTitle>{t("packingListTitle")}</DialogTitle>
+          <DialogTitle>{kit ? tf("packingListTitleCode", { code: kit.kitCode }) : t("packingListTitle")}</DialogTitle>
           <DialogDescription>
             {kit ? t("packingListMeta", { name: rep, date: formatDateTime(kit.createdAt) }) : null}
             {kit?.note ? ` · ${kit.note}` : ""}
@@ -69,26 +87,27 @@ export function PackingListDialog({ kit, onOpenChange }: { kit: TagKitItem | nul
         ) : error ? (
           <LoadError compact what={t("theKitPieces")} error={error} onRetry={() => void refetch()} />
         ) : pieces.length === 0 ? (
-          <EmptyState compact dense tone="tags" icon={ClipboardList} title={t("kitAllReturned")} />
+          <EmptyState compact dense tone="tags" icon={ClipboardList} title={tf("packingEmpty")} />
         ) : (
           <CompactDataTable
             columns={[
-              { key: "code", label: tm("colCode"), cellClassName: "font-mono text-white/85", render: (p) => p.publicCode },
+              { key: "code", label: tm("colCode"), cellClassName: "font-mono text-white/85", render: (p: TagKitPiece) => p.code },
               {
                 key: "product",
                 label: t("fieldProduct"),
                 cellClassName: "text-white/70",
-                render: (p) => [labels.product(p.productType), p.face ? labels.face(p.face) : null].filter(Boolean).join(" · "),
+                render: (p: TagKitPiece) => [labels.product(p.productType), p.face ? labels.face(p.face) : null].filter(Boolean).join(" · "),
               },
               {
                 key: "batch",
                 label: tm("colBatch"),
                 cellClassName: "whitespace-nowrap font-mono text-xs text-white/50",
-                render: (p) => (p.batchCode ? `${p.batchCode}${p.serialNumber ? ` #${p.serialNumber}` : ""}` : "—"),
+                render: (p: TagKitPiece) => (p.batchCode ? `${p.batchCode}${p.serialNumber ? ` #${p.serialNumber}` : ""}` : "—"),
               },
+              { key: "state", label: tm("colStatus"), render: (p: TagKitPiece) => <Pill tone={PIECE_STATE_TONE[p.state]}>{tf(PIECE_STATE_KEY[p.state])}</Pill> },
             ]}
             rows={pieces}
-            getRowKey={(p) => p.id}
+            getRowKey={(p) => p.code}
           />
         )}
         <DialogFooter className="gap-2">
@@ -160,6 +179,26 @@ function KitPieces({ kit, go }: { kit: TagKitItem; go: (path: string) => void })
   );
 }
 
+/** "Handed out 6 · returned 1 · sold 2 · still with Ana 3" (moved shows only when some were). */
+function KitCounts({ kit }: { kit: TagKitItem }) {
+  const t = useT(adminTagsFlowMessages);
+  const part = (label: string, value: number, className = "text-white") => (
+    <span className="whitespace-nowrap">
+      <span className={`font-bold tabular-nums ${className}`}>{value}</span> <span className="text-white/45">{label}</span>
+    </span>
+  );
+  return (
+    <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs" data-testid="kit-counts">
+      {part(t("kitHandedOut"), kit.handedOutCount)}
+      {part(t("kitReturned"), kit.returnedCount, "text-white/70")}
+      {kit.movedCount ? part(t("kitMoved"), kit.movedCount, "text-white/70") : null}
+      {/* Blue: a sale, never read as "Live" (components/xpot/StatusPill.tsx SOLD_TONE). */}
+      {part(t("kitSold"), kit.soldCount, "text-blue-300")}
+      {part(t("kitStillWith"), kit.stillWithCount, "text-violet-200")}
+    </p>
+  );
+}
+
 function KitRow({ kit, go }: { kit: TagKitItem; go: (path: string) => void }) {
   const [open, setOpen] = useState(false);
   const [confirm, setConfirm] = useState(false);
@@ -167,8 +206,9 @@ function KitRow({ kit, go }: { kit: TagKitItem; go: (path: string) => void }) {
   const [loadingCodes, setLoadingCodes] = useState(false);
   const { toast } = useToast();
   const t = useT(manageTagsBatchesMessages);
+  const tf = useT(adminTagsFlowMessages);
   const ret = useReturnToHouse(() => setConfirm(false));
-  // Unsold set-up pieces (a customer or a link) cannot go back until the customer is cleared.
+  // Unsold set-up pieces (a customer or a link) cannot go back until the customer is removed.
   const blockedBySetup = kit.unsoldCount > 0 && kit.returnableCount === 0;
 
   const returnAllUnsold = async () => {
@@ -196,35 +236,28 @@ function KitRow({ kit, go }: { kit: TagKitItem; go: (path: string) => void }) {
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="flex min-h-11 min-w-0 flex-1 basis-48 items-center gap-3 text-left"
+          className="flex min-h-11 min-w-0 flex-1 basis-56 items-start gap-3 text-left"
           aria-expanded={open}
         >
-          {open ? <ChevronDown className="h-4 w-4 shrink-0 text-white/40" /> : <ChevronRight className="h-4 w-4 shrink-0 text-white/40" />}
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-white">{kit.repName ?? t("resellerNumber", { id: kit.repId })}</p>
+          {open ? <ChevronDown className="mt-0.5 h-4 w-4 shrink-0 text-white/40" /> : <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-white/40" />}
+          <div className="min-w-0 space-y-1">
+            <p className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm font-semibold text-white">
+              <span className="font-mono text-violet-200" data-testid="kit-code">{kit.kitCode}</span>
+              <span className="truncate">{kit.repName ?? t("resellerNumber", { id: kit.repId })}</span>
+              {kit.ownershipType ? (
+                <Pill tone="slate" className="font-medium">{kit.ownershipType === "rep" ? tf("ownershipRep") : tf("ownershipCompany")}</Pill>
+              ) : null}
+            </p>
             <p className="truncate text-xs text-white/40">
               {formatDateTime(kit.createdAt)}
+              {kit.acquisitionSource === "stuscle" ? ` · ${tf("sourceStuscle")}` : ""}
+              {kit.unitCostCents !== null ? ` · ${tf("costEach", { cost: formatMoney(kit.unitCostCents, KIT_COST_CURRENCY) })}` : ""}
               {kit.note ? ` · ${kit.note}` : ""}
             </p>
+            <KitCounts kit={kit} />
           </div>
         </button>
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-x-4 gap-y-2 text-right text-xs tabular-nums">
-          <div>
-            <p className="text-base font-bold text-white">{kit.pieceCount}</p>
-            <p className="text-white/40">{t("kitPieces")}</p>
-          </div>
-          <div>
-            <p className="text-base font-bold text-amber-300">{kit.unsoldCount}</p>
-            <p className="text-white/40">{t("kitUnsold")}</p>
-            {kit.returnableCount !== kit.unsoldCount ? (
-              <p className="text-[11px] text-white/40" data-testid="kit-returnable">{t.plural("kitReturnable", kit.returnableCount)}</p>
-            ) : null}
-          </div>
-          <div>
-            {/* Blue: a sale, never read as "Live" (components/xpot/StatusPill.tsx SOLD_TONE). */}
-            <p className="text-base font-bold text-blue-300">{kit.soldCount}</p>
-            <p className="text-white/40">{t("kitSold")}</p>
-          </div>
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
           <Button type="button" variant="secondary" size="sm" className="min-h-10" onClick={() => setPacking(true)} title={t("packingListTitle")} aria-label={t("packingListTitle")} data-testid="kit-packing-open">
             <ClipboardList className="h-4 w-4" />
             <span className="hidden sm:inline">{t("packingList")}</span>

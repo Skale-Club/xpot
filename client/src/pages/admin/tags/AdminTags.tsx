@@ -7,7 +7,8 @@ import { useToast } from "@/hooks/use-toast";
 import { errorMessage, getJson } from "./api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/xpot/Field";
-import { OverviewTab } from "./OverviewTab";
+import { isTagPieceQueue } from "@shared/tagQueues";
+import { OverviewQueue, OverviewTab } from "./OverviewTab";
 import { PiecesTab } from "./PiecesTab";
 import { PieceDetail } from "./PieceDetail";
 import { KitsTab } from "./KitsTab";
@@ -21,13 +22,14 @@ import { useT } from "@/i18n";
 import { shellMessages } from "@/i18n/messages/shell";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
 
-// Same order and names as the Tags "Manage" group in the sidebar (components/xpot/moduleNav.ts).
+// Same order and names as the Tags "Manage" group in the sidebar (components/xpot/moduleNav.ts): the piece's life,
+// production first. "kits" is Distribution (Hand out, Stuscle orders, Kits, Take back); the URL stays /kits.
 const TABS = [
   { id: "overview", labelKey: "manageOverview" },
+  { id: "batches", labelKey: "manageBatches", adminOnly: true },
   { id: "pieces", labelKey: "managePieces" },
   { id: "kits", labelKey: "manageKits" },
   { id: "team", labelKey: "manageResellers" },
-  { id: "batches", labelKey: "manageBatches", adminOnly: true },
   { id: "journey", labelKey: "manageJourney", adminOnly: true },
   { id: "provisioners", labelKey: "manageWriters", adminOnly: true },
 ] as const satisfies ReadonlyArray<{ id: string; labelKey: string; adminOnly?: boolean }>;
@@ -118,7 +120,7 @@ export function AdminTags() {
         <CodeLookup fill onFound={(tagId) => go(`/pieces/${tagId}`)} />
       </div>
 
-      {tab === "overview" && <OverviewTab go={go} />}
+      {tab === "overview" && (isTagPieceQueue(id) ? <OverviewQueue queue={id} go={go} /> : <OverviewTab go={go} />)}
       {tab === "pieces" && (id ? <PieceDetail id={id} go={go} /> : <PiecesTab go={go} />)}
       {tab === "kits" && <KitsTab go={go} />}
       {tab === "batches" && isAdmin && (id ? <BatchDetail id={id} go={go} /> : <BatchesTab go={go} />)}
