@@ -241,3 +241,23 @@ describe("GET /admin/xphere/:userId", () => {
     expect((await request(appFor("boss", true), "GET", "/api/xpot/admin/xphere/nobody")).status).toBe(404);
   });
 });
+
+describe("POST /admin/reps profile edit", () => {
+  it("keeps the person's role when the body leaves it out", async () => {
+    await seedPerson("boss", { role: "admin", isAdmin: true });
+    const manager = await seedPerson("mona", { role: "manager" });
+    const admin = await seedPerson("adam", { role: "admin", isAdmin: true });
+
+    const app = appFor("boss", true);
+    expect((await request(app, "POST", "/api/xpot/admin/reps", { userId: "mona", displayName: "Mona M." })).status).toBe(200);
+    expect((await request(app, "POST", "/api/xpot/admin/reps", { userId: "adam", displayName: "Adam A." })).status).toBe(200);
+    expect(await one(`SELECT role, display_name FROM sales_reps WHERE id = $1`, [manager])).toEqual({ role: "manager", display_name: "Mona M." });
+    expect(await one(`SELECT role FROM sales_reps WHERE id = $1`, [admin])).toEqual({ role: "admin" });
+    expect(await one(`SELECT is_admin FROM users WHERE id = 'adam'`)).toEqual({ is_admin: true });
+    // Editing your own profile without a role is not a role change.
+    expect((await request(app, "POST", "/api/xpot/admin/reps", { userId: "boss", displayName: "Boss" })).status).toBe(200);
+    // An explicit role still changes it.
+    expect((await request(app, "POST", "/api/xpot/admin/reps", { userId: "mona", displayName: "Mona M.", role: "rep" })).status).toBe(200);
+    expect(await one(`SELECT role FROM sales_reps WHERE id = $1`, [manager])).toEqual({ role: "rep" });
+  });
+});

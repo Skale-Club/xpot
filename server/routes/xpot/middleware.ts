@@ -205,8 +205,31 @@ async function ownsOrManagesLead(actor: XpotActor, lead: { ownerRepId: number | 
   return lead.ownerRepId === actor.rep.id || canManageOrganizationForActor(actor, lead.organizationId);
 }
 
+/**
+ * Owner-level access: the lead's owner, a Rep Admin of its Organization, or a
+ * manager. Holding a piece there is not enough. Deleting, changing the owner or
+ * the funnel status, CRM sync and removing photos need this.
+ */
+export function ownsLead(actor: XpotActor, lead: { ownerRepId: number | null; organizationId: number }): Promise<boolean> {
+  return canAccessLead(actor, lead, { viaPieces: false });
+}
+
+/** 403 for a caller with piece-only access to a lead (see ownsLead). */
+export function refuseNotOwner(res: Response) {
+  return res.status(403).json({ code: "lead_owner_only", message: "Only the company's owner or a manager can do this." });
+}
+
+/**
+ * What a lead route needs: `read` (the default: reading and editing details,
+ * piece holders included), `owner` (ownsLead), or `records`. A sale or stock
+ * recorded on a lead is filed under the lead's Organization, and sales lists and
+ * GET /sales/:id are scoped by Organization, so a piece holder outside it would
+ * never see what they recorded: they are refused instead.
+ */
+export type LeadNeed = "read" | "owner" | "records";
+
 /** Load a lead and enforce access. Returns null after writing the error response. */
-export async function loadAccessibleLead(req: Request, res: Response, leadId: number) {
+export async function loadAccessibleLead(req: Request, res: Response, leadId: number, need: LeadNeed = "read") {
   const actor = (req as any).xpotActor as XpotActor;
   if (!Number.isFinite(leadId) || leadId <= 0) {
     res.status(400).json({ message: "Invalid lead id" });
@@ -218,8 +241,22 @@ export async function loadAccessibleLead(req: Request, res: Response, leadId: nu
     return null;
   }
   if (!(await canAccessLead(actor, lead))) {
-    res.status(403).json({ message: "Access denied" });
+    res.status(403).json({ code: "access_denied", message: "Access denied" });
     return null;
+  }
+  if (need === "owner" && !(await ownsLead(actor, lead))) {
+    refuseNotOwner(res);
+    return null;
+  }
+  if (need === "records" && !(await ownsLead(actor, lead))) {
+    const { canViewOrganizationForActor } = await import("../../organizations/service.js");
+    if (!(await canViewOrganizationForActor(actor, lead.organizationId))) {
+      res.status(403).json({
+        code: "lead_other_organization",
+        message: "This company is in an Organization you don't belong to, so what you record here would not show up for you. Ask a manager.",
+      });
+      return null;
+    }
   }
   return lead;
 }
