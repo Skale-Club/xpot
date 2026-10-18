@@ -87,14 +87,6 @@ export function useProducts(opts: { all?: boolean; enabled?: boolean } = {}) {
   });
 }
 
-export function useSale(id: number | null) {
-  return useQuery<SaleWithItems>({
-    queryKey: ["/api/xpot/sales", "one", id],
-    queryFn: () => getJson(`/api/xpot/sales/${id}`),
-    enabled: id != null,
-  });
-}
-
 export function useSalesSummary(days = 30, repId?: number, enabled = true) {
   return useQuery<SalesSummary>({
     queryKey: ["/api/xpot/sales", "summary", days, repId ?? null],

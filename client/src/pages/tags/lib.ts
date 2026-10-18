@@ -43,10 +43,6 @@ export function pushRecent(item: Omit<RecentItem, "at">) {
   writeStorage(RECENTS_KEY, [{ ...item, at: Date.now() }, ...rest].slice(0, RECENTS_LIMIT));
 }
 
-export function clearRecents() {
-  writeStorage(RECENTS_KEY, []);
-}
-
 // ─── Selling during a visit ───────────────────────────────────────────────────
 
 const SELL_TO_KEY = "xpot.tags.sellTo";
