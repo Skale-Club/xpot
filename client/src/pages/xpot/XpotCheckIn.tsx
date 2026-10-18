@@ -56,6 +56,7 @@ import { useIsComputer } from "@/hooks/use-is-desktop";
 import { PlaceLeadSearch } from "./components/PlaceLeadSearch";
 import { CreateLeadDialog } from "./components/CreateLeadDialog";
 import { CheckInOverrideDialog } from "./components/CheckInOverrideDialog";
+import { placeUrl } from "./prospectingMaps";
 
 type VisitLead = SalesLead & Partial<Pick<FullSalesLead, "locations" | "openOpportunities" | "unitsOnShelf">>;
 
@@ -166,7 +167,7 @@ function ActiveLeadInfo({ lead, profile, profileLoading }: { lead: VisitLead; pr
   const shelf = lead.unitsOnShelf != null ? number.format(lead.unitsOnShelf) : t("notAvailable");
   const deals = lead.openOpportunities != null ? number.format(lead.openOpportunities) : t("notAvailable");
   const websiteHref = lead.website ? (lead.website.startsWith("http") ? lead.website : `https://${lead.website}`) : null;
-  const mapsHref = profile?.mapsUrl || (address ? `https://maps.google.com/?q=${encodeURIComponent(address)}` : null);
+  const mapsHref = profile?.mapsUrl || (address ? placeUrl(address) : null);
 
   return (
     <div>
@@ -614,7 +615,7 @@ export function XpotCheckIn() {
                 <div className={`mb-2 ${EYEBROW} !text-blue-200/80`}>{t("selectedLead")}</div>
                 <div className="pr-10 text-lg font-bold text-white">{selectedLead.name}</div>
                 {selectedLead.locations?.[0]?.addressLine1 ? (
-                  <a href={`https://maps.google.com/?q=${encodeURIComponent(selectedLead.locations[0].addressLine1)}`} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="mt-1 flex w-fit max-w-full items-center gap-1.5 text-sm text-blue-300/85 transition-colors hover:text-blue-200">
+                  <a href={placeUrl(selectedLead.locations[0].addressLine1)} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="mt-1 flex w-fit max-w-full items-center gap-1.5 text-sm text-blue-300/85 transition-colors hover:text-blue-200">
                     <MapPinned className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                     <span className="truncate">{selectedLead.locations[0].addressLine1}</span>
                   </a>

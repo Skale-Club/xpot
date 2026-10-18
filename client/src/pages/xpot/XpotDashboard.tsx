@@ -28,7 +28,9 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { ListSkeleton } from "@/components/xpot/ListSkeleton";
 import { RetryButton } from "@/components/xpot/RetryButton";
-import { routeDisplayName, routeStopProgress, todayRouteOf } from "./prospectingUi";
+import { routeDisplayName, routeStatusLabel as sharedRouteStatusLabel, routeStatusTone, routeStopProgress, todayRouteOf } from "./prospectingUi";
+import { prospectingMessages } from "@/i18n/messages/prospecting";
+import { Pill } from "@/components/xpot/StatusPill";
 
 type DashboardRoute = {
   id: number;
@@ -72,6 +74,7 @@ function DashboardOverview() {
   const { dashboardQuery, setLocation } = useXpotQueries();
   const { toast } = useToast();
   const t = useT(dashboardMessages);
+  const tp = useT(prospectingMessages);
   const tl = useT(leadsMessages);
   const tt = useT(tasksMessages);
   const tu = useT(visitsUiMessages);
@@ -156,13 +159,8 @@ function DashboardOverview() {
     return key in visitsUiMessages.en ? tu(key as keyof typeof visitsUiMessages.en) : tu("syncEntityOther");
   }
 
-  function routeStatusLabel(status: DashboardRoute["status"]) {
-    if (status === "draft") return t("routeStatusDraft");
-    if (status === "published") return t("routeStatusPublished");
-    if (status === "in_progress") return t("routeStatusInProgress");
-    if (status === "completed") return t("routeStatusCompleted");
-    return t("routeStatusCancelled");
-  }
+  // The same words and colours as the Route screen (prospectingUi).
+  const routeStatusLabel = (status: DashboardRoute["status"]) => sharedRouteStatusLabel(status, tp);
 
   function taskTimeLabel(value: Date | string | null | undefined) {
     if (!value) return t("taskNoDueDate");
@@ -308,7 +306,7 @@ function DashboardOverview() {
           <span className="min-w-0 flex-1">
             <span className="flex flex-wrap items-center gap-2">
               <span className={EYEBROW}>{t("todayRoute")}</span>
-              {todayRoute ? <span className="rounded-full bg-white/[0.055] px-2 py-0.5 text-[10px] font-semibold text-white/50">{routeStatusLabel(todayRoute.status)}</span> : null}
+              {todayRoute ? <Pill tone={routeStatusTone(todayRoute.status)}>{routeStatusLabel(todayRoute.status)}</Pill> : null}
             </span>
             <span className="mt-1 block truncate text-base font-bold text-white/90 first-letter:uppercase">{todayRoute ? routeDisplayName(todayRoute, t.locale) : t("routeNotCreated")}</span>
             {todayRoute && routeStops.length ? (
