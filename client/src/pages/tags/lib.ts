@@ -73,6 +73,11 @@ export function clearSellTo() {
   writeStorage(SELL_TO_KEY, null);
 }
 
+/** Sold: linked to a customer, or on a recorded sale. Handing a piece to a customer is the sale. */
+export function isPieceSold(tag: { saleId: number | null; leadId: number | null }) {
+  return tag.saleId !== null || tag.leadId !== null;
+}
+
 /** What a tag sale accepts (server/tags/sales.ts): unsold, available stock, not retired. */
 export function canSellPiece(tag: { saleId: number | null; stockStatus: string; status: string }) {
   return tag.saleId === null && tag.stockStatus === "available" && tag.status !== "retired";

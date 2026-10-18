@@ -21,7 +21,7 @@ import { LeadContacts } from "@/pages/xpot/components/leads/LeadContacts";
 import type { FullSalesLead, GoogleBusinessProfile } from "@/pages/xpot/types";
 import { usePlaceSearch } from "@/pages/xpot/usePlaceSearch";
 import TagScreen from "./TagScreen";
-import { APP_BASE, errorText, shortUrl, tagPath, tagsGet, tagsPost, useBanner } from "./lib";
+import { APP_BASE, errorText, isPieceSold, shortUrl, tagPath, tagsGet, tagsPost, useBanner } from "./lib";
 import {
   Banner, BottomSheet, BTN_PRIMARY, BTN_TERTIARY, CARD, EYEBROW_MUTED, INPUT, LinkInput, Pill, SHEET_TITLE, SOLD_TONE, STATUS_TONE, Spinner,
 } from "./ui";
@@ -428,7 +428,7 @@ export default function CustomerScreen({ leadId }: { leadId: number }) {
               <span className="hidden w-48 truncate text-xs text-white/45 md:block">{p.destinationUrl ? shortUrl(p.destinationUrl) : "—"}</span>
               <span className="flex w-24 flex-wrap gap-1">
                 <Pill tone={STATUS_TONE[p.status] ?? "slate"}>{t(`status_${p.status}` as "status_active")}</Pill>
-                {p.saleId && <Pill tone={SOLD_TONE}>{t("soldBadge")}</Pill>}
+                {isPieceSold(p) && <Pill tone={SOLD_TONE}>{t("soldBadge")}</Pill>}
               </span>
               <span className="w-20 text-right tabular-nums">
                 {p.status === "active" ? (

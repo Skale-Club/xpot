@@ -13,7 +13,7 @@ import type { TagListItem } from "@shared/tagsApi";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
-import { APP_BASE, errorText, shortUrl, tagPath, tagsGet } from "./lib";
+import { APP_BASE, errorText, isPieceSold, shortUrl, tagPath, tagsGet } from "./lib";
 import { CARD, Pill, SOLD_TONE, STATUS_TONE, Spinner, TopBar } from "./ui";
 import { WholesaleCard } from "./WholesaleCard";
 
@@ -86,8 +86,8 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
   const items = useMemo(() => {
     const list = data ?? [];
     return list.filter((tag) => {
-      if (filter === "stock" && tag.saleId) return false;
-      if (filter === "sold" && !tag.saleId) return false;
+      if (filter === "stock" && isPieceSold(tag)) return false;
+      if (filter === "sold" && !isPieceSold(tag)) return false;
       if (query && ![tag.publicCode, tag.leadName, tag.label].some((v) => v?.toLocaleLowerCase().includes(query))) return false;
       if (companyFilter && String(tag.leadId) !== companyFilter) return false;
       if (faceFilter && tag.face !== faceFilter) return false;
@@ -236,7 +236,7 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
                   <span className="flex shrink-0 flex-col items-end gap-1">
                     <span className="flex gap-1">
                       <Pill tone={STATUS_TONE[tag.status] ?? "slate"}>{t(`status_${tag.status}` as "status_active")}</Pill>
-                      {tag.saleId && <Pill tone={SOLD_TONE}>{t("soldBadge")}</Pill>}
+                      {isPieceSold(tag) && <Pill tone={SOLD_TONE}>{t("soldBadge")}</Pill>}
                     </span>
                     {tag.status === "active" && (
                       <span className="text-xs tabular-nums text-white/40">{tag.qrInteractions + tag.nfcInteractions}</span>
@@ -325,7 +325,7 @@ function PiecesTable({ items, selectedCode, onSelect, onCustomer }: {
                 <td className="px-3 py-2.5">
                   <div className="flex flex-wrap gap-1">
                     <Pill tone={STATUS_TONE[tag.status] ?? "slate"}>{t(`status_${tag.status}` as "status_active")}</Pill>
-                    {tag.saleId && <Pill tone={SOLD_TONE}>{t("soldBadge")}</Pill>}
+                    {isPieceSold(tag) && <Pill tone={SOLD_TONE}>{t("soldBadge")}</Pill>}
                   </div>
                 </td>
                 <td className="whitespace-nowrap py-2.5 pl-3 pr-4 text-right tabular-nums">

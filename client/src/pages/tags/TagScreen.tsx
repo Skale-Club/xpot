@@ -23,7 +23,7 @@ import LockSheet from "./LockSheet";
 import PieceDashboard from "./PieceDashboard";
 import { isWebNfcSupported } from "./webNfc";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
-import { APP_BASE, canSellPiece, errorText, getSellTo, haptic, lookupTag, pushRecent, shortUrl, tagPath, tagsGet, tagsPost, useBanner } from "./lib";
+import { APP_BASE, canSellPiece, errorText, isPieceSold, getSellTo, haptic, lookupTag, pushRecent, shortUrl, tagPath, tagsGet, tagsPost, useBanner } from "./lib";
 import {
   BTN_PRIMARY,
   BTN_SECONDARY,
@@ -305,7 +305,7 @@ export default function TagScreen({ code, onClose }: {
           // The piece's state, then (after a dot) what it is. The face is the picture's job.
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
             <Pill tone={STATUS_TONE[tag.status] ?? "slate"}>{t(`status_${tag.status}` as "status_active")}</Pill>
-            {tag.saleId && <Pill tone={SOLD_TONE}>{t("soldBadge")}</Pill>}
+            {isPieceSold(tag) && <Pill tone={SOLD_TONE}>{t("soldBadge")}</Pill>}
             <span className="text-white/20" aria-hidden="true">·</span>
             {tagPlaqueSpec(tag.productType, tag.face, tag.batchCode).model ? (
               <TagModelChips productType={tag.productType} face={tag.face} batchCode={tag.batchCode} className="shrink-0" />
@@ -489,35 +489,33 @@ export default function TagScreen({ code, onClose }: {
         </div>
       </section>
 
-      {tag.saleId ? (
-        <section className="mt-3 flex items-center justify-between gap-4 rounded-[20px] border border-blue-400/20 bg-blue-500/[0.08] p-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-blue-300/80">{t("soldBadge")}</p>
-            <p className="mt-1 text-base font-bold text-white">{t("soldFor", { amount: formatCents(tag.soldPriceCents) })}</p>
-          </div>
-          <span className="font-mono text-xs text-white/40">#{tag.saleId}</span>
-        </section>
-      ) : !canSellPiece(tag) ? null : tag.leadId && getSellTo()?.leadId !== tag.leadId ? (
-        // Already with a customer, but no sale on record: a note, not the screen's main action.
-        <section className="mt-3 flex items-center justify-between gap-3 rounded-[20px] border border-white/10 bg-white/[0.04] p-4" data-testid="sale-not-recorded">
+      {isPieceSold(tag) ? (
+        // Linked to a customer is sold; the amount shows once a sale records it.
+        <section className="mt-3 flex items-center justify-between gap-4 rounded-[20px] border border-blue-400/20 bg-blue-500/[0.08] p-4" data-testid="sold-card">
           <div className="min-w-0">
-            <p className={EYEBROW_MUTED}>{t("saleNotRecorded")}</p>
-            <p className="mt-1 text-sm text-white/55">{t("saleNotRecordedHint")}</p>
+            <p className="text-xs font-semibold uppercase tracking-widest text-blue-300/80">{t("soldBadge")}</p>
+            <p className={`mt-1 text-base font-bold ${tag.saleId ? "text-white" : "text-white/55"}`}>
+              {tag.saleId ? t("soldFor", { amount: formatCents(tag.soldPriceCents) }) : t("saleValueMissing")}
+            </p>
           </div>
-          <button
-            type="button"
-            onClick={() => setSaleOpen(true)}
-            className="flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl border border-emerald-400/30 px-3 text-sm font-semibold text-emerald-200 active:bg-emerald-500/15"
-            data-testid="button-sell-this-piece"
-          >
-            <DollarSign className="h-4 w-4" /> {t("recordSale")}
-          </button>
+          {tag.saleId ? (
+            <span className="font-mono text-xs text-white/40">#{tag.saleId}</span>
+          ) : canSellPiece(tag) ? (
+            <button
+              type="button"
+              onClick={() => setSaleOpen(true)}
+              className="flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl border border-emerald-400/30 px-3 text-sm font-semibold text-emerald-200 active:bg-emerald-500/15"
+              data-testid="button-sell-this-piece"
+            >
+              <DollarSign className="h-4 w-4" /> {t("addSaleValue")}
+            </button>
+          ) : null}
         </section>
-      ) : (
+      ) : canSellPiece(tag) ? (
         <button type="button" onClick={() => setSaleOpen(true)} className={`${BTN_PRIMARY} mt-3 bg-none !bg-emerald-500`} data-testid="button-sell-this-piece">
           <DollarSign className="h-5 w-5" /> {t("sellThisPiece")}
         </button>
-      )}
+      ) : null}
 
       <PieceDashboard tagId={tag.id} />
 

@@ -300,9 +300,8 @@ const en = {
   saleCatalogUnavailable: "The sales catalog could not price these pieces. Try again before confirming the sale.",
   soldBadge: "Sold",
   soldFor: "Sold for {amount}",
-  saleNotRecorded: "No sale recorded",
-  saleNotRecordedHint: "This piece is with the customer, but its sale was never recorded.",
-  recordSale: "Record sale",
+  saleValueMissing: "Amount not recorded",
+  addSaleValue: "Add amount",
 
   // Customer (lead) picker
   leadSearch: "Search or type the business name",
@@ -714,9 +713,8 @@ export const tagsMessages: Dictionary<typeof en> = {
     saleCatalogUnavailable: "O catálogo de vendas não conseguiu precificar estas peças. Tente novamente antes de confirmar a venda.",
     soldBadge: "Vendida",
     soldFor: "Vendida por {amount}",
-    saleNotRecorded: "Venda não registrada",
-    saleNotRecordedHint: "A peça está com o cliente, mas a venda nunca foi registrada.",
-    recordSale: "Registrar venda",
+    saleValueMissing: "Valor não registrado",
+    addSaleValue: "Informar valor",
 
     leadSearch: "Buscar ou digitar o nome do estabelecimento",
     leadsLoading: "Carregando clientes",
@@ -1117,9 +1115,8 @@ export const tagsMessages: Dictionary<typeof en> = {
     saleCatalogUnavailable: "El catálogo de ventas no pudo calcular el precio de estas piezas. Inténtalo de nuevo antes de confirmar la venta.",
     soldBadge: "Vendida",
     soldFor: "Vendida por {amount}",
-    saleNotRecorded: "Venta no registrada",
-    saleNotRecordedHint: "La pieza está con el cliente, pero su venta nunca se registró.",
-    recordSale: "Registrar venta",
+    saleValueMissing: "Monto no registrado",
+    addSaleValue: "Agregar monto",
 
     leadSearch: "Busca o escribe el nombre del negocio",
     leadsLoading: "Cargando clientes",
