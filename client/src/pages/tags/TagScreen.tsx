@@ -23,7 +23,7 @@ import LockSheet from "./LockSheet";
 import PieceDashboard from "./PieceDashboard";
 import { isWebNfcSupported } from "./webNfc";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
-import { APP_BASE, errorText, getSellTo, haptic, lookupTag, pushRecent, shortUrl, tagPath, tagsGet, tagsPost, useBanner } from "./lib";
+import { APP_BASE, canSellPiece, errorText, getSellTo, haptic, lookupTag, pushRecent, shortUrl, tagPath, tagsGet, tagsPost, useBanner } from "./lib";
 import {
   BTN_PRIMARY,
   BTN_SECONDARY,
@@ -496,6 +496,22 @@ export default function TagScreen({ code, onClose }: {
             <p className="mt-1 text-base font-bold text-white">{t("soldFor", { amount: formatCents(tag.soldPriceCents) })}</p>
           </div>
           <span className="font-mono text-xs text-white/40">#{tag.saleId}</span>
+        </section>
+      ) : !canSellPiece(tag) ? null : tag.leadId && getSellTo()?.leadId !== tag.leadId ? (
+        // Already with a customer, but no sale on record: a note, not the screen's main action.
+        <section className="mt-3 flex items-center justify-between gap-3 rounded-[20px] border border-white/10 bg-white/[0.04] p-4" data-testid="sale-not-recorded">
+          <div className="min-w-0">
+            <p className={EYEBROW_MUTED}>{t("saleNotRecorded")}</p>
+            <p className="mt-1 text-sm text-white/55">{t("saleNotRecordedHint")}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSaleOpen(true)}
+            className="flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl border border-emerald-400/30 px-3 text-sm font-semibold text-emerald-200 active:bg-emerald-500/15"
+            data-testid="button-sell-this-piece"
+          >
+            <DollarSign className="h-4 w-4" /> {t("recordSale")}
+          </button>
         </section>
       ) : (
         <button type="button" onClick={() => setSaleOpen(true)} className={`${BTN_PRIMARY} mt-3 bg-none !bg-emerald-500`} data-testid="button-sell-this-piece">

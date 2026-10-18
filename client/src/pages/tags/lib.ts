@@ -73,6 +73,11 @@ export function clearSellTo() {
   writeStorage(SELL_TO_KEY, null);
 }
 
+/** What a tag sale accepts (server/tags/sales.ts): unsold, available stock, not retired. */
+export function canSellPiece(tag: { saleId: number | null; stockStatus: string; status: string }) {
+  return tag.saleId === null && tag.stockStatus === "available" && tag.status !== "retired";
+}
+
 // ─── Device helpers ───────────────────────────────────────────────────────────
 
 export async function copyToClipboard(text: string): Promise<boolean> {

@@ -13,7 +13,7 @@ import { salesModuleMessages } from "@/i18n/messages/salesModule";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { TagPieceMention } from "@/components/xpot/TagProductThumbnail";
 import LeadPicker, { type LeadChoice } from "./LeadPicker";
-import { errorText, getSellTo, haptic, tagsGet, tagsPostIdempotent } from "./lib";
+import { canSellPiece, errorText, getSellTo, haptic, tagsGet, tagsPostIdempotent } from "./lib";
 import { Field, Money, MoneyInput, PrimaryButton, Select, SheetDialog, inputStyle } from "@/pages/xpot/components/sales/ui";
 
 type PriceState = Record<number, { cents: number; manual: boolean }>;
@@ -46,7 +46,7 @@ export default function TagSaleDialog({
     staleTime: 5 * 60_000,
   });
   // One sale per piece, opened from that piece (like activating it).
-  const available = useMemo(() => pieces.filter((piece) => !piece.saleId && piece.status !== "retired"), [pieces]);
+  const available = useMemo(() => pieces.filter(canSellPiece), [pieces]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [lead, setLead] = useState<LeadChoice>(null);
   const [prices, setPrices] = useState<PriceState>({});
