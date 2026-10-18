@@ -5,6 +5,7 @@ import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { useT } from "@/i18n";
 import { filtersMessages } from "@/i18n/messages/filters";
 import { MiniCalendar } from "./MiniCalendar";
+import { GLASS_SUBTLE_CLASS, SURFACE_MODAL } from "./surface";
 
 // The one filter bar of the app. Every list (Leads, Visits, Pieces, Tasks,
 // Sales, the Tags admin) builds its filters from these parts, so they look and
@@ -14,9 +15,10 @@ import { MiniCalendar } from "./MiniCalendar";
 //     anything is narrowed;
 //   - one height (40px) for search, selects, toggles and the day picker;
 //   - one "on" colour (indigo) for whatever is narrowing the list. Status
-//     colours only show as a dot, never as the whole chip.
+//     colours only show as a dot, never as the whole chip;
+//   - keyboard focus is the global outline (index.css), no rings of their own.
 
-const CONTROL = "h-10 rounded-xl border text-sm outline-none transition-colors focus-visible:border-indigo-400/60 focus-visible:ring-2 focus-visible:ring-indigo-400/20";
+const CONTROL = "h-10 rounded-xl border text-sm outline-none transition-colors";
 const CONTROL_IDLE = "border-white/[0.08] bg-black/20 text-white/65 hover:border-white/[0.15] hover:bg-white/[0.04] hover:text-white/85";
 const CONTROL_ON = "border-indigo-400/40 bg-indigo-500/[0.14] text-white";
 
@@ -56,7 +58,7 @@ export function FilterBar({
   const hasFirstRow = Boolean(search || controls || actions);
   return (
     <div
-      className={`space-y-2.5 rounded-[18px] border border-white/[0.07] bg-white/[0.025] p-2.5 ${className}`}
+      className={`space-y-2.5 rounded-2xl ${GLASS_SUBTLE_CLASS} p-2.5 ${className}`}
       data-testid={testId}
     >
       {hasFirstRow ? (
@@ -171,7 +173,7 @@ export function FilterSearch({
           }
         }}
         placeholder={placeholder}
-        className={`${CONTROL} w-full border-white/[0.08] bg-black/20 pl-9 pr-9 text-white placeholder:text-white/30 hover:border-white/[0.15] focus:border-indigo-400/50 focus:ring-2 focus:ring-indigo-400/15 [&::-webkit-search-cancel-button]:hidden`}
+        className={`${CONTROL} w-full border-white/[0.08] bg-black/20 pl-9 pr-9 text-white placeholder:text-white/30 hover:border-white/[0.15] focus:border-indigo-400/50 [&::-webkit-search-cancel-button]:hidden`}
         data-testid={testId}
         data-shortcut={shortcut ? "search" : undefined}
       />
@@ -232,9 +234,9 @@ export function FilterSelect({
         className={`${CONTROL} ${on ? CONTROL_ON : CONTROL_IDLE} w-full appearance-none truncate font-medium [color-scheme:dark] disabled:opacity-40 lg:w-auto lg:min-w-[150px] lg:max-w-[240px] ${Icon ? "pl-9" : "pl-3"} pr-8`}
         data-testid={testId}
       >
-        <option value="" className="bg-[#0d1424]">{placeholder}</option>
+        <option value="" className="bg-[#0d1322]">{placeholder}</option>
         {list.map((option) => (
-          <option key={option.value} value={option.value} className="bg-[#0d1424]">
+          <option key={option.value} value={option.value} className="bg-[#0d1322]">
             {option.label}
           </option>
         ))}
@@ -311,7 +313,7 @@ export function FilterChips<T extends string>({
             type="button"
             aria-pressed={on}
             onClick={() => onChange(item.id)}
-            className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-indigo-400/40 ${
+            className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold outline-none transition-colors ${
               on ? "border-indigo-400/40 bg-indigo-500/[0.18] text-white" : "border-white/[0.08] bg-white/[0.03] text-white/50 hover:border-white/[0.15] hover:text-white/80"
             }`}
             data-testid={item.testId}
@@ -460,7 +462,7 @@ export function FilterDay({
         {isDesktop && open ? (
           <>
             <button type="button" aria-hidden tabIndex={-1} className="fixed inset-0 z-30 cursor-default" onClick={() => setOpen(false)} />
-            <div className="absolute left-1/2 top-[calc(100%+6px)] z-40 w-72 -translate-x-1/2 rounded-2xl border border-white/[0.1] bg-[#0b1020]/95 p-3 shadow-[0_16px_44px_rgba(0,0,0,0.5)] backdrop-blur-xl">
+            <div className="absolute left-1/2 top-[calc(100%+6px)] z-40 w-72 -translate-x-1/2 rounded-2xl border border-white/[0.1] p-3 shadow-[0_16px_44px_rgba(0,0,0,0.5)] backdrop-blur-xl" style={{ background: SURFACE_MODAL }}>
               <MiniCalendar
                 value={value}
                 onChange={(day) => {

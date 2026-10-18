@@ -1,6 +1,13 @@
 import type { LucideIcon } from "lucide-react";
 import { Check, ChevronDown, ChevronRight } from "lucide-react";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { Segmented } from "./Segmented";
+import { GLASS_SUBTLE_CLASS, SURFACE_MODAL, type ModuleAccent } from "./surface";
+
+// Dashboard parts: DashboardSection (also exported as SectionCard), the
+// PeriodSelector (a small Segmented), MetricSelector, KpiTile (the one stat
+// tile; Stat in ./Stat.tsx is the plain label + number), EmptyMetricState and
+// the AttentionList rows. Containers use GLASS_SUBTLE; focus is the global outline.
 
 export function DashboardSection({
   title,
@@ -18,7 +25,7 @@ export function DashboardSection({
   bodyClassName?: string;
 }) {
   return (
-    <section className={`overflow-hidden rounded-[18px] border border-white/[0.07] bg-white/[0.025] ${className}`}>
+    <section className={`overflow-hidden rounded-2xl ${GLASS_SUBTLE_CLASS} ${className}`}>
       <header className="flex min-h-12 items-center justify-between gap-3 border-b border-white/[0.06] px-4 py-3">
         <div className="flex min-w-0 items-center gap-2.5">
           {Icon ? (
@@ -40,26 +47,23 @@ export function PeriodSelector({
   onChange,
   options,
   ariaLabel,
+  accent,
 }: {
   value: number;
   onChange: (value: number) => void;
   options: readonly { value: number; label: string }[];
   ariaLabel: string;
+  accent?: ModuleAccent;
 }) {
   return (
-    <div className="inline-flex rounded-lg border border-white/[0.07] bg-black/15 p-0.5" role="group" aria-label={ariaLabel}>
-      {options.map((option) => (
-        <button
-          key={option.value}
-          type="button"
-          aria-pressed={value === option.value}
-          onClick={() => onChange(option.value)}
-          className={`rounded-md px-2 py-1 text-[10px] font-bold tracking-wide transition-colors ${value === option.value ? "bg-white/10 text-white" : "text-white/35 hover:text-white/65"}`}
-        >
-          {option.label}
-        </button>
-      ))}
-    </div>
+    <Segmented
+      size="sm"
+      ariaLabel={ariaLabel}
+      accent={accent}
+      value={value}
+      onChange={onChange}
+      items={options.map((option) => ({ id: option.value, label: option.label }))}
+    />
   );
 }
 
@@ -123,7 +127,7 @@ export function MetricSelector<T extends string>({
             moveSelection(event.key === "ArrowDown" ? 1 : -1);
           }
         }}
-        className={`group inline-flex h-[28px] min-w-[92px] items-center gap-2 rounded-lg border px-2.5 text-[11px] font-bold tracking-wide outline-none transition-all ${open ? "border-indigo-400/45 bg-indigo-400/[0.09] text-white shadow-[0_0_0_3px_rgba(99,102,241,0.1)]" : "border-white/[0.08] bg-white/[0.035] text-white/70 hover:border-white/[0.15] hover:bg-white/[0.055] hover:text-white"} focus-visible:border-indigo-400/60 focus-visible:ring-2 focus-visible:ring-indigo-400/20`}
+        className={`group inline-flex h-[28px] min-w-[92px] items-center gap-2 rounded-lg border px-2.5 text-[11px] font-bold tracking-wide outline-none transition-all ${open ? "border-indigo-400/45 bg-indigo-400/[0.09] text-white shadow-[0_0_0_3px_rgba(99,102,241,0.1)]" : "border-white/[0.08] bg-white/[0.035] text-white/70 hover:border-white/[0.15] hover:bg-white/[0.055] hover:text-white"}`}
       >
         <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${selected?.swatchClassName ?? "bg-indigo-400"}`} aria-hidden="true" />
         <span className="min-w-0 flex-1 truncate text-left">{selected?.label}</span>
@@ -135,7 +139,8 @@ export function MetricSelector<T extends string>({
           id={listboxId}
           role="listbox"
           aria-label={ariaLabel}
-          className="absolute right-0 top-[calc(100%+6px)] z-50 min-w-[142px] overflow-hidden rounded-xl border border-white/[0.1] bg-[#0b1020]/95 p-1.5 shadow-[0_16px_44px_rgba(0,0,0,0.5)] backdrop-blur-xl"
+          className="absolute right-0 top-[calc(100%+6px)] z-50 min-w-[142px] overflow-hidden rounded-xl border border-white/[0.1] p-1.5 shadow-[0_16px_44px_rgba(0,0,0,0.5)] backdrop-blur-xl"
+          style={{ background: SURFACE_MODAL }}
         >
           {options.map((option) => {
             const isSelected = option.value === value;
@@ -192,7 +197,7 @@ export function KpiTile({
     <button
       type="button"
       onClick={onClick}
-      className="group relative min-w-0 rounded-2xl border border-white/[0.07] bg-white/[0.03] p-3 text-left transition-colors hover:border-white/[0.13] hover:bg-white/[0.045] focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-400 lg:p-4"
+      className={`group relative min-w-0 rounded-2xl ${GLASS_SUBTLE_CLASS} p-3 text-left transition-colors hover:border-white/[0.13] hover:bg-white/[0.045] lg:p-4`}
     >
       <div className="flex items-start justify-between gap-2">
         <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] ring-1 ${tones[accent]} lg:h-9 lg:w-9`}>
@@ -264,7 +269,7 @@ export function AttentionItem({
   } as const;
 
   return (
-    <button type="button" onClick={onClick} className="group flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-white/[0.025] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-indigo-400">
+    <button type="button" onClick={onClick} className="group flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-white/[0.025] focus-visible:!-outline-offset-2">
       <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] ${tones[tone]}`}>
         <Icon className="h-4 w-4" aria-hidden="true" />
       </span>
