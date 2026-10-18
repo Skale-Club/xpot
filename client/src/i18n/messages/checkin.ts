@@ -58,6 +58,10 @@ const en = {
   visitTagsHint: "QR or NFC for this customer",
   finishVisit: "Finish visit",
   finishVisitHint: "Outcome and check-out",
+  cancelVisit: "Cancel visit",
+  cancelVisitTitle: "Cancel this visit?",
+  cancelVisitDesc: "The visit is discarded and saved as cancelled, with no outcome. If it is a stop on your route, that stop is marked as skipped.",
+  keepVisit: "Keep visit",
   uploadInProgress: "UPLOAD IN PROGRESS...",
   slideToCheckOut: "SLIDE TO CHECK OUT",
 
@@ -241,6 +245,10 @@ export const checkinMessages: Dictionary<typeof en> = {
     visitTagsHint: "QR ou NFC para este cliente",
     finishVisit: "Finalizar visita",
     finishVisitHint: "Resultado e check-out",
+    cancelVisit: "Cancelar visita",
+    cancelVisitTitle: "Cancelar esta visita?",
+    cancelVisitDesc: "A visita é descartada e salva como cancelada, sem resultado. Se for uma parada da sua rota, essa parada fica como pulada.",
+    keepVisit: "Manter visita",
     uploadInProgress: "ENVIANDO ÁUDIO...",
     slideToCheckOut: "DESLIZE PARA FAZER CHECK-OUT",
 
@@ -411,6 +419,10 @@ export const checkinMessages: Dictionary<typeof en> = {
     visitTagsHint: "QR o NFC para este cliente",
     finishVisit: "Finalizar visita",
     finishVisitHint: "Resultado y check-out",
+    cancelVisit: "Cancelar visita",
+    cancelVisitTitle: "¿Cancelar esta visita?",
+    cancelVisitDesc: "La visita se descarta y se guarda como cancelada, sin resultado. Si es una parada de tu ruta, esa parada queda como omitida.",
+    keepVisit: "Mantener visita",
     uploadInProgress: "SUBIENDO AUDIO...",
     slideToCheckOut: "DESLIZA PARA HACER CHECK-OUT",
 

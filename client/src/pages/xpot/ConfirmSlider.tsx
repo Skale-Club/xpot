@@ -12,12 +12,13 @@ import { useIsDesktop } from "@/hooks/use-is-desktop";
 /**
  * Two modes:
  *
- * Check-in (onCancel = undefined):
+ * Check-in (default):
  *   thumb starts LEFT, drag RIGHT to confirm. Fill grows blue→green.
  *
- * Check-out (onCancel provided):
- *   thumb starts RIGHT (green = active), drag LEFT to confirm check-out.
- *   Fill shrinks and turns red as thumb approaches left.
+ * Check-out (mode "check-out"):
+ *   thumb starts RIGHT, drag LEFT to confirm check-out. It also goes
+ *   blue→green: finishing a visit is a positive step, not a destructive one.
+ *   (Cancelling a visit is a separate, confirmed action on the visit screen.)
  */
 export function ConfirmSlider({
   label,
@@ -25,18 +26,18 @@ export function ConfirmSlider({
   loading,
   disabled,
   onConfirm,
-  onCancel,
+  mode = "check-in",
 }: {
   label: string;
   helperText: string;
   loading?: boolean;
   disabled?: boolean;
   onConfirm: () => void;
-  onCancel?: () => void;
+  mode?: "check-in" | "check-out";
 }) {
   const t = useT(checkinMessages);
   const isDesktop = useIsDesktop();
-  const isCheckOut = Boolean(onCancel);
+  const isCheckOut = mode === "check-out";
   // Desktop: a button that asks for a second click instead of a drag.
   const [armed, setArmed] = useState(false);
   useEffect(() => {
@@ -120,11 +121,12 @@ export function ConfirmSlider({
       const b = Math.round(241 + t * (129 - 241));
       return `rgb(${r}, ${g}, ${b})`;
     } else {
-      const t = v / 100;
-      // Interpolate from Emerald (16, 185, 129) to Rose (225, 29, 72)
-      const r = Math.round(225 + t * (16 - 225));
-      const g2 = Math.round(29 + t * (185 - 29));
-      const b = Math.round(72 + t * (129 - 72));
+      if (v >= 40) return "#3b82f6"; // Blue-500
+      const t = (40 - v) / 40;
+      // Interpolate from Blue (59, 130, 246) to Emerald (16, 185, 129) as the thumb nears the left
+      const r = Math.round(59 + t * (16 - 59));
+      const g2 = Math.round(130 + t * (185 - 130));
+      const b = Math.round(246 + t * (129 - 246));
       return `rgb(${r}, ${g2}, ${b})`;
     }
   }
@@ -132,7 +134,7 @@ export function ConfirmSlider({
   const thumbColor = getThumbColor(value);
 
   if (isDesktop) {
-    const tone = isCheckOut ? "linear-gradient(135deg, #e11d48, #be123c)" : "linear-gradient(135deg, #6366f1, #10b981)";
+    const tone = isCheckOut ? "linear-gradient(135deg, #3b82f6, #10b981)" : "linear-gradient(135deg, #6366f1, #10b981)";
     return (
       <div className="space-y-3">
         <button
