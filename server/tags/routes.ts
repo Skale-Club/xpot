@@ -465,8 +465,10 @@ export function registerTagRoutes(app: Express) {
       // A reseller's list is their own pieces, whatever filter they send. A manager gets
       // every piece (the admin screens), unless asking for their own: a piece is theirs
       // once it is in their kit or they activated it, not because they can reach it.
+      // Tags have no organization scope: like listScope's `everyone` (routes/xpot/middleware.ts),
+      // only a manager or admin in management mode gets every piece, and ?organizationId= narrows that alone.
       const { mine, organizationId, ...rest } = filters;
-      const own = !actor.isManager || mine || viewsAsRep(req);
+      const own = mine || !actor.inManagement;
       res.json(await repo.listTags(own ? { ...rest, repId: actor.repId, house: undefined } : { ...rest, organizationId }));
     } catch (err) {
       fail(res, err, "Failed to load tags");

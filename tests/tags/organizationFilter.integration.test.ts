@@ -110,6 +110,11 @@ test.skipIf(!enabled)("organization filter: Inventory and Kits narrow for manage
     const anaSouth = await api("GET", `/api/xpot/tags?organizationId=${orgB.id}`, "of-ana");
     assert.equal(anaSouth.status, 200, anaSouth.text);
     assert.deepEqual(codesOf(anaSouth.json), [codes[0], codes[1]]);
+    // A Rep Admin in management mode: Tags lists do not widen for them (listScope), so still their own.
+    await db.execute(sql`INSERT INTO organization_memberships (organization_id, rep_id, role) VALUES (${orgA.id}, ${repId["of-ana"]}, 'admin')
+      ON CONFLICT DO NOTHING`);
+    const anaManaging = await api("GET", `/api/xpot/tags?organizationId=${orgB.id}`, "of-ana", undefined, { "x-xpot-view": "manage" });
+    assert.deepEqual(codesOf(anaManaging.json), [codes[0], codes[1]]);
     // Kits stay management's.
     assert.equal((await api("GET", `/api/xpot/admin/tag-kits?organizationId=${orgA.id}`, "of-ana")).status, 403);
 

@@ -38,7 +38,7 @@ import type { XpotMeResponse } from "./types";
 // (`personal`, shared/organizations.ts) is tucked away behind a toggle. The
 // Inventory, Kits and Companies tabs list the organization's records by name,
 // each row opening it on its own screen; for platform management, "See all in
-// Inventory / Distribution" opens the full list filtered to the organization (?org=).
+// Inventory / Distribution / Companies" opens the full list filtered to the organization (?org=).
 
 type Organization = {
   id: number;
@@ -317,6 +317,8 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
         )}
         {tab === "customers" && (
           <RecordList query={customers} empty={t("noCustomers")} rowHref={(row) => (usesVisits ? `/leads/${row.id}` : `/tags/customers/${row.id}`)}
+            // Companies (Visits) has the organization filter, for platform management in management mode.
+            seeAll={platformManager && usesVisits ? { href: `/leads?org=${organizationId}`, label: t("seeAllIn", { screen: ts("tabLeads") }), testId: "organization-customers-all" } : undefined}
             render={(row) => <><span className="text-sm font-medium text-white">{row.name}</span><span className="text-xs text-white/45">{lookup(t, `customer_${row.status}`, String(row.status ?? ""))} · {repName(row.ownerRepId)}</span></>} />
         )}
         {tab === "settings" && <OrganizationSettings key={`${org.name}|${org.isActive}`} organization={org} mayEdit={platformManager} />}
