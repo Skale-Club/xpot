@@ -83,9 +83,12 @@ Expansion stops automatically when any system condition is true:
 - the safety limit for travel growth has been reached;
 - the last wave added no eligible candidates;
 - configured maximum waves/cost has been reached;
-- the rep cancels the planning job. *(Note 2026-10-18, UX overhaul: not implemented. The server
-  has no cancel for a prospecting job or run; a stuck one can only be retried, from the Route
-  screen or from Status. Tracked as BACKLOG UXR-20.)*
+- the rep cancels the planning job ("Cancel this search" on the Route screen, or the Xpot admin's
+  "Cancel search" in Status). Its waiting and running searches become `cancelled` and are never
+  sent or saved again; a route not built yet is marked failed, so the rep can start a new search
+  (or rebuild the route of a finished one). The engine has no cancel in its API: Xpot stops
+  waiting for it and drops whatever it still returns (`cancelProspectingJob`,
+  `server/prospecting/queue.ts`).
 
 The UI avoids false precision. It says “rota completa para hoje” or “rota mais curta — encontramos
 8 locais elegíveis próximos”, while showing approximate drive time only as supporting information.

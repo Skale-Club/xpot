@@ -208,12 +208,14 @@ function statusLabel(status: ProspectingJob["status"], t: ReturnType<typeof useT
   if (status === "queued") return t("statusQueued");
   if (status === "running") return t("statusRunning");
   if (status === "completed") return t("statusCompleted");
+  if (status === "cancelled") return t("statusCancelled");
   return t("statusFailed");
 }
 
 function runStatusLabel(status: string, t: ReturnType<typeof useT<typeof prospectingMessages.en>>) {
   if (status === "completed") return t("statusCompleted");
-  if (status === "failed" || status === "cancelled") return t("statusFailed");
+  if (status === "failed") return t("statusFailed");
+  if (status === "cancelled") return t("statusCancelled");
   if (status === "queued") return t("statusQueued");
   return t("statusRunning");
 }
@@ -484,6 +486,19 @@ export function XpotProspecting() {
     onError: (error: Error) => toast({ title: t("errorTitle"), description: error.message, variant: "destructive" }),
   });
 
+  // The rep stops their own search, still running or waiting, or finished
+  // with a route that never got built (POST /prospecting/jobs/:id/cancel).
+  const [cancelSearchOpen, setCancelSearchOpen] = useState(false);
+  const cancelJob = useMutation({
+    mutationFn: async (jobId: number) => (await apiRequest("POST", `/api/xpot/prospecting/jobs/${jobId}/cancel`)).json() as Promise<ProspectingJobDetails>,
+    onSuccess: async (data) => {
+      queryClient.setQueryData(["/api/xpot/prospecting/jobs", data.job.id], data);
+      await queryClient.invalidateQueries({ queryKey: ["/api/xpot/prospecting/jobs"] });
+      toast({ title: t("searchCancelled") });
+    },
+    onError: (error: Error) => toast({ title: t("errorTitle"), description: error.message, variant: "destructive" }),
+  });
+
   const publishRoute = useMutation({
     mutationFn: async (routeId: number) => {
       const response = await apiRequest("PATCH", `/api/xpot/prospecting/routes/${routeId}/status`, { status: "published" });
@@ -614,14 +629,18 @@ export function XpotProspecting() {
   const eligibleCandidates = useMemo(() => eligibleOf(details?.candidates ?? []), [details?.candidates]);
   const canShowCandidates = details?.job.status === "completed";
   const fill = details ? routeFill(eligibleCandidates.length, details.job.targetStops) : "none";
-  const jobFailed = details ? details.job.status === "failed" || hasFailedRuns || details.job.routePlanningStatus === "failed" : false;
+  const jobCancelled = details?.job.status === "cancelled";
+  const jobFailed = details && !jobCancelled ? details.job.status === "failed" || hasFailedRuns || details.job.routePlanningStatus === "failed" : false;
+  const canCancelJob = details ? !generatedRoute && (["queued", "running"].includes(details.job.status)
+    || (details.job.status === "completed" && ["pending", "building"].includes(details.job.routePlanningStatus))) : false;
   const visibleCandidates = showAllCandidates ? eligibleCandidates : eligibleCandidates.slice(0, 6);
   const excludedCounts = useMemo(() => exclusionCounts(details?.candidates ?? []), [details?.candidates]);
   const otherExcludedCount = Object.entries(excludedCounts).reduce(
     (sum, [reason, count]) => ["existing_customer", "previously_visited"].includes(reason) ? sum : sum + count,
     0,
   );
-  const progress = details ? prospectingProgress({
+  // A cancelled search has no progress left to show; the card says it was cancelled.
+  const progress = details && !jobCancelled ? prospectingProgress({
     jobStatus: details.job.status,
     runs: details.runs,
     eligibleCount: details.summary.eligible,
@@ -1191,11 +1210,18 @@ export function XpotProspecting() {
                       <span className="shrink-0 font-bold uppercase tracking-[0.12em] text-indigo-200">{t("activityLabel")}</span>
                       <span className="min-w-0 break-words leading-5 text-pretty text-white/65">{currentActivity}</span>
                     </div>
-                    {["queued", "running"].includes(details.job.status) ? (
-                      <div className="flex justify-end">
-                        <Button type="button" variant="outline" disabled={notificationsEnabled} onClick={() => void enableReadyNotification()} className="w-full text-xs sm:w-auto">
-                          <BellRing />{notificationsEnabled ? t("notificationsEnabled") : t("notifyWhenReady")}
-                        </Button>
+                    {["queued", "running"].includes(details.job.status) || canCancelJob ? (
+                      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                        {canCancelJob ? (
+                          <Button type="button" variant="ghost" onClick={() => setCancelSearchOpen(true)} className="w-full text-xs text-white/60 sm:w-auto" data-testid="button-cancel-search">
+                            <X />{t("cancelSearch")}
+                          </Button>
+                        ) : null}
+                        {["queued", "running"].includes(details.job.status) ? (
+                          <Button type="button" variant="outline" disabled={notificationsEnabled} onClick={() => void enableReadyNotification()} className="w-full text-xs sm:w-auto">
+                            <BellRing />{notificationsEnabled ? t("notificationsEnabled") : t("notifyWhenReady")}
+                          </Button>
+                        ) : null}
                       </div>
                     ) : null}
                   </div>
@@ -1203,7 +1229,8 @@ export function XpotProspecting() {
               ) : null}
 
               {!details.engine.configured ? <InlineAlert tone="warning">{t("engineUnavailable")}</InlineAlert> : null}
-              {details.job.errorMessage ? <InlineAlert tone="error">{details.job.errorMessage}</InlineAlert> : null}
+              {jobCancelled ? <InlineAlert tone="info">{t("searchCancelled")}</InlineAlert>
+                : details.job.errorMessage ? <InlineAlert tone="error">{details.job.errorMessage}</InlineAlert> : null}
               {details.job.expansionState?.currentArea ? <InlineAlert tone="info" title={t("currentArea", { area: details.job.expansionState.currentArea })}>{t("expanding")}</InlineAlert> : null}
 
               {details.runs.length > 1 && ["queued", "running"].includes(details.job.status) ? (
@@ -1275,7 +1302,7 @@ export function XpotProspecting() {
                 <EmptyState icon={SearchX} title={tu("noEligibleTitle")} hint={tu("noEligibleHint")} />
               ) : null}
 
-              {hasFailedRuns ? (
+              {hasFailedRuns && !jobCancelled ? (
                 <Button variant="brand" onClick={() => retryJob.mutate(details.job.id)} disabled={!details.engine.configured} loading={retryJob.isPending} className="w-full">
                   <RotateCw />{t("tryAgain")}
                 </Button>
@@ -1570,6 +1597,18 @@ export function XpotProspecting() {
           </div>
         </section>
       ) : null}
+
+      <ConfirmDialog
+        open={cancelSearchOpen && details !== undefined}
+        onOpenChange={setCancelSearchOpen}
+        tone="danger"
+        title={t("cancelSearchTitle")}
+        description={t("cancelSearchBody")}
+        confirmLabel={t("cancelSearch")}
+        cancelLabel={t("keepSearch")}
+        testId="button-cancel-search-confirm"
+        onConfirm={() => (details ? cancelJob.mutateAsync(details.job.id) : undefined)}
+      />
 
       <ConfirmDialog
         open={stopPendingRemoval !== null}

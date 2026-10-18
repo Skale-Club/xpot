@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, isNotNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNotNull, ne, or, sql } from "drizzle-orm";
 import { db } from "../db.js";
 import { prospectingJobs, prospectingRuns, salesReps, systemEvents } from "#shared/schema.js";
 import type { ActiveRunHealth, HealthReasonCode, HealthVerdict, RecentRun, StuckJob, SystemHealthSnapshot } from "#shared/system-health.js";
@@ -132,8 +132,9 @@ export async function systemHealthSnapshot(now = Date.now()): Promise<SystemHeal
       // pending jobs expired by design and are not stuck.
       or(gte(prospectingJobs.completedAt, since24h), gte(prospectingJobs.createdAt, since24h)),
     )),
+    // A cancelled search marks its route failed too (cancelProspectingJob); that is not a route that failed.
     db.select({ count: sql<number>`count(*)::int` }).from(prospectingJobs)
-      .where(and(eq(prospectingJobs.routePlanningStatus, "failed"), gte(prospectingJobs.updatedAt, since24h))),
+      .where(and(eq(prospectingJobs.routePlanningStatus, "failed"), ne(prospectingJobs.status, "cancelled"), gte(prospectingJobs.updatedAt, since24h))),
     db.select({ source: systemEvents.source, level: systemEvents.level, count: sql<number>`count(*)::int` })
       .from(systemEvents).where(gte(systemEvents.createdAt, since24h)).groupBy(systemEvents.source, systemEvents.level),
     db.select({
