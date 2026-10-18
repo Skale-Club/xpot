@@ -373,6 +373,11 @@ export function createLeadsRouter() {
     if (input.status !== undefined && !isManagerOrAdmin(actor!) && !repModules(actor!.rep).includes("visits")) {
       return res.status(403).json({ code: "module_off", message: "Visits are not enabled for your account." });
     }
+    // Holding a piece there lets a rep edit the company's details, not take it over:
+    // owning it would then let them delete it (DELETE below refuses piece-only access).
+    if (input.ownerRepId !== undefined && input.ownerRepId !== lead.ownerRepId && !(await canAccessLead(actor!, lead, { viaPieces: false }))) {
+      return res.status(403).json({ code: "access_denied", message: "Access denied" });
+    }
 
     const updated = await storage.updateSalesLead(leadId, input);
     res.json({ lead: updated });
