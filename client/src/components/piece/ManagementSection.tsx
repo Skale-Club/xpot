@@ -56,7 +56,7 @@ export function ManagementSection() {
   const cross = pieceCrossLink(viewer, tag);
   const qrBase = `/api/xpot/admin/tags/${tag.id}`;
   const holder = tag.repId !== null ? tag.repName ?? tm("resellerNumber", { id: tag.repId }) : tm("houseStock");
-  const kit = kitShort(tag.kitId);
+  const kit = kitShort(tag.kitId, tag.kitCode);
 
   return (
     <section className={`${CARD} min-w-0 space-y-4 p-4`} data-testid="piece-management">

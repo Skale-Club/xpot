@@ -38,9 +38,10 @@ export function pieceIsSold(tag: { saleId: number | null }): boolean {
   return tag.saleId !== null;
 }
 
-/** The short form a kit is known by on screen (the start of its id), or null outside a kit. */
-export function kitShort(kitId: string | null | undefined): string | null {
-  return kitId ? kitId.slice(0, 8) : null;
+/** The name a kit is known by on screen: its code (K-0001), else the start of its id; null outside a kit. */
+export function kitShort(kitId: string | null | undefined, kitCode?: string | null): string | null {
+  if (!kitId) return null;
+  return kitCode || kitId.slice(0, 8);
 }
 
 export type PieceLocation =
@@ -48,9 +49,9 @@ export type PieceLocation =
   | { kind: "reseller"; repId: number; name: string | null; kit: string | null };
 
 /** Where the piece is: house stock, or with a reseller (in one of their kits, when it came in one). */
-export function pieceLocation(tag: { repId: number | null; repName: string | null; kitId: string | null }): PieceLocation {
+export function pieceLocation(tag: { repId: number | null; repName: string | null; kitId: string | null; kitCode?: string | null }): PieceLocation {
   if (tag.repId === null) return { kind: "house" };
-  return { kind: "reseller", repId: tag.repId, name: tag.repName, kit: kitShort(tag.kitId) };
+  return { kind: "reseller", repId: tag.repId, name: tag.repName, kit: kitShort(tag.kitId, tag.kitCode) };
 }
 
 // ─── Who sees what ────────────────────────────────────────────────────────────

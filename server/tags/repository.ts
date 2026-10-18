@@ -136,6 +136,7 @@ type TagRow = {
   rep_id: number | null;
   rep_name: string | null;
   kit_id: string | null;
+  kit_number: number | null;
   batch_id: string | null;
   batch_code: string | null;
   qr: number;
@@ -176,6 +177,7 @@ function toListItem(r: TagRow): TagListItem {
     repId: r.rep_id,
     repName: r.rep_name,
     kitId: r.kit_id,
+    kitCode: r.kit_number == null ? null : kitCode(Number(r.kit_number)),
     batchId: r.batch_id,
     batchCode: r.batch_code,
     qrInteractions: Number(r.qr ?? 0),
@@ -195,13 +197,14 @@ function tagListQuery(where: SQL, limit: number, offset = 0): SQL {
            t.face, b.face AS batch_face, t.status, t.stock_status, t.ownership_type, t.custodian_rep_id,
            t.internal_use_note, t.nfc_provisioning_status, t.label,
            t.destination_type, t.destination_url, t.lead_id, l.name AS lead_name, t.rep_id, r.display_name AS rep_name,
-           t.kit_id, t.batch_id, b.batch_code, t.activated_at, t.sold_at, t.created_at,
+           t.kit_id, k.kit_number, t.batch_id, b.batch_code, t.activated_at, t.sold_at, t.created_at,
            sold.sale_id, sold.net_total_cents AS sold_price_cents, acquired.acquisition_cost_cents,
            COALESCE(s.qr, 0)::int AS qr, COALESCE(s.nfc, 0)::int AS nfc, s.last_interaction_at
     FROM tags t
     LEFT JOIN sales_leads l ON l.id = t.lead_id
     LEFT JOIN sales_reps r ON r.id = t.rep_id
     LEFT JOIN tag_batches b ON b.id = t.batch_id
+    LEFT JOIN tag_kits k ON k.id = t.kit_id
     LEFT JOIN LATERAL (
       SELECT st.sale_id, si.net_total_cents
       FROM sales_sale_tags st

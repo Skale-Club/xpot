@@ -38,6 +38,8 @@ export interface TagListItem {
   repId: number | null;
   repName: string | null;
   kitId: string | null;
+  /** "K-0001" (shared/tagKits.ts kitCode) when the piece is in a kit. */
+  kitCode: string | null;
   batchId: string | null;
   batchCode: string | null;
   qrInteractions: number;

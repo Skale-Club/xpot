@@ -64,7 +64,9 @@ describe("pieceLocation", () => {
     expect(pieceLocation({ repId: null, repName: null, kitId: "abc" })).toEqual({ kind: "house" });
     expect(pieceLocation({ repId: 3, repName: "Carla", kitId: "0123456789abcdef" })).toEqual({ kind: "reseller", repId: 3, name: "Carla", kit: "01234567" });
     expect(pieceLocation({ repId: 3, repName: null, kitId: null })).toEqual({ kind: "reseller", repId: 3, name: null, kit: null });
+    expect(pieceLocation({ repId: 3, repName: "Carla", kitId: "0123456789abcdef", kitCode: "K-0007" })).toEqual({ kind: "reseller", repId: 3, name: "Carla", kit: "K-0007" });
     expect(kitShort(null)).toBeNull();
+    expect(kitShort(null, "K-0001")).toBeNull();
   });
 });
 
