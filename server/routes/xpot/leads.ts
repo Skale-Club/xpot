@@ -97,7 +97,7 @@ export function createLeadsRouter() {
     if (input.googlePlaceId) {
       const existing = await storage.getSalesLeadByGooglePlace(organizationId, input.googlePlaceId);
       if (existing) {
-        return res.status(409).json({ code: "duplicate_place", message: `This business is already saved as "${existing.name}".`, leadId: existing.id });
+        return res.status(409).json({ code: "duplicate_place", message: `This business is already saved as "${existing.name}".`, params: { name: existing.name }, leadId: existing.id });
       }
     }
 
@@ -209,14 +209,14 @@ export function createLeadsRouter() {
   router.get("/leads/:id/google-profile", async (req, res) => {
     const actor = (req as any).xpotActor as Awaited<ReturnType<typeof ensureXpotRep>>;
     if (rateLimit(`places:profile:${actor!.rep.id}`, { limit: 60, windowMs: 5 * 60_000 })) {
-      return res.status(429).json({ message: "Too many Google profile requests. Please wait a moment." });
+      return res.status(429).json({ code: "too_many_requests", message: "Too many Google profile requests. Please wait a moment." });
     }
     const leadId = Number(req.params.id);
     if (!Number.isFinite(leadId)) return res.status(400).json({ message: "Invalid lead id" });
 
     const lead = await storage.getSalesLead(leadId);
-    if (!lead) return res.status(404).json({ message: "Lead not found" });
-    if (!(await canAccessLead(actor!, lead))) return res.status(403).json({ message: "Access denied" });
+    if (!lead) return res.status(404).json({ code: "lead_not_found", message: "Lead not found" });
+    if (!(await canAccessLead(actor!, lead))) return res.status(403).json({ code: "access_denied", message: "Access denied" });
 
     if (!lead.googlePlaceId) {
       return res.json({ connected: false, rating: null, reviewCount: null, mapsUrl: null, openNow: null });
@@ -247,14 +247,14 @@ export function createLeadsRouter() {
   router.post("/leads/:id/google-profile", async (req, res) => {
     const actor = (req as any).xpotActor as Awaited<ReturnType<typeof ensureXpotRep>>;
     if (rateLimit(`places:profile-link:${actor!.rep.id}`, { limit: 20, windowMs: 60_000 })) {
-      return res.status(429).json({ message: "Too many Google profile updates. Please wait a moment." });
+      return res.status(429).json({ code: "too_many_requests", message: "Too many Google profile updates. Please wait a moment." });
     }
     const leadId = Number(req.params.id);
     if (!Number.isFinite(leadId)) return res.status(400).json({ message: "Invalid lead id" });
 
     const lead = await storage.getSalesLead(leadId);
-    if (!lead) return res.status(404).json({ message: "Lead not found" });
-    if (!(await canAccessLead(actor!, lead))) return res.status(403).json({ message: "Access denied" });
+    if (!lead) return res.status(404).json({ code: "lead_not_found", message: "Lead not found" });
+    if (!(await canAccessLead(actor!, lead))) return res.status(403).json({ code: "access_denied", message: "Access denied" });
 
     const { placeId } = googleProfileLinkSchema.parse(req.body);
     if (!placeId) {
@@ -323,11 +323,11 @@ export function createLeadsRouter() {
 
     const lead = await storage.getSalesLead(leadId);
     if (!lead) {
-      return res.status(404).json({ message: "Lead not found" });
+      return res.status(404).json({ code: "lead_not_found", message: "Lead not found" });
     }
 
     if (!(await canAccessLead(actor!, lead))) {
-      return res.status(403).json({ message: "Access denied" });
+      return res.status(403).json({ code: "access_denied", message: "Access denied" });
     }
 
     // SEG-06: the lead check above is right, but these collections were not
@@ -362,11 +362,11 @@ export function createLeadsRouter() {
 
     const lead = await storage.getSalesLead(leadId);
     if (!lead) {
-      return res.status(404).json({ message: "Lead not found" });
+      return res.status(404).json({ code: "lead_not_found", message: "Lead not found" });
     }
 
     if (!(await canAccessLead(actor!, lead))) {
-      return res.status(403).json({ message: "Access denied" });
+      return res.status(403).json({ code: "access_denied", message: "Access denied" });
     }
     // The pipeline status (prospect → lead → …) is Visits work, like POST /leads/:id/promote; a Tags-only
     // reseller may edit a customer's details but not move it through the funnel.
@@ -384,9 +384,9 @@ export function createLeadsRouter() {
     const leadId = Number(req.params.id);
 
     const lead = await storage.getSalesLead(leadId);
-    if (!lead) return res.status(404).json({ message: "Lead not found" });
+    if (!lead) return res.status(404).json({ code: "lead_not_found", message: "Lead not found" });
     if (!(await canAccessLead(actor!, lead))) {
-      return res.status(403).json({ message: "Access denied" });
+      return res.status(403).json({ code: "access_denied", message: "Access denied" });
     }
 
     const [locations, appSettings] = await Promise.all([
@@ -414,10 +414,10 @@ export function createLeadsRouter() {
     if (!Number.isFinite(leadId)) return res.status(400).json({ message: "Invalid lead id" });
 
     const lead = await storage.getSalesLead(leadId);
-    if (!lead) return res.status(404).json({ message: "Lead not found" });
+    if (!lead) return res.status(404).json({ code: "lead_not_found", message: "Lead not found" });
 
     if (!(await canAccessLead(actor!, lead))) {
-      return res.status(403).json({ message: "Access denied" });
+      return res.status(403).json({ code: "access_denied", message: "Access denied" });
     }
 
     if (lead.status === "prospect") {
@@ -435,10 +435,10 @@ export function createLeadsRouter() {
     if (!Number.isFinite(leadId)) return res.status(400).json({ message: "Invalid lead id" });
 
     const lead = await storage.getSalesLead(leadId);
-    if (!lead) return res.status(404).json({ message: "Lead not found" });
+    if (!lead) return res.status(404).json({ code: "lead_not_found", message: "Lead not found" });
 
     if (!(await canAccessLead(actor!, lead))) {
-      return res.status(403).json({ message: "Access denied" });
+      return res.status(403).json({ code: "access_denied", message: "Access denied" });
     }
 
     if (lead.status !== "prospect") {
@@ -457,11 +457,11 @@ export function createLeadsRouter() {
     if (!Number.isFinite(leadId)) return res.status(400).json({ message: "Invalid lead id" });
 
     const lead = await storage.getSalesLead(leadId);
-    if (!lead) return res.status(404).json({ message: "Lead not found" });
+    if (!lead) return res.status(404).json({ code: "lead_not_found", message: "Lead not found" });
 
     // Holding a piece there lets a rep see and edit a company, not delete someone else's lead.
     if (!(await canAccessLead(actor!, lead, { viaPieces: false }))) {
-      return res.status(403).json({ message: "Access denied" });
+      return res.status(403).json({ code: "access_denied", message: "Access denied" });
     }
 
     const files = await storage.deleteSalesLead(leadId);

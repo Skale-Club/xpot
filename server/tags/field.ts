@@ -14,12 +14,12 @@ import { placeIdFromReviewUrl } from "#shared/reviewLink.js";
 // flow, packed into what a phone needs.
 
 function assertCanWork(actor: TagActor, tag: Pick<Tag, "repId">) {
-  if (!canWorkOnTag(actor, tag)) throw new TagError("This piece is not in your kit.", 403);
+  if (!canWorkOnTag(actor, tag)) throw new TagError("This piece is not in your kit.", 403, "tag_not_yours");
 }
 
 /** An existing lead the actor may sell to. */
 async function pickLead(tx: Tx, actor: TagActor, leadId: number): Promise<number> {
-  if (!(await leadUsableBy(actor, leadId, tx))) throw new TagError("Customer not found", 404);
+  if (!(await leadUsableBy(actor, leadId, tx))) throw new TagError("Customer not found", 404, "lead_not_found");
   return leadId;
 }
 
@@ -42,11 +42,11 @@ export async function quickActivateTag(id: string, input: QuickActivateInput, ac
   let before: Tag | null = null;
   const updated = await db.transaction(async (tx) => {
     const [tag] = await tx.select().from(tags).where(eq(tags.id, id)).for("update");
-    if (!tag) throw new TagError("Tag not found", 404);
+    if (!tag) throw new TagError("Tag not found", 404, "tag_not_found");
     assertCanWork(actor, tag);
     before = tag;
-    if (tag.status === "retired") throw new TagError("A retired tag cannot be edited", 409);
-    if (tag.stockStatus === "pending") throw new TagError(PENDING_PIECE_ERROR, 409);
+    if (tag.status === "retired") throw new TagError("A retired tag cannot be edited", 409, "tag_retired_locked");
+    if (tag.stockStatus === "pending") throw new TagError(PENDING_PIECE_ERROR, 409, "tag_pending");
 
     let leadId = tag.leadId;
     const newName = input.leadName?.trim();
@@ -56,11 +56,11 @@ export async function quickActivateTag(id: string, input: QuickActivateInput, ac
       // A business met in the field belongs to the reseller configuring it.
       leadId = await createLeadForSale(tx, newName, tag.repId ?? actor.repId);
     }
-    if (!leadId) throw new TagError("Choose the customer before activating", 409);
+    if (!leadId) throw new TagError("Choose the customer before activating", 409, "tag_customer_required");
 
     const changingOwner = leadId !== tag.leadId;
     if (changingOwner && tag.leadId && tag.status === "active") {
-      throw new TagError("Disable the tag before moving it to another customer", 409);
+      throw new TagError("Disable the tag before moving it to another customer", 409, "tag_pause_before_move");
     }
 
     const now = new Date();
@@ -145,11 +145,11 @@ export async function changeTagDestination(
   let before: Tag | null = null;
   const updated = await db.transaction(async (tx) => {
     const [tag] = await tx.select().from(tags).where(eq(tags.id, id)).for("update");
-    if (!tag) throw new TagError("Tag not found", 404);
+    if (!tag) throw new TagError("Tag not found", 404, "tag_not_found");
     assertCanWork(actor, tag);
     before = tag;
-    if (tag.status === "retired") throw new TagError("A retired tag cannot be edited", 409);
-    if (!tag.leadId) throw new TagError("Choose the customer before setting the link", 409);
+    if (tag.status === "retired") throw new TagError("A retired tag cannot be edited", 409, "tag_retired_locked");
+    if (!tag.leadId) throw new TagError("Choose the customer before setting the link", 409, "tag_customer_required");
     if (tag.destinationUrl === input.destinationUrl && tag.destinationType === input.destinationType) return tag;
 
     await tx.insert(tagDestinationHistory).values({
@@ -203,10 +203,10 @@ export async function recordPhoneWrite(
   let publicCode = "";
   const result = await db.transaction(async (tx) => {
     const [tag] = await tx.select().from(tags).where(eq(tags.id, id)).for("update");
-    if (!tag) throw new TagError("Tag not found", 404);
+    if (!tag) throw new TagError("Tag not found", 404, "tag_not_found");
     assertCanWork(actor, tag);
     publicCode = tag.publicCode;
-    if (tag.nfcProvisioningStatus === "locked") throw new TagError("This chip is locked and cannot be rewritten", 409);
+    if (tag.nfcProvisioningStatus === "locked") throw new TagError("This chip is locked and cannot be rewritten", 409, "chip_locked");
     const { nfcUrl } = buildTagUrls(baseUrl, tag.publicCode);
     const decision = decidePhoneWrite(nfcUrl, report.readbackUrl);
     const now = new Date();
@@ -255,12 +255,12 @@ export async function recordPhoneLock(id: string, actor: TagActor) {
   let publicCode = "";
   await db.transaction(async (tx) => {
     const [tag] = await tx.select().from(tags).where(eq(tags.id, id)).for("update");
-    if (!tag) throw new TagError("Tag not found", 404);
+    if (!tag) throw new TagError("Tag not found", 404, "tag_not_found");
     assertCanWork(actor, tag);
     publicCode = tag.publicCode;
     if (tag.nfcProvisioningStatus === "locked") return;
     if (tag.nfcProvisioningStatus !== "verified" && tag.nfcProvisioningStatus !== "programmed") {
-      throw new TagError("Write the chip before locking it", 409);
+      throw new TagError("Write the chip before locking it", 409, "chip_not_written");
     }
     const now = new Date();
     await tx.update(tags).set({ nfcProvisioningStatus: "locked", nfcLockedAt: now, updatedAt: now }).where(eq(tags.id, id));

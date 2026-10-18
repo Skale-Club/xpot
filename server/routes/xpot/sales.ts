@@ -74,10 +74,10 @@ export function createSalesRouter() {
   router.get("/sales/:id", async (req, res) => {
     const actor = (req as any).xpotActor as XpotActor;
     const sale = await salesStorage.getSale(Number(req.params.id));
-    if (!sale) return res.status(404).json({ message: "Sale not found" });
+    if (!sale) return res.status(404).json({ code: "sale_not_found", message: "Sale not found" });
     if (!isManagerOrAdmin(actor) && (!(await canViewOrganizationForActor(actor, sale.sale.organizationId)) ||
       (sale.sale.repId !== actor.rep.id && !(await canManageOrganizationForActor(actor, sale.sale.organizationId))))) {
-      return res.status(403).json({ message: "Access denied" });
+      return res.status(403).json({ code: "access_denied", message: "Access denied" });
     }
     res.json(sale);
   });
@@ -94,7 +94,7 @@ export function createSalesRouter() {
     if (input.visitId) {
       const visit = await storage.getSalesVisit(input.visitId);
       if (!visit || visit.leadId !== lead.id) {
-        return res.status(400).json({ message: "Visit does not belong to this lead" });
+        return res.status(400).json({ code: "visit_mismatch", message: "Visit does not belong to this lead" });
       }
     }
 
@@ -112,7 +112,7 @@ export function createSalesRouter() {
       if (item.productId) {
         const priced = await salesStorage.priceProduct(item.productId, item.quantity);
         if (!priced) return res.status(400).json({ message: `Product ${item.productId} not found` });
-        if (!priced.product.isActive) return res.status(400).json({ message: `${priced.product.name} is no longer sold` });
+        if (!priced.product.isActive) return res.status(400).json({ code: "product_not_sold", message: `${priced.product.name} is no longer sold`, params: { product: priced.product.name } });
         description = description || priced.product.name;
         unitPriceCents = unitPriceCents ?? priced.unitPriceCents;
         // Frozen here: editing the product's cost later must not rewrite the
@@ -121,7 +121,7 @@ export function createSalesRouter() {
         currency = priced.product.currency;
       }
       if (unitPriceCents === undefined) {
-        return res.status(400).json({ message: `Unit price required for "${description}"` });
+        return res.status(400).json({ code: "unit_price_required", message: `Unit price required for "${description}"`, params: { item: description } });
       }
       lines.push({
         productId: item.productId ?? null,
@@ -187,13 +187,13 @@ export function createSalesRouter() {
   router.patch("/sales/:id/payment", async (req, res) => {
     const actor = (req as any).xpotActor as XpotActor;
     const existing = await salesStorage.getSale(Number(req.params.id));
-    if (!existing) return res.status(404).json({ message: "Sale not found" });
+    if (!existing) return res.status(404).json({ code: "sale_not_found", message: "Sale not found" });
     if (!isManagerOrAdmin(actor) && (!(await canViewOrganizationForActor(actor, existing.sale.organizationId)) ||
       (existing.sale.repId !== actor.rep.id && !(await canManageOrganizationForActor(actor, existing.sale.organizationId))))) {
-      return res.status(403).json({ message: "Access denied" });
+      return res.status(403).json({ code: "access_denied", message: "Access denied" });
     }
     if (existing.sale.status === "cancelled") {
-      return res.status(400).json({ message: "Sale is cancelled" });
+      return res.status(400).json({ code: "sale_cancelled", message: "Sale is cancelled" });
     }
     const input = xpotSalePaymentSchema.parse(req.body);
     const total = existing.sale.totalCents;
@@ -217,14 +217,14 @@ export function createSalesRouter() {
   router.post("/sales/:id/cancel", async (req, res) => {
     const actor = (req as any).xpotActor as XpotActor;
     const existing = await salesStorage.getSale(Number(req.params.id));
-    if (!existing) return res.status(404).json({ message: "Sale not found" });
+    if (!existing) return res.status(404).json({ code: "sale_not_found", message: "Sale not found" });
     if (!isManagerOrAdmin(actor) && (!(await canViewOrganizationForActor(actor, existing.sale.organizationId)) ||
       (existing.sale.repId !== actor.rep.id && !(await canManageOrganizationForActor(actor, existing.sale.organizationId))))) {
-      return res.status(403).json({ message: "Access denied" });
+      return res.status(403).json({ code: "access_denied", message: "Access denied" });
     }
     if (existing.sale.status === "cancelled") return res.json(existing);
     if (existing.sale.kind === "consignment_settlement") {
-      return res.status(400).json({ message: "Settlement sales cannot be cancelled. Record a stock adjustment on the consignment instead." });
+      return res.status(400).json({ code: "settlement_sale_not_cancellable", message: "Settlement sales cannot be cancelled. Record a stock adjustment on the consignment instead." });
     }
     const { reason } = xpotSaleCancelSchema.parse(req.body ?? {});
     await salesStorage.updateSale(existing.sale.id, {

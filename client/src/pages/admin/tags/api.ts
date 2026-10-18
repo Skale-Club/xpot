@@ -1,9 +1,10 @@
 import { queryClient } from "@/lib/queryClient";
 import { translate } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
+import { serverErrorText } from "@/lib/apiErrors";
 
 // Fetch helpers for the Tags admin (/api/xpot/admin/tag*). The server answers
-// errors as JSON { message }; only the message reaches the admin.
+// errors as JSON { message, code? }; the code is worded in the admin's language.
 
 export class AdminHttpError extends Error {
   status: number;
@@ -24,8 +25,7 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
   if (!res.ok) {
     let message = translate(commonMessages, "requestFailed");
     try {
-      const data = (await res.json()) as { message?: string };
-      if (data?.message) message = data.message;
+      message = serverErrorText(await res.json(), message);
     } catch {
       // not JSON
     }

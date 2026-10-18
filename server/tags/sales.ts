@@ -25,7 +25,7 @@ import { salesStorage } from "../storage-sales.js";
 import { leadUsableBy } from "./repository.js";
 
 export class TagSaleError extends Error {
-  constructor(message: string, public status = 400, public code = "tag_sale_invalid") {
+  constructor(message: string, public status = 400, public code = "tag_sale_invalid", public params?: Record<string, string | number>) {
     super(message);
     this.name = "TagSaleError";
   }
@@ -109,7 +109,7 @@ export async function createTagSale(input: TagSaleCreateInput, actor: TagActor, 
       .where(and(inArray(salesSaleTags.tagId, allTagIds), eq(salesSaleTags.status, "active")));
     if (activeLinks.length) {
       const codes = activeLinks.map((link) => tagsById.get(link.tagId)?.publicCode ?? link.tagId);
-      throw new TagSaleError(`Already sold: ${codes.join(", ")}`, 409, "tag_already_sold");
+      throw new TagSaleError(`Already sold: ${codes.join(", ")}`, 409, "tag_already_sold", { codes: codes.join(", ") });
     }
 
     const acquisitionRows = await tx
@@ -155,23 +155,23 @@ export async function createTagSale(input: TagSaleCreateInput, actor: TagActor, 
         const tag = tagsById.get(tagId)!;
         const effectiveProductId = tag.ownProductId ?? tag.batchProductId;
         if (effectiveProductId !== line.salesProductId) {
-          throw new TagSaleError(`Piece ${tag.publicCode} is not mapped to ${product.name}`, 409, "tag_product_mismatch");
+          throw new TagSaleError(`Piece ${tag.publicCode} is not mapped to ${product.name}`, 409, "tag_product_mismatch", { code: tag.publicCode, product: product.name });
         }
         if (tag.repId !== null && tag.repId !== sellerRepId) {
-          throw new TagSaleError(`Piece ${tag.publicCode} belongs to another seller`, 403, "tag_owner_mismatch");
+          throw new TagSaleError(`Piece ${tag.publicCode} belongs to another seller`, 403, "tag_owner_mismatch", { code: tag.publicCode });
         }
         if (tag.status === "retired") {
-          throw new TagSaleError(`Piece ${tag.publicCode} is retired`, 409, "tag_retired");
+          throw new TagSaleError(`Piece ${tag.publicCode} is retired`, 409, "tag_retired", { code: tag.publicCode });
         }
         if (tag.stockStatus !== "available") {
-          throw new TagSaleError(`Piece ${tag.publicCode} is not available`, 409, "tag_not_available");
+          throw new TagSaleError(`Piece ${tag.publicCode} is not available`, 409, "tag_not_available", { code: tag.publicCode });
         }
         if (tag.leadId !== null && tag.leadId !== input.leadId) {
-          throw new TagSaleError(`Piece ${tag.publicCode} is assigned to another customer`, 409, "tag_lead_mismatch");
+          throw new TagSaleError(`Piece ${tag.publicCode} is assigned to another customer`, 409, "tag_lead_mismatch", { code: tag.publicCode });
         }
         const acquisition = acquisitionsByTag.get(tagId);
         if (seller.costPolicy === "acquisition" && acquisition?.acquisitionRepId !== sellerRepId) {
-          throw new TagSaleError(`Acquisition cost is missing for ${tag.publicCode}`, 409, "tag_cost_missing");
+          throw new TagSaleError(`Acquisition cost is missing for ${tag.publicCode}`, 409, "tag_cost_missing", { code: tag.publicCode });
         }
         let cost;
         try {
@@ -181,7 +181,7 @@ export async function createTagSale(input: TagSaleCreateInput, actor: TagActor, 
             overrideCostCents: acquisition?.overrideCostCents ?? null,
           });
         } catch {
-          throw new TagSaleError(`Acquisition cost is missing for ${tag.publicCode}`, 409, "tag_cost_missing");
+          throw new TagSaleError(`Acquisition cost is missing for ${tag.publicCode}`, 409, "tag_cost_missing", { code: tag.publicCode });
         }
         units.push({
           tagId,

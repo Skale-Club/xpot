@@ -39,14 +39,14 @@ import { resolveTagFace } from "#shared/tagFace.js";
 import type { TagStockMetric } from "#shared/tagMetrics.js";
 import { parseTagIntakeScan } from "#shared/tagIntake.js";
 import { generateUniqueCodes } from "./codes.js";
-import { TagError, pgError } from "./errors.js";
+import { TagError, pgError, tagErrorBody } from "./errors.js";
 import { journeyContext, recordJourney } from "./journey.js";
 import { countMetricSql, stockMetricSql } from "./metrics.js";
 import type { PublicTag } from "./publicHandler.js";
 
 // TagError and pgError live in ./errors.ts (journey.ts needs them too, and
 // the repository imports journey.ts); re-exported so existing imports work.
-export { TagError, pgError };
+export { TagError, pgError, tagErrorBody };
 
 export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -318,7 +318,7 @@ export async function getTagDetail(id: string, baseUrl: string): Promise<TagDeta
 
 export async function lockTag(tx: Tx, id: string): Promise<Tag> {
   const [tag] = await tx.select().from(tags).where(eq(tags.id, id)).for("update");
-  if (!tag) throw new TagError("Tag not found", 404);
+  if (!tag) throw new TagError("Tag not found", 404, "tag_not_found");
   return tag;
 }
 
@@ -367,13 +367,13 @@ export async function updateTag(id: string, patch: TagUpdate, userId: string | n
   const updated = await db.transaction(async (tx) => {
     const tag = await lockTag(tx, id);
     before = tag;
-    if (tag.status === "retired") throw new TagError("A retired tag cannot be edited");
+    if (tag.status === "retired") throw new TagError("A retired tag cannot be edited", 409, "tag_retired_locked");
     const next = {
       destinationUrl: patch.destinationUrl !== undefined ? patch.destinationUrl : tag.destinationUrl,
       destinationType: patch.destinationType !== undefined ? patch.destinationType : tag.destinationType,
     };
     if (tag.status === "active" && (!next.destinationUrl || !next.destinationType)) {
-      throw new TagError("An active tag must keep a destination; disable it first");
+      throw new TagError("An active tag must keep a destination; disable it first", 400, "tag_active_needs_destination");
     }
     if (patch.productType && patch.productType !== tag.productType && tag.status !== "inventory") {
       throw new TagError("Product type can only change while the tag is in inventory");
@@ -383,7 +383,7 @@ export async function updateTag(id: string, patch: TagUpdate, userId: string | n
       const [activeSale] = await tx.select({ id: salesSaleTags.id }).from(salesSaleTags)
         .where(and(eq(salesSaleTags.tagId, tag.id), eq(salesSaleTags.status, "active")))
         .limit(1);
-      if (activeSale) throw new TagError("A sold piece keeps the catalog product it was sold as", 409);
+      if (activeSale) throw new TagError("A sold piece keeps the catalog product it was sold as", 409, "tag_sold_keeps_product");
     }
     await writeHistory(tx, tag, next, userId, patch.reason ?? null);
     const [updated] = await tx
@@ -435,7 +435,7 @@ export async function transitionTag(
     const tag = await lockTag(tx, id);
     fromStatus = tag.status;
     const plan = planTransition(tag, action);
-    if (!plan.ok) throw new TagError(plan.error, 409);
+    if (!plan.ok) throw new TagError(plan.error, 409, plan.code);
     const now = new Date();
     const set: Partial<Tag> = { status: plan.status, updatedAt: now };
     if (action === "activate") {
@@ -447,7 +447,7 @@ export async function transitionTag(
       const [activeSale] = await tx.select({ id: salesSaleTags.id }).from(salesSaleTags)
         .where(and(eq(salesSaleTags.tagId, tag.id), eq(salesSaleTags.status, "active")))
         .limit(1);
-      if (activeSale) throw new TagError("Cancel the financial sale before clearing this piece's customer", 409);
+      if (activeSale) throw new TagError("Cancel the financial sale before clearing this piece's customer", 409, "tag_sale_blocks_clear");
       // Back to unconfigured stock in the same hands. The previous customer's
       // destination must not follow the piece.
       Object.assign(set, {
@@ -492,21 +492,21 @@ export async function assignTag(
     const tag = await lockTag(tx, id);
     fromStatus = tag.status;
     const plan = planTransition(tag, "assign");
-    if (!plan.ok) throw new TagError(plan.error, 409);
+    if (!plan.ok) throw new TagError(plan.error, 409, plan.code);
     let leadId: number;
     if (target.leadId) {
       const [lead] = await tx.select({ id: salesLeads.id, name: salesLeads.name }).from(salesLeads).where(eq(salesLeads.id, target.leadId));
-      if (!lead) throw new TagError("Customer not found", 404);
+      if (!lead) throw new TagError("Customer not found", 404, "lead_not_found");
       leadId = lead.id;
       leadLabel = lead.name;
     } else if (target.leadName?.trim()) {
       // Checked before creating anything, so a refused move leaves no orphan lead.
-      if (tag.leadId && tag.status === "active") throw new TagError("Disable the tag before moving it to another customer", 409);
+      if (tag.leadId && tag.status === "active") throw new TagError("Disable the tag before moving it to another customer", 409, "tag_pause_before_move");
       leadId = await createLeadForSale(tx, target.leadName.trim(), tag.repId ?? actorRepId);
       leadLabel = target.leadName.trim();
       newLead = true;
     } else {
-      throw new TagError("Choose the customer", 400);
+      throw new TagError("Choose the customer", 400, "tag_customer_required");
     }
     const changingOwner = tag.leadId !== leadId;
     const set: Partial<Tag> = {
@@ -517,7 +517,7 @@ export async function assignTag(
     };
     // A new owner never inherits the old owner's destination.
     if (changingOwner && tag.leadId && (tag.destinationUrl || tag.destinationType)) {
-      if (tag.status === "active") throw new TagError("Disable the tag before moving it to another customer", 409);
+      if (tag.status === "active") throw new TagError("Disable the tag before moving it to another customer", 409, "tag_pause_before_move");
       Object.assign(set, { destinationUrl: null, destinationType: null, utmEnabled: false, utmCampaign: null });
       await writeHistory(tx, tag, { destinationUrl: null, destinationType: null }, userId, "Re-assigned to another customer");
     }
@@ -591,9 +591,9 @@ export async function setTagRep(id: string, repId: number | null, userId: string
     const [activeSale] = await tx.select({ id: salesSaleTags.id }).from(salesSaleTags)
       .where(and(eq(salesSaleTags.tagId, tag.id), eq(salesSaleTags.status, "active")))
       .limit(1);
-    if (activeSale) throw new TagError("A sold piece stays with its seller; cancel the sale before moving it", 409);
-    if (tag.stockStatus !== "available") throw new TagError(`A piece in ${tag.stockStatus} stock cannot be moved`, 409);
-    if (tag.status !== "inventory") throw new TagError("Clear the customer before moving this piece", 409);
+    if (activeSale) throw new TagError("A sold piece stays with its seller; cancel the sale before moving it", 409, "tag_sold_stays");
+    if (tag.stockStatus !== "available") throw new TagError(`A piece in ${tag.stockStatus} stock cannot be moved`, 409, "tag_stock_cannot_move");
+    if (tag.status !== "inventory") throw new TagError("Clear the customer before moving this piece", 409, "tag_clear_customer_first");
     previous = { repId: tag.repId, name: await names(tag.repId) };
     next = await names(repId);
     const now = new Date();
@@ -735,10 +735,10 @@ export async function deliverKit(input: KitInput, userId: string | null, source:
         .for("update");
       const found = new Set(picked.map((t) => t.publicCode));
       const missing = codes.filter((c) => !found.has(c));
-      if (missing.length) throw new TagError(`Unknown codes: ${missing.join(", ")}`, 404);
+      if (missing.length) throw new TagError(`Unknown codes: ${missing.join(", ")}`, 404, "tag_codes_unknown", { codes: missing.join(", ") });
       const unavailable = picked.filter((t) => t.status !== "inventory" || t.stockStatus !== "available" || t.repId !== null ||
         (input.sourceOrganizationId !== undefined && t.organizationId !== input.sourceOrganizationId)).map((t) => t.publicCode);
-      if (unavailable.length) throw new TagError(`Not in house stock: ${unavailable.join(", ")}`, 409);
+      if (unavailable.length) throw new TagError(`Not in house stock: ${unavailable.join(", ")}`, 409, "tag_not_house_stock", { codes: unavailable.join(", ") });
     } else if (input.batchId && input.quantity) {
       picked = await tx
         .select({
@@ -758,10 +758,10 @@ export async function deliverKit(input: KitInput, userId: string | null, source:
         .limit(input.quantity)
         .for("update");
       if (picked.length < input.quantity) {
-        throw new TagError(`Only ${picked.length} unsold pieces left in house stock for that batch`, 409);
+        throw new TagError(`Only ${picked.length} unsold pieces left in house stock for that batch`, 409, "kit_batch_short", { count: picked.length });
       }
     } else {
-      throw new TagError("Choose the pieces: codes, or a batch and a quantity");
+      throw new TagError("Choose the pieces: codes, or a batch and a quantity", 400, "kit_pieces_required");
     }
 
     const [kit] = await tx
@@ -925,16 +925,16 @@ export async function returnToHouse(
       .for("update");
     const found = new Set(picked.map((t) => t.publicCode));
     const missing = codes.filter((c) => !found.has(c));
-    if (missing.length) throw new TagError(`Unknown codes: ${missing.join(", ")}`, 404);
+    if (missing.length) throw new TagError(`Unknown codes: ${missing.join(", ")}`, 404, "tag_codes_unknown", { codes: missing.join(", ") });
     const activeSales = picked.length ? await tx.select({ tagId: salesSaleTags.tagId }).from(salesSaleTags)
       .where(and(inArray(salesSaleTags.tagId, picked.map((tag) => tag.id)), eq(salesSaleTags.status, "active"))) : [];
     if (activeSales.length) {
       const soldIds = new Set(activeSales.map((sale) => sale.tagId));
       const soldCodes = picked.filter((tag) => soldIds.has(tag.id)).map((tag) => tag.publicCode);
-      throw new TagError(`Already sold, cannot return: ${soldCodes.join(", ")}`, 409);
+      throw new TagError(`Already sold, cannot return: ${soldCodes.join(", ")}`, 409, "return_already_sold", { codes: soldCodes.join(", ") });
     }
     const configured = picked.filter((t) => t.status !== "inventory" || t.stockStatus !== "available").map((t) => t.publicCode);
-    if (configured.length) throw new TagError(`Clear the customer of these set-up pieces before returning them: ${configured.join(", ")}`, 409);
+    if (configured.length) throw new TagError(`Clear the customer of these set-up pieces before returning them: ${configured.join(", ")}`, 409, "return_configured", { codes: configured.join(", ") });
     const alreadyInHouse = picked.filter((t) => t.repId === null).map((t) => t.publicCode);
     const moving = picked.filter((t) => t.repId !== null);
     if (moving.length) {
@@ -1065,7 +1065,7 @@ export async function createBatch(input: BatchInput, userId: string | null, sour
     }, journeyContext(userId, source));
     return batch;
   } catch (err) {
-    if (pgError(err).code === "23505") throw new TagError(`Batch code ${batchCode} already exists`, 409);
+    if (pgError(err).code === "23505") throw new TagError(`Batch code ${batchCode} already exists`, 409, "batch_code_taken", { code: batchCode });
     throw err;
   }
 }
@@ -1143,7 +1143,7 @@ async function createIssuedBatch(input: BatchInput, userId: string | null, sourc
       const pg = pgError(err);
       if (pg.code === "23505" && pg.constraint === "tags_public_code_unique" && attempt < 3 && !pinned) continue;
       if (pg.code === "23505" && pg.constraint === "tags_public_code_unique") throw new TagError("Public codes already exist", 409);
-      if (pg.code === "23505") throw new TagError(`Batch code ${batchCode} already exists`, 409);
+      if (pg.code === "23505") throw new TagError(`Batch code ${batchCode} already exists`, 409, "batch_code_taken", { code: batchCode });
       throw err;
     }
   }
@@ -1178,8 +1178,8 @@ export async function scanTagIntoBatch(
 
   const result = await db.transaction(async (tx) => {
     const [batch] = await tx.select().from(tagBatches).where(eq(tagBatches.id, batchId)).for("update");
-    if (!batch) throw new TagError("Batch not found", 404);
-    if (batch.status !== "open") throw new TagError("This batch is closed and no longer accepts scans", 409);
+    if (!batch) throw new TagError("Batch not found", 404, "batch_not_found");
+    if (batch.status !== "open") throw new TagError("This batch is closed and no longer accepts scans", 409, "batch_closed");
 
     if (idempotencyKey && userId) {
       const [sameRequest] = await tx.select().from(tags).where(and(
@@ -1188,7 +1188,7 @@ export async function scanTagIntoBatch(
       )).limit(1);
       if (sameRequest) {
         if (sameRequest.batchId !== batchId || sameRequest.publicCode !== parsed.publicCode) {
-          throw new TagError("This scan request was already used for another piece", 409);
+          throw new TagError("This scan request was already used for another piece", 409, "scan_reused");
         }
         return { tag: sameRequest, batchCount: batch.quantity, receivedCount: await receivedCountOf(tx, batchId), alreadyRegistered: true };
       }
@@ -1196,7 +1196,7 @@ export async function scanTagIntoBatch(
 
     const [existing] = await tx.select().from(tags).where(eq(tags.publicCode, parsed.publicCode)).for("update");
     if (existing) {
-      if (existing.batchId !== batchId) throw new TagError(`Piece ${parsed.publicCode} already belongs to another batch`, 409);
+      if (existing.batchId !== batchId) throw new TagError(`Piece ${parsed.publicCode} already belongs to another batch`, 409, "piece_other_batch", { code: parsed.publicCode });
       if (existing.stockStatus !== "pending") {
         return { tag: existing, batchCount: batch.quantity, receivedCount: await receivedCountOf(tx, batchId), alreadyRegistered: true };
       }
@@ -1228,7 +1228,7 @@ export async function scanTagIntoBatch(
       return { tag: received, batchCount: batch.quantity, receivedCount: await receivedCountOf(tx, batchId), alreadyRegistered: false };
     }
     if (batch.codeSource === "issued") {
-      throw new TagError(`Piece ${parsed.publicCode} was not issued to this batch`, 409);
+      throw new TagError(`Piece ${parsed.publicCode} was not issued to this batch`, 409, "piece_not_in_batch", { code: parsed.publicCode });
     }
 
     const now = new Date();
@@ -1388,7 +1388,7 @@ export async function markTagDamaged(
     if (tag.status !== "inventory" || tag.repId !== null || tag.leadId !== null) {
       throw new TagError("Only unassigned company stock can be marked damaged", 409);
     }
-    if (tag.stockStatus === "damaged") throw new TagError("This piece is already marked damaged", 409);
+    if (tag.stockStatus === "damaged") throw new TagError("This piece is already marked damaged", 409, "tag_already_damaged");
     if (tag.stockStatus !== "available" && tag.stockStatus !== "pending") {
       throw new TagError(`A piece in ${tag.stockStatus} stock cannot be marked damaged`, 409);
     }
@@ -1434,7 +1434,7 @@ export async function setBatchIntakeStatus(
 ) {
   const now = new Date();
   const [previous] = await db.select().from(tagBatches).where(eq(tagBatches.id, id)).limit(1);
-  if (!previous) throw new TagError("Batch not found", 404);
+  if (!previous) throw new TagError("Batch not found", 404, "batch_not_found");
   if (previous.status === "cancelled") throw new TagError("A cancelled batch cannot be changed", 409);
   if (previous.status === status) return previous;
   const [batch] = await db.update(tagBatches).set(status === "closed" ? {
@@ -1468,7 +1468,7 @@ export async function updateBatch(
   source: JourneySource = "admin",
 ) {
   const [previous] = await db.select({ status: tagBatches.status, salesProductId: tagBatches.salesProductId }).from(tagBatches).where(eq(tagBatches.id, id)).limit(1);
-  if (!previous) throw new TagError("Batch not found", 404);
+  if (!previous) throw new TagError("Batch not found", 404, "batch_not_found");
   const batch = await db.transaction(async (tx) => {
     const productChanged = input.salesProductId !== undefined && input.salesProductId !== previous.salesProductId;
     if (productChanged) await assertPhysicalProduct(tx, input.salesProductId!);
@@ -1495,7 +1495,7 @@ export async function updateBatch(
     }
     return updated;
   });
-  if (!batch) throw new TagError("Batch not found", 404);
+  if (!batch) throw new TagError("Batch not found", 404, "batch_not_found");
   if (input.status && input.status !== previous.status) {
     await recordJourney({
       kind: "execution",

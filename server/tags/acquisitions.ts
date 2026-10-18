@@ -114,7 +114,7 @@ async function lockFulfillmentTags(tx: Tx, rawCodes: string[]) {
     .for("update");
   if (rows.length !== normalized.length) throw new TagSaleError("One or more pieces were not found", 404, "tag_not_found");
   const unavailable = rows.filter((tag) => tag.status !== "inventory" || tag.stockStatus !== "available" || tag.repId !== null);
-  if (unavailable.length) throw new TagSaleError(`Not in house stock: ${unavailable.map((tag) => tag.publicCode).join(", ")}`, 409, "tag_not_house_stock");
+  if (unavailable.length) throw new TagSaleError(`Not in house stock: ${unavailable.map((tag) => tag.publicCode).join(", ")}`, 409, "tag_not_house_stock", { codes: unavailable.map((tag) => tag.publicCode).join(", ") });
   return rows;
 }
 
@@ -126,7 +126,7 @@ export async function fulfillAcquisition(acquisitionId: string, codes: string[],
     if (acquisition.status === "cancelled") throw new TagSaleError("A cancelled acquisition cannot be fulfilled", 409, "acquisition_cancelled");
     const lines = await tx.select().from(tagAcquisitionLines).where(eq(tagAcquisitionLines.acquisitionId, acquisitionId)).orderBy(asc(tagAcquisitionLines.createdAt));
     const quantity = lines.reduce((sum, line) => sum + line.quantity, 0);
-    if (codes.length !== quantity) throw new TagSaleError(`This acquisition needs exactly ${quantity} pieces`, 400, "acquisition_quantity_mismatch");
+    if (codes.length !== quantity) throw new TagSaleError(`This acquisition needs exactly ${quantity} pieces`, 400, "acquisition_quantity_mismatch", { count: quantity });
     const picked = await lockFulfillmentTags(tx, codes);
     const organizationId = await organizationIdForRep(acquisition.repId);
 

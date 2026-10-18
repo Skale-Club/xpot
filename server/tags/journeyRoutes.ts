@@ -9,7 +9,7 @@ import {
   PLAN_STATUSES,
 } from "#shared/tagJourney.js";
 import { actorOf, requireTagAdmin } from "./access.js";
-import { TagError } from "./errors.js";
+import { TagError, tagErrorBody } from "./errors.js";
 import * as journey from "./journey.js";
 
 // Tags Journey admin API: /api/xpot/admin/tag-journey* (the timeline) and
@@ -130,7 +130,7 @@ function adminContext(req: Request): journey.JourneyContext {
 }
 
 function fail(res: Response, err: unknown, fallback: string) {
-  if (err instanceof TagError) return res.status(err.status).json({ message: err.message });
+  if (err instanceof TagError) return res.status(err.status).json(tagErrorBody(err));
   if (err instanceof z.ZodError) {
     return res.status(400).json({ message: err.issues[0]?.message ?? "Validation error", errors: err.errors });
   }

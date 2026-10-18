@@ -22,11 +22,11 @@ export function createConsignmentsRouter() {
     const actor = req.xpotActor as XpotActor;
     const row = await salesStorage.getConsignment(id);
     if (!row) {
-      res.status(404).json({ message: "Consignment not found" });
+      res.status(404).json({ code: "consignment_not_found", message: "Consignment not found" });
       return null;
     }
     if (!isManagerOrAdmin(actor) && row.consignment.repId !== actor.rep.id) {
-      res.status(403).json({ message: "Access denied" });
+      res.status(403).json({ code: "access_denied", message: "Access denied" });
       return null;
     }
     return row;
@@ -36,7 +36,7 @@ export function createConsignmentsRouter() {
     if (!visitId) return true;
     const visit = await storage.getSalesVisit(visitId);
     if (!visit || visit.leadId !== leadId) {
-      res.status(400).json({ message: "Visit does not belong to this lead" });
+      res.status(400).json({ code: "visit_mismatch", message: "Visit does not belong to this lead" });
       return false;
     }
     return true;
@@ -72,10 +72,10 @@ export function createConsignmentsRouter() {
     if (!(await assertVisitForLead(res, input.visitId, lead.id))) return;
 
     const priced = await salesStorage.priceProduct(input.productId, input.quantity);
-    if (!priced) return res.status(404).json({ message: "Product not found" });
-    if (!priced.product.isActive) return res.status(400).json({ message: `${priced.product.name} is no longer sold` });
+    if (!priced) return res.status(404).json({ code: "product_not_found", message: "Product not found" });
+    if (!priced.product.isActive) return res.status(400).json({ code: "product_not_sold", message: `${priced.product.name} is no longer sold`, params: { product: priced.product.name } });
     if (!priced.product.consignable) {
-      return res.status(400).json({ message: `${priced.product.name} is not set up for consignment. Enable it in Admin › Products.` });
+      return res.status(400).json({ code: "product_not_consignable", message: `${priced.product.name} is not set up for consignment. Enable it in Admin › Products.`, params: { product: priced.product.name } });
     }
 
     const result = await salesStorage.runDeposit({
@@ -187,7 +187,7 @@ export function createConsignmentsRouter() {
     const row = await loadOwnConsignment(req, res, Number(req.params.id));
     if (!row) return;
     if (row.consignment.quantityOnHand > 0) {
-      return res.status(400).json({ message: `${row.consignment.quantityOnHand} units still on record. Return or settle them first.` });
+      return res.status(400).json({ code: "consignment_units_left", message: `${row.consignment.quantityOnHand} units still on record. Return or settle them first.`, params: { count: row.consignment.quantityOnHand } });
     }
     await salesStorage.closeConsignment(row.consignment.id);
     res.json(await salesStorage.getConsignment(row.consignment.id));

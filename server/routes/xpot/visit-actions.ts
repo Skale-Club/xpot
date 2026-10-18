@@ -43,11 +43,11 @@ export function createVisitActionsRouter() {
     const actor = req.xpotActor as XpotActor;
     const visit = await storage.getSalesVisit(visitId);
     if (!visit) {
-      res.status(404).json({ message: "Visit not found" });
+      res.status(404).json({ code: "visit_not_found", message: "Visit not found" });
       return null;
     }
     if (!isManagerOrAdmin(actor) && visit.repId !== actor.rep.id) {
-      res.status(403).json({ message: "Access denied" });
+      res.status(403).json({ code: "access_denied", message: "Access denied" });
       return null;
     }
     return visit;
