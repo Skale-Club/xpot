@@ -75,8 +75,8 @@ export default function TagScreen({ code, onClose }: {
     [qc, code], // eslint-disable-line react-hooks/exhaustive-deps
   );
   const viewer = useMemo<PieceViewer>(
-    () => ({ surface: "field", canManage: access.canManage, isAdmin: access.isSuperAdmin, hasVisits: modules.includes("visits") }),
-    [access.canManage, access.isSuperAdmin, modules],
+    () => ({ surface: "field", canManage: access.canManage, isAdmin: access.isSuperAdmin, hasVisits: modules.includes("visits"), repId: access.me?.rep.id ?? null }),
+    [access.canManage, access.isSuperAdmin, modules, access.me?.rep.id],
   );
 
   const closeButton = onClose ? (

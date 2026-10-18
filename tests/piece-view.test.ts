@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { TagHistoryEntry, TagJourneyEntryItem, TagPieceSale, TagStockMovementItem } from "../shared/tagsApi";
 import {
+  canCancelPieceSale,
   fillDailySeries,
   kitShort,
   mergePieceTimeline,
@@ -181,5 +182,27 @@ describe("fillDailySeries", () => {
   it("gives the rows back as they are when the window makes no sense", () => {
     const daily = [{ day: "2026-10-02", qr: 1, nfc: 0, approxUnique: 1 }];
     expect(fillDailySeries("bad", "2026-10-03T00:00:00.000Z", daily)).toEqual(daily);
+  });
+});
+
+describe("canCancelPieceSale", () => {
+  const seller: PieceViewer = { surface: "field", canManage: false, isAdmin: false, hasVisits: true, repId: 1 };
+  const ownSale = sale(9, "2026-10-10T10:00:00Z");
+
+  it("lets a manager cancel any sale", () => {
+    expect(canCancelPieceSale({ ...seller, canManage: true, repId: 5 }, ownSale)).toBe(true);
+    expect(canCancelPieceSale({ ...seller, canManage: true, repId: 5 }, undefined)).toBe(true);
+  });
+
+  it("lets the seller cancel their own sale when they have Visits", () => {
+    expect(canCancelPieceSale(seller, ownSale)).toBe(true);
+    // The server's cancel sits in the Visits module.
+    expect(canCancelPieceSale({ ...seller, hasVisits: false }, ownSale)).toBe(false);
+  });
+
+  it("never someone else's sale, nor one not loaded yet", () => {
+    expect(canCancelPieceSale({ ...seller, repId: 2 }, ownSale)).toBe(false);
+    expect(canCancelPieceSale({ ...seller, repId: null }, ownSale)).toBe(false);
+    expect(canCancelPieceSale(seller, undefined)).toBe(false);
   });
 });
