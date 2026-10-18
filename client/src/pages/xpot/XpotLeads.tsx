@@ -5,8 +5,6 @@ import {
   Search,
   Trash2,
   LogIn,
-  X,
-  MapPinned,
   Building2,
   Nfc,
   MoreVertical,
@@ -27,28 +25,22 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useXpotQueries } from "./hooks/useXpotQueries";
 import { leadMatchesSearch, useLeads } from "./hooks/useLeads";
 import { useToast } from "@/hooks/use-toast";
-import { usePlaceSearch } from "./usePlaceSearch";
-import { useXpotShared } from "./hooks/useXpotShared";
 import { apiRequest } from "@/lib/queryClient";
 import { DollarSign } from "lucide-react";
 import { LeadSalesPanel } from "./components/sales/LeadSalesPanel";
 import { SheetDialog } from "./components/sales/ui";
 import { Loader2 } from '@/components/ui/loader';
-import { GoogleLogo } from "@/components/ui/google-logo";
-import { StateSelect } from "@/components/StateSelect";
-import { parseAddress, findMatchingLead } from "./utils";
-import type { EnrichedSalesVisit, FullSalesLead, GooglePlaceResult } from "./types";
+import type { EnrichedSalesVisit, FullSalesLead } from "./types";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { BottomSheet } from "@/pages/tags/ui";
 import { LeadsTable } from "./components/leads/LeadsTable";
 import { LeadDetailPane } from "./components/leads/LeadDetailPane";
+import { CreateLeadDialog } from "./components/CreateLeadDialog";
 import { useT } from "@/i18n";
 import { leadsMessages } from "@/i18n/messages/leads";
-import { checkinMessages } from "@/i18n/messages/checkin";
 import { BRAND_GRADIENT, GLASS } from "@/components/xpot/surface";
 import { EmptyState } from "@/components/xpot/EmptyState";
 import { ListSkeleton } from "@/components/xpot/ListSkeleton";
@@ -60,261 +52,6 @@ import { selectLeadForDetail } from "./lead-detail-selection";
 import { followUpDueTime, isWorkedCompany, needsFollowUp } from "./visitRules";
 import { isFinishedVisitStatus } from "@shared/visit-status";
 
-
-// ─── Shared Add Company Dialog ────────────────────────────────────────────────
-
-const MANUAL_FIELD_KEYS = {
-  name: "fieldBusinessRequired",
-  phone: "fieldPhone",
-  email: "fieldEmail",
-  website: "fieldWebsite",
-  industry: "fieldIndustry",
-  address: "fieldAddress",
-  city: "fieldCity",
-  state: "fieldState",
-} as const;
-
-function AddCompanyDialog({
-  open,
-  onOpenChange,
-  allLeads,
-}: {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-  allLeads: FullSalesLead[];
-}) {
-  const { toast } = useToast();
-  const t = useT(leadsMessages);
-  const tCheckin = useT(checkinMessages);
-  const { geoState, loadCurrentLocation, invalidateXpotData } = useXpotShared();
-  const [search, setSearch] = useState("");
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [manualForm, setManualForm] = useState<null | {
-    name: string; phone: string; email: string; website: string;
-    industry: string; address: string; city: string; state: string;
-  }>(null);
-
-  const placeQuery = usePlaceSearch(search, open, geoState);
-
-  const inputCls = "w-full h-10 rounded-xl px-3 text-sm text-white placeholder:text-white/25 focus:outline-none transition-colors";
-  const inputStyle = { background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.09)" };
-  async function createFromPayload(payload: any) {
-    setSaving(true);
-    try {
-      await apiRequest("POST", "/api/xpot/leads", { ...payload, status: "lead", source: payload.source || "manual" });
-      await invalidateXpotData();
-      toast({ title: t("leadAdded"), variant: "success" });
-      onOpenChange(false);
-      setSearch("");
-      setManualForm(null);
-    } catch (err: any) {
-      toast({ title: t("createFailed"), description: err.message, variant: "destructive" });
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  function pickPlace(place: GooglePlaceResult) {
-    setDropdownOpen(false);
-    const parsed = parseAddress(place.address);
-    setManualForm({
-      name: place.name,
-      phone: place.phone || "",
-      email: "",
-      website: place.website || "",
-      industry: place.primaryType || "",
-      address: parsed.addressLine1,
-      city: parsed.city,
-      state: parsed.state,
-    });
-    setSearch(place.name);
-  }
-
-  function openManual() {
-    setDropdownOpen(false);
-    setManualForm({
-      name: search.trim(),
-      phone: "", email: "", website: "", industry: "", address: "", city: "", state: "",
-    });
-  }
-
-  async function saveManual() {
-    if (!manualForm || !manualForm.name.trim()) return;
-    await createFromPayload({
-      name: manualForm.name.trim(),
-      phone: manualForm.phone || undefined,
-      email: manualForm.email || undefined,
-      website: manualForm.website || undefined,
-      industry: manualForm.industry || undefined,
-      primaryLocation: manualForm.address ? {
-        label: "Main",
-        addressLine1: manualForm.address,
-        city: manualForm.city || undefined,
-        state: manualForm.state || undefined,
-        isPrimary: true,
-      } : undefined,
-    });
-  }
-
-  const mf = (key: keyof NonNullable<typeof manualForm>) =>
-    (e: React.ChangeEvent<HTMLInputElement>) =>
-      setManualForm((p) => p ? { ...p, [key]: e.target.value } : p);
-
-  return (
-    <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) { setSearch(""); setManualForm(null); setDropdownOpen(false); } }}>
-      <DialogContent
-        className="max-w-sm rounded-2xl border-0 p-0 overflow-visible"
-        style={{ background: "#0e1117", boxShadow: "0 24px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.07)" }}
-      >
-        <DialogHeader className="px-5 pt-5 pb-0">
-          <DialogTitle className="text-base font-semibold text-white capitalize">{t("addLeadTitle")}</DialogTitle>
-        </DialogHeader>
-
-        <div className="p-5 space-y-4">
-          {/* Search pill */}
-          {!manualForm && (
-            <div className="relative">
-              <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 z-10" />
-              <input
-                autoFocus
-                value={search}
-                onChange={(e) => { setSearch(e.target.value); setDropdownOpen(true); }}
-                onFocus={() => setDropdownOpen(true)}
-                onBlur={() => setTimeout(() => setDropdownOpen(false), 150)}
-                placeholder={t("searchBusiness")}
-                className={`w-full h-[52px] bg-white pl-10 pr-12 text-[15px] text-slate-900 placeholder:text-slate-400 focus:outline-none shadow-sm ${dropdownOpen ? "rounded-t-2xl" : "rounded-2xl"}`}
-                style={{ border: "1px solid #e2e8f0" }}
-              />
-              <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-0.5">
-                {search && (
-                  <button type="button" onClick={() => setSearch("")} className="p-1.5 text-slate-400 hover:text-slate-600">
-                    <X className="h-4 w-4" />
-                  </button>
-                )}
-                <button
-                  type="button"
-                  className="p-1.5 text-slate-400 hover:text-blue-500 transition-colors"
-                  onClick={async () => { await loadCurrentLocation(); setSearch(tCheckin("nearbyQuery")); setDropdownOpen(true); }}
-                >
-                  <MapPinned className="h-4 w-4" />
-                </button>
-              </div>
-
-              {/* Dropdown */}
-              {dropdownOpen && (
-                <div
-                  className="absolute left-0 right-0 top-full z-50 max-h-64 overflow-y-auto rounded-b-2xl"
-                  style={{ background: "#fff", border: "1px solid #e2e8f0", borderTop: "none", boxShadow: "0 12px 32px rgba(0,0,0,0.12)" }}
-                  onPointerDown={(e) => e.stopPropagation()}
-                >
-                  {/* Manual create */}
-                  <button
-                    type="button"
-                    onClick={openManual}
-                    className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-slate-50 transition-colors"
-                  >
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl" style={{ background: "rgba(99,102,241,0.1)" }}>
-                      <Plus className="h-4 w-4 text-indigo-500" />
-                    </div>
-                    <div>
-                      <div className="text-sm font-medium text-slate-900">
-                        {search.trim().length >= 2 ? t("createNamed", { name: search.trim() }) : t("addNewLead")}
-                      </div>
-                      <div className="text-xs text-slate-500">{t("fillManually")}</div>
-                    </div>
-                  </button>
-
-                  {/* Google Places loading */}
-                  {placeQuery.isFetching && (
-                    <div className="flex items-center gap-2 px-4 py-3 text-sm text-slate-500" style={{ borderTop: "1px solid #f1f5f9" }}>
-                      <Loader2 className="h-4 w-4 animate-spin" />{t("searchingPlaces")}
-                    </div>
-                  )}
-
-                  {/* Google Places results */}
-                  {placeQuery.data?.results.map((place) => {
-                    const existing = findMatchingLead(place, allLeads);
-                    return (
-                      <button
-                        key={place.placeId}
-                        type="button"
-                        onClick={() => pickPlace(place)}
-                        className="flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-slate-50 transition-colors"
-                        style={{ borderTop: "1px solid #f1f5f9" }}
-                      >
-                        {/* Badge under the icon — beside the text it pushed the
-                            name and address into an ellipsis. */}
-                        <div className="flex w-14 shrink-0 flex-col items-center gap-1">
-                          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-50">
-                            <Building2 className="h-4 w-4 text-indigo-500" />
-                          </div>
-                          {existing ? (
-                            <span className="text-[9px] font-bold uppercase tracking-wider text-blue-600">{t("exists")}</span>
-                          ) : (
-                            <span className="flex items-center gap-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-500">
-                              <GoogleLogo className="h-2.5 w-2.5" />
-                              Google
-                            </span>
-                          )}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="text-sm font-medium text-slate-900 break-words">{place.name}</div>
-                          <div className="text-xs text-slate-500 break-words">{place.address}</div>
-                        </div>
-                      </button>
-                    );
-                  })}
-
-                  {!placeQuery.isFetching && !placeQuery.data?.results?.length && search.trim().length < 3 && (
-                    <div className="px-4 py-3 text-sm text-slate-400">{t("typeMore")}</div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Manual form */}
-          {manualForm && (
-            <div className="space-y-2.5">
-              <button
-                type="button"
-                onClick={() => setManualForm(null)}
-                className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 transition-colors mb-1"
-              >
-                {t("backToSearch")}
-              </button>
-              {(["name", "phone", "email", "website", "industry", "address", "city"] as const).map((key) => (
-                <input
-                  key={key}
-                  value={manualForm[key]}
-                  onChange={mf(key)}
-                  placeholder={t(MANUAL_FIELD_KEYS[key])}
-                  className={inputCls}
-                  style={inputStyle}
-                />
-              ))}
-              <StateSelect
-                value={manualForm.state}
-                onValueChange={(state) => setManualForm((previous) => previous ? { ...previous, state } : previous)}
-                placeholder={t("fieldState")}
-              />
-              <button
-                disabled={saving || !manualForm.name.trim()}
-                onClick={saveManual}
-                className="w-full rounded-xl py-2.5 text-sm font-semibold text-white transition-all disabled:opacity-40 mt-1"
-                style={{ background: "linear-gradient(135deg, #3b82f6, #6366f1)" }}
-              >
-                {saving ? <Loader2 className="inline mr-2 h-4 w-4 animate-spin" /> : null}
-                {t("saveLead")}
-              </button>
-            </div>
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
 
 // ─── Lead Card (phone) ────────────────────────────────────────────────────────
 
@@ -747,12 +484,10 @@ export function XpotLeads() {
         {salesLead && <LeadSalesPanel leadId={salesLead.id} leadName={salesLead.name} compact />}
       </SheetDialog>
 
-      {/* Manual creation is reserved for referrals and unplanned encounters. */}
-      <AddCompanyDialog
-        open={addOpen}
-        onOpenChange={setAddOpen}
-        allLeads={allLeads}
-      />
+      {/* The same "New company" dialog as check-in and the Dashboard (Google
+          autofill with coordinates, phone mask); created here as a lead, the
+          status this list shows. */}
+      <CreateLeadDialog open={addOpen} onOpenChange={setAddOpen} initialName="" status="lead" />
 
       <AlertDialog
         open={Boolean(leadPendingDelete)}

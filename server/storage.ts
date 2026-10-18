@@ -125,6 +125,8 @@ export interface IStorage {
   // Leads + child tables
   listSalesLeads(filters?: { ownerRepId?: number; organizationIds?: number[]; search?: string; limit?: number; offset?: number }): Promise<SalesLead[]>;
   getSalesLead(id: number): Promise<SalesLead | undefined>;
+  /** The organization's company already linked to this Google place (unique per organization). */
+  getSalesLeadByGooglePlace(organizationId: number, googlePlaceId: string): Promise<SalesLead | undefined>;
   getSalesLeadsByIds(ids: number[]): Promise<SalesLead[]>;
   getSalesLeadByXphereRef(ref: string): Promise<SalesLead | undefined>;
   createSalesLead(input: InsertSalesLead): Promise<SalesLead>;
@@ -447,6 +449,13 @@ export class DatabaseStorage implements IStorage {
 
   async getSalesLead(id: number): Promise<SalesLead | undefined> {
     const [lead] = await db.select().from(salesLeads).where(eq(salesLeads.id, id));
+    return lead;
+  }
+
+  async getSalesLeadByGooglePlace(organizationId: number, googlePlaceId: string): Promise<SalesLead | undefined> {
+    const [lead] = await db.select().from(salesLeads)
+      .where(and(eq(salesLeads.organizationId, organizationId), eq(salesLeads.googlePlaceId, googlePlaceId)))
+      .limit(1);
     return lead;
   }
 

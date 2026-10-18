@@ -92,6 +92,13 @@ export function createLeadsRouter() {
     const input = xpotLeadCreateSchema.parse(req.body);
     const status = input.status || "lead";
     const organizationId = await organizationIdForRep(actor!.rep.id);
+    // A Google place is unique per organization; say so instead of failing on the index.
+    if (input.googlePlaceId) {
+      const existing = await storage.getSalesLeadByGooglePlace(organizationId, input.googlePlaceId);
+      if (existing) {
+        return res.status(409).json({ code: "duplicate_place", message: `This business is already saved as "${existing.name}".`, leadId: existing.id });
+      }
+    }
 
     const lead = await storage.createSalesLead({
       organizationId,

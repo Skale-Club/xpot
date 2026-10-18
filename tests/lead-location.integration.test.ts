@@ -54,3 +54,14 @@ test("new locations take the admin default radius and updates keep a custom one"
     .returning();
   expect(direct.geofenceRadiusMeters).toBe(275);
 });
+
+test("a Google place is looked up per organization before creating a company", async () => {
+  const orgs = (await db.execute(sql`
+    INSERT INTO organizations (name, slug) VALUES ('Place A', 'place-a'), ('Place B', 'place-b') RETURNING id
+  `)).rows as Array<{ id: number }>;
+  await db.execute(sql`
+    INSERT INTO sales_leads (organization_id, name, google_place_id) VALUES (${orgs[0].id}, 'Bakery', 'ChIJplace000001')
+  `);
+  expect((await storage.getSalesLeadByGooglePlace(orgs[0].id, "ChIJplace000001"))?.name).toBe("Bakery");
+  expect(await storage.getSalesLeadByGooglePlace(orgs[1].id, "ChIJplace000001")).toBeUndefined();
+});
