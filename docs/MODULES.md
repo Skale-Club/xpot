@@ -15,7 +15,7 @@ As decisões foram reavaliadas antes de executar, contra o código. Cinco mudara
 | Seletor de módulo no desktop | Menu suspenso (como o seletor de workspace do Slack) | **Controle segmentado** Visitas \| Tags, sempre visível | Com dois módulos, um menu esconde a opção atrás de um clique a mais. O segmentado é o mesmo do celular |
 | Cor de Tags | Violeta ou verde-água | **Violeta** | Verde-água foi testado e descartado na tela: o verde já significa dinheiro, "ao vivo" e sucesso no app inteiro (o botão "Nova venda" de Visitas é verde), então Tags voltaria a parecer Visitas |
 | MOD-19, Admin traduzido | Fase 4 | **Feito em PR próprio** | Não ajudava a separar os módulos, então saiu depois, numa revisão isolada: são centenas de textos em três idiomas |
-| MOD-21 / D5, peça vendida em Vendas | Depois | **Continua depois**, como recomendado | |
+| MOD-21 / D5, peça vendida em Vendas | Depois | **Continua depois**, como recomendado | *(Nota 2026-10-18, revisão de UX: resolvido. Vender peças cria a venda em `sales_sales`, que aparece em Vendas; ativar nunca é venda. Ver [UX_OVERHAUL.md](./UX_OVERHAUL.md), decisão 5.)* |
 
 **Feito, por item**
 
@@ -30,15 +30,15 @@ As decisões foram reavaliadas antes de executar, contra o código. Cinco mudara
 | MOD-08 título com caminho | ✅ | "Tags › Lotes" na barra superior e na aba do navegador |
 | MOD-09 ⌘K agrupado por módulo | ✅ | `CommandPalette` recebe o grupo de cada tela |
 | MOD-11 Tags unificado | ✅ | A gestão de Tags é o grupo **Gestão** dentro de Tags. As abas de `/admin/tags` ficam só no celular. A busca por código foi para a barra superior |
-| MOD-12 gestão de Visitas | ✅ | Equipe (o antigo Admin › Overview), Produtos, Regras de check-in, Xphere |
-| MOD-13 Conta › Organização | ✅ | Pessoas, Integrações, Marca. Nas páginas de conta, a barra lateral lista a conta e nenhum módulo fica ativo |
+| MOD-12 gestão de Visitas | ✅ | Equipe (o antigo Admin › Overview), Produtos, Regras de check-in, Xphere. *(Nota 2026-10-18, revisão de UX: "Equipe" agora se chama Visão geral; o Xphere saiu daqui e foi para Plataforma › Integrações › Xphere, só do admin do Xpot.)* |
+| MOD-13 Conta › Organização | ✅ | Pessoas, Integrações, Marca. Nas páginas de conta, a barra lateral lista a conta e nenhum módulo fica ativo. *(Nota 2026-10-18, revisão de UX: "Organização" deixou de existir. A conta tem Configurações; Administração (gerentes: Pessoas, Organizações); e Plataforma (admin do Xpot: Integrações, Marca e site público, Status).)* |
 | MOD-14 sem "Admin" separado | ✅ | Sem redirecionamentos: as URLs são as mesmas e só mudaram de lugar no shell |
 | MOD-15 `ModuleBadge` nas pontes | ✅ | Card do Painel, seção de peças da empresa, "Vender peça" no check-in, chip e contagem na lista de leads |
 | MOD-16 empresa com seções por módulo | ✅ já existia | O detalhe da empresa já tinha Vendas, Peças e Visitas; a seção de peças ganhou o selo |
 | MOD-17 card de Tags no Painel | ✅ | Mantido, com cor e selo de Tags |
 | MOD-18, MOD-20 vocabulário | ✅ parcial | "Suas peças" em todo lugar, "Peças" + selo, ES "Tags", aba "Visitas" → "Histórico" (D1), "Team report" → relatório por revendedor |
 | MOD-19 Admin traduzido | ✅ | `i18n/messages/manage.ts` (Visitas e Organização), `manageTags.ts`, `manageTagsPieces.ts`, `manageTagsBatches.ts`; rótulos de peça, produto, chip e impressão vêm de `tags.ts` via `admin/tags/labels.ts`; `tests/i18n-messages.test.ts` confere placeholders e plurais |
-| MOD-21 | ⏸ depende de D5 | No BACKLOG como MOD-21 |
+| MOD-21 | ⏸ depende de D5 | No BACKLOG como MOD-21. *(Nota 2026-10-18, revisão de UX: ✅, ver acima.)* |
 
 Também: o mapa de onde cada tela vive é um só (`client/src/components/xpot/moduleNav.ts`), lido pela barra
 lateral, pela paleta e pelo `AdminApp`, com testes (`tests/module-nav.test.ts`). As telas foram conferidas
@@ -50,7 +50,9 @@ contra uma API simulada em 1366px e 375px (admin, gerente, revendedor só de Tag
   duplica Tags › Gestão › Todas as peças. O motivo dado na Rev. 2 (o gerente venderia peças da casa a partir
   dessa lista) não se sustenta: uma peça é aberta e vendida lendo o QR/NFC ou digitando o código, e ao ser
   ativada passa a ser do gerente (`saleCredit`). Em aberto no BACKLOG como MOD-22, para decidir com o dono.
-- Textos que vêm do servidor continuam em inglês: mensagens de erro da API, títulos que o servidor grava na Jornada, o diagnóstico das integrações (`shared/integrations-registry.ts`) e os erros de validação de link em `shared/tags.ts` (a gestão traduz os conhecidos pelo texto).
+  *(Nota 2026-10-18, revisão de UX: não vale mais. Minhas peças pede sempre `?mine=1`, também para o gerente, e ativar pela gestão mantém a peça no estoque da casa. MOD-22 está ✅.)*
+- *(Nota 2026-10-18, revisão de UX: as recusas mais comuns do servidor agora têm código e são traduzidas no cliente. Continuam em inglês, entre outros, a página de consentimento OAuth e os resultados de "Testar"; ver BACKLOG UXR-25.)*
+  Textos que vêm do servidor continuam em inglês: mensagens de erro da API, títulos que o servidor grava na Jornada, o diagnóstico das integrações (`shared/integrations-registry.ts`) e os erros de validação de link em `shared/tags.ts` (a gestão traduz os conhecidos pelo texto).
 
 ---
 

@@ -3,9 +3,10 @@
 Field sales and QR/NFC pieces in one app, for Skale Club's reps and resellers.
 Two modules share one account:
 
-- **Visits**: GPS check-in at a business, voice notes, leads, direct sales and
-  consigned stock, the day's dashboard. Visits and sales mirror into the
-  **Xphere** CRM; GoHighLevel is a legacy pipeline sync that still exists.
+- **Visits**: GPS check-in at a business, voice notes, companies, direct sales and
+  consigned stock, the day's route and dashboard. Visits and sales mirror into the
+  **Xphere** CRM; GoHighLevel is a legacy pipeline sync that still works and is
+  marked Legacy.
 - **Tags**: physical pieces (Google Review signs, NFC keychains, cards) with a
   permanent QR/NFC code. Resellers receive them in kits, sell them to
   businesses and point them at a destination; Skale Club manages batches,
@@ -23,8 +24,12 @@ New here? Read [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) first.
 |---|---|
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the app is put together: modules and roles, the shell, directories, tables, migrations, tests, deploy |
 | [BACKLOG.md](docs/BACKLOG.md) | Open and closed work items with stable codes (`VND-04`, `MOD-19`), in Portuguese |
+| [UI_KIT.md](docs/UI_KIT.md) | The shared UI kit: colour rules, tokens, components, tone maps and formatters |
+| [UX_OVERHAUL.md](docs/UX_OVERHAUL.md) | The October 2026 UX overhaul: what changed and why, the product decisions taken, the menu tree and how to verify it, in Portuguese |
 | [MODULES.md](docs/MODULES.md) | The plan that split Visits and Tags into distinct panels (#31), and what was decided, in Portuguese |
-| [PROSPECTING_DAILY_ROUTE.md](docs/PROSPECTING_DAILY_ROUTE.md) | Product and implementation contract for the daily prospecting route, direct check-in, post-visit summary and tasks, in Portuguese |
+| [prospecting-routes-architecture.md](docs/prospecting-routes-architecture.md) | The daily prospecting route end to end: discovery jobs, candidates, routes, stops and check-in |
+| [prospecting-planner-ux.md](docs/prospecting-planner-ux.md) | How the route planner behaves for the rep (city + sectors, expansion, review) |
+| [prospecting-engine-runbook.md](docs/prospecting-engine-runbook.md) | Operating the prospecting engine connection |
 | [TAG_SALES_EXECUTION_PLAN.md](docs/TAG_SALES_EXECUTION_PLAN.md) | Execution plan for linking physical pieces to sales, Stuscle acquisitions and partner margins, in Portuguese |
 | [DESKTOP.md](docs/DESKTOP.md) | The plan that brought the rep app to the desktop (#17 to #27), in Portuguese |
 | [AUDITORIA.md](docs/AUDITORIA.md) | The 2026-09-01 technical audit; a historical snapshot, in Portuguese |
@@ -42,15 +47,20 @@ New here? Read [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) first.
   password change. Business photos and voice notes are private, on Cloudflare
   R2 (see "Files"). Nothing is shared with Skale Club.
 - **Integrations:**
-  - Xphere CRM: prospects in, leads, sales and visit outcomes out (per-person keys,
-    set by the global admin in Organization › Integrations › Xphere).
-  - GoHighLevel: legacy pipeline sync, configured in Organization › Integrations.
-  - Twilio: SMS for sign-in codes.
+  - Xphere CRM: prospects in, companies, sales and visit outcomes out. One
+    connection per person, set up by the Xpot admin only: Platform › Integrations ›
+    Xphere, or the Xphere section of the person's page in People. Inbound keys
+    are masked and can be rotated; reps have nothing to configure.
+  - GoHighLevel: **Legacy** pipeline sync. It still works for accounts that use
+    it, and is folded under "Legacy" in the Integrations CRM section.
+  - Twilio: SMS for sign-in codes (marked "Required for sign-in").
   - Stuscle: the store where approved reps buy kits at wholesale with a personal code.
   - Google Places: business search at check-in and address autocomplete.
   - AI: Groq Whisper transcribes visit audio (OpenAI Whisper as fallback);
-    OpenRouter runs the language model, with Gemini as fallback (`server/lib/ai.ts`).
-  - MCP: an MCP server for the Tags Journey (see "AI access (MCP)").
+    OpenRouter runs the language model, with Gemini as fallback. Each runs only
+    when switched on with a key; the order is decided in `server/lib/providerChoice.ts`.
+  - MCP: an MCP server for AI assistants (Tags production log, prospecting,
+    tasks; see "AI access (MCP)").
 
 ## Commands
 
@@ -85,10 +95,11 @@ use the same switch but are not in CI's list; run them by hand the same way.
 1. Copy `.env.example` to `.env` and fill in at least the database URL, the
    Supabase keys and `SESSION_SECRET` (the server refuses to boot without them).
    Integrations (Xphere, GoHighLevel, Twilio, Google Places, the AI providers)
-   are set in the app, under Organization › Integrations (`/admin/integrations`),
-   per person for Xphere. The matching env vars are fallbacks, except the
-   OpenRouter and Gemini keys, which override the panel; each card says when
-   the server environment is the one in force.
+   are set in the app by the Xpot admin, under Platform › Integrations
+   (`/admin/integrations`); Xphere is one connection per person. The matching env
+   vars are fallbacks, except the OpenRouter and Gemini keys, which override the
+   panel; each card says when the server environment is the one in force
+   ("Set by server environment").
 2. `npm install`
 3. `npm run migrate`. Locally you run it whenever new files appear in
    `migrations/`; in production the container runs it on every start (see "Deploy").
@@ -105,32 +116,82 @@ Public:
 - `/login`: phone sign-in.
 - `/privacy`, `/terms`: legal pages.
 
-Visits module:
-- `/check-in`: legacy redirect to Prospecting; geo-validated visits now start directly from a daily route stop.
+Every screen's place in the menu comes from one map,
+`client/src/components/xpot/moduleNav.ts`: the sidebar, the phone tab bars, the
+command palette (Ctrl/⌘+K), the top bar's crumb and the page title all read it,
+so a screen has one name everywhere. The menu tree is drawn in
+[`docs/UX_OVERHAUL.md`](docs/UX_OVERHAUL.md).
+
+Visits module (sidebar order: Dashboard, Route, Companies, Visits, Tasks, Sales):
 - `/dashboard`: KPIs and the day; the Visits home.
-- `/visits`, `/visits/:id`: today's planned route and visit history, with a detail pane on desktop.
-- `/prospecting`: two-field cold-prospecting planner (city + sectors), background discovery and today's route.
-- `/leads`, `/leads/:id`: businesses (Customers and Prospects), with a detail pane.
-- `/leads/prospecting`: one route per rep and day, with asynchronous generation, map, direct check-in and persistent progress.
-- `/leads/prospecting/summary/:visitId`: audio-first summary shown immediately after check-out.
+- `/route`: today's route: the cold-prospecting planner (city + sectors),
+  background discovery, the map and the stops. `?routeId=` / `?jobId=` open one.
+  The old `/prospecting`, `/leads/prospecting…` and `/leads/prospects` redirect here.
+- `/route/check-in?leadId=…`: the visit being run ("Visit"): GPS check-in, notes,
+  voice, sale, check-out. The old `/check-in` and `/route?leadId=` redirect here.
+  Check-out lands back on the route when the visit was a route stop, otherwise on
+  the visit.
+- `/leads`, `/leads/:id`: Companies (prospects, leads and customers), with a
+  detail pane on desktop. Opened from a route, a task or a visit, its back link
+  returns there.
+- `/dashboard/history`, `/dashboard/history/:id`: Visits, the visit history, with
+  a detail pane; the old `/visits` redirects here. The phone tab bar leaves it
+  out (six tabs don't fit); it is one tap away on the Dashboard, the sidebar and the palette.
+- `/tasks`: follow-up tasks.
 - `/sales`, `/sales/<tab>[/<id>]`: overview, `sales`, `stock` (consignments) and `pipeline`.
 
 Tags module:
 - `/tags`: the Tags home.
-- `/tags/t/:code`: one piece on the phone. On desktop it opens as `/tags/pieces/:code`.
-- `/tags/pieces`, `/tags/pieces/:code`: the reseller's pieces.
-- `/tags/direct`: write the customer's own link to a chip, with no Xpot code (`tag_direct_writes`).
+- `/tags/customers`, `/tags/customers/:id`: the companies holding the reseller's pieces.
+- `/tags/pieces`, `/tags/pieces/:code`: My pieces, always the person's own (the
+  list asks for `?mine=1`, so management mode never widens it).
+- `/tags/t/:code`: one piece on the phone (on desktop, `/tags/pieces/:code`). It
+  is the same piece screen as the admin's, with the sections the viewer may use.
+- `/tags/direct`: "Write a plain chip": the customer's own link on a chip, with
+  no Xpot code (`tag_direct_writes`). Reached from the Tags home and the palette.
 
-Account:
-- `/settings`: profile, language, password change.
+Settings (everyone): `/settings` with the tabs Profile (name, photo, contact
+phone), Sign-in (the sign-in phone, read only; a password only for email
+logins), Language and Memberships (`?tab=memberships`: role, modules,
+organizations with their role, the wholesale code). For a manager, Memberships
+also holds the management mode switch and the links to Administration (and
+Platform, for the Xpot admin); that is how management mode is turned on from a phone.
 
-Management (managers and admins). The URLs keep their old `/admin` prefix; the
-shell decides which module each one belongs to (`client/src/components/xpot/moduleNav.ts`):
-- Visits › Manage: `/admin/overview` (Team; `/admin` alone too), `/admin/products`,
-  `/admin/settings` (check-in rules), `/admin/xphere`.
-- Tags › Manage: `/admin/tags/<tab>[/<id>]` with `overview`, `pieces`, `kits`,
-  `team` (resellers report), then the global admin's `batches`, `journey` and `provisioners` (NFC writers).
-- Account › Organization: `/admin/reps` (People), `/admin/integrations`, `/admin/branding`.
+**Management mode.** Managers and the Xpot admin see Xpot as a rep does until
+they turn management mode on (sidebar, Settings › Memberships, or the scope
+chip). While it is on, an amber bar shows on every screen, each module gets its
+Manage group (on the phone, a Manage tab in the Visits and Tags tab bars), and
+the lists widen to the whole team: Companies, Visits, Sales, Tasks (with "Whole
+team"), the Tags home and customers. Those lists carry a scope chip for anyone
+who can manage, "Viewing: everyone" or "Viewing: only me", that also switches
+the mode. Opening an `/admin/...` URL
+turns the mode on with a toast; leaving it on a management screen goes to the
+matching rep screen; signing out turns it off. It only narrows what a person
+sees: the server still decides what each account may open or change.
+
+Management screens keep their `/admin` URLs; `moduleNav.ts` decides where each
+one sits:
+- Visits › Manage (managers): `/admin/overview` (Overview: period picker, team
+  numbers and one row per rep; `/admin` alone too), `/admin/products`,
+  `/admin/settings` (check-in rules).
+- Tags › Manage (managers), in a piece's life order: `/admin/tags/overview`
+  (Needs action queues, stock funnel, scans, analytics and one activity feed;
+  each queue count opens `/admin/tags/overview/<queue>`), `batches` (Xpot admin:
+  the batch pipeline; a batch has tabs Summary, Print, Receive, Pieces, Hand out
+  and Activity in `?tab=`), `pieces` (Inventory; a piece is `/admin/tags/pieces/:id`),
+  `kits` (Distribution: Hand out, Stuscle orders, Kits history and Take back in
+  `?view=`), `team` (Resellers), then the Xpot admin's `journey` (Production log)
+  and `provisioners` (NFC writers).
+- Administration (managers): `/admin/reps` and `/admin/reps/:repId` (People, the
+  one place for a person: access, role and modules, organizations, Tags cost rule
+  and wholesale code, Xphere, activity; filters in `?q=&status=&role=&module=`)
+  and `/organizations` (organizations; personal workspaces hidden behind a switch).
+- Platform (Xpot admin only, tagged "Xpot admin" once on the group heading):
+  `/admin/integrations` (Integrations; tabs Services, Xphere at
+  `/admin/integrations/xphere`, AI assistants at `/admin/integrations/mcp`; the
+  old `/admin/xphere` still works), `/admin/branding` (Brand & public site:
+  Identity, Installed app at `?tab=app`, and the landing page editor at
+  `/admin/landing`) and `/admin/health` (Status).
 
 ### Server
 
@@ -146,32 +207,41 @@ shell decides which module each one belongs to (`client/src/components/xpot/modu
 
 ## Database
 
-52 tables, all defined in `shared/schema/` (the session store included), plus
+58 tables, all defined in `shared/schema/` (the session store included), plus
 the `_xpot_migrations` bookkeeping table the migration runner creates.
 
 **Visits** (prefix `sales_`)
 - `sales_reps`: every person: rep, reseller, manager or admin (FK → `users.id`), with their `modules`
-- `sales_leads` (businesses), `sales_lead_locations`, `sales_lead_contacts`
+- `organizations`, `organization_memberships`, `organization_audit_log`
+- `sales_leads` (companies), `sales_lead_locations`, `sales_lead_contacts`
 - `sales_visits`, `sales_visit_notes`: GPS-validated check-ins and outcome notes
 - `sales_visit_actions`: what the AI extracted from a voice note, pending confirmation
-- `sales_opportunities_local`: pipeline, mirrored to GoHighLevel when configured
-- `sales_tasks`, `sales_sync_events` (integration audit log), `sales_app_settings` (check-in rules)
-- `sales_daily_routes`, `sales_daily_route_stops`, `sales_route_generation_attempts`, `sales_user_notifications`
+- `sales_opportunities_local`: pipeline, mirrored to the CRM when configured
+- `sales_tasks`, `sales_sync_events` (integration audit log), `sales_app_settings` (check-in rules),
+  `sales_push_subscriptions`
 - Sales module (migration 0017): `sales_products`, `sales_product_price_tiers`,
-  `sales_sales`, `sales_sale_items`, `sales_consignments`, `sales_consignment_movements`
-- `xphere_integrations`: per-user Xphere keys
+  `sales_sales`, `sales_sale_items`, `sales_consignments`, `sales_consignment_movements`;
+  `sales_sale_tags` links a sale to the exact Tags pieces it sold
+- `xphere_integrations`: one Xphere connection per person, set up by the Xpot admin
 - Prospecting: `prospecting_jobs`, `prospecting_runs`, `prospecting_candidates`,
   `prospecting_routes`, `prospecting_route_stops`
 
 **Tags**
-- `tag_batches`, `tags`, `tag_kits`, `tag_destination_history`, `tag_events` (scans)
+- `tag_batches`, `tags`, `tag_destination_history`, `tag_events` (scans)
+- `tag_kits` (numbered K-0001…) and `tag_kit_items` (what each kit handed out, and
+  when and why each piece left it; migration 0054)
+- `tag_stock_movements` (append-only stock ledger), `tag_acquisitions`,
+  `tag_acquisition_lines`, `tag_acquisition_units` (what a reseller paid per piece)
 - `tag_direct_writes`
 - `tag_provisioning_devices`, `tag_provisioning_jobs`, `tag_provisioning_events` (NFC writer)
-- `tag_plans`, `tag_journey_entries` (the Journey)
+- `tag_plans`, `tag_journey_entries` (the Production log and the automatic activity)
 
 **Account and infrastructure**
-- `users`, `sessions`, `auth_phone_codes`
-- `chat_integrations` (AI providers), `integration_settings` (other services), `app_branding`
+- `users`, `sessions`, `auth_phone_codes`, `auth_access_requests`
+- `chat_integrations` (AI providers), `integration_settings` (other services),
+  `integration_checks` (each provider's last Test, migration 0053)
+- `app_branding`, `landing_page_contents`
+- `system_events` (the app's own error log, read by Status)
 - `mcp_tokens`, `mcp_oauth_clients`, `mcp_oauth_codes`, `mcp_oauth_tokens`
 
 Every table has RLS on with no policies. The app connects as the owner
@@ -192,9 +262,14 @@ card in Leads, and the Sales tab. They can also be **captured by voice**: the
 visit's audio is transcribed, read against the catalog and the shop's live
 stock, and turned into proposed actions the rep confirms with one tap.
 
-A piece sold in Tags does not appear in Sales yet. The implementation and the
-business rules for linking pieces, visits, Stuscle acquisitions and partner
-margins are specified in `docs/TAG_SALES_EXECUTION_PLAN.md`.
+A piece sold in Tags ("Sell this piece") is a sale here too: it creates one
+`sales_sales` row and links each exact piece through `sales_sale_tags`, so it
+shows in Sales, and the piece screen links to it ("Open in Sales"). Putting a
+piece live is **never** a sale; only a recorded sale counts as "sold", in every
+screen and report. Cancelling a Tags sale puts each piece back in stock with
+its seller and the ownership it had before (a `restore` stock movement), so it
+can be sold again. The rules for pieces, visits, Stuscle acquisitions and
+partner margins are in `docs/TAG_SALES_EXECUTION_PLAN.md`.
 
 ## Auth model
 
@@ -213,8 +288,15 @@ Everyone signs in with their **phone**: a 6-digit code goes out by SMS
   network per hour, stored hashed in `auth_phone_codes`.
 - Settings also has a password change. It changes the Supabase Auth password
   behind the legacy email sign-in (below) and needs an email on file.
-- Role hierarchy: `rep` < `manager` < `admin`. Only admins act on managers/admins.
+- Role hierarchy: `rep` < `manager` < `admin`. The `admin` role is the
+  **Xpot admin**: saving it also sets `users.is_admin` (and signs the person out
+  so the new access takes effect), and People warns and asks before doing so.
+  Only the Xpot admin changes roles, and nobody changes their own; managers
+  don't edit managers or admins. An **org admin** is a role inside one
+  organization (`organization_memberships.role = 'admin'`), not a platform role.
   A "reseller" is not a separate role: it is a `rep` whose modules are just Tags.
+- People also refuses sign-ups (a separate "Refused" state) and deletes an
+  account only after the confirmation word is typed.
 - `requireXpotUser` / `requireXpotManager` check session, approval and blocking
   on every `/api/xpot/*` request.
 
@@ -242,9 +324,10 @@ but has no screen; new accounts it creates wait for approval like any sign-up.
 Kits and other products are sold through the **Stuscle** store, not inside
 Xpot. Approved reps buy at wholesale with a personal code:
 - Every rep gets a code (`XP-XXXX-XXXX`, `salesReps.wholesaleCode`) when they're
-  approved or created by an admin. It shows on Tags → home with a link to
-  `{STUSCLE_PUBLIC_URL}/wholesale?code=…`; People shows it and can issue a
-  new one (the old one stops working).
+  approved or created by an admin. The wholesale card at the bottom of Tags ›
+  My pieces shows it with a link to `{STUSCLE_PUBLIC_URL}/wholesale?code=…`, and
+  Settings › Memberships shows it too. The Tags section of the person's page in
+  People shows it and can issue a new one (the old one stops working).
 - Stuscle asks `POST /api/integrations/stuscle/wholesale/verify`
   (`Authorization: Bearer $XPOT_WHOLESALE_SECRET`, body `{code}`) when the code
   is entered and again at checkout. Answer: `{valid:true, reseller:{id,name}}`
@@ -253,9 +336,10 @@ Xpot. Approved reps buy at wholesale with a personal code:
 - After payment, Stuscle sends `POST /api/integrations/stuscle/wholesale/orders`
   with the same bearer secret, the external order id, wholesale code, currency,
   date and SKU lines. The order is idempotent. When physical codes are included,
-  Xpot assigns the pieces immediately; otherwise it appears in Tags → Manage →
-  Kits for separation. The net line subtotal becomes the partner's exact
-  per-piece acquisition cost.
+  Xpot assigns the pieces immediately; otherwise it waits in Tags › Manage ›
+  Distribution › Stuscle orders (with a count badge) to be separated. Fulfilling
+  it writes the kit's piece list like any hand-out. The net line subtotal
+  becomes the partner's exact per-piece acquisition cost.
 - Without `XPOT_WHOLESALE_SECRET` the endpoint answers 503 and the store sells
   retail only. Code in `server/wholesale/`, `shared/wholesale.ts`.
 
@@ -296,7 +380,8 @@ valid for 5 minutes. A key that no lead or visit holds is never signed.
 
 ## Deleting an account
 
-Admin › Reps › a blocked rep › **Delete account** (platform admins only;
+Administration › People › a blocked person › Access › **Delete account**
+(the Xpot admin only, after typing the confirmation word;
 `DELETE /api/xpot/admin/reps/:id` with `{ "confirm": "DELETE" }`,
 `server/accountDeletion.ts`). It deletes the sign-in identity (users row,
 sessions, sign-in codes, Supabase Auth user, MCP OAuth grants, Xphere
@@ -306,7 +391,7 @@ suggested actions, the businesses they own, and every file they uploaded
 their folders). Sales, sale items, consignments and stock movements are kept
 for accounting: a business that has them stays, unassigned, and the rep row
 stays as an anonymous "Deleted account" placeholder (`deleted_at` set, hidden
-from Admin › Reps) so those rows keep a valid `rep_id`. With nothing to keep,
+from People) so those rows keep a valid `rep_id`. With nothing to keep,
 the rep and user rows are deleted outright. Data already synced to a CRM
 (GoHighLevel, Xphere) is not touched there.
 
@@ -326,21 +411,53 @@ resellers sell them to businesses with the Tags module. Code:
   `resolveTagFace` in `shared/tagFace.ts` reads the piece's own face, then the
   batch's, then the default of a product with one obvious print (a Google
   Review sign), else none (migration 0019).
-- Pieces live in house stock until an admin hands them to a reseller in a kit
-  (`POST /api/xpot/admin/tag-kits`). A reseller only reaches the pieces in their
-  own kit and the leads they own; managers and admins reach everything.
-- Activating a piece (`POST /api/xpot/tags/:id/quick-activate`) links it to a lead
-  and destination, but does not create revenue. Selling one or more physical
+- **Batches and intake.** The Xpot admin creates batches (the manufacturing CSV
+  and QR ZIP are under a batch's Print tab) and receives the pieces at the
+  batch's Receive tab, a scan station: a camera that stays open, a box for typed
+  or pasted codes, and a beep per read. A retried read never counts twice.
+  **Undo last read** puts the piece back to "not received" (it stays registered
+  to the batch; reading it again receives it again). Undo is refused unless the
+  batch is open, the read is under 30 minutes old and nothing else has happened
+  to the piece (`DELETE /api/xpot/admin/tag-batches/:id/tags/:tagId`). Stock
+  movements are never edited or deleted (a database trigger enforces it).
+- **Distribution** (Tags › Manage, managers): pieces leave house stock in a kit.
+  - *Hand out*: typed or scanned codes, or "next N from a batch", checked first
+    by a dry run that says why each code can't go (`POST /api/xpot/admin/tag-kits/check`,
+    then `POST /api/xpot/admin/tag-kits`). The kit is consignment or purchase; a
+    purchase, or a reseller on the acquisition cost rule, needs a unit cost, and
+    a cost entered for house stock is recorded for reference.
+  - *Stuscle orders*: wholesale orders waiting to be separated into pieces.
+  - *Kits*: history. Each kit has a number (K-0001) and keeps the list of what
+    it handed out (`tag_kit_items`), with what was returned, moved or is still
+    with the reseller (`GET /api/xpot/admin/tag-kits/:id/items` is its packing list).
+  - *Take back*: a scan station that returns unsold pieces to house stock, with
+    its own dry run (`POST /api/xpot/admin/tag-kits/return/check`).
+- A reseller only reaches the pieces in their own kit, their own companies and
+  the companies holding their pieces; managers and admins reach everything.
+- **One piece screen** for every role (`client/src/components/piece/`): a header
+  with three labelled chips (Digital, Physical stock, Chip), Customer &
+  destination, Chip, Sale, Performance, and for managers Management (custody,
+  Transfer, Take back to house stock, settings, QR downloads, More actions:
+  Retire, Restore, Mark damaged) and Activity (one timeline of destinations,
+  sales, stock movements and the production log). Each viewer gets the sections
+  they may use; the reseller URL and the admin URL cross-link.
+- Putting a piece live (`POST /api/xpot/tags/:id/quick-activate`) links it to a
+  company and a destination, but is **not a sale**. Selling one or more physical
   pieces uses `POST /api/xpot/tag-sales` with an idempotency key; this creates one
-  financial sale, links every exact piece and freezes its cost. A seller's
-  explicit cost policy is `zero` for the app owners or `acquisition` for a
-  partner. Partner cost comes from a Stuscle order or a manual kit delivery.
-- Tags › Manage (`/admin/tags/*`, managers and admins): overview and analytics,
-  all pieces, batches with the manufacturing CSV and QR ZIP, kits and returns,
-  the per-reseller report, the Journey (admins only) and the desktop NFC
-  writers (`/api/provisioner/*`, device token; see `nfc-provisioner/`).
+  financial sale, links every exact piece and freezes its cost. When management
+  sells a piece, the sale is recorded in the name of the reseller who holds it.
+  A seller's explicit cost policy is `zero` for the app owners or `acquisition`
+  for a partner. Partner cost comes from a Stuscle order or a manual kit delivery.
+- Every count of pieces (Overview, Batches, a batch, Distribution, Resellers, a
+  kit) comes from one set of rules, `shared/tagMetrics.ts` (house, with
+  resellers, sold, live, not received, damaged, can hand out, returnable);
+  "sold" is only a recorded financial sale.
+- Tags › Manage (`/admin/tags/*`, managers; batches, the Production log and the
+  NFC writers are the Xpot admin's): Overview, Batches, Inventory, Distribution,
+  Resellers, Production log, NFC writers (`/api/provisioner/*`, device token;
+  see `nfc-provisioner/`).
 - New accounts start switched off: signing up grants nothing. An admin
-  enables reps in People.
+  enables people in People, choosing at least one module.
 
 Environment:
 - `TAG_PUBLIC_BASE_URL`: domain printed on pieces (default `https://xpot.place`).
@@ -350,11 +467,46 @@ Environment:
 - `TAG_COUNTRY_HEADER`: optional; only if a trusted edge (e.g. Cloudflare's
   `CF-IPCountry`) sets the scanner's country.
 
+## Platform: Integrations, Brand & public site, Status
+
+The Xpot admin's own screens (the Platform group; managers get a 403).
+
+- **Integrations** (`/admin/integrations`) is organised by job, one section
+  each: Sign-in by SMS (Twilio, required), Maps & places (Google Places, plus a
+  read-only route-optimisation line), Voice transcription (Groq, then OpenAI),
+  AI writing (OpenRouter, then Gemini), CRM (an Xphere summary, with
+  GoHighLevel folded under Legacy), AI assistants (MCP) and Infrastructure
+  (file storage, prospecting engine, push, Stuscle wholesale, Telegram: only
+  "configured" or not, never a value). Voice and AI say the order the providers
+  are tried in and which one is "In use now", computed on the server with
+  `server/lib/providerChoice.ts`. Each provider card shows its status, where the
+  settings come from (panel or server environment), the last Test (kept in
+  `integration_checks`), the last error, what stops working without it, and
+  Test / Save / Replace key / Remove key; a saved key reads "Key saved, ending
+  in 1234". Incomplete services are listed at the top. A card can be linked as
+  `/admin/integrations#service-<id>`.
+- **Brand & public site** (`/admin/branding`): Identity (icon and logo on dark
+  and light, "Restore default"), Installed app (`?tab=app`: name and colours,
+  with phone previews) and Landing page (`/admin/landing`: the public page's
+  editor; it warns before leaving with unpublished changes). Changes can take
+  up to 5 minutes to show in the installed app.
+- **Status** (`/admin/health`): a banner that names its causes (prospecting
+  worker, services, CRM sync), the services list, the prospecting worker and
+  searches (a stuck route gets "Build the route again"), CRM sync problems with
+  Retry, and the error log with a plain-language summary on each event.
+- Integrations and Status read one services list,
+  `GET /api/xpot/admin/integrations/services` (`server/observability/services.ts`),
+  so the two screens never disagree.
+
 ## AI access (MCP)
 
-`POST /mcp` is an MCP server (Streamable HTTP, stateless) for the Tags Journey.
-Admin only. Code: `server/mcp/`, `shared/schema/mcp.ts`. Its tools
-(`server/mcp/tools/tagJourney.ts`):
+`POST /mcp` is an MCP server (Streamable HTTP, stateless) for AI assistants.
+Admin only, and an assistant acts as the admin who connected it. Code:
+`server/mcp/`, `shared/schema/mcp.ts`. Three tool families, each behind its own
+OAuth scope (`xpot:journey`, `xpot:prospecting`, `xpot:tasks`): the Tags
+production log below (`server/mcp/tools/tagJourney.ts`), prospecting searches
+(`prospecting_*`, `server/mcp/tools/prospecting.ts`) and tasks (`tasks_*`,
+`server/mcp/tools/tasks.ts`). The production-log tools:
 
 | Tool | What it does |
 |---|---|
@@ -378,12 +530,13 @@ Two ways in:
   blocked. Discovery: `/.well-known/oauth-protected-resource` and
   `/.well-known/oauth-authorization-server`. Tables: `migrations/0018_mcp_oauth.sql`.
 - **Static tokens** for clients that take a header (Claude Code): created in
-  Organization › Integrations › AI access (MCP) (`/admin/integrations/mcp`);
-  the secret is shown once
+  Platform › Integrations › AI assistants (`/admin/integrations/mcp`); the
+  secret is shown once and the box closes only on "I've copied it"
   (`migrations/0015_mcp_tokens.sql`).
 
-Both are listed and revocable in that same card. Codes, tokens and client
-secrets are stored as SHA-256 hashes only.
+Both are listed with the scopes they were granted, and revocable, in that same
+tab; revoked ones sit behind "Show revoked". Codes, tokens and client secrets
+are stored as SHA-256 hashes only.
 
 Environment:
 - `PUBLIC_BASE_URL`: optional. Unset, the OAuth issuer and endpoints are
@@ -404,7 +557,7 @@ comment on each.
 | `R2_ACCOUNT_ID` (or `R2_ENDPOINT`), `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | no | Private storage for photos and voice notes (see "Files"); unset, they go to the private Supabase bucket |
 | `PGSSLMODE`, `POSTGRES_SSL` | no | Force TLS on (`require` / `true`) or off (`PGSSLMODE=disable`); by default it follows the URL |
 | `PORT` | no | Listen port (2110 by default; the Docker image sets 8888) |
-| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` or `TWILIO_MESSAGING_SERVICE_SID` | no | SMS fallback when Organization › Integrations has no Twilio |
+| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` or `TWILIO_MESSAGING_SERVICE_SID` | no | SMS fallback when Platform › Integrations has no Twilio |
 | `XPOT_SUPPORT_WHATSAPP` | no | WhatsApp shown to pending and blocked people |
 | `XPOT_SIGNUP_NOTIFY_PHONES` | no | Who gets a text per sign-up (comma separated) |
 | `XPOT_PUBLIC_URL` | no | Origin for the link in that text (else the request's origin) |
