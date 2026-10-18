@@ -12,8 +12,7 @@ import type { XpotMeResponse } from "@/pages/xpot/types";
 import { AdminOverview } from "./AdminOverview";
 import { AdminReps } from "./AdminReps";
 import { AdminIntegrations } from "./AdminIntegrations";
-import { AdminBranding } from "./AdminBranding";
-import { AdminLandingContent } from "./AdminLandingContent";
+import { AdminBrandSite } from "./platform/AdminBrandSite";
 import { AdminTags, CodeLookup } from "./tags/AdminTags";
 import { AdminProducts } from "./AdminProducts";
 import { AdminSettings } from "./AdminSettings";
@@ -137,8 +136,8 @@ export function AdminApp({ section }: { section: string }) {
         <EmptyState icon={ShieldAlert} tone="red" title={tm("accessRestricted")} hint={tm("noAdminPermission")} />
       )}
       {(active === "integrations" || active === "xphere") && viewer.isAdmin && <AdminIntegrations />}
-      {active === "branding" && viewer.isAdmin && <AdminBranding />}
-      {active === "landing" && viewer.isAdmin && <AdminLandingContent />}
+      {/* Brand & public site: one page, /admin/branding opens Identity and /admin/landing its Landing tab. */}
+      {(active === "branding" || active === "landing") && viewer.isAdmin && <AdminBrandSite />}
       {active === "health" && viewer.isAdmin && <AdminSystemHealth />}
       {active === "reps" && <AdminReps />}
       {active === "tags" && <AdminTags />}
