@@ -3,7 +3,7 @@ import type { Dictionary } from "../index";
 // Admin › System health (client/src/pages/admin/AdminSystemHealth.tsx).
 
 const en = {
-  loadFailed: "Could not load system health.",
+  loadFailed: "Could not load the status.",
   updatedAgo: "Updated {time}",
   refresh: "Refresh",
   overall_healthy: "All systems normal",
@@ -145,7 +145,7 @@ const en = {
 export const systemHealthMessages: Dictionary<typeof en> = {
   en,
   pt: {
-    loadFailed: "Não foi possível carregar a saúde do sistema.",
+    loadFailed: "Não foi possível carregar o status.",
     updatedAgo: "Atualizado {time}",
     refresh: "Atualizar",
     overall_healthy: "Tudo funcionando normalmente",
@@ -227,7 +227,7 @@ export const systemHealthMessages: Dictionary<typeof en> = {
     timelineAverage: "média {duration}",
     timelineSuccessRate: "{rate}% ok",
     timelineShowEvents: "Ver eventos desta busca",
-    filterRun: "Busca #{id}",
+    filterRun: "Busca nº {id}",
     runStatus_queued: "Na fila",
     runStatus_starting: "Iniciando",
     runStatus_running: "Rodando",
@@ -283,7 +283,7 @@ export const systemHealthMessages: Dictionary<typeof en> = {
     todo_route_not_built: "Peça ao vendedor para montar a rota a partir da busca, ou inicie a busca de novo.",
   },
   es: {
-    loadFailed: "No se pudo cargar la salud del sistema.",
+    loadFailed: "No se pudo cargar el estado.",
     updatedAgo: "Actualizado {time}",
     refresh: "Actualizar",
     overall_healthy: "Todo funciona con normalidad",
@@ -365,7 +365,7 @@ export const systemHealthMessages: Dictionary<typeof en> = {
     timelineAverage: "promedio {duration}",
     timelineSuccessRate: "{rate}% ok",
     timelineShowEvents: "Ver eventos de esta búsqueda",
-    filterRun: "Búsqueda #{id}",
+    filterRun: "Búsqueda n.º {id}",
     runStatus_queued: "En cola",
     runStatus_starting: "Iniciando",
     runStatus_running: "En curso",

@@ -115,7 +115,7 @@ const en = {
   welcomeMessage: "Hi {name}! Your Xpot access is ready.\n{link}\nSign in with your phone number {phone}: you'll get a code by SMS.",
 
   // People: role warnings, refusals, filters
-  adminRoleWarning: "Full Xpot admin: sees every organization and the platform settings (integrations, branding, landing page, system health). They will be signed out and must sign in again.",
+  adminRoleWarning: "Full Xpot admin: sees every organization and the platform settings (integrations, brand and public site, status). They will be signed out and must sign in again.",
   adminRoleRemovedWarning: "They stop being an Xpot admin and will be signed out.",
   confirmAdminTitle: "Make {name} an Xpot admin?",
   confirmAdminRemoveTitle: "Remove {name}'s Xpot admin access?",
@@ -246,7 +246,7 @@ export const manageMessages: Dictionary<typeof en> = {
     metricActiveReps: "Vendedores ativos",
     metricVisitsInProgress: "Visitas em andamento",
     metricCompletedVisits: "Visitas finalizadas",
-    metricOpenOpportunities: "Negócios em aberto",
+    metricOpenOpportunities: "Oportunidades abertas",
     metricPendingTasks: "Tarefas pendentes",
     syncStatus_pending: "Pendente",
     syncStatus_synced: "Sincronizado",
@@ -299,7 +299,7 @@ export const manageMessages: Dictionary<typeof en> = {
     wholesaleConfirm: "Gerar um novo código de atacado para {name}? {code} deixa de funcionar na loja Stuscle.",
     block: "Bloquear",
     fieldRole: "Papel",
-    fieldSignInPhone: "Telefone de login",
+    fieldSignInPhone: "Telefone de acesso",
     signInPhoneHint: "A pessoa recebe um código neste telefone para entrar.",
     changePhone: "Trocar",
     fieldWholesale: "Código de atacado (loja Stuscle)",
@@ -334,7 +334,7 @@ export const manageMessages: Dictionary<typeof en> = {
     createAnother: "Criar outro",
     welcomeMessage: "Oi, {name}! Seu acesso ao Xpot está pronto.\n{link}\nEntre com o seu número de telefone {phone}: você vai receber um código por SMS.",
 
-    adminRoleWarning: "Admin total do Xpot: vê todas as organizações e as configurações da plataforma (integrações, marca, landing page, saúde do sistema). A pessoa sai da conta e precisa entrar de novo.",
+    adminRoleWarning: "Admin total do Xpot: vê todas as organizações e as configurações da plataforma (integrações, marca e site público, status). A pessoa sai da conta e precisa entrar de novo.",
     adminRoleRemovedWarning: "A pessoa deixa de ser admin do Xpot e sai da conta.",
     confirmAdminTitle: "Tornar {name} admin do Xpot?",
     confirmAdminRemoveTitle: "Tirar o acesso de admin do Xpot de {name}?",
@@ -457,7 +457,7 @@ export const manageMessages: Dictionary<typeof en> = {
     metricActiveReps: "Vendedores activos",
     metricVisitsInProgress: "Visitas en curso",
     metricCompletedVisits: "Visitas finalizadas",
-    metricOpenOpportunities: "Negocios abiertos",
+    metricOpenOpportunities: "Oportunidades abiertas",
     metricPendingTasks: "Tareas pendientes",
     syncStatus_pending: "Pendiente",
     syncStatus_synced: "Sincronizado",
@@ -545,7 +545,7 @@ export const manageMessages: Dictionary<typeof en> = {
     createAnother: "Crear otro",
     welcomeMessage: "¡Hola, {name}! Tu acceso a Xpot está listo.\n{link}\nInicia sesión con tu número de teléfono {phone}: recibirás un código por SMS.",
 
-    adminRoleWarning: "Admin total de Xpot: ve todas las organizaciones y los ajustes de la plataforma (integraciones, marca, landing page, estado del sistema). Se cerrará su sesión y tendrá que volver a entrar.",
+    adminRoleWarning: "Admin total de Xpot: ve todas las organizaciones y los ajustes de la plataforma (integraciones, marca y sitio público, estado). Se cerrará su sesión y tendrá que volver a entrar.",
     adminRoleRemovedWarning: "Deja de ser admin de Xpot y se cerrará su sesión.",
     confirmAdminTitle: "¿Hacer a {name} admin de Xpot?",
     confirmAdminRemoveTitle: "¿Quitar a {name} el acceso de admin de Xpot?",
