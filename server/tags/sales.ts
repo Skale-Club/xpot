@@ -18,7 +18,7 @@ import {
   tagStockMovements,
   tags,
 } from "#shared/schema.js";
-import type { TagActor } from "#shared/tagAccess.js";
+import { canWorkOnTag, type TagActor } from "#shared/tagAccess.js";
 import { allocateSaleLineTotals, paymentStatusFor, resolveUnitPriceCents } from "#shared/pricing.js";
 import { resolveTagUnitCost, type TagSaleCreateInput } from "#shared/tagSales.js";
 import { salesStorage } from "../storage-sales.js";
@@ -84,6 +84,7 @@ export async function createTagSale(input: TagSaleCreateInput, actor: TagActor, 
         id: tags.id,
         publicCode: tags.publicCode,
         repId: tags.repId,
+        organizationId: tags.organizationId,
         leadId: tags.leadId,
         status: tags.status,
         stockStatus: tags.stockStatus,
@@ -159,6 +160,11 @@ export async function createTagSale(input: TagSaleCreateInput, actor: TagActor, 
         }
         if (tag.repId !== null && tag.repId !== sellerRepId) {
           throw new TagSaleError(`Piece ${tag.publicCode} belongs to another seller`, 403, "tag_owner_mismatch", { code: tag.publicCode });
+        }
+        // A reseller sells the pieces in their kit, never house stock they do not hold (canWorkOnTag, as everywhere
+        // else in Tags): selling one would take it into their hands, and cancelling the sale would keep it there.
+        if (!actor.isManager && !canWorkOnTag(actor, tag)) {
+          throw new TagSaleError(`Piece ${tag.publicCode} is not in your kit`, 403, "tag_not_yours", { code: tag.publicCode });
         }
         if (tag.status === "retired") {
           throw new TagSaleError(`Piece ${tag.publicCode} is retired`, 409, "tag_retired", { code: tag.publicCode });

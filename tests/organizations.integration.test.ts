@@ -113,8 +113,10 @@ describe("Organizations API authorization", () => {
     const [otherLead] = await q(`INSERT INTO sales_leads (organization_id, name, owner_rep_id) VALUES ($1, 'Other customer', $2) RETURNING id`, [other, outsiderId]);
 
     const app = appFor("rep-admin");
-    expect((await request(app, "POST", `/api/xpot/organizations/${own}/members`, { repId: memberId, membershipRole: "member" })).status).toBe(201);
+    // People join through platform management (People, or Organizations for a manager), not a Rep Admin.
+    expect((await request(app, "POST", `/api/xpot/organizations/${own}/members`, { repId: outsiderId, membershipRole: "member" })).status).toBe(403);
     expect((await request(app, "POST", `/api/xpot/organizations/${own}/members`, { repId: outsiderId, membershipRole: "admin" })).status).toBe(403);
+    await addMembership(own, memberId, "member");
     expect((await request(app, "GET", `/api/xpot/organizations/${other}`)).status).toBe(403);
     expect((await request(app, "GET", `/api/xpot/leads/${otherLead.id}`)).status).toBe(403);
 
