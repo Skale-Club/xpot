@@ -1,19 +1,27 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Archive, ArrowLeft, Ban, Building2, ChevronRight, Download, ExternalLink, MapPin, Pencil, Plus, Power, PowerOff, RotateCcw, Truck, Undo2 } from "lucide-react";
+import { Archive, Ban, BarChart3, Building2, ChevronRight, Download, ExternalLink, History, MapPin, Pencil, Plus, Power, PowerOff, RotateCcw, Truck, Undo2 } from "lucide-react";
 import { defaultUtmEnabled, planTransition, type TagAction } from "@shared/tags";
 import { contentKindOf, contentSummary, validateChipContent, type ChipContentKind } from "@shared/chipContent";
 import { guessDestinationType, normalizeUrlInput } from "@shared/tagApp";
 import type { TagDetail } from "@shared/tagsApi";
 import { CODE_HEADING, TagModelChips, TagPieceVisual, tagPlaqueSpec } from "@/components/xpot/TagProductThumbnail";
 import { useIsSuperAdmin } from "@/components/xpot/AdminBadge";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
+import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
+import { SectionCard } from "@/components/xpot/DashboardKit";
+import { EmptyState } from "@/components/xpot/EmptyState";
+import { Field, Input, Select } from "@/components/xpot/Field";
+import { InlineAlert } from "@/components/xpot/InlineAlert";
+import { BackLink } from "@/components/xpot/PageHeader";
+import { Pill } from "@/components/xpot/StatusPill";
+import { EYEBROW, GLASS_CLASS, MODULE_ACCENT } from "@/components/xpot/surface";
 import { useToast } from "@/hooks/use-toast";
 import { AdminHttpError, ADMIN_TAGS_KEY, errorMessage, formatDateTime, getJson, invalidateAdminTags, sendJson, STALE_MS } from "./api";
-import { BTN, BTN_DANGER, BTN_GHOST, CARD, INPUT, PieceStatusPill } from "./ui";
-import { CopyRow, Loading, LoadError, Select, useLeads, useReps } from "./pieces-shared";
-import { ConfirmDialog, useTagCatalog } from "./batches-shared";
+import { PieceStatusPill } from "./ui";
+import { CopyRow, Loading, LoadError, useLeads, useReps } from "./pieces-shared";
+import { catalogOptions, useTagCatalog } from "./batches-shared";
 import { useTagLabels } from "./labels";
 import { AnalyticsPanel, RangePicker, type AnalyticsRange } from "./pieces-analytics";
 import { NfcProvisioningCard } from "./pieces-NfcProvisioningCard";
@@ -42,8 +50,9 @@ const URL_ERROR_KEYS: Record<string, PieceKey> = {
   "Destination URL is not valid": "urlErrorInvalid",
 };
 
-const LABEL = "text-[11px] font-semibold uppercase tracking-wider text-white/40";
 const STEP_TITLE = "text-sm font-semibold text-white";
+/** A piece's own card (the steps, the side panel). */
+const CARD = `rounded-2xl ${GLASS_CLASS}`;
 
 /** Every write on this screen answers with the fresh TagDetail. */
 function usePieceMutation(id: string, successTitle: string) {
@@ -118,10 +127,10 @@ function CustomerStep({ tag }: { tag: TagDetail }) {
           </span>
           {current?.googlePlaceId ? <GoogleBadge label={t("onGoogle")} /> : null}
           {!locked && !liveWithCustomer && !changing ? (
-            <button type="button" className={BTN_GHOST} onClick={() => setChanging(true)} data-testid="admin-piece-change-customer">
+            <Button type="button" variant="secondary" size="sm" className="min-h-10" onClick={() => setChanging(true)} data-testid="admin-piece-change-customer">
               <Pencil className="h-3.5 w-3.5" />
               {t("changeCustomer")}
-            </button>
+            </Button>
           ) : null}
         </div>
       ) : (
@@ -129,30 +138,24 @@ function CustomerStep({ tag }: { tag: TagDetail }) {
       )}
       {liveWithCustomer ? <p className="text-xs text-white/40">{t("disableBeforeMove")}</p> : null}
 
-      {pending ? (
-        <div className="space-y-3 rounded-xl border border-amber-400/30 bg-amber-400/10 p-3" data-testid="admin-piece-confirm-move">
-          <p className="flex items-start gap-2 text-sm text-amber-100">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
-            <span>
-              <strong className="block text-white">{t("moveCustomerTitle", { name: pending.name })}</strong>
-              {t("confirmMoveCustomer")}
-            </span>
-          </p>
-          <div className="flex gap-2">
-            <button type="button" className={BTN} disabled={assign.isPending} onClick={() => commit(pending)} data-testid="admin-piece-confirm-move-yes">
-              {t("confirmMove")}
-            </button>
-            <button type="button" className={BTN_GHOST} disabled={assign.isPending} onClick={() => setPending(null)}>
-              {t("cancelChange")}
-            </button>
-          </div>
-        </div>
-      ) : picking ? (
+      <ConfirmDialog
+        open={pending !== null}
+        onOpenChange={(open) => !open && setPending(null)}
+        title={t("moveCustomerTitle", { name: pending?.name ?? "" })}
+        description={t("confirmMoveCustomer")}
+        confirmLabel={t("confirmMove")}
+        cancelLabel={t("cancelChange")}
+        busy={assign.isPending}
+        testId="admin-piece-confirm-move-yes"
+        onConfirm={() => pending && commit(pending)}
+      />
+
+      {picking ? (
         <div>
           <div className="flex gap-2">
-            <input
-              className={INPUT}
+            <Input
               autoFocus={changing}
+              aria-label={t("searchCustomers")}
               placeholder={leadsLoading ? t("loadingCustomers") : t("searchCustomers")}
               value={text}
               onChange={(e) => setText(e.target.value)}
@@ -161,9 +164,9 @@ function CustomerStep({ tag }: { tag: TagDetail }) {
               data-testid="admin-piece-lead-search"
             />
             {changing ? (
-              <button type="button" className={BTN_GHOST} onClick={reset}>
+              <Button type="button" variant="ghost" onClick={reset}>
                 {t("cancelChange")}
-              </button>
+              </Button>
             ) : null}
           </div>
           {leadsError ? <p className="mt-1 text-xs text-red-300">{t("customersFailed")}</p> : null}
@@ -190,7 +193,7 @@ function CustomerStep({ tag }: { tag: TagDetail }) {
                     type="button"
                     disabled={assign.isPending}
                     onClick={() => choose({ leadId: null, name: text.trim() })}
-                    className="flex min-h-[44px] w-full items-center gap-2 px-3 py-2 text-left text-sm font-semibold text-blue-300 hover:bg-white/[0.05] disabled:opacity-50"
+                    className={`flex min-h-[44px] w-full items-center gap-2 px-3 py-2 text-left text-sm font-semibold ${MODULE_ACCENT.tags.text} hover:bg-white/[0.05] disabled:opacity-50`}
                     data-testid="admin-piece-lead-create"
                   >
                     <Plus className="h-4 w-4 shrink-0" />
@@ -208,10 +211,10 @@ function CustomerStep({ tag }: { tag: TagDetail }) {
 
 function GoogleBadge({ label }: { label: string }) {
   return (
-    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-400/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-300 ring-1 ring-emerald-400/25">
-      <MapPin className="h-3 w-3" />
+    <Pill tone="slate" bordered className="shrink-0 gap-1">
+      <MapPin className="h-3 w-3" aria-hidden="true" />
       {label}
-    </span>
+    </Pill>
   );
 }
 
@@ -284,10 +287,10 @@ function DestinationStep({ tag }: { tag: TagDetail }) {
             )}
           </span>
           {!locked ? (
-            <button type="button" className={BTN_GHOST} onClick={() => setEditing(true)} data-testid="admin-piece-change-destination">
+            <Button type="button" variant="secondary" size="sm" className="min-h-10" onClick={() => setEditing(true)} data-testid="admin-piece-change-destination">
               <Pencil className="h-3.5 w-3.5" />
               {t("changeDestination")}
-            </button>
+            </Button>
           ) : null}
         </div>
       </div>
@@ -344,14 +347,16 @@ function DestinationStep({ tag }: { tag: TagDetail }) {
         </div>
       ) : null}
       {kind === "url" && utm ? (
-        <input className={INPUT} value={utmCampaign} onChange={(e) => setUtmCampaign(e.target.value)} placeholder={t("utmCampaignPlaceholder")} maxLength={80} />
+        <Input value={utmCampaign} onChange={(e) => setUtmCampaign(e.target.value)} placeholder={t("utmCampaignPlaceholder")} aria-label={t("utmCampaignPlaceholder")} maxLength={80} />
       ) : null}
-      {stored ? <input className={INPUT} value={reason} onChange={(e) => setReason(e.target.value)} placeholder={t("changeReasonPlaceholder")} maxLength={300} /> : null}
+      {stored ? <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder={t("changeReasonPlaceholder")} aria-label={t("changeReasonPlaceholder")} maxLength={300} /> : null}
       <div className="flex flex-wrap items-center gap-2">
-        <button
+        <Button
           type="button"
-          className={BTN}
-          disabled={!!blocker || save.isPending}
+          variant="brand"
+          accent="tags"
+          disabled={!!blocker}
+          loading={save.isPending}
           onClick={() =>
             save.mutate(
               { method: "PATCH", body: { destinationType, destinationUrl: value, utmEnabled: kind === "url" ? utm : false, utmCampaign, reason } },
@@ -361,11 +366,11 @@ function DestinationStep({ tag }: { tag: TagDetail }) {
           data-testid="admin-piece-save-destination"
         >
           {t("saveDestination")}
-        </button>
+        </Button>
         {stored ? (
-          <button type="button" className={BTN_GHOST} onClick={() => setEditing(false)}>
+          <Button type="button" variant="ghost" onClick={() => setEditing(false)}>
             {tc("cancel")}
-          </button>
+          </Button>
         ) : null}
         {blocker ? <span className="text-xs text-white/40" data-testid="admin-piece-save-hint">{blocker}</span> : null}
       </div>
@@ -396,42 +401,22 @@ function actionUrl(id: string, action: PieceAction): string {
 
 function ActionDialog({ action, note, onClose, onConfirm, pending }: { action: PieceAction | null; note?: string | null; onClose: () => void; onConfirm: (reason: string) => void; pending: boolean }) {
   const t = useT(manageTagsPiecesMessages);
-  const tc = useT(commonMessages);
-  const [reason, setReason] = useState("");
   return (
-    <Dialog
+    <ConfirmDialog
       open={!!action}
-      onOpenChange={(open) => {
-        if (!open) {
-          setReason("");
-          onClose();
-        }
-      }}
+      onOpenChange={(open) => !open && onClose()}
+      title={action ? t(`action_${action}_title`) : ""}
+      description={action ? t(`action_${action}_description`) : null}
+      confirmLabel={action ? t(`action_${action}_confirm`) : null}
+      tone={action && DANGER_ACTIONS.has(action) ? "danger" : "default"}
+      reason={action === "damage" ? "required" : "optional"}
+      reasonPlaceholder={t("reasonPlaceholder")}
+      busy={pending}
+      testId="admin-piece-action-confirm"
+      onConfirm={onConfirm}
     >
-      <DialogContent className="border-white/10 bg-[#0d1326] text-white">
-        <DialogHeader>
-          <DialogTitle>{action ? t(`action_${action}_title`) : null}</DialogTitle>
-          <DialogDescription className="text-white/50">{action ? t(`action_${action}_description`) : null}</DialogDescription>
-        </DialogHeader>
-        {note ? <p className="text-sm text-white/70" data-testid="admin-piece-action-note">{note}</p> : null}
-        <input className={INPUT} value={reason} onChange={(e) => setReason(e.target.value)} placeholder={t("reasonPlaceholder")} maxLength={300} data-testid="admin-piece-action-reason" />
-        <DialogFooter className="gap-2">
-          <button type="button" className={BTN_GHOST} onClick={onClose}>{tc("cancel")}</button>
-          <button
-            type="button"
-            className={action && DANGER_ACTIONS.has(action) ? BTN_DANGER : BTN}
-            disabled={pending || (action === "damage" && !reason.trim())}
-            onClick={() => {
-              onConfirm(reason);
-              setReason("");
-            }}
-            data-testid="admin-piece-action-confirm"
-          >
-            {action ? t(`action_${action}_confirm`) : null}
-          </button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      {note ? <p className="text-sm text-white/70" data-testid="admin-piece-action-note">{note}</p> : null}
+    </ConfirmDialog>
   );
 }
 
@@ -458,47 +443,46 @@ function LifecycleStep({ tag }: { tag: TagDetail }) {
     <div className="space-y-3">
       <p className={STEP_TITLE}>{t("stepLive")}</p>
       {damaged ? (
-        <div className="flex items-start gap-2 rounded-xl border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-200" data-testid="admin-piece-damaged-banner">
-          <Ban className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>{t("damagedExplain")}</span>
+        <div data-testid="admin-piece-damaged-banner">
+          <InlineAlert tone="error" icon={Ban}>{t("damagedExplain")}</InlineAlert>
         </div>
       ) : null}
       <div className="flex flex-wrap gap-2">
         {tag.destinationUrl ? (
-          <button type="button" className={BTN_GHOST} onClick={() => tag.destinationUrl && window.open(tag.destinationUrl, "_blank", "noopener,noreferrer")}>
+          <Button type="button" variant="secondary" onClick={() => tag.destinationUrl && window.open(tag.destinationUrl, "_blank", "noopener,noreferrer")}>
             <ExternalLink className="h-3.5 w-3.5" />{t("testDestination")}
-          </button>
+          </Button>
         ) : null}
         {!damaged && tag.status !== "active" && tag.status !== "retired" ? (
-          <button type="button" className={BTN} disabled={!activatePlan.ok || run.isPending} onClick={() => setPending("activate")} data-testid="admin-piece-activate">
+          <Button type="button" variant="brand" accent="tags" disabled={!activatePlan.ok || run.isPending} onClick={() => setPending("activate")} data-testid="admin-piece-activate">
             <Power className="h-3.5 w-3.5" />{t("action_activate_confirm")}
-          </button>
+          </Button>
         ) : null}
         {!damaged && can("disable") ? (
-          <button type="button" className={BTN_GHOST} disabled={run.isPending} onClick={() => setPending("disable")} data-testid="admin-piece-disable">
+          <Button type="button" variant="secondary" disabled={run.isPending} onClick={() => setPending("disable")} data-testid="admin-piece-disable">
             <PowerOff className="h-3.5 w-3.5" />{t("action_disable_confirm")}
-          </button>
+          </Button>
         ) : null}
         {/* "Clear customer": the piece keeps its holder. A sold piece keeps its customer (the server refuses). */}
         {!damaged && can("unassign") && tag.saleId === null ? (
-          <button type="button" className={BTN_GHOST} disabled={run.isPending} onClick={() => setPending("unassign")} data-testid="admin-piece-clear-customer">
+          <Button type="button" variant="secondary" disabled={run.isPending} onClick={() => setPending("unassign")} data-testid="admin-piece-clear-customer">
             <Undo2 className="h-3.5 w-3.5" />{t("action_unassign_confirm")}
-          </button>
+          </Button>
         ) : null}
         {!damaged && can("retire") ? (
-          <button type="button" className={BTN_DANGER} disabled={run.isPending} onClick={() => setPending("retire")}>
+          <Button type="button" variant="danger" disabled={run.isPending} onClick={() => setPending("retire")}>
             <Archive className="h-3.5 w-3.5" />{t("action_retire_confirm")}
-          </button>
+          </Button>
         ) : null}
         {!damaged && can("restore") ? (
-          <button type="button" className={BTN_GHOST} disabled={run.isPending} onClick={() => setPending("restore")}>
+          <Button type="button" variant="secondary" disabled={run.isPending} onClick={() => setPending("restore")}>
             <RotateCcw className="h-3.5 w-3.5" />{t("action_restore_confirm")}
-          </button>
+          </Button>
         ) : null}
         {canDamage ? (
-          <button type="button" className={BTN_DANGER} disabled={run.isPending} onClick={() => setPending("damage")} data-testid="admin-piece-damage">
+          <Button type="button" variant="danger" disabled={run.isPending} onClick={() => setPending("damage")} data-testid="admin-piece-damage">
             <Ban className="h-3.5 w-3.5" />{t("action_damage_confirm")}
-          </button>
+          </Button>
         ) : null}
       </div>
       {!damaged && tag.status !== "active" && tag.status !== "retired" && !activatePlan.ok ? <p className="text-xs text-white/40">{t(activateBlockerKey(tag))}</p> : null}
@@ -518,14 +502,14 @@ function DetailsStep({ tag }: { tag: TagDetail }) {
   const labels = useTagLabels();
   const isAdmin = useIsSuperAdmin();
   const [label, setLabel] = useState(tag.label ?? "");
-  const [productType, setProductType] = useState<string | undefined>(tag.productType);
-  const [face, setFace] = useState<string | undefined>(tag.ownFace ?? undefined);
+  const [productType, setProductType] = useState<string>(tag.productType);
+  const [face, setFace] = useState<string>(tag.ownFace ?? "");
   // A piece with no catalog product (its own or its batch's) can never be sold: the admin can map it here.
   const missingProduct = isAdmin && tag.salesProductId === null;
-  const [salesProductId, setSalesProductId] = useState<string | undefined>(undefined);
+  const [salesProductId, setSalesProductId] = useState("");
   const { data: catalog = [] } = useTagCatalog();
   const save = usePieceMutation(tag.id, t("pieceSaved"));
-  const dirty = label.trim() !== (tag.label ?? "") || productType !== tag.productType || (face ?? null) !== tag.ownFace || !!salesProductId;
+  const dirty = label.trim() !== (tag.label ?? "") || productType !== tag.productType || (face || null) !== tag.ownFace || !!salesProductId;
   if (tag.status === "retired" || tag.stockStatus === "damaged") return null;
   return (
     <details className="group space-y-3">
@@ -533,36 +517,31 @@ function DetailsStep({ tag }: { tag: TagDetail }) {
         <ChevronRight className="h-4 w-4 transition-transform group-open:rotate-90" />
         {t("pieceSettings")}
       </summary>
-      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
         {missingProduct ? (
-          <label className="space-y-1 sm:col-span-2">
-            <span className={LABEL}>{tb("fieldCatalogProduct")}</span>
-            <Select
-              value={salesProductId}
-              onChange={setSalesProductId}
-              placeholder={tb("chooseCatalogProduct")}
-              options={catalog.map((p) => ({ value: String(p.id), label: p.sku ? `${p.name} · ${p.sku}` : p.name }))}
-              testId="admin-piece-catalog"
-            />
-            <span className="block text-xs text-amber-300/80">{t("noCatalogProduct")}</span>
-          </label>
+          <Field label={tb("fieldCatalogProduct")} hint={<span className="text-amber-300/80">{t("noCatalogProduct")}</span>} className="sm:col-span-2">
+            <Select value={salesProductId} onChange={(e) => setSalesProductId(e.target.value)} placeholder={tb("chooseCatalogProduct")} options={catalogOptions(catalog)} data-testid="admin-piece-catalog" />
+          </Field>
         ) : null}
-        <label className="space-y-1">
-          <span className={LABEL}>{t("productType")}</span>
-          <Select value={productType} onChange={setProductType} placeholder={t("productPlaceholder")} options={labels.productOptions} allowEmpty={false} />
-        </label>
-        <label className="space-y-1 sm:col-span-2">
-          <span className={LABEL}>{tg("printedOnPiece")}</span>
-          <Select value={face} onChange={setFace} placeholder={tag.batchCode ? t("sameAsBatch") : t("fromProduct")} options={labels.faceOptions} />
-        </label>
-        <label className="space-y-1">
-          <span className={LABEL}>{t("internalLabel")}</span>
-          <input className={INPUT} value={label} onChange={(e) => setLabel(e.target.value)} maxLength={120} placeholder={t("optional")} />
-        </label>
+        <Field label={t("productType")}>
+          <Select value={productType} onChange={(e) => setProductType(e.target.value)} options={labels.productOptions} />
+        </Field>
+        <Field label={t("internalLabel")}>
+          <Input value={label} onChange={(e) => setLabel(e.target.value)} maxLength={120} placeholder={t("optional")} />
+        </Field>
+        <Field label={tg("printedOnPiece")} className="sm:col-span-2">
+          <Select value={face} onChange={(e) => setFace(e.target.value)} placeholder={tag.batchCode ? t("sameAsBatch") : t("fromProduct")} options={labels.faceOptions} />
+        </Field>
       </div>
-      <button type="button" className={BTN_GHOST} disabled={!dirty || !productType || save.isPending} onClick={() => save.mutate({ method: "PATCH", body: { label, productType, face: face ?? null, ...(salesProductId ? { salesProductId: Number(salesProductId) } : {}) } })}>
+      <Button
+        type="button"
+        variant="secondary"
+        disabled={!dirty || !productType}
+        loading={save.isPending}
+        onClick={() => save.mutate({ method: "PATCH", body: { label, productType, face: face || null, ...(salesProductId ? { salesProductId: Number(salesProductId) } : {}) } })}
+      >
         {t("saveDetails")}
-      </button>
+      </Button>
     </details>
   );
 }
@@ -604,19 +583,21 @@ function ResellerField({ tag }: { tag: TagDetail }) {
 
   return (
     <div className="space-y-1.5">
-      <p className={LABEL}>{tg("colReseller")}</p>
+      <p className={EYEBROW}>{tg("colReseller")}</p>
       <p className="text-sm text-white/80">
         {tag.repName ?? (tag.repId ? t("resellerNumber", { id: tag.repId }) : t("houseStock"))}
         {tag.kitId ? <span className="text-xs text-white/40"> · {t("inKit")}</span> : null}
       </p>
       <div className="flex gap-2">
-        <Select value={choice} onChange={(v) => setChoice(v ?? HOUSE)} placeholder={t("houseStock")} options={options} allowEmpty={false} testId="admin-piece-rep" />
-        <button type="button" className={`${BTN_GHOST} shrink-0`} disabled={!!blocker || choice === current || move.isPending} onClick={submit} data-testid="admin-piece-rep-move">
+        <div className="min-w-0 flex-1">
+          <Select value={choice} onChange={(e) => setChoice(e.target.value || HOUSE)} options={options} aria-label={tg("colReseller")} data-testid="admin-piece-rep" />
+        </div>
+        <Button type="button" variant="secondary" className="shrink-0" disabled={!!blocker || choice === current} loading={move.isPending} onClick={submit} data-testid="admin-piece-rep-move">
           <Truck className="h-3.5 w-3.5" />{t("move")}
-        </button>
+        </Button>
       </div>
       {blocker ? <p className="text-xs text-white/40" data-testid="admin-piece-move-blocked">{blocker}</p> : null}
-      {error ? <p className="text-xs text-red-400">{t("resellersFailed")}</p> : null}
+      {error ? <p className="text-xs text-red-300">{t("resellersFailed")}</p> : null}
       <ConfirmDialog
         open={confirming}
         onOpenChange={setConfirming}
@@ -641,9 +622,9 @@ function ResellerField({ tag }: { tag: TagDetail }) {
 function Back({ go }: { go: Go }) {
   const ts = useT(shellMessages);
   return (
-    <button type="button" className="inline-flex items-center gap-1.5 text-sm text-white/50 hover:text-white" onClick={() => go("/pieces")} data-testid="admin-piece-back">
-      <ArrowLeft className="h-4 w-4" />{ts("managePieces")}
-    </button>
+    <span data-testid="admin-piece-back">
+      <BackLink onBack={() => go("/pieces")}>{ts("managePieces")}</BackLink>
+    </span>
   );
 }
 
@@ -664,20 +645,24 @@ export function PieceDetail({ id, go }: { id: string; go: Go }) {
   const labels = useTagLabels();
   const isAdmin = useIsSuperAdmin();
   const [range, setRange] = useState<AnalyticsRange>({ preset: "30d" });
-  const { data: tag, isLoading, error } = useQuery<TagDetail>({
+  const { data: tag, isLoading, error, refetch } = useQuery<TagDetail>({
     queryKey: [ADMIN_TAGS_KEY, "piece", id],
     queryFn: () => getJson(`/api/xpot/tags/${encodeURIComponent(id)}`),
     staleTime: STALE_MS,
     retry: (count, err) => !(err instanceof AdminHttpError && err.status < 500) && count < 2,
   });
 
-  if (isLoading) return <Loading />;
+  if (isLoading) return <Loading rows={5} />;
   if (error || !tag) {
     const notFound = error instanceof AdminHttpError && error.status === 404;
     return (
       <div className="space-y-3">
         <Back go={go} />
-        {notFound ? <p className="text-sm text-red-400">{t("notFound")}</p> : <LoadError what={t("whatThisPiece")} error={error} />}
+        {notFound ? (
+          <EmptyState tone="tags" icon={Ban} title={t("notFound")} />
+        ) : (
+          <LoadError what={t("whatThisPiece")} error={error} onRetry={() => void refetch()} />
+        )}
       </div>
     );
   }
@@ -685,7 +670,7 @@ export function PieceDetail({ id, go }: { id: string; go: Go }) {
   const qrBase = `/api/xpot/admin/tags/${tag.id}`;
 
   return (
-    <div className="space-y-4" data-testid="admin-piece-detail">
+    <div className="min-w-0 space-y-4" data-testid="admin-piece-detail">
       <Back go={go} />
 
       <div className="flex min-w-0 items-center gap-3 sm:gap-4">
@@ -721,9 +706,9 @@ export function PieceDetail({ id, go }: { id: string; go: Go }) {
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
+      <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         {/* key: re-seed the forms whenever the saved piece changes */}
-        <section className={`${CARD} space-y-6 p-4`} key={`${tag.id}-${tag.updatedAt}`}>
+        <section className={`${CARD} min-w-0 space-y-6 p-4`} key={`${tag.id}-${tag.updatedAt}`}>
           <CustomerStep tag={tag} />
           <div className="border-t border-white/10" />
           <DestinationStep tag={tag} />
@@ -733,7 +718,7 @@ export function PieceDetail({ id, go }: { id: string; go: Go }) {
           <DetailsStep tag={tag} />
         </section>
 
-        <section className={`${CARD} space-y-4 p-4`} key={`side-${tag.id}-${tag.updatedAt}`}>
+        <section className={`${CARD} min-w-0 space-y-4 p-4`} key={`side-${tag.id}-${tag.updatedAt}`}>
           <div className="mx-auto w-44 rounded-xl bg-white p-2">
             <img src={`${qrBase}/qr.svg?v=${encodeURIComponent(tag.publicCode)}`} alt={t("qrAlt", { code: tag.publicCode })} className="h-full w-full" />
           </div>
@@ -761,12 +746,16 @@ export function PieceDetail({ id, go }: { id: string; go: Go }) {
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xs text-white/40">{t("downloadQr")}</span>
-                <a className={BTN_GHOST} href={`${qrBase}/qr.svg?download=1`} download={`${tag.publicCode}.svg`}>
-                  <Download className="h-3.5 w-3.5" />SVG
-                </a>
-                <a className={BTN_GHOST} href={`${qrBase}/qr.png?download=1`} download={`${tag.publicCode}.png`}>
-                  <Download className="h-3.5 w-3.5" />PNG
-                </a>
+                <Button asChild variant="secondary" size="sm" className="min-h-10">
+                  <a href={`${qrBase}/qr.svg?download=1`} download={`${tag.publicCode}.svg`}>
+                    <Download className="h-3.5 w-3.5" />SVG
+                  </a>
+                </Button>
+                <Button asChild variant="secondary" size="sm" className="min-h-10">
+                  <a href={`${qrBase}/qr.png?download=1`} download={`${tag.publicCode}.png`}>
+                    <Download className="h-3.5 w-3.5" />PNG
+                  </a>
+                </Button>
               </div>
               {/* Only the dates that happened. */}
               <Dl>
@@ -788,10 +777,9 @@ export function PieceDetail({ id, go }: { id: string; go: Go }) {
       {/* Admin only: renders nothing (and sends no request) for managers. */}
       <JourneyPanel scope={{ tagId: tag.id }} title={t("journeyTitle")} />
 
-      <section className={`${CARD} p-4`}>
-        <p className="mb-3 text-sm font-semibold text-white">{t("destinationHistory")}</p>
+      <SectionCard accent="tags" icon={History} title={t("destinationHistory")} bodyClassName="px-4 py-2">
         {tag.history.length === 0 ? (
-          <p className="text-sm text-white/40">{t("noDestinationYet")}</p>
+          <EmptyState compact dense tone="tags" icon={History} title={t("noDestinationYet")} cardStyle={{}} />
         ) : (
           <ul className="divide-y divide-white/5 text-sm">
             {tag.history.map((h) => (
@@ -815,11 +803,14 @@ export function PieceDetail({ id, go }: { id: string; go: Go }) {
             ))}
           </ul>
         )}
-      </section>
+      </SectionCard>
 
-      <div className="space-y-3">
+      <div className="min-w-0 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm font-semibold uppercase tracking-wider text-white/60">{t("analytics")}</p>
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-white/90">
+            <BarChart3 className={`h-4 w-4 ${MODULE_ACCENT.tags.text}`} aria-hidden="true" />
+            {t("analytics")}
+          </h2>
           <RangePicker value={range} onChange={setRange} />
         </div>
         <AnalyticsPanel scopeUrl={`/api/xpot/admin/tags/${tag.id}/analytics`} range={range} />

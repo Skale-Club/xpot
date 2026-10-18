@@ -5,7 +5,8 @@ import { ScanLine } from "lucide-react";
 import { parseTagIntakeScan } from "@shared/tagIntake";
 import { useToast } from "@/hooks/use-toast";
 import { errorMessage, getJson } from "./api";
-import { BTN, INPUT } from "./ui";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/xpot/Field";
 import { OverviewTab } from "./OverviewTab";
 import { PiecesTab } from "./PiecesTab";
 import { PieceDetail } from "./PieceDetail";
@@ -64,21 +65,22 @@ export function CodeLookup({ onFound }: { onFound: (id: string) => void }) {
     }
   };
   return (
-    <form onSubmit={submit} className="flex gap-2">
-      <input
+    <form onSubmit={submit} className="flex min-w-0 gap-2">
+      <Input
         value={code}
         onChange={(e) => setCode(e.target.value)}
         placeholder={t("codePlaceholder")}
-        className={`${INPUT} w-48 font-mono`}
+        aria-label={t("codePlaceholder")}
+        className="min-h-10 w-48 min-w-0 font-mono"
         autoCapitalize="characters"
         autoCorrect="off"
         spellCheck={false}
         data-testid="admin-tag-code-lookup"
       />
-      <button type="submit" disabled={busy || !code.trim()} className={BTN}>
+      <Button type="submit" variant="brand" accent="tags" className="min-h-10 shrink-0" disabled={!code.trim()} loading={busy}>
         <ScanLine className="h-4 w-4" />
         {t("open")}
-      </button>
+      </Button>
     </form>
   );
 }
@@ -110,6 +112,7 @@ export function AdminTags() {
           ariaLabel={ts("navManage")}
           idPrefix="admin-tags"
           fill={false}
+          accent="tags"
           className="min-w-0 flex-1"
         />
         <CodeLookup onFound={(tagId) => go(`/pieces/${tagId}`)} />

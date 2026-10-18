@@ -1,7 +1,6 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { CHIP_STATUS_TONE, Pill } from "@/components/xpot/StatusPill";
-import { Boxes, Building2, CircleDot, Layers, Package, Plus, ScanLine, Users } from "lucide-react";
+import { Boxes, Building2, CircleDot, Layers, Nfc, Package, Plus, ScanLine, Users } from "lucide-react";
 import { FilterBar, FilterSearch, FilterSelect } from "@/components/xpot/filters";
 import { useUrlFilters } from "@/hooks/use-url-filters";
 import { ListPager, useOffsetPages } from "@/components/xpot/pagination";
@@ -9,13 +8,15 @@ import { TAG_PRODUCT_TYPES, TAG_STATUSES, TAG_STOCK_STATUSES } from "@shared/tag
 import { countStockMetric, type TagStockMetric } from "@shared/tagMetrics";
 import type { TagDetail, TagListItem } from "@shared/tagsApi";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
-import { TagPieceMention } from "@/components/xpot/TagProductThumbnail";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { ADMIN_TAGS_KEY, errorMessage, formatDateTime, getJson, invalidateAdminTags, sendJson, STALE_MS, withQuery } from "./api";
-import { BTN, BTN_GHOST, CARD, Empty, INPUT, PieceStatusPill, TD, TH } from "./ui";
-import { Loading, LoadError, Select, useBatchOptions, useLeads, useReps } from "./pieces-shared";
-import { useTagCatalog } from "./batches-shared";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/xpot/EmptyState";
+import { Field, Input, Select } from "@/components/xpot/Field";
+import { ADMIN_TAGS_KEY, errorMessage, getJson, invalidateAdminTags, sendJson, STALE_MS, withQuery } from "./api";
+import { Loading, LoadError, useBatchOptions, useLeads, useReps } from "./pieces-shared";
+import { catalogOptions, useTagCatalog } from "./batches-shared";
+import { PieceTable } from "./piece-table";
 import { useIsSuperAdmin } from "@/components/xpot/AdminBadge";
 import { useTagLabels } from "./labels";
 import { useT } from "@/i18n";
@@ -73,20 +74,19 @@ function NewPieceDialog({ open, onOpenChange, onCreated }: { open: boolean; onOp
   const tg = useT(manageTagsMessages);
   const tb = useT(manageTagsBatchesMessages);
   const labels = useTagLabels();
-  const [productType, setProductType] = useState<string | undefined>("google_review_sign");
-  const [face, setFace] = useState<string | undefined>(undefined);
+  const [productType, setProductType] = useState("google_review_sign");
+  const [face, setFace] = useState("");
   const [label, setLabel] = useState("");
   // Required: without a catalog product the piece could never be sold (server/tags/sales.ts).
-  const [salesProductId, setSalesProductId] = useState<string | undefined>(undefined);
+  const [salesProductId, setSalesProductId] = useState("");
   const { data: catalog = [] } = useTagCatalog();
-  const catalogOptions = catalog.map((p) => ({ value: String(p.id), label: p.sku ? `${p.name} · ${p.sku}` : p.name }));
   const create = useMutation({
-    mutationFn: () => sendJson<TagDetail>("POST", "/api/xpot/admin/tags", { productType, salesProductId: Number(salesProductId), face: face ?? null, label }),
+    mutationFn: () => sendJson<TagDetail>("POST", "/api/xpot/admin/tags", { productType, salesProductId: Number(salesProductId), face: face || null, label }),
     onSuccess: (tag) => {
       void invalidateAdminTags();
       onOpenChange(false);
       setLabel("");
-      setFace(undefined);
+      setFace("");
       toast({ title: t("pieceCreated", { code: tag.publicCode }), description: t("pieceCreatedHint") });
       onCreated(tag.id);
     },
@@ -98,124 +98,36 @@ function NewPieceDialog({ open, onOpenChange, onCreated }: { open: boolean; onOp
   };
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="border-white/10 bg-[#0d1326] text-white">
+      <DialogContent>
         <form onSubmit={submit} className="space-y-4">
           <DialogHeader>
             <DialogTitle>{t("newPieceTitle")}</DialogTitle>
-            <DialogDescription className="text-white/50">{t("newPieceDescription", { batches: ts("manageBatches") })}</DialogDescription>
+            <DialogDescription>{t("newPieceDescription", { batches: ts("manageBatches") })}</DialogDescription>
           </DialogHeader>
-          <label className="block space-y-1.5">
-            <span className="text-xs font-medium text-white/60">{t("productType")}</span>
-            <Select value={productType} onChange={setProductType} placeholder={t("choose")} options={labels.productOptions} allowEmpty={false} testId="new-piece-product" />
-          </label>
-          <label className="block space-y-1.5">
-            <span className="text-xs font-medium text-white/60">{tb("fieldCatalogProduct")}</span>
-            <Select value={salesProductId} onChange={setSalesProductId} placeholder={tb("chooseCatalogProduct")} options={catalogOptions} testId="new-piece-catalog" />
-            <span className="block text-[11px] text-white/35">{tb("catalogProductHint")}</span>
-          </label>
-          <label className="block space-y-1.5">
-            <span className="text-xs font-medium text-white/60">{tg("printedOnPiece")}</span>
+          <Field label={t("productType")}>
+            <Select value={productType} onChange={(e) => setProductType(e.target.value)} options={labels.productOptions} data-testid="new-piece-product" />
+          </Field>
+          <Field label={tb("fieldCatalogProduct")} hint={tb("catalogProductHint")}>
+            <Select value={salesProductId} onChange={(e) => setSalesProductId(e.target.value)} placeholder={tb("chooseCatalogProduct")} options={catalogOptions(catalog)} data-testid="new-piece-catalog" />
+          </Field>
+          <Field label={tg("printedOnPiece")} id="new-piece-face">
             <div className="flex items-center gap-2">
-              <TagFaceIcon face={face ?? (productType === "google_review_sign" ? "google_review" : null)} size="md" />
-              <Select value={face} onChange={setFace} placeholder={t("faceFromProductGoogle")} options={labels.faceOptions} testId="new-piece-face" />
+              <TagFaceIcon face={face || (productType === "google_review_sign" ? "google_review" : null)} size="md" />
+              <div className="min-w-0 flex-1">
+                <Select id="new-piece-face" value={face} onChange={(e) => setFace(e.target.value)} placeholder={t("faceFromProductGoogle")} options={labels.faceOptions} data-testid="new-piece-face" />
+              </div>
             </div>
-          </label>
-          <label className="block space-y-1.5">
-            <span className="text-xs font-medium text-white/60">{t("internalLabelOptional")}</span>
-            <input className={INPUT} value={label} onChange={(e) => setLabel(e.target.value)} maxLength={120} data-testid="new-piece-label" />
-          </label>
+          </Field>
+          <Field label={t("internalLabelOptional")}>
+            <Input value={label} onChange={(e) => setLabel(e.target.value)} maxLength={120} data-testid="new-piece-label" />
+          </Field>
           <DialogFooter className="gap-2">
-            <button type="button" className={BTN_GHOST} onClick={() => onOpenChange(false)}>{tc("cancel")}</button>
-            <button type="submit" className={BTN} disabled={!productType || !salesProductId || create.isPending} data-testid="new-piece-create">{t("createPiece")}</button>
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>{tc("cancel")}</Button>
+            <Button type="submit" variant="brand" accent="tags" disabled={!productType || !salesProductId} loading={create.isPending} data-testid="new-piece-create">{t("createPiece")}</Button>
           </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function ChipStatusPill({ status, label }: { status: string; label: string }) {
-  return <Pill tone={CHIP_STATUS_TONE[status] ?? "slate"}>{label}</Pill>;
-}
-
-function PiecesTable({ tags, onOpen }: { tags: TagListItem[]; onOpen: (id: string) => void }) {
-  const tm = useT(manageTagsPiecesMessages);
-  const tg = useT(manageTagsMessages);
-  const labels = useTagLabels();
-  return (
-    <>
-      {/* Phones: tappable cards */}
-      <ul className="space-y-2 md:hidden">
-        {tags.map((t) => (
-          <li key={t.id}>
-            <button type="button" onClick={() => onOpen(t.id)} className={`${CARD} w-full p-3 text-left active:bg-white/[0.06]`} data-testid={`admin-piece-card-${t.publicCode}`}>
-              <div className="flex items-center justify-between gap-2">
-                <TagPieceMention
-                  publicCode={t.publicCode}
-                  productType={t.productType}
-                  face={t.face}
-                  batchCode={t.batchCode}
-                  customer={t.leadName}
-                  className="min-w-0 flex-1"
-                />
-                <PieceStatusPill status={t.status} stockStatus={t.stockStatus} saleId={t.saleId} />
-              </div>
-              <div className="mt-2 truncate text-xs text-white/50">
-                {[t.repName ?? tm("houseStock"), t.batchCode].filter(Boolean).join(" · ")}
-              </div>
-              <div className="mt-0.5 text-xs tabular-nums text-white/40">
-                {tm("cardStats", { qr: t.qrInteractions, nfc: t.nfcInteractions, chip: labels.chip(t.nfcStatus), last: formatDateTime(t.lastInteractionAt) })}
-              </div>
-            </button>
-          </li>
-        ))}
-      </ul>
-
-      {/* Desktop: table */}
-      <div className={`${CARD} hidden overflow-x-auto md:block`}>
-        <table className="w-full min-w-[960px]">
-          <thead className="border-b border-white/10">
-            <tr>
-              <th className={TH}>{tg("colCode")}</th>
-              <th className={`${TH} text-center`}>{tg("colStatus")}</th>
-              <th className={TH}>{tg("colCustomer")}</th>
-              <th className={TH}>{tg("colReseller")}</th>
-              <th className={TH}>{tm("colDestination")}</th>
-              <th className={TH}>{tm("colChip")}</th>
-              <th className={`${TH} text-right`}>QR</th>
-              <th className={`${TH} text-right`}>NFC</th>
-              <th className={TH}>{tm("colLastInteraction")}</th>
-              <th className={TH}>{tg("colBatch")}</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-white/5">
-            {tags.map((t) => (
-              <tr key={t.id} className="cursor-pointer hover:bg-white/[0.04]" onClick={() => onOpen(t.id)} data-testid={`admin-piece-row-${t.publicCode}`}>
-                <td className={`${TD} max-w-[260px]`}>
-                  <TagPieceMention
-                    publicCode={t.publicCode}
-                    productType={t.productType}
-                    face={t.face}
-                    batchCode={t.batchCode}
-                    details={[t.serialNumber ? `#${t.serialNumber}` : null, t.label].filter(Boolean).join(" · ") || undefined}
-                    className="max-w-full"
-                  />
-                </td>
-                <td className={`${TD} text-center`}><PieceStatusPill status={t.status} stockStatus={t.stockStatus} saleId={t.saleId} /></td>
-                <td className={`${TD} max-w-[180px] truncate`}>{t.leadName ?? <span className="text-white/30">—</span>}</td>
-                <td className={`${TD} max-w-[160px] truncate`}>{t.repName ?? <span className="text-white/40">{tg("house")}</span>}</td>
-                <td className={TD}>{labels.destination(t.destinationType)}</td>
-                <td className={TD}><ChipStatusPill status={t.nfcStatus} label={labels.chip(t.nfcStatus)} /></td>
-                <td className={`${TD} text-right tabular-nums`}>{t.qrInteractions}</td>
-                <td className={`${TD} text-right tabular-nums`}>{t.nfcInteractions}</td>
-                <td className={`${TD} whitespace-nowrap text-xs`}>{formatDateTime(t.lastInteractionAt)}</td>
-                <td className={`${TD} font-mono text-xs`}>{t.batchCode ?? "—"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </>
   );
 }
 
@@ -241,7 +153,7 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
     staleTime: STALE_MS,
     fetchPage: (pageUrl) => getJson<TagListItem[]>(pageUrl),
   });
-  const { items: tags, isLoading, error } = pieces;
+  const { items: tags, isLoading, error, refetch } = pieces;
 
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -268,9 +180,9 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
         search={<FilterSearch value={filters.search} onChange={(search) => set({ search })} placeholder={tm("searchPlaceholder")} debounceMs={350} testId="admin-pieces-search" />}
         actions={
           isAdmin ? (
-            <button type="button" className={`${BTN} h-10 rounded-xl`} onClick={() => setCreating(true)} data-testid="admin-pieces-new">
+            <Button type="button" variant="brand" accent="tags" className="min-h-10" onClick={() => setCreating(true)} data-testid="admin-pieces-new">
               <Plus className="h-4 w-4" />{tm("newPiece")}
-            </button>
+            </Button>
           ) : undefined
         }
         controls={
@@ -288,11 +200,11 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
       />
 
       {isLoading ? (
-        <Loading />
+        <Loading rows={6} />
       ) : error ? (
-        <LoadError what={tm("whatPieces")} error={error} />
+        <LoadError what={tm("whatPieces")} error={error} onRetry={() => void refetch()} />
       ) : tags.length === 0 ? (
-        <Empty>{hasFilters ? tm("noMatch") : tm("noPiecesYet")}</Empty>
+        <EmptyState tone="tags" icon={Nfc} title={hasFilters ? tm("noMatch") : tm("noPiecesYet")} />
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-white/50" data-testid="admin-pieces-counts">
@@ -306,7 +218,12 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
             ))}
             <span className="tabular-nums">{tm("inHouse", { count: houseCount })}</span>
           </div>
-          <PiecesTable tags={tags} onOpen={(id) => go(`/pieces/${id}`)} />
+          <PieceTable
+            pieces={tags}
+            onOpen={(id) => go(`/pieces/${id}`)}
+            columns={["customer", "destination", "reseller", "chip", "scans", "lastInteraction", "batch"]}
+            testId="admin-pieces-table"
+          />
           <ListPager shown={tags.length} hasMore={pieces.hasMore} onMore={pieces.loadMore} loading={pieces.loadingMore} pageSize={PAGE} />
         </>
       )}
