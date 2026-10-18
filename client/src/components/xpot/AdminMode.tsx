@@ -102,7 +102,7 @@ export function AdminModeBar() {
           className="shrink-0 rounded-lg px-2 py-1 text-xs font-semibold text-amber-200/80 hover:bg-amber-400/15 hover:text-amber-100"
           data-testid="admin-mode-organization"
         >
-          {t("navOrganization")}
+          {t("navOrganizations")}
         </button>
       )}
       <button

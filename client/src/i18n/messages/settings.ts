@@ -54,12 +54,12 @@ const en = {
   routeSaved: "Route preferences saved",
 
   // Account info
-  sectionAccount: "Account Info",
+  sectionAccount: "Memberships",
   role: "Role",
   team: "Team",
   role_rep: "Rep",
   role_manager: "Manager",
-  role_admin: "Admin",
+  role_admin: "Xpot admin",
 
   saveFailed: "Failed to save",
 
@@ -116,12 +116,12 @@ export const settingsMessages: Dictionary<typeof en> = {
     returnHomeHint: "Seu dia começa onde você estiver. Com isto ligado, o Xpot reserva tempo do seu turno para voltar para casa.",
     returnHomeNeedsAddress: "Salve primeiro o endereço de casa.",
     routeSaved: "Preferências de rota salvas",
-    sectionAccount: "Dados da conta",
-    role: "Função",
+    sectionAccount: "Vínculos",
+    role: "Papel",
     team: "Equipe",
     role_rep: "Vendedor",
     role_manager: "Gerente",
-    role_admin: "Admin",
+    role_admin: "Admin Xpot",
 
     saveFailed: "Não foi possível salvar",
     saveChanges: "Salvar alterações",
@@ -172,12 +172,12 @@ export const settingsMessages: Dictionary<typeof en> = {
     returnHomeHint: "Tu día empieza donde estés. Con esto activado, Xpot reserva tiempo de tu turno para volver a casa.",
     returnHomeNeedsAddress: "Guarda primero tu dirección de casa.",
     routeSaved: "Preferencias de ruta guardadas",
-    sectionAccount: "Datos de la cuenta",
+    sectionAccount: "Membresías",
     role: "Rol",
     team: "Equipo",
     role_rep: "Vendedor",
     role_manager: "Gerente",
-    role_admin: "Admin",
+    role_admin: "Admin Xpot",
 
     saveFailed: "No se pudo guardar",
     saveChanges: "Guardar cambios",

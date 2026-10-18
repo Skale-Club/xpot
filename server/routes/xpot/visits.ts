@@ -57,7 +57,7 @@ export function createVisitsRouter() {
     const input = xpotCheckInSchema.parse(req.body);
     const activeVisit = await storage.getActiveSalesVisitForRep(actor!.rep.id);
     if (activeVisit) {
-      return res.status(409).json({ message: "Rep already has an active visit" });
+      return res.status(409).json({ code: "visit_active", message: "Rep already has an active visit" });
     }
 
     const appSettings = await storage.getSalesAppSettings();
@@ -74,7 +74,7 @@ export function createVisitsRouter() {
       plannedVisit.leadId !== lead.id ||
       plannedVisit.status !== "planned"
     )) {
-      return res.status(400).json({ message: "Planned visit is not available for this check-in" });
+      return res.status(400).json({ code: "planned_visit_unavailable", message: "Planned visit is not available for this check-in" });
     }
 
     const locations = await storage.listSalesLeadLocations(input.leadId);
@@ -141,7 +141,7 @@ export function createVisitsRouter() {
       values: checkInValues,
     });
     if (!visit) {
-      return res.status(409).json({ message: "Planned visit changed before check-in. Reload and try again." });
+      return res.status(409).json({ code: "planned_visit_changed", message: "Planned visit changed before check-in. Reload and try again." });
     }
     res.status(201).json({ visit, lead, location: selectedLocation ?? null });
   });
@@ -153,7 +153,7 @@ export function createVisitsRouter() {
     const visit = await storage.getSalesVisit(visitId);
 
     if (!visit || visit.repId !== actor!.rep.id) {
-      return res.status(404).json({ message: "Visit not found" });
+      return res.status(404).json({ code: "visit_not_found", message: "Visit not found" });
     }
 
     const checkedOutAt = new Date();
@@ -189,11 +189,11 @@ export function createVisitsRouter() {
     const visit = await storage.getSalesVisit(visitId);
 
     if (!visit || visit.repId !== actor!.rep.id) {
-      return res.status(404).json({ message: "Visit not found" });
+      return res.status(404).json({ code: "visit_not_found", message: "Visit not found" });
     }
 
     if (visit.status !== "in_progress") {
-      return res.status(400).json({ message: "Only in-progress visits can be cancelled" });
+      return res.status(400).json({ code: "visit_not_cancellable", message: "Only in-progress visits can be cancelled" });
     }
 
     const checkedOutAt = new Date();
@@ -217,7 +217,7 @@ export function createVisitsRouter() {
     const visitId = Number(req.params.id);
     const visit = await storage.getSalesVisit(visitId);
     if (!visit || visit.repId !== actor!.rep.id) {
-      return res.status(404).json({ message: "Visit not found" });
+      return res.status(404).json({ code: "visit_not_found", message: "Visit not found" });
     }
     const { status } = req.body as { status?: SalesVisitStatus };
     const updated = await storage.updateSalesVisit(visitId, { ...(status ? { status } : {}) });
@@ -237,7 +237,7 @@ export function createVisitsRouter() {
     const visitId = Number(req.params.id);
     const visit = await storage.getSalesVisit(visitId);
     if (!visit || (visit.repId !== actor!.rep.id && !actor!.user.isAdmin)) {
-      return res.status(404).json({ message: "Visit not found" });
+      return res.status(404).json({ code: "visit_not_found", message: "Visit not found" });
     }
     if (visit.status === "planned") {
       await finishVisitTransaction({
@@ -261,7 +261,7 @@ export function createVisitsRouter() {
     const visit = await storage.getSalesVisit(visitId);
 
     if (!visit || visit.repId !== actor!.rep.id) {
-      return res.status(404).json({ message: "Visit not found" });
+      return res.status(404).json({ code: "visit_not_found", message: "Visit not found" });
     }
 
     const note = await storage.upsertSalesVisitNote({
@@ -277,7 +277,7 @@ export function createVisitsRouter() {
     const visitId = Number(req.params.id);
     const input = xpotVisitSummarySchema.parse(req.body);
     const visit = await storage.getSalesVisit(visitId);
-    if (!visit || visit.repId !== actor!.rep.id) return res.status(404).json({ message: "Visit not found" });
+    if (!visit || visit.repId !== actor!.rep.id) return res.status(404).json({ code: "visit_not_found", message: "Visit not found" });
     if (!visit.checkedOutAt) return res.status(409).json({ code: "visit_still_active", message: "Finish the visit before saving its summary" });
 
     const { note, task } = await saveVisitSummaryTransaction({
@@ -299,7 +299,7 @@ export function createVisitsRouter() {
 
     const visit = await storage.getSalesVisit(visitId);
     if (!visit || visit.repId !== actor!.rep.id) {
-      return res.status(404).json({ message: "Visit not found" });
+      return res.status(404).json({ code: "visit_not_found", message: "Visit not found" });
     }
 
     if (!audioData) {

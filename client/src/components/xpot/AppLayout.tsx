@@ -86,7 +86,7 @@ function useShellNav() {
   const labels = { shell: t, tags: tt };
 
   const context = contextOfPath(location);
-  const workspaceItem: NavItem = { href: "/organizations", label: t("navOrganization"), icon: Building2, match: starts("/organizations") };
+  const workspaceItem: NavItem = { href: "/organizations", label: t("navOrganizations"), icon: Building2, match: starts("/organizations") };
   const managementItems = viewer.canManage ? organizationItems(labels, viewer) : [];
   // /organizations is a management page: plain reps don't get it in their navigation.
   const organization = me && viewer.canManage ? [workspaceItem, ...managementItems] : [];
@@ -110,7 +110,7 @@ function useShellNav() {
   const pages = [
     ...order.flatMap((m) => groupsFor(m).flatMap((g) => g.items.map((i) => ({ ...i, group: moduleLabel(m) })))),
     { ...settingsItem, group: t("moduleAccount") },
-    ...organization.map((i) => ({ ...i, group: t("moduleAccount") })),
+    ...organization.map((i) => ({ ...i, group: t("navOrganization") })),
   ];
 
   return { context, module, modules, groups, organization, pages, moduleLabel, me };
@@ -246,7 +246,7 @@ function DesktopSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
   // One door to the account (profile, and the Organization for managers); its pages list the rest.
   const footer: NavItem[] = context === "account"
     ? []
-    : [{ href: "/settings", label: t("moduleAccount"), icon: Settings, match: () => false }];
+    : [{ href: "/settings", label: t("navSettings"), icon: Settings, match: () => false }];
 
   return (
     <aside

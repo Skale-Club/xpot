@@ -55,6 +55,23 @@ export function fieldErrorText(error: FieldError): string {
   return error.message;
 }
 
+/**
+ * What a failed request's body says, in the user's language: the sentence for
+ * its stable `code` (srv_<code>, filled with its `params`), else the server's own
+ * `message`, else `fallback`. The fetch helpers use it, so a toast that shows
+ * `err.message` is already translated.
+ */
+export function serverErrorText(body: unknown, fallback: string): string {
+  if (!body || typeof body !== "object") return fallback;
+  const { code, message, params } = body as { code?: unknown; message?: unknown; params?: unknown };
+  const key = typeof code === "string" ? (`srv_${code}` as keyof typeof apiErrorMessages.en) : null;
+  if (key && key in apiErrorMessages.en) {
+    const values = params && typeof params === "object" ? (params as Record<string, string | number>) : undefined;
+    return translate(apiErrorMessages, key, values);
+  }
+  return typeof message === "string" && message ? message : fallback;
+}
+
 function fieldErrorsOf(err: unknown): FieldError[] {
   if (err && typeof err === "object" && Array.isArray((err as { fieldErrors?: unknown }).fieldErrors)) {
     return (err as { fieldErrors: FieldError[] }).fieldErrors;

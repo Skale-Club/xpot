@@ -257,7 +257,8 @@ export type TagAction = (typeof TAG_ACTIONS)[number];
 
 export type TransitionResult =
   | { ok: true; status: TagStatus }
-  | { ok: false; error: string };
+  /** `code` is the stable name the client translates (client/src/lib/apiErrors.ts, srv_<code>). */
+  | { ok: false; error: string; code: string };
 
 /**
  * Server-enforced lifecycle:
@@ -272,35 +273,37 @@ export function planTransition(
 ): TransitionResult {
   const status = tag.status as TagStatus;
   if (tag.stockStatus === "pending" && (action === "assign" || action === "activate")) {
-    return { ok: false, error: PENDING_PIECE_ERROR };
+    return { ok: false, error: PENDING_PIECE_ERROR, code: "tag_pending" };
   }
   if (["damaged", "lost", "retired"].includes(tag.stockStatus ?? "") && (action === "assign" || action === "activate")) {
-    return { ok: false, error: `A piece in ${tag.stockStatus} stock cannot be ${action === "assign" ? "assigned" : "activated"}` };
+    return { ok: false, error: `A piece in ${tag.stockStatus} stock cannot be ${action === "assign" ? "assigned" : "activated"}`, code: "tag_stock_blocked" };
   }
   switch (action) {
     case "assign":
-      if (status === "retired") return { ok: false, error: "A retired tag cannot be assigned" };
+      if (status === "retired") return { ok: false, error: "A retired tag cannot be assigned", code: "tag_retired_locked" };
       return { ok: true, status: status === "inventory" ? "assigned" : status };
     case "unassign":
-      if (status === "retired") return { ok: false, error: "A retired tag cannot be changed" };
-      if (status === "inventory") return { ok: false, error: "Tag is not assigned" };
+      if (status === "retired") return { ok: false, error: "A retired tag cannot be changed", code: "tag_retired_locked" };
+      if (status === "inventory") return { ok: false, error: "Tag is not assigned", code: "tag_has_no_customer" };
       return { ok: true, status: "inventory" };
     case "activate":
       if (status !== "assigned" && status !== "disabled") {
-        return { ok: false, error: status === "active" ? "Tag is already active" : `A tag in ${status} cannot be activated` };
+        return status === "active"
+          ? { ok: false, error: "Tag is already active", code: "tag_already_live" }
+          : { ok: false, error: `A tag in ${status} cannot be activated`, code: "tag_cannot_go_live" };
       }
-      if (!tag.leadId) return { ok: false, error: "Assign a customer before activating" };
-      if (!tag.destinationType) return { ok: false, error: "Choose a destination type before activating" };
-      if (!tag.destinationUrl) return { ok: false, error: "Set a destination URL before activating" };
+      if (!tag.leadId) return { ok: false, error: "Assign a customer before activating", code: "tag_customer_required" };
+      if (!tag.destinationType) return { ok: false, error: "Choose a destination type before activating", code: "tag_destination_type_required" };
+      if (!tag.destinationUrl) return { ok: false, error: "Set a destination URL before activating", code: "tag_destination_required" };
       return { ok: true, status: "active" };
     case "disable":
-      if (status !== "active") return { ok: false, error: "Only an active tag can be disabled" };
+      if (status !== "active") return { ok: false, error: "Only an active tag can be disabled", code: "tag_only_live_pauses" };
       return { ok: true, status: "disabled" };
     case "retire":
-      if (status === "retired") return { ok: false, error: "Tag is already retired" };
+      if (status === "retired") return { ok: false, error: "Tag is already retired", code: "tag_already_retired" };
       return { ok: true, status: "retired" };
     case "restore":
-      if (status !== "retired") return { ok: false, error: "Only a retired tag can be restored" };
+      if (status !== "retired") return { ok: false, error: "Only a retired tag can be restored", code: "tag_only_retired_restores" };
       return { ok: true, status: tag.leadId ? "assigned" : "inventory" };
   }
 }

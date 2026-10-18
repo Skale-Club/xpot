@@ -83,7 +83,7 @@ const en = {
 
   // Xphere
   xphereLoadFailed: "Failed to load Xphere connections.",
-  xphereIntro: "Each person's link to the Xphere CRM. Out: their leads, visits, sales and tasks sync to Xphere with the token Xphere gives them. In: Xphere sends prospects and tasks to Xpot with the inbound key below.",
+  xphereIntro: "Each person's link to the Xphere CRM. Out: their companies, visits, sales and tasks sync to Xphere with the token Xphere gives them. In: Xphere sends prospects and tasks to Xpot with the inbound key below.",
   xphereEndpoint: "Inbound address (give it to Xphere with the person's key)",
   noRepsYet: "No one to show yet.",
   noRepsHidden: "No one here uses Visits yet. Turn on “Show all” to see blocked, pending and Tags-only people.",
@@ -113,9 +113,9 @@ const en = {
   statusTagsOnly: "Tags only",
 
   // AI access (MCP)
-  mcpIntro: "AI assistants connected here act as the admin who connected them. They can read and record the Tags production journey (plans, batches, pieces), start prospecting searches and read their results, and list, create and update tasks. Entries they mark as proposed wait for your approval.",
+  mcpIntro: "AI assistants connected here act as the admin who connected them. They can read and record the Tags production log (plans, batches, pieces), start prospecting searches and read their results, and list, create and update tasks. Entries they mark as proposed wait for your approval.",
   scopesLabel: "Can use:",
-  scope_journey: "Tags journey",
+  scope_journey: "Tags production log",
   scope_prospecting: "Prospecting",
   scope_tasks: "Tasks",
   showRevoked: "Show revoked ({count})",
@@ -129,7 +129,7 @@ export const integrationsMessages: Dictionary<typeof en> = {
   pt: {
     tabApiKeys: "Serviços (chaves de API)",
     tabXphere: "Xphere",
-    tabAiAccess: "Acesso de IA (MCP)",
+    tabAiAccess: "Acesso por IA (MCP)",
 
     integrationsLoadFailed: "Não foi possível carregar as integrações.",
     integrationsIntro: "Chaves dos serviços externos que o Xpot usa. Depois de salva, a chave não aparece mais, só os 4 últimos caracteres.",
@@ -201,7 +201,7 @@ export const integrationsMessages: Dictionary<typeof en> = {
     signInOffConfirm: "Desligar mesmo assim",
 
     xphereLoadFailed: "Não foi possível carregar as conexões do Xphere.",
-    xphereIntro: "A ligação de cada pessoa com o CRM Xphere. Saída: os clientes, visitas, vendas e tarefas dela sincronizam com o Xphere usando o token que o Xphere fornece. Entrada: o Xphere envia prospects e tarefas ao Xpot com a chave de entrada abaixo.",
+    xphereIntro: "A ligação de cada pessoa com o CRM Xphere. Saída: as empresas, visitas, vendas e tarefas dela sincronizam com o Xphere usando o token que o Xphere fornece. Entrada: o Xphere envia prospectos e tarefas ao Xpot com a chave de entrada abaixo.",
     xphereEndpoint: "Endereço de entrada (passe ao Xphere junto com a chave da pessoa)",
     noRepsYet: "Ninguém para mostrar ainda.",
     noRepsHidden: "Ninguém aqui usa Visitas ainda. Ligue “Mostrar todos” para ver pessoas bloqueadas, pendentes e só de Tags.",
@@ -230,9 +230,9 @@ export const integrationsMessages: Dictionary<typeof en> = {
     statusPending: "Pendente",
     statusTagsOnly: "Só Tags",
 
-    mcpIntro: "Os assistentes de IA conectados aqui agem como o admin que os conectou. Eles podem ler e registrar a jornada de produção das Tags (planos, lotes, peças), iniciar buscas de prospecção e ler os resultados, e listar, criar e atualizar tarefas. O que eles marcam como proposto aguarda a sua aprovação.",
+    mcpIntro: "Os assistentes de IA conectados aqui agem como o admin que os conectou. Eles podem ler e registrar o diário de produção das Tags (planos, lotes, peças), iniciar buscas de prospecção e ler os resultados, e listar, criar e atualizar tarefas. O que eles marcam como proposto aguarda a sua aprovação.",
     scopesLabel: "Pode usar:",
-    scope_journey: "Jornada das Tags",
+    scope_journey: "Diário de produção das Tags",
     scope_prospecting: "Prospecção",
     scope_tasks: "Tarefas",
     showRevoked: "Mostrar revogados ({count})",
@@ -243,7 +243,7 @@ export const integrationsMessages: Dictionary<typeof en> = {
   es: {
     tabApiKeys: "Servicios (claves de API)",
     tabXphere: "Xphere",
-    tabAiAccess: "Acceso de IA (MCP)",
+    tabAiAccess: "Acceso por IA (MCP)",
 
     integrationsLoadFailed: "No se pudieron cargar las integraciones.",
     integrationsIntro: "Claves de los servicios externos que usa Xpot. Una vez guardada, la clave no vuelve a mostrarse, solo sus 4 últimos caracteres.",
@@ -315,7 +315,7 @@ export const integrationsMessages: Dictionary<typeof en> = {
     signInOffConfirm: "Apagar de todos modos",
 
     xphereLoadFailed: "No se pudieron cargar las conexiones de Xphere.",
-    xphereIntro: "El enlace de cada persona con el CRM Xphere. Salida: sus clientes, visitas, ventas y tareas se sincronizan con Xphere usando el token que Xphere le da. Entrada: Xphere envía prospectos y tareas a Xpot con la clave de entrada de abajo.",
+    xphereIntro: "El enlace de cada persona con el CRM Xphere. Salida: sus empresas, visitas, ventas y tareas se sincronizan con Xphere usando el token que Xphere le da. Entrada: Xphere envía prospectos y tareas a Xpot con la clave de entrada de abajo.",
     xphereEndpoint: "Dirección de entrada (dásela a Xphere junto con la clave de la persona)",
     noRepsYet: "Todavía no hay nadie que mostrar.",
     noRepsHidden: "Aquí nadie usa Visitas todavía. Activa “Mostrar todos” para ver personas bloqueadas, pendientes y solo de Tags.",
@@ -344,9 +344,9 @@ export const integrationsMessages: Dictionary<typeof en> = {
     statusPending: "Pendiente",
     statusTagsOnly: "Solo Tags",
 
-    mcpIntro: "Los asistentes de IA conectados aquí actúan como el admin que los conectó. Pueden leer y registrar el recorrido de producción de Tags (planes, lotes, piezas), iniciar búsquedas de prospección y leer sus resultados, y listar, crear y actualizar tareas. Lo que marcan como propuesto espera tu aprobación.",
+    mcpIntro: "Los asistentes de IA conectados aquí actúan como el admin que los conectó. Pueden leer y registrar el diario de producción de Tags (planes, lotes, piezas), iniciar búsquedas de prospección y leer sus resultados, y listar, crear y actualizar tareas. Lo que marcan como propuesto espera tu aprobación.",
     scopesLabel: "Puede usar:",
-    scope_journey: "Recorrido de Tags",
+    scope_journey: "Diario de producción de Tags",
     scope_prospecting: "Prospección",
     scope_tasks: "Tareas",
     showRevoked: "Mostrar revocados ({count})",

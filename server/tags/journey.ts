@@ -78,7 +78,7 @@ async function withTagScope(input: JourneyEntryInput): Promise<JourneyEntryInput
     .from(tags)
     .where(eq(tags.id, input.tagId))
     .limit(1);
-  if (!tag) throw new TagError("Tag not found", 404);
+  if (!tag) throw new TagError("Tag not found", 404, "tag_not_found");
   return {
     ...input,
     batchId: input.batchId ?? tag.batchId,
@@ -249,7 +249,7 @@ async function tagScope(alias: string, tagId: string, withCodes: boolean): Promi
     .from(tags)
     .where(eq(tags.id, tagId))
     .limit(1);
-  if (!tag) throw new TagError("Tag not found", 404);
+  if (!tag) throw new TagError("Tag not found", 404, "tag_not_found");
   const col = (name: string) => sql.raw(`${alias}.${name}`);
   const parts: SQL[] = [sql`${col("tag_id")} = ${tagId}`];
   if (tag.batchId) {
@@ -383,7 +383,7 @@ export async function createPlan(input: PlanInput, ctx: JourneyContext): Promise
   let batchId = input.batchId ?? null;
   if (input.tagId && !batchId) {
     const [tag] = await db.select({ batchId: tags.batchId }).from(tags).where(eq(tags.id, input.tagId)).limit(1);
-    if (!tag) throw new TagError("Tag not found", 404);
+    if (!tag) throw new TagError("Tag not found", 404, "tag_not_found");
     batchId = tag.batchId;
   }
   const status = input.status ?? "active";
@@ -496,7 +496,7 @@ export async function resolveBatchId(ref: string): Promise<string> {
     .from(tagBatches)
     .where(UUID.test(value) ? eq(tagBatches.id, value) : sql`upper(${tagBatches.batchCode}) = ${value.toUpperCase()}`)
     .limit(1);
-  if (!batch) throw new TagError("No batch with that id or code", 404);
+  if (!batch) throw new TagError("No batch with that id or code", 404, "batch_not_found");
   return batch.id;
 }
 
@@ -505,12 +505,12 @@ export async function resolveTagId(ref: string): Promise<string> {
   const value = ref.trim();
   const isUuid = UUID.test(value);
   const code = isUuid ? null : normalizeTagCode(value);
-  if (!isUuid && !code) throw new TagError("Not a tag id or code", 404);
+  if (!isUuid && !code) throw new TagError("Not a tag id or code", 404, "tag_code_not_found");
   const [tag] = await db
     .select({ id: tags.id })
     .from(tags)
     .where(code ? eq(tags.publicCode, code) : eq(tags.id, value))
     .limit(1);
-  if (!tag) throw new TagError("No tag with that id or code", 404);
+  if (!tag) throw new TagError("No tag with that id or code", 404, "tag_code_not_found");
   return tag.id;
 }

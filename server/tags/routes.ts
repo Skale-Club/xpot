@@ -282,7 +282,7 @@ export function analyticsWindow(query: { range?: string; from?: string; to?: str
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function fail(res: Response, err: unknown, fallback: string) {
-  if (err instanceof repo.TagError) return res.status(err.status).json({ message: err.message });
+  if (err instanceof repo.TagError) return res.status(err.status).json(repo.tagErrorBody(err));
   if (err instanceof z.ZodError) {
     return res.status(400).json({ message: err.issues[0]?.message ?? "Validation error", errors: err.errors });
   }
@@ -474,7 +474,7 @@ export function registerTagRoutes(app: Express) {
       if (!result.replayed) syncSaleToXphere(result.sale.id).catch((err) => console.error("[tag-sale] xphere mirror:", err));
     } catch (err) {
       if (err instanceof TagSaleError) {
-        return res.status(err.status).json({ code: err.code, message: err.message, requestId: req.get("x-request-id") ?? null });
+        return res.status(err.status).json({ code: err.code, message: err.message, ...(err.params ? { params: err.params } : {}), requestId: req.get("x-request-id") ?? null });
       }
       if (err instanceof z.ZodError) {
         return res.status(400).json({ code: "validation_error", message: err.issues[0]?.message ?? "Validation error", details: err.errors, requestId: req.get("x-request-id") ?? null });
@@ -850,7 +850,7 @@ export function registerTagRoutes(app: Express) {
       const { codes } = z.object({ codes: codeList }).strict().parse(req.body);
       res.json(await fulfillAcquisition(id.data, codes, userIdOf(req)));
     } catch (err) {
-      if (err instanceof TagSaleError) return res.status(err.status).json({ code: err.code, message: err.message });
+      if (err instanceof TagSaleError) return res.status(err.status).json({ code: err.code, message: err.message, ...(err.params ? { params: err.params } : {}) });
       fail(res, err, "Failed to fulfill acquisition");
     }
   });
