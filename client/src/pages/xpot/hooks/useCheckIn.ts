@@ -1,11 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { ApiError, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { translate, useT } from "@/i18n";
 import { visitsMessages } from "@/i18n/messages/visits";
 import { checkinMessages } from "@/i18n/messages/checkin";
-import { usePlaceSearch } from "../usePlaceSearch";
 import { formatMeters } from "../utils";
 import { useXpotShared } from "./useXpotShared";
 import { useXpotQueries } from "./useXpotQueries";
@@ -13,10 +12,7 @@ import { useLeads } from "./useLeads";
 import { useVisits } from "./useVisits";
 import { usePlaceToLead } from "./usePlaceToLead";
 import type { GeofenceMiss } from "../components/CheckInOverrideDialog";
-import type { GooglePlaceResult, FullSalesLead, SalesLeadPayload, SalesVisitNote } from "../types";
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyMutation = ReturnType<typeof useMutation<any, any, any, any>>;
+import type { GooglePlaceResult, FullSalesLead, SalesVisitNote } from "../types";
 
 type CheckInInput = { leadId: number; lat?: number; lng?: number; gpsAccuracyMeters?: number | null; manualOverrideReason?: string };
 
@@ -39,8 +35,8 @@ const MAX_AUDIO_BYTES = 3 * 1024 * 1024;
 export function useCheckIn() {
   const { toast } = useToast();
   const t = useT(checkinMessages);
-  const { geoState, invalidateXpotData } = useXpotShared();
-  const { xpotMeQuery, isOnline } = useXpotQueries();
+  const { invalidateXpotData } = useXpotShared();
+  const { isOnline } = useXpotQueries();
   const { leadsQuery, createLeadMutation } = useLeads();
   const { activeVisit, checkingInRef } = useVisits();
 
@@ -66,46 +62,11 @@ export function useCheckIn() {
       setCheckInSearch(lead.name);
     }
   }, [leadsQuery.data]);
-  const [visitNoteForm, setVisitNoteForm] = useState({ summary: "", outcome: "", nextStep: "", followUpRequired: false });
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordingTime, setRecordingTime] = useState(0);
-  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-
-  const checkInPlaceQuery = usePlaceSearch(checkInSearch, xpotMeQuery.isSuccess, geoState);
 
   const selectedLead = useMemo(
     () => (typeof selectedLeadId === "number" ? leadsQuery.data?.find((lead) => lead.id === selectedLeadId) || null : null),
     [leadsQuery.data, selectedLeadId],
   );
-
-  const filteredLeadsForCheckIn = useMemo(() => {
-    const search = checkInSearch.trim().toLowerCase();
-    if (!search) return (leadsQuery.data || []).slice(0, 6);
-
-    return (leadsQuery.data || []).filter((lead) => {
-      const haystack = [
-        lead.name,
-        lead.industry,
-        lead.phone,
-        lead.email,
-        lead.locations?.map((location) => `${location.addressLine1} ${location.city || ""} ${location.state || ""}`).join(" "),
-      ].filter(Boolean).join(" ").toLowerCase();
-      return haystack.includes(search);
-    }).slice(0, 6);
-  }, [leadsQuery.data, checkInSearch]);
-
-  useEffect(() => {
-    if (activeVisit?.note) {
-      setVisitNoteForm({
-        summary: activeVisit.note.summary || "",
-        outcome: activeVisit.note.outcome || "",
-        nextStep: activeVisit.note.nextStep || "",
-        followUpRequired: Boolean(activeVisit.note.followUpRequired),
-      });
-    }
-  }, [activeVisit?.id, activeVisit?.note]);
 
   const checkInMutation = useMutation({
     mutationFn: async (input: CheckInInput) => {
@@ -141,30 +102,12 @@ export function useCheckIn() {
     },
   });
 
-  const saveNoteMutation = useMutation({
-    mutationFn: async () => {
-      if (!activeVisit?.id) throw new Error(t("noActiveVisitNote"));
-      const response = await apiRequest("PATCH", `/api/xpot/visits/${activeVisit.id}/note`, visitNoteForm);
-      return response.json();
-    },
-    onSuccess: async () => {
-      toast({ title: t("noteSaved"), variant: "success" });
-      await invalidateXpotData();
-    },
-    onError: (error: Error) => {
-      toast({ title: t("noteSaveFailed"), description: error.message, variant: "destructive" });
-    },
-  });
-
-  // The check-in screen records with VoiceRecorder and passes its blob; the
-  // hook's own recorder state is the fallback. (Before, the passed recording
-  // was ignored: with no hook blob the upload returned early yet toasted
-  // "uploaded", so check-in voice notes never reached the server.)
+  // The check-in screen records with VoiceRecorder and passes its blob.
   const uploadAudioMutation = useMutation({
-    mutationFn: async (recording?: { audioBlob: Blob; durationSeconds: number }) => {
-      const blob = recording?.audioBlob ?? audioBlob;
-      const seconds = recording?.durationSeconds ?? recordingTime;
-      if (!blob || !activeVisit?.id) return;
+    mutationFn: async (recording: { audioBlob: Blob; durationSeconds: number }) => {
+      const blob = recording.audioBlob;
+      const seconds = recording.durationSeconds;
+      if (!activeVisit?.id) return;
       if (blob.size > MAX_AUDIO_BYTES) {
         throw new Error(translate(visitsMessages, "recordingTooLargeDesc"));
       }
@@ -219,62 +162,12 @@ export function useCheckIn() {
             : t("audioSavedDesc"),
         variant: "success",
       });
-      setAudioBlob(null);
-      setRecordingTime(0);
       await invalidateXpotData();
     },
     onError: (error: Error) => {
       toast({ title: t("audioUploadFailed"), description: error.message, variant: "destructive" });
     },
   });
-
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream, {
-        audioBitsPerSecond: 32_000,
-        ...(typeof MediaRecorder.isTypeSupported === "function" && MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-          ? { mimeType: "audio/webm;codecs=opus" }
-          : {}),
-      });
-      mediaRecorderRef.current = mediaRecorder;
-      chunksRef.current = [];
-
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
-      };
-
-      mediaRecorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
-        setAudioBlob(blob);
-        stream.getTracks().forEach((track) => track.stop());
-      };
-
-      mediaRecorder.start();
-      setIsRecording(true);
-      setRecordingTime(0);
-
-      const interval = setInterval(() => {
-        setRecordingTime((prev) => {
-          if (prev >= 300) { stopRecording(); return prev; }
-          return prev + 1;
-        });
-      }, 1000);
-
-      (mediaRecorder as any).intervalId = interval;
-    } catch (error) {
-      toast({ title: t("recordStartFailed"), description: t("grantMic"), variant: "destructive" });
-    }
-  };
-
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      const intervalId = (mediaRecorderRef.current as any).intervalId;
-      clearInterval(intervalId);
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-    }
-  };
 
   const pickLocalLeadForCheckIn = (lead: FullSalesLead) => {
     setSelectedLeadId(lead.id);
@@ -293,26 +186,6 @@ export function useCheckIn() {
     checkInMutation.mutate({ ...overridePrompt.input, manualOverrideReason: reason });
   };
 
-  const createNewCompanyFromSearch = async () => {
-    const name = checkInSearch.trim();
-    if (!name) return;
-
-    const createdLead = await createLeadMutation.mutateAsync({
-      name,
-      source: "manual",
-      status: "prospect",
-      notes: "Created manually during check-in",
-      // No address to send: the empty addressLine1 this used to pass failed
-      // validation, and the server skips the location row without one anyway.
-    });
-
-    setSelectedLeadId(createdLead.lead.id);
-    setCheckInSearch(createdLead.lead.name);
-    setCheckInDropdownOpen(false);
-    toast({ title: t("companyCreated"), description: createdLead.lead.name, variant: "success" });
-    await invalidateXpotData();
-  };
-
   return {
     selectedLeadId,
     setSelectedLeadId,
@@ -321,26 +194,13 @@ export function useCheckIn() {
     setCheckInSearch,
     checkInDropdownOpen,
     setCheckInDropdownOpen,
-    filteredLeadsForCheckIn,
-    checkInPlaceQuery,
     checkInMutation,
     createLeadMutation,
     pickLocalLeadForCheckIn,
     pickGooglePlaceForCheckIn,
-    createNewCompanyFromSearch,
     overridePrompt,
     setOverridePrompt,
     confirmOverride,
-    visitNoteForm,
-    setVisitNoteForm,
-    isRecording,
-    recordingTime,
-    audioBlob,
-    setAudioBlob,
-    setRecordingTime,
-    startRecording,
-    stopRecording,
     uploadAudioMutation,
-    saveNoteMutation,
   };
 }
