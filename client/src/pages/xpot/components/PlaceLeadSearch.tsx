@@ -111,6 +111,9 @@ export const PlaceLeadSearch = forwardRef<PlaceLeadSearchHandle, {
     }
     if (event.key === "Enter") {
       event.preventDefault();
+      // With nothing typed the list is just the first saved customers: Enter
+      // alone must not open a check-in at whichever one happens to be first.
+      if (!items[activeIndex] && !query) return;
       const item = items[activeIndex] ?? items.find((candidate) => candidate.kind !== "create");
       if (item) pick(item);
     }
