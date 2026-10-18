@@ -53,7 +53,7 @@ New here? Read [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) first.
     are masked and can be rotated; reps have nothing to configure.
   - GoHighLevel: **Legacy** pipeline sync. It still works for accounts that use
     it, and is folded under "Legacy" in the Integrations CRM section.
-  - Twilio: SMS for sign-in codes (marked "Required for sign-in").
+  - Twilio: SMS for sign-in codes (its card is marked "Required").
   - Stuscle: the store where approved reps buy kits at wholesale with a personal code.
   - Google Places: business search at check-in and address autocomplete.
   - AI: Groq Whisper transcribes visit audio (OpenAI Whisper as fallback);
@@ -83,12 +83,17 @@ the tests write to it. This is what CI does (`.github/workflows/ci.yml`):
 export DATABASE_URL="postgresql://postgres@localhost:5432/xpot_ci?sslmode=disable"
 export TAGS_INTEGRATION=1
 npm run migrate
-npx vitest run tests/tags/tags.integration.test.ts tests/resellerAccounts.integration.test.ts \
-  tests/phoneAuth.integration.test.ts tests/wholesale.integration.test.ts tests/mcp.oauth.integration.test.ts
+npx vitest run --no-file-parallelism tests/tags/tags.integration.test.ts tests/tags/journey.integration.test.ts \
+  tests/mcp.integration.test.ts tests/resellerAccounts.integration.test.ts tests/phoneAuth.integration.test.ts \
+  tests/wholesale.integration.test.ts tests/mcp.oauth.integration.test.ts \
+  tests/tags/stockMetrics.integration.test.ts tests/tags/distribution.integration.test.ts \
+  tests/tags/pieceScreen.integration.test.ts tests/tags/resellerCustomers.integration.test.ts \
+  tests/tags/organizationKits.integration.test.ts
 ```
 
-`tests/tags/journey.integration.test.ts` and `tests/mcp.integration.test.ts`
-use the same switch but are not in CI's list; run them by hand the same way.
+Run them one file at a time (`--no-file-parallelism`): several truncate the
+same tables. The other integration files run on PGlite, an in-memory Postgres,
+inside `npm test`.
 
 ## Setup
 
@@ -258,7 +263,7 @@ stored in integer cents; profit is (price − production cost), frozen onto the
 sale item so repricing a product never rewrites past figures.
 
 Sales can be recorded from three places: the active check-in card, the company
-card in Leads, and the Sales tab. They can also be **captured by voice**: the
+card in Companies, and the Sales tab. They can also be **captured by voice**: the
 visit's audio is transcribed, read against the catalog and the shop's live
 stock, and turned into proposed actions the rep confirms with one tap.
 
@@ -490,8 +495,8 @@ The Xpot admin's own screens (the Platform group; managers get a 403).
   with phone previews) and Landing page (`/admin/landing`: the public page's
   editor; it warns before leaving with unpublished changes). Changes can take
   up to 5 minutes to show in the installed app.
-- **Status** (`/admin/health`): a banner that names its causes (prospecting
-  worker, services, CRM sync), the services list, the prospecting worker and
+- **Status** (`/admin/health`): a banner that names its causes (background
+  prospecting, searches in progress, stuck routes, services, CRM sync), the services list, the prospecting worker and
   searches (a stuck route gets "Build the route again"), CRM sync problems with
   Retry, and the error log with a plain-language summary on each event.
 - Integrations and Status read one services list,
@@ -547,7 +552,8 @@ Environment:
 ## Environment variables
 
 Every variable the server reads. `.env.example` has the same list with a
-comment on each.
+comment on each, plus the client's optional `VITE_GOOGLE_MAPS_API_KEY` (see
+"Deploy") and `XPOT_OPERATION_TIMEZONE`, which no code reads.
 
 | Variable | Needed | What for |
 |---|---|---|
@@ -567,6 +573,11 @@ comment on each.
 | `GEMINI_API_KEY`, `GEMINI_MODEL` | no | LLM fallback; overrides the panel's Gemini key |
 | `TAG_PUBLIC_BASE_URL`, `TAG_HASH_SECRET`, `TAG_COUNTRY_HEADER` | no | Tags (see above) |
 | `PUBLIC_BASE_URL` | no | MCP OAuth origin (see above) |
+| `TOKEN_ENCRYPTION_KEY` | no | Key that encrypts the secrets saved in the Integrations panel; unset, it is derived from `SESSION_SECRET` (so rotating that would make them unreadable) |
+| `XPOT_TELEGRAM_BOT_TOKEN`, `XPOT_TELEGRAM_CHAT_ID` | no | Telegram notices for completed sign-up applications and stale drafts |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | no | Web push (background route notifications) |
+| `PROSPECTING_ENGINE_URL`, `PROSPECTING_ENGINE_CF_CLIENT_ID`, `PROSPECTING_ENGINE_CF_CLIENT_SECRET`, `PROSPECTING_ENGINE_MAX_TIME_SECONDS`, `PROSPECTING_ENGINE_DEPTH`, `PROSPECTING_ENGINE_POLL_MS` | no | The prospecting engine (see `docs/prospecting-engine-runbook.md`); unset, route planning says it is not configured |
+| `GOOGLE_ROUTE_OPTIMIZATION_PROJECT_ID`, `GOOGLE_ROUTE_OPTIMIZATION_CREDENTIALS_FILE` or `GOOGLE_ROUTE_OPTIMIZATION_CREDENTIALS_JSON` | no | Google Route Optimization for the daily route; unset, Xpot orders the stops itself |
 | `SOURCE_COMMIT` | no | Set by Coolify; reported by `/api/version` |
 | `MIGRATIONS_DIR` | no | Where the migration runner looks (default `./migrations`) |
 
@@ -603,7 +614,9 @@ Coolify app settings:
 - Build pack: Dockerfile. Port: `8888`. Health check: `/api/health` (also in the Dockerfile).
 - Turn on "Include Source Commit in Build" so `/api/version` reports the commit.
 - Runtime environment variables: see "Environment variables". No build-time
-  variables are needed.
+  variables are needed: the one the client can read, `VITE_GOOGLE_MAPS_API_KEY`
+  (in `.env.example`), is not passed by the Dockerfile, and without it the
+  route map is drawn with MapLibre instead of Google Maps.
 
 Migrations run on **every container start**: the Dockerfile's `CMD` is
 `node dist/migrate.cjs && exec node dist/index.cjs`. The runner applies pending

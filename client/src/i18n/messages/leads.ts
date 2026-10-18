@@ -62,7 +62,7 @@ const en = {
   // Edit dialog
   socialOther: "Other",
   socialPlaceholder: "URL or handle",
-  saveChanges: "Save Changes",
+  saveChanges: "Save changes",
   leadUpdated: "Company updated",
   leadUpdateFailed: "Could not update the company",
 
@@ -170,7 +170,7 @@ export const leadsMessages: Dictionary<typeof en> = {
     delete: "Excluir",
 
     deleteLeadTitle: "Excluir esta empresa?",
-    deleteNamed: "Remove {name} e todos os dados ligados a ele para sempre.",
+    deleteNamed: "Remove {name} e todos os dados ligados a ela para sempre.",
     deleteGeneric: "Isso será removido para sempre.",
     keep: "Manter",
 
@@ -195,7 +195,7 @@ export const leadsMessages: Dictionary<typeof en> = {
     leadDeleted: "Empresa excluída",
     leadDeleteFailed: "Não foi possível excluir a empresa",
     syncFailed: "Falha na sincronização",
-    promoted: "Transformado em cliente",
+    promoted: "Transformada em cliente",
     promoteFailed: "Não foi possível transformar em cliente",
     businessImported: "Empresa importada",
     piecesCount_one: "{count} peça",
@@ -316,7 +316,7 @@ export const leadsMessages: Dictionary<typeof en> = {
     leadDeleted: "Empresa eliminada",
     leadDeleteFailed: "No se pudo eliminar la empresa",
     syncFailed: "Falló la sincronización",
-    promoted: "Convertido en cliente",
+    promoted: "Convertida en cliente",
     promoteFailed: "No se pudo convertir en cliente",
     businessImported: "Empresa importada",
     piecesCount_one: "{count} pieza",
@@ -339,7 +339,7 @@ export const leadsMessages: Dictionary<typeof en> = {
     directions: "Cómo llegar",
     companyProfile: "Perfil de la empresa",
     googleProfile: "Perfil de Empresa de Google",
-    googleProfileLink: "Añadir perfil de Google",
+    googleProfileLink: "Agregar perfil de Google",
     googleProfileUnlink: "Desvincular perfil de Google",
     googleProfileUnlinkTitle: "¿Desvincular el perfil de Google?",
     googleProfileUnlinkDesc: "La nota y el enlace de Google dejan de aparecer en esta empresa, y Tags ya no puede crear su enlace de reseña de Google. Los datos de la empresa siguen igual.",

@@ -23,7 +23,7 @@ const en = {
   noPipelines: "No pipelines configured in GHL",
   ghlOffTitle: "GoHighLevel is not connected",
   ghlOffBody: "This tab is the legacy GoHighLevel pipeline. Without it there are no pipelines or stages to choose; opportunities and follow-ups added here stay in Xpot only.",
-  createOpp: "Create Opportunity",
+  createOpp: "Create opportunity",
   noOpps: "No opportunities yet — tap + to create one",
   listLoadFailed: "Could not load this list.",
   sync_pending: "Pending",
@@ -77,11 +77,11 @@ export const salesMessages: Dictionary<typeof en> = {
     sync_pending: "Pendente",
     sync_synced: "Sincronizada",
     sync_failed: "Falhou",
-    sync_needs_review: "Precisa revisar",
+    sync_needs_review: "Precisa de revisão",
 
-    followUpTasks: "Tarefas de acompanhamento",
+    followUpTasks: "Tarefas de retorno",
     noDueDate: "Sem prazo",
-    noTasks: "Nenhuma tarefa ainda — toque em + para adicionar um acompanhamento",
+    noTasks: "Nenhuma tarefa ainda — toque em + para adicionar um retorno",
 
     oppCreated: "Oportunidade criada",
     oppCreateFailed: "Não foi possível criar a oportunidade",

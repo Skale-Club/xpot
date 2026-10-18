@@ -8,12 +8,12 @@ const en = {
   greetingAfternoon: "Good afternoon",
   greetingEvening: "Good evening",
 
-  metricVisitsToday: "Visits Today",
+  metricVisitsToday: "Visits today",
   metricCompletedToday: "Finished today",
-  metricTasksToday: "Tasks Today",
-  metricSalesToday: "Sales Today",
+  metricTasksToday: "Tasks today",
+  metricSalesToday: "Sales today",
   metricOpportunities: "Opportunities",
-  metricPendingTasks: "Pending Tasks",
+  metricPendingTasks: "Pending tasks",
 
   photoUpdated: "Photo updated",
   uploadFailed: "Upload failed",
@@ -38,8 +38,8 @@ const en = {
   today: "Today",
   noRouteToday: "No route created for today",
 
-  syncFailures_one: "{count} Sync Failure",
-  syncFailures_other: "{count} Sync Failures",
+  syncFailures_one: "{count} sync failure",
+  syncFailures_other: "{count} sync failures",
   unknownError: "Unknown error",
 
   recentVisits: "Recent visits",
@@ -120,7 +120,7 @@ export const dashboardMessages: Dictionary<typeof en> = {
     photoUpdated: "Foto atualizada",
     uploadFailed: "Não foi possível enviar",
     changePhoto: "Alterar foto do perfil",
-    admin: "Admin Xpot",
+    admin: "Admin do Xpot",
 
     visitActivity: "Atividade",
     periodSelector: "Período da atividade",
@@ -218,7 +218,7 @@ export const dashboardMessages: Dictionary<typeof en> = {
     photoUpdated: "Foto actualizada",
     uploadFailed: "No se pudo subir",
     changePhoto: "Cambiar foto de perfil",
-    admin: "Admin Xpot",
+    admin: "Admin de Xpot",
 
     visitActivity: "Actividad",
     periodSelector: "Período de actividad",

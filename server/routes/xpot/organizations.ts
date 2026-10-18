@@ -21,7 +21,9 @@ import {
   updateOrganizationMember,
   type OrganizationActor,
 } from "../../organizations/service.js";
-import { deliverKit } from "../../tags/repository.js";
+import { deliverKit, TagError, tagErrorBody } from "../../tags/repository.js";
+import { kitCostRequired, kitOwnership } from "#shared/tagKits.js";
+import { storage } from "../../storage.js";
 
 const id = z.coerce.number().int().positive();
 const membershipRole = z.enum(["admin", "member"]);
@@ -38,6 +40,7 @@ function route(handler: (req: any) => Promise<unknown>, status = 200) {
       if (error instanceof OrganizationError || error instanceof AccountError) {
         return res.status(error.status).json({ message: error.message });
       }
+      if (error instanceof TagError) return res.status(error.status).json(tagErrorBody(error));
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: error.issues[0]?.message ?? "Invalid input" });
       }
@@ -94,19 +97,20 @@ export function createOrganizationsRouter() {
       repId: z.number().int().positive(),
       membershipRole: membershipRole.default("member"),
     }).strict().safeParse(req.body);
+    // Only platform management adds people (the Organizations screen offers it
+    // to them alone). A Rep Admin could otherwise pull anyone on the platform,
+    // by id, into their Organization: the newest membership is where that
+    // person's new companies and pieces land (organizationIdForRep), so the
+    // Rep Admin would then see and manage them.
+    if (!managesEveryOrganization(actor)) {
+      throw new OrganizationError("An Xpot admin or a manager adds people to an Organization.", 403);
+    }
     if (existing.success) {
-      if (!managesEveryOrganization(actor) && existing.data.membershipRole === "admin") {
-        throw new OrganizationError("Only an Admin or Manager can assign Rep Admin access.", 403);
-      }
       return addOrganizationMember(organizationId, existing.data.repId, existing.data.membershipRole, actor);
     }
 
     // New people are created in People (/admin/reps), where access is decided.
-    // This older body (name + phone) stays for API callers with platform
-    // management; an org admin only adds people who already have an account.
-    if (!managesEveryOrganization(actor)) {
-      throw new OrganizationError("Add an existing person. New people are created in People.", 403);
-    }
+    // This older body (name + phone) stays for API callers with platform management.
     const created = resellerAccountSchema.extend({
       role: z.literal("rep").default("rep"),
       modules: z.array(z.enum(XPOT_MODULES)).min(1).default([...XPOT_MODULES]),
@@ -161,8 +165,16 @@ export function createOrganizationsRouter() {
     const members = await listOrganizationMembers(organizationId, actor);
     const target = members.find((member) => member.repId === input.repId && member.isActive && !member.blockedAt);
     if (!target) throw new OrganizationError("The target Rep is not active in this Organization.", 400);
+    // The same cost rule as the Distribution hand-out (server/tags/routes.ts, shared/tagKits.ts): a rep on the
+    // zero-cost rule holds company stock even with a reference cost; the acquisition rule needs a cost.
+    const rep = await storage.getSalesRep(input.repId);
+    const policy = rep?.costPolicy === "zero" ? "zero" : "acquisition";
+    if (kitCostRequired(policy) && input.unitCostCents === undefined) {
+      throw new TagError("Unit acquisition cost is required for this partner", 400, "tag_cost_required");
+    }
     return deliverKit({
       ...input,
+      ownershipType: kitOwnership(policy),
       organizationId,
       sourceOrganizationId: managesEveryOrganization(actor) ? undefined : organizationId,
     }, actor.user.userId);

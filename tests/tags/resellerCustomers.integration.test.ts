@@ -135,6 +135,10 @@ test.skipIf(!enabled)("reseller customers: approved reseller activates a piece, 
     // Holding a piece there lets her edit the company, not delete someone else's lead.
     assert.equal((await api("PATCH", `/api/xpot/leads/${padaria.id}`, "rc-carla", { phone: "+15550000000" })).status, 200);
     assert.equal((await api("DELETE", `/api/xpot/leads/${padaria.id}`, "rc-carla")).status, 403);
+    // …nor take it over (owning it would let her delete it).
+    assert.equal((await api("PATCH", `/api/xpot/leads/${padaria.id}`, "rc-carla", { ownerRepId: carla.id })).status, 403);
+    assert.equal((await one<{ owner_rep_id: number }>(sql`SELECT owner_rep_id FROM sales_leads WHERE id = ${padaria.id}`)).owner_rep_id, admin.id);
+    assert.equal((await api("DELETE", `/api/xpot/leads/${padaria.id}`, "rc-carla")).status, 403);
 
     // She can record the sale of her piece to the company holding it.
     await db.execute(sql`UPDATE sales_reps SET cost_policy = 'zero', cost_policy_configured_at = now() WHERE id = ${carla.id}`);
@@ -151,6 +155,16 @@ test.skipIf(!enabled)("reseller customers: approved reseller activates a piece, 
       paymentStatus: "paid",
     }, { "idempotency-key": "rc-sale-2" });
     assert.equal(refused.status, 403, refused.text);
+    // House stock she does not hold is not hers to sell, even to her own customer.
+    const housePiece = await one<{ id: string }>(sql`SELECT id FROM tags WHERE public_code = ${houseCode}`);
+    const houseSale = await api("POST", "/api/xpot/tag-sales", "rc-carla", {
+      leadId: mercadoId,
+      lines: [{ salesProductId: product.id, tagIds: [housePiece.id], unitPriceCents: 2500 }],
+      paymentStatus: "paid",
+    }, { "idempotency-key": "rc-sale-3" });
+    assert.equal(houseSale.status, 403, houseSale.text);
+    assert.equal(houseSale.json.code, "tag_not_yours");
+    assert.equal((await one<{ rep_id: number | null }>(sql`SELECT rep_id FROM tags WHERE id = ${housePiece.id}`)).rep_id, null);
   } finally {
     server.close();
     await clean();
