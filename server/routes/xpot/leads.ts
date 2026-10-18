@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { storage, type LeadVisibility } from "../../storage.js";
 import { repModules } from "#shared/modules.js";
-import { canAccessLead, requireXpotUser, requireVisitsModule, ensureXpotRep, isManagerOrAdmin, loadAccessibleLead, listsEveryone } from "./middleware.js";
+import { canAccessLead, requireXpotUser, requireVisitsModule, ensureXpotRep, isManagerOrAdmin, loadAccessibleLead, listsEveryone, ownsLead, refuseNotOwner } from "./middleware.js";
 import { xpotLeadCreateSchema, xpotLeadUpdateSchema, xpotLeadContactCreateSchema } from "#shared/xpot.js";
 import { syncLeadToGhl, syncLeadToXphere } from "./helpers.js";
 import { salesStorage } from "../../storage-sales.js";
@@ -373,11 +373,11 @@ export function createLeadsRouter() {
     if (input.status !== undefined && !isManagerOrAdmin(actor!) && !repModules(actor!.rep).includes("visits")) {
       return res.status(403).json({ code: "module_off", message: "Visits are not enabled for your account." });
     }
-    // Holding a piece there lets a rep edit the company's details, not take it over:
-    // owning it would then let them delete it (DELETE below refuses piece-only access).
-    if (input.ownerRepId !== undefined && input.ownerRepId !== lead.ownerRepId && !(await canAccessLead(actor!, lead, { viaPieces: false }))) {
-      return res.status(403).json({ code: "access_denied", message: "Access denied" });
-    }
+    // Holding a piece there lets a rep edit the company's details, not take it over
+    // (owning it would then let them delete it) nor move it through the funnel.
+    const ownerLevelChange = (input.ownerRepId !== undefined && input.ownerRepId !== lead.ownerRepId) ||
+      (input.status !== undefined && input.status !== lead.status);
+    if (ownerLevelChange && !(await ownsLead(actor!, lead))) return refuseNotOwner(res);
 
     const updated = await storage.updateSalesLead(leadId, input);
     res.json({ lead: updated });
@@ -424,6 +424,8 @@ export function createLeadsRouter() {
     if (!(await canAccessLead(actor!, lead))) {
       return res.status(403).json({ code: "access_denied", message: "Access denied" });
     }
+    // Pushing a company to the CRM (and promoting it) is the owner's call, not a piece holder's.
+    if (!(await ownsLead(actor!, lead))) return refuseNotOwner(res);
 
     if (lead.status === "prospect") {
       await storage.updateSalesLead(leadId, { status: "lead" });
@@ -445,6 +447,7 @@ export function createLeadsRouter() {
     if (!(await canAccessLead(actor!, lead))) {
       return res.status(403).json({ code: "access_denied", message: "Access denied" });
     }
+    if (!(await ownsLead(actor!, lead))) return refuseNotOwner(res);
 
     if (lead.status !== "prospect") {
       return res.status(400).json({ message: "Lead is already a lead or beyond prospect stage" });
@@ -465,9 +468,7 @@ export function createLeadsRouter() {
     if (!lead) return res.status(404).json({ code: "lead_not_found", message: "Lead not found" });
 
     // Holding a piece there lets a rep see and edit a company, not delete someone else's lead.
-    if (!(await canAccessLead(actor!, lead, { viaPieces: false }))) {
-      return res.status(403).json({ code: "access_denied", message: "Access denied" });
-    }
+    if (!(await ownsLead(actor!, lead))) return refuseNotOwner(res);
 
     const files = await storage.deleteSalesLead(leadId);
     res.status(204).end();
@@ -514,7 +515,8 @@ export function createLeadsRouter() {
     const target = photo || photoUrl;
     if (!target) return res.status(400).json({ message: "photo is required" });
 
-    const lead = await loadAccessibleLead(req, res, Number(req.params.id));
+    // Removing a photo deletes its stored file: the owner's call, not a piece holder's.
+    const lead = await loadAccessibleLead(req, res, Number(req.params.id), "owner");
     if (!lead) return;
 
     const currentPhotos = lead.photos ?? [];
