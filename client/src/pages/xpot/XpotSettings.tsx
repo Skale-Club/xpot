@@ -32,7 +32,7 @@ import { CopyButton } from "@/components/xpot/CopyButton";
 import { AdminBadge } from "@/components/xpot/AdminBadge";
 import { useAvatarUpload } from "@/components/xpot/useAvatarUpload";
 import { ACCENT_SELECTED, BRAND_GRADIENT, EYEBROW, GLASS_CLASS, SURFACE_MODAL_CLASS } from "@/components/xpot/surface";
-import ReactCountryFlag from "react-country-flag";
+import { CountryFlag } from "@/components/CountryFlag";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useViewerAccess } from "@/lib/adminMode";
@@ -160,7 +160,7 @@ function CountryPhoneInput({
         aria-label={`${t("phone")}: ${active.dial}`}
         className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-l-xl border border-r-0 border-white/10 bg-white/[0.05] px-3 text-sm text-white/80 transition-colors hover:bg-white/[0.08]"
       >
-        <ReactCountryFlag countryCode={active.code} svg className="h-4 w-5 rounded-sm object-cover" />
+        <CountryFlag iso={active.code} />
         <span className="text-white/60 text-xs font-medium">{active.dial}</span>
         <ChevronDown className="h-3 w-3 text-white/40" />
       </button>
@@ -182,7 +182,7 @@ function CountryPhoneInput({
                 c.code === active.code ? `${ACCENT_SELECTED.account.row} text-white` : "text-white/70 hover:bg-white/5 hover:text-white"
               }`}
             >
-              <ReactCountryFlag countryCode={c.code} svg className="h-4 w-5 rounded-sm object-cover" />
+              <CountryFlag iso={c.code} />
               <span className="text-white/50 text-xs w-10 shrink-0">{c.dial}</span>
               <span className="truncate">{countryName(c.code, c.name, t.locale)}</span>
             </button>
