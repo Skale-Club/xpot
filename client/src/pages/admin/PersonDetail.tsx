@@ -30,7 +30,7 @@ import { manageMessages, type ManageKey } from "@/i18n/messages/manage";
 import { peopleWorkspaceMessages } from "@/i18n/messages/peopleWorkspace";
 import { settingsMessages } from "@/i18n/messages/settings";
 import type { XpotMeResponse } from "@/pages/xpot/types";
-import { maskInboundKey } from "./integrationsUi";
+import { isXphereQueryKey, maskInboundKey } from "./integrationsUi";
 import { personStatus, type PeopleStatus } from "./peopleFilters";
 
 // One person in Account › People (/admin/reps/:repId): every decision about
@@ -78,7 +78,6 @@ export type Rep = {
 };
 
 export const REPS_KEY = ["/api/xpot/admin/reps"];
-const XPHERE_LIST_KEY = ["/api/xpot/admin/xphere"];
 /** The outline button for a destructive step (block, refuse, delete); the dialog it opens is the red one. */
 export const DANGER_OUTLINE = "border-red-400/30 text-red-300 hover:border-red-400/40 hover:bg-red-500/10 hover:text-red-200";
 export const MODULE_KEYS = { visits: "moduleVisits", tags: "moduleTags" } as const satisfies Record<XpotModule, keyof typeof commonMessages.en>;
@@ -837,10 +836,8 @@ function XphereConnection({ rep, userId }: { rep: Rep; userId: string }) {
   const [token, setToken] = useState("");
   const [revealed, setRevealed] = useState(false);
   const [rotating, setRotating] = useState(false);
-  const refresh = () => {
-    void queryClient.invalidateQueries({ queryKey: key });
-    void queryClient.invalidateQueries({ queryKey: XPHERE_LIST_KEY });
-  };
+  // This person's connection and the Integrations › Xphere list.
+  const refresh = () => void queryClient.invalidateQueries({ predicate: (q) => isXphereQueryKey(q.queryKey) });
   const fail = (e: Error) => toast({ title: tm("errorSaving"), description: e.message, variant: "destructive" });
 
   const put = useMutation({

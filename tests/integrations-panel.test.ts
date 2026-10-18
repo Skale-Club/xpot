@@ -11,6 +11,7 @@ import {
   integrationStatusKey,
   integrationsTabFromPath,
   integrationsTabPath,
+  isXphereQueryKey,
   locksOutSignIn,
   maskInboundKey,
   visibleXphereRows,
@@ -160,6 +161,14 @@ describe("the Xphere list", () => {
   it("masks the inbound key", () => {
     expect(maskInboundKey("xpot_abcdefghijklmnop1234")).toBe("xpot_••••••••1234");
     expect(maskInboundKey("raw-key-9876")).toBe("••••••••9876");
+  });
+  it("refreshes the list and each person's connection together", () => {
+    // A new key made in Integrations must reach People › Visits (and back), never a revoked one.
+    expect(isXphereQueryKey(["/api/xpot/admin/xphere"])).toBe(true);
+    expect(isXphereQueryKey(["/api/xpot/admin/xphere/u-123"])).toBe(true);
+    expect(isXphereQueryKey(["/api/xpot/admin/xphere-other"])).toBe(false);
+    expect(isXphereQueryKey(["/api/xpot/admin/reps"])).toBe(false);
+    expect(isXphereQueryKey([42])).toBe(false);
   });
 });
 
