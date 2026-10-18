@@ -76,23 +76,11 @@ export const STOCK_STATUS_TONE: Record<string, PillTone> = {
   sold: "blue", // = SOLD_TONE
   damaged: "red",
   lost: "red",
-  retired: "slate",
+  retired: "muted",
 };
 
 /** A sold piece; blue so it never reads as "Live". */
 export const SOLD_TONE: PillTone = "blue";
-
-/** The physical piece (tags.stock_status), shown next to the digital status: received stock is violet, a sale blue. */
-export const STOCK_STATUS_TONE: Record<string, PillTone> = {
-  pending: "amber",
-  available: "violet",
-  reserved: "blue",
-  internal_use: "slate",
-  sold: SOLD_TONE,
-  damaged: "red",
-  lost: "red",
-  retired: "muted",
-};
 
 /** The NFC chip: nothing on it is a problem (a tap opens nothing); written but unchecked needs a test. */
 export const CHIP_STATUS_TONE: Record<string, PillTone> = {
