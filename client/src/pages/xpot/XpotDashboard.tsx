@@ -16,6 +16,7 @@ import { StatusBadge } from "./components/VisitStatus";
 import { AttentionItem, AttentionList, DashboardSection, EmptyMetricState, KpiTile, MetricSelector, PeriodSelector } from "@/components/xpot/DashboardKit";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { routeDisplayName, routeStopProgress, todayRouteOf } from "./prospectingUi";
 
 type DashboardRoute = {
   id: number;
@@ -62,13 +63,16 @@ function DashboardOverview() {
   const routesQuery = useQuery<DashboardRoute[]>({ queryKey: ["/api/xpot/prospecting/routes"] });
   const isDesktop = useIsDesktop();
 
-  const todayRoute = routesQuery.data?.find((route) => route.routeDate === localDateKey() && route.status !== "cancelled");
+  // The same route the Route screen opens; a route finished today still shows its progress.
+  const todayRoute = todayRouteOf(routesQuery.data, localDateKey(), { includeCompleted: true });
+  // The array key is the one every route mutation and invalidateXpotData refresh.
   const routeDetailQuery = useQuery<DashboardRouteDetail>({
-    queryKey: [`/api/xpot/prospecting/routes/${todayRoute?.id ?? "none"}`],
+    queryKey: ["/api/xpot/prospecting/routes", todayRoute?.id],
     enabled: Boolean(todayRoute),
   });
   const routeStops = routeDetailQuery.data?.stops ?? [];
-  const completedStops = routeStops.filter((stop) => stop.status === "completed").length;
+  const stopProgress = routeStopProgress(routeStops);
+  const completedStops = stopProgress.done;
   const nextStop = routeStops.find((stop) => stop.status === "en_route")
     ?? routeStops.find((stop) => stop.status === "planned");
   const tasksToday = dashboardQuery.data?.tasksToday ?? [];
@@ -264,12 +268,12 @@ function DashboardOverview() {
               <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/35">{t("todayRoute")}</span>
               {todayRoute ? <span className="rounded-full bg-white/[0.055] px-2 py-0.5 text-[10px] font-semibold text-white/50">{routeStatusLabel(todayRoute.status)}</span> : null}
             </span>
-            <span className="mt-1 block truncate text-base font-bold text-white/90">{todayRoute?.name ?? t("routeNotCreated")}</span>
+            <span className="mt-1 block truncate text-base font-bold text-white/90 first-letter:uppercase">{todayRoute ? routeDisplayName(todayRoute, t.locale) : t("routeNotCreated")}</span>
             {todayRoute && routeStops.length ? (
               <>
                 <span className="mt-1 block text-xs text-white/40">{nextStop ? t("routeNextStop", { stop: nextStop.name }) : t("routeProgress", { completed: completedStops, total: routeStops.length })}</span>
                 <span className="mt-3 block h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
-                  <span className="block h-full rounded-full bg-gradient-to-r from-blue-400 to-indigo-400 transition-[width]" style={{ width: `${Math.round((completedStops / routeStops.length) * 100)}%` }} />
+                  <span className="block h-full rounded-full bg-gradient-to-r from-blue-400 to-indigo-400 transition-[width]" style={{ width: `${stopProgress.percent}%` }} />
                 </span>
                 <span className="mt-1.5 block text-[10px] font-medium tabular-nums text-white/30">{t("routeProgress", { completed: completedStops, total: routeStops.length })}</span>
               </>

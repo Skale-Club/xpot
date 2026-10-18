@@ -228,3 +228,30 @@ export function routeDisplayName(route: { name: string; routeDate: string }, loc
   const generatedNames = [`Prospecting — ${route.routeDate}`, `Route — ${route.routeDate}`];
   return generatedNames.includes(route.name.trim()) ? routeDateLabel(route.routeDate, locale, referenceDate) : route.name;
 }
+
+const ACTIVE_ROUTE_STATUSES = ["draft", "published", "in_progress"];
+
+/**
+ * "Today's route": the day's open route (draft, published or in progress),
+ * the one the Route screen opens. The Dashboard falls back to a route already
+ * completed today so a finished day still shows its progress.
+ */
+export function todayRouteOf<T extends { routeDate: string; status: string }>(
+  routes: T[] | undefined,
+  day: string,
+  { includeCompleted = false } = {},
+): T | undefined {
+  const ofDay = (routes ?? []).filter((route) => route.routeDate === day);
+  return ofDay.find((route) => ACTIVE_ROUTE_STATUSES.includes(route.status))
+    ?? (includeCompleted ? ofDay.find((route) => route.status === "completed") : undefined);
+}
+
+/** Stops behind the rep: visited or skipped (a cancelled visit skips its stop). */
+export function isStopDone(status: string) {
+  return status === "completed" || status === "skipped";
+}
+
+export function routeStopProgress(stops: { status: string }[]) {
+  const done = stops.filter((stop) => isStopDone(stop.status)).length;
+  return { done, total: stops.length, percent: stops.length ? Math.round((done / stops.length) * 100) : 0 };
+}

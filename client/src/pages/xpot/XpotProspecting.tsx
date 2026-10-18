@@ -29,6 +29,7 @@ import {
   prospectingProgress,
   reorderIdsAroundTarget,
   routeDisplayName,
+  todayRouteOf,
   selectableCandidateIds,
   serverNowMs,
   wholeMinutes,
@@ -363,7 +364,7 @@ export function XpotProspecting() {
   const today = localDateKey();
   const todayJobs = useMemo(() => (jobsQuery.data ?? []).filter((job) => localDateKey(new Date(job.createdAt)) === today), [jobsQuery.data, today]);
   const todayRoutes = useMemo(() => (routesQuery.data ?? []).filter((route) => route.routeDate === today), [routesQuery.data, today]);
-  const activeTodayRoute = todayRoutes.find((route) => ["draft", "published", "in_progress"].includes(route.status));
+  const activeTodayRoute = todayRouteOf(todayRoutes, today);
   const pendingTodayJob = todayJobs.find((job) => ["draft", "queued", "running"].includes(job.status)
     || ["pending", "building"].includes(job.routePlanningStatus));
   const dailyRouteLimitReached = todayJobs.length >= MAX_DAILY_PROSPECTING_SESSIONS;
