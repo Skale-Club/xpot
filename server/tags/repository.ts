@@ -412,7 +412,7 @@ export async function updateTag(id: string, patch: TagUpdate, userId: string | n
 export async function transitionTag(
   id: string,
   action: Exclude<TagAction, "assign">,
-  actor: Pick<TagActor, "userId" | "repId">,
+  actor: Pick<TagActor, "userId" | "repId" | "inManagement">,
   reason?: string | null,
   source: JourneySource = "admin",
 ): Promise<Tag> {
@@ -425,7 +425,7 @@ export async function transitionTag(
     const now = new Date();
     const set: Partial<Tag> = { status: plan.status, updatedAt: now };
     if (action === "activate") {
-      Object.assign(set, { activatedAt: now, activatedByRepId: actor.repId, disabledAt: null, ...activationCredit(tag, actor.repId) });
+      Object.assign(set, { activatedAt: now, activatedByRepId: actor.repId, disabledAt: null, ...activationCredit(tag, actor) });
     }
     if (action === "disable") set.disabledAt = now;
     if (action === "retire") set.disabledAt = tag.disabledAt ?? now;

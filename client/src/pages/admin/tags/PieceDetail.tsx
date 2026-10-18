@@ -392,7 +392,7 @@ function actionUrl(id: string, action: PieceAction): string {
   return action === "activate" || action === "disable" ? `/api/xpot/tags/${id}/${action}` : `/api/xpot/admin/tags/${id}/${action}`;
 }
 
-function ActionDialog({ action, onClose, onConfirm, pending }: { action: PieceAction | null; onClose: () => void; onConfirm: (reason: string) => void; pending: boolean }) {
+function ActionDialog({ action, note, onClose, onConfirm, pending }: { action: PieceAction | null; note?: string | null; onClose: () => void; onConfirm: (reason: string) => void; pending: boolean }) {
   const t = useT(manageTagsPiecesMessages);
   const tc = useT(commonMessages);
   const [reason, setReason] = useState("");
@@ -411,6 +411,7 @@ function ActionDialog({ action, onClose, onConfirm, pending }: { action: PieceAc
           <DialogTitle>{action ? t(`action_${action}_title`) : null}</DialogTitle>
           <DialogDescription className="text-white/50">{action ? t(`action_${action}_description`) : null}</DialogDescription>
         </DialogHeader>
+        {note ? <p className="text-sm text-white/70" data-testid="admin-piece-action-note">{note}</p> : null}
         <input className={INPUT} value={reason} onChange={(e) => setReason(e.target.value)} placeholder={t("reasonPlaceholder")} maxLength={300} data-testid="admin-piece-action-reason" />
         <DialogFooter className="gap-2">
           <button type="button" className={BTN_GHOST} onClick={onClose}>{tc("cancel")}</button>
@@ -440,6 +441,11 @@ function LifecycleStep({ tag }: { tag: TagDetail }) {
   const activatePlan = planTransition(tag, "activate");
   const damaged = tag.stockStatus === "damaged";
   const canDamage = tag.status === "inventory" && tag.repId === null && tag.leadId === null && (tag.stockStatus === "available" || tag.stockStatus === "pending");
+
+  // Going live never moves stock: a rep's piece stays theirs, a house piece stays house stock (shared/tagAccess.ts).
+  const holderNote = tag.repId !== null
+    ? t("activateHolderRep", { name: tag.repName ?? t("resellerNumber", { id: tag.repId }) })
+    : t("activateHolderHouse");
 
   const confirm = (reason: string) => {
     if (!pending) return;
@@ -494,7 +500,7 @@ function LifecycleStep({ tag }: { tag: TagDetail }) {
       </div>
       {!damaged && tag.status !== "active" && tag.status !== "retired" && !activatePlan.ok ? <p className="text-xs text-white/40">{t(activateBlockerKey(tag))}</p> : null}
       {tag.status === "active" ? <p className="text-xs text-emerald-400">{t("liveExplain")}</p> : null}
-      <ActionDialog action={pending} onClose={() => setPending(null)} onConfirm={confirm} pending={run.isPending} />
+      <ActionDialog action={pending} note={pending === "activate" ? holderNote : null} onClose={() => setPending(null)} onConfirm={confirm} pending={run.isPending} />
     </div>
   );
 }

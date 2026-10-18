@@ -176,6 +176,23 @@ test.skipIf(!enabled)("tags: every screen counts the same stock the same way", a
     const anaPieces = await ok("GET", `/api/xpot/tags?kitId=${kitAna.id}`, "sm-manager");
     assert.equal(countStockMetric(anaPieces, "returnable"), anaKit.returnableCount);
     assert.equal(countStockMetric(anaPieces, "sold"), anaKit.soldCount);
+
+    // Going live never moves stock. A house piece put live from management stays house stock…
+    const setUp = async (id: string, user: string) => {
+      await ok("POST", `/api/xpot/admin/tags/${id}/assign`, "sm-admin", { leadName: `Shop ${id.slice(0, 4)}` });
+      await ok("PATCH", `/api/xpot/admin/tags/${id}`, "sm-admin", { destinationType: "website", destinationUrl: "https://shop.example" });
+      return ok("POST", `/api/xpot/tags/${id}/activate`, user, {});
+    };
+    const managed = await setUp(p(13).id, "sm-manager");
+    assert.equal(managed.status, "active");
+    assert.equal(managed.repId, null);
+    assert.equal(managed.soldAt, null);
+    // …while a manager viewing the app as a rep takes it into their own hands, as a rep would.
+    const asRep = await setUp(p(14).id, "sm-manager");
+    assert.equal(asRep.repId, null);
+    await ok("POST", `/api/xpot/tags/${p(14).id}/disable`, "sm-manager", {});
+    const repView = await ok("POST", `/api/xpot/tags/${p(14).id}/activate`, "sm-manager", {}, { "x-xpot-view": "rep" });
+    assert.equal(repView.repId, repId["sm-manager"]);
   } finally {
     server.close();
     await pool.end();
