@@ -753,7 +753,7 @@ export function registerTagRoutes(app: Express) {
     });
   }
 
-  // Move a piece (and, if sold, its credit) to another reseller or back to the house.
+  // Move an unsold, unconfigured piece to another reseller or back to the house (a stock transfer or return).
   app.patch(`${adminBase}/:id/rep`, requireTagManager, async (req, res) => {
     const id = idParam(req, res);
     if (!id) return;

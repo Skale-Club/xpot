@@ -556,36 +556,79 @@ async function findExistingCodes(codes: string[]): Promise<Set<string>> {
   return new Set(found.map((r) => r.code));
 }
 
-/** Admin: move a piece (and, if sold, its sale credit) to another reseller or back to the house. */
+/**
+ * Admin "Move": hand one piece to another rep, or take it back to house stock, through the same stock rules as kits
+ * and returns. Back to the house is a return (returnToHouse). To a rep it is a `transfer` movement: the new rep
+ * becomes the custodian of company stock (no cost is captured here, so nothing is bought; an open acquisition of the
+ * previous rep is closed) and the piece leaves its kit. Sold pieces stay with their seller, and a piece set up for a
+ * customer must have the customer cleared first, as for a return.
+ */
 export async function setTagRep(id: string, repId: number | null, userId: string | null, source: JourneySource = "admin"): Promise<Tag> {
+  const current = await getTagRow(id);
+  if (!current) throw new TagError("Tag not found", 404);
+  if (current.repId === repId) return current;
+  if (repId === null) {
+    await returnToHouse([current.publicCode], userId, source);
+    return (await getTagRow(id))!;
+  }
   let previous: { repId: number | null; name: string } = { repId: null, name: "house" };
-  let next = "house";
-  const organizationId = repId === null ? await companyOrganizationId() : await organizationIdForRep(repId);
+  let next = "";
+  const organizationId = await organizationIdForRep(repId);
   const updated = await db.transaction(async (tx) => {
     const tag = await lockTag(tx, id);
     const names = async (rid: number | null) =>
       rid === null ? "house" : (await tx.select({ n: salesReps.displayName }).from(salesReps).where(eq(salesReps.id, rid)))[0]?.n ?? `rep ${rid}`;
+    const [activeSale] = await tx.select({ id: salesSaleTags.id }).from(salesSaleTags)
+      .where(and(eq(salesSaleTags.tagId, tag.id), eq(salesSaleTags.status, "active")))
+      .limit(1);
+    if (activeSale) throw new TagError("A sold piece stays with its seller; cancel the sale before moving it", 409);
+    if (tag.stockStatus !== "available") throw new TagError(`A piece in ${tag.stockStatus} stock cannot be moved`, 409);
+    if (tag.status !== "inventory") throw new TagError("Clear the customer before moving this piece", 409);
     previous = { repId: tag.repId, name: await names(tag.repId) };
     next = await names(repId);
+    const now = new Date();
+    await tx
+      .update(tagAcquisitionUnits)
+      .set({ returnedAt: now })
+      .where(and(eq(tagAcquisitionUnits.tagId, tag.id), isNull(tagAcquisitionUnits.returnedAt)));
     const [updated] = await tx
       .update(tags)
-      .set({ organizationId, repId, kitId: repId === tag.repId ? tag.kitId : null, updatedAt: new Date() })
+      .set({
+        organizationId,
+        repId,
+        kitId: null,
+        custodianRepId: repId,
+        ownershipType: "company",
+        stockUpdatedAt: now,
+        updatedAt: now,
+      })
       .where(eq(tags.id, id))
       .returning();
-    console.log(`[tags] ${tag.publicCode} reseller ${tag.repId ?? "house"} → ${repId ?? "house"} (user ${userId ?? "?"})`);
+    await tx.insert(tagStockMovements).values({
+      tagId: tag.id,
+      movementType: "transfer",
+      fromStockStatus: tag.stockStatus,
+      toStockStatus: updated.stockStatus,
+      fromOwnershipType: tag.ownershipType,
+      toOwnershipType: updated.ownershipType,
+      fromCustodianRepId: tag.custodianRepId,
+      toCustodianRepId: repId,
+      referenceType: tag.kitId ? "kit" : null,
+      referenceId: tag.kitId,
+      actorUserId: userId,
+    });
+    console.log(`[tags] ${tag.publicCode} reseller ${tag.repId ?? "house"} → ${repId} (user ${userId ?? "?"})`);
     return updated;
   });
-  if (previous.repId !== repId) {
-    await recordJourney({
-      kind: "execution",
-      action: "reseller_changed",
-      title: `Tag ${updated.publicCode} moved from ${previous.name} to ${next}`,
-      tagId: id,
-      repId,
-      beforeValue: previous.name,
-      afterValue: next,
-    }, journeyContext(userId, source));
-  }
+  await recordJourney({
+    kind: "execution",
+    action: "reseller_changed",
+    title: `Tag ${updated.publicCode} moved from ${previous.name} to ${next}`,
+    tagId: id,
+    repId,
+    beforeValue: previous.name,
+    afterValue: next,
+  }, journeyContext(userId, source));
   return updated;
 }
 

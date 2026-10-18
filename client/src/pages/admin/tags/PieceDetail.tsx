@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { AdminHttpError, ADMIN_TAGS_KEY, errorMessage, formatDateTime, getJson, invalidateAdminTags, sendJson, STALE_MS } from "./api";
 import { BTN, BTN_DANGER, BTN_GHOST, CARD, INPUT, PieceStatusPill } from "./ui";
 import { CopyRow, Loading, LoadError, Select, useLeads, useReps } from "./pieces-shared";
+import { ConfirmDialog } from "./batches-shared";
 import { useTagLabels } from "./labels";
 import { AnalyticsPanel, RangePicker, type AnalyticsRange } from "./pieces-analytics";
 import { NfcProvisioningCard } from "./pieces-NfcProvisioningCard";
@@ -548,7 +549,10 @@ function DetailsStep({ tag }: { tag: TagDetail }) {
 
 const HOUSE = "house";
 
-/** Move the piece (and, if sold, its sale credit) to another reseller or back to house stock. */
+/**
+ * Move an unsold piece in stock to another reseller (a stock transfer: they become its custodian of company stock)
+ * or back to house stock (a return). Server: setTagRep. Sold and set-up pieces cannot move from here.
+ */
 function ResellerField({ tag }: { tag: TagDetail }) {
   const t = useT(manageTagsPiecesMessages);
   const tg = useT(manageTagsMessages);
@@ -556,15 +560,24 @@ function ResellerField({ tag }: { tag: TagDetail }) {
   const { data: reps = [], error } = useReps();
   const current = tag.repId ? String(tag.repId) : HOUSE;
   const [choice, setChoice] = useState<string>(current);
+  const [confirming, setConfirming] = useState(false);
   const move = usePieceMutation(tag.id, t("resellerUpdated"));
   const options = [{ value: HOUSE, label: t("houseStockNoReseller") }, ...reps.map((r) => ({ value: String(r.id), label: labels.repOption(r) }))];
   if (tag.repId && !options.some((o) => o.value === current)) options.push({ value: current, label: tag.repName ?? t("resellerNumber", { id: tag.repId }) });
+  const target = choice === HOUSE ? t("houseStockTarget") : options.find((o) => o.value === choice)?.label ?? t("thisReseller");
+  // The server's rules (repository setTagRep), said before the click.
+  const blocker = tag.saleId !== null ? t("moveBlockedSold")
+    : tag.stockStatus !== "available" ? t("moveBlockedStock")
+    : tag.status !== "inventory" ? t("moveBlockedSetUp")
+    : null;
+  const consequences = [
+    choice === HOUSE ? t("moveToHouseConsequence") : t("moveToRepConsequence", { target }),
+    tag.kitId ? t("moveLeavesKit") : null,
+  ].filter(Boolean).join(" ");
 
   const submit = () => {
-    if (choice === current) return;
-    const target = choice === HOUSE ? t("houseStockTarget") : options.find((o) => o.value === choice)?.label ?? t("thisReseller");
-    if (!window.confirm(t(tag.soldAt ? "moveConfirmSold" : "moveConfirm", { code: tag.publicCode, target }))) return;
-    move.mutate({ url: `/api/xpot/admin/tags/${tag.id}/rep`, method: "PATCH", body: { repId: choice === HOUSE ? null : Number(choice) } });
+    if (choice === current || blocker) return;
+    setConfirming(true);
   };
 
   return (
@@ -576,11 +589,26 @@ function ResellerField({ tag }: { tag: TagDetail }) {
       </p>
       <div className="flex gap-2">
         <Select value={choice} onChange={(v) => setChoice(v ?? HOUSE)} placeholder={t("houseStock")} options={options} allowEmpty={false} testId="admin-piece-rep" />
-        <button type="button" className={`${BTN_GHOST} shrink-0`} disabled={tag.stockStatus === "damaged" || choice === current || move.isPending} onClick={submit} data-testid="admin-piece-rep-move">
+        <button type="button" className={`${BTN_GHOST} shrink-0`} disabled={!!blocker || choice === current || move.isPending} onClick={submit} data-testid="admin-piece-rep-move">
           <Truck className="h-3.5 w-3.5" />{t("move")}
         </button>
       </div>
+      {blocker ? <p className="text-xs text-white/40" data-testid="admin-piece-move-blocked">{blocker}</p> : null}
       {error ? <p className="text-xs text-red-400">{t("resellersFailed")}</p> : null}
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        title={t("moveTitle", { code: tag.publicCode, target })}
+        description={consequences}
+        confirmLabel={t("move")}
+        busy={move.isPending}
+        onConfirm={() =>
+          move.mutate(
+            { url: `/api/xpot/admin/tags/${tag.id}/rep`, method: "PATCH", body: { repId: choice === HOUSE ? null : Number(choice) } },
+            { onSettled: () => setConfirming(false) },
+          )
+        }
+      />
       {tag.soldAt ? <p className="text-xs text-white/40">{t("saleCounted", { date: formatDateTime(tag.soldAt) })}</p> : null}
     </div>
   );

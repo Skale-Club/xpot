@@ -193,6 +193,25 @@ test.skipIf(!enabled)("tags: every screen counts the same stock the same way", a
     await ok("POST", `/api/xpot/tags/${p(14).id}/disable`, "sm-manager", {});
     const repView = await ok("POST", `/api/xpot/tags/${p(14).id}/activate`, "sm-manager", {}, { "x-xpot-view": "rep" });
     assert.equal(repView.repId, repId["sm-manager"]);
+
+    // Move goes through the stock rules: a transfer to another rep (custodian of company stock, out of the kit, the
+    // previous rep's purchase closed), a return to the house; sold and set-up pieces stay put.
+    const moved = await ok("PATCH", `/api/xpot/admin/tags/${p(5).id}/rep`, "sm-manager", { repId: repId["sm-zed"] });
+    assert.equal(moved.repId, repId["sm-zed"]);
+    assert.equal(moved.kitId, null);
+    assert.deepEqual(await ownership(p(5).publicCode), { ownership_type: "company", custodian_rep_id: repId["sm-zed"], rep_id: repId["sm-zed"] });
+    const [transfer] = (await db.execute(sql`SELECT m.movement_type, m.from_custodian_rep_id, m.to_custodian_rep_id, m.reference_id
+      FROM tag_stock_movements m WHERE m.tag_id = ${p(5).id} ORDER BY m.created_at DESC LIMIT 1`)).rows as any[];
+    assert.deepEqual(transfer, { movement_type: "transfer", from_custodian_rep_id: repId["sm-ana"], to_custodian_rep_id: repId["sm-zed"], reference_id: kitAna.id });
+    const [unit] = (await db.execute(sql`SELECT returned_at FROM tag_acquisition_units WHERE tag_id = ${p(5).id}`)).rows as any[];
+    assert.ok(unit.returned_at);
+    const home = await ok("PATCH", `/api/xpot/admin/tags/${p(4).id}/rep`, "sm-manager", { repId: null });
+    assert.equal(home.repId, null);
+    assert.deepEqual(await ownership(p(4).publicCode), { ownership_type: "company", custodian_rep_id: null, rep_id: null });
+    const [returned] = (await db.execute(sql`SELECT movement_type FROM tag_stock_movements WHERE tag_id = ${p(4).id} ORDER BY created_at DESC LIMIT 1`)).rows as any[];
+    assert.equal(returned.movement_type, "return");
+    assert.equal((await api("PATCH", `/api/xpot/admin/tags/${p(1).id}/rep`, "sm-manager", { repId: repId["sm-zed"] })).status, 409);
+    assert.equal((await api("PATCH", `/api/xpot/admin/tags/${p(3).id}/rep`, "sm-manager", { repId: repId["sm-zed"] })).status, 409);
   } finally {
     server.close();
     await pool.end();
