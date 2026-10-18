@@ -46,7 +46,6 @@ import type { FullSalesLead, GoogleBusinessProfile, SalesLead } from "./types";
 import { LeadSalesPanel } from "./components/sales/LeadSalesPanel";
 import { VisitActionsPanel } from "./components/sales/VisitActions";
 import { GLASS_RAISED } from "@/components/xpot/surface";
-import { useIsComputer } from "@/hooks/use-is-desktop";
 import { PlaceLeadSearch } from "./components/PlaceLeadSearch";
 import { CreateLeadDialog } from "./components/CreateLeadDialog";
 import { CheckInOverrideDialog } from "./components/CheckInOverrideDialog";
@@ -303,13 +302,13 @@ export function XpotCheckIn() {
   const { activeVisit, checkOutMutation, cancelVisitMutation, visitsQuery } = useVisits();
   const [, navigate] = useLocation();
   const canSellTags = useXpotModules().includes("tags");
-  const isComputer = useIsComputer();
   const { xpotMeQuery } = useXpotQueries();
   const checkInRules = xpotMeQuery.data?.checkInRules;
-  // A computer that cannot get a fix may still check in, with a reason, when
-  // the organization allows overrides. Phones keep the location gate.
+  // A device that cannot get a fix (a computer, a phone with location off,
+  // indoors) may still check in, saying what happened, when the organization
+  // allows overrides. Only a strict organization keeps the gate closed.
   const [withoutLocation, setWithoutLocation] = useState(false);
-  const canSkipLocation = isComputer && checkInRules?.allowManualOverride !== false;
+  const canSkipLocation = checkInRules?.allowManualOverride !== false;
 
   // Follow the rep while this screen is open on phones and computers. Modern
   // desktop browsers can provide location too, and the same geofence validation
