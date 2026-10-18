@@ -51,7 +51,10 @@ export type GooglePlaceResult = {
   address: string;
   phone?: string;
   website?: string;
+  /** Google's Table A type code, e.g. "dental_clinic"; show it through placeTypeLabel. */
   primaryType?: string;
+  /** Google's English display name for the type, the fallback label. */
+  primaryTypeName?: string;
   placeId: string;
   lat?: number;
   lng?: number;

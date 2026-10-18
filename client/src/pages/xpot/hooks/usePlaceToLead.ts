@@ -4,6 +4,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/i18n";
 import { checkinMessages } from "@/i18n/messages/checkin";
 import { findMatchingLead, parseAddress } from "../utils";
+import { placeTypeLabel } from "@/lib/placeTypes";
 import { useXpotShared } from "./useXpotShared";
 import { useLeads } from "./useLeads";
 import type { GooglePlaceResult } from "../types";
@@ -51,7 +52,8 @@ export function usePlaceToLead() {
       name: place.name,
       phone: place.phone || undefined,
       website: place.website || undefined,
-      industry: place.primaryType || undefined,
+      // Saved as a word in the rep's language, never Google's raw type code.
+      industry: placeTypeLabel(place.primaryType, t.lang, place.primaryTypeName) || undefined,
       source: "google_places",
       status: "prospect",
       notes: `Imported from Google Places (${place.placeId})`,
