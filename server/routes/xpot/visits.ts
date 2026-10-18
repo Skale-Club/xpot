@@ -9,6 +9,7 @@ import { activeStore, discardFiles, putPrivateFile } from "../../lib/files.js";
 import { finishVisitTransaction, startVisitTransaction } from "../../visit-workflow.js";
 import { saveVisitSummaryTransaction } from "../../visit-summary.js";
 import { evaluateCheckInGeofence } from "../../check-in-geofence.js";
+import { transcriptionProviders } from "../../lib/providerChoice.js";
 
 export function createVisitsRouter() {
   const router = Router();
@@ -317,45 +318,31 @@ export function createVisitsRouter() {
       const audioUrl = await putPrivateFile(`audio/${actor!.rep.id}/${filename}`, buffer, "audio/webm");
       const previousAudio = (await storage.getSalesVisitNote(visitId))?.audioUrl;
 
-      // Transcribe with Groq Whisper (best-effort — does not block save on failure)
+      // Transcribe (best-effort — does not block save on failure): Groq first,
+      // OpenAI when Groq is off or fails; each only when switched on in the panel.
       let audioTranscription: string | null = null;
-      const groqIntegration = await storage.getChatIntegration("groq");
-      const groqApiKey = groqIntegration?.apiKey;
-      if (groqApiKey) {
+      const [groqIntegration, openaiIntegration] = await Promise.all([
+        storage.getChatIntegration("groq"),
+        storage.getChatIntegration("openai"),
+      ]);
+      for (const pick of transcriptionProviders({ groq: groqIntegration, openai: openaiIntegration })) {
         try {
-          const Groq = (await import("groq-sdk")).default;
-          const groq = new Groq({ apiKey: groqApiKey });
           const file = new File([buffer], filename, { type: "audio/webm" });
-          const transcription = await groq.audio.transcriptions.create({
-            file,
-            model: "whisper-large-v3-turbo",
-            response_format: "text",
-          });
-          audioTranscription = (transcription as unknown as string).trim() || null;
-        } catch (transcriptionError: any) {
-          console.error("Groq transcription error:", transcriptionError.message);
-        }
-      }
-
-      // Fallback to OpenAI Whisper when Groq is unconfigured or failed.
-      if (!audioTranscription) {
-        const openaiIntegration = await storage.getChatIntegration("openai");
-        const openaiApiKey = openaiIntegration?.apiKey;
-        if (openaiApiKey && openaiIntegration?.enabled !== false) {
-          try {
+          let transcription: unknown;
+          if (pick.provider === "groq") {
+            const Groq = (await import("groq-sdk")).default;
+            const groq = new Groq({ apiKey: pick.apiKey });
+            transcription = await groq.audio.transcriptions.create({ file, model: pick.model!, response_format: "text" });
+          } else {
             const { OpenAI } = await import("openai");
-            const openai = new OpenAI({ apiKey: openaiApiKey });
-            const file = new File([buffer], filename, { type: "audio/webm" });
-            const transcription = await openai.audio.transcriptions.create({
-              file,
-              model: "whisper-1",
-              response_format: "text",
-            });
-            audioTranscription = (transcription as unknown as string).trim() || null;
-          } catch (transcriptionError: any) {
-            console.error("OpenAI transcription error:", transcriptionError.message);
+            const openai = new OpenAI({ apiKey: pick.apiKey });
+            transcription = await openai.audio.transcriptions.create({ file, model: pick.model!, response_format: "text" });
           }
+          audioTranscription = String(transcription ?? "").trim() || null;
+        } catch (transcriptionError: any) {
+          console.error(`${pick.provider} transcription error:`, transcriptionError.message);
         }
+        if (audioTranscription) break;
       }
 
       // PLT-03: analysis used to run here too, inside the same request, under
