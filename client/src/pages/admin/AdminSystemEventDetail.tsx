@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import { AlertTriangle, ArrowLeft, Clock, FileText, History, Search } from "lucide-react";
 import { Loader2 } from "@/components/ui/loader";
 import { getHttpStatus } from "@/lib/pwa";
+import { formatDateTime } from "@/lib/dates";
 import { useT } from "@/i18n";
 import { systemHealthMessages } from "@/i18n/messages/systemHealth";
 import type { SystemEventDetail } from "@shared/system-health";
@@ -64,7 +65,7 @@ export function AdminSystemEventDetail({ id }: { id: number }) {
         </div>
         <h2 className="mt-3 break-words text-lg font-semibold text-white">{event.message}</h2>
         <p className="mt-2 text-xs text-white/50">
-          {new Date(event.createdAt).toLocaleString()} · {ago(event.createdAt)}
+          {formatDateTime(event.createdAt)} · {ago(event.createdAt)}
           {event.repName ? ` · ${t("rep")}: ${event.repName}` : ""}
         </p>
       </section>
@@ -101,7 +102,7 @@ export function AdminSystemEventDetail({ id }: { id: number }) {
                   href={`/admin/health/events/${item.id}`}
                   className={`flex items-center justify-between gap-2 rounded-md px-2 py-1 ${item.id === event.id ? "bg-white/10 text-white" : "text-white/60 hover:bg-white/5"}`}
                 >
-                  <span>{new Date(item.createdAt).toLocaleString()}</span>
+                  <span>{formatDateTime(item.createdAt)}</span>
                   <span className="text-white/40">
                     {item.repeats ? `+${item.repeats}` : ""}{item.repName ? ` ${item.repName}` : ""}
                   </span>
@@ -112,39 +113,50 @@ export function AdminSystemEventDetail({ id }: { id: number }) {
         </Card>
       </div>
 
-      <Card title={t("context")} icon={FileText}>
-        {contextEntries.length === 0 ? (
-          <p className="text-sm text-white/45">{t("detailNoContext")}</p>
-        ) : (
-          <dl className="grid grid-cols-[minmax(0,10rem)_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-xs">
-            {contextEntries.map(([key, value]) => (
-              <div key={key} className="contents">
-                <dt className="truncate font-mono text-white/45">{key}</dt>
-                <dd className="break-all font-mono text-white/80">{contextValue(value)}</dd>
-              </div>
-            ))}
-          </dl>
-        )}
-      </Card>
+      {/* For whoever debugs it: the raw context, the stack and the fingerprint, folded away. */}
+      <details className="group rounded-2xl border border-white/10 bg-white/[0.02]" data-testid="system-event-technical">
+        <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-semibold text-white/70 marker:content-none">
+          {t("technicalDetails")}
+          <span className="text-lg font-light text-white/35 transition-transform group-open:rotate-45">+</span>
+        </summary>
+        <div className="space-y-4 border-t border-white/[0.07] p-4">
+          <Card title={t("context")} icon={FileText}>
+            {contextEntries.length === 0 ? (
+              <p className="text-sm text-white/45">{t("detailNoContext")}</p>
+            ) : (
+              <dl className="grid grid-cols-[minmax(0,10rem)_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-xs">
+                {contextEntries.map(([key, value]) => (
+                  <div key={key} className="contents">
+                    <dt className="truncate font-mono text-white/45">{key}</dt>
+                    <dd className="break-all font-mono text-white/80">{contextValue(value)}</dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+          </Card>
 
-      <Card title={t("detail")} icon={AlertTriangle}>
-        {event.detail ? (
-          <pre className="max-h-[28rem] overflow-auto whitespace-pre-wrap break-words rounded-lg bg-black/40 p-3 text-[11px] leading-5 text-white/75">{event.detail}</pre>
-        ) : (
-          <p className="text-sm text-white/45">{t("detailNoStack")}</p>
-        )}
-        {componentStack && (
-          <>
-            <p className="mb-1 mt-4 text-[11px] font-semibold uppercase tracking-wide text-white/40">{t("detailComponentStack")}</p>
-            <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-black/40 p-3 text-[11px] leading-5 text-white/65">{componentStack}</pre>
-          </>
-        )}
-      </Card>
+          <Card title={t("detail")} icon={AlertTriangle}>
+            {event.detail ? (
+              <pre className="max-h-[28rem] overflow-auto whitespace-pre-wrap break-words rounded-lg bg-black/40 p-3 text-[11px] leading-5 text-white/75">{event.detail}</pre>
+            ) : (
+              <p className="text-sm text-white/45">{t("detailNoStack")}</p>
+            )}
+            {componentStack && (
+              <>
+                <p className="mb-1 mt-4 text-[11px] font-semibold uppercase tracking-wide text-white/40">{t("detailComponentStack")}</p>
+                <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-black/40 p-3 text-[11px] leading-5 text-white/65">{componentStack}</pre>
+              </>
+            )}
+          </Card>
+
+          <p className="text-xs text-white/40">
+            {t("fingerprint")}: <span className="font-mono">{event.fingerprint}</span>
+          </p>
+        </div>
+      </details>
 
       <p className="text-center text-xs text-white/35">
         <Link href={`/admin/health`} className="hover:text-white/60">{t("backToHealth")}</Link>
-        {" · "}
-        <span className="font-mono">{event.fingerprint}</span>
       </p>
     </div>
   );
