@@ -11,7 +11,7 @@ import { useViewerAccess } from "@/lib/adminMode";
 import type { FullSalesLead, SalesTask } from "./types";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { EmptyState } from "@/components/xpot/EmptyState";
+import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
 import { ListSkeleton } from "@/components/xpot/ListSkeleton";
 import { PageHeader } from "@/components/xpot/PageHeader";
 import { Pill } from "@/components/xpot/StatusPill";
@@ -192,6 +192,9 @@ export function XpotTasks() {
 
     {tasks.isLoading ? (
       <ListSkeleton rows={4} rowClassName="h-24 rounded-2xl" />
+    ) : tasks.error && taskCount === 0 ? (
+      // A failed read is not an empty queue.
+      <ErrorState message={t("loadFailed")} onRetry={() => void tasks.refetch()} />
     ) : groups.length === 0 ? (
       <EmptyState icon={Circle} title={t("noTasks")} />
     ) : groups.map((group) => <section key={group.key} className="space-y-2">

@@ -54,6 +54,7 @@ const en = {
   taskCreated: "Task created",
   saveFailed: "Could not save the task",
   changeFailed: "Could not update the task",
+  loadFailed: "Could not load your tasks",
 };
 
 export const tasksMessages: Dictionary<typeof en> = {
@@ -112,6 +113,7 @@ export const tasksMessages: Dictionary<typeof en> = {
     taskCreated: "Tarefa criada",
     saveFailed: "Não foi possível salvar a tarefa",
     changeFailed: "Não foi possível alterar a tarefa",
+    loadFailed: "Não foi possível carregar suas tarefas",
   },
   es: {
     eyebrow: "Ejecución",
@@ -167,5 +169,6 @@ export const tasksMessages: Dictionary<typeof en> = {
     taskCreated: "Tarea creada",
     saveFailed: "No se pudo guardar la tarea",
     changeFailed: "No se pudo actualizar la tarea",
+    loadFailed: "No se pudieron cargar tus tareas",
   },
 };
