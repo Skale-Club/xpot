@@ -32,7 +32,7 @@ export function ContinueOnPhone({ url, title, hint }: { url: string; title?: str
   }, [url]);
 
   return (
-    <div className="mt-5 flex items-center gap-4 rounded-2xl border border-blue-400/20 bg-blue-500/[0.07] p-4" data-testid="continue-on-phone">
+    <div className="mt-5 flex items-center gap-4 rounded-2xl border border-violet-400/20 bg-violet-500/[0.07] p-4" data-testid="continue-on-phone">
       <div className="flex h-[132px] w-[132px] shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white">
         {src ? (
           <img src={src} alt="" className="h-full w-full" />
@@ -44,7 +44,7 @@ export function ContinueOnPhone({ url, title, hint }: { url: string; title?: str
       </div>
       <div className="min-w-0">
         <div className="flex items-center gap-2 text-sm font-bold text-white">
-          <Smartphone className="h-4 w-4 text-blue-300" />
+          <Smartphone className="h-4 w-4 text-violet-300" />
           {title ?? t("continueOnPhone")}
         </div>
         <p className="mt-1.5 text-sm text-white/60">{hint ?? t("continueOnPhoneHint")}</p>

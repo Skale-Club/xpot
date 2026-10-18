@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeftRight, Building2, Contact, DollarSign, ExternalLink, Link2, Lock, Mail, Nfc, Pencil, Phone, Power, QrCode, ScanLine, Search, Smartphone, Unlink, X } from "lucide-react";
+import { Building2, Check, Contact, DollarSign, ExternalLink, Link2, Lock, Mail, Nfc, Pencil, Phone, Power, QrCode, ScanLine, Settings2, Smartphone, Unlink, UserRound, X } from "lucide-react";
 import type { TagDetail } from "@shared/tagsApi";
 import { stockBlock, TAG_DESTINATION_TYPES, type TagDestinationType } from "@shared/tags";
 import { contentKindOf, contentSummary, validateChipContent, type ChipContentKind } from "@shared/chipContent";
@@ -9,6 +9,11 @@ import { guessDestinationType, normalizeUrlInput } from "@shared/tagApp";
 import { buildReviewUrl } from "@shared/reviewLink";
 import type { FullSalesLead } from "@/pages/xpot/types";
 import { CODE_HEADING_TOPBAR, TagModelChips, TagPieceVisual, tagPlaqueSpec } from "@/components/xpot/TagProductThumbnail";
+import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
+import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
+import { Field, Input } from "@/components/xpot/Field";
+import { InlineAlert } from "@/components/xpot/InlineAlert";
 import { apiRequest } from "@/lib/queryClient";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
@@ -25,23 +30,25 @@ import { isWebNfcSupported } from "./webNfc";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { cameFromInApp } from "@/lib/inAppHistory";
 import { APP_BASE, errorText, getSellTo, haptic, lookupTag, pushRecent, shortUrl, tagPath, tagsGet, tagsPost, useBanner } from "./lib";
+import { formatCount, NFC_COLOR, QR_COLOR } from "./charts";
 import {
-  BTN_PRIMARY,
-  BTN_SECONDARY,
-  BTN_TERTIARY,
   Banner,
   BottomSheet,
   CARD,
+  CARD_ACCENT,
   CHIP_TONE,
   CopyButton,
   EYEBROW,
   EYEBROW_MUTED,
   FieldLabel,
-  INPUT,
+  INPUT_ACCENT,
   LinkInput,
   Pill,
   PieceStatusPills,
+  SheetActions,
+  SOLD_TONE,
   Spinner,
+  StepList,
   TopBar,
 } from "./ui";
 
@@ -78,7 +85,7 @@ export default function TagScreen({ code, onClose }: {
   // No Web NFC on a phone (iPhone): written with NFC Tools, confirmed by a real tap.
   const isDesktop = useIsDesktop();
   const manualFlow = !isWebNfcSupported() && !isDesktop;
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey,
     queryFn: () => fetchTag(code),
     staleTime: 0,
@@ -105,6 +112,7 @@ export default function TagScreen({ code, onClose }: {
   const [newName, setNewName] = useState("");
   const [busy, setBusy] = useState<"save" | "toggle" | "rename" | "unlink" | null>(null);
   const [unlinkOpen, setUnlinkOpen] = useState(false);
+  const [unlinkError, setUnlinkError] = useState<string | null>(null);
   const [writeOpen, setWriteOpen] = useState(false);
   const [lockOpen, setLockOpen] = useState(false);
   // iPhone: the NFC Tools steps, shown by themselves until the chip is confirmed, then on "Rewrite".
@@ -152,10 +160,9 @@ export default function TagScreen({ code, onClose }: {
   );
 
   const closeButton = onClose ? (
-    <button type="button" onClick={onClose} aria-label={t("closePane")} title={t("closePane")}
-      className="flex h-9 w-9 items-center justify-center rounded-lg text-white/40 hover:bg-white/10 hover:text-white">
-      <X className="h-4 w-4" />
-    </button>
+    <Button type="button" variant="ghost" size="icon" onClick={onClose} aria-label={t("closePane")} title={t("closePane")}>
+      <X className="!size-5" />
+    </Button>
   ) : undefined;
   // Back returns to where the piece was opened from (a list, a customer, the
   // dashboard); opened from outside (a scanned QR), it goes to My pieces.
@@ -174,22 +181,25 @@ export default function TagScreen({ code, onClose }: {
   }
 
   if (error || !tag) {
-    const title = error ? t("loadFailed") : data?.kind === "not_yours" ? t("notYours") : t("notFound", { code });
+    const readAnother = !onClose ? (
+      <Button type="button" variant="secondary" onClick={() => navigate(APP_BASE)}>
+        <ScanLine />
+        {t("readAnother")}
+      </Button>
+    ) : undefined;
     return (
       <>
         <TopBar title={code} back={back} onBack={back ? goBack : undefined} right={closeButton} />
-        <div className={`${CARD} p-6 text-center`}>
-          <ScanLine className="mx-auto h-10 w-10 text-white/30" />
-          <p className="mt-3 text-lg font-bold text-white" data-testid="text-tag-error">
-            {title}
-          </p>
-          {error && <p className="mt-1 text-sm text-white/45">{errorText(error, tc("requestFailed"))}</p>}
-          {!onClose && (
-            <button type="button" onClick={() => navigate(APP_BASE)} className={`${BTN_SECONDARY} mt-5`}>
-              {t("readAnother")}
-            </button>
-          )}
-        </div>
+        {error ? (
+          <ErrorState title={<span data-testid="text-tag-error">{t("loadFailed")}</span>} message={errorText(error, tc("requestFailed"))} onRetry={() => void refetch()} />
+        ) : (
+          <EmptyState
+            tone="tags"
+            icon={ScanLine}
+            title={<span data-testid="text-tag-error">{data?.kind === "not_yours" ? t("notYours") : t("notFound", { code })}</span>}
+            action={readAnother}
+          />
+        )}
       </>
     );
   }
@@ -291,18 +301,20 @@ export default function TagScreen({ code, onClose }: {
   };
 
   // Back to the person's stock, with no customer and no link. A sold piece stays put (server rule).
+  // ConfirmDialog closes when this resolves and stays open, with the error, when it throws.
   const unlink = async () => {
     setBusy("unlink");
+    setUnlinkError(null);
     try {
       setDetail(await tagsPost<TagDetail>(`/api/xpot/tags/${tag.id}/unassign`, {}));
       // The Visits company page lists its pieces too.
       void qc.invalidateQueries({ queryKey: ["tags", "lead-pieces"] });
-      setUnlinkOpen(false);
       setLink("");
       setInitialContent(null);
       show({ tone: "ok", text: t("customerUnlinked") });
     } catch (err) {
-      show({ tone: "error", text: errorText(err, tc("requestFailed")) });
+      setUnlinkError(errorText(err, tc("requestFailed")));
+      throw err;
     } finally {
       setBusy(null);
     }
@@ -352,12 +364,13 @@ export default function TagScreen({ code, onClose }: {
           <div className="flex items-center gap-1">
             <Pill tone={CHIP_TONE[tag.nfcStatus] ?? "amber"}>{t(`chip_${tag.nfcStatus}` as "chip_verified")}</Pill>
             {canLock && (
+              // Neutral: locking is optional; the green "Chip locked" pill is what it leads to.
               <button
                 type="button"
                 onClick={() => setLockOpen(true)}
                 aria-label={t("lockNow")}
                 title={t("lockNow")}
-                className="flex h-9 w-9 items-center justify-center rounded-xl text-amber-300/80 hover:bg-white/10 active:bg-white/10"
+                className="flex h-10 w-10 items-center justify-center rounded-xl text-white/50 hover:bg-white/10 hover:text-white active:bg-white/10"
                 data-testid="button-lock-chip"
               >
                 <Lock className="h-4 w-4" />
@@ -367,12 +380,12 @@ export default function TagScreen({ code, onClose }: {
         </div>
         {locked ? (
           <p className="mt-2 flex items-center gap-2 text-sm text-white/60">
-            <Lock className="h-4 w-4 shrink-0 text-amber-300" />
+            <Lock className="h-4 w-4 shrink-0 text-emerald-300" />
             {t("lockedHint")}
           </p>
         ) : manualFlow && (!chipConfirmed || manualOpen) ? (
           <div className="mt-3 space-y-3" data-testid="chip-manual">
-            <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3">
+            <div className={`${CARD} p-3`}>
               <p className={EYEBROW_MUTED}>{t("writeUrl")}</p>
               <p className="mt-1 break-all font-mono text-sm tracking-wide text-white" data-testid="text-write-url">
                 {tag.nfcUrl}
@@ -383,65 +396,53 @@ export default function TagScreen({ code, onClose }: {
               <Smartphone className="h-4 w-4" />
               {t("iphoneTitle")}
             </p>
-            <ol className="space-y-2">
-              {[...manualSteps(tag.nfcUrl), "iphoneConfirmTitle" as const].map((step, i) => (
-                <li key={step} className="flex gap-3 text-sm text-white/75">
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-blue-500/15 text-xs font-bold text-blue-300">{i + 1}</span>
-                  <span className="pt-0.5">
-                    {t(step)}
-                    {step === "iphoneConfirmTitle" && <span className="mt-0.5 block text-xs text-white/45">{t("iphoneConfirmHint")}</span>}
-                  </span>
-                </li>
-              ))}
-            </ol>
+            <StepList
+              steps={[
+                ...manualSteps(tag.nfcUrl).map((step) => ({ key: step, text: t(step) })),
+                { key: "iphoneConfirmTitle", text: t("iphoneConfirmTitle"), hint: t("iphoneConfirmHint") },
+              ]}
+            />
             {chipConfirmed ? (
-              <button type="button" onClick={() => setManualOpen(false)} className={BTN_TERTIARY}>
+              <Button type="button" variant="secondary" size="lg" onClick={() => setManualOpen(false)} className="w-full">
                 {tc("done")}
-              </button>
+              </Button>
             ) : (
-              <p className="flex items-center gap-2 rounded-2xl border border-blue-400/25 bg-blue-500/[0.08] px-3 py-2.5 text-sm font-semibold text-blue-100" data-testid="chip-waiting-read">
-                <Spinner className="h-4 w-4 text-blue-300" />
-                {t("chipWaitingRead")}
-              </p>
+              <div data-testid="chip-waiting-read">
+                <InlineAlert tone="info" title={t("chipWaitingRead")} action={<Spinner className="h-4 w-4 text-blue-300" />} />
+              </div>
             )}
           </div>
         ) : (
-          <button
+          <Button
             type="button"
+            variant={chipMissing ? "brand" : "secondary"}
+            accent="tags"
+            size="lg"
             onClick={() => (manualFlow ? setManualOpen(true) : setWriteOpen(true))}
-            className={
-              chipMissing
-                ? `${BTN_PRIMARY} mt-3`
-                : "mt-3 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.05] text-sm font-semibold text-white active:bg-white/10"
-            }
+            className="mt-3 w-full"
             data-testid="button-write-chip"
           >
-            <Nfc className={chipMissing ? "h-5 w-5" : "h-4 w-4 text-blue-300"} />
+            <Nfc className="!size-5" />
             {chipMissing ? t("writeChip") : t("rewriteChip")}
-          </button>
+          </Button>
         )}
       </section>
 
       {/* Setup / customer link: whose piece it is and where a scan or tap sends people. */}
-      <section className="mt-3 rounded-[20px] border border-blue-400/25 bg-blue-500/[0.08] p-4" data-testid="destination-hero">
+      <section className={`${CARD_ACCENT} mt-3 p-4`} data-testid="destination-hero">
         <div className="flex items-center justify-between gap-2">
           <p className={EYEBROW}>{t("setupTitle")}</p>
           {dest && (
-            <button
-              type="button"
-              onClick={() => setEditing(true)}
-              className="flex min-h-[36px] items-center gap-1.5 rounded-xl border border-blue-300/30 px-3 text-sm font-semibold text-blue-100 active:bg-blue-500/20"
-              data-testid="button-change-destination"
-            >
-              <Pencil className="h-4 w-4" />
+            <Button type="button" variant="outline" size="sm" onClick={() => setEditing(true)} data-testid="button-change-destination">
+              <Pencil />
               {t("changeDestination")}
-            </button>
+            </Button>
           )}
         </div>
         {tag.leadId && (
-          <div className="mt-2 flex items-center gap-2">
+          <div className="mt-2 flex items-center gap-1">
             <Building2 className="h-4 w-4 shrink-0 text-white/40" />
-            <p className="min-w-0 flex-1 truncate text-sm font-semibold text-white/80" data-testid="text-tag-lead">
+            <p className="ml-1 min-w-0 flex-1 truncate text-sm font-semibold text-white/80" data-testid="text-tag-lead">
               {tag.leadName}
             </p>
             <button
@@ -452,20 +453,15 @@ export default function TagScreen({ code, onClose }: {
               }}
               aria-label={t("renameCustomer")}
               title={t("renameCustomer")}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white/45 hover:bg-white/10 hover:text-white active:bg-white/10"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white/45 hover:bg-white/10 hover:text-white active:bg-white/10"
               data-testid="button-edit-customer"
             >
               <Pencil className="h-4 w-4" />
             </button>
-            <button
-              type="button"
-              onClick={startCustomerChange}
-              className="flex min-h-[36px] shrink-0 items-center gap-1.5 rounded-xl px-2 text-sm font-semibold text-white/60 hover:bg-white/10 active:bg-white/10"
-              data-testid="button-change-customer"
-            >
-              <ArrowLeftRight className="h-4 w-4" />
+            <Button type="button" variant="ghost" size="sm" onClick={startCustomerChange} className="min-h-10" data-testid="button-change-customer">
+              <UserRound />
               {t("changeCustomerShort")}
-            </button>
+            </Button>
           </div>
         )}
         {/* Set up without a customer (made before the picker was required): Change links one. */}
@@ -477,7 +473,7 @@ export default function TagScreen({ code, onClose }: {
         )}
         {dest ? (
           <div className="mt-2 flex items-center gap-3">
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-500/20 text-blue-200">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-violet-500/20 text-violet-200">
               <KindIcon className="h-5 w-5" />
             </span>
             <div className="min-w-0 flex-1">
@@ -486,7 +482,7 @@ export default function TagScreen({ code, onClose }: {
               ) : (
                 <a href={dest} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-lg font-bold text-white underline-offset-2 active:underline" data-testid="link-destination">
                   <span className="truncate">{destDisplay}</span>
-                  <ExternalLink className="h-4 w-4 shrink-0 text-blue-300" />
+                  <ExternalLink className="h-4 w-4 shrink-0 text-violet-300" />
                 </a>
               )}
               {destType && <p className="truncate text-xs text-white/50">{destType}</p>}
@@ -497,40 +493,45 @@ export default function TagScreen({ code, onClose }: {
           <>
             <p className="mt-2 text-lg font-bold text-white/55">{t("notYetWritten")}</p>
             {/* The server refuses setting up a piece that is not in stock (shared/tags.ts planTransition). */}
-            {stock && <p className="mt-2 text-sm text-amber-100/85" data-testid="text-stock-blocked">{t(`stockBlocked_${stock}`)}</p>}
-            <button type="button" onClick={() => setEditing(true)} disabled={!!stock} className={`${BTN_PRIMARY} mt-3`} data-testid="button-setup-piece">
-              <Power className="h-5 w-5" />
+            {stock && (
+              <div className="mt-2" data-testid="text-stock-blocked">
+                <InlineAlert tone="warning">{t(`stockBlocked_${stock}`)}</InlineAlert>
+              </div>
+            )}
+            <Button type="button" variant="brand" accent="tags" size="lg" onClick={() => setEditing(true)} disabled={!!stock} className="mt-3 w-full" data-testid="button-setup-piece">
+              <Settings2 className="!size-5" />
               {t("configurePiece")}
-            </button>
+            </Button>
           </>
         )}
-        {/* Since the piece was made; the 30-day numbers are in the piece dashboard below. */}
+        {/* Since the piece was made; the 30-day numbers are in the piece dashboard below. The icons wear the charts' QR / NFC colours. */}
         <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-white/[0.08] pt-3 text-sm text-white/60" data-testid="piece-all-time-scans">
           <span className={EYEBROW_MUTED}>{t("allTime")}</span>
           <span className="flex items-center gap-1.5">
-            <QrCode className="h-4 w-4 text-blue-300" />
-            <span className="font-bold tabular-nums text-white">{tag.qrInteractions}</span> {t("qrScans")}
+            <QrCode className="h-4 w-4" style={{ color: QR_COLOR }} />
+            <span className="font-bold tabular-nums text-white">{formatCount(tag.qrInteractions, t.locale)}</span> {t("qrScans")}
           </span>
           <span className="flex items-center gap-1.5">
-            <Nfc className="h-4 w-4 text-blue-300" />
-            <span className="font-bold tabular-nums text-white">{tag.nfcInteractions}</span> {t("nfcTaps")}
+            <Nfc className="h-4 w-4" style={{ color: NFC_COLOR }} />
+            <span className="font-bold tabular-nums text-white">{formatCount(tag.nfcInteractions, t.locale)}</span> {t("nfcTaps")}
           </span>
         </div>
       </section>
 
       {tag.saleId ? (
-        <section className="mt-3 flex items-center justify-between gap-4 rounded-[20px] border border-blue-400/20 bg-blue-500/[0.08] p-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-blue-300/80">{t("soldBadge")}</p>
-            <p className="mt-1 text-base font-bold text-white">{t("soldFor", { amount: formatCents(tag.soldPriceCents) })}</p>
+        // Sold: the sold pill and the amount, not a second card that looks like the setup one.
+        <section className={`${CARD} mt-3 flex items-center justify-between gap-4 p-4`} data-testid="piece-sold">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <Pill tone={SOLD_TONE}>{t("soldBadge")}</Pill>
+            <p className="text-base font-bold text-white">{t("soldFor", { amount: formatCents(tag.soldPriceCents) })}</p>
           </div>
-          <span className="font-mono text-xs text-white/40">#{tag.saleId}</span>
+          <span className="shrink-0 font-mono text-xs text-white/40">#{tag.saleId}</span>
         </section>
       ) : (
         <>
-          <button type="button" onClick={() => setSaleOpen(true)} disabled={!sellable} className={`${BTN_PRIMARY} mt-3 bg-none !bg-emerald-500`} data-testid="button-sell-this-piece">
-            <DollarSign className="h-5 w-5" /> {t("sellThisPiece")}
-          </button>
+          <Button type="button" variant="money" size="lg" onClick={() => setSaleOpen(true)} disabled={!sellable} className="mt-3 w-full" data-testid="button-sell-this-piece">
+            <DollarSign className="!size-5" /> {t("sellThisPiece")}
+          </Button>
           {/* Only stock in hand sells (server/tags/sales.ts); said once, under the setup card when it is the same reason. */}
           {!sellable && !(stock && !dest) && (
             <p className="mt-2 px-1 text-sm text-white/50" data-testid="text-sell-blocked">{stock ? t(`stockBlocked_${stock}`) : t("stockNotForSale")}</p>
@@ -590,93 +591,112 @@ export default function TagScreen({ code, onClose }: {
               </div>
             }
           />
-          <div>
-            <FieldLabel>{t("labelField")}</FieldLabel>
-            <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder={t("labelPlaceholder")} maxLength={120} className={INPUT} />
-          </div>
-          <button
-            type="button"
-            onClick={() => void save()}
-            disabled={busy !== null || (kind === "url" ? !link.trim() : !content.value)}
-            className={BTN_PRIMARY}
-            data-testid="button-save-activate"
-          >
-            {busy === "save" ? <Spinner /> : <Power className="h-5 w-5" />}
-            {tag.status === "active" ? t("saveLink") : t("saveAndGoLive")}
-          </button>
-          <button type="button" onClick={closeEditor} className={BTN_TERTIARY}>
-            {tc("cancel")}
-          </button>
+          <Field label={t("labelField")}>
+            <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder={t("labelPlaceholder")} maxLength={120} className={INPUT_ACCENT} />
+          </Field>
+          <SheetActions>
+            <Button
+              type="button"
+              variant="brand"
+              accent="tags"
+              size="lg"
+              onClick={() => void save()}
+              loading={busy === "save"}
+              disabled={busy !== null || (kind === "url" ? !link.trim() : !content.value)}
+              className="w-full"
+              data-testid="button-save-activate"
+            >
+              <Check className="!size-5" />
+              {tag.status === "active" ? t("saveLink") : t("saveAndGoLive")}
+            </Button>
+            <Button type="button" variant="ghost" size="lg" onClick={closeEditor} className="w-full">
+              {tc("cancel")}
+            </Button>
+          </SheetActions>
         </div>
       </BottomSheet>
 
-      <div className="mt-4 space-y-2">
+      <SheetActions className="mt-4">
         {(tag.status === "active" || disabled) && (
-          <button type="button" onClick={() => void toggle()} disabled={busy !== null} className={BTN_TERTIARY} data-testid="button-toggle">
-            {busy === "toggle" ? <Spinner /> : <Power className={`h-5 w-5 ${disabled ? "text-emerald-400" : "text-red-400"}`} />}
+          <Button type="button" variant="secondary" size="lg" onClick={() => void toggle()} loading={busy === "toggle"} disabled={busy !== null} className="w-full" data-testid="button-toggle">
+            <Power className={`!size-5 ${disabled ? "text-emerald-400" : "text-red-400"}`} />
             {disabled ? t("switchOn") : t("switchOff")}
-          </button>
+          </Button>
         )}
         {tag.leadId && !tag.saleId && (
-          <button type="button" onClick={() => setUnlinkOpen(true)} disabled={busy !== null} className={BTN_TERTIARY} data-testid="button-unlink-piece">
-            <Unlink className="h-5 w-5 text-red-400" />
+          <Button
+            type="button"
+            variant="secondary"
+            size="lg"
+            onClick={() => {
+              setUnlinkError(null);
+              setUnlinkOpen(true);
+            }}
+            disabled={busy !== null}
+            className="w-full"
+            data-testid="button-unlink-piece"
+          >
+            <Unlink className="!size-5 text-red-400" />
             {t("unlinkFromCustomer")}
-          </button>
+          </Button>
         )}
         {!onClose && (
-          <button
-            type="button"
-            onClick={() => navigate(APP_BASE)}
-            className="flex min-h-[48px] w-full items-center justify-center gap-2 text-sm font-semibold text-white/40 active:text-white"
-          >
-            <Search className="h-4 w-4" />
+          <Button type="button" variant="ghost" size="lg" onClick={() => navigate(APP_BASE)} className="w-full">
+            <ScanLine className="!size-5" />
             {t("readAnother")}
-          </button>
+          </Button>
         )}
-      </div>
+      </SheetActions>
 
       {/* Rename the customer, or move the piece to another one. */}
       <BottomSheet open={renameOpen} onClose={() => setRenameOpen(false)} title={t("renameCustomer")} banner={banner}>
-        <div className="space-y-3">
-          <div>
-            <FieldLabel>{t("customerName")}</FieldLabel>
-            <input value={newName} onChange={(e) => setNewName(e.target.value)} maxLength={200} autoCapitalize="words" className={INPUT} data-testid="input-customer-name" />
-            <p className="mt-1.5 text-xs text-white/45">{t("renameHint")}</p>
-          </div>
-          <button type="button" onClick={() => void rename()} disabled={busy !== null || !newName.trim() || newName.trim() === tag.leadName} className={BTN_PRIMARY}>
-            {busy === "rename" ? <Spinner /> : null}
-            {t("saveName")}
-          </button>
-          <button type="button" onClick={startCustomerChange} className={BTN_TERTIARY} data-testid="button-rename-change-instead">
-            {t("changeCustomer")}
-          </button>
+        <div className="space-y-4">
+          <Field label={t("customerName")} hint={t("renameHint")}>
+            <Input value={newName} onChange={(e) => setNewName(e.target.value)} maxLength={200} autoCapitalize="words" className={INPUT_ACCENT} data-testid="input-customer-name" />
+          </Field>
+          <SheetActions>
+            <Button
+              type="button"
+              variant="brand"
+              accent="tags"
+              size="lg"
+              onClick={() => void rename()}
+              loading={busy === "rename"}
+              disabled={busy !== null || !newName.trim() || newName.trim() === tag.leadName}
+              className="w-full"
+            >
+              <Check className="!size-5" />
+              {t("saveName")}
+            </Button>
+            <Button type="button" variant="secondary" size="lg" onClick={startCustomerChange} className="w-full" data-testid="button-rename-change-instead">
+              <UserRound className="!size-5" />
+              {t("changeCustomer")}
+            </Button>
+            <Button type="button" variant="ghost" size="lg" onClick={() => setRenameOpen(false)} className="w-full">
+              {tc("cancel")}
+            </Button>
+          </SheetActions>
         </div>
       </BottomSheet>
 
-      <BottomSheet open={unlinkOpen} onClose={() => setUnlinkOpen(false)} title={t("customerUnlinkTitle", { code: tag.publicCode })} banner={banner}>
-        <div className="space-y-4">
-          {tag.leadName && (
-            <p className="flex items-center gap-2 text-sm text-white/70">
-              <Building2 className="h-4 w-4 shrink-0 text-white/40" />
-              <span className="truncate">{tag.leadName}</span>
-            </p>
-          )}
-          <p className="text-sm text-white/55">{t("customerUnlinkHint")}</p>
-          <div className="grid grid-cols-2 gap-2">
-            <button type="button" className={BTN_TERTIARY} onClick={() => setUnlinkOpen(false)}>{tc("cancel")}</button>
-            <button
-              type="button"
-              disabled={busy !== null}
-              onClick={() => void unlink()}
-              className="flex min-h-[48px] items-center justify-center gap-2 rounded-2xl bg-red-500 px-5 text-base font-bold text-white active:bg-red-600 disabled:opacity-50"
-              data-testid="button-unlink-confirm"
-            >
-              {busy === "unlink" ? <Spinner /> : <Unlink className="h-5 w-5" />}
-              {t("customerUnlink")}
-            </button>
-          </div>
-        </div>
-      </BottomSheet>
+      <ConfirmDialog
+        open={unlinkOpen}
+        onOpenChange={setUnlinkOpen}
+        tone="danger"
+        title={t("customerUnlinkTitle", { code: tag.publicCode })}
+        description={t("customerUnlinkHint")}
+        confirmLabel={t("customerUnlink")}
+        error={unlinkError}
+        testId="button-unlink-confirm"
+        onConfirm={() => unlink()}
+      >
+        {tag.leadName && (
+          <p className="flex items-center gap-2 text-sm text-white/70">
+            <Building2 className="h-4 w-4 shrink-0 text-white/40" />
+            <span className="truncate">{tag.leadName}</span>
+          </p>
+        )}
+      </ConfirmDialog>
 
       <LockSheet
         open={lockOpen}

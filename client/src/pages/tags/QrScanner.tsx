@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import jsQR from "jsqr";
 import { X, Zap, ZapOff } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { SURFACE_MODAL_CLASS } from "@/components/xpot/surface";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
@@ -148,7 +150,7 @@ export default function QrScanner({ onResult, onClose }: { onResult: (text: stri
             type="button"
             onClick={() => void toggleTorch()}
             aria-label={t("torch")}
-            className={`flex h-12 w-12 items-center justify-center rounded-full text-white ${torchOn ? "bg-blue-500" : "bg-black/50 active:bg-black/70"}`}
+            className={`flex h-12 w-12 items-center justify-center rounded-full text-white ${torchOn ? "bg-violet-500" : "bg-black/50 active:bg-black/70"}`}
           >
             {torchOn ? <Zap className="h-6 w-6" /> : <ZapOff className="h-6 w-6" />}
           </button>
@@ -157,17 +159,17 @@ export default function QrScanner({ onResult, onClose }: { onResult: (text: stri
 
       <div className="absolute inset-0 flex flex-col items-center justify-center px-6">
         {error ? (
-          <div className="max-w-sm rounded-[20px] border border-white/10 p-5 text-center text-white" style={{ background: "#0d1424" }}>
+          <div className={`max-w-sm rounded-2xl p-5 text-center text-white ${SURFACE_MODAL_CLASS}`}>
             <p className="font-semibold">{t(error)}</p>
-            <button type="button" onClick={onClose} className="mt-4 min-h-[48px] rounded-2xl bg-blue-500 px-6 font-bold text-white active:bg-blue-600">
+            <Button type="button" variant="brand" accent="tags" size="lg" onClick={onClose} className="mt-4">
               {tc("back")}
-            </button>
+            </Button>
           </div>
         ) : (
           <>
             <div className="relative aspect-square w-[68vw] max-w-[320px]">
               {(["left-0 top-0 border-l-4 border-t-4 rounded-tl-2xl", "right-0 top-0 border-r-4 border-t-4 rounded-tr-2xl", "bottom-0 left-0 border-b-4 border-l-4 rounded-bl-2xl", "bottom-0 right-0 border-b-4 border-r-4 rounded-br-2xl"] as const).map((c) => (
-                <span key={c} className={`absolute h-10 w-10 border-blue-400 ${c}`} />
+                <span key={c} className={`absolute h-10 w-10 border-violet-400 ${c}`} />
               ))}
             </div>
             <p className="mt-6 rounded-full bg-black/50 px-4 py-2 text-sm font-medium text-white">{t("qrAim")}</p>

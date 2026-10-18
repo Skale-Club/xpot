@@ -104,9 +104,10 @@ export function TagModelChips({
   return (
     <span className={`inline-flex items-center gap-1 align-middle ${className}`} data-testid="tag-model-chips">
       {model ? <span className={`${chip} bg-white/[0.08] text-white/70`}>{model}</span> : null}
+      {/* A size, not a state: Large in the Tags accent, Small neutral (amber would read as "needs a step"). */}
       {size ? (
         <span
-          className={`${chip} w-4 justify-center px-0 ${size === "Large" ? "bg-blue-500/20 text-blue-300" : "bg-amber-500/20 text-amber-300"}`}
+          className={`${chip} w-4 justify-center px-0 ${size === "Large" ? "bg-violet-500/20 text-violet-200" : "bg-white/10 text-white/70"}`}
           title={size}
           aria-label={size}
         >
