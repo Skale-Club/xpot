@@ -343,7 +343,7 @@ export function CustomerDestinationSection() {
       )}
       {live && <p className="mt-2 text-xs text-emerald-400/90">{tm("liveExplain")}</p>}
       {!live && !retired && tag.status !== "inventory" && !activatePlan.ok && tag.status !== "disabled" ? (
-        <p className="mt-2 text-xs text-white/40">{tm(!tag.leadId ? "activateNeedsCustomer" : !tag.destinationType ? "activateNeedsType" : "activateNeedsUrl")}</p>
+        <p className="mt-2 text-xs text-white/40">{tm(!tag.leadId ? "activateNeedsCustomer" : !tag.destinationUrl ? "activateNeedsUrl" : "activateNeedsType")}</p>
       ) : null}
 
       {/* The editor: the customer first (when choosing one), then what the piece opens. */}
