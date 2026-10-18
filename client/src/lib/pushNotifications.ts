@@ -6,8 +6,13 @@ function applicationServerKey(value: string) {
   return Uint8Array.from(atob(base64), (character) => character.charCodeAt(0));
 }
 
+/** False on a browser that cannot get push (an iPhone outside the installed app): offer nothing there. */
+export function routePushSupported() {
+  return typeof window !== "undefined" && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+}
+
 export async function subscribeToRoutePush() {
-  if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) return false;
+  if (!routePushSupported()) return false;
   if (Notification.permission !== "granted") return false;
   const keyResponse = await fetch("/api/xpot/notifications/push/public-key", { credentials: "include" });
   if (!keyResponse.ok) return false;

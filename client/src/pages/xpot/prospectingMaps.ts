@@ -13,10 +13,9 @@ const OPEN_STOP_STATUSES = ["planned", "en_route", "checked_in"];
 
 const point = (value: LatLng) => `${value.lat},${value.lng}`;
 
-/** iPadOS reports itself as a Mac; touch support tells them apart. */
-export function isAppleMobileDevice(userAgent: string, maxTouchPoints: number) {
-  return /iPhone|iPad|iPod/.test(userAgent) || (/Macintosh/.test(userAgent) && maxTouchPoints > 1);
-}
+import { isAppleMobileDevice } from "../../lib/device";
+
+export { isAppleMobileDevice };
 
 /**
  * The next stops still to visit. The native map app deliberately receives no

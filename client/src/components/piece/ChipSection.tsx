@@ -2,13 +2,12 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Lock, Nfc, Smartphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InlineAlert } from "@/components/xpot/InlineAlert";
-import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
-import WriteSheet, { manualSteps, type WriteResult } from "@/pages/tags/WriteSheet";
+import WriteSheet, { manualSteps, manualTitle, type WriteResult } from "@/pages/tags/WriteSheet";
 import LockSheet from "@/pages/tags/LockSheet";
-import { isWebNfcSupported } from "@/pages/tags/webNfc";
+import { canLockChip, nfcMode } from "@/pages/tags/webNfc";
 import { tagPath } from "@/pages/tags/lib";
 import { CARD, CHIP_TONE, CopyButton, EYEBROW_MUTED, Pill, Spinner, StepList } from "@/pages/tags/ui";
 import { usePiece, usePieceWrite } from "./PieceContext";
@@ -27,9 +26,9 @@ export function ChipSection({ desktopWriter }: {
   const t = useT(tagsMessages);
   const tc = useT(commonMessages);
   const write = usePieceWrite();
-  const isDesktop = useIsDesktop();
-  // No Web NFC on a phone (iPhone): written with NFC Tools, confirmed by a real tap.
-  const manualFlow = !isWebNfcSupported() && !isDesktop;
+  // A phone without Web NFC (iPhone): written with NFC Tools, confirmed by a real tap.
+  const nfc = nfcMode();
+  const manualFlow = nfc === "app";
   const [writeOpen, setWriteOpen] = useState(false);
   const [lockOpen, setLockOpen] = useState(false);
   // iPhone: the NFC Tools steps, shown by themselves until the chip is confirmed, then on "Rewrite".
@@ -39,8 +38,9 @@ export function ChipSection({ desktopWriter }: {
   const chipMissing = tag.nfcStatus === "not_programmed" || tag.nfcStatus === "failed";
   const chipConfirmed = tag.nfcStatus === "verified";
   const retired = tag.status === "retired" || tag.stockStatus === "damaged";
-  // An iPhone locks only a chip a tap confirmed (lock a wrong chip and it is lost).
-  const canLock = !locked && !retired && (manualFlow ? chipConfirmed : !chipMissing);
+  // Another phone locks only a chip a tap confirmed (lock a wrong chip and it is lost);
+  // a computer cannot lock, so it gets no padlock.
+  const canLock = !locked && !retired && (manualFlow ? chipConfirmed : nfc === "web" && canLockChip() && !chipMissing);
 
   // "Continue on the phone" (…?write=1) opens the write straight away.
   useEffect(() => {
@@ -94,7 +94,7 @@ export function ChipSection({ desktopWriter }: {
           <CopyButton text={tag.nfcUrl} label={t("copyLink")} large />
           <p className="flex items-center gap-2 pt-1 text-sm font-bold text-white">
             <Smartphone className="h-4 w-4" />
-            {t("iphoneTitle")}
+            {t(manualTitle())}
           </p>
           <StepList
             steps={[
