@@ -30,6 +30,26 @@ export function personStatus(person: Pick<Person, "access" | "refused">): People
   return person.access === "blocked" && person.refused ? "refused" : person.access;
 }
 
+const STATUSES: readonly PeopleStatus[] = ["pending", "active", "blocked", "refused"];
+const ROLES = ["rep", "manager", "admin"] as const;
+const MODULES: readonly XpotModule[] = ["visits", "tags"];
+
+/**
+ * The filters from the URL (?q=&status=&role=&module=), so another screen can
+ * link to a filtered list (the Visits overview opens "active, with Visits").
+ * An unknown value is "all".
+ */
+export function peopleFiltersFromParams(params: { q?: string; status?: string; role?: string; module?: string }): PeopleFilters {
+  const pick = <T extends string>(list: readonly T[], value: string | undefined): T | "all" =>
+    list.find((item) => item === value) ?? "all";
+  return {
+    search: params.q ?? "",
+    status: pick(STATUSES, params.status),
+    role: pick(ROLES, params.role),
+    module: pick(MODULES, params.module),
+  };
+}
+
 const digits = (value: string) => value.replace(/\D/g, "");
 
 export function filterPeople<T extends Person>(people: T[], filters: PeopleFilters): T[] {

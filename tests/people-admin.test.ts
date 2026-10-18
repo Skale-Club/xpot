@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import { blockNote, isRefusal, refusalReason } from "../shared/repAccess";
-import { filterPeople, NO_PEOPLE_FILTERS, personStatus } from "../client/src/pages/admin/peopleFilters";
+import { filterPeople, NO_PEOPLE_FILTERS, peopleFiltersFromParams, personStatus } from "../client/src/pages/admin/peopleFilters";
 
 describe("refusals", () => {
   it("are marked in the block reason, with the admin's note after it", () => {
@@ -70,5 +70,13 @@ describe("people filters", () => {
   it("filters by role and by module (managers use every module)", () => {
     expect(names(filterPeople(people, { ...NO_PEOPLE_FILTERS, role: "manager" }))).toEqual(["Bruno Lima"]);
     expect(names(filterPeople(people, { ...NO_PEOPLE_FILTERS, module: "visits" }))).toEqual(["Bruno Lima", "Carla Dias", "Davi Reis", "Eva Melo"]);
+  });
+
+  it("read from the URL, so other screens can link to a filtered list", () => {
+    expect(peopleFiltersFromParams({})).toEqual(NO_PEOPLE_FILTERS);
+    expect(peopleFiltersFromParams({ q: "ana", status: "active", role: "rep", module: "visits" }))
+      .toEqual({ search: "ana", status: "active", role: "rep", module: "visits" });
+    // Anything unknown is "all", never a filter that matches nobody.
+    expect(peopleFiltersFromParams({ status: "gone", role: "boss", module: "maps" })).toEqual(NO_PEOPLE_FILTERS);
   });
 });

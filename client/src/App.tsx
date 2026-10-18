@@ -211,6 +211,8 @@ export default function App() {
         <Route path="/admin/tags/*?">{() => <AdminApp section="tags" />}</Route>
         <Route path="/admin/health/*?">{() => <AdminApp section="health" />}</Route>
         <Route path="/admin/integrations/*?">{() => <AdminApp section="integrations" />}</Route>
+        {/* One person: /admin/reps/:repId (People opens them beside the list or as a page). */}
+        <Route path="/admin/reps/*?">{() => <AdminApp section="reps" />}</Route>
         <Route path="/admin/:section?">
           {(params) => <AdminApp section={params.section ?? "overview"} />}
         </Route>
