@@ -329,26 +329,6 @@ export interface TagDashboard {
   }>;
 }
 
-/** Compact analytics shown on one piece's field-app screen. */
-export interface TagPieceDashboard {
-  days: number;
-  scans: { qr: number; nfc: number };
-  /** Approximate distinct visitors (the same browser is counted once per day). */
-  visitors: number;
-  lastInteractionAt: string | null;
-  daily: Array<{ day: string; qr: number; nfc: number }>;
-  devices: Array<{ os: string; scans: number }>;
-}
-
-export interface TagRepSummary {
-  /** Pieces in hand, not sold yet. */
-  inStock: number;
-  /** Live pieces they sold. */
-  active: number;
-  soldLast30: number;
-  scansLast30: { qr: number; nfc: number };
-}
-
 /** One reseller's numbers in the admin report (or, with repId null, pieces with no reseller). */
 export interface TagRepReportRow {
   repId: number | null;

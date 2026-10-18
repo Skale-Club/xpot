@@ -423,14 +423,6 @@ export function registerTagRoutes(app: Express) {
 
   const fieldBase = "/api/xpot/tags";
 
-  app.get(`${fieldBase}/summary`, requireTagUser, async (req, res) => {
-    try {
-      res.json(await repo.getRepSummary(actorOf(req).repId));
-    } catch (err) {
-      fail(res, err, "Failed to load summary");
-    }
-  });
-
   // The Tags dashboard: the person's own pieces, or every rep's for a manager in admin mode.
   app.get(`${fieldBase}/dashboard`, requireTagUser, async (req, res) => {
     try {
@@ -516,18 +508,6 @@ export function registerTagRoutes(app: Express) {
       res.json(await repo.getTagDetail(id, tagBaseUrl()));
     } catch (err) {
       fail(res, err, "Failed to load tag");
-    }
-  });
-
-  app.get(`${fieldBase}/:id/dashboard`, requireTagUser, async (req, res) => {
-    const id = idParam(req, res);
-    if (!id) return;
-    try {
-      if (!(await tagForActor(req, res, id))) return;
-      const days = Math.min(Math.max(Number(req.query.days) || 30, 7), 90);
-      res.json(await repo.getTagPieceDashboard(id, days));
-    } catch (err) {
-      fail(res, err, "Failed to load piece dashboard");
     }
   });
 

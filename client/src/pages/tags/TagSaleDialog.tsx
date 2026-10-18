@@ -225,7 +225,6 @@ export default function TagSaleDialog({
       await Promise.all([
         qc.invalidateQueries({ queryKey: ["tags", "list"] }),
         qc.invalidateQueries({ queryKey: ["tags", "piece"] }),
-        qc.invalidateQueries({ queryKey: ["/api/xpot/tags/summary"] }),
         qc.invalidateQueries({ queryKey: ["/api/xpot/tags/by-lead"] }),
         qc.invalidateQueries({ queryKey: ["/api/xpot/sales"] }),
         qc.invalidateQueries({ queryKey: ["/api/xpot/dashboard"] }),
