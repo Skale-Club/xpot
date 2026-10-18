@@ -15,7 +15,7 @@ import { TagPieceMention } from "@/components/xpot/TagProductThumbnail";
 import { FilterChips } from "@/components/xpot/filters";
 import { BarChart3, Smartphone, Trophy } from "lucide-react";
 // One QR / NFC colour pair everywhere a scan is drawn, the piece screen included.
-import { NFC_COLOR, QR_COLOR } from "@/pages/tags/charts";
+import { NFC_COLOR, QR_COLOR, chartTickInterval } from "@/pages/tags/charts";
 
 // Range picker + KPIs + daily QR/NFC chart, for the whole fleet (Team tab) or
 // one piece (PieceDetail).
@@ -154,7 +154,7 @@ export function AnalyticsPanel({
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={data.daily} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
-                <XAxis dataKey="day" tick={{ fontSize: 11, fill: "rgba(255,255,255,0.45)" }} tickFormatter={(d: string) => formatDay(d, { month: "short", day: "numeric" })} stroke="rgba(255,255,255,0.1)" />
+                <XAxis dataKey="day" interval={chartTickInterval(data.daily.length)} tick={{ fontSize: 11, fill: "rgba(255,255,255,0.45)" }} tickFormatter={(d: string) => formatDay(d, { month: "short", day: "numeric" })} stroke="rgba(255,255,255,0.1)" />
                 <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "rgba(255,255,255,0.45)" }} stroke="rgba(255,255,255,0.1)" />
                 <Tooltip
                   contentStyle={{ background: "#0f172a", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "12px", fontSize: "12px", color: "#fff" }}

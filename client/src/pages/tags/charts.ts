@@ -28,6 +28,20 @@ export const CHART_TICK_DAY: Intl.DateTimeFormatOptions = { day: "numeric", mont
 /** Tooltip title: "Wednesday, March 4". */
 export const CHART_TOOLTIP_DAY: Intl.DateTimeFormatOptions = { weekday: "long", day: "numeric", month: "long" };
 
+/** Day steps between axis labels: daily, every other day, then weekly, fortnightly and monthly. */
+const TICK_STEPS = [1, 2, 3, 7, 14, 30, 61, 91] as const;
+
+/**
+ * recharts' XAxis `interval` for a chart of `points` consecutive days: a label
+ * every N days, N the smallest step that keeps at most `maxTicks` labels.
+ * recharts' own interval drops labels where they would touch, so a range came
+ * out with uneven gaps ("4 Mar, 9 Mar, 11 Mar…").
+ */
+export function chartTickInterval(points: number, maxTicks = 7): number {
+  const step = TICK_STEPS.find((candidate) => Math.ceil(points / candidate) <= maxTicks) ?? Math.ceil(points / maxTicks);
+  return step - 1;
+}
+
 /** Props for recharts' XAxis tick text. */
 export const CHART_TICK = { fill: "rgba(255,255,255,0.35)", fontSize: 10 } as const;
 
