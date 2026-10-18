@@ -8,10 +8,13 @@ import { serverErrorText } from "@/lib/apiErrors";
 
 export class AdminHttpError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  /** The server's stable error code (e.g. `piece_other_batch`), when it sent one. */
+  code: string | null;
+  constructor(status: number, message: string, code: string | null = null) {
     super(message);
     this.name = "AdminHttpError";
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -24,18 +27,22 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
   });
   if (!res.ok) {
     let message = translate(commonMessages, "requestFailed");
+    let code: string | null = null;
     try {
-      message = serverErrorText(await res.json(), message);
+      const json = await res.json();
+      message = serverErrorText(json, message);
+      code = typeof json?.code === "string" ? json.code : null;
     } catch {
       // not JSON
     }
-    throw new AdminHttpError(res.status, message);
+    throw new AdminHttpError(res.status, message, code);
   }
   return (await res.json()) as T;
 }
 
 export const getJson = <T,>(url: string) => request<T>("GET", url);
 export const sendJson = <T,>(method: "POST" | "PATCH", url: string, body: unknown = {}) => request<T>(method, url, body);
+export const deleteJson = <T,>(url: string) => request<T>("DELETE", url);
 
 export function errorMessage(err: unknown): string {
   return err instanceof Error && err.message ? err.message : translate(commonMessages, "requestFailed");

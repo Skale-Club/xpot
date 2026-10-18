@@ -11,6 +11,7 @@ import {
   tagBatches,
   tagDestinationHistory,
   tagEvents,
+  tagKitItems,
   tagKits,
   tagStockMovements,
   tags,
@@ -28,6 +29,7 @@ import type {
   TagDetail,
   TagHistoryEntry,
   TagKitItem,
+  TagKitPiece,
   TagListItem,
   TagOverview,
   TagDashboard,
@@ -37,11 +39,15 @@ import type {
 import { JOURNEY_PRODUCT_LABELS, tagActionEntry, type JourneySource } from "#shared/tagJourney.js";
 import { resolveTagFace } from "#shared/tagFace.js";
 import type { TagStockMetric } from "#shared/tagMetrics.js";
+import { kitCode } from "#shared/tagKits.js";
+import { checkCodes, handOutBlocker, takeBackBlocker, type DistributionCheck, type DistributionPiece } from "#shared/tagDistribution.js";
+import type { TagPieceQueue } from "#shared/tagQueues.js";
 import { parseTagIntakeScan } from "#shared/tagIntake.js";
 import { generateUniqueCodes } from "./codes.js";
 import { TagError, pgError, tagErrorBody } from "./errors.js";
 import { journeyContext, recordJourney } from "./journey.js";
 import { countMetricSql, stockMetricSql } from "./metrics.js";
+import { countQueueSql, pieceQueueSql } from "./queues.js";
 import type { PublicTag } from "./publicHandler.js";
 
 // TagError and pgError live in ./errors.ts (journey.ts needs them too, and
@@ -100,6 +106,8 @@ export interface TagListFilters {
   house?: boolean;
   /** Only pieces counted by this stock number (shared/tagMetrics.ts), e.g. `house` for the company stock card. */
   metric?: TagStockMetric;
+  /** Only pieces in this Overview "Needs action" queue (shared/tagQueues.ts). */
+  queue?: TagPieceQueue;
   method?: "qr" | "nfc";
   search?: string;
   limit?: number;
@@ -235,6 +243,7 @@ export async function listTags(filters: TagListFilters): Promise<TagListItem[]> 
   if (filters.kitId) conds.push(sql`t.kit_id = ${filters.kitId}`);
   if (filters.house) conds.push(sql`t.rep_id IS NULL`);
   if (filters.metric) conds.push(stockMetricSql(filters.metric));
+  if (filters.queue) conds.push(pieceQueueSql(filters.queue));
   if (filters.method === "qr") conds.push(sql`COALESCE(s.qr, 0) > 0`);
   if (filters.method === "nfc") conds.push(sql`COALESCE(s.nfc, 0) > 0`);
   if (filters.search) {
@@ -614,6 +623,7 @@ export async function setTagRep(id: string, repId: number | null, userId: string
       })
       .where(eq(tags.id, id))
       .returning();
+    if (tag.kitId) await markKitItemsLeft(tx, [{ kitId: tag.kitId, tagId: tag.id }], repId === null ? "returned" : "moved", now);
     await tx.insert(tagStockMovements).values({
       tagId: tag.id,
       movementType: repId === null ? "return" : "transfer",
@@ -687,6 +697,34 @@ export async function markLeadCustomer(tx: Tx, leadId: number) {
 
 // ─── Kits (pieces handed to a reseller) ───────────────────────────────────────
 
+/** The kit's packing list, written once at the hand-over (tag_kit_items). */
+export async function recordKitItems(
+  tx: Tx,
+  kitId: string,
+  pieces: ReadonlyArray<{ id: string; publicCode: string; batchId: string | null }>,
+  at: Date,
+): Promise<void> {
+  if (!pieces.length) return;
+  await tx.insert(tagKitItems)
+    .values(pieces.map((p) => ({ kitId, tagId: p.id, publicCode: p.publicCode, batchId: p.batchId, handedOutAt: at })))
+    .onConflictDoNothing();
+}
+
+/** Pieces leaving the kit they were handed out in: back to house stock, or to another reseller. */
+export async function markKitItemsLeft(
+  tx: Tx,
+  pieces: ReadonlyArray<{ kitId: string | null; tagId: string }>,
+  reason: "returned" | "moved",
+  at: Date,
+): Promise<void> {
+  for (const p of pieces) {
+    if (!p.kitId) continue;
+    await tx.update(tagKitItems)
+      .set({ leftAt: at, leftReason: reason })
+      .where(and(eq(tagKitItems.kitId, p.kitId), eq(tagKitItems.tagId, p.tagId), isNull(tagKitItems.leftAt)));
+  }
+}
+
 export interface KitInput {
   repId: number;
   /** Target Organization. API callers must derive this from membership, never trust the browser. */
@@ -739,6 +777,14 @@ export async function deliverKit(input: KitInput, userId: string | null, source:
       const unavailable = picked.filter((t) => t.status !== "inventory" || t.stockStatus !== "available" || t.repId !== null ||
         (input.sourceOrganizationId !== undefined && t.organizationId !== input.sourceOrganizationId)).map((t) => t.publicCode);
       if (unavailable.length) throw new TagError(`Not in house stock: ${unavailable.join(", ")}`, 409, "tag_not_house_stock", { codes: unavailable.join(", ") });
+      // Same rule as the dry run (shared/tagDistribution.ts handOutBlocker): a sold piece never goes into a kit.
+      const sold = picked.length ? await tx.select({ tagId: salesSaleTags.tagId }).from(salesSaleTags)
+        .where(and(inArray(salesSaleTags.tagId, picked.map((t) => t.id)), eq(salesSaleTags.status, "active"))) : [];
+      if (sold.length) {
+        const soldIds = new Set(sold.map((s) => s.tagId));
+        const soldCodes = picked.filter((t) => soldIds.has(t.id)).map((t) => t.publicCode);
+        throw new TagError(`Not in house stock: ${soldCodes.join(", ")}`, 409, "tag_not_house_stock", { codes: soldCodes.join(", ") });
+      }
     } else if (input.batchId && input.quantity) {
       picked = await tx
         .select({
@@ -752,6 +798,7 @@ export async function deliverKit(input: KitInput, userId: string | null, source:
           eq(tags.status, "inventory"),
           eq(tags.stockStatus, "available"),
           isNull(tags.repId),
+          sql`NOT EXISTS (SELECT 1 FROM sales_sale_tags st WHERE st.tag_id = ${tags.id} AND st.status = 'active')`,
           ...(input.sourceOrganizationId !== undefined ? [eq(tags.organizationId, input.sourceOrganizationId)] : []),
         ))
         .orderBy(tags.serialNumber, tags.publicCode)
@@ -782,6 +829,7 @@ export async function deliverKit(input: KitInput, userId: string | null, source:
         updatedAt: now,
       })
       .where(inArray(tags.id, picked.map((t) => t.id)));
+    await recordKitItems(tx, kit.id, picked, now);
     await tx.insert(tagStockMovements).values(picked.map((tag) => ({
       tagId: tag.id,
       movementType: "transfer",
@@ -859,15 +907,18 @@ export async function listKits(filter: { repId?: number; kitId?: string } = {}):
   if (filter.repId !== undefined) conds.push(sql`k.rep_id = ${filter.repId}`);
   if (filter.kitId) conds.push(sql`k.id = ${filter.kitId}`);
   const list = await rows<{
-    id: string; rep_id: number; rep_name: string | null; note: string | null; created_at: Date; piece_count: number; unsold_count: number;
-    returnable_count: number; sold_count: number; acquisition_source: string | null; unit_cost_cents: number | null;
+    id: string; kit_number: number; rep_id: number; rep_name: string | null; note: string | null; created_at: Date; piece_count: number;
+    unsold_count: number; returnable_count: number; sold_count: number; acquisition_source: string | null; unit_cost_cents: number | null;
+    handed_out: number; returned: number; moved: number; ownership_type: string | null;
   }>(sql`
-    SELECT k.id, k.rep_id, r.display_name AS rep_name, k.note, k.created_at,
+    SELECT k.id, k.kit_number, k.rep_id, r.display_name AS rep_name, k.note, k.created_at,
       count(t.id)::int AS piece_count,
       count(t.id) FILTER (WHERE t.rep_id = k.rep_id AND ${stockMetricSql("withResellers")})::int AS unsold_count,
       count(t.id) FILTER (WHERE t.rep_id = k.rep_id AND ${stockMetricSql("returnable")})::int AS returnable_count,
       ${countMetricSql("sold")} AS sold_count,
-      acq.source AS acquisition_source, acq.unit_cost_cents
+      acq.source AS acquisition_source, acq.unit_cost_cents,
+      items.handed_out, items.returned, items.moved,
+      COALESCE(own.to_ownership_type, CASE WHEN acq.source = 'stuscle' THEN 'rep' END) AS ownership_type
     FROM tag_kits k
     LEFT JOIN sales_reps r ON r.id = k.rep_id
     LEFT JOIN tags t ON t.kit_id = k.id
@@ -880,23 +931,134 @@ export async function listKits(filter: { repId?: number; kitId?: string } = {}):
       ORDER BY a.created_at DESC
       LIMIT 1
     ) acq ON true
+    LEFT JOIN LATERAL (
+      SELECT count(*)::int AS handed_out,
+        count(*) FILTER (WHERE i.left_reason = 'returned')::int AS returned,
+        count(*) FILTER (WHERE i.left_at IS NOT NULL AND i.left_reason IS DISTINCT FROM 'returned')::int AS moved
+      FROM tag_kit_items i WHERE i.kit_id = k.id
+    ) items ON true
+    LEFT JOIN LATERAL (
+      SELECT m.to_ownership_type FROM tag_stock_movements m
+      WHERE m.reference_type = 'kit' AND m.reference_id = k.id::text AND m.movement_type = 'transfer' AND m.to_custodian_rep_id = k.rep_id
+      ORDER BY m.created_at LIMIT 1
+    ) own ON true
     WHERE ${sql.join(conds, sql` AND `)}
-    GROUP BY k.id, r.display_name, acq.source, acq.unit_cost_cents
+    GROUP BY k.id, r.display_name, acq.source, acq.unit_cost_cents, items.handed_out, items.returned, items.moved, own.to_ownership_type
     ORDER BY k.created_at DESC
   `);
-  return list.map((k) => ({
-    id: k.id,
-    repId: k.rep_id,
-    repName: k.rep_name,
-    note: k.note,
-    createdAt: iso(k.created_at)!,
-    pieceCount: Number(k.piece_count),
-    unsoldCount: Number(k.unsold_count),
-    returnableCount: Number(k.returnable_count),
-    soldCount: Number(k.sold_count),
-    acquisitionSource: k.acquisition_source,
-    unitCostCents: k.unit_cost_cents === null ? null : Number(k.unit_cost_cents),
+  return list.map((k) => {
+    const pieceCount = Number(k.piece_count);
+    const soldCount = Number(k.sold_count);
+    return {
+      id: k.id,
+      kitNumber: Number(k.kit_number),
+      kitCode: kitCode(Number(k.kit_number)),
+      repId: k.rep_id,
+      repName: k.rep_name,
+      note: k.note,
+      createdAt: iso(k.created_at)!,
+      ownershipType: k.ownership_type,
+      // A kit older than its packing list still counts the pieces it holds.
+      handedOutCount: Math.max(Number(k.handed_out ?? 0), pieceCount),
+      returnedCount: Number(k.returned ?? 0),
+      movedCount: Number(k.moved ?? 0),
+      stillWithCount: pieceCount - soldCount,
+      pieceCount,
+      unsoldCount: Number(k.unsold_count),
+      returnableCount: Number(k.returnable_count),
+      soldCount,
+      acquisitionSource: k.acquisition_source,
+      unitCostCents: k.unit_cost_cents === null ? null : Number(k.unit_cost_cents),
+    };
+  });
+}
+
+/** What a kit handed out (its packing list), each piece with where it is now. */
+export async function getKitItems(kitId: string): Promise<TagKitPiece[] | null> {
+  const [kit] = await db.select({ id: tagKits.id, repId: tagKits.repId }).from(tagKits).where(eq(tagKits.id, kitId)).limit(1);
+  if (!kit) return null;
+  const list = await rows<{
+    public_code: string; tag_id: string | null; serial_number: number | null; batch_code: string | null; product_type: string | null;
+    face: string | null; batch_face: string | null; handed_out_at: Date; left_at: Date | null; left_reason: string | null; sold: boolean;
+  }>(sql`
+    SELECT i.public_code, i.tag_id, t.serial_number, b.batch_code, t.product_type, t.face, b.face AS batch_face,
+           i.handed_out_at, i.left_at, i.left_reason,
+           EXISTS (SELECT 1 FROM sales_sale_tags st WHERE st.tag_id = t.id AND st.status = 'active') AS sold
+    FROM tag_kit_items i
+    LEFT JOIN tags t ON t.id = i.tag_id
+    LEFT JOIN tag_batches b ON b.id = COALESCE(t.batch_id, i.batch_id)
+    WHERE i.kit_id = ${kitId}
+    ORDER BY b.batch_code NULLS LAST, t.serial_number NULLS LAST, i.public_code
+  `);
+  return list.map((r) => ({
+    code: r.public_code,
+    tagId: r.tag_id,
+    serialNumber: r.serial_number,
+    batchCode: r.batch_code,
+    productType: r.product_type,
+    face: r.product_type ? faceOf({ face: r.face, batch_face: r.batch_face, product_type: r.product_type }) : null,
+    handedOutAt: iso(r.handed_out_at)!,
+    state: r.left_at ? (r.left_reason === "returned" ? "returned" : "moved") : r.sold ? "sold" : "in_kit",
+    leftAt: iso(r.left_at),
   }));
+}
+
+// ─── Distribution dry runs (Hand out, Take back) ──────────────────────────────
+
+type CheckRow = {
+  id: string; public_code: string; status: string; stock_status: string; rep_id: number | null; rep_name: string | null;
+  serial_number: number | null; batch_code: string | null; product_type: string; kit_number: number | null; sold: boolean;
+};
+
+async function piecesForCheck(where: SQL, limit?: number): Promise<CheckRow[]> {
+  return rows<CheckRow>(sql`
+    SELECT t.id, t.public_code, t.status, t.stock_status, t.rep_id, r.display_name AS rep_name, t.serial_number, b.batch_code,
+           t.product_type, k.kit_number,
+           EXISTS (SELECT 1 FROM sales_sale_tags st WHERE st.tag_id = t.id AND st.status = 'active') AS sold
+    FROM tags t
+    LEFT JOIN sales_reps r ON r.id = t.rep_id
+    LEFT JOIN tag_batches b ON b.id = t.batch_id
+    LEFT JOIN tag_kits k ON k.id = t.kit_id
+    WHERE ${where}
+    ORDER BY t.serial_number NULLS LAST, t.public_code
+    ${limit ? sql`LIMIT ${limit}` : sql``}
+  `);
+}
+
+const checkPiece = (r: CheckRow): DistributionPiece => ({ status: r.status, stockStatus: r.stock_status, repId: r.rep_id, sold: !!r.sold });
+const describeCheck = (_code: string, r: CheckRow | undefined) => ({
+  tagId: r?.id ?? null,
+  batchCode: r?.batch_code ?? null,
+  serialNumber: r?.serial_number ?? null,
+  productType: r?.product_type ?? null,
+  repId: r?.rep_id ?? null,
+  repName: r?.rep_name ?? null,
+  kitCode: r?.kit_number ? kitCode(Number(r.kit_number)) : null,
+});
+
+/**
+ * Hand out, dry run: per code, can it go into a kit now and why not. With a batch and a quantity instead, the next
+ * pieces "next N from batch" would take, in the same order deliverKit picks them. Nothing moves.
+ */
+export async function checkHandOut(input: { codes?: string[]; batchId?: string; quantity?: number }): Promise<DistributionCheck> {
+  if (input.batchId && input.quantity) {
+    const picked = await piecesForCheck(sql`t.batch_id = ${input.batchId} AND ${stockMetricSql("handOut")}`, input.quantity);
+    return checkCodes(picked.map((r) => r.public_code), new Map(picked.map((r) => [r.public_code, r])), (r) => handOutBlocker(checkPiece(r)), describeCheck);
+  }
+  const codes = input.codes ?? [];
+  const found = codes.length ? await piecesForCheck(sql`t.public_code IN ${sqlList(Array.from(new Set(codes)))}`) : [];
+  return checkCodes(codes, new Map(found.map((r) => [r.public_code, r])), (r) => handOutBlocker(checkPiece(r)), describeCheck);
+}
+
+/** Take back, dry run: per code, can it come back to house stock now and why not. Nothing moves. */
+export async function checkTakeBack(codes: string[]): Promise<DistributionCheck> {
+  const found = codes.length ? await piecesForCheck(sql`t.public_code IN ${sqlList(Array.from(new Set(codes)))}`) : [];
+  return checkCodes(codes, new Map(found.map((r) => [r.public_code, r])), (r) => takeBackBlocker(checkPiece(r)), describeCheck);
+}
+
+/** `(a, b, c)` for an IN list (never empty: callers check). */
+function sqlList(values: readonly string[]): SQL {
+  return sql`(${sql.join(values.map((v) => sql`${v}`), sql`, `)})`;
 }
 
 /** Admin: unsold pieces back from a reseller to house stock (kit returned, reseller left). */
@@ -955,6 +1117,7 @@ export async function returnToHouse(
           updatedAt: now,
         })
         .where(inArray(tags.id, moving.map((t) => t.id)));
+      await markKitItemsLeft(tx, moving.map((t) => ({ kitId: t.kitId, tagId: t.id })), "returned", now);
       await tx.insert(tagStockMovements).values(moving.map((tag) => ({
         tagId: tag.id,
         movementType: "return",
@@ -1212,6 +1375,12 @@ export async function scanTagIntoBatch(
         stockUpdatedAt: now,
         updatedAt: now,
       }).where(eq(tags.id, existing.id)).returning();
+      // A read undone at the station and made again keeps the station's key for this code; the first intake row
+      // (append-only) still holds it, so the second one goes without (the piece's own key guards the retry).
+      const [keyTaken] = idempotencyKey && userId
+        ? await tx.select({ id: tagStockMovements.id }).from(tagStockMovements)
+          .where(and(eq(tagStockMovements.actorUserId, userId), eq(tagStockMovements.idempotencyKey, idempotencyKey))).limit(1)
+        : [];
       await tx.insert(tagStockMovements).values({
         tagId: existing.id,
         movementType: "intake",
@@ -1222,7 +1391,7 @@ export async function scanTagIntoBatch(
         actorUserId: userId,
         referenceType: "batch",
         referenceId: batch.id,
-        idempotencyKey,
+        idempotencyKey: keyTaken ? null : idempotencyKey,
       });
       await tx.update(tagBatches).set({ updatedAt: now }).where(eq(tagBatches.id, batch.id));
       return { tag: received, batchCount: batch.quantity, receivedCount: await receivedCountOf(tx, batchId), alreadyRegistered: false };
@@ -1281,6 +1450,88 @@ export async function scanTagIntoBatch(
   }
   return result;
 }
+
+/** How long after a read the intake station may still undo it. */
+export const INTAKE_UNDO_WINDOW_MS = 30 * 60_000;
+const INTAKE_UNDONE = "intake undone";
+
+/**
+ * Undo a read the intake station just made (the operator scanned the wrong piece, or too early). Only a piece
+ * received into this open batch within INTAKE_UNDO_WINDOW_MS and untouched since (still house stock, no customer,
+ * no chip write, no stock movement but its intake, no sale). The piece goes back to `pending` (not received) and
+ * stays registered to the batch: stock movements are append-only, so a received piece is never deleted; reading it
+ * again receives it again. Anything else is refused: use the piece's own actions instead.
+ */
+export async function undoBatchIntake(
+  batchId: string,
+  tagId: string,
+  userId: string | null,
+  source: JourneySource = "admin",
+  now: Date = new Date(),
+): Promise<{ publicCode: string; batchCount: number; receivedCount: number }> {
+  const result = await db.transaction(async (tx) => {
+    const [batch] = await tx.select().from(tagBatches).where(eq(tagBatches.id, batchId)).for("update");
+    if (!batch) throw new TagError("Batch not found", 404, "batch_not_found");
+    if (batch.status !== "open") throw new TagError("This batch is closed and no longer accepts scans", 409, "batch_closed");
+    const tag = await lockTag(tx, tagId);
+    if (tag.batchId !== batchId) throw new TagError(`Piece ${tag.publicCode} was not issued to this batch`, 409, "piece_not_in_batch", { code: tag.publicCode });
+    const receivedAt = tag.registeredAt ? new Date(tag.registeredAt).getTime() : null;
+    if (tag.stockStatus === "pending" || receivedAt === null) {
+      throw new TagError(`Piece ${tag.publicCode} has not been received`, 409, "intake_undo_blocked", { code: tag.publicCode });
+    }
+    if (now.getTime() - receivedAt > INTAKE_UNDO_WINDOW_MS) {
+      throw new TagError(`Piece ${tag.publicCode} was received too long ago to undo`, 409, "intake_undo_expired", { code: tag.publicCode });
+    }
+    // Only its intake (and earlier undos of it) may be on record.
+    const [otherMove] = await tx.select({ id: tagStockMovements.id }).from(tagStockMovements)
+      .where(and(
+        eq(tagStockMovements.tagId, tag.id),
+        sql`${tagStockMovements.movementType} NOT IN ('intake', 'issue', 'migration')`,
+        sql`NOT (${tagStockMovements.movementType} = 'adjustment' AND ${tagStockMovements.reason} = ${INTAKE_UNDONE})`,
+      ))
+      .limit(1);
+    const [sale] = await tx.select({ id: salesSaleTags.id }).from(salesSaleTags).where(eq(salesSaleTags.tagId, tag.id)).limit(1);
+    const touched = tag.stockStatus !== "available" || tag.status !== "inventory" || tag.repId !== null || tag.kitId !== null ||
+      tag.leadId !== null || tag.destinationUrl !== null || tag.nfcProvisioningStatus !== "not_programmed" || !!otherMove || !!sale;
+    if (touched) throw new TagError(`Piece ${tag.publicCode} changed after it was received`, 409, "intake_undo_blocked", { code: tag.publicCode });
+
+    await tx.update(tags).set({
+      stockStatus: "pending",
+      registeredAt: null,
+      registeredByUserId: null,
+      scannedPayload: null,
+      intakeIdempotencyKey: null,
+      stockUpdatedAt: now,
+      updatedAt: now,
+    }).where(eq(tags.id, tag.id));
+    await tx.insert(tagStockMovements).values({
+      tagId: tag.id,
+      movementType: "adjustment",
+      fromStockStatus: "available",
+      toStockStatus: "pending",
+      fromOwnershipType: tag.ownershipType,
+      toOwnershipType: tag.ownershipType,
+      actorUserId: userId,
+      referenceType: "batch",
+      referenceId: batch.id,
+      reason: INTAKE_UNDONE,
+    });
+    await tx.update(tagBatches).set({ updatedAt: now }).where(eq(tagBatches.id, batch.id));
+    return { publicCode: tag.publicCode, batchCount: batch.quantity, receivedCount: await receivedCountOf(tx, batchId) };
+  });
+  await recordJourney({
+    kind: "execution",
+    action: "piece_intake_undone",
+    title: `Read of piece ${result.publicCode} undone (${result.receivedCount}/${result.batchCount})`,
+    batchId,
+    tagId,
+    beforeValue: "available",
+    afterValue: "pending",
+    metadata: { code: result.publicCode, receivedCount: result.receivedCount, batchCount: result.batchCount },
+  }, journeyContext(userId, source));
+  return result;
+}
+
 
 export async function setTagInternalUse(
   id: string,
@@ -1751,14 +2002,43 @@ export async function getOverview(now: Date = new Date(), timezoneOffsetMinutes 
     SELECT status, count(*)::int AS count FROM tags GROUP BY status
   `);
   // The stock numbers every Tags screen shares (shared/tagMetrics.ts).
-  const [stockRow] = await rows<{ house: number; with_resellers: number; damaged: number }>(sql`
+  const [stockRow] = await rows<{
+    house: number; with_resellers: number; damaged: number; not_received: number; sold: number; live: number;
+    chip_pending: number; scanned_not_live: number; no_product: number;
+  }>(sql`
     SELECT ${countMetricSql("house")} AS house,
            ${countMetricSql("withResellers")} AS with_resellers,
-           ${countMetricSql("damaged")} AS damaged
+           ${countMetricSql("damaged")} AS damaged,
+           ${countMetricSql("notReceived")} AS not_received,
+           ${countMetricSql("sold")} AS sold,
+           ${countMetricSql("live")} AS live,
+           ${countQueueSql("chipPending", now)} AS chip_pending,
+           ${countQueueSql("scannedNotLive", now)} AS scanned_not_live,
+           ${countQueueSql("noProduct", now)} AS no_product
     FROM tags t
+  `);
+  // The other two queues are not pieces: paid Stuscle orders waiting for their pieces, and batches still receiving.
+  const [queueRow] = await rows<{ stuscle_orders: number; batches_not_received: number }>(sql`
+    SELECT (SELECT count(*)::int FROM tag_acquisitions a WHERE a.status = 'pending') AS stuscle_orders,
+           (SELECT count(DISTINCT b.id)::int FROM tag_batches b JOIN tags t ON t.batch_id = b.id
+             WHERE b.status <> 'cancelled' AND ${stockMetricSql("notReceived")}) AS batches_not_received
   `);
   const counts: TagOverview["counts"] = { total: 0, inventory: 0, assigned: 0, active: 0, disabled: 0, retired: 0, damaged: Number(stockRow?.damaged ?? 0) };
   const stock = { house: Number(stockRow?.house ?? 0), withResellers: Number(stockRow?.with_resellers ?? 0) };
+  const funnel: TagOverview["funnel"] = {
+    notReceived: Number(stockRow?.not_received ?? 0),
+    house: stock.house,
+    withResellers: stock.withResellers,
+    sold: Number(stockRow?.sold ?? 0),
+    live: Number(stockRow?.live ?? 0),
+  };
+  const queues: TagOverview["queues"] = {
+    stuscleOrders: Number(queueRow?.stuscle_orders ?? 0),
+    batchesNotReceived: Number(queueRow?.batches_not_received ?? 0),
+    chipPending: Number(stockRow?.chip_pending ?? 0),
+    scannedNotLive: Number(stockRow?.scanned_not_live ?? 0),
+    noProduct: Number(stockRow?.no_product ?? 0),
+  };
   for (const r of statusRows) {
     counts.total += Number(r.count);
     if (r.status in counts) counts[r.status as TagStatus] = Number(r.count);
@@ -1808,6 +2088,8 @@ export async function getOverview(now: Date = new Date(), timezoneOffsetMinutes 
   return {
     counts,
     stock,
+    funnel,
+    queues,
     interactions: { today: Number(m?.today ?? 0), last7: Number(m?.last7 ?? 0), last30: Number(m?.last30 ?? 0) },
     split30: { qr: Number(m?.qr30 ?? 0), nfc: Number(m?.nfc30 ?? 0) },
     approxUnique30: Number(m?.unique30 ?? 0),

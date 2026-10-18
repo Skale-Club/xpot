@@ -4,6 +4,7 @@ import { BATCH_STAGE_TONE, BATCH_STATUS_TONE, Pill, toneOf } from "@/components/
 import { Select } from "@/components/xpot/Field";
 import { InlineAlert } from "@/components/xpot/InlineAlert";
 import type { TagBatchItem, TagListItem } from "@shared/tagsApi";
+import { resellerHasTags } from "@shared/tagDistribution";
 import { ADMIN_TAGS_KEY, STALE_MS, getJson, withQuery } from "./api";
 import { useTagLabels } from "./labels";
 import { useT } from "@/i18n";
@@ -47,6 +48,10 @@ export interface Reseller {
   isActive: boolean;
   modules: string[] | null;
   costPolicy: "zero" | "acquisition";
+  /** Set once an admin chose the cost rule (People); until then the default rule applies. */
+  costPolicyConfiguredAt?: string | null;
+  blockedAt?: string | null;
+  wholesaleCode?: string | null;
 }
 
 export interface TagCatalogProduct {
@@ -70,9 +75,9 @@ export function catalogOptions(catalog: readonly TagCatalogProduct[]) {
   return catalog.map((p) => ({ value: String(p.id), label: p.sku ? `${p.name} · ${p.sku}` : p.name }));
 }
 
-/** Can this person see Tags in the field app? Managers/admins always can. */
+/** Can this person see Tags in the field app? Managers/admins always can (shared/tagDistribution.ts). */
 export function hasTagsModule(rep: Reseller): boolean {
-  return rep.role === "manager" || rep.role === "admin" || !rep.modules || rep.modules.includes("tags");
+  return resellerHasTags(rep);
 }
 
 export function useResellers() {
