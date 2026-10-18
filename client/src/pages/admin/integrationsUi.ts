@@ -21,6 +21,9 @@ export function integrationsTabPath(tab: IntegrationsTab): string {
   return tab === "providers" ? "/admin/integrations" : `/admin/integrations/${tab}`;
 }
 
+/** The Xphere tab's list, also read by the CRM card (who is connected). */
+export const XPHERE_KEY = ["/api/xpot/admin/xphere"];
+
 /** One person's Xphere connection, as GET /api/xpot/admin/xphere lists it. */
 export type XphereRow = {
   userId: string | null;
@@ -43,6 +46,11 @@ export type XphereRow = {
 export function visibleXphereRows(rows: XphereRow[], showAll: boolean): XphereRow[] {
   if (showAll) return rows;
   return rows.filter((row) => !row.deleted && row.usesVisits && row.access === "active");
+}
+
+/** Who the CRM card names as connected: switched on with a token, the same rule as its count (server/observability/services.ts). */
+export function connectedXphereRows(rows: XphereRow[]): XphereRow[] {
+  return rows.filter((row) => row.isEnabled && row.apiKeySet);
 }
 
 /**

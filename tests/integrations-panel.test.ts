@@ -11,6 +11,7 @@ import {
   integrationStatusKey,
   integrationsTabFromPath,
   integrationsTabPath,
+  connectedXphereRows,
   isXphereQueryKey,
   locksOutSignIn,
   maskInboundKey,
@@ -157,6 +158,15 @@ describe("the Xphere list", () => {
     ];
     expect(visibleXphereRows(rows, false).map((r) => r.repId)).toEqual([1]);
     expect(visibleXphereRows(rows, true)).toHaveLength(5);
+  });
+  it("names as connected only people switched on with a token, as the CRM card's count does", () => {
+    const rows = [
+      row({ repId: 1, isEnabled: true, apiKeySet: true }),
+      row({ repId: 2, isEnabled: true, apiKeySet: false }),
+      row({ repId: 3, isEnabled: false, apiKeySet: true }),
+      row({ repId: 4, isEnabled: true, apiKeySet: true, deleted: true }),
+    ];
+    expect(connectedXphereRows(rows).map((r) => r.repId)).toEqual([1, 4]);
   });
   it("masks the inbound key", () => {
     expect(maskInboundKey("xpot_abcdefghijklmnop1234")).toBe("xpot_••••••••1234");
