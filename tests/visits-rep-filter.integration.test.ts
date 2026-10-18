@@ -64,6 +64,8 @@ beforeAll(async () => {
   ana = (await one(`INSERT INTO sales_reps (user_id, display_name, role, is_active) VALUES ('vf-ana', 'Ana Rep', 'rep', true) RETURNING id`)).id;
   bia = (await one(`INSERT INTO sales_reps (user_id, display_name, role, is_active) VALUES ('vf-bia', 'Bia Rep', 'rep', true) RETURNING id`)).id;
   const organizationId = (await one(`INSERT INTO organizations (name, slug) VALUES ('Filter Team', 'filter-team') RETURNING id`)).id;
+  // Bia runs the team Ana works in (a Rep Admin): visits have no organization, so that does not widen hers.
+  await q(`INSERT INTO organization_memberships (organization_id, rep_id, role) VALUES ($1, $2, 'member'), ($1, $3, 'admin')`, [organizationId, ana, bia]);
   const leadId = (await one(`INSERT INTO sales_leads (organization_id, name, owner_rep_id, status) VALUES ($1, 'Corner Barber', $2, 'lead') RETURNING id`, [organizationId, ana])).id;
   await q(`INSERT INTO sales_visits (lead_id, rep_id, status, checked_in_at) VALUES ($1, $2, 'completed', NOW()), ($1, $2, 'sale_made', NOW()), ($1, $3, 'completed', NOW())`, [leadId, ana, bia]);
 });
@@ -81,6 +83,11 @@ describe("GET /visits?repId=", () => {
   });
 
   it("is not honoured outside management mode, nor for a rep", async () => {
+    // The app's management mode sends "manage"; a manager's list stays everyone's.
+    expect((await list("vf-boss", `?repId=${ana}`, { "X-Xpot-View": "manage" })).reps).toEqual([ana, ana]);
+    // A Rep Admin in management mode keeps their own visits: the filter is a platform manager's.
+    expect((await list("vf-bia", `?repId=${ana}`, { "X-Xpot-View": "manage" })).reps).toEqual([bia]);
+    expect((await list("vf-bia", "", { "X-Xpot-View": "manage" })).reps).toEqual([bia]);
     // Viewing as a rep, the manager sees their own visits (none) whatever the filter.
     expect((await list("vf-boss", `?repId=${ana}`, { "X-Xpot-View": "rep" })).reps).toEqual([]);
     // A rep cannot read someone else's history through it.
