@@ -136,7 +136,8 @@ export default function QrScanner({ onResult, onClose }: { onResult: (text: stri
       <canvas ref={canvasRef} className="hidden" />
       <div className="absolute inset-0 bg-black/30" />
 
-      <div className="absolute inset-x-0 top-0 flex items-center justify-between px-4" style={{ paddingTop: "calc(env(safe-area-inset-top) + 12px)" }}>
+      {/* Above the centered layer below: it covers the whole screen and would swallow these taps. */}
+      <div className="absolute inset-x-0 top-0 z-10 flex items-center justify-between px-4" style={{ paddingTop: "calc(env(safe-area-inset-top) + 12px)" }}>
         <button
           type="button"
           onClick={onClose}
@@ -157,9 +158,9 @@ export default function QrScanner({ onResult, onClose }: { onResult: (text: stri
         )}
       </div>
 
-      <div className="absolute inset-0 flex flex-col items-center justify-center px-6">
+      <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-6">
         {error ? (
-          <div className={`max-w-sm rounded-2xl p-5 text-center text-white ${SURFACE_MODAL_CLASS}`}>
+          <div className={`pointer-events-auto max-w-sm rounded-2xl p-5 text-center text-white ${SURFACE_MODAL_CLASS}`}>
             <p className="font-semibold">{t(error)}</p>
             <Button type="button" variant="brand" accent="tags" size="lg" onClick={onClose} className="mt-4">
               {tc("back")}
