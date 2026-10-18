@@ -57,9 +57,12 @@ export function PieceTable({
   pageSize,
   empty,
   testId,
+  selectedId,
 }: {
   pieces: readonly TagListItem[];
   onOpen: (id: string) => void;
+  /** The piece open in a side pane (Inventory on a computer): its row is marked. */
+  selectedId?: string | null;
   columns: readonly PieceColumn[];
   selection?: PieceSelection;
   /** Show this many rows, then "Show more" (lists loaded whole). Leave out when the caller pages on the server. */
@@ -219,6 +222,7 @@ export function PieceTable({
         onRowClick={(p) => onOpen(p.id)}
         getRowAriaLabel={(p) => p.publicCode}
         getRowTestId={(p) => `admin-piece-row-${p.publicCode}`}
+        selectedKey={selectedId}
         isRowSelected={selection ? (p) => selection.selected.has(p.publicCode) : undefined}
       />
 

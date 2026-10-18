@@ -1,4 +1,5 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useCallback, useMemo, useState, type FormEvent } from "react";
+import { useSearchParams } from "wouter";
 import { useMutation } from "@tanstack/react-query";
 import { Boxes, Building2, CircleDot, Layers, Network, Nfc, Package, Plus, ScanLine, Users } from "lucide-react";
 import { FilterBar, FilterSearch, FilterSelect } from "@/components/xpot/filters";
@@ -17,7 +18,10 @@ import { ADMIN_TAGS_KEY, errorMessage, getJson, invalidateAdminTags, sendJson, S
 import { Loading, LoadError, organizationFilterOptions, useBatchOptions, useLeads, useOrganizations, useReps } from "./pieces-shared";
 import { useViewerAccess } from "@/lib/adminMode";
 import { catalogOptions, useTagCatalog } from "./batches-shared";
-import { PieceTable } from "./piece-table";
+import { PieceTable, type PieceColumn } from "./piece-table";
+import { PieceDetail } from "./PieceDetail";
+import { MasterDetail } from "@/components/xpot/MasterDetail";
+import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { useIsSuperAdmin } from "@/components/xpot/AdminBadge";
 import { useTagLabels } from "./labels";
 import { useT } from "@/i18n";
@@ -30,6 +34,12 @@ import { manageTagsBatchesMessages } from "@/i18n/messages/manageTagsBatches";
 
 /** Pieces per server page; the next page loads as you reach the end. */
 const PAGE = 100;
+
+const ALL_COLUMNS: readonly PieceColumn[] = ["customer", "destination", "reseller", "chip", "scans", "lastInteraction", "batch"];
+const PANE_COLUMNS: readonly PieceColumn[] = ["customer", "reseller"];
+
+/** Whether a piece is open in the pane now (the next open replaces it in history). */
+const current = () => new URLSearchParams(window.location.search).has("piece");
 
 const METHOD_KEYS = [
   { value: "qr", key: "methodQr" },
@@ -136,6 +146,7 @@ function NewPieceDialog({ open, onOpenChange, onCreated }: { open: boolean; onOp
 
 export function PiecesTab({ go }: { go: (path: string) => void }) {
   const tm = useT(manageTagsPiecesMessages);
+  const tc = useT(commonMessages);
   const tt = useT(tagsMessages);
   const tg = useT(manageTagsMessages);
   const labels = useTagLabels();
@@ -151,6 +162,24 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
   // The organization filter is platform management's (?org=, also the Organizations page's "See all in Inventory").
   const { canManage } = useViewerAccess();
   const { data: organizations = [] } = useOrganizations(canManage);
+  // On a computer a piece opens in the side pane (?piece=<id>, so the link is shareable); its own page,
+  // /admin/tags/pieces/:id, stays for phones and "Open full page". Moving between pieces and closing
+  // replace history; only the first open pushes.
+  const isDesktop = useIsDesktop();
+  const [params, setParams] = useSearchParams();
+  const paneId = params.get("piece") || null;
+  const setPane = useCallback(
+    (id: string | null) =>
+      setParams((current) => {
+        const next = new URLSearchParams(current);
+        if (id) next.set("piece", id);
+        else next.delete("piece");
+        return next;
+      }, { replace: !id || current() }),
+    [setParams],
+  );
+  const openPiece = (id: string) => (isDesktop ? setPane(id) : go(`/pieces/${id}`));
+  const closePiece = useCallback(() => setPane(null), [setPane]);
 
   const pieces = useOffsetPages<TagListItem>({
     queryKey: [ADMIN_TAGS_KEY, "pieces", listUrl(filters, PAGE, 0)],
@@ -179,6 +208,40 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
   if (filters.batch && !batchOptions.some((o) => o.value === filters.batch)) batchOptions.push({ value: filters.batch, label: tm("selectedBatch") });
   const methodOptions = METHOD_KEYS.map((m) => ({ value: m.value, label: tm(m.key) }));
   const orgOptions = organizationFilterOptions(organizations, filters.org, (id) => tg("organizationNumber", { id }));
+
+  // A phone has no pane: a shared ?piece= link shows the piece's page.
+  if (!isDesktop && paneId) return <PieceDetail id={paneId} go={go} />;
+
+  const list = isLoading ? (
+    <Loading rows={6} />
+  ) : error ? (
+    <LoadError what={tm("whatPieces")} error={error} onRetry={() => void refetch()} />
+  ) : tags.length === 0 ? (
+    <EmptyState tone="tags" icon={Nfc} title={hasFilters ? tm("noMatch") : tm("noPiecesYet")} />
+  ) : (
+    <>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-white/50" data-testid="admin-pieces-counts">
+        <span className="font-semibold text-white/80">
+          {tt.plural("pieces", tags.length, pieces.hasMore ? { count: `${tags.length}+` } : undefined)}
+        </span>
+        {TAG_STATUSES.filter((s) => statusCounts[s]).map((s) => (
+          <span key={s} className="tabular-nums">
+            {tm("statusCount", { label: labels.status(s), count: statusCounts[s] })}
+          </span>
+        ))}
+        <span className="tabular-nums">{tm("inHouse", { count: houseCount })}</span>
+      </div>
+      <PieceTable
+        pieces={tags}
+        onOpen={openPiece}
+        // Beside the pane the table keeps what identifies a piece and where it is.
+        columns={paneId ? PANE_COLUMNS : ALL_COLUMNS}
+        selectedId={paneId}
+        testId="admin-pieces-table"
+      />
+      <ListPager shown={tags.length} hasMore={pieces.hasMore} onMore={pieces.loadMore} loading={pieces.loadingMore} pageSize={PAGE} />
+    </>
+  );
 
   return (
     <div className="space-y-4" data-testid="admin-tags-pieces">
@@ -209,36 +272,19 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
         summary={{ shown: tags.length, active: hasFilters, onClear: () => urlFilters.reset() }}
       />
 
-      {isLoading ? (
-        <Loading rows={6} />
-      ) : error ? (
-        <LoadError what={tm("whatPieces")} error={error} onRetry={() => void refetch()} />
-      ) : tags.length === 0 ? (
-        <EmptyState tone="tags" icon={Nfc} title={hasFilters ? tm("noMatch") : tm("noPiecesYet")} />
+      {isDesktop ? (
+        // The pane stays mounted whatever the list shows (loading, empty, error).
+        <MasterDetail
+          closeLabel={tc("close")}
+          onClose={closePiece}
+          list={list}
+          detail={paneId ? <PieceDetail key={paneId} id={paneId} go={go} onClose={closePiece} /> : null}
+        />
       ) : (
-        <>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-white/50" data-testid="admin-pieces-counts">
-            <span className="font-semibold text-white/80">
-              {tt.plural("pieces", tags.length, pieces.hasMore ? { count: `${tags.length}+` } : undefined)}
-            </span>
-            {TAG_STATUSES.filter((s) => statusCounts[s]).map((s) => (
-              <span key={s} className="tabular-nums">
-                {tm("statusCount", { label: labels.status(s), count: statusCounts[s] })}
-              </span>
-            ))}
-            <span className="tabular-nums">{tm("inHouse", { count: houseCount })}</span>
-          </div>
-          <PieceTable
-            pieces={tags}
-            onOpen={(id) => go(`/pieces/${id}`)}
-            columns={["customer", "destination", "reseller", "chip", "scans", "lastInteraction", "batch"]}
-            testId="admin-pieces-table"
-          />
-          <ListPager shown={tags.length} hasMore={pieces.hasMore} onMore={pieces.loadMore} loading={pieces.loadingMore} pageSize={PAGE} />
-        </>
+        list
       )}
 
-      {isAdmin ? <NewPieceDialog open={creating} onOpenChange={setCreating} onCreated={(id) => go(`/pieces/${id}`)} /> : null}
+      {isAdmin ? <NewPieceDialog open={creating} onOpenChange={setCreating} onCreated={openPiece} /> : null}
     </div>
   );
 }
