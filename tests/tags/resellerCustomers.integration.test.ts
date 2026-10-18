@@ -148,6 +148,17 @@ test.skipIf(!enabled)("reseller customers: approved reseller activates a piece, 
       paymentStatus: "paid",
     }, { "idempotency-key": "rc-sale-1" });
     assert.equal(sale.status, 201, sale.text);
+
+    // The dashboard reads the same stock numbers as Overview and Resellers: her live piece is still unsold
+    // stock in her hands, the one she just sold is a sale (not stock), the house piece is the house's.
+    const overview = (await api("GET", "/api/xpot/admin/tags/overview", "rc-admin")).json;
+    const report = (await api("GET", "/api/xpot/admin/tags/report?range=30d", "rc-admin")).json as { reps: Array<{ repId: number; inStock: number; soldInRange: number }> };
+    const fleet = (await api("GET", "/api/xpot/tags/dashboard", "rc-admin")).json;
+    const mine = (await api("GET", "/api/xpot/tags/dashboard", "rc-carla")).json;
+    const carlaRow = report.reps.find((r) => r.repId === carla.id)!;
+    assert.deepEqual([fleet.inStock, overview.stock.withResellers, report.reps.reduce((n, r) => n + r.inStock, 0)], [1, 1, 1]);
+    assert.deepEqual([mine.inStock, carlaRow.inStock], [1, 1]);
+    assert.deepEqual([fleet.soldInPeriod, overview.funnel.sold, mine.soldInPeriod, carlaRow.soldInRange], [1, 1, 1, 1]);
     // A company that holds none of her pieces stays out of reach.
     const refused = await api("POST", "/api/xpot/tag-sales", "rc-carla", {
       leadId: stranger.id,
