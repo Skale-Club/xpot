@@ -25,8 +25,9 @@ menu e das telas, e por fim a limpeza.
 ### Fase 0: regras de negócio (antes de qualquer visual)
 
 - **Visitas** (0A): editar o endereço mantém as coordenadas (ou geocodifica o
-  novo endereço); o raio padrão da área do cliente passa a valer; "Concluídas
-  hoje" e "Últimas visitas" contam todo resultado final, não só `completed`;
+  novo endereço); o raio padrão da área da empresa passa a valer; "Finalizadas
+  hoje" (antes "Concluídas hoje") e "Últimas visitas" contam todo resultado
+  final, não só `completed`;
   as regras de check-in dizem o que fazem e as visitas fora da área ganham o
   selo "Exceção: fora da área"; "Cancelar visita" alcançável e confirmado; card de rota
   do Painel igual à tela Rota; consignação encerrada nunca aparece atrasada;
@@ -44,7 +45,7 @@ menu e das telas, e por fim a limpeza.
   abrem a lista que contam.
 - **Plataforma e Pessoas** (0C): os interruptores de voz e IA são respeitados
   (`server/lib/providerChoice.ts`, migração 0052); integrações dizem a
-  verdade (fonte painel/ambiente, Twilio "obrigatório para entrar"); chaves do
+  verdade (fonte painel/ambiente, Twilio com o selo "Obrigatório"); chaves do
   Xphere mascaradas e com rotação; o card de MCP diz o escopo real; Pessoas
   avisa antes de tornar alguém admin do Xpot, ninguém muda o próprio papel,
   recusas ficam separadas de bloqueios; erros de validação apontam o campo, no
@@ -107,7 +108,7 @@ pontinhos" do loader e o hover dos botões não existiam (classes CSS ausentes).
 - **3b, plataforma:** Integrações organizadas por função, com último teste e
   último erro (migração 0053, `integration_checks`); Marca e site público
   junta Marca e o editor da Landing; Status com serviços, problemas de sync do
-  CRM com Retry e "Montar a rota de novo" para rotas presas. Integrações e
+  CRM com "Tentar de novo" e "Montar a rota de novo" para rotas presas. Integrações e
   Status leem a mesma lista de serviços (`server/observability/services.ts`).
 - **3c, gestão de Tags:** Visão geral com filas "Precisa de ação" e funil de
   estoque; Distribuição (Entregar, Pedidos Stuscle, Kits como histórico,
@@ -239,13 +240,13 @@ Confira cada tela em 1440 px e 390 px (não deve haver rolagem lateral).
 - [ ] Tornar alguém admin do Xpot avisa e pede confirmação; ninguém muda o próprio papel.
 - [ ] Recusar um cadastro coloca a pessoa em "Recusados", separado de bloqueados.
 - [ ] A página da pessoa mostra organizações, Tags (regra de custo, código de atacado) e, para o admin do Xpot, o Xphere com a chave mascarada e "Trocar a chave de entrada".
-- [ ] Organizações não cria conta; "Adicionar pessoa existente" funciona para gerentes.
+- [ ] Organizações não cria conta; "Adicionar uma pessoa existente" funciona para gerentes.
 
 **Plataforma**
 - [ ] Integrações: seções por função, "Em uso agora" na voz e na IA, GoHighLevel sob "Legado", último teste guardado depois de recarregar.
 - [ ] Assistentes de IA: o segredo só fecha em "Já copiei"; conexões mostram os escopos.
 - [ ] Marca e site público: trocar de aba não perde o rascunho da Landing; "Restaurar padrão" no ícone e no logo.
-- [ ] Status: o banner diz a causa; uma linha de serviço abre o card em Integrações; Retry nos problemas de sync.
+- [ ] Status: o banner diz a causa; uma linha de serviço abre o card em Integrações; "Tentar de novo" nos problemas de sincronização com o CRM.
 
 ## O que ficou aberto
 
