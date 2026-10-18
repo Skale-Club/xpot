@@ -7,6 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/i18n";
 import { leadsMessages } from "@/i18n/messages/leads";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
 import { usePlaceSearch } from "../../usePlaceSearch";
 import type { FullSalesLead, GoogleBusinessProfile } from "../../types";
 
@@ -16,6 +17,7 @@ export function CompanyGoogleProfileButton({ lead }: { lead: FullSalesLead }) {
   const t = useT(leadsMessages);
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
+  const [confirmUnlink, setConfirmUnlink] = useState(false);
   const [search, setSearch] = useState(lead.name);
   const [connected, setConnected] = useState(Boolean(lead.googlePlaceId));
   const profile = useQuery<GoogleBusinessProfile>({
@@ -67,7 +69,7 @@ export function CompanyGoogleProfileButton({ lead }: { lead: FullSalesLead }) {
               {p?.mapsUrl ? <a href={p.mapsUrl} target="_blank" rel="noopener noreferrer" aria-label={t("googleProfileMaps")} title={t("googleProfileMaps")} className="text-blue-300/65 transition hover:text-blue-200"><ExternalLink className="h-3.5 w-3.5" /></a> : null}
             </>
           )}
-          <button type="button" disabled={savePlace.isPending} onClick={() => savePlace.mutate(null)} aria-label={t("googleProfileUnlink")} title={t("googleProfileUnlink")} className="ml-0.5 text-white/20 transition hover:text-red-300 disabled:opacity-40">
+          <button type="button" disabled={savePlace.isPending} onClick={() => setConfirmUnlink(true)} aria-label={t("googleProfileUnlink")} title={t("googleProfileUnlink")} className="ml-0.5 text-white/20 transition hover:text-red-300 disabled:opacity-40">
             {savePlace.isPending && savePlace.variables === null ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Unlink className="h-3.5 w-3.5" />}
           </button>
         </div>
@@ -77,6 +79,18 @@ export function CompanyGoogleProfileButton({ lead }: { lead: FullSalesLead }) {
           {t("googleProfileLink")}
         </button>
       )}
+
+      <ConfirmDialog
+        open={confirmUnlink}
+        onOpenChange={setConfirmUnlink}
+        title={t("googleProfileUnlinkTitle")}
+        description={t("googleProfileUnlinkDesc")}
+        confirmLabel={t("googleProfileUnlinkConfirm")}
+        cancelLabel={t("googleProfileKeep")}
+        destructive
+        pending={savePlace.isPending && savePlace.variables === null}
+        onConfirm={() => savePlace.mutateAsync(null)}
+      />
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="border-white/10 bg-[#0b1020] text-white sm:max-w-xl">

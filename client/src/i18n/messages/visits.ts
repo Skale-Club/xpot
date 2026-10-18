@@ -101,6 +101,9 @@ const en = {
   recordingTooLarge: "Recording too large",
   recordingTooLargeDesc: "Keep voice notes under five minutes.",
   removePhoto: "Remove photo",
+  removePhotoTitle: "Remove this photo?",
+  removePhotoDesc: "The photo is deleted from this company.",
+  keepPhoto: "Keep photo",
   removeSocial: "Remove social network",
 };
 
@@ -201,6 +204,9 @@ export const visitsMessages: Dictionary<typeof en> = {
     recordingTooLarge: "Gravação grande demais",
     recordingTooLargeDesc: "Mantenha as notas de voz abaixo de cinco minutos.",
     removePhoto: "Remover foto",
+    removePhotoTitle: "Remover esta foto?",
+    removePhotoDesc: "A foto é apagada desta empresa.",
+    keepPhoto: "Manter foto",
     removeSocial: "Remover rede social",
   },
   es: {
@@ -298,6 +304,9 @@ export const visitsMessages: Dictionary<typeof en> = {
     recordingTooLarge: "Grabación demasiado grande",
     recordingTooLargeDesc: "Mantén las notas de voz por debajo de cinco minutos.",
     removePhoto: "Quitar foto",
+    removePhotoTitle: "¿Quitar esta foto?",
+    removePhotoDesc: "La foto se borra de esta empresa.",
+    keepPhoto: "Conservar foto",
     removeSocial: "Quitar red social",
   },
 };
