@@ -1,12 +1,17 @@
+import { useT } from "@/i18n";
+import { commonMessages } from "@/i18n/messages/common";
 import { cn } from "@/lib/utils";
 
 interface DotsLoaderProps {
   size?: "xs" | "sm" | "md" | "lg";
   tone?: "brand" | "muted" | "light" | "current";
   className?: string;
+  /** What is loading, for screen readers; defaults to the translated "Loading". */
+  label?: string;
 }
 
-export function DotsLoader({ size = "md", tone = "brand", className }: DotsLoaderProps) {
+export function DotsLoader({ size = "md", tone = "brand", className, label }: DotsLoaderProps) {
+  const t = useT(commonMessages);
   const sizeClasses = {
     xs: { dot: "w-1.5 h-1.5", gap: "gap-1" },
     sm: { dot: "w-2 h-2", gap: "gap-1" },
@@ -14,7 +19,7 @@ export function DotsLoader({ size = "md", tone = "brand", className }: DotsLoade
     lg: { dot: "w-4 h-4", gap: "gap-3" },
   };
   const toneClasses = {
-    brand: "bg-[#5272F2]",
+    brand: "bg-primary",
     muted: "bg-muted-foreground/70",
     light: "bg-white",
     current: "bg-current",
@@ -27,7 +32,7 @@ export function DotsLoader({ size = "md", tone = "brand", className }: DotsLoade
     <div
       className={cn("flex items-center", gap, className)}
       role="status"
-      aria-label="Loading"
+      aria-label={label ?? t("loading")}
     >
       <div className={cn(dot, dotTone, "rounded-full animate-dot-pulse [animation-delay:0ms]")} />
       <div className={cn(dot, dotTone, "rounded-full animate-dot-pulse [animation-delay:150ms]")} />
@@ -45,10 +50,11 @@ export function SectionLoader({
   tone = "brand",
   className,
   centerClassName,
+  label,
 }: SectionLoaderProps) {
   return (
     <div className={cn("flex w-full items-center justify-center py-12", centerClassName)}>
-      <DotsLoader size={size} tone={tone} className={className} />
+      <DotsLoader size={size} tone={tone} className={className} label={label} />
     </div>
   );
 }
@@ -57,8 +63,9 @@ export function InlineLoader({
   size = "xs",
   tone = "brand",
   className,
+  label,
 }: DotsLoaderProps) {
-  return <DotsLoader size={size} tone={tone} className={cn("inline-flex shrink-0", className)} />;
+  return <DotsLoader size={size} tone={tone} label={label} className={cn("inline-flex shrink-0", className)} />;
 }
 
 /**
@@ -71,7 +78,7 @@ export function InlineLoader({
  */
 export function PageLoader() {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0f1014]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#060912]">
       <DotsLoader size="lg" tone="brand" />
     </div>
   );
@@ -88,9 +95,9 @@ export function PageLoader() {
  *      parent layout. Crucial inside <SidebarProvider> (and any other flex
  *      container) where a relative-positioned loader would otherwise be
  *      squeezed into a narrow strip of the content column.
- *   2. `bg-background` — theme-aware via the Tailwind dark-class strategy.
- *      Combined with the pre-React theme bootstrap in client/index.html,
- *      this paints the correct color from the very first frame.
+ *   2. `bg-background` — the navy page base (#060912, PAGE_BASE in
+ *      components/xpot/surface.ts), the same colour as the boot screen in
+ *      client/index.html, so nothing flashes between boot and the app.
  *
  * NEVER write `<div className="min-h-screen flex items-center justify-center bg-slate-…"><Loader2 …/></div>`
  * by hand again — use <AppLoader /> so the theme + layout behavior stays
@@ -111,9 +118,10 @@ interface SpinnerProps {
 }
 
 export function Spinner({ size = "md", className }: SpinnerProps) {
+  const t = useT(commonMessages);
   const sizeClasses = {
     sm: "h-4 w-4 border-2",
-    md: "h-8 w-8 border-3",
+    md: "h-8 w-8 border-[3px]",
     lg: "h-12 w-12 border-4",
   };
 
@@ -125,7 +133,7 @@ export function Spinner({ size = "md", className }: SpinnerProps) {
         className
       )}
       role="status"
-      aria-label="Loading"
+      aria-label={t("loading")}
     />
   );
 }

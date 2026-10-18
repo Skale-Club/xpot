@@ -1,5 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Pipette } from "lucide-react";
+import { useT } from "@/i18n";
+import { commonMessages } from "@/i18n/messages/common";
+import { kitMessages } from "@/i18n/messages/kit";
 
 /* ---------- color math ---------- */
 
@@ -99,6 +102,8 @@ function ColorPopover({
 }) {
   // keep hue locally so it survives s/v = 0
   const initial = rgbToHsv(...(Object.values(hexToRgb(value)) as [number, number, number]));
+  const t = useT(kitMessages);
+  const tc = useT(commonMessages);
   const [hsv, setHsv] = useState(initial);
 
   const rgb = hsvToRgb(hsv.h, hsv.s, hsv.v);
@@ -160,7 +165,8 @@ function ColorPopover({
           <button
             onClick={eyedrop}
             className="shrink-0 rounded-md p-1.5 text-white/60 transition-colors hover:bg-white/10 hover:text-white"
-            title="Pick from screen"
+            title={t("pickFromScreen")}
+            aria-label={t("pickFromScreen")}
           >
             <Pipette className="h-4 w-4" />
           </button>
@@ -205,7 +211,7 @@ function ColorPopover({
         onClick={onClose}
         className="mt-3 w-full rounded-lg bg-blue-500 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-600"
       >
-        Done
+        {tc("done")}
       </button>
     </div>
   );
@@ -222,6 +228,7 @@ export function ColorField({
   value: string;
   onChange: (v: string) => void;
 }) {
+  const t = useT(kitMessages);
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   const valid = HEX_RE.test(value);
@@ -264,8 +271,8 @@ export function ColorField({
               backgroundSize: "10px 10px",
               backgroundPosition: "0 0,0 5px,5px -5px,-5px 0",
             }}
-            title="Pick a color"
-            aria-label={`${label} — pick a color`}
+            title={t("pickColor")}
+            aria-label={t("pickColorFor", { label })}
           >
             <span className="absolute inset-0" style={{ backgroundColor: swatch }} />
           </button>
