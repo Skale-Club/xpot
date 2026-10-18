@@ -1,33 +1,21 @@
 import { useQuery } from "@tanstack/react-query";
+import { BarChart3, ScanLine, Users } from "lucide-react";
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 import type { TagPieceDashboard } from "@shared/tagsApi";
+import { KpiTile } from "@/components/xpot/DashboardKit";
+import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
+import { Pill } from "@/components/xpot/StatusPill";
 import { useT } from "@/i18n";
+import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
-import { tagsGet } from "./lib";
+import { errorText, tagsGet } from "./lib";
+import { CHART_TICK, CHART_TICK_DAY, chartTooltip, formatChartDay, formatCount, NFC_COLOR, QR_COLOR } from "./charts";
 import { CARD, EYEBROW_MUTED } from "./ui";
-
-const QR_COLOR = "#60a5fa";
-const NFC_COLOR = "#a78bfa";
-
-function formatChartDay(day: string, locale: string, options: Intl.DateTimeFormatOptions): string {
-  const date = new Date(`${day}T00:00:00Z`);
-  return Number.isNaN(date.getTime())
-    ? day
-    : date.toLocaleDateString(locale, { ...options, timeZone: "UTC" });
-}
-
-function Metric({ value, label }: { value: number; label: string }) {
-  return (
-    <div className="min-w-0 rounded-2xl bg-white/[0.035] px-3 py-2.5">
-      <p className="text-xl font-extrabold tabular-nums text-white">{value}</p>
-      <p className="truncate text-[11px] text-white/40">{label}</p>
-    </div>
-  );
-}
 
 export default function PieceDashboard({ tagId }: { tagId: string }) {
   const t = useT(tagsMessages);
-  const { data, isLoading } = useQuery({
+  const tc = useT(commonMessages);
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["tags", "piece-dashboard", tagId, 30],
     queryFn: () => tagsGet<TagPieceDashboard>(`/api/xpot/tags/${tagId}/dashboard?days=30`),
     staleTime: 30_000,
@@ -39,33 +27,39 @@ export default function PieceDashboard({ tagId }: { tagId: string }) {
       <section className={`${CARD} mt-3 animate-pulse p-4`} aria-label={t("pieceAnalyticsTitle")}>
         <div className="h-3 w-28 rounded bg-white/10" />
         <div className="mt-4 grid grid-cols-2 gap-2">
-          <div className="h-14 rounded-2xl bg-white/[0.05]" />
-          <div className="h-14 rounded-2xl bg-white/[0.05]" />
+          <div className="h-[88px] rounded-2xl bg-white/[0.05]" />
+          <div className="h-[88px] rounded-2xl bg-white/[0.05]" />
         </div>
         <div className="mt-3 h-20 rounded-2xl bg-white/[0.04]" />
       </section>
     );
   }
 
-  if (!data) return null;
+  if (!data) {
+    return error ? (
+      <div className="mt-3">
+        <ErrorState compact message={errorText(error, tc("requestFailed"))} onRetry={() => void refetch()} />
+      </div>
+    ) : null;
+  }
   const total = data.scans.qr + data.scans.nfc;
 
   return (
     <section className={`${CARD} mt-3 overflow-hidden p-4`} data-testid="piece-dashboard">
       <div className="flex items-center justify-between gap-3">
         <h2 className={EYEBROW_MUTED}>{t("pieceAnalyticsTitle")}</h2>
-        <span className="rounded-full bg-blue-400/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-blue-200/80">
-          {t("pieceAnalyticsPeriod")}
-        </span>
+        <Pill tone="violet">{t("pieceAnalyticsPeriod")}</Pill>
       </div>
 
       <div className="mt-3 grid grid-cols-2 gap-2">
-        <Metric value={total} label={t("pieceAnalyticsScans")} />
-        <Metric value={data.visitors} label={t("pieceAnalyticsPeople")} />
+        <KpiTile accent="violet" icon={ScanLine} value={formatCount(total, t.locale)} label={t("pieceAnalyticsScans")} />
+        <KpiTile accent="violet" icon={Users} value={formatCount(data.visitors, t.locale)} label={t("pieceAnalyticsPeople")} />
       </div>
 
       {total === 0 ? (
-        <p className="py-7 text-center text-sm text-white/35">{t("dashEmpty")}</p>
+        <div className="mt-3">
+          <EmptyState compact dense tone="tags" icon={BarChart3} title={t("dashEmpty")} cardStyle={{}} />
+        </div>
       ) : (
         <div className="mt-3 h-24" role="img" aria-label={t("pieceAnalyticsChartLabel")}>
           <ResponsiveContainer width="100%" height="100%">
@@ -75,20 +69,11 @@ export default function PieceDashboard({ tagId }: { tagId: string }) {
                 axisLine={false}
                 tickLine={false}
                 interval="preserveStartEnd"
-                minTickGap={48}
-                tick={{ fill: "rgba(255,255,255,0.32)", fontSize: 9 }}
-                tickFormatter={(day: string) => formatChartDay(day, t.locale, { day: "numeric", month: "short" })}
+                minTickGap={24}
+                tick={CHART_TICK}
+                tickFormatter={(day: string) => formatChartDay(day, t.locale, CHART_TICK_DAY)}
               />
-              <Tooltip
-                cursor={{ fill: "rgba(255,255,255,0.04)" }}
-                contentStyle={{ background: "#0f172a", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, fontSize: 12, color: "#fff" }}
-                labelStyle={{ color: "rgba(255,255,255,0.9)", fontWeight: 700 }}
-                labelFormatter={(day) => (
-                  typeof day === "string"
-                    ? formatChartDay(day, t.locale, { weekday: "short", day: "numeric", month: "short" })
-                    : day
-                )}
-              />
+              <Tooltip {...chartTooltip(t.locale)} />
               <Bar dataKey="qr" name="QR" stackId="piece" fill={QR_COLOR} />
               <Bar dataKey="nfc" name="NFC" stackId="piece" fill={NFC_COLOR} radius={[3, 3, 0, 0]} />
             </BarChart>
@@ -98,12 +83,12 @@ export default function PieceDashboard({ tagId }: { tagId: string }) {
 
       <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t border-white/[0.06] pt-3 text-xs text-white/45">
         <div className="flex items-center gap-3">
-          <span><span style={{ color: QR_COLOR }}>■</span> QR <b className="tabular-nums text-white/75">{data.scans.qr}</b></span>
-          <span><span style={{ color: NFC_COLOR }}>■</span> NFC <b className="tabular-nums text-white/75">{data.scans.nfc}</b></span>
+          <span><span style={{ color: QR_COLOR }}>■</span> QR <b className="tabular-nums text-white/75">{formatCount(data.scans.qr, t.locale)}</b></span>
+          <span><span style={{ color: NFC_COLOR }}>■</span> NFC <b className="tabular-nums text-white/75">{formatCount(data.scans.nfc, t.locale)}</b></span>
         </div>
         {data.devices.length > 0 && (
           <span className="truncate">
-            {data.devices.map((device) => `${device.os === "other" ? t("dashOtherDevice") : device.os} ${device.scans}`).join(" · ")}
+            {data.devices.map((device) => `${device.os === "other" ? t("dashOtherDevice") : device.os} ${formatCount(device.scans, t.locale)}`).join(" · ")}
           </span>
         )}
       </div>

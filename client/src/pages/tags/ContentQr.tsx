@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Download } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { contentKindOf, contentSummary } from "@shared/chipContent";
 import { useT } from "@/i18n";
 import { tagsMessages } from "@/i18n/messages/tags";
@@ -48,14 +49,12 @@ export function ContentQr({ open, value, onClose }: { open: boolean; value: stri
         )}
       </div>
       {src && (
-        <a
-          href={src}
-          download={`${name}.png`}
-          className="mt-4 flex min-h-[52px] w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.06] text-base font-bold text-white active:bg-white/10"
-        >
-          <Download className="h-5 w-5" />
-          {t("downloadQr")}
-        </a>
+        <Button asChild variant="secondary" size="lg" className="mt-4 w-full">
+          <a href={src} download={`${name}.png`}>
+            <Download className="!size-5" />
+            {t("downloadQr")}
+          </a>
+        </Button>
       )}
     </BottomSheet>
   );

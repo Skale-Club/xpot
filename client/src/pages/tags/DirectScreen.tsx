@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Contact, Info, Link2, Mail, Nfc, Phone, QrCode } from "lucide-react";
+import { Contact, History, Info, Link2, Mail, Nfc, Phone, QrCode } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
+import { ListSkeleton } from "@/components/xpot/ListSkeleton";
+import { Field, Input } from "@/components/xpot/Field";
 import { contentKindOf, contentSummary, validateChipContent, type ChipContentKind } from "@shared/chipContent";
 import { normalizeUrlInput } from "@shared/tagApp";
 import type { DirectWriteItem } from "@shared/tagsApi";
@@ -13,8 +17,8 @@ import { ContentEditor, type ContentState } from "./ContentEditor";
 import { ContentQr } from "./ContentQr";
 import LockSheet from "./LockSheet";
 import WriteSheet, { type WriteResult } from "./WriteSheet";
-import { ageOf, pushRecent, shortUrl, tagsGet, tagsPost, useBanner, directPath } from "./lib";
-import { BTN_DIRECT, Banner, CARD, CHIP_TONE, CopyButton, EYEBROW_MUTED, FieldLabel, ICON_BLOCK_DIRECT, INPUT, LinkInput, Pill, TopBar } from "./ui";
+import { ageOf, errorText, pushRecent, shortUrl, tagsGet, tagsPost, useBanner, directPath } from "./lib";
+import { Banner, CARD, CHIP_TONE, CopyButton, EYEBROW_MUTED, FieldLabel, ICON_BLOCK_DIRECT, INPUT_ACCENT, LinkInput, Pill, SheetActions, TopBar } from "./ui";
 
 const WRITES_KEY = ["/api/xpot/tag-direct-writes"];
 
@@ -46,7 +50,7 @@ export default function DirectScreen() {
     }
   }, []);
 
-  const { data: writes } = useQuery({
+  const { data: writes, error: writesError, refetch: refetchWrites } = useQuery({
     queryKey: WRITES_KEY,
     queryFn: () => tagsGet<DirectWriteItem[]>("/api/xpot/tag-direct-writes"),
     staleTime: 15_000,
@@ -103,20 +107,23 @@ export default function DirectScreen() {
 
   return (
     <>
-      <TopBar title={t("directTitle")} eyebrow={t("directEyebrow")} identity="direct" />
+      {/* The desktop top bar already names the screen. */}
+      <div className="lg:hidden">
+        <TopBar title={t("directTitle")} eyebrow={t("directEyebrow")} identity="direct" />
+      </div>
       <Banner banner={banner} />
 
       {/* Desktop: the form on the left, the recent writes beside it. */}
       <div className="lg:grid lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start lg:gap-6">
         <div>
-          <section className="rounded-[20px] border border-emerald-400/20 bg-emerald-400/[0.05] p-4">
+          <section className={`${CARD} p-4`}>
             <p className="flex items-start gap-2 text-sm text-white/60">
-              <Info className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" />
+              <Info className="mt-0.5 h-4 w-4 shrink-0 text-white/45" />
               {t("directExplain")}
             </p>
             {current && (
-              <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.04] p-3">
-                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-300">{t("onChipNow")}</p>
+              <div className={`${CARD} mt-4 p-3`}>
+                <p className={EYEBROW_MUTED}>{t("onChipNow")}</p>
                 <div className="mt-1 flex items-center gap-2">
                   {contentKindOf(current) === "vcard" ? (
                     <span className="min-w-0 flex-1 break-all text-sm font-semibold text-white">{t("contentKind_vcard")}: {contentSummary(current)}</span>
@@ -171,32 +178,31 @@ export default function DirectScreen() {
                 </div>
               }
             />
-            <div>
-              <FieldLabel>{t("labelField")}</FieldLabel>
-              <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder={t("directLabelPlaceholder")} maxLength={120} className={INPUT} />
-            </div>
-            <button type="button" onClick={prepare} disabled={!ready} className={BTN_DIRECT} data-testid="button-write-direct">
-              <Nfc className="h-5 w-5" />
-              {t("writeToChip")}
-            </button>
-            {/* The same content as a QR code, to print or show. */}
-            <button
-              type="button"
-              onClick={openQr}
-              disabled={!ready}
-              className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] text-sm font-semibold text-white/80 transition-colors disabled:opacity-40 active:bg-white/10"
-              data-testid="button-direct-qr"
-            >
-              <QrCode className="h-5 w-5" />
-              {t("showQr")}
-            </button>
+            <Field label={t("labelField")}>
+              <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder={t("directLabelPlaceholder")} maxLength={120} className={INPUT_ACCENT} />
+            </Field>
+            <SheetActions>
+              <Button type="button" variant="brand" accent="tags" size="lg" onClick={prepare} disabled={!ready} className="w-full" data-testid="button-write-direct">
+                <Nfc className="!size-5" />
+                {t("writeToChip")}
+              </Button>
+              {/* The same content as a QR code, to print or show. */}
+              <Button type="button" variant="secondary" size="lg" onClick={openQr} disabled={!ready} className="w-full" data-testid="button-direct-qr">
+                <QrCode className="!size-5" />
+                {t("showQr")}
+              </Button>
+            </SheetActions>
           </section>
         </div>
 
         <section className="mt-8 lg:mt-0">
           <h2 className={`mb-2 px-1 ${EYEBROW_MUTED}`}>{t("recentDirect")}</h2>
-          {!writes || writes.length === 0 ? (
-            <div className={`${CARD} px-6 py-8 text-center text-sm text-white/45`}>{t("directEmpty")}</div>
+          {writesError && !writes ? (
+            <ErrorState compact message={errorText(writesError, tc("requestFailed"))} onRetry={() => void refetchWrites()} />
+          ) : !writes ? (
+            <ListSkeleton rows={3} />
+          ) : writes.length === 0 ? (
+            <EmptyState compact icon={History} title={t("directEmpty")} />
           ) : (
             <ul className={`${CARD} divide-y divide-white/[0.06] overflow-hidden`}>
               {writes.slice(0, 12).map((w) => {

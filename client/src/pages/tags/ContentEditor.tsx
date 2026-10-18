@@ -19,6 +19,7 @@ import { normalizeUrlInput } from "@shared/tagApp";
 import { DEFAULT_COUNTRY_CODE, PHONE_COUNTRIES, formatPhone, normalizePhone } from "@shared/phone";
 import { CountryCodePicker } from "@/components/CountryCodePicker";
 import { maskUsPhoneInput } from "@/pages/xpot/phoneInput";
+import { Segmented } from "@/components/xpot/Segmented";
 import { useT } from "@/i18n";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { FieldLabel, INPUT } from "./ui";
@@ -70,8 +71,9 @@ function PhoneField({ value, onChange, label, testId }: {
   );
 }
 
+/** The kit Field's error line. */
 function FieldError({ text }: { text: string | null }) {
-  return text ? <p className="mt-1.5 text-sm text-red-300">{text}</p> : null;
+  return text ? <p className="mt-1.5 text-xs text-red-300">{text}</p> : null;
 }
 
 export function ContentEditor({
@@ -151,27 +153,27 @@ export function ContentEditor({
     <div className="space-y-3">
       <div>
         <FieldLabel>{t("contentField")}</FieldLabel>
-        <div role="radiogroup" aria-label={t("contentField")} className="grid grid-cols-4 gap-1 rounded-2xl border border-white/10 bg-white/[0.03] p-1" data-testid="content-kind">
-          {KINDS.map((k) => {
-            const Icon = KIND_ICON[k];
-            const active = k === kind;
-            return (
-              <button
-                key={k}
-                type="button"
-                role="radio"
-                aria-checked={active}
-                onClick={() => onKind(k)}
-                className={`flex min-h-[48px] flex-col items-center justify-center gap-0.5 rounded-xl text-xs font-semibold transition-colors touch-manipulation ${
-                  active ? "bg-white/[0.12] text-white" : "text-white/50 active:bg-white/[0.06]"
-                }`}
-                data-testid={`content-kind-${k}`}
-              >
-                <Icon className="h-4 w-4" />
-                {t(`contentKind_${k}`)}
-              </button>
-            );
-          })}
+        {/* The kit's view switch, in the Tags accent. */}
+        <div data-testid="content-kind">
+          <Segmented
+            accent="tags"
+            ariaLabel={t("contentField")}
+            value={kind}
+            onChange={onKind}
+            itemClassName="flex min-h-11 flex-col items-center justify-center gap-0.5 touch-manipulation"
+            items={KINDS.map((k) => {
+              const Icon = KIND_ICON[k];
+              return {
+                id: k,
+                label: (
+                  <span className="flex flex-col items-center gap-0.5" data-testid={`content-kind-${k}`}>
+                    <Icon className="h-4 w-4" aria-hidden="true" />
+                    {t(`contentKind_${k}`)}
+                  </span>
+                ),
+              };
+            })}
+          />
         </div>
       </div>
 

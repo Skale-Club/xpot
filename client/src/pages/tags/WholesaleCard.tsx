@@ -4,7 +4,8 @@ import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { tagsGet } from "./lib";
-import { CopyButton } from "./ui";
+import { Button } from "@/components/ui/button";
+import { CopyButton, EYEBROW_MUTED } from "./ui";
 
 /** "Buy kits at wholesale": the rep's own code and the Stuscle store link that carries it. */
 export function WholesaleCard() {
@@ -18,9 +19,9 @@ export function WholesaleCard() {
   });
   if (!data) return null;
   return (
-    <section className="rounded-[20px] border border-indigo-400/20 bg-gradient-to-br from-indigo-500/[0.10] to-blue-500/[0.05] p-4 lg:flex lg:items-center lg:gap-6 lg:p-5" data-testid="wholesale-card">
+    <section className="rounded-2xl border border-violet-400/20 bg-gradient-to-br from-violet-500/[0.10] to-fuchsia-600/[0.05] p-4 lg:flex lg:items-center lg:gap-6 lg:p-5" data-testid="wholesale-card">
       <div className="flex items-start gap-3 lg:min-w-0 lg:flex-1 lg:items-center">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-400/15 text-indigo-200">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-400/15 text-violet-200">
           <ShoppingBag className="h-5 w-5" />
         </span>
         <div className="min-w-0 flex-1">
@@ -30,25 +31,21 @@ export function WholesaleCard() {
       </div>
       {/* Phones stack the code and the button; wide screens put them on one row beside the text. */}
       <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-stretch lg:mt-0 lg:shrink-0">
-        <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-black/20 py-1.5 pl-4 pr-1.5 sm:flex-1 lg:w-64 lg:flex-none">
+        <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 py-1.5 pl-4 pr-1.5 sm:flex-1 lg:w-64 lg:flex-none">
           <span className="min-w-0 flex-1">
-            <span className="block text-[10px] font-semibold uppercase tracking-widest text-white/40">{t("wholesaleCode")}</span>
+            <span className={`block ${EYEBROW_MUTED}`}>{t("wholesaleCode")}</span>
             <span className="block font-mono text-lg font-bold tracking-[0.12em] text-white" data-testid="wholesale-code">
               {data.code}
             </span>
           </span>
           <CopyButton text={data.code} label={tc("copy")} />
         </div>
-        <a
-          href={data.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex min-h-[48px] w-full items-center justify-center gap-2 whitespace-nowrap rounded-2xl bg-white px-5 text-base font-semibold text-slate-900 transition-transform active:scale-[0.98] sm:w-auto"
-          data-testid="wholesale-open"
-        >
-          {t("wholesaleOpen")}
-          <ExternalLink className="h-4 w-4" />
-        </a>
+        <Button asChild variant="brand" accent="tags" size="lg" className="w-full sm:w-auto">
+          <a href={data.url} target="_blank" rel="noopener noreferrer" data-testid="wholesale-open">
+            {t("wholesaleOpen")}
+            <ExternalLink />
+          </a>
+        </Button>
       </div>
     </section>
   );

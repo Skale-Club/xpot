@@ -9,13 +9,16 @@ import { FilterBar, FilterChips, FilterSearch, FilterSelect, FilterToken } from 
 import { currentSearch, useUrlFilters } from "@/hooks/use-url-filters";
 import { ListPager, usePagedList } from "@/components/xpot/pagination";
 import { TagPieceMention } from "@/components/xpot/TagProductThumbnail";
+import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
+import { ListSkeleton } from "@/components/xpot/ListSkeleton";
+import { ACCENT_SELECTED, GLASS_SUBTLE_CLASS, TABLE_HEAD } from "@/components/xpot/surface";
 import TagScreen from "./TagScreen";
 import type { TagListItem } from "@shared/tagsApi";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { APP_BASE, errorText, shortUrl, tagPath, tagsGet } from "./lib";
-import { CARD, ChipMark, PieceStatusPills, Spinner, TopBar } from "./ui";
+import { CARD, ChipMark, PieceStatusPills, ScanCounts, TopBar } from "./ui";
 import { WholesaleCard } from "./WholesaleCard";
 
 // Two separate axes: where the piece is in its life, and whether a sale was recorded.
@@ -62,7 +65,7 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
   const leadId = Number(filters.values.lead);
   const leadFilter = Number.isInteger(leadId) && leadId > 0 ? { id: leadId, name: filters.values.name } : null;
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     // Every status at once (filtered here): "Not set up" spans two of them.
     queryKey: ["tags", "list", null, leadFilter?.id ?? null],
     queryFn: () => {
@@ -111,17 +114,10 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
   });
   const pager = <ListPager shown={paged.shown} total={paged.total} hasMore={paged.hasMore} onMore={paged.showMore} />;
 
-  const listLoading = (
-    <div className="flex justify-center py-16 text-white/40">
-      <Spinner className="h-7 w-7" />
-    </div>
-  );
-  const listError = <div className={`${CARD} px-6 py-8 text-center text-sm text-red-200`}>{errorText(error, tc("requestFailed"))}</div>;
+  const listLoading = <ListSkeleton rows={6} rowClassName="h-[88px] rounded-2xl" />;
+  const listError = <ErrorState message={errorText(error, tc("requestFailed"))} onRetry={() => void refetch()} />;
   const listEmpty = (
-    <div className={`${CARD} flex flex-col items-center px-6 py-10 text-center`}>
-      <Package className="h-8 w-8 text-white/25" />
-      <p className="mt-2 text-sm text-white/45">{(data ?? []).length === 0 && !hasListFilters ? t("piecesEmpty") : t("piecesNoMatch")}</p>
-    </div>
+    <EmptyState tone="tags" icon={Package} title={(data ?? []).length === 0 && !hasListFilters ? t("piecesEmpty") : t("piecesNoMatch")} />
   );
 
   return (
@@ -268,13 +264,8 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
                       <PieceStatusPills tag={tag} />
                       <ChipMark tag={tag} />
                     </span>
-                    {/* All-time scans, live or not: a switched-off piece keeps what it had. */}
-                    {tag.qrInteractions + tag.nfcInteractions > 0 && (
-                      <span className="flex items-center gap-1 text-xs tabular-nums text-white/40">
-                        <ScanLine className="h-3 w-3" aria-hidden="true" />
-                        {t.plural("scansCount", tag.qrInteractions + tag.nfcInteractions)}
-                      </span>
-                    )}
+                    {/* All-time scans, live or not: a switched-off piece keeps what it had. The same counts as the desktop table. */}
+                    {tag.qrInteractions + tag.nfcInteractions > 0 && <ScanCounts qr={tag.qrInteractions} nfc={tag.nfcInteractions} />}
                   </span>
                   <ChevronRight className="h-4 w-4 shrink-0 text-white/25" />
                 </button>
@@ -303,7 +294,7 @@ function PiecesTable({ items, selectedCode, onSelect, onCustomer }: {
 }) {
   const t = useT(tagsMessages);
   return (
-    <div className={`${CARD} overflow-hidden`}>
+    <div className={`overflow-hidden rounded-2xl ${GLASS_SUBTLE_CLASS}`}>
       <table className="w-full table-fixed text-left text-sm" data-testid="pieces-table">
         <colgroup>
           <col className="w-56" />
@@ -312,7 +303,7 @@ function PiecesTable({ items, selectedCode, onSelect, onCustomer }: {
           <col className="w-28" />
           <col className="w-28" />
         </colgroup>
-        <thead className="border-b border-white/[0.07] text-[10px] uppercase tracking-widest text-white/35">
+        <thead className={`border-b border-white/[0.07] ${TABLE_HEAD}`}>
           <tr>
             <th className="whitespace-nowrap py-3 pl-4 pr-3 font-semibold">{t("colCode")}</th>
             <th className="px-3 py-3 font-semibold">{t("colCustomer")}</th>
@@ -324,7 +315,6 @@ function PiecesTable({ items, selectedCode, onSelect, onCustomer }: {
         <tbody className="divide-y divide-white/[0.05]">
           {items.map((tag) => {
             const selected = selectedCode?.toUpperCase() === tag.publicCode.toUpperCase();
-            const scans = tag.qrInteractions + tag.nfcInteractions;
             return (
               <tr
                 key={tag.id}
@@ -332,7 +322,7 @@ function PiecesTable({ items, selectedCode, onSelect, onCustomer }: {
                 aria-current={selected ? "true" : undefined}
                 onClick={() => onSelect(tag.publicCode)}
                 onKeyDown={(e) => { if (e.target !== e.currentTarget) return; if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(tag.publicCode); } }}
-                className={`cursor-pointer outline-none transition-colors focus-visible:bg-white/[0.05] ${selected ? "bg-blue-500/[0.12]" : "hover:bg-white/[0.03]"}`}
+                className={`cursor-pointer transition-colors focus-visible:bg-white/[0.05] focus-visible:!-outline-offset-2 ${selected ? ACCENT_SELECTED.tags.row : "hover:bg-white/[0.03]"}`}
                 data-testid={`piece-row-${tag.publicCode}`}
               >
                 <td className="py-2.5 pl-4 pr-3">
@@ -344,10 +334,10 @@ function PiecesTable({ items, selectedCode, onSelect, onCustomer }: {
                       type="button"
                       onClick={(e) => { e.stopPropagation(); onCustomer(tag.leadId!); }}
                       title={t("openCustomer", { name: tag.leadName })}
-                      className="group inline-flex max-w-full items-center gap-1.5 rounded-md text-left font-medium text-white/90 hover:text-blue-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-400"
+                      className="group inline-flex max-w-full items-center gap-1.5 rounded-md text-left font-medium text-white/90 hover:text-violet-300"
                       data-testid={`piece-customer-${tag.publicCode}`}
                     >
-                      <Building2 className="h-3.5 w-3.5 shrink-0 text-white/30 group-hover:text-blue-300" />
+                      <Building2 className="h-3.5 w-3.5 shrink-0 text-white/30 group-hover:text-violet-300" />
                       <span className="truncate group-hover:underline">{tag.leadName}</span>
                     </button>
                   ) : (
@@ -362,15 +352,8 @@ function PiecesTable({ items, selectedCode, onSelect, onCustomer }: {
                     <ChipMark tag={tag} />
                   </div>
                 </td>
-                <td className="whitespace-nowrap py-2.5 pl-3 pr-4 text-right tabular-nums">
-                  {scans > 0 ? (
-                    <>
-                      <div className="font-semibold text-white">{scans}</div>
-                      <div className="mt-0.5 text-[11px] text-white/40">{tag.qrInteractions} QR · {tag.nfcInteractions} NFC</div>
-                    </>
-                  ) : (
-                    <span className="text-white/20">—</span>
-                  )}
+                <td className="whitespace-nowrap py-2.5 pl-3 pr-4 text-right">
+                  <ScanCounts qr={tag.qrInteractions} nfc={tag.nfcInteractions} />
                 </td>
               </tr>
             );
