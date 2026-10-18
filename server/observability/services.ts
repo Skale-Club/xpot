@@ -39,11 +39,20 @@ import { isGoogleRouteOptimizationConfigured } from "../prospecting/google-route
 
 type Env = Record<string, string | undefined>;
 
-/** System event sources that speak for an env-only service. */
+/**
+ * System event sources that speak for a service. A provider's own id counts as
+ * a source too, so a failure recorded under "groq" or "twilio" shows on its card.
+ */
 export const EVENT_SOURCES_BY_SERVICE: Partial<Record<string, readonly string[]>> = {
   prospecting_engine: ["prospecting.engine", "prospecting.worker"],
   push: ["push"],
+  twilio: ["twilio", "sms"],
+  gohighlevel: ["gohighlevel", "ghl"],
 };
+
+export function eventSourcesFor(id: string): readonly string[] {
+  return EVENT_SOURCES_BY_SERVICE[id] ?? [id];
+}
 
 export type ServicesInput = {
   env: Env;
@@ -108,12 +117,18 @@ export function activeProviders(env: Env, providers: IntegrationStatus[]): Set<s
 }
 
 function eventFor(input: ServicesInput, id: string): ServiceEvent | null {
-  const sources = EVENT_SOURCES_BY_SERVICE[id] ?? [];
+  const sources = eventSourcesFor(id);
   const newest = sources
     .map((source) => input.events[source])
     .filter(Boolean)
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
   return newest ? { message: newest.message, at: newest.createdAt.toISOString(), eventId: newest.id } : null;
+}
+
+/** The newer of two failures. */
+function newest(a: ServiceEvent | null, b: ServiceEvent | null): ServiceEvent | null {
+  if (!a || !b) return a ?? b;
+  return a.at >= b.at ? a : b;
 }
 
 function crmError(input: ServicesInput, provider: string): ServiceEvent | null {
@@ -135,7 +150,7 @@ export function buildServices(input: ServicesInput): ServiceStatus[] {
     row.active = active.has(def.provider);
     row.lastTest = check ? { ok: check.ok, message: check.message, at: check.checkedAt.toISOString() } : null;
     row.lastSuccessAt = iso(latest(check?.lastOkAt, input.crm[def.provider]?.lastSyncedAt));
-    row.lastError = crmError(input, def.provider);
+    row.lastError = newest(crmError(input, def.provider), eventFor(input, def.provider));
     out.push(row);
   }
 
@@ -154,7 +169,7 @@ export function buildServices(input: ServicesInput): ServiceStatus[] {
   );
   xphere.count = input.xphere.connected;
   xphere.lastSuccessAt = iso(input.crm.xphere?.lastSyncedAt);
-  xphere.lastError = crmError(input, "xphere");
+  xphere.lastError = newest(crmError(input, "xphere"), eventFor(input, "xphere"));
   out.push(xphere);
 
   const mcp = base("mcp", input.mcp.active ? "live" : "off", input.mcp.active ? "panel" : "none");
@@ -235,7 +250,8 @@ async function loadCrm(): Promise<ServicesInput["crm"]> {
 }
 
 async function loadEvents(): Promise<ServicesInput["events"]> {
-  const sources = Object.values(EVENT_SOURCES_BY_SERVICE).flat() as string[];
+  const ids = Object.values(SERVICES_BY_JOB).flat();
+  const sources = Array.from(new Set(ids.flatMap((id) => [...eventSourcesFor(id)])));
   const rows = await db.selectDistinctOn([systemEvents.source], {
     id: systemEvents.id,
     source: systemEvents.source,

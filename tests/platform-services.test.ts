@@ -87,6 +87,17 @@ describe("server-environment services", () => {
     expect(find(rows, "push").lastError?.eventId).toBe(2);
     expect(find(rows, "telegram").lastError).toBeNull();
   });
+
+  it("show a provider's own recorded failure, the newer of it and the CRM sync log", () => {
+    const events = {
+      sms: { id: 7, message: "Twilio not configured", createdAt: new Date("2026-10-04T00:00:00Z") },
+      xphere: { id: 8, message: "Xphere sync failed: 401", createdAt: new Date("2026-10-06T00:00:00Z") },
+    };
+    const crm = { xphere: { lastSyncedAt: null, lastFailed: { message: "403", at: new Date("2026-10-05T00:00:00Z") } } };
+    const rows = buildServices(input({ events, crm }));
+    expect(find(rows, "twilio").lastError).toMatchObject({ message: "Twilio not configured", eventId: 7 });
+    expect(find(rows, "xphere").lastError).toMatchObject({ message: "Xphere sync failed: 401", eventId: 8 });
+  });
 });
 
 describe("CRM and AI assistants", () => {

@@ -1,6 +1,6 @@
 import { inArray, sql } from "drizzle-orm";
 import { db } from "../db.js";
-import { salesLeads, salesReps, salesSales, salesTasks, salesVisits } from "#shared/schema.js";
+import { salesLeads, salesOpportunitiesLocal, salesReps, salesSales, salesTasks, salesVisits } from "#shared/schema.js";
 import { RETRYABLE_SYNC_ENTITIES, type SyncProblem } from "#shared/system-health.js";
 
 /**
@@ -26,7 +26,7 @@ type LatestAttempt = {
 
 type Subject = { name: string | null; leadId: number | null; repId: number | null };
 
-/** Where a record opens: companies and what belongs to one open on the company; a visit on its own page. */
+/** Where a record opens: companies and what belongs to one (sale, task, opportunity) open on the company; a visit on its own page. */
 export function syncProblemHref(entityType: string, entityId: string, subject: Subject | undefined): string | null {
   if (entityType === "sales_visit") return `/visits/${entityId}`;
   if (!subject) return null;
@@ -53,7 +53,7 @@ export async function listSyncProblems(limit = SYNC_PROBLEMS_LIMIT): Promise<Syn
   const rows = ((result as { rows?: unknown[] }).rows ?? (result as unknown as unknown[])) as LatestAttempt[];
   if (!rows.length) return [];
 
-  const [leads, visits, sales, tasks] = await Promise.all([
+  const [leads, visits, sales, tasks, opportunities] = await Promise.all([
     ids(rows, "sales_lead").length
       ? db.select({ id: salesLeads.id, name: salesLeads.name, repId: salesLeads.ownerRepId }).from(salesLeads).where(inArray(salesLeads.id, ids(rows, "sales_lead")))
       : [],
@@ -68,6 +68,10 @@ export async function listSyncProblems(limit = SYNC_PROBLEMS_LIMIT): Promise<Syn
     ids(rows, "sales_task").length
       ? db.select({ id: salesTasks.id, leadId: salesTasks.leadId, repId: salesTasks.repId, name: salesTasks.title }).from(salesTasks).where(inArray(salesTasks.id, ids(rows, "sales_task")))
       : [],
+    ids(rows, "sales_opportunity").length
+      ? db.select({ id: salesOpportunitiesLocal.id, leadId: salesOpportunitiesLocal.leadId, repId: salesOpportunitiesLocal.repId, name: salesOpportunitiesLocal.title })
+        .from(salesOpportunitiesLocal).where(inArray(salesOpportunitiesLocal.id, ids(rows, "sales_opportunity")))
+      : [],
   ]);
 
   const subjects = new Map<string, Subject>();
@@ -75,6 +79,7 @@ export async function listSyncProblems(limit = SYNC_PROBLEMS_LIMIT): Promise<Syn
   for (const visit of visits) subjects.set(`sales_visit:${visit.id}`, { name: visit.name ?? null, leadId: visit.leadId, repId: visit.repId });
   for (const sale of sales) subjects.set(`sales_sale:${sale.id}`, { name: sale.name ?? null, leadId: sale.leadId, repId: sale.repId });
   for (const task of tasks) subjects.set(`sales_task:${task.id}`, { name: task.name, leadId: task.leadId ?? null, repId: task.repId });
+  for (const opp of opportunities) subjects.set(`sales_opportunity:${opp.id}`, { name: opp.name, leadId: opp.leadId, repId: opp.repId });
 
   const repIds = Array.from(new Set(Array.from(subjects.values()).flatMap((s) => (s.repId ? [s.repId] : []))));
   const reps = repIds.length
