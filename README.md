@@ -154,16 +154,17 @@ Settings (everyone): `/settings` with the tabs Profile (name, photo, contact
 phone), Sign-in (the sign-in phone, read only; a password only for email
 logins), Language and Memberships (`?tab=memberships`: role, modules,
 organizations with their role, the wholesale code). For a manager, Memberships
-also holds the management mode switch and the links to Administration and
-Platform; that is how management mode is turned on from a phone.
+also holds the management mode switch and the links to Administration (and
+Platform, for the Xpot admin); that is how management mode is turned on from a phone.
 
 **Management mode.** Managers and the Xpot admin see Xpot as a rep does until
 they turn management mode on (sidebar, Settings › Memberships, or the scope
 chip). While it is on, an amber bar shows on every screen, each module gets its
 Manage group (on the phone, a Manage tab in the Visits and Tags tab bars), and
-the lists that widen to the whole team (Companies, Visits, Sales, Tasks with
-"Whole team", the Tags home and customers) show a scope chip, "Viewing:
-everyone / only me", that also switches the mode. Opening an `/admin/...` URL
+the lists widen to the whole team: Companies, Visits, Sales, Tasks (with "Whole
+team"), the Tags home and customers. Those lists carry a scope chip for anyone
+who can manage, "Viewing: everyone" or "Viewing: only me", that also switches
+the mode. Opening an `/admin/...` URL
 turns the mode on with a toast; leaving it on a management screen goes to the
 matching rep screen; signing out turns it off. It only narrows what a person
 sees: the server still decides what each account may open or change.
