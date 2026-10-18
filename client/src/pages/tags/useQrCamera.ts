@@ -4,8 +4,14 @@ import jsQR from "jsqr";
 // The rear camera reading QR codes, shared by the field app's QrScanner and the admin scan station:
 // BarcodeDetector where it works, jsQR otherwise.
 
+/** A point in the video's own pixels (videoWidth × videoHeight). */
+export interface QrPoint {
+  x: number;
+  y: number;
+}
+
 interface BarcodeDetectorLike {
-  detect(source: CanvasImageSource): Promise<Array<{ rawValue: string }>>;
+  detect(source: CanvasImageSource): Promise<Array<{ rawValue: string; cornerPoints?: QrPoint[] }>>;
 }
 type BarcodeDetectorCtor = (new (opts?: { formats?: string[] }) => BarcodeDetectorLike) & {
   getSupportedFormats?: () => Promise<string[]>;
@@ -33,10 +39,11 @@ async function makeDetector(): Promise<BarcodeDetectorLike | null> {
 }
 
 /**
- * Opens the camera on mount, closes it on unmount, and calls `onCode` with every QR it reads.
+ * Opens the camera on mount, closes it on unmount, and calls `onCode` with every QR it reads, plus its four
+ * corners (top-left, top-right, bottom-right, bottom-left) when the reader reports them.
  * `paused` skips reading without closing the camera.
  */
-export function useQrCamera({ onCode, paused = false }: { onCode: (text: string) => void; paused?: boolean }) {
+export function useQrCamera({ onCode, paused = false }: { onCode: (text: string, corners: QrPoint[] | null) => void; paused?: boolean }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const trackRef = useRef<TorchTrack | null>(null);
@@ -68,7 +75,8 @@ export function useQrCamera({ onCode, paused = false }: { onCode: (text: string)
         if (detector) {
           try {
             const found = await detector.detect(video);
-            if (found[0]?.rawValue) onCodeRef.current(found[0].rawValue);
+            const hit = found[0];
+            if (hit?.rawValue) onCodeRef.current(hit.rawValue, hit.cornerPoints?.length === 4 ? hit.cornerPoints : null);
           } catch {
             // A detector that fails here would fail on every frame: read with jsQR from now on.
             detector = null;
@@ -84,7 +92,11 @@ export function useQrCamera({ onCode, paused = false }: { onCode: (text: string)
               ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
               const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
               const code = jsQR(img.data, img.width, img.height, { inversionAttempts: "dontInvert" });
-              if (code?.data) onCodeRef.current(code.data);
+              if (code?.data) {
+                const { topLeftCorner, topRightCorner, bottomRightCorner, bottomLeftCorner } = code.location;
+                const corners = [topLeftCorner, topRightCorner, bottomRightCorner, bottomLeftCorner].map((p) => ({ x: p.x / scale, y: p.y / scale }));
+                onCodeRef.current(code.data, corners);
+              }
             }
           } catch {
             // A failed frame is not fatal; try the next one.
