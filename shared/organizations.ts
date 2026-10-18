@@ -48,3 +48,17 @@ export function canManageOrganization(
 ): boolean {
   return managesEveryOrganization(viewer) || activeOrganizationAccess(memberships, organizationId)?.role === "admin";
 }
+
+/**
+ * The one-person workspace every new rep gets automatically
+ * (server/organizations/service.ts ensureOrganizationForRep names it after
+ * them, with the slug "rep-<their id>"), for as long as it still holds only
+ * that person, or nobody. Once someone else joins it is a real organization.
+ * The Organizations list hides these behind "Show personal workspaces".
+ */
+export function isPersonalOrganization(organization: { slug: string; memberCount: number; soleMemberRepId?: number | null }): boolean {
+  const owner = /^rep-(\d+)$/.exec(organization.slug);
+  if (!owner) return false;
+  if (organization.memberCount === 0) return true;
+  return organization.memberCount === 1 && organization.soleMemberRepId === Number(owner[1]);
+}

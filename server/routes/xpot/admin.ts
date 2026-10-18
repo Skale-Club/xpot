@@ -22,6 +22,8 @@ import {
   type Actor,
 } from "./resellerAccounts.js";
 import { AccountDeletionError, deleteRepAccount } from "../../accountDeletion.js";
+import { organizationsForRep } from "../../organizations/service.js";
+import { teamActivity, teamActivitySince } from "./teamActivity.js";
 
 export function createAdminRouter() {
   const router = Router();
@@ -60,6 +62,14 @@ export function createAdminRouter() {
       },
       latestSyncEvents: syncEvents.slice(0, 10),
     });
+  });
+
+  // Visits › Manage › Overview: the period's numbers and one row per field rep
+  // (teamActivity.ts). ?since=<ISO start of the viewer's period> or ?days=N.
+  router.get("/admin/team-activity", async (req, res) => {
+    const since = teamActivitySince(req.query);
+    if (!since) return res.status(400).json({ message: "Choose a period of up to 400 days." });
+    res.json(await teamActivity(since));
   });
 
   router.get("/admin/reps", async (_req, res) => {
@@ -136,6 +146,15 @@ export function createAdminRouter() {
     return deleteRepAccount(id, actorOf(req));
   }));
 
+  // People › Organizations: where this person is a member, with each
+  // organization's name and their role there. Adding and removing go through
+  // the Organizations API (organizations.ts), which checks who may do it.
+  router.get("/admin/reps/:id/organizations", withRep(async (id) => {
+    const rep = await storage.getSalesRep(id);
+    if (!rep || rep.deletedAt) throw new AccountError("Rep not found", 404);
+    return organizationsForRep(id);
+  }));
+
   router.get("/admin/sync-events", async (_req, res) => {
     res.json(await storage.listSalesSyncEvents());
   });
@@ -202,6 +221,23 @@ export function createAdminRouter() {
     const rep = userId ? await storage.getSalesRepByUserId(userId) : undefined;
     return rep && !rep.deletedAt ? rep : null;
   };
+
+  // One person's connection, for People › Visits: the same fields as the list,
+  // plus when their last record went out (or failed to) and how it went.
+  router.get("/admin/xphere/:userId", async (req, res) => {
+    const rep = await xphereTarget(req.params.userId);
+    if (!rep) return res.status(404).json({ message: "Person not found" });
+    const [config, [last]] = await Promise.all([
+      storage.getXphereIntegrationByUserId(rep.userId),
+      storage.listSalesSyncEventsForRep(rep.id, 1),
+    ]);
+    res.json({
+      userId: rep.userId,
+      repId: rep.id,
+      ...presentXphere(config),
+      lastSync: last ? { status: last.status, at: last.lastAttemptAt ?? last.createdAt, error: last.lastError } : null,
+    });
+  });
 
   router.put("/admin/xphere/:userId", async (req, res) => {
     const userId = req.params.userId;

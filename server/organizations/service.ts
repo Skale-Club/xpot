@@ -14,6 +14,7 @@ import {
 import {
   canManageOrganization,
   canViewOrganization,
+  isPersonalOrganization,
   managesEveryOrganization,
   type OrganizationAccess,
   type OrganizationViewer,
@@ -158,21 +159,32 @@ export async function assertOrganizationAccess(actor: OrganizationActor, organiz
   return { organization, memberships };
 }
 
+/** Every member counted (suspended ones too), and the one member when there is only one. The column is spelled out: in a one-table select drizzle would print a bare "id", which inside the subquery means om.id. */
+const memberCount = sql<number>`(SELECT count(*)::int FROM organization_memberships om WHERE om.organization_id = "organizations"."id")`;
+const soleMemberRepId = sql<number | null>`(SELECT min(om.rep_id) FROM organization_memberships om WHERE om.organization_id = "organizations"."id")`;
+
+/** Adds `personal`: the automatic one-person workspace of a rep (shared/organizations.ts). */
+function withPersonal<T extends { slug: string; memberCount: number; soleMemberRepId: number | null }>(row: T) {
+  return { ...row, personal: isPersonalOrganization(row) };
+}
+
 export async function listOrganizations(actor: OrganizationActor) {
+  const columns = {
+    id: organizations.id,
+    name: organizations.name,
+    slug: organizations.slug,
+    isActive: organizations.isActive,
+    createdByUserId: organizations.createdByUserId,
+    createdAt: organizations.createdAt,
+    updatedAt: organizations.updatedAt,
+    memberCount,
+    soleMemberRepId,
+  };
   if (managesEveryOrganization(actor)) {
-    return db.select().from(organizations).orderBy(asc(organizations.name));
+    return (await db.select(columns).from(organizations).orderBy(asc(organizations.name))).map(withPersonal);
   }
-  return db
-    .select({
-      id: organizations.id,
-      name: organizations.name,
-      slug: organizations.slug,
-      isActive: organizations.isActive,
-      createdByUserId: organizations.createdByUserId,
-      createdAt: organizations.createdAt,
-      updatedAt: organizations.updatedAt,
-      membershipRole: organizationMemberships.role,
-    })
+  const rows = await db
+    .select({ ...columns, membershipRole: organizationMemberships.role })
     .from(organizationMemberships)
     .innerJoin(organizations, eq(organizations.id, organizationMemberships.organizationId))
     .where(and(
@@ -181,6 +193,32 @@ export async function listOrganizations(actor: OrganizationActor) {
       sql`${organizationMemberships.blockedAt} IS NULL`,
     ))
     .orderBy(asc(organizations.name));
+  return rows.map(withPersonal);
+}
+
+/**
+ * One person's memberships with each organization's name, for People's
+ * Organizations section. Suspended memberships are listed too (they are still
+ * memberships; the organization page reactivates them).
+ */
+export async function organizationsForRep(repId: number) {
+  const rows = await db
+    .select({
+      organizationId: organizations.id,
+      name: organizations.name,
+      slug: organizations.slug,
+      organizationActive: organizations.isActive,
+      role: organizationMemberships.role,
+      isActive: organizationMemberships.isActive,
+      blockedAt: organizationMemberships.blockedAt,
+      memberCount,
+      soleMemberRepId,
+    })
+    .from(organizationMemberships)
+    .innerJoin(organizations, eq(organizations.id, organizationMemberships.organizationId))
+    .where(eq(organizationMemberships.repId, repId))
+    .orderBy(asc(organizations.name));
+  return rows.map(withPersonal);
 }
 
 function slugBase(name: string) {

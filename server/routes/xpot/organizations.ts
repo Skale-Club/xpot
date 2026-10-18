@@ -101,14 +101,17 @@ export function createOrganizationsRouter() {
       return addOrganizationMember(organizationId, existing.data.repId, existing.data.membershipRole, actor);
     }
 
+    // New people are created in People (/admin/reps), where access is decided.
+    // This older body (name + phone) stays for API callers with platform
+    // management; an org admin only adds people who already have an account.
+    if (!managesEveryOrganization(actor)) {
+      throw new OrganizationError("Add an existing person. New people are created in People.", 403);
+    }
     const created = resellerAccountSchema.extend({
       role: z.literal("rep").default("rep"),
       modules: z.array(z.enum(XPOT_MODULES)).min(1).default([...XPOT_MODULES]),
       membershipRole: membershipRole.default("member"),
     }).strict().parse(req.body);
-    if (!managesEveryOrganization(actor) && created.membershipRole === "admin") {
-      throw new OrganizationError("Only an Admin or Manager can assign Rep Admin access.", 403);
-    }
     const { membershipRole: role, ...account } = created;
     const rep = await createResellerAccount(
       account,
