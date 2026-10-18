@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Check, ChevronDown } from "lucide-react";
 import { PHONE_COUNTRIES } from "@shared/phone";
 import { CountryFlag } from "@/components/CountryFlag";
+import { SURFACE_MODAL_CLASS } from "@/components/xpot/surface";
 
 // The country code next to a phone field. A native <select> can't show an
 // image inside its options, so this is a small listbox with SVG flags.
@@ -143,7 +144,7 @@ export function CountryCodePicker({
         aria-controls={POPUP_ID}
         aria-activedescendant={open ? `country-${PHONE_COUNTRIES[active].code}` : undefined}
         aria-label={`${label}: ${current.label} +${current.code}`}
-        className={`flex h-full items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 text-base text-white outline-none transition-all hover:bg-white/10 focus:border-blue-500/50 ${className}`}
+        className={`flex h-full min-h-11 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] px-3 text-base text-white transition-colors hover:border-white/[0.16] hover:bg-white/[0.08] focus:border-blue-400/60 sm:text-sm ${className}`}
         data-testid="select-country-code"
       >
         <CountryFlag iso={current.iso} />
@@ -158,7 +159,7 @@ export function CountryCodePicker({
           aria-label={label}
           data-country-code-picker-popup
           style={popupPosition}
-          className="pointer-events-auto fixed z-[100] overflow-y-auto rounded-xl border border-white/10 bg-[#0d1424] p-1 shadow-[0_12px_32px_rgba(0,0,0,0.6)] outline-none"
+          className={`pointer-events-auto fixed z-[100] overflow-y-auto rounded-xl ${SURFACE_MODAL_CLASS} p-1 shadow-[0_12px_32px_rgba(0,0,0,0.6)] outline-none`}
         >
           {PHONE_COUNTRIES.map((c, i) => (
             <li
@@ -169,12 +170,12 @@ export function CountryCodePicker({
               onPointerEnter={() => setActive(i)}
               onPointerDown={(event) => event.preventDefault()}
               onClick={() => pick(c.code)}
-              className={`flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 text-sm text-white ${i === active ? "bg-white/10" : ""}`}
+              className={`flex min-h-10 cursor-pointer items-center gap-3 rounded-lg px-3 py-2 text-sm text-white ${i === active ? "bg-white/10" : ""}`}
             >
               <CountryFlag iso={c.iso} />
               <span className="flex-1">{c.label}</span>
               <span className="tabular-nums text-white/50">+{c.code}</span>
-              {c.code === current.code ? <Check className="h-4 w-4 text-blue-400" /> : <span className="h-4 w-4" />}
+              {c.code === current.code ? <Check className="h-4 w-4 text-blue-300" /> : <span className="h-4 w-4" />}
             </li>
           ))}
         </ul>,

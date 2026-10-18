@@ -4,6 +4,8 @@ import { initSupabase } from "@/lib/supabase";
 import { queryClient } from "@/lib/queryClient";
 import { consumePostLoginRedirect, getXpotHomePath } from "@/lib/xpot";
 import { Loader2 } from "@/components/ui/loader";
+import { InlineAlert } from "@/components/xpot/InlineAlert";
+import { PAGE_GRADIENT } from "@/components/xpot/surface";
 import { translate, useT } from "@/i18n";
 import { landingMessages } from "@/i18n/messages/landing";
 import type { XpotMeResponse } from "./xpot/types";
@@ -169,17 +171,17 @@ export default function Login() {
   return (
     <div
       className="flex min-h-screen flex-col items-center justify-center gap-4 text-white"
-      style={{ background: "linear-gradient(160deg, #060912 0%, #090f1c 50%, #060c14 100%)" }}
+      style={{ background: PAGE_GRADIENT }}
     >
       {status === "working" ? (
         <>
-          <Loader2 className="h-8 w-8 animate-spin text-blue-400" />
+          <Loader2 className="h-8 w-8 text-blue-400" />
           <p className="text-sm text-white/40">{t("finishingSignIn")}</p>
         </>
       ) : (
-        <p className="max-w-sm rounded-md bg-red-500/10 px-4 py-3 text-center text-sm text-red-300">
+        <InlineAlert tone="error" className="mx-4 max-w-sm">
           {errorMsg}
-        </p>
+        </InlineAlert>
       )}
     </div>
   );

@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, Check, Clock3, Loader2, MessageCircle, Phone, ShieldOff } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Clock3, MessageCircle, Phone, ShieldOff } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Loader2 } from "@/components/ui/loader";
+import { FIELD_CONTROL } from "@/components/xpot/Field";
+import { InlineAlert } from "@/components/xpot/InlineAlert";
 import { formatPhone, normalizePhone } from "@shared/phone";
 import { CountryCodePicker } from "@/components/CountryCodePicker";
 import { useT } from "@/i18n";
@@ -24,10 +28,8 @@ interface ApiError {
   retryAfter?: number;
 }
 
-const FIELD =
-  "h-12 w-full rounded-xl border border-white/10 bg-white/5 px-4 text-base text-white placeholder:text-white/30 outline-none transition-all focus:border-[#5272F2]/55 focus:bg-white/10";
-const PRIMARY =
-  "flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#5272F2] text-base font-semibold text-white shadow-[0_4px_18px_rgba(82,114,242,0.3)] transition-all hover:bg-[#4869E6] disabled:cursor-not-allowed disabled:opacity-50";
+// The kit's field, a little taller for the sign-in card; the primary is the brand Button.
+const FIELD = `${FIELD_CONTROL} h-12 px-4 !text-base`;
 
 async function post<T>(url: string, body: unknown): Promise<{ ok: boolean; data: T & ApiError }> {
   const res = await fetch(url, {
@@ -265,8 +267,8 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
   };
 
   const errorBox = error && (
-    <div role="alert" className="rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-center text-sm text-red-300" data-testid="signin-error">
-      {error}
+    <div data-testid="signin-error">
+      <InlineAlert tone="error">{error}</InlineAlert>
     </div>
   );
 
@@ -284,12 +286,14 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
           <p className="mt-1 text-sm text-white/60">{pending ? t("pendingText") : t("blockedText")}</p>
         </div>
         {link && (
-          <a href={link} target="_blank" rel="noopener noreferrer" className={`${PRIMARY} !bg-emerald-600 hover:!bg-emerald-500 shadow-none`}>
-            <MessageCircle className="h-5 w-5" />
-            {t("contactWhatsapp")}
-          </a>
+          <Button asChild variant="secondary" size="lg" className="w-full">
+            <a href={link} target="_blank" rel="noopener noreferrer">
+              <MessageCircle className="text-emerald-300" />
+              {t("contactWhatsapp")}
+            </a>
+          </Button>
         )}
-        <button type="button" onClick={restart} className="text-sm text-white/50 hover:text-white">
+        <button type="button" onClick={restart} className="min-h-10 text-sm text-white/50 hover:text-white">
           {t("backToStart")}
         </button>
       </div>
@@ -297,7 +301,7 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
   }
 
   if (step === "application") {
-    if (draftLoading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-[#8CA3FF]" /></div>;
+    if (draftLoading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 text-blue-300" /></div>;
     const valid = [
       name.trim().length >= 2,
       /^\S+@\S+\.\S+$/.test(email.trim()),
@@ -325,7 +329,7 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
         <div className="divide-y divide-white/[0.08] border-y border-white/[0.08]">
           {(["en", "pt", "es", "other"] as Language[]).map((language) => (
             <label key={language} className="flex cursor-pointer items-center gap-3 py-3 text-sm text-white/75">
-              <input type="checkbox" checked={languages.includes(language)} onChange={(e) => setLanguages(e.target.checked ? [...languages, language] : languages.filter((item) => item !== language))} className="h-4 w-4 accent-[#5272F2]" />
+              <input type="checkbox" checked={languages.includes(language)} onChange={(e) => setLanguages(e.target.checked ? [...languages, language] : languages.filter((item) => item !== language))} className="h-4 w-4 accent-blue-500" />
               {t(`language_${language}` as keyof typeof signinMessages.en)}
             </label>
           ))}
@@ -336,26 +340,25 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
     else if (applicationStep === 7) question = <Choices value={salesExperience} onChange={(value) => setSalesExperience(value as SalesExperience)} options={["none", "some", "experienced"].map((value) => ({ value, label: t(`salesExperience_${value}` as keyof typeof signinMessages.en) }))} />;
     else if (applicationStep === 8) question = <Choices value={fieldSalesReadiness} onChange={(value) => setFieldSalesReadiness(value as FieldReadiness)} options={["ready", "with_support", "not_ready"].map((value) => ({ value, label: t(`fieldReadiness_${value}` as keyof typeof signinMessages.en) }))} />;
     else if (applicationStep === 9) question = <Choices value={availability} onChange={(value) => setAvailability(value as Availability)} options={["weekdays", "evenings", "weekends", "flexible"].map((value) => ({ value, label: t(`availability_${value}` as keyof typeof signinMessages.en) }))} />;
-    else if (applicationStep === 10) question = <label className="flex cursor-pointer gap-3 text-sm leading-relaxed text-white/70"><input type="checkbox" checked={kitInvestmentAcknowledged} onChange={(e) => setKitInvestmentAcknowledged(e.target.checked)} className="mt-1 h-4 w-4 shrink-0 accent-[#5272F2]" /><span>{t("kitAcknowledgement")}</span></label>;
-    else if (applicationStep === 11) question = <label className="flex cursor-pointer gap-3 text-sm leading-relaxed text-white/70"><input type="checkbox" checked={activeSellerAcknowledged} onChange={(e) => setActiveSellerAcknowledged(e.target.checked)} className="mt-1 h-4 w-4 shrink-0 accent-[#5272F2]" /><span>{t("activeSellerAcknowledgement")}</span></label>;
+    else if (applicationStep === 10) question = <label className="flex cursor-pointer gap-3 text-sm leading-relaxed text-white/70"><input type="checkbox" checked={kitInvestmentAcknowledged} onChange={(e) => setKitInvestmentAcknowledged(e.target.checked)} className="mt-1 h-4 w-4 shrink-0 accent-blue-500" /><span>{t("kitAcknowledgement")}</span></label>;
+    else if (applicationStep === 11) question = <label className="flex cursor-pointer gap-3 text-sm leading-relaxed text-white/70"><input type="checkbox" checked={activeSellerAcknowledged} onChange={(e) => setActiveSellerAcknowledged(e.target.checked)} className="mt-1 h-4 w-4 shrink-0 accent-blue-500" /><span>{t("activeSellerAcknowledgement")}</span></label>;
     else question = <textarea value={message} onChange={(e) => setMessage(e.target.value)} placeholder={t("messagePlaceholder")} maxLength={1000} rows={4} autoFocus className={`${FIELD} h-auto resize-none py-3`} data-testid="input-signup-message" />;
 
     const questionKeys = ["nameQuestion", "emailQuestion", "workCityQuestion", "workRegionQuestion", "occupationQuestion", "vehicleQuestion", "languagesQuestion", "salesExperienceQuestion", "fieldReadinessQuestion", "availabilityQuestion", "kitQuestion", "activeSellerQuestion", "messageQuestion"] as const;
     return (
       <form onSubmit={(event) => applicationStep === APPLICATION_STEPS - 1 ? void register(event) : (event.preventDefault(), void saveAndContinue())} className="space-y-5" data-testid="signin-application">
         <div className="text-center">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8CA3FF]">{t("applicationProgress", { current: applicationStep + 1, total: APPLICATION_STEPS })}</p>
-          <div className="mx-auto mt-2 h-1 w-24 overflow-hidden rounded-full bg-white/10"><div className="h-full bg-gradient-to-r from-[#5272F2] to-[#24C7C1] transition-all" style={{ width: `${((applicationStep + 1) / APPLICATION_STEPS) * 100}%` }} /></div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-blue-300">{t("applicationProgress", { current: applicationStep + 1, total: APPLICATION_STEPS })}</p>
+          <div className="mx-auto mt-2 h-1 w-24 overflow-hidden rounded-full bg-white/10"><div className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 transition-all" style={{ width: `${((applicationStep + 1) / APPLICATION_STEPS) * 100}%` }} /></div>
           <p className="mt-5 text-xl font-bold leading-snug text-white">{t(questionKeys[applicationStep])}</p>
         </div>
         {errorBox}
         <div className="min-h-32">{question}</div>
-        <button type="submit" disabled={busy || !valid} className={PRIMARY} data-testid={applicationStep === APPLICATION_STEPS - 1 ? "button-request-access" : "button-application-next"}>
-          {busy && <Loader2 className="h-4 w-4 animate-spin" />}
+        <Button type="submit" variant="brand" size="lg" className="w-full" disabled={!valid} loading={busy} data-testid={applicationStep === APPLICATION_STEPS - 1 ? "button-request-access" : "button-application-next"}>
           {applicationStep === APPLICATION_STEPS - 1 ? t("requestAccess") : t("next")}
-          {!busy && applicationStep < APPLICATION_STEPS - 1 ? <ArrowRight className="h-4 w-4" /> : null}
-        </button>
-        {applicationStep > 0 ? <button type="button" disabled={busy} onClick={() => setApplicationStep((value) => Math.max(0, value - 1))} className="mx-auto flex items-center gap-2 text-sm text-white/45 hover:text-white"><ArrowLeft className="h-4 w-4" />{t("previous")}</button> : null}
+          {applicationStep < APPLICATION_STEPS - 1 ? <ArrowRight /> : null}
+        </Button>
+        {applicationStep > 0 ? <button type="button" disabled={busy} onClick={() => setApplicationStep((value) => Math.max(0, value - 1))} className="mx-auto flex min-h-10 items-center gap-2 text-sm text-white/45 hover:text-white"><ArrowLeft className="h-4 w-4" />{t("previous")}</button> : null}
         <p className="text-center text-xs text-white/35">{t("draftSaved")}</p>
       </form>
     );
@@ -372,7 +375,7 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
         className="space-y-4"
         data-testid="signin-code"
       >
-        <button type="button" onClick={restart} className="flex items-center gap-2 text-sm text-white/60 hover:text-white">
+        <button type="button" onClick={restart} className="flex min-h-10 items-center gap-2 text-sm text-white/60 hover:text-white">
           <ArrowLeft className="h-4 w-4" />
           {t("changeNumber")}
         </button>
@@ -395,15 +398,14 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
           className={`${FIELD} text-center font-mono text-2xl tracking-[0.5em]`}
           data-testid="input-code"
         />
-        <button type="submit" disabled={busy || code.length !== 6} className={PRIMARY}>
-          {busy && <Loader2 className="h-4 w-4 animate-spin" />}
+        <Button type="submit" variant="brand" size="lg" className="w-full" disabled={code.length !== 6} loading={busy}>
           {t("verify")}
-        </button>
+        </Button>
         <button
           type="button"
           disabled={busy || wait > 0}
           onClick={() => void sendCode(phone)}
-          className="w-full text-sm text-[#9BB0FF] hover:text-white disabled:text-white/35"
+          className="min-h-10 w-full text-sm text-blue-300 hover:text-white disabled:text-white/35"
         >
           {wait > 0 ? t("resendIn", { seconds: wait }) : t("resend")}
         </button>
@@ -444,11 +446,10 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
             </div>
           </div>
         </div>
-        <button type="submit" disabled={busy || phoneInput.replace(/\D/g, "").length < 7} className={PRIMARY} data-testid="button-send-code">
-          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+        <Button type="submit" variant="brand" size="lg" className="w-full" disabled={phoneInput.replace(/\D/g, "").length < 7} loading={busy} data-testid="button-send-code">
           {t("sendCode")}
-          {!busy && <ArrowRight className="h-4 w-4" />}
-        </button>
+          <ArrowRight />
+        </Button>
       </form>
   );
 }
@@ -471,9 +472,9 @@ function Choices({ options, value, onChange }: { options: Array<{ value: string;
     <div className="divide-y divide-white/[0.08] border-y border-white/[0.08]">
       {options.map((option) => (
         <label key={option.value} className="flex cursor-pointer items-center gap-3 py-3 text-sm text-white/75 hover:text-white">
-          <input type="radio" checked={value === option.value} onChange={() => onChange(option.value)} className="h-4 w-4 accent-[#5272F2]" />
+          <input type="radio" checked={value === option.value} onChange={() => onChange(option.value)} className="h-4 w-4 accent-blue-500" />
           <span className="flex-1">{option.label}</span>
-          {value === option.value ? <Check className="h-4 w-4 text-cyan-300" /> : null}
+          {value === option.value ? <Check className="h-4 w-4 text-blue-300" /> : null}
         </label>
       ))}
     </div>
