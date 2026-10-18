@@ -40,7 +40,6 @@ export function usePlaceToLead() {
           country: "US",
           lat: place.lat ?? undefined,
           lng: place.lng ?? undefined,
-          geofenceRadiusMeters: 150,
         }).then(() => invalidateXpotData()).catch(() => {});
       }
       toast({ title: t("localLeadSelected"), description: existingLead.name, variant: "success" });
@@ -65,7 +64,6 @@ export function usePlaceToLead() {
         country: "US",
         lat: place.lat ?? undefined,
         lng: place.lng ?? undefined,
-        geofenceRadiusMeters: 150,
         isPrimary: true,
       },
     });

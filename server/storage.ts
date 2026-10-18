@@ -58,6 +58,7 @@ import {
   type InsertLandingPageContentRow,
 } from "#shared/schema.js";
 import type { LandingLocale } from "#shared/landingContent.js";
+import { defaultGeofenceRadiusSql } from "./lead-location.js";
 
 // ─── Recent-visits joined shape (used by /api/xpot/admin/recent-visits) ──────
 
@@ -497,8 +498,12 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(salesLeadLocations.isPrimary), asc(salesLeadLocations.id));
   }
 
+  // A location created without a radius takes the admin's default radius; an
+  // update without one keeps the radius it has.
   async createSalesLeadLocation(input: InsertSalesLeadLocation): Promise<SalesLeadLocation> {
-    const [created] = await db.insert(salesLeadLocations).values(input).returning();
+    const [created] = await db.insert(salesLeadLocations)
+      .values({ ...input, geofenceRadiusMeters: input.geofenceRadiusMeters ?? defaultGeofenceRadiusSql() })
+      .returning();
     return created;
   }
 
@@ -518,7 +523,7 @@ export class DatabaseStorage implements IStorage {
     }
     const [created] = await db
       .insert(salesLeadLocations)
-      .values({ ...data, leadId, isPrimary: true })
+      .values({ ...data, leadId, isPrimary: true, geofenceRadiusMeters: data.geofenceRadiusMeters ?? defaultGeofenceRadiusSql() })
       .returning();
     return created;
   }

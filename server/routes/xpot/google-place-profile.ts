@@ -141,3 +141,35 @@ export async function fetchGooglePlaceProfile(
   }
   return profile;
 }
+
+/**
+ * Best-effort coordinates for a typed address, through the same Places API
+ * (New) key the rest of the app uses (Text Search, location field only), so no
+ * separate Geocoding API has to be enabled. Any failure returns null: the
+ * caller then stores the address without coordinates.
+ */
+export async function geocodeAddress(
+  address: string,
+  apiKey: string,
+  fetchImpl: FetchLike = fetch,
+): Promise<{ lat: string; lng: string } | null> {
+  try {
+    const response = await fetchImpl("https://places.googleapis.com/v1/places:searchText", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": apiKey,
+        "X-Goog-FieldMask": "places.location",
+      },
+      body: JSON.stringify({ textQuery: address, pageSize: 1 }),
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (!response.ok) return null;
+    const data = await response.json() as { places?: Array<{ location?: { latitude?: number; longitude?: number } }> };
+    const location = data.places?.[0]?.location;
+    if (typeof location?.latitude !== "number" || typeof location?.longitude !== "number") return null;
+    return { lat: String(location.latitude), lng: String(location.longitude) };
+  } catch {
+    return null;
+  }
+}

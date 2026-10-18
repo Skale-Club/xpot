@@ -39,6 +39,7 @@ import { retryAutomaticRoute } from "../../prospecting/auto-route.js";
 import { haversineMeters } from "../../prospecting/route-optimizer.js";
 import { openWindowsOn, secondsUntilDayEnd } from "../../prospecting/opening-hours.js";
 import { ensureProspectingCandidateLead } from "../../prospecting/lead-materializer.js";
+import { defaultGeofenceRadiusSql } from "../../lead-location.js";
 import { publishProspectingRouteForRep } from "../../prospecting/route-publisher.js";
 
 function lifecycleScore(lead: Awaited<ReturnType<typeof storage.getSalesLead>>): { score: number; reasons: string[] } {
@@ -720,6 +721,7 @@ export function createProspectingRouter() {
           leadId, addressLine1: candidate.address || "Prospecting location", city: candidate.city,
           state: candidate.state, postalCode: candidate.postalCode, country: candidate.country || "US",
           lat: candidate.lat, lng: candidate.lng, isPrimary: true,
+          geofenceRadiusMeters: defaultGeofenceRadiusSql(),
         });
       }
       if (!leadId) throw new Error("Route stop has no lead");
@@ -816,6 +818,7 @@ export function createProspectingRouter() {
           lat: candidate.lat,
           lng: candidate.lng,
           isPrimary: true,
+          geofenceRadiusMeters: defaultGeofenceRadiusSql(),
         }).returning({ id: salesLeadLocations.id });
         locationId = location.id;
       }

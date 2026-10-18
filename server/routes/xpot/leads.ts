@@ -9,7 +9,8 @@ import { salesStorage } from "../../storage-sales.js";
 import { activeStore, discardFiles, putPrivateFile } from "../../lib/files.js";
 import { activeOrganizationIds, canManageOrganizationForActor, managedOrganizationIds, organizationIdForRep } from "../../organizations/service.js";
 import { resolveGoogleApiKey } from "./google.js";
-import { fetchGooglePlaceProfile } from "./google-place-profile.js";
+import { fetchGooglePlaceProfile, geocodeAddress } from "./google-place-profile.js";
+import { planPrimaryLocationUpdate } from "../../lead-location.js";
 import { rateLimit } from "../../tags/rateLimit.js";
 
 const googleProfileLinkSchema = z.object({
@@ -113,7 +114,8 @@ export function createLeadsRouter() {
         country: input.primaryLocation.country || "US",
         lat: input.primaryLocation.lat,
         lng: input.primaryLocation.lng,
-        geofenceRadiusMeters: input.primaryLocation.geofenceRadiusMeters || 150,
+        // Omitted: the admin's default radius (storage fills it in).
+        geofenceRadiusMeters: input.primaryLocation.geofenceRadiusMeters || undefined,
         isPrimary: input.primaryLocation.isPrimary ?? true,
       });
     }
@@ -173,7 +175,6 @@ export function createLeadsRouter() {
             state: row.state,
             postalCode: row.postalCode,
             country: "US",
-            geofenceRadiusMeters: 150,
             isPrimary: true,
           });
         }
@@ -275,7 +276,7 @@ export function createLeadsRouter() {
             country: profile.address.country,
             lat: profile.address.lat,
             lng: profile.address.lng,
-            geofenceRadiusMeters: 150,
+            // No radius: an existing location keeps its own, a new one gets the default.
             isPrimary: true,
           })
         : null;
@@ -372,20 +373,20 @@ export function createLeadsRouter() {
       return res.status(403).json({ message: "Access denied" });
     }
 
-    const location = await storage.upsertPrimaryLocation(leadId, {
-      label: req.body.label || "Main",
-      addressLine1: req.body.addressLine1 || "",
-      addressLine2: req.body.addressLine2 ?? null,
-      city: req.body.city ?? null,
-      state: req.body.state ?? null,
-      postalCode: req.body.postalCode ?? null,
-      country: req.body.country || "US",
-      // Callers send numbers (Google Places, geolocation); the column is text.
-      lat: req.body.lat == null ? null : String(req.body.lat),
-      lng: req.body.lng == null ? null : String(req.body.lng),
-      geofenceRadiusMeters: req.body.geofenceRadiusMeters || 150,
-      isPrimary: true,
-    });
+    const [locations, appSettings] = await Promise.all([
+      storage.listSalesLeadLocations(leadId),
+      storage.getSalesAppSettings(),
+    ]);
+    const existing = locations.find((location) => location.isPrimary) ?? null;
+    // Address editors send no coordinates; keep them unless the address moved
+    // (see planPrimaryLocationUpdate for the full rule).
+    const plan = planPrimaryLocationUpdate(existing, req.body ?? {}, appSettings.defaultGeofenceRadiusMeters);
+    if (plan.geocode) {
+      const apiKey = await resolveGoogleApiKey();
+      const coords = apiKey ? await geocodeAddress(plan.geocode, apiKey) : null;
+      if (coords) Object.assign(plan.data, coords);
+    }
+    const location = await storage.upsertPrimaryLocation(leadId, plan.data);
 
     res.json({ location });
   });
