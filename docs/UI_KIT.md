@@ -91,7 +91,7 @@ opacity steps in multiples of 5, so the extra steps the screens use
 | `AdminBadge` | `xpot/AdminBadge.tsx` | The amber "Xpot admin" tag, once per group heading or screen (`useIsSuperAdmin`); `compact` (a shield, the words for screen readers) on a sidebar row, `dot` in the collapsed sidebar. |
 | `ScopeChip` | `xpot/ScopeChip.tsx` | "Viewing: everyone / only me" on the lists management mode widens (`managementScope` in `moduleNav.ts`); tapping it switches the mode (on Tasks, the "Whole team" filter). AppLayout places it. |
 | `VisitsTabBar` | `xpot/VisitsTabBar.tsx` | The Visits phone tab bar (Dashboard, Route, Companies, Tasks, Sales) plus Manage in management mode; the Visits management screens keep it. `TagsTabBar` (`pages/tags/TagsTabBar.tsx`) is its Tags twin. |
-| `useUnsavedChangesGuard` | `hooks/useUnsavedChangesGuard.ts` | While dirty, leaving the screen asks first (browser prompt on reload, held in-app link); the screen draws the dialog. |
+| `useUnsavedChangesGuard` | `hooks/useUnsavedChangesGuard.ts` | While dirty, leaving the screen asks first (browser prompt on reload, held in-app link); the screen draws the dialog. A move made in code (a tab strip) goes through `navigateGuarded` so it is held too. |
 
 ## Tone maps (`components/xpot/StatusPill.tsx`)
 

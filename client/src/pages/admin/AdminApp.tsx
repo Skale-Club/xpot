@@ -32,6 +32,7 @@ import { manageMessages } from "@/i18n/messages/manage";
 import { MODULE_HOME, moduleEntryPath } from "@/lib/xpot";
 import { TagsTabBar } from "@/pages/tags/TagsTabBar";
 import { useViewerAccess } from "@/lib/adminMode";
+import { navigateGuarded } from "@/hooks/useUnsavedChangesGuard";
 
 // The management screens. They are not a place of their own any more: each one
 // belongs to a module (Visits: overview, products, check-in rules; Tags: the
@@ -110,6 +111,7 @@ export function AdminApp({ section }: { section: string }) {
       : area === "platform"
         ? platform
         : visitsManage;
+  const sectionHref = siblings.find((item) => item.match(location))?.href ?? "";
   const tagsManage = moduleGroups("tags", viewer, labels)[1]?.items ?? [];
   // The same name as in the sidebar and the palette (the landing editor before Brand, which also matches it).
   const current = [...paletteExtras("platform", labels), ...siblings, ...administrationItems(labels), ...platform, ...tagsManage].find((i) => i.match(location));
@@ -145,8 +147,10 @@ export function AdminApp({ section }: { section: string }) {
               accent={area ? "account" : "visits"}
               ariaLabel={heading}
               idPrefix="admin-section"
-              value={siblings.find((item) => item.match(location))?.href ?? ""}
-              onChange={(href) => setLocation(href)}
+              value={sectionHref}
+              // A tab is not a link, so the Landing editor's unsaved-changes guard is asked here;
+              // the open section's own tab (Brand while on its Landing tab) stays put.
+              onChange={(href) => href !== sectionHref && navigateGuarded(href, setLocation)}
               tabs={siblings.map(({ href, label, icon, adminOnly }) => ({ id: href, label, icon, badge: adminOnly ? <AdminBadge /> : undefined }))}
             />
           )}
