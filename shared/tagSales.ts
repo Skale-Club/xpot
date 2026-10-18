@@ -120,3 +120,26 @@ export function suggestSaleCustomer(input: {
 export function saleCustomerConflict<T extends { leadId: number | null }>(pieces: readonly T[], leadId: number | null): T | null {
   return pieces.find((piece) => piece.leadId !== null && piece.leadId !== leadId) ?? null;
 }
+
+/**
+ * What the sale dialog previews as the cost of a group of pieces. The viewer's
+ * own sale uses their cost rule and the pieces' acquisition cost. A sale
+ * management records in the holder's name takes the holder's rule
+ * (server/tags/sales.ts), which the piece list does not carry, so the dialog
+ * shows no cost or profit then, only whose cost will apply.
+ */
+export function saleCostPreview(input: {
+  viewerRepId: number | null | undefined;
+  /** The seller the sale is recorded for; the viewer when absent. */
+  sellerRepId?: number;
+  viewerCostPolicy: string | null | undefined;
+  pieces: ReadonlyArray<{ repId: number | null; repName: string | null; acquisitionCostCents: number | null }>;
+}): { kind: "own"; unitCostCents: number } | { kind: "seller"; sellerName: string | null } {
+  if (input.sellerRepId !== undefined && input.viewerRepId != null && input.sellerRepId !== input.viewerRepId) {
+    const sellerName = input.pieces.find((piece) => piece.repId === input.sellerRepId)?.repName?.trim() || null;
+    return { kind: "seller", sellerName };
+  }
+  if (input.viewerCostPolicy === "zero" || input.pieces.length === 0) return { kind: "own", unitCostCents: 0 };
+  const total = input.pieces.reduce((sum, piece) => sum + (piece.acquisitionCostCents ?? 0), 0);
+  return { kind: "own", unitCostCents: total / input.pieces.length };
+}
