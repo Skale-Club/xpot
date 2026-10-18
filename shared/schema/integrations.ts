@@ -31,3 +31,15 @@ export const integrationSettings = pgTable("integration_settings", {
 });
 
 export type IntegrationSettings = typeof integrationSettings.$inferSelect;
+
+/** The last Test of each Integrations provider (migrations/0053_integration_checks.sql). */
+export const integrationChecks = pgTable("integration_checks", {
+  provider: text("provider").primaryKey(),
+  ok: boolean("ok").notNull(),
+  message: text("message").notNull(),
+  checkedAt: timestamp("checked_at", { withTimezone: true }).notNull().defaultNow(),
+  /** The last time a test passed; kept when a later one fails. */
+  lastOkAt: timestamp("last_ok_at", { withTimezone: true }),
+});
+
+export type IntegrationCheck = typeof integrationChecks.$inferSelect;

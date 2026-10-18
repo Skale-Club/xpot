@@ -29,11 +29,17 @@ vi.mock("../server/routes/xpot/middleware.js", () => ({
   requireXpotManager: (_req: any, _res: any, next: any) => next(),
   requireSuperAdmin: (_req: any, _res: any, next: any) => next(),
 }));
+// Keeping the last test result is covered by platform-status.integration.test.ts.
+vi.mock("../server/db.js", () => ({ db: {} }));
+vi.mock("../server/observability/services.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../server/observability/services.js")>()),
+  recordIntegrationCheck: async () => ({ checkedAt: new Date() }),
+}));
 
 describe("twilio provider in the registry", () => {
   it("is a Messaging provider whose secret is the Auth Token", () => {
     const def = getProviderDef("twilio")!;
-    expect(def.label).toBe("Twilio | SMS");
+    expect(def.label).toBe("Twilio");
     expect(def.category).toBe("Messaging");
     expect(def.table).toBe("settings");
     expect(def.fields.map((f) => f.key)).toEqual(["accountSid", "apiKey", "fromNumber", "messagingServiceSid"]);

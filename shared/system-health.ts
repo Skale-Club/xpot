@@ -75,6 +75,8 @@ export type StuckJob = {
   updatedAt: string;
   reasonCode: HealthReasonCode;
   reason: string;
+  /** Status can ask for the route again (POST /admin/system-health/jobs/:id/retry-route). */
+  canRetry: boolean;
 };
 
 export type EventGroup = {
@@ -149,3 +151,30 @@ export type SystemEventRow = {
   repName: string | null;
   fingerprint: string;
 };
+
+/**
+ * A record that did not reach the CRM (Admin › Status › CRM sync): the latest
+ * sync attempt of one entity with one provider, when it failed or needs review.
+ */
+export type SyncProblem = {
+  /** sales_sync_events.id of that latest attempt. */
+  id: number;
+  /** "xphere" or "gohighlevel" (legacy). */
+  provider: string;
+  entityType: string;
+  entityId: string;
+  /** The company, the visit's or sale's company, or the task title; null when the record is gone. */
+  entityName: string | null;
+  /** Where the record opens in the app, when it has a page. */
+  href: string | null;
+  repName: string | null;
+  status: "failed" | "needs_review";
+  lastError: string | null;
+  attemptCount: number;
+  at: string | null;
+  /** POST /api/xpot/sync/retry takes this entity type. */
+  retryable: boolean;
+};
+
+/** The entity types POST /api/xpot/sync/retry can send again (server/routes/xpot/sync.ts). */
+export const RETRYABLE_SYNC_ENTITIES: readonly string[] = ["sales_visit", "sales_lead", "sales_sale", "sales_task"];

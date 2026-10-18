@@ -35,6 +35,8 @@ vi.mock("../server/storage.js", () => ({
     },
   },
 }));
+// The services list and the kept test results are covered by platform-status.integration.test.ts.
+vi.mock("../server/db.js", () => ({ db: {} }));
 vi.mock("../server/routes/xpot/middleware.js", () => ({
   requireXpotManager: (_req: any, _res: any, next: any) => next(),
   requireSuperAdmin: (_req: any, _res: any, next: any) => next(),

@@ -188,6 +188,9 @@ export async function systemHealthSnapshot(now = Date.now()): Promise<SystemHeal
       status: job.status,
       routePlanningStatus: job.routePlanningStatus,
       updatedAt: job.updatedAt.toISOString(),
+      // retryAutomaticRoute takes a "pending" route back to the builder; one still
+      // "building" is reclaimed by auto-route.ts itself.
+      canRetry: job.routePlanningStatus === "pending",
       ...(job.routePlanningStatus === "building"
         ? { reasonCode: "route_building_stuck" as const, reason: "Route building has not finished." }
         : { reasonCode: "route_not_built" as const, reason: "Search finished but no route was built." }),

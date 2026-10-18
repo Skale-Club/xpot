@@ -1,7 +1,13 @@
 import { useEffect, useState } from "react";
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { Activity, AlertTriangle, ChevronRight, Cpu, History, ListOrdered, RotateCw, ScrollText } from "lucide-react";
+import { EYEBROW } from "@/components/xpot/surface";
+import { useToast } from "@/hooks/use-toast";
+import { describeApiError } from "@/lib/apiErrors";
+import { platformAdminMessages } from "@/i18n/messages/platformAdmin";
+import { CAUSE_ANCHOR, statusOverview, type StatusCause } from "./platform/servicesUi";
+import { ServicesSection, SyncProblemsSection, useServices, useSyncProblems } from "./platform/StatusSections";
 import { Button } from "@/components/ui/button";
 import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
 import { FilterBar, FilterChips, FilterSearch, FilterSelect, FilterToken } from "@/components/xpot/filters";
@@ -13,7 +19,7 @@ import { formatDateTime } from "@/lib/dates";
 import { useT } from "@/i18n";
 import { systemHealthMessages } from "@/i18n/messages/systemHealth";
 import { SYSTEM_EVENT_SOURCES } from "@shared/schema/observability";
-import type { EventGroup, RecentRun, SystemEventRow, SystemHealthSnapshot } from "@shared/system-health";
+import type { EventGroup, RecentRun, StuckJob, SystemEventRow, SystemHealthSnapshot } from "@shared/system-health";
 import { AdminSystemEventDetail } from "./AdminSystemEventDetail";
 import {
   Card,
@@ -32,7 +38,7 @@ import {
   type T,
 } from "./systemHealthUi";
 
-/** /admin/health is the panel; /admin/health/events/:id is one event in full. */
+/** /admin/health is Status; /admin/health/events/:id is one event in full. */
 export function AdminSystemHealth() {
   const [location] = useLocation();
   const eventId = /^\/admin\/health\/events\/(\d+)/.exec(location)?.[1];
@@ -40,9 +46,36 @@ export function AdminSystemHealth() {
 }
 
 
+/** A short heading between the parts of the page. */
+function PartTitle({ children }: { children: string }) {
+  return <h2 className={`${EYEBROW} px-1 pt-2`}>{children}</h2>;
+}
+
+/** Asks the route builder again for a search that finished without a route, whoever owns it. */
+function RetryRouteButton({ job }: { job: StuckJob }) {
+  const tp = useT(platformAdminMessages);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const retry = useMutation({
+    mutationFn: async () => (await apiRequest("POST", `/api/xpot/admin/system-health/jobs/${job.jobId}/retry-route`)).json(),
+    onSuccess: () => toast({ title: tp("routeRetried"), variant: "success" }),
+    onError: (e: Error) => toast({ title: tp("routeRetryFailed"), description: describeApiError(e), variant: "destructive" }),
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: ["/api/xpot/admin/system-health"] }),
+  });
+  return (
+    <Button variant="secondary" size="sm" className="shrink-0" loading={retry.isPending} onClick={() => retry.mutate()} data-testid="status-retry-route">
+      <RotateCw />
+      {tp("retryRoute")}
+    </Button>
+  );
+}
+
 function SystemHealthOverview() {
   const t = useT(systemHealthMessages);
+  const tp = useT(platformAdminMessages);
   const ago = useAgo(t);
+  const services = useServices();
+  const syncProblems = useSyncProblems();
   const [, setNow] = useState(0);
   const [fingerprint, setFingerprint] = useState<string | null>(null);
   const [runFilter, setRunFilter] = useState<number | null>(null);
@@ -71,14 +104,40 @@ function SystemHealthOverview() {
 
   const data = health.data;
   const { worker, queue, events } = data;
-  const overallTone = verdictTone(data.overall);
+  // The banner weighs the prospecting pipeline, the services and the CRM sync, and says which one.
+  const overview = statusOverview(data, services.data?.services ?? [], syncProblems.data?.problems.length ?? 0);
+  const overallTone = verdictTone(overview.verdict);
+  const jumpTo = (cause: StatusCause) => document.getElementById(CAUSE_ANCHOR[cause])?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   return (
     <div className="space-y-4" data-testid="system-health">
-      <div className={`flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-4 py-3 ${VERDICT_BANNER[overallTone]}`}>
-        <div className="flex items-center gap-3">
-          <span className={`h-2.5 w-2.5 rounded-full ${PILL_DOTS[overallTone]} ${data.overall === "healthy" ? "" : "animate-pulse"}`} />
-          <p className="font-semibold">{t(`overall_${data.overall}`)}</p>
+      <div className={`flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-4 py-3 ${VERDICT_BANNER[overallTone]}`} data-testid="status-banner">
+        <div className="min-w-0">
+          <div className="flex items-center gap-3">
+            <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${PILL_DOTS[overallTone]} ${overview.verdict === "healthy" ? "" : "animate-pulse"}`} />
+            <p className="font-semibold">{t(`overall_${overview.verdict}`)}</p>
+          </div>
+          {overview.causes.length > 0 && (
+            <p className="mt-1 pl-[22px] text-xs text-white/60">
+              {tp("causedBy")}{" "}
+              {overview.causes.map((cause, index) => (
+                <span key={cause}>
+                  {index > 0 && " · "}
+                  <a
+                    href={`#${CAUSE_ANCHOR[cause]}`}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      jumpTo(cause);
+                    }}
+                    className="font-semibold text-white/85 underline underline-offset-2"
+                    data-testid={`status-cause-${cause}`}
+                  >
+                    {tp(`cause_${cause}`)}
+                  </a>
+                </span>
+              ))}
+            </p>
+          )}
         </div>
         <Button variant="ghost" size="sm" onClick={() => void health.refetch()} disabled={health.isFetching} className="text-xs font-medium text-white/55">
           <RotateCw />
@@ -86,20 +145,25 @@ function SystemHealthOverview() {
         </Button>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card title={t("workerTitle")} icon={Cpu} right={<VerdictChip verdict={worker.verdict} t={t} />}>
-          <HealthReason t={t} code={worker.reasonCode} fallback={worker.reason} />
-          <p className="mt-2 text-xs text-white/45">
-            {t("workerLastTick", { time: ago(worker.lastTickFinishedAt) })}
-            {worker.lastTickDurationMs !== null && ` · ${t("workerTickTook", { duration: formatDuration(worker.lastTickDurationMs) })}`}
-            {` · ${t("workerEvery", { seconds: Math.round(worker.pollMs / 1000) })}`}
-          </p>
-          {worker.lastError && (
-            <p className="mt-2 break-words text-xs text-red-300/80">
-              {t("workerLastError", { time: ago(worker.lastError.at), message: worker.lastError.message })}
+      <ServicesSection query={services} />
+
+      <PartTitle>{tp("pipelineTitle")}</PartTitle>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div id={CAUSE_ANCHOR.worker} className="scroll-mt-24">
+          <Card title={t("workerTitle")} icon={Cpu} right={<VerdictChip verdict={worker.verdict} t={t} />}>
+            <HealthReason t={t} code={worker.reasonCode} fallback={worker.reason} />
+            <p className="mt-2 text-xs text-white/45">
+              {t("workerLastTick", { time: ago(worker.lastTickFinishedAt) })}
+              {worker.lastTickDurationMs !== null && ` · ${t("workerTickTook", { duration: formatDuration(worker.lastTickDurationMs) })}`}
+              {` · ${t("workerEvery", { seconds: Math.round(worker.pollMs / 1000) })}`}
             </p>
-          )}
-        </Card>
+            {worker.lastError && (
+              <p className="mt-2 break-words text-xs text-red-300/80">
+                {t("workerLastError", { time: ago(worker.lastError.at), message: worker.lastError.message })}
+              </p>
+            )}
+          </Card>
+        </div>
 
         <Card title={t("queueTitle")} icon={ListOrdered}>
           <div className="grid grid-cols-3 gap-3">
@@ -113,79 +177,69 @@ function SystemHealthOverview() {
             <p className="mt-2 text-xs text-white/45">{t("queueOldest", { duration: formatDuration(queue.oldestQueuedMs) })}</p>
           )}
         </Card>
+      </div>
 
-        <Card title={t("errorsTitle")} icon={AlertTriangle}>
-          <div className="grid grid-cols-2 gap-3">
-            <Stat label={t("errors24h")} value={events.errors24h} tone={events.errors24h ? "bad" : undefined} />
-            <Stat label={t("warnings24h")} value={events.warnings24h} tone={events.warnings24h ? "warn" : undefined} />
-          </div>
-          {events.bySource24h.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {events.bySource24h.map((row) => (
-                <Pill key={`${row.source}:${row.level}`} tone={row.level === "error" ? "red" : "amber"} bordered>
-                  {sourceLabel(t, row.source)} · {row.count}
-                </Pill>
-              ))}
+      <div id={CAUSE_ANCHOR.runs} className="scroll-mt-24">
+        <Card title={t("activeRunsTitle")} icon={Activity}>
+          {queue.activeRuns.length === 0 ? (
+            <EmptyState compact dense icon={Activity} title={t("noActiveRuns")} cardStyle={{}} />
+          ) : (
+            <ul className="space-y-3">
+              {queue.activeRuns.map((run) => {
+                const limitMs = run.deadlineMs;
+                const pct = Math.min(100, Math.round((run.elapsedMs / limitMs) * 100));
+                const typicalPct = run.typicalMs ? Math.min(100, Math.round((run.typicalMs / limitMs) * 100)) : null;
+                return (
+                  <li key={run.runId} className="rounded-xl border border-white/10 bg-black/20 p-3">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold">{run.query} · {run.location}</p>
+                        <p className="text-xs text-white/45">
+                          {t("runJob", { id: run.jobId })}{run.repName ? ` · ${run.repName}` : ""}{run.wave ? ` · ${t("runWave", { wave: run.wave })}` : ""}
+                        </p>
+                      </div>
+                      <VerdictChip verdict={run.verdict} t={t} />
+                    </div>
+                    <div className="relative mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
+                      <div className={`h-full rounded-full ${PILL_DOTS[verdictTone(run.verdict)]}`} style={{ width: `${pct}%` }} />
+                      {typicalPct !== null && <div className="absolute top-0 h-full w-0.5 bg-white/60" style={{ left: `${typicalPct}%` }} />}
+                    </div>
+                    <p className="mt-2 text-xs text-white/55">
+                      {t("runElapsed", { duration: formatDuration(run.elapsedMs) })}
+                      {run.typicalMs !== null && ` · ${t("runTypical", { duration: formatDuration(run.typicalMs) })}`}
+                      {` · ${t("runLimit", { duration: formatDuration(limitMs) })}`}
+                      {` · ${t("runChecked", { time: ago(run.updatedAt) })}`}
+                    </p>
+                    <div title={run.engineJobId ?? undefined}>
+                      <HealthReason t={t} code={run.reasonCode} fallback={run.reason} className="mt-1 text-xs text-white/40" />
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          {queue.stuckJobs.length > 0 && (
+            <div className="mt-4">
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-red-300/80">{t("stuckJobsTitle")}</p>
+              <ul className="space-y-2">
+                {queue.stuckJobs.map((job) => {
+                  const reason = healthReason(t, job.reasonCode, job.reason);
+                  return (
+                    <li key={job.jobId} className="flex flex-col gap-2 rounded-xl border border-red-500/20 bg-red-500/[0.05] px-3 py-2 text-xs sm:flex-row sm:items-center sm:justify-between" data-testid="status-stuck-job">
+                      <div className="min-w-0">
+                        <span className="font-semibold">{t("runJob", { id: job.jobId })} · {job.location}</span>
+                        <span className="text-white/50"> · {reason.text}{job.repName ? ` · ${job.repName}` : ""} · {ago(job.updatedAt)}</span>
+                        {reason.todo && <span className="block text-white/40">{t("whatToDo", { action: reason.todo })}</span>}
+                      </div>
+                      {job.canRetry && <RetryRouteButton job={job} />}
+                    </li>
+                  );
+                })}
+              </ul>
             </div>
           )}
         </Card>
       </div>
-
-      <Card title={t("activeRunsTitle")} icon={Activity}>
-        {queue.activeRuns.length === 0 ? (
-          <EmptyState compact dense icon={Activity} title={t("noActiveRuns")} cardStyle={{}} />
-        ) : (
-          <ul className="space-y-3">
-            {queue.activeRuns.map((run) => {
-              const limitMs = run.deadlineMs;
-              const pct = Math.min(100, Math.round((run.elapsedMs / limitMs) * 100));
-              const typicalPct = run.typicalMs ? Math.min(100, Math.round((run.typicalMs / limitMs) * 100)) : null;
-              return (
-                <li key={run.runId} className="rounded-xl border border-white/10 bg-black/20 p-3">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold">{run.query} · {run.location}</p>
-                      <p className="text-xs text-white/45">
-                        {t("runJob", { id: run.jobId })}{run.repName ? ` · ${run.repName}` : ""}{run.wave ? ` · ${t("runWave", { wave: run.wave })}` : ""}
-                      </p>
-                    </div>
-                    <VerdictChip verdict={run.verdict} t={t} />
-                  </div>
-                  <div className="relative mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
-                    <div className={`h-full rounded-full ${PILL_DOTS[verdictTone(run.verdict)]}`} style={{ width: `${pct}%` }} />
-                    {typicalPct !== null && <div className="absolute top-0 h-full w-0.5 bg-white/60" style={{ left: `${typicalPct}%` }} />}
-                  </div>
-                  <p className="mt-2 text-xs text-white/55">
-                    {t("runElapsed", { duration: formatDuration(run.elapsedMs) })}
-                    {run.typicalMs !== null && ` · ${t("runTypical", { duration: formatDuration(run.typicalMs) })}`}
-                    {` · ${t("runLimit", { duration: formatDuration(limitMs) })}`}
-                    {` · ${t("runChecked", { time: ago(run.updatedAt) })}`}
-                  </p>
-                  <div title={run.engineJobId ?? undefined}>
-                    <HealthReason t={t} code={run.reasonCode} fallback={run.reason} className="mt-1 text-xs text-white/40" />
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-        {queue.stuckJobs.length > 0 && (
-          <div className="mt-4">
-            <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-red-300/80">{t("stuckJobsTitle")}</p>
-            <ul className="space-y-2">
-              {queue.stuckJobs.map((job) => (
-                <li key={job.jobId} className="rounded-xl border border-red-500/20 bg-red-500/[0.05] px-3 py-2 text-xs">
-                  <span className="font-semibold">{t("runJob", { id: job.jobId })} · {job.location}</span>
-                  <span className="text-white/50"> · {healthReason(t, job.reasonCode, job.reason).text} · {ago(job.updatedAt)}</span>
-                  {healthReason(t, job.reasonCode, job.reason).todo && (
-                    <span className="block text-white/40">{t("whatToDo", { action: healthReason(t, job.reasonCode, job.reason).todo! })}</span>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </Card>
 
       <RecentSearches
         runs={queue.recentRuns}
@@ -196,6 +250,26 @@ function SystemHealthOverview() {
           document.getElementById("system-event-log")?.scrollIntoView({ behavior: "smooth", block: "start" });
         }}
       />
+
+      <PartTitle>{tp("cause_sync")}</PartTitle>
+      <SyncProblemsSection query={syncProblems} />
+
+      <PartTitle>{t("errorsTitle")}</PartTitle>
+      <Card title={t("errorsTitle")} icon={AlertTriangle}>
+        <div className="grid grid-cols-2 gap-3">
+          <Stat label={t("errors24h")} value={events.errors24h} tone={events.errors24h ? "bad" : undefined} />
+          <Stat label={t("warnings24h")} value={events.warnings24h} tone={events.warnings24h ? "warn" : undefined} />
+        </div>
+        {events.bySource24h.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {events.bySource24h.map((row) => (
+              <Pill key={`${row.source}:${row.level}`} tone={row.level === "error" ? "red" : "amber"} bordered>
+                {sourceLabel(t, row.source)} · {row.count}
+              </Pill>
+            ))}
+          </div>
+        )}
+      </Card>
       <ProblemGroups groups={events.groups} t={t} ago={ago} onPick={setFingerprint} />
       <EventLog
         t={t}

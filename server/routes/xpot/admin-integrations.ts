@@ -12,6 +12,7 @@ import { sendValidationError } from "../../lib/validation.js";
 import { invalidateSmsConfig } from "../../auth/sms.js";
 import { checkTwilioConfig } from "../../auth/twilioCheck.js";
 import { maskIntegration, mergeConfigPatch, readConfig } from "./integrationStatus.js";
+import { listProviderStatuses, loadServices, recordIntegrationCheck } from "../../observability/services.js";
 
 const TEST_TIMEOUT_MS = 15000;
 const GHL_BASE_URL = "https://services.leadconnectorhq.com";
@@ -43,19 +44,13 @@ export function createAdminIntegrationsRouter() {
 
   // List every provider's masked status (registry ⨝ DB).
   router.get("/admin/integrations", async (_req, res) => {
-    const [chat, settings] = await Promise.all([
-      storage.listChatIntegrations(),
-      storage.listIntegrationSettings(),
-    ]);
-    const chatByProvider = new Map(chat.map((r) => [r.provider, r]));
-    const settingsByProvider = new Map(settings.map((r) => [r.provider, r]));
+    res.json({ providers: INTEGRATION_PROVIDERS, status: await listProviderStatuses() });
+  });
 
-    const items = INTEGRATION_PROVIDERS.map((def) => {
-      const row = def.table === "chat" ? chatByProvider.get(def.provider) : settingsByProvider.get(def.provider);
-      return maskIntegration(def.provider, row);
-    });
-
-    res.json({ providers: INTEGRATION_PROVIDERS, status: items });
+  // Every service by job, with its last test, last success and last error: the
+  // Integrations cards and Admin › Status read this same list.
+  router.get("/admin/integrations/services", async (_req, res) => {
+    res.set("Cache-Control", "no-store").json(await loadServices());
   });
 
   // Upsert one provider. Empty/omitted apiKey keeps the stored secret; clearApiKey removes it.
@@ -123,17 +118,31 @@ export function createAdminIntegrationsRouter() {
       console.log(`[admin-integrations] Calling provider ${def.provider} (key length ${config.apiKey.length})`);
       const result = await testProvider(def.provider, config);
       console.log(`[admin-integrations] Test result for ${def.provider}:`, result);
-      return res.json(result);
+      return res.json(await withCheck(def.provider, result));
     } catch (err) {
       console.error(`[admin-integrations] Test threw for ${def.provider}:`, err);
-      return res.json({
+      return res.json(await withCheck(def.provider, {
         ok: false,
         message: `Server error while testing: ${(err as Error).message || String(err)}`,
-      });
+      }));
     }
   });
 
   return router;
+}
+
+/**
+ * Keeps the result as the provider's "last test" (Integrations and Status show
+ * it) and answers with its time. Keeping it must never hide the result itself.
+ */
+async function withCheck(provider: string, result: { ok: boolean; message: string }) {
+  try {
+    const saved = await recordIntegrationCheck(provider, result);
+    return { ...result, testedAt: saved.checkedAt.toISOString() };
+  } catch (err) {
+    console.error(`[admin-integrations] Could not keep the test result for ${provider}:`, err);
+    return result;
+  }
 }
 
 /** The ConfigFieldKey values present in a request body. */

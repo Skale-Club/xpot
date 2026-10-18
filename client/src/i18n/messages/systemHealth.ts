@@ -62,7 +62,6 @@ const en = {
   clearFilter: "Clear filter",
   detail: "Details",
   context: "Context",
-  rep: "Rep",
 
   source_api: "API",
   source_client: "Browser",
@@ -99,7 +98,7 @@ const en = {
   runResults: "Results",
   runQueuedAt: "Created",
 
-  backToHealth: "System health",
+  backToHealth: "Status",
   eventNotFound: "This event no longer exists (events are kept for 30 days).",
   levelError: "Error",
   levelWarn: "Warning",
@@ -206,7 +205,6 @@ export const systemHealthMessages: Dictionary<typeof en> = {
     clearFilter: "Limpar filtro",
     detail: "Detalhes",
     context: "Contexto",
-    rep: "Vendedor",
 
     source_api: "API",
     source_client: "Navegador",
@@ -243,7 +241,7 @@ export const systemHealthMessages: Dictionary<typeof en> = {
     runResults: "Resultados",
     runQueuedAt: "Criada",
 
-    backToHealth: "Saúde do sistema",
+    backToHealth: "Status",
     eventNotFound: "Este evento não existe mais (eventos ficam guardados por 30 dias).",
     levelError: "Erro",
     levelWarn: "Aviso",
@@ -346,7 +344,6 @@ export const systemHealthMessages: Dictionary<typeof en> = {
     clearFilter: "Quitar filtro",
     detail: "Detalles",
     context: "Contexto",
-    rep: "Vendedor",
 
     source_api: "API",
     source_client: "Navegador",
@@ -383,7 +380,7 @@ export const systemHealthMessages: Dictionary<typeof en> = {
     runResults: "Resultados",
     runQueuedAt: "Creada",
 
-    backToHealth: "Salud del sistema",
+    backToHealth: "Estado",
     eventNotFound: "Este evento ya no existe (los eventos se guardan 30 días).",
     levelError: "Error",
     levelWarn: "Aviso",
