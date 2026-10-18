@@ -44,7 +44,7 @@ import { FilterBar, FilterChips, FilterDay, FilterSearch, FilterToggle, fromDayK
 import { currentSearch, useUrlFilters } from "@/hooks/use-url-filters";
 import { ListPager, usePagedList } from "@/components/xpot/pagination";
 import { selectLeadForDetail } from "./lead-detail-selection";
-import { followUpDueTime, isWorkedCompany, needsFollowUp } from "./visitRules";
+import { companyStage, followUpDueTime, isWorkedCompany, needsFollowUp } from "./visitRules";
 import { isFinishedVisitStatus } from "@shared/visit-status";
 
 
@@ -166,8 +166,8 @@ const LEAD_FILTER_LABEL = {
  */
 function matchesLeadFilter(lead: FullSalesLead, filter: LeadFilter, lastOutcome?: string | null): boolean {
   if (filter === "followup") return needsFollowUp(lead, lastOutcome);
-  if (filter === "lead") return ["lead", "active", "prospect"].includes(lead.status);
-  if (filter === "customer") return lead.status === "customer";
+  if (filter === "lead") return ["lead", "prospect"].includes(companyStage(lead.status));
+  if (filter === "customer") return companyStage(lead.status) === "customer";
   // "prospect" lists the unvisited prospects, a separate pool (see `prospects` below).
   return true;
 }

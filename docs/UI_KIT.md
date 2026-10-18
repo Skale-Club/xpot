@@ -109,7 +109,7 @@ Pick a pill's tone from a map, never on the screen: `toneOf(MAP, status)`.
 | `INTEGRATION_TONE` | live green, incomplete amber, idle/off slate, broken red |
 | `HEALTH_TONE` (`RUN_STATUS_TONE`) | ok/healthy/completed green, running/starting blue, slow/stuck amber, failed/stalled/down red, idle/queued slate, cancelled muted |
 | `ROLE_TONE` | admin (Xpot admin) amber, manager blue, rep slate |
-| `LEAD_STATE_TONE` (`pages/xpot/components/leads/LeadStatePill.tsx`) | prospect slate, lead/active sky, customer blue, inactive muted. No green (money) and no violet (Tags) |
+| `LEAD_STATE_TONE` (`pages/xpot/components/leads/LeadStatePill.tsx`) | prospect slate, lead sky, customer and active (shown as Customer) blue, inactive muted. No green (money) and no violet (Tags) |
 | `PIECE_STATUS_TONE` | inventory slate, assigned amber, active green, disabled/damaged red, retired muted |
 | `STOCK_STATUS_TONE` | pending amber (not received), available slate, reserved blue, internal_use slate, sold blue (`SOLD_TONE`), damaged/lost red, retired muted |
 | `SOLD_TONE` | blue: a recorded sale, so it never reads as "Live" |

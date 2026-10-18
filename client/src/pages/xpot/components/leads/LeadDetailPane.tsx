@@ -28,6 +28,7 @@ import type { EnrichedSalesVisit, FullSalesLead } from "../../types";
 import { ModuleBadge } from "@/components/xpot/ModuleBadge";
 import { fileSrc } from "@/lib/files";
 import { formatCents, formatVisitWhen } from "../../utils";
+import { companyStage } from "../../visitRules";
 import { useLeadSalesSnapshot } from "../../hooks/useSalesModule";
 import { LeadStatePill } from "./LeadStatePill";
 
@@ -179,7 +180,7 @@ export function LeadDetailPane({ lead, pieces, visits, onClose, backLabel, onDel
               <a href={routeUrl} target="_blank" rel="noopener noreferrer"><Navigation aria-hidden="true" />{t("directions")}</a>
             </Button>
           ) : null}
-          {lead.status !== "customer" && onConvertToCustomer ? (
+          {companyStage(lead.status) !== "customer" && onConvertToCustomer ? (
             <Button type="button" variant="secondary" onClick={onConvertToCustomer} loading={converting}>
               <UserRoundCheck aria-hidden="true" />{t("promote")}
             </Button>
