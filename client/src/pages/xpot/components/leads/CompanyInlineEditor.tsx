@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Camera, Plus, X } from "lucide-react";
+import { Camera, Plus, Trash2 } from "lucide-react";
 import type { SalesLead } from "../../types";
 import { InlineField, validateEmail } from "../InlineField";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -10,6 +10,12 @@ import { leadsMessages } from "@/i18n/messages/leads";
 import { visitsMessages } from "@/i18n/messages/visits";
 import { InlineStateSelect } from "@/components/StateSelect";
 import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
+import { Input, Select } from "@/components/xpot/Field";
+import { Button } from "@/components/ui/button";
+import { EYEBROW } from "@/components/xpot/surface";
+import { displayPhone, phoneHref } from "../../utils";
+import { maskUsPhoneInput } from "../../phoneInput";
+import { SOCIAL_PLATFORMS } from "./socials";
 
 type CompanyLead = SalesLead & {
   locations?: Array<{
@@ -158,7 +164,7 @@ export function CompanyInlineEditor({ lead }: { lead: CompanyLead }) {
       />
 
       <div className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
-        <InlineField label={tl("fieldPhone")} value={fields.phone} onSave={(value) => saveField("phone", value)} linkable linkHref={fields.phone ? `tel:${fields.phone}` : undefined} />
+        <InlineField label={tl("fieldPhone")} value={fields.phone} onSave={(value) => saveField("phone", value)} linkable linkHref={phoneHref(fields.phone)} formatInput={maskUsPhoneInput} display={displayPhone} inputMode="tel" />
         <InlineField label={tl("fieldWebsite")} value={fields.website} onSave={(value) => saveField("website", value)} linkable />
         <InlineField label={tl("fieldEmail")} value={fields.email} onSave={(value) => saveField("email", value)} linkable linkHref={fields.email ? `mailto:${fields.email}` : undefined} validate={validateEmail} />
         <InlineField label={tl("fieldIndustry")} value={fields.industry} onSave={(value) => saveField("industry", value)} />
@@ -173,55 +179,56 @@ export function CompanyInlineEditor({ lead }: { lead: CompanyLead }) {
       <div className="h-px bg-white/[0.06]" />
 
       <section className="space-y-2">
-        <h3 className="text-[10px] font-semibold uppercase tracking-widest text-white/30">{t("socialNetworks")}</h3>
+        <h3 className={EYEBROW}>{t("socialNetworks")}</h3>
         {socials.map((social, index) => (
           <div key={`${social.platform}-${index}`} className="flex items-center gap-2">
-            <select
-              value={social.platform}
-              onChange={(event) => saveSocials(socials.map((item, itemIndex) => itemIndex === index ? { ...item, platform: event.target.value } : item))}
-              className="h-9 w-24 shrink-0 rounded-lg border border-white/[0.09] bg-white/[0.06] px-2 text-xs text-white/80 outline-none"
-            >
-              {["instagram", "linkedin", "facebook", "twitter", "youtube", "tiktok", "other"].map((platform) => (
-                <option key={platform} value={platform} className="bg-[#0e1117] capitalize">{platform === "other" ? tl("socialOther") : platform}</option>
-              ))}
-            </select>
-            <input
+            <div className="w-32 shrink-0">
+              <Select
+                value={social.platform}
+                aria-label={t("socialNetworks")}
+                onChange={(event) => saveSocials(socials.map((item, itemIndex) => itemIndex === index ? { ...item, platform: event.target.value } : item))}
+                options={SOCIAL_PLATFORMS.map((platform) => ({ value: platform.value, label: platform.name ?? tl("socialOther") }))}
+              />
+            </div>
+            <Input
               value={social.url}
+              aria-label={tl("socialPlaceholder")}
               onChange={(event) => setSocials(socials.map((item, itemIndex) => itemIndex === index ? { ...item, url: event.target.value } : item))}
               onBlur={() => saveSocials(socials)}
               onKeyDown={(event) => { if (event.key === "Enter") saveSocials(socials); }}
               placeholder={tl("socialPlaceholder")}
-              className="h-9 min-w-0 flex-1 rounded-lg border border-white/[0.09] bg-white/[0.06] px-2 text-xs text-white/80 outline-none placeholder:text-white/25"
+              className="min-w-0 flex-1"
             />
-            <button type="button" onClick={() => saveSocials(socials.filter((_, itemIndex) => itemIndex !== index))} aria-label={t("removeSocial")} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white/30 transition hover:bg-red-500/10 hover:text-red-300">
-              <X className="h-3.5 w-3.5" />
-            </button>
+            <Button type="button" variant="ghost" size="icon" onClick={() => saveSocials(socials.filter((_, itemIndex) => itemIndex !== index))} aria-label={t("removeSocial")} title={t("removeSocial")} className="text-white/45 hover:bg-red-500/10 hover:text-red-300">
+              <Trash2 aria-hidden="true" />
+            </Button>
           </div>
         ))}
-        <button type="button" onClick={() => setSocials((previous) => [...previous, { platform: "instagram", url: "" }])} className="flex items-center gap-1.5 pt-1 text-[11px] font-semibold text-indigo-300 transition hover:text-indigo-200">
-          <Plus className="h-3 w-3" /> {t("addSocial")}
-        </button>
+        <Button type="button" variant="ghost" size="sm" onClick={() => setSocials((previous) => [...previous, { platform: "instagram", url: "" }])} className="-ml-2 text-blue-300">
+          <Plus aria-hidden="true" /> {t("addSocial")}
+        </Button>
       </section>
 
       <div className="h-px bg-white/[0.06]" />
 
       <section className="space-y-2">
-        <h3 className="text-[10px] font-semibold uppercase tracking-widest text-white/30">{t("photos")}</h3>
+        <h3 className={EYEBROW}>{t("photos")}</h3>
         {photos.length > 0 ? (
           <div className="grid grid-cols-3 gap-2">
             {photos.map((photo, index) => (
               <div key={photo} className={`group relative overflow-hidden rounded-xl ${index === 0 ? "col-span-2 row-span-2 aspect-video" : "aspect-square"}`}>
                 <img src={fileSrc(photo)} alt={index === 0 ? t("coverAlt") : ""} className="h-full w-full object-cover" />
-                <button type="button" onClick={() => setPhotoToRemove(photo)} aria-label={t("removePhoto")} className="absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white/70 opacity-0 transition group-hover:opacity-100 hover:text-red-300">
-                  <X className="h-3.5 w-3.5" />
+                {/* Always visible on touch screens (no hover there). */}
+                <button type="button" onClick={() => setPhotoToRemove(photo)} aria-label={t("removePhoto")} title={t("removePhoto")} className="absolute right-1.5 top-1.5 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white/80 transition hover:text-red-300 focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100">
+                  <Trash2 className="h-4 w-4" aria-hidden="true" />
                 </button>
               </div>
             ))}
           </div>
         ) : null}
-        <button type="button" onClick={() => photoInputRef.current?.click()} disabled={uploadingPhoto} className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-white/10 py-3 text-xs font-medium text-white/40 transition hover:border-white/20 hover:text-white/65 disabled:opacity-40">
-          <Camera className="h-3.5 w-3.5" /> {uploadingPhoto ? t("uploading") : t("addPhoto")}
-        </button>
+        <Button type="button" variant="outline" onClick={() => photoInputRef.current?.click()} loading={uploadingPhoto} className="w-full border-dashed">
+          <Camera aria-hidden="true" /> {t("addPhoto")}
+        </Button>
         <ConfirmDialog
           open={photoToRemove !== null}
           onOpenChange={(open) => { if (!open) setPhotoToRemove(null); }}

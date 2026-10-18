@@ -14,7 +14,9 @@ import { DepositDialog, SettleDialog, ReturnDialog } from "./ConsignmentDialogs"
 import { ConsignmentCard } from "./cards";
 import { SectionLabel } from "./ui";
 import { ListSkeleton } from "@/components/xpot/ListSkeleton";
-import { RetryButton } from "@/components/xpot/RetryButton";
+import { ErrorState } from "@/components/xpot/EmptyState";
+import { Button } from "@/components/ui/button";
+import { EYEBROW, GLASS_CLASS } from "@/components/xpot/surface";
 import { useT } from "@/i18n";
 import { salesMessages } from "@/i18n/messages/sales";
 import { salesModuleMessages } from "@/i18n/messages/salesModule";
@@ -48,54 +50,44 @@ export function LeadSalesPanel({
       {snapshot.isLoading ? (
         <ListSkeleton rows={2} className="flex items-stretch gap-2" rowClassName="h-[76px] flex-1 rounded-2xl" testId="lead-sales-loading" />
       ) : snapshot.isError ? (
-        <div className="flex flex-col items-center gap-2.5 rounded-2xl px-4 py-4 text-center"
-          style={{ background: "rgba(239,68,68,0.05)", border: "1px solid rgba(239,68,68,0.18)" }}>
-          <div className="text-xs text-red-300/80">{t("companySalesLoadFailed")}</div>
-          <RetryButton onRetry={refresh} busy={snapshot.isFetching} />
-        </div>
+        <ErrorState compact dense message={t("companySalesLoadFailed")} onRetry={refresh} />
       ) : (
       <div className="flex items-stretch gap-2">
-        <div className="flex-1 rounded-2xl px-3.5 py-3"
-          style={{ background: "rgba(16,185,129,0.07)", border: "1px solid rgba(16,185,129,0.18)" }}>
-          <div className="text-[10px] font-semibold uppercase tracking-widest text-white/35">{t("soldHere")}</div>
-          <div className="mt-0.5 text-xl font-bold tabular-nums text-emerald-400">
+        <div className="min-w-0 flex-1 rounded-2xl border border-emerald-400/20 bg-emerald-500/[0.07] px-3.5 py-3">
+          <div className={EYEBROW}>{t("soldHere")}</div>
+          <div className="mt-0.5 truncate text-xl font-bold tabular-nums text-emerald-300">
             {formatCents(data?.lifetimeCents ?? 0)}
           </div>
-          <div className="text-[10px] text-white/35">
+          <div className="text-[11px] text-white/40">
             {t.plural("salesCount", data?.salesCount ?? 0)}
             {data?.lastSaleAt ? ` · ${t("lastSale", { date: formatShortDate(data.lastSaleAt) })}` : ""}
           </div>
         </div>
-        <div className="flex-1 rounded-2xl px-3.5 py-3"
-          style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
-          <div className="text-[10px] font-semibold uppercase tracking-widest text-white/35">{t("youKept")}</div>
-          <div className="mt-0.5 text-xl font-bold tabular-nums text-white">
+        <div className={`min-w-0 flex-1 rounded-2xl px-3.5 py-3 ${GLASS_CLASS}`}>
+          <div className={EYEBROW}>{t("youKept")}</div>
+          <div className="mt-0.5 truncate text-xl font-bold tabular-nums text-white">
             {formatCents(data?.lifetimeProfitCents ?? 0)}
           </div>
-          <div className="text-[10px] text-white/35">{t("afterProductionCost")}</div>
+          <div className="text-[11px] text-white/40">{t("afterProductionCost")}</div>
         </div>
       </div>
       )}
 
       {/* The two actions */}
       <div className="flex gap-2">
-        <button type="button" onClick={() => setSaleOpen(true)}
-          className="flex flex-1 items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold text-white transition-all active:scale-[0.98] touch-manipulation"
-          style={{ background: "linear-gradient(135deg, #10b981, #06b6d4)" }}>
-          <Package className="h-4 w-4" /> {t("newSale")}
-        </button>
-        <button type="button" onClick={() => setDepositOpen(true)}
-          className="flex flex-1 items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold text-white/80 transition-colors hover:bg-white/10 touch-manipulation"
-          style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.10)" }}>
-          <PackagePlus className="h-4 w-4" /> {t("leaveStock")}
-        </button>
+        <Button type="button" variant="money" onClick={() => setSaleOpen(true)} className="flex-1">
+          <Package aria-hidden="true" /> {t("newSale")}
+        </Button>
+        <Button type="button" variant="secondary" onClick={() => setDepositOpen(true)} className="flex-1">
+          <PackagePlus aria-hidden="true" /> {t("leaveStock")}
+        </Button>
       </div>
 
       {/* Stock sitting here */}
       {consignments.length > 0 && (
         <div className="space-y-2">
-          <div className="flex items-center gap-1.5 px-1 text-[10px] font-semibold uppercase tracking-widest text-white/30">
-            <TrendingUp className="h-3 w-3" /> {t("onConsignmentHere")}
+          <div className={`flex items-center gap-1.5 px-1 ${EYEBROW}`}>
+            <TrendingUp className="h-3 w-3" aria-hidden="true" /> {t("onConsignmentHere")}
           </div>
           {consignments.map((row) => (
             <ConsignmentCard

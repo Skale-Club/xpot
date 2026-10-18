@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { ApiError, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { useT } from "@/i18n";
+import { translate, useT } from "@/i18n";
+import { visitsMessages } from "@/i18n/messages/visits";
 import { checkinMessages } from "@/i18n/messages/checkin";
 import { usePlaceSearch } from "../usePlaceSearch";
 import { formatMeters } from "../utils";
@@ -155,21 +156,27 @@ export function useCheckIn() {
     },
   });
 
+  // The check-in screen records with VoiceRecorder and passes its blob; the
+  // hook's own recorder state is the fallback. (Before, the passed recording
+  // was ignored: with no hook blob the upload returned early yet toasted
+  // "uploaded", so check-in voice notes never reached the server.)
   const uploadAudioMutation = useMutation({
-    mutationFn: async () => {
-      if (!audioBlob || !activeVisit?.id) return;
-      if (audioBlob.size > MAX_AUDIO_BYTES) {
-        throw new Error("That recording is too large to send. Keep voice notes under five minutes.");
+    mutationFn: async (recording?: { audioBlob: Blob; durationSeconds: number }) => {
+      const blob = recording?.audioBlob ?? audioBlob;
+      const seconds = recording?.durationSeconds ?? recordingTime;
+      if (!blob || !activeVisit?.id) return;
+      if (blob.size > MAX_AUDIO_BYTES) {
+        throw new Error(translate(visitsMessages, "recordingTooLargeDesc"));
       }
       const reader = new FileReader();
       const audioData = await new Promise<string>((resolve) => {
         reader.onloadend = () => resolve(reader.result as string);
-        reader.readAsDataURL(audioBlob);
+        reader.readAsDataURL(blob);
       });
 
       const response = await apiRequest("POST", `/api/xpot/visits/${activeVisit.id}/audio`, {
         audioData,
-        durationSeconds: recordingTime,
+        durationSeconds: seconds,
       });
       const uploaded = await response.json() as {
         note: SalesVisitNote;

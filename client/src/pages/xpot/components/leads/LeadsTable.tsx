@@ -1,36 +1,76 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { ArrowDown, ArrowUp, Building2, Nfc, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Building2, DollarSign, LogIn, Nfc, Trash2 } from "lucide-react";
 import type { LeadTagSummary } from "@shared/tagsApi";
 import { useT } from "@/i18n";
 import { leadsMessages } from "@/i18n/messages/leads";
-import { formatCents } from "../../utils";
+import { visitsUiMessages } from "@/i18n/messages/visitsUi";
+import { Button } from "@/components/ui/button";
+import { CompactDataTable, type CompactDataColumn } from "@/components/xpot/CompactDataTable";
+import { Pill } from "@/components/xpot/StatusPill";
+import { displayPhone, formatCents, formatShortDate } from "../../utils";
+import { followUpDueTime } from "../../visitRules";
 import type { FullSalesLead } from "../../types";
 import { fileSrc } from "@/lib/files";
+import { LeadStatePill } from "./LeadStatePill";
 
 type SortKey = "name" | "city" | "sold" | "shelf" | "lastVisit";
 
-function RowAction({ title, onClick, children, hover, disabled }: { title: string; onClick: () => void; children: ReactNode; hover: string; disabled?: boolean }) {
+/** Follow-up due as a pill: late is red, otherwise a step to take (amber). Nothing when none is due. */
+export function FollowUpDuePill({ lead }: { lead: FullSalesLead }) {
+  const t = useT(visitsUiMessages);
+  const due = followUpDueTime(lead);
+  if (!Number.isFinite(due)) return null;
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  return <Pill tone={due < startOfToday.getTime() ? "red" : "amber"}>{t("followUpDue", { date: formatShortDate(new Date(due)) })}</Pill>;
+}
+
+/**
+ * The core facts of a company row, the same on the phone card and the
+ * desktop table: its state, the follow-up due and the last visit.
+ */
+export function LeadRowFacts({ lead, lastVisit, showLastVisit = true }: { lead: FullSalesLead; lastVisit: Date | null; showLastVisit?: boolean }) {
+  const t = useT(visitsUiMessages);
   return (
-    <button
-      type="button"
-      title={title}
-      aria-label={title}
-      disabled={disabled}
-      onClick={(e) => { e.stopPropagation(); onClick(); }}
-      className={`flex h-8 w-8 items-center justify-center rounded-lg text-white/35 transition-colors disabled:opacity-40 ${hover}`}
-    >
-      {children}
-    </button>
+    <span className="flex flex-wrap items-center gap-1.5">
+      <LeadStatePill status={lead.status} />
+      <FollowUpDuePill lead={lead} />
+      {showLastVisit && lastVisit ? <span className="text-[11px] text-white/40">{t("lastVisit", { date: formatShortDate(lastVisit) })}</span> : null}
+    </span>
   );
 }
 
-/** Desktop list of visited leads, sortable, one row per company. */
+export type LeadRowActions = {
+  onSell: (lead: FullSalesLead) => void;
+  onCheckIn: (lead: FullSalesLead) => void;
+  onDelete: (lead: FullSalesLead) => void;
+};
+
+function RowAction({ title, onClick, children, className = "" }: { title: string; onClick: () => void; children: ReactNode; className?: string }) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon"
+      title={title}
+      aria-label={title}
+      onClick={(e) => { e.stopPropagation(); onClick(); }}
+      className={`h-9 w-9 text-white/45 ${className}`}
+    >
+      {children}
+    </Button>
+  );
+}
+
+/** Desktop list of visited leads, sortable, one row per company (the kit's CompactDataTable). */
 export function LeadsTable({
   leads,
   selectedId,
   onSelect,
   piecesFor,
   lastVisitFor,
+  onSell,
+  onCheckIn,
   onDelete,
 }: {
   leads: FullSalesLead[];
@@ -38,9 +78,9 @@ export function LeadsTable({
   onSelect: (lead: FullSalesLead) => void;
   piecesFor: (leadId: number) => LeadTagSummary | undefined;
   lastVisitFor: (leadId: number) => Date | null;
-  onDelete: (lead: FullSalesLead) => void;
-}) {
+} & LeadRowActions) {
   const t = useT(leadsMessages);
+  const tu = useT(visitsUiMessages);
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: "name", dir: 1 });
 
   const rows = useMemo(() => {
@@ -60,105 +100,132 @@ export function LeadsTable({
     });
   }, [leads, sort, lastVisitFor]);
 
-  const header = (key: SortKey, label: string, align: "left" | "right" = "left", className = "") => {
+  const sortable = (key: SortKey, label: string): Pick<CompactDataColumn<FullSalesLead>, "label" | "ariaSort"> => {
     const active = sort.key === key;
-    return (
-      <th className={`whitespace-nowrap px-3 py-2.5 font-semibold ${align === "right" ? "text-right" : ""} ${className}`} aria-sort={active ? (sort.dir === 1 ? "ascending" : "descending") : undefined}>
+    return {
+      ariaSort: active ? (sort.dir === 1 ? "ascending" : "descending") : undefined,
+      label: (
         <button
           type="button"
           onClick={() => setSort((s) => ({ key, dir: s.key === key ? (s.dir === 1 ? -1 : 1) : key === "name" || key === "city" ? 1 : -1 }))}
-          className={`inline-flex items-center gap-1 uppercase tracking-widest transition-colors ${active ? "text-white/70" : "hover:text-white/60"}`}
+          className={`inline-flex min-h-8 items-center gap-1 uppercase transition-colors ${active ? "text-white/70" : "hover:text-white/60"}`}
         >
           {label}
-          {active && (sort.dir === 1 ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}
+          {active && (sort.dir === 1 ? <ArrowUp className="h-3 w-3" aria-hidden="true" /> : <ArrowDown className="h-3 w-3" aria-hidden="true" />)}
         </button>
-      </th>
-    );
+      ),
+    };
   };
 
+  const columns: CompactDataColumn<FullSalesLead>[] = [
+    {
+      key: "name",
+      ...sortable("name", t("colName")),
+      width: "40%",
+      cellClassName: "max-w-0",
+      render: (lead) => {
+        const photo = lead.photos?.[0];
+        const pieces = piecesFor(lead.id);
+        return (
+          <div className="flex items-center gap-3">
+            {photo ? (
+              <img src={fileSrc(photo)} alt="" className="h-9 w-9 shrink-0 rounded-lg object-cover" />
+            ) : (
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04]">
+                <Building2 className="h-4 w-4 text-white/40" aria-hidden="true" />
+              </div>
+            )}
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="truncate font-semibold text-white">{lead.name}</span>
+                {lead.ghlContactId && <Pill tone="slate" className="shrink-0">GHL</Pill>}
+              </div>
+              <div className="flex items-center gap-2 truncate text-[11px] text-white/40">
+                {lead.industry && <span className="truncate">{lead.industry}</span>}
+                {pieces && pieces.pieces > 0 && (
+                  <span className="inline-flex shrink-0 items-center gap-1 text-violet-300/80">
+                    <Nfc className="h-3 w-3" aria-hidden="true" /> {t.plural("piecesCount", pieces.pieces)}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      key: "state",
+      label: tu("colState"),
+      cellClassName: "whitespace-nowrap",
+      render: (lead) => <LeadRowFacts lead={lead} lastVisit={null} showLastVisit={false} />,
+    },
+    {
+      key: "city",
+      ...sortable("city", t("fieldCity")),
+      headerClassName: "hidden xl:table-cell",
+      cellClassName: "hidden whitespace-nowrap text-white/55 xl:table-cell",
+      render: (lead) => [lead.locations?.[0]?.city, lead.locations?.[0]?.state].filter(Boolean).join(", ") || "—",
+    },
+    {
+      key: "phone",
+      label: t("colPhone"),
+      headerClassName: "hidden 2xl:table-cell",
+      cellClassName: "hidden whitespace-nowrap text-white/55 2xl:table-cell",
+      render: (lead) => displayPhone(lead.phone) || "—",
+    },
+    {
+      key: "sold",
+      ...sortable("sold", t("colSold")),
+      align: "right",
+      cellClassName: "whitespace-nowrap text-emerald-300",
+      render: (lead) => (lead.salesLifetimeCents ? formatCents(lead.salesLifetimeCents) : <span className="text-white/20">—</span>),
+    },
+    {
+      key: "shelf",
+      ...sortable("shelf", t("colShelf")),
+      align: "right",
+      headerClassName: "hidden 2xl:table-cell",
+      cellClassName: "hidden whitespace-nowrap text-white/70 2xl:table-cell",
+      render: (lead) => lead.unitsOnShelf || <span className="text-white/20">—</span>,
+    },
+    {
+      key: "lastVisit",
+      ...sortable("lastVisit", t("colLastVisit")),
+      cellClassName: "whitespace-nowrap text-white/55",
+      render: (lead) => {
+        const last = lastVisitFor(lead.id);
+        return last ? formatShortDate(last) : <span className="text-white/20">—</span>;
+      },
+    },
+    {
+      key: "actions",
+      label: <span className="sr-only">{t("colActions")}</span>,
+      cellClassName: "whitespace-nowrap !px-2 !py-1.5",
+      render: (lead) => (
+        <div className="flex items-center justify-end gap-0.5">
+          <RowAction title={t("salesAndConsignment")} onClick={() => onSell(lead)} className="hover:text-emerald-300">
+            <DollarSign aria-hidden="true" />
+          </RowAction>
+          <RowAction title={t("checkIn")} onClick={() => onCheckIn(lead)} className="hover:text-blue-300">
+            <LogIn aria-hidden="true" />
+          </RowAction>
+          <RowAction title={t("delete")} onClick={() => onDelete(lead)} className="hover:bg-red-500/15 hover:text-red-300">
+            <Trash2 aria-hidden="true" />
+          </RowAction>
+        </div>
+      ),
+    },
+  ];
+
   return (
-    <div className="overflow-hidden rounded-2xl" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
-      <table className="w-full text-left text-sm" data-testid="leads-table">
-        <thead className="border-b border-white/[0.07] text-[10px] text-white/35">
-          <tr>
-            {header("name", t("colName"))}
-            {header("city", t("fieldCity"))}
-            <th className="hidden whitespace-nowrap px-3 py-2.5 font-semibold uppercase tracking-widest 2xl:table-cell">{t("colPhone")}</th>
-            {header("sold", t("colSold"), "right")}
-            {header("shelf", t("colShelf"), "right", "hidden 2xl:table-cell")}
-            {header("lastVisit", t("colLastVisit"))}
-            <th className="px-3 py-2.5"><span className="sr-only">{t("colActions")}</span></th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-white/[0.05]">
-          {rows.map((lead) => {
-            const loc = lead.locations?.[0];
-            const photo = lead.photos?.[0];
-            const pieces = piecesFor(lead.id);
-            const last = lastVisitFor(lead.id);
-            const selected = selectedId === lead.id;
-            return (
-              <tr
-                key={lead.id}
-                tabIndex={0}
-                aria-current={selected ? "true" : undefined}
-                onClick={() => onSelect(lead)}
-                onKeyDown={(e) => { if (e.target !== e.currentTarget) return; if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(lead); } }}
-                className={`group cursor-pointer outline-none transition-colors focus-visible:bg-white/[0.05] ${
-                  selected ? "bg-blue-500/[0.12]" : "hover:bg-white/[0.03]"
-                }`}
-                data-testid={`lead-row-${lead.id}`}
-              >
-                <td className="max-w-0 px-3 py-2.5" style={{ width: "45%" }}>
-                  <div className="flex items-center gap-3">
-                    {photo ? (
-                      <img src={fileSrc(photo)} alt="" className="h-9 w-9 shrink-0 rounded-lg object-cover" />
-                    ) : (
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-indigo-500/20 bg-indigo-500/10">
-                        <Building2 className="h-4 w-4 text-indigo-400" />
-                      </div>
-                    )}
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <span className="truncate font-semibold text-white">{lead.name}</span>
-                        {lead.ghlContactId && (
-                          <span className="shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase text-emerald-400" style={{ background: "rgba(16,185,129,0.12)" }}>GHL</span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 truncate text-[11px] text-white/35">
-                        {lead.industry && <span className="truncate">{lead.industry}</span>}
-                        {pieces && pieces.pieces > 0 && (
-                          <span className="inline-flex shrink-0 items-center gap-1 text-violet-300/80">
-                            <Nfc className="h-3 w-3" /> {pieces.pieces}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </td>
-                <td className="whitespace-nowrap px-3 py-2.5 text-white/55">{[loc?.city, loc?.state].filter(Boolean).join(", ") || "—"}</td>
-                <td className="hidden whitespace-nowrap px-3 py-2.5 text-white/55 2xl:table-cell">{lead.phone || "—"}</td>
-                <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-emerald-300/85">
-                  {lead.salesLifetimeCents ? formatCents(lead.salesLifetimeCents) : <span className="text-white/20">—</span>}
-                </td>
-                <td className="hidden whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-indigo-200/80 2xl:table-cell">
-                  {lead.unitsOnShelf || <span className="text-white/20">—</span>}
-                </td>
-                <td className="whitespace-nowrap px-3 py-2.5 text-white/55">
-                  {last ? last.toLocaleDateString(t.locale, { month: "short", day: "numeric" }) : <span className="text-white/20">—</span>}
-                </td>
-                <td className="whitespace-nowrap px-2 py-1.5">
-                  <div className="flex items-center justify-end gap-0.5">
-                    <RowAction title={t("delete")} onClick={() => onDelete(lead)} hover="hover:bg-red-500/20 hover:text-red-400">
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </RowAction>
-                  </div>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+    <CompactDataTable
+      testId="leads-table"
+      columns={columns}
+      rows={rows}
+      getRowKey={(lead) => lead.id}
+      selectedKey={selectedId}
+      onRowClick={onSelect}
+      getRowTestId={(lead) => `lead-row-${lead.id}`}
+    />
   );
 }

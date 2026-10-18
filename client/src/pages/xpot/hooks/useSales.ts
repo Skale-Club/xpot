@@ -17,7 +17,6 @@ export function useSales() {
   const { activeVisit } = useVisits();
 
   const [opportunityForm, setOpportunityForm] = useState({ leadId: "", title: "", value: "", pipelineKey: "", stageKey: "" });
-  const [taskForm, setTaskForm] = useState({ title: "", dueAt: "" });
 
   const opportunitiesQuery = useQuery<SalesOpportunity[]>({ queryKey: ["/api/xpot/opportunities"], enabled: xpotMeQuery.isSuccess });
   const tasksQuery = useQuery<SalesTask[]>({ queryKey: ["/api/xpot/tasks"], enabled: xpotMeQuery.isSuccess });
@@ -36,7 +35,7 @@ export function useSales() {
       return response.json();
     },
     onSuccess: async () => {
-      toast({ title: t("oppCreated") });
+      toast({ title: t("oppCreated"), variant: "success" });
       setOpportunityForm({ leadId: "", title: "", value: "", pipelineKey: "", stageKey: "" });
       await invalidateXpotData();
     },
@@ -45,32 +44,13 @@ export function useSales() {
     },
   });
 
-  const createTaskMutation = useMutation({
-    mutationFn: async ({ selectedLeadId }: { selectedLeadId?: number | "" }) => {
-      const response = await apiRequest("POST", "/api/xpot/tasks", {
-        leadId: selectedLeadId ? Number(selectedLeadId) : undefined,
-        visitId: activeVisit?.id,
-        title: taskForm.title,
-        dueAt: taskForm.dueAt ? new Date(taskForm.dueAt).toISOString() : undefined,
-        type: "follow_up",
-      });
-      return response.json();
-    },
-    onSuccess: async () => {
-      toast({ title: t("taskCreated") });
-      setTaskForm({ title: "", dueAt: "" });
-      await invalidateXpotData();
-    },
-    onError: (error: Error) => {
-      toast({ title: t("taskCreateFailed"), description: error.message, variant: "destructive" });
-    },
-  });
+  // New tasks are created with the shared task form (components/leads/TaskForm.tsx).
 
   const updateTaskStatus = async (taskId: number, status: string) => {
     try {
       await apiRequest("PATCH", `/api/xpot/tasks/${taskId}`, { status });
       await invalidateXpotData();
-      toast({ title: t("taskUpdated") });
+      toast({ title: t("taskUpdated"), variant: "success" });
     } catch (error: any) {
       toast({ title: t("taskUpdateFailed"), description: error.message, variant: "destructive" });
     }
@@ -81,10 +61,7 @@ export function useSales() {
     tasksQuery,
     opportunityForm,
     setOpportunityForm,
-    taskForm,
-    setTaskForm,
     createOpportunityMutation,
-    createTaskMutation,
     updateTaskStatus,
   };
 }

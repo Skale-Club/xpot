@@ -16,11 +16,16 @@ import {
   type ProductWithTiers,
 } from "../../hooks/useSalesModule";
 import {
-  Field, GhostButton, Money, MoneyInput, PrimaryButton, QtyInput, Select, SheetDialog,
-  inputCls, inputStyle,
+  Field, GhostButton, Money, MoneyInput, QtyInput, Select, SheetDialog,
 } from "./ui";
 import { useT } from "@/i18n";
 import { salesModuleMessages } from "@/i18n/messages/salesModule";
+import { commonMessages } from "@/i18n/messages/common";
+import { Button } from "@/components/ui/button";
+import { DialogFooter } from "@/components/ui/dialog";
+import { Input, Textarea } from "@/components/xpot/Field";
+import { InlineAlert } from "@/components/xpot/InlineAlert";
+import { EYEBROW, GLASS_CLASS } from "@/components/xpot/surface";
 
 type Line = {
   key: string;
@@ -63,6 +68,7 @@ export function SaleDialog({
   onDone?: () => void;
 }) {
   const t = useT(salesModuleMessages);
+  const tc = useT(commonMessages);
   const { statusOptions, methodOptions } = usePaymentOptions();
   const productsQuery = useProducts({ enabled: open });
   const { createSale } = useSalesMutations();
@@ -147,28 +153,23 @@ export function SaleDialog({
     <SheetDialog open={open} onOpenChange={onOpenChange} title={leadName ? t("newSaleFor", { name: leadName }) : t("newSale")} wide>
       <div className="space-y-4">
         {visitId ? (
-          <div className="flex items-center gap-2 rounded-xl px-3 py-2 text-[11px] text-indigo-300"
-            style={{ background: "rgba(99,102,241,0.10)", border: "1px solid rgba(99,102,241,0.25)" }}>
-            <Sparkles className="h-3.5 w-3.5 shrink-0" />
-            {t("linkedToVisit")}
-          </div>
+          <InlineAlert tone="info" icon={Sparkles}>{t("linkedToVisit")}</InlineAlert>
         ) : null}
 
         {/* Lines */}
         <div className="space-y-3">
           {lines.map((line, index) => (
-            <div key={line.key} className="rounded-2xl p-3 space-y-2.5"
-              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+            <div key={line.key} className={`space-y-2.5 rounded-2xl p-3 ${GLASS_CLASS}`}>
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-semibold uppercase tracking-widest text-white/30">
+                <span className={EYEBROW}>
                   {t("itemN", { n: index + 1 })}
                 </span>
                 {lines.length > 1 && (
-                  <button type="button" onClick={() => setLines((p) => p.filter((l) => l.key !== line.key))}
+                  <Button type="button" variant="ghost" size="icon" onClick={() => setLines((p) => p.filter((l) => l.key !== line.key))}
                     aria-label={t("removeItem")} title={t("removeItem")}
-                    className="flex h-7 w-7 items-center justify-center rounded-lg text-white/30 transition-colors hover:bg-red-500/15 hover:text-red-400">
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
+                    className="-my-2 -mr-2 text-white/40 hover:bg-red-500/15 hover:text-red-300">
+                    <Trash2 aria-hidden="true" />
+                  </Button>
                 )}
               </div>
 
@@ -180,12 +181,11 @@ export function SaleDialog({
               />
 
               {!line.productId && (
-                <input
+                <Input
                   value={line.description}
                   onChange={(e) => patchLine(line.key, { description: e.target.value })}
                   placeholder={t("whatWasSold")}
-                  className={inputCls}
-                  style={inputStyle}
+                  aria-label={t("whatWasSold")}
                 />
               )}
 
@@ -202,7 +202,7 @@ export function SaleDialog({
               </div>
 
               <div className="flex items-center justify-between text-xs">
-                <span className="text-white/35">{t("lineTotal")}</span>
+                <span className="text-white/40">{t("lineTotal")}</span>
                 <Money cents={line.quantity * line.unitPriceCents} className="font-semibold text-white" />
               </div>
             </div>
@@ -214,8 +214,7 @@ export function SaleDialog({
         </div>
 
         {/* Money */}
-        <div className="rounded-2xl p-3.5 space-y-3"
-          style={{ background: "rgba(16,185,129,0.06)", border: "1px solid rgba(16,185,129,0.18)" }}>
+        <div className="space-y-3 rounded-2xl border border-emerald-400/20 bg-emerald-500/[0.06] p-3.5">
           <div className="flex items-center justify-between text-xs text-white/45">
             <span>{t("subtotal")}</span><Money cents={totals.subtotalCents} />
           </div>
@@ -224,9 +223,9 @@ export function SaleDialog({
           </Field>
           <div className="flex items-center justify-between border-t border-white/10 pt-2.5">
             <span className="text-sm font-semibold text-white">{t("total")}</span>
-            <Money cents={totals.totalCents} className="text-lg font-bold text-emerald-400" />
+            <Money cents={totals.totalCents} className="text-lg font-bold text-emerald-300" />
           </div>
-          <div className="flex items-center justify-between text-[11px] text-white/35">
+          <div className="flex items-center justify-between text-xs text-white/40">
             <span>{t("youKeep")}</span>
             <span className="tabular-nums">{formatCents(totals.profitCents)}</span>
           </div>
@@ -257,20 +256,22 @@ export function SaleDialog({
         )}
 
         <Field label={t("notes")}>
-          <textarea
+          <Textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             rows={2}
             placeholder={t("notesPlaceholder")}
-            className="w-full rounded-xl px-3 py-2 text-sm text-white placeholder:text-white/25 focus:outline-none"
-            style={inputStyle}
+            className="min-h-16"
           />
         </Field>
 
-        <PrimaryButton tone="emerald" onClick={submit} disabled={!canSubmit} loading={createSale.isPending}>
-          <Package className="h-4 w-4" />
-          {t("recordSale", { amount: formatCents(totals.totalCents) })}
-        </PrimaryButton>
+        <DialogFooter className="gap-2 sm:space-x-0">
+          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={createSale.isPending}>{tc("cancel")}</Button>
+          <Button type="button" variant="money" onClick={submit} disabled={!canSubmit} loading={createSale.isPending}>
+            <Package aria-hidden="true" />
+            {t("recordSale", { amount: formatCents(totals.totalCents) })}
+          </Button>
+        </DialogFooter>
       </div>
     </SheetDialog>
   );

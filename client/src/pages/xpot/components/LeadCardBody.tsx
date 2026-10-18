@@ -1,7 +1,9 @@
-import { Building2, MapPinned, Package, Boxes } from "lucide-react";
-import { formatCents } from "../utils";
+import { Building2, Navigation, Package, Boxes } from "lucide-react";
+import { displayPhone, formatCents } from "../utils";
 import { useT } from "@/i18n";
 import { salesModuleMessages } from "@/i18n/messages/salesModule";
+import { leadsMessages } from "@/i18n/messages/leads";
+import { Pill } from "@/components/xpot/StatusPill";
 import { fileSrc } from "@/lib/files";
 
 type LeadLike = {
@@ -52,6 +54,7 @@ export function LeadCardBody({
   right?: React.ReactNode;
 }) {
   const t = useT(salesModuleMessages);
+  const tl = useT(leadsMessages);
   const loc = lead.locations?.[0];
   const photo = lead.photos?.[0];
   const routeUrl = buildRouteUrl(loc);
@@ -59,12 +62,12 @@ export function LeadCardBody({
   return (
     <div className="flex items-center gap-3">
       {/* Avatar + route */}
-      <div className="flex shrink-0 flex-col items-center gap-3">
+      <div className="flex shrink-0 flex-col items-center gap-1">
         {photo ? (
           <img src={fileSrc(photo)} alt="" className="h-14 w-14 rounded-xl object-cover" />
         ) : (
-          <div className="flex h-14 w-14 items-center justify-center rounded-xl border border-indigo-500/20 bg-indigo-500/10">
-            <Building2 className="h-7 w-7 text-indigo-400" />
+          <div className="flex h-14 w-14 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04]">
+            <Building2 className="h-7 w-7 text-white/40" aria-hidden="true" />
           </div>
         )}
         {routeUrl && (
@@ -73,9 +76,11 @@ export function LeadCardBody({
             target="_blank"
             rel="noopener noreferrer"
             onClick={(e) => e.stopPropagation()}
-            className="inline-flex items-center justify-center text-white/40 transition-colors hover:text-white"
+            aria-label={tl("directions")}
+            title={tl("directions")}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-white/45 transition-colors hover:bg-white/[0.06] hover:text-white"
           >
-            <MapPinned className="h-5 w-5" />
+            <Navigation className="h-5 w-5" aria-hidden="true" />
           </a>
         )}
       </div>
@@ -84,14 +89,7 @@ export function LeadCardBody({
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <div className="truncate text-[15px] font-semibold text-white">{lead.name}</div>
-          {lead.ghlContactId && (
-            <span
-              className="shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-emerald-400"
-              style={{ background: "rgba(16,185,129,0.12)" }}
-            >
-              GHL
-            </span>
-          )}
+          {lead.ghlContactId && <Pill tone="slate" className="shrink-0">GHL</Pill>}
         </div>
         <div className="mt-0.5 space-y-0.5">
           {loc?.addressLine1 && (
@@ -101,7 +99,7 @@ export function LeadCardBody({
             </div>
           )}
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0 text-[11px] font-medium text-white/35">
-            {lead.phone && <span>{lead.phone}</span>}
+            {lead.phone && <span>{displayPhone(lead.phone)}</span>}
             {lead.phone && lead.website && <span className="text-white/15">·</span>}
             {lead.website && (
               <span className="truncate max-w-[140px]">
@@ -117,13 +115,13 @@ export function LeadCardBody({
         {(lead.salesLifetimeCents || lead.unitsOnShelf) ? (
           <div className="mt-1 flex flex-wrap items-center gap-x-2.5 text-[11px] font-medium">
             {lead.salesLifetimeCents ? (
-              <span className="inline-flex items-center gap-1 text-emerald-400/80">
-                <Package className="h-3 w-3" /> {t("soldAmount", { amount: formatCents(lead.salesLifetimeCents) })}
+              <span className="inline-flex items-center gap-1 text-emerald-300">
+                <Package className="h-3 w-3" aria-hidden="true" /> {t("soldAmount", { amount: formatCents(lead.salesLifetimeCents) })}
               </span>
             ) : null}
             {lead.unitsOnShelf ? (
-              <span className="inline-flex items-center gap-1 text-indigo-300/80">
-                <Boxes className="h-3 w-3" /> {t("onShelfN", { count: lead.unitsOnShelf })}
+              <span className="inline-flex items-center gap-1 text-white/55">
+                <Boxes className="h-3 w-3" aria-hidden="true" /> {t("onShelfN", { count: lead.unitsOnShelf })}
               </span>
             ) : null}
           </div>

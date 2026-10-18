@@ -1,10 +1,9 @@
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2 } from "@/components/ui/loader";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { leadsMessages } from "@/i18n/messages/leads";
-import { BRAND_GRADIENT } from "@/components/xpot/surface";
-import { GradientTopLine } from "@/components/xpot/GradientTopLine";
+import { TABLE_HEAD } from "@/components/xpot/surface";
 import type { CsvLeadRow } from "../../csvLeads";
 
 export type { CsvLeadRow };
@@ -31,13 +30,9 @@ export function CsvImportDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o && !importing) onCancel(); }}>
-      <DialogContent
-        className="max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-2xl border-0 p-6 sm:max-w-3xl"
-        style={{ background: "#0e1117", boxShadow: "0 24px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.07)" }}
-      >
-        <GradientTopLine />
-        <DialogHeader>
-          <DialogTitle className="text-base font-semibold text-white">{t("csvReviewTitle")}</DialogTitle>
+      <DialogContent className="max-w-3xl">
+        <DialogHeader className="pr-8">
+          <DialogTitle className="text-base">{t("csvReviewTitle")}</DialogTitle>
         </DialogHeader>
 
         {rows && rows.length === 0 ? (
@@ -47,7 +42,7 @@ export function CsvImportDialog({
             <p className="text-sm text-white/50">{t.plural("csvRows", rows?.length ?? 0)}</p>
             <div className="max-h-[50vh] overflow-auto rounded-xl border border-white/[0.07]">
               <table className="w-full min-w-[560px] text-left text-xs">
-                <thead className="sticky top-0 text-[10px] uppercase tracking-widest text-white/35" style={{ background: "#11151f" }}>
+                <thead className={`sticky top-0 bg-[#0d1322] ${TABLE_HEAD}`}>
                   <tr>
                     <th className="px-3 py-2 font-semibold">{t("colName")}</th>
                     <th className="px-3 py-2 font-semibold">{t("colPhone")}</th>
@@ -75,29 +70,16 @@ export function CsvImportDialog({
           </>
         )}
 
-        <div className="mt-2 flex gap-2">
-          <button
-            type="button"
-            onClick={onCancel}
-            disabled={importing}
-            className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white/60 hover:text-white disabled:opacity-40"
-            style={{ background: "rgba(255,255,255,0.07)" }}
-          >
+        <DialogFooter className="gap-2 sm:space-x-0">
+          <Button type="button" variant="ghost" onClick={onCancel} disabled={importing}>
             {tc(rows && rows.length === 0 ? "close" : "cancel")}
-          </button>
+          </Button>
           {rows && rows.length > 0 && (
-            <button
-              type="button"
-              onClick={onConfirm}
-              disabled={importing}
-              className="flex flex-1 items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-40"
-              style={{ background: BRAND_GRADIENT }}
-            >
-              {importing && <Loader2 className="h-4 w-4 animate-spin" />}
+            <Button type="button" variant="brand" onClick={onConfirm} loading={importing}>
               {t.plural("importCount", rows.length)}
-            </button>
+            </Button>
           )}
-        </div>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

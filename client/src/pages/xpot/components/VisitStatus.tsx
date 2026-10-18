@@ -1,6 +1,7 @@
 import { useT, type Translate } from "@/i18n";
 import { checkinMessages } from "@/i18n/messages/checkin";
-import { Pill } from "@/components/xpot/StatusPill";
+import { PILL_BORDERS, PILL_DOTS, PILL_TONES, Pill, VISIT_OUTCOME_TONE, toneOf, type PillTone } from "@/components/xpot/StatusPill";
+import { EYEBROW } from "@/components/xpot/surface";
 import { visitLocationException } from "../visitRules";
 
 export type VisitStatus =
@@ -16,51 +17,40 @@ export type VisitStatus =
   | "sale_made";
 
 // `label` is the English name, kept as a fallback; screens show the
-// translated `status_<value>` message from checkinMessages instead.
-export const VISIT_STATUSES: {
-  value: VisitStatus;
-  label: string;
-  dot: string;
-  bg: string;
-  border: string;
-  text: string;
-}[] = [
-  { value: "sale_made",       label: "Sale Made",        dot: "#10b981", bg: "rgba(16,185,129,0.12)",  border: "rgba(16,185,129,0.3)",  text: "#6ee7b7" },
-  { value: "completed",       label: "Completed",        dot: "#38bdf8", bg: "rgba(56,189,248,0.12)",  border: "rgba(56,189,248,0.3)",  text: "#7dd3fc" },
-  { value: "follow_up",       label: "Follow Up",        dot: "#a78bfa", bg: "rgba(167,139,250,0.12)", border: "rgba(167,139,250,0.3)", text: "#c4b5fd" },
-  { value: "came_back_later", label: "Come Back Later",  dot: "#fbbf24", bg: "rgba(251,191,36,0.12)",  border: "rgba(251,191,36,0.3)",  text: "#fde68a" },
-  { value: "no_answer",       label: "No Answer",        dot: "#fb923c", bg: "rgba(251,146,60,0.12)",  border: "rgba(251,146,60,0.3)",  text: "#fdba74" },
-  { value: "not_interested",  label: "Not Interested",   dot: "#f87171", bg: "rgba(248,113,113,0.12)", border: "rgba(248,113,113,0.3)", text: "#fca5a5" },
-  { value: "cancelled",       label: "Cancelled",        dot: "#64748b", bg: "rgba(100,116,139,0.12)", border: "rgba(100,116,139,0.3)", text: "#94a3b8" },
-  { value: "in_progress",     label: "In Progress",      dot: "#60a5fa", bg: "rgba(96,165,250,0.12)",  border: "rgba(96,165,250,0.3)",  text: "#93c5fd" },
-  { value: "planned",         label: "Planned",          dot: "#94a3b8", bg: "rgba(148,163,184,0.10)", border: "rgba(148,163,184,0.2)", text: "#cbd5e1" },
-  { value: "invalid",         label: "Invalid",          dot: "#ef4444", bg: "rgba(239,68,68,0.10)",   border: "rgba(239,68,68,0.2)",   text: "#fca5a5" },
+// translated `status_<value>` message from checkinMessages instead. The colour
+// comes from VISIT_OUTCOME_TONE (components/xpot/StatusPill.tsx), so the badge,
+// the picker and the Visits filter chips always agree.
+export const VISIT_STATUSES: { value: VisitStatus; label: string }[] = [
+  { value: "sale_made", label: "Sale Made" },
+  { value: "completed", label: "Completed" },
+  { value: "follow_up", label: "Follow Up" },
+  { value: "came_back_later", label: "Come Back Later" },
+  { value: "no_answer", label: "No Answer" },
+  { value: "not_interested", label: "Not Interested" },
+  { value: "cancelled", label: "Cancelled" },
+  { value: "in_progress", label: "In Progress" },
+  { value: "planned", label: "Planned" },
+  { value: "invalid", label: "Invalid" },
 ];
 
-export function getStatusMeta(status: string) {
-  return VISIT_STATUSES.find((s) => s.value === status) ?? {
-    value: status, label: status,
-    dot: "#64748b", bg: "rgba(100,116,139,0.1)", border: "rgba(100,116,139,0.2)", text: "#94a3b8",
-  };
+/** The pill tone of a visit status (slate for one the map doesn't know). */
+export function visitStatusTone(status: string): PillTone {
+  return toneOf(VISIT_OUTCOME_TONE, status);
 }
 
 /** The status name in the reader's language; unknown statuses show as-is. */
-function statusLabel(t: Translate<typeof checkinMessages.en>, status: string, fallback: string): string {
+export function visitStatusLabel(t: Translate<typeof checkinMessages.en>, status: string): string {
   const key = `status_${status}`;
-  return key in checkinMessages.en ? t(key as keyof typeof checkinMessages.en) : fallback;
+  if (key in checkinMessages.en) return t(key as keyof typeof checkinMessages.en);
+  return VISIT_STATUSES.find((s) => s.value === status)?.label ?? status;
 }
 
 export function StatusBadge({ status }: { status: string }) {
   const t = useT(checkinMessages);
-  const meta = getStatusMeta(status);
   return (
-    <span
-      className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium"
-      style={{ background: meta.bg, border: `1px solid ${meta.border}`, color: meta.text }}
-    >
-      <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ background: meta.dot }} />
-      {statusLabel(t, meta.value, meta.label)}
-    </span>
+    <Pill tone={visitStatusTone(status)} dot>
+      {visitStatusLabel(t, status)}
+    </Pill>
   );
 }
 
@@ -81,7 +71,7 @@ export function LocationExceptionBadge({ visit }: {
     : reason ? t("exceptionOutsideAreaReason", { reason }) : t("exceptionOutsideAreaHint");
   return (
     <span title={hint} aria-label={hint} className="inline-flex">
-      <Pill tone="amber" className="!min-h-0 !py-1 !text-[11px]">
+      <Pill tone="amber">
         {exception === "no_location" ? t("exceptionNoLocation") : t("exceptionOutsideArea")}
       </Pill>
     </span>
@@ -93,25 +83,24 @@ export function StatusPicker({ value, onChange, layout = "compact" }: { value: s
   const OUTCOMES = VISIT_STATUSES.filter((s) => !["planned", "in_progress", "invalid", "cancelled"].includes(s.value));
   return (
     <div className="space-y-2">
-      <div className="text-xs font-semibold uppercase tracking-widest text-white/30">{t("visitOutcome")}</div>
-      <div className={layout === "wide" ? "grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6" : "grid grid-cols-3 gap-2"}>
+      <div className={EYEBROW}>{t("visitOutcome")}</div>
+      <div role="radiogroup" aria-label={t("visitOutcome")} className={layout === "wide" ? "grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6" : "grid grid-cols-3 gap-2"}>
         {OUTCOMES.map((s) => {
           const isActive = value === s.value;
+          const tone = visitStatusTone(s.value);
           return (
             <button
               key={s.value}
               type="button"
+              role="radio"
+              aria-checked={isActive}
               onClick={() => onChange(s.value)}
-              className="rounded-full px-1 py-1.5 text-[11px] font-medium transition-all active:scale-95 w-full"
-              style={{
-                background: isActive ? s.bg : "rgba(255,255,255,0.04)",
-                border: `1px solid ${isActive ? s.border : "rgba(255,255,255,0.08)"}`,
-                color: isActive ? s.text : "rgba(255,255,255,0.4)",
-                boxShadow: isActive ? `0 0 12px ${s.dot}40` : "none",
-                transform: isActive ? "scale(1.03)" : "scale(1)",
-              }}
+              className={`inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-full border px-1.5 py-1.5 text-xs font-semibold transition-all active:scale-95 ${
+                isActive ? `${PILL_TONES[tone]} ${PILL_BORDERS[tone]}` : "border-white/[0.08] bg-white/[0.04] text-white/45 hover:text-white/70"
+              }`}
             >
-              {statusLabel(t, s.value, s.label)}
+              {isActive ? <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${PILL_DOTS[tone]}`} aria-hidden="true" /> : null}
+              <span className="truncate">{visitStatusLabel(t, s.value)}</span>
             </button>
           );
         })}
