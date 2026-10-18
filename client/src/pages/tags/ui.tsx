@@ -582,6 +582,7 @@ export function BottomSheet({ open, onClose, children, title, icon, banner }: {
       <div
         ref={panel}
         tabIndex={-1}
+        data-focus-container
         className={`relative max-h-full w-full max-w-md overflow-y-auto rounded-3xl px-5 pb-5 pt-5 shadow-[0_24px_64px_rgba(0,0,0,0.5)] outline-none lg:max-w-lg lg:pt-6 ${SURFACE_MODAL_CLASS}`}
       >
         {title ? (
