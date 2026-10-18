@@ -218,7 +218,8 @@ export function createSalesRouter() {
       cancelledAt: new Date(),
       cancelReason: reason ?? null,
     });
-    if (existing.sale.source === "tags") await cancelTagLinksForSale(existing.sale.id, actor.user.userId);
+    // Pieces can sit on any sale (sold from Tags, or linked to a Visits sale later).
+    await cancelTagLinksForSale(existing.sale.id, actor.user.userId);
     res.json(await salesStorage.getSale(existing.sale.id));
   });
 

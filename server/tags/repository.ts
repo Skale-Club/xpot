@@ -209,7 +209,8 @@ function tagListQuery(where: SQL, limit: number, offset = 0): SQL {
     LEFT JOIN tag_batches b ON b.id = t.batch_id
     LEFT JOIN tag_kits k ON k.id = t.kit_id
     LEFT JOIN LATERAL (
-      SELECT st.sale_id, si.net_total_cents
+      -- A Visits line can carry several pieces: each one is its share.
+      SELECT st.sale_id, round(si.net_total_cents::numeric / GREATEST(si.quantity, 1))::int AS net_total_cents
       FROM sales_sale_tags st
       JOIN sales_sale_items si ON si.id = st.sale_item_id
       WHERE st.tag_id = t.id AND st.status = 'active'

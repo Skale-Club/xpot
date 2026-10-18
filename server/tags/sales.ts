@@ -1,5 +1,5 @@
 import { createHash } from "crypto";
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNull, ne, or } from "drizzle-orm";
 import { db } from "../db.js";
 import {
   salesLeads,
@@ -19,6 +19,7 @@ import {
   tags,
 } from "#shared/schema.js";
 import { canWorkOnTag, type TagActor } from "#shared/tagAccess.js";
+import type { LinkableSaleItem } from "#shared/tagsApi.js";
 import { tagSystemReason } from "#shared/tagReasons.js";
 import { allocateSaleLineTotals, paymentStatusFor, resolveUnitPriceCents } from "#shared/pricing.js";
 import { resolveTagUnitCost, type TagSaleCreateInput } from "#shared/tagSales.js";
@@ -367,5 +368,157 @@ export async function cancelTagLinksForSale(saleId: number, actorUserId: string 
         reason: tagSystemReason("sale_cancelled"),
       });
     }
+  });
+}
+
+/** The product a piece sells as: its own, else its batch's. */
+async function pieceForLink(executor: Pick<typeof db, "select">, tagId: string) {
+  const [piece] = await executor
+    .select({
+      id: tags.id,
+      publicCode: tags.publicCode,
+      leadId: tags.leadId,
+      status: tags.status,
+      stockStatus: tags.stockStatus,
+      ownershipType: tags.ownershipType,
+      custodianRepId: tags.custodianRepId,
+      ownProductId: tags.salesProductId,
+      batchProductId: tagBatches.salesProductId,
+    })
+    .from(tags)
+    .leftJoin(tagBatches, eq(tags.batchId, tagBatches.id))
+    .where(eq(tags.id, tagId))
+    .limit(1);
+  return piece ? { ...piece, productId: piece.ownProductId ?? piece.batchProductId } : null;
+}
+
+/**
+ * Sales already recorded for the piece's customer that it can join: completed
+ * direct sales from outside Tags whose line is the piece's product (or has no product) and has
+ * fewer pieces linked than units sold. Empty for a sold or unassigned piece.
+ */
+export async function listLinkableSales(tagId: string): Promise<LinkableSaleItem[]> {
+  const piece = await pieceForLink(db, tagId);
+  if (!piece?.leadId) return [];
+  const [active] = await db.select({ id: salesSaleTags.id }).from(salesSaleTags)
+    .where(and(eq(salesSaleTags.tagId, tagId), eq(salesSaleTags.status, "active"))).limit(1);
+  if (active) return [];
+  const items = await db
+    .select({
+      saleId: salesSales.id,
+      saleItemId: salesSaleItems.id,
+      soldAt: salesSales.soldAt,
+      currency: salesSales.currency,
+      description: salesSaleItems.description,
+      quantity: salesSaleItems.quantity,
+      netTotalCents: salesSaleItems.netTotalCents,
+    })
+    .from(salesSaleItems)
+    .innerJoin(salesSales, eq(salesSaleItems.saleId, salesSales.id))
+    .where(and(
+      eq(salesSales.leadId, piece.leadId),
+      eq(salesSales.status, "completed"),
+      eq(salesSales.kind, "direct"),
+      // A Tags sale already names its pieces, one line each.
+      ne(salesSales.source, "tags"),
+      piece.productId ? or(eq(salesSaleItems.productId, piece.productId), isNull(salesSaleItems.productId)) : undefined,
+    ))
+    .orderBy(desc(salesSales.soldAt), desc(salesSaleItems.id))
+    .limit(20);
+  if (!items.length) return [];
+  const counts = await db
+    .select({ saleItemId: salesSaleTags.saleItemId, linked: count() })
+    .from(salesSaleTags)
+    .where(and(inArray(salesSaleTags.saleItemId, items.map((item) => item.saleItemId)), eq(salesSaleTags.status, "active")))
+    .groupBy(salesSaleTags.saleItemId);
+  const linkedByItem = new Map(counts.map((row) => [row.saleItemId, Number(row.linked)]));
+  return items
+    .map((item) => ({
+      saleId: item.saleId,
+      saleItemId: item.saleItemId,
+      soldAt: item.soldAt.toISOString(),
+      description: item.description,
+      quantity: item.quantity,
+      linked: linkedByItem.get(item.saleItemId) ?? 0,
+      unitNetCents: Math.round(item.netTotalCents / Math.max(item.quantity, 1)),
+      currency: item.currency,
+    }))
+    .filter((item) => item.linked < item.quantity);
+}
+
+/**
+ * Link a piece to one unit of a sale already recorded for its customer. The
+ * sale's amounts do not change; the piece becomes sold at the sale's date and
+ * costs what the sale item froze.
+ */
+export async function linkTagToSale(tagId: string, saleItemId: number, actor: TagActor) {
+  await db.transaction(async (tx) => {
+    // Lock the piece, then the sale line, so two links cannot take its last unit.
+    await tx.select({ id: tags.id }).from(tags).where(eq(tags.id, tagId)).for("update");
+    const piece = await pieceForLink(tx, tagId);
+    if (!piece) throw new TagSaleError("Piece not found", 404, "tag_not_found");
+    if (!piece.leadId) throw new TagSaleError(`Piece ${piece.publicCode} has no customer`, 409, "tag_has_no_customer");
+    if (piece.status === "retired") throw new TagSaleError(`Piece ${piece.publicCode} is retired`, 409, "tag_retired");
+    const [active] = await tx.select({ id: salesSaleTags.id }).from(salesSaleTags)
+      .where(and(eq(salesSaleTags.tagId, tagId), eq(salesSaleTags.status, "active"))).limit(1);
+    if (active) throw new TagSaleError(`Already sold: ${piece.publicCode}`, 409, "tag_already_sold", { codes: piece.publicCode });
+    if (piece.stockStatus !== "available") throw new TagSaleError(`Piece ${piece.publicCode} is not available`, 409, "tag_not_available", { code: piece.publicCode });
+
+    const [line] = await tx
+      .select({ item: salesSaleItems, sale: salesSales })
+      .from(salesSaleItems)
+      .innerJoin(salesSales, eq(salesSaleItems.saleId, salesSales.id))
+      .where(eq(salesSaleItems.id, saleItemId))
+      .for("update", { of: salesSaleItems });
+    if (!line) throw new TagSaleError("Sale not found", 404, "sale_not_found");
+    if (line.sale.leadId !== piece.leadId) throw new TagSaleError("This sale is for another customer", 409, "tag_lead_mismatch", { code: piece.publicCode });
+    if (line.sale.status !== "completed" || line.sale.kind !== "direct" || line.sale.source === "tags") throw new TagSaleError("This sale cannot take pieces", 409, "sale_not_linkable");
+    if (line.item.productId && piece.productId && line.item.productId !== piece.productId) {
+      throw new TagSaleError(`Piece ${piece.publicCode} is not ${line.item.description}`, 409, "tag_product_mismatch", { code: piece.publicCode, product: line.item.description });
+    }
+    const [{ linked }] = await tx.select({ linked: count() }).from(salesSaleTags)
+      .where(and(eq(salesSaleTags.saleItemId, saleItemId), eq(salesSaleTags.status, "active")));
+    if (Number(linked) >= line.item.quantity) throw new TagSaleError("Every unit of this sale already has a piece", 409, "sale_item_full");
+
+    const [acquisition] = await tx
+      .select({ unitId: tagAcquisitionUnits.id })
+      .from(tagAcquisitionUnits)
+      .innerJoin(tagAcquisitionLines, eq(tagAcquisitionUnits.acquisitionLineId, tagAcquisitionLines.id))
+      .innerJoin(tagAcquisitions, eq(tagAcquisitionLines.acquisitionId, tagAcquisitions.id))
+      .where(and(eq(tagAcquisitionUnits.tagId, tagId), isNull(tagAcquisitionUnits.returnedAt), eq(tagAcquisitions.status, "fulfilled")))
+      .limit(1);
+    const now = new Date();
+    const soldAt = line.sale.soldAt;
+    await tx.insert(salesSaleTags).values({
+      saleId: line.sale.id,
+      saleItemId,
+      tagId,
+      acquisitionUnitId: acquisition?.unitId ?? null,
+      costBasisCents: line.item.unitCostCents,
+      costSource: "sale_item",
+      soldAt,
+    });
+    await tx.update(tags).set({
+      soldAt,
+      stockStatus: "sold",
+      ownershipType: "customer",
+      custodianRepId: null,
+      stockUpdatedAt: now,
+      updatedAt: now,
+    }).where(eq(tags.id, tagId));
+    await tx.insert(tagStockMovements).values({
+      tagId,
+      movementType: "sale",
+      fromStockStatus: piece.stockStatus,
+      toStockStatus: "sold",
+      fromOwnershipType: piece.ownershipType,
+      toOwnershipType: "customer",
+      fromCustodianRepId: piece.custodianRepId,
+      toCustodianRepId: null,
+      referenceType: "sale",
+      referenceId: String(line.sale.id),
+      actorUserId: actor.userId,
+      reason: tagSystemReason("sale_linked"),
+    });
   });
 }

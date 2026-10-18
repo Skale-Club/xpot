@@ -14,6 +14,8 @@ export const TAG_SYSTEM_REASONS = [
   "unlinked",
   /** A cancelled sale gave the piece back to stock. */
   "sale_cancelled",
+  /** The piece was linked to a sale already recorded for its customer. */
+  "sale_linked",
   /** The intake station undid a read. */
   "intake_undone",
 ] as const;
@@ -35,6 +37,7 @@ export const LEGACY_TAG_REASONS: Record<string, TagSystemReason> = {
   "Unlinked from the customer page": "unlinked",
   Unassigned: "unlinked",
   "Sale cancelled": "sale_cancelled",
+  "Linked to a sale already recorded": "sale_linked",
   "intake undone": "intake_undone",
 };
 
