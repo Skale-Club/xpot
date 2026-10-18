@@ -387,7 +387,6 @@ function LeadActionSheet({ lead, onClose, onSell, onCheckIn, onDelete }: {
   ];
   return (
     <BottomSheet open={Boolean(lead)} onClose={onClose} title={lead?.name}>
-      <p className="mb-3 truncate px-1 text-base font-bold text-white">{lead?.name}</p>
       <div className="space-y-1.5 pb-1">
         {items.map(({ key, label, icon: Icon, run, cls }) => (
           <button

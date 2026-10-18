@@ -22,9 +22,9 @@ import { LeadContacts } from "@/pages/xpot/components/leads/LeadContacts";
 import type { FullSalesLead, GoogleBusinessProfile, SalesLead, SalesLeadContact, SalesLeadLocation } from "@/pages/xpot/types";
 import { usePlaceSearch } from "@/pages/xpot/usePlaceSearch";
 import TagScreen from "./TagScreen";
-import { APP_BASE, errorText, shortUrl, tagPath, tagsGet, tagsPost, useBanner } from "./lib";
+import { APP_BASE, errorText, shortUrl, tagPath, tagsGet, tagsPost, useBanner, type BannerState } from "./lib";
 import {
-  Banner, BottomSheet, BTN_PRIMARY, BTN_TERTIARY, CARD, EYEBROW_MUTED, INPUT, LinkInput, ChipMark, PieceStatusPills, SHEET_TITLE, Spinner,
+  Banner, BottomSheet, BTN_PRIMARY, BTN_TERTIARY, CARD, EYEBROW_MUTED, INPUT, LinkInput, ChipMark, PieceStatusPills, Spinner,
 } from "./ui";
 
 // One customer of the reseller: the company (its details, contacts and Google
@@ -76,12 +76,8 @@ function Panel({ title, right, children }: { title: ReactNode; right?: ReactNode
   );
 }
 
-function SheetHeading({ children }: { children: ReactNode }) {
-  return children ? <h2 className={`${SHEET_TITLE} mb-4`}>{children}</h2> : null;
-}
-
 /** The company's Google Business Profile: live rating when linked, a search to link it when not. */
-function GoogleProfile({ lead, onDone }: { lead: FullSalesLead; onDone: (text: string, ok: boolean) => void }) {
+function GoogleProfile({ lead, onDone, banner }: { lead: FullSalesLead; onDone: (text: string, ok: boolean) => void; banner: BannerState }) {
   const t = useT(tagsMessages);
   const tc = useT(commonMessages);
   const qc = useQueryClient();
@@ -163,8 +159,7 @@ function GoogleProfile({ lead, onDone }: { lead: FullSalesLead; onDone: (text: s
         </>
       )}
 
-      <BottomSheet open={picking} onClose={() => setPicking(false)} title={t("customerGoogleLink")}>
-        <SheetHeading>{t("customerGoogleLink")}</SheetHeading>
+      <BottomSheet open={picking} onClose={() => setPicking(false)} title={t("customerGoogleLink")} banner={banner}>
         <div className="relative">
           <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
           <input
@@ -535,12 +530,11 @@ export default function CustomerScreen({ leadId }: { leadId: number }) {
             </div>
           </Panel>
 
-          <GoogleProfile lead={lead} onDone={(text, ok) => show({ tone: ok ? "ok" : "error", text })} />
+          <GoogleProfile lead={lead} banner={banner} onDone={(text, ok) => show({ tone: ok ? "ok" : "error", text })} />
         </div>
       </div>
 
-      <BottomSheet open={linking} onClose={() => setLinking(false)} title={t("customerLinkPieceTitle", { name: lead.name })}>
-        <SheetHeading>{t("customerLinkPieceTitle", { name: lead.name })}</SheetHeading>
+      <BottomSheet open={linking} onClose={() => setLinking(false)} title={t("customerLinkPieceTitle", { name: lead.name })} banner={banner}>
         {freePieces.length === 0 ? (
           <p className="py-6 text-center text-sm text-white/45">{t("customerNoStock")}</p>
         ) : (
@@ -566,8 +560,7 @@ export default function CustomerScreen({ leadId }: { leadId: number }) {
         )}
       </BottomSheet>
 
-      <BottomSheet open={changing} onClose={() => setChanging(false)} title={t.plural("customerChangeLinkTitle", targets.length)}>
-        <SheetHeading>{t.plural("customerChangeLinkTitle", targets.length)}</SheetHeading>
+      <BottomSheet open={changing} onClose={() => setChanging(false)} title={t.plural("customerChangeLinkTitle", targets.length)} banner={banner}>
         <div className="space-y-4">
           <p className="text-sm text-white/50">{t("customerChangeLinkHint")}</p>
           <LinkInput value={link} onChange={setLink} face={targets[0]?.face} placeholder={t("linkPlaceholder")} onPasteFailed={() => show({ tone: "error", text: tc("pasteFailed") })} />
@@ -578,8 +571,7 @@ export default function CustomerScreen({ leadId }: { leadId: number }) {
         </div>
       </BottomSheet>
 
-      <BottomSheet open={unlinking != null} onClose={() => setUnlinking(null)} title={unlinking ? t("customerUnlinkTitle", { code: unlinking.publicCode }) : undefined}>
-        <SheetHeading>{unlinking ? t("customerUnlinkTitle", { code: unlinking.publicCode }) : undefined}</SheetHeading>
+      <BottomSheet open={unlinking != null} onClose={() => setUnlinking(null)} title={unlinking ? t("customerUnlinkTitle", { code: unlinking.publicCode }) : undefined} banner={banner}>
         <div className="space-y-4">
           <p className="text-sm text-white/55">{t("customerUnlinkHint")}</p>
           <div className="grid grid-cols-2 gap-2">

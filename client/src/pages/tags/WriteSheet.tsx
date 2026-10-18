@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, Lock, Nfc, Smartphone, X } from "lucide-react";
+import { Check, Lock, Nfc, Smartphone } from "lucide-react";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
@@ -123,14 +123,7 @@ export default function WriteSheet({ open, url, identity, onClose, onDone, conti
 
   return (
     <BottomSheet open={open} onClose={close} title={t("writeTitle")}>
-      <div className="flex items-center justify-between">
-        <h2 className={SHEET_TITLE}>{t("writeTitle")}</h2>
-        <button type="button" onClick={close} aria-label={tc("close")} className="flex h-11 w-11 items-center justify-center rounded-full text-white/60 active:bg-white/10">
-          <X className="h-5 w-5" />
-        </button>
-      </div>
-
-      <div className="mt-2 rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+      <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
         <p className={EYEBROW_MUTED}>{t("writeUrl")}</p>
         <p className="mt-1 whitespace-pre-wrap break-all font-mono text-sm tracking-wide text-white" data-testid="text-write-url">
           {url}

@@ -40,7 +40,6 @@ import {
   LinkInput,
   Pill,
   PieceStatusPills,
-  SHEET_TITLE,
   Spinner,
   TopBar,
 } from "./ui";
@@ -516,16 +515,9 @@ export default function TagScreen({ code, onClose }: {
       <PieceDashboard tagId={tag.id} />
 
       {/* The editor, as a pop-up: the customer first (when choosing one), then what the piece opens. */}
-      <BottomSheet open={editing} onClose={closeEditor} title={changingCustomer ? t("changeCustomer") : dest ? t("editDestination") : t("configurePiece")}>
+      {/* Messages (a bad link, a save error) show inside each pop-up too: the page banner is behind it. */}
+      <BottomSheet open={editing} onClose={closeEditor} title={changingCustomer ? t("changeCustomer") : dest ? t("editDestination") : t("configurePiece")} banner={banner}>
         <div className="space-y-4" data-testid="destination-editor">
-          <div className="flex items-center justify-between gap-2">
-            <h2 className={SHEET_TITLE}>{changingCustomer ? t("changeCustomer") : dest ? t("editDestination") : t("configurePiece")}</h2>
-            <button type="button" onClick={closeEditor} aria-label={tc("close")} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/60 active:bg-white/10">
-              <X className="h-5 w-5" />
-            </button>
-          </div>
-          {/* Messages (a bad link, a save error) show here too: the page banner is behind the pop-up. */}
-          <Banner banner={banner} />
           {!needsLead && tag.leadName && (
             <p className="flex items-center gap-2 text-sm text-white/60">
               <Building2 className="h-4 w-4 shrink-0 text-white/40" />
@@ -612,9 +604,8 @@ export default function TagScreen({ code, onClose }: {
       </div>
 
       {/* Rename the customer, or move the piece to another one. */}
-      <BottomSheet open={renameOpen} onClose={() => setRenameOpen(false)} title={t("renameCustomer")}>
-        <h2 className={SHEET_TITLE}>{t("renameCustomer")}</h2>
-        <div className="mt-4 space-y-3">
+      <BottomSheet open={renameOpen} onClose={() => setRenameOpen(false)} title={t("renameCustomer")} banner={banner}>
+        <div className="space-y-3">
           <div>
             <FieldLabel>{t("customerName")}</FieldLabel>
             <input value={newName} onChange={(e) => setNewName(e.target.value)} maxLength={200} autoCapitalize="words" className={INPUT} data-testid="input-customer-name" />

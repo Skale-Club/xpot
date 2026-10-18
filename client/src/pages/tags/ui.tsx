@@ -456,16 +456,62 @@ export function FieldLabel({ children }: { children: ReactNode }) {
   return <span className={`mb-1.5 block ${EYEBROW_MUTED}`}>{children}</span>;
 }
 
-/** Slide-up sheet with a dimmed backdrop; a centred dialog from `lg` up. */
-/** A pop-up, centered on phone and desktop. (Named for when it slid up from the bottom.) */
-export function BottomSheet({ open, onClose, children, title }: { open: boolean; onClose: () => void; children: ReactNode; title?: string }) {
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/**
+ * A pop-up, centered on phone and desktop. (Named for when it slid up from the bottom.)
+ * With a `title` it draws the title row and its X; `banner` repeats the screen's
+ * message inside, since the page banner sits behind the pop-up. Escape closes it,
+ * focus starts inside and Tab stays inside until it closes.
+ */
+export function BottomSheet({ open, onClose, children, title, icon, banner }: {
+  open: boolean;
+  onClose: () => void;
+  children: ReactNode;
+  title?: string;
+  /** Shown before the title. */
+  icon?: ReactNode;
+  banner?: BannerState;
+}) {
   const t = useT(commonMessages);
+  const panel = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
   useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    const opener = document.activeElement as HTMLElement | null;
+    // The first field or button, unless something inside asked for focus (autoFocus).
+    const node = panel.current;
+    if (node && !node.contains(document.activeElement)) {
+      const first = Array.from(node.querySelectorAll<HTMLElement>(FOCUSABLE)).find((el) => el.dataset.sheetClose === undefined);
+      (first ?? node).focus();
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        // Only the top-most sheet closes, and nothing behind it (a desktop pane) does too.
+        e.stopPropagation();
+        closeRef.current();
+        return;
+      }
+      if (e.key !== "Tab" || !panel.current) return;
+      const items = Array.from(panel.current.querySelectorAll<HTMLElement>(FOCUSABLE));
+      if (!items.length) return;
+      const [first, last] = [items[0], items[items.length - 1]];
+      if (e.shiftKey && (document.activeElement === first || !panel.current.contains(document.activeElement))) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    node?.addEventListener("keydown", onKey);
     return () => {
+      node?.removeEventListener("keydown", onKey);
       document.body.style.overflow = prev;
+      if (opener && document.contains(opener)) opener.focus();
     };
   }, [open]);
   if (!open) return null;
@@ -478,8 +524,32 @@ export function BottomSheet({ open, onClose, children, title }: { open: boolean;
       aria-modal="true"
       aria-label={title}
     >
-      <button type="button" aria-label={t("close")} onClick={onClose} className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
-      <div className="relative max-h-full w-full max-w-md overflow-y-auto rounded-[28px] border border-white/10 px-5 pb-5 pt-5 lg:max-w-lg lg:pt-6" style={{ background: "#0d1424" }}>
+      <button type="button" tabIndex={-1} aria-label={t("close")} onClick={onClose} className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+      <div
+        ref={panel}
+        tabIndex={-1}
+        className="relative max-h-full w-full max-w-md overflow-y-auto rounded-[28px] border border-white/10 px-5 pb-5 pt-5 outline-none lg:max-w-lg lg:pt-6"
+        style={{ background: "#0d1424" }}
+      >
+        {title ? (
+          <div className="-mr-2 -mt-1 mb-3 flex items-center justify-between gap-2">
+            <h2 className={`${SHEET_TITLE} flex min-w-0 items-center gap-2`}>
+              {icon}
+              <span className="min-w-0 break-words">{title}</span>
+            </h2>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label={t("close")}
+              data-sheet-close=""
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/60 hover:bg-white/10 active:bg-white/10"
+              data-testid="button-sheet-close"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+        ) : null}
+        {banner ? <Banner banner={banner} /> : null}
         {children}
       </div>
     </div>

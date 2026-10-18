@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, Lock, ShieldAlert, X } from "lucide-react";
+import { Check, Lock, ShieldAlert } from "lucide-react";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
@@ -82,16 +82,7 @@ export default function LockSheet({ open, identity, onClose, onLocked }: {
   };
 
   return (
-    <BottomSheet open={open} onClose={close} title={t("lockTitle")}>
-      <div className="flex items-center justify-between">
-        <h2 className={`${SHEET_TITLE} flex items-center gap-2`}>
-          <Lock className="h-5 w-5 text-amber-300" />
-          {t("lockTitle")}
-        </h2>
-        <button type="button" onClick={close} aria-label={tc("close")} className="flex h-11 w-11 items-center justify-center rounded-full text-white/60 active:bg-white/10">
-          <X className="h-5 w-5" />
-        </button>
-      </div>
+    <BottomSheet open={open} onClose={close} title={t("lockTitle")} icon={<Lock className="h-5 w-5 shrink-0 text-amber-300" />}>
 
       {phase === "done" ? (
         <div className="mt-6 text-center">
