@@ -31,6 +31,9 @@ const en = {
   gestureMobile: "Use two fingers to move the map",
   gestureWindows: "Use Ctrl + scroll to zoom the map",
   gestureMac: "Use ⌘ + scroll to zoom the map",
+  mapZoomIn: "Zoom in",
+  mapZoomOut: "Zoom out",
+  mapAttribution: "Show map credits",
   reasonsLabel: "Why it fits",
 };
 
@@ -62,6 +65,9 @@ export const prospectingUiMessages: Dictionary<typeof en> = {
     gestureMobile: "Use dois dedos para mover o mapa",
     gestureWindows: "Use Ctrl + rolagem para dar zoom no mapa",
     gestureMac: "Use ⌘ + rolagem para dar zoom no mapa",
+    mapZoomIn: "Aproximar",
+    mapZoomOut: "Afastar",
+    mapAttribution: "Mostrar créditos do mapa",
     reasonsLabel: "Por que entrou",
   },
   es: {
@@ -90,6 +96,9 @@ export const prospectingUiMessages: Dictionary<typeof en> = {
     gestureMobile: "Usa dos dedos para mover el mapa",
     gestureWindows: "Usa Ctrl + desplazamiento para hacer zoom en el mapa",
     gestureMac: "Usa ⌘ + desplazamiento para hacer zoom en el mapa",
+    mapZoomIn: "Acercar",
+    mapZoomOut: "Alejar",
+    mapAttribution: "Mostrar créditos del mapa",
     reasonsLabel: "Por qué entra",
   },
 };

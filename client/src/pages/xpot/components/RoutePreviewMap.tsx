@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { useT } from "@/i18n";
+import { useT, type Lang } from "@/i18n";
 import { prospectingMessages } from "@/i18n/messages/prospecting";
 import { prospectingUiMessages } from "@/i18n/messages/prospectingUi";
 import { MAP_POINT_TONES } from "../prospectingUi";
@@ -65,7 +65,13 @@ const MAPLIBRE_DARK_PAINT = {
 
 let mapsLoader: Promise<void> | null = null;
 
-function loadGoogleMaps(apiKey: string) {
+/**
+ * Google's language for its controls ("Zoom in") and map labels. The script
+ * loads once per page, so a language picked later applies after a reload.
+ */
+export const GOOGLE_MAPS_LANGUAGE: Record<Lang, string> = { en: "en", pt: "pt-BR", es: "es" };
+
+function loadGoogleMaps(apiKey: string, lang: Lang) {
   if ((window as any).google?.maps) return Promise.resolve();
   if (mapsLoader) return mapsLoader;
   mapsLoader = new Promise<void>((resolve, reject) => {
@@ -77,7 +83,7 @@ function loadGoogleMaps(apiKey: string) {
       cleanup();
       resolve();
     };
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&v=weekly&loading=async&callback=${callbackName}`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&v=weekly&loading=async&language=${GOOGLE_MAPS_LANGUAGE[lang]}&callback=${callbackName}`;
     script.async = true;
     script.onerror = () => {
       cleanup();
@@ -208,7 +214,7 @@ export function RoutePreviewMap({ start, stops, landmarks = [], encodedPolyline,
     let locationWatchId: number | undefined;
     const markers: any[] = [];
     const lines: any[] = [];
-    loadGoogleMaps(apiKey).then(() => {
+    loadGoogleMaps(apiKey, tp.lang).then(() => {
       if (cancelled || !containerRef.current) return;
       const google = (window as any).google;
       const visibleStops = stops.length ? stops : [start];
@@ -413,6 +419,10 @@ function MapLibreRouteMap({ start, stops, landmarks, landmarkKey, encodedPolylin
           "CooperativeGesturesHandler.WindowsHelpText": t("gestureWindows"),
           "CooperativeGesturesHandler.MacHelpText": t("gestureMac"),
           "CooperativeGesturesHandler.MobileHelpText": t("gestureMobile"),
+          // The control buttons' titles and labels, English by default.
+          "NavigationControl.ZoomIn": t("mapZoomIn"),
+          "NavigationControl.ZoomOut": t("mapZoomOut"),
+          "AttributionControl.ToggleAttribution": t("mapAttribution"),
         },
       });
       map.touchZoomRotate.disableRotation();
@@ -526,7 +536,7 @@ function MapLibreRouteMap({ start, stops, landmarks, landmarkKey, encodedPolylin
     };
     // labels and t only change with the language; the effect keys on what it draws.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [start.lat, start.lng, stops, landmarkKey, encodedPolyline, showCurrentLocation, locateLabel, onStopClick]);
+  }, [start.lat, start.lng, stops, landmarkKey, encodedPolyline, showCurrentLocation, locateLabel, onStopClick, t]);
 
   if (unavailable) return <MapUnavailable label={alt} hint={t("mapUnavailableHint")} className={`h-64 sm:h-72 ${className ?? ""}`} />;
   return (
