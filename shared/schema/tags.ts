@@ -8,7 +8,7 @@
 // guarded by CHECK constraints there; the allowed values are in shared/tags.ts.
 
 import { sql } from "drizzle-orm";
-import { bigserial, boolean, date, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { bigserial, boolean, date, index, integer, jsonb, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { organizations, salesLeads, salesProducts, salesReps, salesSaleItems, salesSales } from "./sales.js";
 
 export const tagBatches = pgTable("tag_batches", {
@@ -44,6 +44,8 @@ export const tagKits = pgTable("tag_kits", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: "restrict" }),
   repId: integer("rep_id").notNull().references(() => salesReps.id),
+  /** Short sequential number, shown as K-0001 (shared/tagKits.ts kitCode); migrations/0053_tag_kit_items.sql. */
+  kitNumber: integer("kit_number").notNull().default(sql`nextval('tag_kits_kit_number_seq')`),
   note: text("note"),
   createdByUserId: text("created_by_user_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -143,6 +145,24 @@ export const tagStockMovements = pgTable("tag_stock_movements", {
 }, (table) => ({
   tagIdx: index("tag_stock_movements_tag_idx").on(table.tagId, table.createdAt),
   referenceIdx: index("tag_stock_movements_reference_idx").on(table.referenceType, table.referenceId),
+}));
+
+/**
+ * What a kit handed out, written once at the hand-over (the packing list), so a kit keeps its history after pieces
+ * come back or move: left_at / left_reason ('returned' | 'moved') mark a piece that left the reseller's kit.
+ * migrations/0053_tag_kit_items.sql.
+ */
+export const tagKitItems = pgTable("tag_kit_items", {
+  kitId: uuid("kit_id").notNull().references(() => tagKits.id, { onDelete: "cascade" }),
+  tagId: uuid("tag_id").references(() => tags.id, { onDelete: "set null" }),
+  publicCode: text("public_code").notNull(),
+  batchId: uuid("batch_id"),
+  handedOutAt: timestamp("handed_out_at", { withTimezone: true }).notNull().defaultNow(),
+  leftAt: timestamp("left_at", { withTimezone: true }),
+  leftReason: text("left_reason"),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.kitId, table.publicCode] }),
+  tagIdx: index("tag_kit_items_tag_idx").on(table.tagId),
 }));
 
 // Append-only: every destination/type change writes one row, never updated.
@@ -353,6 +373,7 @@ export const tagJourneyEntries = pgTable("tag_journey_entries", {
 
 export type TagBatch = typeof tagBatches.$inferSelect;
 export type TagKit = typeof tagKits.$inferSelect;
+export type TagKitItemRow = typeof tagKitItems.$inferSelect;
 export type Tag = typeof tags.$inferSelect;
 export type TagDestinationChange = typeof tagDestinationHistory.$inferSelect;
 export type TagEvent = typeof tagEvents.$inferSelect;

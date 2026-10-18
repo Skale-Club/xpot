@@ -9,6 +9,7 @@ import {
   tagAcquisitionUnits,
   tagAcquisitions,
   tagBatches,
+  tagKitItems,
   tagKits,
   tagStockMovements,
   tags,
@@ -105,6 +106,7 @@ async function lockFulfillmentTags(tx: Tx, rawCodes: string[]) {
       ownershipType: tags.ownershipType,
       custodianRepId: tags.custodianRepId,
       repId: tags.repId,
+      batchId: tags.batchId,
       ownProductId: tags.salesProductId,
       batchProductId: tagBatches.salesProductId,
     })
@@ -136,6 +138,10 @@ export async function fulfillAcquisition(acquisitionId: string, codes: string[],
       note: acquisition.source === "stuscle" ? `Stuscle order ${acquisition.externalRef}` : "Manual acquisition",
       createdByUserId: userId,
     }).returning();
+    // The kit's packing list, kept after pieces come back (tag_kit_items).
+    await tx.insert(tagKitItems).values(picked.map((tag) => ({
+      kitId: kit.id, tagId: tag.id, publicCode: tag.publicCode, batchId: tag.batchId, handedOutAt: kit.createdAt,
+    }))).onConflictDoNothing();
 
     const remaining = new Map(picked.map((tag) => [tag.id, tag]));
     for (const line of lines) {

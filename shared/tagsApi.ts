@@ -1,6 +1,8 @@
 // Response shapes of the Xpot Tags API (server/routes/tags/*), shared with the
 // app. Dates travel as ISO strings.
 
+import type { TagQueueCounts } from "./tagQueues.js";
+
 export interface TagMetrics {
   interactions: number;
   qr: number;
@@ -102,6 +104,10 @@ export interface TagOverview {
   counts: Record<"total" | "inventory" | "assigned" | "active" | "disabled" | "retired" | "damaged", number>;
   /** Unsold pieces still in house stock vs. out with resellers. */
   stock: { house: number; withResellers: number };
+  /** The stock funnel, one shared stock number each (shared/tagMetrics.ts): not received → house → resellers → sold → live. */
+  funnel: { notReceived: number; house: number; withResellers: number; sold: number; live: number };
+  /** "Needs action" counts (shared/tagQueues.ts). */
+  queues: TagQueueCounts;
   interactions: { today: number; last7: number; last30: number };
   split30: { qr: number; nfc: number };
   approxUnique30: number;
@@ -189,10 +195,25 @@ export interface TagBatchItem {
 
 export interface TagKitItem {
   id: string;
+  /** Sequential number; shown as `kitCode`. */
+  kitNumber: number;
+  /** "K-0001" (shared/tagKits.ts kitCode). */
+  kitCode: string;
   repId: number;
   repName: string | null;
   note: string | null;
   createdAt: string;
+  /** Who owns the pieces handed out: `company` (consignment) or `rep` (a purchase); null for an empty kit. */
+  ownershipType: string | null;
+  /** What the kit handed out, for good (tag_kit_items): never shrinks. */
+  handedOutCount: number;
+  /** Of those, back in house stock. */
+  returnedCount: number;
+  /** Of those, moved to another reseller. */
+  movedCount: number;
+  /** Still in the kit and unsold: handed out − returned − moved − sold. */
+  stillWithCount: number;
+  /** Pieces in the kit right now (sold or not). */
   pieceCount: number;
   /** Pieces from this kit still unsold in the reseller's hands (`withResellers`, held by the kit's rep). */
   unsoldCount: number;
@@ -202,6 +223,20 @@ export interface TagKitItem {
   soldCount: number;
   acquisitionSource: string | null;
   unitCostCents: number | null;
+}
+
+/** One piece a kit handed out (GET /api/xpot/admin/tag-kits/:id/items): the packing list, with where it is now. */
+export interface TagKitPiece {
+  code: string;
+  tagId: string | null;
+  serialNumber: number | null;
+  batchCode: string | null;
+  productType: string | null;
+  face: string | null;
+  handedOutAt: string;
+  /** `in_kit` (still with the kit's reseller, unsold), `sold`, `returned` or `moved`. */
+  state: "in_kit" | "sold" | "returned" | "moved";
+  leftAt: string | null;
 }
 
 /** Pieces sold to one customer (lead), for the Visits side. */

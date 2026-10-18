@@ -14,6 +14,7 @@ import {
 import { canWorkOnTag } from "#shared/tagAccess.js";
 import { TAG_STOCK_METRIC_NAMES } from "#shared/tagMetrics.js";
 import { kitCostRequired, kitOwnership } from "#shared/tagKits.js";
+import { TAG_PIECE_QUEUES } from "#shared/tagQueues.js";
 import { TAG_FACES } from "#shared/tagFace.js";
 import { validateChipContent } from "#shared/chipContent.js";
 import { DIRECT_WRITE_METHODS, TAGS_APP_PATH } from "#shared/tagApp.js";
@@ -135,6 +136,8 @@ export const listQuerySchema = z.object({
   house: z.enum(["1", "true"]).transform(() => true).optional(),
   /** A stock number (shared/tagMetrics.ts): the list behind a count, e.g. the company stock card. */
   metric: z.enum(TAG_STOCK_METRIC_NAMES).optional(),
+  /** An Overview "Needs action" queue (shared/tagQueues.ts): the list behind its count. */
+  queue: z.enum(TAG_PIECE_QUEUES).optional(),
   /** Only the viewer's own pieces, even for a manager (the phone app's Pieces screen). */
   mine: z.enum(["1", "true"]).transform(() => true).optional(),
   method: z.enum(["qr", "nfc"]).optional(),
@@ -247,6 +250,17 @@ const kitSchema = z.object({
   quantity: z.number().int().min(1).max(TAG_MAX_BATCH_QUANTITY).optional(),
   note: optionalText(500),
   unitCostCents: z.number().int().nonnegative().optional(),
+  /** Consignment (`company`) or a purchase (`rep`); omitted: the rep's cost rule decides (shared/tagKits.ts). */
+  ownershipType: z.enum(["company", "rep"]).optional(),
+}).strict().refine((v) => v.codes?.length || (v.batchId && v.quantity), {
+  message: "Choose the pieces: codes, or a batch and a quantity",
+});
+
+/** Hand out dry run: the same pieces a kit would take, without moving them. */
+const kitCheckSchema = z.object({
+  codes: codeList.optional(),
+  batchId: z.string().uuid().optional(),
+  quantity: z.number().int().min(1).max(TAG_MAX_BATCH_QUANTITY).optional(),
 }).strict().refine((v) => v.codes?.length || (v.batchId && v.quantity), {
   message: "Choose the pieces: codes, or a batch and a quantity",
 });
@@ -814,12 +828,14 @@ export function registerTagRoutes(app: Express) {
       const rep = await storage.getSalesRep(input.repId);
       if (!rep) return res.status(404).json({ message: "Reseller not found" });
       const policy = rep.costPolicy === "zero" ? "zero" : "acquisition";
-      if (kitCostRequired(policy) && input.unitCostCents === undefined) {
+      // Acquisition rule: the rep buys the pieces. Zero-cost rule: company stock in the rep's custody (consignment),
+      // even when a reference cost is recorded. The person handing out may pick the other ownership for one kit; a
+      // purchase, or any kit under the acquisition rule, needs a cost (shared/tagKits.ts).
+      const ownershipType = input.ownershipType ?? kitOwnership(policy);
+      if (kitCostRequired(policy, ownershipType) && input.unitCostCents === undefined) {
         return res.status(400).json({ code: "tag_cost_required", message: "Unit acquisition cost is required for this partner" });
       }
-      // Acquisition rule: the rep buys the pieces. Zero-cost rule: company stock in the rep's custody (consignment),
-      // even when a reference cost is recorded (shared/tagKits.ts).
-      res.status(201).json(await repo.deliverKit({ ...input, ownershipType: kitOwnership(policy) }, userIdOf(req)));
+      res.status(201).json(await repo.deliverKit({ ...input, ownershipType }, userIdOf(req)));
     } catch (err) {
       fail(res, err, "Failed to deliver kit");
     }
@@ -831,6 +847,37 @@ export function registerTagRoutes(app: Express) {
       res.json(await repo.returnToHouse(codes, userIdOf(req)));
     } catch (err) {
       fail(res, err, "Failed to return pieces");
+    }
+  });
+
+  // Dry runs for Distribution: per code, whether it can be handed out / taken back now, and why not. Nothing moves.
+  app.post("/api/xpot/admin/tag-kits/check", requireTagManager, async (req, res) => {
+    try {
+      res.json(await repo.checkHandOut(kitCheckSchema.parse(req.body)));
+    } catch (err) {
+      fail(res, err, "Failed to check pieces");
+    }
+  });
+
+  app.post("/api/xpot/admin/tag-kits/return/check", requireTagManager, async (req, res) => {
+    try {
+      const { codes } = z.object({ codes: codeList }).strict().parse(req.body);
+      res.json(await repo.checkTakeBack(codes));
+    } catch (err) {
+      fail(res, err, "Failed to check pieces");
+    }
+  });
+
+  // What a kit handed out (its packing list), each piece with where it is now.
+  app.get("/api/xpot/admin/tag-kits/:id/items", requireTagManager, async (req, res) => {
+    const id = idParam(req, res);
+    if (!id) return;
+    try {
+      const items = await repo.getKitItems(id);
+      if (!items) return res.status(404).json({ message: "Kit not found" });
+      res.json(items);
+    } catch (err) {
+      fail(res, err, "Failed to load kit");
     }
   });
 
@@ -891,6 +938,20 @@ export function registerTagRoutes(app: Express) {
       res.status(result.alreadyRegistered ? 200 : 201).json(result);
     } catch (err) {
       fail(res, err, "Failed to add piece to batch");
+    }
+  });
+
+  // Undo a read the intake station just made: the piece goes back to "not received" (an issued code) or is removed
+  // (a scanned batch's newest piece). Refused once anything else happened to it (server/tags/repository.ts).
+  app.delete("/api/xpot/admin/tag-batches/:id/tags/:tagId", requireTagAdmin, async (req, res) => {
+    const id = idParam(req, res);
+    if (!id) return;
+    const tagId = z.string().uuid().safeParse(req.params.tagId);
+    if (!tagId.success) return res.status(404).json({ message: "Tag not found" });
+    try {
+      res.json(await repo.undoBatchIntake(id, tagId.data, userIdOf(req)));
+    } catch (err) {
+      fail(res, err, "Failed to undo the read");
     }
   });
 
