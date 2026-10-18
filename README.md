@@ -88,7 +88,7 @@ npx vitest run --no-file-parallelism tests/tags/tags.integration.test.ts tests/t
   tests/wholesale.integration.test.ts tests/mcp.oauth.integration.test.ts \
   tests/tags/stockMetrics.integration.test.ts tests/tags/distribution.integration.test.ts \
   tests/tags/pieceScreen.integration.test.ts tests/tags/resellerCustomers.integration.test.ts \
-  tests/tags/organizationKits.integration.test.ts
+  tests/tags/organizationKits.integration.test.ts tests/leadPieceAccess.integration.test.ts
 ```
 
 Run them one file at a time (`--no-file-parallelism`): several truncate the
