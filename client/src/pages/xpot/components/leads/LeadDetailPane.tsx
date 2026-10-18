@@ -28,6 +28,8 @@ import type { EnrichedSalesVisit, FullSalesLead } from "../../types";
 import { ModuleBadge } from "@/components/xpot/ModuleBadge";
 import { fileSrc } from "@/lib/files";
 import { formatCents, formatVisitWhen } from "../../utils";
+import { companyStage } from "../../visitRules";
+import { useLeadAccess } from "../../leadAccess";
 import { useLeadSalesSnapshot } from "../../hooks/useSalesModule";
 import { LeadStatePill } from "./LeadStatePill";
 
@@ -133,6 +135,8 @@ export function LeadDetailPane({ lead, pieces, visits, onClose, backLabel, onDel
   const t = useT(leadsMessages);
   const location = lead.locations?.[0];
   const routeUrl = buildRouteUrl(location);
+  // A rep who only holds a piece here may edit it but not delete it or change its stage.
+  const access = useLeadAccess(lead);
   const address = [location?.addressLine1, location?.city, location?.state].filter(Boolean).join(", ");
   // The tiles read the same snapshot as the "Sales and stock" card below (one
   // cached query). They used the list's per-lead totals, which the company
@@ -179,7 +183,7 @@ export function LeadDetailPane({ lead, pieces, visits, onClose, backLabel, onDel
               <a href={routeUrl} target="_blank" rel="noopener noreferrer"><Navigation aria-hidden="true" />{t("directions")}</a>
             </Button>
           ) : null}
-          {lead.status !== "customer" && onConvertToCustomer ? (
+          {access.owner && companyStage(lead.status) !== "customer" && onConvertToCustomer ? (
             <Button type="button" variant="secondary" onClick={onConvertToCustomer} loading={converting}>
               <UserRoundCheck aria-hidden="true" />{t("promote")}
             </Button>
@@ -200,7 +204,7 @@ export function LeadDetailPane({ lead, pieces, visits, onClose, backLabel, onDel
           <SectionCard title={t("sectionContacts")} icon={UsersRound} bodyClassName="p-4 sm:p-5"><LeadContacts leadId={lead.id} contacts={lead.contacts ?? []} /></SectionCard>
         </div>
         <div className="min-w-0 space-y-6">
-          <SectionCard title={t("sectionSales")} icon={DollarSign} bodyClassName="p-4 sm:p-5"><LeadSalesPanel leadId={lead.id} leadName={lead.name} compact /></SectionCard>
+          <SectionCard title={t("sectionSales")} icon={DollarSign} bodyClassName="p-4 sm:p-5"><LeadSalesPanel leadId={lead.id} leadName={lead.name} lead={lead} compact /></SectionCard>
           {pieces && pieces.pieces > 0 ? (
             <SectionCard title={<span className="flex items-center gap-2">{t("sectionPieces")}<ModuleBadge module="tags" /></span>} icon={Nfc} bodyClassName="p-4 sm:p-5">
               <LeadPiecesPanel leadId={lead.id} leadName={lead.name} summary={pieces} />
@@ -222,7 +226,11 @@ export function LeadDetailPane({ lead, pieces, visits, onClose, backLabel, onDel
       </div>
 
       <div className="flex justify-end border-t border-white/[0.06] pt-4">
-        <Button type="button" variant="ghost" size="sm" onClick={onDelete} className="text-red-300/70 hover:bg-red-500/[0.08] hover:text-red-300"><Trash2 aria-hidden="true" />{t("delete")}</Button>
+        {access.owner ? (
+          <Button type="button" variant="ghost" size="sm" onClick={onDelete} className="text-red-300/70 hover:bg-red-500/[0.08] hover:text-red-300"><Trash2 aria-hidden="true" />{t("delete")}</Button>
+        ) : (
+          <p className="text-xs text-white/40" data-testid="lead-owner-only-note">{t("ownerOnlyNote")}</p>
+        )}
       </div>
     </div>
   );

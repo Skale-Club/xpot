@@ -22,6 +22,7 @@ import {
   eligibleCandidates,
   routeFill,
   samePlace,
+  routeOfJob,
   todayRouteOf,
   selectableCandidateIds,
   activeRunTiming,
@@ -288,5 +289,18 @@ describe("search results", () => {
   it("treats points ~50 m apart as one place", () => {
     expect(samePlace({ lat: 42.3, lng: -71.5 }, { lat: 42.3001, lng: -71.5001 })).toBe(true);
     expect(samePlace({ lat: 42.3, lng: -71.5 }, { lat: 42.31, lng: -71.5 })).toBe(false);
+  });
+});
+
+describe("routeOfJob", () => {
+  const routes = [{ id: 1, jobId: null }, { id: 2, jobId: 7 }];
+
+  it("finds the route built from a search", () => {
+    expect(routeOfJob(routes, 7)?.id).toBe(2);
+  });
+
+  it("never takes a route without a job for \"no search open\"", () => {
+    expect(routeOfJob(routes, null)).toBeUndefined();
+    expect(routeOfJob(undefined, 7)).toBeUndefined();
   });
 });

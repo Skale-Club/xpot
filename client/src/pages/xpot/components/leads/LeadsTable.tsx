@@ -44,6 +44,8 @@ export type LeadRowActions = {
   onSell: (lead: FullSalesLead) => void;
   onCheckIn: (lead: FullSalesLead) => void;
   onDelete: (lead: FullSalesLead) => void;
+  /** Whether the viewer may delete this company (leadAccess owner); Delete is left out when not. */
+  canDelete?: (lead: FullSalesLead) => boolean;
 };
 
 function RowAction({ title, onClick, children, className = "" }: { title: string; onClick: () => void; children: ReactNode; className?: string }) {
@@ -72,6 +74,7 @@ export function LeadsTable({
   onSell,
   onCheckIn,
   onDelete,
+  canDelete,
 }: {
   leads: FullSalesLead[];
   selectedId: number | null;
@@ -209,9 +212,11 @@ export function LeadsTable({
           <RowAction title={t("checkIn")} onClick={() => onCheckIn(lead)} className="hover:text-blue-300">
             <LogIn aria-hidden="true" />
           </RowAction>
-          <RowAction title={t("delete")} onClick={() => onDelete(lead)} className="hover:bg-red-500/15 hover:text-red-300">
-            <Trash2 aria-hidden="true" />
-          </RowAction>
+          {!canDelete || canDelete(lead) ? (
+            <RowAction title={t("delete")} onClick={() => onDelete(lead)} className="hover:bg-red-500/15 hover:text-red-300">
+              <Trash2 aria-hidden="true" />
+            </RowAction>
+          ) : null}
         </div>
       ),
     },

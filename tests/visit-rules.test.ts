@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clampGeofenceRadiusInput, followUpDueTime, isWorkedCompany, needsFollowUp, visitLocationException } from "../client/src/pages/xpot/visitRules";
+import { clampGeofenceRadiusInput, companyStage, followUpDueTime, isWorkedCompany, needsFollowUp, visitLocationException } from "../client/src/pages/xpot/visitRules";
 
 describe("clampGeofenceRadiusInput", () => {
   it("keeps typed values in the 10-5000 range the server accepts", () => {
@@ -51,6 +51,16 @@ describe("followUpDueTime", () => {
     expect(followUpDueTime({ nextVisitDueAt: "2026-11-02T00:00:00Z", openFollowUpDueAt: "2026-11-01T00:00:00Z" }))
       .toBe(Date.parse("2026-11-01T00:00:00Z"));
     expect(followUpDueTime({ openFollowUp: true, openFollowUpDueAt: null })).toBe(Number.POSITIVE_INFINITY);
+  });
+});
+
+describe("companyStage", () => {
+  it("counts the older \"active\" status as a customer, as its pill reads", () => {
+    expect(companyStage("active")).toBe("customer");
+    expect(companyStage("customer")).toBe("customer");
+    expect(companyStage("lead")).toBe("lead");
+    expect(companyStage("prospect")).toBe("prospect");
+    expect(companyStage("inactive")).toBe("inactive");
   });
 });
 

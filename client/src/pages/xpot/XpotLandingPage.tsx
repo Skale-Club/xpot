@@ -333,7 +333,7 @@ export function XpotLandingPage() {
               <XpotLogo className="h-8 w-auto" decorative />
             </button>
 
-            <nav className="hidden items-center gap-6 text-sm text-white/55 md:flex" aria-label="Sections">
+            <nav className="hidden items-center gap-6 text-sm text-white/55 md:flex" aria-label={t("navSections")}>
               <button type="button" onClick={() => scrollTo("audience")} className="transition-colors hover:text-white">{content.navigation.audience}</button>
               <button type="button" onClick={() => scrollTo("how")} className="transition-colors hover:text-white">{content.navigation.how}</button>
               <button type="button" onClick={() => scrollTo("faq")} className="transition-colors hover:text-white">{content.navigation.faq}</button>

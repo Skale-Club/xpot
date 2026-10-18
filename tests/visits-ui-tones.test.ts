@@ -16,6 +16,10 @@ describe("company state pill", () => {
     const tones = new Set([LEAD_STATE_TONE.prospect, LEAD_STATE_TONE.lead, LEAD_STATE_TONE.customer]);
     expect(tones.size).toBe(3);
   });
+
+  it("paints \"active\" like the Customer it reads as", () => {
+    expect(LEAD_STATE_TONE.active).toBe(LEAD_STATE_TONE.customer);
+  });
 });
 
 describe("visit status badge and filter", () => {

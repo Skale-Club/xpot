@@ -5,12 +5,13 @@ import { Pill, toneOf, type PillTone } from "@/components/xpot/StatusPill";
 /**
  * Where a company is with us. A prospect has not been worked yet (idle
  * slate), a lead has been visited (sky, like a completed visit), a customer
- * has bought (blue, like "sold"). No green: green is money; no violet: that is Tags.
+ * has bought (blue, like "sold"; "active", the older word, reads Customer too).
+ * No green: green is money; no violet: that is Tags.
  */
 export const LEAD_STATE_TONE: Record<string, PillTone> = {
   prospect: "slate",
   lead: "sky",
-  active: "sky",
+  active: "blue",
   customer: "blue",
   inactive: "muted",
 };

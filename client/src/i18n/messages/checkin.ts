@@ -160,6 +160,7 @@ const en = {
   searchNoLeads: "No saved company matches",
   searchGoogleHint: "Type at least 2 letters to search Google",
   searchGoogleEmpty: "Nothing found on Google",
+  searchGoogleFailed: "Google search isn't available right now. Pick a saved company or add a new one.",
   searchNearby: "Nearby",
   searchClear: "Clear search",
 
@@ -328,6 +329,7 @@ export const checkinMessages: Dictionary<typeof en> = {
     searchNoLeads: "Nenhuma empresa salva com esse nome",
     searchGoogleHint: "Digite pelo menos 2 letras para buscar no Google",
     searchGoogleEmpty: "Nada encontrado no Google",
+    searchGoogleFailed: "A busca no Google não está disponível agora. Escolha uma empresa salva ou adicione uma nova.",
     searchNearby: "Perto de mim",
     searchClear: "Limpar busca",
 
@@ -492,6 +494,7 @@ export const checkinMessages: Dictionary<typeof en> = {
     searchNoLeads: "Ninguna empresa guardada coincide",
     searchGoogleHint: "Escribe al menos 2 letras para buscar en Google",
     searchGoogleEmpty: "Nada encontrado en Google",
+    searchGoogleFailed: "La búsqueda en Google no está disponible ahora. Elige una empresa guardada o agrega una nueva.",
     searchNearby: "Cerca de mí",
     searchClear: "Borrar búsqueda",
 

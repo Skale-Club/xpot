@@ -521,7 +521,7 @@ export function XpotCheckIn() {
         <Dialog open={activeVisitPanel === "sales"} onOpenChange={(open) => !open && setActiveVisitPanel(null)}>
           <DialogContent className="max-w-md">
             <DialogHeader className="pr-8"><DialogTitle className="text-base">{t("visitSales")}</DialogTitle></DialogHeader>
-            <LeadSalesPanel leadId={activeVisit.lead.id} leadName={activeVisit.lead.name} visitId={activeVisit.id} compact />
+            <LeadSalesPanel leadId={activeVisit.lead.id} leadName={activeVisit.lead.name} lead={activeVisit.lead} visitId={activeVisit.id} compact />
           </DialogContent>
         </Dialog>
       )}

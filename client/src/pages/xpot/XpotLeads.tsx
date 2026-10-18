@@ -44,7 +44,8 @@ import { FilterBar, FilterChips, FilterDay, FilterSearch, FilterToggle, fromDayK
 import { currentSearch, useUrlFilters } from "@/hooks/use-url-filters";
 import { ListPager, usePagedList } from "@/components/xpot/pagination";
 import { selectLeadForDetail } from "./lead-detail-selection";
-import { followUpDueTime, isWorkedCompany, needsFollowUp } from "./visitRules";
+import { companyStage, followUpDueTime, isWorkedCompany, needsFollowUp } from "./visitRules";
+import { leadAccess } from "./leadAccess";
 import { isFinishedVisitStatus } from "@shared/visit-status";
 
 
@@ -115,18 +116,20 @@ function LeadCard({ lead, onOpen, onMore, pieces, onOpenPieces, lastVisit }: {
   );
 }
 
-function LeadActionSheet({ lead, onClose, onSell, onCheckIn, onDelete }: {
+function LeadActionSheet({ lead, onClose, onSell, onCheckIn, onDelete, canDelete }: {
   lead: FullSalesLead | null;
   onClose: () => void;
   onSell: () => void;
   onCheckIn: () => void;
   onDelete: () => void;
+  /** Only the owner, a Rep Admin of its organization or a manager may delete it (leadAccess). */
+  canDelete: boolean;
 }) {
   const t = useT(leadsMessages);
   const items = [
     { key: "sell", label: t("salesAndConsignment"), icon: DollarSign, run: onSell, cls: "text-emerald-300" },
     { key: "checkin", label: t("checkIn"), icon: LogIn, run: onCheckIn, cls: "text-blue-300" },
-    { key: "delete", label: t("delete"), icon: Trash2, run: onDelete, cls: "text-red-300" },
+    ...(canDelete ? [{ key: "delete", label: t("delete"), icon: Trash2, run: onDelete, cls: "text-red-300" }] : []),
   ];
   return (
     <BottomSheet open={Boolean(lead)} onClose={onClose} title={lead?.name}>
@@ -166,8 +169,8 @@ const LEAD_FILTER_LABEL = {
  */
 function matchesLeadFilter(lead: FullSalesLead, filter: LeadFilter, lastOutcome?: string | null): boolean {
   if (filter === "followup") return needsFollowUp(lead, lastOutcome);
-  if (filter === "lead") return ["lead", "active", "prospect"].includes(lead.status);
-  if (filter === "customer") return lead.status === "customer";
+  if (filter === "lead") return ["lead", "prospect"].includes(companyStage(lead.status));
+  if (filter === "customer") return companyStage(lead.status) === "customer";
   // "prospect" lists the unvisited prospects, a separate pool (see `prospects` below).
   return true;
 }
@@ -175,7 +178,9 @@ function matchesLeadFilter(lead: FullSalesLead, filter: LeadFilter, lastOutcome?
 export function XpotLeads() {
   const t = useT(leadsMessages);
   const tc = useT(commonMessages);
-  const { setLocation } = useXpotQueries();
+  const { setLocation, me } = useXpotQueries();
+  // A rep who only holds a piece at a company may not delete it (the server refuses).
+  const canDelete = useCallback((lead: FullSalesLead) => leadAccess(me, lead).owner, [me]);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const isDesktop = useIsDesktop();
@@ -451,6 +456,7 @@ export function XpotLeads() {
                   onSell={setSalesLead}
                   onCheckIn={(lead) => setLocation(`/route/check-in?leadId=${lead.id}`)}
                   onDelete={setLeadPendingDelete}
+                  canDelete={canDelete}
                 />
               )}
               <ListPager shown={pagedLeads.shown} total={pagedLeads.total} hasMore={pagedLeads.hasMore} onMore={pagedLeads.showMore} />
@@ -481,6 +487,7 @@ export function XpotLeads() {
         onSell={() => actionLead && setSalesLead(actionLead)}
         onCheckIn={() => actionLead && setLocation(`/route/check-in?leadId=${actionLead.id}`)}
         onDelete={() => actionLead && setLeadPendingDelete(actionLead)}
+        canDelete={actionLead ? canDelete(actionLead) : false}
       />
 
       {/* Sales & consignment for one company, with no visit attached. */}
@@ -489,7 +496,7 @@ export function XpotLeads() {
         onOpenChange={(o) => { if (!o) setSalesLead(null); }}
         title={salesLead?.name ?? t("salesAndConsignment")}
       >
-        {salesLead && <LeadSalesPanel leadId={salesLead.id} leadName={salesLead.name} compact />}
+        {salesLead && <LeadSalesPanel leadId={salesLead.id} leadName={salesLead.name} lead={salesLead} compact />}
       </SheetDialog>
 
       {/* The same "New company" dialog as check-in and the Dashboard (Google
