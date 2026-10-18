@@ -1,5 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode } from "react";
-import { Building2, Loader2 as SpinnerIcon, LocateFixed, Plus, Search, X } from "lucide-react";
+import { Building2, LocateFixed, Plus, Search, X } from "lucide-react";
+import { DotsLoader } from "@/components/ui/spinner";
+import { Pill } from "@/components/xpot/StatusPill";
 import { useT } from "@/i18n";
 import { checkinMessages } from "@/i18n/messages/checkin";
 import { GoogleLogo } from "@/components/ui/google-logo";
@@ -137,7 +139,8 @@ export const PlaceLeadSearch = forwardRef<PlaceLeadSearchHandle, {
           <span className={`block text-sm font-semibold text-white/90 ${lineClamp}`}>{lead.name}</span>
           <span className={`block text-xs text-white/40 ${lineClamp}`}>{address || lead.industry || t("localLead")}</span>
         </span>
-        <span className="mt-0.5 shrink-0 rounded-full bg-emerald-400/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-300">{t("badgeLocal")}</span>
+        {/* Already saved: neutral, green is money. */}
+        <Pill tone="slate" className="mt-0.5 shrink-0">{t("badgeLocal")}</Pill>
       </button>
     );
   });
@@ -233,9 +236,9 @@ export const PlaceLeadSearch = forwardRef<PlaceLeadSearchHandle, {
           data-testid="place-lead-search"
         />
         <div className="flex shrink-0 items-center gap-1 pr-2">
-          {busy || placeQuery.isFetching ? <SpinnerIcon className="h-4 w-4 animate-spin text-white/35" /> : null}
+          {busy || placeQuery.isFetching ? <DotsLoader size="xs" tone="muted" /> : null}
           {value ? (
-            <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => { onChange(""); inputRef.current?.focus(); }} aria-label={t("searchClear")} title={t("searchClear")} className="flex h-8 w-8 items-center justify-center rounded-full text-white/35 transition-colors hover:bg-white/[0.07] hover:text-white/80">
+            <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => { onChange(""); inputRef.current?.focus(); }} aria-label={t("searchClear")} title={t("searchClear")} className="flex h-10 w-10 items-center justify-center rounded-full text-white/35 transition-colors hover:bg-white/[0.07] hover:text-white/80">
               <X className="h-4 w-4" />
             </button>
           ) : trailing}

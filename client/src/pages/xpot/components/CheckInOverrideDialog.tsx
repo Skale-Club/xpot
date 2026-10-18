@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { MapPinOff, ShieldAlert } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2 } from "@/components/ui/loader";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/xpot/Field";
+import { InlineAlert } from "@/components/xpot/InlineAlert";
 import { useT } from "@/i18n";
 import { checkinMessages } from "@/i18n/messages/checkin";
 import { formatMeters } from "../utils";
@@ -53,30 +55,22 @@ export function CheckInOverrideDialog({ open, onOpenChange, miss, leadName, load
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className="max-w-md rounded-2xl border-0 p-6"
-        style={{ background: "#0e1117", boxShadow: "0 24px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.07)" }}
-      >
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2.5 text-base font-semibold text-white">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-400/10 text-amber-300">
-              {miss ? <ShieldAlert className="h-[18px] w-[18px]" /> : <MapPinOff className="h-[18px] w-[18px]" />}
-            </span>
-            {t("overrideTitle")}
-          </DialogTitle>
+      <DialogContent className="max-w-md">
+        <DialogHeader className="pr-8">
+          <DialogTitle className="text-base">{t("overrideTitle")}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="rounded-xl border border-amber-400/15 bg-amber-400/[0.06] px-3.5 py-3 text-sm leading-relaxed text-amber-100/85">
+          <InlineAlert tone="warning" icon={miss ? ShieldAlert : MapPinOff}>
             {miss
               ? t("overrideOutside", { distance: formatMeters(miss.distanceMeters), name: leadName, radius: formatMeters(miss.allowedRadiusMeters) })
               : t("overrideNoLocation", { name: leadName })}
-            {miss?.accuracyMeters ? <span className="mt-1 block text-xs text-amber-100/55">{t("overrideAccuracy", { accuracy: formatMeters(miss.accuracyMeters) })}</span> : null}
-          </div>
+            {miss?.accuracyMeters ? <span className="mt-1 block text-xs text-white/50">{t("overrideAccuracy", { accuracy: formatMeters(miss.accuracyMeters) })}</span> : null}
+          </InlineAlert>
 
           <p className="text-xs leading-relaxed text-white/50">{t("overrideAsk")}</p>
 
-          <div className="space-y-2" role="radiogroup">
+          <div className="space-y-2" role="radiogroup" aria-label={t("overrideAsk")}>
             {reasons.map((option) => {
               const selected = option.id === reasonId;
               return (
@@ -86,10 +80,10 @@ export function CheckInOverrideDialog({ open, onOpenChange, miss, leadName, load
                   role="radio"
                   aria-checked={selected}
                   onClick={() => setReasonId(option.id)}
-                  className={`flex w-full items-center gap-3 rounded-xl border px-3.5 py-3 text-left text-sm transition-colors ${selected ? "border-indigo-400/40 bg-indigo-500/10 text-white" : "border-white/[0.08] bg-white/[0.03] text-white/70 hover:bg-white/[0.05]"}`}
+                  className={`flex min-h-11 w-full items-center gap-3 rounded-xl border px-3.5 py-3 text-left text-sm transition-colors ${selected ? "border-blue-400/40 bg-blue-500/10 text-white" : "border-white/[0.08] bg-white/[0.03] text-white/70 hover:bg-white/[0.05]"}`}
                 >
-                  <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${selected ? "border-indigo-300" : "border-white/25"}`}>
-                    {selected ? <span className="h-2 w-2 rounded-full bg-indigo-300" /> : null}
+                  <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${selected ? "border-blue-300" : "border-white/25"}`}>
+                    {selected ? <span className="h-2 w-2 rounded-full bg-blue-300" /> : null}
                   </span>
                   {option.label}
                 </button>
@@ -98,33 +92,26 @@ export function CheckInOverrideDialog({ open, onOpenChange, miss, leadName, load
           </div>
 
           {reasonId === "other" ? (
-            <textarea
+            <Textarea
               value={otherText}
               onChange={(event) => setOtherText(event.target.value.slice(0, 500))}
               placeholder={t("overrideOtherPlaceholder")}
+              aria-label={t("overrideOtherPlaceholder")}
               rows={3}
               autoFocus
-              className="w-full resize-none rounded-xl border border-white/[0.09] bg-white/[0.06] px-3 py-2.5 text-[16px] text-white placeholder:text-white/25 focus:border-indigo-400/40 focus:outline-none"
+              className="resize-none"
             />
           ) : null}
-
-          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <button type="button" onClick={() => onOpenChange(false)} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-white/60 transition-colors hover:bg-white/[0.06] hover:text-white">
-              {t("overrideCancel")}
-            </button>
-            <button
-              type="button"
-              disabled={!reason || loading}
-              onClick={() => onConfirm(reason)}
-              className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition-all disabled:opacity-40"
-              style={{ background: "linear-gradient(135deg, #3b82f6, #6366f1)" }}
-              data-testid="check-in-override-confirm"
-            >
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              {t("overrideConfirm")}
-            </button>
-          </div>
         </div>
+
+        <DialogFooter className="gap-2 sm:space-x-0">
+          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={loading}>
+            {t("overrideCancel")}
+          </Button>
+          <Button type="button" variant="brand" disabled={!reason} loading={loading} onClick={() => onConfirm(reason)} data-testid="check-in-override-confirm">
+            {t("overrideConfirm")}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

@@ -1,7 +1,12 @@
 import { useEffect, useState } from "react";
 import { Building2, Search } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2 } from "@/components/ui/loader";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { DotsLoader } from "@/components/ui/spinner";
+import { FIELD_CONTROL, Input } from "@/components/xpot/Field";
+import { Pill } from "@/components/xpot/StatusPill";
+import { SURFACE_MODAL_CLASS } from "@/components/xpot/surface";
+import { commonMessages } from "@/i18n/messages/common";
 import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/i18n";
 import { checkinMessages } from "@/i18n/messages/checkin";
@@ -28,6 +33,7 @@ export function CreateLeadDialog({ open, onOpenChange, initialName, onCreated, s
 }) {
   const { toast } = useToast();
   const t = useT(checkinMessages);
+  const tc = useT(commonMessages);
   const { geoState, invalidateXpotData } = useXpotShared();
   const emptyForm = { name: initialName, phone: "", email: "", website: "", industry: "", address: "", city: "", state: "" };
   const [form, setForm] = useState(emptyForm);
@@ -104,55 +110,41 @@ export function CreateLeadDialog({ open, onOpenChange, initialName, onCreated, s
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className="max-w-sm rounded-2xl border-0 p-6"
-        style={{ background: "#0e1117", boxShadow: "0 24px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.07)" }}
-      >
-        <DialogHeader>
-          <DialogTitle className="text-base font-semibold text-white">{t("newCompany")}</DialogTitle>
+      <DialogContent className="max-w-sm">
+        <DialogHeader className="pr-8">
+          <DialogTitle className="text-base">{t("newCompany")}</DialogTitle>
         </DialogHeader>
-        <div className="space-y-2.5 mt-1">
+        <div className="space-y-2.5">
           {/* Place search */}
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" aria-hidden="true" />
             <input
+              aria-label={t("placeSearchPlaceholder")}
               value={placeSearch}
               onChange={(e) => { setPlaceSearch(e.target.value); setPlaceDropdownOpen(true); }}
               onFocus={() => setPlaceDropdownOpen(true)}
               onBlur={() => setTimeout(() => setPlaceDropdownOpen(false), 150)}
               placeholder={t("placeSearchPlaceholder")}
-              className="w-full h-10 rounded-xl pl-9 pr-9 text-[16px] text-white placeholder:text-white/25 focus:outline-none"
-              style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.09)" }}
+              className={`${FIELD_CONTROL} py-2 pl-9 pr-10`}
             />
-            {placeQuery.isFetching && <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-white/30" />}
+            {placeQuery.isFetching && <DotsLoader size="xs" tone="muted" className="absolute right-3 top-1/2 -translate-y-1/2" />}
             {placeDropdownOpen && placeQuery.data?.results.length ? (
-              <div
-                className="absolute left-0 right-0 top-full z-50 max-h-48 overflow-y-auto"
-                style={{
-                  background: "#0e1117",
-                  border: "1px solid rgba(255,255,255,0.07)",
-                  borderTop: "none",
-                  borderBottomLeftRadius: "12px",
-                  borderBottomRightRadius: "12px",
-                  boxShadow: "0 16px 32px rgba(0,0,0,0.5)",
-                }}
-              >
+              <div className={`absolute left-0 right-0 top-full z-50 mt-1 max-h-48 overflow-y-auto rounded-xl shadow-[0_16px_32px_rgba(0,0,0,0.5)] ${SURFACE_MODAL_CLASS}`}>
                 {placeQuery.data.results.map((place) => (
                   <button
                     key={place.placeId}
                     type="button"
                     onMouseDown={() => applyPlace(place)}
-                    className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-white/[0.04]"
-                    style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}
+                    className="flex min-h-11 w-full items-center gap-3 border-t border-white/[0.05] px-4 py-2.5 text-left transition-colors first:border-t-0 hover:bg-white/[0.04]"
                   >
-                    <Building2 className="h-4 w-4 shrink-0 text-white/30" />
+                    <Building2 className="h-4 w-4 shrink-0 text-white/30" aria-hidden="true" />
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-medium text-white">{place.name}</div>
                       <div className="truncate text-xs text-white/35">{place.address}</div>
                     </div>
                     {/* Warn before a duplicate: this business is already saved. */}
                     {findMatchingLead(place, leadsQuery.data ?? []) ? (
-                      <span className="shrink-0 rounded-full bg-blue-400/10 px-2 py-0.5 text-[10px] font-semibold text-blue-300">{t("badgeMatch")}</span>
+                      <Pill tone="blue" className="shrink-0">{t("badgeMatch")}</Pill>
                     ) : null}
                   </button>
                 ))}
@@ -167,53 +159,29 @@ export function CreateLeadDialog({ open, onOpenChange, initialName, onCreated, s
             { key: "industry", value: form.industry, onChange: f("industry"), placeholder: t("fieldIndustry") },
             { key: "address", value: form.address, onChange: f("address"), placeholder: t("streetPlaceholder") },
           ].map(({ key, value, onChange, placeholder }) => (
-            <input
-              key={key}
-              value={value}
-              onChange={onChange}
-              placeholder={placeholder}
-              className="w-full h-10 rounded-xl px-3 text-[16px] text-white placeholder:text-white/25 focus:outline-none"
-              style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.09)" }}
-            />
+            <Input key={key} value={value} onChange={onChange} placeholder={placeholder} aria-label={placeholder} />
           ))}
-          <input
+          <Input
             value={form.phone}
             onChange={(e) => setForm((prev) => ({ ...prev, phone: maskUsPhoneInput(e.target.value) }))}
             placeholder={t("fieldPhone")}
+            aria-label={t("fieldPhone")}
             inputMode="tel"
-            className="w-full h-10 rounded-xl px-3 text-[16px] text-white placeholder:text-white/25 focus:outline-none"
-            style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.09)" }}
           />
-          <input
-            value={form.email}
-            onChange={f("email")}
-            placeholder={t("fieldEmail")}
-            type="email"
-            inputMode="email"
-            className="w-full h-10 rounded-xl px-3 text-[16px] text-white placeholder:text-white/25 focus:outline-none"
-            style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.09)" }}
-          />
+          <Input value={form.email} onChange={f("email")} placeholder={t("fieldEmail")} aria-label={t("fieldEmail")} type="email" inputMode="email" />
           <div className="grid grid-cols-2 gap-2">
-            <input
-              value={form.city}
-              onChange={f("city")}
-              placeholder={t("cityPlaceholder")}
-              className="w-full h-10 rounded-xl px-3 text-[16px] text-white placeholder:text-white/25 focus:outline-none"
-              style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.09)" }}
-            />
-            <StateSelect value={form.state} onValueChange={(state) => setForm((previous) => ({ ...previous, state }))} placeholder={t("statePlaceholder")} selectClassName="text-[16px]" />
+            <Input value={form.city} onChange={f("city")} placeholder={t("cityPlaceholder")} aria-label={t("cityPlaceholder")} />
+            <StateSelect value={form.state} onValueChange={(state) => setForm((previous) => ({ ...previous, state }))} placeholder={t("statePlaceholder")} selectClassName="h-11 text-base sm:text-sm" />
           </div>
-
-          <button
-            disabled={createLeadMutation.isPending || !form.name.trim()}
-            onClick={handleCreate}
-            className="w-full rounded-xl py-2.5 text-sm font-semibold text-white transition-all disabled:opacity-40 mt-1"
-            style={{ background: "linear-gradient(135deg, #3b82f6, #6366f1)" }}
-          >
-            {createLeadMutation.isPending ? <Loader2 className="inline mr-2 h-4 w-4 animate-spin" /> : null}
-            {t("createCompany")}
-          </button>
         </div>
+        <DialogFooter className="gap-2 sm:space-x-0">
+          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={createLeadMutation.isPending}>
+            {tc("cancel")}
+          </Button>
+          <Button type="button" variant="brand" onClick={handleCreate} disabled={!form.name.trim()} loading={createLeadMutation.isPending}>
+            {t("createCompany")}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
