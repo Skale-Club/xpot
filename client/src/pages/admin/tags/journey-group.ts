@@ -49,3 +49,13 @@ export function groupJourneyRows(entries: readonly TagJourneyEntryItem[], min = 
   flush();
   return rows;
 }
+
+/**
+ * Which vocabulary an entry's before → after values are in: a piece's digital status ("tag_*" actions,
+ * inventory → active), its physical stock ("piece_*" actions, available → internal_use), or free text.
+ */
+export function journeyValueKind(action: string | null | undefined): "status" | "stock" | null {
+  if (action?.startsWith("tag_")) return "status";
+  if (action?.startsWith("piece_")) return "stock";
+  return null;
+}

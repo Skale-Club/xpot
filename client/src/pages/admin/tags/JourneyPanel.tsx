@@ -9,7 +9,6 @@ import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/i18n";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
 import { shellMessages } from "@/i18n/messages/shell";
-import { tagsMessages } from "@/i18n/messages/tags";
 import { Button } from "@/components/ui/button";
 import { SectionCard } from "@/components/xpot/DashboardKit";
 import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
@@ -17,7 +16,8 @@ import { PILL_DOTS, toneOf, JOURNEY_KIND_TONE } from "@/components/xpot/StatusPi
 import { adminTagsUiMessages } from "@/i18n/messages/adminTagsUi";
 import { errorMessage, formatDate, formatDateTime, formatTime, invalidateAdminTags, sendJson } from "./api";
 import { Loading } from "./pieces-shared";
-import { groupJourneyRows } from "./journey-group";
+import { groupJourneyRows, journeyValueKind } from "./journey-group";
+import { useTagLabels } from "./labels";
 import { NewEntryDialog, NewPlanDialog, PlanStatusDialog } from "./JourneyForms";
 import {
   EntryStatusBadge,
@@ -98,7 +98,7 @@ const LABELLED_ACTIONS = new Set<string>(JOURNEY_PRODUCTION_ACTIONS);
 
 function EntryRow({ entry, showScope }: { entry: TagJourneyEntryItem; showScope: boolean }) {
   const t = useT(manageTagsMessages);
-  const tt = useT(tagsMessages);
+  const tagLabels = useTagLabels();
   const labels = useJourneyLabels();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
@@ -108,14 +108,9 @@ function EntryRow({ entry, showScope }: { entry: TagJourneyEntryItem; showScope:
     onError: (err) => toast({ title: t("couldNotUpdateEntry"), description: errorMessage(err), variant: "destructive" }),
   });
   const dimmed = entry.status === "archived" || entry.status === "superseded";
-  // A piece's status change reads as the status names people see (Available → Live).
-  const isStatusChange = !!entry.action?.startsWith("tag_");
-  const value = (v: string) => {
-    if (!isStatusChange) return v;
-    const key = `status_${v}`;
-    const label = tt(key as never);
-    return label === key ? v : label;
-  };
+  // A piece's status or stock change reads as the names people see (Not set up → Live, In stock → Internal use).
+  const valueKind = journeyValueKind(entry.action);
+  const value = (v: string) => (valueKind === "status" ? tagLabels.status(v) : valueKind === "stock" ? tagLabels.stock(v) : v);
   const actorName = entry.actor === "human" ? entry.actorName ?? entry.actorEmail : null;
   const labelledAction = entry.action && LABELLED_ACTIONS.has(entry.action) ? entry.action : null;
   return (
