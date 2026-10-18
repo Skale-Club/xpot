@@ -37,7 +37,7 @@ split is in [MODULES.md](./MODULES.md); the October 2026 UX overhaul is in
 | Reseller | Not a role: a `rep` whose `modules` is just `{tags}` | The pieces in their own kit, their own companies and the companies holding their pieces |
 | Manager | `role = 'manager'` | In management mode: everything in both modules, each module's Manage group and Administration (People, Organizations), minus the Xpot admin's items below. Out of it, the same screens as a rep |
 | Xpot admin | `role = 'admin'`, which always goes with `users.is_admin` (`storage.updateSalesRepAccountProfile` writes both and signs the person out when it changes) | What a manager has, plus the items only it sees: the Platform group (Integrations, Brand & public site, Status), Xphere, Tags batches, the Production log, the NFC writers (and writing a piece's chip from the desktop), MCP, changing roles, acting on managers and admins, deleting an account. The "Xpot admin" tag marks these in the UI. Client: `isSuperAdmin()` and `adminOnly` nav items; server: `requireSuperAdmin` and `requireTagAdmin` answer 403 to everyone else |
-| Org admin | `organization_memberships.role = 'admin'` in one organization; not a platform role | Manages that organization's members (suspend, remove, org role) and sees its records. Adding existing people and creating accounts stay with managers (an org admin who posts a new account gets 403) |
+| Org admin | `organization_memberships.role = 'admin'` in one organization; not a platform role | Manages that organization's members (suspend, remove, org role) and opens its records. In management mode their Companies, Sales (summary, sales, consignments) and Tasks lists show that organization (below); out of it, their own. Adding existing people and creating accounts stay with managers (an org admin who posts a new account gets 403) |
 
 Every person also needs `is_active` and no `blocked_at`. A phone that signs up
 starts pending; a manager approves it in People (`/admin/reps`), choosing at
@@ -59,23 +59,49 @@ managers.
 
 ### Management mode
 
-Managers and the Xpot admin also work as reps, so the app has a view switch:
-**management mode** (`client/src/lib/adminMode.ts`, kept per device, off after
-sign-out). While it is off, every API call carries `X-Xpot-View: rep` and the
-server narrows lists to the person's own: `viewsAsRep(req)` and
-`listsEveryone(req, actor)` in `server/routes/xpot/middleware.ts`, `listActor`
-and `TagActor.inManagement` in Tags. The header can only narrow: what someone
-may open or change is still `isManagerOrAdmin` and the ownership rules.
+Managers, the Xpot admin and org admins also work as reps, so the app has a
+view switch: **management mode** (`client/src/lib/adminMode.ts`, kept per
+device, off after sign-out). One rule for everyone: off is the person's own
+records; on is the scope they manage. Every API call carries `X-Xpot-View: rep`
+while it is off and `X-Xpot-View: manage` while it is on. The server reads it
+through `listScope(req, actor)` in `server/routes/xpot/middleware.ts`:
 
-The lists that widen in management mode are Companies (`/leads`), Visits,
-Sales and consignments, opportunities, the sync log, the Tags home and Tags
-customers, and Tasks, which also needs its "Whole team" filter (`?team=1`; the
-server ignores `all` and `repId` while the mode is off). My pieces never widens
-(it always asks for `?mine=1`), and a piece's stock movements are shown only in
-management mode. `managementScope(path)` in `moduleNav.ts` lists the screens
-that get the scope chip ("Viewing: everyone / only me", `ScopeChip`), which is
-also the switch. Opening an `/admin/...` page turns the mode on with a toast
+- `everyone`: a manager or the Xpot admin with the mode on. A call without the
+  header counts as on for them, as before (`listsEveryone`, `viewsAsRep`;
+  `listActor` and `TagActor.inManagement` in Tags).
+- `organizations`: an org admin of a real team (`runsATeam`, an organization
+  other than their personal workspace) with `manage`: the organizations they
+  run (`managedOrganizationIds`), never another. Only `manage` widens theirs,
+  so a call without the header gets their own records.
+- `own`: everyone else, and both of the above with the mode off.
+
+`recordFilters` turns the scope into the sales and consignment filters;
+`?repId=` of yourself is always your own records (the Dashboard asks for it,
+so it stays personal in every mode). The header only chooses the view: what
+someone may open or change is still `isManagerOrAdmin` and the ownership rules
+(an org admin opens and settles their organization's consignments, as with its
+sales). An org admin's mode grants nothing else: no Manage screens, no
+Administration, no admin endpoints (`useViewerAccess().canManage` stays false;
+`reach` is `"organization"`).
+
+The lists that widen in a manager's management mode are Companies (`/leads`,
+with `?organizationId=` to pick one organization, the Companies filter
+`?org=`), Visits, Sales (`/sales` also takes `?organizationId=`) and
+consignments, opportunities, the sync log, the Tags home and Tags customers,
+and Tasks, which also needs its "Whole team" filter (`?team=1`; the server
+ignores `all` and `repId` while the mode is off). An org admin's widens only
+the ones with an organization: Companies, Sales' summary, sales and
+consignments, and Tasks ("Whole team"); visits, opportunities and Tags stay
+their own (`organizationWideList`). My pieces never widens (it always asks for
+`?mine=1`), and a piece's stock movements are shown only in management mode.
+`managementScope(path)` in `moduleNav.ts` lists the screens that get the scope
+chip ("Viewing: everyone / my organization / only me", `ScopeChip`, worded by
+`scopeChipState`), which is also the switch where the mode would change the
+list. Opening an `/admin/...` page turns a manager's mode on with a toast
 (`AdminApp`); leaving it on a management screen goes to `repScreenFor(path)`.
+An org admin turns it on from the sidebar, Settings › Memberships or the chip
+and stays on the same screen; the amber bar says "lists show your
+organization".
 Putting a house piece live in management mode keeps it in house stock; a
 manager out of management mode who puts one live becomes its holder, as before
 (`activationCredit`, `shared/tagAccess.ts`).

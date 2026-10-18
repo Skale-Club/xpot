@@ -2,12 +2,12 @@ import { Router } from "express";
 import { z } from "zod";
 import { storage } from "../../storage.js";
 import { salesStorage } from "../../storage-sales.js";
-import { requireXpotUser, isManagerOrAdmin, loadAccessibleLead, type XpotActor, listsEveryone } from "./middleware.js";
+import { requireXpotUser, isManagerOrAdmin, loadAccessibleLead, type XpotActor, listScope, recordFilters } from "./middleware.js";
 import { xpotSaleCreateSchema, xpotSalePaymentSchema, xpotSaleCancelSchema } from "#shared/xpot.js";
 import { allocateSaleLineTotals, computeSaleTotals, paymentStatusFor } from "#shared/pricing.js";
 import { syncSaleToXphere } from "./xphere-sync.js";
 import { cancelTagLinksForSale } from "../../tags/sales.js";
-import { activeOrganizationIds, canManageOrganizationForActor, canViewOrganizationForActor, managedOrganizationIds } from "../../organizations/service.js";
+import { canManageOrganizationForActor, canViewOrganizationForActor } from "../../organizations/service.js";
 
 // Direct sales: what the rep closes on the spot (a website, a marketing plan,
 // a handful of keychains sold outright). Consignment settlements also land
@@ -20,6 +20,7 @@ export function createSalesRouter() {
     leadId: z.coerce.number().int().positive().optional(),
     visitId: z.coerce.number().int().positive().optional(),
     repId: z.coerce.number().int().positive().optional(),
+    organizationId: z.coerce.number().int().positive().optional(),
     status: z.enum(["completed", "cancelled"]).optional(),
     source: z.enum(["sales", "tags", "voice", "visit", "lead"]).optional(),
     days: z.coerce.number().int().min(1).max(365).optional(),
@@ -27,40 +28,25 @@ export function createSalesRouter() {
     offset: z.coerce.number().int().min(0).optional(),
   });
 
-  // GET /sales — rep sees own; manager/admin sees all (optional ?repId=).
+  // GET /sales — whose sales follow management mode (listScope): your own with
+  // it off; on, a manager's everyone (optional ?repId=, ?organizationId=) and a
+  // Rep Admin's organizations.
   router.get("/sales", async (req, res) => {
     const actor = (req as any).xpotActor as XpotActor;
     const q = listQuerySchema.parse(req.query);
-    let repId: number | undefined;
-    let organizationIds: number[] | undefined;
-    if (listsEveryone(req, actor)) repId = q.repId;
-    else {
-      const managed = await managedOrganizationIds(actor);
-      if (managed?.length) organizationIds = managed;
-      else {
-        repId = actor.rep.id;
-        organizationIds = (await activeOrganizationIds(actor)) ?? undefined;
-      }
-    }
+    const { repId, organizationIds } = recordFilters(await listScope(req, actor), actor, q.repId, q.organizationId);
     const since = q.days ? new Date(Date.now() - q.days * 24 * 60 * 60 * 1000) : undefined;
     res.json(await salesStorage.listSales({ repId, organizationIds, leadId: q.leadId, visitId: q.visitId, status: q.status, source: q.source, since, limit: q.limit, offset: q.offset }));
   });
 
-  // GET /sales/summary?days=30[&repId=] — revenue, by product, daily series, consignment stock.
+  // GET /sales/summary?days=30[&repId=] — revenue, by product, daily series,
+  // consignment stock, in the same scope as the lists (the Dashboard asks for
+  // its own repId, so it stays personal in every mode).
   router.get("/sales/summary", async (req, res) => {
     const actor = (req as any).xpotActor as XpotActor;
     const days = Math.min(Math.max(Number(req.query.days) || 30, 1), 365);
-    let repId: number | undefined;
-    let organizationIds: number[] | undefined;
-    if (listsEveryone(req, actor)) repId = req.query.repId ? Number(req.query.repId) : undefined;
-    else {
-      const managed = await managedOrganizationIds(actor);
-      if (managed?.length) organizationIds = managed;
-      else {
-        repId = actor.rep.id;
-        organizationIds = (await activeOrganizationIds(actor)) ?? undefined;
-      }
-    }
+    const requested = Number(req.query.repId);
+    const { repId, organizationIds } = recordFilters(await listScope(req, actor), actor, Number.isInteger(requested) && requested > 0 ? requested : undefined);
     res.json(await salesStorage.salesSummary({ repId, organizationIds, days }));
   });
 

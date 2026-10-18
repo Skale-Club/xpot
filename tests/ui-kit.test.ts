@@ -24,7 +24,8 @@ import {
   VISIT_OUTCOME_TONE,
   toneOf,
 } from "../client/src/components/xpot/StatusPill";
-import { ACCENT_SELECTED, MODULE_ACCENT, OPACITY_STEPS, RADIUS } from "../client/src/components/xpot/surface";
+import { ACCENT_SELECTED, MODULE_ACCENT, OPACITY_STEPS, PAGE_BASE, RADIUS } from "../client/src/components/xpot/surface";
+import { MONEY_CHART, MONEY_DUE_TONE } from "../client/src/pages/xpot/components/sales/moneyPalette";
 import { TAG_STOCK_STATUSES } from "../shared/tags";
 
 describe("tone maps", () => {
@@ -50,7 +51,9 @@ describe("tone maps", () => {
     const green = Object.entries(VISIT_OUTCOME_TONE).filter(([, tone]) => tone === "green").map(([key]) => key);
     expect(green).toEqual(["sale_made"]);
     expect(PAYMENT_STATUS_TONE.paid).toBe("green");
-    expect(PAYMENT_STATUS_TONE.unpaid).toBe("red");
+    // Still to collect is a step, not a problem: sales have no due date to be late against.
+    expect(PAYMENT_STATUS_TONE.unpaid).toBe("amber");
+    expect(PAYMENT_STATUS_TONE.partial).toBe("amber");
   });
 
   it("mark late tasks red and today's amber", () => {
@@ -75,6 +78,53 @@ describe("tone maps", () => {
     expect(toneOf(ROUTE_STATUS_TONE, "completed")).toBe("green");
     expect(toneOf(ROUTE_STATUS_TONE, "mystery")).toBe("slate");
     expect(toneOf(ROUTE_STATUS_TONE, null, "muted")).toBe("muted");
+  });
+});
+
+// WCAG relative luminance and contrast of two #rrggbb colours.
+function luminance(hex: string): number {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+    .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+function contrast(a: string, b: string): number {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
+/** HSL saturation, 0 for a grey. */
+function saturation(hex: string): number {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const light = (max + min) / 2;
+  return max === min ? 0 : (max - min) / (1 - Math.abs(2 * light - 1));
+}
+
+describe("money palette", () => {
+  it("paints costs and discounts in the neutral cost tone, never amber or rose", () => {
+    expect(MONEY_CHART.cost.swatch).toMatch(/slate/);
+    expect(MONEY_CHART.cost.text).toMatch(/slate/);
+    expect(saturation(MONEY_CHART.cost.stroke)).toBeLessThan(0.3);
+    const source = readFileSync("client/src/pages/xpot/components/sales/SalesOverview.tsx", "utf8");
+    for (const key of ["discountsGiven", "acquisitionCosts"]) {
+      const line = source.split("\n").find((text) => text.includes(`t("${key}")`));
+      expect(line, key).toContain('accent="cost"');
+    }
+    expect(source).not.toMatch(/rose-|accent="amber"/);
+  });
+
+  it("keeps cost readable beside revenue and profit on the page", () => {
+    for (const [name, tone] of Object.entries(MONEY_CHART)) {
+      expect(contrast(tone.stroke, PAGE_BASE), name).toBeGreaterThan(7);
+    }
+    // Revenue and profit are colours; cost is the grey between them, not a third hue.
+    expect(saturation(MONEY_CHART.revenue.stroke)).toBeGreaterThan(0.6);
+    expect(saturation(MONEY_CHART.profit.stroke)).toBeGreaterThan(0.6);
+    expect(new Set([MONEY_CHART.revenue.stroke, MONEY_CHART.profit.stroke, MONEY_CHART.cost.stroke]).size).toBe(3);
+  });
+
+  it("marks money to collect amber and only overdue money red", () => {
+    expect(MONEY_DUE_TONE).toEqual({ outstanding: "amber", overdue: "red" });
   });
 });
 
