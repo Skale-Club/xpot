@@ -18,6 +18,7 @@ import { VisitActionsPanel } from "./sales/VisitActions";
 import { Link, useLocation } from "wouter";
 import { fileSrc } from "@/lib/files";
 import { CompanyInlineEditor } from "./leads/CompanyInlineEditor";
+import { CheckInFlag, CheckInValidationNotice, type CheckInValidationFields } from "./CheckInValidation";
 
 export type VisitLike = {
   id: number;
@@ -30,7 +31,7 @@ export type VisitLike = {
   durationSeconds?: number | null;
   note?: SalesVisitNote | null;
   visitSales?: { transactions: number; pieces: number; totalCents: number };
-};
+} & CheckInValidationFields;
 
 function VisitOutcomeEditor({ visit }: { visit: VisitLike }) {
   const { toast } = useToast();
@@ -184,6 +185,8 @@ export function VisitSummaryPage({ visit, onBack, onDelete }: { visit: VisitLike
         <VisitMetric icon={<DollarSign className="h-3.5 w-3.5" />} label={t("visitSales")} value={formatCents(visit.visitSales?.totalCents ?? 0)} detail={t("visitSalesCount", { sales: visit.visitSales?.transactions ?? 0, pieces: visit.visitSales?.pieces ?? 0 })} />
       </div>
 
+      <CheckInValidationNotice visit={visit} />
+
       {visit.status !== "planned" ? (
         <section className="rounded-2xl border border-white/[0.07] bg-white/[0.018] px-5 py-4 sm:px-6">
           <VisitOutcomeEditor visit={visit} />
@@ -333,7 +336,7 @@ export function VisitRow({ visit, onOpen }: { visit: VisitLike; onOpen?: () => v
             {formatDateTime(visit.checkedInAt ?? visit.scheduledAt)}
           </div>
         }
-        right={<StatusBadge status={visit.status} />}
+        right={<span className="flex items-center gap-2"><CheckInFlag visit={visit} /><StatusBadge status={visit.status} /></span>}
       />
     </button>
   );

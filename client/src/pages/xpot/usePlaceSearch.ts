@@ -17,7 +17,7 @@ export const roundSearchBias = (n: number) => Math.round(n * 1e3) / 1e3;
 // too, so typing "barbershop" should cost one call, not nine.
 export const PLACE_SEARCH_DEBOUNCE_MS = 300;
 
-function useDebouncedValue<T>(value: T, delayMs: number): T {
+export function useDebouncedValue<T>(value: T, delayMs: number): T {
   const [debounced, setDebounced] = useState(value);
   useEffect(() => {
     const id = window.setTimeout(() => setDebounced(value), delayMs);

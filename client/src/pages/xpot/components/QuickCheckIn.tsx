@@ -8,7 +8,6 @@ import { checkinMessages } from "@/i18n/messages/checkin";
 import { quickCheckInMessages } from "@/i18n/messages/quickCheckIn";
 import { useIsComputer } from "@/hooks/use-is-desktop";
 import { useXpotShared } from "../hooks/useXpotShared";
-import { useLeads } from "../hooks/useLeads";
 import { usePlaceToLead } from "../hooks/usePlaceToLead";
 import { formatMeters } from "../utils";
 import { PlaceLeadSearch, type PlaceLeadSearchHandle } from "./PlaceLeadSearch";
@@ -82,7 +81,6 @@ export function QuickCheckIn() {
   const isComputer = useIsComputer();
   const { data: me } = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
   const { geoState, loadCurrentLocation } = useXpotShared();
-  const { leadsQuery } = useLeads();
   const { resolvePlace } = usePlaceToLead();
   const [search, setSearch] = useState("");
   const [opening, setOpening] = useState(false);
@@ -132,16 +130,15 @@ export function QuickCheckIn() {
             ref={searchRef}
             value={search}
             onChange={setSearch}
-            leads={leadsQuery.data || []}
             geoState={geoState}
             placeholder={t("placeholder")}
             busy={opening}
             trailing={isComputer ? <span className="mr-1 hidden lg:inline-flex"><Kbd>/</Kbd></span> : null}
             onPickLead={(lead) => openCheckIn(lead.id)}
-            onPickPlace={async (place) => {
+            onPickPlace={async (place, match) => {
               setOpening(true);
               try {
-                const lead = await resolvePlace(place);
+                const lead = await resolvePlace(place, match);
                 openCheckIn(lead.id);
               } catch {
                 // useLeads already raised a toast for a failed import.
