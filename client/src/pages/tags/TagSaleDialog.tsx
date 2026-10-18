@@ -21,6 +21,7 @@ import { useT } from "@/i18n";
 import { salesModuleMessages } from "@/i18n/messages/salesModule";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { TagPieceMention } from "@/components/xpot/TagProductThumbnail";
+import { invalidatePieceViews } from "@/components/piece/PieceContext";
 import LeadPicker, { type LeadChoice } from "./LeadPicker";
 import { errorText, getSellTo, haptic, tagsGet, tagsPostIdempotent } from "./lib";
 import { CARD, INPUT_ACCENT, SHEET_TITLE } from "./ui";
@@ -222,10 +223,9 @@ export default function TagSaleDialog({
       }
       await tagsPostIdempotent<SaleResult>("/api/xpot/tag-sales", body, attempt.current.key);
       haptic([40, 30, 60]);
+      // Both piece screens (the admin page reads it under "admin-tags"), the lists and the dashboards.
+      invalidatePieceViews(qc);
       await Promise.all([
-        qc.invalidateQueries({ queryKey: ["tags", "list"] }),
-        qc.invalidateQueries({ queryKey: ["tags", "piece"] }),
-        qc.invalidateQueries({ queryKey: ["/api/xpot/tags/by-lead"] }),
         qc.invalidateQueries({ queryKey: ["/api/xpot/sales"] }),
         qc.invalidateQueries({ queryKey: ["/api/xpot/dashboard"] }),
         qc.invalidateQueries({ queryKey: ["/api/xpot/leads"] }),
