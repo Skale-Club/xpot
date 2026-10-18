@@ -235,3 +235,87 @@ export function integrationProblem(provider: string, state: ProblemState): strin
   const code = integrationProblemCode(provider, state);
   return code ? PROBLEM_MESSAGES[code] : null;
 }
+
+/**
+ * One status per provider, shown by every pill and dot that talks about it
+ * (Integrations cards and Status alike):
+ *   live   = in use: switched on and complete here, or set by the server environment
+ *   broken = switched on here but something is missing
+ *   idle   = switched off, with a key saved (turn on to use it)
+ *   off    = switched off, nothing saved
+ */
+export type StatusKey = "live" | "broken" | "idle" | "off";
+
+export function integrationStatusKey(s: Pick<IntegrationStatus, "enabled" | "problem" | "hasApiKey" | "source"> | undefined): StatusKey {
+  if (!s) return "off";
+  if (s.source === "env") return "live";
+  if (s.enabled && !s.problem) return "live";
+  if (s.enabled) return "broken";
+  if (s.hasApiKey) return "idle";
+  return "off";
+}
+
+// ── Services: Integrations grouped by the job they do, shared with Status ──
+//
+// Admin › Integrations shows one card per job and Admin › Status one row per
+// service; both read GET /api/xpot/admin/integrations/services
+// (server/observability/services.ts), so the two screens never disagree.
+
+/** The job a service does, in the order the Integrations page shows them. */
+export const SERVICE_JOBS = ["signIn", "maps", "voice", "ai", "crm", "assistants", "infra"] as const;
+export type ServiceJob = (typeof SERVICE_JOBS)[number];
+
+/** Services that live only in the server environment: shown, never edited, values never sent. */
+export const INFRA_SERVICES = ["file_storage", "prospecting_engine", "push", "wholesale", "telegram"] as const;
+export type InfraServiceId = (typeof INFRA_SERVICES)[number];
+
+/**
+ * Every service, by job. Providers of the registry keep their `provider` id;
+ * a job with two providers lists them primary first (the order they are tried in).
+ */
+export const SERVICES_BY_JOB: Record<ServiceJob, readonly string[]> = {
+  signIn: ["twilio"],
+  maps: ["google_places", "route_optimization"],
+  voice: ["groq", "openai"],
+  ai: ["openrouter", "gemini"],
+  crm: ["xphere", "gohighlevel"],
+  assistants: ["mcp"],
+  infra: INFRA_SERVICES,
+};
+
+export function serviceJob(id: string): ServiceJob | null {
+  return SERVICE_JOBS.find((job) => SERVICES_BY_JOB[job].includes(id)) ?? null;
+}
+
+export interface ServiceEvent {
+  message: string;
+  at: string;
+  /** The Status event behind it (system_events.id), when there is one. */
+  eventId: number | null;
+}
+
+/** One service as Integrations and Status show it. Never carries a secret. */
+export interface ServiceStatus {
+  id: string;
+  job: ServiceJob;
+  status: StatusKey;
+  /** Where its settings come from: saved in Integrations, the server environment, or nowhere. */
+  source: IntegrationSource;
+  /** For a job with a primary and a fallback: the one doing the work right now. */
+  active: boolean;
+  /** A short code for what is configured, e.g. file storage "r2" | "supabase". */
+  variant: string | null;
+  /** A count the row shows, e.g. people connected to Xphere, assistants with access. */
+  count: number | null;
+  /** The last Test from Integrations (provider cards only). */
+  lastTest: { ok: boolean; message: string; at: string } | null;
+  /** The last time it was seen working: a passing test, a synced record, a used token. */
+  lastSuccessAt: string | null;
+  /** The latest failure the app recorded for it (system events, CRM sync log). */
+  lastError: ServiceEvent | null;
+}
+
+export interface ServicesResponse {
+  generatedAt: string;
+  services: ServiceStatus[];
+}

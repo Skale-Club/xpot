@@ -175,6 +175,18 @@ export function createBrandingAdminRouter() {
   router.post("/admin/branding/favicon", (req, res) => uploadBrandAsset(req, res, "favicon"));
   router.post("/admin/branding/logo", (req, res) => uploadBrandAsset(req, res, "logo"));
 
+  // "Restore default": forget the uploaded asset, so the public URLs redirect to
+  // the built-in /favicon.png or /xpot-logo.svg again. The uploaded file stays in
+  // storage (other caches may still point at it for up to 5 minutes).
+  router.delete("/admin/branding/:asset", async (req, res) => {
+    const asset = req.params.asset;
+    if (asset !== "favicon" && asset !== "logo") return res.status(404).json({ message: "Unknown branding asset" });
+    const saved = await storage.upsertAppBranding(
+      asset === "favicon" ? { faviconUrl: null, faviconContentType: null } : { logoUrl: null, logoContentType: null },
+    );
+    res.json(present(saved));
+  });
+
   router.put("/admin/branding", async (req, res) => {
     const input = z
       .object({

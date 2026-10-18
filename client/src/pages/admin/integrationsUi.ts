@@ -51,23 +51,8 @@ export function maskInboundKey(key: string): string {
   return `${prefix}••••••••${key.slice(-4)}`;
 }
 
-/**
- * One status per provider, shown by the bar, the dot and the chip alike:
- *   live   = in use: switched on and complete here, or set by the server environment
- *   broken = switched on here but something is missing
- *   idle   = switched off, with a key saved (turn on to use it)
- *   off    = switched off, nothing saved
- */
-export type StatusKey = "live" | "broken" | "idle" | "off";
-
-export function integrationStatusKey(s: Pick<IntegrationStatus, "enabled" | "problem" | "hasApiKey" | "source"> | undefined): StatusKey {
-  if (!s) return "off";
-  if (s.source === "env") return "live";
-  if (s.enabled && !s.problem) return "live";
-  if (s.enabled) return "broken";
-  if (s.hasApiKey) return "idle";
-  return "off";
-}
+// One status per provider, shared with the server's services list (Status reads the same).
+export { integrationStatusKey, type StatusKey } from "@shared/integrations-registry";
 
 /**
  * Whether a save would leave nobody able to sign in: the provider sends the
