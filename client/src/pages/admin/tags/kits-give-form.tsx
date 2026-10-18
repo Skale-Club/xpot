@@ -4,10 +4,13 @@ import { useMutation } from "@tanstack/react-query";
 import { PackagePlus } from "lucide-react";
 import type { TagKitItem } from "@shared/tagsApi";
 import { TAG_MAX_BATCH_QUANTITY, normalizeTagCode } from "@shared/tags";
+import { KIT_COST_CURRENCY, kitCostRequired, parseKitUnitCost } from "@shared/tagKits";
 import { useToast } from "@/hooks/use-toast";
 import { errorMessage, invalidateAdminTags, sendJson } from "./api";
 import { BTN, INPUT } from "./ui";
-import { Field, ResellerSelect, SELECT, hasTagsModule, useBatches, useResellers } from "./batches-shared";
+import { Field, ResellerSelect, SELECT, hasTagsModule, useResellers } from "./batches-shared";
+import { useBatchOptions } from "./pieces-shared";
+import { PackingListDialog } from "./kits-list";
 import { useTagLabels } from "./labels";
 import { useT } from "@/i18n";
 import { shellMessages } from "@/i18n/messages/shell";
@@ -57,7 +60,7 @@ export function GiveKitForm({
   fixedBatch,
   onDone,
 }: {
-  fixedBatch?: { id: string; batchCode: string; houseCount: number };
+  fixedBatch?: { id: string; batchCode: string; handOutCount: number };
   onDone?: (kit: TagKitItem) => void;
 }) {
   const { toast } = useToast();
@@ -66,7 +69,7 @@ export function GiveKitForm({
   const ts = useT(shellMessages);
   const labels = useTagLabels();
   const { data: reps = [] } = useResellers();
-  const { data: batches = [] } = useBatches();
+  const { data: batches = [] } = useBatchOptions();
   const [repId, setRepId] = useState<number | null>(null);
   const [mode, setMode] = useState<Mode>("batch");
   const [batchId, setBatchId] = useState<string>("");
@@ -74,20 +77,25 @@ export function GiveKitForm({
   const [codesText, setCodesText] = useState("");
   const [note, setNote] = useState("");
   const [unitCost, setUnitCost] = useState("");
+  // The kit just recorded: its packing list opens so the operator packs exactly these codes.
+  const [packing, setPacking] = useState<TagKitItem | null>(null);
 
   const effectiveMode: Mode = fixedBatch ? "batch" : mode;
   const rep = reps.find((r) => r.id === repId) ?? null;
-  const batchOptions = batches.filter((b) => b.houseCount > 0);
+  // Only pieces not set up for a customer can go into a kit (shared/tagMetrics.ts `handOut`).
+  const batchOptions = batches.filter((b) => b.handOutCount > 0);
   const chosenBatch = fixedBatch ?? batchOptions.find((b) => b.id === batchId) ?? null;
-  const available = chosenBatch?.houseCount ?? 0;
+  const available = chosenBatch?.handOutCount ?? 0;
   const qty = Number(quantity);
   const validQty = Number.isInteger(qty) && qty >= 1 && qty <= Math.min(available, TAG_MAX_BATCH_QUANTITY);
   const parsed = useMemo(() => parseCodes(codesText), [codesText]);
   const validCodes = parsed.codes.length > 0 && parsed.invalid.length === 0 && parsed.codes.length <= TAG_MAX_BATCH_QUANTITY;
 
-  const unitCostNumber = Number(unitCost);
-  const validUnitCost = unitCost.trim() !== "" && Number.isFinite(unitCostNumber) && unitCostNumber >= 0;
-  const ready = !!repId && validUnitCost && (effectiveMode === "batch" ? !!chosenBatch && validQty : validCodes);
+  // The rep's cost rule decides whether a cost is needed (shared/tagKits.ts); the server applies the same rule.
+  const policy = rep?.costPolicy ?? "acquisition";
+  const costRequired = kitCostRequired(policy);
+  const cost = parseKitUnitCost(unitCost, policy);
+  const ready = !!repId && cost.ok && (effectiveMode === "batch" ? !!chosenBatch && validQty : validCodes);
   const pieceCount = effectiveMode === "batch" ? (validQty ? qty : 0) : parsed.codes.length;
 
   const give = useMutation({
@@ -96,7 +104,7 @@ export function GiveKitForm({
         repId,
         ...(effectiveMode === "batch" ? { batchId: chosenBatch!.id, quantity: qty } : { codes: parsed.codes }),
         note: note.trim() || null,
-        unitCostCents: Math.round(unitCostNumber * 100),
+        ...(cost.ok && cost.cents !== undefined ? { unitCostCents: cost.cents } : {}),
       }),
     onSuccess: (kit) => {
       void invalidateAdminTags();
@@ -108,7 +116,7 @@ export function GiveKitForm({
       setCodesText("");
       setNote("");
       setUnitCost("");
-      onDone?.(kit);
+      setPacking(kit);
     },
     onError: (err) => toast({ title: t("couldNotGiveKit"), description: errorMessage(err), variant: "destructive" }),
   });
@@ -134,7 +142,14 @@ export function GiveKitForm({
         <Field label={t("fieldNoteOptional")} hint={t("noteHint")}>
           <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} placeholder={t("notePlaceholder")} className={INPUT} />
         </Field>
-        <Field label={t("fieldUnitCost")} hint={t("unitCostHint")}>
+        <Field
+          label={`${t(costRequired ? "fieldUnitCost" : "fieldUnitCostOptional")} (${KIT_COST_CURRENCY})`}
+          hint={
+            !rep ? t("unitCostChooseRep")
+              : !cost.ok && cost.reason === "invalid" ? <span className="text-red-300">{t("unitCostInvalid")}</span>
+              : t(costRequired ? "costPolicyAcquisitionHint" : "costPolicyZeroHint")
+          }
+        >
           <input
             type="number"
             min="0"
@@ -142,7 +157,7 @@ export function GiveKitForm({
             value={unitCost}
             onChange={(e) => setUnitCost(e.target.value)}
             placeholder="0.00"
-            required
+            required={costRequired}
             className={`${INPUT} tabular-nums`}
             data-testid="input-kit-unit-cost"
           />
@@ -166,7 +181,7 @@ export function GiveKitForm({
             <Field label={tm("colBatch")}>
               <p className="py-2 text-sm text-white/80">
                 <span className="font-mono">{fixedBatch.batchCode}</span>
-                <span className="text-white/40"> · {t("inHouseStockCount", { count: fixedBatch.houseCount })}</span>
+                <span className="text-white/40"> · {t("inHouseStockCount", { count: fixedBatch.handOutCount })}</span>
               </p>
             </Field>
           ) : (
@@ -175,7 +190,7 @@ export function GiveKitForm({
                 <option value="">{t("chooseBatch")}</option>
                 {batchOptions.map((b) => (
                   <option key={b.id} value={b.id}>
-                    {b.batchCode} · {labels.product(b.productType)}{b.face ? ` · ${labels.face(b.face)}` : ""} · {t("inHouseCount", { count: b.houseCount })}
+                    {b.batchCode} · {labels.product(b.productType)}{b.face ? ` · ${labels.face(b.face)}` : ""} · {t("inHouseCount", { count: b.handOutCount })}
                   </option>
                 ))}
               </select>
@@ -232,6 +247,15 @@ export function GiveKitForm({
                 : t("giveNoCount")}
         </button>
       </div>
+      <PackingListDialog
+        kit={packing}
+        onOpenChange={(open) => {
+          if (open) return;
+          const kit = packing;
+          setPacking(null);
+          if (kit) onDone?.(kit);
+        }}
+      />
     </form>
   );
 }

@@ -49,6 +49,7 @@ test("tag endpoints refuse anonymous callers", async () => {
       ["GET", "/api/xpot/admin/tag-kits"],
       ["POST", "/api/xpot/admin/tag-kits"],
       ["POST", "/api/xpot/admin/tag-kits/return"],
+      ["GET", "/api/xpot/admin/tag-batch-options"],
       ["GET", "/api/xpot/admin/tag-batches"],
       ["POST", "/api/xpot/admin/tag-batches"],
       ["POST", `/api/xpot/admin/tag-batches/${ID}/scan`],

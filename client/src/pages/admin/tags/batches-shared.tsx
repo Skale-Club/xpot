@@ -103,20 +103,6 @@ export function usePieces(params: { kitId?: string; batchId?: string; house?: "1
   });
 }
 
-/** Unsold and still with the reseller that holds it. */
-export function isUnsoldWithReseller(t: TagListItem): boolean {
-  return t.status === "inventory" && t.repId !== null && t.stockStatus === "available";
-}
-
-export function isHouseStock(t: TagListItem): boolean {
-  return t.status === "inventory" && t.repId === null && t.stockStatus === "available";
-}
-
-/** A code issued for a piece not printed / not delivered yet. */
-export function isPendingPiece(t: TagListItem): boolean {
-  return t.stockStatus === "pending";
-}
-
 // ─── Small UI ─────────────────────────────────────────────────────────────────
 
 export function Loading() {

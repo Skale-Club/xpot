@@ -12,6 +12,8 @@ import {
   normalizeTagCode,
 } from "#shared/tags.js";
 import { canWorkOnTag } from "#shared/tagAccess.js";
+import { TAG_STOCK_METRIC_NAMES } from "#shared/tagMetrics.js";
+import { kitCostRequired, kitOwnership } from "#shared/tagKits.js";
 import { TAG_FACES } from "#shared/tagFace.js";
 import { validateChipContent } from "#shared/chipContent.js";
 import { DIRECT_WRITE_METHODS, TAGS_APP_PATH } from "#shared/tagApp.js";
@@ -131,6 +133,8 @@ export const listQuerySchema = z.object({
   repId: z.coerce.number().int().positive().optional(),
   kitId: z.string().uuid().optional(),
   house: z.enum(["1", "true"]).transform(() => true).optional(),
+  /** A stock number (shared/tagMetrics.ts): the list behind a count, e.g. the company stock card. */
+  metric: z.enum(TAG_STOCK_METRIC_NAMES).optional(),
   /** Only the viewer's own pieces, even for a manager (the phone app's Pieces screen). */
   mine: z.enum(["1", "true"]).transform(() => true).optional(),
   method: z.enum(["qr", "nfc"]).optional(),
@@ -807,10 +811,13 @@ export function registerTagRoutes(app: Express) {
       const input = kitSchema.parse(req.body);
       const rep = await storage.getSalesRep(input.repId);
       if (!rep) return res.status(404).json({ message: "Reseller not found" });
-      if (rep.costPolicy === "acquisition" && input.unitCostCents === undefined) {
+      const policy = rep.costPolicy === "zero" ? "zero" : "acquisition";
+      if (kitCostRequired(policy) && input.unitCostCents === undefined) {
         return res.status(400).json({ code: "tag_cost_required", message: "Unit acquisition cost is required for this partner" });
       }
-      res.status(201).json(await repo.deliverKit(input, userIdOf(req)));
+      // Acquisition rule: the rep buys the pieces. Zero-cost rule: company stock in the rep's custody (consignment),
+      // even when a reference cost is recorded (shared/tagKits.ts).
+      res.status(201).json(await repo.deliverKit({ ...input, ownershipType: kitOwnership(policy) }, userIdOf(req)));
     } catch (err) {
       fail(res, err, "Failed to deliver kit");
     }
@@ -843,6 +850,16 @@ export function registerTagRoutes(app: Express) {
     } catch (err) {
       if (err instanceof TagSaleError) return res.status(err.status).json({ code: err.code, message: err.message });
       fail(res, err, "Failed to fulfill acquisition");
+    }
+  });
+
+  // Batches to pick from (Give a kit › From a batch, the Pieces filter). Managers hand out kits too, so they get
+  // this read-only list; the batches themselves (production, intake, editing) stay admin-only.
+  app.get("/api/xpot/admin/tag-batch-options", requireTagManager, async (_req, res) => {
+    try {
+      res.json(await repo.listBatchOptions());
+    } catch (err) {
+      fail(res, err, "Failed to load batches");
     }
   });
 

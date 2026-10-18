@@ -26,7 +26,9 @@ test.skipIf(!enabled)("tags: kits, reseller isolation, sales, scans, report, pro
   const { sql } = await import("drizzle-orm");
 
   await db.execute(sql`TRUNCATE tag_provisioning_events, tag_provisioning_jobs, tag_provisioning_devices, tag_events,
-    tag_destination_history, tag_direct_writes, tags, tag_kits, tag_batches CASCADE`);
+    tag_destination_history, tag_direct_writes, tag_acquisitions, tags, tag_kits, tag_batches CASCADE`);
+  // Sales from an earlier run would keep the leads (and reps) below alive.
+  await db.execute(sql`DELETE FROM sales_sales WHERE rep_id IN (SELECT id FROM sales_reps WHERE user_id LIKE 'it-%')`);
   await db.execute(sql`DELETE FROM sales_leads WHERE owner_rep_id IN (SELECT id FROM sales_reps WHERE user_id LIKE 'it-%')`);
   await db.execute(sql`DELETE FROM sales_reps WHERE user_id LIKE 'it-%'`);
   await db.execute(sql`DELETE FROM users WHERE id LIKE 'it-%'`);
