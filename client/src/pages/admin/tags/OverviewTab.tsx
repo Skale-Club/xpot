@@ -232,25 +232,19 @@ function ActivityFeed({ overview, go }: { overview: TagOverview; go: Go }) {
                   </span>
                 </button>
               ) : (
-                <button type="button" className={FEED_ROW} onClick={() => go(`/pieces/${item.change.tagId}`)}>
-                  {/* The new destination sits under the code, like a scan's details, not on a line of its own. */}
-                  <TagPieceMention
-                    publicCode={item.change.publicCode}
-                    productType={item.change.productType}
-                    face={item.change.face}
-                    batchCode={item.change.batchCode}
-                    details={
-                      item.change.newUrl
-                        ? `${labels.destination(item.change.newDestinationType)} · ${item.change.newUrl}`
-                        : item.change.reason
-                          ? t("ovDestClearedReason", { reason: item.change.reason })
-                          : t("ovDestCleared")
-                    }
-                    className="min-w-0 flex-1"
-                  />
+                <button type="button" className={`${FEED_ROW} flex-wrap`} onClick={() => go(`/pieces/${item.change.tagId}`)}>
+                  <TagPieceMention publicCode={item.change.publicCode} productType={item.change.productType} face={item.change.face} batchCode={item.change.batchCode} className="min-w-0 flex-1" />
                   <span className="flex shrink-0 flex-col items-end gap-1">
                     <Pill tone="slate">{tf("activityDestinationPill")}</Pill>
                     <span className={FEED_DATE}>{formatDateTime(item.at)}</span>
+                  </span>
+                  {/* Its own line (a link needs the width on a phone), indented under the code, past the piece's picture. */}
+                  <span className="block w-full min-w-0 truncate pl-12 text-xs text-white/40">
+                    {item.change.newUrl
+                      ? `${labels.destination(item.change.newDestinationType)} · ${item.change.newUrl}`
+                      : item.change.reason
+                        ? t("ovDestClearedReason", { reason: item.change.reason })
+                        : t("ovDestCleared")}
                   </span>
                 </button>
               )}

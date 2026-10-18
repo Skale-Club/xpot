@@ -62,6 +62,8 @@ export function parseCodes(text: string): { codes: string[]; invalid: string[] }
 }
 
 type PieceMode = "scan" | "type" | "batch";
+/** A mode's icon over its name on a phone (the three share a narrow row and "Next from a batch" wraps), beside it from sm. */
+const MODE_LABEL = "inline-flex flex-col items-center gap-1 sm:flex-row sm:gap-1.5";
 
 /** One numbered step of the flow. */
 function Step({ n, title, done, disabled, children, testId }: { n: number; title: string; done?: boolean; disabled?: boolean; children: ReactNode; testId?: string }) {
@@ -259,9 +261,9 @@ export function HandOutFlow() {
       <Step n={3} title={t("stepPieces")} done={okCodes.length > 0} disabled={!rep} testId="handout-step-pieces">
         <Segmented<PieceMode>
           items={[
-            { id: "scan", label: <span className="inline-flex items-center gap-1.5"><ScanLine className="h-3.5 w-3.5" />{t("modeScan")}</span> },
-            { id: "type", label: <span className="inline-flex items-center gap-1.5"><Type className="h-3.5 w-3.5" />{t("modeType")}</span> },
-            { id: "batch", label: <span className="inline-flex items-center gap-1.5"><Layers className="h-3.5 w-3.5" />{t("modeBatch")}</span> },
+            { id: "scan", label: <span className={MODE_LABEL}><ScanLine className="h-3.5 w-3.5" />{t("modeScan")}</span> },
+            { id: "type", label: <span className={MODE_LABEL}><Type className="h-3.5 w-3.5" />{t("modeType")}</span> },
+            { id: "batch", label: <span className={MODE_LABEL}><Layers className="h-3.5 w-3.5" />{t("modeBatch")}</span> },
           ]}
           value={mode}
           onChange={(next) => {
