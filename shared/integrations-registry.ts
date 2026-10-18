@@ -57,7 +57,7 @@ export const INTEGRATION_PROVIDERS: IntegrationProviderDef[] = [
   {
     provider: "google_places",
     label: "Google Places",
-    description: "Business search at check-in (Places API v1).",
+    description: "Business search at check-in and in prospecting, address autocomplete and map images.",
     table: "settings",
     category: "Maps",
     envMode: "fallback",
@@ -146,7 +146,7 @@ export const INTEGRATION_PROVIDERS: IntegrationProviderDef[] = [
     category: "Pipeline",
     legacy: true,
     fields: [
-      { key: "apiKey", label: "API Key", secret: true, placeholder: "Bearer token / PIT" },
+      { key: "apiKey", label: "API Key", secret: true, placeholder: "Private integration token" },
       // Every sync call is scoped to a location (helpers.ts), so it is required.
       { key: "locationId", label: "Location ID" },
       { key: "calendarId", label: "Calendar ID", optional: true },
