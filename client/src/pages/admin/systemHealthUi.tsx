@@ -1,5 +1,8 @@
 import type { ReactNode } from "react";
-import type { Activity } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { SectionCard } from "@/components/xpot/DashboardKit";
+import { Stat as KitStat } from "@/components/xpot/Stat";
+import { HEALTH_TONE, Pill, PILL_DOTS, toneOf, type PillTone } from "@/components/xpot/StatusPill";
 import type { Translate } from "@/i18n";
 import { systemHealthMessages } from "@/i18n/messages/systemHealth";
 import type { HealthReasonCode, HealthVerdict, RecentRun } from "@shared/system-health";
@@ -10,12 +13,21 @@ export type T = Translate<typeof systemHealthMessages.en>;
 
 export const REFRESH_MS = 15_000;
 
-export const VERDICT_STYLE: Record<HealthVerdict, { chip: string; dot: string; banner: string }> = {
-  healthy: { chip: "border-emerald-500/30 bg-emerald-500/15 text-emerald-300", dot: "bg-emerald-400", banner: "border-emerald-500/25 bg-emerald-500/[0.07]" },
-  idle: { chip: "border-white/10 bg-white/5 text-white/50", dot: "bg-white/40", banner: "border-white/10 bg-white/[0.03]" },
-  slow: { chip: "border-amber-500/30 bg-amber-500/15 text-amber-300", dot: "bg-amber-400", banner: "border-amber-500/25 bg-amber-500/[0.07]" },
-  stalled: { chip: "border-red-500/30 bg-red-500/15 text-red-300", dot: "bg-red-400", banner: "border-red-500/25 bg-red-500/[0.07]" },
-  down: { chip: "border-red-500/40 bg-red-500/20 text-red-200", dot: "bg-red-500", banner: "border-red-500/30 bg-red-500/[0.1]" },
+/** A verdict's tone (HEALTH_TONE: healthy green, slow amber, stalled and down red, idle slate). */
+export function verdictTone(verdict: HealthVerdict): PillTone {
+  return toneOf(HEALTH_TONE, verdict);
+}
+
+/** The overall banner behind the verdict, tinted in its tone. */
+export const VERDICT_BANNER: Record<PillTone, string> = {
+  green: "border-emerald-400/25 bg-emerald-500/[0.07]",
+  amber: "border-amber-400/25 bg-amber-500/[0.07]",
+  red: "border-red-400/25 bg-red-500/[0.07]",
+  blue: "border-blue-400/25 bg-blue-500/[0.07]",
+  sky: "border-sky-400/25 bg-sky-500/[0.07]",
+  violet: "border-violet-400/25 bg-violet-500/[0.07]",
+  slate: "border-white/10 bg-white/[0.03]",
+  muted: "border-white/10 bg-white/[0.02]",
 };
 
 export function useAgo(t: T) {
@@ -70,51 +82,36 @@ export function HealthReason({ t, code, fallback, className = "text-sm text-whit
 
 export function VerdictChip({ verdict, t }: { verdict: HealthVerdict; t: T }) {
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${VERDICT_STYLE[verdict].chip}`}>
-      <span className={`h-1.5 w-1.5 rounded-full ${VERDICT_STYLE[verdict].dot}`} />
+    <Pill tone={verdictTone(verdict)} dot bordered>
       {t(`verdict_${verdict}`)}
-    </span>
+    </Pill>
   );
 }
 
-export function Card({ title, icon: Icon, right, children }: { title: string; icon: typeof Activity; right?: ReactNode; children: ReactNode }) {
+/** A titled section of the panel: the kit's SectionCard, with `right` in the title row. */
+export function Card({ title, icon, right, children }: { title: string; icon: LucideIcon; right?: ReactNode; children: ReactNode }) {
   return (
-    <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-      <header className="mb-3 flex items-center justify-between gap-2">
-        <h3 className="flex items-center gap-2 text-sm font-semibold text-white/80">
-          <Icon className="h-4 w-4 text-white/45" />
-          {title}
-        </h3>
-        {right}
-      </header>
+    <SectionCard title={title} icon={icon} actions={right}>
       {children}
-    </section>
+    </SectionCard>
   );
 }
 
+/** A number in a section: the kit's Stat, red when bad and amber when it needs a look. */
 export function Stat({ label, value, tone }: { label: string; value: ReactNode; tone?: "bad" | "warn" }) {
-  return (
-    <div>
-      <p className="text-[11px] text-white/45">{label}</p>
-      <p className={`text-xl font-bold ${tone === "bad" ? "text-red-300" : tone === "warn" ? "text-amber-300" : ""}`}>{value}</p>
-    </div>
-  );
+  return <KitStat label={label} value={value} tone={tone === "bad" ? "danger" : tone === "warn" ? "warning" : "neutral"} />;
 }
 
-/** Timeline colours: green finished, red failed, amber still going, grey waiting or cancelled. */
-export const RUN_STATUS_STYLE: Record<RecentRun["status"], { bar: string; chip: string }> = {
-  completed: { bar: "bg-emerald-400/90", chip: "border-emerald-500/30 bg-emerald-500/15 text-emerald-300" },
-  failed: { bar: "bg-red-500/90", chip: "border-red-500/30 bg-red-500/15 text-red-300" },
-  running: { bar: "bg-amber-400 animate-pulse", chip: "border-amber-500/30 bg-amber-500/15 text-amber-300" },
-  starting: { bar: "bg-amber-400 animate-pulse", chip: "border-amber-500/30 bg-amber-500/15 text-amber-300" },
-  queued: { bar: "bg-white/25", chip: "border-white/10 bg-white/5 text-white/55" },
-  cancelled: { bar: "bg-white/15", chip: "border-white/10 bg-white/5 text-white/45" },
-};
+/** Timeline bar per run status, from HEALTH_TONE: green finished, red failed, blue still going, grey waiting or cancelled. */
+export function runBar(status: RecentRun["status"]): string {
+  const tone = toneOf(HEALTH_TONE, status);
+  return `${PILL_DOTS[tone]} ${status === "running" || status === "starting" ? "animate-pulse" : ""}`;
+}
 
 export function RunStatusChip({ status, t }: { status: RecentRun["status"]; t: T }) {
   return (
-    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${RUN_STATUS_STYLE[status].chip}`}>
+    <Pill tone={toneOf(HEALTH_TONE, status)} bordered>
       {t(`runStatus_${status}`)}
-    </span>
+    </Pill>
   );
 }

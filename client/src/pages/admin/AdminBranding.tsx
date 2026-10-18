@@ -3,8 +3,13 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { describeApiError } from "@/lib/apiErrors";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2 } from "@/components/ui/loader";
+import { Button } from "@/components/ui/button";
 import { ColorField } from "@/components/ui/color-picker";
+import { ErrorState } from "@/components/xpot/EmptyState";
+import { Field, Input } from "@/components/xpot/Field";
+import { FormFooter } from "@/components/xpot/FormFooter";
+import { ListSkeleton } from "@/components/xpot/ListSkeleton";
+import { GLASS_CLASS } from "@/components/xpot/surface";
 import { Upload, Palette } from "lucide-react";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
@@ -26,15 +31,9 @@ export function AdminBranding() {
   const query = useQuery<Branding>({ queryKey: ["/api/xpot/admin/branding"] });
   const t = useT(manageMessages);
 
-  if (query.isLoading) {
-    return (
-      <div className="flex justify-center py-16">
-        <Loader2 className="h-6 w-6 animate-spin text-blue-400" />
-      </div>
-    );
-  }
+  if (query.isLoading) return <ListSkeleton rows={3} rowClassName="h-36 rounded-2xl" className="space-y-4" />;
   if (query.isError || !query.data) {
-    return <p className="text-sm text-red-400">{t("brandingLoadFailed")}</p>;
+    return <ErrorState message={t("brandingLoadFailed")} onRetry={() => void query.refetch()} />;
   }
 
   return <BrandingForm branding={query.data} />;
@@ -51,6 +50,17 @@ function BrandingForm({ branding }: { branding: Branding }) {
   const [shortName, setShortName] = useState(branding.shortName);
   const [themeColor, setThemeColor] = useState(branding.themeColor);
   const [backgroundColor, setBackgroundColor] = useState(branding.backgroundColor);
+  const dirty =
+    appName !== branding.appName ||
+    shortName !== branding.shortName ||
+    themeColor !== branding.themeColor ||
+    backgroundColor !== branding.backgroundColor;
+  const reset = () => {
+    setAppName(branding.appName);
+    setShortName(branding.shortName);
+    setThemeColor(branding.themeColor);
+    setBackgroundColor(branding.backgroundColor);
+  };
   const fieldLabel = (path: string) =>
     ({ appName: t("appName"), shortName: t("shortName"), themeColor: t("themeColor"), backgroundColor: t("backgroundColor") })[path];
   // The public icon, logo and manifest are cached for 5 minutes (branding.ts), so "done" needs that caveat.
@@ -127,11 +137,11 @@ function BrandingForm({ branding }: { branding: Branding }) {
       </div>
 
       {/* Favicon / app icon */}
-      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+      <div className={`rounded-2xl ${GLASS_CLASS} p-5`}>
         <h3 className="font-semibold">{t("favicon")}</h3>
         <p className="mt-1 text-sm text-white/45">{t("faviconDescription")}</p>
         <div className="mt-4 flex items-center gap-5">
-          <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-[#0a0f1e]">
+          <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-black/20">
             <img src={faviconPreviewSrc} alt={t("iconAlt")} className="h-16 w-16 object-contain" />
           </div>
           <div>
@@ -142,25 +152,21 @@ function BrandingForm({ branding }: { branding: Branding }) {
               onChange={(event) => onFile(event, "favicon")}
               className="hidden"
             />
-            <button
-              onClick={() => faviconFileRef.current?.click()}
-              disabled={faviconUpload.isPending}
-              className="inline-flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-600 disabled:opacity-50"
-            >
-              {faviconUpload.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+            <Button variant="secondary" onClick={() => faviconFileRef.current?.click()} loading={faviconUpload.isPending}>
+              <Upload />
               {t("uploadImage")}
-            </button>
+            </Button>
             <p className="mt-2 text-xs text-white/35">{t("uploadFormats")}</p>
           </div>
         </div>
       </div>
 
       {/* Horizontal logo */}
-      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+      <div className={`rounded-2xl ${GLASS_CLASS} p-5`}>
         <h3 className="font-semibold">{t("logo")}</h3>
         <p className="mt-1 text-sm text-white/45">{t("logoDescription")}</p>
         <div className="mt-4 flex flex-col gap-5 sm:flex-row sm:items-center">
-          <div className="flex h-24 w-full max-w-xs shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-[#0a0f1e] px-5">
+          <div className="flex h-24 w-full max-w-xs shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-black/20 px-5">
             <img src={logoPreviewSrc} alt={t("logoAlt")} className="max-h-16 w-full object-contain" />
           </div>
           <div>
@@ -171,53 +177,34 @@ function BrandingForm({ branding }: { branding: Branding }) {
               onChange={(event) => onFile(event, "logo")}
               className="hidden"
             />
-            <button
-              onClick={() => logoFileRef.current?.click()}
-              disabled={logoUpload.isPending}
-              className="inline-flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-600 disabled:opacity-50"
-            >
-              {logoUpload.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+            <Button variant="secondary" onClick={() => logoFileRef.current?.click()} loading={logoUpload.isPending}>
+              <Upload />
               {t("uploadImage")}
-            </button>
+            </Button>
             <p className="mt-2 text-xs text-white/35">{t("logoUploadFormats")}</p>
           </div>
         </div>
       </div>
 
       {/* Metadata */}
-      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+      <div className={`rounded-2xl ${GLASS_CLASS} p-5`}>
         <h3 className="font-semibold">{t("appAndColors")}</h3>
         <p className="mt-1 text-sm text-white/45">{t("appAndColorsHint")}</p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-white/50">{t("appName")}</label>
-            <input
-              value={appName}
-              onChange={(e) => setAppName(e.target.value)}
-              className="w-full rounded-lg border border-white/10 bg-[#0a0f1e] px-3 py-2 text-sm text-white outline-none focus:border-blue-500/50"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-white/50">{t("shortName")}</label>
-            <input
-              value={shortName}
-              onChange={(e) => setShortName(e.target.value)}
-              className="w-full rounded-lg border border-white/10 bg-[#0a0f1e] px-3 py-2 text-sm text-white outline-none focus:border-blue-500/50"
-            />
-          </div>
+          <Field label={t("appName")}>
+            <Input value={appName} onChange={(e) => setAppName(e.target.value)} />
+          </Field>
+          <Field label={t("shortName")}>
+            <Input value={shortName} onChange={(e) => setShortName(e.target.value)} />
+          </Field>
           <ColorField label={t("themeColor")} value={themeColor} onChange={setThemeColor} />
           <ColorField label={t("backgroundColor")} value={backgroundColor} onChange={setBackgroundColor} />
         </div>
-        <div className="mt-4">
-          <button
-            onClick={() => saveMeta.mutate()}
-            disabled={saveMeta.isPending}
-            className="inline-flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-600 disabled:opacity-50"
-          >
-            {saveMeta.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+        <FormFooter dirty={dirty} onCancel={dirty ? reset : undefined} className="mt-4">
+          <Button variant="brand" onClick={() => saveMeta.mutate()} disabled={!dirty} loading={saveMeta.isPending}>
             {tc("save")}
-          </button>
-        </div>
+          </Button>
+        </FormFooter>
       </div>
     </div>
   );

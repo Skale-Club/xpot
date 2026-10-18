@@ -3,17 +3,21 @@ import { Tabs } from "@/components/xpot/Tabs";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import {
-  ArrowLeft,
   BadgeInfo,
   ChevronDown,
   Eye,
   EyeOff,
   Languages,
-  Loader2,
   Save,
   ShieldCheck,
   UserRound,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { AppLoader } from "@/components/ui/spinner";
+import { Field, FIELD_CONTROL, Input } from "@/components/xpot/Field";
+import { FormFooter } from "@/components/xpot/FormFooter";
+import { PageHeader } from "@/components/xpot/PageHeader";
+import { ACCENT_SELECTED, GLASS_CLASS, SURFACE_MODAL_CLASS } from "@/components/xpot/surface";
 import ReactCountryFlag from "react-country-flag";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -127,7 +131,9 @@ function CountryPhoneInput({
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1.5 rounded-l-2xl border border-r-0 border-white/5 bg-white/[0.03] px-3 py-3 text-sm text-white/80 hover:bg-white/[0.06] transition-colors shrink-0"
+        aria-expanded={open}
+        aria-label={`${t("phone")}: ${active.dial}`}
+        className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-l-xl border border-r-0 border-white/10 bg-white/[0.05] px-3 text-sm text-white/80 transition-colors hover:bg-white/[0.08]"
       >
         <ReactCountryFlag countryCode={active.code} svg className="h-4 w-5 rounded-sm object-cover" />
         <span className="text-white/60 text-xs font-medium">{active.dial}</span>
@@ -138,17 +144,17 @@ function CountryPhoneInput({
         value={local}
         onChange={handleLocalChange}
         placeholder={active.code === "BR" ? "(11) 99999-9999" : "(555) 000-0000"}
-        className="w-full rounded-r-2xl border border-white/5 bg-white/[0.03] px-4 py-3 text-[15px] font-medium text-white placeholder-white/20 outline-none focus:border-indigo-500/50 focus:bg-white/[0.05] transition-all"
+        className={`${FIELD_CONTROL} rounded-l-none py-2`}
       />
       {open && (
-        <div className="absolute left-0 top-full z-50 mt-1 max-h-48 w-56 overflow-y-auto rounded-xl border border-white/10 bg-[#0f111a] p-1 shadow-2xl">
+        <div className={`absolute left-0 top-full z-50 mt-1 max-h-48 w-56 overflow-y-auto rounded-xl ${SURFACE_MODAL_CLASS} p-1 shadow-2xl`}>
           {COUNTRIES.map((c) => (
             <button
               key={c.code}
               type="button"
               onClick={() => selectCountry(c)}
-              className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
-                c.code === active.code ? "bg-white/10 text-white" : "text-white/70 hover:bg-white/5 hover:text-white"
+              className={`flex min-h-10 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+                c.code === active.code ? `${ACCENT_SELECTED.account.row} text-white` : "text-white/70 hover:bg-white/5 hover:text-white"
               }`}
             >
               <ReactCountryFlag countryCode={c.code} svg className="h-4 w-5 rounded-sm object-cover" />
@@ -166,18 +172,9 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   return (
     <div className="space-y-3">
       <h2 className="px-1 text-base font-bold text-white/90">{title}</h2>
-      <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-4 space-y-4">
+      <div className={`space-y-4 rounded-2xl ${GLASS_CLASS} p-4`}>
         {children}
       </div>
-    </div>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-1.5">
-      <label className="text-sm font-medium text-white/55">{label}</label>
-      {children}
     </div>
   );
 }
@@ -219,7 +216,7 @@ export function XpotSettings() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/xpot/me"] });
-      toast({ title: t("profileSaved") });
+      toast({ title: t("profileSaved"), variant: "success" });
     },
     onError: (err: Error) => {
       toast({ title: t("profileSaveFailed"), description: err.message, variant: "destructive" });
@@ -232,7 +229,7 @@ export function XpotSettings() {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: t("passwordChanged") });
+      toast({ title: t("passwordChanged"), variant: "success" });
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
@@ -275,13 +272,27 @@ export function XpotSettings() {
     passwordMutation.mutate({ currentPassword, newPassword });
   };
 
-  if (meQuery.isLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[#060912]">
-        <Loader2 className="h-7 w-7 animate-spin text-blue-400" />
-      </div>
-    );
-  }
+  if (meQuery.isLoading) return <AppLoader />;
+
+  const profileDirty = !!me && (
+    displayName !== me.rep.displayName ||
+    phone !== (me.rep.phone ?? "") ||
+    firstName !== (me.user.firstName ?? "") ||
+    lastName !== (me.user.lastName ?? "")
+  );
+  const resetProfile = () => {
+    if (!me) return;
+    setDisplayName(me.rep.displayName);
+    setFirstName(me.user.firstName ?? "");
+    setLastName(me.user.lastName ?? "");
+    setPhone(me.rep.phone ?? "");
+  };
+  const passwordDirty = Boolean(currentPassword || newPassword || confirmPassword);
+  const resetPassword = () => {
+    setCurrentPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
+  };
 
   const isSaving = profileMutation.isPending;
   const settingsTabs = [
@@ -296,19 +307,14 @@ export function XpotSettings() {
       <div>
         {/* Header (phone only; the desktop top bar shows the title). Settings is the
             person's own: language, profile, password. Management is admin mode. */}
-        <div className="mb-6 flex items-center gap-3 lg:hidden">
-          <button
-            onClick={() => setLocation(homeForModules(modules))}
-            className="rounded-lg border border-white/10 bg-white/5 p-2 text-white/70 transition-colors hover:bg-white/10"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </button>
-          <div className="min-w-0">
-            <h1 className="text-2xl font-bold tracking-tight">{t("title")}</h1>
-            <p className="truncate text-sm text-white/45">
-              {me ? [me.user.firstName, me.user.lastName].filter(Boolean).join(" ") || me.user.email : ""}
-            </p>
-          </div>
+        <div className="lg:hidden">
+          <PageHeader
+            onBack={() => setLocation(homeForModules(modules))}
+            backLabel={tc("back")}
+            title={t("title")}
+            description={me ? [me.user.firstName, me.user.lastName].filter(Boolean).join(" ") || me.user.email : undefined}
+            className="mb-6"
+          />
         </div>
 
         <InstallAppRow className="mb-6" />
@@ -321,6 +327,7 @@ export function XpotSettings() {
             ariaLabel={t("settingsSections")}
             idPrefix="settings"
             testId="settings-tabs"
+            accent="account"
           />
 
           <div
@@ -334,36 +341,16 @@ export function XpotSettings() {
               <Section title={t("sectionProfile")}>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Field label={t("firstName")}>
-                    <input
-                      type="text"
-                      value={firstName}
-                      onChange={(e) => setFirstName(e.target.value)}
-                      placeholder={t("firstNamePlaceholder")}
-                      className="w-full rounded-2xl border border-white/5 bg-white/[0.03] px-4 py-3 text-[15px] font-medium text-white placeholder-white/20 outline-none transition-all focus:border-indigo-500/50 focus:bg-white/[0.05]"
-                    />
+                    <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder={t("firstNamePlaceholder")} />
                   </Field>
                   <Field label={t("lastName")}>
-                    <input
-                      type="text"
-                      value={lastName}
-                      onChange={(e) => setLastName(e.target.value)}
-                      placeholder={t("lastNamePlaceholder")}
-                      className="w-full rounded-2xl border border-white/5 bg-white/[0.03] px-4 py-3 text-[15px] font-medium text-white placeholder-white/20 outline-none transition-all focus:border-indigo-500/50 focus:bg-white/[0.05]"
-                    />
+                    <Input value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder={t("lastNamePlaceholder")} />
                   </Field>
                   <Field label={t("displayName")}>
-                    <input
-                      type="text"
-                      value={displayName}
-                      onChange={(e) => setDisplayName(e.target.value)}
-                      placeholder={t("displayNamePlaceholder")}
-                      className="w-full rounded-2xl border border-white/5 bg-white/[0.03] px-4 py-3 text-[15px] font-medium text-white placeholder-white/20 outline-none transition-all focus:border-indigo-500/50 focus:bg-white/[0.05]"
-                    />
+                    <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder={t("displayNamePlaceholder")} />
                   </Field>
                   <Field label={t("email")}>
-                    <div className="rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-3 text-[15px] font-medium text-white/40">
-                      {me?.user.email ?? "—"}
-                    </div>
+                    <Input value={me?.user.email ?? "—"} readOnly disabled />
                   </Field>
                   <div className="sm:col-span-2">
                     <Field label={t("phone")}>
@@ -371,16 +358,12 @@ export function XpotSettings() {
                     </Field>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleSaveProfile}
-                  disabled={isSaving || !displayName.trim()}
-                  className="flex w-full items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-bold text-white transition-all touch-manipulation active:scale-[0.98] disabled:opacity-40"
-                  style={{ background: "linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)", boxShadow: "0 8px 24px rgba(99,102,241,0.25)" }}
-                >
-                  {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                  <span>{isSaving ? t("saving") : t("saveProfile")}</span>
-                </button>
+                <FormFooter dirty={profileDirty} onCancel={profileDirty ? resetProfile : undefined}>
+                  <Button variant="brand" onClick={handleSaveProfile} disabled={!profileDirty || !displayName.trim()} loading={isSaving}>
+                    <Save />
+                    {t("saveProfile")}
+                  </Button>
+                </FormFooter>
               </Section>
             )}
 
@@ -388,17 +371,17 @@ export function XpotSettings() {
               <Section title={t("sectionSecurity")}>
                 <Field label={t("currentPassword")}>
                   <div className="relative">
-                    <input
+                    <Input
                       type={showPwd ? "text" : "password"}
                       value={currentPassword}
                       onChange={(e) => setCurrentPassword(e.target.value)}
                       placeholder={t("currentPasswordPlaceholder")}
-                      className="w-full rounded-2xl border border-white/5 bg-white/[0.03] px-4 py-3 pr-11 text-[15px] font-medium text-white placeholder-white/20 outline-none transition-all focus:border-indigo-500/50 focus:bg-white/[0.05]"
+                      className="pr-12"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPwd(!showPwd)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60"
+                      className="absolute right-1 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg text-white/30 hover:text-white/60"
                       aria-label={showPwd ? t("hidePassword") : t("showPassword")}
                     >
                       {showPwd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -406,35 +389,24 @@ export function XpotSettings() {
                   </div>
                 </Field>
                 <Field label={t("newPassword")}>
-                  <input
-                    type="password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder={t("newPasswordPlaceholder")}
-                    className="w-full rounded-2xl border border-white/5 bg-white/[0.03] px-4 py-3 text-[15px] font-medium text-white placeholder-white/20 outline-none transition-all focus:border-indigo-500/50 focus:bg-white/[0.05]"
-                  />
+                  <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder={t("newPasswordPlaceholder")} />
                 </Field>
-                <Field label={t("confirmPassword")}>
-                  <input
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder={t("confirmPasswordPlaceholder")}
-                    className="w-full rounded-2xl border border-white/5 bg-white/[0.03] px-4 py-3 text-[15px] font-medium text-white placeholder-white/20 outline-none transition-all focus:border-indigo-500/50 focus:bg-white/[0.05]"
-                  />
-                </Field>
-                {newPassword && confirmPassword && newPassword !== confirmPassword && (
-                  <p className="text-xs text-red-400">{t("passwordsMismatch")}</p>
-                )}
-                <button
-                  type="button"
-                  onClick={handleChangePassword}
-                  disabled={passwordMutation.isPending || !currentPassword || !newPassword || newPassword !== confirmPassword}
-                  className="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] py-3.5 text-sm font-bold text-white transition-all touch-manipulation hover:bg-white/[0.06] active:scale-[0.98] disabled:opacity-40"
+                <Field
+                  label={t("confirmPassword")}
+                  error={newPassword && confirmPassword && newPassword !== confirmPassword ? t("passwordsMismatch") : undefined}
                 >
-                  {passwordMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                  <span>{passwordMutation.isPending ? t("changing") : t("changePassword")}</span>
-                </button>
+                  <Input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder={t("confirmPasswordPlaceholder")} />
+                </Field>
+                <FormFooter dirty={passwordDirty} onCancel={passwordDirty ? resetPassword : undefined}>
+                  <Button
+                    variant="brand"
+                    onClick={handleChangePassword}
+                    disabled={!currentPassword || !newPassword || newPassword !== confirmPassword}
+                    loading={passwordMutation.isPending}
+                  >
+                    {t("changePassword")}
+                  </Button>
+                </FormFooter>
               </Section>
             )}
 
@@ -449,14 +421,10 @@ export function XpotSettings() {
               <Section title={t("sectionAccount")}>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <Field label={t("role")}>
-                    <div className="rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-3 text-[15px] font-medium text-white/40">
-                      {me?.rep.role ? roleLabel(me.rep.role, t) : "—"}
-                    </div>
+                    <Input value={me?.rep.role ? roleLabel(me.rep.role, t) : "—"} readOnly disabled />
                   </Field>
                   <Field label={t("team")}>
-                    <div className="rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-3 text-[15px] font-medium text-white/40">
-                      {me?.rep.team ?? "—"}
-                    </div>
+                    <Input value={me?.rep.team ?? "—"} readOnly disabled />
                   </Field>
                 </div>
               </Section>

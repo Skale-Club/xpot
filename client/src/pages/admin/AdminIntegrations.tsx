@@ -9,16 +9,20 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { describeApiError } from "@/lib/apiErrors";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2 } from "@/components/ui/loader";
+import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { ErrorState } from "@/components/xpot/EmptyState";
+import { Field, FIELD_CONTROL, Input } from "@/components/xpot/Field";
+import { FormFooter } from "@/components/xpot/FormFooter";
+import { InlineAlert } from "@/components/xpot/InlineAlert";
+import { ListSkeleton } from "@/components/xpot/ListSkeleton";
+import { INTEGRATION_TONE, Pill, PILL_DOTS } from "@/components/xpot/StatusPill";
+import { ACCENT_SELECTED, GLASS_CLASS, GLASS_SUBTLE_CLASS, SURFACE_MODAL_CLASS } from "@/components/xpot/surface";
 import {
-  CheckCircle2,
-  XCircle,
   Plug,
   KeyRound,
   ChevronRight,
   ChevronDown,
-  AlertTriangle,
   Search,
   Check,
   Webhook,
@@ -49,39 +53,12 @@ import {
 type IntegrationsResponse = { providers: IntegrationProviderDef[]; status: IntegrationStatus[] };
 const INTEGRATIONS_KEY = ["/api/xpot/admin/integrations"];
 
-const CATEGORY_COLORS: Record<string, string> = {
-  Maps: "bg-emerald-500/15 text-emerald-300 border-emerald-500/20",
-  Voice: "bg-violet-500/15 text-violet-300 border-violet-500/20",
-  AI: "bg-blue-500/15 text-blue-300 border-blue-500/20",
-  Pipeline: "bg-amber-500/15 text-amber-300 border-amber-500/20",
-  Messaging: "bg-sky-500/15 text-sky-300 border-sky-500/20",
-};
-
-/** One tone per status for the left bar, the dot and the chip, so the three never disagree. */
-const STATUS_TONE: Record<StatusKey, { bar: string; dot: string; chip: string }> = {
-  live: {
-    bar: "bg-emerald-500",
-    dot: "bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.45)]",
-    chip: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
-  },
-  broken: {
-    bar: "bg-red-500",
-    dot: "bg-red-400 shadow-[0_0_10px_rgba(248,113,113,0.45)]",
-    chip: "bg-red-500/15 text-red-300 border-red-500/30",
-  },
-  idle: {
-    bar: "bg-amber-400",
-    dot: "bg-amber-400",
-    chip: "bg-amber-500/15 text-amber-300 border-amber-500/30",
-  },
-  off: {
-    bar: "bg-white/10",
-    dot: "bg-white/20",
-    chip: "bg-white/5 text-white/40 border-white/10",
-  },
-};
+/** The bar, the dot and the chip of a provider all come from INTEGRATION_TONE, so the three never disagree. */
+function statusTone(key: StatusKey) {
+  const tone = INTEGRATION_TONE[key] ?? "slate";
+  return { tone, bar: key === "off" ? "bg-white/10" : PILL_DOTS[tone], dot: PILL_DOTS[tone] };
+}
 const SAVED_SECRET_MASK = "••••••••";
-const BADGE = "rounded-md border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide";
 
 type IntT = Translate<typeof integrationsMessages.en>;
 
@@ -157,13 +134,9 @@ function displayFieldValue(
 function ProviderBadges({ def, t }: { def: IntegrationProviderDef; t: IntT }) {
   return (
     <>
-      {def.role && (
-        <span className={`${BADGE} border-white/10 bg-white/5 text-white/55`}>{t(def.role === "primary" ? "rolePrimary" : "roleFallback")}</span>
-      )}
-      {def.legacy && <span className={`${BADGE} border-white/10 bg-white/5 text-white/45`}>{t("legacyBadge")}</span>}
-      {def.requiredForSignIn && (
-        <span className={`${BADGE} border-sky-500/30 bg-sky-500/10 text-sky-300`}>{t("requiredForSignIn")}</span>
-      )}
+      {def.role && <Pill tone="slate">{t(def.role === "primary" ? "rolePrimary" : "roleFallback")}</Pill>}
+      {def.legacy && <Pill tone="muted">{t("legacyBadge")}</Pill>}
+      {def.requiredForSignIn && <Pill tone="slate" bordered>{t("requiredForSignIn")}</Pill>}
     </>
   );
 }
@@ -175,24 +148,17 @@ function ProvidersPanel() {
   const [dirty, setDirty] = useState(false);
   const [pending, setPending] = useState<string | null>(null);
   const t = useT(integrationsMessages);
-  const tc = useT(commonMessages);
 
   if (query.isLoading) {
     return (
-      <div className="flex justify-center py-16">
-        <Loader2 className="h-6 w-6 animate-spin text-blue-400" />
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[260px,1fr]">
+        <ListSkeleton rows={5} />
+        <ListSkeleton rows={1} rowClassName="h-64 rounded-2xl" />
       </div>
     );
   }
   if (query.isError || !query.data) {
-    return (
-      <div className="flex flex-wrap items-center gap-3 text-sm text-red-400">
-        {t("integrationsLoadFailed")}
-        <button type="button" onClick={() => void query.refetch()} className="rounded-lg border border-white/10 px-3 py-1 text-white/70 hover:bg-white/5">
-          {tc("retry")}
-        </button>
-      </div>
-    );
+    return <ErrorState message={t("integrationsLoadFailed")} onRetry={() => void query.refetch()} />;
   }
 
   const statusByProvider = new Map(query.data.status.map((s) => [s.provider, s]));
@@ -214,13 +180,13 @@ function ProvidersPanel() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[260px,1fr]">
         {/* Sidebar */}
-        <aside className="rounded-2xl border border-white/10 bg-white/[0.025] p-2">
+        <aside className={`rounded-2xl ${GLASS_SUBTLE_CLASS} p-2`}>
           <ul className="flex flex-row gap-1 overflow-x-auto lg:flex-col lg:gap-0.5 lg:overflow-x-visible">
             {INTEGRATION_PROVIDERS.map((def) => {
               const status = statusByProvider.get(def.provider)!;
               const isActive = def.provider === selectedDef.provider;
               const sk = integrationStatusKey(status);
-              const tone = STATUS_TONE[sk];
+              const tone = statusTone(sk);
               return (
                 <li key={def.provider} className="shrink-0 lg:shrink">
                   <button
@@ -228,7 +194,7 @@ function ProvidersPanel() {
                     onClick={() => select(def.provider)}
                     className={`group relative flex w-full items-center gap-3 overflow-hidden rounded-xl pl-4 pr-3 py-3 text-left transition-colors ${
                       isActive
-                        ? "bg-blue-500/15 text-white"
+                        ? `${ACCENT_SELECTED.account.row} text-white`
                         : "text-white/70 hover:bg-white/5 hover:text-white"
                     }`}
                     data-testid={`integration-${def.provider}`}
@@ -238,7 +204,7 @@ function ProvidersPanel() {
                     <span className="flex min-w-0 flex-1 flex-col">
                       <span className="flex items-center gap-2">
                         <span className="truncate text-sm font-medium">{providerLabel(t, def)}</span>
-                        <span className={`hidden shrink-0 sm:inline-flex ${BADGE} ${tone.chip}`}>{t(STATUS_LABEL_KEYS[sk])}</span>
+                        <Pill tone={tone.tone} className="hidden min-h-5 shrink-0 px-2 py-0.5 text-[11px] sm:inline-flex">{t(STATUS_LABEL_KEYS[sk])}</Pill>
                       </span>
                       <span className="flex flex-wrap items-center gap-1.5 text-[11px] text-white/40">
                         {t(CATEGORY_KEYS[def.category])}
@@ -269,7 +235,6 @@ function ProvidersPanel() {
           key={selectedDef.provider}
           def={selectedDef}
           status={selectedStatus}
-          categoryColor={CATEGORY_COLORS[selectedDef.category] ?? "bg-white/10 text-white/60 border-white/10"}
           onDirtyChange={setDirty}
         />
       </div>
@@ -295,12 +260,10 @@ function ProvidersPanel() {
 function ProviderDetail({
   def,
   status,
-  categoryColor,
   onDirtyChange,
 }: {
   def: IntegrationProviderDef;
   status: IntegrationStatus;
-  categoryColor: string;
   onDirtyChange: (dirty: boolean) => void;
 }) {
   const { toast } = useToast();
@@ -366,6 +329,11 @@ function ProviderDetail({
     },
   });
 
+  const reset = () => {
+    setFields({});
+    setEnabled(status.enabled);
+    setTestResult(null);
+  };
   const requestSave = () => {
     if (locksOutSignIn(def, status, { enabled })) setConfirming("signInOff");
     else save.mutate({});
@@ -388,28 +356,26 @@ function ProviderDetail({
   });
 
   return (
-    <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 lg:p-6">
+    <section className={`rounded-2xl ${GLASS_CLASS} p-5 lg:p-6`}>
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="text-lg font-semibold text-white">{label}</h3>
-            <span className={`rounded-md border px-2 py-0.5 text-[11px] font-medium ${categoryColor}`}>
-              {t(CATEGORY_KEYS[def.category])}
-            </span>
+            <Pill tone="slate">{t(CATEGORY_KEYS[def.category])}</Pill>
             <ProviderBadges def={def} t={t} />
             {status.hasApiKey && (
-              <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[11px] font-medium text-emerald-300">
-                <KeyRound className="h-3 w-3" />
+              <Pill tone="slate" className="gap-1">
+                <KeyRound className="h-3 w-3" aria-hidden="true" />
                 {t("keyLast4", { last4: status.apiKeyLast4 ?? "" })}
-              </span>
+              </Pill>
             )}
           </div>
           <p className="mt-1.5 text-sm text-white/55">{providerDescription(t, def)}</p>
         </div>
 
         <label className="flex shrink-0 cursor-pointer items-center gap-3 text-sm text-white/70">
-          <span className={enabled ? "text-emerald-400" : "text-white/40"}>
+          <span className={enabled ? "text-white/80" : "text-white/40"}>
             {enabled ? tm("enabled") : tm("disabled")}
           </span>
           <Switch
@@ -422,33 +388,28 @@ function ProviderDetail({
 
       {/* The server's own settings are the ones in force. */}
       {status.source === "env" && (
-        <div className="mt-4 flex items-start gap-2.5 rounded-lg border border-sky-500/25 bg-sky-500/[0.07] px-3.5 py-3 text-sm text-sky-100" data-testid="integration-env-source">
-          <Server className="mt-0.5 h-4 w-4 shrink-0 text-sky-300" />
-          <div className="min-w-0 flex-1">
-            <div className="font-medium">{t("envSourceTitle")}</div>
-            <div className="text-sky-100/75">{t(def.envMode === "override" ? "envSourceOverride" : "envSourceFallback")}</div>
-          </div>
+        <div className="mt-4" data-testid="integration-env-source">
+          <InlineAlert tone="info" icon={Server} title={t("envSourceTitle")}>
+            {t(def.envMode === "override" ? "envSourceOverride" : "envSourceFallback")}
+          </InlineAlert>
         </div>
       )}
 
       {/* Broken-state warning — enabled but something is missing */}
       {status.enabled && status.problem && (
-        <div className="mt-4 flex items-start gap-2.5 rounded-lg border border-red-500/30 bg-red-500/10 px-3.5 py-3 text-sm text-red-200">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          <div className="min-w-0 flex-1">
-            <div className="font-medium">{t("setupIncomplete")}</div>
-            <div className="text-red-200/80">{problemText(t, status)}</div>
-          </div>
-        </div>
+        <InlineAlert tone="error" title={t("setupIncomplete")} className="mt-4">
+          {problemText(t, status)}
+        </InlineAlert>
       )}
 
       {/* Fields */}
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
         {def.fields.map((f) => (
-          <div key={f.key} className={def.fields.length === 1 ? "sm:col-span-2" : ""}>
-            <label className="mb-1.5 block text-xs font-medium text-white/55">
-              {fieldLabel(t, f.label)} {f.optional && <span className="text-white/30">({tm("optional")})</span>}
-            </label>
+          <Field
+            key={f.key}
+            className={def.fields.length === 1 ? "sm:col-span-2" : ""}
+            label={<>{fieldLabel(t, f.label)} {f.optional && <span className="font-normal text-white/30">({tm("optional")})</span>}</>}
+          >
             {f.options ? (
               <SearchableSelect
                 value={displayFieldValue(f.key, fields, status)}
@@ -460,7 +421,7 @@ function ProviderDetail({
                 }}
               />
             ) : (
-              <input
+              <Input
                 type={f.secret ? "password" : "text"}
                 autoComplete="off"
                 value={fields[f.key] ?? (f.secret && status.hasApiKey ? SAVED_SECRET_MASK : displayFieldValue(f.key, fields, status))}
@@ -474,65 +435,48 @@ function ProviderDetail({
                   setFields((prev) => ({ ...prev, [f.key]: e.target.value }));
                 }}
                 placeholder={f.secret && status.hasApiKey ? t("currentKey", { last4: status.apiKeyLast4 ?? t("savedKey") }) : f.placeholder ?? ""}
-                className="w-full rounded-lg border border-white/10 bg-[#0a0f1e] px-3 py-2.5 text-sm text-white placeholder-white/25 outline-none transition-colors focus:border-blue-500/50"
               />
             )}
-          </div>
+          </Field>
         ))}
-      </div>
-
-      {/* Actions */}
-      <div className="mt-5 flex flex-wrap items-center gap-2">
-        <button
-          onClick={requestSave}
-          disabled={save.isPending}
-          className="inline-flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-600 disabled:opacity-50"
-          data-testid="integration-save"
-        >
-          {save.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-          {tc("save")}
-        </button>
-        <button
-          onClick={() => test.mutate()}
-          disabled={test.isPending || !hasApiKeyForTest}
-          title={!hasApiKeyForTest ? t("testNeedsKey") : t("testCredentials")}
-          className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-white/80 transition-colors hover:bg-white/10 disabled:opacity-40"
-        >
-          {test.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-          {t("test")}
-        </button>
-        {status.hasApiKey && (
-          <button
-            type="button"
-            onClick={() => setConfirming("removeKey")}
-            disabled={save.isPending}
-            className="inline-flex items-center gap-2 rounded-lg border border-red-500/30 px-4 py-2 text-sm font-medium text-red-300 transition-colors hover:bg-red-500/10 disabled:opacity-40"
-            data-testid="integration-remove-key"
-          >
-            <Trash2 className="h-4 w-4" />
-            {t("removeKey")}
-          </button>
-        )}
-        {dirty && <span className="text-xs text-amber-300">{t("unsavedChanges")}</span>}
       </div>
 
       {/* Test result block */}
       {testResult && (
-        <div
-          className={`mt-4 flex items-start gap-2.5 rounded-lg border px-3.5 py-3 text-sm ${
-            testResult.ok
-              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
-              : "border-red-500/30 bg-red-500/10 text-red-200"
-          }`}
-        >
-          {testResult.ok ? (
-            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
-          ) : (
-            <XCircle className="mt-0.5 h-4 w-4 shrink-0" />
-          )}
-          <div className="min-w-0 flex-1 break-words whitespace-pre-wrap">{testResult.message}</div>
-        </div>
+        <InlineAlert tone={testResult.ok ? "success" : "error"} className="mt-4">
+          <span className="block whitespace-pre-wrap break-words">{testResult.message}</span>
+        </InlineAlert>
       )}
+
+      {/* Actions: test and remove on the left, Cancel and Save on the right. */}
+      <div className="mt-5 flex flex-wrap items-center gap-2">
+        <Button
+          variant="secondary"
+          onClick={() => test.mutate()}
+          disabled={!hasApiKeyForTest}
+          loading={test.isPending}
+          title={!hasApiKeyForTest ? t("testNeedsKey") : t("testCredentials")}
+        >
+          {t("test")}
+        </Button>
+        {status.hasApiKey && (
+          <Button
+            variant="outline"
+            className="border-red-400/30 text-red-300 hover:border-red-400/40 hover:bg-red-500/10 hover:text-red-200"
+            onClick={() => setConfirming("removeKey")}
+            disabled={save.isPending}
+            data-testid="integration-remove-key"
+          >
+            <Trash2 />
+            {t("removeKey")}
+          </Button>
+        )}
+        <FormFooter dirty={dirty} onCancel={dirty ? reset : undefined} className="ml-auto">
+          <Button variant="brand" onClick={requestSave} disabled={!dirty} loading={save.isPending} data-testid="integration-save">
+            {tc("save")}
+          </Button>
+        </FormFooter>
+      </div>
 
       <ConfirmDialog
         open={confirming === "signInOff"}
@@ -587,9 +531,8 @@ function SearchableSelect({
           setOpen((prev) => !prev);
           setSearch("");
         }}
-        className={`flex w-full items-center justify-between gap-3 rounded-lg border bg-[#0a0f1e] px-3 py-2.5 text-left text-sm outline-none transition-colors ${
-          open ? "border-blue-500/50" : "border-white/10 hover:border-white/20"
-        }`}
+        aria-expanded={open}
+        className={`${FIELD_CONTROL} flex items-center justify-between gap-3 py-2 text-left ${open ? "border-blue-400/60" : ""}`}
       >
         <span className={value ? "min-w-0 truncate text-white" : "min-w-0 truncate text-white/25"}>
           {value || placeholder || t("selectModel")}
@@ -598,7 +541,7 @@ function SearchableSelect({
       </button>
 
       {open && (
-        <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-30 overflow-hidden rounded-lg border border-white/10 bg-[#080d19] shadow-2xl shadow-black/40">
+        <div className={`absolute left-0 right-0 top-[calc(100%+6px)] z-30 overflow-hidden rounded-xl ${SURFACE_MODAL_CLASS} shadow-2xl shadow-black/40`}>
           <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
             <Search className="h-4 w-4 shrink-0 text-white/35" />
             <input
@@ -625,9 +568,9 @@ function SearchableSelect({
                   onChange(customValue);
                   setOpen(false);
                 }}
-                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-blue-200 transition-colors hover:bg-blue-500/10"
+                className="flex min-h-10 w-full items-center gap-2 px-3 py-2 text-left text-sm text-white/85 transition-colors hover:bg-white/[0.06]"
               >
-                <Check className="h-4 w-4 shrink-0 text-blue-300" />
+                <Check className="h-4 w-4 shrink-0 text-white/60" />
                 <span className="min-w-0 truncate">{t("useCustomValue", { value: customValue })}</span>
               </button>
             )}
@@ -641,11 +584,11 @@ function SearchableSelect({
                     onChange(option);
                     setOpen(false);
                   }}
-                  className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${
-                    selected ? "bg-blue-500/15 text-white" : "text-white/70 hover:bg-white/5 hover:text-white"
+                  className={`flex min-h-10 w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${
+                    selected ? `${ACCENT_SELECTED.account.row} text-white` : "text-white/70 hover:bg-white/5 hover:text-white"
                   }`}
                 >
-                  <Check className={`h-4 w-4 shrink-0 ${selected ? "text-blue-300 opacity-100" : "opacity-0"}`} />
+                  <Check className={`h-4 w-4 shrink-0 ${selected ? "text-slate-200 opacity-100" : "opacity-0"}`} />
                   <span className="min-w-0 truncate">{option}</span>
                 </button>
               );
@@ -682,6 +625,7 @@ export function AdminIntegrations() {
         ariaLabel={ts("orgIntegrations")}
         idPrefix="integrations"
         testId="integrations-tabs"
+        accent="account"
       />
       {tab === "providers" && <ProvidersPanel />}
       {tab === "xphere" && <AdminXphere />}

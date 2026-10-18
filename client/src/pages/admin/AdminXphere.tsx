@@ -3,10 +3,19 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { describeApiError } from "@/lib/apiErrors";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2 } from "@/components/ui/loader";
+import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
-import { Copy, Eye, EyeOff, RotateCcw, Webhook } from "lucide-react";
+import { CopyButton } from "@/components/xpot/CopyButton";
+import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
+import { Field, Input } from "@/components/xpot/Field";
+import { FilterBar, FilterSearch, FilterToggle } from "@/components/xpot/filters";
+import { FormFooter } from "@/components/xpot/FormFooter";
+import { ListSkeleton } from "@/components/xpot/ListSkeleton";
+import { ListPager, usePagedList } from "@/components/xpot/pagination";
+import { INTEGRATION_TONE, Pill } from "@/components/xpot/StatusPill";
+import { GLASS_CLASS } from "@/components/xpot/surface";
+import { Eye, EyeOff, RotateCw, Users, Webhook } from "lucide-react";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { manageMessages } from "@/i18n/messages/manage";
@@ -14,82 +23,67 @@ import { integrationsMessages } from "@/i18n/messages/integrations";
 import { maskInboundKey, visibleXphereRows, type XphereRow } from "./integrationsUi";
 
 const XPHERE_KEY = ["/api/xpot/admin/xphere"];
-const FIELD =
-  "w-full rounded-lg border border-white/10 bg-[#0a0f1e] px-3 py-2 text-sm text-white placeholder-white/25 outline-none focus:border-blue-500/50";
-const ICON_BTN =
-  "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 text-xs text-white/70 hover:bg-white/10 disabled:opacity-40";
-const CHIP = "rounded-md px-2 py-0.5 text-[11px]";
+/** The read-only value boxes (endpoint, inbound key): the field's shape without being editable. */
+const CODE_BOX = "min-w-0 flex-1 break-all rounded-xl border border-white/10 bg-black/20 px-3.5 py-2.5 font-mono text-xs text-white/75";
 
-function useCopy() {
-  const { toast } = useToast();
-  const t = useT(integrationsMessages);
-  const tc = useT(commonMessages);
-  return (value: string) =>
-    navigator.clipboard?.writeText(value).then(
-      () => toast({ title: tc("copied") }),
-      () => toast({ title: t("couldNotCopy"), variant: "destructive" }),
-    );
+/** Name or email contains the search (any case). */
+function matches(row: XphereRow, search: string) {
+  const q = search.trim().toLowerCase();
+  return !q || [row.displayName, row.email].some((value) => value?.toLowerCase().includes(q));
 }
 
 /** Account › Integrations › Xphere: each person's link to the Xphere CRM, set by the global admin. */
 export function AdminXphere() {
   const query = useQuery<XphereRow[]>({ queryKey: XPHERE_KEY });
   const t = useT(integrationsMessages);
-  const tc = useT(commonMessages);
-  const copy = useCopy();
+  const tm = useT(manageMessages);
   const [showAll, setShowAll] = useState(false);
+  const [search, setSearch] = useState("");
   const endpoint = `${window.location.origin}/api/xpot/inbound`;
+  const visible = visibleXphereRows(query.data ?? [], showAll);
+  const rows = visible.filter((row) => matches(row, search));
+  const page = usePagedList(rows, { resetKey: `${search}|${showAll}` });
 
-  if (query.isLoading) {
-    return (
-      <div className="flex justify-center py-16">
-        <Loader2 className="h-6 w-6 animate-spin text-blue-400" />
-      </div>
-    );
-  }
+  if (query.isLoading) return <ListSkeleton rows={3} rowClassName="h-40 rounded-2xl" />;
   if (query.isError || !query.data) {
-    return (
-      <div className="flex flex-wrap items-center gap-3 text-sm text-red-400">
-        {t("xphereLoadFailed")}
-        <button type="button" onClick={() => void query.refetch()} className="rounded-lg border border-white/10 px-3 py-1 text-white/70 hover:bg-white/5">
-          {tc("retry")}
-        </button>
-      </div>
-    );
+    return <ErrorState message={t("xphereLoadFailed")} onRetry={() => void query.refetch()} />;
   }
-
-  const rows = visibleXphereRows(query.data, showAll);
 
   return (
     <div className="space-y-4">
-      <div className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+      <div className={`space-y-3 rounded-2xl ${GLASS_CLASS} p-5`}>
         <p className="flex items-start gap-2 text-sm text-white/60">
           <Webhook className="mt-0.5 h-4 w-4 shrink-0" />
           {t("xphereIntro")}
         </p>
         <div>
-          <p className="mb-1 text-xs font-medium text-white/50">{t("xphereEndpoint")}</p>
+          <p className="mb-1.5 text-xs font-semibold text-white/60">{t("xphereEndpoint")}</p>
           <div className="flex items-center gap-2">
-            <code className="min-w-0 flex-1 break-all rounded-lg border border-white/10 bg-[#0a0f1e] px-3 py-2 text-xs text-white/75" data-testid="xphere-endpoint">
+            <code className={CODE_BOX} data-testid="xphere-endpoint">
               {endpoint}
             </code>
-            <button type="button" onClick={() => void copy(endpoint)} className={ICON_BTN} aria-label={t("copyAddress")} title={t("copyAddress")}>
-              <Copy className="h-3.5 w-3.5" />
-            </button>
+            <CopyButton value={endpoint} label={t("copyAddress")} iconOnly />
           </div>
         </div>
-        <label className="flex w-fit cursor-pointer items-center gap-2.5 text-sm text-white/70">
-          <Switch checked={showAll} onCheckedChange={setShowAll} data-testid="xphere-show-all" />
-          {t("showAll")}
-        </label>
       </div>
 
+      <FilterBar
+        search={<FilterSearch value={search} onChange={setSearch} placeholder={tm("searchPeople")} testId="xphere-search" />}
+        controls={<FilterToggle pressed={showAll} onChange={setShowAll} label={t("showAll")} testId="xphere-show-all" />}
+        summary={{ active: search.trim() !== "", shown: rows.length, total: visible.length, onClear: () => setSearch("") }}
+      />
+
       {rows.length === 0 && (
-        <p className="text-sm text-white/40">{query.data.length && !showAll ? t("noRepsHidden") : t("noRepsYet")}</p>
+        <EmptyState
+          compact
+          icon={Users}
+          title={search.trim() ? tm("noPeopleMatch") : query.data.length && !showAll ? t("noRepsHidden") : t("noRepsYet")}
+        />
       )}
-      {rows.map((row) => (
+      {page.visible.map((row) => (
         <XphereRowCard key={row.repId} row={row} />
       ))}
+      <ListPager shown={page.shown} total={page.total} hasMore={page.hasMore} onMore={page.showMore} />
     </div>
   );
 }
@@ -100,7 +94,6 @@ function XphereRowCard({ row }: { row: XphereRow }) {
   const t = useT(integrationsMessages);
   const tm = useT(manageMessages);
   const tc = useT(commonMessages);
-  const copy = useCopy();
   const [apiKey, setApiKey] = useState("");
   const [apiUrl, setApiUrl] = useState(row.apiUrl);
   const [isEnabled, setIsEnabled] = useState(row.isEnabled);
@@ -109,6 +102,13 @@ function XphereRowCard({ row }: { row: XphereRow }) {
   const editable = Boolean(row.userId) && !row.deleted;
   const dirty = apiKey.trim() !== "" || apiUrl.trim() !== row.apiUrl || isEnabled !== row.isEnabled;
   const labels: Record<string, string> = { apiUrl: t("apiUrl"), apiKey: t("outboundToken") };
+  // The token chip reads like an integration: saved and switched on is live, saved but off is idle.
+  const tokenTone = INTEGRATION_TONE[row.apiKeySet ? (row.isEnabled ? "live" : "idle") : "off"];
+  const reset = () => {
+    setApiKey("");
+    setApiUrl(row.apiUrl);
+    setIsEnabled(row.isEnabled);
+  };
 
   const save = useMutation({
     mutationFn: async () => {
@@ -140,43 +140,39 @@ function XphereRowCard({ row }: { row: XphereRow }) {
   });
 
   return (
-    <div className={`rounded-2xl border border-white/10 bg-white/[0.03] p-5 ${editable ? "" : "opacity-60"}`} data-testid={`xphere-${row.repId}`}>
+    <div className={`rounded-2xl ${GLASS_CLASS} p-5 ${editable ? "" : "opacity-60"}`} data-testid={`xphere-${row.repId}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="font-semibold">{row.displayName}</h3>
-            <span className={`${CHIP} ${row.apiKeySet ? "bg-emerald-500/15 text-emerald-300" : "bg-white/10 text-white/40"}`}>
-              {row.apiKeySet ? t("tokenSaved") : t("noToken")}
-            </span>
-            {row.access === "blocked" && <span className={`${CHIP} bg-red-500/15 text-red-300`}>{t("statusBlocked")}</span>}
-            {row.access === "pending" && <span className={`${CHIP} bg-amber-500/15 text-amber-300`}>{t("statusPending")}</span>}
-            {!row.usesVisits && <span className={`${CHIP} bg-white/10 text-white/50`}>{t("statusTagsOnly")}</span>}
+            <Pill tone={tokenTone}>{row.apiKeySet ? t("tokenSaved") : t("noToken")}</Pill>
+            {row.access === "blocked" && <Pill tone="red">{t("statusBlocked")}</Pill>}
+            {row.access === "pending" && <Pill tone="amber">{t("statusPending")}</Pill>}
+            {!row.usesVisits && <Pill tone="slate">{t("statusTagsOnly")}</Pill>}
           </div>
           <p className="mt-1 text-xs text-white/40">{row.email ?? "—"}</p>
         </div>
-        <label className="flex cursor-pointer items-center gap-2.5 text-sm font-medium text-white/70">
+        <label className="flex min-h-11 cursor-pointer items-center gap-2.5 text-sm font-medium text-white/70">
           {t("xphereEnabled")}
           <Switch checked={isEnabled} onCheckedChange={setIsEnabled} disabled={!editable} />
         </label>
       </div>
 
       <div className="mt-3">
-        <label className="mb-1 block text-xs font-medium text-white/50">{t("inboundKey")}</label>
+        <p className="mb-1.5 text-xs font-semibold text-white/60">{t("inboundKey")}</p>
         {row.inboundApiKey ? (
           <div className="flex flex-wrap items-center gap-2">
-            <code className="min-w-0 flex-1 break-all rounded-lg border border-white/10 bg-[#0a0f1e] px-3 py-2 text-xs text-white/70" data-testid={`xphere-key-${row.repId}`}>
+            <code className={CODE_BOX} data-testid={`xphere-key-${row.repId}`}>
               {revealed ? row.inboundApiKey : maskInboundKey(row.inboundApiKey)}
             </code>
-            <button type="button" onClick={() => setRevealed((v) => !v)} className={ICON_BTN} aria-label={revealed ? t("hideKey") : t("revealKey")} title={revealed ? t("hideKey") : t("revealKey")}>
-              {revealed ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-            </button>
-            <button type="button" onClick={() => void copy(row.inboundApiKey!)} className={ICON_BTN} aria-label={t("copyKey")} title={t("copyKey")}>
-              <Copy className="h-3.5 w-3.5" />
-            </button>
-            <button type="button" onClick={() => setRotating(true)} disabled={!editable || rotate.isPending} className={ICON_BTN} data-testid={`xphere-rotate-${row.repId}`}>
-              <RotateCcw className="h-3.5 w-3.5" />
+            <Button variant="secondary" size="sm" className="w-9 px-0" onClick={() => setRevealed((v) => !v)} aria-label={revealed ? t("hideKey") : t("revealKey")} title={revealed ? t("hideKey") : t("revealKey")}>
+              {revealed ? <EyeOff /> : <Eye />}
+            </Button>
+            <CopyButton value={row.inboundApiKey} label={t("copyKey")} iconOnly />
+            <Button variant="secondary" size="sm" onClick={() => setRotating(true)} disabled={!editable} loading={rotate.isPending} data-testid={`xphere-rotate-${row.repId}`}>
+              <RotateCw />
               {t("rotateKey")}
-            </button>
+            </Button>
           </div>
         ) : (
           <p className="text-xs text-white/40">{t("noInboundKeyYet")}</p>
@@ -184,44 +180,37 @@ function XphereRowCard({ row }: { row: XphereRow }) {
       </div>
 
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
-        <div>
-          <label className="mb-1 block text-xs font-medium text-white/50">{t("outboundToken")}</label>
-          <input
+        <Field label={t("outboundToken")}>
+          <Input
             type="password"
             autoComplete="off"
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
             placeholder={row.apiKeySet ? t("keepCurrentToken") : "xph_..."}
             disabled={!editable}
-            className={FIELD}
           />
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-white/50">{t("apiUrl")}</label>
-          <input
-            type="text"
+        </Field>
+        <Field label={t("apiUrl")} hint={t("apiUrlHint")}>
+          <Input
             value={apiUrl}
             onChange={(e) => setApiUrl(e.target.value)}
             placeholder="https://xphere.app"
             disabled={!editable}
-            className={FIELD}
           />
-          <p className="mt-1 text-[11px] text-white/35">{t("apiUrlHint")}</p>
-        </div>
+        </Field>
       </div>
 
-      <div className="mt-4 flex items-center gap-3">
-        <button
+      <FormFooter dirty={dirty} onCancel={dirty ? reset : undefined} className="mt-4">
+        <Button
+          variant="brand"
           onClick={() => save.mutate()}
-          disabled={save.isPending || !editable || !dirty}
-          title={!row.userId ? t("repNoUser") : ""}
-          className="inline-flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-600 disabled:opacity-50"
+          disabled={!editable || !dirty}
+          loading={save.isPending}
+          title={!row.userId ? t("repNoUser") : undefined}
         >
-          {save.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
           {tc("save")}
-        </button>
-        {dirty && <span className="text-xs text-amber-300">{t("unsavedChanges")}</span>}
-      </div>
+        </Button>
+      </FormFooter>
 
       <ConfirmDialog
         open={rotating}

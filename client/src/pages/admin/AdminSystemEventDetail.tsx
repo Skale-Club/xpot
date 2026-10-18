@@ -1,7 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { AlertTriangle, ArrowLeft, Clock, FileText, History, Search } from "lucide-react";
-import { Loader2 } from "@/components/ui/loader";
+import { AlertTriangle, Clock, FileText, History, Search } from "lucide-react";
+import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
+import { ListSkeleton } from "@/components/xpot/ListSkeleton";
+import { BackLink } from "@/components/xpot/PageHeader";
+import { Pill } from "@/components/xpot/StatusPill";
 import { getHttpStatus } from "@/lib/pwa";
 import { formatDateTime } from "@/lib/dates";
 import { useT } from "@/i18n";
@@ -22,18 +25,13 @@ export function AdminSystemEventDetail({ id }: { id: number }) {
   const ago = useAgo(t);
   const query = useQuery<SystemEventDetail>({ queryKey: [`/api/xpot/admin/system-events/${id}`], retry: false });
 
-  const back = (
-    <Link href="/admin/health" className="inline-flex items-center gap-1.5 text-sm text-white/60 hover:text-white">
-      <ArrowLeft className="h-4 w-4" />
-      {t("backToHealth")}
-    </Link>
-  );
+  const back = <BackLink href="/admin/health">{t("backToHealth")}</BackLink>;
 
   if (query.isLoading) {
     return (
       <div className="space-y-4">
         {back}
-        <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-blue-400" /></div>
+        <ListSkeleton rows={3} rowClassName="h-28 rounded-2xl" />
       </div>
     );
   }
@@ -41,7 +39,11 @@ export function AdminSystemEventDetail({ id }: { id: number }) {
     return (
       <div className="space-y-4">
         {back}
-        <p className="text-sm text-red-400">{getHttpStatus(query.error) === 404 ? t("eventNotFound") : t("loadFailed")}</p>
+        {getHttpStatus(query.error) === 404 ? (
+          <EmptyState icon={Search} title={t("eventNotFound")} />
+        ) : (
+          <ErrorState message={t("loadFailed")} onRetry={() => void query.refetch()} />
+        )}
       </div>
     );
   }
@@ -55,12 +57,12 @@ export function AdminSystemEventDetail({ id }: { id: number }) {
     <div className="space-y-4" data-testid="system-event-detail">
       {back}
 
-      <section className={`rounded-2xl border p-4 ${isError ? "border-red-500/25 bg-red-500/[0.06]" : "border-amber-500/25 bg-amber-500/[0.06]"}`}>
+      <section className={`rounded-2xl border p-4 ${isError ? "border-red-400/25 bg-red-500/[0.06]" : "border-amber-400/25 bg-amber-500/[0.06]"}`}>
         <div className="flex flex-wrap items-center gap-2 text-xs">
-          <span className={`rounded-full border px-2 py-0.5 font-semibold ${isError ? "border-red-500/30 bg-red-500/15 text-red-300" : "border-amber-500/30 bg-amber-500/15 text-amber-300"}`}>
+          <Pill tone={isError ? "red" : "amber"} bordered>
             {isError ? t("levelError") : t("levelWarn")}
-          </span>
-          <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-white/70">{sourceLabel(t, event.source)}</span>
+          </Pill>
+          <Pill tone="slate">{sourceLabel(t, event.source)}</Pill>
           <span className="text-white/45">#{event.id}</span>
         </div>
         <h2 className="mt-3 break-words text-lg font-semibold text-white">{event.message}</h2>
@@ -72,7 +74,7 @@ export function AdminSystemEventDetail({ id }: { id: number }) {
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card title={t("detailFrequency")} icon={History}>
-          <p className="text-2xl font-bold">{t("groupCount", { count: group.count })}</p>
+          <p className="text-2xl font-bold tabular-nums">{t("groupCount", { count: group.count })}</p>
           <p className="mt-1 text-xs text-white/50">{t("detailFirstSeen", { time: ago(group.firstSeenAt) })}</p>
           <p className="text-xs text-white/50">{t("detailLastSeen", { time: ago(group.lastSeenAt) })}</p>
         </Card>
@@ -100,7 +102,7 @@ export function AdminSystemEventDetail({ id }: { id: number }) {
               <li key={item.id}>
                 <Link
                   href={`/admin/health/events/${item.id}`}
-                  className={`flex items-center justify-between gap-2 rounded-md px-2 py-1 ${item.id === event.id ? "bg-white/10 text-white" : "text-white/60 hover:bg-white/5"}`}
+                  className={`flex min-h-9 items-center justify-between gap-2 rounded-lg px-2 py-1 ${item.id === event.id ? "bg-white/10 text-white" : "text-white/60 hover:bg-white/5"}`}
                 >
                   <span>{formatDateTime(item.createdAt)}</span>
                   <span className="text-white/40">
@@ -114,8 +116,8 @@ export function AdminSystemEventDetail({ id }: { id: number }) {
       </div>
 
       {/* For whoever debugs it: the raw context, the stack and the fingerprint, folded away. */}
-      <details className="group rounded-2xl border border-white/10 bg-white/[0.02]" data-testid="system-event-technical">
-        <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-semibold text-white/70 marker:content-none">
+      <details className="group rounded-2xl border border-white/[0.07] bg-white/[0.025]" data-testid="system-event-technical">
+        <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-semibold text-white/70 marker:content-none">
           {t("technicalDetails")}
           <span className="text-lg font-light text-white/35 transition-transform group-open:rotate-45">+</span>
         </summary>
@@ -143,7 +145,7 @@ export function AdminSystemEventDetail({ id }: { id: number }) {
             )}
             {componentStack && (
               <>
-                <p className="mb-1 mt-4 text-[11px] font-semibold uppercase tracking-wide text-white/40">{t("detailComponentStack")}</p>
+                <p className="mb-1 mt-4 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/40">{t("detailComponentStack")}</p>
                 <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-black/40 p-3 text-[11px] leading-5 text-white/65">{componentStack}</pre>
               </>
             )}

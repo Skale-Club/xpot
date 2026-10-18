@@ -2,8 +2,19 @@ import { useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Building2, Package, PackageOpen, Settings, ShieldCheck, Users } from "lucide-react";
 import { useLocation } from "wouter";
+import { Button } from "@/components/ui/button";
 import { AppLayout } from "@/components/xpot/AppLayout";
 import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
+import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
+import { Field, Input, Select } from "@/components/xpot/Field";
+import { FormFooter } from "@/components/xpot/FormFooter";
+import { InlineAlert } from "@/components/xpot/InlineAlert";
+import { ListSkeleton } from "@/components/xpot/ListSkeleton";
+import { BackLink, PageHeader } from "@/components/xpot/PageHeader";
+import { Stat } from "@/components/xpot/Stat";
+import { Pill } from "@/components/xpot/StatusPill";
+import { GLASS_CLASS, GLASS_SUBTLE_CLASS } from "@/components/xpot/surface";
+import { Tabs } from "@/components/xpot/Tabs";
 import { apiRequest } from "@/lib/queryClient";
 import { describeApiError } from "@/lib/apiErrors";
 import { formatDate } from "@/lib/dates";
@@ -37,8 +48,8 @@ type Member = {
 /** What a member action does, for its confirmation and its toast. */
 type MemberAction = { member: Member; kind: "suspend" | "reactivate" | "makeAdmin" | "makeRep" | "remove" };
 
-const FIELD = "w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-white outline-none placeholder:text-white/25 focus:border-blue-400/50";
-const BUTTON = "rounded-xl border border-white/10 bg-white/[0.06] px-3 py-2 text-sm font-semibold text-white/80 transition-colors hover:bg-white/10";
+/** The outline button for removing someone; the dialog it opens is the red one. */
+const DANGER_OUTLINE = "border-red-400/30 text-red-300 hover:border-red-400/40 hover:bg-red-500/10 hover:text-red-200";
 // Stored on the membership when it is suspended; managers read it in the audit log.
 const SUSPENDED_REASON = "Suspended by an organization manager";
 
@@ -80,47 +91,41 @@ function OrganizationsList() {
   return (
     <AppLayout title={t("title")} size="wide">
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-white">{t("title")}</h1>
-          <p className="mt-1 text-sm text-white/50">{t("intro")}</p>
-        </div>
+        <PageHeader title={t("title")} description={t("intro")} className="mb-0" />
 
         {mayCreate && (
           <form
-            className="grid gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 md:grid-cols-[1fr_1fr_auto]"
+            className={`grid gap-3 rounded-2xl ${GLASS_CLASS} p-4 md:grid-cols-[1fr_1fr_auto]`}
             onSubmit={(event) => { event.preventDefault(); create.mutate(); }}
           >
-            <input className={FIELD} value={name} onChange={(event) => setName(event.target.value)} placeholder={t("namePlaceholder")} required />
-            <select className={FIELD} value={repAdminId} onChange={(event) => setRepAdminId(event.target.value)} required>
-              <option value="">{t("chooseRepAdmin")}</option>
-              {reps.map((rep) => <option key={rep.id} value={rep.id}>{rep.displayName}</option>)}
-            </select>
-            <button className={`${BUTTON} bg-blue-500/20 text-blue-100`} disabled={create.isPending}>{t("createOrganization")}</button>
-            {create.error && <p className="text-sm text-red-300 md:col-span-3">{describeApiError(create.error)}</p>}
+            <Input value={name} onChange={(event) => setName(event.target.value)} placeholder={t("namePlaceholder")} aria-label={t("namePlaceholder")} required />
+            <Select value={repAdminId} onChange={(event) => setRepAdminId(event.target.value)} aria-label={t("chooseRepAdmin")} required
+              placeholder={t("chooseRepAdmin")} options={reps.map((rep) => ({ value: String(rep.id), label: rep.displayName }))} />
+            <Button type="submit" variant="brand" loading={create.isPending}>{t("createOrganization")}</Button>
+            {create.error && <InlineAlert tone="error" className="md:col-span-3">{describeApiError(create.error)}</InlineAlert>}
           </form>
         )}
 
-        {isLoading ? <p className="text-sm text-white/50">{t("loadingList")}</p> : (
+        {isLoading ? <ListSkeleton rows={3} className="grid gap-3 md:grid-cols-2 xl:grid-cols-3" rowClassName="h-32 rounded-2xl" /> : !organizations.length ? (
+          <EmptyState icon={Building2} title={t("emptyList")} />
+        ) : (
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {organizations.map((organization) => (
               <button
                 key={organization.id}
                 onClick={() => navigate(`/organizations/${organization.id}`)}
-                className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-left transition-colors hover:border-blue-400/30 hover:bg-white/[0.06]"
+                className={`rounded-2xl ${GLASS_CLASS} p-5 text-left transition-colors hover:border-white/20 hover:bg-white/[0.06]`}
               >
                 <div className="flex items-start justify-between gap-3">
-                  <Building2 className="h-6 w-6 text-blue-300" />
+                  <Building2 className="h-6 w-6 text-slate-200" />
                   {organization.membershipRole && (
-                    <span className="rounded-full border border-white/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white/55">
-                      {organization.membershipRole === "admin" ? t("roleRepAdmin") : t("roleRep")}
-                    </span>
+                    <Pill tone="slate">{organization.membershipRole === "admin" ? t("roleRepAdmin") : t("roleRep")}</Pill>
                   )}
                 </div>
                 <h2 className="mt-4 font-semibold text-white">{organization.name}</h2>
                 <p className="mt-1 text-xs text-white/35">{organization.isActive ? t("active") : t("inactive")}</p>
               </button>
             ))}
-            {!organizations.length && <p className="text-sm text-white/45">{t("emptyList")}</p>}
           </div>
         )}
       </div>
@@ -132,7 +137,6 @@ type WorkspaceTab = "overview" | "team" | "inventory" | "kits" | "customers" | "
 
 function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
   const qc = useQueryClient();
-  const [, navigate] = useLocation();
   const { toast } = useToast();
   const t = useT(organizationsMessages);
   const tt = useT(tagsMessages);
@@ -201,9 +205,18 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
     { id: "settings", label: t("tabSettings"), icon: Settings },
   ], [t]);
 
-  if (organization.isLoading) return <AppLayout title={t("title")}><p className="text-sm text-white/50">{t("loadingOne")}</p></AppLayout>;
+  if (organization.isLoading) return <AppLayout title={t("title")}><ListSkeleton rows={4} /></AppLayout>;
   if (organization.error || !organization.data) {
-    return <AppLayout title={t("title")}><p className="text-sm text-red-300">{organization.error ? describeApiError(organization.error) : t("notFound")}</p></AppLayout>;
+    return (
+      <AppLayout title={t("title")}>
+        <BackLink href="/organizations" className="mb-3">{t("backToList")}</BackLink>
+        {organization.error ? (
+          <ErrorState message={describeApiError(organization.error)} onRetry={() => void organization.refetch()} />
+        ) : (
+          <EmptyState icon={Building2} title={t("notFound")} />
+        )}
+      </AppLayout>
+    );
   }
   const org = organization.data;
   const confirmCopy = pending ? {
@@ -217,57 +230,58 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
   return (
     <AppLayout title={org.name} size="wide">
       <div className="space-y-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <button onClick={() => navigate("/organizations")} className="mb-2 text-xs font-semibold text-blue-300 hover:text-blue-200">← {t("backToList")}</button>
-            <h1 className="text-2xl font-bold text-white">{org.name}</h1>
-            <p className="mt-1 text-sm text-white/45">{membership?.role === "admin" ? t("roleRepAdmin") : platformManager ? t("platformManagement") : t("roleRep")}</p>
-          </div>
-        </div>
+        <PageHeader
+          backHref="/organizations"
+          backLabel={t("backToList")}
+          title={org.name}
+          description={membership?.role === "admin" ? t("roleRepAdmin") : platformManager ? t("platformManagement") : t("roleRep")}
+          className="mb-0"
+        />
 
-        <nav className="flex gap-1 overflow-x-auto rounded-2xl border border-white/10 bg-white/[0.03] p-1.5">
-          {tabs.map(({ id, label, icon: Icon }) => (
-            <button key={id} onClick={() => setTab(id)} className={`flex items-center gap-2 whitespace-nowrap rounded-xl px-3 py-2 text-sm font-medium ${tab === id ? "bg-white/10 text-white" : "text-white/50 hover:text-white"}`}>
-              <Icon className="h-4 w-4" />{label}
-            </button>
-          ))}
-        </nav>
+        <Tabs tabs={tabs} value={tab} onChange={setTab} ariaLabel={org.name} idPrefix="organization" fill={false} accent="account" />
 
         {tab === "overview" && <Overview organization={org} inventory={inventory.data ?? []} kits={kits.data ?? []} customers={customers.data ?? []} />}
         {tab === "team" && (
           <div className="space-y-4">
             {mayManageTeam && (
-              <form className="grid gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 md:grid-cols-[1fr_1fr_auto_auto]" onSubmit={(event) => { event.preventDefault(); addMember.mutate(); }}>
-                <input className={FIELD} value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder={t("repName")} required />
-                <input className={FIELD} value={phone} onChange={(event) => setPhone(event.target.value)} placeholder={t("phoneWithCode")} required />
-                {platformManager && <select className={FIELD} value={newRole} onChange={(event) => setNewRole(event.target.value as "admin" | "member")}><option value="member">{t("roleRep")}</option><option value="admin">{t("roleRepAdmin")}</option></select>}
-                <button className={BUTTON} disabled={addMember.isPending}>{t("addRep")}</button>
-                {addMember.error && <p className="text-sm text-red-300 md:col-span-4">{describeApiError(addMember.error)}</p>}
+              <form className={`grid gap-3 rounded-2xl ${GLASS_CLASS} p-4 md:grid-cols-[1fr_1fr_auto_auto]`} onSubmit={(event) => { event.preventDefault(); addMember.mutate(); }}>
+                <Input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder={t("repName")} aria-label={t("repName")} required />
+                <Input value={phone} onChange={(event) => setPhone(event.target.value)} placeholder={t("phoneWithCode")} aria-label={t("phoneWithCode")} type="tel" required />
+                {platformManager && (
+                  <Select value={newRole} onChange={(event) => setNewRole(event.target.value as "admin" | "member")} aria-label={t("roleRepAdmin")}
+                    options={[{ value: "member", label: t("roleRep") }, { value: "admin", label: t("roleRepAdmin") }]} />
+                )}
+                <Button type="submit" variant="brand" loading={addMember.isPending}>{t("addRep")}</Button>
+                {addMember.error && <InlineAlert tone="error" className="md:col-span-4">{describeApiError(addMember.error)}</InlineAlert>}
               </form>
             )}
-            <div className="overflow-hidden rounded-2xl border border-white/10">
+            {members.isLoading ? <ListSkeleton rows={3} /> : members.isError ? (
+              <ErrorState message={describeApiError(members.error)} onRetry={() => void members.refetch()} />
+            ) : (
+            <div className={`divide-y divide-white/[0.06] overflow-hidden rounded-2xl ${GLASS_SUBTLE_CLASS}`}>
               {(members.data ?? []).map((member) => {
                 const canChange = mayManageTeam && member.repId !== me?.rep.id && (platformManager || member.membershipRole !== "admin");
                 const suspended = !member.isActive || !!member.blockedAt;
                 return (
-                  <div key={member.repId} className="flex flex-wrap items-center gap-3 border-b border-white/5 bg-white/[0.02] px-4 py-3 last:border-0">
+                  <div key={member.repId} className="flex flex-wrap items-center gap-3 px-4 py-3">
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-medium text-white">{member.displayName}</p>
                       <p className="truncate text-xs text-white/40">{member.phone || member.email || t("noContact")}</p>
                     </div>
-                    <span className="inline-flex items-center gap-1 rounded-full border border-white/10 px-2 py-1 text-[10px] font-semibold uppercase text-white/60">
-                      {member.membershipRole === "admin" && <ShieldCheck className="h-3 w-3" />}{member.membershipRole === "admin" ? t("roleRepAdmin") : t("roleRep")}
-                    </span>
-                    <span className={`text-xs ${suspended ? "text-red-300" : "text-emerald-300"}`}>{suspended ? t("memberSuspended") : t("memberActive")}</span>
+                    <Pill tone="slate" className="gap-1">
+                      {member.membershipRole === "admin" && <ShieldCheck className="h-3 w-3" aria-hidden="true" />}{member.membershipRole === "admin" ? t("roleRepAdmin") : t("roleRep")}
+                    </Pill>
+                    <Pill tone={suspended ? "red" : "green"}>{suspended ? t("memberSuspended") : t("memberActive")}</Pill>
                     {canChange && <>
-                      <button className={BUTTON} onClick={() => setPending({ member, kind: member.blockedAt ? "reactivate" : "suspend" })}>{member.blockedAt ? t("reactivate") : t("suspend")}</button>
-                      {platformManager && <button className={BUTTON} onClick={() => setPending({ member, kind: member.membershipRole === "admin" ? "makeRep" : "makeAdmin" })}>{member.membershipRole === "admin" ? t("makeRep") : t("makeRepAdmin")}</button>}
-                      <button className={`${BUTTON} text-red-200`} onClick={() => setPending({ member, kind: "remove" })}>{t("remove")}</button>
+                      <Button variant="secondary" size="sm" onClick={() => setPending({ member, kind: member.blockedAt ? "reactivate" : "suspend" })}>{member.blockedAt ? t("reactivate") : t("suspend")}</Button>
+                      {platformManager && <Button variant="secondary" size="sm" onClick={() => setPending({ member, kind: member.membershipRole === "admin" ? "makeRep" : "makeAdmin" })}>{member.membershipRole === "admin" ? t("makeRep") : t("makeRepAdmin")}</Button>}
+                      <Button variant="outline" size="sm" className={DANGER_OUTLINE} onClick={() => setPending({ member, kind: "remove" })}>{t("remove")}</Button>
                     </>}
                   </div>
                 );
               })}
             </div>
+            )}
           </div>
         )}
         {tab === "inventory" && <SimpleList rows={inventory.data ?? []} empty={t("noPieces")} render={(row) => <><span className="font-mono text-sm text-white">{row.publicCode}</span><span className="text-xs text-white/45">{lookup(tt, `product_${row.productType}`, String(row.productType ?? ""))} · {lookup(tt, `status_${row.status}`, String(row.status ?? ""))}</span></>} />}
@@ -299,12 +313,20 @@ function Overview({ organization, inventory, kits, customers }: { organization: 
     [t("cardKits"), organization.counts?.kits ?? kits.length],
     [t("cardCustomers"), organization.counts?.customers ?? customers.length],
   ];
-  return <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{cards.map(([label, value]) => <div key={String(label)} className="rounded-2xl border border-white/10 bg-white/[0.03] p-5"><p className="text-xs font-semibold uppercase tracking-wide text-white/40">{label}</p><p className="mt-2 text-3xl font-bold text-white">{value}</p></div>)}</div>;
+  return (
+    <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+      {cards.map(([label, value]) => <Stat key={String(label)} card label={label} value={value} />)}
+    </div>
+  );
 }
 
 function SimpleList({ rows, empty, render }: { rows: any[]; empty: string; render: (row: any) => ReactNode }) {
-  if (!rows.length) return <p className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 text-sm text-white/45">{empty}</p>;
-  return <div className="overflow-hidden rounded-2xl border border-white/10">{rows.map((row) => <div key={row.id} className="flex items-center justify-between gap-3 border-b border-white/5 bg-white/[0.02] px-4 py-3 last:border-0">{render(row)}</div>)}</div>;
+  if (!rows.length) return <EmptyState compact icon={Package} title={empty} />;
+  return (
+    <div className={`divide-y divide-white/[0.06] overflow-hidden rounded-2xl ${GLASS_SUBTLE_CLASS}`}>
+      {rows.map((row) => <div key={row.id} className="flex items-center justify-between gap-3 px-4 py-3">{render(row)}</div>)}
+    </div>
+  );
 }
 
 function OrganizationSettings({ organization, mayEdit }: { organization: Organization; mayEdit: boolean }) {
@@ -313,6 +335,7 @@ function OrganizationSettings({ organization, mayEdit }: { organization: Organiz
   const t = useT(organizationsMessages);
   const tc = useT(commonMessages);
   const [name, setName] = useState(organization.name);
+  const dirty = name.trim() !== organization.name;
   const save = useMutation({
     mutationFn: () => json<Organization>("PATCH", `/api/xpot/organizations/${organization.id}`, { name }),
     onSuccess: () => {
@@ -321,5 +344,16 @@ function OrganizationSettings({ organization, mayEdit }: { organization: Organiz
     },
     onError: (error) => toast({ title: t("couldNotSave"), description: describeApiError(error), variant: "destructive" }),
   });
-  return <div className="max-w-xl rounded-2xl border border-white/10 bg-white/[0.03] p-5"><label className="text-xs font-semibold uppercase text-white/40">{t("orgName")}</label><div className="mt-2 flex gap-2"><input className={FIELD} value={name} onChange={(event) => setName(event.target.value)} disabled={!mayEdit} /><button className={BUTTON} onClick={() => save.mutate()} disabled={!mayEdit || save.isPending}>{tc("save")}</button></div>{!mayEdit && <p className="mt-3 text-xs text-white/40">{t("settingsReadOnly")}</p>}</div>;
+  return (
+    <div className={`max-w-xl space-y-4 rounded-2xl ${GLASS_CLASS} p-5`}>
+      <Field label={t("orgName")} hint={!mayEdit ? t("settingsReadOnly") : undefined}>
+        <Input value={name} onChange={(event) => setName(event.target.value)} disabled={!mayEdit} />
+      </Field>
+      {mayEdit && (
+        <FormFooter dirty={dirty} onCancel={dirty ? () => setName(organization.name) : undefined}>
+          <Button variant="brand" onClick={() => save.mutate()} disabled={!dirty || !name.trim()} loading={save.isPending}>{tc("save")}</Button>
+        </FormFooter>
+      )}
+    </div>
+  );
 }

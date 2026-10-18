@@ -1,13 +1,16 @@
 import { useEffect, useState } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
-import { Activity, AlertTriangle, ChevronRight, Cpu, History, ListOrdered, RefreshCw, Search } from "lucide-react";
-import { Loader2 } from "@/components/ui/loader";
-import { Segmented } from "@/components/xpot/Segmented";
+import { Activity, AlertTriangle, ChevronRight, Cpu, History, ListOrdered, RotateCw, ScrollText } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
+import { FilterBar, FilterChips, FilterSearch, FilterSelect, FilterToken } from "@/components/xpot/filters";
+import { ListSkeleton } from "@/components/xpot/ListSkeleton";
+import { ListPager } from "@/components/xpot/pagination";
+import { Pill, PILL_DOTS } from "@/components/xpot/StatusPill";
 import { apiRequest } from "@/lib/queryClient";
 import { formatDateTime } from "@/lib/dates";
 import { useT } from "@/i18n";
-import { commonMessages } from "@/i18n/messages/common";
 import { systemHealthMessages } from "@/i18n/messages/systemHealth";
 import { SYSTEM_EVENT_SOURCES } from "@shared/schema/observability";
 import type { EventGroup, RecentRun, SystemEventRow, SystemHealthSnapshot } from "@shared/system-health";
@@ -18,13 +21,14 @@ import {
   HealthReason,
   healthReason,
   REFRESH_MS,
-  RUN_STATUS_STYLE,
+  runBar,
   RunStatusChip,
   sourceLabel,
   Stat,
   useAgo,
-  VERDICT_STYLE,
+  VERDICT_BANNER,
   VerdictChip,
+  verdictTone,
   type T,
 } from "./systemHealthUi";
 
@@ -38,7 +42,6 @@ export function AdminSystemHealth() {
 
 function SystemHealthOverview() {
   const t = useT(systemHealthMessages);
-  const tc = useT(commonMessages);
   const ago = useAgo(t);
   const [, setNow] = useState(0);
   const [fingerprint, setFingerprint] = useState<string | null>(null);
@@ -56,40 +59,31 @@ function SystemHealthOverview() {
 
   if (health.isLoading) {
     return (
-      <div className="flex justify-center py-16">
-        <Loader2 className="h-6 w-6 animate-spin text-blue-400" />
+      <div className="space-y-4">
+        <ListSkeleton rows={1} rowClassName="h-14 rounded-2xl" />
+        <ListSkeleton rows={3} className="grid gap-4 lg:grid-cols-3" rowClassName="h-40 rounded-2xl" />
       </div>
     );
   }
   if (health.isError || !health.data) {
-    return (
-      <div className="flex flex-wrap items-center gap-3 text-sm text-red-400">
-        {t("loadFailed")}
-        <button type="button" onClick={() => void health.refetch()} className="rounded-lg border border-white/10 px-3 py-1 text-white/70 hover:bg-white/5" data-testid="system-health-retry">
-          {tc("retry")}
-        </button>
-      </div>
-    );
+    return <ErrorState message={t("loadFailed")} onRetry={() => void health.refetch()} />;
   }
 
   const data = health.data;
   const { worker, queue, events } = data;
+  const overallTone = verdictTone(data.overall);
 
   return (
     <div className="space-y-4" data-testid="system-health">
-      <div className={`flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-4 py-3 ${VERDICT_STYLE[data.overall].banner}`}>
+      <div className={`flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-4 py-3 ${VERDICT_BANNER[overallTone]}`}>
         <div className="flex items-center gap-3">
-          <span className={`h-2.5 w-2.5 rounded-full ${VERDICT_STYLE[data.overall].dot} ${data.overall === "healthy" ? "" : "animate-pulse"}`} />
+          <span className={`h-2.5 w-2.5 rounded-full ${PILL_DOTS[overallTone]} ${data.overall === "healthy" ? "" : "animate-pulse"}`} />
           <p className="font-semibold">{t(`overall_${data.overall}`)}</p>
         </div>
-        <button
-          type="button"
-          onClick={() => void health.refetch()}
-          className="inline-flex items-center gap-1.5 text-xs text-white/55 hover:text-white/80"
-        >
-          <RefreshCw className={`h-3.5 w-3.5 ${health.isFetching ? "animate-spin" : ""}`} />
+        <Button variant="ghost" size="sm" onClick={() => void health.refetch()} disabled={health.isFetching} className="text-xs font-medium text-white/55">
+          <RotateCw />
           {t("updatedAgo", { time: ago(data.generatedAt) })}
-        </button>
+        </Button>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
@@ -128,12 +122,9 @@ function SystemHealthOverview() {
           {events.bySource24h.length > 0 && (
             <div className="mt-3 flex flex-wrap gap-1.5">
               {events.bySource24h.map((row) => (
-                <span
-                  key={`${row.source}:${row.level}`}
-                  className={`rounded-full border px-2 py-0.5 text-[11px] ${row.level === "error" ? "border-red-500/25 text-red-300/90" : "border-amber-500/25 text-amber-300/90"}`}
-                >
+                <Pill key={`${row.source}:${row.level}`} tone={row.level === "error" ? "red" : "amber"} bordered>
                   {sourceLabel(t, row.source)} · {row.count}
-                </span>
+                </Pill>
               ))}
             </div>
           )}
@@ -142,7 +133,7 @@ function SystemHealthOverview() {
 
       <Card title={t("activeRunsTitle")} icon={Activity}>
         {queue.activeRuns.length === 0 ? (
-          <p className="text-sm text-white/45">{t("noActiveRuns")}</p>
+          <EmptyState compact dense icon={Activity} title={t("noActiveRuns")} cardStyle={{}} />
         ) : (
           <ul className="space-y-3">
             {queue.activeRuns.map((run) => {
@@ -161,7 +152,7 @@ function SystemHealthOverview() {
                     <VerdictChip verdict={run.verdict} t={t} />
                   </div>
                   <div className="relative mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
-                    <div className={`h-full rounded-full ${VERDICT_STYLE[run.verdict].dot}`} style={{ width: `${pct}%` }} />
+                    <div className={`h-full rounded-full ${PILL_DOTS[verdictTone(run.verdict)]}`} style={{ width: `${pct}%` }} />
                     {typicalPct !== null && <div className="absolute top-0 h-full w-0.5 bg-white/60" style={{ left: `${typicalPct}%` }} />}
                   </div>
                   <p className="mt-2 text-xs text-white/55">
@@ -180,7 +171,7 @@ function SystemHealthOverview() {
         )}
         {queue.stuckJobs.length > 0 && (
           <div className="mt-4">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-red-300/80">{t("stuckJobsTitle")}</p>
+            <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-red-300/80">{t("stuckJobsTitle")}</p>
             <ul className="space-y-2">
               {queue.stuckJobs.map((job) => (
                 <li key={job.jobId} className="rounded-xl border border-red-500/20 bg-red-500/[0.05] px-3 py-2 text-xs">
@@ -249,7 +240,7 @@ function RecentSearches({ runs, t, ago, onShowEvents }: {
       ) : undefined}
     >
       {runs.length === 0 ? (
-        <p className="text-sm text-white/45">{t("timelineEmpty")}</p>
+        <EmptyState compact dense icon={History} title={t("timelineEmpty")} cardStyle={{}} />
       ) : (
         <>
           <div className="flex h-8 items-end justify-end gap-[3px]" role="list" aria-label={t("timelineTitle")} data-testid="search-timeline">
@@ -265,7 +256,7 @@ function RecentSearches({ runs, t, ago, onShowEvents }: {
                   aria-label={label}
                   aria-pressed={active}
                   onClick={() => setSelectedId(active ? null : run.runId)}
-                  className={`h-full min-w-[4px] max-w-[10px] flex-1 rounded-sm transition-opacity ${RUN_STATUS_STYLE[run.status].bar} ${
+                  className={`h-full min-w-[4px] max-w-[10px] flex-1 rounded-sm transition-opacity ${runBar(run.status)} ${
                     selectedId !== null && !active ? "opacity-35" : "hover:opacity-80"
                   } ${active ? "ring-2 ring-white/70 ring-offset-1 ring-offset-[#0b1020]" : ""}`}
                 />
@@ -306,9 +297,10 @@ function RecentSearches({ runs, t, ago, onShowEvents }: {
                 <dd className="text-white/75">{ago(selected.createdAt)}</dd>
               </dl>
               {selected.errorMessage && <p className="mt-2 break-words text-xs text-red-300">{selected.errorMessage}</p>}
-              <button type="button" onClick={() => onShowEvents(selected.runId)} className="mt-3 text-xs font-semibold text-blue-300 hover:text-blue-200">
-                {t("timelineShowEvents")} →
-              </button>
+              <Button variant="secondary" size="sm" onClick={() => onShowEvents(selected.runId)} className="mt-3">
+                {t("timelineShowEvents")}
+                <ChevronRight />
+              </Button>
             </div>
           )}
         </>
@@ -321,7 +313,7 @@ function ProblemGroups({ groups, t, ago, onPick }: { groups: EventGroup[]; t: T;
   return (
     <Card title={t("groupsTitle")} icon={AlertTriangle}>
       {groups.length === 0 ? (
-        <p className="text-sm text-white/45">{t("groupsEmpty")}</p>
+        <EmptyState compact dense icon={AlertTriangle} title={t("groupsEmpty")} cardStyle={{}} />
       ) : (
         <ul className="divide-y divide-white/5">
           {groups.map((group) => (
@@ -332,19 +324,19 @@ function ProblemGroups({ groups, t, ago, onPick }: { groups: EventGroup[]; t: T;
                   onPick(group.fingerprint);
                   document.getElementById("system-event-log")?.scrollIntoView({ behavior: "smooth", block: "start" });
                 }}
-                className="flex w-full items-start gap-3 py-2.5 text-left hover:bg-white/[0.02]"
+                className="flex min-h-11 w-full items-start gap-3 py-2.5 text-left hover:bg-white/[0.02]"
                 title={t("showOccurrences")}
               >
-                <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${group.level === "error" ? "bg-red-400" : "bg-amber-400"}`} />
+                <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${group.level === "error" ? PILL_DOTS.red : PILL_DOTS.amber}`} />
                 <span className="min-w-0 flex-1">
                   <span className="block break-words text-sm text-white/85">{group.message}</span>
                   <span className="text-xs text-white/40">
                     {sourceLabel(t, group.source)} · {t("groupLastSeen", { time: ago(group.lastSeenAt) })}
                   </span>
                 </span>
-                <span className="shrink-0 rounded-full bg-white/5 px-2 py-0.5 text-xs font-semibold text-white/70">
+                <Pill tone="slate" className="shrink-0">
                   {t("groupCount", { count: group.count })}
-                </span>
+                </Pill>
               </button>
             </li>
           ))}
@@ -366,12 +358,9 @@ function EventLog({ t, ago, fingerprint, onClearFingerprint, runId, onClearRun }
 }) {
   const [level, setLevel] = useState<"all" | "error" | "warn">("all");
   const [source, setSource] = useState("");
-  const [search, setSearch] = useState("");
-  const [q, setQ] = useState("");
-  useEffect(() => {
-    const id = setTimeout(() => setQ(search.trim()), 300);
-    return () => clearTimeout(id);
-  }, [search]);
+  // FilterSearch reports after typing pauses (debounceMs), so this is already the settled search.
+  const [query, setQ] = useState("");
+  const q = query.trim();
 
   const params = new URLSearchParams();
   if (level !== "all") params.set("level", level);
@@ -391,92 +380,75 @@ function EventLog({ t, ago, fingerprint, onClearFingerprint, runId, onClearRun }
   const rows = events.data?.pages.flatMap((page) => page.events) ?? [];
 
   return (
-    <section id="system-event-log" className="scroll-mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-      <header className="mb-3 flex flex-wrap items-center gap-2">
-        <h3 className="mr-auto text-sm font-semibold text-white/80">{t("eventsTitle")}</h3>
-        <Segmented
-          className="w-full sm:w-64"
-          value={level}
-          onChange={setLevel}
-          items={[
-            { id: "all", label: t("filterAll") },
-            { id: "error", label: t("filterErrors") },
-            { id: "warn", label: t("filterWarnings") },
-          ]}
+    <div id="system-event-log" className="scroll-mt-4">
+      <Card title={t("eventsTitle")} icon={ScrollText}>
+        <FilterBar
+          className="mb-3"
+          search={<FilterSearch value={query} onChange={setQ} debounceMs={300} placeholder={t("searchPlaceholder")} shortcut={false} />}
+          controls={
+            <FilterSelect
+              value={source}
+              onChange={setSource}
+              placeholder={t("allSources")}
+              options={SYSTEM_EVENT_SOURCES.map((s) => ({ value: s, label: sourceLabel(t, s) }))}
+            />
+          }
+          secondary={
+            <div className="flex flex-wrap items-center gap-2">
+              <FilterChips
+                ariaLabel={t("eventsTitle")}
+                value={level}
+                onChange={setLevel}
+                items={[
+                  { id: "all", label: t("filterAll") },
+                  { id: "error", label: t("filterErrors"), dot: PILL_DOTS.red },
+                  { id: "warn", label: t("filterWarnings"), dot: PILL_DOTS.amber },
+                ]}
+              />
+              {fingerprint && <FilterToken label={t("clearFilter")} onRemove={onClearFingerprint} />}
+              {runId && <FilterToken label={t("filterRun", { id: runId })} onRemove={onClearRun} />}
+            </div>
+          }
         />
-      </header>
-      <div className="mb-3 flex flex-col gap-2 sm:flex-row">
-        <select
-          value={source}
-          onChange={(event) => setSource(event.target.value)}
-          className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/80"
-          aria-label={t("allSources")}
-        >
-          <option value="">{t("allSources")}</option>
-          {SYSTEM_EVENT_SOURCES.map((s) => <option key={s} value={s}>{sourceLabel(t, s)}</option>)}
-        </select>
-        <label className="flex flex-1 items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2">
-          <Search className="h-4 w-4 text-white/40" />
-          <input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder={t("searchPlaceholder")}
-            className="w-full bg-transparent text-sm outline-none placeholder:text-white/30"
-          />
-        </label>
-      </div>
-      {(fingerprint || runId) && (
-        <div className="mb-3 flex flex-wrap gap-2">
-          {fingerprint && (
-            <button type="button" onClick={onClearFingerprint} className="rounded-full border border-blue-400/30 bg-blue-500/10 px-3 py-1 text-xs text-blue-200">
-              {t("clearFilter")} ✕
-            </button>
-          )}
-          {runId && (
-            <button type="button" onClick={onClearRun} className="rounded-full border border-blue-400/30 bg-blue-500/10 px-3 py-1 text-xs text-blue-200">
-              {t("filterRun", { id: runId })} ✕
-            </button>
-          )}
-        </div>
-      )}
 
-      {events.isLoading ? (
-        <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-blue-400" /></div>
-      ) : rows.length === 0 ? (
-        <p className="py-6 text-center text-sm text-white/45">{t("eventsEmpty")}</p>
-      ) : (
-        <ul className="divide-y divide-white/5">
-          {rows.map((event) => (
-            <li key={event.id}>
-              <Link
-                href={`/admin/health/events/${event.id}`}
-                className="flex w-full items-start gap-2 rounded-lg py-2.5 text-left hover:bg-white/[0.02]"
-                data-testid="system-event-row"
-              >
-                <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${event.level === "error" ? "bg-red-400" : "bg-amber-400"}`} />
-                <span className="min-w-0 flex-1">
-                  <span className="block break-words text-sm text-white/85">{event.message}</span>
-                  <span className="text-xs text-white/40">
-                    {sourceLabel(t, event.source)} · {ago(event.createdAt)} · {formatDateTime(event.createdAt)}
-                    {event.repName ? ` · ${event.repName}` : ""}
+        {events.isLoading ? (
+          <ListSkeleton rows={4} rowClassName="h-12 rounded-xl" />
+        ) : events.isError ? (
+          <ErrorState compact message={t("loadFailed")} onRetry={() => void events.refetch()} />
+        ) : rows.length === 0 ? (
+          <EmptyState compact dense icon={ScrollText} title={t("eventsEmpty")} cardStyle={{}} />
+        ) : (
+          <ul className="divide-y divide-white/5">
+            {rows.map((event) => (
+              <li key={event.id}>
+                <Link
+                  href={`/admin/health/events/${event.id}`}
+                  className="flex min-h-11 w-full items-start gap-2 rounded-lg py-2.5 text-left hover:bg-white/[0.02]"
+                  data-testid="system-event-row"
+                >
+                  <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${event.level === "error" ? PILL_DOTS.red : PILL_DOTS.amber}`} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block break-words text-sm text-white/85">{event.message}</span>
+                    <span className="text-xs text-white/40">
+                      {sourceLabel(t, event.source)} · {ago(event.createdAt)} · {formatDateTime(event.createdAt)}
+                      {event.repName ? ` · ${event.repName}` : ""}
+                    </span>
                   </span>
-                </span>
-                <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-white/30" />
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
-      {events.hasNextPage && (
-        <button
-          type="button"
-          onClick={() => void events.fetchNextPage()}
-          disabled={events.isFetchingNextPage}
-          className="mt-3 w-full rounded-xl border border-white/10 bg-white/5 py-2 text-sm text-white/70 hover:bg-white/10"
-        >
-          {events.isFetchingNextPage ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : t("loadMore")}
-        </button>
-      )}
-    </section>
+                  <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-white/30" />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+        <ListPager
+          shown={rows.length}
+          hasMore={Boolean(events.hasNextPage)}
+          onMore={() => {
+            if (!events.isFetchingNextPage) void events.fetchNextPage();
+          }}
+          loading={events.isFetchingNextPage}
+        />
+      </Card>
+    </div>
   );
 }

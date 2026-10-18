@@ -1,4 +1,4 @@
-import type { KeyboardEvent } from "react";
+import type { KeyboardEvent, ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import { ACCENT_SELECTED, type ModuleAccent } from "./surface";
 
@@ -6,7 +6,14 @@ import { ACCENT_SELECTED, type ModuleAccent } from "./surface";
 // the active tab lifted in the module accent (blue by default, violet in Tags
 // with accent="tags"). Arrow keys, Home and End move between tabs.
 
-export type TabItem<T extends string> = { id: T; label: string; icon?: LucideIcon; testId?: string };
+export type TabItem<T extends string> = {
+  id: T;
+  label: string;
+  icon?: LucideIcon;
+  testId?: string;
+  /** Small mark after the label (an "Admin" tag, an unsaved-changes dot). */
+  badge?: ReactNode;
+};
 
 export function Tabs<T extends string>({
   tabs,
@@ -74,6 +81,7 @@ export function Tabs<T extends string>({
           >
             {Icon ? <Icon className={`h-4 w-4 ${active ? selected.icon : "text-white/35 group-hover:text-white/55"}`} /> : null}
             <span>{tab.label}</span>
+            {tab.badge}
           </button>
         );
       })}

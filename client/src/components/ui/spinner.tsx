@@ -1,5 +1,6 @@
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
+import { PAGE_GRADIENT } from "@/components/xpot/surface";
 import { cn } from "@/lib/utils";
 
 interface DotsLoaderProps {
@@ -95,9 +96,10 @@ export function PageLoader() {
  *      parent layout. Crucial inside <SidebarProvider> (and any other flex
  *      container) where a relative-positioned loader would otherwise be
  *      squeezed into a narrow strip of the content column.
- *   2. `bg-background` — the navy page base (#060912, PAGE_BASE in
- *      components/xpot/surface.ts), the same colour as the boot screen in
- *      client/index.html, so nothing flashes between boot and the app.
+ *   2. PAGE_GRADIENT — the page background of every shell, starting from
+ *      the navy page base (#060912, PAGE_BASE in components/xpot/surface.ts)
+ *      the boot screen in client/index.html uses, so nothing flashes between
+ *      boot, the loader and the page.
  *
  * NEVER write `<div className="min-h-screen flex items-center justify-center bg-slate-…"><Loader2 …/></div>`
  * by hand again — use <AppLoader /> so the theme + layout behavior stays
@@ -105,7 +107,7 @@ export function PageLoader() {
  */
 export function AppLoader() {
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-background">
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-background" style={{ background: PAGE_GRADIENT }}>
       <DotsLoader size="lg" tone="brand" />
     </div>
   );

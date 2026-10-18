@@ -73,13 +73,15 @@ opacity steps in multiples of 5, so the extra steps the screens use
 | `ConfirmDialog` | `xpot/ConfirmDialog.tsx` | `tone="danger"`, `reason="required" \| "optional"`, `confirmWord`, `pending`. Never closes while the action runs; closes when a returned promise resolves. |
 | `PageHeader`, `BackLink` | `xpot/PageHeader.tsx` | 44px round back, eyebrow, title, actions, safe-area padding. |
 | `Field`, `Input`, `Select`, `Textarea` | `xpot/Field.tsx` | 44px control, 16px text on phones (no iOS zoom), error line wired to the control. |
+| `FormFooter`, `UnsavedNote` | `xpot/FormFooter.tsx` | Right-aligned Cancel then the primary (brand, disabled while clean), "Unsaved changes" on the left while dirty; `sticky` only for long editors. |
+| `SwitchRow` | `xpot/SwitchRow.tsx` | One on/off setting (label, hint, Switch); checkboxes only for picking several. |
 | `CopyButton` | `xpot/CopyButton.tsx` | Inline check for 1.5 s; no toast. |
 | `Pill` | `xpot/StatusPill.tsx` | `tone`, optional `dot` and `bordered`. |
 | `EmptyState`, `ErrorState` | `xpot/EmptyState.tsx` | Tones `indigo` (default), `tags`, `red`; `action`, `onRetry`; `compact` inside sections. |
 | `InlineAlert` | `xpot/InlineAlert.tsx` | `info`, `success`, `warning`, `error`, with icon and role. |
 | `KpiTile`, `Stat` | `xpot/DashboardKit.tsx`, `xpot/Stat.tsx` | KpiTile is the dashboard tile (button when it has `onClick`); Stat is label over value. |
 | `SectionCard` / `DashboardSection` | `xpot/DashboardKit.tsx` | Card with a title row and actions. |
-| `Tabs`, `Segmented`, `PeriodSelector` | `xpot/Tabs.tsx`, `xpot/Segmented.tsx` | `accent` per module (blue by default). PeriodSelector is a small Segmented. |
+| `Tabs`, `Segmented`, `PeriodSelector` | `xpot/Tabs.tsx`, `xpot/Segmented.tsx` | `accent` per module (blue by default; `account` on account pages); a tab may carry a `badge`. PeriodSelector is a small Segmented. |
 | `CommandPalette` | `xpot/CommandPalette.tsx` | `accent` for the selected row. |
 | `FilterBar` and parts, `ListPager` | `xpot/filters.tsx`, `xpot/pagination.tsx` | The one filter bar and pager. |
 | `CompactDataTable` | `xpot/CompactDataTable.tsx` | The one table. |
@@ -99,7 +101,7 @@ Pick a pill's tone from a map, never on the screen: `toneOf(MAP, status)`.
 | `ROUTE_STATUS_TONE` | draft slate, published blue, in_progress blue, completed green, cancelled slate |
 | `STOP_STATUS_TONE` | planned slate, en_route/checked_in blue, completed green, skipped muted, rescheduled amber |
 | `INTEGRATION_TONE` | live green, incomplete amber, idle/off slate, broken red |
-| `HEALTH_TONE` (`RUN_STATUS_TONE`) | ok/completed green, running/starting blue, slow/stuck amber, failed red, idle/queued slate, cancelled muted |
+| `HEALTH_TONE` (`RUN_STATUS_TONE`) | ok/healthy/completed green, running/starting blue, slow/stuck amber, failed/stalled/down red, idle/queued slate, cancelled muted |
 | `ROLE_TONE` | admin amber, manager blue, rep slate |
 | `PIECE_STATUS_TONE` | inventory slate, assigned amber, active green, disabled/damaged red, retired muted |
 | `STOCK_STATUS_TONE` | pending amber (not received), available slate, reserved blue, internal_use slate, sold blue (`SOLD_TONE`), damaged/lost red, retired slate |
