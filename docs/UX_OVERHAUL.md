@@ -227,7 +227,7 @@ Confira cada tela em 1440 px e 390 px (não deve haver rolagem lateral).
 - [ ] Editar o endereço de uma empresa mantém o check-in validado pela área.
 - [ ] Uma visita encerrada como "Venda feita" ou "Retorno" conta em "Finalizadas hoje" e em Últimas visitas.
 - [ ] Check-in fora da área aparece com o selo "Exceção: fora da área".
-- [ ] Cancelar visita pede confirmação; check-out de uma parada volta para a rota.
+- [ ] Cancelar visita pede confirmação e volta para a rota (parada de rota) ou para onde a visita começou (Painel, página da empresa); check-out de uma parada volta para a rota.
 - [ ] Nota de voz gravada no check-in chega à visita.
 - [ ] Página da empresa: tiles e card de vendas mostram os mesmos valores.
 
