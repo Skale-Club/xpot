@@ -42,6 +42,18 @@ export function DashboardSection({
   );
 }
 
+/**
+ * A card with a title row (icon, title, actions) and a body: the one "section
+ * with a heading" of the app. Same as DashboardSection, with `actions` named
+ * like PageHeader's.
+ */
+export function SectionCard({
+  actions,
+  ...props
+}: Omit<Parameters<typeof DashboardSection>[0], "action"> & { actions?: ReactNode }) {
+  return <DashboardSection {...props} action={actions} />;
+}
+
 export function PeriodSelector({
   value,
   onChange,
@@ -169,11 +181,16 @@ export function MetricSelector<T extends string>({
   );
 }
 
+/**
+ * The one KPI tile: icon, big number, label. With `onClick` the whole tile is a
+ * button that opens the list behind the number; without it, a plain card.
+ * Emerald is for money only, violet for Tags only.
+ */
 export function KpiTile({
   label,
   value,
   icon: Icon,
-  accent,
+  accent = "blue",
   detail,
   onClick,
   loading = false,
@@ -181,9 +198,9 @@ export function KpiTile({
   label: string;
   value: ReactNode;
   icon: LucideIcon;
-  accent: "blue" | "emerald" | "violet" | "amber";
+  accent?: "blue" | "emerald" | "violet" | "amber";
   detail?: ReactNode;
-  onClick: () => void;
+  onClick?: () => void;
   loading?: boolean;
 }) {
   const tones = {
@@ -193,17 +210,17 @@ export function KpiTile({
     amber: "bg-amber-500/[0.12] text-amber-300 ring-amber-400/[0.15]",
   } as const;
 
+  const Root = onClick ? "button" : "div";
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`group relative min-w-0 rounded-2xl ${GLASS_SUBTLE_CLASS} p-3 text-left transition-colors hover:border-white/[0.13] hover:bg-white/[0.045] lg:p-4`}
+    <Root
+      {...(onClick ? { type: "button" as const, onClick } : {})}
+      className={`group relative min-w-0 rounded-2xl ${GLASS_SUBTLE_CLASS} p-3 text-left lg:p-4 ${onClick ? "transition-colors hover:border-white/[0.13] hover:bg-white/[0.045]" : ""}`}
     >
       <div className="flex items-start justify-between gap-2">
         <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] ring-1 ${tones[accent]} lg:h-9 lg:w-9`}>
           <Icon className="h-4 w-4" aria-hidden="true" />
         </span>
-        <ChevronRight className="mt-1 hidden h-3.5 w-3.5 text-white/15 transition group-hover:translate-x-0.5 group-hover:text-white/45 lg:block" aria-hidden="true" />
+        {onClick ? <ChevronRight className="mt-1 hidden h-3.5 w-3.5 text-white/15 transition group-hover:translate-x-0.5 group-hover:text-white/45 lg:block" aria-hidden="true" /> : null}
       </div>
       {loading ? (
         <div className="mt-3 h-7 w-16 animate-pulse rounded-md bg-white/10" />
@@ -212,7 +229,7 @@ export function KpiTile({
       )}
       <div className="mt-1.5 truncate text-[9px] font-bold uppercase tracking-[0.12em] text-white/35 lg:text-[10px]">{label}</div>
       {detail ? <div className="mt-1 hidden truncate text-[11px] text-white/30 lg:block">{detail}</div> : null}
-    </button>
+    </Root>
   );
 }
 
