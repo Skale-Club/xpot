@@ -42,7 +42,7 @@ const en = {
   removeFromOrgBody: "Their membership is deleted. Their account, companies and pieces stay; add them again to undo.",
   removeOnlyOrgWarning: "This is their only active organization: until they join another, they can't add companies, visits or sales.",
   removedFromOrg: "{name} removed from {org}",
-  orgAdminWarning: "An org admin manages this organization's members: adds people, suspends and removes members.",
+  orgAdminWarning: "An org admin manages this organization's members: suspends and removes them. Adding people is for Xpot admins and managers.",
 
   // People › Tags / Visits / Activity
   xphereLoadFailed: "Could not load their Xphere connection.",
@@ -141,7 +141,7 @@ export const peopleWorkspaceMessages: Dictionary<typeof en> = {
     removeFromOrgBody: "O vínculo é apagado. A conta, as empresas e as peças continuam; adicione de novo para desfazer.",
     removeOnlyOrgWarning: "Esta é a única organização ativa: até entrar em outra, não pode cadastrar empresas, visitas nem vendas.",
     removedFromOrg: "{name} removido(a) de {org}",
-    orgAdminWarning: "Um admin da organização gerencia os membros dela: adiciona pessoas, suspende e remove membros.",
+    orgAdminWarning: "Um admin da organização gerencia os membros dela: suspende e remove. Adicionar pessoas é com o Admin do Xpot e os gerentes.",
 
     xphereLoadFailed: "Não foi possível carregar a conexão Xphere.",
     lastSync: "Última sincronização",
@@ -233,7 +233,7 @@ export const peopleWorkspaceMessages: Dictionary<typeof en> = {
     removeFromOrgBody: "Se borra su membresía. Su cuenta, empresas y piezas se mantienen; agrégalo de nuevo para deshacerlo.",
     removeOnlyOrgWarning: "Es su única organización activa: hasta que entre en otra, no puede registrar empresas, visitas ni ventas.",
     removedFromOrg: "{name} quitado(a) de {org}",
-    orgAdminWarning: "Un admin de la organización gestiona sus miembros: agrega personas, suspende y quita miembros.",
+    orgAdminWarning: "Un admin de la organización gestiona sus miembros: los suspende y los quita. Agregar personas corresponde al Admin de Xpot y a los gerentes.",
 
     xphereLoadFailed: "No se pudo cargar su conexión Xphere.",
     lastSync: "Última sincronización",
