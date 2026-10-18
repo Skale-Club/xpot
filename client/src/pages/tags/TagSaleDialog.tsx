@@ -16,6 +16,7 @@ import type { ProductWithTiers, PaymentMethod, PaymentStatus } from "@/pages/xpo
 import { usePaymentOptions } from "@/pages/xpot/hooks/useSalesModule";
 import type { FullSalesLead, XpotMeResponse } from "@/pages/xpot/types";
 import { centsToInput, formatCents, inputToCents } from "@/pages/xpot/utils";
+import { MONEY_CHART } from "@/pages/xpot/components/sales/moneyPalette";
 import { apiRequest } from "@/lib/queryClient";
 import { useT } from "@/i18n";
 import { salesModuleMessages } from "@/i18n/messages/salesModule";
@@ -322,7 +323,7 @@ export default function TagSaleDialog({
             <div className="flex items-center justify-between text-xs text-white/45"><span>{ts("subtotal")}</span><Money cents={totals.subtotalCents} /></div>
             <Field label={ts("discount")}><MoneyInput valueCents={discountCents} onChangeCents={(value) => { setDiscountCents(value); attempt.current = null; }} /></Field>
             <div className="flex items-center justify-between border-t border-white/10 pt-2.5"><span className="font-semibold text-white">{ts("total")}</span><Money cents={totals.totalCents} className="text-lg font-bold text-emerald-300" /></div>
-            <div className="flex items-center justify-between text-xs text-white/45"><span>{t("saleCost")}</span><Money cents={totals.costCents} /></div>
+            <div className="flex items-center justify-between text-xs text-white/45"><span>{t("saleCost")}</span><Money cents={totals.costCents} className={MONEY_CHART.cost.text} /></div>
             <div className="flex items-center justify-between text-xs text-white/45"><span>{t("saleGrossProfit")}</span><Money cents={totals.profitCents} className="font-semibold text-white" /></div>
           </div>
 

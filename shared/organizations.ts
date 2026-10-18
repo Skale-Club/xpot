@@ -24,6 +24,19 @@ export function managesEveryOrganization(viewer: OrganizationViewer): boolean {
   return role === "admin" || role === "manager";
 }
 
+/**
+ * A Rep Admin of a real team: admin of an organization that is not just their
+ * own one-person workspace (`personal`, isPersonalOrganization). Their
+ * management mode widens their lists to the organizations they run, and no
+ * further (server/routes/xpot/middleware.ts listScope). `organizations` is
+ * /api/xpot/me's list, which carries the person's role in each.
+ */
+export function runsATeam(
+  organizations: readonly { membershipRole?: OrganizationRole | null; personal?: boolean }[] | null | undefined,
+): boolean {
+  return (organizations ?? []).some((organization) => organization.membershipRole === "admin" && !organization.personal);
+}
+
 export function activeOrganizationAccess(
   memberships: readonly OrganizationAccess[],
   organizationId: number,

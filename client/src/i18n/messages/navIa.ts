@@ -18,6 +18,9 @@ const en = {
   scopeOnlyMe: "Viewing: only me",
   scopeToEveryone: "Show the whole team (management mode)",
   scopeToOnlyMe: "Show only my records",
+  /** A Rep Admin in management mode: the organizations they run. */
+  scopeOrganization: "Viewing: my organization",
+  scopeToOrganization: "Show my organization (management mode)",
 
   // Command palette footer: only the shortcuts this screen supports
   shortcutsLabel: "Shortcuts",
@@ -43,6 +46,7 @@ const en = {
   administrationHint: "People, organizations and, for the Xpot admin, the platform setup.",
   managementMode: "Management mode",
   managementModeHint: "Lists show the whole team and each module gets its Manage tab. It is a view on this device.",
+  managementModeOrgHint: "Companies, Sales and Tasks also show your organization's records. Visits, the pipeline and Tags stay yours. It is a view on this device.",
 };
 
 export const navIaMessages: Dictionary<typeof en> = {
@@ -57,6 +61,8 @@ export const navIaMessages: Dictionary<typeof en> = {
     scopeOnlyMe: "Vendo: só eu",
     scopeToEveryone: "Mostrar toda a equipe (modo gestão)",
     scopeToOnlyMe: "Mostrar só os meus registros",
+    scopeOrganization: "Vendo: minha organização",
+    scopeToOrganization: "Mostrar minha organização (modo gestão)",
 
     shortcutsLabel: "Atalhos",
     shortcutSearch: "/ buscar",
@@ -80,6 +86,7 @@ export const navIaMessages: Dictionary<typeof en> = {
     administrationHint: "Pessoas, organizações e, para o admin do Xpot, a configuração da plataforma.",
     managementMode: "Modo gestão",
     managementModeHint: "As listas mostram toda a equipe e cada módulo ganha a aba Gestão. Vale só neste aparelho.",
+    managementModeOrgHint: "Empresas, Vendas e Tarefas mostram também os registros da sua organização. Visitas, o funil e Tags continuam só seus. Vale só neste aparelho.",
   },
   es: {
     navPlatform: "Plataforma",
@@ -91,6 +98,8 @@ export const navIaMessages: Dictionary<typeof en> = {
     scopeOnlyMe: "Viendo: solo yo",
     scopeToEveryone: "Mostrar a todo el equipo (modo gestión)",
     scopeToOnlyMe: "Mostrar solo mis registros",
+    scopeOrganization: "Viendo: mi organización",
+    scopeToOrganization: "Mostrar mi organización (modo gestión)",
 
     shortcutsLabel: "Atajos",
     shortcutSearch: "/ buscar",
@@ -114,5 +123,6 @@ export const navIaMessages: Dictionary<typeof en> = {
     administrationHint: "Personas, organizaciones y, para el admin de Xpot, la configuración de la plataforma.",
     managementMode: "Modo gestión",
     managementModeHint: "Las listas muestran a todo el equipo y cada módulo tiene su pestaña Gestión. Vale solo en este dispositivo.",
+    managementModeOrgHint: "Empresas, Ventas y Tareas muestran también los registros de tu organización. Las visitas, el embudo y Tags siguen siendo solo tuyos. Vale solo en este dispositivo.",
   },
 };
