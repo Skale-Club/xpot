@@ -107,7 +107,8 @@ export function createAdminRouter() {
       email: z.string().email().optional().nullable(),
       phone: z.string().optional().nullable(),
       team: z.string().optional().nullable(),
-      role: z.enum(["rep", "manager", "admin"]).default("rep"),
+      // Omitted: the person keeps their role (a default of "rep" silently demoted managers and admins).
+      role: z.enum(["rep", "manager", "admin"]).optional(),
       vcardId: z.number().int().positive().optional().nullable(),
       ghlUserId: z.string().optional().nullable(),
       modules: z.array(z.enum(["visits", "tags"])).min(1).optional(),
@@ -116,17 +117,19 @@ export function createAdminRouter() {
     const actor = actorOf(req);
     const existing = await storage.getSalesRepByUserId(input.userId);
     if (!existing) throw new AccountError("Rep not found", 404);
-    if (!actor.isAdmin && (input.role !== "rep" || existing.role !== "rep")) {
+    const role = input.role ?? existing.role;
+    if (!actor.isAdmin && (role !== "rep" || existing.role !== "rep")) {
       throw new AccountError("Only an admin can change a manager's or admin's role.", 403);
     }
     // Demoting yourself would sign you out of the admin you are using, with nobody to undo it.
-    if (existing.userId === actor.userId && input.role !== existing.role) {
+    if (existing.userId === actor.userId && role !== existing.role) {
       throw new AccountError("You can't change your own role.", 400);
     }
     const costPolicyChanged = input.costPolicy !== undefined &&
       (input.costPolicy !== existing.costPolicy || !existing.costPolicyConfiguredAt);
     return storage.updateSalesRepAccountProfile({
       ...input,
+      role,
       isActive: existing.isActive,
       ...(costPolicyChanged ? { costPolicyConfiguredAt: new Date(), costPolicyConfiguredByUserId: actor.userId } : {}),
     });

@@ -88,7 +88,7 @@ export function createSalesRouter() {
     const actor = (req as any).xpotActor as XpotActor;
     const input = xpotSaleCreateSchema.parse(req.body);
 
-    const lead = await loadAccessibleLead(req, res, input.leadId);
+    const lead = await loadAccessibleLead(req, res, input.leadId, "records");
     if (!lead) return;
 
     if (input.visitId) {

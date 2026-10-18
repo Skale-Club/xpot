@@ -67,7 +67,7 @@ export function createConsignmentsRouter() {
   router.post("/consignments/deposit", async (req, res) => {
     const actor = (req as any).xpotActor as XpotActor;
     const input = xpotConsignmentDepositSchema.parse(req.body);
-    const lead = await loadAccessibleLead(req, res, input.leadId);
+    const lead = await loadAccessibleLead(req, res, input.leadId, "records");
     if (!lead) return;
     if (!(await assertVisitForLead(res, input.visitId, lead.id))) return;
 
