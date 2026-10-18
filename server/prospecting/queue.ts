@@ -32,6 +32,7 @@ import { recordSystemEvent, reportSystemEvent } from "../observability/events.js
 const QUEUE_MAX_WAIT_MS = 24 * 60 * 60 * 1000;
 const STARTING_STALE_MS = START_TIMEOUT_MS + 2 * 60 * 1000;
 const DISPATCH_LOCK_KEY = 7_424_002;
+const CANCELLED_RUN_MESSAGE = "This search was cancelled.";
 let ticking: Promise<void> | null = null;
 let lastDispatchedRepId: number | null = null;
 
@@ -111,13 +112,15 @@ async function maybeQueueExpansion(jobId: number, runs: ProspectingRun[]) {
     },
     completedAt: null,
     updatedAt: new Date(),
-  }).where(eq(prospectingJobs.id, job.id));
+  }).where(and(eq(prospectingJobs.id, job.id), ne(prospectingJobs.status, "cancelled")));
   return true;
 }
 
 async function updateJobStatus(jobId: number) {
   const [previousJob] = await db.select({ repId: prospectingJobs.repId, status: prospectingJobs.status })
     .from(prospectingJobs).where(eq(prospectingJobs.id, jobId)).limit(1);
+  // A cancelled job is final: no expansion wave, no status from its runs.
+  if (!previousJob || previousJob.status === "cancelled") return;
   const runs = await db.select().from(prospectingRuns).where(eq(prospectingRuns.jobId, jobId));
   const expanded = await maybeQueueExpansion(jobId, runs);
   if (expanded) return;
@@ -137,8 +140,8 @@ async function updateJobStatus(jobId: number) {
     startedAt: earliestStartedAt(runs.map((run) => run.startedAt)),
     completedAt: ["completed", "failed", "cancelled"].includes(status) ? new Date() : null,
     updatedAt: new Date(),
-  }).where(eq(prospectingJobs.id, jobId));
-  if (previousJob && previousJob.status !== status && ["completed", "failed"].includes(status)) {
+  }).where(and(eq(prospectingJobs.id, jobId), ne(prospectingJobs.status, "cancelled")));
+  if (previousJob.status !== status && ["completed", "failed"].includes(status)) {
     const ready = status === "completed";
     void sendPushNotification(previousJob.repId, {
       title: ready ? "Xpot is optimizing your route" : "Prospecting needs attention",
@@ -159,6 +162,17 @@ async function saveResults(run: ProspectingRun, places: NormalizedPlace[]) {
     lastVisitAt: salesLeads.lastVisitAt,
   }).from(salesLeads).where(eq(salesLeads.ownerRepId, run.repId));
   await db.transaction(async (tx) => {
+    // Claim the run first: one cancelled (or failed) while the CSV downloaded
+    // keeps its status, and its results are dropped.
+    const [saved] = await tx.update(prospectingRuns).set({
+      status: "completed",
+      progress: 100,
+      resultCount: places.length,
+      errorMessage: null,
+      completedAt: new Date(),
+      updatedAt: new Date(),
+    }).where(and(eq(prospectingRuns.id, run.id), eq(prospectingRuns.status, "running"))).returning({ id: prospectingRuns.id });
+    if (!saved) return;
     if (places.length) {
       await tx.insert(prospectingCandidates).values(places.map((place) => {
         const scored = scorePlace(place);
@@ -192,14 +206,6 @@ async function saveResults(run: ProspectingRun, places: NormalizedPlace[]) {
         };
       })).onConflictDoNothing();
     }
-    await tx.update(prospectingRuns).set({
-      status: "completed",
-      progress: 100,
-      resultCount: places.length,
-      errorMessage: null,
-      completedAt: new Date(),
-      updatedAt: new Date(),
-    }).where(and(eq(prospectingRuns.id, run.id), eq(prospectingRuns.status, "running")));
   });
   await updateJobStatus(run.jobId);
 }
@@ -275,6 +281,16 @@ async function claimNextRun() {
       completedAt: new Date(),
       updatedAt: new Date(),
     }).where(and(eq(prospectingRuns.status, "queued"), sql`${prospectingRuns.createdAt} < ${new Date(Date.now() - QUEUE_MAX_WAIT_MS)}`));
+    // A job cancelled while an expansion wave was being added must not send it.
+    await tx.update(prospectingRuns).set({
+      status: "cancelled",
+      errorMessage: CANCELLED_RUN_MESSAGE,
+      completedAt: new Date(),
+      updatedAt: new Date(),
+    }).where(and(
+      eq(prospectingRuns.status, "queued"),
+      sql`${prospectingRuns.jobId} IN (SELECT ${prospectingJobs.id} FROM ${prospectingJobs} WHERE ${prospectingJobs.status} = 'cancelled')`,
+    ));
     const [active] = await tx.select({ id: prospectingRuns.id }).from(prospectingRuns)
       .where(inArray(prospectingRuns.status, ["starting", "running"])).limit(1);
     if (active) return null;
@@ -311,7 +327,7 @@ async function dispatchNextRun() {
       context: { jobId: run.jobId, runId: run.id, query: run.query, location: run.location },
     });
     await db.update(prospectingRuns).set({ status: "failed", errorMessage: message, completedAt: new Date(), updatedAt: new Date() })
-      .where(eq(prospectingRuns.id, run.id));
+      .where(and(eq(prospectingRuns.id, run.id), eq(prospectingRuns.status, "starting")));
   }
   await updateJobStatus(run.jobId);
 }
@@ -349,6 +365,10 @@ export function tickProspectingQueueSafely() {
 /** Explicit user retry: reset only failed physical runs, never successful work. */
 export async function retryFailedProspectingRuns(jobId: number, repId: number) {
   return db.transaction(async (tx) => {
+    // A cancelled job stays cancelled; the rep starts a new search instead.
+    const [job] = await tx.select({ status: prospectingJobs.status }).from(prospectingJobs)
+      .where(and(eq(prospectingJobs.id, jobId), eq(prospectingJobs.repId, repId))).limit(1);
+    if (!job || job.status === "cancelled") return 0;
     const failed = await tx.select({ id: prospectingRuns.id }).from(prospectingRuns).where(and(
       eq(prospectingRuns.jobId, jobId),
       eq(prospectingRuns.repId, repId),
@@ -380,6 +400,67 @@ export async function retryFailedProspectingRuns(jobId: number, repId: number) {
     }).where(and(eq(prospectingJobs.id, jobId), eq(prospectingJobs.repId, repId)));
     return ids.length;
   });
+}
+
+export type ProspectingCancelResult =
+  | { outcome: "not_found" }
+  | { outcome: "not_cancellable"; status: ProspectingJobStatus; routePlanningStatus: string }
+  | { outcome: "cancelled"; jobId: number; repId: number; status: ProspectingJobStatus; routePlanningStatus: string; cancelledRuns: number };
+
+/**
+ * Stops a search that is still running or waiting, or a finished search whose
+ * route was never built. Its waiting and running searches become "cancelled"
+ * and the worker never picks them up again (claimNextRun, updateJobStatus and
+ * saveResults leave a cancelled job alone); the route is marked failed, so
+ * nothing keeps the rep from rebuilding it (a finished search) or starting a
+ * new search. The engine's API has no cancel: Xpot only stops waiting for it,
+ * and whatever it still returns for that search is dropped.
+ * `repId` limits it to one person's own searches (the Route screen).
+ */
+export async function cancelProspectingJob(jobId: number, repId?: number): Promise<ProspectingCancelResult> {
+  const result = await db.transaction(async (tx): Promise<ProspectingCancelResult> => {
+    // The dispatcher claims runs under this lock: a run is never started after it was cancelled.
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(${DISPATCH_LOCK_KEY})`);
+    const [job] = await tx.select().from(prospectingJobs).where(and(
+      eq(prospectingJobs.id, jobId),
+      ...(repId === undefined ? [] : [eq(prospectingJobs.repId, repId)]),
+    )).limit(1).for("update");
+    if (!job) return { outcome: "not_found" };
+    const searching = ["draft", "queued", "running"].includes(job.status);
+    const routing = job.status === "completed" && ["pending", "building"].includes(job.routePlanningStatus);
+    if (!searching && !routing) {
+      return { outcome: "not_cancellable", status: job.status, routePlanningStatus: job.routePlanningStatus };
+    }
+    const now = new Date();
+    const runs = searching
+      ? await tx.update(prospectingRuns).set({
+          status: "cancelled",
+          errorMessage: CANCELLED_RUN_MESSAGE,
+          completedAt: now,
+          updatedAt: now,
+        }).where(and(
+          eq(prospectingRuns.jobId, job.id),
+          inArray(prospectingRuns.status, ["queued", "starting", "running"]),
+        )).returning({ id: prospectingRuns.id })
+      : [];
+    const [updated] = await tx.update(prospectingJobs).set({
+      ...(searching ? { status: "cancelled" as const, errorMessage: CANCELLED_RUN_MESSAGE, completedAt: now } : {}),
+      routePlanningStatus: "failed",
+      routeErrorMessage: searching ? CANCELLED_RUN_MESSAGE : "Route planning was cancelled.",
+      updatedAt: now,
+    }).where(eq(prospectingJobs.id, job.id)).returning();
+    return {
+      outcome: "cancelled",
+      jobId: updated.id,
+      repId: updated.repId,
+      status: updated.status,
+      routePlanningStatus: updated.routePlanningStatus,
+      cancelledRuns: runs.length,
+    };
+  });
+  // The engine's single slot is free again: send the next search in line.
+  if (result.outcome === "cancelled") void tickProspectingQueueSafely();
+  return result;
 }
 
 export function startProspectingWorker() {

@@ -19,11 +19,13 @@ import TagSaleDialog from "@/pages/tags/TagSaleDialog";
 import { errorText } from "@/pages/tags/lib";
 import { CARD, EYEBROW_MUTED } from "@/pages/tags/ui";
 import { invalidatePieceViews, pieceSend, usePiece, usePieceActivity } from "./PieceContext";
+import { canCancelPieceSale } from "./pieceView";
 
 // Sale: the financial sale, the only thing that makes a piece "sold" (going live
 // never does). Record it (TagSaleDialog, the same on both screens); once sold,
 // see it (price, date, seller, payment, and its page in Sales for Visits users);
-// a manager can cancel it, which gives the piece back to the seller's stock.
+// a manager, or the seller themselves (with Visits), can cancel it, which gives
+// the piece back to the seller's stock.
 
 export function SaleSection() {
   const { tag, viewer, notify, refresh } = usePiece();
@@ -42,6 +44,7 @@ export function SaleSection() {
   const sellable = tag.stockStatus === "available" && tag.status !== "retired";
   const sale = tag.saleId !== null ? activity?.sales.find((s) => s.saleId === tag.saleId && s.status === "active") : undefined;
   const seller = sale?.sellerName ?? tag.repName ?? (tag.repId !== null ? tm("resellerNumber", { id: tag.repId }) : null);
+  const mayCancel = canCancelPieceSale(viewer, sale);
 
   const cancelSale = async (reason: string) => {
     if (tag.saleId === null) return;
@@ -115,7 +118,7 @@ export function SaleSection() {
           </>
         ) : null}
       </dl>
-      {(viewer.hasVisits || viewer.canManage) && (
+      {(viewer.hasVisits || mayCancel) && (
         <div className="mt-3 flex flex-col gap-2 border-t border-white/[0.08] pt-3 sm:flex-row sm:flex-wrap">
           {viewer.hasVisits && (
             <Button asChild variant="secondary" className="w-full sm:w-auto">
@@ -125,7 +128,7 @@ export function SaleSection() {
               </Link>
             </Button>
           )}
-          {viewer.canManage && (
+          {mayCancel && (
             <Button
               type="button"
               variant="secondary"

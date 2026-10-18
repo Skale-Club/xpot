@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "wouter";
 import {
-  Ban, Building2, Check, ChevronRight, Eye, EyeOff, KeyRound, LayoutGrid, Nfc, PackageOpen, Phone, RotateCcw, RotateCw,
+  Ban, Building2, CalendarDays, Check, ChevronRight, Eye, EyeOff, KeyRound, LayoutGrid, Nfc, PackageOpen, Phone, RotateCcw, RotateCw,
   ShieldCheck, Tag, Trash2, Webhook, X,
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -233,15 +233,25 @@ export function PersonDetail({ rep, onClose, onGone }: { rep: Rep; onClose?: () 
         </Section>
       )}
 
-      {modules.includes("tags") && (
+      {(modules.includes("tags") || modules.includes("visits")) && (
         <Section title={tw("sectionActivity")} icon={ChevronRight} testId="person-activity">
           <div className="flex flex-wrap gap-2">
-            <Button asChild variant="secondary" size="sm">
-              <Link href={`/admin/tags/pieces?rep=${rep.id}`}><Nfc />{tw("theirPieces")}</Link>
-            </Button>
-            <Button asChild variant="secondary" size="sm">
-              <Link href={`/admin/tags/kits?kitRep=${rep.id}`}><PackageOpen />{tw("theirKits")}</Link>
-            </Button>
+            {/* The visits history narrowed to this person (management mode, ?rep=). */}
+            {modules.includes("visits") && (
+              <Button asChild variant="secondary" size="sm">
+                <Link href={`/dashboard/history?rep=${rep.id}`} data-testid="person-their-visits"><CalendarDays />{tw("theirVisits")}</Link>
+              </Button>
+            )}
+            {modules.includes("tags") && (
+              <>
+                <Button asChild variant="secondary" size="sm">
+                  <Link href={`/admin/tags/pieces?rep=${rep.id}`}><Nfc />{tw("theirPieces")}</Link>
+                </Button>
+                <Button asChild variant="secondary" size="sm">
+                  <Link href={`/admin/tags/kits?kitRep=${rep.id}`}><PackageOpen />{tw("theirKits")}</Link>
+                </Button>
+              </>
+            )}
           </div>
         </Section>
       )}

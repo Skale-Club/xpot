@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { storage } from "../../storage.js";
-import { requireXpotUser, ensureXpotRep, loadAccessibleLead, listsEveryone } from "./middleware.js";
+import { requireXpotUser, ensureXpotRep, loadAccessibleLead, listScope, type XpotActor } from "./middleware.js";
 import type { SalesVisitStatus } from "#shared/schema/sales.js";
 import { getDistanceMeters, syncTaskToGhl, syncVisitToGhl, syncVisitToXphere } from "./helpers.js";
 import { xpotCheckInSchema, xpotCheckOutSchema, xpotVisitNoteUpsertSchema, xpotVisitSummarySchema } from "#shared/xpot.js";
@@ -18,8 +18,14 @@ export function createVisitsRouter() {
   router.get("/visits", async (req, res) => {
     const actor = (req as any).xpotActor as Awaited<ReturnType<typeof ensureXpotRep>>;
     const leadId = typeof req.query.leadId === "string" ? Number(req.query.leadId) : undefined;
+    // ?repId= narrows the list to one person (the history's "Seller" filter,
+    // People's "Their visits"). Visits have no organization, so only the
+    // "everyone" scope widens (a manager in management mode) and only it
+    // honours the filter; anyone else gets their own visits.
+    const repFilter = Number(req.query.repId);
+    const scope = await listScope(req, actor as XpotActor);
     const visits = await storage.listSalesVisits({
-      repId: listsEveryone(req, actor!) ? (req.query.repId ? Number(req.query.repId) : undefined) : actor!.rep.id,
+      repId: scope.kind === "everyone" ? (Number.isInteger(repFilter) && repFilter > 0 ? repFilter : undefined) : actor!.rep.id,
       leadId,
     });
     // Four queries for the whole list. This used to read the lead, its

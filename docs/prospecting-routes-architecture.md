@@ -161,6 +161,7 @@ a linked visit must belong to the stop's business.
 | GET | `/api/xpot/prospecting/jobs/:id` | Return owned job, physical runs and ranked candidates |
 | POST | `/api/xpot/prospecting/jobs/:id/refresh` | Advance the queue/poller and return current details |
 | POST | `/api/xpot/prospecting/jobs/:id/retry` | Explicitly requeue this job's failed physical searches |
+| POST | `/api/xpot/prospecting/jobs/:id/cancel` | Cancel the rep's own search (running, waiting, or finished with a route not built); Status has the same for the Xpot admin at `/api/xpot/admin/system-health/jobs/:id/cancel` |
 | POST | `/api/xpot/prospecting/routes` | Build a draft from a job, candidate ids and/or owned lead ids |
 | GET | `/api/xpot/prospecting/routes` | List owned routes |
 | GET | `/api/xpot/prospecting/routes/:id` | Return a route with ordered stops |

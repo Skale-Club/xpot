@@ -25,6 +25,13 @@ vi.mock("../server/db.js", async () => {
   return { db: drizzle(client, { schema }), pool: { end: async () => {} } };
 });
 
+// GoHighLevel (legacy) answers a re-sent opportunity without the network.
+const ghl = vi.hoisted(() => ({ createGHLOpportunity: null as any }));
+vi.mock("../server/integrations/ghl.js", async (importOriginal) => {
+  ghl.createGHLOpportunity = vi.fn(async () => ({ success: true, opportunityId: "ghl-opp-1" }));
+  return { ...(await importOriginal<typeof import("../server/integrations/ghl.js")>()), createGHLOpportunity: ghl.createGHLOpportunity };
+});
+
 // The route retry nudges the queue; the engine is not part of this test.
 vi.mock("../server/prospecting/queue.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../server/prospecting/queue.js")>()),
@@ -34,6 +41,7 @@ vi.mock("../server/prospecting/queue.js", async (importOriginal) => ({
 const { createAdminIntegrationsRouter } = await import("../server/routes/xpot/admin-integrations.js");
 const { createSystemHealthRouter } = await import("../server/routes/xpot/system-health.js");
 const { createBrandingAdminRouter } = await import("../server/routes/xpot/branding.js");
+const { createSyncRouter } = await import("../server/routes/xpot/sync.js");
 const { recordIntegrationCheck } = await import("../server/observability/services.js");
 
 const q = async (text: string, params: unknown[] = []) => (await pg.client.query(text, params)).rows as any[];
@@ -41,22 +49,23 @@ const one = async (text: string, params: unknown[] = []) => (await q(text, param
 
 afterAll(async () => pg.client?.close());
 
-function app(isAdmin: boolean) {
+function app(isAdmin: boolean, userId = "status-admin") {
   const server = express();
   server.use(express.json());
   server.use((req, _res, next) => {
-    (req as any).session = { userId: "status-admin", email: "admin@x.test", firstName: "Ada", isAdmin };
+    (req as any).session = { userId, email: `${userId}@x.test`, firstName: "Ada", isAdmin };
     next();
   });
+  server.use("/api/xpot", createSyncRouter());
   server.use("/api/xpot", createAdminIntegrationsRouter());
   server.use("/api/xpot", createSystemHealthRouter());
   server.use("/api/xpot", createBrandingAdminRouter());
   return server;
 }
 
-async function request(method: string, path: string, body?: unknown, options: { admin?: boolean } = {}) {
+async function request(method: string, path: string, body?: unknown, options: { admin?: boolean; as?: string } = {}) {
   return new Promise<{ status: number; body: any }>((resolve, reject) => {
-    const server = app(options.admin ?? true).listen(0, async () => {
+    const server = app(options.admin ?? true, options.as).listen(0, async () => {
       const { port } = server.address() as { port: number };
       try {
         const response = await fetch(`http://127.0.0.1:${port}${path}`, {
@@ -78,7 +87,7 @@ async function request(method: string, path: string, body?: unknown, options: { 
 let seed: { adminRepId: number; repId: number; organizationId: number; leadId: number; otherLeadId: number };
 
 beforeEach(async () => {
-  await q(`TRUNCATE integration_checks, sales_sync_events, mcp_tokens, xphere_integrations, prospecting_runs, prospecting_jobs,
+  await q(`TRUNCATE integration_checks, sales_sync_events, sales_opportunities_local, integration_settings, sales_app_settings, mcp_tokens, xphere_integrations, prospecting_runs, prospecting_jobs,
     sales_visits, sales_leads, organization_memberships, organizations, sales_reps, users, app_branding RESTART IDENTITY CASCADE`);
   await q(`INSERT INTO users (id, phone, first_name) VALUES ('status-admin', '+15550000201', 'Ada'), ('status-rep', '+15550000202', 'Rui')`);
   const adminRepId = (await one(`INSERT INTO sales_reps (user_id, display_name, role, is_active) VALUES ('status-admin', 'Ada Admin', 'admin', true) RETURNING id`)).id;
@@ -166,8 +175,55 @@ describe("CRM sync problems", () => {
         lastError: "Xphere returned 403",
         retryable: true,
       }),
-      expect.objectContaining({ provider: "gohighlevel", entityType: "sales_opportunity", entityName: null, href: null, retryable: false }),
+      // An opportunity is re-sent to GoHighLevel like the rest (POST /sync/retry).
+      expect.objectContaining({ provider: "gohighlevel", entityType: "sales_opportunity", entityName: null, href: null, retryable: true }),
     ]);
+  });
+});
+
+describe("CRM sync retry of an opportunity", () => {
+  const opportunity = async () => {
+    const id = (await one(`INSERT INTO sales_opportunities_local (lead_id, rep_id, title, value, sync_status)
+      VALUES ($1, $2, 'Window decals', 500, 'needs_review') RETURNING id`, [seed.leadId, seed.repId])).id as number;
+    await q(`INSERT INTO sales_sync_events (provider, entity_type, entity_id, status, last_error, last_attempt_at)
+      VALUES ('gohighlevel', 'sales_opportunity', $1, 'needs_review', 'GHL not configured', NOW() - interval '1 hour')`, [String(id)]);
+    return id;
+  };
+  const problemFor = async (id: number) =>
+    (await request("GET", "/api/xpot/admin/system-health/sync-problems")).body.problems.find((p: any) => p.entityType === "sales_opportunity" && p.entityId === String(id));
+
+  it("sends it again and drops it from the list once it lands", async () => {
+    const id = await opportunity();
+    expect(await problemFor(id)).toMatchObject({ entityName: "Window decals", href: `/leads/${seed.leadId}`, repName: "Rui Rep", retryable: true });
+    await q(`INSERT INTO integration_settings (provider, api_key, location_id, is_enabled) VALUES ('gohighlevel', 'pit-1', 'loc-1', true)`);
+    await q(`INSERT INTO sales_app_settings (default_pipeline_key, default_stage_key) VALUES ('pipe-1', 'stage-1')`);
+    await q(`UPDATE sales_leads SET ghl_contact_id = 'ghl-contact-1' WHERE id = $1`, [seed.leadId]);
+
+    const res = await request("POST", "/api/xpot/sync/retry", { entityType: "sales_opportunity", entityId: String(id) });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ synced: true, ghlOpportunityId: "ghl-opp-1" });
+    expect(ghl.createGHLOpportunity).toHaveBeenCalledWith("pit-1", "loc-1", expect.objectContaining({ contactId: "ghl-contact-1", pipelineId: "pipe-1", pipelineStageId: "stage-1" }));
+    expect(await one(`SELECT sync_status, ghl_opportunity_id FROM sales_opportunities_local WHERE id = $1`, [id]))
+      .toEqual({ sync_status: "synced", ghl_opportunity_id: "ghl-opp-1" });
+    expect(await problemFor(id)).toBeUndefined();
+  });
+
+  it("keeps it listed with the new error when it still fails", async () => {
+    const id = await opportunity();
+    const res = await request("POST", "/api/xpot/sync/retry", { entityType: "sales_opportunity", entityId: String(id) });
+    expect(res.body).toMatchObject({ synced: false, message: "GHL not configured" });
+    expect(await problemFor(id)).toMatchObject({ status: "needs_review", lastError: "GHL not configured" });
+    expect((await one(`SELECT count(*)::int AS n FROM sales_sync_events WHERE entity_type = 'sales_opportunity' AND entity_id = $1`, [String(id)])).n).toBe(2);
+  });
+
+  it("is refused for another rep's opportunity", async () => {
+    const id = await opportunity();
+    await q(`INSERT INTO users (id, phone, first_name) VALUES ('status-other', '+15550000203', 'Otto')`);
+    await q(`INSERT INTO sales_reps (user_id, display_name, role, is_active) VALUES ('status-other', 'Otto Rep', 'rep', true)`);
+    const res = await request("POST", "/api/xpot/sync/retry", { entityType: "sales_opportunity", entityId: String(id) }, { admin: false, as: "status-other" });
+    expect(res.status).toBe(403);
+    // Its owner may.
+    expect((await request("POST", "/api/xpot/sync/retry", { entityType: "sales_opportunity", entityId: String(id) }, { admin: false, as: "status-rep" })).status).toBe(200);
   });
 });
 
