@@ -16,6 +16,7 @@ import { EYEBROW } from "@/components/xpot/surface";
 import { displayPhone, phoneHref } from "../../utils";
 import { maskUsPhoneInput } from "../../phoneInput";
 import { SOCIAL_PLATFORMS } from "./socials";
+import { useLeadAccess } from "../../leadAccess";
 
 type CompanyLead = SalesLead & {
   locations?: Array<{
@@ -35,6 +36,8 @@ export function CompanyInlineEditor({ lead }: { lead: CompanyLead }) {
   const t = useT(visitsMessages);
   const tl = useT(leadsMessages);
   const primaryLocation = lead.locations?.[0];
+  // Removing a photo is the owner's (a rep holding a piece here can add, not remove).
+  const canRemovePhotos = useLeadAccess(lead).owner;
   const [fields, setFields] = useState({
     phone: lead.phone || "",
     email: lead.email || "",
@@ -219,9 +222,9 @@ export function CompanyInlineEditor({ lead }: { lead: CompanyLead }) {
               <div key={photo} className={`group relative overflow-hidden rounded-xl ${index === 0 ? "col-span-2 row-span-2 aspect-video" : "aspect-square"}`}>
                 <img src={fileSrc(photo)} alt={index === 0 ? t("coverAlt") : ""} className="h-full w-full object-cover" />
                 {/* Always visible on touch screens (no hover there). */}
-                <button type="button" onClick={() => setPhotoToRemove(photo)} aria-label={t("removePhoto")} title={t("removePhoto")} className="absolute right-1.5 top-1.5 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white/80 transition hover:text-red-300 focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100">
+                {canRemovePhotos ? <button type="button" onClick={() => setPhotoToRemove(photo)} aria-label={t("removePhoto")} title={t("removePhoto")} className="absolute right-1.5 top-1.5 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white/80 transition hover:text-red-300 focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100">
                   <Trash2 className="h-4 w-4" aria-hidden="true" />
-                </button>
+                </button> : null}
               </div>
             ))}
           </div>

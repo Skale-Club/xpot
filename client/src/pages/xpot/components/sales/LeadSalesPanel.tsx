@@ -20,18 +20,25 @@ import { EYEBROW, GLASS_CLASS } from "@/components/xpot/surface";
 import { useT } from "@/i18n";
 import { salesMessages } from "@/i18n/messages/sales";
 import { salesModuleMessages } from "@/i18n/messages/salesModule";
+import { apiErrorMessages } from "@/i18n/messages/apiErrors";
+import { useLeadAccess, type LeadOwnership } from "../../leadAccess";
 
 export function LeadSalesPanel({
-  leadId, leadName, visitId, compact,
+  leadId, leadName, lead, visitId, compact,
 }: {
   leadId: number;
   leadName?: string;
+  /** Its owner and organization: who may record a sale or leave stock here (leadAccess). */
+  lead?: LeadOwnership;
   visitId?: number | null;
   /** Inside the visit card: tighter, no section heading. */
   compact?: boolean;
 }) {
   const t = useT(salesModuleMessages);
   const ts = useT(salesMessages);
+  const te = useT(apiErrorMessages);
+  // A sale or stock is filed under the company's organization; outside it the server refuses.
+  const canRecord = useLeadAccess(lead).records;
   const snapshot = useLeadSalesSnapshot(leadId);
   const [saleOpen, setSaleOpen] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
@@ -75,13 +82,14 @@ export function LeadSalesPanel({
 
       {/* The two actions */}
       <div className="flex gap-2">
-        <Button type="button" variant="money" onClick={() => setSaleOpen(true)} className="flex-1">
+        <Button type="button" variant="money" onClick={() => setSaleOpen(true)} disabled={!canRecord} className="flex-1">
           <Package aria-hidden="true" /> {t("newSale")}
         </Button>
-        <Button type="button" variant="secondary" onClick={() => setDepositOpen(true)} className="flex-1">
+        <Button type="button" variant="secondary" onClick={() => setDepositOpen(true)} disabled={!canRecord} className="flex-1">
           <PackagePlus aria-hidden="true" /> {t("leaveStock")}
         </Button>
       </div>
+      {!canRecord ? <p className="text-xs text-white/45" data-testid="lead-sales-other-organization">{te("srv_lead_other_organization")}</p> : null}
 
       {/* Stock sitting here */}
       {consignments.length > 0 && (
@@ -95,7 +103,7 @@ export function LeadSalesPanel({
               row={row}
               compact
               onSettle={() => setSettleRow(row)}
-              onRestock={() => setDepositOpen(true)}
+              onRestock={canRecord ? () => setDepositOpen(true) : undefined}
               onReturn={() => setReturnRow(row)}
             />
           ))}
