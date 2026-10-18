@@ -6,6 +6,7 @@ import { useXpotQueries } from "./hooks/useXpotQueries";
 import { useSyncStatus } from "./hooks/useSyncStatus";
 import { formatCents, formatVisitWhen } from "./utils";
 import { MONEY_CHART } from "./components/sales/moneyPalette";
+import { salesPath } from "./salesPath";
 import { leadsMessages } from "@/i18n/messages/leads";
 import { tasksMessages } from "@/i18n/messages/tasks";
 import { visitsUiMessages } from "@/i18n/messages/visitsUi";
@@ -71,7 +72,7 @@ function localDateKey(date = new Date()) {
 }
 
 function DashboardOverview() {
-  const { dashboardQuery, setLocation } = useXpotQueries();
+  const { dashboardQuery, setLocation, me } = useXpotQueries();
   const { toast } = useToast();
   const t = useT(dashboardMessages);
   const tp = useT(prospectingMessages);
@@ -82,7 +83,10 @@ function DashboardOverview() {
   const { failedEvents, retryMutation } = useSyncStatus();
   const [periodDays, setPeriodDays] = useState(7);
   const [activityMetric, setActivityMetric] = useState<ActivityMetric>("visits");
-  const salesSummary = useSalesSummary(periodDays * 2);
+  // The Dashboard is the person's own day (its visits and tasks are theirs in
+  // every mode), so its money is too: management mode would otherwise widen
+  // only these tiles to the team, with no scope chip to say so.
+  const salesSummary = useSalesSummary(periodDays * 2, me?.rep.id, Boolean(me));
   const routesQuery = useQuery<DashboardRoute[]>({ queryKey: ["/api/xpot/prospecting/routes"] });
   const isDesktop = useIsDesktop();
 
@@ -384,8 +388,8 @@ function DashboardOverview() {
       {sectionPending(2, salesSummary.isLoading) ?? ((metrics?.overdueTasks ?? 0) > 0 || (salesSummary.data?.consignment.dueCount ?? 0) > 0 || (metrics?.openOpportunities ?? 0) > 0 ? (
         <AttentionList>
           {(metrics?.overdueTasks ?? 0) > 0 ? <AttentionItem icon={Clock3} eyebrow={t("taskOverdue")} title={t("overdueTasksTitle")} detail={t.plural("overdueTasksDetail", metrics?.overdueTasks ?? 0)} tone="amber" onClick={() => setLocation("/tasks")} /> : null}
-          {(salesSummary.data?.consignment.dueCount ?? 0) > 0 ? <AttentionItem icon={DollarSign} eyebrow={t("salesOnStreet")} title={t("settlementsDueTitle")} detail={t.plural("settlementsDueDetail", salesSummary.data?.consignment.dueCount ?? 0)} tone="amber" onClick={() => setLocation("/sales")} /> : null}
-          {(metrics?.openOpportunities ?? 0) > 0 ? <AttentionItem icon={Target} eyebrow={t("metricOpportunities")} title={t("openOpportunitiesTitle")} detail={t.plural("openOpportunitiesDetail", metrics?.openOpportunities ?? 0)} tone="blue" onClick={() => setLocation("/sales")} /> : null}
+          {(salesSummary.data?.consignment.dueCount ?? 0) > 0 ? <AttentionItem icon={DollarSign} eyebrow={t("salesOnStreet")} title={t("settlementsDueTitle")} detail={t.plural("settlementsDueDetail", salesSummary.data?.consignment.dueCount ?? 0)} tone="amber" onClick={() => setLocation(salesPath("consignments"))} /> : null}
+          {(metrics?.openOpportunities ?? 0) > 0 ? <AttentionItem icon={Target} eyebrow={t("metricOpportunities")} title={t("openOpportunitiesTitle")} detail={t.plural("openOpportunitiesDetail", metrics?.openOpportunities ?? 0)} tone="blue" onClick={() => setLocation(salesPath("pipeline"))} /> : null}
         </AttentionList>
       ) : (
         <EmptyState compact dense icon={Check} title={t("attentionClear")} hint={t("attentionClearHint")} cardStyle={SECTION_EMPTY} />

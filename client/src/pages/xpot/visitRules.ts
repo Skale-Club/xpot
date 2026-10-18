@@ -16,6 +16,17 @@ export function clampGeofenceRadiusInput(raw: string, fallback: number): number 
 }
 
 /**
+ * The stage a company's status stands for (Prospect → Lead → Customer).
+ * "active" is an older status the app shows as Customer, so it counts as one
+ * everywhere: the pill, the Customers chip and the "Mark as customer" action.
+ */
+export function companyStage(status: string): "prospect" | "lead" | "customer" | "inactive" {
+  if (status === "customer" || status === "active") return "customer";
+  if (status === "prospect" || status === "inactive") return status;
+  return "lead";
+}
+
+/**
  * Companies list split: a company is "worked" once it is past prospect or has
  * been checked in; the rest are unvisited prospects (the Prospects chip).
  */

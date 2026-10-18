@@ -126,8 +126,9 @@ export function TagsDashboard() {
       {data && data.chipsMissing > 0 && (
         <button
           type="button"
-          // Every rep's count in management mode: "My pieces" would hold only the viewer's.
-          onClick={() => navigate(fleet ? "/admin/tags/pieces" : `${APP_BASE}/pieces?chip=missing`)}
+          // Every rep's count in management mode: "My pieces" would hold only the viewer's, so it opens the
+          // Overview's "Chips to write" list (set-up pieces whose chip is not written and checked).
+          onClick={() => navigate(fleet ? "/admin/tags/overview/chipPending" : `${APP_BASE}/pieces?chip=missing`)}
           className="flex w-full items-center gap-3 rounded-2xl border border-red-400/40 bg-red-500/[0.12] p-4 text-left"
           data-testid="dashboard-chips-missing"
         >

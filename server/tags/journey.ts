@@ -14,6 +14,7 @@ import {
   type PlanKind,
   type PlanStatus,
 } from "#shared/tagJourney.js";
+import { kitCode } from "#shared/tagKits.js";
 import type { TagJourney, TagJourneyEntryItem, TagPlanItem } from "#shared/tagsApi.js";
 import { TagError, pgError } from "./errors.js";
 
@@ -177,7 +178,7 @@ export interface JourneyFilters {
 type EntryRow = {
   id: string; kind: string; action: string | null; title: string; content: string | null;
   batch_id: string | null; batch_code: string | null; tag_id: string | null; public_code: string | null;
-  serial_number: number | null; kit_id: string | null; rep_id: number | null; rep_name: string | null;
+  serial_number: number | null; kit_id: string | null; kit_number: number | null; rep_id: number | null; rep_name: string | null;
   lead_id: number | null; lead_name: string | null; plan_id: string | null; plan_title: string | null;
   before_value: string | null; after_value: string | null; source: string; actor: string;
   actor_user_id: string | null; actor_email: string | null; actor_rep_id: number | null; actor_name: string | null;
@@ -187,13 +188,14 @@ type EntryRow = {
 async function listEntriesWhere(where: SQL, limit: number, offset = 0): Promise<TagJourneyEntryItem[]> {
   const list = await rows<EntryRow>(sql`
     SELECT j.id, j.kind, j.action, j.title, j.content, j.batch_id, b.batch_code, j.tag_id, t.public_code,
-           t.serial_number, j.kit_id, j.rep_id, r.display_name AS rep_name, j.lead_id, l.name AS lead_name,
+           t.serial_number, j.kit_id, k.kit_number, j.rep_id, r.display_name AS rep_name, j.lead_id, l.name AS lead_name,
            j.plan_id, p.title AS plan_title, j.before_value, j.after_value, j.source, j.actor, j.actor_user_id,
            u.email AS actor_email, j.actor_rep_id, ar.display_name AS actor_name, j.status,
            j.metadata, j.occurred_at, j.created_at
     FROM tag_journey_entries j
     LEFT JOIN tag_batches b ON b.id = j.batch_id
     LEFT JOIN tags t ON t.id = j.tag_id
+    LEFT JOIN tag_kits k ON k.id = j.kit_id
     LEFT JOIN sales_reps r ON r.id = j.rep_id
     LEFT JOIN sales_reps ar ON ar.id = j.actor_rep_id
     LEFT JOIN sales_leads l ON l.id = j.lead_id
@@ -215,6 +217,7 @@ async function listEntriesWhere(where: SQL, limit: number, offset = 0): Promise<
     publicCode: r.public_code,
     serialNumber: r.serial_number,
     kitId: r.kit_id,
+    kitCode: r.kit_number == null ? null : kitCode(Number(r.kit_number)),
     repId: r.rep_id,
     repName: r.rep_name,
     leadId: r.lead_id,

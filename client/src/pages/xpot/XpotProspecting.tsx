@@ -49,6 +49,7 @@ import {
   stopStatusTone,
   STOP_MARKER_TONES,
   MAP_POINT_TONES,
+  routeOfJob,
   todayRouteOf,
   selectableCandidateIds,
   serverNowMs,
@@ -341,7 +342,7 @@ export function XpotProspecting() {
     setRouteParams(next);
   };
 
-  const generatedRoute = (routesQuery.data ?? []).find((route) => route.jobId === activeJobId);
+  const generatedRoute = routeOfJob(routesQuery.data, activeJobId);
   useEffect(() => {
     if (!generatedRoute || activeRouteId === generatedRoute.id) return;
     setSelectedJobId(null);
@@ -913,7 +914,7 @@ export function XpotProspecting() {
                       <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/[0.06] text-white/55"><StatusIcon className="h-5 w-5" aria-hidden="true" /></span>
                       <span className="min-w-0 flex-1">
                         <span className="flex min-w-0 items-center gap-2">
-                          <strong className="truncate capitalize text-sm text-white/90">{routeDisplayName(route, t.locale)}</strong>
+                          <strong className="truncate text-sm text-white/90 first-letter:uppercase">{routeDisplayName(route, t.locale)}</strong>
                           <Pill tone={routeStatusTone(route.status)} dot className="shrink-0">{routeStatusLabel(route.status, t, route.routeDate < today)}</Pill>
                         </span>
                         <span className="mt-1 block truncate text-xs text-white/45">{tu("routePlanLine", {
@@ -1326,7 +1327,7 @@ export function XpotProspecting() {
             <div className="min-w-0 space-y-6 p-4 sm:p-5 lg:overflow-y-auto lg:p-6">
             <div>
               <div className="flex items-center gap-2 text-indigo-300"><RouteIcon className="h-4 w-4" /><span className="text-xs font-bold uppercase tracking-wider">{routeContextLabel}</span></div>
-              <h2 className="mt-2 text-xl font-bold capitalize text-white">{selectedRouteName}</h2>
+              <h2 className="mt-2 text-xl font-bold text-white first-letter:uppercase">{selectedRouteName}</h2>
               <p className="mt-1 text-sm text-white/65">{tu("routeDetailLine", {
                 count: routeDetails.stops.length,
                 duration: formatDuration(routeDetails.route.totalDurationSeconds),
