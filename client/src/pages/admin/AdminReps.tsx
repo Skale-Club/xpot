@@ -254,7 +254,8 @@ function PeopleToolbar({ value, onChange, shown, total }: { value: PeopleFilters
 function Identity({ rep }: { rep: Rep }) {
   const t = useT(manageMessages);
   return (
-    <div className="min-w-0 flex-1">
+    // Wide enough to read the name: on a phone the row's other parts wrap below it instead.
+    <div className="min-w-[10rem] flex-1">
       <p className="truncate font-medium text-white">{rep.displayName}</p>
       <p className="truncate text-xs text-white/40">
         {rep.loginPhone ? formatPhone(rep.loginPhone) : <span className="text-amber-300/80">{t("noSignInPhone")}</span>}

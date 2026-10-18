@@ -151,7 +151,6 @@ function Editor({ rows }: { rows: LandingContentResponse[] }) {
             badge: dirty[item] ? <span className="h-1.5 w-1.5 rounded-full bg-amber-400" aria-hidden="true" /> : undefined,
           }))}
         />
-        <span data-testid="landing-status">{status}</span>
       </div>
 
       <div className="space-y-3">
@@ -238,7 +237,7 @@ function Editor({ rows }: { rows: LandingContentResponse[] }) {
       </div>
 
       {/* The one sticky footer of the admin: the editor is long, Publish stays in reach. */}
-      <FormFooter sticky status={status}>
+      <FormFooter sticky status={<span data-testid="landing-status">{status}</span>}>
         <Button variant="brand" disabled={!dirty[locale]} loading={save.isPending} onClick={() => save.mutate({ locale, content })} data-testid="landing-publish">
           <Save />{t("publish", { language: LANG_LABELS[locale] })}
         </Button>
