@@ -21,6 +21,7 @@ import { commonMessages } from "@/i18n/messages/common";
 import { manageMessages } from "@/i18n/messages/manage";
 import { integrationsMessages } from "@/i18n/messages/integrations";
 import { isXphereQueryKey, maskInboundKey, visibleXphereRows, type XphereRow } from "./integrationsUi";
+import { SERVICES_KEY } from "./platform/servicesUi";
 
 const XPHERE_KEY = ["/api/xpot/admin/xphere"];
 /** The read-only value boxes (endpoint, inbound key): the field's shape without being editable. */
@@ -122,6 +123,8 @@ function XphereRowCard({ row }: { row: XphereRow }) {
       setApiKey("");
       // The list and the person's own view in People (its key is per user).
       void queryClient.invalidateQueries({ predicate: (q) => isXphereQueryKey(q.queryKey) });
+      // Integrations › Services and Status count who is connected.
+      void queryClient.invalidateQueries({ queryKey: [...SERVICES_KEY] });
     },
     onError: (e: Error) => toast({ title: tm("errorSaving"), description: describeApiError(e, (path) => labels[path]), variant: "destructive" }),
   });

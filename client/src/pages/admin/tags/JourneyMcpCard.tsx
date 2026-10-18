@@ -17,6 +17,7 @@ import { manageTagsMessages } from "@/i18n/messages/manageTags";
 import { integrationsMessages } from "@/i18n/messages/integrations";
 import { ADMIN_TAGS_KEY, STALE_MS, errorMessage, getJson, sendJson } from "./api";
 import { queryClient } from "@/lib/queryClient";
+import { SERVICES_KEY } from "../platform/servicesUi";
 
 // Account › Integrations › "AI access (MCP)": two ways for an AI session to
 // reach /mcp (the Tags journey, prospecting and tasks, acting as the admin who
@@ -27,6 +28,8 @@ import { queryClient } from "@/lib/queryClient";
 
 const TOKENS_KEY = [ADMIN_TAGS_KEY, "mcp-tokens"];
 const CONNECTIONS_KEY = [ADMIN_TAGS_KEY, "mcp-connections"];
+/** Integrations › Services counts the assistants that can reach /mcp: refresh it after a change here. */
+const refreshServices = () => void queryClient.invalidateQueries({ queryKey: [...SERVICES_KEY] });
 
 function CopyField({ label, value }: { label: string; value: string }) {
   const t = useT(manageTagsMessages);
@@ -94,6 +97,7 @@ function CreateForm({ onCreated }: { onCreated: (created: McpTokenCreated) => vo
     mutationFn: () => sendJson<McpTokenCreated>("POST", "/api/xpot/admin/mcp-tokens", { name: name.trim() }),
     onSuccess: (created) => {
       void queryClient.invalidateQueries({ queryKey: TOKENS_KEY });
+      refreshServices();
       setName("");
       onCreated(created);
     },
@@ -136,6 +140,7 @@ function ConnectedApps() {
     mutationFn: (clientId: string) => sendJson<{ revoked: number }>("POST", `/api/xpot/admin/mcp-connections/${clientId}/revoke`),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: CONNECTIONS_KEY });
+      refreshServices();
       setRevoking(null);
       toast({ title: t("connectionRevoked"), variant: "success" });
     },
@@ -212,6 +217,7 @@ export function JourneyMcpCard() {
     mutationFn: (id: string) => sendJson<McpTokenItem>("POST", `/api/xpot/admin/mcp-tokens/${id}/revoke`),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: TOKENS_KEY });
+      refreshServices();
       setRevoking(null);
       toast({ title: t("tokenRevoked"), variant: "success" });
     },

@@ -31,6 +31,7 @@ import { peopleWorkspaceMessages } from "@/i18n/messages/peopleWorkspace";
 import { settingsMessages } from "@/i18n/messages/settings";
 import type { XpotMeResponse } from "@/pages/xpot/types";
 import { isXphereQueryKey, maskInboundKey } from "./integrationsUi";
+import { SERVICES_KEY } from "./platform/servicesUi";
 import { personStatus, type PeopleStatus } from "./peopleFilters";
 
 // One person in Account › People (/admin/reps/:repId): every decision about
@@ -845,6 +846,8 @@ function XphereConnection({ rep, userId }: { rep: Rep; userId: string }) {
       else toast({ title: t("xphereSavedFor", { name: rep.displayName }), variant: "success" });
       setToken("");
       refresh();
+      // Integrations › Services and Status count who is connected.
+      void queryClient.invalidateQueries({ queryKey: [...SERVICES_KEY] });
     },
     onError: fail,
   });
