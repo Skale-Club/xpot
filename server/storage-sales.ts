@@ -338,11 +338,16 @@ async function attachConsignmentRefs(rows: SalesConsignment[]): Promise<Consignm
 
 export async function listConsignments(filters: {
   repId?: number;
+  organizationIds?: number[];
   leadId?: number;
   status?: SalesConsignmentStatus;
 } = {}): Promise<ConsignmentWithRefs[]> {
   const conditions = [];
   if (filters.repId) conditions.push(eq(salesConsignments.repId, filters.repId));
+  if (filters.organizationIds) {
+    if (!filters.organizationIds.length) return [];
+    conditions.push(inArray(salesConsignments.organizationId, filters.organizationIds));
+  }
   if (filters.leadId) conditions.push(eq(salesConsignments.leadId, filters.leadId));
   if (filters.status) conditions.push(eq(salesConsignments.status, filters.status));
 

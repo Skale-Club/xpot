@@ -18,13 +18,15 @@ import {
   tagStockMovements,
   tags,
 } from "#shared/schema.js";
-import type { TagActor } from "#shared/tagAccess.js";
+import { canWorkOnTag, type TagActor } from "#shared/tagAccess.js";
+import { tagSystemReason } from "#shared/tagReasons.js";
 import { allocateSaleLineTotals, paymentStatusFor, resolveUnitPriceCents } from "#shared/pricing.js";
 import { resolveTagUnitCost, type TagSaleCreateInput } from "#shared/tagSales.js";
 import { salesStorage } from "../storage-sales.js";
+import { leadUsableBy } from "./repository.js";
 
 export class TagSaleError extends Error {
-  constructor(message: string, public status = 400, public code = "tag_sale_invalid") {
+  constructor(message: string, public status = 400, public code = "tag_sale_invalid", public params?: Record<string, string | number>) {
     super(message);
     this.name = "TagSaleError";
   }
@@ -67,7 +69,7 @@ export async function createTagSale(input: TagSaleCreateInput, actor: TagActor, 
       throw new TagSaleError("The seller's Tags cost policy must be confirmed by an administrator", 409, "seller_cost_policy_unconfigured");
     }
     if (!lead) throw new TagSaleError("Customer not found", 404, "lead_not_found");
-    if (!actor.isManager && lead.ownerRepId !== actor.repId) {
+    if (!actor.isManager && !(await leadUsableBy(actor, lead.id, tx))) {
       throw new TagSaleError("This customer is not assigned to you", 403, "lead_forbidden");
     }
     if (input.visitId) {
@@ -83,6 +85,7 @@ export async function createTagSale(input: TagSaleCreateInput, actor: TagActor, 
         id: tags.id,
         publicCode: tags.publicCode,
         repId: tags.repId,
+        organizationId: tags.organizationId,
         leadId: tags.leadId,
         status: tags.status,
         stockStatus: tags.stockStatus,
@@ -108,7 +111,7 @@ export async function createTagSale(input: TagSaleCreateInput, actor: TagActor, 
       .where(and(inArray(salesSaleTags.tagId, allTagIds), eq(salesSaleTags.status, "active")));
     if (activeLinks.length) {
       const codes = activeLinks.map((link) => tagsById.get(link.tagId)?.publicCode ?? link.tagId);
-      throw new TagSaleError(`Already sold: ${codes.join(", ")}`, 409, "tag_already_sold");
+      throw new TagSaleError(`Already sold: ${codes.join(", ")}`, 409, "tag_already_sold", { codes: codes.join(", ") });
     }
 
     const acquisitionRows = await tx
@@ -154,23 +157,28 @@ export async function createTagSale(input: TagSaleCreateInput, actor: TagActor, 
         const tag = tagsById.get(tagId)!;
         const effectiveProductId = tag.ownProductId ?? tag.batchProductId;
         if (effectiveProductId !== line.salesProductId) {
-          throw new TagSaleError(`Piece ${tag.publicCode} is not mapped to ${product.name}`, 409, "tag_product_mismatch");
+          throw new TagSaleError(`Piece ${tag.publicCode} is not mapped to ${product.name}`, 409, "tag_product_mismatch", { code: tag.publicCode, product: product.name });
         }
         if (tag.repId !== null && tag.repId !== sellerRepId) {
-          throw new TagSaleError(`Piece ${tag.publicCode} belongs to another seller`, 403, "tag_owner_mismatch");
+          throw new TagSaleError(`Piece ${tag.publicCode} belongs to another seller`, 403, "tag_owner_mismatch", { code: tag.publicCode });
+        }
+        // A reseller sells the pieces in their kit, never house stock they do not hold (canWorkOnTag, as everywhere
+        // else in Tags): selling one would take it into their hands, and cancelling the sale would keep it there.
+        if (!actor.isManager && !canWorkOnTag(actor, tag)) {
+          throw new TagSaleError(`Piece ${tag.publicCode} is not in your kit`, 403, "tag_not_yours", { code: tag.publicCode });
         }
         if (tag.status === "retired") {
-          throw new TagSaleError(`Piece ${tag.publicCode} is retired`, 409, "tag_retired");
+          throw new TagSaleError(`Piece ${tag.publicCode} is retired`, 409, "tag_retired", { code: tag.publicCode });
         }
         if (tag.stockStatus !== "available") {
-          throw new TagSaleError(`Piece ${tag.publicCode} is not available`, 409, "tag_not_available");
+          throw new TagSaleError(`Piece ${tag.publicCode} is not available`, 409, "tag_not_available", { code: tag.publicCode });
         }
         if (tag.leadId !== null && tag.leadId !== input.leadId) {
-          throw new TagSaleError(`Piece ${tag.publicCode} is assigned to another customer`, 409, "tag_lead_mismatch");
+          throw new TagSaleError(`Piece ${tag.publicCode} is assigned to another customer`, 409, "tag_lead_mismatch", { code: tag.publicCode });
         }
         const acquisition = acquisitionsByTag.get(tagId);
         if (seller.costPolicy === "acquisition" && acquisition?.acquisitionRepId !== sellerRepId) {
-          throw new TagSaleError(`Acquisition cost is missing for ${tag.publicCode}`, 409, "tag_cost_missing");
+          throw new TagSaleError(`Acquisition cost is missing for ${tag.publicCode}`, 409, "tag_cost_missing", { code: tag.publicCode });
         }
         let cost;
         try {
@@ -180,7 +188,7 @@ export async function createTagSale(input: TagSaleCreateInput, actor: TagActor, 
             overrideCostCents: acquisition?.overrideCostCents ?? null,
           });
         } catch {
-          throw new TagSaleError(`Acquisition cost is missing for ${tag.publicCode}`, 409, "tag_cost_missing");
+          throw new TagSaleError(`Acquisition cost is missing for ${tag.publicCode}`, 409, "tag_cost_missing", { code: tag.publicCode });
         }
         units.push({
           tagId,
@@ -307,7 +315,14 @@ export async function createTagSale(input: TagSaleCreateInput, actor: TagActor, 
   return { ...sale, pieces, replayed: transactionResult.replayed };
 }
 
-export async function cancelTagLinksForSale(saleId: number) {
+/**
+ * A cancelled sale gives its pieces back: the sale links end, and each piece still marked
+ * sold by this sale returns to stock in its seller's hands (rep_id is the seller since the
+ * sale), with the ownership it had before the sale, recorded as a `restore` movement that
+ * points at the sale. A piece whose stock moved on since (damaged, lost) keeps that status.
+ * It keeps its customer and destination; removing the customer is a separate step.
+ */
+export async function cancelTagLinksForSale(saleId: number, actorUserId: string | null = null) {
   await db.transaction(async (tx) => {
     const links = await tx
       .select({ tagId: salesSaleTags.tagId })
@@ -316,7 +331,41 @@ export async function cancelTagLinksForSale(saleId: number) {
       .for("update");
     if (!links.length) return;
     const now = new Date();
+    const tagIds = links.map((link) => link.tagId);
     await tx.update(salesSaleTags).set({ status: "cancelled", endedAt: now }).where(and(eq(salesSaleTags.saleId, saleId), eq(salesSaleTags.status, "active")));
-    await tx.update(tags).set({ soldAt: null, updatedAt: now }).where(inArray(tags.id, links.map((link) => link.tagId)));
+    await tx.update(tags).set({ soldAt: null, updatedAt: now }).where(inArray(tags.id, tagIds));
+
+    const [pieces, saleMovements] = await Promise.all([
+      tx.select({ id: tags.id, repId: tags.repId, stockStatus: tags.stockStatus, ownershipType: tags.ownershipType, custodianRepId: tags.custodianRepId })
+        .from(tags).where(inArray(tags.id, tagIds)).for("update"),
+      tx.select({ tagId: tagStockMovements.tagId, fromOwnershipType: tagStockMovements.fromOwnershipType })
+        .from(tagStockMovements)
+        .where(and(inArray(tagStockMovements.tagId, tagIds), eq(tagStockMovements.movementType, "sale"), eq(tagStockMovements.referenceType, "sale"), eq(tagStockMovements.referenceId, String(saleId)))),
+    ]);
+    const ownershipBefore = new Map(saleMovements.map((m) => [m.tagId, m.fromOwnershipType]));
+    for (const piece of pieces) {
+      if (piece.stockStatus !== "sold") continue;
+      const ownershipType = ownershipBefore.get(piece.id) ?? "company";
+      await tx.update(tags).set({
+        stockStatus: "available",
+        ownershipType,
+        custodianRepId: piece.repId,
+        stockUpdatedAt: now,
+      }).where(eq(tags.id, piece.id));
+      await tx.insert(tagStockMovements).values({
+        tagId: piece.id,
+        movementType: "restore",
+        fromStockStatus: piece.stockStatus,
+        toStockStatus: "available",
+        fromOwnershipType: piece.ownershipType,
+        toOwnershipType: ownershipType,
+        fromCustodianRepId: piece.custodianRepId,
+        toCustodianRepId: piece.repId,
+        referenceType: "sale",
+        referenceId: String(saleId),
+        actorUserId,
+        reason: tagSystemReason("sale_cancelled"),
+      });
+    }
   });
 }

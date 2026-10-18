@@ -1,7 +1,10 @@
 import { Router } from "express";
 import { z } from "zod";
-import { randomBytes } from "crypto";
 import { storage } from "../../storage.js";
+import { isFinishedVisitStatus } from "#shared/visit-status.js";
+import { repModules } from "#shared/modules.js";
+import { refusalBody, sendValidationError } from "../../lib/validation.js";
+import { genInboundKey, presentXphere, XPHERE_DEFAULT_URL, xphereConfigSchema } from "./xphere.js";
 import { requireSuperAdmin, requireXpotManager } from "./middleware.js";
 import {
   AccountError,
@@ -13,19 +16,20 @@ import {
   createResellerAccount,
   listRepsWithAccess,
   phoneChangeSchema,
+  refuseRep,
   resellerAccountSchema,
   unblockRep,
   type Actor,
 } from "./resellerAccounts.js";
 import { AccountDeletionError, deleteRepAccount } from "../../accountDeletion.js";
+import { organizationsForRep } from "../../organizations/service.js";
+import { teamActivity, teamActivitySince } from "./teamActivity.js";
 
 export function createAdminRouter() {
   const router = Router();
   // Only the /admin paths: this router is mounted at /api/xpot, so a bare router.use would guard
   // every route mounted after it (sales, consignments, products...) and lock plain reps out.
   router.use("/admin", requireXpotManager);
-
-  const genInboundKey = () => `xpot_${randomBytes(24).toString("base64url")}`;
 
   router.get("/admin/overview", async (_req, res) => {
     const [reps, leads, visits, opportunities, tasks, syncEvents] = await Promise.all([
@@ -50,7 +54,7 @@ export function createAdminRouter() {
         activeReps: reps.filter((rep) => rep.isActive).length,
         leads: leads.length,
         visitsInProgress: visits.filter((visit) => visit.status === "in_progress").length,
-        completedVisits: visits.filter((visit) => visit.status === "completed").length,
+        completedVisits: visits.filter((visit) => isFinishedVisitStatus(visit.status)).length,
         openOpportunities: opportunities.filter((item) => item.status === "open").length,
         pipelineValue: opportunities.filter((item) => item.status === "open").reduce((sum, item) => sum + (item.value || 0), 0),
         pendingTasks: tasks.filter((item) => item.status === "pending").length,
@@ -58,6 +62,14 @@ export function createAdminRouter() {
       },
       latestSyncEvents: syncEvents.slice(0, 10),
     });
+  });
+
+  // Visits › Manage › Overview: the period's numbers and one row per field rep
+  // (teamActivity.ts). ?since=<ISO start of the viewer's period> or ?days=N.
+  router.get("/admin/team-activity", async (req, res) => {
+    const since = teamActivitySince(req.query);
+    if (!since) return res.status(400).json({ message: "Choose a period of up to 400 days." });
+    res.json(await teamActivity(since));
   });
 
   router.get("/admin/reps", async (_req, res) => {
@@ -73,7 +85,7 @@ export function createAdminRouter() {
     try {
       res.status(status).json(await handler(req));
     } catch (err) {
-      if (err instanceof AccountError || err instanceof AccountDeletionError) return res.status(err.status).json({ message: err.message });
+      if (err instanceof AccountError || err instanceof AccountDeletionError) return res.status(err.status).json(refusalBody(err));
       if (err instanceof z.ZodError) return res.status(400).json({ message: err.issues[0]?.message ?? "Invalid input" });
       console.error(`[${req.method} ${req.path}]`, err);
       res.status(500).json({ message: "Something went wrong" });
@@ -82,7 +94,7 @@ export function createAdminRouter() {
   const withRep = (fn: (repId: number, req: any) => Promise<unknown>) =>
     accountRoute(async (req) => {
       const repId = repIdOf(req);
-      if (!repId) throw new AccountError("Invalid rep id", 400);
+      if (!repId) throw new AccountError("Invalid rep id", 400, "invalid_rep_id");
       return fn(repId, req);
     });
 
@@ -95,7 +107,8 @@ export function createAdminRouter() {
       email: z.string().email().optional().nullable(),
       phone: z.string().optional().nullable(),
       team: z.string().optional().nullable(),
-      role: z.enum(["rep", "manager", "admin"]).default("rep"),
+      // Omitted: the person keeps their role (a default of "rep" silently demoted managers and admins).
+      role: z.enum(["rep", "manager", "admin"]).optional(),
       vcardId: z.number().int().positive().optional().nullable(),
       ghlUserId: z.string().optional().nullable(),
       modules: z.array(z.enum(["visits", "tags"])).min(1).optional(),
@@ -103,14 +116,20 @@ export function createAdminRouter() {
     }).parse(req.body);
     const actor = actorOf(req);
     const existing = await storage.getSalesRepByUserId(input.userId);
-    if (!existing) throw new AccountError("Rep not found", 404);
-    if (!actor.isAdmin && (input.role !== "rep" || existing.role !== "rep")) {
-      throw new AccountError("Only an admin can change a manager's or admin's role.", 403);
+    if (!existing) throw new AccountError("Person not found", 404, "rep_not_found");
+    const role = input.role ?? existing.role;
+    if (!actor.isAdmin && (role !== "rep" || existing.role !== "rep")) {
+      throw new AccountError("Only an Xpot admin can change a manager's or admin's role.", 403, "role_change_admin_only");
+    }
+    // Demoting yourself would sign you out of the admin you are using, with nobody to undo it.
+    if (existing.userId === actor.userId && role !== existing.role) {
+      throw new AccountError("You can't change your own role.", 400, "own_role_locked");
     }
     const costPolicyChanged = input.costPolicy !== undefined &&
       (input.costPolicy !== existing.costPolicy || !existing.costPolicyConfiguredAt);
     return storage.updateSalesRepAccountProfile({
       ...input,
+      role,
       isActive: existing.isActive,
       ...(costPolicyChanged ? { costPolicyConfiguredAt: new Date(), costPolicyConfiguredByUserId: actor.userId } : {}),
     });
@@ -120,6 +139,7 @@ export function createAdminRouter() {
   router.post("/admin/reps/accounts", accountRoute((req) => createResellerAccount(resellerAccountSchema.parse(req.body), actorOf(req)), 201));
   router.post("/admin/reps/:id/approve", withRep((id, req) => approveRep(id, approveSchema.parse(req.body ?? {}).modules, actorOf(req))));
   router.post("/admin/reps/:id/block", withRep((id, req) => blockRep(id, blockSchema.parse(req.body ?? {}).reason, actorOf(req))));
+  router.post("/admin/reps/:id/refuse", withRep((id, req) => refuseRep(id, blockSchema.parse(req.body ?? {}).reason, actorOf(req))));
   router.post("/admin/reps/:id/unblock", withRep((id, req) => unblockRep(id, actorOf(req))));
   router.post("/admin/reps/:id/phone", withRep((id, req) => changeRepPhone(id, phoneChangeSchema.parse(req.body), actorOf(req))));
   // Delete the account and its data on the person's request (server/accountDeletion.ts).
@@ -127,6 +147,15 @@ export function createAdminRouter() {
   router.delete("/admin/reps/:id", requireSuperAdmin, withRep((id, req) => {
     z.object({ confirm: z.literal("DELETE", { errorMap: () => ({ message: 'Send { "confirm": "DELETE" } to delete this account.' }) }) }).parse(req.body ?? {});
     return deleteRepAccount(id, actorOf(req));
+  }));
+
+  // People › Organizations: where this person is a member, with each
+  // organization's name and their role there. Adding and removing go through
+  // the Organizations API (organizations.ts), which checks who may do it.
+  router.get("/admin/reps/:id/organizations", withRep(async (id) => {
+    const rep = await storage.getSalesRep(id);
+    if (!rep || rep.deletedAt) throw new AccountError("Person not found", 404, "rep_not_found");
+    return organizationsForRep(id);
   }));
 
   router.get("/admin/sync-events", async (_req, res) => {
@@ -166,6 +195,8 @@ export function createAdminRouter() {
   // ── Xphere per-user config, managed by the global admin across all reps ──
   router.use("/admin/xphere", requireSuperAdmin);
 
+  // Everyone is listed; the screen hides deleted placeholders, Tags-only people
+  // (Xphere syncs Visits) and anyone blocked or pending until "Show all".
   router.get("/admin/xphere", async (_req, res) => {
     const [reps, configs] = await Promise.all([
       storage.listSalesReps(),
@@ -175,46 +206,68 @@ export function createAdminRouter() {
     const items = reps.map((rep) => {
       const cfg = rep.userId ? byUser.get(rep.userId) : undefined;
       return {
+        ...presentXphere(cfg),
         userId: rep.userId,
         repId: rep.id,
         displayName: rep.displayName,
         email: rep.email,
-        inboundApiKey: cfg?.inboundApiKey ?? null,
-        apiUrl: cfg?.apiUrl ?? "https://xphere.app",
-        apiKeySet: Boolean(cfg?.apiKey),
-        isEnabled: Boolean(cfg?.isEnabled),
+        access: rep.blockedAt ? "blocked" : rep.isActive ? "active" : "pending",
+        deleted: Boolean(rep.deletedAt),
+        usesVisits: repModules(rep).includes("visits"),
       };
     });
     res.json(items);
   });
 
+  // An account that may hold an Xphere connection: a real, not deleted, person.
+  const xphereTarget = async (userId: string) => {
+    const rep = userId ? await storage.getSalesRepByUserId(userId) : undefined;
+    return rep && !rep.deletedAt ? rep : null;
+  };
+
+  // One person's connection, for People › Visits: the same fields as the list,
+  // plus when their last record went out (or failed to) and how it went.
+  router.get("/admin/xphere/:userId", async (req, res) => {
+    const rep = await xphereTarget(req.params.userId);
+    if (!rep) return res.status(404).json({ message: "Person not found" });
+    const [config, [last]] = await Promise.all([
+      storage.getXphereIntegrationByUserId(rep.userId),
+      storage.listSalesSyncEventsForRep(rep.id, 1),
+    ]);
+    res.json({
+      userId: rep.userId,
+      repId: rep.id,
+      ...presentXphere(config),
+      lastSync: last ? { status: last.status, at: last.lastAttemptAt ?? last.createdAt, error: last.lastError } : null,
+    });
+  });
+
   router.put("/admin/xphere/:userId", async (req, res) => {
     const userId = req.params.userId;
-    if (!userId) return res.status(400).json({ message: "userId required" });
+    if (!(await xphereTarget(userId))) return res.status(404).json({ message: "Person not found" });
 
-    const input = z
-      .object({
-        apiKey: z.string().trim().nullable().optional(),
-        apiUrl: z.string().url().nullable().optional(),
-        isEnabled: z.boolean().optional(),
-      })
-      .parse(req.body);
+    const parsed = xphereConfigSchema.safeParse(req.body ?? {});
+    if (!parsed.success) return sendValidationError(res, parsed.error, "Invalid input");
+    const input = parsed.data;
 
     const existing = await storage.getXphereIntegrationByUserId(userId);
     const data: Record<string, unknown> = {};
     if (input.apiKey !== undefined) data.apiKey = input.apiKey || null;
-    if (input.apiUrl !== undefined) data.apiUrl = input.apiUrl || "https://xphere.app";
+    // Empty means "the default address", not an invalid URL.
+    if (input.apiUrl !== undefined) data.apiUrl = input.apiUrl || XPHERE_DEFAULT_URL;
     if (input.isEnabled !== undefined) data.isEnabled = input.isEnabled;
     if (!existing?.inboundApiKey) data.inboundApiKey = genInboundKey();
 
     const saved = await storage.upsertXphereIntegration(userId, data);
-    res.json({
-      userId,
-      inboundApiKey: saved.inboundApiKey ?? null,
-      apiUrl: saved.apiUrl ?? "https://xphere.app",
-      apiKeySet: Boolean(saved.apiKey),
-      isEnabled: Boolean(saved.isEnabled),
-    });
+    res.json({ userId, ...presentXphere(saved) });
+  });
+
+  // A leaked key can be replaced: the old one stops working at once (inbound.ts looks keys up).
+  router.post("/admin/xphere/:userId/rotate-inbound-key", async (req, res) => {
+    const userId = req.params.userId;
+    if (!(await xphereTarget(userId))) return res.status(404).json({ message: "Person not found" });
+    const saved = await storage.upsertXphereIntegration(userId, { inboundApiKey: genInboundKey() });
+    res.json({ userId, ...presentXphere(saved) });
   });
 
   return router;

@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, Lock, Nfc, Smartphone, X } from "lucide-react";
+import { Check, Lock, Nfc, RotateCw, Smartphone } from "lucide-react";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { errorText, haptic } from "./lib";
-import { BTN_PRIMARY, BTN_SECONDARY, BTN_TERTIARY, BottomSheet, CopyButton, EYEBROW_MUTED, SHEET_TITLE, Spinner, TapAnimation, type Identity } from "./ui";
+import { Button } from "@/components/ui/button";
+import { InlineAlert } from "@/components/xpot/InlineAlert";
+import { BottomSheet, CARD, CopyButton, EYEBROW_MUTED, SHEET_TITLE, SheetActions, Spinner, StepList, TapAnimation, type Identity } from "./ui";
 import { isWebNfcSupported, mapNfcError, readBack, writeContent } from "./webNfc";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { contentKindOf } from "@shared/chipContent";
@@ -115,22 +117,11 @@ export default function WriteSheet({ open, url, identity, onClose, onDone, conti
     onClose();
   };
 
-  const errorBox = phase === "error" && error && (
-    <p role="alert" className="rounded-2xl border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm font-medium text-red-100">
-      {error}
-    </p>
-  );
+  const errorBox = phase === "error" && error && <InlineAlert tone="error">{error}</InlineAlert>;
 
   return (
     <BottomSheet open={open} onClose={close} title={t("writeTitle")}>
-      <div className="flex items-center justify-between">
-        <h2 className={SHEET_TITLE}>{t("writeTitle")}</h2>
-        <button type="button" onClick={close} aria-label={tc("close")} className="flex h-11 w-11 items-center justify-center rounded-full text-white/60 active:bg-white/10">
-          <X className="h-5 w-5" />
-        </button>
-      </div>
-
-      <div className="mt-2 rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+      <div className={`${CARD} p-4`}>
         <p className={EYEBROW_MUTED}>{t("writeUrl")}</p>
         <p className="mt-1 whitespace-pre-wrap break-all font-mono text-sm tracking-wide text-white" data-testid="text-write-url">
           {url}
@@ -151,56 +142,60 @@ export default function WriteSheet({ open, url, identity, onClose, onDone, conti
             confirmed ? (
               <p className="mt-2 text-sm font-semibold text-emerald-300" data-testid="iphone-confirmed">{t("iphoneConfirmed")}</p>
             ) : (
-              <div className="mt-3 rounded-2xl border border-blue-400/25 bg-blue-500/[0.08] p-3 text-left" data-testid="iphone-confirm">
-                <p className="flex items-center gap-2 text-sm font-bold text-white">
-                  <Spinner className="h-4 w-4 text-blue-300" />
-                  {t("iphoneConfirmTitle")}
-                </p>
-                <p className="mt-1 text-sm text-white/60">{t("iphoneConfirmHint")}</p>
+              <div className="mt-3 text-left" data-testid="iphone-confirm">
+                <InlineAlert tone="info" title={t("iphoneConfirmTitle")} action={<Spinner className="h-4 w-4 text-blue-300" />}>
+                  {t("iphoneConfirmHint")}
+                </InlineAlert>
               </div>
             )
           ) : (
             !lastVerified && <p className="mt-1 text-sm text-white/50">{t("notReadBack")}</p>
           )}
-          <button type="button" onClick={close} className={`${BTN_PRIMARY} mt-5`}>
-            {tc("done")}
-          </button>
-          {/* Android locks right away; an iPhone once a real tap confirmed the write (lock a wrong chip and it is lost). */}
-          {onLock && (supported || confirmed) && (
-            <button
-              type="button"
-              onClick={() => {
-                close();
-                onLock();
-              }}
-              className={`${BTN_TERTIARY} mt-2`}
-              data-testid="button-write-then-lock"
-            >
-              <Lock className="h-5 w-5 text-amber-300" />
-              {t("lockNow")}
-            </button>
-          )}
+          <SheetActions className="mt-5">
+            <Button type="button" variant="brand" accent="tags" size="lg" onClick={close} className="w-full">
+              {tc("done")}
+            </Button>
+            {/* Android locks right away; an iPhone once a real tap confirmed the write (lock a wrong chip and it is lost). */}
+            {onLock && (supported || confirmed) && (
+              <Button
+                type="button"
+                variant="secondary"
+                size="lg"
+                onClick={() => {
+                  close();
+                  onLock();
+                }}
+                className="w-full"
+                data-testid="button-write-then-lock"
+              >
+                <Lock className="!size-5" />
+                {t("lockNow")}
+              </Button>
+            )}
+          </SheetActions>
         </div>
       ) : phase === "writing" ? (
         <>
           <TapAnimation identity={identity} icon={Nfc} label={t("holdChip")} sub={t("holdChipSub")} />
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="lg"
             onClick={() => {
               cancel();
               setPhase("idle");
             }}
-            className={BTN_TERTIARY}
+            className="w-full"
           >
             {tc("cancel")}
-          </button>
+          </Button>
         </>
       ) : phase === "verifying" ? (
         <>
           <TapAnimation identity={identity} icon={Nfc} label={t("tapAgain")} sub={t("tapAgainSub")} />
-          <button type="button" onClick={skipVerify} className={BTN_TERTIARY}>
+          <Button type="button" variant="secondary" size="lg" onClick={skipVerify} className="w-full">
             {t("skipCheck")}
-          </button>
+          </Button>
         </>
       ) : phase === "saving" ? (
         <div className="flex flex-col items-center py-8 text-white/60">
@@ -210,17 +205,15 @@ export default function WriteSheet({ open, url, identity, onClose, onDone, conti
       ) : supported ? (
         <div className="mt-5 space-y-3">
           {errorBox}
-          <button type="button" onClick={() => void startWrite()} className={BTN_PRIMARY} data-testid="button-write-now">
-            <Nfc className="h-5 w-5" />
-            {phase === "error" ? tc("retry") : t("writeNow")}
-          </button>
-          <button
-            type="button"
-            onClick={() => void report({ method: "manual", verified: false, readbackUrl: null })}
-            className="min-h-[44px] w-full text-sm font-semibold text-white/45 active:text-white"
-          >
-            {t("wroteElsewhere")}
-          </button>
+          <SheetActions>
+            <Button type="button" variant="brand" accent="tags" size="lg" onClick={() => void startWrite()} className="w-full" data-testid="button-write-now">
+              {phase === "error" ? <RotateCw className="!size-5" /> : <Nfc className="!size-5" />}
+              {phase === "error" ? tc("retry") : t("writeNow")}
+            </Button>
+            <Button type="button" variant="ghost" onClick={() => void report({ method: "manual", verified: false, readbackUrl: null })} className="w-full">
+              {t("wroteElsewhere")}
+            </Button>
+          </SheetActions>
         </div>
       ) : (
         <div className="mt-5">
@@ -232,26 +225,22 @@ export default function WriteSheet({ open, url, identity, onClose, onDone, conti
                 <Smartphone className="h-4 w-4" />
                 {t("iphoneTitle")}
               </div>
-              <ol className="mt-3 space-y-2">
-                {manualSteps(url).map((step, i) => (
-                  <li key={step} className="flex gap-3 text-sm text-white/75">
-                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-blue-500/15 text-xs font-bold text-blue-300">{i + 1}</span>
-                    <span className="pt-0.5">{t(step)}</span>
-                  </li>
-                ))}
-              </ol>
+              <StepList className="mt-3" steps={manualSteps(url).map((step) => ({ key: step, text: t(step) }))} />
             </>
           )}
           {errorBox && <div className="mt-4">{errorBox}</div>}
-          <button
+          <Button
             type="button"
+            variant="brand"
+            accent="tags"
+            size="lg"
             onClick={() => void report({ method: "manual", verified: false, readbackUrl: null })}
-            className={`${BTN_SECONDARY} mt-5`}
+            className="mt-5 w-full"
             data-testid="button-mark-written"
           >
-            <Check className="h-5 w-5" />
+            <Check className="!size-5" />
             {t("markWritten")}
-          </button>
+          </Button>
         </div>
       )}
     </BottomSheet>

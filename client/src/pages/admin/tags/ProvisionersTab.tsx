@@ -1,30 +1,27 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Copy, KeyRound, Laptop, X } from "lucide-react";
+import { KeyRound, Laptop, X } from "lucide-react";
 import type { ProvisionerDeviceItem } from "@shared/tagsApi";
 import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/i18n";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
+import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
+import { CopyButton } from "@/components/xpot/CopyButton";
+import { SectionCard } from "@/components/xpot/DashboardKit";
+import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
+import { Input } from "@/components/xpot/Field";
+import { PROVISIONER_STATUS_TONE, Pill, toneOf } from "@/components/xpot/StatusPill";
+import { GLASS_CLASS } from "@/components/xpot/surface";
 import { ADMIN_TAGS_KEY, STALE_MS, errorMessage, formatDateTime, getJson, invalidateAdminTags, sendJson } from "./api";
-import { BTN, BTN_DANGER, CARD, Empty, INPUT, SectionTitle } from "./ui";
-import { ConfirmDialog, ErrorLine, Loading } from "./batches-shared";
-
-const DEVICE_TONES: Record<string, string> = {
-  active: "bg-emerald-400/10 text-emerald-300",
-  pairing: "bg-amber-400/10 text-amber-300",
-  revoked: "bg-white/5 text-white/40",
-};
+import { Loading } from "./pieces-shared";
 
 const DEVICE_KEYS = { active: "device_active", pairing: "device_pairing", revoked: "device_revoked" } as const;
 
 function DevicePill({ status }: { status: string }) {
   const t = useT(manageTagsMessages);
   const key = DEVICE_KEYS[status as keyof typeof DEVICE_KEYS];
-  return (
-    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${DEVICE_TONES[status] ?? "bg-white/10 text-white/60"}`}>
-      {key ? t(key) : status}
-    </span>
-  );
+  return <Pill tone={toneOf(PROVISIONER_STATUS_TONE, status)}>{key ? t(key) : status}</Pill>;
 }
 
 interface Pairing {
@@ -33,43 +30,18 @@ interface Pairing {
   deviceName: string;
 }
 
-function CopyButton({ value, label, copiedTitle }: { value: string; label: string; copiedTitle: string }) {
-  const t = useT(manageTagsMessages);
-  const { toast } = useToast();
-  return (
-    <button
-      type="button"
-      onClick={() => {
-        navigator.clipboard?.writeText(value).then(
-          () => toast({ title: copiedTitle }),
-          () => toast({ title: t("couldNotCopy"), variant: "destructive" }),
-        );
-      }}
-      className="rounded-md p-1.5 text-white/40 hover:bg-white/10 hover:text-white"
-      aria-label={t("copyLabel", { label: label.toLowerCase() })}
-    >
-      <Copy className="h-4 w-4" />
-    </button>
-  );
-}
-
 function PairingCode({ pairing, onClose }: { pairing: Pairing; onClose: () => void }) {
   const t = useT(manageTagsMessages);
   const server = typeof window !== "undefined" ? window.location.origin : "";
   return (
-    <div className="relative rounded-2xl border border-blue-500/30 bg-blue-500/[0.06] p-5" data-testid="admin-tags-pairing-code">
-      <button
-        type="button"
-        onClick={onClose}
-        className="absolute right-3 top-3 rounded-md p-1 text-white/40 hover:bg-white/10 hover:text-white"
-        aria-label={t("hidePairingCode")}
-      >
+    <div className="relative rounded-2xl border border-violet-400/25 bg-violet-500/[0.07] p-5" data-testid="admin-tags-pairing-code">
+      <Button type="button" variant="ghost" size="icon" onClick={onClose} className="absolute right-1 top-1" aria-label={t("hidePairingCode")}>
         <X className="h-4 w-4" />
-      </button>
+      </Button>
       <p className="text-center text-xs text-white/50">{t("pairingCodeFor", { name: pairing.deviceName })}</p>
-      <div className="my-2 flex items-center justify-center gap-2">
-        <p className="select-all font-mono text-4xl font-bold tracking-[0.2em] text-white">{pairing.code}</p>
-        <CopyButton value={pairing.code} label={t("pairingCodeLabel")} copiedTitle={t("pairingCodeCopied")} />
+      <div className="my-2 flex flex-wrap items-center justify-center gap-2">
+        <p className="select-all font-mono text-3xl font-bold tracking-[0.2em] text-white sm:text-4xl">{pairing.code}</p>
+        <CopyButton value={pairing.code} iconOnly label={t("copyLabel", { label: t("pairingCodeLabel").toLowerCase() })} />
       </div>
       <p className="text-center text-xs text-white/45">{t("pairingCodeExpiry", { date: formatDateTime(pairing.expiresAt) })}</p>
       <ol className="mx-auto mt-4 max-w-md list-decimal space-y-1 pl-5 text-sm text-white/70">
@@ -80,9 +52,9 @@ function PairingCode({ pairing, onClose }: { pairing: Pairing; onClose: () => vo
         </li>
         <li>
           {t("pairStep2")}{" "}
-          <span className="inline-flex items-center gap-1 font-mono text-white">
+          <span className="inline-flex max-w-full items-center gap-1 break-all font-mono text-white">
             {server}
-            <CopyButton value={server} label={t("serverAddressLabel")} copiedTitle={t("serverAddressCopied")} />
+            <CopyButton value={server} iconOnly label={t("copyLabel", { label: t("serverAddressLabel").toLowerCase() })} />
           </span>
         </li>
         <li>{t("pairStep3")}</li>
@@ -103,7 +75,7 @@ export function ProvisionersTab(_props: { go: (path: string) => void }) {
   const [name, setName] = useState("");
   const [pairing, setPairing] = useState<Pairing | null>(null);
   const [revoking, setRevoking] = useState<ProvisionerDeviceItem | null>(null);
-  const { data: devices = [], isLoading, isError } = useQuery<ProvisionerDeviceItem[]>({
+  const { data: devices = [], isLoading, error, refetch } = useQuery<ProvisionerDeviceItem[]>({
     queryKey: [ADMIN_TAGS_KEY, "provisioners"],
     queryFn: () => getJson("/api/xpot/admin/tag-provisioners"),
     staleTime: STALE_MS,
@@ -139,42 +111,33 @@ export function ProvisionersTab(_props: { go: (path: string) => void }) {
 
   return (
     <div className="space-y-6">
-      <section className={`${CARD} space-y-4 p-5`}>
-        <div>
-          <p className="flex items-center gap-2 text-sm font-semibold text-white">
-            <KeyRound className="h-4 w-4 text-white/50" />
-            {t("pairComputer")}
-          </p>
-          <p className="mt-1 text-xs text-white/45">
-            {t("pairComputerHint")}
-          </p>
-        </div>
+      <SectionCard accent="tags" icon={KeyRound} title={t("pairComputer")} bodyClassName="space-y-4 p-4">
+        <p className="text-xs text-white/45">{t("pairComputerHint")}</p>
         <form onSubmit={submit} className="flex flex-col gap-2 sm:flex-row">
-          <input
+          <Input
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder={t("computerNamePlaceholder")}
+            aria-label={t("computerNamePlaceholder")}
             maxLength={80}
-            className={INPUT}
             data-testid="admin-tags-provisioner-name"
           />
-          <button type="submit" disabled={!name.trim() || create.isPending} className={`${BTN} shrink-0`}>
-            {create.isPending ? t("creating") : t("createPairingCode")}
-          </button>
+          <Button type="submit" variant="brand" accent="tags" className="shrink-0" disabled={!name.trim()} loading={create.isPending}>
+            {t("createPairingCode")}
+          </Button>
         </form>
         {pairing && <PairingCode pairing={pairing} onClose={() => setPairing(null)} />}
-      </section>
+      </SectionCard>
 
-      <section>
-        <SectionTitle>{t("computers")}</SectionTitle>
+      <SectionCard accent="tags" icon={Laptop} title={t("computers")} bodyClassName="p-3">
         {isLoading ? (
-          <Loading />
-        ) : isError ? (
-          <ErrorLine>{t("computersLoadError")}</ErrorLine>
+          <Loading rows={2} />
+        ) : error ? (
+          <ErrorState compact title={t("computersLoadError")} message={errorMessage(error)} onRetry={() => void refetch()} />
         ) : devices.length === 0 ? (
-          <Empty>{t("noComputers")}</Empty>
+          <EmptyState compact tone="tags" icon={Laptop} title={t("noComputers")} cardStyle={{}} />
         ) : (
-          <ul className={`${CARD} divide-y divide-white/5`}>
+          <ul className={`divide-y divide-white/5 rounded-2xl ${GLASS_CLASS}`}>
             {devices.map((d) => (
               <li key={d.id} className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between" data-testid={`admin-tags-provisioner-${d.id}`}>
                 <div className="flex min-w-0 items-center gap-3">
@@ -201,15 +164,15 @@ export function ProvisionersTab(_props: { go: (path: string) => void }) {
                   </div>
                 </div>
                 {d.status !== "revoked" && (
-                  <button type="button" onClick={() => setRevoking(d)} disabled={revoke.isPending} className={`${BTN_DANGER} shrink-0`}>
+                  <Button type="button" variant="danger" size="sm" className="min-h-10 shrink-0 self-start sm:self-auto" onClick={() => setRevoking(d)} disabled={revoke.isPending}>
                     {d.status === "pairing" ? t("cancelCode") : t("revoke")}
-                  </button>
+                  </Button>
                 )}
               </li>
             ))}
           </ul>
         )}
-      </section>
+      </SectionCard>
 
       <ConfirmDialog
         open={!!revoking}
@@ -221,7 +184,7 @@ export function ProvisionersTab(_props: { go: (path: string) => void }) {
             : t("revokeDeviceDesc")
         }
         confirmLabel={revoking?.status === "pairing" ? t("cancelCode") : t("revoke")}
-        destructive
+        tone="danger"
         busy={revoke.isPending}
         onConfirm={() => revoking && revoke.mutate(revoking.id)}
       />

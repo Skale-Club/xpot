@@ -72,6 +72,23 @@ test.skipIf(!enabled)("reseller access: create, approve, block, unblock, phone",
     const back = await accounts.unblockRep(pending.id, manager);
     assert.equal(back.isActive, true);
     assert.equal(back.blockedAt, null);
+    // A plain block is not a refusal.
+    assert.equal(list.find((r) => r.id === pending.id)?.refused, false);
+
+    // Refusing a sign-up blocks it too, but People lists it as refused.
+    const [refusedUser] = (await db.execute(sql`INSERT INTO users (phone, first_name) VALUES ('+15550110077', 'Rui') RETURNING id`)).rows as any[];
+    const applicant = await storage.upsertSalesRep({ userId: refusedUser.id, displayName: "Rui", phone: "+15550110077", isActive: false });
+    const refused = await accounts.refuseRep(applicant.id, "No car", manager);
+    assert.ok(refused.blockedAt);
+    assert.equal(refused.blockedReason, "Sign-up refused: No car");
+    // Marked explicitly (refused_at); a plain block left it empty.
+    assert.ok(refused.refusedAt);
+    assert.equal(blocked.refusedAt, null);
+    list = await accounts.listRepsWithAccess();
+    assert.equal(list.find((r) => r.id === applicant.id)?.access, "blocked");
+    assert.equal(list.find((r) => r.id === applicant.id)?.refused, true);
+    // Only someone still waiting can be refused.
+    await assert.rejects(accounts.refuseRep(pending.id, null, manager), (err: any) => err.status === 409);
 
     // Managers can't touch admins; nobody can block themselves.
     await assert.rejects(accounts.blockRep(boss.id, null, manager), (err: any) => err.status === 403);

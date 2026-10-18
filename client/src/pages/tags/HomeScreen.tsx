@@ -19,17 +19,15 @@ import {
   tagPath,
   useBanner,
 } from "./lib";
+import { Button } from "@/components/ui/button";
 import {
   ActionTile,
-  BTN_DIRECT,
-  BTN_TERTIARY,
   Banner,
   BottomSheet,
   CARD,
-  EYEBROW_MUTED,
   INPUT,
-  SHEET_TITLE,
-  Spinner,
+  SheetActions,
+  TAGS_FILL,
   TapAnimation,
 } from "./ui";
 import { isWebNfcSupported, mapNfcError, scanOnce } from "./webNfc";
@@ -159,7 +157,7 @@ export default function HomeScreen() {
         submitCode();
       }}
     >
-      <label htmlFor="tag-code" className={`mb-2 block ${EYEBROW_MUTED}`}>
+      <label htmlFor="tag-code" className="mb-1.5 block text-xs font-semibold text-white/60">
         {isComputer ? t("typeCode") : t("orTypeCode")}
       </label>
       <div className="flex gap-2">
@@ -179,15 +177,18 @@ export default function HomeScreen() {
           data-testid="input-tag-code"
           data-shortcut="search"
         />
-        <button
+        <Button
           type="submit"
-          disabled={busy || code.trim().length < 8}
+          variant="brand"
+          accent="tags"
+          size="icon"
+          loading={busy}
+          disabled={code.trim().length < 8}
           aria-label={t("open")}
-          className="flex min-h-[48px] min-w-[48px] shrink-0 items-center justify-center rounded-2xl bg-blue-500 text-white disabled:opacity-40"
           data-testid="button-open-code"
         >
-          {busy ? <Spinner /> : <ArrowRight className="h-5 w-5" />}
-        </button>
+          <ArrowRight className="!size-5" />
+        </Button>
       </div>
       {isDesktop && <p className="mt-2 text-xs text-white/35">{t("scannerHint")}</p>}
     </form>
@@ -196,7 +197,7 @@ export default function HomeScreen() {
   const main = (
     <div className="space-y-5">
       {sellTo && (
-        <div className="flex items-center gap-3 rounded-[20px] border border-emerald-400/25 bg-emerald-400/[0.08] p-4" data-testid="selling-to">
+        <div className="flex items-center gap-3 rounded-2xl border border-emerald-400/25 bg-emerald-400/[0.08] p-4" data-testid="selling-to">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-400/15 text-emerald-300">
             <Building2 className="h-5 w-5" />
           </span>
@@ -204,18 +205,19 @@ export default function HomeScreen() {
             <span className="block truncate text-base font-bold text-white">{t("sellingTo", { name: sellTo.name })}</span>
             <span className="block text-xs text-white/50">{t("sellingToHint")}</span>
           </span>
-          <button
+          <Button
             type="button"
+            variant="secondary"
+            size="sm"
             onClick={() => {
               clearSellTo();
               setSellToState(null);
             }}
-            aria-label={t("stopSelling")}
-            className="flex h-10 shrink-0 items-center gap-1 rounded-xl border border-white/10 px-3 text-xs font-semibold text-white/70 active:bg-white/10"
+            className="min-h-10"
           >
-            <X className="h-4 w-4" />
+            <X />
             {t("stopSelling")}
-          </button>
+          </Button>
         </div>
       )}
 
@@ -252,15 +254,9 @@ export default function HomeScreen() {
         />
       )}
 
-      <BottomSheet open={sheet?.kind === "read"} onClose={() => setSheet(null)} title={t("readPiece")}>
-        <h2 className={SHEET_TITLE}>{t("readPiece")}</h2>
-        {banner && (
-          <div className="mt-3">
-            <Banner banner={banner} />
-          </div>
-        )}
+      <BottomSheet open={sheet?.kind === "read"} onClose={() => setSheet(null)} title={t("readPiece")} banner={banner}>
         {/* QR first: it always works, while a chip is only found once it has been written. */}
-        <div className="mt-4 grid grid-cols-2 gap-3">
+        <div className="mt-1 grid grid-cols-2 gap-3">
           <button
             type="button"
             onClick={() => {
@@ -270,7 +266,7 @@ export default function HomeScreen() {
             disabled={busy}
             data-testid="button-scan-qr"
             style={{ WebkitTapHighlightColor: "transparent" }}
-            className="flex min-h-[164px] flex-col items-center justify-center gap-2.5 rounded-[22px] bg-gradient-to-br from-blue-500 to-indigo-500 p-3 text-center text-white shadow-[0_8px_24px_rgba(59,130,246,0.25)] transition-transform active:scale-[0.97] disabled:opacity-60"
+            className={`flex min-h-[164px] flex-col items-center justify-center gap-2.5 rounded-2xl p-3 text-center text-white transition-transform active:scale-[0.97] disabled:opacity-60 ${TAGS_FILL}`}
           >
             <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">
               {t("recommended")}
@@ -289,23 +285,24 @@ export default function HomeScreen() {
             disabled={busy || !nfcSupported}
             data-testid="button-scan-nfc"
             style={{ WebkitTapHighlightColor: "transparent" }}
-            className="flex min-h-[164px] flex-col items-center justify-center gap-2.5 rounded-[22px] border border-white/10 bg-white/[0.04] p-3 text-center text-white transition-transform active:scale-[0.97] disabled:opacity-50"
+            className={`${CARD} flex min-h-[164px] flex-col items-center justify-center gap-2.5 p-3 text-center text-white transition-transform active:scale-[0.97] disabled:opacity-50`}
           >
-            <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/[0.06] text-blue-300">
+            <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/[0.06] text-violet-300">
               <Nfc className="h-8 w-8" />
             </span>
             <span>
               <span className="block text-base font-bold leading-tight">{t("readChip")}</span>
-              <span className="mt-1 block text-[11px] leading-snug text-amber-200/80">
+              {/* Amber only when it is a warning: this phone cannot read chips. */}
+              <span className={`mt-1 block text-[11px] leading-snug ${nfcSupported ? "text-white/50" : "text-amber-200/80"}`}>
                 {nfcSupported ? t("readChipHint") : t("readChipUnavailable")}
               </span>
             </span>
           </button>
         </div>
         <div className="mt-5 border-t border-white/10 pt-4">{codeForm}</div>
-        <button type="button" onClick={() => setSheet(null)} className={`mt-4 ${BTN_TERTIARY}`}>
+        <Button type="button" variant="ghost" size="lg" onClick={() => setSheet(null)} className="mt-4 w-full">
           {tc("cancel")}
-        </button>
+        </Button>
       </BottomSheet>
 
       <BottomSheet
@@ -317,29 +314,30 @@ export default function HomeScreen() {
         title={t("readPiece")}
       >
         <TapAnimation identity="xpot" icon={Nfc} label={t("readingTitle")} sub={t("readingSub")} />
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="lg"
           onClick={() => {
             stopNfc();
             setSheet(null);
           }}
-          className={BTN_TERTIARY}
+          className="w-full"
         >
           {tc("cancel")}
-        </button>
+        </Button>
       </BottomSheet>
 
       <BottomSheet open={sheet?.kind === "empty"} onClose={() => setSheet(null)} title={t("chipEmpty")}>
-        <h2 className={SHEET_TITLE}>{t("chipEmpty")}</h2>
-        <div className="mt-5 space-y-3">
-          <button type="button" onClick={() => navigate(directPath())} className={BTN_DIRECT}>
-            <Link2 className="h-5 w-5" />
+        <SheetActions className="mt-2">
+          <Button type="button" variant="brand" accent="tags" size="lg" onClick={() => navigate(directPath())} className="w-full">
+            <Link2 className="!size-5" />
             {t("openDirect")}
-          </button>
-          <button type="button" onClick={() => setSheet(null)} className={BTN_TERTIARY}>
+          </Button>
+          <Button type="button" variant="ghost" size="lg" onClick={() => setSheet(null)} className="w-full">
             {tc("close")}
-          </button>
-        </div>
+          </Button>
+        </SheetActions>
       </BottomSheet>
     </div>
   );

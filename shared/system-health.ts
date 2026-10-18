@@ -6,6 +6,25 @@ import type { SystemEventLevel } from "./schema/observability.js";
 /** healthy → slow → stalled/down: "slow" still moves, "stalled" has stopped moving. */
 export type HealthVerdict = "healthy" | "slow" | "stalled" | "down" | "idle";
 
+/** Why a verdict was given, stable across languages (the screen words it and says what to do). */
+export type HealthReasonCode =
+  // one search
+  | "engine_never_confirmed"
+  | "run_not_checked"
+  | "past_time_limit"
+  | "slower_than_usual"
+  | "running_normally"
+  // the worker
+  | "engine_not_configured"
+  | "worker_not_running"
+  | "worker_not_ticking"
+  | "tick_running_long"
+  | "last_tick_failed"
+  | "ticking_normally"
+  // a finished search with no route
+  | "route_building_stuck"
+  | "route_not_built";
+
 export type ActiveRunHealth = {
   runId: number;
   jobId: number;
@@ -25,6 +44,7 @@ export type ActiveRunHealth = {
   /** Median duration of recent completed runs, the "normal" to compare against. */
   typicalMs: number | null;
   verdict: HealthVerdict;
+  reasonCode: HealthReasonCode;
   reason: string;
 };
 
@@ -53,7 +73,10 @@ export type StuckJob = {
   status: string;
   routePlanningStatus: string;
   updatedAt: string;
+  reasonCode: HealthReasonCode;
   reason: string;
+  /** Status can ask for the route again (POST /admin/system-health/jobs/:id/retry-route). */
+  canRetry: boolean;
 };
 
 export type EventGroup = {
@@ -72,6 +95,7 @@ export type SystemHealthSnapshot = {
   overall: HealthVerdict;
   worker: {
     verdict: HealthVerdict;
+    reasonCode: HealthReasonCode;
     reason: string;
     engineConfigured: boolean;
     pollMs: number;
@@ -127,3 +151,30 @@ export type SystemEventRow = {
   repName: string | null;
   fingerprint: string;
 };
+
+/**
+ * A record that did not reach the CRM (Admin › Status › CRM sync): the latest
+ * sync attempt of one entity with one provider, when it failed or needs review.
+ */
+export type SyncProblem = {
+  /** sales_sync_events.id of that latest attempt. */
+  id: number;
+  /** "xphere" or "gohighlevel" (legacy). */
+  provider: string;
+  entityType: string;
+  entityId: string;
+  /** The company, the visit's or sale's company, or the task title; null when the record is gone. */
+  entityName: string | null;
+  /** Where the record opens in the app, when it has a page. */
+  href: string | null;
+  repName: string | null;
+  status: "failed" | "needs_review";
+  lastError: string | null;
+  attemptCount: number;
+  at: string | null;
+  /** POST /api/xpot/sync/retry takes this entity type. */
+  retryable: boolean;
+};
+
+/** The entity types POST /api/xpot/sync/retry can send again (server/routes/xpot/sync.ts). */
+export const RETRYABLE_SYNC_ENTITIES: readonly string[] = ["sales_visit", "sales_lead", "sales_sale", "sales_task", "sales_opportunity"];

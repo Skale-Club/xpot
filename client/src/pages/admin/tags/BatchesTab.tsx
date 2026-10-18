@@ -1,20 +1,30 @@
 import { useState, type FormEvent } from "react";
-import { ListPager, usePagedList } from "@/components/xpot/pagination";
 import { useMutation } from "@tanstack/react-query";
-import { Plus, X } from "lucide-react";
+import { ChevronRight, Factory, Plus, X } from "lucide-react";
 import { TAG_MAX_BATCH_QUANTITY, TAG_PRODUCT_TYPES } from "@shared/tags";
 import { useToast } from "@/hooks/use-toast";
+import { useUrlFilters } from "@/hooks/use-url-filters";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
 import { TagBatchMention, TagModelChips } from "@/components/xpot/TagProductThumbnail";
+import { Button } from "@/components/ui/button";
+import { CompactDataTable } from "@/components/xpot/CompactDataTable";
+import { SectionCard } from "@/components/xpot/DashboardKit";
+import { EmptyState } from "@/components/xpot/EmptyState";
+import { Field, Input, Select, Textarea } from "@/components/xpot/Field";
+import { FilterBar, FilterChips } from "@/components/xpot/filters";
+import { GLASS_CLASS } from "@/components/xpot/surface";
+import type { TagBatchItem } from "@shared/tagsApi";
 import { errorMessage, formatDate, invalidateAdminTags, sendJson } from "./api";
-import { BTN, BTN_GHOST, CARD, Empty, INPUT, SectionTitle, Stat, TD, TH } from "./ui";
-import { BatchStagePill, ErrorLine, Field, Loading, SELECT, useBatches, useTagCatalog } from "./batches-shared";
+import { BatchStagePill, catalogOptions, useBatches, useTagCatalog } from "./batches-shared";
+import { Loading, LoadError } from "./pieces-shared";
 import { useTagLabels } from "./labels";
+import { BATCH_PIPELINE, groupBatchesByStage, isAwaitingPieces } from "./batches-model";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { shellMessages } from "@/i18n/messages/shell";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
 import { manageTagsBatchesMessages } from "@/i18n/messages/manageTagsBatches";
+import { adminTagsFlowMessages } from "@/i18n/messages/adminTagsFlow";
 
 const EMPTY_FORM = {
   name: "",
@@ -70,24 +80,24 @@ function NewBatchForm({ onClose, onCreated }: { onClose: () => void; onCreated: 
   };
 
   return (
-    <form onSubmit={submit} className={`${CARD} space-y-4 p-4`} data-testid="admin-tags-new-batch-form">
+    <form onSubmit={submit} className={`space-y-4 rounded-2xl ${GLASS_CLASS} p-4`} data-testid="admin-tags-new-batch-form">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm font-semibold text-white">{t("newBatchTitle")}</p>
           <p className="text-xs text-white/40">{t("newBatchIntro")}</p>
         </div>
-        <button type="button" onClick={onClose} className="rounded-lg p-1 text-white/40 hover:bg-white/5 hover:text-white" aria-label={tc("close")}>
+        <Button type="button" variant="ghost" size="icon" className="-mr-2 -mt-2" onClick={onClose} aria-label={tc("close")}>
           <X className="h-4 w-4" />
-        </button>
+        </Button>
       </div>
       <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" data-testid="admin-tags-new-batch-codes">
         {(["issued", "scanned"] as const).map((mode) => (
           <label
             key={mode}
-            className={`cursor-pointer rounded-xl border p-3 ${form.codes === mode ? "border-blue-400/50 bg-blue-500/10" : "border-white/10 hover:bg-white/[0.03]"}`}
+            className={`cursor-pointer rounded-xl border p-3 transition-colors ${form.codes === mode ? "border-violet-400/40 bg-violet-500/[0.1]" : "border-white/10 hover:bg-white/[0.03]"}`}
           >
             <span className="flex items-center gap-2 text-sm font-semibold text-white">
-              <input type="radio" name="codes" value={mode} checked={form.codes === mode} onChange={() => set({ codes: mode })} />
+              <input type="radio" name="codes" value={mode} checked={form.codes === mode} onChange={() => set({ codes: mode })} className="h-4 w-4 accent-violet-500" />
               {mode === "issued" ? t("codesIssued") : t("codesScanned")}
             </span>
             <span className="mt-1 block text-xs text-white/45">{mode === "issued" ? t("codesIssuedHint") : t("codesScannedHint")}</span>
@@ -96,187 +106,211 @@ function NewBatchForm({ onClose, onCreated }: { onClose: () => void; onCreated: 
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label={t("fieldNameRequired")} className="sm:col-span-2">
-          <input value={form.name} onChange={(e) => set({ name: e.target.value })} maxLength={120} placeholder={t("namePlaceholder")} className={INPUT} autoFocus />
+          <Input value={form.name} onChange={(e) => set({ name: e.target.value })} maxLength={120} placeholder={t("namePlaceholder")} autoFocus />
         </Field>
         <Field label={t("fieldProduct")}>
-          <select value={form.productType} onChange={(e) => set({ productType: e.target.value })} className={SELECT}>
-            {labels.productOptions.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
+          <Select value={form.productType} onChange={(e) => set({ productType: e.target.value })} options={labels.productOptions} />
         </Field>
         <Field label={t("fieldCatalogProduct")} hint={t("catalogProductHint")}>
-          <select value={form.salesProductId} onChange={(e) => set({ salesProductId: e.target.value })} className={SELECT} required>
-            <option value="">{t("chooseCatalogProduct")}</option>
-            {catalog.map((product) => (
-              <option key={product.id} value={product.id}>{product.name}{product.sku ? ` · ${product.sku}` : ""}</option>
-            ))}
-          </select>
+          <Select value={form.salesProductId} onChange={(e) => set({ salesProductId: e.target.value })} required placeholder={t("chooseCatalogProduct")} options={catalogOptions(catalog)} />
         </Field>
-        <Field label={t("fieldPrintedOnPieces")} hint={t("printedHintNew")} className="sm:col-span-2">
+        <Field label={t("fieldPrintedOnPieces")} hint={t("printedHintNew")} className="sm:col-span-2" id="new-batch-face">
           <div className="flex items-center gap-2">
             <TagFaceIcon face={form.face || (form.productType === "google_review_sign" ? "google_review" : null)} size="md" />
-            <select value={form.face} onChange={(e) => set({ face: e.target.value })} className={SELECT}>
-              <option value="">{form.productType === "google_review_sign" ? t("faceFromProduct") : t("faceNotSet")}</option>
-              {labels.faceOptions.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
+            <div className="min-w-0 flex-1">
+              <Select
+                id="new-batch-face"
+                value={form.face}
+                onChange={(e) => set({ face: e.target.value })}
+                placeholder={form.productType === "google_review_sign" ? t("faceFromProduct") : t("faceNotSet")}
+                options={labels.faceOptions}
+              />
+            </div>
           </div>
         </Field>
         <Field label={t("fieldBatchCode")} hint={t("batchCodeHint")}>
-          <input
+          <Input
             value={form.batchCode}
             onChange={(e) => set({ batchCode: e.target.value.toUpperCase() })}
             maxLength={40}
             placeholder={t("batchCodeAutomatic")}
-            className={`${INPUT} font-mono`}
+            className="font-mono"
           />
         </Field>
         {issuing && (
           <Field label={t("fieldQuantityRequired")} hint={t("quantityRange", { max: TAG_MAX_BATCH_QUANTITY })}>
-            <input
+            <Input
               type="number"
               inputMode="numeric"
               min={1}
               max={TAG_MAX_BATCH_QUANTITY}
               value={form.quantity}
               onChange={(e) => set({ quantity: e.target.value })}
-              className={`${INPUT} tabular-nums`}
+              className="tabular-nums"
               data-testid="admin-tags-new-batch-quantity"
             />
           </Field>
         )}
         <Field label={t("fieldVendor")}>
-          <input value={form.vendor} onChange={(e) => set({ vendor: e.target.value })} maxLength={120} className={INPUT} />
+          <Input value={form.vendor} onChange={(e) => set({ vendor: e.target.value })} maxLength={120} />
         </Field>
         <Field label={t("fieldNotes")} className="sm:col-span-2">
-          <textarea value={form.notes} onChange={(e) => set({ notes: e.target.value })} maxLength={2000} rows={2} className={`${INPUT} resize-y`} />
+          <Textarea value={form.notes} onChange={(e) => set({ notes: e.target.value })} maxLength={2000} rows={2} />
         </Field>
       </div>
       <div className="flex justify-end gap-2">
-        <button type="button" onClick={onClose} className={BTN_GHOST}>
+        <Button type="button" variant="ghost" onClick={onClose}>
           {tc("cancel")}
-        </button>
-        <button type="submit" disabled={!ready || create.isPending} className={BTN} data-testid="admin-tags-new-batch-submit">
-          {create.isPending ? t("creatingBatch") : issuing && quantityOk ? t.plural("createIssuedBatch", quantity) : t("createEmptyBatch")}
-        </button>
+        </Button>
+        <Button type="submit" variant="brand" accent="tags" disabled={!ready} loading={create.isPending} data-testid="admin-tags-new-batch-submit">
+          {issuing && quantityOk ? t.plural("createIssuedBatch", quantity) : t("createEmptyBatch")}
+        </Button>
       </div>
     </form>
   );
 }
 
-/** Production batches from the factory: what was made, how much is still in house. */
+/** One "Pieces received/total" column: issued codes not received yet show amber. */
+function PiecesCell({ batch }: { batch: TagBatchItem }) {
+  return (
+    <span className={`tabular-nums ${batch.pendingCount ? "text-amber-300" : "text-white/85"}`}>
+      {batch.receivedCount}/{batch.tagCount}
+    </span>
+  );
+}
+
+/**
+ * Production batches as a pipeline: Codes issued → Print file ready → Printed → Receiving → In stock (then cancelled),
+ * each stage its own group. `?stage=` shows one stage; `?pending=1` the batches still waiting for pieces (the
+ * Overview's "Needs action" card). The stock split lives in Inventory.
+ */
 export function BatchesTab({ go }: { go: (path: string) => void }) {
-  const { data: batches = [], isLoading, isError } = useBatches();
-  const paged = usePagedList(batches, { resetKey: String(batches.length) });
+  const { data: batches = [], isLoading, error, refetch } = useBatches();
   const [creating, setCreating] = useState(false);
+  const filters = useUrlFilters({ stage: "", pending: "" });
   const t = useT(manageTagsBatchesMessages);
+  const tf = useT(adminTagsFlowMessages);
   const tm = useT(manageTagsMessages);
   const ts = useT(shellMessages);
   const labels = useTagLabels();
+  const pendingOnly = filters.values.pending === "1";
+  const stage = (BATCH_PIPELINE as readonly string[]).includes(filters.values.stage) || filters.values.stage === "cancelled" ? filters.values.stage : "";
+  const shown = batches.filter((b) => (!pendingOnly || isAwaitingPieces(b)) && (!stage || b.stage === stage));
+  const groups = groupBatchesByStage(shown);
+  const countIn = (s: string) => batches.filter((b) => b.stage === s).length;
 
-  const totals = batches.reduce(
-    (acc, b) => ({ pieces: acc.pieces + b.tagCount, house: acc.house + b.houseCount, out: acc.out + b.withResellersCount, active: acc.active + b.activeCount }),
-    { pieces: 0, house: 0, out: 0, active: 0 },
-  );
+  const columns = [
+    {
+      key: "batch",
+      label: tm("colBatch"),
+      cellClassName: "max-w-[320px]",
+      render: (b: TagBatchItem) => (
+        <TagBatchMention
+          batchCode={b.batchCode}
+          productType={b.productType}
+          face={b.face}
+          details={[b.name, b.vendor].filter(Boolean).join(" · ") || undefined}
+          className="max-w-full"
+        />
+      ),
+    },
+    {
+      key: "product",
+      label: t("fieldProduct"),
+      render: (b: TagBatchItem) => (
+        <>
+          {b.face ? <span className="mb-1 block text-sm text-white/85">{labels.face(b.face)}</span> : null}
+          <TagModelChips productType={b.productType} face={b.face} batchCode={b.batchCode} fallback={labels.product(b.productType)} />
+        </>
+      ),
+    },
+    { key: "pieces", label: tf("colPiecesReceived"), align: "right" as const, render: (b: TagBatchItem) => <PiecesCell batch={b} /> },
+    { key: "nfc", label: t("nfcVerified"), align: "right" as const, render: (b: TagBatchItem) => b.nfcVerifiedCount },
+    { key: "created", label: t("colCreated"), cellClassName: "whitespace-nowrap text-white/50", render: (b: TagBatchItem) => formatDate(b.createdAt) },
+  ];
 
   return (
-    <div className="space-y-5">
-      {batches.length > 0 && (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <Stat label={ts("manageBatches")} value={batches.length} hint={t.plural("piecesMade", totals.pieces)} />
-          <Stat label={t("inHouseStock")} value={totals.house} hint={t("inHouseStockHint")} />
-          <Stat label={t("withResellers")} value={totals.out} hint={t("withResellersHint")} />
-          <Stat label={t("live")} value={totals.active} hint={t("liveHint")} />
-        </div>
-      )}
+    <div className="min-w-0 space-y-4" data-testid="admin-tags-batches">
+      {creating ? <NewBatchForm onClose={() => setCreating(false)} onCreated={(id) => go(`/batches/${id}`)} /> : null}
 
-      {creating ? (
-        <NewBatchForm onClose={() => setCreating(false)} onCreated={(id) => go(`/batches/${id}`)} />
-      ) : null}
-
-      <section>
-        <SectionTitle
-          right={
-            !creating && (
-              <button type="button" onClick={() => setCreating(true)} className={BTN} data-testid="admin-tags-new-batch">
-                <Plus className="h-4 w-4" />
-                {t("newBatch")}
-              </button>
-            )
+      <SectionCard
+        accent="tags"
+        icon={Factory}
+        title={ts("manageBatches")}
+        actions={
+          !creating && (
+            <Button type="button" variant="brand" accent="tags" size="sm" className="min-h-10" onClick={() => setCreating(true)} data-testid="admin-tags-new-batch">
+              <Plus className="h-4 w-4" />
+              {t("newBatch")}
+            </Button>
+          )
+        }
+      >
+        {/* The pipeline at a glance; a stage opens its batches. */}
+        {batches.length > 0 ? (
+          <ol className="mb-4 flex min-w-0 flex-wrap items-center gap-1 text-xs" aria-label={tf("pipelineLabel")} data-testid="batches-pipeline">
+            {BATCH_PIPELINE.map((s, i) => (
+              <li key={s} className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => filters.set({ stage: stage === s ? "" : s })}
+                  aria-pressed={stage === s}
+                  className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 font-semibold transition-colors ${stage === s ? "border-violet-400/40 bg-violet-500/[0.15] text-white" : "border-white/[0.08] bg-white/[0.03] text-white/60 hover:text-white"}`}
+                >
+                  {labels.batchStage(s)}
+                  <span className="tabular-nums text-white/45">{countIn(s)}</span>
+                </button>
+                {i < BATCH_PIPELINE.length - 1 ? <ChevronRight className="h-3.5 w-3.5 text-white/25" aria-hidden="true" /> : null}
+              </li>
+            ))}
+          </ol>
+        ) : null}
+        <FilterBar
+          className="mb-3"
+          testId="batches-filters"
+          secondary={
+            <FilterChips
+              items={[
+                { id: "all", label: t("filterAll"), count: batches.length },
+                { id: "pending", label: tf("filterAwaitingPieces"), count: batches.filter(isAwaitingPieces).length },
+              ]}
+              value={pendingOnly ? "pending" : "all"}
+              onChange={(id) => filters.set({ pending: id === "pending" ? "1" : "" })}
+              ariaLabel={ts("manageBatches")}
+              accent="tags"
+            />
           }
-        >
-          {ts("manageBatches")}
-        </SectionTitle>
+          summary={{ shown: shown.length, total: batches.length, active: pendingOnly || !!stage, onClear: () => filters.reset() }}
+        />
         {isLoading ? (
-          <Loading />
-        ) : isError ? (
-          <ErrorLine>{tm("couldNotLoad", { what: t("theBatches") })}</ErrorLine>
+          <Loading rows={4} />
+        ) : error ? (
+          <LoadError what={t("theBatches")} error={error} onRetry={() => void refetch()} />
         ) : batches.length === 0 ? (
-          <Empty>{t("noBatchesYet")}</Empty>
+          <EmptyState compact tone="tags" icon={Factory} title={t("noBatchesYet")} cardStyle={{}} />
+        ) : groups.length === 0 ? (
+          <EmptyState compact tone="tags" icon={Factory} title={tf("noBatchesMatch")} cardStyle={{}} />
         ) : (
-          <div className={`${CARD} overflow-x-auto`}>
-            <table className="w-full min-w-[760px]">
-              <thead className="border-b border-white/10">
-                <tr>
-                  <th className={TH}>{tm("colBatch")}</th>
-                  <th className={TH}>{t("fieldProduct")}</th>
-                  <th className={TH}>{tm("colStatus")}</th>
-                  <th className={`${TH} text-right`}>{t("colQty")}</th>
-                  <th className={`${TH} text-right`}>{t("colReceived")}</th>
-                  <th className={`${TH} text-right`}>{tm("house")}</th>
-                  <th className={`${TH} text-right`}>{t("withResellers")}</th>
-                  <th className={`${TH} text-right`}>{t("live")}</th>
-                  <th className={`${TH} text-right`}>{t("nfcVerified")}</th>
-                  <th className={TH}>{t("colCreated")}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/5">
-                {paged.visible.map((b) => (
-                  <tr
-                    key={b.id}
-                    onClick={() => go(`/batches/${b.id}`)}
-                    className="cursor-pointer hover:bg-white/[0.03]"
-                    data-testid={`admin-tags-batch-${b.batchCode}`}
-                  >
-                    <td className={TD}>
-                      <TagBatchMention
-                        batchCode={b.batchCode}
-                        productType={b.productType}
-                        face={b.face}
-                        details={[b.name, b.vendor].filter(Boolean).join(" · ") || undefined}
-                        className="max-w-[320px]"
-                      />
-                    </td>
-                    <td className={TD}>
-                      {b.face ? <span className="mb-1 block text-sm text-white/85">{labels.face(b.face)}</span> : null}
-                      <TagModelChips productType={b.productType} face={b.face} batchCode={b.batchCode} fallback={labels.product(b.productType)} />
-                    </td>
-                    <td className={TD}>
-                      <BatchStagePill stage={b.stage} />
-                    </td>
-                    <td className={`${TD} text-right tabular-nums`}>{b.quantity}</td>
-                    <td className={`${TD} text-right tabular-nums ${b.pendingCount ? "text-violet-200" : ""}`}>
-                      {b.pendingCount ? `${b.receivedCount}/${b.tagCount}` : b.receivedCount}
-                    </td>
-                    <td className={`${TD} text-right font-semibold tabular-nums text-white`}>{b.houseCount}</td>
-                    <td className={`${TD} text-right tabular-nums`}>{b.withResellersCount}</td>
-                    <td className={`${TD} text-right tabular-nums`}>{b.activeCount}</td>
-                    <td className={`${TD} text-right tabular-nums`}>{b.nfcVerifiedCount}</td>
-                    <td className={`${TD} whitespace-nowrap text-white/50`}>{formatDate(b.createdAt)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <ListPager className="border-t border-white/5 px-3" shown={paged.shown} total={paged.total} hasMore={paged.hasMore} onMore={paged.showMore} />
+          <div className="space-y-5">
+            {groups.map((group) => (
+              <section key={group.stage} className="min-w-0 space-y-2" data-testid={`batches-stage-${group.stage}`}>
+                <h3 className="flex items-center gap-2 text-sm font-semibold text-white/85">
+                  <BatchStagePill stage={group.stage} />
+                  <span className="text-xs font-normal text-white/40">{tf.plural("batchCount", group.batches.length)}</span>
+                </h3>
+                <CompactDataTable
+                  columns={columns}
+                  rows={group.batches}
+                  getRowKey={(b) => b.id}
+                  onRowClick={(b) => go(`/batches/${b.id}`)}
+                  getRowAriaLabel={(b) => b.batchCode}
+                  getRowTestId={(b) => `admin-tags-batch-${b.batchCode}`}
+                />
+              </section>
+            ))}
           </div>
         )}
-      </section>
+      </SectionCard>
     </div>
   );
 }

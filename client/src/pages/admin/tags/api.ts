@@ -1,16 +1,20 @@
 import { queryClient } from "@/lib/queryClient";
-import { currentLocale, translate } from "@/i18n";
+import { translate } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
+import { serverErrorText } from "@/lib/apiErrors";
 
 // Fetch helpers for the Tags admin (/api/xpot/admin/tag*). The server answers
-// errors as JSON { message }; only the message reaches the admin.
+// errors as JSON { message, code? }; the code is worded in the admin's language.
 
 export class AdminHttpError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  /** The server's stable error code (e.g. `piece_other_batch`), when it sent one. */
+  code: string | null;
+  constructor(status: number, message: string, code: string | null = null) {
     super(message);
     this.name = "AdminHttpError";
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -23,19 +27,22 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
   });
   if (!res.ok) {
     let message = translate(commonMessages, "requestFailed");
+    let code: string | null = null;
     try {
-      const data = (await res.json()) as { message?: string };
-      if (data?.message) message = data.message;
+      const json = await res.json();
+      message = serverErrorText(json, message);
+      code = typeof json?.code === "string" ? json.code : null;
     } catch {
       // not JSON
     }
-    throw new AdminHttpError(res.status, message);
+    throw new AdminHttpError(res.status, message, code);
   }
   return (await res.json()) as T;
 }
 
 export const getJson = <T,>(url: string) => request<T>("GET", url);
 export const sendJson = <T,>(method: "POST" | "PATCH", url: string, body: unknown = {}) => request<T>(method, url, body);
+export const deleteJson = <T,>(url: string) => request<T>("DELETE", url);
 
 export function errorMessage(err: unknown): string {
   return err instanceof Error && err.message ? err.message : translate(commonMessages, "requestFailed");
@@ -59,23 +66,8 @@ export function invalidateAdminTags() {
 
 export const STALE_MS = 30_000;
 
-/** Dates follow the app's language, not the browser's. */
-export function formatDateTime(value: string | null | undefined): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleString(currentLocale(), { dateStyle: "medium", timeStyle: "short" });
-}
+/** Dates follow the app's language, not the browser's (shared with the other admin screens). */
+export { formatDate, formatDateTime, formatTime } from "@/lib/dates";
 
-export function formatTime(value: string | null | undefined): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleTimeString(currentLocale(), { timeStyle: "short" });
-}
-
-export function formatDate(value: string | null | undefined): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleDateString(currentLocale(), { dateStyle: "medium" });
-}
-
-export function percent(part: number, total: number): string {
-  if (!total) return "0%";
-  return `${Math.round((part / total) * 100)}%`;
-}
+/** Percentages follow the app's language too ("45%" / "45 %"). */
+export { formatShare } from "@/lib/format";

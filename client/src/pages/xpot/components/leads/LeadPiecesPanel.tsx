@@ -3,23 +3,16 @@ import { Link } from "wouter";
 import { ChevronRight, ExternalLink, ScanLine } from "lucide-react";
 import type { LeadTagSummary, TagListItem } from "@shared/tagsApi";
 import { TagPieceMention } from "@/components/xpot/TagProductThumbnail";
+import { PIECE_STATUS_TONE, Pill } from "@/components/xpot/StatusPill";
 import { useT } from "@/i18n";
 import { leadsMessages } from "@/i18n/messages/leads";
 import { tagsMessages } from "@/i18n/messages/tags";
-import { tagsGet } from "@/pages/tags/lib";
+import { leadPiecesPath, tagsGet } from "@/pages/tags/lib";
+import { useViewerAccess } from "@/lib/adminMode";
 
 function compactUrl(url: string): string {
   return url.replace(/^https?:\/\/(www\.)?/i, "").replace(/\/$/, "");
 }
-
-const STATUS_STYLE: Record<string, string> = {
-  active: "bg-emerald-400/[0.09] text-emerald-300",
-  assigned: "bg-blue-400/[0.09] text-blue-300",
-  inventory: "bg-violet-400/[0.09] text-violet-300",
-  disabled: "bg-white/[0.06] text-white/45",
-  retired: "bg-white/[0.06] text-white/35",
-  damaged: "bg-red-400/[0.09] text-red-300",
-};
 
 export function LeadPiecesPanel({ leadId, leadName, summary }: {
   leadId: number;
@@ -34,7 +27,9 @@ export function LeadPiecesPanel({ leadId, leadName, summary }: {
     staleTime: 15_000,
   });
   const items = pieces.data ?? [];
-  const allHref = `/tags/pieces?lead=${leadId}&name=${encodeURIComponent(leadName)}`;
+  // Same scope as the counts above: everyone's pieces in management mode.
+  const { canManage } = useViewerAccess();
+  const allHref = leadPiecesPath(leadId, leadName, canManage);
 
   return (
     <div className="space-y-3" data-testid="lead-pieces-panel">
@@ -73,7 +68,8 @@ export function LeadPiecesPanel({ leadId, leadName, summary }: {
                   {(piece.label || piece.destinationUrl) ? <span className="mt-1 block truncate pl-12 text-[11px] text-white/35">{[piece.label, piece.destinationUrl && compactUrl(piece.destinationUrl)].filter(Boolean).join(" · ")}</span> : null}
                 </span>
                 <span className="flex flex-col items-end gap-1.5">
-                  <span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${STATUS_STYLE[piece.status] ?? STATUS_STYLE.disabled}`}>{tt(`status_${piece.status}` as "status_active")}</span>
+                  {/* Canon piece colours, so a piece reads the same here as in Tags. */}
+                  <Pill tone={PIECE_STATUS_TONE[piece.status] ?? "slate"}>{tt(`status_${piece.status}` as "status_active")}</Pill>
                   <span className="inline-flex items-center gap-1 text-[10px] tabular-nums text-white/35"><ScanLine className="h-3 w-3" />{scans}</span>
                 </span>
                 <ChevronRight className="h-4 w-4 text-white/20 transition-transform group-hover:translate-x-0.5 group-hover:text-violet-300" />

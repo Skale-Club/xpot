@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=0" />
     <!-- xpot:seo -->
-    <meta name="theme-color" content="#09090b" />
+    <meta name="theme-color" content="#060912" />
     <meta name="application-name" content="Xpot" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -19,7 +19,7 @@
   </head>
   <body>
     <div id="root"></div>
-    <div id="initial-loader" style="position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; background-color: #0f1014;">
+    <div id="initial-loader" style="position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; background-color: #060912;">
       <div class="loader-dots">
         <div class="loader-dot"></div>
         <div class="loader-dot"></div>
@@ -30,7 +30,7 @@
       .loader-dots { display: flex; align-items: center; gap: 10px; }
       .loader-dot {
         width: 14px; height: 14px; border-radius: 50%;
-        background-color: #406EF1;
+        background-color: #3b82f6;
         animation: dotBounce 1.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
       }
       .loader-dot:nth-child(1) { animation-delay: 0s; }
@@ -60,7 +60,7 @@
           loader.innerHTML =
             '<div style="text-align:center;color:#e4e4e7;font-family:system-ui,sans-serif;padding:0 24px">' +
             '<p style="margin:0 0 16px">The app is taking too long to load.</p>' +
-            '<button onclick="location.reload()" style="padding:10px 24px;border-radius:8px;border:0;background:#406EF1;color:#fff;font-size:15px">Try again</button>' +
+            '<button onclick="location.reload()" style="padding:10px 24px;border-radius:12px;border:0;background:#3b82f6;color:#fff;font-size:15px">Try again</button>' +
             "</div>";
         }
         function check() {

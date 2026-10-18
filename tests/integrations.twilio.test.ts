@@ -29,11 +29,17 @@ vi.mock("../server/routes/xpot/middleware.js", () => ({
   requireXpotManager: (_req: any, _res: any, next: any) => next(),
   requireSuperAdmin: (_req: any, _res: any, next: any) => next(),
 }));
+// Keeping the last test result is covered by platform-status.integration.test.ts.
+vi.mock("../server/db.js", () => ({ db: {} }));
+vi.mock("../server/observability/services.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../server/observability/services.js")>()),
+  recordIntegrationCheck: async () => ({ checkedAt: new Date() }),
+}));
 
 describe("twilio provider in the registry", () => {
   it("is a Messaging provider whose secret is the Auth Token", () => {
     const def = getProviderDef("twilio")!;
-    expect(def.label).toBe("Twilio | SMS");
+    expect(def.label).toBe("Twilio");
     expect(def.category).toBe("Messaging");
     expect(def.table).toBe("settings");
     expect(def.fields.map((f) => f.key)).toEqual(["accountSid", "apiKey", "fromNumber", "messagingServiceSid"]);
@@ -198,7 +204,7 @@ describe("integrations routes (twilio)", () => {
   it("the Test action reads from Twilio and never POSTs to Messages", async () => {
     await call("PUT", "/admin/integrations/twilio", { accountSid: SID, apiKey: TOKEN, fromNumber: "+15550000001" });
     const result = await call("POST", "/admin/integrations/twilio/test", {});
-    expect(result.json).toMatchObject({ ok: true });
+    expect(result.json).toMatchObject({ ok: true, code: "twilio_ok", params: { from: "+15550000001" } });
     expect(twilioFetch).toHaveBeenCalled();
     for (const [url, init] of twilioFetch.mock.calls) {
       expect(init?.method ?? "GET").toBe("GET");
@@ -210,6 +216,8 @@ describe("integrations routes (twilio)", () => {
     const result = await call("POST", "/admin/integrations/twilio/test", { accountSid: SID });
     expect(result.json.ok).toBe(false);
     expect(result.json.message).toMatch(/Auth Token/);
+    // The screen words it from the code and the field it names.
+    expect(result.json).toMatchObject({ code: "missing_secret", params: { field: "apiKey" } });
     expect(twilioFetch).not.toHaveBeenCalled();
   });
 });

@@ -99,8 +99,7 @@ export function DepositDialog({
         )}
 
         {openAgreement && (
-          <div className="rounded-xl px-3 py-2.5 text-[11px] text-amber-200"
-            style={{ background: "rgba(245,158,11,0.10)", border: "1px solid rgba(245,158,11,0.25)" }}>
+          <div className="rounded-xl px-3 py-2.5 text-xs text-amber-100 border border-amber-400/25 bg-amber-500/[0.08]">
             {t("alreadyOnShelf", {
               count: openAgreement.consignment.quantityOnHand,
               price: formatCents(openAgreement.consignment.unitPriceCents, openAgreement.consignment.currency),
@@ -138,11 +137,10 @@ export function DepositDialog({
           </p>
         ) : null}
 
-        <div className="rounded-2xl p-3.5"
-          style={{ background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.2)" }}>
+        <div className="rounded-2xl p-3.5 border border-white/[0.09] bg-white/[0.04]">
           <div className="flex items-center justify-between">
             <span className="text-sm text-white/60">{t("owedIfAllSells")}</span>
-            <Money cents={quantity * unitPriceCents} currency={product?.currency} className="text-lg font-bold text-indigo-300" />
+            <Money cents={quantity * unitPriceCents} currency={product?.currency} className="text-lg font-bold text-white" />
           </div>
         </div>
 
@@ -223,14 +221,13 @@ export function SettleDialog({
   return (
     <SheetDialog open={open} onOpenChange={onOpenChange} title={t("settleTitle", { product: row.product?.name ?? t("stockFallback") })}>
       <div className="space-y-4">
-        <div className="flex items-center justify-between rounded-xl px-3.5 py-3"
-          style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}>
+        <div className="flex items-center justify-between rounded-xl px-3.5 py-3 border border-white/[0.09] bg-white/[0.04]">
           <div>
-            <div className="text-[10px] font-semibold uppercase tracking-widest text-white/35">{t("onRecord")}</div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/40">{t("onRecord")}</div>
             <div className="text-xl font-bold tabular-nums text-white">{onHand}</div>
           </div>
           <div className="text-right">
-            <div className="text-[10px] font-semibold uppercase tracking-widest text-white/35">{t("unitPrice")}</div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/40">{t("unitPrice")}</div>
             <div className="text-xl font-bold tabular-nums text-white">
               {formatCents(row.consignment.unitPriceCents, currency)}
             </div>
@@ -242,21 +239,19 @@ export function SettleDialog({
         </Field>
 
         {result.overCount ? (
-          <div className="flex items-start gap-2 rounded-xl px-3 py-2.5 text-[11px] text-red-300"
-            style={{ background: "rgba(239,68,68,0.10)", border: "1px solid rgba(239,68,68,0.25)" }}>
+          <div className="flex items-start gap-2 rounded-xl px-3 py-2.5 text-xs text-red-300 border border-red-400/25 bg-red-500/[0.08]">
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span>{t("overCount", { count: onHand })}</span>
           </div>
         ) : (
-          <div className="rounded-2xl p-3.5 space-y-2"
-            style={{ background: "rgba(16,185,129,0.07)", border: "1px solid rgba(16,185,129,0.2)" }}>
+          <div className="rounded-2xl p-3.5 space-y-2 border border-emerald-400/20 bg-emerald-500/[0.07]">
             <div className="flex items-center justify-between text-xs text-white/50">
               <span>{t("soldSinceLastVisit")}</span>
               <span className="tabular-nums font-semibold text-white">{result.soldQuantity}</span>
             </div>
             <div className="flex items-center justify-between border-t border-white/10 pt-2">
               <span className="text-sm font-semibold text-white">{t("theyOwe")}</span>
-              <Money cents={result.amountCents} currency={currency} className="text-2xl font-bold text-emerald-400" />
+              <Money cents={result.amountCents} currency={currency} className="text-2xl font-bold text-emerald-300" />
             </div>
             <div className="flex items-center justify-between text-[11px] text-white/35">
               <span>{t("youKeep")}</span>
@@ -337,9 +332,8 @@ export function ReturnDialog({
         <Field label={t("unitsTakenBack")}>
           <QtyInput value={quantity} onChange={setQuantity} min={1} max={onHand} autoFocus />
         </Field>
-        <label className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 cursor-pointer"
-          style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
-          <input type="checkbox" checked={close} onChange={(e) => setClose(e.target.checked)} className="accent-indigo-500" />
+        <label className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 cursor-pointer border border-white/[0.09] bg-white/[0.04]">
+          <input type="checkbox" checked={close} onChange={(e) => setClose(e.target.checked)} className="h-4 w-4 accent-blue-500" />
           <span className="text-xs text-white/70">{t("closeThisConsignment")}</span>
         </label>
         <Field label={t("reason")}>
@@ -382,8 +376,7 @@ export function AdjustDialog({
     <SheetDialog open={open} onOpenChange={onOpenChange} title={row.product?.name ? t("correctStockTitle", { product: row.product.name }) : t("correctStock")}>
       <div className="space-y-4">
         <p className="text-xs text-white/45">{t("correctIntro")}</p>
-        <div className="flex items-center justify-between rounded-xl px-3.5 py-3"
-          style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}>
+        <div className="flex items-center justify-between rounded-xl px-3.5 py-3 border border-white/[0.09] bg-white/[0.04]">
           <span className="text-xs text-white/45">{t("onRecord")}</span>
           <span className="tabular-nums text-white">
             {onHand} <span className="text-white/30">→</span>{" "}

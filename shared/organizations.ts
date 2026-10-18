@@ -24,6 +24,19 @@ export function managesEveryOrganization(viewer: OrganizationViewer): boolean {
   return role === "admin" || role === "manager";
 }
 
+/**
+ * A Rep Admin of a real team: admin of an organization that is not just their
+ * own one-person workspace (`personal`, isPersonalOrganization). Their
+ * management mode widens their lists to the organizations they run, and no
+ * further (server/routes/xpot/middleware.ts listScope). `organizations` is
+ * /api/xpot/me's list, which carries the person's role in each.
+ */
+export function runsATeam(
+  organizations: readonly { membershipRole?: OrganizationRole | null; personal?: boolean }[] | null | undefined,
+): boolean {
+  return (organizations ?? []).some((organization) => organization.membershipRole === "admin" && !organization.personal);
+}
+
 export function activeOrganizationAccess(
   memberships: readonly OrganizationAccess[],
   organizationId: number,
@@ -47,4 +60,18 @@ export function canManageOrganization(
   organizationId: number,
 ): boolean {
   return managesEveryOrganization(viewer) || activeOrganizationAccess(memberships, organizationId)?.role === "admin";
+}
+
+/**
+ * The one-person workspace every new rep gets automatically
+ * (server/organizations/service.ts ensureOrganizationForRep names it after
+ * them, with the slug "rep-<their id>"), for as long as it still holds only
+ * that person, or nobody. Once someone else joins it is a real organization.
+ * The Organizations list hides these behind "Show personal workspaces".
+ */
+export function isPersonalOrganization(organization: { slug: string; memberCount: number; soleMemberRepId?: number | null }): boolean {
+  const owner = /^rep-(\d+)$/.exec(organization.slug);
+  if (!owner) return false;
+  if (organization.memberCount === 0) return true;
+  return organization.memberCount === 1 && organization.soleMemberRepId === Number(owner[1]);
 }

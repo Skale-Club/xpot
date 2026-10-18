@@ -7,12 +7,15 @@ import {
   Factory,
   FileText,
   HeartPulse,
+  History,
   LayoutDashboard,
   ListTodo,
+  MapPin,
   Nfc,
   Package,
   PackageOpen,
   Palette,
+  PenLine,
   Plug,
   Route,
   ShieldCheck,
@@ -21,12 +24,16 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { XpotModule } from "@shared/modules";
+import { parseSalesPath } from "../../pages/xpot/salesPath";
 
 // Where every screen lives. The app is two modules, Visits (field sales) and
 // Tags (QR/NFC pieces), plus the account pages outside both. Each module carries
 // its own screens and, for managers, its own "Manage" group, so the management of
-// Tags sits inside Tags instead of in an "Admin" next to it. The sidebar, the
-// command palette and the admin screens all read this one map (docs/MODULES.md).
+// Tags sits inside Tags instead of in an "Admin" next to it. The account is the
+// person's Settings, the managers' Administration (People, Organizations) and
+// the Xpot admin's Platform. The sidebar, the phone tab bars, the command
+// palette, the top bar and the admin screens all read this one map, so a screen
+// has one name everywhere (docs/MODULES.md).
 
 /** The part of the app a screen belongs to; the account pages belong to neither module. */
 export type ShellContext = XpotModule | "account";
@@ -36,10 +43,15 @@ export type NavItem = {
   label: string;
   icon: LucideIcon;
   match: (path: string) => boolean;
-  /** Only the global admin sees it, and it shows the "Admin" tag (AdminBadge). */
+  /** Only the global admin sees it, and it shows the "Xpot admin" tag (AdminBadge). */
   adminOnly?: boolean;
 };
-export type NavGroup = { label: string; items: NavItem[] };
+export type NavGroup = {
+  label: string;
+  items: NavItem[];
+  /** The whole group is the global admin's: the "Xpot admin" tag sits on its heading, not on each item. */
+  adminOnly?: boolean;
+};
 
 /** Matches a path and everything under it ("/tags" matches "/tags/pieces", not "/tagsx"). */
 export const starts = (prefix: string) => (path: string) => path === prefix || path.startsWith(`${prefix}/`);
@@ -57,6 +69,17 @@ export function contextOfPath(path: string): ShellContext {
   return "visits";
 }
 
+/**
+ * Where an account page sits: personal Settings, the managers' Administration
+ * (People, Organizations) or the Xpot admin's Platform. Null outside the account.
+ */
+export function accountSection(path: string): "settings" | "administration" | "platform" | null {
+  if (contextOfPath(path) !== "account") return null;
+  if (starts("/settings")(path)) return "settings";
+  if (starts("/organizations")(path) || starts("/admin/reps")(path)) return "administration";
+  return "platform";
+}
+
 /** The Visits admin section a path shows, or null; "/admin" alone is the team overview. */
 export function visitsAdminSection(path: string): (typeof VISITS_ADMIN)[number] | null {
   const m = /^\/admin(?:\/([^/]+))?\/?$/.exec(path);
@@ -65,14 +88,51 @@ export function visitsAdminSection(path: string): (typeof VISITS_ADMIN)[number] 
   return (VISITS_ADMIN as readonly string[]).includes(section) ? (section as (typeof VISITS_ADMIN)[number]) : null;
 }
 
+/** The Visits screens, as the shell names them (title, sidebar, phone tab). */
+export type VisitsScreen = "dashboard" | "route" | "leads" | "visits" | "visit" | "tasks" | "sales" | "manage";
+
+/**
+ * Which Visits screen a path shows. The visit history (/dashboard/history, the
+ * old /visits) is "Visits"; the active visit (/route/check-in, the old
+ * /check-in) is "Visit", not Route; unknown paths fall back to the dashboard,
+ * as the app does.
+ */
+export function visitsScreen(path: string): VisitsScreen {
+  if (starts("/dashboard/history")(path) || starts("/visits")(path)) return "visits";
+  if (starts("/route/check-in")(path) || starts("/check-in")(path)) return "visit";
+  if (starts("/route")(path) || starts("/prospecting")(path) || starts("/leads/prospecting")(path) || path === "/leads/prospects") return "route";
+  if (starts("/leads")(path)) return "leads";
+  if (starts("/tasks")(path)) return "tasks";
+  if (starts("/sales")(path)) return "sales";
+  if (visitsAdminSection(path)) return "manage";
+  return "dashboard";
+}
+
+/**
+ * The phone tab bar of Visits, in the sidebar's order. Six screens don't fit a
+ * phone bar (seven with Manage), so Visits (the history) is the one left out:
+ * it stays one tap away on the Dashboard, and in the sidebar and the palette.
+ */
+export const VISITS_TAB_ORDER = ["dashboard", "route", "leads", "tasks", "sales"] as const;
+export type VisitsTabId = (typeof VISITS_TAB_ORDER)[number] | "manage";
+
+/** The phone tab lit for a path: the history sits under Dashboard, the active visit under none. */
+export function activeVisitsTab(path: string): VisitsTabId | null {
+  const screen = visitsScreen(path);
+  if (screen === "visits") return "dashboard";
+  if (screen === "visit") return null;
+  return screen;
+}
+
 export type Labels = {
   shell: (key: ShellKey) => string;
   /** Tags app labels used by the shared shell. */
   tags: (key: "navHome" | "navCustomers" | "navPieces" | "navDirect") => string;
+  /** This shell's own labels (i18n/messages/navIa.ts). */
+  nav: (key: "navPlatform" | "visitScreen") => string;
 };
 
 type ShellKey =
-  | "tabCheckIn"
   | "tabDashboard"
   | "tabVisits"
   | "tabLeads"
@@ -80,6 +140,8 @@ type ShellKey =
   | "tabRoute"
   | "tabTasks"
   | "navManage"
+  | "navOrganization"
+  | "navOrganizations"
   | "manageTeam"
   | "manageProducts"
   | "manageCheckInRules"
@@ -97,29 +159,31 @@ type ShellKey =
   | "orgSystemHealth";
 
 export type Viewer = {
-  /** Manager or admin: sees each module's Manage group and the Organization pages. */
+  /** Manager or admin, in management mode: sees each module's Manage group and Administration. */
   canManage: boolean;
-  /** The global admin (isSuperAdmin): sees the items marked adminOnly. */
+  /** The global admin (isSuperAdmin): sees the items marked adminOnly, and Platform. */
   isAdmin: boolean;
 };
 
-/** The items this viewer may see: adminOnly ones only for the global admin, grouped at the end. */
+/** The items this viewer may see, in their order: adminOnly ones only for the global admin. */
 function visibleTo(viewer: Pick<Viewer, "isAdmin">, items: NavItem[]): NavItem[] {
-  const shared = items.filter((i) => !i.adminOnly);
-  return viewer.isAdmin ? [...shared, ...items.filter((i) => i.adminOnly)] : shared;
+  return viewer.isAdmin ? items : items.filter((i) => !i.adminOnly);
 }
 
 /** The screens of one module: what its people use, then (for managers) its Manage group. */
 export function moduleGroups(module: XpotModule, viewer: Viewer, l: Labels): NavGroup[] {
   if (module === "visits") {
+    const screen = (id: VisitsScreen) => (path: string) => visitsScreen(path) === id;
     const work: NavGroup = {
       label: "",
       items: [
-        { href: "/dashboard", label: l.shell("tabDashboard"), icon: Activity, match: (path) => starts("/dashboard")(path) || starts("/visits")(path) },
-        { href: "/route", label: l.shell("tabRoute"), icon: Route, match: (path) => starts("/route")(path) || starts("/prospecting")(path) || starts("/check-in")(path) },
-        { href: "/leads", label: l.shell("tabLeads"), icon: Building2, match: starts("/leads") },
-        { href: "/tasks", label: l.shell("tabTasks"), icon: ListTodo, match: starts("/tasks") },
-        { href: "/sales", label: l.shell("tabSales"), icon: DollarSign, match: starts("/sales") },
+        { href: "/dashboard", label: l.shell("tabDashboard"), icon: Activity, match: (p) => starts("/dashboard")(p) && screen("dashboard")(p) },
+        { href: "/route", label: l.shell("tabRoute"), icon: Route, match: screen("route") },
+        { href: "/leads", label: l.shell("tabLeads"), icon: Building2, match: screen("leads") },
+        // The history, and the visit being run (it is one of them).
+        { href: "/dashboard/history", label: l.shell("tabVisits"), icon: History, match: (p) => screen("visits")(p) || screen("visit")(p) },
+        { href: "/tasks", label: l.shell("tabTasks"), icon: ListTodo, match: screen("tasks") },
+        { href: "/sales", label: l.shell("tabSales"), icon: DollarSign, match: screen("sales") },
       ],
     };
     if (!viewer.canManage) return [work];
@@ -140,10 +204,11 @@ export function moduleGroups(module: XpotModule, viewer: Viewer, l: Labels): Nav
   const work: NavGroup = {
     label: "",
     items: [
-      // Writing a chip without Xpot (/tags/direct) is reached from the dashboard, not the nav.
-      { href: "/tags", label: l.tags("navHome"), icon: LayoutDashboard, match: (p) => p === "/tags" || p.startsWith("/tags/t/") || p.startsWith("/tags/direct") },
+      // Writing a chip without Xpot (/tags/direct) is reached from the dashboard and the palette.
+      { href: "/tags", label: l.tags("navHome"), icon: LayoutDashboard, match: (p) => p === "/tags" || p.startsWith("/tags/direct") },
       { href: "/tags/customers", label: l.tags("navCustomers"), icon: Building2, match: starts("/tags/customers") },
-      { href: "/tags/pieces", label: l.tags("navPieces"), icon: Package, match: starts("/tags/pieces") },
+      // A piece (/tags/t/<code>) belongs to My pieces, wherever it was opened from.
+      { href: "/tags/pieces", label: l.tags("navPieces"), icon: Package, match: (p) => starts("/tags/pieces")(p) || p.startsWith("/tags/t/") },
     ],
   };
   if (!viewer.canManage) return [work];
@@ -152,12 +217,14 @@ export function moduleGroups(module: XpotModule, viewer: Viewer, l: Labels): Nav
     work,
     {
       label: l.shell("navManage"),
+      // A piece's life: made (Batches), in stock (Inventory), handed out
+      // (Distribution), sold by resellers; then the Xpot admin's tools.
       items: visibleTo(viewer, [
         { href: "/admin/tags/overview", label: l.shell("manageOverview"), icon: BarChart3, match: (p) => p === "/admin/tags" || tab("overview")(p) },
+        { href: "/admin/tags/batches", label: l.shell("manageBatches"), icon: Factory, match: tab("batches"), adminOnly: true },
         { href: "/admin/tags/pieces", label: l.shell("managePieces"), icon: Nfc, match: tab("pieces") },
         { href: "/admin/tags/kits", label: l.shell("manageKits"), icon: PackageOpen, match: tab("kits") },
         { href: "/admin/tags/team", label: l.shell("manageResellers"), icon: Users, match: tab("team") },
-        { href: "/admin/tags/batches", label: l.shell("manageBatches"), icon: Factory, match: tab("batches"), adminOnly: true },
         { href: "/admin/tags/journey", label: l.shell("manageJourney"), icon: Route, match: tab("journey"), adminOnly: true },
         { href: "/admin/tags/provisioners", label: l.shell("manageWriters"), icon: ShieldCheck, match: tab("provisioners"), adminOnly: true },
       ]),
@@ -165,14 +232,104 @@ export function moduleGroups(module: XpotModule, viewer: Viewer, l: Labels): Nav
   ];
 }
 
-/** The account's Organization pages (managers; Integrations and Branding for the global admin only). */
-export function organizationItems(l: Labels, viewer: Pick<Viewer, "isAdmin">): NavItem[] {
+/** Administration, for managers in management mode: the people and the organizations. */
+export function administrationItems(l: Labels): NavItem[] {
+  return [
+    { href: "/admin/reps", label: l.shell("orgPeople"), icon: Users, match: starts("/admin/reps") },
+    { href: "/organizations", label: l.shell("navOrganizations"), icon: Building2, match: starts("/organizations") },
+  ];
+}
+
+/**
+ * Platform, the Xpot admin's own: integrations, the brand and public site, the
+ * system status. Only the global admin gets the group (accountGroups), which
+ * carries the "Xpot admin" tag once, on its heading.
+ */
+export function platformItems(l: Labels): NavItem[] {
   const section = (id: string) => starts(`/admin/${id}`);
-  return visibleTo(viewer, [
-    { href: "/admin/reps", label: l.shell("orgPeople"), icon: Users, match: section("reps") },
-    { href: "/admin/integrations", label: l.shell("orgIntegrations"), icon: Plug, match: (p) => section("integrations")(p) || section("xphere")(p), adminOnly: true },
-    { href: "/admin/branding", label: l.shell("orgBranding"), icon: Palette, match: section("branding"), adminOnly: true },
-    { href: "/admin/landing", label: l.shell("orgLanding"), icon: FileText, match: section("landing"), adminOnly: true },
-    { href: "/admin/health", label: l.shell("orgSystemHealth"), icon: HeartPulse, match: section("health"), adminOnly: true },
-  ]);
+  return [
+    { href: "/admin/integrations", label: l.shell("orgIntegrations"), icon: Plug, match: (p) => section("integrations")(p) || section("xphere")(p) },
+    // The landing page editor is part of the brand and public site.
+    { href: "/admin/branding", label: l.shell("orgBranding"), icon: Palette, match: (p) => section("branding")(p) || section("landing")(p) },
+    { href: "/admin/health", label: l.shell("orgSystemHealth"), icon: HeartPulse, match: section("health") },
+  ];
+}
+
+/** The account's groups after Settings: Administration for managers, Platform for the Xpot admin. */
+export function accountGroups(viewer: Viewer, l: Labels): NavGroup[] {
+  if (!viewer.canManage) return [];
+  return [
+    { label: l.shell("navOrganization"), items: administrationItems(l) },
+    ...(viewer.isAdmin ? [{ label: l.nav("navPlatform"), items: platformItems(l), adminOnly: true }] : []),
+  ];
+}
+
+/** Screens the palette offers that no sidebar lists: the visit, a plain chip, the landing page editor. */
+export function paletteExtras(area: XpotModule | "platform", l: Labels): NavItem[] {
+  if (area === "visits") return [{ href: "/route/check-in", label: l.nav("visitScreen"), icon: MapPin, match: (p) => visitsScreen(p) === "visit" }];
+  if (area === "tags") return [{ href: "/tags/direct", label: l.tags("navDirect"), icon: PenLine, match: starts("/tags/direct") }];
+  return [{ href: "/admin/landing", label: l.shell("orgLanding"), icon: FileText, match: starts("/admin/landing") }];
+}
+
+/**
+ * The lists that management mode widens from the person's own records to the
+ * whole team, where the scope chip says which one is on show. Tasks widen
+ * only with its "Whole team" filter on top of the mode ("tasks").
+ */
+export function managementScope(path: string): "list" | "tasks" | null {
+  if (contextOfPath(path) === "visits" && starts("/tasks")(path)) return "tasks";
+  const screen = contextOfPath(path) === "visits" ? visitsScreen(path) : null;
+  if (screen === "leads" || screen === "visits" || screen === "sales") return "list";
+  // The Tags dashboard and customers widen; My pieces is the person's own in every mode.
+  if (path === "/tags" || starts("/tags/customers")(path)) return "list";
+  return null;
+}
+
+/**
+ * The lists a Rep Admin's management mode widens to the organizations they run
+ * (server/routes/xpot/middleware.ts listScope): Companies, Tasks (its "Whole
+ * team") and Sales' summary, sales and consignments. Visits, the pipeline and
+ * Tags have no organization: a Rep Admin's own in every mode.
+ */
+export function organizationWideList(path: string): boolean {
+  if (contextOfPath(path) !== "visits") return false;
+  const screen = visitsScreen(path);
+  if (screen === "leads" || screen === "tasks") return true;
+  return screen === "sales" && parseSalesPath(path).tab !== "pipeline";
+}
+
+/** "Viewing: everyone / my organization / only me". */
+export type ScopeLabel = "everyone" | "organization" | "mine";
+
+/**
+ * What the scope chip says on a list, and whether tapping it changes the list.
+ * `reach` is what the person's management mode shows ("everyone" for a manager,
+ * "organization" for a Rep Admin; null: no mode, no chip); `teamFilter` is
+ * Tasks' "Whole team". Where the mode would not widen the list (a Rep Admin's
+ * visits), the chip says "only me" and is not a switch.
+ */
+export function scopeChipState(
+  path: string,
+  reach: "everyone" | "organization" | null,
+  adminMode: boolean,
+  teamFilter: boolean,
+): { label: ScopeLabel; toggles: boolean } | null {
+  const scope = managementScope(path);
+  if (!reach || !scope) return null;
+  const widens = reach === "everyone" || organizationWideList(path);
+  const wide = adminMode && widens && (scope !== "tasks" || teamFilter);
+  return { label: wide ? (reach === "everyone" ? "everyone" : "organization") : "mine", toggles: widens };
+}
+
+/**
+ * Where leaving management mode on a management screen lands: the rep screen
+ * of the same module that matches it best (Inventory → My pieces, Products →
+ * Sales…). Administration and Platform pages have no rep twin: `fallback`.
+ */
+export function repScreenFor(path: string, fallback: string): string {
+  if (starts("/admin/tags")(path)) return starts("/admin/tags/pieces")(path) ? "/tags/pieces" : "/tags";
+  const section = visitsAdminSection(path);
+  if (section === "products") return "/sales";
+  if (section) return "/dashboard";
+  return fallback;
 }

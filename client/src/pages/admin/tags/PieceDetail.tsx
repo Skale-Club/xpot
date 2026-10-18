@@ -1,773 +1,103 @@
-import { useMemo, useState, type ReactNode } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Archive, ArrowLeft, Ban, Building2, ChevronRight, Download, ExternalLink, MapPin, Pencil, Plus, Power, PowerOff, RotateCcw, Truck, Undo2 } from "lucide-react";
-import { defaultUtmEnabled, planTransition, type TagAction } from "@shared/tags";
-import { contentKindOf, contentSummary, validateChipContent, type ChipContentKind } from "@shared/chipContent";
-import { guessDestinationType, normalizeUrlInput } from "@shared/tagApp";
+import { useCallback, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Ban } from "lucide-react";
+import { PaneBar } from "@/components/xpot/MasterDetail";
 import type { TagDetail } from "@shared/tagsApi";
-import { CODE_HEADING, TagModelChips, TagPieceVisual, tagPlaqueSpec } from "@/components/xpot/TagProductThumbnail";
-import { useIsSuperAdmin } from "@/components/xpot/AdminBadge";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Switch } from "@/components/ui/switch";
+import { useXpotModules } from "@/components/ModuleSwitch";
+import { EmptyState } from "@/components/xpot/EmptyState";
+import { BackLink } from "@/components/xpot/PageHeader";
+import { PieceBody } from "@/components/piece/PieceBody";
+import { PieceProvider, type PieceContextValue } from "@/components/piece/PieceContext";
+import { PieceHeader } from "@/components/piece/PieceHeader";
+import type { PieceViewer } from "@/components/piece/pieceView";
 import { useToast } from "@/hooks/use-toast";
-import { AdminHttpError, ADMIN_TAGS_KEY, errorMessage, formatDateTime, getJson, invalidateAdminTags, sendJson, STALE_MS } from "./api";
-import { BTN, BTN_DANGER, BTN_GHOST, CARD, INPUT, PieceStatusPill } from "./ui";
-import { CopyRow, Loading, LoadError, Select, useLeads, useReps } from "./pieces-shared";
-import { useTagLabels } from "./labels";
-import { AnalyticsPanel, RangePicker, type AnalyticsRange } from "./pieces-analytics";
+import { queryClient } from "@/lib/queryClient";
+import { useViewerAccess } from "@/lib/adminMode";
+import { AdminHttpError, ADMIN_TAGS_KEY, getJson, STALE_MS } from "./api";
+import { Loading, LoadError } from "./pieces-shared";
 import { NfcProvisioningCard } from "./pieces-NfcProvisioningCard";
-import { ContentEditor, type ContentState } from "@/pages/tags/ContentEditor";
-import { GenerateReviewButton, ReviewLinkAssist } from "@/pages/tags/ReviewLinkSheet";
-import { FieldLabel, LinkInput } from "@/pages/tags/ui";
-import { JourneyPanel } from "./JourneyPanel";
 import { useT } from "@/i18n";
-import { commonMessages } from "@/i18n/messages/common";
 import { shellMessages } from "@/i18n/messages/shell";
-import { manageTagsMessages } from "@/i18n/messages/manageTags";
 import { manageTagsPiecesMessages } from "@/i18n/messages/manageTagsPieces";
-import { tagsMessages } from "@/i18n/messages/tags";
+
+// Admin › Tags › a piece: the management side of the one piece screen
+// (components/piece), with every section. On a computer the working sections
+// sit left and Management right; Performance and Activity run across the bottom.
+// In Inventory's side pane (`onClose`) the sections stack in one column, with
+// "Open full page" (this same page at /admin/tags/pieces/:id) and Close on top.
 
 type Go = (path: string) => void;
-
-type PieceKey = keyof (typeof manageTagsPiecesMessages)["en"];
-
-/** validateDestinationUrl (shared) answers in English; its messages, by text. */
-const URL_ERROR_KEYS: Record<string, PieceKey> = {
-  "Destination URL is required": "urlErrorRequired",
-  "Destination URL is too long": "urlErrorTooLong",
-  "Destination must be a full URL starting with https://": "urlErrorNotFull",
-  "Destination must use https://": "urlErrorHttps",
-  "Destination URL is not valid": "urlErrorInvalid",
-};
-
-const LABEL = "text-[11px] font-semibold uppercase tracking-wider text-white/40";
-const STEP_TITLE = "text-sm font-semibold text-white";
-
-/** Every write on this screen answers with the fresh TagDetail. */
-function usePieceMutation(id: string, successTitle: string) {
-  const { toast } = useToast();
-  const t = useT(manageTagsPiecesMessages);
-  return useMutation({
-    mutationFn: ({ url, method = "POST", body }: { url?: string; method?: "POST" | "PATCH"; body?: unknown }) =>
-      sendJson<TagDetail>(method, url ?? `/api/xpot/admin/tags/${id}`, body ?? {}),
-    onSuccess: () => {
-      void invalidateAdminTags();
-      toast({ title: successTitle });
-    },
-    onError: (err) => toast({ title: t("actionFailed"), description: errorMessage(err), variant: "destructive" }),
-  });
-}
-
-// ─── Customer (lead) ──────────────────────────────────────────────────────────
-
-type CustomerPick = { leadId: number; name: string } | { leadId: null; name: string };
-
-function CustomerStep({ tag }: { tag: TagDetail }) {
-  const t = useT(manageTagsPiecesMessages);
-  const { data: leads = [], isLoading: leadsLoading, error: leadsError } = useLeads();
-  const [changing, setChanging] = useState(false);
-  const [text, setText] = useState("");
-  // A pick that would wipe the current destination waits here for a confirm.
-  const [pending, setPending] = useState<CustomerPick | null>(null);
-  const assign = usePieceMutation(tag.id, t("customerAssigned"));
-  const locked = tag.status === "retired" || tag.stockStatus === "damaged";
-  // The server refuses to move a live piece; don't create a lead that would be left orphaned.
-  const liveWithCustomer = tag.status === "active" && !!tag.leadId;
-  const hasCustomer = !!(tag.leadName || tag.leadId);
-  const current = tag.leadId ? leads.find((l) => l.id === tag.leadId) : undefined;
-
-  const query = text.trim().toLowerCase();
-  const matches = useMemo(
-    // Nothing until someone searches: the list is not a menu to scroll through.
-    () => (query ? leads.filter((l) => l.name.toLowerCase().includes(query) && l.id !== tag.leadId).slice(0, 8) : []),
-    [leads, query, tag.leadId],
-  );
-  const exact = leads.some((l) => l.name.toLowerCase() === query);
-
-  const reset = () => {
-    setChanging(false);
-    setText("");
-    setPending(null);
-  };
-
-  const commit = (pick: CustomerPick) => {
-    // The server creates a new lead, owned by the reseller holding the piece.
-    const body = pick.leadId ? { leadId: pick.leadId } : { leadName: pick.name };
-    assign.mutate({ url: `/api/xpot/admin/tags/${tag.id}/assign`, body }, { onSuccess: reset });
-  };
-
-  const choose = (pick: CustomerPick) => {
-    if (tag.leadId && (tag.destinationUrl || tag.destinationType)) setPending(pick);
-    else commit(pick);
-  };
-
-  const picking = !locked && !liveWithCustomer && (!hasCustomer || changing);
-
-  return (
-    <div className="space-y-3">
-      <p className={STEP_TITLE}>{t("stepCustomer")}</p>
-
-      {hasCustomer ? (
-        <div className="flex min-h-[52px] items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] py-2 pl-3 pr-2" data-testid="admin-piece-customer">
-          <Building2 className="h-4 w-4 shrink-0 text-white/40" />
-          <span className="min-w-0 flex-1">
-            <span className="block truncate font-semibold text-white">{tag.leadName ?? t("customerNumber", { id: tag.leadId ?? "" })}</span>
-            {current?.city ? <span className="block truncate text-xs text-white/40">{current.city}</span> : null}
-          </span>
-          {current?.googlePlaceId ? <GoogleBadge label={t("onGoogle")} /> : null}
-          {!locked && !liveWithCustomer && !changing ? (
-            <button type="button" className={BTN_GHOST} onClick={() => setChanging(true)} data-testid="admin-piece-change-customer">
-              <Pencil className="h-3.5 w-3.5" />
-              {t("changeCustomer")}
-            </button>
-          ) : null}
-        </div>
-      ) : (
-        <p className="text-sm text-white/40">{t("notAssigned")}</p>
-      )}
-      {liveWithCustomer ? <p className="text-xs text-white/40">{t("disableBeforeMove")}</p> : null}
-
-      {pending ? (
-        <div className="space-y-3 rounded-xl border border-amber-400/30 bg-amber-400/10 p-3" data-testid="admin-piece-confirm-move">
-          <p className="flex items-start gap-2 text-sm text-amber-100">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
-            <span>
-              <strong className="block text-white">{t("moveCustomerTitle", { name: pending.name })}</strong>
-              {t("confirmMoveCustomer")}
-            </span>
-          </p>
-          <div className="flex gap-2">
-            <button type="button" className={BTN} disabled={assign.isPending} onClick={() => commit(pending)} data-testid="admin-piece-confirm-move-yes">
-              {t("confirmMove")}
-            </button>
-            <button type="button" className={BTN_GHOST} disabled={assign.isPending} onClick={() => setPending(null)}>
-              {t("cancelChange")}
-            </button>
-          </div>
-        </div>
-      ) : picking ? (
-        <div>
-          <div className="flex gap-2">
-            <input
-              className={INPUT}
-              autoFocus={changing}
-              placeholder={leadsLoading ? t("loadingCustomers") : t("searchCustomers")}
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              maxLength={200}
-              disabled={assign.isPending}
-              data-testid="admin-piece-lead-search"
-            />
-            {changing ? (
-              <button type="button" className={BTN_GHOST} onClick={reset}>
-                {t("cancelChange")}
-              </button>
-            ) : null}
-          </div>
-          {leadsError ? <p className="mt-1 text-xs text-red-300">{t("customersFailed")}</p> : null}
-          {query ? (
-            <ul className="mt-2 divide-y divide-white/10 overflow-hidden rounded-xl border border-white/10 bg-white/[0.03]">
-              {matches.map((lead) => (
-                <li key={lead.id}>
-                  <button
-                    type="button"
-                    disabled={assign.isPending}
-                    onClick={() => choose({ leadId: lead.id, name: lead.name })}
-                    className="flex min-h-[44px] w-full items-center gap-3 px-3 py-2 text-left hover:bg-white/[0.05] disabled:opacity-50"
-                    data-testid={`admin-piece-lead-${lead.id}`}
-                  >
-                    <span className="min-w-0 flex-1 truncate text-sm text-white">{lead.name}</span>
-                    {lead.city ? <span className="shrink-0 text-xs text-white/40">{lead.city}</span> : null}
-                    {lead.googlePlaceId ? <GoogleBadge label={t("onGoogle")} /> : null}
-                  </button>
-                </li>
-              ))}
-              {!exact ? (
-                <li>
-                  <button
-                    type="button"
-                    disabled={assign.isPending}
-                    onClick={() => choose({ leadId: null, name: text.trim() })}
-                    className="flex min-h-[44px] w-full items-center gap-2 px-3 py-2 text-left text-sm font-semibold text-blue-300 hover:bg-white/[0.05] disabled:opacity-50"
-                    data-testid="admin-piece-lead-create"
-                  >
-                    <Plus className="h-4 w-4 shrink-0" />
-                    <span className="truncate">{t("createCustomer", { name: text.trim() })}</span>
-                  </button>
-                </li>
-              ) : null}
-            </ul>
-          ) : null}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function GoogleBadge({ label }: { label: string }) {
-  return (
-    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-400/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-300 ring-1 ring-emerald-400/25">
-      <MapPin className="h-3 w-3" />
-      {label}
-    </span>
-  );
-}
-
-// ─── Destination ──────────────────────────────────────────────────────────────
-
-function DestinationStep({ tag }: { tag: TagDetail }) {
-  const t = useT(manageTagsPiecesMessages);
-  const tt = useT(tagsMessages);
-  const tc = useT(commonMessages);
-  const labels = useTagLabels();
-  const { toast } = useToast();
-  const { data: leads = [] } = useLeads();
-  const stored = tag.destinationUrl ?? "";
-  const storedKind = contentKindOf(stored);
-  // With a destination on file the step is a summary; "Change" opens the form.
-  const [editing, setEditing] = useState(!stored);
-  const [kind, setKind] = useState<ChipContentKind>(storedKind);
-  const [link, setLink] = useState(storedKind === "url" ? stored : "");
-  const [content, setContent] = useState<ContentState>({ value: null, error: null });
-  const [utmEnabled, setUtmEnabled] = useState(tag.utmEnabled);
-  const [utmTouched, setUtmTouched] = useState(false);
-  const [utmCampaign, setUtmCampaign] = useState(tag.utmCampaign ?? "");
-  const [reason, setReason] = useState("");
-  const save = usePieceMutation(tag.id, t("destinationSaved"));
-  const locked = tag.status === "retired" || tag.stockStatus === "damaged";
-  const customer = tag.leadId ? leads.find((l) => l.id === tag.leadId) : undefined;
-
-  // A link, or an email/phone/vCard from the kind tabs (shared/chipContent.ts).
-  const raw = kind === "url" ? normalizeUrlInput(link) : content.value ?? "";
-  const check = raw ? validateChipContent(raw, { allowHttp: import.meta.env.DEV }) : null;
-  const value = check?.ok ? check.value : null;
-  const destinationType = value ? (kind === "url" ? guessDestinationType(value) : kind) : null;
-  const utm = utmTouched ? utmEnabled : destinationType ? defaultUtmEnabled(destinationType) : utmEnabled;
-  const dirty = value !== (tag.destinationUrl ?? null) || utm !== tag.utmEnabled || utmCampaign.trim() !== (tag.utmCampaign ?? "");
-  // Why the button is off, said out loud instead of a silent grey button.
-  const blocker = !value
-    ? kind === "url" && check && !check.ok
-      ? URL_ERROR_KEYS[check.error] ? t(URL_ERROR_KEYS[check.error]) : check.error
-      : kind !== "url"
-        ? content.error ?? t("saveNeedsContent")
-        : t("saveNeedsContent")
-    : !dirty
-      ? t("saveNoChanges")
-      : null;
-
-  if (!stored && !tag.leadId && tag.status === "inventory") {
-    return (
-      <div className="space-y-2">
-        <p className={STEP_TITLE}>{t("stepDestination")}</p>
-        <p className="text-sm text-white/40">{t("destinationNeedsCustomer")}</p>
-      </div>
-    );
-  }
-
-  if (!editing) {
-    return (
-      <div className="space-y-3">
-        <p className={STEP_TITLE}>{t("stepDestination")}</p>
-        <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] py-2 pl-3 pr-2" data-testid="admin-piece-destination">
-          <span className="min-w-0 flex-1">
-            <span className="block text-xs text-white/40">
-              {t("destinationOpens")} · {storedKind === "url" ? labels.destination(tag.destinationType) : tt(`contentKind_${storedKind}`)}
-            </span>
-            {storedKind === "url" ? (
-              <a href={stored} target="_blank" rel="noopener noreferrer" className="block truncate font-semibold text-white hover:underline">
-                {stored.replace(/^https?:\/\/(www\.)?/, "")}
-              </a>
-            ) : (
-              <span className="block truncate font-semibold text-white">{contentSummary(stored)}</span>
-            )}
-          </span>
-          {!locked ? (
-            <button type="button" className={BTN_GHOST} onClick={() => setEditing(true)} data-testid="admin-piece-change-destination">
-              <Pencil className="h-3.5 w-3.5" />
-              {t("changeDestination")}
-            </button>
-          ) : null}
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-3">
-      <p className={STEP_TITLE}>{t("stepDestination")}</p>
-      {tag.leadName && (customer?.googlePlaceId || tag.face === "google_review") ? (
-        <GenerateReviewButton
-          name={tag.leadName}
-          placeId={customer?.googlePlaceId}
-          currentLink={link}
-          onLink={(url) => {
-            setKind("url");
-            setLink(url);
-          }}
-        />
-      ) : null}
-      <ContentEditor
-        kind={kind}
-        onKind={setKind}
-        initial={storedKind === "url" ? null : stored}
-        onChange={setContent}
-        urlField={
-          <div>
-            <FieldLabel>{tt("linkField")}</FieldLabel>
-            <LinkInput
-              value={link}
-              onChange={setLink}
-              face={tag.face}
-              placeholder={tt("linkPlaceholder")}
-              onPasteFailed={() => toast({ title: tc("pasteFailed"), variant: "destructive" })}
-            />
-            <ReviewLinkAssist link={link} onPick={(place) => setLink(place.reviewUrl)} />
-          </div>
-        }
-      />
-      {kind === "url" ? (
-        <div className="flex items-center justify-between gap-3 rounded-xl border border-white/10 p-3">
-          <div>
-            <label htmlFor={`utm-${tag.id}`} className="text-sm text-white/80">{t("utmLabel")}</label>
-            <p className="text-xs text-white/40">{t("utmHint")}</p>
-          </div>
-          <Switch
-            id={`utm-${tag.id}`}
-            checked={utm}
-            onCheckedChange={(v) => {
-              setUtmEnabled(v);
-              setUtmTouched(true);
-            }}
-          />
-        </div>
-      ) : null}
-      {kind === "url" && utm ? (
-        <input className={INPUT} value={utmCampaign} onChange={(e) => setUtmCampaign(e.target.value)} placeholder={t("utmCampaignPlaceholder")} maxLength={80} />
-      ) : null}
-      {stored ? <input className={INPUT} value={reason} onChange={(e) => setReason(e.target.value)} placeholder={t("changeReasonPlaceholder")} maxLength={300} /> : null}
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          className={BTN}
-          disabled={!!blocker || save.isPending}
-          onClick={() =>
-            save.mutate(
-              { method: "PATCH", body: { destinationType, destinationUrl: value, utmEnabled: kind === "url" ? utm : false, utmCampaign, reason } },
-              { onSuccess: () => setEditing(false) },
-            )
-          }
-          data-testid="admin-piece-save-destination"
-        >
-          {t("saveDestination")}
-        </button>
-        {stored ? (
-          <button type="button" className={BTN_GHOST} onClick={() => setEditing(false)}>
-            {tc("cancel")}
-          </button>
-        ) : null}
-        {blocker ? <span className="text-xs text-white/40" data-testid="admin-piece-save-hint">{blocker}</span> : null}
-      </div>
-    </div>
-  );
-}
-
-// ─── Lifecycle ────────────────────────────────────────────────────────────────
-
-type LifecycleAction = Exclude<TagAction, "assign">;
-type PieceAction = LifecycleAction | "damage";
-
-/** Title, description and button are action_<action>_title / _description / _confirm. */
-const DANGER_ACTIONS: ReadonlySet<PieceAction> = new Set<PieceAction>(["disable", "unassign", "retire", "damage"]);
-
-/** Why a piece cannot go live yet (planTransition's reason, in the language in use). */
-function activateBlockerKey(tag: TagDetail): PieceKey {
-  if (tag.status === "inventory" || !tag.leadId) return "activateNeedsCustomer";
-  if (!tag.destinationType) return "activateNeedsType";
-  return "activateNeedsUrl";
-}
-
-/** Activate/disable live on the field API (managers may act on any piece); the rest on the admin API. */
-function actionUrl(id: string, action: PieceAction): string {
-  if (action === "damage") return `/api/xpot/admin/tags/${id}/damage`;
-  return action === "activate" || action === "disable" ? `/api/xpot/tags/${id}/${action}` : `/api/xpot/admin/tags/${id}/${action}`;
-}
-
-function ActionDialog({ action, onClose, onConfirm, pending }: { action: PieceAction | null; onClose: () => void; onConfirm: (reason: string) => void; pending: boolean }) {
-  const t = useT(manageTagsPiecesMessages);
-  const tc = useT(commonMessages);
-  const [reason, setReason] = useState("");
-  return (
-    <Dialog
-      open={!!action}
-      onOpenChange={(open) => {
-        if (!open) {
-          setReason("");
-          onClose();
-        }
-      }}
-    >
-      <DialogContent className="border-white/10 bg-[#0d1326] text-white">
-        <DialogHeader>
-          <DialogTitle>{action ? t(`action_${action}_title`) : null}</DialogTitle>
-          <DialogDescription className="text-white/50">{action ? t(`action_${action}_description`) : null}</DialogDescription>
-        </DialogHeader>
-        <input className={INPUT} value={reason} onChange={(e) => setReason(e.target.value)} placeholder={t("reasonPlaceholder")} maxLength={300} data-testid="admin-piece-action-reason" />
-        <DialogFooter className="gap-2">
-          <button type="button" className={BTN_GHOST} onClick={onClose}>{tc("cancel")}</button>
-          <button
-            type="button"
-            className={action && DANGER_ACTIONS.has(action) ? BTN_DANGER : BTN}
-            disabled={pending || (action === "damage" && !reason.trim())}
-            onClick={() => {
-              onConfirm(reason);
-              setReason("");
-            }}
-            data-testid="admin-piece-action-confirm"
-          >
-            {action ? t(`action_${action}_confirm`) : null}
-          </button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function LifecycleStep({ tag }: { tag: TagDetail }) {
-  const t = useT(manageTagsPiecesMessages);
-  const run = usePieceMutation(tag.id, t("pieceUpdated"));
-  const [pending, setPending] = useState<PieceAction | null>(null);
-  const can = (action: LifecycleAction) => planTransition(tag, action).ok;
-  const activatePlan = planTransition(tag, "activate");
-  const damaged = tag.stockStatus === "damaged";
-  const canDamage = tag.status === "inventory" && tag.repId === null && tag.leadId === null && (tag.stockStatus === "available" || tag.stockStatus === "pending");
-
-  const confirm = (reason: string) => {
-    if (!pending) return;
-    run.mutate({ url: actionUrl(tag.id, pending), body: { reason } }, { onSettled: () => setPending(null) });
-  };
-
-  return (
-    <div className="space-y-3">
-      <p className={STEP_TITLE}>{t("stepLive")}</p>
-      {damaged ? (
-        <div className="flex items-start gap-2 rounded-xl border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-200" data-testid="admin-piece-damaged-banner">
-          <Ban className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>{t("damagedExplain")}</span>
-        </div>
-      ) : null}
-      <div className="flex flex-wrap gap-2">
-        {tag.destinationUrl ? (
-          <button type="button" className={BTN_GHOST} onClick={() => tag.destinationUrl && window.open(tag.destinationUrl, "_blank", "noopener,noreferrer")}>
-            <ExternalLink className="h-3.5 w-3.5" />{t("testDestination")}
-          </button>
-        ) : null}
-        {!damaged && tag.status !== "active" && tag.status !== "retired" ? (
-          <button type="button" className={BTN} disabled={!activatePlan.ok || run.isPending} onClick={() => setPending("activate")} data-testid="admin-piece-activate">
-            <Power className="h-3.5 w-3.5" />{t("action_activate_confirm")}
-          </button>
-        ) : null}
-        {!damaged && can("disable") ? (
-          <button type="button" className={BTN_GHOST} disabled={run.isPending} onClick={() => setPending("disable")} data-testid="admin-piece-disable">
-            <PowerOff className="h-3.5 w-3.5" />{t("action_disable_confirm")}
-          </button>
-        ) : null}
-        {!damaged && can("unassign") ? (
-          <button type="button" className={BTN_GHOST} disabled={run.isPending} onClick={() => setPending("unassign")}>
-            <Undo2 className="h-3.5 w-3.5" />{t("action_unassign_confirm")}
-          </button>
-        ) : null}
-        {!damaged && can("retire") ? (
-          <button type="button" className={BTN_DANGER} disabled={run.isPending} onClick={() => setPending("retire")}>
-            <Archive className="h-3.5 w-3.5" />{t("action_retire_confirm")}
-          </button>
-        ) : null}
-        {!damaged && can("restore") ? (
-          <button type="button" className={BTN_GHOST} disabled={run.isPending} onClick={() => setPending("restore")}>
-            <RotateCcw className="h-3.5 w-3.5" />{t("action_restore_confirm")}
-          </button>
-        ) : null}
-        {canDamage ? (
-          <button type="button" className={BTN_DANGER} disabled={run.isPending} onClick={() => setPending("damage")} data-testid="admin-piece-damage">
-            <Ban className="h-3.5 w-3.5" />{t("action_damage_confirm")}
-          </button>
-        ) : null}
-      </div>
-      {!damaged && tag.status !== "active" && tag.status !== "retired" && !activatePlan.ok ? <p className="text-xs text-white/40">{t(activateBlockerKey(tag))}</p> : null}
-      {tag.status === "active" ? <p className="text-xs text-emerald-400">{t("liveExplain")}</p> : null}
-      <ActionDialog action={pending} onClose={() => setPending(null)} onConfirm={confirm} pending={run.isPending} />
-    </div>
-  );
-}
-
-// ─── Label / product ──────────────────────────────────────────────────────────
-
-function DetailsStep({ tag }: { tag: TagDetail }) {
-  const t = useT(manageTagsPiecesMessages);
-  const tg = useT(manageTagsMessages);
-  const labels = useTagLabels();
-  const [label, setLabel] = useState(tag.label ?? "");
-  const [productType, setProductType] = useState<string | undefined>(tag.productType);
-  const [face, setFace] = useState<string | undefined>(tag.ownFace ?? undefined);
-  const save = usePieceMutation(tag.id, t("pieceSaved"));
-  const dirty = label.trim() !== (tag.label ?? "") || productType !== tag.productType || (face ?? null) !== tag.ownFace;
-  if (tag.status === "retired" || tag.stockStatus === "damaged") return null;
-  return (
-    <details className="group space-y-3">
-      <summary className="flex cursor-pointer list-none items-center gap-1.5 text-sm font-semibold text-white/70 hover:text-white">
-        <ChevronRight className="h-4 w-4 transition-transform group-open:rotate-90" />
-        {t("pieceSettings")}
-      </summary>
-      <div className="mt-3 grid gap-2 sm:grid-cols-2">
-        <label className="space-y-1">
-          <span className={LABEL}>{t("productType")}</span>
-          <Select value={productType} onChange={setProductType} placeholder={t("productPlaceholder")} options={labels.productOptions} allowEmpty={false} />
-        </label>
-        <label className="space-y-1 sm:col-span-2">
-          <span className={LABEL}>{tg("printedOnPiece")}</span>
-          <Select value={face} onChange={setFace} placeholder={tag.batchCode ? t("sameAsBatch") : t("fromProduct")} options={labels.faceOptions} />
-        </label>
-        <label className="space-y-1">
-          <span className={LABEL}>{t("internalLabel")}</span>
-          <input className={INPUT} value={label} onChange={(e) => setLabel(e.target.value)} maxLength={120} placeholder={t("optional")} />
-        </label>
-      </div>
-      <button type="button" className={BTN_GHOST} disabled={!dirty || !productType || save.isPending} onClick={() => save.mutate({ method: "PATCH", body: { label, productType, face: face ?? null } })}>
-        {t("saveDetails")}
-      </button>
-    </details>
-  );
-}
-
-// ─── Reseller ─────────────────────────────────────────────────────────────────
-
-const HOUSE = "house";
-
-/** Move the piece (and, if sold, its sale credit) to another reseller or back to house stock. */
-function ResellerField({ tag }: { tag: TagDetail }) {
-  const t = useT(manageTagsPiecesMessages);
-  const tg = useT(manageTagsMessages);
-  const labels = useTagLabels();
-  const { data: reps = [], error } = useReps();
-  const current = tag.repId ? String(tag.repId) : HOUSE;
-  const [choice, setChoice] = useState<string>(current);
-  const move = usePieceMutation(tag.id, t("resellerUpdated"));
-  const options = [{ value: HOUSE, label: t("houseStockNoReseller") }, ...reps.map((r) => ({ value: String(r.id), label: labels.repOption(r) }))];
-  if (tag.repId && !options.some((o) => o.value === current)) options.push({ value: current, label: tag.repName ?? t("resellerNumber", { id: tag.repId }) });
-
-  const submit = () => {
-    if (choice === current) return;
-    const target = choice === HOUSE ? t("houseStockTarget") : options.find((o) => o.value === choice)?.label ?? t("thisReseller");
-    if (!window.confirm(t(tag.soldAt ? "moveConfirmSold" : "moveConfirm", { code: tag.publicCode, target }))) return;
-    move.mutate({ url: `/api/xpot/admin/tags/${tag.id}/rep`, method: "PATCH", body: { repId: choice === HOUSE ? null : Number(choice) } });
-  };
-
-  return (
-    <div className="space-y-1.5">
-      <p className={LABEL}>{tg("colReseller")}</p>
-      <p className="text-sm text-white/80">
-        {tag.repName ?? (tag.repId ? t("resellerNumber", { id: tag.repId }) : t("houseStock"))}
-        {tag.kitId ? <span className="text-xs text-white/40"> · {t("inKit")}</span> : null}
-      </p>
-      <div className="flex gap-2">
-        <Select value={choice} onChange={(v) => setChoice(v ?? HOUSE)} placeholder={t("houseStock")} options={options} allowEmpty={false} testId="admin-piece-rep" />
-        <button type="button" className={`${BTN_GHOST} shrink-0`} disabled={tag.stockStatus === "damaged" || choice === current || move.isPending} onClick={submit} data-testid="admin-piece-rep-move">
-          <Truck className="h-3.5 w-3.5" />{t("move")}
-        </button>
-      </div>
-      {error ? <p className="text-xs text-red-400">{t("resellersFailed")}</p> : null}
-      {tag.soldAt ? <p className="text-xs text-white/40">{t("saleCounted", { date: formatDateTime(tag.soldAt) })}</p> : null}
-    </div>
-  );
-}
-
-// ─── Page ─────────────────────────────────────────────────────────────────────
 
 function Back({ go }: { go: Go }) {
   const ts = useT(shellMessages);
   return (
-    <button type="button" className="inline-flex items-center gap-1.5 text-sm text-white/50 hover:text-white" onClick={() => go("/pieces")} data-testid="admin-piece-back">
-      <ArrowLeft className="h-4 w-4" />{ts("managePieces")}
-    </button>
+    <span data-testid="admin-piece-back">
+      <BackLink onBack={() => go("/pieces")}>{ts("managePieces")}</BackLink>
+    </span>
   );
 }
 
-function Dl({ children }: { children: ReactNode }) {
-  return <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">{children}</dl>;
-}
-function Row({ label, value }: { label: string; value: ReactNode }) {
-  return (
-    <>
-      <dt className="text-white/40">{label}</dt>
-      <dd className="truncate text-right text-white/80">{value}</dd>
-    </>
-  );
-}
-
-export function PieceDetail({ id, go }: { id: string; go: Go }) {
+export function PieceDetail({ id, go, onClose }: { id: string; go: Go; /** Shown in Inventory's side pane. */ onClose?: () => void }) {
   const t = useT(manageTagsPiecesMessages);
-  const labels = useTagLabels();
-  const isAdmin = useIsSuperAdmin();
-  const [range, setRange] = useState<AnalyticsRange>({ preset: "30d" });
-  const { data: tag, isLoading, error } = useQuery<TagDetail>({
-    queryKey: [ADMIN_TAGS_KEY, "piece", id],
+  const { toast } = useToast();
+  const access = useViewerAccess();
+  const modules = useXpotModules();
+  const queryKey = [ADMIN_TAGS_KEY, "piece", id];
+  const { data: tag, isLoading, error, refetch } = useQuery<TagDetail>({
+    queryKey,
     queryFn: () => getJson(`/api/xpot/tags/${encodeURIComponent(id)}`),
     staleTime: STALE_MS,
     retry: (count, err) => !(err instanceof AdminHttpError && err.status < 500) && count < 2,
   });
+  const changed = useCallback((detail: TagDetail) => queryClient.setQueryData(queryKey, detail), [id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const viewer = useMemo<PieceViewer>(
+    // The admin pages turn management mode on (AdminApp), so this is the manager's or the admin's view.
+    () => ({ surface: "admin", canManage: access.hasAdminAccess, isAdmin: access.isSuperAdmin, hasVisits: modules.includes("visits"), repId: access.me?.rep.id ?? null }),
+    [access.hasAdminAccess, access.isSuperAdmin, modules, access.me?.rep.id],
+  );
 
-  if (isLoading) return <Loading />;
+  const top = onClose ? <PaneBar fullHref={`/admin/tags/pieces/${encodeURIComponent(id)}`} onClose={onClose} testId="admin-piece-pane" /> : <Back go={go} />;
+  if (isLoading) return onClose ? <div className="space-y-3">{top}<Loading rows={5} /></div> : <Loading rows={5} />;
   if (error || !tag) {
     const notFound = error instanceof AdminHttpError && error.status === 404;
     return (
       <div className="space-y-3">
-        <Back go={go} />
-        {notFound ? <p className="text-sm text-red-400">{t("notFound")}</p> : <LoadError what={t("whatThisPiece")} error={error} />}
+        {top}
+        {notFound ? (
+          <EmptyState tone="tags" icon={Ban} title={t("notFound")} />
+        ) : (
+          <LoadError what={t("whatThisPiece")} error={error} onRetry={() => void refetch()} />
+        )}
       </div>
     );
   }
 
-  const qrBase = `/api/xpot/admin/tags/${tag.id}`;
+  const context: PieceContextValue = {
+    tag,
+    viewer,
+    changed,
+    refresh: () => void refetch(),
+    notify: ({ tone, text }) => toast(tone === "error" ? { title: t("actionFailed"), description: text, variant: "destructive" } : { title: text }),
+  };
 
   return (
-    <div className="space-y-4" data-testid="admin-piece-detail">
-      <Back go={go} />
-
-      <div className="flex min-w-0 items-center gap-3 sm:gap-4">
-        <TagPieceVisual productType={tag.productType} face={tag.face} size="md" />
-        <div className="min-w-0 flex-1 space-y-1.5">
-          <div className="flex flex-wrap items-center gap-2.5">
-            <h2 className={CODE_HEADING} data-testid="admin-piece-code">{tag.publicCode}</h2>
-            <PieceStatusPill status={tag.status} stockStatus={tag.stockStatus} />
-          </div>
-          <div className="flex flex-wrap items-center gap-y-1 text-sm text-white/50">
-            {tagPlaqueSpec(tag.productType, tag.face, tag.batchCode).model ? (
-              <TagModelChips productType={tag.productType} face={tag.face} batchCode={tag.batchCode} className="mr-2" />
-            ) : (
-              <span className="mr-2">{labels.product(tag.productType)}</span>
-            )}
-            <span>{labels.face(tag.face)}</span>
-            {tag.batchCode ? (
-              /* Batches are the global admin's; a manager sees the code without the link. */
-              isAdmin ? (
-                <button type="button" className="font-mono before:mx-2 before:text-white/20 before:content-['·'] hover:text-white hover:underline" onClick={() => tag.batchId && go(`/batches/${tag.batchId}`)}>
-                  {tag.batchCode}
-                  {tag.serialNumber ? ` #${tag.serialNumber}` : ""}
-                </button>
-              ) : (
-                <span className="font-mono before:mx-2 before:text-white/20 before:content-['·']">
-                  {tag.batchCode}
-                  {tag.serialNumber ? ` #${tag.serialNumber}` : ""}
-                </span>
-              )
-            ) : null}
-            {tag.label ? <span className="before:mx-2 before:text-white/20 before:content-['·']">{tag.label}</span> : null}
-          </div>
-        </div>
+    <PieceProvider value={context}>
+      <div className="min-w-0 space-y-4" data-testid="admin-piece-detail">
+        {top}
+        <PieceHeader tag={tag} />
+        <PieceBody
+          layout={onClose ? "stack" : "columns"}
+          desktopWriter={
+            <NfcProvisioningCard
+              tagId={tag.id}
+              publicCode={tag.publicCode}
+              nfcUrl={tag.nfcUrl}
+              retired={tag.status === "retired" || tag.stockStatus === "damaged"}
+              onOpenWriters={() => go("/provisioners")}
+            />
+          }
+        />
       </div>
-
-      <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
-        {/* key: re-seed the forms whenever the saved piece changes */}
-        <section className={`${CARD} space-y-6 p-4`} key={`${tag.id}-${tag.updatedAt}`}>
-          <CustomerStep tag={tag} />
-          <div className="border-t border-white/10" />
-          <DestinationStep tag={tag} />
-          <div className="border-t border-white/10" />
-          <LifecycleStep tag={tag} />
-          <div className="border-t border-white/10" />
-          <DetailsStep tag={tag} />
-        </section>
-
-        <section className={`${CARD} space-y-4 p-4`} key={`side-${tag.id}-${tag.updatedAt}`}>
-          <div className="mx-auto w-44 rounded-xl bg-white p-2">
-            <img src={`${qrBase}/qr.svg?v=${encodeURIComponent(tag.publicCode)}`} alt={t("qrAlt", { code: tag.publicCode })} className="h-full w-full" />
-          </div>
-          <Dl>
-            <Row label={t("rowScans")} value={`QR ${tag.qrInteractions} · NFC ${tag.nfcInteractions}`} />
-            <Row label={t("colLastInteraction")} value={formatDateTime(tag.lastInteractionAt)} />
-          </Dl>
-          <div className="border-t border-white/10" />
-          <ResellerField tag={tag} />
-          <div className="border-t border-white/10" />
-          {/* Rarely needed: the QR is printed and the chip is written by the NFC tools. */}
-          <details className="group" data-testid="admin-piece-technical">
-            <summary className="flex cursor-pointer list-none items-center gap-1.5 text-sm font-semibold text-white/70 hover:text-white">
-              <ChevronRight className="h-4 w-4 transition-transform group-open:rotate-90" />
-              {t("technicalDetails")}
-            </summary>
-            <div className="mt-3 space-y-3">
-              <div>
-                <CopyRow label={t("qrUrlLabel")} value={tag.qrUrl} />
-                <p className="mt-1 text-xs text-white/40">{t("qrUrlHint")}</p>
-              </div>
-              <div>
-                <CopyRow label={t("nfcUrlLabel")} value={tag.nfcUrl} />
-                <p className="mt-1 text-xs text-white/40">{t("nfcUrlHint")}</p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs text-white/40">{t("downloadQr")}</span>
-                <a className={BTN_GHOST} href={`${qrBase}/qr.svg?download=1`} download={`${tag.publicCode}.svg`}>
-                  <Download className="h-3.5 w-3.5" />SVG
-                </a>
-                <a className={BTN_GHOST} href={`${qrBase}/qr.png?download=1`} download={`${tag.publicCode}.png`}>
-                  <Download className="h-3.5 w-3.5" />PNG
-                </a>
-              </div>
-              {/* Only the dates that happened. */}
-              <Dl>
-                {tag.assignedAt ? <Row label={t("rowAssigned")} value={formatDateTime(tag.assignedAt)} /> : null}
-                {tag.activatedAt ? <Row label={t("rowActivated")} value={formatDateTime(tag.activatedAt)} /> : null}
-                {tag.disabledAt ? <Row label={t("rowDisabled")} value={formatDateTime(tag.disabledAt)} /> : null}
-                <Row label={t("rowCreated")} value={formatDateTime(tag.createdAt)} />
-              </Dl>
-            </div>
-          </details>
-        </section>
-      </div>
-
-      {/* Writing the chip is the global admin's (NFC writers); managers don't get the card. */}
-      {isAdmin && (
-        <NfcProvisioningCard tagId={tag.id} publicCode={tag.publicCode} nfcUrl={tag.nfcUrl} retired={tag.status === "retired" || tag.stockStatus === "damaged"} onOpenWriters={() => go("/provisioners")} />
-      )}
-
-      {/* Admin only: renders nothing (and sends no request) for managers. */}
-      <JourneyPanel scope={{ tagId: tag.id }} title={t("journeyTitle")} />
-
-      <section className={`${CARD} p-4`}>
-        <p className="mb-3 text-sm font-semibold text-white">{t("destinationHistory")}</p>
-        {tag.history.length === 0 ? (
-          <p className="text-sm text-white/40">{t("noDestinationYet")}</p>
-        ) : (
-          <ul className="divide-y divide-white/5 text-sm">
-            {tag.history.map((h) => (
-              <li key={h.id} className="space-y-0.5 py-2">
-                <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-white/40">
-                  <span>
-                    {formatDateTime(h.createdAt)} · {h.changedByEmail ?? t("historyByAdmin")}
-                  </span>
-                  {h.reason ? <span className="italic">“{h.reason}”</span> : null}
-                </div>
-                <p className="break-all">
-                  <span className="text-white/40">
-                    {labels.destination(h.previousDestinationType)}: {h.previousUrl ?? "—"}
-                  </span>
-                  <span className="mx-1 text-white/30">→</span>
-                  <span className="text-white/80">
-                    {labels.destination(h.newDestinationType)}: {h.newUrl ?? t("historyCleared")}
-                  </span>
-                </p>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <div className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm font-semibold uppercase tracking-wider text-white/60">{t("analytics")}</p>
-          <RangePicker value={range} onChange={setRange} />
-        </div>
-        <AnalyticsPanel scopeUrl={`/api/xpot/admin/tags/${tag.id}/analytics`} range={range} />
-      </div>
-    </div>
+    </PieceProvider>
   );
 }

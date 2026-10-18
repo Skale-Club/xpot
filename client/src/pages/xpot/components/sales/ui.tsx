@@ -1,90 +1,97 @@
-// Small shared pieces for the sales module dialogs and cards, in the app's
-// existing dark-glass idiom (see XpotSales / VisitRow).
+// Small shared pieces for the sales module dialogs and cards. They are thin
+// wrappers over the UI kit (docs/UI_KIT.md) kept under their old names
+// because Admin and Tags screens import them too: new code can use the kit
+// directly (Button, Field/Input/Select, Pill, ui/dialog).
 
 import { useState, type ReactNode } from "react";
-import { ChevronDown } from "lucide-react";
+import { Minus, Plus } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2 } from "@/components/ui/loader";
-import { BRAND_GRADIENT } from "@/components/xpot/surface";
-import { centsToInput, formatCents, inputToCents } from "../../utils";
+import { Button } from "@/components/ui/button";
+import { FIELD_CONTROL, Select as KitSelect } from "@/components/xpot/Field";
+import { Pill, type PillTone } from "@/components/xpot/StatusPill";
+import { EYEBROW, GLASS_SUBTLE_CLASS } from "@/components/xpot/surface";
+import { cn } from "@/lib/utils";
+import { useT } from "@/i18n";
+import { visitsUiMessages } from "@/i18n/messages/visitsUi";
+import { centsToInput, currencySymbol, formatCents, inputToCents } from "../../utils";
 
 export { GLASS } from "@/components/xpot/surface";
 
-export const inputCls =
-  "w-full h-10 rounded-xl px-3 text-sm text-white placeholder:text-white/25 focus:outline-none focus:ring-1 focus:ring-indigo-400/50 transition-colors";
-export const inputStyle = {
-  background: "rgba(255,255,255,0.06)",
-  border: "1px solid rgba(255,255,255,0.09)",
-  colorScheme: "dark" as const,
-};
+/** The kit's text-control classes (components/xpot/Field.tsx FIELD_CONTROL). */
+export const inputCls = `${FIELD_CONTROL} py-2`;
+/** Kept for callers that pass it with inputCls; the look is all in the classes now. */
+export const inputStyle = { colorScheme: "dark" as const };
 
+/** A small group heading ("STOCK HERE", "LEDGER"), the app's EYEBROW. */
 export function SectionLabel({ children, right }: { children: ReactNode; right?: ReactNode }) {
   return (
     <div className="flex items-center justify-between px-1">
-      <div className="text-xs font-semibold uppercase tracking-widest text-white/30">{children}</div>
+      <div className={EYEBROW}>{children}</div>
       {right}
     </div>
   );
 }
 
+/** Label + control with the kit's one label style; `hint` sits at the end of the label row. */
 export function Field({ label, children, hint }: { label: string; children: ReactNode; hint?: ReactNode }) {
   return (
     <label className="block space-y-1.5">
-      <div className="flex items-baseline justify-between">
-        <span className="text-[10px] font-semibold uppercase tracking-widest text-white/35">{label}</span>
-        {hint ? <span className="text-[10px] text-white/30">{hint}</span> : null}
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-xs font-semibold text-white/60">{label}</span>
+        {hint ? <span className="text-xs text-white/40">{hint}</span> : null}
       </div>
       {children}
     </label>
   );
 }
 
+/** Full-width primary button: brand by default, `emerald` for money, `red` to destroy. */
 export function PrimaryButton({
   children, onClick, disabled, loading, tone = "indigo", type = "button", className = "",
 }: {
   children: ReactNode; onClick?: () => void; disabled?: boolean; loading?: boolean;
   tone?: "indigo" | "emerald" | "amber" | "red"; type?: "button" | "submit"; className?: string;
 }) {
-  const bg = {
-    indigo: BRAND_GRADIENT,
-    emerald: "linear-gradient(135deg, #10b981, #06b6d4)",
-    amber: "linear-gradient(135deg, #f59e0b, #f97316)",
-    red: "linear-gradient(135deg, #ef4444, #dc2626)",
-  }[tone];
+  const variant = tone === "emerald" ? "money" : tone === "red" ? "danger" : "brand";
   return (
-    <button
-      type={type}
-      onClick={onClick}
-      disabled={disabled || loading}
-      className={`flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold text-white transition-all active:scale-[0.99] disabled:opacity-40 touch-manipulation ${className}`}
-      style={{ background: bg }}
-    >
-      {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+    <Button type={type} variant={variant} onClick={onClick} disabled={disabled} loading={loading} className={cn("w-full", className)}>
       {children}
-    </button>
+    </Button>
   );
 }
 
+/** The quiet button next to a primary one (kit Button, secondary). */
 export function GhostButton({
-  children, onClick, disabled, className = "", title,
-}: { children: ReactNode; onClick?: () => void; disabled?: boolean; className?: string; title?: string }) {
+  children, onClick, disabled, className = "", title, loading,
+}: { children: ReactNode; onClick?: () => void; disabled?: boolean; className?: string; title?: string; loading?: boolean }) {
   return (
-    <button
+    <Button
       type="button"
+      variant="secondary"
+      size="sm"
       title={title}
+      aria-label={title}
       onClick={onClick}
       disabled={disabled}
-      className={`flex items-center justify-center gap-1.5 rounded-xl border border-white/[0.08] bg-white/[0.035] px-3 py-2 text-xs font-semibold text-white/65 shadow-[inset_0_1px_0_rgba(255,255,255,0.025)] transition-all hover:border-white/[0.14] hover:bg-white/[0.07] hover:text-white disabled:opacity-40 touch-manipulation ${className}`}
+      loading={loading}
+      className={cn("text-xs", className)}
     >
       {children}
-    </button>
+    </Button>
   );
 }
 
-/** Dollars in the box, cents in state. */
+/** Money in the box, cents in state; the prefix is the currency's own symbol. */
 export function MoneyInput({
-  valueCents, onChangeCents, placeholder = "0.00", disabled, autoFocus,
-}: { valueCents: number | null | undefined; onChangeCents: (cents: number) => void; placeholder?: string; disabled?: boolean; autoFocus?: boolean }) {
+  valueCents, onChangeCents, placeholder = "0.00", disabled, autoFocus, currency = "USD",
+}: {
+  valueCents: number | null | undefined;
+  onChangeCents: (cents: number) => void;
+  placeholder?: string;
+  disabled?: boolean;
+  autoFocus?: boolean;
+  currency?: string;
+}) {
   const [text, setText] = useState(() => centsToInput(valueCents));
   const [lastCents, setLastCents] = useState(valueCents ?? 0);
   // Re-sync the text when the outside value changes (e.g. product picked).
@@ -92,9 +99,10 @@ export function MoneyInput({
     setLastCents(valueCents ?? 0);
     setText(centsToInput(valueCents));
   }
+  const symbol = currencySymbol(currency);
   return (
     <div className="relative">
-      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-white/35">$</span>
+      <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-sm text-white/40" aria-hidden="true">{symbol}</span>
       <input
         value={text}
         disabled={disabled}
@@ -103,8 +111,7 @@ export function MoneyInput({
         placeholder={placeholder}
         onChange={(e) => { setText(e.target.value); const c = inputToCents(e.target.value); setLastCents(c); onChangeCents(c); }}
         onBlur={() => setText(centsToInput(inputToCents(text)))}
-        className={`${inputCls} pl-7 tabular-nums`}
-        style={inputStyle}
+        className={cn(inputCls, symbol.length > 1 ? "pl-11" : "pl-8", "tabular-nums")}
       />
     </div>
   );
@@ -113,45 +120,41 @@ export function MoneyInput({
 export function QtyInput({
   value, onChange, min = 0, max, disabled, autoFocus,
 }: { value: number; onChange: (n: number) => void; min?: number; max?: number; disabled?: boolean; autoFocus?: boolean }) {
+  const t = useT(visitsUiMessages);
   const clamp = (n: number) => Math.max(min, max != null ? Math.min(max, n) : n);
   return (
     <div className="flex items-center gap-1">
-      <button type="button" disabled={disabled || value <= min} onClick={() => onChange(clamp(value - 1))}
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-lg text-white/70 transition-colors hover:bg-white/10 disabled:opacity-30 touch-manipulation"
-        style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.09)" }}>−</button>
+      <Button type="button" variant="secondary" size="icon" aria-label={t("decrease")} disabled={disabled || value <= min} onClick={() => onChange(clamp(value - 1))}>
+        <Minus aria-hidden="true" />
+      </Button>
       <input
         value={value}
         disabled={disabled}
         autoFocus={autoFocus}
         inputMode="numeric"
         onChange={(e) => onChange(clamp(Math.max(0, Math.floor(Number(e.target.value) || 0))))}
-        className={`${inputCls} text-center tabular-nums font-semibold`}
-        style={inputStyle}
+        className={cn(inputCls, "px-1 text-center font-semibold tabular-nums")}
       />
-      <button type="button" disabled={disabled || (max != null && value >= max)} onClick={() => onChange(clamp(value + 1))}
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-lg text-white/70 transition-colors hover:bg-white/10 disabled:opacity-30 touch-manipulation"
-        style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.09)" }}>+</button>
+      <Button type="button" variant="secondary" size="icon" aria-label={t("increase")} disabled={disabled || (max != null && value >= max)} onClick={() => onChange(clamp(value + 1))}>
+        <Plus aria-hidden="true" />
+      </Button>
     </div>
   );
 }
 
+/** The kit's native Select, with the old `onChange(value)` signature. */
 export function Select({
   value, onChange, options, placeholder, disabled,
 }: { value: string; onChange: (v: string) => void; options: { value: string; label: string }[]; placeholder?: string; disabled?: boolean }) {
   return (
-    <div className="relative">
-      <select
-        value={value}
-        disabled={disabled}
-        onChange={(e) => onChange(e.target.value)}
-        className={`${inputCls} appearance-none pr-8`}
-        style={{ ...inputStyle, color: value ? "white" : "rgba(255,255,255,0.3)" }}
-      >
-        {placeholder ? <option value="" className="bg-[#0e1117]">{placeholder}</option> : null}
-        {options.map((o) => <option key={o.value} value={o.value} className="bg-[#0e1117]">{o.label}</option>)}
-      </select>
-      <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/30" />
-    </div>
+    <KitSelect
+      value={value}
+      disabled={disabled}
+      onChange={(e) => onChange(e.target.value)}
+      options={options}
+      placeholder={placeholder}
+      className={value ? "" : "text-white/40"}
+    />
   );
 }
 
@@ -159,34 +162,29 @@ export function Money({ cents, currency = "USD", className = "" }: { cents: numb
   return <span className={`tabular-nums ${className}`}>{formatCents(cents, currency)}</span>;
 }
 
-export function Chip({ children, tone = "neutral" }: { children: ReactNode; tone?: "neutral" | "green" | "amber" | "red" | "blue" | "purple" }) {
-  const styles = {
-    neutral: { bg: "rgba(148,163,184,0.12)", border: "rgba(148,163,184,0.25)", text: "#cbd5e1" },
-    green: { bg: "rgba(16,185,129,0.12)", border: "rgba(16,185,129,0.3)", text: "#6ee7b7" },
-    amber: { bg: "rgba(245,158,11,0.12)", border: "rgba(245,158,11,0.3)", text: "#fcd34d" },
-    red: { bg: "rgba(239,68,68,0.12)", border: "rgba(239,68,68,0.3)", text: "#fca5a5" },
-    blue: { bg: "rgba(59,130,246,0.12)", border: "rgba(59,130,246,0.3)", text: "#93c5fd" },
-    purple: { bg: "rgba(167,139,250,0.12)", border: "rgba(167,139,250,0.3)", text: "#c4b5fd" },
-  }[tone];
-  return (
-    <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
-      style={{ background: styles.bg, border: `1px solid ${styles.border}`, color: styles.text }}>
-      {children}
-    </span>
-  );
+const CHIP_TONE: Record<"neutral" | "green" | "amber" | "red" | "blue" | "purple", PillTone> = {
+  neutral: "slate",
+  green: "green",
+  amber: "amber",
+  red: "red",
+  blue: "blue",
+  purple: "violet",
+};
+
+/** Old name for the kit Pill; new code uses Pill with a tone map. */
+export function Chip({ children, tone = "neutral" }: { children: ReactNode; tone?: keyof typeof CHIP_TONE }) {
+  return <Pill tone={CHIP_TONE[tone]}>{children}</Pill>;
 }
 
+/** A dialog on the kit's modal shell (ui/dialog), wider with `wide`. */
 export function SheetDialog({
   open, onOpenChange, title, children, wide,
 }: { open: boolean; onOpenChange: (o: boolean) => void; title: string; children: ReactNode; wide?: boolean }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className={`max-w-[calc(100vw-1.5rem)] ${wide ? "sm:max-w-2xl" : "sm:max-w-md"} rounded-3xl border-white/10 max-h-[90vh] overflow-y-auto`}
-        style={{ background: "rgba(10,15,30,0.97)", backdropFilter: "blur(20px)" }}
-      >
-        <DialogHeader>
-          <DialogTitle className="text-base font-semibold text-white">{title}</DialogTitle>
+      <DialogContent className={wide ? "max-w-2xl" : "max-w-md"}>
+        <DialogHeader className="pr-8">
+          <DialogTitle className="text-base">{title}</DialogTitle>
         </DialogHeader>
         {children}
       </DialogContent>
@@ -195,17 +193,17 @@ export function SheetDialog({
 }
 
 export function StatTile({ label, value, sub, tone = "neutral" }: { label: string; value: ReactNode; sub?: ReactNode; tone?: "neutral" | "green" | "amber" | "red" | "indigo" }) {
-  const accent = {
-    neutral: { bg: "rgba(255,255,255,0.032)", border: "rgba(255,255,255,0.075)", value: "text-white" },
-    green: { bg: "rgba(16,185,129,0.065)", border: "rgba(52,211,153,0.14)", value: "text-emerald-300" },
-    amber: { bg: "rgba(245,158,11,0.065)", border: "rgba(251,191,36,0.14)", value: "text-amber-300" },
-    red: { bg: "rgba(239,68,68,0.065)", border: "rgba(251,113,133,0.14)", value: "text-rose-300" },
-    indigo: { bg: "rgba(99,102,241,0.075)", border: "rgba(129,140,248,0.16)", value: "text-indigo-200" },
+  const valueClass = {
+    neutral: "text-white",
+    green: "text-emerald-300",
+    amber: "text-amber-300",
+    red: "text-red-300",
+    indigo: "text-blue-200",
   }[tone];
   return (
-    <div className="rounded-[20px] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.025)]" style={{ background: accent.bg, border: `1px solid ${accent.border}` }}>
-      <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-white/32">{label}</div>
-      <div className={`mt-2 text-2xl font-bold tracking-[-0.035em] tabular-nums ${accent.value}`}>{value}</div>
+    <div className={`rounded-2xl p-4 ${GLASS_SUBTLE_CLASS}`}>
+      <div className={EYEBROW}>{label}</div>
+      <div className={`mt-2 text-2xl font-bold tracking-tight tabular-nums ${valueClass}`}>{value}</div>
       {sub ? <div className="mt-0.5 text-[11px] text-white/40">{sub}</div> : null}
     </div>
   );

@@ -7,7 +7,7 @@ import { db } from "../db.js";
 import { accessDenial, ensureXpotRep } from "../routes/xpot/middleware.js";
 import { storage } from "../storage.js";
 import { normalizeIpKey, rateLimit } from "../tags/rateLimit.js";
-import { renderConsentPage, renderErrorPage } from "./consentPage.js";
+import { consentLang, journeyRefusalMessage, renderConsentPage, renderErrorPage, type JourneyRefusal } from "./consentPage.js";
 import {
   ACCESS_TOKEN_TTL_MS,
   SUPPORTED_SCOPES,
@@ -102,15 +102,21 @@ export function isAllowedRedirectUri(uri: string): boolean {
  * Whether this user may hold journey access right now: an active, unblocked
  * global Xpot admin (users.is_admin), as requireTagAdmin.
  */
-export async function journeyAdminDenial(userId: string): Promise<string | null> {
+export async function journeyAdminRefusal(userId: string): Promise<JourneyRefusal | null> {
   const [user] = await db.select({ isAdmin: users.isAdmin }).from(users).where(eq(users.id, userId)).limit(1);
-  if (!user) return "The account that approved this connection no longer exists.";
+  if (!user) return "accountGone";
   const rep = await storage.getSalesRepByUserId(userId);
-  if (!rep) return "This account has no Xpot profile.";
+  if (!rep) return "noProfile";
   const denial = accessDenial(rep);
-  if (denial) return denial.message;
-  if (!user.isAdmin) return "Only Xpot admins can connect AI apps to the journey.";
+  if (denial) return denial.code;
+  if (!user.isAdmin) return "notAdmin";
   return null;
+}
+
+/** journeyAdminRefusal as English text, for the JSON refusals MCP clients read. */
+export async function journeyAdminDenial(userId: string): Promise<string | null> {
+  const refusal = await journeyAdminRefusal(userId);
+  return refusal ? journeyRefusalMessage(refusal) : null;
 }
 
 /** Resolves an OAuth access token on /mcp. `denied` means a real token whose owner lost access. */
@@ -241,12 +247,13 @@ export function createMcpOauthRouter(): Router {
   router.get("/oauth/authorize", async (req, res) => {
     const q = req.query as Record<string, unknown>;
     const str = (v: unknown) => (typeof v === "string" ? v : undefined);
+    const lang = consentLang(req.get("accept-language"));
     const clientId = str(q.client_id);
     const redirectUri = str(q.redirect_uri);
     const state = str(q.state);
 
     if (!clientId || !redirectUri) {
-      return htmlPage(res, 400, renderErrorPage("Invalid request", "The authorization request is missing client_id or redirect_uri."));
+      return htmlPage(res, 400, renderErrorPage(lang, "invalidRequest"));
     }
     // Until redirect_uri is proven registered, never redirect: that is how
     // this endpoint would become an open redirector.
@@ -255,11 +262,7 @@ export function createMcpOauthRouter(): Router {
       return htmlPage(
         res,
         400,
-        renderErrorPage(
-          "App not recognised",
-          "That client_id does not exist, or the redirect URL is not registered for it.",
-          "Remove the Xpot connector in the AI app and add it again.",
-        ),
+        renderErrorPage(lang, "appUnknown"),
       );
     }
 
@@ -288,8 +291,8 @@ export function createMcpOauthRouter(): Router {
     // Same identity as the admin pages (creates a global admin's rep profile
     // on first use); a non-admin learns why instead of bouncing back silently.
     const found = await ensureXpotRep(req);
-    const denial = found ? await journeyAdminDenial(found.user.userId) : "Sign in again.";
-    if (denial) return htmlPage(res, 403, renderErrorPage("Access not allowed", denial));
+    const refusal = found ? await journeyAdminRefusal(found.user.userId) : "signedOut";
+    if (refusal) return htmlPage(res, 403, renderErrorPage(lang, "accessDenied", refusal));
 
     // CSRF guard for the consent POST: one-time value kept in the session.
     const consentState = randomBytes(16).toString("base64url");
@@ -300,9 +303,10 @@ export function createMcpOauthRouter(): Router {
       res,
       200,
       renderConsentPage({
-        clientName: client.clientName || "An MCP app",
+        lang,
+        clientName: client.clientName,
         redirectHost: new URL(redirectUri).host || redirectUri,
-        userLabel: found!.user.email || found!.rep.displayName || "your account",
+        userLabel: found!.user.email || found!.rep.displayName,
         scopes: scope.split(" "),
         fields: {
           consent_state: consentState,
@@ -321,9 +325,10 @@ export function createMcpOauthRouter(): Router {
     const body = (req.body ?? {}) as Record<string, unknown>;
     const field = (name: string) => (typeof body[name] === "string" ? (body[name] as string) : "");
     const sess = sessionOf(req);
-    if (!sess.userId) return htmlPage(res, 401, renderErrorPage("Session expired", "Sign in to Xpot again and restart the connection."));
+    const lang = consentLang(req.get("accept-language"));
+    if (!sess.userId) return htmlPage(res, 401, renderErrorPage(lang, "sessionExpired"));
     if (!field("consent_state") || field("consent_state") !== sess.mcpConsentState) {
-      return htmlPage(res, 400, renderErrorPage("Request expired", "This authorization form is no longer valid. Restart the connection."));
+      return htmlPage(res, 400, renderErrorPage(lang, "requestExpired"));
     }
     // One-shot, whatever the decision.
     (req.session as unknown as OauthSession).mcpConsentState = undefined;
@@ -332,7 +337,7 @@ export function createMcpOauthRouter(): Router {
     const redirectUri = field("redirect_uri");
     const client = clientId ? await getClient(clientId) : undefined;
     if (!client || !client.redirectUris.includes(redirectUri)) {
-      return htmlPage(res, 400, renderErrorPage("App not recognised", "The redirect URL does not match the registered app."));
+      return htmlPage(res, 400, renderErrorPage(lang, "appMismatch"));
     }
 
     const url = new URL(redirectUri);
@@ -343,8 +348,8 @@ export function createMcpOauthRouter(): Router {
       url.searchParams.set("error_description", "The user denied the request");
       return res.redirect(url.toString());
     }
-    const denial = await journeyAdminDenial(sess.userId);
-    if (denial) return htmlPage(res, 403, renderErrorPage("Access not allowed", denial));
+    const refusal = await journeyAdminRefusal(sess.userId);
+    if (refusal) return htmlPage(res, 403, renderErrorPage(lang, "accessDenied", refusal));
     // The hidden fields were checked on GET, but the form is the browser's to edit.
     const failBack = (error: string, description: string) => {
       url.searchParams.set("error", error);

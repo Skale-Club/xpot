@@ -1,4 +1,3 @@
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -6,127 +5,60 @@
 :root {
   --font-sans: 'Inter', sans-serif;
   --font-display: 'Inter', sans-serif;
+  --font-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
 
-  /* Xpot mark: sampled from the blue and green halves of the X. */
+  /* Xpot mark: sampled from the blue half of the X (the landing's brand CTA). */
   --xpot-blue: #5272F2;
-  --xpot-green: #0BB8AF;
 
-  /* Light Mode Colors */
+  /* The app is dark-only (index.html sets class="dark"), so the light values
+     below only matter for a page rendered outside that class. */
   --background: 0 0% 100%;
   --foreground: 0 0% 11%;
 
-  --primary: 228 86% 64%; /* Xpot blue #5272F2 */
+  /* Brand blue #3b82f6: the start of BRAND_GRADIENT (components/xpot/surface.ts). */
+  --primary: 217 91% 60%;
   --primary-foreground: 0 0% 100%;
 
   --secondary: 210 40% 96.1%; /* slate-100 */
-  --secondary-foreground: 0 0% 11%;
 
   --muted: 210 40% 96.1%;
   --muted-foreground: 215.4 16.3% 46.9%;
-
-  --accent: 213 93% 93%; /* blue-100 */
-  --accent-foreground: 217 91% 24%; /* blue-900 */
 
   --destructive: 0 84.2% 60.2%;
   --destructive-foreground: 210 40% 98%;
 
   /* Soft hairline border — subtle, never harsh black/white solid */
   --border: hsl(222 20% 8% / 0.08);
-  --input: hsl(222 20% 8% / 0.1);
-  --ring: 228 86% 64%;
-  --radius: 0.75rem;
+  --ring: 217 91% 60%;
 
   --popover: 0 0% 100%;
-  --popover-foreground: 222.2 84% 4.9%;
-
-  /* Card and Section backgrounds */
   --card: 0 0% 100%;
-  --card-foreground: 0 0% 11%;
-  --section: 210 40% 98%; /* slate-50 */
-
-  /* Sidebar */
-  --sidebar: 0 0% 100%;
-  --sidebar-foreground: 0 0% 11%;
-  --sidebar-border: hsl(222 20% 8% / 0.08);
-  --sidebar-accent: 210 40% 96.1%;
-  --sidebar-accent-foreground: 0 0% 11%;
-
-  /* Success color */
-  --success: 142 76% 36%;
-  --success-foreground: 0 0% 100%;
-
-  /* Warning color */
-  --warning: 38 92% 50%;
-  --warning-foreground: 0 0% 11%;
-
-  /* Button outline border */
-  --button-outline: var(--border);
-
-  /* Variant borders — subtle by default */
-  --primary-border: hsl(var(--primary) / 0.8);
-  --secondary-border: var(--border);
-  --destructive-border: hsl(var(--destructive) / 0.8);
-  --sidebar-primary-border: hsl(var(--primary) / 0.8);
-  --badge-outline: var(--border);
 }
 
-/* Dark Mode Colors — neutral/desaturated charcoal */
+/* Dark Mode Colors — the app's navy palette, so shadcn-style primitives
+   (bg-background, bg-card, bg-popover, bg-muted, border-border) match the
+   screens without per-call overrides. Keep in step with surface.ts. */
 .dark {
-  --background: 0 0% 7%; /* #121212 — neutral charcoal */
-  --foreground: 0 0% 95%; /* near-white, no tint */
+  --background: 225 50% 5%; /* #060912 — PAGE_BASE */
+  --foreground: 0 0% 95%;
 
-  --primary: 228 86% 64%; /* Xpot blue #5272F2 */
+  --primary: 217 91% 60%; /* brand blue #3b82f6 */
   --primary-foreground: 0 0% 100%;
 
-  --secondary: 0 0% 14%; /* #242424 */
-  --secondary-foreground: 0 0% 95%;
+  --secondary: 222 35% 14%; /* #17203a-ish raised fill */
 
-  --muted: 0 0% 11%; /* #1c1c1c */
-  --muted-foreground: 0 0% 60%; /* neutral gray */
+  --muted: 221 46% 12%; /* #111a2e */
+  --muted-foreground: 215 20% 65%; /* slate-400 */
 
-  --accent: 0 0% 16%; /* #292929 */
-  --accent-foreground: 0 0% 95%;
-
-  --destructive: 0 62% 50%;
+  --destructive: 0 72% 51%;
   --destructive-foreground: 0 0% 100%;
 
-  /* Soft hairline border — subtle, never harsh white solid */
-  --border: hsl(0 0% 100% / 0.06);
-  --input: hsl(0 0% 100% / 0.08);
-  --ring: 228 86% 64%;
+  /* Hairlines: GLASS border alpha. */
+  --border: hsl(0 0% 100% / 0.09);
+  --ring: 217 91% 60%;
 
-  --popover: 0 0% 9%;
-  --popover-foreground: 0 0% 95%;
-
-  /* Card and Section backgrounds — neutral charcoal */
-  --card: 0 0% 10%; /* #1a1a1a */
-  --card-foreground: 0 0% 95%;
-  --section: 0 0% 7%;
-
-  /* Sidebar */
-  --sidebar: 0 0% 9%;
-  --sidebar-foreground: 0 0% 95%;
-  --sidebar-border: hsl(0 0% 100% / 0.06);
-  --sidebar-accent: 0 0% 14%;
-  --sidebar-accent-foreground: 0 0% 95%;
-
-  /* Success color */
-  --success: 142 71% 45%;
-  --success-foreground: 0 0% 100%;
-
-  /* Warning color */
-  --warning: 38 92% 50%;
-  --warning-foreground: 0 0% 11%;
-
-  /* Button outline border */
-  --button-outline: var(--border);
-
-  /* Variant borders — subtle by default */
-  --primary-border: hsl(var(--primary) / 0.8);
-  --secondary-border: var(--border);
-  --destructive-border: hsl(var(--destructive) / 0.8);
-  --sidebar-primary-border: hsl(var(--primary) / 0.8);
-  --badge-outline: var(--border);
+  --popover: 223 45% 9%; /* #0d1322 — SURFACE_MODAL */
+  --card: 226 49% 8%; /* #0b1020 */
 }
 
 @layer base {
@@ -148,7 +80,10 @@
   }
 }
 
-/* Unlayered so component utilities such as outline-none cannot hide keyboard focus. */
+/* The one keyboard-focus indicator of the app, in the brand blue (--ring).
+   Unlayered and !important so component utilities such as outline-none cannot
+   hide it; components therefore draw no focus ring of their own (a ring on top
+   of this outline reads as a double border). */
 :focus:not(:focus-visible) {
   outline: none;
 }
@@ -156,6 +91,22 @@
 *:focus-visible {
   outline: 3px solid hsl(var(--ring)) !important;
   outline-offset: 3px !important;
+}
+
+/* A pane that takes focus only so the keyboard starts inside it (the opened
+   item of a list) is not a control: ringing the whole pane read as a thick
+   blue border around the piece. Its controls keep their outline. */
+[data-focus-container]:focus-visible {
+  outline: none !important;
+}
+
+/* Text fields sit inside tight layouts (filter bars, dialogs), so their outline
+   hugs the field instead of floating 3px away from it. */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline-width: 2px !important;
+  outline-offset: 1px !important;
 }
 
 /* Composite input: the rounded container carries the focus treatment so the
@@ -262,116 +213,4 @@
   .xpot-brand-gradient-text {
     background-image: linear-gradient(100deg, #8EB4FF 0%, #718DF7 58%, #35C9BC 112%);
   }
-
-  .container-custom {
-    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
-  }
-
-  .glass-panel {
-    @apply bg-white/80 backdrop-blur-md border border-white/20 shadow-xl;
-  }
-
-  /* Admin Panel Design Tokens */
-
-  /* Card container - usado para cards de conteúdo */
-  .admin-card {
-    @apply bg-card text-card-foreground rounded-lg border border-border p-6;
-    transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out;
-  }
-
-  /* Section container - usado para agrupar seções */
-  .admin-section {
-    @apply bg-muted rounded-lg p-6 space-y-4;
-    transition: background-color 0.2s ease-in-out;
-  }
-
-  /* Form group - espaçamento padrão para formulários */
-  .admin-form-group {
-    @apply space-y-4;
-  }
-
-  /* Form field - campo individual de formulário */
-  .admin-form-field {
-    @apply space-y-2;
-  }
-
-  /* Grid padrão para formulários de 2 colunas */
-  .admin-form-grid {
-    @apply grid gap-4 sm:grid-cols-2;
-  }
-
-  /* Header de página */
-  .admin-page-header {
-    @apply mb-6;
-  }
-
-  .admin-page-title {
-    @apply text-2xl font-bold text-foreground;
-  }
-
-  .admin-page-subtitle {
-    @apply text-muted-foreground mt-1;
-  }
-
-  /* Stat card para dashboard */
-  .admin-stat-card {
-    @apply bg-card rounded-lg p-6 border border-border;
-    transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out;
-  }
-
-  /* Table container */
-  .admin-table-container {
-    @apply bg-card rounded-lg border border-border overflow-hidden;
-    transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out;
-  }
-
-  /* Action buttons group */
-  .admin-actions {
-    @apply flex items-center gap-2;
-  }
-
-  /* Badge variants para status */
-  .admin-badge-success {
-    @apply bg-success/10 text-success border-success/20;
-  }
-
-  .admin-badge-warning {
-    @apply bg-warning/10 text-warning border-warning/20;
-  }
-
-  .admin-badge-error {
-    @apply bg-destructive/10 text-destructive border-destructive/20;
-  }
-
-  /* Input padrão com suporte a dark mode */
-  .admin-input {
-    @apply bg-background border-input text-foreground placeholder:text-muted-foreground;
-    transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out;
-  }
-
-  .admin-editor:empty:before {
-    content: attr(data-placeholder);
-    color: hsl(var(--muted-foreground));
-    pointer-events: none;
-  }
-}
-
-/* Utility to hide scrollbars (used in carrossel track) */
-.no-scrollbar {
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
-}
-
-/* Reviews widget should keep square edges */
-.lc_reviews_widget {
-  border-radius: 0 !important;
-  background: #111111 !important;
-}
-
-/* If the widget injects its own markup, keep all corners square */
-.lc_reviews_widget * {
-  border-radius: 0 !important;
 }

@@ -177,7 +177,8 @@ describe("batch intake API", () => {
     expect(filtered.body.map((tag: any) => tag.publicCode)).toEqual(["ABY74NEB"]);
 
     const overview = await request(app, "GET", "/api/xpot/admin/tags/overview");
-    expect(overview.body.counts).toMatchObject({ total: 1, inventory: 0, damaged: 1 });
+    // Digital status (still inventory, as its ?status= list shows) and the physical damage are counted apart.
+    expect(overview.body.counts).toMatchObject({ total: 1, inventory: 1, damaged: 1 });
     expect(overview.body.stock).toEqual({ house: 0, withResellers: 0 });
   });
 

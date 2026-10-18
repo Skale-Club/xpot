@@ -5,13 +5,15 @@ import { requireSuperAdmin, requireXpotManager } from "./middleware.js";
 import {
   INTEGRATION_PROVIDERS,
   getProviderDef,
-  getMutexSiblings,
   isConfigFieldKey,
   type ConfigFieldKey,
 } from "#shared/integrations-registry.js";
+import { sendValidationError } from "../../lib/validation.js";
 import { invalidateSmsConfig } from "../../auth/sms.js";
 import { checkTwilioConfig } from "../../auth/twilioCheck.js";
 import { maskIntegration, mergeConfigPatch, readConfig } from "./integrationStatus.js";
+import { listProviderStatuses, loadServices, recordIntegrationCheck } from "../../observability/services.js";
+import type { IntegrationTestCode, IntegrationTestResult } from "#shared/integrationTest.js";
 
 const TEST_TIMEOUT_MS = 15000;
 const GHL_BASE_URL = "https://services.leadconnectorhq.com";
@@ -26,8 +28,12 @@ const putSchema = z.object({
   fromNumber: z.string().trim().regex(/^(\+[1-9]\d{6,14})?$/, "From number must be in E.164 format, e.g. +15085550100").optional(),
   messagingServiceSid: z.string().trim().regex(/^(MG[0-9a-zA-Z]{32})?$/, "Messaging Service SID starts with MG and has 34 characters").optional(),
   enabled: z.boolean().optional(),
+  // "Remove key": an empty apiKey keeps the stored secret, so removing it is explicit.
+  clearApiKey: z.boolean().optional(),
 });
-const testSchema = putSchema.omit({ enabled: true });
+const testSchema = putSchema.omit({ enabled: true, clearApiKey: true });
+// Codes the panel words itself (client/src/lib/apiErrors.ts) instead of "invalid format".
+const FIELD_CODES = { accountSid: "invalid_twilio_sid", fromNumber: "invalid_e164", messagingServiceSid: "invalid_twilio_mg_sid" };
 
 export function createAdminIntegrationsRouter() {
   const router = Router();
@@ -39,52 +45,36 @@ export function createAdminIntegrationsRouter() {
 
   // List every provider's masked status (registry ⨝ DB).
   router.get("/admin/integrations", async (_req, res) => {
-    const [chat, settings] = await Promise.all([
-      storage.listChatIntegrations(),
-      storage.listIntegrationSettings(),
-    ]);
-    const chatByProvider = new Map(chat.map((r) => [r.provider, r]));
-    const settingsByProvider = new Map(settings.map((r) => [r.provider, r]));
-
-    const items = INTEGRATION_PROVIDERS.map((def) => {
-      const row = def.table === "chat" ? chatByProvider.get(def.provider) : settingsByProvider.get(def.provider);
-      return maskIntegration(def.provider, row);
-    });
-
-    res.json({ providers: INTEGRATION_PROVIDERS, status: items });
+    res.json({ providers: INTEGRATION_PROVIDERS, status: await listProviderStatuses() });
   });
 
-  // Upsert one provider. Empty/omitted apiKey keeps the stored secret.
+  // Every service by job, with its last test, last success and last error: the
+  // Integrations cards and Admin › Status read this same list.
+  router.get("/admin/integrations/services", async (_req, res) => {
+    res.set("Cache-Control", "no-store").json(await loadServices());
+  });
+
+  // Upsert one provider. Empty/omitted apiKey keeps the stored secret; clearApiKey removes it.
   router.put("/admin/integrations/:provider", async (req, res) => {
     const def = getProviderDef(req.params.provider);
     if (!def) return res.status(404).json({ message: "Unknown provider" });
 
     const parsed = putSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ message: "Invalid input", errors: parsed.error.flatten() });
-    }
+    if (!parsed.success) return sendValidationError(res, parsed.error, "Invalid input", FIELD_CODES);
     const body = parsed.data;
 
     if (def.table === "chat") {
       const data: Record<string, unknown> = {};
-      if (body.apiKey) data.apiKey = body.apiKey;
+      if (body.clearApiKey) data.apiKey = null;
+      else if (body.apiKey) data.apiKey = body.apiKey;
       if (body.model !== undefined) data.model = body.model;
       if (body.enabled !== undefined) data.enabled = body.enabled;
       const saved = await storage.upsertChatIntegration(def.provider, data);
-      // Mutex enforcement: enabling this provider disables siblings in the same group.
-      if (body.enabled === true) {
-        for (const sibling of getMutexSiblings(def.provider)) {
-          if (sibling.table === "chat") {
-            await storage.upsertChatIntegration(sibling.provider, { enabled: false });
-          } else {
-            await storage.upsertIntegrationSettings(sibling.provider, { isEnabled: false });
-          }
-        }
-      }
       return res.json(maskIntegration(def.provider, saved));
     } else {
       const data: Record<string, unknown> = {};
-      if (body.apiKey) data.apiKey = body.apiKey;
+      if (body.clearApiKey) data.apiKey = null;
+      else if (body.apiKey) data.apiKey = body.apiKey;
       if (body.locationId !== undefined) data.locationId = body.locationId;
       if (body.calendarId !== undefined) data.calendarId = body.calendarId;
       if (body.enabled !== undefined) data.isEnabled = body.enabled;
@@ -94,15 +84,6 @@ export function createAdminIntegrationsRouter() {
         data.config = mergeConfigPatch(def.provider, existing?.config, configPatch);
       }
       const saved = await storage.upsertIntegrationSettings(def.provider, data);
-      if (body.enabled === true) {
-        for (const sibling of getMutexSiblings(def.provider)) {
-          if (sibling.table === "chat") {
-            await storage.upsertChatIntegration(sibling.provider, { enabled: false });
-          } else {
-            await storage.upsertIntegrationSettings(sibling.provider, { isEnabled: false });
-          }
-        }
-      }
       if (def.provider === "twilio") invalidateSmsConfig();
       return res.json(maskIntegration(def.provider, saved));
     }
@@ -118,7 +99,7 @@ export function createAdminIntegrationsRouter() {
 
     const parsed = testSchema.safeParse(req.body ?? {});
     if (!parsed.success) {
-      return res.status(400).json({ ok: false, message: "Invalid test input", errors: parsed.error.flatten() });
+      return sendValidationError(res, parsed.error, "Invalid test input", FIELD_CODES);
     }
 
     console.log(`[admin-integrations] Test starting for ${def.provider}`);
@@ -131,25 +112,64 @@ export function createAdminIntegrationsRouter() {
 
       if (!config.apiKey) {
         console.warn(`[admin-integrations] No API key available for ${def.provider}`, { rowId: (row as any)?.id });
-        const secretLabel = def.fields.find((f) => f.secret)?.label ?? "API Key";
-        return res.json({ ok: false, message: `Paste the ${secretLabel} or save one before testing.` });
+        const secret = def.fields.find((f) => f.secret);
+        const secretLabel = secret?.label ?? "API Key";
+        return res.json(testResult(false, "missing_secret", `Paste the ${secretLabel} or save one before testing.`, { field: secret?.key ?? "apiKey" }));
       }
 
       console.log(`[admin-integrations] Calling provider ${def.provider} (key length ${config.apiKey.length})`);
       const result = await testProvider(def.provider, config);
       console.log(`[admin-integrations] Test result for ${def.provider}:`, result);
-      return res.json(result);
+      return res.json(await withCheck(def.provider, result));
     } catch (err) {
       console.error(`[admin-integrations] Test threw for ${def.provider}:`, err);
-      return res.json({
-        ok: false,
-        message: `Server error while testing: ${(err as Error).message || String(err)}`,
-      });
+      if (err instanceof TestTimeoutError) {
+        return res.json(await withCheck(def.provider, testResult(false, "timeout", err.message, { seconds: TEST_TIMEOUT_MS / 1000 })));
+      }
+      const reason = (err as Error).message || String(err);
+      // undici's network failure (DNS, refused, TLS): the provider was never reached.
+      if (err instanceof TypeError && reason === "fetch failed") {
+        const cause = (err as Error & { cause?: { message?: string } }).cause?.message;
+        return res.json(await withCheck(def.provider, testResult(false, "unreachable", `Could not reach the provider: ${cause ?? reason}`, undefined, cause ?? reason)));
+      }
+      return res.json(await withCheck(def.provider, testResult(false, "server_error", `Server error while testing: ${reason}`, undefined, reason)));
     }
   });
 
   return router;
 }
+
+/**
+ * Keeps the result as the provider's "last test" (Integrations and Status show
+ * it) and answers with its time. Keeping it must never hide the result itself.
+ */
+async function withCheck(provider: string, result: IntegrationTestResult): Promise<IntegrationTestResult> {
+  try {
+    const saved = await recordIntegrationCheck(provider, result);
+    return { ...result, testedAt: saved.checkedAt.toISOString() };
+  } catch (err) {
+    console.error(`[admin-integrations] Could not keep the test result for ${provider}:`, err);
+    return result;
+  }
+}
+
+function testResult(
+  ok: boolean,
+  code: IntegrationTestCode,
+  message: string,
+  params?: IntegrationTestResult["params"],
+  detail?: string,
+): IntegrationTestResult {
+  return { ok, code, message, ...(params ? { params } : {}), ...(detail ? { detail } : {}) };
+}
+
+/** A provider's error answer: its status for the sentence, its own words as the detail. */
+async function httpFailure(name: string, r: Response): Promise<IntegrationTestResult> {
+  const detail = await readErrorBody(r);
+  return testResult(false, "http_error", `${name} returned ${r.status}. ${detail}`.trim(), { status: r.status }, detail);
+}
+
+class TestTimeoutError extends Error {}
 
 /** The ConfigFieldKey values present in a request body. */
 function pickConfig(body: Record<string, unknown>): Partial<Record<ConfigFieldKey, string>> {
@@ -196,7 +216,7 @@ async function fetchWithTimeout(url: string, init: RequestInit = {}): Promise<Re
     return await fetch(url, { ...init, signal: controller.signal });
   } catch (err) {
     if ((err as Error).name === "AbortError") {
-      throw new Error(`Provider did not respond within ${TEST_TIMEOUT_MS / 1000}s.`);
+      throw new TestTimeoutError(`Provider did not respond within ${TEST_TIMEOUT_MS / 1000}s.`);
     }
     throw err;
   } finally {
@@ -218,7 +238,7 @@ async function readErrorBody(r: Response): Promise<string> {
 async function testProvider(
   provider: string,
   config: TestConfig
-): Promise<{ ok: boolean; message: string }> {
+): Promise<IntegrationTestResult> {
   const { apiKey } = config;
   switch (provider) {
     case "google_places": {
@@ -231,25 +251,22 @@ async function testProvider(
         },
         body: JSON.stringify({ textQuery: "coffee", pageSize: 1 }),
       });
-      if (r.ok) return { ok: true, message: "Places responded 200." };
-      const detail = await readErrorBody(r);
-      return { ok: false, message: `Places returned ${r.status}. ${detail}`.trim() };
+      if (r.ok) return testResult(true, "ok", "Places responded 200.");
+      return httpFailure("Places", r);
     }
     case "groq": {
       const r = await fetchWithTimeout("https://api.groq.com/openai/v1/models", {
         headers: { Authorization: `Bearer ${apiKey}` },
       });
-      if (r.ok) return { ok: true, message: "Groq authenticated." };
-      const detail = await readErrorBody(r);
-      return { ok: false, message: `Groq returned ${r.status}. ${detail}`.trim() };
+      if (r.ok) return testResult(true, "ok", "Groq authenticated.");
+      return httpFailure("Groq", r);
     }
     case "openai": {
       const r = await fetchWithTimeout("https://api.openai.com/v1/models", {
         headers: { Authorization: `Bearer ${apiKey}` },
       });
-      if (r.ok) return { ok: true, message: "OpenAI authenticated." };
-      const detail = await readErrorBody(r);
-      return { ok: false, message: `OpenAI returned ${r.status}. ${detail}`.trim() };
+      if (r.ok) return testResult(true, "ok", "OpenAI authenticated.");
+      return httpFailure("OpenAI", r);
     }
     case "openrouter": {
       const r = await fetchWithTimeout("https://openrouter.ai/api/v1/key", {
@@ -259,20 +276,18 @@ async function testProvider(
           "X-Title": "Xpot",
         },
       });
-      if (r.ok) return { ok: true, message: "OpenRouter authenticated." };
-      const detail = await readErrorBody(r);
-      return { ok: false, message: `OpenRouter returned ${r.status}. ${detail}`.trim() };
+      if (r.ok) return testResult(true, "ok", "OpenRouter authenticated.");
+      return httpFailure("OpenRouter", r);
     }
     case "gemini": {
       const r = await fetchWithTimeout(
         `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`
       );
-      if (r.ok) return { ok: true, message: "Gemini authenticated." };
-      const detail = await readErrorBody(r);
-      return { ok: false, message: `Gemini returned ${r.status}. ${detail}`.trim() };
+      if (r.ok) return testResult(true, "ok", "Gemini authenticated.");
+      return httpFailure("Gemini", r);
     }
     case "gohighlevel": {
-      if (!config.locationId) return { ok: false, message: "Location ID is required to test GHL." };
+      if (!config.locationId) return testResult(false, "location_required", "Location ID is required to test GHL.");
       const params = new URLSearchParams({ locationId: config.locationId });
       const r = await fetchWithTimeout(`${GHL_BASE_URL}/opportunities/pipelines?${params.toString()}`, {
         headers: {
@@ -281,9 +296,8 @@ async function testProvider(
           "Content-Type": "application/json",
         },
       });
-      if (r.ok) return { ok: true, message: "GHL authenticated." };
-      const detail = await readErrorBody(r);
-      return { ok: false, message: `GHL returned ${r.status}. ${detail}`.trim() };
+      if (r.ok) return testResult(true, "ok", "GHL authenticated.");
+      return httpFailure("GHL", r);
     }
     case "twilio":
       // Read-only calls: the test must never send an SMS.
@@ -297,6 +311,6 @@ async function testProvider(
         fetchWithTimeout,
       );
     default:
-      return { ok: false, message: "No test implemented for this provider." };
+      return testResult(false, "not_implemented", "No test implemented for this provider.");
   }
 }

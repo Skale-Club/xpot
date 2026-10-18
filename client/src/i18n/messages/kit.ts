@@ -1,0 +1,58 @@
+import type { Dictionary } from "../index";
+
+// Words of the shared UI kit (components/ui and components/xpot: ConfirmDialog,
+// ErrorState, CopyButton, Field, formatters). Generic actions such as Close,
+// Cancel, Retry and Copy live in common.ts.
+
+const en = {
+  confirm: "Confirm",
+  reason: "Reason",
+  reasonOptional: "Reason (optional)",
+  reasonRequired: "Write a reason to continue.",
+  typeToConfirm: "Type {word} to confirm",
+  errorTitle: "Something went wrong",
+  copyFailed: "Could not copy. Select the text and copy it by hand.",
+  durationSeconds: "{seconds} s",
+  durationMinutes: "{minutes} min",
+  durationHours: "{hours} h {minutes} min",
+  durationHoursOnly: "{hours} h",
+  pickFromScreen: "Pick from screen",
+  pickColor: "Pick a color",
+  pickColorFor: "{label}: pick a color",
+};
+
+export const kitMessages: Dictionary<typeof en> = {
+  en,
+  pt: {
+    confirm: "Confirmar",
+    reason: "Motivo",
+    reasonOptional: "Motivo (opcional)",
+    reasonRequired: "Escreva um motivo para continuar.",
+    typeToConfirm: "Digite {word} para confirmar",
+    errorTitle: "Algo deu errado",
+    copyFailed: "Não foi possível copiar. Selecione o texto e copie manualmente.",
+    durationSeconds: "{seconds} s",
+    durationMinutes: "{minutes} min",
+    durationHours: "{hours} h {minutes} min",
+    durationHoursOnly: "{hours} h",
+    pickFromScreen: "Capturar da tela",
+    pickColor: "Escolher uma cor",
+    pickColorFor: "{label}: escolher uma cor",
+  },
+  es: {
+    confirm: "Confirmar",
+    reason: "Motivo",
+    reasonOptional: "Motivo (opcional)",
+    reasonRequired: "Escribe un motivo para continuar.",
+    typeToConfirm: "Escribe {word} para confirmar",
+    errorTitle: "Algo salió mal",
+    copyFailed: "No se pudo copiar. Selecciona el texto y cópialo a mano.",
+    durationSeconds: "{seconds} s",
+    durationMinutes: "{minutes} min",
+    durationHours: "{hours} h {minutes} min",
+    durationHoursOnly: "{hours} h",
+    pickFromScreen: "Tomar de la pantalla",
+    pickColor: "Elegir un color",
+    pickColorFor: "{label}: elegir un color",
+  },
+};

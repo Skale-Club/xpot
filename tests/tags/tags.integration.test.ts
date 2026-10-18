@@ -26,7 +26,9 @@ test.skipIf(!enabled)("tags: kits, reseller isolation, sales, scans, report, pro
   const { sql } = await import("drizzle-orm");
 
   await db.execute(sql`TRUNCATE tag_provisioning_events, tag_provisioning_jobs, tag_provisioning_devices, tag_events,
-    tag_destination_history, tag_direct_writes, tags, tag_kits, tag_batches CASCADE`);
+    tag_destination_history, tag_direct_writes, tag_acquisitions, tags, tag_kits, tag_batches CASCADE`);
+  // Sales from an earlier run would keep the leads (and reps) below alive.
+  await db.execute(sql`DELETE FROM sales_sales WHERE rep_id IN (SELECT id FROM sales_reps WHERE user_id LIKE 'it-%')`);
   await db.execute(sql`DELETE FROM sales_leads WHERE owner_rep_id IN (SELECT id FROM sales_reps WHERE user_id LIKE 'it-%')`);
   await db.execute(sql`DELETE FROM sales_reps WHERE user_id LIKE 'it-%'`);
   await db.execute(sql`DELETE FROM users WHERE id LIKE 'it-%'`);
@@ -138,7 +140,7 @@ test.skipIf(!enabled)("tags: kits, reseller isolation, sales, scans, report, pro
     assert.equal(dash.daily.length >= 30, true);
     assert.deepEqual(dash.topPieces, []);
     assert.deepEqual(dash.recentScans, []);
-    assert.deepEqual((await api("GET", "/api/xpot/tags/summary", "it-ana")).json, { inStock: 3, active: 0, soldLast30: 0, scansLast30: { qr: 0, nfc: 0 } });
+    assert.deepEqual([dash.active, dash.soldInPeriod, dash.scans], [0, 0, { qr: 0, nfc: 0 }]);
     // Bruno's piece and house stock are out of her reach.
     assert.equal((await api("GET", `/api/xpot/tags/lookup/${b1.publicCode}`, "it-ana")).status, 403);
     assert.equal((await api("GET", `/api/xpot/tags/lookup/${house.publicCode}`, "it-ana")).status, 403);
@@ -215,14 +217,10 @@ test.skipIf(!enabled)("tags: kits, reseller isolation, sales, scans, report, pro
       FROM tag_events WHERE event_type = 'redirect'`)).rows as any[];
     assert.deepEqual(ev, { n: 4, owned: 4 });
 
-    // Each piece gets its own compact 30-day dashboard, with the same access boundary as the detail screen.
-    const pieceDash = await api("GET", `/api/xpot/tags/${a1.id}/dashboard?days=30`, "it-ana");
-    assert.equal(pieceDash.status, 200, pieceDash.text);
-    assert.deepEqual(pieceDash.json.scans, { qr: 1, nfc: 2 });
-    assert.equal(pieceDash.json.visitors, 1);
-    assert.equal(pieceDash.json.daily.length >= 30, true);
-    assert.equal(pieceDash.json.devices[0].os, "Android");
-    assert.equal((await api("GET", `/api/xpot/tags/${a1.id}/dashboard`, "it-bruno")).status, 403);
+    // Each piece's Performance has the same access boundary as the detail screen.
+    const pieceAnalytics = await api("GET", `/api/xpot/tags/${a1.id}/analytics?range=7d`, "it-ana");
+    assert.equal(pieceAnalytics.status, 200, pieceAnalytics.text);
+    assert.equal((await api("GET", `/api/xpot/tags/${a1.id}/analytics`, "it-bruno")).status, 403);
 
     // Direct links are per reseller.
     assert.equal((await api("POST", "/api/xpot/tag-direct-writes", "it-ana", { url: REVIEW, method: "web_nfc", verified: true, leadId })).status, 201);
@@ -230,8 +228,8 @@ test.skipIf(!enabled)("tags: kits, reseller isolation, sales, scans, report, pro
     assert.equal((await api("GET", "/api/xpot/tag-direct-writes", "it-ana")).json.length, 1);
 
     // Ana's home numbers.
-    assert.deepEqual((await api("GET", "/api/xpot/tags/summary", "it-ana")).json, { inStock: 1, active: 2, soldLast30: 2, scansLast30: { qr: 2, nfc: 2 } });
     const populatedDash = (await api("GET", "/api/xpot/tags/dashboard?days=30", "it-ana")).json;
+    assert.deepEqual([populatedDash.inStock, populatedDash.active, populatedDash.soldInPeriod, populatedDash.scans], [1, 2, 2, { qr: 2, nfc: 2 }]);
     assert.deepEqual(
       (({ publicCode, productType, face, batchCode }) => ({ publicCode, productType, face, batchCode }))(populatedDash.topPieces[0]),
       { publicCode: a1.publicCode, productType: "keychain", face: "instagram", batchCode: batch.json.batchCode },
@@ -247,7 +245,7 @@ test.skipIf(!enabled)("tags: kits, reseller isolation, sales, scans, report, pro
     );
 
     // Pieces per customer for the Visits side: Ana sees her customer, Bruno nothing.
-    assert.deepEqual((await api("GET", "/api/xpot/tags/by-lead", "it-ana")).json, [{ leadId, pieces: 2, live: 2, scansLast30: 4 }]);
+    assert.deepEqual((await api("GET", "/api/xpot/tags/by-lead", "it-ana")).json, [{ leadId, name: "Taqueria El Sol", pieces: 2, live: 2, scansLast30: 4 }]);
     assert.deepEqual((await api("GET", "/api/xpot/tags/by-lead", "it-bruno")).json, []);
     // Selling a Google review piece kept the business's Place ID on the lead.
     const [place] = (await db.execute(sql`SELECT google_place_id FROM sales_leads WHERE id = ${leadId}`)).rows as any[];
@@ -293,7 +291,7 @@ test.skipIf(!enabled)("tags: kits, reseller isolation, sales, scans, report, pro
 
     // Bruno returns his kit; sold pieces cannot be returned.
     assert.equal((await api("POST", "/api/xpot/admin/tag-kits/return", "it-admin", { codes: brunoCodes })).json.returned, 2);
-    assert.equal((await api("GET", "/api/xpot/tags/summary", "it-bruno")).json.inStock, 0);
+    assert.equal((await api("GET", "/api/xpot/tags/dashboard", "it-bruno")).json.inStock, 0);
     assert.equal((await api("POST", "/api/xpot/admin/tag-kits/return", "it-admin", { codes: [a1.publicCode] })).status, 409);
     // A typo is refused; a piece already home is reported, not counted.
     const typo = await api("POST", "/api/xpot/admin/tag-kits/return", "it-admin", { codes: ["ZZZZZZZZ"] });

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { classifyScan, TAGS_APP_PATH, type ScanClassification } from "@shared/tagApp";
 import { viewHeaders } from "@/lib/adminMode";
+import { serverErrorText } from "@/lib/apiErrors";
 
 export const APP_BASE = TAGS_APP_PATH;
 const RECENTS_KEY = "xpot.tags.recents";
@@ -40,10 +41,6 @@ export function getRecents(): RecentItem[] {
 export function pushRecent(item: Omit<RecentItem, "at">) {
   const rest = getRecents().filter((r) => !(r.kind === item.kind && r.value === item.value));
   writeStorage(RECENTS_KEY, [{ ...item, at: Date.now() }, ...rest].slice(0, RECENTS_LIMIT));
-}
-
-export function clearRecents() {
-  writeStorage(RECENTS_KEY, []);
 }
 
 // ─── Selling during a visit ───────────────────────────────────────────────────
@@ -170,8 +167,7 @@ async function call<T>(method: "GET" | "POST", url: string, body?: unknown, extr
   if (!res.ok) {
     let message = res.statusText;
     try {
-      const data = (await res.json()) as { message?: string };
-      if (data?.message) message = data.message;
+      message = serverErrorText(await res.json(), message);
     } catch {
       // Not JSON: keep the status text.
     }
@@ -217,6 +213,15 @@ export function directPath(url?: string): string {
 
 export function tagPath(code: string): string {
   return `${APP_BASE}/t/${encodeURIComponent(code)}`;
+}
+
+/**
+ * A company's pieces. In management mode its piece counts cover every rep, so
+ * they open the full inventory filtered by that customer; "My pieces" would
+ * show only the viewer's own.
+ */
+export function leadPiecesPath(leadId: number, leadName: string, fleet: boolean): string {
+  return fleet ? `/admin/tags/pieces?lead=${leadId}` : `${APP_BASE}/pieces?lead=${leadId}&name=${encodeURIComponent(leadName)}`;
 }
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────

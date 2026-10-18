@@ -25,7 +25,8 @@ export const TAGS_MANAGE_HREF = "/admin/tags";
 export function activeTagsTab(path: string): string {
   if (path === TAGS_MANAGE_HREF || path.startsWith(`${TAGS_MANAGE_HREF}/`)) return TAGS_MANAGE_HREF;
   if (path.startsWith(`${APP_BASE}/customers`)) return `${APP_BASE}/customers`;
-  if (path.startsWith(`${APP_BASE}/pieces`)) return `${APP_BASE}/pieces`;
+  // A piece is one of the person's pieces, wherever it was opened from.
+  if (path.startsWith(`${APP_BASE}/pieces`) || path.startsWith(`${APP_BASE}/t/`)) return `${APP_BASE}/pieces`;
   return APP_BASE;
 }
 

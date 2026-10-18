@@ -1,32 +1,42 @@
 import { useCallback, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { Building2, ChevronRight, Package, ScanLine, Shapes } from "lucide-react";
+import { Building2, ChevronRight, Nfc, Package, ScanLine, Shapes } from "lucide-react";
+import { matchesPieceFilters, parsePieceFilters, type PieceSaleFilter, type PieceStatusFilter } from "@shared/tagApp";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { MasterDetail } from "@/components/xpot/MasterDetail";
 import { FilterBar, FilterChips, FilterSearch, FilterSelect, FilterToken } from "@/components/xpot/filters";
 import { currentSearch, useUrlFilters } from "@/hooks/use-url-filters";
 import { ListPager, usePagedList } from "@/components/xpot/pagination";
 import { TagPieceMention } from "@/components/xpot/TagProductThumbnail";
+import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
+import { ListSkeleton } from "@/components/xpot/ListSkeleton";
+import { ACCENT_SELECTED, GLASS_SUBTLE_CLASS, TABLE_HEAD } from "@/components/xpot/surface";
 import TagScreen from "./TagScreen";
 import type { TagListItem } from "@shared/tagsApi";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { APP_BASE, errorText, shortUrl, tagPath, tagsGet } from "./lib";
-import { CARD, Pill, SOLD_TONE, STATUS_TONE, Spinner, TopBar } from "./ui";
+import { CARD, ChipMark, PieceStatusPills, ScanCounts, TopBar } from "./ui";
 import { WholesaleCard } from "./WholesaleCard";
 
-const FILTERS = [
-  { id: "all", status: null, key: "filterAll" },
-  { id: "stock", status: null, key: "filterStock" },
-  { id: "sold", status: null, key: "filterSold" },
-  { id: "active", status: "active", key: "filterActive" },
-  { id: "off", status: "disabled", key: "filterOff" },
-] as const;
+// Two separate axes: where the piece is in its life, and whether a sale was recorded.
+const STATUS_CHIPS: ReadonlyArray<{ id: PieceStatusFilter; key: "filterAll" | "filterSetup" | "filterActive" | "filterOff" }> = [
+  { id: "all", key: "filterAll" },
+  { id: "setup", key: "filterSetup" },
+  { id: "active", key: "filterActive" },
+  { id: "off", key: "filterOff" },
+];
+const SALE_CHIPS: ReadonlyArray<{ id: PieceSaleFilter; key: "filterAll" | "filterSold" | "filterUnsold" }> = [
+  { id: "all", key: "filterAll" },
+  { id: "sold", key: "filterSold" },
+  { id: "unsold", key: "filterUnsold" },
+];
 
-type FilterId = (typeof FILTERS)[number]["id"];
 type ScanFilter = "all" | "with" | "without";
+
+const CHIP_ROW_LABEL = "w-14 shrink-0 text-[10px] font-semibold uppercase tracking-widest text-white/35 lg:w-auto";
 
 /** The list endpoint's ceiling: everything a reseller holds fits under it. */
 const LIST_LIMIT = 2000;
@@ -45,22 +55,22 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
   const closePiece = useCallback(() => navigate(`${APP_BASE}/pieces${currentSearch()}`, { replace: true }), [navigate]);
   // Every filter lives in the URL. ?lead=<id>&name=<name> is one customer's
   // pieces, opened from a customer card.
-  const filters = useUrlFilters({ status: "all", q: "", company: "", face: "", scan: "all", lead: "", name: "" });
-  const filter: FilterId = FILTERS.some((f) => f.id === filters.values.status) ? (filters.values.status as FilterId) : "all";
+  // ?chip=missing is the dashboard's "chip not written" alert.
+  const filters = useUrlFilters({ status: "all", sale: "all", chip: "", q: "", company: "", face: "", scan: "all", lead: "", name: "" });
+  const pieceFilters = parsePieceFilters(filters.values);
   const search = filters.values.q;
   const companyFilter = filters.values.company;
   const faceFilter = filters.values.face;
   const scanFilter: ScanFilter = filters.values.scan === "with" || filters.values.scan === "without" ? filters.values.scan : "all";
-  const status = FILTERS.find((f) => f.id === filter)?.status ?? null;
   const leadId = Number(filters.values.lead);
   const leadFilter = Number.isInteger(leadId) && leadId > 0 ? { id: leadId, name: filters.values.name } : null;
 
-  const { data, isLoading, error } = useQuery({
-    queryKey: ["tags", "list", status, leadFilter?.id ?? null],
+  const { data, isLoading, error, refetch } = useQuery({
+    // Every status at once (filtered here): "Not set up" spans two of them.
+    queryKey: ["tags", "list", null, leadFilter?.id ?? null],
     queryFn: () => {
       // "My pieces": the viewer's own, even for an admin who can reach every piece.
       const params = new URLSearchParams({ mine: "1", limit: String(LIST_LIMIT) });
-      if (status) params.set("status", status);
       if (leadFilter) params.set("leadId", String(leadFilter.id));
       return tagsGet<TagListItem[]>(`/api/xpot/tags?${params}`);
     },
@@ -86,8 +96,7 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
   const items = useMemo(() => {
     const list = data ?? [];
     return list.filter((tag) => {
-      if (filter === "stock" && tag.saleId) return false;
-      if (filter === "sold" && !tag.saleId) return false;
+      if (!matchesPieceFilters(tag, pieceFilters)) return false;
       if (query && ![tag.publicCode, tag.leadName, tag.label].some((v) => v?.toLocaleLowerCase().includes(query))) return false;
       if (companyFilter && String(tag.leadId) !== companyFilter) return false;
       if (faceFilter && tag.face !== faceFilter) return false;
@@ -96,8 +105,8 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
       if (scanFilter === "without" && scans > 0) return false;
       return true;
     });
-  }, [companyFilter, data, faceFilter, filter, query, scanFilter]);
-  const hasListFilters = filters.activeCount(["status", "q", "company", "face", "scan", "lead"]) > 0;
+  }, [companyFilter, data, faceFilter, pieceFilters.status, pieceFilters.sale, pieceFilters.chip, query, scanFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+  const hasListFilters = filters.activeCount(["status", "sale", "chip", "q", "company", "face", "scan", "lead"]) > 0;
   // Render 50 rows at a time; the open piece always stays on the page.
   const paged = usePagedList(items, {
     resetKey: JSON.stringify(filters.values),
@@ -105,17 +114,10 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
   });
   const pager = <ListPager shown={paged.shown} total={paged.total} hasMore={paged.hasMore} onMore={paged.showMore} />;
 
-  const listLoading = (
-    <div className="flex justify-center py-16 text-white/40">
-      <Spinner className="h-7 w-7" />
-    </div>
-  );
-  const listError = <div className={`${CARD} px-6 py-8 text-center text-sm text-red-200`}>{errorText(error, tc("requestFailed"))}</div>;
+  const listLoading = <ListSkeleton rows={6} rowClassName="h-[88px] rounded-2xl" />;
+  const listError = <ErrorState message={errorText(error, tc("requestFailed"))} onRetry={() => void refetch()} />;
   const listEmpty = (
-    <div className={`${CARD} flex flex-col items-center px-6 py-10 text-center`}>
-      <Package className="h-8 w-8 text-white/25" />
-      <p className="mt-2 text-sm text-white/45">{(data ?? []).length === 0 && !hasListFilters ? t("piecesEmpty") : t("piecesNoMatch")}</p>
-    </div>
+    <EmptyState tone="tags" icon={Package} title={(data ?? []).length === 0 && !hasListFilters ? t("piecesEmpty") : t("piecesNoMatch")} />
   );
 
   return (
@@ -156,6 +158,14 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
               ]}
               testId="filter-scan-activity"
             />
+            <FilterSelect
+              value={pieceFilters.chip === "missing" ? "missing" : ""}
+              onChange={(chip) => filters.set({ chip })}
+              placeholder={t("filterAnyChip")}
+              icon={Nfc}
+              options={[{ value: "missing", label: t("filterChipMissing") }]}
+              testId="filter-chip"
+            />
           </>
         }
         secondary={
@@ -167,13 +177,31 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
                 testId="lead-filter"
               />
             ) : null}
-            <div className="min-w-0 flex-1">
-              <FilterChips
-                items={FILTERS.map((f) => ({ id: f.id, label: t(f.key), testId: `filter-${f.id}` }))}
-                value={filter}
-                onChange={(status) => filters.set({ status })}
-                ariaLabel={t("piecesTitle")}
-              />
+            <div className="flex min-w-0 flex-1 flex-col gap-2 lg:flex-row lg:items-center lg:gap-4">
+              <div className="flex min-w-0 items-center gap-2">
+                <span className={CHIP_ROW_LABEL} aria-hidden="true">{t("filterStatusGroup")}</span>
+                <div className="min-w-0 flex-1">
+                  <FilterChips
+                    items={STATUS_CHIPS.map((f) => ({ id: f.id, label: t(f.key), testId: `filter-${f.id}` }))}
+                    value={pieceFilters.status}
+                    onChange={(status) => filters.set({ status })}
+                    ariaLabel={t("filterStatusGroup")}
+                    accent="tags"
+                  />
+                </div>
+              </div>
+              <div className="flex min-w-0 items-center gap-2">
+                <span className={CHIP_ROW_LABEL} aria-hidden="true">{t("filterSaleGroup")}</span>
+                <div className="min-w-0 flex-1">
+                  <FilterChips
+                    items={SALE_CHIPS.map((f) => ({ id: f.id, label: t(f.key), testId: `filter-sale-${f.id}` }))}
+                    value={pieceFilters.sale}
+                    onChange={(sale) => filters.set({ sale })}
+                    ariaLabel={t("filterSaleGroup")}
+                    accent="tags"
+                  />
+                </div>
+              </div>
             </div>
           </div>
         }
@@ -233,14 +261,14 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
                       </span>
                     )}
                   </span>
-                  <span className="flex shrink-0 flex-col items-end gap-1">
-                    <span className="flex gap-1">
-                      <Pill tone={STATUS_TONE[tag.status] ?? "slate"}>{t(`status_${tag.status}` as "status_active")}</Pill>
-                      {tag.saleId && <Pill tone={SOLD_TONE}>{t("soldBadge")}</Pill>}
+                  {/* At most half the row: with Live, Sold and "Chip not written" on one line the customer's name was cut to one letter on a phone; the pills wrap instead. */}
+                  <span className="flex max-w-[50%] shrink-0 flex-col items-end gap-1">
+                    <span className="flex flex-wrap justify-end gap-1">
+                      <PieceStatusPills tag={tag} />
+                      <ChipMark tag={tag} />
                     </span>
-                    {tag.status === "active" && (
-                      <span className="text-xs tabular-nums text-white/40">{tag.qrInteractions + tag.nfcInteractions}</span>
-                    )}
+                    {/* All-time scans, live or not: a switched-off piece keeps what it had. The same counts as the desktop table. */}
+                    {tag.qrInteractions + tag.nfcInteractions > 0 && <ScanCounts qr={tag.qrInteractions} nfc={tag.nfcInteractions} />}
                   </span>
                   <ChevronRight className="h-4 w-4 shrink-0 text-white/25" />
                 </button>
@@ -269,7 +297,7 @@ function PiecesTable({ items, selectedCode, onSelect, onCustomer }: {
 }) {
   const t = useT(tagsMessages);
   return (
-    <div className={`${CARD} overflow-hidden`}>
+    <div className={`overflow-hidden rounded-2xl ${GLASS_SUBTLE_CLASS}`}>
       <table className="w-full table-fixed text-left text-sm" data-testid="pieces-table">
         <colgroup>
           <col className="w-56" />
@@ -278,7 +306,7 @@ function PiecesTable({ items, selectedCode, onSelect, onCustomer }: {
           <col className="w-28" />
           <col className="w-28" />
         </colgroup>
-        <thead className="border-b border-white/[0.07] text-[10px] uppercase tracking-widest text-white/35">
+        <thead className={`border-b border-white/[0.07] ${TABLE_HEAD}`}>
           <tr>
             <th className="whitespace-nowrap py-3 pl-4 pr-3 font-semibold">{t("colCode")}</th>
             <th className="px-3 py-3 font-semibold">{t("colCustomer")}</th>
@@ -290,7 +318,6 @@ function PiecesTable({ items, selectedCode, onSelect, onCustomer }: {
         <tbody className="divide-y divide-white/[0.05]">
           {items.map((tag) => {
             const selected = selectedCode?.toUpperCase() === tag.publicCode.toUpperCase();
-            const scans = tag.qrInteractions + tag.nfcInteractions;
             return (
               <tr
                 key={tag.id}
@@ -298,7 +325,7 @@ function PiecesTable({ items, selectedCode, onSelect, onCustomer }: {
                 aria-current={selected ? "true" : undefined}
                 onClick={() => onSelect(tag.publicCode)}
                 onKeyDown={(e) => { if (e.target !== e.currentTarget) return; if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(tag.publicCode); } }}
-                className={`cursor-pointer outline-none transition-colors focus-visible:bg-white/[0.05] ${selected ? "bg-blue-500/[0.12]" : "hover:bg-white/[0.03]"}`}
+                className={`cursor-pointer transition-colors focus-visible:bg-white/[0.05] focus-visible:!-outline-offset-2 ${selected ? ACCENT_SELECTED.tags.row : "hover:bg-white/[0.03]"}`}
                 data-testid={`piece-row-${tag.publicCode}`}
               >
                 <td className="py-2.5 pl-4 pr-3">
@@ -310,10 +337,10 @@ function PiecesTable({ items, selectedCode, onSelect, onCustomer }: {
                       type="button"
                       onClick={(e) => { e.stopPropagation(); onCustomer(tag.leadId!); }}
                       title={t("openCustomer", { name: tag.leadName })}
-                      className="group inline-flex max-w-full items-center gap-1.5 rounded-md text-left font-medium text-white/90 hover:text-blue-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-400"
+                      className="group inline-flex max-w-full items-center gap-1.5 rounded-md text-left font-medium text-white/90 hover:text-violet-300"
                       data-testid={`piece-customer-${tag.publicCode}`}
                     >
-                      <Building2 className="h-3.5 w-3.5 shrink-0 text-white/30 group-hover:text-blue-300" />
+                      <Building2 className="h-3.5 w-3.5 shrink-0 text-white/30 group-hover:text-violet-300" />
                       <span className="truncate group-hover:underline">{tag.leadName}</span>
                     </button>
                   ) : (
@@ -323,20 +350,13 @@ function PiecesTable({ items, selectedCode, onSelect, onCustomer }: {
                 </td>
                 <td className="truncate px-3 py-2.5 text-xs text-white/45">{tag.destinationUrl ? shortUrl(tag.destinationUrl) : "—"}</td>
                 <td className="px-3 py-2.5">
-                  <div className="flex flex-wrap gap-1">
-                    <Pill tone={STATUS_TONE[tag.status] ?? "slate"}>{t(`status_${tag.status}` as "status_active")}</Pill>
-                    {tag.saleId && <Pill tone={SOLD_TONE}>{t("soldBadge")}</Pill>}
+                  <div className="flex flex-wrap items-center gap-1">
+                    <PieceStatusPills tag={tag} />
+                    <ChipMark tag={tag} />
                   </div>
                 </td>
-                <td className="whitespace-nowrap py-2.5 pl-3 pr-4 text-right tabular-nums">
-                  {tag.status === "active" ? (
-                    <>
-                      <div className="font-semibold text-white">{scans}</div>
-                      <div className="mt-0.5 text-[11px] text-white/40">{tag.qrInteractions} QR · {tag.nfcInteractions} NFC</div>
-                    </>
-                  ) : (
-                    <span className="text-white/20">—</span>
-                  )}
+                <td className="whitespace-nowrap py-2.5 pl-3 pr-4 text-right">
+                  <ScanCounts qr={tag.qrInteractions} nfc={tag.nfcInteractions} />
                 </td>
               </tr>
             );

@@ -1,7 +1,7 @@
-import { and, desc, eq, gte, inArray, isNotNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNotNull, ne, or, sql } from "drizzle-orm";
 import { db } from "../db.js";
 import { prospectingJobs, prospectingRuns, salesReps, systemEvents } from "#shared/schema.js";
-import type { ActiveRunHealth, HealthVerdict, RecentRun, StuckJob, SystemHealthSnapshot } from "#shared/system-health.js";
+import type { ActiveRunHealth, HealthReasonCode, HealthVerdict, RecentRun, StuckJob, SystemHealthSnapshot } from "#shared/system-health.js";
 import type { ProspectingRun } from "#shared/schema.js";
 import { ENGINE_OVERDUE_GRACE_MS, getEngineSettings } from "../prospecting/google-maps-engine.js";
 import { getProspectingWorkerHealth } from "../prospecting/queue.js";
@@ -21,6 +21,13 @@ export function worstVerdict(verdicts: HealthVerdict[]): HealthVerdict {
 }
 
 /**
+ * A verdict with its reason: `reasonCode` is stable, for the screen to word in
+ * the admin's language with a "what to do" line; `reason` is the English
+ * sentence, kept for logs and API clients.
+ */
+type Assessment = { verdict: HealthVerdict; reasonCode: HealthReasonCode; reason: string };
+
+/**
  * Is one engine search moving? The worker touches a running run's updated_at on
  * every poll, so a run nobody touched for three polls is not being watched at all;
  * a run past the median of past searches is slow but alive.
@@ -33,22 +40,22 @@ export function assessRun(input: {
   pollMs: number;
   maxTimeMs: number;
   typicalMs: number | null;
-}): { verdict: HealthVerdict; reason: string } {
+}): Assessment {
   const { status, engineJobId, elapsedMs, sinceUpdateMs, pollMs, maxTimeMs, typicalMs } = input;
   if (status === "starting" && !engineJobId && elapsedMs > STARTING_STALL_MS) {
-    return { verdict: "stalled", reason: "The engine never confirmed this search." };
+    return { verdict: "stalled", reasonCode: "engine_never_confirmed", reason: "The engine never confirmed this search." };
   }
   if (sinceUpdateMs > pollMs * 3) {
-    return { verdict: "stalled", reason: "The worker has not checked this search for several polls." };
+    return { verdict: "stalled", reasonCode: "run_not_checked", reason: "The worker has not checked this search for several polls." };
   }
   if (elapsedMs > maxTimeMs) {
-    return { verdict: "stalled", reason: "Past the engine's time limit; it will be failed soon." };
+    return { verdict: "stalled", reasonCode: "past_time_limit", reason: "Past the engine's time limit; it will be failed soon." };
   }
   const slowAfter = typicalMs ? Math.max(typicalMs * 2, 5 * 60 * 1000) : DEFAULT_SLOW_MS;
   if (elapsedMs > slowAfter) {
-    return { verdict: "slow", reason: "Taking longer than usual, but the engine is still answering." };
+    return { verdict: "slow", reasonCode: "slower_than_usual", reason: "Taking longer than usual, but the engine is still answering." };
   }
-  return { verdict: "healthy", reason: "Running normally." };
+  return { verdict: "healthy", reasonCode: "running_normally", reason: "Running normally." };
 }
 
 export function assessWorker(input: {
@@ -60,21 +67,21 @@ export function assessWorker(input: {
   ticking: boolean;
   pollMs: number;
   now: number;
-}): { verdict: HealthVerdict; reason: string } {
-  if (!input.engineConfigured) return { verdict: "down", reason: "PROSPECTING_ENGINE_URL is not configured." };
-  if (!input.startedAt) return { verdict: "down", reason: "The worker is not running in this process." };
+}): Assessment {
+  if (!input.engineConfigured) return { verdict: "down", reasonCode: "engine_not_configured", reason: "PROSPECTING_ENGINE_URL is not configured." };
+  if (!input.startedAt) return { verdict: "down", reasonCode: "worker_not_running", reason: "The worker is not running in this process." };
   const lastBeat = input.lastTickFinishedAt?.getTime() ?? input.startedAt.getTime();
   if (input.now - lastBeat > input.pollMs * 3 && !input.ticking) {
-    return { verdict: "down", reason: "The worker has not ticked for several polls." };
+    return { verdict: "down", reasonCode: "worker_not_ticking", reason: "The worker has not ticked for several polls." };
   }
   if (input.ticking && input.now - lastBeat > input.pollMs * 4) {
-    return { verdict: "stalled", reason: "A worker tick has been running for several polls." };
+    return { verdict: "stalled", reasonCode: "tick_running_long", reason: "A worker tick has been running for several polls." };
   }
   const lastErrorAt = input.lastError?.at.getTime() ?? 0;
   if (lastErrorAt && lastErrorAt > (input.lastSuccessAt?.getTime() ?? 0)) {
-    return { verdict: "stalled", reason: `The last tick failed: ${input.lastError!.message}` };
+    return { verdict: "stalled", reasonCode: "last_tick_failed", reason: `The last tick failed: ${input.lastError!.message}` };
   }
-  return { verdict: "healthy", reason: "Ticking normally." };
+  return { verdict: "healthy", reasonCode: "ticking_normally", reason: "Ticking normally." };
 }
 
 const iso = (date: Date | null | undefined) => (date ? date.toISOString() : null);
@@ -125,8 +132,9 @@ export async function systemHealthSnapshot(now = Date.now()): Promise<SystemHeal
       // pending jobs expired by design and are not stuck.
       or(gte(prospectingJobs.completedAt, since24h), gte(prospectingJobs.createdAt, since24h)),
     )),
+    // A cancelled search marks its route failed too (cancelProspectingJob); that is not a route that failed.
     db.select({ count: sql<number>`count(*)::int` }).from(prospectingJobs)
-      .where(and(eq(prospectingJobs.routePlanningStatus, "failed"), gte(prospectingJobs.updatedAt, since24h))),
+      .where(and(eq(prospectingJobs.routePlanningStatus, "failed"), ne(prospectingJobs.status, "cancelled"), gte(prospectingJobs.updatedAt, since24h))),
     db.select({ source: systemEvents.source, level: systemEvents.level, count: sql<number>`count(*)::int` })
       .from(systemEvents).where(gte(systemEvents.createdAt, since24h)).groupBy(systemEvents.source, systemEvents.level),
     db.select({
@@ -181,9 +189,12 @@ export async function systemHealthSnapshot(now = Date.now()): Promise<SystemHeal
       status: job.status,
       routePlanningStatus: job.routePlanningStatus,
       updatedAt: job.updatedAt.toISOString(),
-      reason: job.routePlanningStatus === "building"
-        ? "Route building has not finished."
-        : "Search finished but no route was built.",
+      // retryAutomaticRoute takes a "pending" route back to the builder; one still
+      // "building" is reclaimed by auto-route.ts itself.
+      canRetry: job.routePlanningStatus === "pending",
+      ...(job.routePlanningStatus === "building"
+        ? { reasonCode: "route_building_stuck" as const, reason: "Route building has not finished." }
+        : { reasonCode: "route_not_built" as const, reason: "Search finished but no route was built." }),
     }));
 
   const workerAssessed = assessWorker({

@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 
 // Country flags for the phone country picker. Drawn by Nucleo
 // (https://nucleoapp.com/svg-flag-icons), © Nucleo, used under the Nucleo
@@ -100,13 +100,128 @@ const FLAGS: Record<string, ReactNode> = {
   ),
 };
 
+// The rest of Settings' phone countries, from flag-icons
+// (https://github.com/lipis/flag-icons, MIT, © Panayiotis Lipiridis), drawn on a
+// 640×480 canvas. Argentina's sun and India's wheel are reduced to what shows at
+// 20 px. They sit in the Nucleo frame below, so all flags share one look, and
+// ship with the bundle: no flag is fetched from a CDN at run time.
+const WIDE_FLAGS: Record<string, ReactNode> = {
+  GB: (
+    <>
+      <path fill="#012169" d="M0 0h640v480H0z" />
+      <path fill="#FFF" d="m75 0 244 181L562 0h78v62L400 241l240 178v61h-80L320 301 81 480H0v-60l239-178L0 64V0z" />
+      <path fill="#C8102E" d="m424 281 216 159v40L369 281zm-184 20 6 35L54 480H0zM640 0v3L391 191l2-44L590 0zM0 0l239 176h-60L0 42z" />
+      <path fill="#FFF" d="M241 0v480h160V0zM0 160v160h640V160z" />
+      <path fill="#C8102E" d="M0 193v96h640v-96zM273 0v480h96V0z" />
+    </>
+  ),
+  DE: (
+    <>
+      <path fill="#fc0" d="M0 320h640v160H0z" />
+      <path fill="#000001" d="M0 0h640v160H0z" />
+      <path fill="red" d="M0 160h640v160H0z" />
+    </>
+  ),
+  FR: (
+    <>
+      <path fill="#fff" d="M0 0h640v480H0z" />
+      <path fill="#000091" d="M0 0h213.3v480H0z" />
+      <path fill="#e1000f" d="M426.7 0H640v480H426.7z" />
+    </>
+  ),
+  IT: (
+    <>
+      <path fill="#fff" d="M0 0h640v480H0z" />
+      <path fill="#009246" d="M0 0h213.3v480H0z" />
+      <path fill="#ce2b37" d="M426.7 0H640v480H426.7z" />
+    </>
+  ),
+  CA: (
+    <>
+      <path fill="#fff" d="M150.1 0h339.7v480H150z" />
+      <path fill="#d52b1e" d="M-19.7 0h169.8v480H-19.7zm509.5 0h169.8v480H489.9zM201 232l-13.3 4.4 61.4 54c4.7 13.7-1.6 17.8-5.6 25l66.6-8.4-1.6 67 13.9-.3-3.1-66.6 66.7 8c-4.1-8.7-7.8-13.3-4-27.2l61.3-51-10.7-4c-8.8-6.8 3.8-32.6 5.6-48.9 0 0-35.7 12.3-38 5.8l-9.2-17.5-32.6 35.8c-3.5.9-5-.5-5.9-3.5l15-74.8-23.8 13.4c-2 .9-4 .1-5.2-2.2l-23-46-23.6 47.8c-1.8 1.7-3.6 1.9-5 .7L264 130.8l13.7 74.1c-1.1 3-3.7 3.8-6.7 2.2l-31.2-35.3c-4 6.5-6.8 17.1-12.2 19.5-5.4 2.3-23.5-4.5-35.6-7 4.2 14.8 17 39.6 9 47.7" />
+    </>
+  ),
+  AR: (
+    <>
+      <path fill="#74acdf" d="M0 0h640v480H0z" />
+      <path fill="#fff" d="M0 160h640v160H0z" />
+      <circle cx="320" cy="240" r="40" fill="#f6b40e" stroke="#85340a" strokeWidth="6" />
+    </>
+  ),
+  CL: (
+    <g transform="scale(.9375)">
+      <path fill="#fff" d="M256 0h512v256H256z" />
+      <path fill="#0039a6" d="M0 0h256v256H0z" />
+      <path fill="#fff" d="M167.8 191.7 128.2 162l-39.5 30 14.7-48.8L64 113.1l48.7-.5L127.8 64l15.5 48.5 48.7.1-39.2 30.4z" />
+      <path fill="#d52b1e" d="M0 256h768v256H0z" />
+    </g>
+  ),
+  AU: (
+    <>
+      <path fill="#00008B" d="M0 0h640v480H0z" />
+      <path fill="#fff" d="m37.5 0 122 90.5L281 0h39v31l-120 89.5 120 89V240h-40l-120-89.5L40.5 240H0v-30l119.5-89L0 32V0z" />
+      <path fill="red" d="M212 140.5 320 220v20l-135.5-99.5zm-92 10 3 17.5-96 72H0zM320 0v1.5l-124.5 94 1-22L295 0zM0 0l119.5 88h-30L0 21z" />
+      <path fill="#fff" d="M120.5 0v240h80V0zM0 80v80h320V80z" />
+      <path fill="red" d="M0 96.5v48h320v-48zM136.5 0v240h48V0z" />
+      <path fill="#fff" d="m527 396.7-20.5 2.6 2.2 20.5-14.8-14.4-14.7 14.5 2-20.5-20.5-2.4 17.3-11.2-10.9-17.5 19.6 6.5 6.9-19.5 7.1 19.4 19.5-6.7-10.7 17.6zm-3.7-117.2 2.7-13-9.8-9 13.2-1.5 5.5-12.1 5.5 12.1 13.2 1.5-9.8 9 2.7 13-11.6-6.6zm-104.1-60-20.3 2.2 1.8 20.3-14.4-14.5-14.8 14.1 2.4-20.3-20.2-2.7 17.3-10.8-10.5-17.5 19.3 6.8L387 178l6.7 19.3 19.4-6.3-10.9 17.3 17.1 11.2ZM623 186.7l-20.9 2.7 2.3 20.9-15.1-14.7-15 14.8 2.1-21-20.9-2.4 17.7-11.5-11.1-17.9 20 6.7 7-19.8 7.2 19.8 19.9-6.9-11 18zm-96.1-83.5-20.7 2.3 1.9 20.8-14.7-14.8-15.1 14.4 2.4-20.7-20.7-2.8 17.7-11L467 73.5l19.7 6.9 7.3-19.5 6.8 19.7 19.8-6.5-11.1 17.6zM234 385.7l-45.8 5.4 4.6 45.9-32.8-32.4-33 32.2 4.9-45.9-45.8-5.8 38.9-24.8-24-39.4 43.6 15 15.8-43.4 15.5 43.5 43.7-14.7-24.3 39.2 38.8 25.1Z" />
+    </>
+  ),
+  JP: (
+    <>
+      <path fill="#fff" d="M0 0h640v480H0z" />
+      <circle cx="320" cy="240" r="149.2" fill="#bc002d" />
+    </>
+  ),
+  IN: (
+    <>
+      <path fill="#f93" d="M0 0h640v160H0z" />
+      <path fill="#fff" d="M0 160h640v160H0z" />
+      <path fill="#128807" d="M0 320h640v160H0z" />
+      <circle cx="320" cy="240" r="56" fill="none" stroke="#008" strokeWidth="12" />
+      <circle cx="320" cy="240" r="12" fill="#008" />
+    </>
+  ),
+  CN: (
+    <>
+      <path fill="#ee1c25" d="M0 0h640v480H0z" />
+      <g fill="#ff0">
+        <path d="M-.6.8 0-1 .6.8-1-.3h2z" transform="matrix(71.9991 0 0 72 120 120)" />
+        <path d="M-.6.8 0-1 .6.8-1-.3h2z" transform="matrix(-12.33562 -20.5871 20.58684 -12.33577 240.3 48)" />
+        <path d="M-.6.8 0-1 .6.8-1-.3h2z" transform="matrix(-3.38573 -23.75998 23.75968 -3.38578 288 95.8)" />
+        <path d="M-.6.8 0-1 .6.8-1-.3h2z" transform="matrix(6.5991 -23.0749 23.0746 6.59919 288 168)" />
+        <path d="M-.6.8 0-1 .6.8-1-.3h2z" transform="matrix(14.9991 -18.73557 18.73533 14.99929 240 216)" />
+      </g>
+    </>
+  ),
+};
+
+/** Every country with a drawing. */
+export const FLAG_CODES: readonly string[] = [...Object.keys(FLAGS), ...Object.keys(WIDE_FLAGS)];
+
 /** A rounded 5:4 flag for an ISO 3166 code; nothing when the code has no drawing. */
 export function CountryFlag({ iso, className = "h-4 w-5" }: { iso: string; className?: string }) {
+  const clipId = `flag-clip-${useId().replace(/:/g, "")}`;
   const flag = FLAGS[iso];
-  if (!flag) return null;
+  const wide = WIDE_FLAGS[iso];
+  if (!flag && !wide) return null;
   return (
-    <svg viewBox="1 4 30 24" className={`shrink-0 ${className}`} aria-hidden="true">
-      {flag}
+    <svg viewBox="1 4 30 24" className={`shrink-0 ${className}`} aria-hidden="true" data-flag={iso}>
+      {flag ?? (
+        <>
+          <clipPath id={clipId}>
+            <rect x="1" y="4" width="30" height="24" rx="4" ry="4" />
+          </clipPath>
+          <g clipPath={`url(#${clipId})`}>
+            <svg x="1" y="4" width="30" height="24" viewBox="0 0 640 480" preserveAspectRatio="xMidYMid slice">
+              {wide}
+            </svg>
+          </g>
+          {/* Nucleo's edge and highlight, as on the flags above. */}
+          <path d="M27,4H5c-2.209,0-4,1.791-4,4V24c0,2.209,1.791,4,4,4H27c2.209,0,4-1.791,4-4V8c0-2.209-1.791-4-4-4Zm3,20c0,1.654-1.346,3-3,3H5c-1.654,0-3-1.346-3-3V8c0-1.654,1.346-3,3-3H27c1.654,0,3,1.346,3,3V24Z" opacity=".15" />
+          <path d="M27,5H5c-1.657,0-3,1.343-3,3v1c0-1.657,1.343-3,3-3H27c1.657,0,3,1.343,3,3v-1c0-1.657-1.343-3-3-3Z" fill="#fff" opacity=".2" />
+        </>
+      )}
     </svg>
   );
 }

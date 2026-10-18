@@ -2,14 +2,20 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Area, AreaChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { TagAnalytics } from "@shared/tagsApi";
-import { ADMIN_TAGS_KEY, formatDateTime, getJson, percent, STALE_MS, withQuery } from "./api";
-import { CARD, Stat } from "./ui";
+import { Stat } from "@/components/xpot/Stat";
+import { EmptyState } from "@/components/xpot/EmptyState";
+import { GLASS_CLASS } from "@/components/xpot/surface";
+import { formatDate } from "@/lib/format";
+import { ADMIN_TAGS_KEY, formatDateTime, formatShare, getJson, STALE_MS, withQuery } from "./api";
 import { Loading, LoadError } from "./pieces-shared";
 import { useT } from "@/i18n";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { manageTagsPiecesMessages } from "@/i18n/messages/manageTagsPieces";
 import { TagPieceMention } from "@/components/xpot/TagProductThumbnail";
 import { FilterChips } from "@/components/xpot/filters";
+import { BarChart3, Smartphone, Trophy } from "lucide-react";
+// One QR / NFC colour pair everywhere a scan is drawn, the piece screen included.
+import { NFC_COLOR, QR_COLOR, chartTickInterval } from "@/pages/tags/charts";
 
 // Range picker + KPIs + daily QR/NFC chart, for the whole fleet (Team tab) or
 // one piece (PieceDetail).
@@ -32,11 +38,19 @@ const DEVICE_KEYS = {
 
 const isDevice = (value: string): value is keyof typeof DEVICE_KEYS => value in DEVICE_KEYS;
 
-/** "2026-10-04" (a UTC day) in the language in use. */
-function formatDay(day: string, locale: string, opts: Intl.DateTimeFormatOptions): string {
-  const date = new Date(`${day}T00:00:00Z`);
-  return Number.isNaN(date.getTime()) ? day : date.toLocaleDateString(locale, { ...opts, timeZone: "UTC" });
+/** "mobile" → "Mobile", in the language in use; an unknown type stays as it came. */
+export function useDeviceLabel() {
+  const tm = useT(manageTagsPiecesMessages);
+  return (value: string) => (isDevice(value) ? tm(DEVICE_KEYS[value]) : value);
 }
+
+/** "2026-10-04" (a UTC day) in the language in use (lib/format). */
+function formatDay(day: string, opts: Intl.DateTimeFormatOptions): string {
+  const date = new Date(`${day}T00:00:00Z`);
+  return Number.isNaN(date.getTime()) ? day : formatDate(date, { ...opts, timeZone: "UTC" });
+}
+
+const CARD = `rounded-2xl ${GLASS_CLASS}`;
 
 export interface AnalyticsRange {
   preset: RangePreset | "custom";
@@ -55,9 +69,10 @@ export function rangeParams(range: AnalyticsRange): Record<string, string | unde
 }
 
 // Same parts as the list filters (components/xpot/filters.tsx): the presets are
-// FilterChips, the custom range sits in a 32px control of the same look.
+// FilterChips, the custom range sits in a 32px control of the same look. Tags
+// only (Overview, Resellers, a piece's Performance): chosen in violet.
 const DATE_INPUT =
-  "h-8 rounded-lg border border-white/[0.08] bg-black/20 px-2 text-xs text-white/80 outline-none [color-scheme:dark] focus:border-indigo-400/50";
+  "h-8 min-w-0 flex-1 rounded-lg border border-white/[0.08] bg-black/20 px-2 text-xs text-white/80 outline-none [color-scheme:dark] focus:border-violet-400/50 sm:w-auto sm:flex-none";
 
 export function RangePicker({ value, onChange }: { value: AnalyticsRange; onChange: (r: AnalyticsRange) => void }) {
   const t = useT(manageTagsPiecesMessages);
@@ -70,16 +85,17 @@ export function RangePicker({ value, onChange }: { value: AnalyticsRange; onChan
         value={value.preset}
         onChange={(preset) => onChange({ preset })}
         ariaLabel={t("rangeLabel")}
+        accent="tags"
       />
       <div
-        className={`flex items-center gap-1 rounded-full border py-0.5 pl-1 pr-0.5 ${customOn ? "border-indigo-400/40 bg-indigo-500/[0.12]" : "border-white/[0.08] bg-white/[0.03]"}`}
+        className={`flex w-full min-w-0 items-center gap-1 rounded-full border py-0.5 pl-1 pr-0.5 sm:w-auto ${customOn ? "border-violet-400/40 bg-violet-500/[0.12]" : "border-white/[0.08] bg-white/[0.03]"}`}
       >
         <input type="date" aria-label={t("rangeFrom")} className={DATE_INPUT} value={custom.from} onChange={(e) => setCustom((c) => ({ ...c, from: e.target.value }))} />
         <span className="text-xs text-white/40">–</span>
         <input type="date" aria-label={t("rangeTo")} className={DATE_INPUT} value={custom.to} onChange={(e) => setCustom((c) => ({ ...c, to: e.target.value }))} />
         <button
           type="button"
-          className={`h-7 rounded-full px-3 text-xs font-semibold transition-colors disabled:opacity-40 ${customOn ? "bg-indigo-500/30 text-white" : "text-white/60 hover:bg-white/10 hover:text-white"}`}
+          className={`h-7 shrink-0 rounded-full px-3 text-xs font-semibold transition-colors disabled:opacity-40 ${customOn ? "bg-violet-500/30 text-white" : "text-white/60 hover:bg-white/10 hover:text-white"}`}
           disabled={!custom.from}
           onClick={() => onChange({ preset: "custom", from: custom.from, to: custom.to || undefined })}
         >
@@ -90,9 +106,6 @@ export function RangePicker({ value, onChange }: { value: AnalyticsRange; onChan
   );
 }
 
-// Validated for the dark surface (blue / amber: ΔE ≥ 28 under every CVD type).
-const QR_COLOR = "#3b82f6";
-const NFC_COLOR = "#d97706";
 
 export function AnalyticsPanel({
   scopeUrl,
@@ -110,44 +123,44 @@ export function AnalyticsPanel({
   const tm = useT(manageTagsPiecesMessages);
   const tt = useT(tagsMessages);
   const url = withQuery(scopeUrl, { ...scope, ...rangeParams(range) });
-  const { data, isLoading, error } = useQuery<TagAnalytics>({
+  const { data, isLoading, error, refetch } = useQuery<TagAnalytics>({
     queryKey: [ADMIN_TAGS_KEY, "analytics", url],
     queryFn: () => getJson(url),
     staleTime: STALE_MS,
   });
 
-  if (isLoading) return <Loading />;
-  if (error || !data) return <LoadError what={tm("whatAnalytics")} error={error} />;
+  if (isLoading) return <Loading rows={4} />;
+  if (error || !data) return <LoadError what={tm("whatAnalytics")} error={error} onRetry={() => void refetch()} />;
 
   const { totals } = data;
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label={tm("interactions")} value={totals.interactions} hint={tm("interactionsHint")} />
-        <Stat label={tt("qrScans")} value={totals.qr} hint={percent(totals.qr, totals.interactions)} />
-        <Stat label={tt("nfcTaps")} value={totals.nfc} hint={percent(totals.nfc, totals.interactions)} />
-        <Stat label={tm("approxUnique")} value={totals.approxUnique} hint={tm("approxUniqueHint")} />
+        <Stat card label={tm("interactions")} value={totals.interactions} detail={tm("interactionsHint")} />
+        <Stat card label={tt("qrScans")} value={totals.qr} detail={formatShare(totals.qr, totals.interactions)} />
+        <Stat card label={tt("nfcTaps")} value={totals.nfc} detail={formatShare(totals.nfc, totals.interactions)} />
+        <Stat card label={tm("approxUnique")} value={totals.approxUnique} detail={tm("approxUniqueHint")} />
       </div>
 
-      <div className={`${CARD} p-4`}>
+      <div className={`${CARD} min-w-0 p-4`}>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <p className="text-sm font-semibold text-white">{tm("interactionsByDay")}</p>
           <p className="text-xs text-white/40">{tm("lastInteraction", { date: formatDateTime(totals.lastInteractionAt) })}</p>
         </div>
         {data.daily.length === 0 || totals.interactions === 0 ? (
-          <p className="py-10 text-center text-sm text-white/40">{tm("noScansInPeriod")}</p>
+          <EmptyState compact tone="tags" icon={BarChart3} title={tm("noScansInPeriod")} cardStyle={{}} />
         ) : (
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={data.daily} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
-                <XAxis dataKey="day" tick={{ fontSize: 11, fill: "rgba(255,255,255,0.45)" }} tickFormatter={(d: string) => formatDay(d, tm.locale, { month: "short", day: "numeric" })} stroke="rgba(255,255,255,0.1)" />
+                <XAxis dataKey="day" interval={chartTickInterval(data.daily.length)} tick={{ fontSize: 11, fill: "rgba(255,255,255,0.45)" }} tickFormatter={(d: string) => formatDay(d, { month: "short", day: "numeric" })} stroke="rgba(255,255,255,0.1)" />
                 <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "rgba(255,255,255,0.45)" }} stroke="rgba(255,255,255,0.1)" />
                 <Tooltip
                   contentStyle={{ background: "#0f172a", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "12px", fontSize: "12px", color: "#fff" }}
                   itemStyle={{ color: "#fff" }}
                   cursor={{ stroke: "rgba(255,255,255,0.15)", strokeWidth: 1, strokeDasharray: "4 4" }}
-                  labelFormatter={(d) => (typeof d === "string" ? formatDay(d, tm.locale, { dateStyle: "medium" }) : d)}
+                  labelFormatter={(d) => (typeof d === "string" ? formatDay(d, { dateStyle: "medium" }) : d)}
                 />
                 <Legend wrapperStyle={{ fontSize: 12, color: "rgba(255,255,255,0.7)" }} />
                 <Area type="monotone" dataKey="qr" name={tt("qrScans")} stackId="1" stroke={QR_COLOR} strokeWidth={2} fill={QR_COLOR} fillOpacity={0.25} />
@@ -163,18 +176,18 @@ export function AnalyticsPanel({
         </p>
       </div>
 
-      <div className={`grid gap-4 ${showTopTags ? "md:grid-cols-2" : ""}`}>
-        <div className={`${CARD} p-4`}>
+      <div className={`grid min-w-0 grid-cols-1 gap-4 ${showTopTags ? "md:grid-cols-2" : ""}`}>
+        <div className={`${CARD} min-w-0 p-4`}>
           <p className="mb-2 text-sm font-semibold text-white">{tm("devices")}</p>
           {data.devices.length === 0 ? (
-            <p className="text-sm text-white/40">{tm("noInteractionsInPeriod")}</p>
+            <EmptyState compact dense tone="tags" icon={Smartphone} title={tm("noInteractionsInPeriod")} cardStyle={{}} />
           ) : (
             <ul className="space-y-1.5 text-sm">
               {data.devices.map((d) => (
                 <li key={d.deviceType} className="flex justify-between">
                   <span className="capitalize text-white/80">{isDevice(d.deviceType) ? tm(DEVICE_KEYS[d.deviceType]) : d.deviceType}</span>
                   <span className="tabular-nums text-white/50">
-                    {d.count} <span className="text-xs text-white/30">({percent(d.count, totals.interactions)})</span>
+                    {d.count} <span className="text-xs text-white/30">({formatShare(d.count, totals.interactions)})</span>
                   </span>
                 </li>
               ))}
@@ -182,14 +195,14 @@ export function AnalyticsPanel({
           )}
         </div>
         {showTopTags ? (
-          <div className={`${CARD} p-4`}>
+          <div className={`${CARD} min-w-0 p-4`}>
             <p className="mb-2 text-sm font-semibold text-white">{tm("topPieces")}</p>
             {data.topTags.length === 0 ? (
-              <p className="text-sm text-white/40">{tm("noInteractionsInPeriod")}</p>
+              <EmptyState compact dense tone="tags" icon={Trophy} title={tm("noInteractionsInPeriod")} cardStyle={{}} />
             ) : (
               <ul className="space-y-1.5 text-sm">
                 {data.topTags.map((t) => (
-                  <li key={t.id} className="flex items-center justify-between gap-2 py-1">
+                  <li key={t.id} className="flex min-w-0 items-center justify-between gap-2 py-1">
                     <button type="button" className="min-w-0 flex-1 text-left hover:opacity-90" onClick={() => onOpenTag?.(t.id)}>
                       <TagPieceMention
                         publicCode={t.publicCode}
@@ -200,7 +213,7 @@ export function AnalyticsPanel({
                         details={t.repName ?? undefined}
                       />
                     </button>
-                    <span className="shrink-0 tabular-nums text-white/50">
+                    <span className="shrink-0 whitespace-nowrap text-xs tabular-nums text-white/50">
                       QR {t.qr} · NFC {t.nfc}
                     </span>
                   </li>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useMemo, useRef } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -8,6 +8,8 @@ import { useXpotShared } from "./useXpotShared";
 import { useXpotQueries } from "./useXpotQueries";
 import type { EnrichedSalesVisit } from "../types";
 import { useLocation } from "wouter";
+import { previousInAppPath } from "@/lib/inAppHistory";
+import { cancelledVisitExit } from "../visitDestination";
 
 export function useVisits() {
   const { toast } = useToast();
@@ -44,10 +46,11 @@ export function useVisits() {
       });
       return response.json();
     },
-    onSuccess: async (visit: { id: number }) => {
+    onSuccess: async (visit: { id: number; routeId?: number | null }) => {
       toast({ title: t("visitCompleted"), variant: "success" });
       await invalidateXpotData();
-      setLocation(`/dashboard/history/${visit.id}`);
+      // A stop of a route goes back to the route, for the next stop; any other visit shows its summary.
+      setLocation(visit.routeId ? `/route?routeId=${visit.routeId}` : `/dashboard/history/${visit.id}`);
     },
     onError: (error: Error) => {
       toast({ title: t("checkOutFailed"), description: error.message, variant: "destructive" });
@@ -60,10 +63,13 @@ export function useVisits() {
       const response = await apiRequest("POST", `/api/xpot/visits/${activeVisitStable.id}/cancel`);
       return response.json();
     },
-    onSuccess: async () => {
+    onSuccess: async (visit: { routeId?: number | null } | null) => {
       toast({ title: t("visitCancelled") });
+      // Read before anything navigates: the screen the visit was started from.
+      const exit = cancelledVisitExit(visit?.routeId, previousInAppPath());
       await invalidateXpotData();
-      setLocation("/route");
+      if (exit.back) window.history.back();
+      else setLocation(exit.path);
     },
     onError: (error: Error) => {
       toast({ title: t("cancelVisitFailed"), description: error.message, variant: "destructive" });

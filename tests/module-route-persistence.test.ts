@@ -36,6 +36,16 @@ describe("module route persistence", () => {
     expect(moduleEntryPath("visits")).toBe("/dashboard");
   });
 
+  it("never goes back to a visit screen: once the visit is over it is stale", () => {
+    rememberModuleRoute("visits", "/leads?status=customer");
+    for (const route of ["/route/check-in?leadId=4", "/route/check-in", "/route?leadId=4&visitId=9", "/check-in"]) {
+      expect(isModuleRoute("visits", route)).toBe(false);
+      rememberModuleRoute("visits", route);
+    }
+    expect(moduleEntryPath("visits")).toBe("/leads?status=customer");
+    expect(isModuleRoute("visits", "/route?routeId=3")).toBe(true);
+  });
+
   it("clears remembered screens when the user signs out", () => {
     rememberModuleRoute("visits", "/route");
     rememberModuleRoute("tags", "/tags/customers");

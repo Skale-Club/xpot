@@ -1,5 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { Pipette } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { SURFACE_MODAL_CLASS } from "@/components/xpot/surface";
+import { useT } from "@/i18n";
+import { commonMessages } from "@/i18n/messages/common";
+import { kitMessages } from "@/i18n/messages/kit";
 
 /* ---------- color math ---------- */
 
@@ -99,6 +104,8 @@ function ColorPopover({
 }) {
   // keep hue locally so it survives s/v = 0
   const initial = rgbToHsv(...(Object.values(hexToRgb(value)) as [number, number, number]));
+  const t = useT(kitMessages);
+  const tc = useT(commonMessages);
   const [hsv, setHsv] = useState(initial);
 
   const rgb = hsvToRgb(hsv.h, hsv.s, hsv.v);
@@ -137,7 +144,7 @@ function ColorPopover({
 
   return (
     <div
-      className="absolute left-0 top-full z-50 mt-2 w-64 rounded-2xl border border-white/10 bg-[#0c1124] p-3 shadow-2xl shadow-black/50"
+      className={`absolute left-0 top-full z-50 mt-2 w-64 rounded-2xl ${SURFACE_MODAL_CLASS} p-3 shadow-2xl shadow-black/50`}
       onPointerDown={(e) => e.stopPropagation()}
     >
       {/* saturation / value area */}
@@ -158,9 +165,11 @@ function ColorPopover({
       <div className="mt-3 flex items-center gap-2.5">
         {supportsEyedropper && (
           <button
+            type="button"
             onClick={eyedrop}
-            className="shrink-0 rounded-md p-1.5 text-white/60 transition-colors hover:bg-white/10 hover:text-white"
-            title="Pick from screen"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+            title={t("pickFromScreen")}
+            aria-label={t("pickFromScreen")}
           >
             <Pipette className="h-4 w-4" />
           </button>
@@ -192,7 +201,7 @@ function ColorPopover({
               onChange={(e) => setRgb(k, e.target.value.replace(/[^0-9]/g, ""))}
               inputMode="numeric"
               maxLength={3}
-              className="w-full rounded-lg border border-white/10 bg-[#0a0f1e] px-2 py-1.5 text-center text-sm text-white outline-none focus:border-blue-500/50"
+              className="w-full rounded-lg border border-white/10 bg-white/[0.05] px-2 py-1.5 text-center text-sm text-white focus:border-blue-400/60"
             />
             <div className="mt-1 text-center text-[10px] font-semibold uppercase tracking-wider text-white/40">
               {k}
@@ -201,12 +210,9 @@ function ColorPopover({
         ))}
       </div>
 
-      <button
-        onClick={onClose}
-        className="mt-3 w-full rounded-lg bg-blue-500 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-600"
-      >
-        Done
-      </button>
+      <Button type="button" variant="brand" size="sm" onClick={onClose} className="mt-3 w-full">
+        {tc("done")}
+      </Button>
     </div>
   );
 }
@@ -222,6 +228,7 @@ export function ColorField({
   value: string;
   onChange: (v: string) => void;
 }) {
+  const t = useT(kitMessages);
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   const valid = HEX_RE.test(value);
@@ -251,9 +258,9 @@ export function ColorField({
 
   return (
     <div>
-      <label className="mb-1 block text-xs font-medium text-white/50">{label}</label>
+      <p className="mb-1.5 text-xs font-semibold text-white/60">{label}</p>
       <div ref={wrapRef} className="relative">
-        <div className="flex items-center gap-2.5 rounded-xl border border-white/10 bg-[#0a0f1e] p-1.5 pr-3 transition-colors focus-within:border-blue-500/50">
+        <div className="flex min-h-11 items-center gap-2.5 rounded-xl border border-white/10 bg-white/[0.05] p-1 pr-3 transition-colors hover:border-white/[0.16] focus-within:border-blue-400/60">
           <button
             type="button"
             onClick={() => setOpen((o) => !o)}
@@ -264,8 +271,8 @@ export function ColorField({
               backgroundSize: "10px 10px",
               backgroundPosition: "0 0,0 5px,5px -5px,-5px 0",
             }}
-            title="Pick a color"
-            aria-label={`${label} — pick a color`}
+            title={t("pickColor")}
+            aria-label={t("pickColorFor", { label })}
           >
             <span className="absolute inset-0" style={{ backgroundColor: swatch }} />
           </button>
@@ -278,6 +285,7 @@ export function ColorField({
               spellCheck={false}
               maxLength={6}
               placeholder="000000"
+              aria-label={label}
               className="w-full bg-transparent pl-0.5 font-mono text-sm uppercase tracking-wide text-white outline-none placeholder:text-white/20"
             />
           </div>

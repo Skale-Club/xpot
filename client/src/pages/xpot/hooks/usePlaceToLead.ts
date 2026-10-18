@@ -4,6 +4,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/i18n";
 import { checkinMessages } from "@/i18n/messages/checkin";
 import { parseAddress } from "../utils";
+import { placeTypeLabel } from "@/lib/placeTypes";
 import { useXpotShared } from "./useXpotShared";
 import { useLeads } from "./useLeads";
 import type { FullSalesLead, GooglePlaceResult } from "../types";
@@ -42,7 +43,6 @@ export function usePlaceToLead() {
           country: "US",
           lat: place.lat ?? undefined,
           lng: place.lng ?? undefined,
-          geofenceRadiusMeters: 150,
         }).then(() => invalidateXpotData()).catch(() => {});
       }
       toast({ title: t("localLeadSelected"), description: existingLead.name, variant: "success" });
@@ -54,7 +54,8 @@ export function usePlaceToLead() {
       name: place.name,
       phone: place.phone || undefined,
       website: place.website || undefined,
-      industry: place.primaryType || undefined,
+      // Saved as a word in the rep's language, never Google's raw type code.
+      industry: placeTypeLabel(place.primaryType, t.lang, place.primaryTypeName) || undefined,
       source: "google_places",
       status: "prospect",
       notes: `Imported from Google Places (${place.placeId})`,
@@ -67,12 +68,10 @@ export function usePlaceToLead() {
         country: "US",
         lat: place.lat ?? undefined,
         lng: place.lng ?? undefined,
-        geofenceRadiusMeters: 150,
         isPrimary: true,
       },
     });
-    const alreadySaved = (createdLead as { existing?: boolean }).existing === true;
-    toast({ title: t(alreadySaved ? "localLeadSelected" : "businessImported"), description: createdLead.lead.name, variant: "success" });
+    toast({ title: t(createdLead.existing ? "localLeadSelected" : "businessImported"), description: createdLead.lead.name, variant: "success" });
     await invalidateXpotData();
     return { id: createdLead.lead.id, name: createdLead.lead.name };
   }, [createLeadMutation, invalidateXpotData, t, toast]);

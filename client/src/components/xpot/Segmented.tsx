@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { ACCENT_SELECTED, GLASS, type ModuleAccent } from "./surface";
 
 export type SegmentedItem<T extends string | number | undefined> = {
   id: T;
@@ -9,8 +10,10 @@ export type SegmentedItem<T extends string | number | undefined> = {
 
 /**
  * One-of-N view switch: the track with a gradient on the active segment
- * (All/By day, the Sales tabs). It changes what the screen shows; filters that
- * narrow a list use FilterChips (components/xpot/filters.tsx) instead.
+ * (All/By day, the dashboard period). It changes what the screen shows; filters
+ * that narrow a list use FilterChips (components/xpot/filters.tsx) instead.
+ * `size="sm"` is the compact form for section headers; `accent` tints the
+ * active segment per module (violet in Tags).
  */
 export function Segmented<T extends string | number | undefined>({
   items,
@@ -18,18 +21,29 @@ export function Segmented<T extends string | number | undefined>({
   onChange,
   className = "",
   itemClassName = "",
+  accent = "visits",
+  size = "md",
+  ariaLabel,
 }: {
   items: ReadonlyArray<SegmentedItem<T>>;
   value: T;
   onChange: (id: T) => void;
   className?: string;
   itemClassName?: string;
+  /** Module tint of the active segment (MODULE_ACCENT); Visits blue by default. */
+  accent?: ModuleAccent;
+  /** `sm`: a compact inline switch (section headers, the dashboard period). */
+  size?: "sm" | "md";
+  ariaLabel?: string;
 }) {
+  const selected = ACCENT_SELECTED[accent];
+  const small = size === "sm";
   return (
     <div
       role="group"
-      className={`flex gap-1 rounded-xl p-1 ${className}`}
-      style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}
+      aria-label={ariaLabel}
+      className={`${small ? "inline-flex gap-0.5 rounded-lg p-0.5" : "flex gap-1 rounded-xl p-1"} ${className}`}
+      style={{ background: GLASS.background, border: "1px solid rgba(255,255,255,0.07)" }}
     >
       {items.map(({ id, label, count }) => (
         <button
@@ -37,10 +51,9 @@ export function Segmented<T extends string | number | undefined>({
           type="button"
           aria-pressed={value === id}
           onClick={() => onChange(id)}
-          className={`relative flex-1 rounded-lg py-2 text-xs font-semibold transition-all ${itemClassName}`}
-          style={value === id
-            ? { background: "linear-gradient(135deg, rgba(59,130,246,0.3), rgba(99,102,241,0.3))", color: "white" }
-            : { color: "rgba(255,255,255,0.35)" }}
+          className={`relative font-semibold transition-all ${small ? "rounded-md px-2 py-1 text-[11px] tracking-wide" : "flex-1 rounded-lg py-2 text-xs"} ${
+            value === id ? selected.fill : "text-white/40 hover:text-white/70"
+          } ${itemClassName}`}
         >
           {label}
           {count ? (

@@ -121,3 +121,32 @@ test("companies without a Google place are never merged", async () => {
   expect((await request("rep-a", "POST", "/api/xpot/leads", manual)).status).toBe(201);
   expect(await leadCount()).toBe(2);
 });
+
+// The check-in search asks GET /leads?search= for the rep's companies (useLeadLookup).
+const lookup = async (userId: string, search: string) =>
+  (await request(userId, "GET", `/api/xpot/leads?limit=8&search=${encodeURIComponent(search)}`)).body.map((lead: { name: string }) => lead.name);
+
+test("the company lookup matches the sector, the street and the city, as the local search did", async () => {
+  await request("rep-a", "POST", "/api/xpot/leads", { ...place("ChIJ-downtown-barber"), industry: "Barber shop" });
+  expect(await lookup("rep-a", "downtown")).toEqual(["Downtown Barber"]);
+  expect(await lookup("rep-a", "barber shop")).toEqual(["Downtown Barber"]);
+  expect(await lookup("rep-a", "33 E Pine")).toEqual(["Downtown Barber"]);
+  expect(await lookup("rep-a", "orlando")).toEqual(["Downtown Barber"]);
+  expect(await lookup("rep-a", "tampa")).toEqual([]);
+});
+
+test("the company lookup never shows another rep's companies", async () => {
+  await request("rep-a", "POST", "/api/xpot/leads", place("ChIJ-downtown-barber"));
+  expect(await lookup("rep-b", "downtown")).toEqual([]);
+  expect(await lookup("rep-b", "orlando")).toEqual([]);
+});
+
+test("linking a company to a Google place another company already has is a clear 409, not a 500", async () => {
+  await request("rep-a", "POST", "/api/xpot/leads", place("ChIJ-downtown-barber"));
+  const { googlePlaceId: _drop, ...manual } = place("unused");
+  const second = await request("rep-a", "POST", "/api/xpot/leads", { ...manual, name: "Barber (typed by hand)" });
+  const linked = await request("rep-a", "PATCH", `/api/xpot/leads/${second.body.lead.id}`, { googlePlaceId: "ChIJ-downtown-barber" });
+  expect(linked.status).toBe(409);
+  expect(linked.body).toMatchObject({ code: "lead_exists" });
+  expect(linked.body.lead).toBeUndefined();
+});

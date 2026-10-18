@@ -1,39 +1,56 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "wouter";
-import { AlertCircle, ArrowLeft, ArrowRight, Check, ChevronDown, ClipboardPaste, Copy, Link2, Loader2, X, type LucideIcon } from "lucide-react";
-import { formatPhoneMask, isSocialNetwork, looksLikeLink, normalizeUrlInput, SOCIAL_NETWORKS, socialHandleOf, socialNetworkOf, socialUrl, type SocialNetwork } from "@shared/tagApp";
+import { ArrowLeft, ArrowRight, Check, ChevronDown, ClipboardPaste, Copy, Link2, Nfc, X, type LucideIcon } from "lucide-react";
+import { chipNeedsWriting, formatPhoneMask, isSocialNetwork, looksLikeLink, normalizeUrlInput, SOCIAL_NETWORKS, socialHandleOf, socialNetworkOf, socialUrl, type SocialNetwork } from "@shared/tagApp";
+import { stockBlock } from "@shared/tags";
+import { Button } from "@/components/ui/button";
+import { Loader2 } from "@/components/ui/loader";
+import { FIELD_CONTROL } from "@/components/xpot/Field";
+import { InlineAlert } from "@/components/xpot/InlineAlert";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
+import { CHIP_STATUS_TONE, PIECE_STATUS_TONE, Pill, SOLD_TONE, STOCK_STATUS_TONE } from "@/components/xpot/StatusPill";
+import { ACCENT_SELECTED, EYEBROW as KIT_EYEBROW, GLASS_CLASS, MODULE_ACCENT, OVERLAY_CLASS, SURFACE_MODAL_CLASS } from "@/components/xpot/surface";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
+import { tagsMessages } from "@/i18n/messages/tags";
+import { cn } from "@/lib/utils";
+import { formatCount, NFC_COLOR, QR_COLOR } from "./charts";
 import { copyToClipboard, haptic, readClipboard, type BannerState } from "./lib";
 
-// Class kit for the Tags screens, in Xpot's dark glass style. Blue/indigo is an
-// Xpot piece; emerald is a chip holding the customer's own link.
+// Class kit for the Tags screens, derived from the shared kit (docs/UI_KIT.md).
+// The module's accent is violet (MODULE_ACCENT.tags): the primary action is
+// <Button variant="brand" accent="tags">, and eyebrows, focus borders, "selected"
+// and the tap animation are violet. A plain chip written without Xpot (the
+// "direct" identity) is neutral slate. Green is only money (Sell, Record sale)
+// and success; amber only "needs a step". Blue is left where it is not the
+// module's colour but a meaning of its own: QR scans in the charts and counters
+// (QR_COLOR, charts.ts), the kit's info alerts and the global focus outline.
+// Nothing in Tags uses blue to mean "an Xpot piece" any more: every piece here
+// is one, and the plain-chip screen tells itself apart by being slate.
 
 export type Identity = "xpot" | "direct";
 
-export const CARD = "rounded-[20px] border border-white/10 bg-white/[0.04]";
-export const INPUT =
-  "w-full min-h-[48px] rounded-2xl border border-white/10 bg-white/[0.05] px-4 text-base text-white placeholder:text-white/30 [color-scheme:dark] focus:border-blue-400/60 focus:outline-none";
-export const OPTION = "bg-[#0d1424] text-white";
-export const BTN_PRIMARY =
-  "flex min-h-[52px] w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-500 px-6 text-base font-bold text-white shadow-[0_8px_24px_rgba(59,130,246,0.25)] transition-transform active:scale-[0.98] disabled:opacity-50";
-export const BTN_SECONDARY =
-  "flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl bg-white px-5 text-base font-semibold text-slate-900 transition-transform active:scale-[0.98] disabled:opacity-50";
-export const BTN_TERTIARY =
-  "flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-5 text-base font-semibold text-white/85 transition-colors active:bg-white/10 disabled:opacity-50";
-export const BTN_DIRECT =
-  "flex min-h-[52px] w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-6 text-base font-bold text-white transition-transform active:scale-[0.98] disabled:opacity-50";
-export const EYEBROW = "text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-300/80";
-export const EYEBROW_MUTED = "text-[10px] font-semibold uppercase tracking-widest text-white/40";
+export const CARD = `rounded-2xl ${GLASS_CLASS}`;
+/** The violet-tinted hero card (a piece's setup / customer link). */
+export const CARD_ACCENT = "rounded-2xl border border-violet-400/25 bg-violet-500/[0.08]";
+/** Violet focus border for the kit's Input / Textarea in Tags (`<Input className={INPUT_ACCENT} />`). */
+export const INPUT_ACCENT = "focus:border-violet-400/60";
+/** The kit's field (FIELD_CONTROL) with the Tags focus colour, for raw <input>s and composite fields. */
+export const INPUT = cn(FIELD_CONTROL, "py-2 [color-scheme:dark]", INPUT_ACCENT);
+/** One eyebrow shape (the kit's EYEBROW); EYEBROW is its module-accent variant, for a hero card or a screen's title. */
+export const EYEBROW_MUTED = KIT_EYEBROW;
+export const EYEBROW = KIT_EYEBROW.replace("text-white/40", MODULE_ACCENT.tags.text);
 export const SHEET_TITLE = "text-xl font-bold tracking-tight text-white";
-export const ICON_BLOCK_XPOT = "flex shrink-0 items-center justify-center rounded-xl bg-blue-500/15 text-blue-300";
-export const ICON_BLOCK_DIRECT = "flex shrink-0 items-center justify-center rounded-xl bg-emerald-400/10 text-emerald-300";
+/** Icon tile of a plain chip (direct identity): neutral slate. */
+export const ICON_BLOCK_DIRECT = "flex shrink-0 items-center justify-center rounded-xl bg-white/[0.06] text-white/60";
+/** The Tags primary fill (ACCENT_GRADIENT.tags), spelled out so Tailwind sees it; the same as <Button accent="tags">. */
+export const TAGS_FILL = "bg-[linear-gradient(135deg,#8b5cf6,#c026d3)] shadow-[0_8px_24px_rgba(139,92,246,0.22)]";
 
 /** Title row for a screen: optional back arrow, eyebrow and a large title. */
 export function TopBar({
   title,
   back,
+  onBack,
   eyebrow,
   identity = "xpot",
   right,
@@ -43,6 +60,8 @@ export function TopBar({
 }: {
   title: string;
   back?: string;
+  /** Runs instead of following `back` (which stays the link's address), e.g. to go back in history. */
+  onBack?: () => void;
   eyebrow?: string;
   identity?: Identity;
   right?: ReactNode;
@@ -60,6 +79,7 @@ export function TopBar({
       {back && (
         <Link
           href={back}
+          onClick={onBack ? (e) => { e.preventDefault(); onBack(); } : undefined}
           aria-label={t("back")}
           className="-ml-2 mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/80 active:bg-white/10"
         >
@@ -67,7 +87,7 @@ export function TopBar({
         </Link>
       )}
       <div className="min-w-0 flex-1">
-        {eyebrow && <p className={identity === "direct" ? EYEBROW.replace("text-indigo-300/80", "text-emerald-300/80") : EYEBROW}>{eyebrow}</p>}
+        {eyebrow && <p className={identity === "direct" ? EYEBROW_MUTED : EYEBROW}>{eyebrow}</p>}
         <h1 className={`mt-0.5 break-words text-[26px] font-extrabold leading-tight tracking-tight text-white ${titleClassName}`}>{title}</h1>
         {sub && <div className="mt-1.5">{sub}</div>}
       </div>
@@ -105,15 +125,13 @@ export function ActionTile({
       disabled={disabled}
       data-testid={testId}
       style={{ WebkitTapHighlightColor: "transparent" }}
-      className={`flex min-h-[80px] w-full items-center gap-4 rounded-[20px] p-4 text-left transition-transform active:scale-[0.98] disabled:opacity-60 ${
-        primary
-          ? "bg-gradient-to-br from-blue-500 to-indigo-500 text-white shadow-[0_8px_24px_rgba(59,130,246,0.25)]"
-          : "border border-white/10 bg-white/[0.04] text-white"
+      className={`flex min-h-[80px] w-full items-center gap-4 rounded-2xl p-4 text-left transition-transform active:scale-[0.98] disabled:opacity-60 ${
+        primary ? `${TAGS_FILL} text-white` : `${GLASS_CLASS} text-white`
       }`}
     >
       <span
-        className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${
-          primary ? "bg-white/15 text-white" : `bg-white/[0.05] ${iconClassName ?? "text-blue-300"}`
+        className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${
+          primary ? "bg-white/15 text-white" : `bg-white/[0.05] ${iconClassName ?? MODULE_ACCENT.tags.text}`
         }`}
       >
         <Icon className="h-6 w-6" />
@@ -127,30 +145,68 @@ export function ActionTile({
   );
 }
 
+/** The screen's message (saved, failed): the kit's InlineAlert, success or error. */
 export function Banner({ banner }: { banner: BannerState }) {
   if (!banner) return null;
-  const ok = banner.tone === "ok";
   return (
-    <div
-      role="status"
-      className={`mb-4 flex items-start gap-2 rounded-2xl border px-4 py-3 text-sm font-medium ${
-        ok ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-100" : "border-red-400/30 bg-red-400/10 text-red-100"
-      }`}
-    >
-      {ok ? <Check className="mt-0.5 h-4 w-4 shrink-0" /> : <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />}
-      <span className="min-w-0 break-words">{banner.text}</span>
-    </div>
+    <InlineAlert tone={banner.tone === "ok" ? "success" : "error"} className="mb-4 break-words font-medium">
+      {banner.text}
+    </InlineAlert>
   );
 }
 
+/** The app's loader (animated dots, ui/loader); sized from the h-/w- class. */
 export function Spinner({ className = "h-5 w-5" }: { className?: string }) {
-  return <Loader2 className={`animate-spin ${className}`} />;
+  return <Loader2 className={className} />;
 }
 
 // Status pills: one shape and palette for admin and app (components/xpot/StatusPill.tsx).
 export { Pill, type PillTone } from "@/components/xpot/StatusPill";
-export { PIECE_STATUS_TONE as STATUS_TONE, CHIP_STATUS_TONE as CHIP_TONE, SOLD_TONE } from "@/components/xpot/StatusPill";
+export { PIECE_STATUS_TONE as STATUS_TONE, CHIP_STATUS_TONE as CHIP_TONE, STOCK_STATUS_TONE as STOCK_TONE, SOLD_TONE } from "@/components/xpot/StatusPill";
 
+/**
+ * A piece's state wherever it is listed: where it is in its life, a stock problem
+ * that keeps it from being set up or sold (not received, damaged, lost), and sold.
+ */
+export function PieceStatusPills({ tag }: { tag: { status: string; stockStatus: string; saleId: number | null } }) {
+  const t = useT(tagsMessages);
+  const stock = stockBlock(tag.stockStatus);
+  return (
+    <>
+      <Pill tone={PIECE_STATUS_TONE[tag.status] ?? "slate"}>{t(`status_${tag.status}` as "status_active")}</Pill>
+      {stock && <Pill tone={STOCK_STATUS_TONE[stock]}>{t(`stock_${stock}`)}</Pill>}
+      {tag.saleId && <Pill tone={SOLD_TONE}>{t("soldBadge")}</Pill>}
+    </>
+  );
+}
+
+/** The NFC chip of a listed piece: a red pill when it still needs writing, else a small coloured mark. */
+export function ChipMark({ tag }: { tag: { status: string; nfcStatus: string } }) {
+  const t = useT(tagsMessages);
+  const label = t(`chip_${tag.nfcStatus}` as "chip_verified");
+  if (chipNeedsWriting(tag)) {
+    return (
+      <Pill tone="red" className="gap-1">
+        <Nfc className="h-3 w-3" aria-hidden="true" />
+        {label}
+      </Pill>
+    );
+  }
+  const tone = CHIP_STATUS_TONE[tag.nfcStatus] ?? "slate";
+  const color = tone === "green" ? "text-emerald-300/80" : tone === "amber" ? "text-amber-300/80" : tone === "red" ? "text-red-300/80" : "text-white/30";
+  return (
+    <span className={`inline-flex h-6 w-6 items-center justify-center ${color}`} title={label} data-chip={tag.nfcStatus}>
+      <Nfc className="h-3.5 w-3.5" aria-hidden="true" />
+      <span className="sr-only">{label}</span>
+    </span>
+  );
+}
+
+/**
+ * Copy with a check for 2 s. The kit's CopyButton look; this one keeps the
+ * Tags clipboard fallback (copyToClipboard) and the haptic tap. `large` is the
+ * full-width button of a sheet.
+ */
 export function CopyButton({ text, label, large = false }: { text: string; label: string; large?: boolean }) {
   const t = useT(commonMessages);
   const [copied, setCopied] = useState(false);
@@ -163,29 +219,40 @@ export function CopyButton({ text, label, large = false }: { text: string; label
     window.clearTimeout(timer.current);
     timer.current = window.setTimeout(() => setCopied(false), 2000);
   };
+  const Icon = copied ? Check : Copy;
   if (!large) {
     return (
       <button
         type="button"
         onClick={() => void onCopy()}
-        aria-label={label}
-        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/10 text-white/80 active:bg-white/10"
+        aria-label={copied ? t("copied") : label}
+        title={label}
+        className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.05] transition-colors hover:bg-white/10 ${copied ? "text-emerald-300" : "text-white/75 hover:text-white"}`}
       >
-        {copied ? <Check className="h-5 w-5 text-emerald-400" /> : <Copy className="h-5 w-5" />}
+        <Icon className="h-5 w-5" />
       </button>
     );
   }
   return (
-    <button
-      type="button"
-      onClick={() => void onCopy()}
-      className={`flex min-h-[52px] w-full items-center justify-center gap-2 rounded-2xl text-base font-bold text-white transition-colors ${
-        copied ? "bg-emerald-500" : "border border-white/10 bg-white/[0.06] active:bg-white/10"
-      }`}
-    >
-      {copied ? <Check className="h-5 w-5" /> : <Copy className="h-5 w-5" />}
+    <Button type="button" variant="secondary" size="lg" onClick={() => void onCopy()} className={`w-full ${copied ? "!text-emerald-300" : ""}`}>
+      <Icon className="!size-5" />
       {copied ? t("copied") : label}
-    </button>
+    </Button>
+  );
+}
+
+/** Scans of a piece, the same on the phone and the desktop: the total, then QR · NFC in the charts' colours. */
+export function ScanCounts({ qr, nfc, align = "right" }: { qr: number; nfc: number; align?: "left" | "right" }) {
+  const t = useT(tagsMessages);
+  const total = qr + nfc;
+  if (total === 0) return <span className="text-white/20">—</span>;
+  return (
+    <span className={`block tabular-nums ${align === "right" ? "text-right" : ""}`}>
+      <span className="block text-sm font-semibold text-white">{t.plural("scansCount", total, { count: formatCount(total, t.locale) })}</span>
+      <span className="mt-0.5 block text-[11px] text-white/40">
+        <span style={{ color: QR_COLOR }}>QR</span> {formatCount(qr, t.locale)} · <span style={{ color: NFC_COLOR }}>NFC</span> {formatCount(nfc, t.locale)}
+      </span>
+    </span>
   );
 }
 
@@ -326,7 +393,7 @@ export function LinkInput({
     : placeholder;
   return (
     <>
-      <div ref={field} className={`${INPUT} flex min-w-0 items-center !px-1.5 focus-within:border-blue-400/60`}>
+      <div ref={field} className={`${INPUT} flex min-w-0 items-center !px-1.5 !py-0 focus-within:border-violet-400/60`}>
         <button
           type="button"
           onClick={() => (menuAt ? setMenuAt(null) : openMenu())}
@@ -334,7 +401,7 @@ export function LinkInput({
           aria-expanded={!!menuAt}
           aria-label={`${t("linkNetwork")}: ${nameOf(network)}`}
           title={nameOf(network)}
-          className={`flex h-10 shrink-0 items-center gap-1 rounded-xl pl-2 pr-1.5 transition-colors hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50 active:bg-white/10 ${menuAt ? "bg-white/[0.06] text-white" : "text-white/45"}`}
+          className={`flex h-9 shrink-0 items-center gap-1 rounded-lg pl-2 pr-1.5 transition-colors hover:bg-white/[0.06] active:bg-white/10 ${menuAt ? "bg-white/[0.06] text-white" : "text-white/45"}`}
           data-testid="link-network"
         >
           <NetworkMark network={network} />
@@ -352,7 +419,7 @@ export function LinkInput({
           value={shown}
           onChange={(e) => type(e.target.value)}
           placeholder={hint}
-          className="min-h-[46px] min-w-0 flex-1 bg-transparent text-base text-white placeholder:text-white/30 focus:outline-none"
+          className="min-h-[42px] min-w-0 flex-1 bg-transparent text-base text-white placeholder:text-white/30 focus:outline-none sm:text-sm"
           data-testid="input-destination"
         />
         {typed ? (
@@ -382,8 +449,8 @@ export function LinkInput({
           ref={menu}
           role="listbox"
           aria-label={t("linkNetwork")}
-          className="fixed z-[70] rounded-2xl border border-white/10 p-1.5 shadow-[0_16px_40px_rgba(0,0,0,0.5)]"
-          style={{ left: menuAt.left, width: menuAt.width, top: menuAt.top, bottom: menuAt.bottom, background: "#111a2e" }}
+          className={`fixed z-[70] rounded-xl p-1.5 shadow-[0_16px_40px_rgba(0,0,0,0.5)] ${SURFACE_MODAL_CLASS}`}
+          style={{ left: menuAt.left, width: menuAt.width, top: menuAt.top, bottom: menuAt.bottom }}
         >
           {LINK_NETWORKS.map((n) => (
             <button
@@ -392,14 +459,14 @@ export function LinkInput({
               role="option"
               aria-selected={network === n}
               onClick={() => pick(n)}
-              className={`flex min-h-[44px] w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold transition-colors ${
-                network === n ? "bg-blue-500/15 text-white" : "text-white/75 hover:bg-white/[0.06]"
+              className={`flex min-h-[44px] w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold transition-colors ${
+                network === n ? `${ACCENT_SELECTED.tags.row} text-white` : "text-white/75 hover:bg-white/[0.06]"
               }`}
               data-testid={`link-network-${n}`}
             >
               <NetworkMark network={n} />
               <span className="min-w-0 flex-1 truncate">{nameOf(n)}</span>
-              {network === n ? <Check className="h-4 w-4 shrink-0 text-blue-300" /> : null}
+              {network === n ? <Check className={`h-4 w-4 shrink-0 ${ACCENT_SELECTED.tags.icon}`} /> : null}
             </button>
           ))}
         </div>
@@ -411,20 +478,94 @@ export function LinkInput({
 /** Brand names stay as they are in every language. */
 const NETWORK_NAMES: Record<SocialNetwork, string> = { instagram: "Instagram", facebook: "Facebook", tiktok: "TikTok", whatsapp: "WhatsApp" };
 
-export function FieldLabel({ children }: { children: ReactNode }) {
-  return <span className={`mb-1.5 block ${EYEBROW_MUTED}`}>{children}</span>;
+/** The label over a field: the kit Field's label style, for the composite controls (LinkInput, LeadPicker) that Field can't wrap. */
+export function FieldLabel({ children, htmlFor }: { children: ReactNode; htmlFor?: string }) {
+  return (
+    <label htmlFor={htmlFor} className="mb-1.5 block text-xs font-semibold text-white/60">
+      {children}
+    </label>
+  );
 }
 
-/** Slide-up sheet with a dimmed backdrop; a centred dialog from `lg` up. */
-/** A pop-up, centered on phone and desktop. (Named for when it slid up from the bottom.) */
-export function BottomSheet({ open, onClose, children, title }: { open: boolean; onClose: () => void; children: ReactNode; title?: string }) {
+/** Numbered how-to steps (NFC Tools on an iPhone), numbered in the module accent. */
+export function StepList({ steps, className = "" }: { steps: ReadonlyArray<{ key: string; text: ReactNode; hint?: ReactNode }>; className?: string }) {
+  return (
+    <ol className={`space-y-2 ${className}`}>
+      {steps.map((step, i) => (
+        <li key={step.key} className="flex gap-3 text-sm text-white/75">
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-violet-500/15 text-xs font-bold text-violet-300">{i + 1}</span>
+          <span className="pt-0.5">
+            {step.text}
+            {step.hint ? <span className="mt-0.5 block text-xs text-white/45">{step.hint}</span> : null}
+          </span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+/** The buttons at the foot of a sheet or card: the primary on top, then the others, then Cancel. */
+export function SheetActions({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return <div className={`flex flex-col gap-2 ${className}`}>{children}</div>;
+}
+
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/**
+ * A pop-up, centered on phone and desktop. (Named for when it slid up from the bottom.)
+ * The kit's modal shell: SURFACE_MODAL, OVERLAY_CLASS and the sheet radius (rounded-3xl).
+ * With a `title` it draws the title row and its X; `banner` repeats the screen's
+ * message inside, since the page banner sits behind the pop-up. Escape closes it,
+ * focus starts inside and Tab stays inside until it closes.
+ */
+export function BottomSheet({ open, onClose, children, title, icon, banner }: {
+  open: boolean;
+  onClose: () => void;
+  children: ReactNode;
+  title?: string;
+  /** Shown before the title. */
+  icon?: ReactNode;
+  banner?: BannerState;
+}) {
   const t = useT(commonMessages);
+  const panel = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
   useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    const opener = document.activeElement as HTMLElement | null;
+    // The first field or button, unless something inside asked for focus (autoFocus).
+    const node = panel.current;
+    if (node && !node.contains(document.activeElement)) {
+      const first = Array.from(node.querySelectorAll<HTMLElement>(FOCUSABLE)).find((el) => el.dataset.sheetClose === undefined);
+      (first ?? node).focus();
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        // Only the top-most sheet closes, and nothing behind it (a desktop pane) does too.
+        e.stopPropagation();
+        closeRef.current();
+        return;
+      }
+      if (e.key !== "Tab" || !panel.current) return;
+      const items = Array.from(panel.current.querySelectorAll<HTMLElement>(FOCUSABLE));
+      if (!items.length) return;
+      const [first, last] = [items[0], items[items.length - 1]];
+      if (e.shiftKey && (document.activeElement === first || !panel.current.contains(document.activeElement))) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    node?.addEventListener("keydown", onKey);
     return () => {
+      node?.removeEventListener("keydown", onKey);
       document.body.style.overflow = prev;
+      if (opener && document.contains(opener)) opener.focus();
     };
   }, [open]);
   if (!open) return null;
@@ -437,17 +578,41 @@ export function BottomSheet({ open, onClose, children, title }: { open: boolean;
       aria-modal="true"
       aria-label={title}
     >
-      <button type="button" aria-label={t("close")} onClick={onClose} className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
-      <div className="relative max-h-full w-full max-w-md overflow-y-auto rounded-[28px] border border-white/10 px-5 pb-5 pt-5 lg:max-w-lg lg:pt-6" style={{ background: "#0d1424" }}>
+      <button type="button" tabIndex={-1} aria-label={t("close")} onClick={onClose} className={`absolute inset-0 ${OVERLAY_CLASS}`} />
+      <div
+        ref={panel}
+        tabIndex={-1}
+        data-focus-container
+        className={`relative max-h-full w-full max-w-md overflow-y-auto rounded-3xl px-5 pb-5 pt-5 shadow-[0_24px_64px_rgba(0,0,0,0.5)] outline-none lg:max-w-lg lg:pt-6 ${SURFACE_MODAL_CLASS}`}
+      >
+        {title ? (
+          <div className="-mr-2 -mt-1 mb-3 flex items-center justify-between gap-2">
+            <h2 className={`${SHEET_TITLE} flex min-w-0 items-center gap-2`}>
+              {icon}
+              <span className="min-w-0 break-words">{title}</span>
+            </h2>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label={t("close")}
+              data-sheet-close=""
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/60 hover:bg-white/10 active:bg-white/10"
+              data-testid="button-sheet-close"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+        ) : null}
+        {banner ? <Banner banner={banner} /> : null}
         {children}
       </div>
     </div>
   );
 }
 
-/** Pulsing "hold the chip to the phone" animation. */
+/** Pulsing "hold the chip to the phone" animation: violet for an Xpot piece, slate for a plain chip. */
 export function TapAnimation({ identity, label, sub, icon: Icon }: { identity: Identity; label: string; sub: string; icon: LucideIcon }) {
-  const color = identity === "xpot" ? "bg-blue-500" : "bg-emerald-500";
+  const color = identity === "xpot" ? "bg-violet-500" : "bg-slate-500";
   return (
     <div className="flex flex-col items-center py-6 text-center">
       <div className="relative flex h-36 w-36 items-center justify-center">

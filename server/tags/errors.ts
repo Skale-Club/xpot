@@ -1,8 +1,17 @@
-/** A 4xx the routes pass straight to the client. */
+/**
+ * A 4xx the routes pass straight to the client. `message` stays a readable
+ * English sentence; `code` (with `params`) lets the client word it in the
+ * user's language (client/src/lib/apiErrors.ts, srv_<code>).
+ */
 export class TagError extends Error {
-  constructor(message: string, public status = 400) {
+  constructor(message: string, public status = 400, public code?: string, public params?: Record<string, string | number>) {
     super(message);
   }
+}
+
+/** The JSON body for a TagError: { message, code?, params? }. */
+export function tagErrorBody(err: TagError) {
+  return { message: err.message, ...(err.code ? { code: err.code } : {}), ...(err.params ? { params: err.params } : {}) };
 }
 
 /**

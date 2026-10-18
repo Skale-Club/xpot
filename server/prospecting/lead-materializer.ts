@@ -5,6 +5,7 @@ import {
   salesLeadLocations,
   salesLeads,
 } from "#shared/schema.js";
+import { defaultGeofenceRadiusSql } from "../lead-location.js";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -60,6 +61,7 @@ export async function ensureProspectingCandidateLead(
       lat: candidate.lat,
       lng: candidate.lng,
       isPrimary: true,
+      geofenceRadiusMeters: defaultGeofenceRadiusSql(),
     });
   }
 

@@ -426,3 +426,11 @@ test("only the platform owner can recalculate today's route", async () => {
   expect((await q(`SELECT status FROM sales_visits WHERE source = 'prospecting-route'`)).map((visit) => visit.status))
     .toEqual(["cancelled", "cancelled"]);
 });
+
+test("/me tells the sign-in phone apart from the profile's contact phone", async () => {
+  await q(`UPDATE sales_reps SET phone = '+15559990000' WHERE user_id = 'route-rep'`);
+  const me = await request("GET", "/api/xpot/me");
+  expect(me.status).toBe(200);
+  expect(me.body.user.phone).toBe("+15550000124");
+  expect(me.body.rep.phone).toBe("+15559990000");
+});

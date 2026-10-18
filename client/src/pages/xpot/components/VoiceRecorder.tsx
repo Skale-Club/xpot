@@ -3,9 +3,12 @@ import {
   Headphones,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2 } from '@/components/ui/loader';
+import { Button } from "@/components/ui/button";
+import { formatDuration } from "@/lib/format";
+import { EYEBROW, GLASS_CLASS } from "@/components/xpot/surface";
 import { useT } from "@/i18n";
 import { checkinMessages } from "@/i18n/messages/checkin";
+import { visitsUiMessages } from "@/i18n/messages/visitsUi";
 
 const MAX_SECONDS = 300;
 const BAR_COUNT = 24;
@@ -23,6 +26,7 @@ export function VoiceRecorder({
 }) {
   const { toast } = useToast();
   const t = useT(checkinMessages);
+  const tu = useT(visitsUiMessages);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
@@ -131,14 +135,14 @@ export function VoiceRecorder({
       {/* Existing audio playback */}
       {existingAudio ? (
         <div className="space-y-2">
-          <div className="flex items-center gap-2 rounded-xl p-2" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}>
-            <Headphones className="h-4 w-4 shrink-0 text-indigo-400" />
+          <div className={`flex items-center gap-2 rounded-xl p-2 ${GLASS_CLASS}`}>
+            <Headphones className="h-4 w-4 shrink-0 text-white/45" aria-hidden="true" />
             <audio src={existingAudio} controls className="h-8 w-full min-w-0" />
-            {existingDuration ? <span className="shrink-0 text-xs text-white/40">{existingDuration}s</span> : null}
+            {existingDuration ? <span className="shrink-0 text-xs tabular-nums text-white/40">{formatDuration(existingDuration)}</span> : null}
           </div>
           {existingTranscription ? (
-            <div className="rounded-xl p-3 text-sm text-white/60" style={{ background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.2)" }}>
-              <div className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-indigo-400/70">{t("transcription")}</div>
+            <div className={`rounded-xl p-3 text-sm text-white/60 ${GLASS_CLASS}`}>
+              <div className={`mb-1 ${EYEBROW}`}>{t("transcription")}</div>
               {existingTranscription}
             </div>
           ) : null}
@@ -158,6 +162,9 @@ export function VoiceRecorder({
           }}
           onClick={isRecording ? stopRecording : startRecording}
           disabled={isUploading}
+          aria-label={isRecording ? tu("stopRecording") : tu("record")}
+          aria-pressed={isRecording}
+          title={isRecording ? tu("stopRecording") : tu("record")}
         >
           {isRecording
             ? <div className="h-3 w-3 rounded-sm bg-red-400" />
@@ -190,17 +197,13 @@ export function VoiceRecorder({
             </div>
           ) : audioBlob ? (
             <div className="flex items-center gap-2">
-              <span className="text-sm text-indigo-400 flex-1">{t("recordedSeconds", { seconds: recordingTime })}</span>
-              <button
-                type="button"
-                className="text-xs text-white/30 hover:text-white/60 transition-colors"
-                onClick={() => { setAudioBlob(null); setRecordingTime(0); }}
-              >
+              <span className="flex-1 text-sm text-white/70">{t("recordedSeconds", { seconds: recordingTime })}</span>
+              <Button type="button" variant="ghost" size="sm" onClick={() => { setAudioBlob(null); setRecordingTime(0); }}>
                 {t("clear")}
-              </button>
+              </Button>
             </div>
           ) : (
-            <span className="text-sm text-white/30">
+            <span className="text-sm text-white/40">
               {existingAudio ? t("reRecord") : t("tapToRecord")}
             </span>
           )}
@@ -208,14 +211,9 @@ export function VoiceRecorder({
 
         {/* Upload button */}
         {audioBlob && !isRecording && (
-          <button
-            onClick={handleUpload}
-            disabled={isUploading}
-            className="rounded-xl px-3 py-1.5 text-sm font-medium text-white transition-all disabled:opacity-40"
-            style={{ background: "linear-gradient(135deg, #3b82f6, #6366f1)" }}
-          >
-            {isUploading ? <Loader2 className="inline h-4 w-4 animate-spin" /> : t("upload")}
-          </button>
+          <Button type="button" variant="brand" size="sm" onClick={handleUpload} loading={isUploading}>
+            {t("upload")}
+          </Button>
         )}
       </div>
 

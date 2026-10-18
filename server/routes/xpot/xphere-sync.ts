@@ -22,7 +22,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "../../db.js";
 import { storage } from "../../storage.js";
 import { salesStorage } from "../../storage-sales.js";
-import { salesSales, salesSaleItems, salesLeadLocations, salesSyncEvents } from "#shared/schema.js";
+import { salesSales, salesLeadLocations, salesSyncEvents } from "#shared/schema.js";
 
 const money = (cents: number, currency: string) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: currency || "USD" }).format(cents / 100);

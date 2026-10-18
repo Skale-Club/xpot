@@ -216,6 +216,7 @@ export async function listConnections(): Promise<McpConnectionItem[]> {
       userLabel: sql<string | null>`coalesce(${users.email}, ${users.phone})`,
       connectedAt: sql<string>`min(${mcpOauthTokens.createdAt})`,
       lastUsedAt: sql<string | null>`max(${mcpOauthTokens.lastUsedAt})`,
+      scopes: sql<string>`string_agg(distinct ${mcpOauthTokens.scope}, ' ')`,
     })
     .from(mcpOauthTokens)
     .leftJoin(mcpOauthClients, eq(mcpOauthClients.clientId, mcpOauthTokens.clientId))
@@ -232,6 +233,8 @@ export async function listConnections(): Promise<McpConnectionItem[]> {
     userLabel: r.userLabel,
     connectedAt: iso(r.connectedAt)!,
     lastUsedAt: iso(r.lastUsedAt),
+    // What the app may do: the union of what its live tokens were granted.
+    scopes: Array.from(new Set((r.scopes ?? "").split(/\s+/).filter(Boolean))).sort(),
   }));
 }
 

@@ -3,6 +3,8 @@ import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, MessageCircle } from "lucide-react";
 import { LanguagePicker } from "@/components/LanguagePicker";
+import { Button } from "@/components/ui/button";
+import { GLASS_CLASS, PAGE_BASE, PAGE_GRADIENT } from "@/components/xpot/surface";
 import { useI18n, useT } from "@/i18n";
 import { landingMessages } from "@/i18n/messages/landing";
 import { LEGAL_DOCS, type LegalBlock } from "./content";
@@ -46,10 +48,13 @@ export function LegalPage({ doc }: { doc: "privacy" | "terms" }) {
   }, [content.title]);
 
   return (
-    <div className="min-h-screen text-white" style={{ background: "linear-gradient(160deg, #05070f 0%, #080c18 50%, #040810 100%)" }}>
-      <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-[#05070f]/80 backdrop-blur-md">
-        <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-5 py-4">
-          <Link href={publicPagePath("home", lang)} className="flex items-center gap-2 text-sm font-semibold text-white/70 transition-colors hover:text-white">
+    <div className="min-h-screen text-white" style={{ background: PAGE_GRADIENT }}>
+      <header
+        className="sticky top-0 z-40 border-b border-white/[0.06] backdrop-blur-md"
+        style={{ background: `${PAGE_BASE}cc`, paddingTop: "env(safe-area-inset-top)" }}
+      >
+        <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-4 py-3 sm:px-5">
+          <Link href={publicPagePath("home", lang)} className="flex min-h-11 items-center gap-2 text-sm font-semibold text-white/70 transition-colors hover:text-white">
             <ArrowLeft className="h-4 w-4" />
             {t("backHome")}
           </Link>
@@ -57,7 +62,7 @@ export function LegalPage({ doc }: { doc: "privacy" | "terms" }) {
         </div>
       </header>
 
-      <main className="mx-auto max-w-3xl px-5 py-12 sm:py-16">
+      <main className="mx-auto max-w-3xl px-4 py-12 sm:px-5 sm:py-16">
         <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl">{content.title}</h1>
         <p className="mt-2 text-sm text-white/45">{content.updated}</p>
         <p className="mt-6 text-base leading-relaxed text-white/75">{content.intro}</p>
@@ -74,19 +79,16 @@ export function LegalPage({ doc }: { doc: "privacy" | "terms" }) {
             </section>
           ))}
 
-          <section className="space-y-3 rounded-2xl border border-white/[0.08] bg-white/[0.035] p-6">
+          <section className={`space-y-3 rounded-2xl ${GLASS_CLASS} p-6`}>
             <h2 className="text-lg font-bold text-white">{t("legalContactTitle")}</h2>
             <p className="text-[15px] leading-relaxed text-white/70">{t("legalContactBody")}</p>
             {whatsapp ? (
-              <a
-                href={whatsapp}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 rounded-xl bg-emerald-500/15 px-4 py-2.5 text-sm font-semibold text-emerald-300 transition-colors hover:bg-emerald-500/25"
-              >
-                <MessageCircle className="h-4 w-4" />
-                {t("legalContactWhatsapp")}
-              </a>
+              <Button asChild variant="secondary">
+                <a href={whatsapp} target="_blank" rel="noopener noreferrer">
+                  <MessageCircle className="text-emerald-300" />
+                  {t("legalContactWhatsapp")}
+                </a>
+              </Button>
             ) : (
               <p className="text-sm text-white/50">{t("legalContactInApp")}</p>
             )}
@@ -95,7 +97,7 @@ export function LegalPage({ doc }: { doc: "privacy" | "terms" }) {
       </main>
 
       <footer className="border-t border-white/[0.06] py-8 text-center text-sm text-white/50">
-        <Link href={publicPagePath(other, lang)} className="transition-colors hover:text-white">
+        <Link href={publicPagePath(other, lang)} className="inline-flex min-h-10 items-center transition-colors hover:text-white">
           {t(other === "privacy" ? "privacyPolicy" : "termsOfService")}
         </Link>
         <p className="mt-2">{t("footerRights", { year: new Date().getFullYear() })}</p>

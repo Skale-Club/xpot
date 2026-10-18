@@ -4,59 +4,39 @@ import type { XpotModule } from "@shared/modules";
 import { useT } from "@/i18n";
 import { shellMessages } from "@/i18n/messages/shell";
 import { useViewerAccess } from "@/lib/adminMode";
-import { moduleEntryPath, rememberModuleRoute } from "@/lib/xpot";
-import { contextOfPath } from "./moduleNav";
+import { homeForModules, useXpotModules } from "@/components/ModuleSwitch";
+import { rememberModuleRoute } from "@/lib/xpot";
+import { contextOfPath, repScreenFor } from "./moduleNav";
 
 // The two sides of the app, kept visibly apart. Settings is the person's own
-// (language, profile, password); management lives in admin mode, entered with
-// the shield and marked by an amber bar on every screen until it is left.
+// (language, profile, sign-in); management lives in management mode, entered
+// from the sidebar, the scope chip on a list or Settings, and marked by an
+// amber bar on every screen until it is left.
 
 /** Where each module's management starts. */
-const MANAGE_HOME: Record<XpotModule, string> = { visits: "/admin/overview", tags: "/admin/tags" };
-
-/** The shield on a phone header: enters admin mode at this module's management. Only for people who manage. */
-export function AdminModeButton({ module }: { module: XpotModule }) {
-  const t = useT(shellMessages);
-  const [location, navigate] = useLocation();
-  const { hasAdminAccess, adminMode, setAdminMode } = useViewerAccess();
-  if (!hasAdminAccess) return null;
-  return (
-    <button
-      type="button"
-      onClick={() => {
-        rememberModuleRoute(module, `${location.split("?")[0]}${window.location.search}`);
-        setAdminMode(true);
-        navigate(MANAGE_HOME[module]);
-      }}
-      title={t("adminModeEnter")}
-      aria-label={t("adminModeEnter")}
-      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[18px] border transition-all active:scale-95 touch-manipulation ${
-        adminMode
-          ? "border-amber-400/40 bg-amber-400/15 text-amber-300"
-          : "border-white/5 bg-white/[0.03] text-white/40 hover:bg-white/10 hover:text-white"
-      }`}
-      data-testid="admin-mode-button"
-    >
-      <Shield className="h-[18px] w-[18px]" />
-    </button>
-  );
-}
+export const MANAGE_HOME: Record<XpotModule, string> = { visits: "/admin/overview", tags: "/admin/tags" };
 
 /**
  * Desktop sidebar item that enters admin mode. Leaving is the amber bar's job
- * (on every screen, phone and desktop), so there is one way out, not two.
+ * (on every screen, phone and desktop), so there is one way out, not two. A
+ * manager lands on the module's Manage home; a Rep Admin has no Manage screens
+ * and stays where they are, their lists now showing their organization.
  */
 export function AdminModeSidebarItem({ collapsed }: { collapsed: boolean }) {
   const t = useT(shellMessages);
   const [location, navigate] = useLocation();
-  const { hasAdminAccess, adminMode, setAdminMode } = useViewerAccess();
-  if (!hasAdminAccess || adminMode) return null;
+  const { reach, adminMode, setAdminMode } = useViewerAccess();
+  if (!reach || adminMode) return null;
   const context = contextOfPath(location);
   const label = t("adminModeEnter");
   return (
     <button
       type="button"
       onClick={() => {
+        if (reach === "organization") {
+          setAdminMode(true);
+          return;
+        }
         const module = context === "tags" ? "tags" : "visits";
         rememberModuleRoute(module, `${location.split("?")[0]}${window.location.search}`);
         setAdminMode(true);
@@ -72,21 +52,18 @@ export function AdminModeSidebarItem({ collapsed }: { collapsed: boolean }) {
   );
 }
 
-/** Leaving admin mode from a management screen goes back to the module it belongs to. */
-function leave(location: string, navigate: (to: string) => void, setAdminMode: (on: boolean) => void) {
-  setAdminMode(false);
-  if (location.startsWith("/admin")) {
-    const context = contextOfPath(location);
-    navigate(moduleEntryPath(context === "tags" ? "tags" : "visits"));
-  }
-}
-
 /** The amber bar across the top of every screen while admin mode is on. */
 export function AdminModeBar() {
   const t = useT(shellMessages);
   const [location, navigate] = useLocation();
-  const { adminMode, setAdminMode } = useViewerAccess();
+  const modules = useXpotModules();
+  const { adminMode, setAdminMode, reach } = useViewerAccess();
   if (!adminMode) return null;
+  // A management screen has nothing to show a rep: land on the same module's rep twin.
+  const leave = () => {
+    setAdminMode(false);
+    if (location.startsWith("/admin")) navigate(repScreenFor(location, homeForModules(modules)));
+  };
   return (
     <div
       className="relative z-40 flex items-center gap-2 border-b border-amber-400/25 bg-amber-400/[0.12] px-4 pb-2 text-amber-200 lg:px-8"
@@ -94,20 +71,14 @@ export function AdminModeBar() {
       data-testid="admin-mode-bar"
     >
       <Shield className="h-4 w-4 shrink-0 text-amber-300" />
-      <span className="min-w-0 flex-1 truncate text-sm font-semibold">{t("adminModeOn")}</span>
-      {!location.startsWith("/organizations") && (
-        <button
-          type="button"
-          onClick={() => navigate("/organizations")}
-          className="shrink-0 rounded-lg px-2 py-1 text-xs font-semibold text-amber-200/80 hover:bg-amber-400/15 hover:text-amber-100"
-          data-testid="admin-mode-organization"
-        >
-          {t("navOrganization")}
-        </button>
-      )}
+      {/* A phone has room for the name only; the lists' scope chip says the rest. */}
+      <span className="min-w-0 flex-1 truncate text-sm font-semibold">
+        <span className="sm:hidden">{t("adminModeEnter")}</span>
+        <span className="hidden sm:inline">{t(reach === "organization" ? "adminModeOnOrganization" : "adminModeOn")}</span>
+      </span>
       <button
         type="button"
-        onClick={() => leave(location, navigate, setAdminMode)}
+        onClick={leave}
         className="flex shrink-0 items-center gap-1 rounded-lg border border-amber-400/30 px-2 py-1 text-xs font-semibold text-amber-100 hover:bg-amber-400/15"
         data-testid="admin-mode-exit"
       >

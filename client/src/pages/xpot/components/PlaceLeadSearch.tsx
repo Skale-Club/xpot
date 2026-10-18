@@ -1,11 +1,14 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode } from "react";
-import { Building2, Loader2 as SpinnerIcon, LocateFixed, Plus, Search, X } from "lucide-react";
+import { Building2, LocateFixed, Plus, Search, X } from "lucide-react";
+import { DotsLoader } from "@/components/ui/spinner";
+import { Pill } from "@/components/xpot/StatusPill";
 import { useT } from "@/i18n";
 import { checkinMessages } from "@/i18n/messages/checkin";
 import { GoogleLogo } from "@/components/ui/google-logo";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { usePlaceSearch } from "../usePlaceSearch";
-import { findMatchingLead } from "../utils";
+import { matchSavedLead } from "../utils";
+import { placeTypeLabel } from "@/lib/placeTypes";
 import { useLeadLookup } from "../hooks/useLeadLookup";
 import type { FullSalesLead, GeoState, GooglePlaceResult } from "../types";
 
@@ -72,8 +75,7 @@ export const PlaceLeadSearch = forwardRef<PlaceLeadSearchHandle, {
   const leadResults = leadQuery.data ?? [];
   // A Google result is "already saved" when one of the companies the server
   // returned for this text carries its Place ID, or looks like it.
-  const matchFor = (place: GooglePlaceResult) =>
-    leadResults.find((lead) => lead.googlePlaceId && lead.googlePlaceId === place.placeId) ?? findMatchingLead(place, leadResults);
+  const matchFor = (place: GooglePlaceResult) => matchSavedLead(place, leadResults);
   const places = query.length >= 2 ? placeQuery.data?.results ?? [] : [];
 
   // Visual order and keyboard order are the same list.
@@ -139,7 +141,8 @@ export const PlaceLeadSearch = forwardRef<PlaceLeadSearchHandle, {
           <span className={`block text-sm font-semibold text-white/90 ${lineClamp}`}>{lead.name}</span>
           <span className={`block text-xs text-white/40 ${lineClamp}`}>{address || lead.industry || t("localLead")}</span>
         </span>
-        <span className="mt-0.5 shrink-0 rounded-full bg-emerald-400/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-300">{t("badgeLocal")}</span>
+        {/* Already saved: neutral, green is money. */}
+        <Pill tone="slate" className="mt-0.5 shrink-0">{t("badgeLocal")}</Pill>
       </button>
     );
   });
@@ -168,6 +171,7 @@ export const PlaceLeadSearch = forwardRef<PlaceLeadSearchHandle, {
   const placeRows = places.map((place) => {
     const key = `place-${place.placeId}`;
     const match = matchFor(place);
+    const typeLabel = placeTypeLabel(place.primaryType, t.lang, place.primaryTypeName);
     return (
       <button key={key} type="button" id={key} role="option" aria-selected={indexOf(key) === activeIndex} onMouseEnter={() => setActiveIndex(indexOf(key))} onClick={() => pick({ kind: "place", key, place, match })} className={rowClass(key)}>
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-blue-400/15 bg-blue-500/10 text-blue-300">
@@ -176,9 +180,9 @@ export const PlaceLeadSearch = forwardRef<PlaceLeadSearchHandle, {
         <span className="min-w-0 flex-1">
           <span className={`block text-sm font-semibold text-white/90 ${lineClamp}`}>{place.name}</span>
           <span className={`block text-xs text-white/40 ${lineClamp}`}>{place.address}</span>
-          {place.primaryType || place.phone ? (
+          {typeLabel || place.phone ? (
             <span className="mt-0.5 flex gap-2 truncate text-[10px] font-medium uppercase tracking-wider text-white/30">
-              {place.primaryType ? <span className="truncate">{place.primaryType.replace(/_/g, " ")}</span> : null}
+              {typeLabel ? <span className="truncate">{typeLabel}</span> : null}
               {place.phone ? <span className="shrink-0">{place.phone}</span> : null}
             </span>
           ) : null}
@@ -197,7 +201,8 @@ export const PlaceLeadSearch = forwardRef<PlaceLeadSearchHandle, {
   const googleStatus = query.length < 2 ? (
     <div className="px-3 py-6 text-center text-xs text-white/35">{t("searchGoogleHint")}</div>
   ) : placeQuery.error ? (
-    <div className="mx-1 rounded-xl border border-red-400/20 bg-red-500/10 px-3 py-2.5 text-xs text-red-300">{(placeQuery.error as Error).message}</div>
+    // The server's reason is the raw response body, often an admin instruction in English; the rep gets what they can do.
+    <div className="mx-1 rounded-xl border border-red-400/20 bg-red-500/10 px-3 py-2.5 text-xs text-red-300" role="alert">{t("searchGoogleFailed")}</div>
   ) : placeQuery.isFetching && !places.length ? (
     <div className="space-y-1.5 px-1">
       {[0, 1, 2].map((n) => <div key={n} className="h-12 animate-pulse rounded-xl bg-white/[0.04]" />)}
@@ -235,9 +240,9 @@ export const PlaceLeadSearch = forwardRef<PlaceLeadSearchHandle, {
           data-testid="place-lead-search"
         />
         <div className="flex shrink-0 items-center gap-1 pr-2">
-          {busy || placeQuery.isFetching ? <SpinnerIcon className="h-4 w-4 animate-spin text-white/35" /> : null}
+          {busy || placeQuery.isFetching ? <DotsLoader size="xs" tone="muted" /> : null}
           {value ? (
-            <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => { onChange(""); inputRef.current?.focus(); }} aria-label={t("searchClear")} title={t("searchClear")} className="flex h-8 w-8 items-center justify-center rounded-full text-white/35 transition-colors hover:bg-white/[0.07] hover:text-white/80">
+            <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => { onChange(""); inputRef.current?.focus(); }} aria-label={t("searchClear")} title={t("searchClear")} className="flex h-10 w-10 items-center justify-center rounded-full text-white/35 transition-colors hover:bg-white/[0.07] hover:text-white/80">
               <X className="h-4 w-4" />
             </button>
           ) : trailing}

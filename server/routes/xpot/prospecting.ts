@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { refusalBody } from "../../lib/validation.js";
 import { and, asc, desc, eq, inArray, notInArray, sql } from "drizzle-orm";
 import { db } from "../../db.js";
 import { storage } from "../../storage.js";
@@ -20,7 +21,7 @@ import {
   prospectingStopUpdateSchema,
 } from "#shared/prospecting.js";
 import { ensureXpotRep, requireXpotUser } from "./middleware.js";
-import { retryFailedProspectingRuns, tickProspectingQueueSafely } from "../../prospecting/queue.js";
+import { cancelProspectingJob, retryFailedProspectingRuns, tickProspectingQueueSafely } from "../../prospecting/queue.js";
 import { isEngineConfigured } from "../../prospecting/google-maps-engine.js";
 import type { RouteCandidate } from "../../prospecting/route-optimizer.js";
 import {
@@ -39,6 +40,7 @@ import { retryAutomaticRoute } from "../../prospecting/auto-route.js";
 import { haversineMeters } from "../../prospecting/route-optimizer.js";
 import { openWindowsOn, secondsUntilDayEnd } from "../../prospecting/opening-hours.js";
 import { ensureProspectingCandidateLead } from "../../prospecting/lead-materializer.js";
+import { defaultGeofenceRadiusSql } from "../../lead-location.js";
 import { publishProspectingRouteForRep } from "../../prospecting/route-publisher.js";
 
 function lifecycleScore(lead: Awaited<ReturnType<typeof storage.getSalesLead>>): { score: number; reasons: string[] } {
@@ -250,6 +252,19 @@ export function createProspectingRouter() {
     return res.status(202).json(await prospectingJobDetails(jobId, actor.rep.id));
   });
 
+  // The rep stops their own search (still running or waiting, or finished
+  // with a route that never got built), to start another one.
+  router.post("/prospecting/jobs/:id/cancel", async (req, res) => {
+    const actor = (req as any).xpotActor as NonNullable<Awaited<ReturnType<typeof ensureXpotRep>>>;
+    const jobId = pathId(req.params.id);
+    const result = jobId ? await cancelProspectingJob(jobId, actor.rep.id) : { outcome: "not_found" as const };
+    if (result.outcome === "not_found") return res.status(404).json({ message: "Prospecting job not found" });
+    if (result.outcome === "not_cancellable") {
+      return res.status(409).json({ code: "search_not_cancellable", message: "This search has already finished." });
+    }
+    return res.json(await prospectingJobDetails(result.jobId, actor.rep.id));
+  });
+
   router.post("/prospecting/jobs/:id/route/retry", async (req, res) => {
     const actor = (req as any).xpotActor as NonNullable<Awaited<ReturnType<typeof ensureXpotRep>>>;
     const jobId = pathId(req.params.id);
@@ -399,7 +414,7 @@ export function createProspectingRouter() {
     try {
       organizationId = await organizationIdForRep(actor.rep.id);
     } catch (error) {
-      if (error instanceof OrganizationError) return res.status(error.status).json({ message: error.message });
+      if (error instanceof OrganizationError) return res.status(error.status).json(refusalBody(error));
       throw error;
     }
     // The selling day starts at visit one. Getting from the rep's current
@@ -696,7 +711,7 @@ export function createProspectingRouter() {
       try {
         organizationId = await organizationIdForRep(actor.rep.id);
       } catch (error) {
-        if (error instanceof OrganizationError) return res.status(error.status).json({ message: error.message });
+        if (error instanceof OrganizationError) return res.status(error.status).json(refusalBody(error));
         throw error;
       }
     }
@@ -720,6 +735,7 @@ export function createProspectingRouter() {
           leadId, addressLine1: candidate.address || "Prospecting location", city: candidate.city,
           state: candidate.state, postalCode: candidate.postalCode, country: candidate.country || "US",
           lat: candidate.lat, lng: candidate.lng, isPrimary: true,
+          geofenceRadiusMeters: defaultGeofenceRadiusSql(),
         });
       }
       if (!leadId) throw new Error("Route stop has no lead");
@@ -774,7 +790,7 @@ export function createProspectingRouter() {
       try {
         organizationId = await organizationIdForRep(actor.rep.id);
       } catch (error) {
-        if (error instanceof OrganizationError) return res.status(error.status).json({ message: error.message });
+        if (error instanceof OrganizationError) return res.status(error.status).json(refusalBody(error));
         throw error;
       }
     }
@@ -816,6 +832,7 @@ export function createProspectingRouter() {
           lat: candidate.lat,
           lng: candidate.lng,
           isPrimary: true,
+          geofenceRadiusMeters: defaultGeofenceRadiusSql(),
         }).returning({ id: salesLeadLocations.id });
         locationId = location.id;
       }
@@ -876,7 +893,7 @@ export function createProspectingRouter() {
         const published = await publishProspectingRouteForRep(route.id, actor.rep.id);
         return res.json(published);
       } catch (error) {
-        if (error instanceof OrganizationError) return res.status(error.status).json({ message: error.message });
+        if (error instanceof OrganizationError) return res.status(error.status).json(refusalBody(error));
         throw error;
       }
     }

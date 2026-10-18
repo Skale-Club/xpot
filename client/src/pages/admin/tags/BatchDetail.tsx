@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Download, Factory, LockKeyhole, PackagePlus, Pencil, RotateCcw, ScanLine } from "lucide-react";
+import { Check, Download, Factory, Layers, LockKeyhole, PackagePlus, Pencil, RotateCcw } from "lucide-react";
 import { FilterBar, FilterChips } from "@/components/xpot/filters";
 import { useUrlFilters } from "@/hooks/use-url-filters";
 import type { TagListItem } from "@shared/tagsApi";
@@ -8,16 +8,30 @@ import { resolveTagFace } from "@shared/tagFace";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
 import { CODE_HEADING, TagModelChips, TagPieceVisual } from "@/components/xpot/TagProductThumbnail";
 import { useToast } from "@/hooks/use-toast";
-import { ADMIN_TAGS_KEY, STALE_MS, errorMessage, formatDate, getJson, invalidateAdminTags, percent, sendJson } from "./api";
-import { BTN, BTN_GHOST, CARD, INPUT, SectionTitle, Stat } from "./ui";
-import { BatchStagePill, BatchStatusPill, ErrorLine, Field, Loading, PieceTable, SELECT, isHouseStock, isPendingPiece, isUnsoldWithReseller, useTagCatalog } from "./batches-shared";
+import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
+import { SectionCard } from "@/components/xpot/DashboardKit";
+import { EmptyState } from "@/components/xpot/EmptyState";
+import { Field, Input, Select, Textarea } from "@/components/xpot/Field";
+import { InlineAlert } from "@/components/xpot/InlineAlert";
+import { BackLink } from "@/components/xpot/PageHeader";
+import { Stat } from "@/components/xpot/Stat";
+import { Tabs } from "@/components/xpot/Tabs";
+import { GLASS_CLASS } from "@/components/xpot/surface";
+import { AdminHttpError, ADMIN_TAGS_KEY, STALE_MS, errorMessage, formatDate, formatShare, getJson, invalidateAdminTags, sendJson } from "./api";
+import { countStockMetric, matchesStockMetric, type TagStockMetric } from "@shared/tagMetrics";
+import { BatchStagePill, BatchStatusPill, catalogOptions, useTagCatalog } from "./batches-shared";
+import { Loading, LoadError } from "./pieces-shared";
+import { PieceTable } from "./piece-table";
 import { useTagLabels } from "./labels";
-import { GiveKitForm } from "./kits-give-form";
 import { JourneyPanel } from "./JourneyPanel";
+import { BatchReceiveStation } from "./batch-receive";
+import { canMarkStep, stageSteps, type StageStep } from "./batches-model";
+import { handOutHref } from "./distribution-model";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { manageTagsBatchesMessages } from "@/i18n/messages/manageTagsBatches";
-import QrScanner from "../../tags/QrScanner";
+import { adminTagsFlowMessages } from "@/i18n/messages/adminTagsFlow";
 
 interface BatchDetailData {
   id: string;
@@ -41,16 +55,17 @@ interface BatchDetailData {
   tags: TagListItem[];
 }
 
-const FILTERS = [
-  { id: "all", label: "filterAll", test: () => true },
-  { id: "pending", label: "pendingPieces", test: isPendingPiece },
-  { id: "damaged", label: "damaged", test: (t: TagListItem) => t.stockStatus === "damaged" },
-  { id: "house", label: "houseStock", test: isHouseStock },
-  { id: "resellers", label: "withResellers", test: isUnsoldWithReseller },
-  { id: "sold", label: "sold", test: (t: TagListItem) => t.status !== "inventory" && t.stockStatus === "sold" },
-  { id: "live", label: "live", test: (t: TagListItem) => t.status === "active" },
-] as const;
-type FilterId = (typeof FILTERS)[number]["id"];
+/** Each chip is one shared stock number (shared/tagMetrics.ts), the same the stats above and the Batches list count. */
+const FILTERS: ReadonlyArray<{ id: string; label: "filterAll" | "pendingPieces" | "damaged" | "houseStock" | "withResellers" | "sold" | "live"; metric: TagStockMetric | null }> = [
+  { id: "all", label: "filterAll", metric: null },
+  { id: "pending", label: "pendingPieces", metric: "notReceived" },
+  { id: "damaged", label: "damaged", metric: "damaged" },
+  { id: "house", label: "houseStock", metric: "house" },
+  { id: "resellers", label: "withResellers", metric: "withResellers" },
+  { id: "sold", label: "sold", metric: "sold" },
+  { id: "live", label: "live", metric: "live" },
+];
+const passes = (filter: (typeof FILTERS)[number], t: TagListItem) => !filter.metric || matchesStockMetric(t, filter.metric);
 
 function EditBatch({ batch, onClose }: { batch: BatchDetailData; onClose: () => void }) {
   const { toast } = useToast();
@@ -71,7 +86,8 @@ function EditBatch({ batch, onClose }: { batch: BatchDetailData; onClose: () => 
         face: form.face || null,
         vendor: form.vendor || null,
         notes: form.notes || null,
-        salesProductId: Number(form.salesProductId),
+        // Only a real change: the server re-maps the pieces that followed the old product (never sold ones).
+        ...(Number(form.salesProductId) !== batch.salesProductId ? { salesProductId: Number(form.salesProductId) } : {}),
       }),
     onSuccess: () => {
       void invalidateAdminTags();
@@ -89,308 +105,359 @@ function EditBatch({ batch, onClose }: { batch: BatchDetailData; onClose: () => 
     <form onSubmit={submit} className="space-y-3 border-t border-white/5 pt-4">
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label={t("fieldName")} className="sm:col-span-2">
-          <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} maxLength={120} className={INPUT} />
+          <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} maxLength={120} />
         </Field>
         <Field label={t("fieldCatalogProduct")} hint={t("catalogProductHint")}>
-          <select value={form.salesProductId} onChange={(e) => setForm({ ...form, salesProductId: e.target.value })} className={SELECT} required>
-            <option value="">{t("chooseCatalogProduct")}</option>
-            {catalog.map((product) => (
-              <option key={product.id} value={product.id}>{product.name}{product.sku ? ` · ${product.sku}` : ""}</option>
-            ))}
-          </select>
+          <Select value={form.salesProductId} onChange={(e) => setForm({ ...form, salesProductId: e.target.value })} required placeholder={t("chooseCatalogProduct")} options={catalogOptions(catalog)} />
         </Field>
-        <Field label={t("fieldPrintedOnPieces")} hint={t("printedHintEdit")}>
+        <Field label={t("fieldPrintedOnPieces")} hint={t("printedHintEdit")} id={`batch-face-${batch.id}`}>
           <div className="flex items-center gap-2">
             <TagFaceIcon face={resolveTagFace({ batchFace: form.face || null, productType: batch.productType })} size="sm" />
-            <select value={form.face} onChange={(e) => setForm({ ...form, face: e.target.value })} className={SELECT}>
-              <option value="">{batch.productType === "google_review_sign" ? t("faceFromProduct") : t("faceNotSet")}</option>
-              {labels.faceOptions.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
+            <div className="min-w-0 flex-1">
+              <Select
+                id={`batch-face-${batch.id}`}
+                value={form.face}
+                onChange={(e) => setForm({ ...form, face: e.target.value })}
+                placeholder={batch.productType === "google_review_sign" ? t("faceFromProduct") : t("faceNotSet")}
+                options={labels.faceOptions}
+              />
+            </div>
           </div>
         </Field>
         <Field label={t("fieldVendor")}>
-          <input value={form.vendor} onChange={(e) => setForm({ ...form, vendor: e.target.value })} maxLength={120} className={INPUT} />
+          <Input value={form.vendor} onChange={(e) => setForm({ ...form, vendor: e.target.value })} maxLength={120} />
         </Field>
         <Field label={t("fieldNotes")} className="sm:col-span-2">
-          <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} maxLength={2000} rows={2} className={`${INPUT} resize-y`} />
+          <Textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} maxLength={2000} rows={2} />
         </Field>
       </div>
       <div className="flex justify-end gap-2">
-        <button type="button" onClick={onClose} className={BTN_GHOST}>
+        <Button type="button" variant="ghost" onClick={onClose}>
           {tc("cancel")}
-        </button>
-        <button type="submit" disabled={!form.name.trim() || !form.salesProductId || save.isPending} className={BTN}>
-          {save.isPending ? t("saving") : tc("save")}
-        </button>
+        </Button>
+        <Button type="submit" variant="brand" accent="tags" disabled={!form.name.trim() || !form.salesProductId} loading={save.isPending}>
+          {tc("save")}
+        </Button>
       </div>
     </form>
   );
 }
 
-function BatchIntakePanel({ batch }: { batch: BatchDetailData }) {
-  const [value, setValue] = useState("");
-  const [cameraOpen, setCameraOpen] = useState(false);
+const BATCH_TABS = ["summary", "print", "receive", "pieces", "handout", "activity"] as const;
+type BatchTab = (typeof BATCH_TABS)[number];
+const TAB_KEYS = {
+  summary: "tabSummary",
+  print: "tabPrint",
+  receive: "tabReceive",
+  pieces: "tabPieces",
+  handout: "tabHandOut",
+  activity: "tabActivity",
+} as const satisfies Record<BatchTab, string>;
+
+const STEP_ACTION_TITLE = { art_built: "Print file ready", printed: "Printed" } as const;
+
+/** The stage stepper: done steps checked; Print file ready and Printed get "Mark as done", which writes the journey. */
+function StageStepper({ batch }: { batch: BatchDetailData }) {
+  const t = useT(adminTagsFlowMessages);
+  const labels = useTagLabels();
   const { toast } = useToast();
-  const t = useT(manageTagsBatchesMessages);
-
-  const add = useMutation({
-    mutationFn: (scanValue: string) => sendJson<{ tag: { publicCode: string }; batchCount: number; receivedCount: number; alreadyRegistered: boolean }>(
-      "POST",
-      `/api/xpot/admin/tag-batches/${batch.id}/scan`,
-      { value: scanValue, idempotencyKey: crypto.randomUUID() },
-    ),
-    onSuccess: (result) => {
-      setValue("");
+  const steps = stageSteps(batch);
+  const mark = useMutation({
+    mutationFn: (step: StageStep) =>
+      sendJson("POST", "/api/xpot/admin/tag-journey", {
+        kind: "execution",
+        action: step.markAction,
+        // The journey is written in English on the server too (shared/tagJourney.ts); the screen shows the stage.
+        title: `${STEP_ACTION_TITLE[step.markAction!]}: batch ${batch.batchCode}`,
+        batchId: batch.id,
+      }),
+    onSuccess: (_entry, step) => {
       void invalidateAdminTags();
-      toast({
-        title: result.alreadyRegistered ? t("pieceAlreadyAdded") : t("pieceAdded", { code: result.tag.publicCode }),
-        description: batch.codeSource === "issued"
-          ? t("receivedCount", { received: result.receivedCount, total: result.batchCount })
-          : t("registeredCount", { count: result.batchCount }),
-      });
+      toast({ title: t("stepMarked", { step: labels.batchStage(step.stage) }) });
     },
-    onError: (err) => toast({ title: t("couldNotAddPiece"), description: errorMessage(err), variant: "destructive" }),
+    onError: (err) => toast({ title: t("couldNotMarkStep"), description: errorMessage(err), variant: "destructive" }),
   });
-
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
-    const scanValue = value.trim();
-    if (scanValue && !add.isPending) add.mutate(scanValue);
-  };
-
-  if (batch.status !== "open") return null;
   return (
-    <div className={`${CARD} border border-blue-400/20 p-4`} data-testid="admin-tags-batch-intake">
-      <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="flex items-center gap-2 text-sm font-semibold text-white"><ScanLine className="h-4 w-4 text-blue-300" />{t("addPiecesTitle")}</p>
-          <p className="mt-1 text-xs text-white/45">{batch.codeSource === "issued" ? t("receiveIntro") : t("addPiecesIntro")}</p>
-        </div>
-        <span className="rounded-full bg-blue-400/10 px-3 py-1 text-sm font-semibold tabular-nums text-blue-200">
-          {batch.codeSource === "issued"
-            ? t("receivedCount", { received: batch.receivedCount, total: batch.tagCount })
-            : t("registeredCount", { count: batch.quantity })}
-        </span>
-      </div>
-      <form onSubmit={submit} className="flex flex-col gap-2 sm:flex-row">
-        <input
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          placeholder={t("scanPlaceholder")}
-          className={`${INPUT} min-w-0 flex-1 font-mono`}
-          autoCapitalize="characters"
-          autoComplete="off"
-          spellCheck={false}
-          autoFocus
-          data-testid="admin-tags-batch-scan-input"
-        />
-        <button type="submit" disabled={!value.trim() || add.isPending} className={BTN}>
-          <ScanLine className="h-4 w-4" />
-          {add.isPending ? t("addingPiece") : t("addPiece")}
-        </button>
-        <button type="button" onClick={() => setCameraOpen(true)} disabled={add.isPending} className={BTN_GHOST}>
-          {t("scanWithCamera")}
-        </button>
-      </form>
-      {cameraOpen && (
-        <QrScanner
-          onClose={() => setCameraOpen(false)}
-          onResult={(text) => {
-            setCameraOpen(false);
-            if (!add.isPending) add.mutate(text);
-          }}
-        />
-      )}
-    </div>
+    <ol className="grid gap-2 sm:grid-cols-[repeat(auto-fit,minmax(150px,1fr))]" data-testid="batch-stage-stepper">
+      {steps.map((step, i) => (
+        <li
+          key={step.stage}
+          className={`flex min-w-0 flex-col gap-2 rounded-xl border p-3 ${step.state === "current" ? "border-violet-400/40 bg-violet-500/[0.08]" : "border-white/[0.08] bg-white/[0.02]"}`}
+          data-testid={`batch-step-${step.stage}`}
+          data-state={step.state}
+        >
+          <span className="flex items-center gap-2 text-sm font-semibold text-white">
+            <span
+              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${step.state === "done" ? "bg-violet-500/30 text-violet-100" : "bg-white/10 text-white/60"}`}
+              aria-hidden="true"
+            >
+              {step.state === "done" ? <Check className="h-3.5 w-3.5" /> : i + 1}
+            </span>
+            <span className="min-w-0 truncate">{labels.batchStage(step.stage)}</span>
+          </span>
+          <span className="text-xs text-white/45">
+            {t(step.state === "done" ? "stepDone" : step.state === "current" ? (step.stage === batch.stage ? "stepInProgress" : "stepCurrent") : "stepTodo")}
+          </span>
+          {canMarkStep(step, batch.stage) ? (
+            <Button type="button" variant="secondary" size="sm" loading={mark.isPending && mark.variables?.stage === step.stage} disabled={mark.isPending} onClick={() => mark.mutate(step)} data-testid={`batch-mark-${step.stage}`}>
+              {t("markDone")}
+            </Button>
+          ) : null}
+        </li>
+      ))}
+    </ol>
   );
 }
 
-/** One production batch: info, factory downloads, its pieces, and kits from it. */
+/** A manufacturing file, downloaded with a "generating…" state (a 1000-piece ZIP takes a while). */
+function DownloadButton({ href, filename, children }: { href: string; filename: string; children: string }) {
+  const t = useT(adminTagsFlowMessages);
+  const { toast } = useToast();
+  const [busy, setBusy] = useState(false);
+  const download = async () => {
+    setBusy(true);
+    try {
+      const res = await fetch(href, { credentials: "include" });
+      if (!res.ok) throw new AdminHttpError(res.status, (await res.json().catch(() => null))?.message ?? t("downloadFailed"));
+      const url = URL.createObjectURL(await res.blob());
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    } catch (err) {
+      toast({ title: t("downloadFailed"), description: errorMessage(err), variant: "destructive" });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Button type="button" variant="secondary" onClick={() => void download()} loading={busy} aria-busy={busy}>
+      <Download className="h-4 w-4" />
+      {busy ? t("generating") : children}
+    </Button>
+  );
+}
+
+/**
+ * One production batch, in tabs (`?tab=`): Summary (stage stepper and numbers), Print (the manufacturing package),
+ * Receive (the intake station), Pieces, Hand out (into Distribution, on this batch) and Activity (its journey).
+ */
 export function BatchDetail({ id, go }: { id: string; go: (path: string) => void }) {
   const [editing, setEditing] = useState(false);
-  const [giving, setGiving] = useState(false);
-  // ?pieces=sold — survives opening a piece and coming back.
-  const pieceFilter = useUrlFilters({ pieces: "all" });
-  const filter: FilterId = FILTERS.some((f) => f.id === pieceFilter.values.pieces) ? (pieceFilter.values.pieces as FilterId) : "all";
+  const [stateDialog, setStateDialog] = useState(false);
+  const [changingState, setChangingState] = useState(false);
+  // ?tab=receive&pieces=sold — survive opening a piece and coming back.
+  const url = useUrlFilters({ tab: "summary", pieces: "all" });
+  const tab: BatchTab = (BATCH_TABS as readonly string[]).includes(url.values.tab) ? (url.values.tab as BatchTab) : "summary";
+  const filter = FILTERS.some((f) => f.id === url.values.pieces) ? url.values.pieces : "all";
   const t = useT(manageTagsBatchesMessages);
+  const tf = useT(adminTagsFlowMessages);
   const labels = useTagLabels();
   const { toast } = useToast();
-  const { data: batch, isLoading, isError } = useQuery<BatchDetailData>({
+  const { data: batch, isLoading, error, refetch } = useQuery<BatchDetailData>({
     queryKey: [ADMIN_TAGS_KEY, "batch", id],
     queryFn: () => getJson(`/api/xpot/admin/tag-batches/${encodeURIComponent(id)}`),
     staleTime: STALE_MS,
   });
 
-  const back = (
-    <button type="button" onClick={() => go("/batches")} className={BTN_GHOST}>
-      <ArrowLeft className="h-4 w-4" />
-      {t("allBatches")}
-    </button>
-  );
+  const back = <BackLink onBack={() => go("/batches")}>{t("allBatches")}</BackLink>;
 
-  if (isLoading) return <Loading />;
-  if (isError || !batch) {
+  if (isLoading) return <Loading rows={5} />;
+  if (error || !batch) {
+    const notFound = error instanceof AdminHttpError && error.status === 404;
     return (
       <div className="space-y-4">
         {back}
-        <ErrorLine>{t("batchNotFound")}</ErrorLine>
+        {notFound || !error ? (
+          <EmptyState tone="tags" icon={Layers} title={t("batchNotFound")} />
+        ) : (
+          <LoadError what={t("theBatches")} error={error} onRetry={() => void refetch()} />
+        )}
       </div>
     );
   }
 
   const pieces = batch.tags;
   const total = pieces.length;
-  const house = pieces.filter(isHouseStock).length;
-  const withResellers = pieces.filter((p) => p.repId !== null).length;
-  const unsoldInKits = pieces.filter(isUnsoldWithReseller).length;
-  const sold = pieces.filter((p) => p.status !== "inventory").length;
-  const damaged = pieces.filter((p) => p.stockStatus === "damaged").length;
-  const live = pieces.filter((p) => p.status === "active").length;
+  const house = countStockMetric(pieces, "house");
+  const handOut = countStockMetric(pieces, "handOut");
+  const withResellers = countStockMetric(pieces, "withResellers");
+  const sold = countStockMetric(pieces, "sold");
+  const damaged = countStockMetric(pieces, "damaged");
+  const live = countStockMetric(pieces, "live");
   const chipsVerified = pieces.filter((p) => p.nfcStatus === "verified" || p.nfcStatus === "locked").length;
   const exportBase = `/api/xpot/admin/tag-batches/${encodeURIComponent(batch.id)}`;
   const activeFilter = FILTERS.find((f) => f.id === filter) ?? FILTERS[0];
-  const shown = pieces.filter(activeFilter.test);
+  const shown = pieces.filter((p) => passes(activeFilter, p));
   const face = resolveTagFace({ batchFace: batch.face, productType: batch.productType });
+  const fileBase = batch.batchCode.replace(/[^A-Za-z0-9._-]/g, "_");
 
-  const changeState = async () => {
+  const closing = batch.status === "open";
+  const changeState = async (reopenReason: string) => {
+    if (!closing && !reopenReason.trim()) return;
+    setChangingState(true);
     try {
-      if (batch.status === "open") {
+      if (closing) {
         await sendJson("POST", `/api/xpot/admin/tag-batches/${batch.id}/close`, {});
         toast({ title: t("batchClosed") });
       } else {
-        const reason = window.prompt(t("reopenReasonPrompt"));
-        if (!reason?.trim()) return;
-        await sendJson("POST", `/api/xpot/admin/tag-batches/${batch.id}/reopen`, { reason });
+        await sendJson("POST", `/api/xpot/admin/tag-batches/${batch.id}/reopen`, { reason: reopenReason.trim() });
         toast({ title: t("batchReopened") });
       }
+      setStateDialog(false);
       await invalidateAdminTags();
     } catch (err) {
-      toast({ title: batch.status === "open" ? t("couldNotCloseBatch") : t("couldNotReopenBatch"), description: errorMessage(err), variant: "destructive" });
+      toast({ title: closing ? t("couldNotCloseBatch") : t("couldNotReopenBatch"), description: errorMessage(err), variant: "destructive" });
+    } finally {
+      setChangingState(false);
     }
   };
 
   return (
-    <div className="space-y-5">
+    <div className="min-w-0 space-y-5">
       {back}
 
-      <div className={`${CARD} space-y-4 p-5`}>
+      <div className={`space-y-4 rounded-2xl ${GLASS_CLASS} p-4 sm:p-5`}>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex min-w-0 items-start gap-3">
             <TagPieceVisual productType={batch.productType} face={face} size="md" />
             <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className={CODE_HEADING}>{batch.batchCode}</h2>
-              <BatchStagePill stage={batch.stage} />
-              <BatchStatusPill status={batch.status} />
-              <TagModelChips productType={batch.productType} face={face} batchCode={batch.batchCode} />
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className={CODE_HEADING}>{batch.batchCode}</h2>
+                <BatchStagePill stage={batch.stage} />
+                <BatchStatusPill status={batch.status} />
+                <TagModelChips productType={batch.productType} face={face} batchCode={batch.batchCode} />
+              </div>
+              <p className="mt-0.5 text-sm text-white/70">{batch.name}</p>
+              <p className="text-xs text-white/40">
+                {labels.product(batch.productType)} · {labels.face(face)} · {batch.vendor || t("noVendor")} ·{" "}
+                {tf("piecesReceivedOf", { received: batch.receivedCount, total: batch.tagCount })} · {t("createdOn", { date: formatDate(batch.createdAt) })}
+              </p>
+              {batch.notes && !editing && <p className="mt-2 whitespace-pre-wrap text-sm text-white/60">{batch.notes}</p>}
             </div>
-            <p className="mt-0.5 text-sm text-white/70">{batch.name}</p>
-            <p className="text-xs text-white/40">
-              {labels.product(batch.productType)} · {labels.face(face)} · {batch.vendor || t("noVendor")} · {t("registeredCount", { count: batch.quantity })} ·{" "}
-              {t("createdOn", { date: formatDate(batch.createdAt) })}
-            </p>
-            {batch.notes && !editing && <p className="mt-2 whitespace-pre-wrap text-sm text-white/60">{batch.notes}</p>}
           </div>
-          </div>
-          {!editing && <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => void changeState()} className={BTN_GHOST}>
-              {batch.status === "open" ? <LockKeyhole className="h-4 w-4" /> : <RotateCcw className="h-4 w-4" />}
-              {batch.status === "open" ? t("closeBatch") : t("reopenBatch")}
-            </button>
-            <button type="button" onClick={() => setEditing(true)} className={BTN_GHOST}>
-              <Pencil className="h-4 w-4" />
-              {t("edit")}
-            </button>
-          </div>}
+          {!editing && (
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="secondary" onClick={() => setStateDialog(true)} data-testid="admin-batch-state">
+                {batch.status === "open" ? <LockKeyhole className="h-4 w-4" /> : <RotateCcw className="h-4 w-4" />}
+                {batch.status === "open" ? t("closeBatch") : t("reopenBatch")}
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => setEditing(true)}>
+                <Pencil className="h-4 w-4" />
+                {t("edit")}
+              </Button>
+            </div>
+          )}
         </div>
         {editing && <EditBatch batch={batch} onClose={() => setEditing(false)} />}
       </div>
 
-      <BatchIntakePanel batch={batch} />
+      <ConfirmDialog
+        accent="tags"
+        open={stateDialog}
+        onOpenChange={setStateDialog}
+        title={closing ? t("closeBatchTitle") : t("reopenBatchTitle")}
+        description={closing ? t("closeBatchDescription") : undefined}
+        reason={closing ? undefined : "required"}
+        reasonLabel={closing ? undefined : t("reopenReasonPrompt")}
+        confirmLabel={closing ? t("closeBatch") : t("reopenBatch")}
+        busy={changingState}
+        testId="admin-batch-state-confirm"
+        onConfirm={(reason) => void changeState(reason)}
+      >
+        {closing && batch.pendingCount > 0 ? <InlineAlert tone="warning">{t.plural("closeBatchPending", batch.pendingCount)}</InlineAlert> : null}
+      </ConfirmDialog>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-        <Stat label={t("houseStock")} value={house} hint={t.plural("houseShare", total, { percent: percent(house, total) })} />
-        <Stat label={t("withResellers")} value={withResellers} hint={t.plural("unsoldInKits", unsoldInKits)} />
-        <Stat label={t("sold")} value={sold} hint={t.plural("liveCount", live)} />
-        <Stat label={t("damaged")} value={damaged} hint={t("qualityControlSample")} />
-        <Stat label={t("nfcVerified")} value={chipsVerified} hint={t("chipsShare", { percent: percent(chipsVerified, total) })} />
-      </div>
+      <Tabs
+        tabs={BATCH_TABS.map((id) => ({ id, label: tf(TAB_KEYS[id]), testId: `batch-tab-${id}` }))}
+        value={tab}
+        onChange={(next) => url.set({ tab: next })}
+        ariaLabel={batch.batchCode}
+        idPrefix="batch"
+        fill={false}
+        accent="tags"
+      />
 
-      <div className="grid gap-3 lg:grid-cols-2">
-        <div className={`${CARD} p-4`}>
-          <p className="mb-1 flex items-center gap-2 text-sm font-semibold text-white">
-            <Factory className="h-4 w-4 text-white/50" />
-            {t("manufacturingPackage")}
-          </p>
-          <p className="mb-3 text-xs text-white/40">{t("manufacturingIntro")}</p>
-          <div className="flex flex-wrap gap-2">
-            <a href={`${exportBase}/export.csv`} download className={BTN_GHOST}>
-              <Download className="h-4 w-4" />
-              CSV
-            </a>
-            <a href={`${exportBase}/qr-assets.zip`} download className={BTN_GHOST}>
-              <Download className="h-4 w-4" />
-              QR ZIP (SVG)
-            </a>
-            <a href={`${exportBase}/qr-assets.zip?png=1`} download className={BTN_GHOST}>
-              <Download className="h-4 w-4" />
-              QR ZIP (SVG + PNG)
-            </a>
+      {tab === "summary" && (
+        <div className="space-y-4" role="tabpanel" aria-labelledby="batch-tab-summary">
+          <SectionCard accent="tags" icon={Factory} title={tf("productionStage")}>
+            <StageStepper batch={batch} />
+            <p className="mt-3 text-xs text-white/40">{tf(batch.codeSource === "scanned" ? "stageScannedHint" : "stageIssuedHint")}</p>
+          </SectionCard>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
+            <Stat card label={tf("statReceived")} value={`${batch.receivedCount}/${batch.tagCount}`} detail={batch.pendingCount ? tf.plural("stillToReceive", batch.pendingCount) : tf("allReceived")} />
+            <Stat card label={t("houseStock")} value={house} detail={t.plural("houseShare", total, { percent: formatShare(house, total) })} />
+            <Stat card label={t("withResellers")} value={withResellers} detail={t("withResellersKitHint")} />
+            <Stat card label={t("sold")} value={sold} detail={t.plural("liveCount", live)} />
+            <Stat card label={t("damaged")} value={damaged} detail={t("qualityControlSample")} />
+            <Stat card label={t("nfcVerified")} value={chipsVerified} detail={t("chipsShare", { percent: formatShare(chipsVerified, total) })} />
           </div>
         </div>
+      )}
 
-        <div className={`${CARD} p-4`}>
-          <p className="mb-1 flex items-center gap-2 text-sm font-semibold text-white">
-            <PackagePlus className="h-4 w-4 text-white/50" />
-            {t("givePiecesTitle")}
-          </p>
-          {house === 0 ? (
-            <p className="text-xs text-white/40">{t("noHouseLeft")}</p>
-          ) : giving ? (
-            <div className="pt-2">
-              <GiveKitForm
-                fixedBatch={{ id: batch.id, batchCode: batch.batchCode, houseCount: house }}
-                onDone={() => setGiving(false)}
+      {tab === "print" && (
+        <SectionCard accent="tags" icon={Factory} title={t("manufacturingPackage")}>
+          <p className="mb-3 text-xs text-white/40">{t("manufacturingIntro")}</p>
+          {batch.codeSource === "scanned" ? <InlineAlert tone="info">{tf("printScannedNote")}</InlineAlert> : null}
+          <div className="mt-3 flex flex-wrap gap-2" data-testid="batch-print-downloads">
+            <DownloadButton href={`${exportBase}/export.csv`} filename={`${fileBase}.csv`}>CSV</DownloadButton>
+            <DownloadButton href={`${exportBase}/qr-assets.zip`} filename={`${fileBase}-qr.zip`}>QR ZIP (SVG)</DownloadButton>
+            <DownloadButton href={`${exportBase}/qr-assets.zip?png=1`} filename={`${fileBase}-qr.zip`}>QR ZIP (SVG + PNG)</DownloadButton>
+          </div>
+        </SectionCard>
+      )}
+
+      {tab === "receive" && <BatchReceiveStation batch={batch} onRequestClose={() => setStateDialog(true)} />}
+
+      {tab === "pieces" && (
+        <SectionCard accent="tags" icon={Layers} title={t("piecesHeading", { count: shown.length })}>
+          <FilterBar
+            className="mb-3"
+            testId="batch-pieces-filters"
+            secondary={
+              <FilterChips
+                items={FILTERS.map((f) => ({ id: f.id, label: t(f.label), count: pieces.filter((p) => passes(f, p)).length }))}
+                value={filter}
+                onChange={(next) => url.set({ pieces: next })}
+                ariaLabel={t("piecesHeading", { count: total })}
+                accent="tags"
               />
-            </div>
-          ) : (
-            <>
-              <p className="mb-3 text-xs text-white/40">{t.plural("giveKitIntro", house)}</p>
-              <button type="button" onClick={() => setGiving(true)} className={BTN}>
-                <PackagePlus className="h-4 w-4" />
-                {t("giveAKit")}
-              </button>
-            </>
-          )}
-        </div>
-      </div>
+            }
+            summary={{ shown: shown.length, total, active: filter !== "all", onClear: () => url.set({ pieces: "all" }) }}
+          />
+          <PieceTable
+            pieces={shown}
+            onOpen={(pieceId) => go(`/pieces/${pieceId}`)}
+            columns={["customer", "reseller", "scans", "sold"]}
+            pageSize={25}
+            empty={t("noPiecesMatch")}
+            testId="admin-batch-pieces"
+          />
+        </SectionCard>
+      )}
 
-      <section>
-        <SectionTitle>{t("piecesHeading", { count: shown.length })}</SectionTitle>
-        <FilterBar
-          className="mb-3"
-          testId="batch-pieces-filters"
-          secondary={
-            <FilterChips
-              items={FILTERS.map((f) => ({ id: f.id, label: t(f.label), count: pieces.filter(f.test).length }))}
-              value={filter}
-              onChange={(pieces) => pieceFilter.set({ pieces })}
-              ariaLabel={t("piecesHeading", { count: total })}
-            />
-          }
-          summary={{ shown: shown.length, total, active: filter !== "all", onClear: () => pieceFilter.reset() }}
-        />
-        <div className={`${CARD} overflow-hidden`}>
-          <PieceTable pieces={shown} go={go} showBatch={false} empty={t("noPiecesMatch")} />
-        </div>
-      </section>
+      {tab === "handout" && (
+        <SectionCard accent="tags" icon={PackagePlus} title={t("givePiecesTitle")}>
+          {handOut === 0 ? (
+            <p className="text-xs text-white/40">{t("noHouseLeft")}</p>
+          ) : (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-white/60">{t.plural("giveKitIntro", handOut)}</p>
+              <Button type="button" variant="brand" accent="tags" onClick={() => go(handOutHref(batch.id))} data-testid="batch-hand-out">
+                <PackagePlus className="h-4 w-4" />
+                {tf("handOutFromBatch")}
+              </Button>
+            </div>
+          )}
+        </SectionCard>
+      )}
 
       {/* Admin only: renders nothing (and sends no request) for managers. */}
-      <JourneyPanel scope={{ batchId: batch.id }} filters={{}} title={t("batchJourney")} />
+      {tab === "activity" && <JourneyPanel scope={{ batchId: batch.id }} filters={{}} title={t("batchJourney")} />}
     </div>
   );
 }
+

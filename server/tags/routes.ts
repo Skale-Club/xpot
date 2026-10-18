@@ -12,6 +12,9 @@ import {
   normalizeTagCode,
 } from "#shared/tags.js";
 import { canWorkOnTag } from "#shared/tagAccess.js";
+import { TAG_STOCK_METRIC_NAMES } from "#shared/tagMetrics.js";
+import { kitCostRequired, kitOwnership } from "#shared/tagKits.js";
+import { TAG_PIECE_QUEUES } from "#shared/tagQueues.js";
 import { TAG_FACES } from "#shared/tagFace.js";
 import { validateChipContent } from "#shared/chipContent.js";
 import { DIRECT_WRITE_METHODS, TAGS_APP_PATH } from "#shared/tagApp.js";
@@ -34,6 +37,7 @@ import * as repo from "./repository.js";
 import * as field from "./field.js";
 import * as provisioning from "./provisioning.js";
 import { getTeamReport } from "./report.js";
+import { getPieceActivity } from "./pieceActivity.js";
 import { ReviewLinkError, resolveReviewLink } from "./reviewLink.js";
 import { tagSaleCreateSchema } from "#shared/tagSales.js";
 import { createTagSale, TagSaleError } from "./sales.js";
@@ -131,8 +135,14 @@ export const listQuerySchema = z.object({
   repId: z.coerce.number().int().positive().optional(),
   kitId: z.string().uuid().optional(),
   house: z.enum(["1", "true"]).transform(() => true).optional(),
+  /** A stock number (shared/tagMetrics.ts): the list behind a count, e.g. the company stock card. */
+  metric: z.enum(TAG_STOCK_METRIC_NAMES).optional(),
+  /** An Overview "Needs action" queue (shared/tagQueues.ts): the list behind its count. */
+  queue: z.enum(TAG_PIECE_QUEUES).optional(),
   /** Only the viewer's own pieces, even for a manager (the phone app's Pieces screen). */
   mine: z.enum(["1", "true"]).transform(() => true).optional(),
+  /** One organization's pieces; honoured only for platform management (a reseller's list is theirs anyway). */
+  organizationId: z.coerce.number().int().positive().optional(),
   method: z.enum(["qr", "nfc"]).optional(),
   search: z.string().trim().max(100).optional(),
   limit: z.coerce.number().int().min(1).max(2000).optional(),
@@ -144,7 +154,8 @@ const faceField = z.enum(TAG_FACES).nullable().optional();
 
 const tagCreateSchema = z.object({
   productType: z.enum(TAG_PRODUCT_TYPES),
-  salesProductId: z.number().int().positive().optional(),
+  // Without a catalog product a piece can never be sold (server/tags/sales.ts).
+  salesProductId: z.number({ required_error: "Choose a sales catalog product" }).int().positive(),
   face: faceField,
   label: optionalText(120),
 }).strict();
@@ -242,6 +253,17 @@ const kitSchema = z.object({
   quantity: z.number().int().min(1).max(TAG_MAX_BATCH_QUANTITY).optional(),
   note: optionalText(500),
   unitCostCents: z.number().int().nonnegative().optional(),
+  /** Consignment (`company`) or a purchase (`rep`); omitted: the rep's cost rule decides (shared/tagKits.ts). */
+  ownershipType: z.enum(["company", "rep"]).optional(),
+}).strict().refine((v) => v.codes?.length || (v.batchId && v.quantity), {
+  message: "Choose the pieces: codes, or a batch and a quantity",
+});
+
+/** Hand out dry run: the same pieces a kit would take, without moving them. */
+const kitCheckSchema = z.object({
+  codes: codeList.optional(),
+  batchId: z.string().uuid().optional(),
+  quantity: z.number().int().min(1).max(TAG_MAX_BATCH_QUANTITY).optional(),
 }).strict().refine((v) => v.codes?.length || (v.batchId && v.quantity), {
   message: "Choose the pieces: codes, or a batch and a quantity",
 });
@@ -277,7 +299,7 @@ export function analyticsWindow(query: { range?: string; from?: string; to?: str
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function fail(res: Response, err: unknown, fallback: string) {
-  if (err instanceof repo.TagError) return res.status(err.status).json({ message: err.message });
+  if (err instanceof repo.TagError) return res.status(err.status).json(repo.tagErrorBody(err));
   if (err instanceof z.ZodError) {
     return res.status(400).json({ message: err.issues[0]?.message ?? "Validation error", errors: err.errors });
   }
@@ -403,14 +425,6 @@ export function registerTagRoutes(app: Express) {
 
   const fieldBase = "/api/xpot/tags";
 
-  app.get(`${fieldBase}/summary`, requireTagUser, async (req, res) => {
-    try {
-      res.json(await repo.getRepSummary(actorOf(req).repId));
-    } catch (err) {
-      fail(res, err, "Failed to load summary");
-    }
-  });
-
   // The Tags dashboard: the person's own pieces, or every rep's for a manager in admin mode.
   app.get(`${fieldBase}/dashboard`, requireTagUser, async (req, res) => {
     try {
@@ -451,9 +465,11 @@ export function registerTagRoutes(app: Express) {
       // A reseller's list is their own pieces, whatever filter they send. A manager gets
       // every piece (the admin screens), unless asking for their own: a piece is theirs
       // once it is in their kit or they activated it, not because they can reach it.
-      const { mine, ...rest } = filters;
-      const own = !actor.isManager || mine || viewsAsRep(req);
-      res.json(await repo.listTags(own ? { ...rest, repId: actor.repId, house: undefined } : rest));
+      // Tags have no organization scope: like listScope's `everyone` (routes/xpot/middleware.ts),
+      // only a manager or admin in management mode gets every piece, and ?organizationId= narrows that alone.
+      const { mine, organizationId, ...rest } = filters;
+      const own = mine || !actor.inManagement;
+      res.json(await repo.listTags(own ? { ...rest, repId: actor.repId, house: undefined } : { ...rest, organizationId }));
     } catch (err) {
       fail(res, err, "Failed to load tags");
     }
@@ -469,7 +485,7 @@ export function registerTagRoutes(app: Express) {
       if (!result.replayed) syncSaleToXphere(result.sale.id).catch((err) => console.error("[tag-sale] xphere mirror:", err));
     } catch (err) {
       if (err instanceof TagSaleError) {
-        return res.status(err.status).json({ code: err.code, message: err.message, requestId: req.get("x-request-id") ?? null });
+        return res.status(err.status).json({ code: err.code, message: err.message, ...(err.params ? { params: err.params } : {}), requestId: req.get("x-request-id") ?? null });
       }
       if (err instanceof z.ZodError) {
         return res.status(400).json({ code: "validation_error", message: err.issues[0]?.message ?? "Validation error", details: err.errors, requestId: req.get("x-request-id") ?? null });
@@ -499,15 +515,31 @@ export function registerTagRoutes(app: Express) {
     }
   });
 
-  app.get(`${fieldBase}/:id/dashboard`, requireTagUser, async (req, res) => {
+  // The piece screen's Performance (same numbers and range presets as the admin analytics),
+  // for anyone who can open the piece.
+  app.get(`${fieldBase}/:id/analytics`, requireTagUser, async (req, res) => {
     const id = idParam(req, res);
     if (!id) return;
     try {
       if (!(await tagForActor(req, res, id))) return;
-      const days = Math.min(Math.max(Number(req.query.days) || 30, 7), 90);
-      res.json(await repo.getTagPieceDashboard(id, days));
+      const { range, from, to } = analyticsQuerySchema.parse(req.query);
+      const window = analyticsWindow({ range, from, to });
+      res.json(await repo.getAnalytics({ tagId: id }, window.from, window.to));
     } catch (err) {
-      fail(res, err, "Failed to load piece dashboard");
+      fail(res, err, "Failed to load piece analytics");
+    }
+  });
+
+  // The piece screen's Sale and Activity: its sales (active and cancelled) and, on the
+  // management side, its stock movements.
+  app.get(`${fieldBase}/:id/activity`, requireTagUser, async (req, res) => {
+    const id = idParam(req, res);
+    if (!id) return;
+    try {
+      if (!(await tagForActor(req, res, id))) return;
+      res.json(await getPieceActivity(id, { withMovements: listActor(req).isManager }));
+    } catch (err) {
+      fail(res, err, "Failed to load piece activity");
     }
   });
 
@@ -561,7 +593,8 @@ export function registerTagRoutes(app: Express) {
     try {
       if (!(await tagForActor(req, res, id))) return;
       const { reason } = actionSchema.parse(req.body ?? {});
-      await repo.transitionTag(id, "unassign", actorOf(req), reason ?? "Unlinked from the customer page", "field");
+      // No reason typed: the history row gets the "customer removed" code (transitionTag), worded by the app.
+      await repo.transitionTag(id, "unassign", actorOf(req), reason ?? null, "field");
       res.json(await repo.getTagDetail(id, tagBaseUrl()));
     } catch (err) {
       fail(res, err, "Failed to unlink the piece");
@@ -663,7 +696,8 @@ export function registerTagRoutes(app: Express) {
     }
   });
 
-  app.post(adminBase, requireTagManager, async (req, res) => {
+  // A single piece outside any batch: production (batches) is the global admin's, so is this.
+  app.post(adminBase, requireTagAdmin, async (req, res) => {
     try {
       const tag = await repo.createSingleTag(tagCreateSchema.parse(req.body), userIdOf(req));
       res.status(201).json(await repo.getTagDetail(tag.id, tagBaseUrl()));
@@ -749,7 +783,7 @@ export function registerTagRoutes(app: Express) {
     });
   }
 
-  // Move a piece (and, if sold, its credit) to another reseller or back to the house.
+  // Move an unsold, unconfigured piece to another reseller or back to the house (a stock transfer or return).
   app.patch(`${adminBase}/:id/rep`, requireTagManager, async (req, res) => {
     const id = idParam(req, res);
     if (!id) return;
@@ -795,8 +829,12 @@ export function registerTagRoutes(app: Express) {
   // Kits: pieces handed to a reseller.
   app.get("/api/xpot/admin/tag-kits", requireTagManager, async (req, res) => {
     try {
-      const { repId } = z.object({ repId: z.coerce.number().int().positive().optional() }).parse(req.query);
-      res.json(await repo.listKits({ repId }));
+      const { repId, organizationId } = z.object({
+        repId: z.coerce.number().int().positive().optional(),
+        organizationId: z.coerce.number().int().positive().optional(),
+      }).parse(req.query);
+      // The organization filter is platform management's; viewing as a rep it is ignored, as on the pieces list.
+      res.json(await repo.listKits({ repId, organizationId: actorOf(req).inManagement ? organizationId : undefined }));
     } catch (err) {
       fail(res, err, "Failed to load kits");
     }
@@ -807,10 +845,15 @@ export function registerTagRoutes(app: Express) {
       const input = kitSchema.parse(req.body);
       const rep = await storage.getSalesRep(input.repId);
       if (!rep) return res.status(404).json({ message: "Reseller not found" });
-      if (rep.costPolicy === "acquisition" && input.unitCostCents === undefined) {
+      const policy = rep.costPolicy === "zero" ? "zero" : "acquisition";
+      // Acquisition rule: the rep buys the pieces. Zero-cost rule: company stock in the rep's custody (consignment),
+      // even when a reference cost is recorded. The person handing out may pick the other ownership for one kit; a
+      // purchase, or any kit under the acquisition rule, needs a cost (shared/tagKits.ts).
+      const ownershipType = input.ownershipType ?? kitOwnership(policy);
+      if (kitCostRequired(policy, ownershipType) && input.unitCostCents === undefined) {
         return res.status(400).json({ code: "tag_cost_required", message: "Unit acquisition cost is required for this partner" });
       }
-      res.status(201).json(await repo.deliverKit(input, userIdOf(req)));
+      res.status(201).json(await repo.deliverKit({ ...input, ownershipType }, userIdOf(req)));
     } catch (err) {
       fail(res, err, "Failed to deliver kit");
     }
@@ -822,6 +865,37 @@ export function registerTagRoutes(app: Express) {
       res.json(await repo.returnToHouse(codes, userIdOf(req)));
     } catch (err) {
       fail(res, err, "Failed to return pieces");
+    }
+  });
+
+  // Dry runs for Distribution: per code, whether it can be handed out / taken back now, and why not. Nothing moves.
+  app.post("/api/xpot/admin/tag-kits/check", requireTagManager, async (req, res) => {
+    try {
+      res.json(await repo.checkHandOut(kitCheckSchema.parse(req.body)));
+    } catch (err) {
+      fail(res, err, "Failed to check pieces");
+    }
+  });
+
+  app.post("/api/xpot/admin/tag-kits/return/check", requireTagManager, async (req, res) => {
+    try {
+      const { codes } = z.object({ codes: codeList }).strict().parse(req.body);
+      res.json(await repo.checkTakeBack(codes));
+    } catch (err) {
+      fail(res, err, "Failed to check pieces");
+    }
+  });
+
+  // What a kit handed out (its packing list), each piece with where it is now.
+  app.get("/api/xpot/admin/tag-kits/:id/items", requireTagManager, async (req, res) => {
+    const id = idParam(req, res);
+    if (!id) return;
+    try {
+      const items = await repo.getKitItems(id);
+      if (!items) return res.status(404).json({ message: "Kit not found" });
+      res.json(items);
+    } catch (err) {
+      fail(res, err, "Failed to load kit");
     }
   });
 
@@ -841,8 +915,18 @@ export function registerTagRoutes(app: Express) {
       const { codes } = z.object({ codes: codeList }).strict().parse(req.body);
       res.json(await fulfillAcquisition(id.data, codes, userIdOf(req)));
     } catch (err) {
-      if (err instanceof TagSaleError) return res.status(err.status).json({ code: err.code, message: err.message });
+      if (err instanceof TagSaleError) return res.status(err.status).json({ code: err.code, message: err.message, ...(err.params ? { params: err.params } : {}) });
       fail(res, err, "Failed to fulfill acquisition");
+    }
+  });
+
+  // Batches to pick from (Give a kit › From a batch, the Pieces filter). Managers hand out kits too, so they get
+  // this read-only list; the batches themselves (production, intake, editing) stay admin-only.
+  app.get("/api/xpot/admin/tag-batch-options", requireTagManager, async (_req, res) => {
+    try {
+      res.json(await repo.listBatchOptions());
+    } catch (err) {
+      fail(res, err, "Failed to load batches");
     }
   });
 
@@ -872,6 +956,21 @@ export function registerTagRoutes(app: Express) {
       res.status(result.alreadyRegistered ? 200 : 201).json(result);
     } catch (err) {
       fail(res, err, "Failed to add piece to batch");
+    }
+  });
+
+  // Undo a read the intake station just made: the piece goes back to "not received" and stays registered to the batch
+  // (stock movements are append-only, so a received piece is never deleted). Refused once anything else happened to
+  // it (server/tags/repository.ts undoBatchIntake).
+  app.delete("/api/xpot/admin/tag-batches/:id/tags/:tagId", requireTagAdmin, async (req, res) => {
+    const id = idParam(req, res);
+    if (!id) return;
+    const tagId = z.string().uuid().safeParse(req.params.tagId);
+    if (!tagId.success) return res.status(404).json({ message: "Tag not found" });
+    try {
+      res.json(await repo.undoBatchIntake(id, tagId.data, userIdOf(req)));
+    } catch (err) {
+      fail(res, err, "Failed to undo the read");
     }
   });
 

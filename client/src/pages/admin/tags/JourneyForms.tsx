@@ -6,17 +6,15 @@ import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
+import { Button } from "@/components/ui/button";
+import { Field, Input, Select, Textarea } from "@/components/xpot/Field";
 import { errorMessage, invalidateAdminTags, sendJson } from "./api";
-import { BTN, BTN_GHOST, INPUT } from "./ui";
-import { Field } from "./batches-shared";
-import { Select } from "./pieces-shared";
 import { useJourneyLabels, type JourneyScope } from "./journey-shared";
 
 // The three dialogs of the journey: record an entry, create a plan, and
 // change a plan's status (with the outcome when it is closed).
 
-const DIALOG = "max-w-lg border-white/10 bg-[#0d1326] text-white";
-const DESC = "text-white/50";
+const DIALOG = "max-w-lg";
 
 interface ScopedDialogProps {
   open: boolean;
@@ -63,7 +61,7 @@ export function NewEntryDialog({ open, onOpenChange, scope, scopeLabel }: Scoped
       <DialogContent className={DIALOG}>
         <DialogHeader>
           <DialogTitle>{t("entryDialogTitle")}</DialogTitle>
-          <DialogDescription className={DESC}>
+          <DialogDescription>
             {t("entryDialogDesc")}
             {attached}
           </DialogDescription>
@@ -71,42 +69,40 @@ export function NewEntryDialog({ open, onOpenChange, scope, scopeLabel }: Scoped
         <div className="space-y-3">
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label={t("fieldKind")}>
-              <Select value={form.kind} onChange={(kind) => setForm({ ...form, kind: kind ?? "observation" })} placeholder={t("fieldKind")} options={labels.kindOptions} allowEmpty={false} testId="journey-entry-kind" />
+              <Select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value || "observation" })} options={labels.kindOptions} data-testid="journey-entry-kind" />
             </Field>
             {form.kind === "execution" && (
               <Field label={t("fieldStep")}>
-                <Select value={form.action} onChange={(action) => setForm({ ...form, action })} placeholder={t("stepOther")} options={labels.actionOptions} testId="journey-entry-action" />
+                <Select value={form.action ?? ""} onChange={(e) => setForm({ ...form, action: e.target.value || undefined })} placeholder={t("stepOther")} options={labels.actionOptions} data-testid="journey-entry-action" />
               </Field>
             )}
           </div>
           <Field label={t("fieldTitle")}>
-            <input
+            <Input
               value={form.title}
               maxLength={200}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
               placeholder={t("entryTitlePlaceholder")}
-              className={INPUT}
               data-testid="journey-entry-title"
             />
           </Field>
           <Field label={t("fieldDetails")}>
-            <textarea
+            <Textarea
               value={form.content}
               maxLength={4000}
               rows={4}
               onChange={(e) => setForm({ ...form, content: e.target.value })}
-              className={`${INPUT} resize-y`}
               data-testid="journey-entry-content"
             />
           </Field>
         </div>
         <DialogFooter className="gap-2">
-          <button type="button" className={BTN_GHOST} onClick={() => onOpenChange(false)}>
+          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
             {tc("cancel")}
-          </button>
-          <button type="button" className={BTN} onClick={() => save.mutate()} disabled={save.isPending || !form.title.trim()} data-testid="journey-entry-save">
-            {save.isPending ? t("saving") : t("journeyRecord")}
-          </button>
+          </Button>
+          <Button type="button" variant="brand" accent="tags" onClick={() => save.mutate()} disabled={!form.title.trim()} loading={save.isPending} data-testid="journey-entry-save">
+            {t("journeyRecord")}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -137,7 +133,7 @@ export function NewPlanDialog({ open, onOpenChange, scope, scopeLabel }: ScopedD
       <DialogContent className={DIALOG}>
         <DialogHeader>
           <DialogTitle>{t("planDialogTitle")}</DialogTitle>
-          <DialogDescription className={DESC}>
+          <DialogDescription>
             {t("planDialogDesc")}
             {attached}
           </DialogDescription>
@@ -145,45 +141,43 @@ export function NewPlanDialog({ open, onOpenChange, scope, scopeLabel }: ScopedD
         <div className="space-y-3">
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label={t("fieldKind")}>
-              <Select value={form.kind} onChange={(kind) => setForm({ ...form, kind: kind ?? "task" })} placeholder={t("fieldKind")} options={labels.planKindOptions} allowEmpty={false} testId="journey-plan-kind" />
+              <Select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value || "task" })} options={labels.planKindOptions} data-testid="journey-plan-kind" />
             </Field>
             <Field label={t("fieldDue")}>
-              <input
+              <Input
                 type="date"
                 value={form.dueDate}
                 onChange={(e) => setForm({ ...form, dueDate: e.target.value })}
-                className={`${INPUT} [color-scheme:dark]`}
+                className="[color-scheme:dark]"
                 data-testid="journey-plan-due"
               />
             </Field>
           </div>
           <Field label={t("fieldTitle")}>
-            <input
+            <Input
               value={form.title}
               maxLength={200}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
               placeholder={t("planTitlePlaceholder")}
-              className={INPUT}
               data-testid="journey-plan-title"
             />
           </Field>
           <Field label={t("fieldDescription")}>
-            <textarea
+            <Textarea
               value={form.description}
               maxLength={4000}
               rows={4}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
-              className={`${INPUT} resize-y`}
             />
           </Field>
         </div>
         <DialogFooter className="gap-2">
-          <button type="button" className={BTN_GHOST} onClick={() => onOpenChange(false)}>
+          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
             {tc("cancel")}
-          </button>
-          <button type="button" className={BTN} onClick={() => save.mutate()} disabled={save.isPending || !form.title.trim()} data-testid="journey-plan-save">
-            {save.isPending ? t("saving") : t("create")}
-          </button>
+          </Button>
+          <Button type="button" variant="brand" accent="tags" onClick={() => save.mutate()} disabled={!form.title.trim()} loading={save.isPending} data-testid="journey-plan-save">
+            {t("create")}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -196,6 +190,7 @@ export function PlanStatusDialog({ plan, onClose }: { plan: TagPlanItem | null; 
   const labels = useJourneyLabels();
   const { toast } = useToast();
   const [status, setStatus] = useState<string | undefined>(undefined);
+  const statusChange = (value: string) => setStatus(value || undefined);
   const [outcome, setOutcome] = useState("");
   const next = status ?? plan?.status;
   const reset = () => {
@@ -226,45 +221,46 @@ export function PlanStatusDialog({ plan, onClose }: { plan: TagPlanItem | null; 
       <DialogContent className={DIALOG}>
         <DialogHeader>
           <DialogTitle className="break-words pr-6">{plan?.title}</DialogTitle>
-          <DialogDescription className={DESC}>{t("planStatusDesc")}</DialogDescription>
+          <DialogDescription>{t("planStatusDesc")}</DialogDescription>
         </DialogHeader>
         {plan?.description && <p className="whitespace-pre-wrap text-sm text-white/60">{plan.description}</p>}
         <div className="space-y-3">
           <Field label={t("colStatus")}>
-            <Select value={next} onChange={setStatus} placeholder={t("colStatus")} options={labels.planStatusOptions} allowEmpty={false} testId="journey-plan-status" />
+            <Select value={next ?? ""} onChange={(e) => statusChange(e.target.value)} options={labels.planStatusOptions} data-testid="journey-plan-status" />
           </Field>
           <Field label={t("fieldOutcome")}>
-            <textarea
+            <Textarea
               value={outcome}
               maxLength={4000}
               rows={3}
               placeholder={plan?.outcome ?? t("outcomePlaceholder")}
               onChange={(e) => setOutcome(e.target.value)}
-              className={`${INPUT} resize-y`}
               data-testid="journey-plan-outcome"
             />
           </Field>
         </div>
         <DialogFooter className="gap-2">
-          <button
+          <Button
             type="button"
-            className={BTN_GHOST}
+            variant="ghost"
             onClick={() => {
               reset();
               onClose();
             }}
           >
             {tc("cancel")}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
-            className={BTN}
+            variant="brand"
+            accent="tags"
             onClick={() => save.mutate()}
-            disabled={save.isPending || (next === plan?.status && !outcome.trim())}
+            disabled={next === plan?.status && !outcome.trim()}
+            loading={save.isPending}
             data-testid="journey-plan-status-save"
           >
-            {save.isPending ? t("saving") : tc("save")}
-          </button>
+            {tc("save")}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { requireXpotUser, type XpotActor } from "./middleware.js";
+import { inManagementView, isManagerOrAdmin, requireXpotUser, viewsAsRep, type XpotActor } from "./middleware.js";
 import { createTask, getTask, listTasks, TaskServiceError, updateTask } from "../../tasks/service.js";
 import { xpotTaskCreateSchema, xpotTaskPrioritySchema, xpotTaskStatusSchema, xpotTaskUpdateSchema } from "#shared/xpot.js";
 
@@ -26,7 +26,12 @@ export function createTasksRouter() {
       const statuses = typeof req.query.status === "string"
         ? req.query.status.split(",").filter(Boolean).map((value) => xpotTaskStatusSchema.parse(value))
         : undefined;
-      const repId = typeof req.query.repId === "string" ? Number(req.query.repId) : undefined;
+      // Management mode off: the person's own tasks, as on every other list. A
+      // manager is off with "X-Xpot-View: rep"; a Rep Admin is on only with
+      // "X-Xpot-View: manage", and listTasks keeps their "all" and "?repId=" to
+      // the organizations they run.
+      const asRep = isManagerOrAdmin(actor) ? viewsAsRep(req) : !inManagementView(req);
+      const repId = !asRep && typeof req.query.repId === "string" ? Number(req.query.repId) : undefined;
       const leadId = typeof req.query.leadId === "string" ? Number(req.query.leadId) : undefined;
       const priority = typeof req.query.priority === "string" ? xpotTaskPrioritySchema.parse(req.query.priority) : undefined;
       res.json(await listTasks(actor, {
@@ -35,7 +40,7 @@ export function createTasksRouter() {
         leadId: leadId && Number.isInteger(leadId) ? leadId : undefined,
         priority,
         search: typeof req.query.search === "string" ? req.query.search : undefined,
-        all: req.query.all === "true",
+        all: !asRep && req.query.all === "true",
         limit: typeof req.query.limit === "string" && /^\d+$/.test(req.query.limit) ? Number(req.query.limit) : undefined,
         offset: typeof req.query.offset === "string" && /^\d+$/.test(req.query.offset) ? Number(req.query.offset) : undefined,
       }));

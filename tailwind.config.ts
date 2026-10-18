@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss";
+import { OPACITY_STEPS, RADIUS } from "./client/src/components/xpot/surface";
 
 export default {
   darkMode: ["class"],
@@ -9,82 +10,48 @@ export default {
         lg: ".5625rem",
         md: ".375rem",
         sm: ".1875rem",
+        // The Xpot radius scale (components/xpot/surface.ts RADIUS):
+        // rounded-control (inputs, buttons), rounded-card, rounded-sheet (dialogs, sheets).
+        ...RADIUS,
       },
+      // Off-scale alpha steps the screens use (text-white/32, border-white/12…).
+      // Tailwind 3 only generates multiples of 5, so without these the classes
+      // silently render nothing.
+      opacity: OPACITY_STEPS,
       colors: {
         background: "hsl(var(--background) / <alpha-value>)",
         foreground: "hsl(var(--foreground) / <alpha-value>)",
         border: "var(--border)",
-        input: "var(--input)",
-        card: {
-          DEFAULT: "hsl(var(--card) / <alpha-value>)",
-          foreground: "hsl(var(--card-foreground) / <alpha-value>)",
-          border: "hsl(var(--card-border) / <alpha-value>)",
-        },
-        popover: {
-          DEFAULT: "hsl(var(--popover) / <alpha-value>)",
-          foreground: "hsl(var(--popover-foreground) / <alpha-value>)",
-          border: "hsl(var(--popover-border) / <alpha-value>)",
-        },
+        card: "hsl(var(--card) / <alpha-value>)",
+        popover: "hsl(var(--popover) / <alpha-value>)",
         primary: {
           DEFAULT: "hsl(var(--primary) / <alpha-value>)",
           foreground: "hsl(var(--primary-foreground) / <alpha-value>)",
-          border: "var(--primary-border)",
         },
-        secondary: {
-          DEFAULT: "hsl(var(--secondary) / <alpha-value>)",
-          foreground: "hsl(var(--secondary-foreground) / <alpha-value>)",
-          border: "var(--secondary-border)",
-        },
+        secondary: "hsl(var(--secondary) / <alpha-value>)",
         muted: {
           DEFAULT: "hsl(var(--muted) / <alpha-value>)",
           foreground: "hsl(var(--muted-foreground) / <alpha-value>)",
-          border: "var(--muted-border)",
-        },
-        accent: {
-          DEFAULT: "hsl(var(--accent) / <alpha-value>)",
-          foreground: "hsl(var(--accent-foreground) / <alpha-value>)",
-          border: "var(--accent-border)",
         },
         destructive: {
           DEFAULT: "hsl(var(--destructive) / <alpha-value>)",
           foreground: "hsl(var(--destructive-foreground) / <alpha-value>)",
-          border: "var(--destructive-border)",
-        },
-        success: {
-          DEFAULT: "hsl(var(--success) / <alpha-value>)",
-          foreground: "hsl(var(--success-foreground) / <alpha-value>)",
-        },
-        warning: {
-          DEFAULT: "hsl(var(--warning) / <alpha-value>)",
-          foreground: "hsl(var(--warning-foreground) / <alpha-value>)",
-        },
-        ring: "hsl(var(--ring) / <alpha-value>)",
-        status: {
-          online: "rgb(34 197 94)",
-          away: "rgb(245 158 11)",
-          busy: "rgb(239 68 68)",
-          offline: "rgb(156 163 175)",
         },
       },
       fontFamily: {
         sans: ["var(--font-sans)"],
-        serif: ["var(--font-serif)"],
         mono: ["var(--font-mono)"],
         display: ["var(--font-display)"],
       },
       keyframes: {
-        "fade-in": { from: { opacity: "0" }, to: { opacity: "1" } },
-        "fade-out": { from: { opacity: "1" }, to: { opacity: "0" } },
-        "form-shake": {
-          "0%, 100%": { transform: "translateX(0)" },
-          "25%": { transform: "translateX(-4px)" },
-          "75%": { transform: "translateX(4px)" },
+        // DotsLoader (components/ui/spinner.tsx): each dot swells and brightens in turn.
+        "dot-pulse": {
+          "0%, 80%, 100%": { transform: "scale(0.6)", opacity: "0.4" },
+          "40%": { transform: "scale(1)", opacity: "1" },
         },
       },
       animation: {
-        "fade-in": "fade-in 0.3s ease-out",
-        "fade-out": "fade-out 0.3s ease-out",
-        "form-shake": "form-shake 0.4s ease-in-out",
+        "dot-pulse": "dot-pulse 1.2s ease-in-out infinite both",
       },
     },
   },
