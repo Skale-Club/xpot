@@ -49,8 +49,8 @@ export function PieceDetail({ id, go }: { id: string; go: Go }) {
   const changed = useCallback((detail: TagDetail) => queryClient.setQueryData(queryKey, detail), [id]); // eslint-disable-line react-hooks/exhaustive-deps
   const viewer = useMemo<PieceViewer>(
     // The admin pages turn management mode on (AdminApp), so this is the manager's or the admin's view.
-    () => ({ surface: "admin", canManage: access.hasAdminAccess, isAdmin: access.isSuperAdmin, hasVisits: modules.includes("visits") }),
-    [access.hasAdminAccess, access.isSuperAdmin, modules],
+    () => ({ surface: "admin", canManage: access.hasAdminAccess, isAdmin: access.isSuperAdmin, hasVisits: modules.includes("visits"), repId: access.me?.rep.id ?? null }),
+    [access.hasAdminAccess, access.isSuperAdmin, modules, access.me?.rep.id],
   );
 
   if (isLoading) return <Loading rows={5} />;

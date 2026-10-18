@@ -67,6 +67,8 @@ export interface PieceViewer {
   isAdmin: boolean;
   /** May open the Visits screens (the sale's page in Sales). */
   hasVisits: boolean;
+  /** The viewer's own rep id, to recognise their own sale. */
+  repId?: number | null;
 }
 
 export type PieceSection = "customer" | "chip" | "sale" | "performance" | "management" | "activity";
@@ -81,6 +83,16 @@ export function pieceSections(viewer: PieceViewer): PieceSection[] {
   if (viewer.canManage) sections.push("management");
   if (viewer.surface === "admin" && viewer.canManage) sections.push("activity");
   return sections;
+}
+
+/**
+ * "Cancel sale": a manager cancels any; the seller of the sale cancels their own
+ * when they have Visits (POST /sales/:id/cancel sits in the Visits module and
+ * allows a seller their own sale only, server/routes/xpot/sales.ts).
+ */
+export function canCancelPieceSale(viewer: PieceViewer, sale: { sellerRepId: number } | undefined): boolean {
+  if (viewer.canManage) return true;
+  return viewer.hasVisits && sale !== undefined && viewer.repId != null && sale.sellerRepId === viewer.repId;
 }
 
 /** "Open in management" on the reseller screen; "Open as reseller view" on the admin page (only when someone holds it). */

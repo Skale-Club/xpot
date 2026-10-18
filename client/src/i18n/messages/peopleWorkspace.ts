@@ -51,6 +51,7 @@ const en = {
   allConnections: "All connections in Integrations",
   syncOnSaved: "Sync turned on for {name}",
   syncOffSaved: "Sync turned off for {name}",
+  theirVisits: "Their visits",
   theirPieces: "Their pieces",
   theirKits: "Their kits",
 
@@ -149,6 +150,7 @@ export const peopleWorkspaceMessages: Dictionary<typeof en> = {
     allConnections: "Todas as conexões em Integrações",
     syncOnSaved: "Sincronização ligada para {name}",
     syncOffSaved: "Sincronização desligada para {name}",
+    theirVisits: "Visitas da pessoa",
     theirPieces: "Peças da pessoa",
     theirKits: "Kits da pessoa",
 
@@ -241,6 +243,7 @@ export const peopleWorkspaceMessages: Dictionary<typeof en> = {
     allConnections: "Todas las conexiones en Integraciones",
     syncOnSaved: "Sincronización activada para {name}",
     syncOffSaved: "Sincronización desactivada para {name}",
+    theirVisits: "Sus visitas",
     theirPieces: "Sus piezas",
     theirKits: "Sus kits",
 

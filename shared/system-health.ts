@@ -177,4 +177,4 @@ export type SyncProblem = {
 };
 
 /** The entity types POST /api/xpot/sync/retry can send again (server/routes/xpot/sync.ts). */
-export const RETRYABLE_SYNC_ENTITIES: readonly string[] = ["sales_visit", "sales_lead", "sales_sale", "sales_task"];
+export const RETRYABLE_SYNC_ENTITIES: readonly string[] = ["sales_visit", "sales_lead", "sales_sale", "sales_task", "sales_opportunity"];
