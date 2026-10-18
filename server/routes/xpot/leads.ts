@@ -84,22 +84,52 @@ export function createLeadsRouter() {
     const status = input.status || "lead";
     const organizationId = await organizationIdForRep(actor!.rep.id);
 
-    const lead = await storage.createSalesLead({
-      organizationId,
-      name: input.name,
-      legalName: input.legalName,
-      website: input.website,
-      phone: input.phone,
-      email: input.email,
-      industry: input.industry,
-      source: input.source || "field",
-      status,
-      ownerRepId: actor!.rep.id,
-      territoryName: input.territoryName,
-      notes: input.notes,
-      socialUrls: input.socialUrls,
-      googlePlaceId: input.googlePlaceId,
-    });
+    // A Google business is one company per Organization (migration 0049). The
+    // check-in searches import a picked Google result whenever they cannot see
+    // a saved match, and they only ever see a page of the rep's companies, so
+    // the same place can arrive here twice. Inserting it again hit the unique
+    // index as an unhandled rejection and the request hung.
+    const existingForPlace = async () => {
+      if (!input.googlePlaceId) return undefined;
+      return storage.findSalesLeadByGooglePlace(organizationId, input.googlePlaceId);
+    };
+    const answerExisting = async (existing: NonNullable<Awaited<ReturnType<typeof existingForPlace>>>) => {
+      if (!(await canAccessLead(actor!, existing))) {
+        return res.status(409).json({ code: "lead_exists", message: "This business is already a company of another rep in your organization." });
+      }
+      return res.status(200).json({ lead: await storage.getSalesLead(existing.id), existing: true });
+    };
+
+    const alreadySaved = await existingForPlace();
+    if (alreadySaved) return answerExisting(alreadySaved);
+
+    let lead;
+    try {
+      lead = await storage.createSalesLead({
+        organizationId,
+        name: input.name,
+        legalName: input.legalName,
+        website: input.website,
+        phone: input.phone,
+        email: input.email,
+        industry: input.industry,
+        source: input.source || "field",
+        status,
+        ownerRepId: actor!.rep.id,
+        territoryName: input.territoryName,
+        notes: input.notes,
+        socialUrls: input.socialUrls,
+        googlePlaceId: input.googlePlaceId,
+      });
+    } catch (err) {
+      // Two imports of the same place racing past the lookup above.
+      const raced = (err as { code?: string; cause?: { code?: string } });
+      if (raced.code === "23505" || raced.cause?.code === "23505") {
+        const winner = await existingForPlace();
+        if (winner) return answerExisting(winner);
+      }
+      throw err;
+    }
 
     if (input.primaryLocation?.addressLine1) {
       await storage.createSalesLeadLocation({

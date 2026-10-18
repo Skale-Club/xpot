@@ -6,6 +6,7 @@ import { formatDuration } from "../utils";
 import { StatusBadge } from "./VisitStatus";
 import type { EnrichedSalesVisit } from "../types";
 import { fileSrc } from "@/lib/files";
+import { CheckInFlag } from "./CheckInValidation";
 
 /** Desktop list of visits, newest first, one row each. */
 export function VisitsTable({
@@ -81,6 +82,7 @@ export function VisitsTable({
                 </td>
                 <td className="whitespace-nowrap px-3 py-2.5">
                   <div className="flex items-center justify-end gap-1.5 text-white/35">
+                    <CheckInFlag visit={visit} />
                     {visit.note?.summary && <Sparkles className="h-3.5 w-3.5 text-indigo-300" aria-label={t("hasSummary")} />}
                     {visit.note?.audioUrl && <Mic className="h-3.5 w-3.5" aria-label={t("hasAudio")} />}
                   </div>

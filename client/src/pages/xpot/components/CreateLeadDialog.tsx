@@ -25,7 +25,8 @@ export function CreateLeadDialog({ open, onOpenChange, initialName, onCreated }:
   const [form, setForm] = useState({ name: initialName, phone: "", email: "", website: "", industry: "", address: "", city: "", state: "" });
   const [placeSearch, setPlaceSearch] = useState(initialName);
   const [placeDropdownOpen, setPlaceDropdownOpen] = useState(false);
-  const { createLeadMutation } = useLeads();
+  // Only the create mutation: mounted (closed) on the Dashboard, it must not load the company list.
+  const { createLeadMutation } = useLeads(false);
   const placeQuery = usePlaceSearch(placeSearch, open, geoState);
 
   useEffect(() => {

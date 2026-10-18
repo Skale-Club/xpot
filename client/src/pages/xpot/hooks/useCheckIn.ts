@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { ApiError, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/i18n";
@@ -12,6 +12,9 @@ import { useVisits } from "./useVisits";
 import { usePlaceToLead } from "./usePlaceToLead";
 import type { GeofenceMiss } from "../components/CheckInOverrideDialog";
 import type { GooglePlaceResult, FullSalesLead, SalesLeadPayload, SalesVisitNote } from "../types";
+
+/** GET /api/xpot/leads/:id answers with the company and its collections side by side. */
+type LeadDetailResponse = { lead: FullSalesLead; locations?: FullSalesLead["locations"]; contacts?: FullSalesLead["contacts"] };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyMutation = ReturnType<typeof useMutation<any, any, any, any>>;
@@ -57,13 +60,12 @@ export function useCheckIn() {
     const leadId = params.get("leadId");
     const visitId = Number(params.get("visitId"));
     setPlannedVisitId(Number.isInteger(visitId) && visitId > 0 ? visitId : null);
-    if (!leadId || !leadsQuery.data) return;
-    const lead = leadsQuery.data.find((l) => l.id === Number(leadId));
-    if (lead) {
-      setSelectedLeadId(lead.id);
-      setCheckInSearch(lead.name);
-    }
-  }, [leadsQuery.data]);
+    const id = Number(leadId);
+    // Chosen even before (or without) the company list: the list is one page
+    // of 100 and the company may be older than all of them. selectedLead below
+    // fetches it on its own when the list does not have it.
+    if (Number.isInteger(id) && id > 0) setSelectedLeadId(id);
+  }, []);
   const [visitNoteForm, setVisitNoteForm] = useState({ summary: "", outcome: "", nextStep: "", followUpRequired: false });
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
@@ -71,10 +73,24 @@ export function useCheckIn() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
 
-  const selectedLead = useMemo(
-    () => (typeof selectedLeadId === "number" ? leadsQuery.data?.find((lead) => lead.id === selectedLeadId) || null : null),
-    [leadsQuery.data, selectedLeadId],
-  );
+  const listedLead = typeof selectedLeadId === "number" ? leadsQuery.data?.find((lead) => lead.id === selectedLeadId) ?? null : null;
+  // A company picked in the search, imported from Google or linked with
+  // ?leadId= is not always on the first page of the list.
+  const leadDetailQuery = useQuery<LeadDetailResponse>({
+    queryKey: [`/api/xpot/leads/${selectedLeadId}`],
+    enabled: typeof selectedLeadId === "number" && leadsQuery.isFetched && !listedLead,
+  });
+  const selectedLead = useMemo<FullSalesLead | null>(() => {
+    if (listedLead) return listedLead;
+    const detail = leadDetailQuery.data;
+    if (!detail?.lead || detail.lead.id !== selectedLeadId) return null;
+    return { ...detail.lead, locations: detail.locations ?? detail.lead.locations ?? [], contacts: detail.contacts ?? detail.lead.contacts ?? [] };
+  }, [listedLead, leadDetailQuery.data, selectedLeadId]);
+
+  // The search field shows the chosen company's name once it is known.
+  useEffect(() => {
+    if (selectedLead) setCheckInSearch((current) => current || selectedLead.name);
+  }, [selectedLead?.id]);
 
   useEffect(() => {
     if (activeVisit?.note) {
@@ -255,8 +271,8 @@ export function useCheckIn() {
     setCheckInSearch(lead.name);
   };
 
-  const pickGooglePlaceForCheckIn = async (place: GooglePlaceResult) => {
-    const lead = await resolvePlace(place);
+  const pickGooglePlaceForCheckIn = async (place: GooglePlaceResult, match?: FullSalesLead) => {
+    const lead = await resolvePlace(place, match);
     setSelectedLeadId(lead.id);
     setCheckInSearch(lead.name);
   };

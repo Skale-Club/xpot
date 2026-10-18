@@ -102,6 +102,15 @@ const en = {
   recordingTooLargeDesc: "Keep voice notes under five minutes.",
   removePhoto: "Remove photo",
   removeSocial: "Remove social network",
+
+  // How the check-in was validated (visit detail and history list)
+  checkInOverride: "Checked in by exception",
+  checkInOutside: "Checked in outside the radius",
+  checkInNoLocation: "Checked in without location validation",
+  checkInReason: "Reason given",
+  checkInDistance: "{distance} from the customer",
+  checkInAccuracy: "location accurate to about {accuracy}",
+  checkInNoLocationHint: "The device sent no location, or the customer has no map address.",
 };
 
 export const visitsMessages: Dictionary<typeof en> = {
@@ -202,6 +211,14 @@ export const visitsMessages: Dictionary<typeof en> = {
     recordingTooLargeDesc: "Mantenha as notas de voz abaixo de cinco minutos.",
     removePhoto: "Remover foto",
     removeSocial: "Remover rede social",
+
+    checkInOverride: "Check-in por exceção",
+    checkInOutside: "Check-in fora do raio",
+    checkInNoLocation: "Check-in sem validação de localização",
+    checkInReason: "Motivo informado",
+    checkInDistance: "{distance} do cliente",
+    checkInAccuracy: "localização com precisão de cerca de {accuracy}",
+    checkInNoLocationHint: "O aparelho não enviou localização ou o cliente não tem endereço no mapa.",
   },
   es: {
     allVisits: "Todas las visitas",
@@ -299,5 +316,13 @@ export const visitsMessages: Dictionary<typeof en> = {
     recordingTooLargeDesc: "Mantén las notas de voz por debajo de cinco minutos.",
     removePhoto: "Quitar foto",
     removeSocial: "Quitar red social",
+
+    checkInOverride: "Check-in por excepción",
+    checkInOutside: "Check-in fuera del radio",
+    checkInNoLocation: "Check-in sin validación de ubicación",
+    checkInReason: "Motivo indicado",
+    checkInDistance: "{distance} del cliente",
+    checkInAccuracy: "ubicación con precisión de unos {accuracy}",
+    checkInNoLocationHint: "El dispositivo no envió ubicación o el cliente no tiene dirección en el mapa.",
   },
 };
