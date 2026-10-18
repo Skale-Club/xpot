@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { Boxes, Building2, CircleDot, Layers, Nfc, Package, Plus, ScanLine, Users } from "lucide-react";
+import { Boxes, Building2, CircleDot, Layers, Network, Nfc, Package, Plus, ScanLine, Users } from "lucide-react";
 import { FilterBar, FilterSearch, FilterSelect } from "@/components/xpot/filters";
 import { useUrlFilters } from "@/hooks/use-url-filters";
 import { ListPager, useOffsetPages } from "@/components/xpot/pagination";
@@ -14,7 +14,8 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/xpot/EmptyState";
 import { Field, Input, Select } from "@/components/xpot/Field";
 import { ADMIN_TAGS_KEY, errorMessage, getJson, invalidateAdminTags, sendJson, STALE_MS, withQuery } from "./api";
-import { Loading, LoadError, useBatchOptions, useLeads, useReps } from "./pieces-shared";
+import { Loading, LoadError, organizationFilterOptions, useBatchOptions, useLeads, useOrganizations, useReps } from "./pieces-shared";
+import { useViewerAccess } from "@/lib/adminMode";
 import { catalogOptions, useTagCatalog } from "./batches-shared";
 import { PieceTable } from "./piece-table";
 import { useIsSuperAdmin } from "@/components/xpot/AdminBadge";
@@ -39,7 +40,7 @@ const METHOD_KEYS = [
  * Filters live in the URL (?status=…&stock=house…) so Overview links and the back button keep them. `status` is the
  * digital status (the link) and `stock` the physical piece, separately: nothing is added behind the user's back.
  */
-const PIECE_FILTERS = { status: "", stock: "", product: "", rep: "", lead: "", batch: "", method: "", search: "" };
+const PIECE_FILTERS = { status: "", stock: "", product: "", rep: "", lead: "", batch: "", method: "", search: "", org: "" };
 type Filters = Record<keyof typeof PIECE_FILTERS, string>;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -60,6 +61,8 @@ function listUrl(f: Filters, limit: number, offset: number): string {
     leadId: posInt(f.lead),
     batchId: f.batch && UUID.test(f.batch) ? f.batch : undefined,
     method: f.method === "qr" || f.method === "nfc" ? f.method : undefined,
+    // Platform management only: the server ignores it for anyone else.
+    organizationId: posInt(f.org),
     search: f.search.trim().slice(0, 100),
     limit,
     offset: offset || undefined,
@@ -145,6 +148,9 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
   const { data: reps = [] } = useReps();
   const { data: leads = [] } = useLeads();
   const { data: batches = [] } = useBatchOptions();
+  // The organization filter is platform management's (?org=, also the Organizations page's "See all in Inventory").
+  const { canManage } = useViewerAccess();
+  const { data: organizations = [] } = useOrganizations(canManage);
 
   const pieces = useOffsetPages<TagListItem>({
     queryKey: [ADMIN_TAGS_KEY, "pieces", listUrl(filters, PAGE, 0)],
@@ -172,6 +178,7 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
   const batchOptions = batches.map((b) => ({ value: b.id, label: b.batchCode }));
   if (filters.batch && !batchOptions.some((o) => o.value === filters.batch)) batchOptions.push({ value: filters.batch, label: tm("selectedBatch") });
   const methodOptions = METHOD_KEYS.map((m) => ({ value: m.value, label: tm(m.key) }));
+  const orgOptions = organizationFilterOptions(organizations, filters.org, (id) => tg("organizationNumber", { id }));
 
   return (
     <div className="space-y-4" data-testid="admin-tags-pieces">
@@ -194,6 +201,9 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
             <FilterSelect value={filters.lead} onChange={(lead) => set({ lead })} placeholder={tm("allCustomers")} options={leadOptions} icon={Building2} />
             <FilterSelect value={filters.batch} onChange={(batch) => set({ batch })} placeholder={tm("allBatches")} options={batchOptions} icon={Layers} />
             <FilterSelect value={filters.method} onChange={(method) => set({ method })} placeholder={tm("anyMethod")} options={methodOptions} icon={ScanLine} />
+            {canManage ? (
+              <FilterSelect value={filters.org} onChange={(org) => set({ org })} placeholder={tg("allOrganizations")} options={orgOptions} icon={Network} testId="admin-pieces-org" />
+            ) : null}
           </>
         }
         summary={{ shown: tags.length, active: hasFilters, onClear: () => urlFilters.reset() }}

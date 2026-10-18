@@ -26,6 +26,7 @@ import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { organizationsMessages } from "@/i18n/messages/organizations";
 import { peopleWorkspaceMessages } from "@/i18n/messages/peopleWorkspace";
+import { shellMessages } from "@/i18n/messages/shell";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { repModules } from "@shared/modules";
 import { kitCode } from "@shared/tagKits";
@@ -36,7 +37,8 @@ import type { XpotMeResponse } from "./types";
 // added and given a role. The automatic one-person workspace each new rep gets
 // (`personal`, shared/organizations.ts) is tucked away behind a toggle. The
 // Inventory, Kits and Companies tabs list the organization's records by name,
-// each row opening it on its own screen (those screens have no organization filter).
+// each row opening it on its own screen; for platform management, "See all in
+// Inventory / Distribution" opens the full list filtered to the organization (?org=).
 
 type Organization = {
   id: number;
@@ -176,6 +178,7 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
   const t = useT(organizationsMessages);
   const tt = useT(tagsMessages);
   const tw = useT(peopleWorkspaceMessages);
+  const ts = useT(shellMessages);
   const [tab, setTab] = useState<WorkspaceTab>("overview");
   const { data: me } = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"] });
   const base = `/api/xpot/organizations/${organizationId}`;
@@ -304,10 +307,12 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
         )}
         {tab === "inventory" && (
           <RecordList query={inventory} empty={t("noPieces")} rowHref={(row) => (platformManager ? `/admin/tags/pieces/${row.id}` : `/tags/pieces/${encodeURIComponent(row.publicCode)}`)}
+            seeAll={platformManager ? { href: `/admin/tags/pieces?org=${organizationId}`, label: t("seeAllIn", { screen: ts("managePieces") }), testId: "organization-inventory-all" } : undefined}
             render={(row) => <><span className="font-mono text-sm text-white">{row.publicCode}</span><span className="text-xs text-white/45">{lookup(tt, `product_${row.productType}`, String(row.productType ?? ""))} · {lookup(tt, `status_${row.status}`, String(row.status ?? ""))}</span></>} />
         )}
         {tab === "kits" && (
-          <RecordList query={kits} empty={t("noKits")} rowHref={(row) => (platformManager ? `/admin/tags/kits${row.repId ? `?kitRep=${row.repId}` : ""}` : "/tags/pieces")}
+          <RecordList query={kits} empty={t("noKits")} rowHref={(row) => (platformManager ? `/admin/tags/kits?view=kits&org=${organizationId}${row.repId ? `&kitRep=${row.repId}` : ""}` : "/tags/pieces")}
+            seeAll={platformManager ? { href: `/admin/tags/kits?view=kits&org=${organizationId}`, label: t("seeAllIn", { screen: ts("manageKits") }), testId: "organization-kits-all" } : undefined}
             render={(row) => <><span className="text-sm text-white"><span className="font-mono">{kitCode(row.kitNumber)}</span><span className="text-white/45"> · {formatDate(row.createdAt)}</span>{row.note ? <span className="text-white/45"> · {row.note}</span> : null}</span><span className="text-xs text-white/45">{repName(row.repId)}</span></>} />
         )}
         {tab === "customers" && (
@@ -401,26 +406,41 @@ function Overview({ organization, onOpen }: { organization: Organization; onOpen
   );
 }
 
-/** The organization's records, by name, each opening on its own screen. */
-function RecordList({ query, empty, render, rowHref }: {
+/**
+ * The organization's records, by name, each opening on its own screen. `seeAll` (platform management) links to the
+ * full list filtered to this organization, with its search, filters and actions.
+ */
+function RecordList({ query, empty, render, rowHref, seeAll }: {
   query: { data?: any[]; isLoading: boolean; isError: boolean; error: unknown; refetch: () => unknown };
   empty: string;
   render: (row: any) => ReactNode;
   rowHref: (row: any) => string;
+  seeAll?: { href: string; label: string; testId?: string };
 }) {
   const tw = useT(peopleWorkspaceMessages);
+  const link = seeAll ? (
+    <div className="flex justify-end">
+      <Link href={seeAll.href} className="inline-flex min-h-11 items-center gap-1 text-sm font-medium text-blue-300 hover:text-blue-200" data-testid={seeAll.testId}>
+        {seeAll.label}
+        <ChevronRight className="h-4 w-4" aria-hidden="true" />
+      </Link>
+    </div>
+  ) : null;
   if (query.isLoading) return <ListSkeleton rows={3} />;
   if (query.isError) return <ErrorState message={describeApiError(query.error)} onRetry={() => void query.refetch()} />;
   const rows = query.data ?? [];
-  if (!rows.length) return <EmptyState compact icon={Package} title={empty} />;
+  if (!rows.length) return <div className="space-y-2">{link}<EmptyState compact icon={Package} title={empty} /></div>;
   return (
-    <div className={`divide-y divide-white/[0.06] overflow-hidden rounded-2xl ${GLASS_SUBTLE_CLASS}`}>
-      {rows.map((row) => (
-        <Link key={row.id} href={rowHref(row)} className="flex min-h-11 items-center gap-3 px-4 py-3 transition-colors hover:bg-white/[0.04] focus-visible:!-outline-offset-2">
-          <span className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-x-3 gap-y-1">{render(row)}</span>
-          <ChevronRight className="h-4 w-4 shrink-0 text-white/25" aria-label={tw("openRow")} />
-        </Link>
-      ))}
+    <div className="space-y-2">
+      {link}
+      <div className={`divide-y divide-white/[0.06] overflow-hidden rounded-2xl ${GLASS_SUBTLE_CLASS}`}>
+        {rows.map((row) => (
+          <Link key={row.id} href={rowHref(row)} className="flex min-h-11 items-center gap-3 px-4 py-3 transition-colors hover:bg-white/[0.04] focus-visible:!-outline-offset-2">
+            <span className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-x-3 gap-y-1">{render(row)}</span>
+            <ChevronRight className="h-4 w-4 shrink-0 text-white/25" aria-label={tw("openRow")} />
+          </Link>
+        ))}
+      </div>
     </div>
   );
 }
