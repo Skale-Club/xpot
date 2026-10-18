@@ -2,7 +2,7 @@
 // the app (client/src/lib/inAppHistory.ts), driven here by a fake history that
 // fires wouter's pushState/replaceState events.
 import { describe, expect, it } from "vitest";
-import { cameFromInApp, installInAppHistory } from "../client/src/lib/inAppHistory";
+import { backLeavesSection, cameFromInApp, installInAppHistory, previousInAppPath } from "../client/src/lib/inAppHistory";
 
 function fakeBrowser(initialState: unknown = null) {
   const listeners = new Map<string, Array<() => void>>();
@@ -42,6 +42,33 @@ describe("in-app history", () => {
     expect(cameFromInApp(browser.history)).toBe(true);
     browser.back();
     expect(cameFromInApp(browser.history)).toBe(false);
+  });
+
+  it("remembers the screen an entry was pushed from, through redirects and Back", () => {
+    const browser = fakeBrowser();
+    const location = { pathname: "/route", search: "?routeId=3" };
+    installInAppHistory({ ...browser.target, location });
+    // Route → a company (the list's own redirect keeps the origin).
+    location.pathname = "/leads/12"; location.search = "";
+    browser.push();
+    expect(previousInAppPath(browser.history)).toBe("/route?routeId=3");
+    browser.replace(null);
+    expect(previousInAppPath(browser.history)).toBe("/route?routeId=3");
+    expect(backLeavesSection("/leads", browser.history)).toBe(true);
+    // Company → the next company, opened from the list.
+    location.pathname = "/leads/13";
+    browser.push();
+    expect(previousInAppPath(browser.history)).toBe("/leads/12");
+    expect(backLeavesSection("/leads", browser.history)).toBe(false);
+    browser.back();
+    expect(previousInAppPath(browser.history)).toBe("/route?routeId=3");
+  });
+
+  it("knows nothing of where an entry opened from outside came from", () => {
+    const browser = fakeBrowser();
+    installInAppHistory({ ...browser.target, location: { pathname: "/leads/4", search: "" } });
+    expect(previousInAppPath(browser.history)).toBeNull();
+    expect(backLeavesSection("/leads", browser.history)).toBe(false);
   });
 
   it("keeps what the app stored in the entry's state", () => {

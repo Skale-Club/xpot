@@ -34,6 +34,8 @@ import { LeadDetailPane } from "./components/leads/LeadDetailPane";
 import { CreateLeadDialog } from "./components/CreateLeadDialog";
 import { useT } from "@/i18n";
 import { leadsMessages } from "@/i18n/messages/leads";
+import { commonMessages } from "@/i18n/messages/common";
+import { backLeavesSection } from "@/lib/inAppHistory";
 import { GLASS_CLASS } from "@/components/xpot/surface";
 import { EmptyState } from "@/components/xpot/EmptyState";
 import { ListSkeleton } from "@/components/xpot/ListSkeleton";
@@ -172,6 +174,7 @@ function matchesLeadFilter(lead: FullSalesLead, filter: LeadFilter, lastOutcome?
 
 export function XpotLeads() {
   const t = useT(leadsMessages);
+  const tc = useT(commonMessages);
   const { setLocation } = useXpotQueries();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -319,7 +322,12 @@ export function XpotLeads() {
   // Moving between companies and closing replace history; only the first open
   // pushes. The query string rides along so the filters stay put.
   const openLead = (lead: FullSalesLead) => setLocation(`/leads/${lead.id}${currentSearch()}`, { replace: routeId != null });
-  const closeLead = useCallback(() => setLocation(`/leads${currentSearch()}`, { replace: true }), [setLocation]);
+  // A company opened from the Route, a task or a visit goes back there; else to the list.
+  const backOut = routeId != null && backLeavesSection("/leads");
+  const closeLead = useCallback(() => {
+    if (backLeavesSection("/leads")) window.history.back();
+    else setLocation(`/leads${currentSearch()}`, { replace: true });
+  }, [setLocation]);
 
   // Stays open with the loader until the server answers (ConfirmDialog); a failure keeps it open.
   const handleDeleteLead = async () => {
@@ -417,6 +425,7 @@ export function XpotLeads() {
             pieces={piecesFor(selectedLead.id)}
             visits={visitsByLead.get(selectedLead.id) ?? []}
             onClose={closeLead}
+            backLabel={backOut ? tc("back") : undefined}
             onDelete={() => setLeadPendingDelete(selectedLead)}
             onConvertToCustomer={() => convertToCustomer.mutate(selectedLead.id)}
             converting={convertToCustomer.isPending}

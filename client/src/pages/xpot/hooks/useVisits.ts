@@ -44,10 +44,11 @@ export function useVisits() {
       });
       return response.json();
     },
-    onSuccess: async (visit: { id: number }) => {
+    onSuccess: async (visit: { id: number; routeId?: number | null }) => {
       toast({ title: t("visitCompleted"), variant: "success" });
       await invalidateXpotData();
-      setLocation(`/dashboard/history/${visit.id}`);
+      // A stop of a route goes back to the route, for the next stop; any other visit shows its summary.
+      setLocation(visit.routeId ? `/route?routeId=${visit.routeId}` : `/dashboard/history/${visit.id}`);
     },
     onError: (error: Error) => {
       toast({ title: t("checkOutFailed"), description: error.message, variant: "destructive" });
