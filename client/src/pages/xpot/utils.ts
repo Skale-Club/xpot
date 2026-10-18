@@ -18,7 +18,6 @@ import {
   formatTime,
 } from "@/lib/format";
 import { normalizePhone } from "@shared/phone";
-import { formatDistanceFor } from "./distance";
 
 // Dates, money and durations come from lib/format.ts (the app language, one
 // shape everywhere). These names stay because the Visits screens and a few
@@ -79,11 +78,6 @@ export function formatMeters(meters: number) {
   if (value < 1000) return `${value} m`;
   const km = new Intl.NumberFormat(currentLocale(), { maximumFractionDigits: value < 10_000 ? 1 : 0 }).format(value / 1000);
   return `${km} km`;
-}
-
-/** A route distance in the reader's units: miles in English, km in Portuguese and Spanish. */
-export function formatDistance(meters: number) {
-  return formatDistanceFor(meters, currentLocale());
 }
 
 export function normalizeSearchValue(value?: string | null) {
