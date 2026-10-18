@@ -4,13 +4,14 @@
 // business runs on: what the shop pays us, minus what the unit cost to make.
 
 import { useState } from "react";
-import { Archive, Layers, Package, Pencil, Plus, Trash2 } from "lucide-react";
+import { Archive, ArchiveRestore, Layers, Package, Pencil, Plus, Trash2 } from "lucide-react";
 import { unitMarginCents } from "#shared/pricing.js";
 import { centsToInput, inputToCents } from "@/pages/xpot/utils";
 import { formatMoney } from "@/lib/format";
 import { useT } from "@/i18n";
 import { adminUiMessages } from "@/i18n/messages/adminUi";
 import { manageMessages } from "@/i18n/messages/manage";
+import { peopleWorkspaceMessages } from "@/i18n/messages/peopleWorkspace";
 import {
   useProducts, useProductMutations, type ProductWithTiers, type ProductInput,
 } from "@/pages/xpot/hooks/useSalesModule";
@@ -24,6 +25,7 @@ import { FormFooter } from "@/components/xpot/FormFooter";
 import { ListSkeleton } from "@/components/xpot/ListSkeleton";
 import { ListPager, usePagedList } from "@/components/xpot/pagination";
 import { Pill } from "@/components/xpot/StatusPill";
+import { Segmented } from "@/components/xpot/Segmented";
 import { SwitchRow } from "@/components/xpot/SwitchRow";
 import { GLASS_SUBTLE_CLASS } from "@/components/xpot/surface";
 
@@ -84,26 +86,33 @@ function CentsInput({ valueCents, onChangeCents, id, ...aria }: {
 
 export function AdminProducts() {
   const query = useProducts({ all: true });
-  const { remove } = useProductMutations();
+  const { remove, update } = useProductMutations();
   const t = useT(manageMessages);
   const tu = useT(adminUiMessages);
+  const tw = useT(peopleWorkspaceMessages);
   const money = (cents: number | null | undefined, currency: string) => formatMoney(cents, currency, t.locale);
   const [editing, setEditing] = useState<ProductWithTiers | null>(null);
   const [creating, setCreating] = useState(false);
   const [tiersFor, setTiersFor] = useState<ProductWithTiers | null>(null);
   const [archiving, setArchiving] = useState<ProductWithTiers | null>(null);
   const [search, setSearch] = useState("");
+  // Archived products sit in their own tab, where they can be brought back.
+  const [chosenView, setView] = useState<"active" | "archived">("active");
 
   const all = query.data ?? [];
-  const products = all.filter((p) => matches(p, search));
-  const page = usePagedList(products, { resetKey: search });
+  const archivedCount = all.filter((p) => !p.isActive).length;
+  // The last archived product brought back: the tab goes away, so the list returns to Active.
+  const view = archivedCount === 0 ? "active" : chosenView;
+  const inView = all.filter((p) => (view === "active" ? p.isActive : !p.isActive));
+  const products = inView.filter((p) => matches(p, search));
+  const page = usePagedList(products, { resetKey: `${search}|${view}` });
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-sm font-semibold text-white/80">{t("catalog")}</h2>
-          <p className="text-xs text-white/40">{t("catalogHint")}</p>
+          <p className="text-xs text-white/40">{tw("productsTagsNote")}</p>
         </div>
         <Button variant="brand" onClick={() => setCreating(true)}>
           <Plus /> {t("newProduct")}
@@ -111,10 +120,24 @@ export function AdminProducts() {
       </div>
 
       {all.length > 0 && (
-        <FilterBar
-          search={<FilterSearch value={search} onChange={setSearch} placeholder={tu("searchProducts")} testId="products-search" />}
-          summary={{ active: search.trim() !== "", shown: products.length, total: all.length, onClear: () => setSearch("") }}
-        />
+        <>
+          {archivedCount > 0 && (
+            <Segmented
+              className="sm:max-w-xs"
+              ariaLabel={t("catalog")}
+              value={view}
+              onChange={setView}
+              items={[
+                { id: "active", label: tw("productsActive"), count: all.length - archivedCount },
+                { id: "archived", label: tw("productsArchived"), count: archivedCount },
+              ]}
+            />
+          )}
+          <FilterBar
+            search={<FilterSearch value={search} onChange={setSearch} placeholder={tu("searchProducts")} testId="products-search" />}
+            summary={{ active: search.trim() !== "", shown: products.length, total: inView.length, onClear: () => setSearch("") }}
+          />
+        </>
       )}
 
       {query.isLoading ? (
@@ -123,6 +146,8 @@ export function AdminProducts() {
         <ErrorState message={tu("productsLoadFailed")} onRetry={() => void query.refetch()} />
       ) : all.length === 0 ? (
         <EmptyState icon={Package} title={t("noProducts")} />
+      ) : inView.length === 0 ? (
+        <EmptyState compact icon={Package} title={view === "archived" ? tw("noArchivedProducts") : t("noProducts")} />
       ) : products.length === 0 ? (
         <EmptyState compact icon={Package} title={tu("noProductsMatch")} />
       ) : (
@@ -130,7 +155,7 @@ export function AdminProducts() {
           {page.visible.map((p) => {
             const margin = unitMarginCents(p.basePriceCents, p.costCents);
             return (
-              <div key={p.id} className={`flex flex-wrap items-center gap-3 px-4 py-3 ${p.isActive ? "" : "opacity-50"}`}>
+              <div key={p.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="truncate text-sm font-medium text-white">{p.name}</span>
@@ -160,9 +185,15 @@ export function AdminProducts() {
                   <Button variant="ghost" size="icon" onClick={() => setEditing(p)} title={t("edit")} aria-label={t("edit")}>
                     <Pencil />
                   </Button>
-                  {p.isActive && (
+                  {p.isActive ? (
                     <Button variant="ghost" size="icon" onClick={() => setArchiving(p)} disabled={remove.isPending} title={t("archive")} aria-label={t("archive")}>
                       <Archive />
+                    </Button>
+                  ) : (
+                    // Unarchiving is setting it active again (PATCH isActive), so reps can sell it.
+                    <Button variant="secondary" size="sm" onClick={() => update.mutate({ id: p.id, isActive: true })} loading={update.isPending && update.variables?.id === p.id} data-testid={`unarchive-${p.id}`}>
+                      <ArchiveRestore />
+                      {tw("unarchive")}
                     </Button>
                   )}
                 </div>
