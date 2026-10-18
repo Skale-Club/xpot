@@ -21,7 +21,9 @@ import {
   updateOrganizationMember,
   type OrganizationActor,
 } from "../../organizations/service.js";
-import { deliverKit } from "../../tags/repository.js";
+import { deliverKit, TagError, tagErrorBody } from "../../tags/repository.js";
+import { kitCostRequired, kitOwnership } from "#shared/tagKits.js";
+import { storage } from "../../storage.js";
 
 const id = z.coerce.number().int().positive();
 const membershipRole = z.enum(["admin", "member"]);
@@ -38,6 +40,7 @@ function route(handler: (req: any) => Promise<unknown>, status = 200) {
       if (error instanceof OrganizationError || error instanceof AccountError) {
         return res.status(error.status).json({ message: error.message });
       }
+      if (error instanceof TagError) return res.status(error.status).json(tagErrorBody(error));
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: error.issues[0]?.message ?? "Invalid input" });
       }
@@ -162,8 +165,16 @@ export function createOrganizationsRouter() {
     const members = await listOrganizationMembers(organizationId, actor);
     const target = members.find((member) => member.repId === input.repId && member.isActive && !member.blockedAt);
     if (!target) throw new OrganizationError("The target Rep is not active in this Organization.", 400);
+    // The same cost rule as the Distribution hand-out (server/tags/routes.ts, shared/tagKits.ts): a rep on the
+    // zero-cost rule holds company stock even with a reference cost; the acquisition rule needs a cost.
+    const rep = await storage.getSalesRep(input.repId);
+    const policy = rep?.costPolicy === "zero" ? "zero" : "acquisition";
+    if (kitCostRequired(policy) && input.unitCostCents === undefined) {
+      throw new TagError("Unit acquisition cost is required for this partner", 400, "tag_cost_required");
+    }
     return deliverKit({
       ...input,
+      ownershipType: kitOwnership(policy),
       organizationId,
       sourceOrganizationId: managesEveryOrganization(actor) ? undefined : organizationId,
     }, actor.user.userId);
