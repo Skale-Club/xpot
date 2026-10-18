@@ -73,7 +73,7 @@ export function CodeLookup({ onFound, fill = false }: { onFound: (id: string) =>
         onChange={(e) => setCode(e.target.value)}
         placeholder={t("codePlaceholder")}
         aria-label={t("codePlaceholder")}
-        className={`min-h-10 min-w-0 font-mono ${fill ? "flex-1" : "w-48"}`}
+        className={`min-h-10 min-w-0 font-mono ${fill ? "flex-1" : "w-48 xl:w-60"}`}
         autoCapitalize="characters"
         autoCorrect="off"
         spellCheck={false}

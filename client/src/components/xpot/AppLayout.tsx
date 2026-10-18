@@ -172,7 +172,7 @@ function SidebarLink({ item, collapsed, active, accent, warningLabel }: { item: 
           role="img"
         />
       ) : null}
-      {item.adminOnly && (collapsed ? <AdminBadge dot className="absolute right-1.5 top-1.5" /> : <AdminBadge className="relative ml-auto" />)}
+      {item.adminOnly && (collapsed ? <AdminBadge dot className="absolute right-1.5 top-1.5" /> : <AdminBadge compact className="relative ml-auto" />)}
     </Link>
   );
 }
