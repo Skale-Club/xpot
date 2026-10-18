@@ -28,6 +28,7 @@ import { organizationsMessages } from "@/i18n/messages/organizations";
 import { peopleWorkspaceMessages } from "@/i18n/messages/peopleWorkspace";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { repModules } from "@shared/modules";
+import { kitCode } from "@shared/tagKits";
 import type { XpotMeResponse } from "./types";
 
 // Account › Organizations. People are created, approved and blocked only in
@@ -307,7 +308,7 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
         )}
         {tab === "kits" && (
           <RecordList query={kits} empty={t("noKits")} rowHref={(row) => (platformManager ? `/admin/tags/kits${row.repId ? `?kitRep=${row.repId}` : ""}` : "/tags/pieces")}
-            render={(row) => <><span className="text-sm text-white">{t("kitOf", { date: formatDate(row.createdAt) })}{row.note ? <span className="text-white/45"> · {row.note}</span> : null}</span><span className="text-xs text-white/45">{repName(row.repId)}</span></>} />
+            render={(row) => <><span className="text-sm text-white"><span className="font-mono">{kitCode(row.kitNumber)}</span><span className="text-white/45"> · {formatDate(row.createdAt)}</span>{row.note ? <span className="text-white/45"> · {row.note}</span> : null}</span><span className="text-xs text-white/45">{repName(row.repId)}</span></>} />
         )}
         {tab === "customers" && (
           <RecordList query={customers} empty={t("noCustomers")} rowHref={(row) => (usesVisits ? `/leads/${row.id}` : `/tags/customers/${row.id}`)}
