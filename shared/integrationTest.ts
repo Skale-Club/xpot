@@ -9,6 +9,7 @@ export const INTEGRATION_TEST_CODES = [
   "missing_secret",
   "location_required",
   "timeout",
+  "unreachable",
   "server_error",
   "not_implemented",
   "twilio_ok",

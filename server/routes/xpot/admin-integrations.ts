@@ -127,6 +127,11 @@ export function createAdminIntegrationsRouter() {
         return res.json(await withCheck(def.provider, testResult(false, "timeout", err.message, { seconds: TEST_TIMEOUT_MS / 1000 })));
       }
       const reason = (err as Error).message || String(err);
+      // undici's network failure (DNS, refused, TLS): the provider was never reached.
+      if (err instanceof TypeError && reason === "fetch failed") {
+        const cause = (err as Error & { cause?: { message?: string } }).cause?.message;
+        return res.json(await withCheck(def.provider, testResult(false, "unreachable", `Could not reach the provider: ${cause ?? reason}`, undefined, cause ?? reason)));
+      }
       return res.json(await withCheck(def.provider, testResult(false, "server_error", `Server error while testing: ${reason}`, undefined, reason)));
     }
   });
