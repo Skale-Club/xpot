@@ -227,13 +227,14 @@ O que mudou e por quê, as seis decisões de produto e como conferir:
 | ✅ UXR-15 | Alto | **Quatro caminhos para entregar peças; kit sem histórico.** Distribuição com simulação, kits numerados com histórico (`tag_kit_items`), recebimento do lote com desfazer. | ✅ `35d83fe`, `d6805d0` (migração 0054) |
 | ✅ UXR-16 | Alto | **Duas telas de peça que não se ligavam; cancelar venda deixava a peça vendida.** Uma tela por seções conforme o papel; cancelar devolve ao estoque. | ✅ `524ae0a`, `1e50189`, `88b85c0` |
 | ✅ UXR-17 | Alto | **Cinco lugares para gerenciar pessoas.** Pessoas é o único lugar; Organizações só vincula pessoas existentes; Visão geral de Visitas por período e por vendedor. | ✅ `1ddaeee`, `02afe53` |
+| ✅ UXR-18 | Baixo | **Código morto** (Fase 4a): `RouteSettings`, importação CSV sem tela, a API Xphere do vendedor, `markLeadCustomer`, `/tags/summary`, 216 chaves de i18n sem uso (com teste que impede novas). As rotas-alias antigas ficam, por causa de favoritos. | ✅ Fase 4a (`f9ecb66`, `f63cfcd`, `85a38d5`) |
 | ✅ UXR-19 | Baixo | **README e docs desatualizados** (local do MCP, Xphere em Configurações, "por usuário", `PROSPECTING_DAILY_ROUTE.md` inexistente). | ✅ Fase 4b |
+| ✅ UXR-28 | Baixo | **`GET /api/xpot/tags/:id/dashboard` sem chamadores** desde a tela única de peça. Remover. | ✅ Fase 4a (`36e1951`) |
 
 ### Aberto
 
 | ID | Sev | Item | Estado |
 |---|---|---|---|
-| UXR-18 | Baixo | **Código morto** (Fase 4a): `RouteSettings`, importação CSV sem tela, a API Xphere do vendedor, `markLeadCustomer`, `/tags/summary`, 216 chaves de i18n sem uso (com teste que impede novas). As rotas-alias antigas ficam, por causa de favoritos. | Feito (Fase 4a) |
 | UXR-20 | Médio | **Cancelar uma busca de prospecção presa.** `server/prospecting/**` não tem cancelamento de job ou run; Status só oferece Retry e "Montar a rota de novo". | A fazer |
 | UXR-21 | Baixo | **Filtro por vendedor no histórico de visitas.** Sem ele, a página da pessoa em Pessoas não tem o atalho "visitas dela" (tem peças e kits). | A fazer |
 | UXR-22 | Médio | **Filtro por organização em Inventário, Kits e Empresas.** Sem ele, as abas de Organizações ficam como listas só de leitura. | A fazer |
@@ -241,8 +242,7 @@ O que mudou e por quê, as seis decisões de produto e como conferir:
 | UXR-24 | Baixo | **Tipos de lugar do Google sem tradução.** `primaryType` aparece cru na busca de empresas (`PlaceLeadSearch`); não há fonte de tradução. | A fazer |
 | UXR-25 | Baixo | **Página de consentimento OAuth (MCP) e resultados de "Testar" das integrações em inglês.** | A fazer |
 | UXR-26 | Baixo | **Recusas antigas com motivo próprio aparecem como Bloqueado.** Só o texto padrão é reconhecido como recusa; não há marcador para as demais. | A fazer |
-| UXR-27 | Baixo | **Linhas do Xphere e o card CRM de Integrações levarem à pessoa** (`/admin/reps/:repId`). | A fazer (conferir no merge da 4a) |
-| UXR-28 | Baixo | **`GET /api/xpot/tags/:id/dashboard` sem chamadores** desde a tela única de peça. Remover. | Feito (Fase 4a, `36e1951`) |
+| UXR-27 | Baixo | **Linhas do Xphere e o card CRM de Integrações levarem à pessoa** (`/admin/reps/:repId`). | A fazer (conferido em 2026-10-18: nenhuma linha do Xphere leva à pessoa) |
 | UXR-29 | Baixo | **Retry de oportunidades em Status › Sync do CRM.** Elas aparecem na lista, mas `POST /api/xpot/sync/retry` não as aceita. | A fazer |
 | UXR-30 | Baixo | **Aviso de alterações não salvas em Integrações** cobre só a troca de provedor; a Landing tem o aviso completo. | A fazer |
 | UXR-31 | Baixo | **Quem cancela uma venda de Tags.** A tela mostra "Cancelar venda" só a gerentes; o servidor também deixa o próprio vendedor (com Visitas) cancelar. | Decidir |

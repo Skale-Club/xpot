@@ -37,8 +37,8 @@ const en = {
 export const prospectingUiMessages: Dictionary<typeof en> = {
   en,
   pt: {
-    routeLine: "{status} · {duration} previstas · {distance}",
-    routePlanLine: "{duration} previstas · {distance}",
+    routeLine: "{status} · duração prevista {duration} · {distance}",
+    routePlanLine: "Duração prevista {duration} · {distance}",
     routeDetailLine: "{count} paradas · cerca de {duration} · {distance}",
     noEligibleTitle: "Nenhum local elegível encontrado",
     noEligibleHint: "Todas as empresas encontradas aqui já são clientes, já foram visitadas ou conflitam com outra rota. Tente outra cidade ou mais tipos de negócio.",
@@ -65,8 +65,8 @@ export const prospectingUiMessages: Dictionary<typeof en> = {
     reasonsLabel: "Por que entrou",
   },
   es: {
-    routeLine: "{status} · {duration} previstas · {distance}",
-    routePlanLine: "{duration} previstas · {distance}",
+    routeLine: "{status} · duración prevista {duration} · {distance}",
+    routePlanLine: "Duración prevista {duration} · {distance}",
     routeDetailLine: "{count} paradas · cerca de {duration} · {distance}",
     noEligibleTitle: "No se encontraron lugares elegibles",
     noEligibleHint: "Todos los negocios encontrados aquí ya son clientes, ya fueron visitados o chocan con otra ruta. Prueba otra ciudad o más tipos de negocio.",
@@ -84,7 +84,7 @@ export const prospectingUiMessages: Dictionary<typeof en> = {
     legendCurrent: "Parada actual",
     legendNext: "Próxima parada",
     legendPlanned: "Planificada",
-    legendDone: "Hecha",
+    legendDone: "Completada",
     legendSkipped: "Omitida",
     legendYou: "Tú",
     gestureMobile: "Usa dos dedos para mover el mapa",

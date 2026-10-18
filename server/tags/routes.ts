@@ -950,8 +950,9 @@ export function registerTagRoutes(app: Express) {
     }
   });
 
-  // Undo a read the intake station just made: the piece goes back to "not received" (an issued code) or is removed
-  // (a scanned batch's newest piece). Refused once anything else happened to it (server/tags/repository.ts).
+  // Undo a read the intake station just made: the piece goes back to "not received" and stays registered to the batch
+  // (stock movements are append-only, so a received piece is never deleted). Refused once anything else happened to
+  // it (server/tags/repository.ts undoBatchIntake).
   app.delete("/api/xpot/admin/tag-batches/:id/tags/:tagId", requireTagAdmin, async (req, res) => {
     const id = idParam(req, res);
     if (!id) return;

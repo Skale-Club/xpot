@@ -92,7 +92,7 @@ export const settingsMessages: Dictionary<typeof en> = {
     role: "Papel",
     role_rep: "Vendedor",
     role_manager: "Gerente",
-    role_admin: "Admin Xpot",
+    role_admin: "Admin do Xpot",
 
     saveFailed: "Não foi possível salvar",
     saveChanges: "Salvar alterações",
@@ -135,7 +135,7 @@ export const settingsMessages: Dictionary<typeof en> = {
     role: "Rol",
     role_rep: "Vendedor",
     role_manager: "Gerente",
-    role_admin: "Admin Xpot",
+    role_admin: "Admin de Xpot",
 
     saveFailed: "No se pudo guardar",
     saveChanges: "Guardar cambios",

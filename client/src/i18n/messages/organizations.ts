@@ -130,12 +130,12 @@ export const organizationsMessages: Dictionary<typeof en> = {
     customer_prospect: "Prospecto",
     customer_lead: "Em negociação",
     customer_active: "Cliente",
-    customer_inactive: "Inativo",
+    customer_inactive: "Inativa",
     customer_customer: "Cliente",
 
     orgName: "Nome da organização",
     orgSaved: "Organização salva",
-    settingsReadOnly: "Só um admin Xpot ou um gerente pode editar as configurações da organização.",
+    settingsReadOnly: "Só um admin do Xpot ou um gerente pode editar as configurações da organização.",
   },
   es: {
     title: "Organizaciones",
@@ -195,11 +195,11 @@ export const organizationsMessages: Dictionary<typeof en> = {
     customer_prospect: "Prospecto",
     customer_lead: "En negociación",
     customer_active: "Cliente",
-    customer_inactive: "Inactivo",
+    customer_inactive: "Inactiva",
     customer_customer: "Cliente",
 
     orgName: "Nombre de la organización",
     orgSaved: "Organización guardada",
-    settingsReadOnly: "Solo un admin Xpot o un gerente puede editar los ajustes de la organización.",
+    settingsReadOnly: "Solo un admin de Xpot o un gerente puede editar los ajustes de la organización.",
   },
 };
