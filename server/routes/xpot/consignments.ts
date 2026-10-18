@@ -2,7 +2,8 @@ import { Router } from "express";
 import { z } from "zod";
 import { storage } from "../../storage.js";
 import { salesStorage } from "../../storage-sales.js";
-import { requireXpotUser, isManagerOrAdmin, loadAccessibleLead, type XpotActor, listsEveryone } from "./middleware.js";
+import { requireXpotUser, isManagerOrAdmin, loadAccessibleLead, type XpotActor, listScope, recordFilters } from "./middleware.js";
+import { canManageOrganizationForActor } from "../../organizations/service.js";
 import {
   xpotConsignmentDepositSchema,
   xpotConsignmentSettleSchema,
@@ -25,7 +26,9 @@ export function createConsignmentsRouter() {
       res.status(404).json({ code: "consignment_not_found", message: "Consignment not found" });
       return null;
     }
-    if (!isManagerOrAdmin(actor) && row.consignment.repId !== actor.rep.id) {
+    // The rep who left the stock, a Rep Admin of its organization (as with a sale), or a manager.
+    if (!isManagerOrAdmin(actor) && row.consignment.repId !== actor.rep.id &&
+      !(await canManageOrganizationForActor(actor, row.consignment.organizationId))) {
       res.status(403).json({ code: "access_denied", message: "Access denied" });
       return null;
     }
@@ -51,8 +54,9 @@ export function createConsignmentsRouter() {
   router.get("/consignments", async (req, res) => {
     const actor = (req as any).xpotActor as XpotActor;
     const q = listQuerySchema.parse(req.query);
-    const repId = listsEveryone(req, actor) ? q.repId : actor.rep.id;
-    res.json(await salesStorage.listConsignments({ repId, leadId: q.leadId, status: q.status }));
+    // The same scope as the sales lists and the Sales summary's stock figures.
+    const { repId, organizationIds } = recordFilters(await listScope(req, actor), actor, q.repId);
+    res.json(await salesStorage.listConsignments({ repId, organizationIds, leadId: q.leadId, status: q.status }));
   });
 
   router.get("/consignments/:id", async (req, res) => {

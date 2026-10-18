@@ -65,10 +65,13 @@ export function XpotTasks() {
   const [editing, setEditing] = useState<EnrichedTask | null>(null);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<Form>(emptyForm);
-  const organizationId = me?.organizations?.[0]?.id;
   // The team's tasks and assigning to others are management: only in management mode,
   // like every other list (the server narrows "all" to the person's own outside it).
-  const { canManage } = useViewerAccess();
+  // A Rep Admin's team is the organization they run (the server keeps it to that).
+  const { adminMode: canManage, reach } = useViewerAccess();
+  const organizationId = (reach === "organization"
+    ? me?.organizations?.find((organization) => organization.membershipRole === "admin" && !organization.personal)
+    : me?.organizations?.[0])?.id;
   const team = canManage && filters.values.team === "1";
 
   const taskParams = new URLSearchParams({ status: status === "open" ? "pending,in_progress" : status });

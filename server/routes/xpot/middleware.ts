@@ -137,6 +137,64 @@ export function listsEveryone(req: Request, actor: { user: SessionUser; rep: { r
   return isManagerOrAdmin(actor) && !viewsAsRep(req);
 }
 
+/**
+ * The app's management mode is on ("X-Xpot-View: manage"). A manager's lists
+ * widen without it too (no header means management, as before); for a Rep
+ * Admin of an organization it is the only way their lists widen, so an API
+ * call that says nothing gets their own records.
+ */
+export function inManagementView(req: Request): boolean {
+  return req.get("x-xpot-view") === "manage";
+}
+
+/**
+ * Whose records a list shows:
+ * - `everyone`: a manager or admin in management mode (listsEveryone);
+ * - `organizations`: a Rep Admin in management mode, the organizations they
+ *   run and no other (managedOrganizationIds);
+ * - `own`: everyone else, and both of them with management mode off. Their own
+ *   records, in the organizations they are still active in (null: no limit).
+ * Lists that have no organization (visits, opportunities, Tags) widen only
+ * for `everyone`.
+ */
+export type ListScope =
+  | { kind: "everyone" }
+  | { kind: "organizations"; organizationIds: number[]; activeOrganizationIds: number[] | null }
+  | { kind: "own"; activeOrganizationIds: number[] | null };
+
+export async function listScope(req: Request, actor: XpotActor): Promise<ListScope> {
+  if (listsEveryone(req, actor)) return { kind: "everyone" };
+  const { activeOrganizationIds, managedOrganizationIds } = await import("../../organizations/service.js");
+  const active = await activeOrganizationIds(actor);
+  if (!isManagerOrAdmin(actor) && inManagementView(req)) {
+    const managed = await managedOrganizationIds(actor);
+    if (managed?.length) return { kind: "organizations", organizationIds: managed, activeOrganizationIds: active };
+  }
+  return { kind: "own", activeOrganizationIds: active };
+}
+
+/**
+ * The repId / organizationIds filters of a sales or consignment list for a
+ * scope. `requestedRepId` (?repId=) narrows a wide scope to one person, and
+ * `requestedOrganizationId` (?organizationId=) a manager's everyone to one
+ * organization; both are ignored in a narrower scope. Asking for yourself is
+ * your own records, in every scope (the Dashboard does).
+ */
+export function recordFilters(
+  scope: ListScope,
+  actor: Pick<XpotActor, "rep">,
+  requestedRepId?: number,
+  requestedOrganizationId?: number,
+): { repId?: number; organizationIds?: number[] } {
+  if (scope.kind === "everyone") {
+    return { repId: requestedRepId, organizationIds: requestedOrganizationId ? [requestedOrganizationId] : undefined };
+  }
+  if (scope.kind === "organizations" && requestedRepId !== actor.rep.id) {
+    return { repId: requestedRepId, organizationIds: scope.organizationIds };
+  }
+  return { repId: actor.rep.id, organizationIds: scope.activeOrganizationIds ?? undefined };
+}
+
 export async function requireXpotManager(req: Request, res: Response, next: NextFunction) {
   try {
     const actor = await ensureXpotRep(req);

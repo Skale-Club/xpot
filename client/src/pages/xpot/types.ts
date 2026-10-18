@@ -94,7 +94,7 @@ export type SalesLeadPayload = {
 export type XpotMeResponse = {
   user: { id: string; email: string; firstName?: string | null; lastName?: string | null; isAdmin: boolean; profileImageUrl?: string | null; /** The sign-in phone (E.164), not the profile's contact phone. */ phone?: string | null };
   rep: { id: number; displayName: string; email?: string; phone?: string; team?: string; role: string; avatarUrl?: string | null; isActive?: boolean; modules?: string[]; costPolicy?: "zero" | "acquisition"; costPolicyConfiguredAt?: string | null; homeAddress?: string | null; homeLat?: string | null; homeLng?: string | null; routeReturnHome?: boolean; wholesaleCode?: string | null };
-  organizations?: Array<{ id: number; name: string; slug: string; isActive: boolean; membershipRole?: "admin" | "member" }>;
+  organizations?: Array<{ id: number; name: string; slug: string; isActive: boolean; membershipRole?: "admin" | "member"; /** The automatic one-person workspace (shared/organizations.ts isPersonalOrganization). */ personal?: boolean }>;
   organizationMemberships?: Array<{ organizationId: number; role: "admin" | "member"; isActive: boolean; blockedAt?: string | null }>;
   activeVisit: (SalesVisit & { lead?: SalesLead; note?: SalesVisitNote }) | null;
   checkInRules?: CheckInRules;

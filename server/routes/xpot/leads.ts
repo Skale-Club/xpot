@@ -2,12 +2,12 @@ import { Router } from "express";
 import { z } from "zod";
 import { storage, type LeadVisibility } from "../../storage.js";
 import { repModules } from "#shared/modules.js";
-import { canAccessLead, requireXpotUser, requireVisitsModule, ensureXpotRep, isManagerOrAdmin, loadAccessibleLead, listsEveryone, ownsLead, refuseNotOwner } from "./middleware.js";
+import { canAccessLead, requireXpotUser, requireVisitsModule, ensureXpotRep, isManagerOrAdmin, loadAccessibleLead, listScope, listsEveryone, ownsLead, refuseNotOwner, type XpotActor } from "./middleware.js";
 import { xpotLeadCreateSchema, xpotLeadUpdateSchema, xpotLeadContactCreateSchema } from "#shared/xpot.js";
 import { syncLeadToGhl, syncLeadToXphere } from "./helpers.js";
 import { salesStorage } from "../../storage-sales.js";
 import { activeStore, discardFiles, putPrivateFile } from "../../lib/files.js";
-import { activeOrganizationIds, canManageOrganizationForActor, managedOrganizationIds, organizationIdForRep } from "../../organizations/service.js";
+import { canManageOrganizationForActor, organizationIdForRep } from "../../organizations/service.js";
 import { resolveGoogleApiKey } from "./google.js";
 import { fetchGooglePlaceProfile, geocodeAddress } from "./google-place-profile.js";
 import { planPrimaryLocationUpdate } from "../../lead-location.js";
@@ -21,32 +21,38 @@ export function createLeadsRouter() {
   const router = Router();
   router.use(requireXpotUser);
 
-  // GET /leads — rep sees own; manager/admin sees all (optional ?repId= filter)
+  // GET /leads — whose companies follow management mode (listScope): with it
+  // off, your own; on, a manager's everyone (optional ?repId= and
+  // ?organizationId=) and a Rep Admin's organizations.
   router.get("/leads", async (req, res) => {
-    const actor = (req as any).xpotActor as Awaited<ReturnType<typeof ensureXpotRep>>;
+    const actor = (req as any).xpotActor as XpotActor;
 
     let ownerRepId: number | undefined;
+    let organizationIds: number[] | undefined;
     let visibleTo: LeadVisibility | undefined;
     // Whose follow-up tasks count: everyone's for a manager, the rep's own otherwise (as on GET /leads/:id).
     let taskRepId: number | undefined;
-    if (listsEveryone(req, actor!)) {
-      // Manager can filter by a specific rep
+    const scope = await listScope(req, actor);
+    if (scope.kind === "everyone") {
+      // Manager can filter by a specific rep, and by one organization
       ownerRepId = req.query.repId ? Number(req.query.repId) : undefined;
+      const organizationId = Number(req.query.organizationId);
+      if (Number.isInteger(organizationId) && organizationId > 0) organizationIds = [organizationId];
     } else {
-      // A Rep Admin's Organization, plus their own leads wherever they belong, plus
-      // the companies holding their Tags pieces. A rep is often Rep Admin of their
-      // personal Organization and a member of another one, so scoping to either
-      // alone hid the customers their pieces were linked to.
-      const [managed, active] = await Promise.all([managedOrganizationIds(actor!), activeOrganizationIds(actor!)]);
-      visibleTo = { repId: actor!.rep.id, managedOrganizationIds: managed ?? [], activeOrganizationIds: active };
-      // A Rep Admin sees their Organization's follow-ups; a plain rep only their own.
-      if (!managed?.length) taskRepId = actor!.rep.id;
+      // Their own leads wherever they belong, plus the companies holding their
+      // Tags pieces (a rep is often Rep Admin of their personal Organization and
+      // a member of another one, so scoping to either alone hid the customers
+      // their pieces were linked to), plus, in management mode, the
+      // organizations a Rep Admin runs, whose follow-ups then count too.
+      const managed = scope.kind === "organizations" ? scope.organizationIds : [];
+      visibleTo = { repId: actor.rep.id, managedOrganizationIds: managed, activeOrganizationIds: scope.activeOrganizationIds };
+      if (!managed.length) taskRepId = actor.rep.id;
     }
 
     const search = typeof req.query.search === "string" ? req.query.search : undefined;
     const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 100));
     const offset = Math.max(0, Number(req.query.offset) || 0);
-    const leads = await storage.listSalesLeads({ ownerRepId, visibleTo, search, limit, offset });
+    const leads = await storage.listSalesLeads({ ownerRepId, organizationIds, visibleTo, search, limit, offset });
 
     if (!leads.length) return res.json([]);
 

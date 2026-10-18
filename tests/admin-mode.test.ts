@@ -25,17 +25,17 @@ describe("management mode", () => {
     expect(viewHeaders()).toEqual({ "X-Xpot-View": "rep" });
   });
 
-  it("on, the headers no longer narrow, and the choice is remembered", async () => {
+  it("on, the headers ask for the management view, and the choice is remembered", async () => {
     const { setAdminMode, viewHeaders } = await import("../client/src/lib/adminMode");
     setAdminMode(true);
-    expect(viewHeaders()).toEqual({});
+    expect(viewHeaders()).toEqual({ "X-Xpot-View": "manage" });
     expect(values.get("xpot.adminMode")).toBe("1");
   });
 
   it("signing out forgets it", async () => {
     values.set("xpot.adminMode", "1");
     const { clearAdminMode, viewHeaders } = await import("../client/src/lib/adminMode");
-    expect(viewHeaders()).toEqual({});
+    expect(viewHeaders()).toEqual({ "X-Xpot-View": "manage" });
     clearAdminMode();
     expect(viewHeaders()).toEqual({ "X-Xpot-View": "rep" });
     expect(values.has("xpot.adminMode")).toBe(false);
