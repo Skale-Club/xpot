@@ -8,7 +8,7 @@ import { storage } from "../../storage.js";
 import { ensureWholesaleCode } from "../../wholesale/index.js";
 import { formatWholesaleCode } from "#shared/wholesale.js";
 import { ensureOrganizationForRep } from "../../organizations/service.js";
-import { isRefusal, refusalReason } from "#shared/repAccess.js";
+import { refusalReason } from "#shared/repAccess.js";
 
 // Who may use Xpot is decided by the Xpot team. People sign up themselves (by
 // phone) and wait for approval, or an admin creates their access directly;
@@ -106,7 +106,7 @@ function assertMayManage(rep: SalesRep, actor: Actor) {
   if (rep.role !== "rep" && !actor.isAdmin) throw new AccountError("Only an Xpot admin can change a manager's or admin's access.", 403, "access_change_admin_only");
 }
 
-async function setAccess(repId: number, patch: Partial<Pick<SalesRep, "isActive" | "blockedAt" | "blockedReason" | "modules">>) {
+async function setAccess(repId: number, patch: Partial<Pick<SalesRep, "isActive" | "blockedAt" | "blockedReason" | "refusedAt" | "modules">>) {
   const [updated] = await db.update(salesReps).set({ ...patch, updatedAt: new Date() }).where(eq(salesReps.id, repId)).returning();
   return updated;
 }
@@ -128,10 +128,11 @@ export async function approveRep(repId: number, modules: string[] | undefined, a
 }
 
 /** Partnership ended (or sign-up refused): no access, and every open session ends now. */
-export async function blockRep(repId: number, reason: string | null | undefined, actor: Actor) {
+export async function blockRep(repId: number, reason: string | null | undefined, actor: Actor, refused = false) {
   const rep = await repOr404(repId);
   assertMayManage(rep, actor);
-  const updated = await setAccess(repId, { isActive: false, blockedAt: new Date(), blockedReason: reason?.trim() || null });
+  const now = new Date();
+  const updated = await setAccess(repId, { isActive: false, blockedAt: now, blockedReason: reason?.trim() || null, refusedAt: refused ? now : null });
   await db.update(authAccessRequests).set({
     status: "declined",
     reviewedAt: new Date(),
@@ -143,19 +144,20 @@ export async function blockRep(repId: number, reason: string | null | undefined,
 }
 
 /**
- * Sign-up turned down: blocked like an ended partnership, with a reason that
- * marks it as a refusal so People can list it as "Refused" (shared/repAccess.ts).
+ * Sign-up turned down: blocked like an ended partnership, marked refused_at so
+ * People lists it as "Refused". The reason keeps its "Sign-up refused" prefix
+ * (shared/repAccess.ts), which People strips to show the admin's note.
  */
 export async function refuseRep(repId: number, reason: string | null | undefined, actor: Actor) {
   const rep = await repOr404(repId);
   if (rep.isActive || rep.blockedAt) throw new AccountError("Only a sign-up waiting for approval can be refused.", 409, "refuse_pending_only");
-  return blockRep(repId, refusalReason(reason), actor);
+  return blockRep(repId, refusalReason(reason), actor, true);
 }
 
 export async function unblockRep(repId: number, actor: Actor) {
   const rep = await repOr404(repId);
   assertMayManage(rep, actor);
-  const updated = await setAccess(repId, { isActive: true, blockedAt: null, blockedReason: null });
+  const updated = await setAccess(repId, { isActive: true, blockedAt: null, blockedReason: null, refusedAt: null });
   await db.update(authAccessRequests).set({
     status: "approved",
     reviewedAt: new Date(),
@@ -201,7 +203,7 @@ export async function listRepsWithAccess() {
     wholesaleCode: rep.wholesaleCode ? formatWholesaleCode(rep.wholesaleCode) : null,
     access: (rep.blockedAt ? "blocked" : rep.isActive ? "active" : "pending") as RepAccess,
     // A blocked sign-up that was never approved: listed as "Refused", not "Blocked".
-    refused: Boolean(rep.blockedAt) && isRefusal(rep.blockedReason),
+    refused: Boolean(rep.blockedAt && rep.refusedAt),
     application: application ? {
       email: application.email,
       workCity: application.workCity,
