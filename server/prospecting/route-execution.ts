@@ -102,10 +102,18 @@ export async function linkStopToVisit(
  * after the last reached one, and the stops still ahead are re-timed from it
  * with the local travel model (no new paid optimization).
  */
-export async function attachAdHocStop(tx: Tx, visit: Visit) {
+const RUNNING_ROUTE_MAX_AGE_MS = 18 * 60 * 60 * 1000;
+
+export async function attachAdHocStop(tx: Tx, visit: Visit, now = new Date()) {
+  // Routes are same-day: one left "in progress" from an earlier day is not the
+  // running route, even if a late check-in on one of its stops restarted it.
+  // route_date is the rep's local day, so allow one day either side of UTC.
+  const day = (offsetDays: number) => new Date(now.getTime() + offsetDays * 86_400_000).toISOString().slice(0, 10);
   const [route] = await tx.select().from(prospectingRoutes).where(and(
     eq(prospectingRoutes.repId, visit.repId),
     eq(prospectingRoutes.status, "in_progress"),
+    inArray(prospectingRoutes.routeDate, [day(-1), day(0), day(1)]),
+    gte(prospectingRoutes.startedAt, new Date(now.getTime() - RUNNING_ROUTE_MAX_AGE_MS)),
   )).orderBy(desc(prospectingRoutes.startedAt)).limit(1);
   if (!route) return null;
 
@@ -136,7 +144,6 @@ export async function attachAdHocStop(tx: Tx, visit: Visit) {
 
   const here = { lat: Number(lat), lng: Number(lng) };
   const distance = previous ? Math.round(haversineMeters({ lat: Number(previous.lat), lng: Number(previous.lng) }, here)) : 0;
-  const now = new Date();
   const arrivedAt = visit.checkedInAt ?? now;
   const serviceSeconds = route.defaultVisitMinutes * 60;
   const [extra] = await tx.insert(prospectingRouteStops).values({

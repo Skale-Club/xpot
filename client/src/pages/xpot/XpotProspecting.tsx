@@ -118,6 +118,7 @@ type PlanningStep = 0 | 1 | 2 | 3;
 
 const ROUTE_DRAFT_KEY = "xpot:route-planning-draft";
 const MAX_PROSPECTING_CITIES = 5;
+const ROUTE_HISTORY_PREVIEW = 10;
 const SUGGESTIONS_GAP = 8;
 const SUGGESTIONS_VIEWPORT_GAP = 8;
 const SUGGESTIONS_MAX_HEIGHT = 280;
@@ -254,6 +255,8 @@ function statusLabel(status: ProspectingJob["status"], t: ReturnType<typeof useT
 
 function routeStatusLabel(status: ProspectingRoute["status"], t: ReturnType<typeof useT<typeof prospectingMessages.en>>, isPast = false) {
   if (status === "draft") return isPast ? t("routeNotStarted") : t("routeDraft");
+  // A same-day route never runs into a later day: left open, it just wasn't finished.
+  if (isPast && (status === "published" || status === "in_progress")) return t("routeUnfinished");
   if (status === "in_progress") return t("routeInProgress");
   if (status === "completed") return t("routeCompleted");
   if (status === "cancelled") return t("routeCancelled");
@@ -295,6 +298,7 @@ export function XpotProspecting() {
   const [citySuggestionsOpen, setCitySuggestionsOpen] = useState(false);
   const [sectorSuggestionsOpen, setSectorSuggestionsOpen] = useState(false);
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
+  const [showFullHistory, setShowFullHistory] = useState(false);
   const [showAllCandidates, setShowAllCandidates] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [selectedStopId, setSelectedStopId] = useState<number | null>(null);
@@ -348,8 +352,10 @@ export function XpotProspecting() {
   const todayJobs = useMemo(() => (jobsQuery.data ?? []).filter((job) => localDateKey(new Date(job.createdAt)) === today), [jobsQuery.data, today]);
   const todayRoutes = useMemo(() => (routesQuery.data ?? []).filter((route) => route.routeDate === today), [routesQuery.data, today]);
   const activeTodayRoute = todayRoutes.find((route) => ["draft", "published", "in_progress"].includes(route.status));
+  // A failed search keeps routePlanningStatus "pending", so only a live search
+  // or a finished one still building its route counts as being prepared.
   const pendingTodayJob = todayJobs.find((job) => ["draft", "queued", "running"].includes(job.status)
-    || ["pending", "building"].includes(job.routePlanningStatus));
+    || (job.status === "completed" && ["pending", "building"].includes(job.routePlanningStatus)));
   const dailyRouteLimitReached = todayJobs.length >= MAX_DAILY_PROSPECTING_SESSIONS;
   const requestedJobId = useMemo(() => {
     const jobId = Number(routeParams.get("jobId"));
@@ -891,7 +897,7 @@ export function XpotProspecting() {
             </div>
             {routeHistory.length ? (
               <div className="mt-3 divide-y divide-white/[0.08] border-y border-white/[0.08]">
-                {routeHistory.map((route) => (
+                {(showFullHistory ? routeHistory : routeHistory.slice(0, ROUTE_HISTORY_PREVIEW)).map((route) => (
                   <button key={route.id} type="button" onClick={() => openRoute(route.id)} className="flex min-h-[76px] w-full items-center gap-3 py-3 text-left transition hover:bg-white/[0.025]">
                     <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-300"><RouteIcon className="h-5 w-5" /></span>
                     <span className="min-w-0 flex-1">
@@ -903,6 +909,9 @@ export function XpotProspecting() {
                 ))}
               </div>
             ) : <p className="mt-3 border-y border-white/[0.08] py-8 text-center text-sm text-white/40">{t("noRouteHistory")}</p>}
+            {!showFullHistory && routeHistory.length > ROUTE_HISTORY_PREVIEW ? (
+              <button type="button" onClick={() => setShowFullHistory(true)} className="mt-3 text-xs font-semibold text-indigo-300 transition hover:text-indigo-200">{t("showAllRoutes", { count: routeHistory.length })}</button>
+            ) : null}
           </section>
 
           <Dialog open={builderOpen} onOpenChange={setBuilderOpen}>
