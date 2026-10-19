@@ -278,7 +278,7 @@ nfc-provisioner/           Electron app that writes and verifies NFC chips over 
 
 ## 5. Tables
 
-58 tables, all in `shared/schema/`, plus `_xpot_migrations`, which the migration
+59 tables, all in `shared/schema/`, plus `_xpot_migrations`, which the migration
 runner creates for its own bookkeeping.
 
 | Group | Tables |

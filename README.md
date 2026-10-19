@@ -155,6 +155,9 @@ Tags module:
   is the same piece screen as the admin's, with the sections the viewer may use.
 - `/tags/direct`: "Write a plain chip": the customer's own link on a chip, with
   no Xpot code (`tag_direct_writes`). Reached from the Tags home and the palette.
+- `/tags/shop`: Shop, the showcase of what Skale Club sells (piece models and
+  ready-made kits). Xpot sells nothing: each button opens the Stuscle store with the
+  reseller's own wholesale code (see "Wholesale (Stuscle)").
 
 Settings (everyone): `/settings` with the tabs Profile (name, photo, contact
 phone), Sign-in (the sign-in phone, read only; a password only for email
@@ -186,8 +189,8 @@ one sits:
   the batch pipeline; a batch has tabs Summary, Print, Receive, Pieces, Hand out
   and Activity in `?tab=`), `pieces` (Inventory; a piece is `/admin/tags/pieces/:id`),
   `kits` (Distribution: Hand out, Stuscle orders, Kits history and Take back in
-  `?view=`), `team` (Resellers), then the Xpot admin's `journey` (Production log)
-  and `provisioners` (NFC writers).
+  `?view=`), `team` (Resellers), then the Xpot admin's `shop` (the Shop entries),
+  `journey` (Production log) and `provisioners` (NFC writers).
 - Administration (managers): `/admin/reps` and `/admin/reps/:repId` (People, the
   one place for a person: access, role and modules, organizations, Tags cost rule
   and wholesale code, Xphere, activity; filters in `?q=&status=&role=&module=`)
@@ -213,7 +216,7 @@ one sits:
 
 ## Database
 
-58 tables, all defined in `shared/schema/` (the session store included), plus
+59 tables, all defined in `shared/schema/` (the session store included), plus
 the `_xpot_migrations` bookkeeping table the migration runner creates.
 
 **Visits** (prefix `sales_`)
@@ -239,6 +242,7 @@ the `_xpot_migrations` bookkeeping table the migration runner creates.
 - `tag_stock_movements` (append-only stock ledger), `tag_acquisitions`,
   `tag_acquisition_lines`, `tag_acquisition_units` (what a reseller paid per piece)
 - `tag_direct_writes`
+- `tag_showcase_items` (the Shop entries: piece models and ready-made kits; migration 0057)
 - `tag_provisioning_devices`, `tag_provisioning_jobs`, `tag_provisioning_events` (NFC writer)
 - `tag_plans`, `tag_journey_entries` (the Production log and the automatic activity)
 
@@ -346,6 +350,16 @@ Xpot. Approved reps buy at wholesale with a personal code:
   Distribution › Stuscle orders (with a count badge) to be separated. Fulfilling
   it writes the kit's piece list like any hand-out. The net line subtotal
   becomes the partner's exact per-piece acquisition cost.
+- **Shop (Tags › Shop).** Stuscle is the sales engine, so Xpot only shows what is
+  for sale. The Xpot admin keeps the entries in Tags › Manage › Shop
+  (`tag_showcase_items`, `/api/xpot/admin/tag-showcase`); every Tags user reads the
+  published ones (`GET /api/xpot/tags/showcase`), each with a link that carries
+  their own code. A *model* opens `/wholesale?code=…`. A *kit* lists Stuscle SKUs
+  and quantities and opens `{STUSCLE_PUBLIC_URL}/wholesale/kit?code=…&items=SKU:qty,SKU:qty`,
+  which opens the wholesale session and fills the cart at the wholesale price (the
+  link carries no price; see Stuscle's `docs/WHOLESALE.md`). A reference price may
+  be typed by hand; the price that counts is Stuscle's. Code in
+  `server/tags/showcase.ts`, `shared/tagShowcase.ts`, `stuscleKitUrl` in `shared/wholesale.ts`.
 - Without `XPOT_WHOLESALE_SECRET` the endpoint answers 503 and the store sells
   retail only. Code in `server/wholesale/`, `shared/wholesale.ts`.
 

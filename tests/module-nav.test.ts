@@ -88,6 +88,11 @@ describe("moduleGroups", () => {
     expect(active("/tags")).toEqual(["/tags"]);
     expect(active("/tags/direct")).toEqual(["/tags"]);
   });
+  it("the Shop is a screen of its own in the rep's Tags menu", () => {
+    const [work] = moduleGroups("tags", rep, labels);
+    expect(work.items.map((item) => item.href)).toEqual(["/tags", "/tags/customers", "/tags/pieces", "/tags/shop"]);
+    expect(work.items.filter((item) => item.match("/tags/shop")).map((item) => item.href)).toEqual(["/tags/shop"]);
+  });
   it("a rep sees the module's screens and no Manage group", () => {
     expect(moduleGroups("tags", rep, labels)).toHaveLength(1);
     expect(hrefs(moduleGroups("visits", rep, labels))).toEqual(["/dashboard", "/route", "/leads", "/dashboard/history", "/tasks", "/sales"]);
@@ -109,7 +114,7 @@ describe("moduleGroups", () => {
   it("a manager gets each module's own management, without the global admin's items", () => {
     const tags = hrefs(moduleGroups("tags", manager, labels));
     expect(tags).toEqual(expect.arrayContaining(["/admin/tags/overview", "/admin/tags/pieces", "/admin/tags/kits", "/admin/tags/team"]));
-    for (const href of ["/admin/tags/batches", "/admin/tags/journey", "/admin/tags/provisioners"]) expect(tags).not.toContain(href);
+    for (const href of ["/admin/tags/batches", "/admin/tags/shop", "/admin/tags/journey", "/admin/tags/provisioners"]) expect(tags).not.toContain(href);
     const visits = hrefs(moduleGroups("visits", manager, labels));
     expect(visits).toEqual(expect.arrayContaining(["/admin/overview", "/admin/products", "/admin/settings"]));
     expect(visits).not.toContain("/admin/xphere");
@@ -122,6 +127,7 @@ describe("moduleGroups", () => {
       "/admin/tags/pieces",
       "/admin/tags/kits",
       "/admin/tags/team",
+      "/admin/tags/shop",
       "/admin/tags/journey",
       "/admin/tags/provisioners",
     ]);
@@ -129,7 +135,7 @@ describe("moduleGroups", () => {
   it("the global admin sees everything, and exactly those extra items carry the Xpot admin tag", () => {
     const extra = (m: "visits" | "tags") =>
       moduleGroups(m, admin, labels).flatMap((g) => g.items).filter((i) => i.adminOnly).map((i) => i.href);
-    expect(extra("tags")).toEqual(["/admin/tags/batches", "/admin/tags/journey", "/admin/tags/provisioners"]);
+    expect(extra("tags")).toEqual(["/admin/tags/batches", "/admin/tags/shop", "/admin/tags/journey", "/admin/tags/provisioners"]);
     expect(extra("visits")).toEqual([]);
     // Platform is the Xpot admin's as a whole: one tag on the group, none on its items.
     expect(accountGroups(admin, labels).map((g) => Boolean(g.adminOnly))).toEqual([false, true]);
@@ -180,6 +186,7 @@ describe("repScreenFor", () => {
   it("leaving management lands on the same module's rep screen", () => {
     expect(repScreenFor("/admin/tags/pieces/12", "/x")).toBe("/tags/pieces");
     expect(repScreenFor("/admin/tags/kits", "/x")).toBe("/tags");
+    expect(repScreenFor("/admin/tags/shop", "/x")).toBe("/tags/shop");
     expect(repScreenFor("/admin/tags", "/x")).toBe("/tags");
     expect(repScreenFor("/admin/products", "/x")).toBe("/sales");
     expect(repScreenFor("/admin/overview", "/x")).toBe("/dashboard");

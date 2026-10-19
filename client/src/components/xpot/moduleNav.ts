@@ -19,6 +19,7 @@ import {
   Plug,
   Route,
   ShieldCheck,
+  ShoppingBag,
   SlidersHorizontal,
   Users,
   type LucideIcon,
@@ -127,7 +128,7 @@ export function activeVisitsTab(path: string): VisitsTabId | null {
 export type Labels = {
   shell: (key: ShellKey) => string;
   /** Tags app labels used by the shared shell. */
-  tags: (key: "navHome" | "navCustomers" | "navPieces" | "navDirect") => string;
+  tags: (key: "navHome" | "navCustomers" | "navPieces" | "navShop" | "navDirect") => string;
   /** This shell's own labels (i18n/messages/navIa.ts). */
   nav: (key: "navPlatform" | "visitScreen") => string;
 };
@@ -151,6 +152,7 @@ type ShellKey =
   | "manageBatches"
   | "manageJourney"
   | "manageResellers"
+  | "manageShop"
   | "manageWriters"
   | "orgPeople"
   | "orgIntegrations"
@@ -209,6 +211,8 @@ export function moduleGroups(module: XpotModule, viewer: Viewer, l: Labels): Nav
       { href: "/tags/customers", label: l.tags("navCustomers"), icon: Building2, match: starts("/tags/customers") },
       // A piece (/tags/t/<code>) belongs to My pieces, wherever it was opened from.
       { href: "/tags/pieces", label: l.tags("navPieces"), icon: Package, match: (p) => starts("/tags/pieces")(p) || p.startsWith("/tags/t/") },
+      // What Skale Club sells; every button opens the Stuscle store (the sales engine).
+      { href: "/tags/shop", label: l.tags("navShop"), icon: ShoppingBag, match: starts("/tags/shop") },
     ],
   };
   if (!viewer.canManage) return [work];
@@ -225,6 +229,8 @@ export function moduleGroups(module: XpotModule, viewer: Viewer, l: Labels): Nav
         { href: "/admin/tags/pieces", label: l.shell("managePieces"), icon: Nfc, match: tab("pieces") },
         { href: "/admin/tags/kits", label: l.shell("manageKits"), icon: PackageOpen, match: tab("kits") },
         { href: "/admin/tags/team", label: l.shell("manageResellers"), icon: Users, match: tab("team") },
+        // The showcase the resellers see in Tags › Shop: the Xpot admin keeps it.
+        { href: "/admin/tags/shop", label: l.shell("manageShop"), icon: ShoppingBag, match: tab("shop"), adminOnly: true },
         { href: "/admin/tags/journey", label: l.shell("manageJourney"), icon: Route, match: tab("journey"), adminOnly: true },
         { href: "/admin/tags/provisioners", label: l.shell("manageWriters"), icon: ShieldCheck, match: tab("provisioners"), adminOnly: true },
       ]),
@@ -327,6 +333,7 @@ export function scopeChipState(
  * Sales…). Administration and Platform pages have no rep twin: `fallback`.
  */
 export function repScreenFor(path: string, fallback: string): string {
+  if (starts("/admin/tags/shop")(path)) return "/tags/shop";
   if (starts("/admin/tags")(path)) return starts("/admin/tags/pieces")(path) ? "/tags/pieces" : "/tags";
   const section = visitsAdminSection(path);
   if (section === "products") return "/sales";

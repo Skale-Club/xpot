@@ -34,6 +34,15 @@ export function generateWholesaleCode(randomBytes: (n: number) => Uint8Array): s
   return WHOLESALE_CODE_PREFIX + body;
 }
 
+/**
+ * The store link of a ready-made kit: Stuscle checks the code, fills the cart with these SKUs at the wholesale price
+ * (the price is never in the link) and opens the cart. `items` reads `SKU:quantity,SKU:quantity`.
+ */
+export function stuscleKitUrl(storeBaseUrl: string, code: string, items: ReadonlyArray<{ sku: string; quantity: number }>): string {
+  const list = items.map((item) => `${item.sku}:${item.quantity}`).join(",");
+  return `${storeBaseUrl.replace(/\/+$/, "")}/wholesale/kit?code=${encodeURIComponent(formatWholesaleCode(code))}&items=${encodeURIComponent(list)}`;
+}
+
 /** The store page a reseller lands on, code already filled in. */
 export function wholesaleUrl(storeBaseUrl: string, code: string): string {
   return `${storeBaseUrl.replace(/\/+$/, "")}/wholesale?code=${encodeURIComponent(formatWholesaleCode(code))}`;

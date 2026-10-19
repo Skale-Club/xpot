@@ -15,6 +15,7 @@ import { KitsTab } from "./KitsTab";
 import { BatchesTab } from "./BatchesTab";
 import { BatchDetail } from "./BatchDetail";
 import { TeamTab } from "./TeamTab";
+import { ShowcaseTab } from "./ShowcaseTab";
 import { ProvisionersTab } from "./ProvisionersTab";
 import { JourneyTab } from "./JourneyTab";
 import { useIsSuperAdmin } from "@/components/xpot/AdminBadge";
@@ -22,7 +23,7 @@ import { useT } from "@/i18n";
 import { shellMessages } from "@/i18n/messages/shell";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
 
-// Same order and names as the Tags "Manage" group in the sidebar (components/xpot/moduleNav.ts): the piece's life,
+// "shop" is the Tags › Shop showcase (the Xpot admin's). Same order and names as the Tags "Manage" group in the sidebar (components/xpot/moduleNav.ts): the piece's life,
 // production first. "kits" is Distribution (Hand out, Stuscle orders, Kits, Take back); the URL stays /kits.
 const TABS = [
   { id: "overview", labelKey: "manageOverview" },
@@ -30,6 +31,7 @@ const TABS = [
   { id: "pieces", labelKey: "managePieces" },
   { id: "kits", labelKey: "manageKits" },
   { id: "team", labelKey: "manageResellers" },
+  { id: "shop", labelKey: "manageShop", adminOnly: true },
   { id: "journey", labelKey: "manageJourney", adminOnly: true },
   { id: "provisioners", labelKey: "manageWriters", adminOnly: true },
 ] as const satisfies ReadonlyArray<{ id: string; labelKey: string; adminOnly?: boolean }>;
@@ -126,6 +128,7 @@ export function AdminTags() {
       {tab === "batches" && isAdmin && (id ? <BatchDetail id={id} go={go} /> : <BatchesTab go={go} />)}
       {tab === "journey" && isAdmin && <JourneyTab />}
       {tab === "team" && <TeamTab go={go} />}
+      {tab === "shop" && isAdmin && <ShowcaseTab />}
       {tab === "provisioners" && isAdmin && <ProvisionersTab go={go} />}
     </div>
   );

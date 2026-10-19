@@ -165,6 +165,32 @@ export const tagKitItems = pgTable("tag_kit_items", {
   tagIdx: index("tag_kit_items_tag_idx").on(table.tagId),
 }));
 
+/**
+ * Tags › Shop: a piece model or a ready-made kit the Xpot admin shows to resellers. Xpot sells nothing: each entry
+ * sends the reseller to the Stuscle store (shared/tagShowcase.ts). migrations/0057_tag_showcase.sql.
+ */
+export const tagShowcaseItems = pgTable("tag_showcase_items", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  kind: text("kind").notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  /** What is in the box: a list of short lines. */
+  includes: jsonb("includes").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  imageUrl: text("image_url"),
+  /** A kit's Stuscle SKUs and quantities (what the link puts in the cart). */
+  items: jsonb("items").$type<Array<{ sku: string; quantity: number }>>().notNull().default(sql`'[]'::jsonb`),
+  /** Typed by hand and shown as a reference; the price that counts is Stuscle's. */
+  referencePriceCents: integer("reference_price_cents"),
+  currency: text("currency").notNull().default("USD"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  isPublished: boolean("is_published").notNull().default(false),
+  createdByUserId: text("created_by_user_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  orderIdx: index("tag_showcase_items_order_idx").on(table.isPublished, table.sortOrder, table.createdAt),
+}));
+
 // Append-only: every destination/type change writes one row, never updated.
 export const tagDestinationHistory = pgTable("tag_destination_history", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -374,6 +400,7 @@ export const tagJourneyEntries = pgTable("tag_journey_entries", {
 export type TagBatch = typeof tagBatches.$inferSelect;
 export type TagKit = typeof tagKits.$inferSelect;
 export type TagKitItemRow = typeof tagKitItems.$inferSelect;
+export type TagShowcaseRow = typeof tagShowcaseItems.$inferSelect;
 export type Tag = typeof tags.$inferSelect;
 export type TagDestinationChange = typeof tagDestinationHistory.$inferSelect;
 export type TagEvent = typeof tagEvents.$inferSelect;

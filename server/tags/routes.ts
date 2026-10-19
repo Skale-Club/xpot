@@ -43,6 +43,7 @@ import { tagSaleCreateSchema } from "#shared/tagSales.js";
 import { createTagSale, linkTagToSale, listLinkableSales, TagSaleError } from "./sales.js";
 import { syncSaleToXphere } from "../routes/xpot/xphere-sync.js";
 import { fulfillAcquisition, listAcquisitions } from "./acquisitions.js";
+import { registerShowcaseRoutes } from "./showcase.js";
 import { salesStorage } from "../storage-sales.js";
 
 // Xpot Tags HTTP API. Four audiences:
@@ -425,6 +426,10 @@ export function registerTagRoutes(app: Express) {
   // ─── Field app (any active rep, scoped) ─────────────────────────────────────
 
   const fieldBase = "/api/xpot/tags";
+
+  // Tags › Shop (the showcase that sends resellers to Stuscle). Before the `${fieldBase}/:id` routes below, which
+  // would take "showcase" for a piece id.
+  registerShowcaseRoutes(app);
 
   // The Tags dashboard: the person's own pieces, or every rep's for a manager in admin mode.
   app.get(`${fieldBase}/dashboard`, requireTagUser, async (req, res) => {
