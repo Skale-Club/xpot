@@ -86,7 +86,7 @@ beforeAll(async () => {
   ids.candX = await candidate("Street Opportunity", "place-x", "discovered", null, "42.3100");
 
   ids.route = (await one(`INSERT INTO prospecting_routes (rep_id, job_id, name, route_date, status, planned_start_at, started_at, start_lat, start_lng, default_visit_minutes)
-    VALUES ($1, $2, 'Today', '2026-10-14', 'in_progress', NOW() - INTERVAL '1 hour', NOW() - INTERVAL '1 hour', '42.3000', '-71.4000', 20) RETURNING id`, [ids.rep, job])).id;
+    VALUES ($1, $2, 'Today', to_char(NOW(), 'YYYY-MM-DD'), 'in_progress', NOW() - INTERVAL '1 hour', NOW() - INTERVAL '1 hour', '42.3000', '-71.4000', 20) RETURNING id`, [ids.rep, job])).id;
   const visitA = (await one(`INSERT INTO sales_visits (rep_id, lead_id, status, source, checked_in_at, checked_out_at)
     VALUES ($1, $2, 'completed', 'prospecting-route', NOW() - INTERVAL '50 minutes', NOW() - INTERVAL '30 minutes') RETURNING id`, [ids.rep, ids.leadA])).id;
   const stop = async (position: number, status: string, candidateId: number, leadId: number | null, visitId: number | null, name: string, lat: string) =>
@@ -157,4 +157,14 @@ test("with no route running, an ad-hoc visit stays a plain visit", async () => {
   expect(await q(`SELECT id FROM prospecting_route_stops WHERE visit_id = $1`, [visit!.id])).toEqual([]);
   // No route to go back to: the app shows the visit summary.
   expect((await checkOut(visit!))?.routeId).toBeNull();
+});
+
+test("a route from an earlier day does not take today's ad-hoc visit, even if restarted today", async () => {
+  // A late check-in on one of its old stops set started_at to today.
+  const stale = (await one(`INSERT INTO prospecting_routes (rep_id, name, route_date, status, planned_start_at, started_at, start_lat, start_lng)
+    VALUES ($1, 'Days ago', to_char(NOW() - INTERVAL '3 days', 'YYYY-MM-DD'), 'in_progress', NOW() - INTERVAL '3 days', NOW() - INTERVAL '10 minutes', '42.3000', '-71.4000') RETURNING id`, [ids.rep])).id;
+  const visit = await checkIn(ids.leadAdHoc);
+  expect(await q(`SELECT id FROM prospecting_route_stops WHERE route_id = $1`, [stale])).toEqual([]);
+  expect(await q(`SELECT id FROM prospecting_route_stops WHERE visit_id = $1`, [visit!.id])).toEqual([]);
+  await checkOut(visit!);
 });

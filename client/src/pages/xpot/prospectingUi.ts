@@ -316,11 +316,13 @@ export { ROUTE_STATUS_TONE, STOP_STATUS_TONE };
 export type RouteStatus = "draft" | "published" | "in_progress" | "completed" | "cancelled";
 
 /** Keys of prospectingMessages that name a route status. */
-export type RouteStatusLabelKey = "routeDraft" | "routeNotStarted" | "published" | "routeInProgress" | "routeCompleted" | "routeCancelled";
+export type RouteStatusLabelKey = "routeDraft" | "routeNotStarted" | "published" | "routeInProgress" | "routeUnfinished" | "routeCompleted" | "routeCancelled";
 
 /** The message key for a route status; a draft from a past day was never started. */
 export function routeStatusLabelKey(status: string, isPast = false): RouteStatusLabelKey {
   if (status === "draft") return isPast ? "routeNotStarted" : "routeDraft";
+  // Routes are same-day: one left open on a past day was simply not finished.
+  if (isPast && (status === "published" || status === "in_progress")) return "routeUnfinished";
   if (status === "in_progress") return "routeInProgress";
   if (status === "completed") return "routeCompleted";
   if (status === "cancelled") return "routeCancelled";
