@@ -88,17 +88,10 @@ test.skipIf(!enabled)("phone sign-in: code, sign-up pending, approval, blocking"
       displayName: "Maria Souza",
       email: "maria@example.com",
       workCity: "Worcester",
-      workRegion: "Massachusetts",
-      occupation: "Delivery driver",
-      availability: "evenings",
+      workRegion: "MA",
       hasVehicle: true,
-      languages: ["en", "pt"],
-      otherLanguages: "",
-      salesExperience: "some",
-      fieldSalesReadiness: "ready",
       kitInvestmentAcknowledged: true,
       activeSellerAcknowledged: true,
-      message: "I want to build a side income.",
     };
     const reg = await call("POST", "/api/auth/phone/register", application);
     assert.equal(reg.status, 201);
@@ -106,20 +99,14 @@ test.skipIf(!enabled)("phone sign-in: code, sign-up pending, approval, blocking"
     assert.equal((await call("GET", "/whoami")).json.userId, null);
     const [rep] = (await db.execute(sql`SELECT r.id, r.is_active, r.display_name FROM sales_reps r JOIN users u ON u.id = r.user_id WHERE u.phone = ${PHONE}`)).rows as any[];
     assert.deepEqual([rep.is_active, rep.display_name], [false, "Maria Souza"]);
-    const [request] = (await db.execute(sql`SELECT ar.email, ar.work_city, ar.work_region, ar.occupation, ar.availability, ar.has_vehicle, ar.languages, ar.sales_experience, ar.field_sales_readiness, ar.kit_investment_acknowledged, ar.active_seller_acknowledged, ar.message, ar.status FROM auth_access_requests ar JOIN users u ON u.id = ar.user_id WHERE u.phone = ${PHONE}`)).rows as any[];
+    const [request] = (await db.execute(sql`SELECT ar.email, ar.work_city, ar.work_region, ar.has_vehicle, ar.kit_investment_acknowledged, ar.active_seller_acknowledged, ar.status FROM auth_access_requests ar JOIN users u ON u.id = ar.user_id WHERE u.phone = ${PHONE}`)).rows as any[];
     assert.deepEqual(request, {
       email: application.email,
       work_city: application.workCity,
       work_region: application.workRegion,
-      occupation: application.occupation,
-      availability: application.availability,
       has_vehicle: application.hasVehicle,
-      languages: application.languages,
-      sales_experience: application.salesExperience,
-      field_sales_readiness: application.fieldSalesReadiness,
       kit_investment_acknowledged: application.kitInvestmentAcknowledged,
       active_seller_acknowledged: application.activeSellerAcknowledged,
-      message: application.message,
       status: "pending",
     });
     // Registering needs a freshly verified number.

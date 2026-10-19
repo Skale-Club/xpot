@@ -278,17 +278,20 @@ function Application({ rep }: { rep: Rep }) {
   const item = (label: string, value: ReactNode) => (
     <div><dt className="text-xs text-white/35">{label}</dt><dd className="mt-0.5 break-words text-white/75">{value || "—"}</dd></div>
   );
+  // The form no longer asks these; they show only on applications sent before.
+  const legacy = (label: string, value: ReactNode) => (value ? item(label, value) : null);
+  const languages = [...(a.languages ?? []), a.otherLanguages].filter(Boolean).join(", ");
   return (
     <div data-testid={`application-${rep.id}`}>
       <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
         {item(t("applicationEmail"), a.email)}
         {item(t("applicationCity"), [a.workCity, a.workRegion].filter(Boolean).join(", "))}
-        {item(t("applicationOccupation"), a.occupation)}
-        {item(t("applicationAvailability"), availabilityKey ? t(availabilityKey) : null)}
         {item(t("applicationVehicle"), a.hasVehicle === null ? null : a.hasVehicle ? t("applicationYes") : t("applicationNo"))}
-        {item(t("applicationLanguages"), [...(a.languages ?? []), a.otherLanguages].filter(Boolean).join(", "))}
-        {item(t("applicationSalesExperience"), experienceKey ? t(experienceKey) : null)}
-        {item(t("applicationFieldReadiness"), readinessKey ? t(readinessKey) : null)}
+        {legacy(t("applicationOccupation"), a.occupation)}
+        {legacy(t("applicationAvailability"), availabilityKey ? t(availabilityKey) : null)}
+        {legacy(t("applicationLanguages"), languages)}
+        {legacy(t("applicationSalesExperience"), experienceKey ? t(experienceKey) : null)}
+        {legacy(t("applicationFieldReadiness"), readinessKey ? t(readinessKey) : null)}
       </dl>
       <p className="mt-3 text-xs text-white/45">
         {a.kitInvestmentAcknowledged && a.activeSellerAcknowledged ? `✓ ${t("applicationTermsAcknowledged")}` : t("applicationTermsMissing")}

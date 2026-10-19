@@ -87,40 +87,45 @@ const verifySchema = z.object({
   code: z.string().trim().regex(/^\d{6}$/),
 }).strict();
 
+// The application asks only the basics. Occupation, availability, languages,
+// sales experience, field readiness and a free-text message were dropped from
+// the form; their columns stay for applications sent before.
 const applicationFields = z.object({
   displayName: z.string().trim().min(2).max(100),
   email: z.string().trim().email().max(254),
   workCity: z.string().trim().min(2).max(120),
   workRegion: z.string().trim().min(2).max(120),
-  occupation: z.string().trim().min(2).max(160),
-  availability: z.enum(["weekdays", "evenings", "weekends", "flexible"]),
   hasVehicle: z.boolean(),
-  languages: z.array(z.enum(["en", "pt", "es", "other"])).min(1).max(4),
-  otherLanguages: z.string().trim().max(160).optional().default(""),
-  salesExperience: z.enum(["none", "some", "experienced"]),
-  fieldSalesReadiness: z.enum(["ready", "with_support", "not_ready"]),
   kitInvestmentAcknowledged: z.literal(true),
   activeSellerAcknowledged: z.literal(true),
-  message: z.string().trim().max(1000).optional().default(""),
 });
 
 const registerSchema = applicationFields.extend({
   lang: z.enum(LANGS).optional(),
-}).strict().superRefine((input, ctx) => {
-  if (input.languages.includes("other") && input.otherLanguages.length < 2) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["otherLanguages"], message: "List the other languages." });
-  }
-});
+}).strict();
 
 const draftSchema = applicationFields.partial().extend({
   displayName: z.string().trim().max(100).optional(),
   step: z.number().int().min(0).max(20),
 }).strict();
 
-function enforceRouteLimit(req: Request, bucket: "start" | "verify" | "draft" | "register", limit: number, retryAfter: number) {
+/** Where `draft_step` lands once the application is sent (past the last question). */
+const SUBMITTED_STEP = 6;
+
+function enforceRouteLimit(req: Request, bucket: "start" | "verify" | "register", limit: number, retryAfter: number) {
   const key = `phone-auth:${bucket}:ip:${normalizeIpKey(req.ip)}`;
   if (rateLimit(key, { limit, windowMs: ROUTE_LIMIT_WINDOW_MS })) {
     throw new PhoneAuthError("rate_limited", 429, "Too many sign-in attempts. Try again later.", { retryAfter });
+  }
+}
+
+// The form saves its draft in the background as they answer, so going back to
+// fix an answer must never run into a limit. It's capped per verified number,
+// only to stop a runaway client.
+function enforceDraftLimit(phone: string) {
+  const key = `phone-auth:draft:phone:${createHash("sha256").update(phone).digest("hex").slice(0, 24)}`;
+  if (rateLimit(key, { limit: 600, windowMs: ROUTE_LIMIT_WINDOW_MS })) {
+    throw new PhoneAuthError("rate_limited", 429, "Too many sign-in attempts. Try again later.", { retryAfter: 60 });
   }
 }
 
@@ -358,9 +363,9 @@ export function registerPhoneAuthRoutes(app: Express, sms: SmsSender = defaultSm
 
   app.put("/api/auth/phone/application-draft", async (req, res) => {
     try {
-      enforceRouteLimit(req, "draft", 60, 900);
       const input = draftSchema.parse(req.body);
       const phone = verifiedPhone(req);
+      enforceDraftLimit(phone);
       const user = await ensureDraftUser(phone, input.displayName);
       const { step, displayName, ...fields } = input;
       if (displayName?.trim().length && displayName.trim().length >= 2) {
@@ -434,18 +439,11 @@ export function registerPhoneAuthRoutes(app: Express, sms: SmsSender = defaultSm
           email: input.email,
           workCity: input.workCity,
           workRegion: input.workRegion,
-          occupation: input.occupation,
-          availability: input.availability,
           hasVehicle: input.hasVehicle,
-          languages: input.languages,
-          otherLanguages: input.languages.includes("other") ? input.otherLanguages : null,
-          salesExperience: input.salesExperience,
-          fieldSalesReadiness: input.fieldSalesReadiness,
           kitInvestmentAcknowledged: input.kitInvestmentAcknowledged,
           activeSellerAcknowledged: input.activeSellerAcknowledged,
-          message: input.message || null,
           status: "pending",
-          draftStep: 13,
+          draftStep: SUBMITTED_STEP,
           lastActivityAt: new Date(),
           submittedAt: new Date(),
           reviewedAt: null,
@@ -456,18 +454,11 @@ export function registerPhoneAuthRoutes(app: Express, sms: SmsSender = defaultSm
             email: input.email,
             workCity: input.workCity,
             workRegion: input.workRegion,
-            occupation: input.occupation,
-            availability: input.availability,
             hasVehicle: input.hasVehicle,
-            languages: input.languages,
-            otherLanguages: input.languages.includes("other") ? input.otherLanguages : null,
-            salesExperience: input.salesExperience,
-            fieldSalesReadiness: input.fieldSalesReadiness,
             kitInvestmentAcknowledged: input.kitInvestmentAcknowledged,
             activeSellerAcknowledged: input.activeSellerAcknowledged,
-            message: input.message || null,
             status: "pending",
-            draftStep: 13,
+            draftStep: SUBMITTED_STEP,
             lastActivityAt: new Date(),
             abandonedNotifiedAt: null,
             submittedAt: new Date(),
@@ -488,13 +479,6 @@ export function registerPhoneAuthRoutes(app: Express, sms: SmsSender = defaultSm
         workCity: input.workCity,
         workRegion: input.workRegion,
         hasVehicle: input.hasVehicle,
-        languages: input.languages,
-        otherLanguages: input.otherLanguages,
-        occupation: input.occupation,
-        salesExperience: input.salesExperience,
-        fieldSalesReadiness: input.fieldSalesReadiness,
-        availability: input.availability,
-        message: input.message,
       }), {
         whatsappPhone: phone,
         whatsappText: `Olá, ${input.displayName.split(/\s+/)[0]}! Recebemos seu cadastro no Xpot e queremos conversar com você.`,
