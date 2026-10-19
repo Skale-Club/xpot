@@ -1,15 +1,16 @@
 import { Router } from "express";
 import { z } from "zod";
-import { storage } from "../../storage.js";
+import { storage, type LeadVisibility } from "../../storage.js";
 import { repModules } from "#shared/modules.js";
-import { canAccessLead, requireXpotUser, requireVisitsModule, ensureXpotRep, isManagerOrAdmin, loadAccessibleLead, listsEveryone } from "./middleware.js";
+import { canAccessLead, requireXpotUser, requireVisitsModule, ensureXpotRep, isManagerOrAdmin, loadAccessibleLead, listScope, listsEveryone, ownsLead, refuseNotOwner, type XpotActor } from "./middleware.js";
 import { xpotLeadCreateSchema, xpotLeadUpdateSchema, xpotLeadContactCreateSchema } from "#shared/xpot.js";
 import { syncLeadToGhl, syncLeadToXphere } from "./helpers.js";
 import { salesStorage } from "../../storage-sales.js";
 import { activeStore, discardFiles, putPrivateFile } from "../../lib/files.js";
-import { activeOrganizationIds, canManageOrganizationForActor, managedOrganizationIds, organizationIdForRep } from "../../organizations/service.js";
+import { canManageOrganizationForActor, organizationIdForRep } from "../../organizations/service.js";
 import { resolveGoogleApiKey } from "./google.js";
-import { fetchGooglePlaceProfile } from "./google-place-profile.js";
+import { fetchGooglePlaceProfile, geocodeAddress } from "./google-place-profile.js";
+import { planPrimaryLocationUpdate } from "../../lead-location.js";
 import { rateLimit } from "../../tags/rateLimit.js";
 
 const googleProfileLinkSchema = z.object({
@@ -20,37 +21,48 @@ export function createLeadsRouter() {
   const router = Router();
   router.use(requireXpotUser);
 
-  // GET /leads — rep sees own; manager/admin sees all (optional ?repId= filter)
+  // GET /leads — whose companies follow management mode (listScope): with it
+  // off, your own; on, a manager's everyone (optional ?repId= and
+  // ?organizationId=) and a Rep Admin's organizations.
   router.get("/leads", async (req, res) => {
-    const actor = (req as any).xpotActor as Awaited<ReturnType<typeof ensureXpotRep>>;
+    const actor = (req as any).xpotActor as XpotActor;
 
     let ownerRepId: number | undefined;
     let organizationIds: number[] | undefined;
-    if (listsEveryone(req, actor!)) {
-      // Manager can filter by a specific rep
+    let visibleTo: LeadVisibility | undefined;
+    // Whose follow-up tasks count: everyone's for a manager, the rep's own otherwise (as on GET /leads/:id).
+    let taskRepId: number | undefined;
+    const scope = await listScope(req, actor);
+    if (scope.kind === "everyone") {
+      // Manager can filter by a specific rep, and by one organization
       ownerRepId = req.query.repId ? Number(req.query.repId) : undefined;
+      const organizationId = Number(req.query.organizationId);
+      if (Number.isInteger(organizationId) && organizationId > 0) organizationIds = [organizationId];
     } else {
-      const managed = await managedOrganizationIds(actor!);
-      if (managed?.length) organizationIds = managed;
-      else {
-        ownerRepId = actor!.rep.id;
-        organizationIds = (await activeOrganizationIds(actor!)) ?? undefined;
-      }
+      // Their own leads wherever they belong, plus the companies holding their
+      // Tags pieces (a rep is often Rep Admin of their personal Organization and
+      // a member of another one, so scoping to either alone hid the customers
+      // their pieces were linked to), plus, in management mode, the
+      // organizations a Rep Admin runs, whose follow-ups then count too.
+      const managed = scope.kind === "organizations" ? scope.organizationIds : [];
+      visibleTo = { repId: actor.rep.id, managedOrganizationIds: managed, activeOrganizationIds: scope.activeOrganizationIds };
+      if (!managed.length) taskRepId = actor.rep.id;
     }
 
     const search = typeof req.query.search === "string" ? req.query.search : undefined;
     const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 100));
     const offset = Math.max(0, Number(req.query.offset) || 0);
-    const leads = await storage.listSalesLeads({ ownerRepId, organizationIds, search, limit, offset });
+    const leads = await storage.listSalesLeads({ ownerRepId, organizationIds, visibleTo, search, limit, offset });
 
     if (!leads.length) return res.json([]);
 
     const leadIds = leads.map((l) => l.id);
-    const [allLocations, allContacts, openOpportunitiesMap, salesByLead] = await Promise.all([
+    const [allLocations, allContacts, openOpportunitiesMap, salesByLead, followUps] = await Promise.all([
       storage.listSalesLeadLocationsBatch(leadIds),
       storage.listSalesLeadContactsBatch(leadIds),
       storage.countOpenOpportunitiesByLeadIds(leadIds),
       salesStorage.leadSalesBatch(leadIds),
+      storage.openFollowUpsByLeadIds(leadIds, taskRepId),
     ]);
 
     const locationsByLead = new Map<number, typeof allLocations>();
@@ -72,6 +84,10 @@ export function createLeadsRouter() {
       // What the company card shows at a glance: sold here, and stock on their shelf.
       salesLifetimeCents: salesByLead.get(lead.id)?.lifetimeCents ?? 0,
       unitsOnShelf: salesByLead.get(lead.id)?.unitsOnShelf ?? 0,
+      // Feeds the Companies "Follow-up" chip: nextVisitDueAt alone is only set
+      // by a voice follow-up and is cleared at every check-in.
+      openFollowUp: followUps.has(lead.id),
+      openFollowUpDueAt: followUps.get(lead.id) ?? null,
     }));
 
     res.json(enriched);
@@ -83,23 +99,54 @@ export function createLeadsRouter() {
     const input = xpotLeadCreateSchema.parse(req.body);
     const status = input.status || "lead";
     const organizationId = await organizationIdForRep(actor!.rep.id);
+    // A Google business is one company per Organization (migration 0049). The
+    // check-in searches import a picked Google result whenever they cannot see
+    // a saved match (they only ask the server for a few matches by name), so
+    // the same place can arrive here twice. Inserting it again hit the unique
+    // index as an unhandled rejection and the request hung. A company the rep
+    // can open (canAccessLead, as GET /leads/:id) comes back as is; one they
+    // cannot is refused without its name or id.
+    const existingForPlace = async () => {
+      if (!input.googlePlaceId) return undefined;
+      return storage.getSalesLeadByGooglePlace(organizationId, input.googlePlaceId);
+    };
+    const answerExisting = async (existing: NonNullable<Awaited<ReturnType<typeof existingForPlace>>>) => {
+      if (!(await canAccessLead(actor!, existing))) {
+        return res.status(409).json({ code: "lead_exists", message: "This business is already saved by someone else in your organization." });
+      }
+      return res.status(200).json({ lead: await storage.getSalesLead(existing.id), existing: true });
+    };
 
-    const lead = await storage.createSalesLead({
-      organizationId,
-      name: input.name,
-      legalName: input.legalName,
-      website: input.website,
-      phone: input.phone,
-      email: input.email,
-      industry: input.industry,
-      source: input.source || "field",
-      status,
-      ownerRepId: actor!.rep.id,
-      territoryName: input.territoryName,
-      notes: input.notes,
-      socialUrls: input.socialUrls,
-      googlePlaceId: input.googlePlaceId,
-    });
+    const alreadySaved = await existingForPlace();
+    if (alreadySaved) return answerExisting(alreadySaved);
+
+    let lead;
+    try {
+      lead = await storage.createSalesLead({
+        organizationId,
+        name: input.name,
+        legalName: input.legalName,
+        website: input.website,
+        phone: input.phone,
+        email: input.email,
+        industry: input.industry,
+        source: input.source || "field",
+        status,
+        ownerRepId: actor!.rep.id,
+        territoryName: input.territoryName,
+        notes: input.notes,
+        socialUrls: input.socialUrls,
+        googlePlaceId: input.googlePlaceId,
+      });
+    } catch (err) {
+      // Two imports of the same place racing past the lookup above.
+      const raced = (err as { code?: string; cause?: { code?: string } });
+      if (raced.code === "23505" || raced.cause?.code === "23505") {
+        const winner = await existingForPlace();
+        if (winner) return answerExisting(winner);
+      }
+      throw err;
+    }
 
     if (input.primaryLocation?.addressLine1) {
       await storage.createSalesLeadLocation({
@@ -113,7 +160,8 @@ export function createLeadsRouter() {
         country: input.primaryLocation.country || "US",
         lat: input.primaryLocation.lat,
         lng: input.primaryLocation.lng,
-        geofenceRadiusMeters: input.primaryLocation.geofenceRadiusMeters || 150,
+        // Omitted: the admin's default radius (storage fills it in).
+        geofenceRadiusMeters: input.primaryLocation.geofenceRadiusMeters || undefined,
         isPrimary: input.primaryLocation.isPrimary ?? true,
       });
     }
@@ -173,7 +221,6 @@ export function createLeadsRouter() {
             state: row.state,
             postalCode: row.postalCode,
             country: "US",
-            geofenceRadiusMeters: 150,
             isPrimary: true,
           });
         }
@@ -192,14 +239,14 @@ export function createLeadsRouter() {
   router.get("/leads/:id/google-profile", async (req, res) => {
     const actor = (req as any).xpotActor as Awaited<ReturnType<typeof ensureXpotRep>>;
     if (rateLimit(`places:profile:${actor!.rep.id}`, { limit: 60, windowMs: 5 * 60_000 })) {
-      return res.status(429).json({ message: "Too many Google profile requests. Please wait a moment." });
+      return res.status(429).json({ code: "too_many_requests", message: "Too many Google profile requests. Please wait a moment." });
     }
     const leadId = Number(req.params.id);
     if (!Number.isFinite(leadId)) return res.status(400).json({ message: "Invalid lead id" });
 
     const lead = await storage.getSalesLead(leadId);
-    if (!lead) return res.status(404).json({ message: "Lead not found" });
-    if (!(await canAccessLead(actor!, lead))) return res.status(403).json({ message: "Access denied" });
+    if (!lead) return res.status(404).json({ code: "lead_not_found", message: "Lead not found" });
+    if (!(await canAccessLead(actor!, lead))) return res.status(403).json({ code: "access_denied", message: "Access denied" });
 
     if (!lead.googlePlaceId) {
       return res.json({ connected: false, rating: null, reviewCount: null, mapsUrl: null, openNow: null });
@@ -230,14 +277,14 @@ export function createLeadsRouter() {
   router.post("/leads/:id/google-profile", async (req, res) => {
     const actor = (req as any).xpotActor as Awaited<ReturnType<typeof ensureXpotRep>>;
     if (rateLimit(`places:profile-link:${actor!.rep.id}`, { limit: 20, windowMs: 60_000 })) {
-      return res.status(429).json({ message: "Too many Google profile updates. Please wait a moment." });
+      return res.status(429).json({ code: "too_many_requests", message: "Too many Google profile updates. Please wait a moment." });
     }
     const leadId = Number(req.params.id);
     if (!Number.isFinite(leadId)) return res.status(400).json({ message: "Invalid lead id" });
 
     const lead = await storage.getSalesLead(leadId);
-    if (!lead) return res.status(404).json({ message: "Lead not found" });
-    if (!(await canAccessLead(actor!, lead))) return res.status(403).json({ message: "Access denied" });
+    if (!lead) return res.status(404).json({ code: "lead_not_found", message: "Lead not found" });
+    if (!(await canAccessLead(actor!, lead))) return res.status(403).json({ code: "access_denied", message: "Access denied" });
 
     const { placeId } = googleProfileLinkSchema.parse(req.body);
     if (!placeId) {
@@ -275,7 +322,7 @@ export function createLeadsRouter() {
             country: profile.address.country,
             lat: profile.address.lat,
             lng: profile.address.lng,
-            geofenceRadiusMeters: 150,
+            // No radius: an existing location keeps its own, a new one gets the default.
             isPrimary: true,
           })
         : null;
@@ -306,11 +353,11 @@ export function createLeadsRouter() {
 
     const lead = await storage.getSalesLead(leadId);
     if (!lead) {
-      return res.status(404).json({ message: "Lead not found" });
+      return res.status(404).json({ code: "lead_not_found", message: "Lead not found" });
     }
 
     if (!(await canAccessLead(actor!, lead))) {
-      return res.status(403).json({ message: "Access denied" });
+      return res.status(403).json({ code: "access_denied", message: "Access denied" });
     }
 
     // SEG-06: the lead check above is right, but these collections were not
@@ -345,19 +392,35 @@ export function createLeadsRouter() {
 
     const lead = await storage.getSalesLead(leadId);
     if (!lead) {
-      return res.status(404).json({ message: "Lead not found" });
+      return res.status(404).json({ code: "lead_not_found", message: "Lead not found" });
     }
 
     if (!(await canAccessLead(actor!, lead))) {
-      return res.status(403).json({ message: "Access denied" });
+      return res.status(403).json({ code: "access_denied", message: "Access denied" });
     }
     // The pipeline status (prospect → lead → …) is Visits work, like POST /leads/:id/promote; a Tags-only
     // reseller may edit a customer's details but not move it through the funnel.
     if (input.status !== undefined && !isManagerOrAdmin(actor!) && !repModules(actor!.rep).includes("visits")) {
       return res.status(403).json({ code: "module_off", message: "Visits are not enabled for your account." });
     }
+    // Holding a piece there lets a rep edit the company's details, not take it over
+    // (owning it would then let them delete it) nor move it through the funnel.
+    const ownerLevelChange = (input.ownerRepId !== undefined && input.ownerRepId !== lead.ownerRepId) ||
+      (input.status !== undefined && input.status !== lead.status);
+    if (ownerLevelChange && !(await ownsLead(actor!, lead))) return refuseNotOwner(res);
 
-    const updated = await storage.updateSalesLead(leadId, input);
+    let updated;
+    try {
+      updated = await storage.updateSalesLead(leadId, input);
+    } catch (err) {
+      // Linking a Google place another company of the organization already has (unique index):
+      // say so, without naming that company, as POST /leads does.
+      const clash = err as { code?: string; cause?: { code?: string } };
+      if (input.googlePlaceId && (clash.code === "23505" || clash.cause?.code === "23505")) {
+        return res.status(409).json({ code: "lead_exists", message: "This place is already saved as another company." });
+      }
+      throw err;
+    }
     res.json({ lead: updated });
   });
 
@@ -367,25 +430,25 @@ export function createLeadsRouter() {
     const leadId = Number(req.params.id);
 
     const lead = await storage.getSalesLead(leadId);
-    if (!lead) return res.status(404).json({ message: "Lead not found" });
+    if (!lead) return res.status(404).json({ code: "lead_not_found", message: "Lead not found" });
     if (!(await canAccessLead(actor!, lead))) {
-      return res.status(403).json({ message: "Access denied" });
+      return res.status(403).json({ code: "access_denied", message: "Access denied" });
     }
 
-    const location = await storage.upsertPrimaryLocation(leadId, {
-      label: req.body.label || "Main",
-      addressLine1: req.body.addressLine1 || "",
-      addressLine2: req.body.addressLine2 ?? null,
-      city: req.body.city ?? null,
-      state: req.body.state ?? null,
-      postalCode: req.body.postalCode ?? null,
-      country: req.body.country || "US",
-      // Callers send numbers (Google Places, geolocation); the column is text.
-      lat: req.body.lat == null ? null : String(req.body.lat),
-      lng: req.body.lng == null ? null : String(req.body.lng),
-      geofenceRadiusMeters: req.body.geofenceRadiusMeters || 150,
-      isPrimary: true,
-    });
+    const [locations, appSettings] = await Promise.all([
+      storage.listSalesLeadLocations(leadId),
+      storage.getSalesAppSettings(),
+    ]);
+    const existing = locations.find((location) => location.isPrimary) ?? null;
+    // Address editors send no coordinates; keep them unless the address moved
+    // (see planPrimaryLocationUpdate for the full rule).
+    const plan = planPrimaryLocationUpdate(existing, req.body ?? {}, appSettings.defaultGeofenceRadiusMeters);
+    if (plan.geocode) {
+      const apiKey = await resolveGoogleApiKey();
+      const coords = apiKey ? await geocodeAddress(plan.geocode, apiKey) : null;
+      if (coords) Object.assign(plan.data, coords);
+    }
+    const location = await storage.upsertPrimaryLocation(leadId, plan.data);
 
     res.json({ location });
   });
@@ -397,11 +460,13 @@ export function createLeadsRouter() {
     if (!Number.isFinite(leadId)) return res.status(400).json({ message: "Invalid lead id" });
 
     const lead = await storage.getSalesLead(leadId);
-    if (!lead) return res.status(404).json({ message: "Lead not found" });
+    if (!lead) return res.status(404).json({ code: "lead_not_found", message: "Lead not found" });
 
     if (!(await canAccessLead(actor!, lead))) {
-      return res.status(403).json({ message: "Access denied" });
+      return res.status(403).json({ code: "access_denied", message: "Access denied" });
     }
+    // Pushing a company to the CRM (and promoting it) is the owner's call, not a piece holder's.
+    if (!(await ownsLead(actor!, lead))) return refuseNotOwner(res);
 
     if (lead.status === "prospect") {
       await storage.updateSalesLead(leadId, { status: "lead" });
@@ -418,11 +483,12 @@ export function createLeadsRouter() {
     if (!Number.isFinite(leadId)) return res.status(400).json({ message: "Invalid lead id" });
 
     const lead = await storage.getSalesLead(leadId);
-    if (!lead) return res.status(404).json({ message: "Lead not found" });
+    if (!lead) return res.status(404).json({ code: "lead_not_found", message: "Lead not found" });
 
     if (!(await canAccessLead(actor!, lead))) {
-      return res.status(403).json({ message: "Access denied" });
+      return res.status(403).json({ code: "access_denied", message: "Access denied" });
     }
+    if (!(await ownsLead(actor!, lead))) return refuseNotOwner(res);
 
     if (lead.status !== "prospect") {
       return res.status(400).json({ message: "Lead is already a lead or beyond prospect stage" });
@@ -440,11 +506,10 @@ export function createLeadsRouter() {
     if (!Number.isFinite(leadId)) return res.status(400).json({ message: "Invalid lead id" });
 
     const lead = await storage.getSalesLead(leadId);
-    if (!lead) return res.status(404).json({ message: "Lead not found" });
+    if (!lead) return res.status(404).json({ code: "lead_not_found", message: "Lead not found" });
 
-    if (!(await canAccessLead(actor!, lead))) {
-      return res.status(403).json({ message: "Access denied" });
-    }
+    // Holding a piece there lets a rep see and edit a company, not delete someone else's lead.
+    if (!(await ownsLead(actor!, lead))) return refuseNotOwner(res);
 
     const files = await storage.deleteSalesLead(leadId);
     res.status(204).end();
@@ -491,7 +556,8 @@ export function createLeadsRouter() {
     const target = photo || photoUrl;
     if (!target) return res.status(400).json({ message: "photo is required" });
 
-    const lead = await loadAccessibleLead(req, res, Number(req.params.id));
+    // Removing a photo deletes its stored file: the owner's call, not a piece holder's.
+    const lead = await loadAccessibleLead(req, res, Number(req.params.id), "owner");
     if (!lead) return;
 
     const currentPhotos = lead.photos ?? [];

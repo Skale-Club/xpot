@@ -1,15 +1,16 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode } from "react";
-import { Building2, Loader2 as SpinnerIcon, LocateFixed, Plus, Search, X } from "lucide-react";
+import { Building2, LocateFixed, Plus, Search, X } from "lucide-react";
+import { DotsLoader } from "@/components/ui/spinner";
+import { Pill } from "@/components/xpot/StatusPill";
 import { useT } from "@/i18n";
 import { checkinMessages } from "@/i18n/messages/checkin";
 import { GoogleLogo } from "@/components/ui/google-logo";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { usePlaceSearch } from "../usePlaceSearch";
-import { findMatchingLead } from "../utils";
-import { leadMatchesSearch } from "../hooks/useLeads";
+import { matchSavedLead } from "../utils";
+import { placeTypeLabel } from "@/lib/placeTypes";
+import { useLeadLookup } from "../hooks/useLeadLookup";
 import type { FullSalesLead, GeoState, GooglePlaceResult } from "../types";
-
-const MAX_LEADS = 6;
 
 type Item =
   | { kind: "lead"; key: string; lead: FullSalesLead }
@@ -27,7 +28,6 @@ export type PlaceLeadSearchHandle = { focus: () => void };
 export const PlaceLeadSearch = forwardRef<PlaceLeadSearchHandle, {
   value: string;
   onChange: (value: string) => void;
-  leads: FullSalesLead[];
   geoState: GeoState;
   enabled?: boolean;
   placeholder: string;
@@ -35,7 +35,8 @@ export const PlaceLeadSearch = forwardRef<PlaceLeadSearchHandle, {
   /** Shown at the end of the input row, e.g. a keyboard hint. */
   trailing?: ReactNode;
   onPickLead: (lead: FullSalesLead) => void;
-  onPickPlace: (place: GooglePlaceResult) => void;
+  /** `match` is the saved company this Google result already is, when the search can see it. */
+  onPickPlace: (place: GooglePlaceResult, match?: FullSalesLead) => void;
   onCreate: (name: string) => void;
   onNearby: () => void;
   onOpenChange?: (open: boolean) => void;
@@ -43,7 +44,6 @@ export const PlaceLeadSearch = forwardRef<PlaceLeadSearchHandle, {
 }>(function PlaceLeadSearch({
   value,
   onChange,
-  leads,
   geoState,
   enabled = true,
   placeholder,
@@ -71,19 +71,20 @@ export const PlaceLeadSearch = forwardRef<PlaceLeadSearchHandle, {
   };
 
   const query = value.trim();
-  const leadResults = useMemo(
-    () => leads.filter((lead) => leadMatchesSearch(lead, query)).slice(0, MAX_LEADS),
-    [leads, query],
-  );
+  const leadQuery = useLeadLookup(value, enabled && open);
+  const leadResults = leadQuery.data ?? [];
+  // A Google result is "already saved" when one of the companies the server
+  // returned for this text carries its Place ID, or looks like it.
+  const matchFor = (place: GooglePlaceResult) => matchSavedLead(place, leadResults);
   const places = query.length >= 2 ? placeQuery.data?.results ?? [] : [];
 
   // Visual order and keyboard order are the same list.
   const items: Item[] = useMemo(() => [
     ...leadResults.map((lead) => ({ kind: "lead" as const, key: `lead-${lead.id}`, lead })),
     ...(isDesktop ? [{ kind: "create" as const, key: "create" }] : []),
-    ...places.map((place) => ({ kind: "place" as const, key: `place-${place.placeId}`, place, match: findMatchingLead(place, leads) })),
+    ...places.map((place) => ({ kind: "place" as const, key: `place-${place.placeId}`, place, match: matchFor(place) })),
     ...(isDesktop ? [] : [{ kind: "create" as const, key: "create" }]),
-  ], [isDesktop, leadResults, leads, places]);
+  ], [isDesktop, leadResults, places]);
 
   useEffect(() => { setActiveIndex(-1); }, [query]);
 
@@ -91,7 +92,7 @@ export const PlaceLeadSearch = forwardRef<PlaceLeadSearchHandle, {
     setOpen(false);
     inputRef.current?.blur();
     if (item.kind === "lead") onPickLead(item.lead);
-    else if (item.kind === "place") onPickPlace(item.place);
+    else if (item.kind === "place") onPickPlace(item.place, item.match);
     else onCreate(query);
   };
 
@@ -111,6 +112,9 @@ export const PlaceLeadSearch = forwardRef<PlaceLeadSearchHandle, {
     }
     if (event.key === "Enter") {
       event.preventDefault();
+      // With nothing typed the list is just the first saved customers: Enter
+      // alone must not open a check-in at whichever one happens to be first.
+      if (!items[activeIndex] && !query) return;
       const item = items[activeIndex] ?? items.find((candidate) => candidate.kind !== "create");
       if (item) pick(item);
     }
@@ -137,7 +141,8 @@ export const PlaceLeadSearch = forwardRef<PlaceLeadSearchHandle, {
           <span className={`block text-sm font-semibold text-white/90 ${lineClamp}`}>{lead.name}</span>
           <span className={`block text-xs text-white/40 ${lineClamp}`}>{address || lead.industry || t("localLead")}</span>
         </span>
-        <span className="mt-0.5 shrink-0 rounded-full bg-emerald-400/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-300">{t("badgeLocal")}</span>
+        {/* Already saved: neutral, green is money. */}
+        <Pill tone="slate" className="mt-0.5 shrink-0">{t("badgeLocal")}</Pill>
       </button>
     );
   });
@@ -165,7 +170,8 @@ export const PlaceLeadSearch = forwardRef<PlaceLeadSearchHandle, {
 
   const placeRows = places.map((place) => {
     const key = `place-${place.placeId}`;
-    const match = findMatchingLead(place, leads);
+    const match = matchFor(place);
+    const typeLabel = placeTypeLabel(place.primaryType, t.lang, place.primaryTypeName);
     return (
       <button key={key} type="button" id={key} role="option" aria-selected={indexOf(key) === activeIndex} onMouseEnter={() => setActiveIndex(indexOf(key))} onClick={() => pick({ kind: "place", key, place, match })} className={rowClass(key)}>
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-blue-400/15 bg-blue-500/10 text-blue-300">
@@ -174,9 +180,9 @@ export const PlaceLeadSearch = forwardRef<PlaceLeadSearchHandle, {
         <span className="min-w-0 flex-1">
           <span className={`block text-sm font-semibold text-white/90 ${lineClamp}`}>{place.name}</span>
           <span className={`block text-xs text-white/40 ${lineClamp}`}>{place.address}</span>
-          {place.primaryType || place.phone ? (
+          {typeLabel || place.phone ? (
             <span className="mt-0.5 flex gap-2 truncate text-[10px] font-medium uppercase tracking-wider text-white/30">
-              {place.primaryType ? <span className="truncate">{place.primaryType.replace(/_/g, " ")}</span> : null}
+              {typeLabel ? <span className="truncate">{typeLabel}</span> : null}
               {place.phone ? <span className="shrink-0">{place.phone}</span> : null}
             </span>
           ) : null}
@@ -195,7 +201,8 @@ export const PlaceLeadSearch = forwardRef<PlaceLeadSearchHandle, {
   const googleStatus = query.length < 2 ? (
     <div className="px-3 py-6 text-center text-xs text-white/35">{t("searchGoogleHint")}</div>
   ) : placeQuery.error ? (
-    <div className="mx-1 rounded-xl border border-red-400/20 bg-red-500/10 px-3 py-2.5 text-xs text-red-300">{(placeQuery.error as Error).message}</div>
+    // The server's reason is the raw response body, often an admin instruction in English; the rep gets what they can do.
+    <div className="mx-1 rounded-xl border border-red-400/20 bg-red-500/10 px-3 py-2.5 text-xs text-red-300" role="alert">{t("searchGoogleFailed")}</div>
   ) : placeQuery.isFetching && !places.length ? (
     <div className="space-y-1.5 px-1">
       {[0, 1, 2].map((n) => <div key={n} className="h-12 animate-pulse rounded-xl bg-white/[0.04]" />)}
@@ -233,9 +240,9 @@ export const PlaceLeadSearch = forwardRef<PlaceLeadSearchHandle, {
           data-testid="place-lead-search"
         />
         <div className="flex shrink-0 items-center gap-1 pr-2">
-          {busy || placeQuery.isFetching ? <SpinnerIcon className="h-4 w-4 animate-spin text-white/35" /> : null}
+          {busy || placeQuery.isFetching ? <DotsLoader size="xs" tone="muted" /> : null}
           {value ? (
-            <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => { onChange(""); inputRef.current?.focus(); }} aria-label={t("searchClear")} title={t("searchClear")} className="flex h-8 w-8 items-center justify-center rounded-full text-white/35 transition-colors hover:bg-white/[0.07] hover:text-white/80">
+            <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => { onChange(""); inputRef.current?.focus(); }} aria-label={t("searchClear")} title={t("searchClear")} className="flex h-10 w-10 items-center justify-center rounded-full text-white/35 transition-colors hover:bg-white/[0.07] hover:text-white/80">
               <X className="h-4 w-4" />
             </button>
           ) : trailing}
@@ -247,7 +254,7 @@ export const PlaceLeadSearch = forwardRef<PlaceLeadSearchHandle, {
             title={t("searchNearby")}
           >
             <LocateFixed className="h-4 w-4" />
-            <span className="hidden sm:inline">{t("searchNearby")}</span>
+            <span className="hidden lg:inline">{t("searchNearby")}</span>
           </button>
         </div>
       </div>

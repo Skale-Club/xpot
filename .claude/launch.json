@@ -14,6 +14,12 @@
       "runtimeArgs": ["start"],
       "port": 2110,
       "autoPort": true
+    },
+    {
+      "name": "xmartmenu",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "C:/Users/Vanildo/Dev/xmartmenu", "run", "dev", "--", "-p", "3105"],
+      "port": 3105
     }
   ]
 }

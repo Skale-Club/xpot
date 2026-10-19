@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { storage } from "../../storage.js";
-import { requireXpotUser, ensureXpotRep, isManagerOrAdmin, loadAccessibleLead, listsEveryone } from "./middleware.js";
+import { requireXpotUser, ensureXpotRep, loadAccessibleLead, listScope, type XpotActor } from "./middleware.js";
 import type { SalesVisitStatus } from "#shared/schema/sales.js";
 import { getDistanceMeters, syncTaskToGhl, syncVisitToGhl, syncVisitToXphere } from "./helpers.js";
 import { xpotCheckInSchema, xpotCheckOutSchema, xpotVisitNoteUpsertSchema, xpotVisitSummarySchema } from "#shared/xpot.js";
@@ -9,6 +9,7 @@ import { activeStore, discardFiles, putPrivateFile } from "../../lib/files.js";
 import { finishVisitTransaction, startVisitTransaction } from "../../visit-workflow.js";
 import { saveVisitSummaryTransaction } from "../../visit-summary.js";
 import { evaluateCheckInGeofence } from "../../check-in-geofence.js";
+import { transcriptionProviders } from "../../lib/providerChoice.js";
 
 export function createVisitsRouter() {
   const router = Router();
@@ -17,8 +18,14 @@ export function createVisitsRouter() {
   router.get("/visits", async (req, res) => {
     const actor = (req as any).xpotActor as Awaited<ReturnType<typeof ensureXpotRep>>;
     const leadId = typeof req.query.leadId === "string" ? Number(req.query.leadId) : undefined;
+    // ?repId= narrows the list to one person (the history's "Seller" filter,
+    // People's "Their visits"). Visits have no organization, so only the
+    // "everyone" scope widens (a manager in management mode) and only it
+    // honours the filter; anyone else gets their own visits.
+    const repFilter = Number(req.query.repId);
+    const scope = await listScope(req, actor as XpotActor);
     const visits = await storage.listSalesVisits({
-      repId: listsEveryone(req, actor!) ? (req.query.repId ? Number(req.query.repId) : undefined) : actor!.rep.id,
+      repId: scope.kind === "everyone" ? (Number.isInteger(repFilter) && repFilter > 0 ? repFilter : undefined) : actor!.rep.id,
       leadId,
     });
     // Four queries for the whole list. This used to read the lead, its
@@ -56,7 +63,7 @@ export function createVisitsRouter() {
     const input = xpotCheckInSchema.parse(req.body);
     const activeVisit = await storage.getActiveSalesVisitForRep(actor!.rep.id);
     if (activeVisit) {
-      return res.status(409).json({ message: "Rep already has an active visit" });
+      return res.status(409).json({ code: "visit_active", message: "Rep already has an active visit" });
     }
 
     const appSettings = await storage.getSalesAppSettings();
@@ -73,7 +80,7 @@ export function createVisitsRouter() {
       plannedVisit.leadId !== lead.id ||
       plannedVisit.status !== "planned"
     )) {
-      return res.status(400).json({ message: "Planned visit is not available for this check-in" });
+      return res.status(400).json({ code: "planned_visit_unavailable", message: "Planned visit is not available for this check-in" });
     }
 
     const locations = await storage.listSalesLeadLocations(input.leadId);
@@ -140,7 +147,7 @@ export function createVisitsRouter() {
       values: checkInValues,
     });
     if (!visit) {
-      return res.status(409).json({ message: "Planned visit changed before check-in. Reload and try again." });
+      return res.status(409).json({ code: "planned_visit_changed", message: "Planned visit changed before check-in. Reload and try again." });
     }
     res.status(201).json({ visit, lead, location: selectedLocation ?? null });
   });
@@ -152,7 +159,7 @@ export function createVisitsRouter() {
     const visit = await storage.getSalesVisit(visitId);
 
     if (!visit || visit.repId !== actor!.rep.id) {
-      return res.status(404).json({ message: "Visit not found" });
+      return res.status(404).json({ code: "visit_not_found", message: "Visit not found" });
     }
 
     const checkedOutAt = new Date();
@@ -188,11 +195,11 @@ export function createVisitsRouter() {
     const visit = await storage.getSalesVisit(visitId);
 
     if (!visit || visit.repId !== actor!.rep.id) {
-      return res.status(404).json({ message: "Visit not found" });
+      return res.status(404).json({ code: "visit_not_found", message: "Visit not found" });
     }
 
     if (visit.status !== "in_progress") {
-      return res.status(400).json({ message: "Only in-progress visits can be cancelled" });
+      return res.status(400).json({ code: "visit_not_cancellable", message: "Only in-progress visits can be cancelled" });
     }
 
     const checkedOutAt = new Date();
@@ -216,7 +223,7 @@ export function createVisitsRouter() {
     const visitId = Number(req.params.id);
     const visit = await storage.getSalesVisit(visitId);
     if (!visit || visit.repId !== actor!.rep.id) {
-      return res.status(404).json({ message: "Visit not found" });
+      return res.status(404).json({ code: "visit_not_found", message: "Visit not found" });
     }
     const { status } = req.body as { status?: SalesVisitStatus };
     const updated = await storage.updateSalesVisit(visitId, { ...(status ? { status } : {}) });
@@ -236,7 +243,7 @@ export function createVisitsRouter() {
     const visitId = Number(req.params.id);
     const visit = await storage.getSalesVisit(visitId);
     if (!visit || (visit.repId !== actor!.rep.id && !actor!.user.isAdmin)) {
-      return res.status(404).json({ message: "Visit not found" });
+      return res.status(404).json({ code: "visit_not_found", message: "Visit not found" });
     }
     if (visit.status === "planned") {
       await finishVisitTransaction({
@@ -260,7 +267,7 @@ export function createVisitsRouter() {
     const visit = await storage.getSalesVisit(visitId);
 
     if (!visit || visit.repId !== actor!.rep.id) {
-      return res.status(404).json({ message: "Visit not found" });
+      return res.status(404).json({ code: "visit_not_found", message: "Visit not found" });
     }
 
     const note = await storage.upsertSalesVisitNote({
@@ -276,7 +283,7 @@ export function createVisitsRouter() {
     const visitId = Number(req.params.id);
     const input = xpotVisitSummarySchema.parse(req.body);
     const visit = await storage.getSalesVisit(visitId);
-    if (!visit || visit.repId !== actor!.rep.id) return res.status(404).json({ message: "Visit not found" });
+    if (!visit || visit.repId !== actor!.rep.id) return res.status(404).json({ code: "visit_not_found", message: "Visit not found" });
     if (!visit.checkedOutAt) return res.status(409).json({ code: "visit_still_active", message: "Finish the visit before saving its summary" });
 
     const { note, task } = await saveVisitSummaryTransaction({
@@ -298,7 +305,7 @@ export function createVisitsRouter() {
 
     const visit = await storage.getSalesVisit(visitId);
     if (!visit || visit.repId !== actor!.rep.id) {
-      return res.status(404).json({ message: "Visit not found" });
+      return res.status(404).json({ code: "visit_not_found", message: "Visit not found" });
     }
 
     if (!audioData) {
@@ -317,45 +324,31 @@ export function createVisitsRouter() {
       const audioUrl = await putPrivateFile(`audio/${actor!.rep.id}/${filename}`, buffer, "audio/webm");
       const previousAudio = (await storage.getSalesVisitNote(visitId))?.audioUrl;
 
-      // Transcribe with Groq Whisper (best-effort — does not block save on failure)
+      // Transcribe (best-effort — does not block save on failure): Groq first,
+      // OpenAI when Groq is off or fails; each only when switched on in the panel.
       let audioTranscription: string | null = null;
-      const groqIntegration = await storage.getChatIntegration("groq");
-      const groqApiKey = groqIntegration?.apiKey;
-      if (groqApiKey) {
+      const [groqIntegration, openaiIntegration] = await Promise.all([
+        storage.getChatIntegration("groq"),
+        storage.getChatIntegration("openai"),
+      ]);
+      for (const pick of transcriptionProviders({ groq: groqIntegration, openai: openaiIntegration })) {
         try {
-          const Groq = (await import("groq-sdk")).default;
-          const groq = new Groq({ apiKey: groqApiKey });
           const file = new File([buffer], filename, { type: "audio/webm" });
-          const transcription = await groq.audio.transcriptions.create({
-            file,
-            model: "whisper-large-v3-turbo",
-            response_format: "text",
-          });
-          audioTranscription = (transcription as unknown as string).trim() || null;
-        } catch (transcriptionError: any) {
-          console.error("Groq transcription error:", transcriptionError.message);
-        }
-      }
-
-      // Fallback to OpenAI Whisper when Groq is unconfigured or failed.
-      if (!audioTranscription) {
-        const openaiIntegration = await storage.getChatIntegration("openai");
-        const openaiApiKey = openaiIntegration?.apiKey;
-        if (openaiApiKey && openaiIntegration?.enabled !== false) {
-          try {
+          let transcription: unknown;
+          if (pick.provider === "groq") {
+            const Groq = (await import("groq-sdk")).default;
+            const groq = new Groq({ apiKey: pick.apiKey });
+            transcription = await groq.audio.transcriptions.create({ file, model: pick.model!, response_format: "text" });
+          } else {
             const { OpenAI } = await import("openai");
-            const openai = new OpenAI({ apiKey: openaiApiKey });
-            const file = new File([buffer], filename, { type: "audio/webm" });
-            const transcription = await openai.audio.transcriptions.create({
-              file,
-              model: "whisper-1",
-              response_format: "text",
-            });
-            audioTranscription = (transcription as unknown as string).trim() || null;
-          } catch (transcriptionError: any) {
-            console.error("OpenAI transcription error:", transcriptionError.message);
+            const openai = new OpenAI({ apiKey: pick.apiKey });
+            transcription = await openai.audio.transcriptions.create({ file, model: pick.model!, response_format: "text" });
           }
+          audioTranscription = String(transcription ?? "").trim() || null;
+        } catch (transcriptionError: any) {
+          console.error(`${pick.provider} transcription error:`, transcriptionError.message);
         }
+        if (audioTranscription) break;
       }
 
       // PLT-03: analysis used to run here too, inside the same request, under

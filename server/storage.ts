@@ -58,6 +58,7 @@ import {
   type InsertLandingPageContentRow,
 } from "#shared/schema.js";
 import type { LandingLocale } from "#shared/landingContent.js";
+import { defaultGeofenceRadiusSql } from "./lead-location.js";
 
 // ─── Recent-visits joined shape (used by /api/xpot/admin/recent-visits) ──────
 
@@ -69,6 +70,17 @@ export type RecentSalesVisit = {
   note: Pick<SalesVisitNote, "summary" | "outcome" | "nextStep" | "sentiment"> | null;
   syncStatus: string | null;
   syncLastError: string | null;
+};
+
+/**
+ * The leads a rep's own lists show: every lead of the Organizations they run,
+ * the leads they own in an Organization they belong to (`null`: any), and the
+ * companies holding one of their Tags pieces, whoever created the lead.
+ */
+export type LeadVisibility = {
+  repId: number;
+  managedOrganizationIds: number[];
+  activeOrganizationIds: number[] | null;
 };
 
 // ─── Storage interface (intentionally narrow) ────────────────────────────────
@@ -122,8 +134,12 @@ export interface IStorage {
   updateUserProfile(userId: string, data: { firstName?: string | null; lastName?: string | null; profileImageUrl?: string | null }): Promise<User>;
 
   // Leads + child tables
-  listSalesLeads(filters?: { ownerRepId?: number; organizationIds?: number[]; search?: string; limit?: number; offset?: number }): Promise<SalesLead[]>;
+  listSalesLeads(filters?: { ownerRepId?: number; organizationIds?: number[]; visibleTo?: LeadVisibility; search?: string; limit?: number; offset?: number }): Promise<SalesLead[]>;
+  /** True when one of this rep's Tags pieces is linked to the lead (the company holds it). */
+  leadHoldsRepPiece(leadId: number, repId: number): Promise<boolean>;
   getSalesLead(id: number): Promise<SalesLead | undefined>;
+  /** The organization's company already linked to this Google place (unique per organization). */
+  getSalesLeadByGooglePlace(organizationId: number, googlePlaceId: string): Promise<SalesLead | undefined>;
   getSalesLeadsByIds(ids: number[]): Promise<SalesLead[]>;
   getSalesLeadByXphereRef(ref: string): Promise<SalesLead | undefined>;
   createSalesLead(input: InsertSalesLead): Promise<SalesLead>;
@@ -140,6 +156,8 @@ export interface IStorage {
   listSalesLeadContactsBatch(leadIds: number[]): Promise<SalesLeadContact[]>;
   createSalesLeadContact(input: InsertSalesLeadContact): Promise<SalesLeadContact>;
   countOpenOpportunitiesByLeadIds(leadIds: number[]): Promise<Record<number, number>>;
+  /** Leads with an open follow-up task, and the earliest due date among them (null when none is dated). */
+  openFollowUpsByLeadIds(leadIds: number[], repId?: number): Promise<Map<number, Date | null>>;
 
   // Visits
   listSalesVisits(filters?: { repId?: number; leadId?: number; activeOnly?: boolean }): Promise<SalesVisit[]>;
@@ -411,21 +429,38 @@ export class DatabaseStorage implements IStorage {
 
   // ── Leads ──
 
-  async listSalesLeads(filters: { ownerRepId?: number; organizationIds?: number[]; search?: string; limit?: number; offset?: number } = {}): Promise<SalesLead[]> {
+  async listSalesLeads(filters: { ownerRepId?: number; organizationIds?: number[]; visibleTo?: LeadVisibility; search?: string; limit?: number; offset?: number } = {}): Promise<SalesLead[]> {
     const conditions: any[] = [];
     if (filters.ownerRepId) conditions.push(eq(salesLeads.ownerRepId, filters.ownerRepId));
     if (filters.organizationIds) {
       if (!filters.organizationIds.length) return [];
       conditions.push(inArray(salesLeads.organizationId, filters.organizationIds));
     }
+    if (filters.visibleTo) {
+      const { repId, managedOrganizationIds, activeOrganizationIds } = filters.visibleTo;
+      conditions.push(or(
+        managedOrganizationIds.length ? inArray(salesLeads.organizationId, managedOrganizationIds) : undefined,
+        activeOrganizationIds === null
+          ? eq(salesLeads.ownerRepId, repId)
+          : activeOrganizationIds.length
+            ? and(eq(salesLeads.ownerRepId, repId), inArray(salesLeads.organizationId, activeOrganizationIds))
+            : undefined,
+        sql`EXISTS (SELECT 1 FROM tags t WHERE t.lead_id = ${salesLeads.id} AND t.rep_id = ${repId})`,
+      ));
+    }
     if (filters.search) {
       const likeValue = `%${filters.search}%`;
+      // What the check-in search matched locally before it asked the server:
+      // the sector and an address or city count too.
       conditions.push(
         or(
           ilike(salesLeads.name, likeValue),
           ilike(salesLeads.legalName, likeValue),
           ilike(salesLeads.email, likeValue),
           ilike(salesLeads.phone, likeValue),
+          ilike(salesLeads.industry, likeValue),
+          sql`EXISTS (SELECT 1 FROM sales_lead_locations l WHERE l.lead_id = ${salesLeads.id}
+            AND (l.address_line_1 ILIKE ${likeValue} OR l.city ILIKE ${likeValue}))`,
         )
       );
     }
@@ -437,6 +472,11 @@ export class DatabaseStorage implements IStorage {
     return filters.limit ? await query.limit(filters.limit).offset(filters.offset ?? 0) : await query;
   }
 
+  async leadHoldsRepPiece(leadId: number, repId: number): Promise<boolean> {
+    const found = await db.execute(sql`SELECT 1 FROM tags WHERE lead_id = ${leadId} AND rep_id = ${repId} LIMIT 1`);
+    return found.rows.length > 0;
+  }
+
   async getSalesLeadsByIds(ids: number[]): Promise<SalesLead[]> {
     if (!ids.length) return [];
     return await db.select().from(salesLeads).where(inArray(salesLeads.id, ids));
@@ -444,6 +484,13 @@ export class DatabaseStorage implements IStorage {
 
   async getSalesLead(id: number): Promise<SalesLead | undefined> {
     const [lead] = await db.select().from(salesLeads).where(eq(salesLeads.id, id));
+    return lead;
+  }
+
+  async getSalesLeadByGooglePlace(organizationId: number, googlePlaceId: string): Promise<SalesLead | undefined> {
+    const [lead] = await db.select().from(salesLeads)
+      .where(and(eq(salesLeads.organizationId, organizationId), eq(salesLeads.googlePlaceId, googlePlaceId)))
+      .limit(1);
     return lead;
   }
 
@@ -497,8 +544,12 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(salesLeadLocations.isPrimary), asc(salesLeadLocations.id));
   }
 
+  // A location created without a radius takes the admin's default radius; an
+  // update without one keeps the radius it has.
   async createSalesLeadLocation(input: InsertSalesLeadLocation): Promise<SalesLeadLocation> {
-    const [created] = await db.insert(salesLeadLocations).values(input).returning();
+    const [created] = await db.insert(salesLeadLocations)
+      .values({ ...input, geofenceRadiusMeters: input.geofenceRadiusMeters ?? defaultGeofenceRadiusSql() })
+      .returning();
     return created;
   }
 
@@ -518,7 +569,7 @@ export class DatabaseStorage implements IStorage {
     }
     const [created] = await db
       .insert(salesLeadLocations)
-      .values({ ...data, leadId, isPrimary: true })
+      .values({ ...data, leadId, isPrimary: true, geofenceRadiusMeters: data.geofenceRadiusMeters ?? defaultGeofenceRadiusSql() })
       .returning();
     return created;
   }
@@ -553,6 +604,22 @@ export class DatabaseStorage implements IStorage {
       .where(and(inArray(salesOpportunitiesLocal.leadId, leadIds), eq(salesOpportunitiesLocal.status, "open")))
       .groupBy(salesOpportunitiesLocal.leadId);
     return Object.fromEntries(rows.map((r) => [r.leadId, r.count]));
+  }
+
+  async openFollowUpsByLeadIds(leadIds: number[], repId?: number): Promise<Map<number, Date | null>> {
+    if (!leadIds.length) return new Map();
+    const conditions = [
+      inArray(salesTasks.leadId, leadIds),
+      eq(salesTasks.type, "follow_up"),
+      inArray(salesTasks.status, ["pending", "in_progress"]),
+    ];
+    if (repId) conditions.push(eq(salesTasks.repId, repId));
+    const rows = await db
+      .select({ leadId: salesTasks.leadId, dueAt: sql<string | null>`min(${salesTasks.dueAt})` })
+      .from(salesTasks)
+      .where(and(...conditions))
+      .groupBy(salesTasks.leadId);
+    return new Map(rows.filter((row) => row.leadId != null).map((row) => [row.leadId!, row.dueAt ? new Date(row.dueAt) : null]));
   }
 
   // ── Visits ──

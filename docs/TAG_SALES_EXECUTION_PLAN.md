@@ -1,6 +1,15 @@
 # Plano de execução: venda de peças e margem de parceiros
 
 **Status:** implementado em outubro de 2026
+
+> *Nota 2026-10-18 (revisão de UX):* o passo 3 de §3.5 não estava implementado.
+> Cancelar uma venda de Tags invalidava o vínculo, mas a peça continuava marcada
+> como vendida e da posse do cliente, então não contava como estoque nem como
+> vendida e não podia ser vendida de novo. Corrigido em `524ae0a`: a peça volta
+> ao estoque com o vendedor e a posse de antes, com um movimento `restore`
+> ligado à venda. Os nomes de tela abaixo são os do plano; os de hoje estão em
+> [UX_OVERHAUL.md](./UX_OVERHAUL.md) (por exemplo, a caixa de pedidos Stuscle de
+> §8.4 é Tags › Gestão › Distribuição › Pedidos Stuscle).
 **Público:** produto, engenharia e operação
 **Objetivo:** transformar a venda de uma peça de Tags em uma venda financeira completa, ligada à peça física, ao cliente, à visita e ao custo real de quem vendeu.
 

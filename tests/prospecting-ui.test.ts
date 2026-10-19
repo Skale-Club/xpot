@@ -7,6 +7,23 @@ import {
   prospectingProgress,
   reorderIdsAroundTarget,
   routeDisplayName,
+  routeStopProgress,
+  stopMarkerTone,
+  STOP_MARKER_TONES,
+  ROUTE_STATUS_ICON,
+  ROUTE_STATUS_TONE,
+  STOP_STATUS_TONE,
+  routeStatusLabel,
+  routeStatusTone,
+  routeStatusIcon,
+  stopStatusLabelKey,
+  stopStatusTone,
+  isStopOpen,
+  eligibleCandidates,
+  routeFill,
+  samePlace,
+  routeOfJob,
+  todayRouteOf,
   selectableCandidateIds,
   activeRunTiming,
   estimatedRunPercent,
@@ -159,5 +176,131 @@ describe("prospecting UI helpers", () => {
     expect(moveIdByOffset(stops, 2, 1)).toEqual([1, 3, 2]);
     expect(moveIdByOffset(stops, 1, -1)).toBe(stops);
     expect(moveIdByOffset(stops, 3, 1)).toBe(stops);
+  });
+});
+
+describe("todayRouteOf", () => {
+  const routes = [
+    { id: 1, routeDate: "2026-10-18", status: "completed" },
+    { id: 2, routeDate: "2026-10-18", status: "cancelled" },
+    { id: 3, routeDate: "2026-10-18", status: "published" },
+    { id: 4, routeDate: "2026-10-17", status: "in_progress" },
+  ];
+
+  it("picks the open route of the day, like the Route screen", () => {
+    expect(todayRouteOf(routes, "2026-10-18")?.id).toBe(3);
+    expect(todayRouteOf(routes, "2026-10-19")).toBeUndefined();
+  });
+
+  it("falls back to a route completed that day only when asked", () => {
+    const finished = routes.filter((route) => route.id !== 3);
+    expect(todayRouteOf(finished, "2026-10-18")).toBeUndefined();
+    expect(todayRouteOf(finished, "2026-10-18", { includeCompleted: true })?.id).toBe(1);
+  });
+});
+
+describe("routeStopProgress", () => {
+  it("counts completed and skipped stops as done", () => {
+    expect(routeStopProgress([
+      { status: "completed" }, { status: "skipped" }, { status: "planned" }, { status: "checked_in" },
+    ])).toEqual({ done: 2, total: 4, percent: 50 });
+    expect(routeStopProgress([])).toEqual({ done: 0, total: 0, percent: 0 });
+  });
+});
+
+describe("stopMarkerTone", () => {
+  it("mutes done and skipped stops with a glyph so they never look like future ones", () => {
+    const done = stopMarkerTone({ id: 1, status: "completed" }, 2, 3);
+    const skipped = stopMarkerTone({ id: 4, status: "skipped" }, 2, 3);
+    const future = stopMarkerTone({ id: 5, status: "planned" }, 2, 3);
+    expect(done.glyph).toBe("✓");
+    expect(skipped.glyph).toBe("↷");
+    expect(future.glyph).toBeNull();
+    expect(done.background).not.toBe(future.background);
+    expect(skipped.text).not.toBe(future.text);
+  });
+
+  it("marks the next stop in blue, not the Tags violet", () => {
+    const next = stopMarkerTone({ id: 3, status: "planned" }, 2, 3);
+    const current = stopMarkerTone({ id: 2, status: "en_route" }, 2, 3);
+    expect(current.background).toBe("#3b82f6");
+    expect(next.border).toBe("#60a5fa");
+    expect(next.border).not.toBe("#a78bfa");
+  });
+
+  it("draws the map legend from the same colours", () => {
+    expect(stopMarkerTone({ id: 1, status: "completed" }, null, null)).toBe(STOP_MARKER_TONES.done);
+    expect(stopMarkerTone({ id: 9, status: "planned" }, 2, 3)).toBe(STOP_MARKER_TONES.planned);
+  });
+});
+
+describe("route status", () => {
+  const t = (key: string) => `<${key}>`;
+
+  it("has one label per status; a past draft was never started", () => {
+    expect(routeStatusLabel("draft", t)).toBe("<routeDraft>");
+    expect(routeStatusLabel("draft", t, true)).toBe("<routeNotStarted>");
+    expect(routeStatusLabel("published", t)).toBe("<published>");
+    expect(routeStatusLabel("in_progress", t)).toBe("<routeInProgress>");
+    expect(routeStatusLabel("completed", t)).toBe("<routeCompleted>");
+    expect(routeStatusLabel("cancelled", t)).toBe("<routeCancelled>");
+  });
+
+  it("is green only when completed and checks only a completed route", () => {
+    expect(routeStatusTone("completed")).toBe("green");
+    expect(routeStatusTone("draft")).toBe("slate");
+    expect(routeStatusTone("cancelled")).toBe("slate");
+    expect(routeStatusTone("in_progress")).toBe("blue");
+    expect(ROUTE_STATUS_TONE.published).toBe("blue");
+    const icons = Object.entries(ROUTE_STATUS_ICON).filter(([, icon]) => icon === ROUTE_STATUS_ICON.completed).map(([status]) => status);
+    expect(icons).toEqual(["completed"]);
+    expect(routeStatusIcon("unknown")).toBe(ROUTE_STATUS_ICON.draft);
+  });
+
+  it("names and colours stops from one map", () => {
+    expect(stopStatusLabelKey("checked_in")).toBe("stopCheckedIn");
+    expect(stopStatusLabelKey("whatever")).toBe("stopPlanned");
+    expect(stopStatusTone("completed")).toBe(STOP_STATUS_TONE.completed);
+    expect(stopStatusTone("skipped")).toBe("muted");
+    expect(isStopOpen("planned")).toBe(true);
+    expect(isStopOpen("en_route")).toBe(true);
+    expect(isStopOpen("checked_in")).toBe(false);
+  });
+});
+
+describe("search results", () => {
+  it("counts the places a route can use, the same ones it sends", () => {
+    const candidates = [
+      { id: 1, status: "eligible" },
+      { id: 2, status: "discarded" },
+      { id: 3, status: "visited" },
+      { id: 4, status: "selected" },
+    ];
+    expect(eligibleCandidates(candidates).map((candidate) => candidate.id)).toEqual(selectableCandidateIds(candidates));
+  });
+
+  it("tells a short route from a full one", () => {
+    expect(routeFill(0, 20)).toBe("none");
+    expect(routeFill(8, 20)).toBe("short");
+    expect(routeFill(20, 20)).toBe("full");
+    expect(routeFill(5, 0)).toBe("full");
+  });
+
+  it("treats points ~50 m apart as one place", () => {
+    expect(samePlace({ lat: 42.3, lng: -71.5 }, { lat: 42.3001, lng: -71.5001 })).toBe(true);
+    expect(samePlace({ lat: 42.3, lng: -71.5 }, { lat: 42.31, lng: -71.5 })).toBe(false);
+  });
+});
+
+describe("routeOfJob", () => {
+  const routes = [{ id: 1, jobId: null }, { id: 2, jobId: 7 }];
+
+  it("finds the route built from a search", () => {
+    expect(routeOfJob(routes, 7)?.id).toBe(2);
+  });
+
+  it("never takes a route without a job for \"no search open\"", () => {
+    expect(routeOfJob(routes, null)).toBeUndefined();
+    expect(routeOfJob(undefined, 7)).toBeUndefined();
   });
 });

@@ -1,4 +1,4 @@
-import { useMemo, type ComponentType } from "react";
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Building2, ChevronRight, Package, Radio, ScanLine } from "lucide-react";
@@ -10,27 +10,20 @@ import { CompactDataTable, type CompactDataColumn } from "@/components/xpot/Comp
 import { FilterBar, FilterSearch } from "@/components/xpot/filters";
 import { useUrlFilters } from "@/hooks/use-url-filters";
 import { ListPager, usePagedList } from "@/components/xpot/pagination";
+import { KpiTile } from "@/components/xpot/DashboardKit";
+import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
+import { ListSkeleton } from "@/components/xpot/ListSkeleton";
+import { GLASS_SUBTLE_CLASS } from "@/components/xpot/surface";
 import type { FullSalesLead } from "@/pages/xpot/types";
 import { APP_BASE, errorText } from "./lib";
-import { CARD, Spinner, TopBar } from "./ui";
+import { formatCount } from "./charts";
+import { TopBar } from "./ui";
 
 type Customer = LeadTagSummary & {
   name: string;
   detail: string | null;
   searchText: string;
 };
-
-function Metric({ icon: Icon, value, label }: { icon: ComponentType<{ className?: string }>; value: string; label: string }) {
-  return (
-    <div className={`${CARD} min-w-0 px-4 py-3.5`}>
-      <div className="flex items-center gap-2 text-violet-300">
-        <Icon className="h-4 w-4 shrink-0" />
-        <strong className="truncate text-xl font-extrabold tracking-tight text-white">{value}</strong>
-      </div>
-      <p className="mt-1 truncate text-xs font-medium text-white/40">{label}</p>
-    </div>
-  );
-}
 
 /** Customers who own at least one of the signed-in reseller's Tags pieces. */
 export default function CustomersScreen() {
@@ -51,7 +44,7 @@ export default function CustomersScreen() {
         const location = lead?.locations?.[0];
         const place = [location?.city, location?.state].filter(Boolean).join(", ");
         const detail = place || lead?.industry || lead?.phone || null;
-        const name = lead?.name || t("customerFallback", { id: summary.leadId });
+        const name = summary.name || lead?.name?.trim() || t("customerUnnamed");
         return {
           ...summary,
           name,
@@ -69,7 +62,7 @@ export default function CustomersScreen() {
     () => customers.reduce((sum, customer) => ({ pieces: sum.pieces + customer.pieces, live: sum.live + customer.live, scans: sum.scans + customer.scansLast30 }), { pieces: 0, live: 0, scans: 0 }),
     [customers],
   );
-  const number = useMemo(() => new Intl.NumberFormat(t.locale), [t.locale]);
+  const fmt = (n: number) => formatCount(n, t.locale);
   const loading = (leadsQuery.isLoading && !leadsQuery.data) || (summariesQuery.isLoading && !summariesQuery.data);
   const error = leadsQuery.error || summariesQuery.error;
 
@@ -80,7 +73,7 @@ export default function CustomersScreen() {
       label: t("customerCompany"),
       render: (customer) => (
         <div className="flex min-w-0 items-center gap-3">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-violet-500/[0.1] text-violet-300/80">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-violet-500/[0.1] text-violet-300/80">
             <Building2 className="h-4 w-4" aria-hidden="true" />
           </span>
           <span className="min-w-0">
@@ -96,7 +89,7 @@ export default function CustomersScreen() {
       width: 120,
       headerClassName: "text-center",
       cellClassName: "text-center",
-      render: (customer) => <span className="font-semibold tabular-nums text-white/70">{number.format(customer.pieces)}</span>,
+      render: (customer) => <span className="font-semibold tabular-nums text-white/70">{fmt(customer.pieces)}</span>,
     },
     {
       key: "live",
@@ -107,7 +100,7 @@ export default function CustomersScreen() {
       render: (customer) => (
         <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-400/[0.08] px-2 py-1 text-xs font-semibold tabular-nums text-emerald-300/85">
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" aria-hidden="true" />
-          {number.format(customer.live)}
+          {fmt(customer.live)}
         </span>
       ),
     },
@@ -117,7 +110,7 @@ export default function CustomersScreen() {
       width: 160,
       headerClassName: "text-right",
       cellClassName: "text-right",
-      render: (customer) => <span className="font-semibold tabular-nums text-white/75">{number.format(customer.scansLast30)}</span>,
+      render: (customer) => <span className="font-semibold tabular-nums text-white/75">{fmt(customer.scansLast30)}</span>,
     },
     {
       key: "action",
@@ -136,18 +129,22 @@ export default function CustomersScreen() {
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-20 text-white/40">
-          <Spinner className="h-7 w-7" />
-        </div>
+        <ListSkeleton rows={5} />
       ) : error ? (
-        <div className={`${CARD} px-6 py-10 text-center text-sm text-red-200`}>{errorText(error, tc("requestFailed"))}</div>
+        <ErrorState
+          message={errorText(error, tc("requestFailed"))}
+          onRetry={() => {
+            void leadsQuery.refetch();
+            void summariesQuery.refetch();
+          }}
+        />
       ) : (
         <>
           <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
-            <Metric icon={Building2} value={number.format(customers.length)} label={t("customersTitle")} />
-            <Metric icon={Package} value={number.format(totals.pieces)} label={t("customersPieces")} />
-            <Metric icon={Radio} value={number.format(totals.live)} label={t("customersLive")} />
-            <Metric icon={ScanLine} value={number.format(totals.scans)} label={t("customersScans30")} />
+            <KpiTile accent="violet" icon={Building2} value={fmt(customers.length)} label={t("customersTitle")} />
+            <KpiTile accent="violet" icon={Package} value={fmt(totals.pieces)} label={t("customersPieces")} />
+            <KpiTile accent="violet" icon={Radio} value={fmt(totals.live)} label={t("customersLive")} />
+            <KpiTile accent="violet" icon={ScanLine} value={fmt(totals.scans)} label={t("customersScans30")} />
           </div>
 
           <FilterBar
@@ -169,7 +166,7 @@ export default function CustomersScreen() {
                 testId="customers-table"
               />
 
-              <div className="divide-y divide-white/[0.055] overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.025] sm:hidden">
+              <div className={`divide-y divide-white/[0.055] overflow-hidden rounded-2xl sm:hidden ${GLASS_SUBTLE_CLASS}`}>
                 {paged.visible.map((customer) => (
                   <button
                     key={customer.leadId}
@@ -185,7 +182,7 @@ export default function CustomersScreen() {
                     <span className="min-w-0 flex-1">
                       <strong className="block truncate text-sm font-semibold text-white/90">{customer.name}</strong>
                       <span className="mt-1 block truncate text-[11px] text-white/38">
-                        {t.plural("pieces", customer.pieces)} · {number.format(customer.live)} {t("customersLive").toLocaleLowerCase(t.locale)} · {number.format(customer.scansLast30)} {t("customersScans30").toLocaleLowerCase(t.locale)}
+                        {t.plural("pieces", customer.pieces)} · {fmt(customer.live)} {t("customersLive").toLocaleLowerCase(t.locale)} · {fmt(customer.scansLast30)} {t("customersScans30").toLocaleLowerCase(t.locale)}
                       </span>
                     </span>
                     <ChevronRight className="h-4 w-4 shrink-0 text-white/20 transition-transform group-active:translate-x-0.5" aria-hidden="true" />
@@ -195,12 +192,13 @@ export default function CustomersScreen() {
               <ListPager shown={paged.shown} total={paged.total} hasMore={paged.hasMore} onMore={paged.showMore} />
             </div>
           ) : (
-            <div className={`${CARD} mt-4 flex flex-col items-center px-6 py-12 text-center`}>
-              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-500/10 text-violet-300/70">
-                <Building2 className="h-6 w-6" />
-              </span>
-              <p className="mt-3 text-base font-bold text-white">{customers.length ? t("customersNoMatch") : t("customersEmpty")}</p>
-              {!customers.length && <p className="mt-1 max-w-sm text-sm text-white/40">{t("customersEmptyHint")}</p>}
+            <div className="mt-4">
+              <EmptyState
+                tone="tags"
+                icon={Building2}
+                title={customers.length ? t("customersNoMatch") : t("customersEmpty")}
+                hint={customers.length ? undefined : t("customersEmptyHint")}
+              />
             </div>
           )}
         </>

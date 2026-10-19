@@ -1,3 +1,7 @@
+import type { LucideIcon } from "lucide-react";
+import { CheckCircle2, PencilLine, PlayCircle, ShieldCheck, XCircle } from "lucide-react";
+import { ROUTE_STATUS_TONE, STOP_STATUS_TONE, toneOf, type PillTone } from "@/components/xpot/StatusPill";
+
 export const MAX_PROSPECTING_SECTORS = 5;
 export const MAX_ROUTE_CANDIDATES = 60;
 
@@ -212,8 +216,7 @@ export function exclusionCounts(candidates: Array<{ status: string; exclusionRea
 }
 
 export function selectableCandidateIds(candidates: Array<{ id: number; status: string }>) {
-  return candidates
-    .filter((candidate) => candidate.status !== "discarded" && candidate.status !== "visited")
+  return eligibleCandidates(candidates)
     .slice(0, MAX_ROUTE_CANDIDATES)
     .map((candidate) => candidate.id);
 }
@@ -227,4 +230,170 @@ export function routeDateLabel(routeDate: string, locale: string, referenceDate 
 export function routeDisplayName(route: { name: string; routeDate: string }, locale: string, referenceDate = new Date()) {
   const generatedNames = [`Prospecting — ${route.routeDate}`, `Route — ${route.routeDate}`];
   return generatedNames.includes(route.name.trim()) ? routeDateLabel(route.routeDate, locale, referenceDate) : route.name;
+}
+
+const ACTIVE_ROUTE_STATUSES = ["draft", "published", "in_progress"];
+
+/**
+ * "Today's route": the day's open route (draft, published or in progress),
+ * the one the Route screen opens. The Dashboard falls back to a route already
+ * completed today so a finished day still shows its progress.
+ */
+export function todayRouteOf<T extends { routeDate: string; status: string }>(
+  routes: T[] | undefined,
+  day: string,
+  { includeCompleted = false } = {},
+): T | undefined {
+  const ofDay = (routes ?? []).filter((route) => route.routeDate === day);
+  return ofDay.find((route) => ACTIVE_ROUTE_STATUSES.includes(route.status))
+    ?? (includeCompleted ? ofDay.find((route) => route.status === "completed") : undefined);
+}
+
+/**
+ * The route built from a search (job). No job, no route: a route whose job is
+ * gone (the link is cleared when a job is deleted) or that was built without
+ * one has jobId null, and must not count as the route of "no job", or it
+ * would open itself every time the Route screen shows its list.
+ */
+export function routeOfJob<T extends { jobId: number | null }>(routes: T[] | undefined, jobId: number | null): T | undefined {
+  if (jobId === null) return undefined;
+  return (routes ?? []).find((route) => route.jobId === jobId);
+}
+
+/** Stops behind the rep: visited or skipped (a cancelled visit skips its stop). */
+export function isStopDone(status: string) {
+  return status === "completed" || status === "skipped";
+}
+
+export function routeStopProgress(stops: { status: string }[]) {
+  const done = stops.filter((stop) => isStopDone(stop.status)).length;
+  return { done, total: stops.length, percent: stops.length ? Math.round((done / stops.length) * 100) : 0 };
+}
+
+export type StopMarkerTone = { background: string; border: string; text: string; glyph: string | null };
+
+/** Marker colours per stop state; the map legend draws its swatches from the same table. */
+export const STOP_MARKER_TONES = {
+  done: { background: "#0f172a", border: "#065f46", text: "#34d399", glyph: "✓" },
+  skipped: { background: "#0f172a", border: "#334155", text: "#64748b", glyph: "↷" },
+  current: { background: "#3b82f6", border: "#93c5fd", text: "#ffffff", glyph: null },
+  next: { background: "#172554", border: "#60a5fa", text: "#bfdbfe", glyph: null },
+  planned: { background: "#1f2937", border: "#475569", text: "#94a3b8", glyph: null },
+} as const satisfies Record<string, StopMarkerTone>;
+
+/** The other points on the route map: where the route starts, the rep's home and the rep now. */
+export const MAP_POINT_TONES = {
+  start: { background: "#e2e8f0", border: "#0f172a", text: "#0f172a" },
+  home: { background: "#0f172a", border: "#e2e8f0", text: "#e2e8f0" },
+  you: { background: "#2563eb", border: "#ffffff", text: "#ffffff" },
+} as const;
+
+/**
+ * How a route stop looks on the map, in the list rail and in its preview:
+ * done and skipped stops are muted with a check / skip glyph so they never
+ * pass for a future stop; the current stop is solid blue and the next one a
+ * lighter blue outline (violet is the Tags accent, not used in Visits).
+ */
+export function stopMarkerTone(
+  stop: { id: number; status: string },
+  currentStopId: number | null,
+  nextStopId: number | null,
+): StopMarkerTone {
+  if (stop.status === "completed") return STOP_MARKER_TONES.done;
+  if (stop.status === "skipped") return STOP_MARKER_TONES.skipped;
+  if (stop.id === currentStopId) return STOP_MARKER_TONES.current;
+  if (stop.id === nextStopId) return STOP_MARKER_TONES.next;
+  return STOP_MARKER_TONES.planned;
+}
+
+// ─── Route and stop status ────────────────────────────────────────────────────
+// One label, tone and icon per route status, so the Route screen, its history
+// and the Dashboard card say the same thing in the same colour. The tones live
+// with the other pill maps (components/xpot/StatusPill.tsx).
+
+export { ROUTE_STATUS_TONE, STOP_STATUS_TONE };
+
+export type RouteStatus = "draft" | "published" | "in_progress" | "completed" | "cancelled";
+
+/** Keys of prospectingMessages that name a route status. */
+export type RouteStatusLabelKey = "routeDraft" | "routeNotStarted" | "published" | "routeInProgress" | "routeUnfinished" | "routeCompleted" | "routeCancelled";
+
+/** The message key for a route status; a draft from a past day was never started. */
+export function routeStatusLabelKey(status: string, isPast = false): RouteStatusLabelKey {
+  if (status === "draft") return isPast ? "routeNotStarted" : "routeDraft";
+  // Routes are same-day: one left open on a past day was simply not finished.
+  if (isPast && (status === "published" || status === "in_progress")) return "routeUnfinished";
+  if (status === "in_progress") return "routeInProgress";
+  if (status === "completed") return "routeCompleted";
+  if (status === "cancelled") return "routeCancelled";
+  return "published";
+}
+
+/** "Draft route", "Route in progress"… with `t` = useT(prospectingMessages). */
+export function routeStatusLabel(status: string, t: (key: RouteStatusLabelKey) => string, isPast = false) {
+  return t(routeStatusLabelKey(status, isPast));
+}
+
+export function routeStatusTone(status: string): PillTone {
+  return toneOf(ROUTE_STATUS_TONE, status);
+}
+
+/** A check only for a finished route; a draft or a cancelled one never reads as done. */
+export const ROUTE_STATUS_ICON: Record<RouteStatus, LucideIcon> = {
+  draft: PencilLine,
+  published: ShieldCheck,
+  in_progress: PlayCircle,
+  completed: CheckCircle2,
+  cancelled: XCircle,
+};
+
+export function routeStatusIcon(status: string): LucideIcon {
+  return ROUTE_STATUS_ICON[status as RouteStatus] ?? PencilLine;
+}
+
+/** Keys of prospectingMessages that name a stop status. */
+export type StopStatusLabelKey = "stopPlanned" | "stopEnRoute" | "stopCheckedIn" | "stopCompleted" | "stopSkipped" | "stopRescheduled";
+
+export function stopStatusLabelKey(status: string): StopStatusLabelKey {
+  if (status === "checked_in") return "stopCheckedIn";
+  if (status === "completed") return "stopCompleted";
+  if (status === "skipped") return "stopSkipped";
+  if (status === "en_route") return "stopEnRoute";
+  if (status === "rescheduled") return "stopRescheduled";
+  return "stopPlanned";
+}
+
+export function stopStatusTone(status: string): PillTone {
+  return toneOf(STOP_STATUS_TONE, status);
+}
+
+/** Stops the rep can still check in to. */
+export function isStopOpen(status: string) {
+  return status === "planned" || status === "en_route";
+}
+
+// ─── Search results ───────────────────────────────────────────────────────────
+
+/** The places a route can still use: the same ones selectableCandidateIds sends. */
+export function eligibleCandidates<T extends { status: string }>(candidates: T[]) {
+  return candidates.filter((candidate) => candidate.status !== "discarded" && candidate.status !== "visited");
+}
+
+/**
+ * Whether a finished search fills the day: "none" found, a "short" route (fewer
+ * places than the job's internal stop target) or a "full" one.
+ */
+export function routeFill(eligibleCount: number, targetStops: number): "none" | "short" | "full" {
+  if (eligibleCount <= 0) return "none";
+  return targetStops > 0 && eligibleCount < targetStops ? "short" : "full";
+}
+
+// ─── Map ──────────────────────────────────────────────────────────────────────
+
+/** Two points closer than ~50 m are one place on the map (the route start is usually stop 1). */
+export function samePlace(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
+  const metersPerDegree = 111_320;
+  const dLat = (a.lat - b.lat) * metersPerDegree;
+  const dLng = (a.lng - b.lng) * metersPerDegree * Math.cos((a.lat * Math.PI) / 180);
+  return Math.hypot(dLat, dLng) < 50;
 }

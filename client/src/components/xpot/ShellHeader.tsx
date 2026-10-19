@@ -1,24 +1,23 @@
-import { useEffect, useRef, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Camera, LogOut, Settings } from "lucide-react";
 import type { XpotModule } from "@shared/modules";
-import { apiRequest, queryClient } from "@/lib/queryClient";
 import { signOut } from "@/lib/signOut";
-import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/i18n";
-import { dashboardMessages } from "@/i18n/messages/dashboard";
 import { shellMessages } from "@/i18n/messages/shell";
 import type { XpotMeResponse } from "@/pages/xpot/types";
-import { AdminModeButton } from "./AdminMode";
 import { UserGreeting } from "./UserGreeting";
+import { useAvatarUpload } from "./useAvatarUpload";
 import { subscribeToRoutePush } from "@/lib/pushNotifications";
+import { navigateGuarded } from "@/hooks/useUnsavedChangesGuard";
 
 // The person at the top of every phone screen, in both modules: their photo
-// (tap to change it), the greeting, the date, and the buttons that belong to
-// the whole app rather than one module: admin mode, Settings and sign out.
-// The Visits/Tags switch sits right below it. On desktop the sidebar has the
-// buttons, so the desktop sidebar carries the same identity block.
+// (tap to change it; Settings › Profile has it too), the greeting, the date,
+// and the buttons that belong to the whole app rather than one module:
+// Settings and sign out. Management is a tab of each module's bar (Manage) and
+// a switch in Settings, not a button here. The Visits/Tags switch sits right
+// below it. On desktop the sidebar has the buttons and the same identity block.
 
 function useOnline() {
   const [online, setOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
@@ -39,12 +38,10 @@ const ICON_BUTTON =
   "flex h-10 w-10 items-center justify-center rounded-[18px] border border-white/5 bg-white/[0.03] text-white/40 transition-all hover:bg-white/10 hover:text-white active:scale-95 touch-manipulation";
 
 export function ShellHeader({ module, actions = true }: { module: XpotModule; actions?: boolean }) {
-  const t = useT(dashboardMessages);
   const ts = useT(shellMessages);
-  const { toast } = useToast();
   const [, navigate] = useLocation();
   const online = useOnline();
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const avatar = useAvatarUpload();
   const { data: me } = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
   useEffect(() => {
     if (module === "visits" && "Notification" in window && Notification.permission === "granted") {
@@ -59,36 +56,14 @@ export function ShellHeader({ module, actions = true }: { module: XpotModule; ac
   const initials = name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
   const avatarUrl = me?.rep.avatarUrl;
 
-  const avatarMutation = useMutation({
-    mutationFn: async (imageData: string) => {
-      const res = await apiRequest("POST", "/api/xpot/me/avatar", { imageData });
-      return res.json() as Promise<{ avatarUrl: string }>;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/xpot/me"] });
-      toast({ title: t("photoUpdated") });
-    },
-    onError: (err: Error) => {
-      toast({ title: t("uploadFailed"), description: err.message, variant: "destructive" });
-    },
-  });
-
-  const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => avatarMutation.mutate(reader.result as string);
-    reader.readAsDataURL(file);
-    e.target.value = "";
-  };
-
   return (
     <div className="mb-4 flex items-center justify-between" data-testid="shell-header">
       <div className="flex min-w-0 flex-1 items-center gap-4">
         <button
           type="button"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={avatarMutation.isPending}
+          onClick={avatar.pick}
+          disabled={avatar.pending}
+          aria-label={avatar.label}
           className="group relative shrink-0 transition-transform active:scale-95 touch-manipulation"
           style={{ WebkitTapHighlightColor: "transparent" }}
         >
@@ -104,7 +79,7 @@ export function ShellHeader({ module, actions = true }: { module: XpotModule; ac
               className="flex h-[62px] w-[62px] items-center justify-center rounded-[22px] text-[22px] font-bold tracking-wide text-white"
               style={{ background: "linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)", boxShadow: "0 8px 24px rgba(59,130,246,0.25)" }}
             >
-              {avatarMutation.isPending ? (
+              {avatar.pending ? (
                 <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
               ) : (
                 initials
@@ -116,15 +91,14 @@ export function ShellHeader({ module, actions = true }: { module: XpotModule; ac
           </div>
           <div className={`absolute -bottom-0.5 -right-0.5 h-4 w-4 rounded-full border-[3px] border-[#080d1a] ${online ? "bg-emerald-400" : "bg-slate-500"}`} />
         </button>
-        <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={onFile} />
+        <input {...avatar.inputProps} />
 
         <UserGreeting name={firstName} />
       </div>
 
       {actions && (
         <div className="relative z-10 flex shrink-0 items-center gap-1.5">
-          <AdminModeButton module={module} />
-          <button type="button" onClick={() => navigate("/settings")} title={ts("navSettings")} aria-label={ts("navSettings")} className={ICON_BUTTON} data-testid="shell-settings">
+          <button type="button" onClick={() => navigateGuarded("/settings", navigate)} title={ts("navSettings")} aria-label={ts("navSettings")} className={ICON_BUTTON} data-testid="shell-settings">
             <Settings className="h-[18px] w-[18px]" />
           </button>
           <button

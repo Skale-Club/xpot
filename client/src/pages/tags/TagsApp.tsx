@@ -10,6 +10,7 @@ import CustomersScreen from "./CustomersScreen";
 import CustomerScreen from "./CustomerScreen";
 import HomeScreen from "./HomeScreen";
 import PiecesScreen from "./PiecesScreen";
+import ShopScreen from "./ShopScreen";
 import TagScreen from "./TagScreen";
 import { APP_BASE, tagPath } from "./lib";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
@@ -89,6 +90,7 @@ export function TagsApp() {
         <Route path={`${APP_BASE}/customers`}>
           {() => sharesCompanyProfiles ? <Redirect to="/leads?status=customer" replace /> : <CustomersScreen />}
         </Route>
+        <Route path={`${APP_BASE}/shop`} component={ShopScreen} />
         <Route path={`${APP_BASE}/direct`} component={DirectScreen} />
         <Route path={APP_BASE} component={HomeScreen} />
         <Route>

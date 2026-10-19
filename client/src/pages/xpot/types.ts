@@ -30,6 +30,10 @@ export type FullSalesLead = SalesLead & {
   openOpportunities?: number;
   salesLifetimeCents?: number;
   unitsOnShelf?: number;
+  /** An open follow-up task exists for this company (list endpoint only). */
+  openFollowUp?: boolean;
+  /** Earliest due date among those tasks. */
+  openFollowUpDueAt?: string | null;
 };
 
 export type EnrichedSalesVisit = SalesVisit & {
@@ -47,7 +51,10 @@ export type GooglePlaceResult = {
   address: string;
   phone?: string;
   website?: string;
+  /** Google's Table A type code, e.g. "dental_clinic"; show it through placeTypeLabel. */
   primaryType?: string;
+  /** Google's English display name for the type, the fallback label. */
+  primaryTypeName?: string;
   placeId: string;
   lat?: number;
   lng?: number;
@@ -88,9 +95,9 @@ export type SalesLeadPayload = {
 };
 
 export type XpotMeResponse = {
-  user: { id: string; email: string; firstName?: string | null; lastName?: string | null; isAdmin: boolean; profileImageUrl?: string | null };
-  rep: { id: number; displayName: string; email?: string; phone?: string; team?: string; role: string; avatarUrl?: string | null; isActive?: boolean; modules?: string[]; costPolicy?: "zero" | "acquisition"; costPolicyConfiguredAt?: string | null; homeAddress?: string | null; homeLat?: string | null; homeLng?: string | null; routeReturnHome?: boolean };
-  organizations?: Array<{ id: number; name: string; slug: string; isActive: boolean; membershipRole?: "admin" | "member" }>;
+  user: { id: string; email: string; firstName?: string | null; lastName?: string | null; isAdmin: boolean; profileImageUrl?: string | null; /** The sign-in phone (E.164), not the profile's contact phone. */ phone?: string | null };
+  rep: { id: number; displayName: string; email?: string; phone?: string; team?: string; role: string; avatarUrl?: string | null; isActive?: boolean; modules?: string[]; costPolicy?: "zero" | "acquisition"; costPolicyConfiguredAt?: string | null; homeAddress?: string | null; homeLat?: string | null; homeLng?: string | null; routeReturnHome?: boolean; wholesaleCode?: string | null };
+  organizations?: Array<{ id: number; name: string; slug: string; isActive: boolean; membershipRole?: "admin" | "member"; /** The automatic one-person workspace (shared/organizations.ts isPersonalOrganization). */ personal?: boolean }>;
   organizationMemberships?: Array<{ organizationId: number; role: "admin" | "member"; isActive: boolean; blockedAt?: string | null }>;
   activeVisit: (SalesVisit & { lead?: SalesLead; note?: SalesVisitNote }) | null;
   checkInRules?: CheckInRules;

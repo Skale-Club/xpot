@@ -5,6 +5,7 @@ import { TagError } from "../tags/errors.js";
 import { authenticateOauthAccess, createMcpOauthRouter, protectedResourceMetadataUrl } from "./oauth.js";
 import { listConnections, looksLikeOauthAccessToken, revokeClientTokens } from "./oauthStore.js";
 import { handleMcpRequest, type McpCaller } from "./server.js";
+import { MCP_TOKEN_SCOPES } from "#shared/tagsApi.js";
 import { bearerSecret, createMcpToken, findActiveMcpToken, looksLikeMcpSecret, listMcpTokens, revokeMcpToken, touchMcpToken } from "./tokens.js";
 
 // POST /mcp (the MCP endpoint), the OAuth server that lets hosts connect to it
@@ -131,7 +132,7 @@ export function registerMcpRoutes(app: Express) {
             id: token.id,
             label: token.tokenPrefix,
             userId: token.createdByUserId,
-            scopes: ["xpot:journey", "xpot:prospecting", "xpot:tasks"],
+            scopes: [...MCP_TOKEN_SCOPES],
           };
           // Fire-and-forget: a failed timestamp must not fail the call.
           touchMcpToken(token.id).catch((err) => console.error("[mcp] touch token:", err instanceof Error ? err.message : err));

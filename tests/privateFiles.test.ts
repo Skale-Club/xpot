@@ -18,6 +18,7 @@ const store = {
 const storage = {
   getSalesRepByUserId: vi.fn(async (userId: string) => [...store.reps.values()].find((r) => r.userId === userId)),
   getSalesLead: vi.fn(async (id: number) => store.leads.get(id)),
+  leadHoldsRepPiece: vi.fn(async () => false),
   updateSalesLead: vi.fn(async (id: number, data: any) => {
     const lead = { ...store.leads.get(id), ...data };
     store.leads.set(id, lead);

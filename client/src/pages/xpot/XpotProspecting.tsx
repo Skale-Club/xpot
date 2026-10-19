@@ -1,27 +1,37 @@
-import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
-import { createPortal } from "react-dom";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, BellRing, Building2, Check, CheckCircle2, ChevronDown, ChevronRight, ChevronUp, Clock3, ExternalLink, GripVertical, Loader2, Map as MapIcon, MapPin, MapPinCheck, Navigation, Nfc, Phone, Radar, RefreshCw, Route as RouteIcon, Search, ShieldCheck, Sparkles, Star, Trash2, X } from "lucide-react";
+import { BellRing, Building2, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Clock3, ExternalLink, GripVertical, Home, Map as MapIcon, MapPin, MapPinCheck, Navigation, Nfc, Phone, Radar, RefreshCw, RotateCw, Route as RouteIcon, SearchX, Search, ShieldCheck, Sparkles, Star, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Loader2 } from "@/components/ui/loader";
 import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/i18n";
 import { prospectingMessages } from "@/i18n/messages/prospecting";
+import { prospectingUiMessages } from "@/i18n/messages/prospectingUi";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { subscribeToRoutePush } from "@/lib/pushNotifications";
+import { routePushSupported, subscribeToRoutePush } from "@/lib/pushNotifications";
 import { useViewerAccess } from "@/lib/adminMode";
+import { formatDistance, formatDuration, formatTime } from "@/lib/format";
 import { Link, useLocation, useSearchParams } from "wouter";
-import { RoutePreviewMap } from "./components/RoutePreviewMap";
-import { appleRouteUrl, appleStopUrl, googleRouteUrl, googleStopUrl, isAppleMobileDevice } from "./prospectingMaps";
-import { GLASS } from "@/components/xpot/surface";
+import { RoutePreviewMap, type RouteLandmark } from "./components/RoutePreviewMap";
+import { FloatingSuggestions, SuggestionOption, SuggestionStatus, SUGGESTIONS_ATTRIBUTE } from "./components/PlaceSuggestions";
+import { appleRouteUrl, googleRouteUrl, isAppleMobile, stopNavigationUrl } from "./prospectingMaps";
+import { ACCENT_SELECTED, GLASS, GLASS_CLASS, GLASS_SUBTLE_CLASS } from "@/components/xpot/surface";
+import { PILL_DOTS, Pill, RUN_STATUS_TONE, toneOf } from "@/components/xpot/StatusPill";
+import { EmptyState } from "@/components/xpot/EmptyState";
+import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
+import { InlineAlert } from "@/components/xpot/InlineAlert";
+import { ListSkeleton } from "@/components/xpot/ListSkeleton";
+import { BackLink } from "@/components/xpot/PageHeader";
 import { GradientTopLine } from "@/components/xpot/GradientTopLine";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { GoogleLogo } from "@/components/ui/google-logo";
 import { usePlaceSearch } from "./usePlaceSearch";
 import { setSellTo } from "@/pages/tags/lib";
 import {
   activeRunTiming,
+  eligibleCandidates as eligibleOf,
   exclusionCounts,
+  isStopOpen,
   searchPhase,
   MAX_PROSPECTING_SECTORS,
   moveIdByOffset,
@@ -29,13 +39,26 @@ import {
   prospectingProgress,
   reorderIdsAroundTarget,
   routeDisplayName,
+  routeFill,
+  routeStatusIcon,
+  routeStatusLabel,
+  routeStatusTone,
+  samePlace,
+  stopMarkerTone,
+  stopStatusLabelKey,
+  stopStatusTone,
+  STOP_MARKER_TONES,
+  MAP_POINT_TONES,
+  routeOfJob,
+  todayRouteOf,
   selectableCandidateIds,
   serverNowMs,
   wholeMinutes,
   type ProspectingTiming,
 } from "./prospectingUi";
 import { useNow } from "@/hooks/use-now";
-import { MAX_DAILY_PROSPECTING_SESSIONS } from "@shared/prospecting";
+import { placeTypeLabel } from "@/lib/placeTypes";
+import { MAX_DAILY_PROSPECTING_SESSIONS, PROSPECTING_DAY_END_HOUR, PROSPECTING_SHIFT_MINUTES, minutesUntilProspectingDayEnd } from "@shared/prospecting";
 
 type ProspectingJob = {
   id: number;
@@ -119,82 +142,19 @@ type PlanningStep = 0 | 1 | 2 | 3;
 const ROUTE_DRAFT_KEY = "xpot:route-planning-draft";
 const MAX_PROSPECTING_CITIES = 5;
 const ROUTE_HISTORY_PREVIEW = 10;
-const SUGGESTIONS_GAP = 8;
-const SUGGESTIONS_VIEWPORT_GAP = 8;
-const SUGGESTIONS_MAX_HEIGHT = 280;
+const SHIFT_HOUR_OPTIONS = PROSPECTING_SHIFT_MINUTES.map((minutes) => minutes / 60);
 
-function stopMarkerTone(stopId: number, currentStopId: number | null, nextStopId: number | null) {
-  if (stopId === currentStopId) return { background: "#3b82f6", border: "#93c5fd", text: "#ffffff" };
-  if (stopId === nextStopId) return { background: "#312e81", border: "#a78bfa", text: "#ede9fe" };
-  return { background: "#1f2937", border: "#475569", text: "#94a3b8" };
-}
+/** The removable city and sector chips of the planner: one tone for both. */
+const TAG_CHIP = "inline-flex min-h-11 max-w-full items-center gap-2.5 rounded-2xl border border-blue-300/20 bg-blue-500/15 py-1.5 pl-4 pr-2 text-base font-semibold text-blue-100";
+const TAG_CHIP_REMOVE = "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-blue-100/65 transition hover:bg-white/10 hover:text-white";
 
-function FloatingSuggestions({
-  anchorRef,
-  children,
-  id,
-  open,
-}: {
-  anchorRef: RefObject<HTMLElement>;
-  children: ReactNode;
-  id: string;
-  open: boolean;
-}) {
-  const [style, setStyle] = useState<CSSProperties | null>(null);
-
-  const updatePosition = useCallback(() => {
-    const anchor = anchorRef.current;
-    if (!anchor) return;
-
-    const rect = anchor.getBoundingClientRect();
-    const viewportWidth = document.documentElement.clientWidth;
-    const viewportHeight = window.innerHeight;
-    const spaceBelow = viewportHeight - rect.bottom - SUGGESTIONS_GAP - SUGGESTIONS_VIEWPORT_GAP;
-    const spaceAbove = rect.top - SUGGESTIONS_GAP - SUGGESTIONS_VIEWPORT_GAP;
-    const placeAbove = spaceBelow < 180 && spaceAbove > spaceBelow;
-    const maxHeight = Math.min(SUGGESTIONS_MAX_HEIGHT, Math.max(112, placeAbove ? spaceAbove : spaceBelow));
-    const width = Math.min(rect.width, viewportWidth - SUGGESTIONS_VIEWPORT_GAP * 2);
-    const left = Math.max(
-      SUGGESTIONS_VIEWPORT_GAP,
-      Math.min(rect.left, viewportWidth - width - SUGGESTIONS_VIEWPORT_GAP),
-    );
-
-    setStyle(placeAbove
-      ? { bottom: viewportHeight - rect.top + SUGGESTIONS_GAP, left, maxHeight, width }
-      : { left, maxHeight, top: rect.bottom + SUGGESTIONS_GAP, width });
-  }, [anchorRef]);
-
-  useLayoutEffect(() => {
-    if (!open) {
-      setStyle(null);
-      return;
-    }
-
-    updatePosition();
-    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(updatePosition);
-    if (anchorRef.current) observer?.observe(anchorRef.current);
-    window.addEventListener("resize", updatePosition);
-    window.addEventListener("scroll", updatePosition, true);
-    return () => {
-      observer?.disconnect();
-      window.removeEventListener("resize", updatePosition);
-      window.removeEventListener("scroll", updatePosition, true);
-    };
-  }, [anchorRef, open, updatePosition]);
-
-  if (!open || !style || typeof document === "undefined") return null;
-
-  return createPortal(
-    <div
-      id={id}
-      role="listbox"
-      data-prospecting-suggestions
-      style={style}
-      className="pointer-events-auto fixed z-[100] overflow-y-auto overscroll-contain rounded-2xl border border-white/10 bg-[#111827] shadow-[0_18px_44px_rgba(0,0,0,0.55)]"
-    >
-      {children}
-    </div>,
-    document.body,
+/** A swatch of the map legend, drawn from the marker colours. */
+function LegendItem({ tone, glyph, label }: { tone: { background: string; border: string; text: string }; glyph?: string | null; label: string }) {
+  return (
+    <li className="flex items-center gap-1.5">
+      <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 text-[8px] font-bold leading-none" style={{ background: tone.background, borderColor: tone.border, color: tone.text }} aria-hidden="true">{glyph ?? null}</span>
+      <span>{label}</span>
+    </li>
   );
 }
 
@@ -214,7 +174,7 @@ function loadRouteDraft(): { city: string; cities: string[]; sectors: string; sh
       city: migratedCities.length ? "" : legacyCity,
       cities: migratedCities,
       sectors: typeof saved?.sectors === "string" ? saved.sectors : "",
-      shiftHours: [2, 4, 6, 8, 10, 12].includes(saved?.shiftHours) ? saved.shiftHours : 8,
+      shiftHours: SHIFT_HOUR_OPTIONS.includes(saved?.shiftHours) ? saved.shiftHours : 8,
     };
   } catch {
     return fallback;
@@ -250,37 +210,21 @@ function statusLabel(status: ProspectingJob["status"], t: ReturnType<typeof useT
   if (status === "queued") return t("statusQueued");
   if (status === "running") return t("statusRunning");
   if (status === "completed") return t("statusCompleted");
+  if (status === "cancelled") return t("statusCancelled");
   return t("statusFailed");
-}
-
-function routeStatusLabel(status: ProspectingRoute["status"], t: ReturnType<typeof useT<typeof prospectingMessages.en>>, isPast = false) {
-  if (status === "draft") return isPast ? t("routeNotStarted") : t("routeDraft");
-  // A same-day route never runs into a later day: left open, it just wasn't finished.
-  if (isPast && (status === "published" || status === "in_progress")) return t("routeUnfinished");
-  if (status === "in_progress") return t("routeInProgress");
-  if (status === "completed") return t("routeCompleted");
-  if (status === "cancelled") return t("routeCancelled");
-  return t("published");
 }
 
 function runStatusLabel(status: string, t: ReturnType<typeof useT<typeof prospectingMessages.en>>) {
   if (status === "completed") return t("statusCompleted");
-  if (status === "failed" || status === "cancelled") return t("statusFailed");
+  if (status === "failed") return t("statusFailed");
+  if (status === "cancelled") return t("statusCancelled");
   if (status === "queued") return t("statusQueued");
   return t("statusRunning");
 }
 
-function stopStatusLabel(status: RouteStop["status"], t: ReturnType<typeof useT<typeof prospectingMessages.en>>) {
-  if (status === "checked_in") return t("stopCheckedIn");
-  if (status === "completed") return t("stopCompleted");
-  if (status === "skipped") return t("stopSkipped");
-  if (status === "en_route") return t("stopEnRoute");
-  if (status === "rescheduled") return t("stopRescheduled");
-  return t("stopPlanned");
-}
-
 export function XpotProspecting() {
   const t = useT(prospectingMessages);
+  const tu = useT(prospectingUiMessages);
   const { toast } = useToast();
   const [, navigate] = useLocation();
   const [routeParams, setRouteParams] = useSearchParams();
@@ -295,6 +239,21 @@ export function XpotProspecting() {
   const [shiftHours, setShiftHours] = useState(initialDraft.shiftHours);
   const [planningStep, setPlanningStep] = useState<PlanningStep>(0);
   const [builderOpen, setBuilderOpen] = useState(false);
+  // Routes are same-day and end by 10 PM, so later in the day the longer
+  // shifts gray out. The clock only ticks while the planner is open.
+  const plannerNow = useNow(60_000, builderOpen);
+  const dayEndLabel = useMemo(() => {
+    const end = new Date(plannerNow);
+    end.setHours(PROSPECTING_DAY_END_HOUR, 0, 0, 0);
+    return formatTime(end, t.locale);
+  }, [plannerNow, t.locale]);
+  const minutesLeftToday = minutesUntilProspectingDayEnd(new Date(plannerNow));
+  const availableShiftHours = SHIFT_HOUR_OPTIONS.filter((hours) => hours * 60 <= minutesLeftToday);
+  const latestShiftHours = availableShiftHours[availableShiftHours.length - 1];
+  useEffect(() => {
+    if (latestShiftHours !== undefined && shiftHours > latestShiftHours) setShiftHours(latestShiftHours);
+  }, [latestShiftHours, shiftHours]);
+  const shiftFitsToday = availableShiftHours.includes(shiftHours);
   const [citySuggestionsOpen, setCitySuggestionsOpen] = useState(false);
   const [sectorSuggestionsOpen, setSectorSuggestionsOpen] = useState(false);
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
@@ -325,9 +284,13 @@ export function XpotProspecting() {
     builderOpen && planningStep === 1 && sectorFragment.length >= 2,
     {},
   );
+  // Google's place types, as words in the rep's language: picking one adds it as
+  // the sector's search text, so it must read like something a person typed.
   const googleSectorSuggestions = useMemo(
-    () => Array.from(new Set((sectorPlacesQuery.data?.results ?? []).map((place) => place.primaryType?.trim()).filter((value): value is string => Boolean(value)))).slice(0, 5),
-    [sectorPlacesQuery.data?.results],
+    () => Array.from(new Set((sectorPlacesQuery.data?.results ?? [])
+      .map((place) => placeTypeLabel(place.primaryType, t.lang, place.primaryTypeName))
+      .filter((value): value is string => Boolean(value)))).slice(0, 5),
+    [sectorPlacesQuery.data?.results, t.lang],
   );
 
   useEffect(() => {
@@ -351,7 +314,7 @@ export function XpotProspecting() {
   const today = localDateKey();
   const todayJobs = useMemo(() => (jobsQuery.data ?? []).filter((job) => localDateKey(new Date(job.createdAt)) === today), [jobsQuery.data, today]);
   const todayRoutes = useMemo(() => (routesQuery.data ?? []).filter((route) => route.routeDate === today), [routesQuery.data, today]);
-  const activeTodayRoute = todayRoutes.find((route) => ["draft", "published", "in_progress"].includes(route.status));
+  const activeTodayRoute = todayRouteOf(todayRoutes, today);
   // A failed search keeps routePlanningStatus "pending", so only a live search
   // or a finished one still building its route counts as being prepared.
   const pendingTodayJob = todayJobs.find((job) => ["draft", "queued", "running"].includes(job.status)
@@ -390,7 +353,7 @@ export function XpotProspecting() {
     setRouteParams(next);
   };
 
-  const generatedRoute = (routesQuery.data ?? []).find((route) => route.jobId === activeJobId);
+  const generatedRoute = routeOfJob(routesQuery.data, activeJobId);
   useEffect(() => {
     if (!generatedRoute || activeRouteId === generatedRoute.id) return;
     setSelectedJobId(null);
@@ -500,10 +463,6 @@ export function XpotProspecting() {
   }, [detailsQuery.data?.job.id, detailsQuery.data?.candidates.length]);
 
   const enableReadyNotification = async () => {
-    if (!("Notification" in window)) {
-      toast({ title: t("notificationsUnavailable") });
-      return;
-    }
     const permission = Notification.permission === "default"
       ? await Notification.requestPermission()
       : Notification.permission;
@@ -528,6 +487,19 @@ export function XpotProspecting() {
       queryClient.setQueryData(["/api/xpot/prospecting/jobs", data.job.id], data);
       await queryClient.invalidateQueries({ queryKey: ["/api/xpot/prospecting/jobs"] });
       toast({ title: t("retryStarted") });
+    },
+    onError: (error: Error) => toast({ title: t("errorTitle"), description: error.message, variant: "destructive" }),
+  });
+
+  // The rep stops their own search, still running or waiting, or finished
+  // with a route that never got built (POST /prospecting/jobs/:id/cancel).
+  const [cancelSearchOpen, setCancelSearchOpen] = useState(false);
+  const cancelJob = useMutation({
+    mutationFn: async (jobId: number) => (await apiRequest("POST", `/api/xpot/prospecting/jobs/${jobId}/cancel`)).json() as Promise<ProspectingJobDetails>,
+    onSuccess: async (data) => {
+      queryClient.setQueryData(["/api/xpot/prospecting/jobs", data.job.id], data);
+      await queryClient.invalidateQueries({ queryKey: ["/api/xpot/prospecting/jobs"] });
+      toast({ title: t("searchCancelled") });
     },
     onError: (error: Error) => toast({ title: t("errorTitle"), description: error.message, variant: "destructive" }),
   });
@@ -658,15 +630,22 @@ export function XpotProspecting() {
   }, [routeDetails]);
   const selectedStop = routeDetails?.stops.find((stop) => stop.id === selectedStopId) ?? null;
   const canReorderRoute = routeDetails ? ["draft", "published"].includes(routeDetails.route.status) : false;
-  const eligibleCandidates = details?.candidates.filter((candidate) => candidate.status !== "discarded" && candidate.status !== "visited") ?? [];
+  // One count of found places everywhere on the card: the ones the route can use.
+  const eligibleCandidates = useMemo(() => eligibleOf(details?.candidates ?? []), [details?.candidates]);
   const canShowCandidates = details?.job.status === "completed";
+  const fill = details ? routeFill(eligibleCandidates.length, details.job.targetStops) : "none";
+  const jobCancelled = details?.job.status === "cancelled";
+  const jobFailed = details && !jobCancelled ? details.job.status === "failed" || hasFailedRuns || details.job.routePlanningStatus === "failed" : false;
+  const canCancelJob = details ? !generatedRoute && (["queued", "running"].includes(details.job.status)
+    || (details.job.status === "completed" && ["pending", "building"].includes(details.job.routePlanningStatus))) : false;
   const visibleCandidates = showAllCandidates ? eligibleCandidates : eligibleCandidates.slice(0, 6);
   const excludedCounts = useMemo(() => exclusionCounts(details?.candidates ?? []), [details?.candidates]);
   const otherExcludedCount = Object.entries(excludedCounts).reduce(
     (sum, [reason, count]) => ["existing_customer", "previously_visited"].includes(reason) ? sum : sum + count,
     0,
   );
-  const progress = details ? prospectingProgress({
+  // A cancelled search has no progress left to show; the card says it was cancelled.
+  const progress = details && !jobCancelled ? prospectingProgress({
     jobStatus: details.job.status,
     runs: details.runs,
     eligibleCount: details.summary.eligible,
@@ -731,20 +710,58 @@ export function XpotProspecting() {
     "rating 4.0+": t("reasonRating"),
     "established review volume": t("reasonReviews"),
   }[reason] ?? reason);
+  // Google ratings and review counts in the app language ("4,5" / "1.234" in Portuguese).
+  const ratingFormat = useMemo(() => new Intl.NumberFormat(t.locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }), [t.locale]);
+  const countFormat = useMemo(() => new Intl.NumberFormat(t.locale), [t.locale]);
   // Android and desktop navigate with Google Maps; an iPhone or iPad also gets Apple Maps.
-  const appleDevice = useMemo(() => typeof navigator !== "undefined" && isAppleMobileDevice(navigator.userAgent, navigator.maxTouchPoints ?? 0), []);
+  const appleDevice = useMemo(isAppleMobile, []);
   const routeStart = routeDetails ? { lat: routeDetails.route.startLat, lng: routeDetails.route.startLng } : null;
   const directionsUrl = routeDetails && routeStart ? googleRouteUrl(routeStart, routeDetails.stops) : null;
   const appleDirectionsUrl = appleDevice && routeDetails && routeStart ? appleRouteUrl(routeStart, routeDetails.stops) : null;
-  const mapStops = useMemo(() => routeDetails?.stops.map((stop) => ({
-    id: stop.id,
-    lat: Number(stop.lat),
-    lng: Number(stop.lng),
-    label: stop.name,
-    markerColor: stopMarkerTone(stop.id, currentStopId, nextStopId).background,
-    markerBorderColor: stopMarkerTone(stop.id, currentStopId, nextStopId).border,
-    markerTextColor: stopMarkerTone(stop.id, currentStopId, nextStopId).text,
-  })) ?? [], [routeDetails?.stops, currentStopId, nextStopId]);
+  // The route usually starts at stop 1; a start elsewhere and the rep's home (a
+  // route set to end there) get their own markers.
+  const routeLandmarks = useMemo<RouteLandmark[]>(() => {
+    if (!routeDetails) return [];
+    const { route, stops } = routeDetails;
+    const points: RouteLandmark[] = [];
+    const start = { lat: Number(route.startLat), lng: Number(route.startLng) };
+    const first = stops[0] ? { lat: Number(stops[0].lat), lng: Number(stops[0].lng) } : null;
+    if (Number.isFinite(start.lat) && Number.isFinite(start.lng) && (!first || !samePlace(start, first))) points.push({ kind: "start", ...start });
+    if (route.optimizationMeta.returnHome && route.endLat && route.endLng) {
+      const home = { lat: Number(route.endLat), lng: Number(route.endLng) };
+      if (Number.isFinite(home.lat) && Number.isFinite(home.lng)) points.push({ kind: "home", ...home });
+    }
+    return points;
+  }, [routeDetails]);
+  const routeEndsHome = routeLandmarks.some((point) => point.kind === "home");
+  // The legend lists only what this map shows.
+  const legendItems = useMemo(() => {
+    if (!routeDetails) return [];
+    const stops = routeDetails.stops;
+    const items: Array<{ key: string; tone: { background: string; border: string; text: string }; glyph?: string | null; label: string }> = [];
+    if (currentStopId !== null) items.push({ key: "current", tone: STOP_MARKER_TONES.current, label: tu("legendCurrent") });
+    if (nextStopId !== null) items.push({ key: "next", tone: STOP_MARKER_TONES.next, label: tu("legendNext") });
+    if (stops.some((stop) => stop.id !== currentStopId && stop.id !== nextStopId && !["completed", "skipped"].includes(stop.status))) items.push({ key: "planned", tone: STOP_MARKER_TONES.planned, label: tu("legendPlanned") });
+    if (stops.some((stop) => stop.status === "completed")) items.push({ key: "done", tone: STOP_MARKER_TONES.done, glyph: STOP_MARKER_TONES.done.glyph, label: tu("legendDone") });
+    if (stops.some((stop) => stop.status === "skipped")) items.push({ key: "skipped", tone: STOP_MARKER_TONES.skipped, glyph: STOP_MARKER_TONES.skipped.glyph, label: tu("legendSkipped") });
+    if (routeLandmarks.some((point) => point.kind === "start")) items.push({ key: "start", tone: MAP_POINT_TONES.start, glyph: "▸", label: tu("routeStart") });
+    if (routeEndsHome) items.push({ key: "home", tone: MAP_POINT_TONES.home, glyph: "⌂", label: tu("home") });
+    if (routeIsToday) items.push({ key: "you", tone: MAP_POINT_TONES.you, label: tu("legendYou") });
+    return items;
+  }, [routeDetails, currentStopId, nextStopId, routeLandmarks, routeEndsHome, routeIsToday, tu]);
+  const mapStops = useMemo(() => routeDetails?.stops.map((stop) => {
+    const tone = stopMarkerTone(stop, currentStopId, nextStopId);
+    return {
+      id: stop.id,
+      lat: Number(stop.lat),
+      lng: Number(stop.lng),
+      label: stop.name,
+      markerColor: tone.background,
+      markerBorderColor: tone.border,
+      markerTextColor: tone.text,
+      markerText: tone.glyph ?? undefined,
+    };
+  }) ?? [], [routeDetails?.stops, currentStopId, nextStopId]);
   const openStopPreview = useCallback((stopId: number) => setSelectedStopId(stopId), []);
   const resetDragState = () => {
     setDraggedStopId(null);
@@ -795,12 +812,12 @@ export function XpotProspecting() {
     if (routeDetails) ensureStopLead.mutate({ routeId: routeDetails.route.id, stopId: stop.id, destination: "company" });
   };
   const planningTitles = [t("cityStepTitle"), t("sectorsStepTitle"), t("durationStepTitle"), t("reviewStepTitle")];
-  const planningBodies = [t("cityStepBody"), t("sectorsStepBody"), t("durationStepBody"), t("reviewStepBody")];
+  const planningBodies = [t("cityStepBody"), t("sectorsStepBody"), t("durationStepBody", { time: dayEndLabel }), t("reviewStepBody")];
   const canAdvancePlanning = planningStep === 0
     ? cities.length > 0
     : planningStep === 1
-      ? parsedSearches.length > 0 && parsedSectors.overflow === 0
-      : true;
+      ? (parsedSearches.length > 0 || sectorDraft.trim().length > 0) && parsedSectors.overflow === 0
+      : shiftFitsToday;
   const loadingExistingPlan = jobsQuery.isLoading
     || routesQuery.isLoading
     || (activeJobId !== null && detailsQuery.isLoading)
@@ -811,10 +828,10 @@ export function XpotProspecting() {
     () => (routesQuery.data ?? []).filter((route) => route.id !== activeTodayRoute?.id),
     [routesQuery.data, activeTodayRoute?.id],
   );
-  const routeSummaryLine = (route: ProspectingRoute) => t("viewRouteHint", {
+  const routeSummaryLine = (route: ProspectingRoute) => tu("routeLine", {
     status: routeStatusLabel(route.status, t, route.routeDate < today),
-    hours: Math.max(0.1, Math.round(route.totalDurationSeconds / 360) / 10),
-    distance: Math.max(0, route.totalDistanceMeters / 1609.344).toLocaleString(t.locale, { maximumFractionDigits: 1 }),
+    duration: formatDuration(route.totalDurationSeconds),
+    distance: formatDistance(route.totalDistanceMeters, t.locale),
   });
   const openTodayAction = () => {
     if (activeTodayRoute) openRoute(activeTodayRoute.id);
@@ -825,6 +842,8 @@ export function XpotProspecting() {
   const submitPlanningStep = (event: React.FormEvent) => {
     event.preventDefault();
     if (!canAdvancePlanning) return;
+    // A typed but not yet added sector counts, so the in-field button never drops it.
+    if (planningStep === 1 && sectorDraft.trim()) addSector(sectorDraft, false);
     if (planningStep < 3) {
       setPlanningStep((planningStep + 1) as PlanningStep);
       return;
@@ -845,14 +864,29 @@ export function XpotProspecting() {
     setCities((current) => current.filter((value) => value !== label));
   };
 
-  const addSector = (value = sectorDraft) => {
+  const addSector = (value = sectorDraft, refocus = true) => {
     if (!value.trim() || parsedSearches.length >= MAX_PROSPECTING_SECTORS) return;
     const next = parseSectorSearches([sectors, value].filter(Boolean).join(", ")).searches;
     setSectors(next.map((search) => search.query).join(", "));
     setSectorDraft("");
     setSectorSuggestionsOpen(false);
-    window.requestAnimationFrame(() => sectorInputRef.current?.focus());
+    if (refocus) window.requestAnimationFrame(() => sectorInputRef.current?.focus());
   };
+
+  // On phones the keyboard covers the dialog footer, so the text steps also
+  // carry their Continue button inside the field, right next to what is typed.
+  // mousedown is cancelled so the input keeps focus: a blur would close the
+  // keyboard, shift the layout and make the tap miss.
+  const inFieldContinue = canAdvancePlanning ? (
+    <Button
+      type="submit"
+      variant="brand"
+      onMouseDown={(event) => event.preventDefault()}
+      className="absolute right-2 top-1/2 min-h-10 -translate-y-1/2 gap-1 pl-3.5 pr-2.5 font-bold"
+    >
+      {t("continue")}<ChevronRight />
+    </Button>
+  ) : null;
 
   const removeSector = (niche: string) => {
     setSectors(parsedSearches.filter((search) => search.niche !== niche).map((search) => search.query).join(", "));
@@ -868,9 +902,9 @@ export function XpotProspecting() {
         <>
           {/* No top padding: the layout already spaces every page from the header. */}
           <section className="flex w-full pb-1">
-            <button type="button" onClick={openTodayAction} disabled={!activeTodayRoute && !pendingTodayJob && dailyRouteLimitReached} className="flex min-h-[92px] w-full items-center gap-4 rounded-[22px] bg-gradient-to-br from-blue-500 to-indigo-500 p-4 text-left text-white shadow-[0_12px_34px_rgba(59,130,246,0.28)] transition-[filter,opacity,transform] enabled:active:scale-[0.985] disabled:cursor-not-allowed disabled:saturate-50 disabled:opacity-55 lg:min-h-20 lg:px-6">
+            <Button type="button" variant="brand" onClick={openTodayAction} disabled={!activeTodayRoute && !pendingTodayJob && dailyRouteLimitReached} className="min-h-[92px] w-full justify-start gap-4 whitespace-normal rounded-[22px] p-4 text-left [&_svg]:size-6 lg:min-h-20 lg:px-6">
               <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/15">
-                {pendingTodayJob && !activeTodayRoute ? <Loader2 className="h-7 w-7 animate-spin" /> : activeTodayRoute ? <MapIcon className="h-7 w-7" /> : <RouteIcon className="h-7 w-7" />}
+                {pendingTodayJob && !activeTodayRoute ? <Loader2 className="h-6 w-6" /> : activeTodayRoute ? <MapIcon /> : <RouteIcon />}
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block text-lg font-bold tracking-tight">{activeTodayRoute
@@ -886,29 +920,38 @@ export function XpotProspecting() {
                       ? t("dailyRouteLimit", { count: MAX_DAILY_PROSPECTING_SESSIONS })
                       : t("todayOnlyHint")}</span>
               </span>
-              <ChevronRight className="h-6 w-6 shrink-0 text-white/90" />
-            </button>
+              <ChevronRight className="shrink-0 text-white/90" />
+            </Button>
           </section>
 
           <section className="border-t border-white/[0.08] pt-6">
             <div className="flex min-h-9 items-center gap-2 text-white/85">
-              <RouteIcon className="h-4 w-4 text-indigo-300" />
+              <RouteIcon className="h-4 w-4 text-blue-300" />
               <h2 className="text-sm font-bold">{t("routeHistory")}</h2>
             </div>
             {routeHistory.length ? (
               <div className="mt-3 divide-y divide-white/[0.08] border-y border-white/[0.08]">
-                {(showFullHistory ? routeHistory : routeHistory.slice(0, ROUTE_HISTORY_PREVIEW)).map((route) => (
-                  <button key={route.id} type="button" onClick={() => openRoute(route.id)} className="flex min-h-[76px] w-full items-center gap-3 py-3 text-left transition hover:bg-white/[0.025]">
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-300"><RouteIcon className="h-5 w-5" /></span>
-                    <span className="min-w-0 flex-1">
-                      <span className="flex items-center gap-2"><strong className="truncate capitalize text-sm text-white/90">{routeDisplayName(route, t.locale)}</strong><span className={`h-1.5 w-1.5 shrink-0 rounded-full ${route.status === "completed" ? "bg-emerald-400" : route.status === "cancelled" ? "bg-red-400" : "bg-sky-400"}`} /></span>
-                      <span className="mt-1 block truncate text-xs text-white/45">{routeSummaryLine(route)}</span>
-                    </span>
-                    <ChevronRight className="h-4 w-4 shrink-0 text-white/30" />
-                  </button>
-                ))}
+                {(showFullHistory ? routeHistory : routeHistory.slice(0, ROUTE_HISTORY_PREVIEW)).map((route) => {
+                  const StatusIcon = routeStatusIcon(route.status);
+                  return (
+                    <button key={route.id} type="button" onClick={() => openRoute(route.id)} className="flex min-h-[76px] w-full items-center gap-3 py-3 text-left transition hover:bg-white/[0.025]">
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/[0.06] text-white/55"><StatusIcon className="h-5 w-5" aria-hidden="true" /></span>
+                      <span className="min-w-0 flex-1">
+                        <span className="flex min-w-0 items-center gap-2">
+                          <strong className="truncate text-sm text-white/90 first-letter:uppercase">{routeDisplayName(route, t.locale)}</strong>
+                          <Pill tone={routeStatusTone(route.status)} dot className="shrink-0">{routeStatusLabel(route.status, t, route.routeDate < today)}</Pill>
+                        </span>
+                        <span className="mt-1 block truncate text-xs text-white/45">{tu("routePlanLine", {
+                          duration: formatDuration(route.totalDurationSeconds),
+                          distance: formatDistance(route.totalDistanceMeters, t.locale),
+                        })}</span>
+                      </span>
+                      <ChevronRight className="h-4 w-4 shrink-0 text-white/30" />
+                    </button>
+                  );
+                })}
               </div>
-            ) : <p className="mt-3 border-y border-white/[0.08] py-8 text-center text-sm text-white/40">{t("noRouteHistory")}</p>}
+            ) : <div className="mt-3"><EmptyState compact dense icon={RouteIcon} title={t("noRouteHistory")} /></div>}
             {!showFullHistory && routeHistory.length > ROUTE_HISTORY_PREVIEW ? (
               <button type="button" onClick={() => setShowFullHistory(true)} className="mt-3 text-xs font-semibold text-indigo-300 transition hover:text-indigo-200">{t("showAllRoutes", { count: routeHistory.length })}</button>
             ) : null}
@@ -917,9 +960,9 @@ export function XpotProspecting() {
           <Dialog open={builderOpen} onOpenChange={setBuilderOpen}>
             <DialogContent
               onInteractOutside={(event) => {
-                if ((event.target as HTMLElement | null)?.closest?.("[data-prospecting-suggestions]")) event.preventDefault();
+                if ((event.target as HTMLElement | null)?.closest?.(`[${SUGGESTIONS_ATTRIBUTE}]`)) event.preventDefault();
               }}
-              className="max-h-[calc(100dvh-2rem)] w-[calc(100%-1.5rem)] max-w-2xl overflow-y-auto rounded-[24px] border border-white/10 bg-[#090f1d] p-0 text-white shadow-[0_28px_90px_rgba(0,0,0,0.72)] sm:rounded-[28px]"
+              className="max-h-[calc(100dvh-2rem)] w-[calc(100%-1.5rem)] max-w-2xl gap-0 p-0 sm:rounded-[28px]"
             >
               <GradientTopLine glow />
               <DialogTitle className="sr-only">{planningTitles[planningStep]}</DialogTitle>
@@ -966,47 +1009,31 @@ export function XpotProspecting() {
                       aria-controls="prospecting-city-suggestions"
                       aria-expanded={citySuggestionsOpen && cities.length < MAX_PROSPECTING_CITIES && deferredCity.length >= 2}
                       aria-describedby="prospecting-cities-help"
-                      className="h-14 w-full rounded-2xl border border-white/15 bg-black/20 pl-12 pr-4 text-base text-white outline-none transition placeholder:text-white/30 focus:border-indigo-300/70 focus:bg-black/30 disabled:cursor-not-allowed"
+                      className={`h-14 w-full rounded-2xl border border-white/15 bg-black/20 pl-12 text-base text-white outline-none transition placeholder:text-white/30 focus:border-indigo-300/70 focus:bg-black/30 disabled:cursor-not-allowed ${inFieldContinue ? "pr-36" : "pr-4"}`}
                     />
+                    {inFieldContinue}
                     <FloatingSuggestions
                       anchorRef={cityInputRef}
                       id="prospecting-city-suggestions"
                       open={citySuggestionsOpen && cities.length < MAX_PROSPECTING_CITIES && deferredCity.length >= 2}
                     >
-                        {citySuggestionsQuery.isFetching ? <div className="flex items-center gap-2 px-4 py-3 text-sm text-white/50"><Loader2 className="h-4 w-4 animate-spin" />{t("googleSuggestions")}</div> : null}
-                        {citySuggestionsQuery.isError ? <div className="px-4 py-3 text-sm leading-5 text-amber-100/70">{t("googleUnavailable")}</div> : null}
+                        <SuggestionStatus loading={citySuggestionsQuery.isFetching} error={citySuggestionsQuery.isError} loadingLabel={t("googleSuggestions")} errorLabel={t("googleUnavailable")} />
                         {citySuggestionsQuery.data?.suggestions.map((suggestion) => (
-                          <button
-                            key={suggestion.placeId}
-                            role="option"
-                            type="button"
-                            onMouseDown={(event) => {
-                              event.preventDefault();
-                              addCity(suggestion);
-                            }}
-                            onClick={(event) => {
-                              if (event.detail === 0) addCity(suggestion);
-                            }}
-                            className="flex w-full items-center gap-3 border-t border-white/[0.06] px-4 py-3 text-left transition first:border-t-0 hover:bg-white/[0.06]"
-                          >
-                            <MapPin className="h-4 w-4 shrink-0 text-indigo-300" />
-                            <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-white/90">{suggestion.mainText}</span><span className="block truncate text-xs text-white/40">{suggestion.secondaryText}</span></span>
-                            <GoogleLogo className="h-4 w-4 shrink-0" />
-                          </button>
+                          <SuggestionOption key={suggestion.placeId} icon={MapPin} title={suggestion.mainText} subtitle={suggestion.secondaryText} onPick={() => addCity(suggestion)} />
                         ))}
                     </FloatingSuggestions>
                   </div>
                   {cities.length ? (
                     <div className="mt-3 flex flex-wrap gap-2" role="list" aria-label={t("areaSummary")}>
                       {cities.map((selectedCity) => (
-                        <span key={selectedCity} role="listitem" className="inline-flex min-h-11 max-w-full items-center gap-2.5 rounded-2xl border border-sky-300/20 bg-sky-500/15 py-1.5 pl-4 pr-2 text-base font-semibold text-sky-100">
+                        <span key={selectedCity} role="listitem" className={TAG_CHIP}>
                           <span className="truncate">{selectedCity}</span>
                           <button
                             type="button"
                             onClick={() => removeCity(selectedCity)}
                             aria-label={t("removeCity", { city: selectedCity })}
                             title={t("removeCity", { city: selectedCity })}
-                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-sky-100/65 transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/70"
+                            className={TAG_CHIP_REMOVE}
                           >
                             <X className="h-[18px] w-[18px]" />
                           </button>
@@ -1050,47 +1077,31 @@ export function XpotProspecting() {
                       aria-controls="prospecting-sector-suggestions"
                       aria-expanded={sectorSuggestionsOpen && sectorFragment.length >= 2 && (sectorPlacesQuery.isFetching || sectorPlacesQuery.isError || googleSectorSuggestions.length > 0)}
                       aria-describedby="prospecting-sectors-help"
-                      className="h-14 min-w-0 flex-1 bg-transparent pl-12 pr-4 text-base text-white outline-none placeholder:text-white/30 disabled:cursor-not-allowed"
+                      className={`h-14 min-w-0 flex-1 bg-transparent pl-12 text-base text-white outline-none placeholder:text-white/30 disabled:cursor-not-allowed ${inFieldContinue ? "pr-36" : "pr-4"}`}
                     />
+                    {inFieldContinue}
                     <FloatingSuggestions
                       anchorRef={sectorAnchorRef}
                       id="prospecting-sector-suggestions"
                       open={sectorSuggestionsOpen && sectorFragment.length >= 2 && (sectorPlacesQuery.isFetching || sectorPlacesQuery.isError || googleSectorSuggestions.length > 0)}
                     >
-                        {sectorPlacesQuery.isFetching ? <div className="flex items-center gap-2 px-4 py-3 text-sm text-white/50"><Loader2 className="h-4 w-4 animate-spin" />{t("googleSuggestions")}</div> : null}
-                        {sectorPlacesQuery.isError ? <div className="px-4 py-3 text-sm leading-5 text-amber-100/70">{t("googleUnavailable")}</div> : null}
+                        <SuggestionStatus loading={sectorPlacesQuery.isFetching} error={sectorPlacesQuery.isError} loadingLabel={t("googleSuggestions")} errorLabel={t("googleUnavailable")} />
                         {googleSectorSuggestions.map((suggestion) => (
-                          <button
-                            key={suggestion}
-                            role="option"
-                            type="button"
-                            onMouseDown={(event) => {
-                              event.preventDefault();
-                              pickSectorSuggestion(suggestion);
-                            }}
-                            onClick={(event) => {
-                              if (event.detail === 0) pickSectorSuggestion(suggestion);
-                            }}
-                            className="flex w-full items-center gap-3 border-t border-white/[0.06] px-4 py-3 text-left transition first:border-t-0 hover:bg-white/[0.06]"
-                          >
-                            <Search className="h-4 w-4 shrink-0 text-indigo-300" />
-                            <span className="min-w-0 flex-1 truncate text-sm font-semibold text-white/90">{suggestion}</span>
-                            <GoogleLogo className="h-4 w-4 shrink-0" />
-                          </button>
+                          <SuggestionOption key={suggestion} icon={Search} title={suggestion} onPick={() => pickSectorSuggestion(suggestion)} />
                         ))}
                     </FloatingSuggestions>
                   </div>
                   {parsedSearches.length ? (
                     <div className="mt-3 flex flex-wrap gap-2" role="list" aria-label={t("sectorsSummary")}>
                       {parsedSearches.map((sector) => (
-                        <span key={sector.niche} role="listitem" className="inline-flex min-h-11 max-w-full items-center gap-2.5 rounded-2xl border border-indigo-300/20 bg-indigo-500/15 py-1.5 pl-4 pr-2 text-base font-semibold text-indigo-100">
+                        <span key={sector.niche} role="listitem" className={TAG_CHIP}>
                           <span className="truncate">{sector.query}</span>
                           <button
                             type="button"
                             onClick={() => removeSector(sector.niche)}
                             aria-label={t("removeSector", { sector: sector.query })}
                             title={t("removeSector", { sector: sector.query })}
-                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-indigo-100/65 transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300/70"
+                            className={TAG_CHIP_REMOVE}
                           >
                             <X className="h-[18px] w-[18px]" />
                           </button>
@@ -1109,12 +1120,15 @@ export function XpotProspecting() {
                 <fieldset className="mt-8">
                   <legend className="sr-only">{t("shiftLabel")}</legend>
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                    {[2, 4, 6, 8, 10, 12].map((hours) => (
-                      <button key={hours} type="button" aria-pressed={shiftHours === hours} onClick={() => setShiftHours(hours)} className={`min-h-16 touch-manipulation rounded-2xl border px-3 py-3 text-base font-bold transition ${shiftHours === hours ? "border-indigo-300/70 bg-indigo-500/25 text-white shadow-[0_0_24px_rgba(99,102,241,0.12)]" : "border-white/12 bg-black/10 text-white/55 hover:bg-white/[0.06] hover:text-white/80"}`}>
+                    {SHIFT_HOUR_OPTIONS.map((hours) => (
+                      <button key={hours} type="button" aria-pressed={shiftHours === hours} disabled={!availableShiftHours.includes(hours)} onClick={() => setShiftHours(hours)} className={`min-h-16 touch-manipulation rounded-2xl border px-3 py-3 text-base font-bold transition disabled:cursor-not-allowed disabled:border-white/[0.06] disabled:bg-transparent disabled:text-white/20 disabled:line-through ${shiftHours === hours ? `border-blue-300/50 ${ACCENT_SELECTED.visits.fill}` : "border-white/12 bg-black/10 text-white/55 enabled:hover:bg-white/[0.06] enabled:hover:text-white/80"}`}>
                         {t("shiftHours", { hours })}
                       </button>
                     ))}
                   </div>
+                  {availableShiftHours.length ? null : (
+                    <InlineAlert tone="warning" className="mt-4">{t("dayOverHint", { time: dayEndLabel })}</InlineAlert>
+                  )}
                 </fieldset>
               ) : null}
 
@@ -1139,10 +1153,10 @@ export function XpotProspecting() {
 
             <div className="flex items-center gap-3 border-t border-white/10 pt-5">
               {planningStep > 0 ? (
-                <button type="button" onClick={() => setPlanningStep((planningStep - 1) as PlanningStep)} className="flex h-12 items-center gap-2 rounded-xl px-3 text-sm font-semibold text-white/55 transition hover:bg-white/[0.05] hover:text-white/80"><ArrowLeft className="h-4 w-4" />{t("back")}</button>
+                <Button type="button" variant="ghost" size="lg" onClick={() => setPlanningStep((planningStep - 1) as PlanningStep)} className="px-3 text-sm"><ChevronLeft />{t("back")}</Button>
               ) : <span />}
-              <Button type="submit" disabled={!canAdvancePlanning || createJob.isPending} className="ml-auto h-12 min-w-36 touch-manipulation rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-5 font-bold text-white">
-                {createJob.isPending ? <><Loader2 className="animate-spin" />{t("creating")}</> : planningStep === 3 ? <><RouteIcon />{t("buildToday")}</> : <>{t("continue")}<ChevronRight className="h-4 w-4" /></>}
+              <Button type="submit" variant="brand" size="lg" disabled={!canAdvancePlanning} loading={createJob.isPending} aria-label={createJob.isPending ? t("creating") : undefined} className="ml-auto min-w-36 px-5 text-sm font-bold">
+                {planningStep === 3 ? <><RouteIcon />{t("buildToday")}</> : <>{t("continue")}<ChevronRight /></>}
               </Button>
             </div>
           </form>
@@ -1153,18 +1167,21 @@ export function XpotProspecting() {
       ) : null}
 
       {loadingExistingPlan && !details && !routeDetails ? (
-        <section className="flex min-h-[420px] items-center justify-center rounded-[20px]" style={GLASS}><Loader2 className="h-7 w-7 animate-spin text-indigo-300" /></section>
+        <section className="space-y-4 rounded-[20px] p-4 sm:p-6" style={GLASS} aria-busy="true">
+          <ListSkeleton rows={1} rowClassName="h-[92px] rounded-[22px]" className="" />
+          <ListSkeleton rows={4} rowClassName="h-[76px] rounded-2xl" />
+        </section>
       ) : null}
 
       {!routeDetails && details ? (
         <section className="mx-auto min-w-0 max-w-3xl rounded-[20px] p-3 sm:rounded-[22px] sm:p-6" style={GLASS}>
-          {detailsQuery.isLoading ? <div className="flex min-h-48 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-indigo-300" /></div> : details ? (
+          {detailsQuery.isLoading ? <ListSkeleton rows={3} /> : details ? (
             <div className="space-y-4 sm:space-y-5">
               <div className="grid gap-3 sm:flex sm:items-start sm:justify-between">
-                <div className="min-w-0"><div className="text-[11px] font-bold uppercase tracking-[0.14em] text-indigo-300">{details.job.status === "completed" && ["pending", "building"].includes(details.job.routePlanningStatus) ? t("preparingRoute") : statusLabel(details.job.status, t)}</div><h2 className="mt-1 truncate text-xl font-bold text-white [text-wrap:balance]">{details.job.location}</h2></div>
-                <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-                  <span className="rounded-xl bg-emerald-500/10 px-3 py-2 text-center text-xs font-semibold tabular-nums text-emerald-200">{t("found", { count: details.summary.eligible })}</span>
-                  <span className="rounded-xl bg-white/[0.07] px-3 py-2 text-center text-xs tabular-nums text-white/65">{t("excluded", { count: details.summary.excluded })}</span>
+                <div className="min-w-0"><div className={`text-[11px] font-bold uppercase tracking-[0.14em] ${jobFailed ? "text-red-300" : "text-indigo-300"}`}>{details.job.status === "completed" && ["pending", "building"].includes(details.job.routePlanningStatus) ? t("preparingRoute") : statusLabel(details.job.status, t)}</div><h2 className="mt-1 truncate text-xl font-bold text-white [text-wrap:balance]">{details.job.location}</h2></div>
+                <div className="flex flex-wrap gap-2">
+                  <Pill tone="slate" className="tabular-nums">{t("found", { count: eligibleCandidates.length })}</Pill>
+                  <Pill tone="muted" className="tabular-nums">{t("excluded", { count: details.summary.excluded })}</Pill>
                 </div>
               </div>
 
@@ -1174,13 +1191,13 @@ export function XpotProspecting() {
                     <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-400/15 text-indigo-200"><Sparkles className="h-4 w-4" aria-hidden="true" /></span>
                     <div className="min-w-0 flex-1" aria-live="polite" aria-atomic="true">
                       <p className="text-sm font-bold text-white [text-wrap:pretty]">{progressCopy[0]}</p>
-                      <p className="mt-0.5 hidden text-xs leading-5 text-white/60 sm:block">{progressCopy[1]}</p>
+                      <p className="mt-0.5 text-xs leading-5 text-white/60">{progressCopy[1]}</p>
                     </div>
                     <span className="shrink-0 text-sm font-bold tabular-nums text-indigo-100">{progress.percent}%</span>
                   </div>
                   <div className="relative mt-4">
                     <div className="absolute inset-x-0 top-3.5 h-1.5 -translate-y-1/2 overflow-hidden rounded-full bg-white/10" role="progressbar" aria-label={progressCopy[0]} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress.percent}>
-                      <div className="relative h-full overflow-hidden rounded-full bg-gradient-to-r from-sky-400 to-indigo-400 transition-[width] duration-300" style={{ width: `${progress.percent}%` }}>
+                      <div className={`relative h-full overflow-hidden rounded-full transition-[width] duration-300 ${progress.stage === "failed" ? "bg-red-400" : "bg-gradient-to-r from-sky-400 to-indigo-400"}`} style={{ width: `${progress.percent}%` }}>
                         {["queued", "running"].includes(details.job.status) || progress.stage === "review" ? <span className="xpot-progress-shimmer absolute inset-y-0 left-0 w-2/5 bg-gradient-to-r from-transparent via-white/75 to-transparent" aria-hidden="true" /> : null}
                       </div>
                     </div>
@@ -1197,27 +1214,35 @@ export function XpotProspecting() {
                   </div>
                   <div className="mt-4 space-y-3">
                     <div key={currentActivity} className="flex min-h-10 w-full min-w-0 animate-in items-center gap-2.5 rounded-xl bg-black/15 px-3 py-2 text-xs fade-in slide-in-from-bottom-1 duration-200" role="status" aria-live="polite" aria-atomic="true">
-                      <span className={`h-2 w-2 shrink-0 rounded-full ${["queued", "running"].includes(details.job.status) || progress.stage === "review" ? "animate-pulse bg-sky-300 shadow-[0_0_8px_rgba(125,211,252,0.7)]" : details.job.status === "completed" ? "bg-emerald-300" : "bg-amber-300"}`} aria-hidden="true" />
+                      <span className={`h-2 w-2 shrink-0 rounded-full ${["queued", "running"].includes(details.job.status) || progress.stage === "review" ? "animate-pulse bg-sky-300 shadow-[0_0_8px_rgba(125,211,252,0.7)]" : progress.stage === "failed" ? PILL_DOTS.red : PILL_DOTS.green}`} aria-hidden="true" />
                       <span className="shrink-0 font-bold uppercase tracking-[0.12em] text-indigo-200">{t("activityLabel")}</span>
                       <span className="min-w-0 break-words leading-5 text-pretty text-white/65">{currentActivity}</span>
                     </div>
-                    {["queued", "running"].includes(details.job.status) ? (
-                      <div className="flex justify-end">
-                        <Button type="button" variant="outline" disabled={notificationsEnabled} onClick={() => void enableReadyNotification()} className="min-h-10 w-full rounded-xl border-white/12 bg-black/10 text-xs text-white active:scale-[0.96] sm:w-auto">
-                          <BellRing className="h-4 w-4" />{notificationsEnabled ? t("notificationsEnabled") : t("notifyWhenReady")}
-                        </Button>
+                    {(["queued", "running"].includes(details.job.status) && routePushSupported()) || canCancelJob ? (
+                      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                        {canCancelJob ? (
+                          <Button type="button" variant="ghost" onClick={() => setCancelSearchOpen(true)} className="w-full text-xs text-white/60 sm:w-auto" data-testid="button-cancel-search">
+                            <X />{t("cancelSearch")}
+                          </Button>
+                        ) : null}
+                        {["queued", "running"].includes(details.job.status) && routePushSupported() ? (
+                          <Button type="button" variant="outline" disabled={notificationsEnabled} onClick={() => void enableReadyNotification()} className="w-full text-xs sm:w-auto">
+                            <BellRing />{notificationsEnabled ? t("notificationsEnabled") : t("notifyWhenReady")}
+                          </Button>
+                        ) : null}
                       </div>
                     ) : null}
                   </div>
                 </div>
               ) : null}
 
-              {!details.engine.configured ? <div className="rounded-xl border border-amber-400/20 bg-amber-400/10 p-3 text-xs text-amber-200">{t("engineUnavailable")}</div> : null}
-              {details.job.errorMessage ? <div className="rounded-xl border border-red-400/20 bg-red-400/[0.08] p-3 text-sm text-red-100" role="alert">{details.job.errorMessage}</div> : null}
-              {details.job.expansionState?.currentArea ? <div className="rounded-xl border border-sky-400/15 bg-sky-400/[0.07] p-3 text-xs text-sky-200"><div>{t("currentArea", { area: details.job.expansionState.currentArea })}</div><div className="mt-1 text-sky-200/60">{t("expanding")}</div></div> : null}
+              {!details.engine.configured ? <InlineAlert tone="warning">{t("engineUnavailable")}</InlineAlert> : null}
+              {jobCancelled ? <InlineAlert tone="info">{t("searchCancelled")}</InlineAlert>
+                : details.job.errorMessage ? <InlineAlert tone="error">{details.job.errorMessage}</InlineAlert> : null}
+              {details.job.expansionState?.currentArea ? <InlineAlert tone="info" title={t("currentArea", { area: details.job.expansionState.currentArea })}>{t("expanding")}</InlineAlert> : null}
 
               {details.runs.length > 1 && ["queued", "running"].includes(details.job.status) ? (
-                <details className="group rounded-xl bg-black/10 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]">
+                <details className={`group rounded-xl ${GLASS_SUBTLE_CLASS}`}>
                   <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-3 text-xs font-semibold text-white/70">
                     <span>{t("searchDetails", { completed: details.runs.filter((run) => run.status === "completed").length, total: details.runs.length })}</span>
                     <ChevronDown className="h-4 w-4 transition-transform duration-200 group-open:rotate-180" aria-hidden="true" />
@@ -1225,7 +1250,7 @@ export function XpotProspecting() {
                   <div className="grid gap-2 border-t border-white/[0.06] p-2 sm:grid-cols-2">
                     {details.runs.slice(0, 6).map((run) => (
                       <div key={run.id} className="flex min-h-10 items-center gap-3 rounded-lg bg-white/[0.035] px-3 py-2">
-                        <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${run.status === "completed" ? "bg-emerald-400" : run.status === "failed" ? "bg-red-400" : "bg-sky-400"}`} aria-hidden="true" />
+                        <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${PILL_DOTS[toneOf(RUN_STATUS_TONE, run.status)]}`} aria-hidden="true" />
                         <span className="min-w-0 flex-1 truncate text-xs font-medium text-white/70">{t("runProgress", { sector: run.niche.replaceAll("_", " "), status: runStatusLabel(run.status, t) })}</span>
                         <span className="text-xs tabular-nums text-white/55">{Math.max(0, Math.min(100, run.progress))}%</span>
                       </div>
@@ -1235,7 +1260,7 @@ export function XpotProspecting() {
               ) : null}
 
               {details.summary.excluded > 0 ? (
-                <details className="group rounded-xl border border-white/10 bg-black/10 p-3">
+                <details className={`group rounded-xl p-3 ${GLASS_SUBTLE_CLASS}`}>
                   <summary className="flex min-h-8 cursor-pointer list-none items-center justify-between gap-3 text-xs font-semibold text-white/75">
                     {t("exclusionBreakdown", { count: details.summary.excluded })}<ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" aria-hidden="true" />
                   </summary>
@@ -1249,98 +1274,130 @@ export function XpotProspecting() {
 
               {canShowCandidates && eligibleCandidates.length > 0 ? (
                 <div className="border-t border-white/[0.07] pt-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <h3 className="text-base font-bold text-white [text-wrap:balance]">{t("candidateReview")}</h3>
-                      <p className="mt-1 hidden max-w-xl text-xs leading-5 text-white/60 sm:block">{t("candidateReviewBody")}</p>
-                    </div>
-                    <span className="shrink-0 rounded-full bg-indigo-400/10 px-3 py-1.5 text-xs font-semibold tabular-nums text-indigo-100">{t("found", { count: eligibleCandidates.length })}</span>
+                  <div className="min-w-0">
+                    <h3 className="text-base font-bold text-white [text-wrap:balance]">{t("candidateReview")}</h3>
+                    {/* Xpot picks the stops itself; the rep can still remove or reorder them on the route. */}
+                    <p className="mt-1 max-w-xl text-xs leading-5 text-white/60">{t("candidateReviewBody")}</p>
+                    <p className="mt-1 max-w-xl text-xs font-semibold leading-5 text-white/75">{fill === "short" ? tu("shortRoute") : tu("fullRoute")}</p>
                   </div>
                   <div className="mt-3 grid gap-2 sm:grid-cols-2">
                     {visibleCandidates.map((candidate) => {
                       return (
-                        <div key={candidate.id} className="flex min-h-20 items-start gap-3 rounded-2xl bg-indigo-400/[0.08] p-3 shadow-[inset_0_0_0_1px_rgba(165,180,252,0.22)]">
-                          <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-emerald-300 shadow-[0_0_8px_rgba(110,231,183,0.5)]" aria-hidden="true" />
+                        <div key={candidate.id} className={`flex min-h-20 items-start gap-3 rounded-2xl p-3 ${GLASS_SUBTLE_CLASS}`}>
                           <span className="min-w-0 flex-1">
                             <span className="flex items-start justify-between gap-2">
                               <span className="line-clamp-2 text-sm font-semibold text-white/90 [text-wrap:pretty]">{candidate.name}</span>
                               <span className="shrink-0 rounded-lg bg-white/[0.08] px-2 py-1 text-xs font-bold tabular-nums text-white/75">{t("scoreLabel", { score: candidate.score })}</span>
                             </span>
-                            <span className="mt-1 block truncate text-xs leading-5 text-white/55">{candidate.address || "—"}</span>
-                            {candidate.scoreReasons.length ? <span className="mt-2 hidden flex-wrap gap-1.5 sm:flex">{candidate.scoreReasons.slice(0, 2).map((reason) => <span key={reason} className="rounded-md bg-emerald-400/[0.09] px-2 py-1 text-xs font-medium text-emerald-100">{reasonLabel(reason)}</span>)}</span> : null}
+                            <span className="mt-1 block truncate text-xs leading-5 text-white/55">{candidate.address || t("noAddress")}</span>
+                            {candidate.scoreReasons.length ? (
+                              <span className="mt-2 flex flex-wrap gap-1.5" aria-label={tu("reasonsLabel")}>
+                                {candidate.scoreReasons.slice(0, 2).map((reason) => <Pill key={reason} tone="slate">{reasonLabel(reason)}</Pill>)}
+                              </span>
+                            ) : null}
                           </span>
                         </div>
                       );
                     })}
                   </div>
                   {eligibleCandidates.length > 6 ? (
-                    <button type="button" onClick={() => setShowAllCandidates((value) => !value)} className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl text-sm font-semibold text-indigo-200 transition hover:bg-indigo-400/[0.08]">
-                      {showAllCandidates ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}{showAllCandidates ? t("showFewerCandidates") : t("showAllCandidates")}
-                    </button>
+                    <Button type="button" variant="ghost" onClick={() => setShowAllCandidates((value) => !value)} className="mt-3 w-full">
+                      {showAllCandidates ? <ChevronUp /> : <ChevronDown />}{showAllCandidates ? t("showFewerCandidates") : t("showAllCandidates")}
+                    </Button>
                   ) : null}
                 </div>
-              ) : canShowCandidates ? <p className="text-sm text-white/60">{t("emptyCandidates")}</p> : null}
+              ) : canShowCandidates ? (
+                <EmptyState icon={SearchX} title={tu("noEligibleTitle")} hint={tu("noEligibleHint")} />
+              ) : null}
 
-              {hasFailedRuns ? (
-                <Button onClick={() => retryJob.mutate(details.job.id)} disabled={retryJob.isPending || !details.engine.configured} className="h-12 w-full touch-manipulation rounded-xl bg-amber-500 text-slate-950 hover:bg-amber-400 sm:h-10">
-                  {retryJob.isPending ? <><Loader2 className="animate-spin" />{t("retrying")}</> : t("tryAgain")}
+              {hasFailedRuns && !jobCancelled ? (
+                <Button variant="brand" onClick={() => retryJob.mutate(details.job.id)} disabled={!details.engine.configured} loading={retryJob.isPending} className="w-full">
+                  <RotateCw />{t("tryAgain")}
                 </Button>
               ) : !canShowCandidates ? null : generatedRoute ? (
-                <Button asChild className="h-12 w-full touch-manipulation rounded-xl bg-indigo-500 text-white sm:h-10">
-                  <a href="#today-route"><Navigation />{t("viewRoute")}</a>
+                <Button asChild variant="brand" className="w-full">
+                  <a href="#today-route"><MapIcon />{t("viewRoute")}</a>
                 </Button>
               ) : details.job.routePlanningStatus === "failed" ? (
                 <div className="space-y-2">
-                  {details.job.routeErrorMessage ? <p className="rounded-xl border border-amber-300/15 bg-amber-300/[0.07] px-3 py-2.5 text-xs leading-5 text-amber-100" role="alert">{details.job.routeErrorMessage}</p> : null}
-                  <Button onClick={() => retryAutomaticRoute.mutate(details.job.id)} disabled={retryAutomaticRoute.isPending} className="h-12 w-full touch-manipulation rounded-xl bg-amber-500 text-slate-950 hover:bg-amber-400 sm:h-10">
-                    {retryAutomaticRoute.isPending ? <><Loader2 className="animate-spin" />{t("retrying")}</> : <><RefreshCw />{t("retryRoute")}</>}
+                  {details.job.routeErrorMessage ? <InlineAlert tone="error">{details.job.routeErrorMessage}</InlineAlert> : null}
+                  <Button variant="brand" onClick={() => retryAutomaticRoute.mutate(details.job.id)} loading={retryAutomaticRoute.isPending} className="w-full">
+                    <RotateCw />{t("retryRoute")}
                   </Button>
                 </div>
-              ) : (
-                <div className="flex min-h-12 items-center justify-center gap-2 rounded-xl border border-indigo-300/15 bg-indigo-400/[0.07] px-4 text-sm font-semibold text-indigo-100" role="status">
-                  <Loader2 className="h-4 w-4 animate-spin" />{t("automaticRouteHint")}
+              ) : fill === "none" ? null : (
+                <div className={`flex min-h-12 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold text-white/75 ${GLASS_SUBTLE_CLASS}`} role="status">
+                  <Loader2 className="h-4 w-4" />{t("automaticRouteHint")}
                 </div>
               )}
             </div>
-          ) : <div className="flex min-h-48 items-center justify-center text-sm text-white/60">{t("noPlans")}</div>}
+          ) : <EmptyState compact icon={RouteIcon} title={t("noPlans")} />}
         </section>
       ) : null}
 
       {routeDetails ? (
         <section id="today-route" className="scroll-mt-4 overflow-hidden rounded-[20px] sm:rounded-[24px]" style={GLASS}>
           <div className="border-b border-white/[0.08] px-4 py-2 sm:px-5">
-            <button type="button" onClick={closeRoute} className="flex min-h-10 items-center gap-2 text-xs font-semibold text-white/55 transition hover:text-white"><ArrowLeft className="h-4 w-4" />{t("backToRoutes")}</button>
+            <BackLink onBack={closeRoute}>{t("backToRoutes")}</BackLink>
           </div>
           <div className="grid lg:h-[calc(100vh-11rem)] lg:min-h-[620px] lg:max-h-[820px] lg:grid-cols-[minmax(0,1.08fr)_minmax(420px,0.92fr)]">
-            <div className="min-w-0 overflow-hidden border-b border-white/[0.08] lg:border-b-0 lg:border-r">
+            <div className="flex min-w-0 flex-col overflow-hidden border-b border-white/[0.08] lg:border-b-0 lg:border-r">
               <RoutePreviewMap
                 start={{ lat: Number(routeDetails.route.startLat), lng: Number(routeDetails.route.startLng) }}
                 stops={mapStops}
+                landmarks={routeLandmarks}
                 encodedPolyline={routeDetails.route.optimizationMeta.encodedPolyline}
                 alt={routeContextLabel}
                 showCurrentLocation={routeIsToday}
                 locateLabel={t("showMyLocation")}
                 onStopClick={openStopPreview}
-                className="lg:h-full"
+                className="lg:h-auto lg:flex-1"
               />
+              {legendItems.length ? (
+                <ul aria-label={tu("legendLabel")} className="flex flex-wrap gap-x-4 gap-y-1.5 border-t border-white/[0.08] px-4 py-2.5 text-[11px] font-medium text-white/55">
+                  {legendItems.map((item) => <LegendItem key={item.key} tone={item.tone} glyph={item.glyph} label={item.label} />)}
+                </ul>
+              ) : null}
             </div>
             <div className="min-w-0 space-y-6 p-4 sm:p-5 lg:overflow-y-auto lg:p-6">
             <div>
               <div className="flex items-center gap-2 text-indigo-300"><RouteIcon className="h-4 w-4" /><span className="text-xs font-bold uppercase tracking-wider">{routeContextLabel}</span></div>
-              <h2 className="mt-2 text-xl font-bold capitalize text-white">{selectedRouteName}</h2>
-              <p className="mt-1 text-sm text-white/65">{t("routeSummary", { count: routeDetails.stops.length, hours: `${Math.max(1, Math.round(routeDetails.route.totalDurationSeconds / 360) / 10)}h` })}</p>
+              <h2 className="mt-2 text-xl font-bold text-white first-letter:uppercase">{selectedRouteName}</h2>
+              <p className="mt-1 text-sm text-white/65">{tu("routeDetailLine", {
+                count: routeDetails.stops.length,
+                duration: formatDuration(routeDetails.route.totalDurationSeconds),
+                distance: formatDistance(routeDetails.route.totalDistanceMeters, t.locale),
+              })}</p>
+              <div className="mt-3">
+                {(() => {
+                  const StatusIcon = routeStatusIcon(routeDetails.route.status);
+                  return (
+                    <Pill tone={routeStatusTone(routeDetails.route.status)} bordered className="gap-1.5">
+                      <StatusIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                      {routeStatusLabel(routeDetails.route.status, t, routeDetails.route.routeDate < today)}
+                    </Pill>
+                  );
+                })()}
+              </div>
               <div className="mt-4 grid gap-2 sm:flex sm:flex-wrap">
-                {routeDetails.route.status === "draft" && routeIsToday ? <Button onClick={() => publishRoute.mutate(routeDetails.route.id)} disabled={publishRoute.isPending} className="h-11 w-full touch-manipulation rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-white sm:w-auto">{publishRoute.isPending ? <Loader2 className="animate-spin" /> : <ShieldCheck />}{publishRoute.isPending ? t("publishing") : t("publishRoute")}</Button> : <><span className={`inline-flex h-11 items-center justify-center gap-2 rounded-xl border px-4 text-sm font-semibold ${routeDetails.route.status === "completed" ? "border-emerald-400/20 bg-emerald-500/10 text-emerald-300" : "border-white/10 bg-white/[0.04] text-white/65"}`}><CheckCircle2 className="h-4 w-4" />{routeStatusLabel(routeDetails.route.status, t, routeDetails.route.routeDate < today)}</span>{routeIsToday && !["cancelled", "draft"].includes(routeDetails.route.status) ? <Button asChild className="h-11 w-full touch-manipulation rounded-xl bg-indigo-500 px-4 text-sm font-semibold text-white sm:w-auto"><Link href="/visits?view=day">{t("openVisits")}</Link></Button> : null}</>}
-                {directionsUrl ? <Button asChild variant="outline" className="h-11 w-full touch-manipulation rounded-xl border-white/10 bg-white/[0.04] px-4 text-sm font-semibold text-white/80 hover:bg-white/[0.08] hover:text-white sm:w-auto"><a href={directionsUrl} target="_blank" rel="noreferrer"><Navigation />{t("openMaps")}</a></Button> : null}
-                {appleDirectionsUrl ? <Button asChild variant="outline" className="h-11 w-full touch-manipulation rounded-xl border-white/10 bg-white/[0.04] px-4 text-sm font-semibold text-white/80 hover:bg-white/[0.08] hover:text-white sm:w-auto"><a href={appleDirectionsUrl} target="_blank" rel="noreferrer"><Navigation />{t("openAppleMaps")}</a></Button> : null}
+                {routeDetails.route.status === "draft" && routeIsToday ? (
+                  <Button variant="brand" onClick={() => publishRoute.mutate(routeDetails.route.id)} loading={publishRoute.isPending} aria-label={publishRoute.isPending ? t("publishing") : undefined} className="w-full sm:w-auto">
+                    <ShieldCheck />{t("publishRoute")}
+                  </Button>
+                ) : routeIsToday && !["cancelled", "draft"].includes(routeDetails.route.status) ? (
+                  <Button asChild variant="brand" className="w-full sm:w-auto"><Link href="/dashboard/history?view=day">{t("openVisits")}</Link></Button>
+                ) : null}
+                {directionsUrl ? <Button asChild variant="secondary" className="w-full sm:w-auto"><a href={directionsUrl} target="_blank" rel="noreferrer"><Navigation />{t("openMaps")}</a></Button> : null}
+                {appleDirectionsUrl ? <Button asChild variant="secondary" className="w-full sm:w-auto"><a href={appleDirectionsUrl} target="_blank" rel="noreferrer"><Navigation />{t("openAppleMaps")}</a></Button> : null}
                 {isSuperAdmin && details ? (
                   <Button
                     variant="outline"
                     onClick={() => createRoute.mutate({ rebuild: true })}
-                    disabled={createRoute.isPending || ["queued", "running"].includes(details.job.status)}
-                    className="h-11 w-full touch-manipulation rounded-xl border-amber-400/30 px-4 text-sm font-semibold text-amber-200 sm:w-auto"
+                    disabled={["queued", "running"].includes(details.job.status)}
+                    loading={createRoute.isPending}
+                    className="w-full sm:w-auto"
                   >
-                    {createRoute.isPending ? <Loader2 className="animate-spin" /> : <RefreshCw />}{t("rebuildRoute")}
+                    <RefreshCw />{t("rebuildRoute")}
                   </Button>
                 ) : null}
               </div>
@@ -1355,17 +1412,18 @@ export function XpotProspecting() {
               </div>
               <ol className="space-y-2">
                 {routeDetails.stops.map((stop) => {
-                  const stopUrl = appleDevice ? appleStopUrl(stop) : googleStopUrl(stop);
-                  const numberRailClass = stop.id === currentStopId
-                    ? "border-blue-300/45 bg-blue-500 text-white shadow-[inset_-1px_0_0_rgba(255,255,255,0.12)]"
-                    : stop.id === nextStopId
-                      ? "border-violet-300/20 bg-violet-400/[0.14] text-violet-100/85 shadow-[inset_-1px_0_0_rgba(196,181,253,0.1)]"
-                      : "border-white/10 bg-white/[0.035] text-white/45";
-                  const checkInToneClass = stop.id === currentStopId
-                    ? "bg-blue-500 text-white hover:bg-blue-400 focus-visible:ring-blue-300/60"
-                    : stop.id === nextStopId
-                      ? "border border-violet-300/25 bg-violet-400/[0.16] text-violet-100/85 hover:border-violet-200/35 hover:bg-violet-400/[0.24] hover:text-white focus-visible:ring-violet-300/45"
-                      : "border border-white/10 bg-white/[0.06] text-white/50 hover:bg-white/[0.1] hover:text-white/80 focus-visible:ring-white/30";
+                  const stopUrl = stopNavigationUrl(stop, appleDevice);
+                  const stopTone = stopMarkerTone(stop, currentStopId, nextStopId);
+                  const numberRailClass = stop.status === "completed"
+                    ? "border-white/[0.06] bg-white/[0.02] text-emerald-300/80"
+                    : stop.status === "skipped"
+                      ? "border-white/[0.06] bg-white/[0.02] text-white/35"
+                      : stop.id === currentStopId
+                        ? "border-blue-300/45 bg-blue-500 text-white shadow-[inset_-1px_0_0_rgba(255,255,255,0.12)]"
+                        : stop.id === nextStopId
+                          ? "border-blue-300/30 bg-blue-400/[0.1] text-blue-100/85 shadow-[inset_-1px_0_0_rgba(147,197,253,0.12)]"
+                          : "border-white/10 bg-white/[0.035] text-white/45";
+                  const checkingInHere = prepareCheckIn.isPending && prepareCheckIn.variables?.stopId === stop.id;
                   const canRemoveThisStop = routeDetails.stops.length > 1
                     && ["draft", "published", "in_progress"].includes(routeDetails.route.status)
                     && ["planned", "en_route"].includes(stop.status);
@@ -1400,7 +1458,7 @@ export function XpotProspecting() {
                       aria-label={t("openCompanyPreview", { name: stop.name })}
                       className={`group relative grid min-h-[84px] cursor-pointer grid-cols-[3.5rem_minmax(0,1fr)] items-stretch overflow-hidden rounded-xl border bg-black/10 transition-[border-color,background-color,box-shadow,opacity,transform] hover:bg-white/[0.035] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300/60 sm:grid-cols-[3.5rem_minmax(0,1fr)_auto] [contain-intrinsic-size:84px] [content-visibility:auto] ${dragOverStopId === stop.id && draggedStopId !== stop.id ? "border-indigo-300/70 ring-2 ring-indigo-400/20" : "border-white/10"} ${draggedStopId === stop.id ? "scale-[0.995] opacity-45" : "opacity-100"} ${dragOverStopId === stop.id && draggedStopId !== stop.id && dragPlacement === "before" ? "before:absolute before:inset-x-2 before:top-0 before:z-30 before:h-0.5 before:rounded-full before:bg-indigo-300 before:shadow-[0_0_12px_rgba(165,180,252,0.9)]" : ""} ${dragOverStopId === stop.id && draggedStopId !== stop.id && dragPlacement === "after" ? "after:absolute after:inset-x-2 after:bottom-0 after:z-30 after:h-0.5 after:rounded-full after:bg-indigo-300 after:shadow-[0_0_12px_rgba(165,180,252,0.9)]" : ""}`}
                     >
-                      <span className={`row-span-2 flex w-14 shrink-0 items-center justify-center self-stretch border-r px-2 text-sm font-bold tabular-nums transition-colors sm:row-span-1 ${numberRailClass}`}>{stop.position}</span>
+                      <span className={`row-span-2 flex w-14 shrink-0 items-center justify-center self-stretch border-r px-2 text-sm font-bold tabular-nums transition-colors sm:row-span-1 ${numberRailClass}`}>{stopTone.glyph ?? stop.position}</span>
                       {canReorderRoute ? (
                         <button
                           type="button"
@@ -1453,19 +1511,19 @@ export function XpotProspecting() {
                             }
                           }}
                           onPointerCancel={resetDragState}
-                          className="absolute right-2 top-2 z-20 flex h-9 w-9 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg border border-white/[0.08] bg-[#111827]/90 text-white/40 shadow-[0_6px_18px_rgba(0,0,0,0.28)] backdrop-blur transition hover:border-indigo-300/30 hover:bg-indigo-400/15 hover:text-indigo-100 active:cursor-grabbing focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300/60 disabled:cursor-not-allowed disabled:opacity-40"
+                          className="absolute right-2 top-2 z-20 flex h-9 w-9 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg border border-white/[0.08] bg-[#0d1322]/90 text-white/40 shadow-[0_6px_18px_rgba(0,0,0,0.28)] backdrop-blur transition hover:border-indigo-300/30 hover:bg-indigo-400/15 hover:text-indigo-100 active:cursor-grabbing focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300/60 disabled:cursor-not-allowed disabled:opacity-40"
                         >
-                          {reorderRoute.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <GripVertical className="h-4 w-4" aria-hidden="true" />}
+                          {reorderRoute.isPending ? <Loader2 className="h-4 w-4" aria-hidden="true" /> : <GripVertical className="h-4 w-4" aria-hidden="true" />}
                         </button>
                       ) : null}
                       <div className="min-w-0 px-4 py-3 pr-12">
                         <div className="line-clamp-2 text-sm font-semibold text-white/90">{stop.name}</div>
-                        <div className="mt-0.5 line-clamp-2 text-xs leading-5 text-white/60">{stop.address || "No address"}</div>
+                        <div className="mt-0.5 line-clamp-2 text-xs leading-5 text-white/60">{stop.address || t("noAddress")}</div>
                         {typeof stop.rating === "number" ? (
                           <div className="mt-1 flex items-center gap-1 text-xs text-amber-300">
                             <Star className="h-3.5 w-3.5 fill-current" aria-hidden="true" />
-                            <span className="font-semibold tabular-nums">{stop.rating.toFixed(1)}</span>
-                            {typeof stop.reviewCount === "number" ? <span className="text-white/45">({stop.reviewCount.toLocaleString(t.locale)})</span> : null}
+                            <span className="font-semibold tabular-nums">{ratingFormat.format(stop.rating)}</span>
+                            {typeof stop.reviewCount === "number" ? <span className="text-white/45">({countFormat.format(stop.reviewCount)})</span> : null}
                           </div>
                         ) : null}
                         <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 text-xs text-white/65">
@@ -1473,159 +1531,174 @@ export function XpotProspecting() {
                           <span>{stop.position === 1 && stop.travelDurationSeconds === 0
                             ? t("routeStartsHere")
                             : t("driveMinutes", { minutes: driveMinutes(stop.travelDurationSeconds) })}</span>
-                          {stop.estimatedArrivalAt ? <><span aria-hidden="true">·</span><span>{t("arrivalAt", { time: new Date(stop.estimatedArrivalAt).toLocaleTimeString(t.locale, { hour: "numeric", minute: "2-digit" }) })}</span></> : null}
+                          {stop.estimatedArrivalAt ? <><span aria-hidden="true">·</span><span>{t("arrivalAt", { time: formatTime(stop.estimatedArrivalAt, t.locale) })}</span></> : null}
                         </div>
-                        <span className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-white/60">
-                          {stopStatusLabel(stop.status, t)}
-                          {stop.origin === "ad_hoc" ? <span className="rounded-full bg-amber-400/15 px-2 py-0.5 text-[10px] text-amber-200">{t("stopExtra")}</span> : null}
+                        <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                          <Pill tone={stopStatusTone(stop.status)} dot>{t(stopStatusLabelKey(stop.status))}</Pill>
+                          {stop.origin === "ad_hoc" ? <Pill tone="slate" bordered>{t("stopExtra")}</Pill> : null}
                         </span>
                       </div>
                       <div className="col-start-2 flex self-end justify-end gap-2 px-3 pb-3 sm:col-start-3 sm:row-start-1 sm:shrink-0 sm:self-end sm:pb-3 sm:pl-0 sm:pr-3 sm:pt-12">
-                        {["planned", "en_route"].includes(stop.status) ? (
+                        {isStopOpen(stop.status) ? (
                           <Button
                             type="button"
+                            variant="brand"
+                            size="icon"
                             onClick={(event) => {
                               event.stopPropagation();
                               prepareCheckIn.mutate({ routeId: routeDetails.route.id, stopId: stop.id });
                             }}
-                            disabled={prepareCheckIn.isPending}
+                            loading={checkingInHere}
                             aria-label={t("checkIn")}
                             title={t("checkIn")}
-                            className={`h-11 w-11 shrink-0 touch-manipulation rounded-xl p-0 shadow-[inset_0_1px_0_rgba(255,255,255,0.18)] transition hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b1020] active:translate-y-0 ${checkInToneClass}`}
+                            className="[&_svg]:size-5"
                           >
-                            {prepareCheckIn.isPending && prepareCheckIn.variables?.stopId === stop.id ? <Loader2 className="h-5 w-5 animate-spin" /> : <MapPinCheck className="h-5 w-5" strokeWidth={2} />}
+                            <MapPinCheck strokeWidth={2} />
                           </Button>
                         ) : null}
-                        <a
-                          href={stopUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          aria-label={appleDevice ? t("navigateWithApple", { name: stop.name }) : t("navigateTo", { name: stop.name })}
-                          title={appleDevice ? t("navigateWithApple", { name: stop.name }) : t("navigateTo", { name: stop.name })}
-                          onClick={(event) => event.stopPropagation()}
-                          className="flex h-11 w-11 shrink-0 touch-manipulation items-center justify-center rounded-xl border border-indigo-300/30 bg-indigo-500/10 text-indigo-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition hover:-translate-y-0.5 hover:border-indigo-200/50 hover:bg-indigo-500/20 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b1020] active:translate-y-0"
+                        <Button
+                          asChild
+                          variant="secondary"
+                          size="icon"
+                          className="[&_svg]:size-5"
                         >
-                          <MapIcon className="h-5 w-5" strokeWidth={2} aria-hidden="true" />
-                        </a>
+                          <a
+                            href={stopUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            aria-label={appleDevice ? t("navigateWithApple", { name: stop.name }) : t("navigateTo", { name: stop.name })}
+                            title={appleDevice ? t("navigateWithApple", { name: stop.name }) : t("navigateTo", { name: stop.name })}
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            <Navigation strokeWidth={2} aria-hidden="true" />
+                          </a>
+                        </Button>
                         {canRemoveThisStop ? (
-                          <button
+                          <Button
                             type="button"
+                            variant="secondary"
+                            size="icon"
                             onClick={(event) => {
                               event.stopPropagation();
                               setStopPendingRemoval(stop);
                             }}
                             aria-label={t("removeStop", { name: stop.name })}
                             title={t("removeStop", { name: stop.name })}
-                            className="flex h-11 w-11 shrink-0 touch-manipulation items-center justify-center rounded-xl border border-red-300/20 bg-red-500/[0.08] text-red-200/70 transition hover:-translate-y-0.5 hover:border-red-300/35 hover:bg-red-500/15 hover:text-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b1020] active:translate-y-0"
+                            className="text-red-200/80 hover:text-red-100 [&_svg]:size-5"
                           >
-                            <Trash2 className="h-5 w-5" strokeWidth={2} aria-hidden="true" />
-                          </button>
+                            <Trash2 strokeWidth={2} aria-hidden="true" />
+                          </Button>
                         ) : null}
                       </div>
                     </li>
                   );
                 })}
               </ol>
+              {routeEndsHome && routeDetails.route.plannedEndAt ? (
+                <div className={`mt-2 flex min-h-12 items-center gap-3 rounded-xl px-4 text-sm text-white/70 ${GLASS_SUBTLE_CLASS}`}>
+                  <Home className="h-4 w-4 shrink-0 text-white/45" aria-hidden="true" />
+                  <span>{tu("backHomeAt", { time: formatTime(routeDetails.route.plannedEndAt, t.locale) })}</span>
+                </div>
+              ) : null}
             </div>
           </div>
           </div>
         </section>
       ) : null}
 
-      <AlertDialog
+      <ConfirmDialog
+        open={cancelSearchOpen && details !== undefined}
+        onOpenChange={setCancelSearchOpen}
+        tone="danger"
+        title={t("cancelSearchTitle")}
+        description={t("cancelSearchBody")}
+        confirmLabel={t("cancelSearch")}
+        cancelLabel={t("keepSearch")}
+        testId="button-cancel-search-confirm"
+        onConfirm={() => (details ? cancelJob.mutateAsync(details.job.id) : undefined)}
+      />
+
+      <ConfirmDialog
         open={stopPendingRemoval !== null}
-        onOpenChange={(open) => { if (!open && !removeStop.isPending) setStopPendingRemoval(null); }}
-      >
-        <AlertDialogContent className="max-w-sm rounded-2xl border border-white/10 bg-[#0d1322] p-6 text-white shadow-[0_24px_70px_rgba(0,0,0,0.7)]">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-lg font-bold text-white">{t("removeStopTitle")}</AlertDialogTitle>
-            <AlertDialogDescription className="text-sm leading-6 text-white/55">
-              {stopPendingRemoval ? t("removeStopDescription", { name: stopPendingRemoval.name }) : ""}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="mt-2 flex-row gap-2 sm:space-x-0">
-            <AlertDialogCancel disabled={removeStop.isPending} className="flex-1 rounded-xl border border-white/10 bg-white/[0.06] text-white/70 hover:bg-white/[0.1] hover:text-white">
-              {t("keepStop")}
-            </AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              disabled={removeStop.isPending || !stopPendingRemoval || !routeDetails}
-              onClick={(event) => {
-                event.preventDefault();
-                if (stopPendingRemoval && routeDetails) removeStop.mutate({ routeId: routeDetails.route.id, stopId: stopPendingRemoval.id });
-              }}
-              className="flex-1 rounded-xl bg-red-500 font-semibold text-white hover:bg-red-400"
-            >
-              {removeStop.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-              {t("confirmRemoveStop")}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        onOpenChange={(open) => { if (!open) setStopPendingRemoval(null); }}
+        tone="danger"
+        title={t("removeStopTitle")}
+        description={stopPendingRemoval ? t("removeStopDescription", { name: stopPendingRemoval.name }) : ""}
+        confirmLabel={<><Trash2 className="h-4 w-4" />{t("confirmRemoveStop")}</>}
+        cancelLabel={t("keepStop")}
+        pending={removeStop.isPending}
+        confirmDisabled={!stopPendingRemoval || !routeDetails}
+        onConfirm={() => {
+          if (stopPendingRemoval && routeDetails) removeStop.mutate({ routeId: routeDetails.route.id, stopId: stopPendingRemoval.id });
+        }}
+      />
 
       <Dialog open={selectedStop !== null} onOpenChange={(open) => { if (!open) setSelectedStopId(null); }}>
-        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto border-white/10 bg-[#0d1322] p-0 text-white shadow-2xl sm:max-w-lg">
-          {selectedStop && routeDetails ? (
+        <DialogContent className="max-h-[calc(100dvh-2rem)] gap-0 p-0 sm:max-w-lg">
+          {selectedStop && routeDetails ? (() => {
+            const tone = stopMarkerTone(selectedStop, currentStopId, nextStopId);
+            const checkingInHere = prepareCheckIn.isPending && prepareCheckIn.variables?.stopId === selectedStop.id;
+            const pendingDestination = ensureStopLead.isPending ? ensureStopLead.variables?.destination : null;
+            return (
             <>
               <div className="relative overflow-hidden border-b border-white/[0.08] px-5 pb-5 pt-6 sm:px-6">
-                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(99,102,241,0.2),transparent_50%)]" />
                 <div className="relative flex items-start gap-4 pr-8">
                   <span
                     className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-2 text-sm font-bold shadow-lg"
-                    style={{
-                      background: stopMarkerTone(selectedStop.id, currentStopId, nextStopId).background,
-                      borderColor: stopMarkerTone(selectedStop.id, currentStopId, nextStopId).border,
-                      color: stopMarkerTone(selectedStop.id, currentStopId, nextStopId).text,
-                    }}
+                    style={{ background: tone.background, borderColor: tone.border, color: tone.text }}
                   >
-                    {selectedStop.position}
+                    {tone.glyph ?? selectedStop.position}
                   </span>
                   <div className="min-w-0">
                     <DialogTitle className="text-xl font-bold leading-tight text-white">{selectedStop.name}</DialogTitle>
                     <DialogDescription className="mt-1.5 text-sm leading-5 text-white/55">{selectedStop.address || t("noAddress")}</DialogDescription>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      <Pill tone={stopStatusTone(selectedStop.status)} dot>{t(stopStatusLabelKey(selectedStop.status))}</Pill>
+                      {selectedStop.origin === "ad_hoc" ? <Pill tone="slate" bordered>{t("stopExtra")}</Pill> : null}
+                    </div>
                   </div>
                 </div>
               </div>
 
-              <div className="space-y-5 px-5 pb-6 sm:px-6">
-                <div className="rounded-2xl border border-white/[0.08] bg-white/[0.035] p-4">
+              <div className="space-y-5 px-5 py-5 sm:px-6">
+                <div className={`rounded-2xl p-4 ${GLASS_CLASS}`}>
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                     <GoogleLogo className="h-5 w-5" />
                     {typeof selectedStop.rating === "number" ? (
                       <>
-                        <span className="text-lg font-bold tabular-nums text-white">{selectedStop.rating.toFixed(1)}</span>
-                        <span className="flex items-center gap-0.5" aria-label={t("googleRating", { rating: selectedStop.rating.toFixed(1) })}>
+                        <span className="text-lg font-bold tabular-nums text-white">{ratingFormat.format(selectedStop.rating)}</span>
+                        <span className="flex items-center gap-0.5" aria-label={t("googleRating", { rating: ratingFormat.format(selectedStop.rating) })}>
                           {Array.from({ length: 5 }, (_, index) => (
                             <Star key={index} className={`h-4 w-4 ${selectedStop.rating! >= index + 0.5 ? "fill-amber-400 text-amber-400" : "fill-white/10 text-white/20"}`} aria-hidden="true" />
                           ))}
                         </span>
-                        <span className="text-sm text-white/50">{typeof selectedStop.reviewCount === "number" ? t("googleReviews", { count: selectedStop.reviewCount.toLocaleString(t.locale) }) : t("googleBusiness")}</span>
+                        <span className="text-sm text-white/50">{typeof selectedStop.reviewCount === "number" ? t("googleReviews", { count: countFormat.format(selectedStop.reviewCount) }) : t("googleBusiness")}</span>
                       </>
                     ) : <span className="text-sm text-white/50">{t("noGoogleRating")}</span>}
                   </div>
                   <div className="mt-4 flex flex-wrap gap-2">
                     {selectedStop.phone ? (
-                      <a href={`tel:${selectedStop.phone}`} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-white/10 bg-black/15 px-3 text-sm font-semibold text-white/75 transition hover:bg-white/[0.06] hover:text-white">
-                        <Phone className="h-4 w-4" />{selectedStop.phone}
-                      </a>
+                      <Button asChild variant="secondary" size="sm">
+                        <a href={`tel:${selectedStop.phone}`}><Phone />{selectedStop.phone}</a>
+                      </Button>
                     ) : null}
                     {selectedStop.website ? (
-                      <a href={/^https?:\/\//i.test(selectedStop.website) ? selectedStop.website : `https://${selectedStop.website}`} target="_blank" rel="noreferrer" className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-white/10 bg-black/15 px-3 text-sm font-semibold text-white/75 transition hover:bg-white/[0.06] hover:text-white">
-                        <ExternalLink className="h-4 w-4" />{t("website")}
-                      </a>
+                      <Button asChild variant="secondary" size="sm">
+                        <a href={/^https?:\/\//i.test(selectedStop.website) ? selectedStop.website : `https://${selectedStop.website}`} target="_blank" rel="noreferrer"><ExternalLink />{t("website")}</a>
+                      </Button>
                     ) : null}
                   </div>
                 </div>
 
                 {selectedStop.scoreReasons?.length ? (
-                  <div className="flex flex-wrap gap-2">
-                    {selectedStop.scoreReasons.map((reason) => <span key={reason} className="rounded-full bg-emerald-400/[0.1] px-3 py-1.5 text-xs font-semibold text-emerald-200">{reasonLabel(reason)}</span>)}
+                  <div className="flex flex-wrap gap-2" aria-label={tu("reasonsLabel")}>
+                    {selectedStop.scoreReasons.map((reason) => <Pill key={reason} tone="slate">{reasonLabel(reason)}</Pill>)}
                   </div>
                 ) : null}
 
-                <div className="rounded-2xl border border-indigo-300/15 bg-indigo-400/[0.07] p-4">
+                <div className={`rounded-2xl p-4 ${GLASS_CLASS}`}>
                   <div className="flex gap-3">
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-400/15 text-indigo-200"><Nfc className="h-5 w-5" /></span>
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/[0.06] text-white/70"><Nfc className="h-5 w-5" /></span>
                     <div>
                       <p className="text-sm font-bold text-white">{t("demoPlaqueTitle")}</p>
                       <p className="mt-1 text-xs leading-5 text-white/50">{t("demoPlaqueBody")}</p>
@@ -1633,33 +1706,36 @@ export function XpotProspecting() {
                   </div>
                   <Button
                     type="button"
+                    variant="secondary"
                     onClick={() => openPlaqueSetup(selectedStop)}
-                    disabled={ensureStopLead.isPending}
-                    className="mt-4 h-11 w-full rounded-xl bg-indigo-500 text-sm font-bold text-white hover:bg-indigo-400"
+                    disabled={ensureStopLead.isPending && pendingDestination !== "plaque"}
+                    loading={pendingDestination === "plaque"}
+                    aria-label={pendingDestination === "plaque" ? t("preparingDemo") : undefined}
+                    className="mt-4 w-full"
                   >
-                    {ensureStopLead.isPending && ensureStopLead.variables?.destination === "plaque" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Nfc className="h-4 w-4" />}
-                    {ensureStopLead.isPending && ensureStopLead.variables?.destination === "plaque" ? t("preparingDemo") : t("prepareDemoPlaque")}
+                    <Nfc />{t("prepareDemoPlaque")}
                   </Button>
                 </div>
 
                 <div className="space-y-2">
-                  {['planned', 'en_route'].includes(selectedStop.status) ? (
-                    <Button type="button" onClick={() => prepareCheckIn.mutate({ routeId: routeDetails.route.id, stopId: selectedStop.id })} disabled={prepareCheckIn.isPending} className="h-11 w-full rounded-xl bg-blue-500 font-bold text-white shadow-[0_8px_24px_rgba(59,130,246,0.18)] hover:bg-blue-400">
-                      {prepareCheckIn.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <MapPinCheck className="h-4 w-4" />}{t("checkIn")}
+                  {isStopOpen(selectedStop.status) ? (
+                    <Button type="button" variant="brand" onClick={() => prepareCheckIn.mutate({ routeId: routeDetails.route.id, stopId: selectedStop.id })} loading={checkingInHere} className="w-full font-bold">
+                      <MapPinCheck />{t("checkIn")}
                     </Button>
                   ) : null}
                   <div className="grid grid-cols-2 gap-2">
-                    <Button type="button" variant="outline" onClick={() => openCompanyPanel(selectedStop)} disabled={ensureStopLead.isPending} className="h-11 min-w-0 rounded-xl border-white/10 bg-white/[0.04] px-2 text-white hover:bg-white/[0.08] hover:text-white sm:px-4">
-                      {ensureStopLead.isPending && ensureStopLead.variables?.destination === "company" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Building2 className="h-4 w-4" />}{t("openCompanyPanel")}
+                    <Button type="button" variant="secondary" onClick={() => openCompanyPanel(selectedStop)} disabled={ensureStopLead.isPending && pendingDestination !== "company"} loading={pendingDestination === "company"} className="min-w-0 px-2 sm:px-4">
+                      <Building2 />{t("openCompanyPanel")}
                     </Button>
-                    <Button asChild variant="outline" className="h-11 min-w-0 rounded-xl border-white/10 bg-white/[0.04] px-2 text-white hover:bg-white/[0.08] hover:text-white sm:px-4">
-                      <a href={appleDevice ? appleStopUrl(selectedStop) : googleStopUrl(selectedStop)} target="_blank" rel="noreferrer"><Navigation className="h-4 w-4" />{t("googleMaps")}</a>
+                    <Button asChild variant="secondary" className="min-w-0 px-2 sm:px-4">
+                      <a href={stopNavigationUrl(selectedStop, appleDevice)} target="_blank" rel="noreferrer"><Navigation />{appleDevice ? t("appleMaps") : t("googleMaps")}</a>
                     </Button>
                   </div>
                 </div>
               </div>
             </>
-          ) : null}
+            );
+          })() : null}
         </DialogContent>
       </Dialog>
     </div>

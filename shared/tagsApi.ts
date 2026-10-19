@@ -1,6 +1,8 @@
 // Response shapes of the Xpot Tags API (server/routes/tags/*), shared with the
 // app. Dates travel as ISO strings.
 
+import type { TagQueueCounts } from "./tagQueues.js";
+
 export interface TagMetrics {
   interactions: number;
   qr: number;
@@ -36,6 +38,8 @@ export interface TagListItem {
   repId: number | null;
   repName: string | null;
   kitId: string | null;
+  /** "K-0001" (shared/tagKits.ts kitCode) when the piece is in a kit. */
+  kitCode: string | null;
   batchId: string | null;
   batchCode: string | null;
   qrInteractions: number;
@@ -60,6 +64,24 @@ export interface TagHistoryEntry {
   createdAt: string;
 }
 
+/**
+ * A line of a sale already recorded for the piece's customer (in Visits, say)
+ * that the piece can be linked to: same customer, same product or none, and
+ * fewer pieces linked than units sold.
+ */
+export interface LinkableSaleItem {
+  saleId: number;
+  saleItemId: number;
+  soldAt: string;
+  description: string;
+  quantity: number;
+  /** Pieces already linked to this line. */
+  linked: number;
+  /** The line's net total divided by its quantity. */
+  unitNetCents: number;
+  currency: string;
+}
+
 export interface TagDetail extends TagListItem {
   utmEnabled: boolean;
   utmCampaign: string | null;
@@ -70,6 +92,45 @@ export interface TagDetail extends TagListItem {
   qrUrl: string;
   nfcUrl: string;
   history: TagHistoryEntry[];
+}
+
+/** One financial sale a piece was part of (sales_sale_tags + sales_sales). */
+export interface TagPieceSale {
+  saleId: number;
+  /** "cancelled" once the sale was cancelled (the link ended). */
+  status: "active" | "cancelled";
+  soldAt: string;
+  endedAt: string | null;
+  /** This piece's share of the sale, after discount. */
+  priceCents: number | null;
+  currency: string;
+  sellerRepId: number;
+  sellerName: string | null;
+  paymentStatus: string;
+  cancelReason: string | null;
+}
+
+/** One stock movement of a piece (tag_stock_movements). Management only. */
+export interface TagStockMovementItem {
+  id: string;
+  movementType: string;
+  fromStockStatus: string | null;
+  toStockStatus: string;
+  fromOwnershipType: string | null;
+  toOwnershipType: string;
+  fromCustodianName: string | null;
+  toCustodianName: string | null;
+  referenceType: string | null;
+  referenceId: string | null;
+  reason: string | null;
+  actorEmail: string | null;
+  createdAt: string;
+}
+
+/** GET /api/xpot/tags/:id/activity: the piece's sales, and its stock movements for the management side (else null). */
+export interface TagPieceActivity {
+  sales: TagPieceSale[];
+  movements: TagStockMovementItem[] | null;
 }
 
 export interface TagDailyPoint {
@@ -102,6 +163,10 @@ export interface TagOverview {
   counts: Record<"total" | "inventory" | "assigned" | "active" | "disabled" | "retired" | "damaged", number>;
   /** Unsold pieces still in house stock vs. out with resellers. */
   stock: { house: number; withResellers: number };
+  /** The stock funnel, one shared stock number each (shared/tagMetrics.ts): not received → house → resellers → sold → live. */
+  funnel: { notReceived: number; house: number; withResellers: number; sold: number; live: number };
+  /** "Needs action" counts (shared/tagQueues.ts). */
+  queues: TagQueueCounts;
   interactions: { today: number; last7: number; last30: number };
   split30: { qr: number; nfc: number };
   approxUnique30: number;
@@ -137,6 +202,17 @@ export interface TagOverview {
   }>;
 }
 
+/** A batch as a picker shows it (`GET /api/xpot/admin/tag-batch-options`, managers too). */
+export interface TagBatchOption {
+  id: string;
+  batchCode: string;
+  name: string;
+  productType: string;
+  face: string | null;
+  houseCount: number;
+  handOutCount: number;
+}
+
 export interface TagBatchItem {
   id: string;
   batchCode: string;
@@ -163,30 +239,70 @@ export interface TagBatchItem {
   pendingCount: number;
   /** Pieces physically received into stock at some point (tagCount − pendingCount). */
   receivedCount: number;
-  /** Unsold pieces in house stock (received, no reseller). */
+  /** Company stock (shared/tagMetrics.ts `house`): in stock, no rep, not retired, unsold. */
   houseCount: number;
-  /** Pieces handed to resellers (sold or not). */
+  /** House stock that can go into a kit now (`handOut`: also not set up for a customer). */
+  handOutCount: number;
+  /** Unsold pieces in reps' hands (`withResellers`). */
   withResellersCount: number;
+  /** Pieces with a recorded financial sale (`sold`). */
+  soldCount: number;
+  damagedCount: number;
   activeCount: number;
   nfcVerifiedCount: number;
 }
 
 export interface TagKitItem {
   id: string;
+  /** Sequential number; shown as `kitCode`. */
+  kitNumber: number;
+  /** "K-0001" (shared/tagKits.ts kitCode). */
+  kitCode: string;
   repId: number;
   repName: string | null;
   note: string | null;
   createdAt: string;
+  /** Who owns the pieces handed out: `company` (consignment) or `rep` (a purchase); null for an empty kit. */
+  ownershipType: string | null;
+  /** What the kit handed out, for good (tag_kit_items): never shrinks. */
+  handedOutCount: number;
+  /** Of those, back in house stock. */
+  returnedCount: number;
+  /** Of those, moved to another reseller. */
+  movedCount: number;
+  /** Still in the kit and unsold: handed out − returned − moved − sold. */
+  stillWithCount: number;
+  /** Pieces in the kit right now (sold or not). */
   pieceCount: number;
-  /** Pieces from this kit still unsold in the reseller's hands. */
+  /** Pieces from this kit still unsold in the reseller's hands (`withResellers`, held by the kit's rep). */
   unsoldCount: number;
+  /** Of those, the ones "Return unsold" can take back now (`returnable`: not set up for a customer). */
+  returnableCount: number;
+  /** Pieces from this kit with a recorded financial sale. */
+  soldCount: number;
   acquisitionSource: string | null;
   unitCostCents: number | null;
+}
+
+/** One piece a kit handed out (GET /api/xpot/admin/tag-kits/:id/items): the packing list, with where it is now. */
+export interface TagKitPiece {
+  code: string;
+  tagId: string | null;
+  serialNumber: number | null;
+  batchCode: string | null;
+  productType: string | null;
+  face: string | null;
+  handedOutAt: string;
+  /** `in_kit` (still with the kit's reseller, unsold), `sold`, `returned` or `moved`. */
+  state: "in_kit" | "sold" | "returned" | "moved";
+  leftAt: string | null;
 }
 
 /** Pieces sold to one customer (lead), for the Visits side. */
 export interface LeadTagSummary {
   leadId: number;
+  /** The company's name; null when it was saved blank. */
+  name: string | null;
   pieces: number;
   live: number;
   scansLast30: number;
@@ -231,26 +347,6 @@ export interface TagDashboard {
     accessMethod: string;
     occurredAt: string;
   }>;
-}
-
-/** Compact analytics shown on one piece's field-app screen. */
-export interface TagPieceDashboard {
-  days: number;
-  scans: { qr: number; nfc: number };
-  /** Approximate distinct visitors (the same browser is counted once per day). */
-  visitors: number;
-  lastInteractionAt: string | null;
-  daily: Array<{ day: string; qr: number; nfc: number }>;
-  devices: Array<{ os: string; scans: number }>;
-}
-
-export interface TagRepSummary {
-  /** Pieces in hand, not sold yet. */
-  inStock: number;
-  /** Live pieces they sold. */
-  active: number;
-  soldLast30: number;
-  scansLast30: { qr: number; nfc: number };
 }
 
 /** One reseller's numbers in the admin report (or, with repId null, pieces with no reseller). */
@@ -371,6 +467,8 @@ export interface TagJourneyEntryItem {
   publicCode: string | null;
   serialNumber: number | null;
   kitId: string | null;
+  /** "K-0001" (shared/tagKits.ts kitCode) when the entry is about a kit. */
+  kitCode: string | null;
   repId: number | null;
   repName: string | null;
   leadId: number | null;
@@ -452,4 +550,9 @@ export interface McpConnectionItem {
   userLabel: string | null;
   connectedAt: string;
   lastUsedAt: string | null;
+  /** What it was granted, e.g. ["xpot:journey", "xpot:tasks"]. */
+  scopes: string[];
 }
+
+/** What a static MCP token may do: every tool family (server/mcp/routes.ts). */
+export const MCP_TOKEN_SCOPES = ["xpot:journey", "xpot:prospecting", "xpot:tasks"] as const;

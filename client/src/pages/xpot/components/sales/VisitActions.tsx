@@ -7,26 +7,32 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Pencil, Sparkles, Trash2, X, AlertTriangle } from "lucide-react";
+import { Check, Pencil, Sparkles, Trash2, AlertTriangle } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
-import { Loader2 } from "@/components/ui/loader";
+import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { Field, Input } from "@/components/xpot/Field";
+import { Pill, VISIT_OUTCOME_TONE, type PillTone } from "@/components/xpot/StatusPill";
+import { EYEBROW, GLASS_CLASS } from "@/components/xpot/surface";
 import type { SalesVisitAction } from "#shared/schema.js";
 import type { VisitAction } from "#shared/visit-actions.js";
 import { centsToInput, formatCents, inputToCents } from "../../utils";
 import { useProducts } from "../../hooks/useSalesModule";
-import { Chip, GhostButton, PrimaryButton, Select, inputCls, inputStyle } from "./ui";
+import { PrimaryButton, Select } from "./ui";
 import { useT, type Translate } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { salesModuleMessages } from "@/i18n/messages/salesModule";
 
 type SalesModuleT = Translate<(typeof salesModuleMessages)["en"]>;
 
-const TYPE_TONE: Record<string, "blue" | "green" | "amber" | "purple"> = {
+// The same colours the record uses: stock left is blue like an active
+// agreement, money in (a settlement, a sale) is green like "Sale made", a
+// follow-up is amber like the follow-up outcome.
+const TYPE_TONE: Record<string, PillTone> = {
   deposit: "blue",
   settlement: "green",
-  sale: "amber",
-  follow_up: "purple",
+  sale: VISIT_OUTCOME_TONE.sale_made,
+  follow_up: VISIT_OUTCOME_TONE.follow_up,
 };
 
 const TYPE_LABEL_KEY = {
@@ -121,14 +127,11 @@ export function VisitActionsPanel({ visitId, onApplied, surface = "card" }: { vi
 
   return (
     <div
-      className={surface === "plain" ? "space-y-2.5 border-b border-white/[0.07] py-6" : "space-y-2.5 rounded-2xl p-3.5"}
-      style={surface === "plain" ? undefined : { background: "rgba(99,102,241,0.07)", border: "1px solid rgba(99,102,241,0.22)" }}
+      className={surface === "plain" ? "space-y-2.5 border-b border-white/[0.07] py-6" : `space-y-2.5 rounded-2xl p-3.5 ${GLASS_CLASS}`}
     >
-      <div className="flex items-center gap-2">
-        <Sparkles className="h-3.5 w-3.5 text-indigo-300" />
-        <span className="text-xs font-bold uppercase tracking-widest text-indigo-300">
-          {t("detectedInNote")}
-        </span>
+      <div className={`flex items-center gap-2 ${EYEBROW}`}>
+        <Sparkles className="h-3.5 w-3.5 text-blue-300" aria-hidden="true" />
+        {t("detectedInNote")}
       </div>
 
       {proposed.length > 0 && (
@@ -191,21 +194,16 @@ function ActionRow({
   const needsProduct = isProposed && payload.type === "deposit" && !payload.productId;
 
   return (
-    <div className="rounded-xl px-3 py-2.5"
-      style={{
-        background: isFailed ? "rgba(239,68,68,0.08)" : "rgba(0,0,0,0.22)",
-        border: `1px solid ${isFailed ? "rgba(239,68,68,0.25)" : "rgba(255,255,255,0.07)"}`,
-        opacity: action.status === "dismissed" ? 0.4 : 1,
-      }}>
+    <div className={`rounded-xl border px-3 py-2.5 ${isFailed ? "border-red-400/25 bg-red-500/[0.08]" : "border-white/[0.07] bg-black/20"} ${action.status === "dismissed" ? "opacity-40" : ""}`}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
-            <Chip tone={TYPE_TONE[action.type] ?? "neutral"}>{typeKey ? t(typeKey) : action.type}</Chip>
-            {isApplied && <Chip tone="green">{t("chipRecorded")}</Chip>}
-            {action.status === "dismissed" && <Chip tone="neutral">{t("chipDiscarded")}</Chip>}
-            {isProposed && lowConfidence && <Chip tone="amber">{t("chipCheckThis")}</Chip>}
-            {needsPrice && <Chip tone="red">{t("chipNeedsPrice")}</Chip>}
-            {needsProduct && <Chip tone="red">{t("chipPickProduct")}</Chip>}
+            <Pill tone={TYPE_TONE[action.type] ?? "slate"}>{typeKey ? t(typeKey) : action.type}</Pill>
+            {isApplied && <Pill tone="green">{t("chipRecorded")}</Pill>}
+            {action.status === "dismissed" && <Pill tone="muted">{t("chipDiscarded")}</Pill>}
+            {isProposed && lowConfidence && <Pill tone="amber">{t("chipCheckThis")}</Pill>}
+            {needsPrice && <Pill tone="red">{t("chipNeedsPrice")}</Pill>}
+            {needsProduct && <Pill tone="red">{t("chipPickProduct")}</Pill>}
           </div>
           <div className={`mt-1 text-sm ${action.status === "dismissed" ? "text-white/40 line-through" : "text-white/90"}`}>
             {describeAction(payload, t)}
@@ -223,14 +221,12 @@ function ActionRow({
 
         {(isProposed || isFailed) && !editing && (
           <div className="flex shrink-0 gap-0.5">
-            <button type="button" onClick={onEdit} disabled={busy} title={t("edit")} aria-label={t("edit")}
-              className="flex h-7 w-7 items-center justify-center rounded-lg text-white/35 transition-colors hover:bg-white/10 hover:text-white/70 disabled:opacity-40">
-              <Pencil className="h-3 w-3" />
-            </button>
-            <button type="button" onClick={onDismiss} disabled={busy} title={t("discard")} aria-label={t("discard")}
-              className="flex h-7 w-7 items-center justify-center rounded-lg text-white/35 transition-colors hover:bg-red-500/15 hover:text-red-400 disabled:opacity-40">
-              <Trash2 className="h-3 w-3" />
-            </button>
+            <Button type="button" variant="ghost" size="icon" className="h-10 w-10" onClick={onEdit} disabled={busy} title={t("edit")} aria-label={t("edit")}>
+              <Pencil aria-hidden="true" />
+            </Button>
+            <Button type="button" variant="ghost" size="icon" className="h-10 w-10 hover:text-red-300" onClick={onDismiss} disabled={busy} title={t("discard")} aria-label={t("discard")}>
+              <Trash2 aria-hidden="true" />
+            </Button>
           </div>
         )}
       </div>
@@ -331,8 +327,8 @@ function ActionEditor({
   return (
     <div className="mt-2.5 space-y-2 border-t border-white/[0.08] pt-2.5">
       {(payload.type === "deposit" || payload.type === "sale") && (
-        <label className="block space-y-1">
-          <span className="text-[9px] font-semibold uppercase tracking-widest text-white/35">{t("product")}</span>
+        <label className="block space-y-1.5">
+          <span className="text-xs font-semibold text-white/60">{t("product")}</span>
           <Select
             value={productId}
             onChange={setProductId}
@@ -343,29 +339,30 @@ function ActionEditor({
       )}
       <div className={`grid gap-2 ${fields.length === 3 ? "grid-cols-3" : "grid-cols-2"}`}>
         {fields.map((f) => (
-          <label key={f.key} className="block space-y-1">
-            <span className="text-[9px] font-semibold uppercase tracking-widest text-white/35">{f.label}</span>
-            <input
+          <Field key={f.key} label={f.label}>
+            <Input
               value={draft[f.key] ?? ""}
               inputMode={f.text ? "text" : f.money ? "decimal" : "numeric"}
               onChange={(e) => set(f.key, e.target.value)}
-              className={`${inputCls} !h-9 ${f.text ? "" : "tabular-nums"}`}
-              style={inputStyle}
+              className={f.text ? "" : "tabular-nums"}
             />
-          </label>
+          </Field>
         ))}
       </div>
       {payload.type === "settlement" && (
         <p className="text-[10px] text-white/30">{t("settlementFillHint")}</p>
       )}
-      <div className="flex gap-1.5">
-        <GhostButton onClick={onCancel} className="flex-1"><X className="h-3 w-3" /> {tc("cancel")}</GhostButton>
-        <GhostButton onClick={() => onSave(build())} disabled={busy} className="flex-1">
-          {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />} {tc("save")}
-        </GhostButton>
-        <GhostButton onClick={async () => { await onSave(build()); onApplyOne(); }} disabled={busy} className="flex-1">
+      {/* The footer every dialog uses: cancel on the left, the main action on the right. */}
+      <div className="flex flex-wrap items-center gap-2 pt-1">
+        <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={busy} className="mr-auto">
+          {tc("cancel")}
+        </Button>
+        <Button type="button" variant="secondary" size="sm" onClick={() => onSave(build())} loading={busy}>
+          <Check aria-hidden="true" /> {tc("save")}
+        </Button>
+        <Button type="button" variant="brand" size="sm" onClick={async () => { await onSave(build()); onApplyOne(); }} disabled={busy}>
           {t("saveAndRecord")}
-        </GhostButton>
+        </Button>
       </div>
     </div>
   );

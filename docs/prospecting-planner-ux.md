@@ -83,7 +83,12 @@ Expansion stops automatically when any system condition is true:
 - the safety limit for travel growth has been reached;
 - the last wave added no eligible candidates;
 - configured maximum waves/cost has been reached;
-- the rep cancels the planning job.
+- the rep cancels the planning job ("Cancel this search" on the Route screen, or the Xpot admin's
+  "Cancel search" in Status). Its waiting and running searches become `cancelled` and are never
+  sent or saved again; a route not built yet is marked failed, so the rep can start a new search
+  (or rebuild the route of a finished one). The engine has no cancel in its API: Xpot stops
+  waiting for it and drops whatever it still returns (`cancelProspectingJob`,
+  `server/prospecting/queue.ts`).
 
 The UI avoids false precision. It says “rota completa para hoje” or “rota mais curta — encontramos
 8 locais elegíveis próximos”, while showing approximate drive time only as supporting information.
@@ -122,12 +127,19 @@ precision:
 1. **Search:** current area, sector, wave and progress for each physical search.
 2. **Quality:** found, duplicate, existing-customer and previously-visited counts while the result
    set is normalized and expanded.
-3. **Review:** ranked eligible businesses with score reasons, an exclusion breakdown and an explicit
-   selection step. The rep chooses the businesses before the app requests location or spends the
-   day's route optimization.
-4. **Route:** the resulting numbered map shows estimated start/end, visit and drive time.
-   Publishing sends the ordered stops to today's existing Visits view as planned visits; the planner
-   is not a second agenda.
+3. **Review:** ranked eligible businesses with score reasons and an exclusion breakdown. There is no
+   selection step: Xpot automatically picks which eligible businesses fit the available time and
+   orders them, and the screen says so (on phones too). The card shows the eligible count once and
+   says whether the result is a "full route for today" or a "shorter route" (fewer eligible places
+   than the shift needs). A finished search with no eligible place shows "No eligible places found"
+   instead of a waiting message. The rep shapes the result on the route itself: remove a stop,
+   drag to reorder, or skip it during the day.
+4. **Route:** the resulting numbered map shows the stops coloured by state (current, next, planned,
+   done, skipped) with a small legend, the rep's live position, a start marker when the route does
+   not start at stop 1 and a home marker (plus a "Back home around HH:MM" row) when the route ends
+   at home. The summary gives stops, approximate total time and distance in the app language.
+   Publishing ("Use this route") sends the ordered stops to today's existing Visits view as planned
+   visits; the planner is not a second agenda.
 
 Notification permission is requested only from the visible “notify me when ready” action while a
 job is running. Finishing discovery never triggers location or notification permissions on its own.

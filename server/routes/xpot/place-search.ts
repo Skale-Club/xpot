@@ -148,6 +148,7 @@ export function createPlaceSearchRouter() {
             "places.displayName",
             "places.formattedAddress",
             "places.location",
+            "places.primaryType",
             "places.primaryTypeDisplayName",
             "places.websiteUri",
             "places.nationalPhoneNumber",
@@ -174,6 +175,7 @@ export function createPlaceSearchRouter() {
           displayName?: { text?: string };
           formattedAddress?: string;
           location?: { latitude?: number; longitude?: number };
+          primaryType?: string;
           primaryTypeDisplayName?: { text?: string };
           websiteUri?: string;
           nationalPhoneNumber?: string;
@@ -187,7 +189,10 @@ export function createPlaceSearchRouter() {
           address: place.formattedAddress || "",
           phone: place.nationalPhoneNumber || "",
           website: place.websiteUri || "",
-          primaryType: place.primaryTypeDisplayName?.text || "",
+          // The Table A code ("dental_clinic") is what the app translates; Google's
+          // English display name is the fallback for a type it does not know.
+          primaryType: place.primaryType || "",
+          primaryTypeName: place.primaryTypeDisplayName?.text || "",
           lat: place.location?.latitude,
           lng: place.location?.longitude,
         })).filter((place) => place.placeId && place.name),

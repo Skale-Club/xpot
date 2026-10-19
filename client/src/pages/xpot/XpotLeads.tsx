@@ -5,8 +5,6 @@ import {
   Search,
   Trash2,
   LogIn,
-  X,
-  MapPinned,
   Building2,
   Nfc,
   MoreVertical,
@@ -17,300 +15,39 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { LeadTagSummary } from "@shared/tagsApi";
 import { useXpotModules } from "@/components/ModuleSwitch";
 import { LeadCardBody } from "./components/LeadCardBody";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
 import { useXpotQueries } from "./hooks/useXpotQueries";
 import { leadMatchesSearch, useLeads } from "./hooks/useLeads";
 import { useToast } from "@/hooks/use-toast";
-import { usePlaceSearch } from "./usePlaceSearch";
-import { useXpotShared } from "./hooks/useXpotShared";
 import { apiRequest } from "@/lib/queryClient";
 import { DollarSign } from "lucide-react";
 import { LeadSalesPanel } from "./components/sales/LeadSalesPanel";
 import { SheetDialog } from "./components/sales/ui";
-import { Loader2 } from '@/components/ui/loader';
-import { GoogleLogo } from "@/components/ui/google-logo";
-import { StateSelect } from "@/components/StateSelect";
-import { parseAddress, findMatchingLead } from "./utils";
-import type { EnrichedSalesVisit, FullSalesLead, GooglePlaceResult } from "./types";
+import type { EnrichedSalesVisit, FullSalesLead } from "./types";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { BottomSheet } from "@/pages/tags/ui";
-import { LeadsTable } from "./components/leads/LeadsTable";
+import { leadPiecesPath } from "@/pages/tags/lib";
+import { useViewerAccess } from "@/lib/adminMode";
+import { LeadRowFacts, LeadsTable } from "./components/leads/LeadsTable";
 import { LeadDetailPane } from "./components/leads/LeadDetailPane";
+import { CreateLeadDialog } from "./components/CreateLeadDialog";
 import { useT } from "@/i18n";
 import { leadsMessages } from "@/i18n/messages/leads";
-import { checkinMessages } from "@/i18n/messages/checkin";
-import { BRAND_GRADIENT, GLASS } from "@/components/xpot/surface";
+import { commonMessages } from "@/i18n/messages/common";
+import { backLeavesSection } from "@/lib/inAppHistory";
+import { GLASS_CLASS } from "@/components/xpot/surface";
 import { EmptyState } from "@/components/xpot/EmptyState";
-import { FilterBar, FilterChips, FilterDay, FilterSearch, FilterToggle, fromDayKey, toDayKey } from "@/components/xpot/filters";
+import { ListSkeleton } from "@/components/xpot/ListSkeleton";
+import { RetryButton } from "@/components/xpot/RetryButton";
+import { FilterBar, FilterChips, FilterDay, FilterSearch, FilterSelect, FilterToggle, fromDayKey, toDayKey } from "@/components/xpot/filters";
 import { currentSearch, useUrlFilters } from "@/hooks/use-url-filters";
 import { ListPager, usePagedList } from "@/components/xpot/pagination";
 import { selectLeadForDetail } from "./lead-detail-selection";
+import { companyStage, followUpDueTime, isWorkedCompany, needsFollowUp } from "./visitRules";
+import { leadAccess } from "./leadAccess";
+import { isFinishedVisitStatus } from "@shared/visit-status";
 
-
-// ─── Shared Add Company Dialog ────────────────────────────────────────────────
-
-const MANUAL_FIELD_KEYS = {
-  name: "fieldBusinessRequired",
-  phone: "fieldPhone",
-  email: "fieldEmail",
-  website: "fieldWebsite",
-  industry: "fieldIndustry",
-  address: "fieldAddress",
-  city: "fieldCity",
-  state: "fieldState",
-} as const;
-
-function AddCompanyDialog({
-  open,
-  onOpenChange,
-  allLeads,
-}: {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-  allLeads: FullSalesLead[];
-}) {
-  const { toast } = useToast();
-  const t = useT(leadsMessages);
-  const tCheckin = useT(checkinMessages);
-  const { geoState, loadCurrentLocation, invalidateXpotData } = useXpotShared();
-  const [search, setSearch] = useState("");
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [manualForm, setManualForm] = useState<null | {
-    name: string; phone: string; email: string; website: string;
-    industry: string; address: string; city: string; state: string;
-  }>(null);
-
-  const placeQuery = usePlaceSearch(search, open, geoState);
-
-  const inputCls = "w-full h-10 rounded-xl px-3 text-sm text-white placeholder:text-white/25 focus:outline-none transition-colors";
-  const inputStyle = { background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.09)" };
-  async function createFromPayload(payload: any) {
-    setSaving(true);
-    try {
-      await apiRequest("POST", "/api/xpot/leads", { ...payload, status: "lead", source: payload.source || "manual" });
-      await invalidateXpotData();
-      toast({ title: t("leadAdded"), variant: "success" });
-      onOpenChange(false);
-      setSearch("");
-      setManualForm(null);
-    } catch (err: any) {
-      toast({ title: t("createFailed"), description: err.message, variant: "destructive" });
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  function pickPlace(place: GooglePlaceResult) {
-    setDropdownOpen(false);
-    const parsed = parseAddress(place.address);
-    setManualForm({
-      name: place.name,
-      phone: place.phone || "",
-      email: "",
-      website: place.website || "",
-      industry: place.primaryType || "",
-      address: parsed.addressLine1,
-      city: parsed.city,
-      state: parsed.state,
-    });
-    setSearch(place.name);
-  }
-
-  function openManual() {
-    setDropdownOpen(false);
-    setManualForm({
-      name: search.trim(),
-      phone: "", email: "", website: "", industry: "", address: "", city: "", state: "",
-    });
-  }
-
-  async function saveManual() {
-    if (!manualForm || !manualForm.name.trim()) return;
-    await createFromPayload({
-      name: manualForm.name.trim(),
-      phone: manualForm.phone || undefined,
-      email: manualForm.email || undefined,
-      website: manualForm.website || undefined,
-      industry: manualForm.industry || undefined,
-      primaryLocation: manualForm.address ? {
-        label: "Main",
-        addressLine1: manualForm.address,
-        city: manualForm.city || undefined,
-        state: manualForm.state || undefined,
-        isPrimary: true,
-      } : undefined,
-    });
-  }
-
-  const mf = (key: keyof NonNullable<typeof manualForm>) =>
-    (e: React.ChangeEvent<HTMLInputElement>) =>
-      setManualForm((p) => p ? { ...p, [key]: e.target.value } : p);
-
-  return (
-    <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) { setSearch(""); setManualForm(null); setDropdownOpen(false); } }}>
-      <DialogContent
-        className="max-w-sm rounded-2xl border-0 p-0 overflow-visible"
-        style={{ background: "#0e1117", boxShadow: "0 24px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.07)" }}
-      >
-        <DialogHeader className="px-5 pt-5 pb-0">
-          <DialogTitle className="text-base font-semibold text-white capitalize">{t("addLeadTitle")}</DialogTitle>
-        </DialogHeader>
-
-        <div className="p-5 space-y-4">
-          {/* Search pill */}
-          {!manualForm && (
-            <div className="relative">
-              <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 z-10" />
-              <input
-                autoFocus
-                value={search}
-                onChange={(e) => { setSearch(e.target.value); setDropdownOpen(true); }}
-                onFocus={() => setDropdownOpen(true)}
-                onBlur={() => setTimeout(() => setDropdownOpen(false), 150)}
-                placeholder={t("searchBusiness")}
-                className={`w-full h-[52px] bg-white pl-10 pr-12 text-[15px] text-slate-900 placeholder:text-slate-400 focus:outline-none shadow-sm ${dropdownOpen ? "rounded-t-2xl" : "rounded-2xl"}`}
-                style={{ border: "1px solid #e2e8f0" }}
-              />
-              <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-0.5">
-                {search && (
-                  <button type="button" onClick={() => setSearch("")} className="p-1.5 text-slate-400 hover:text-slate-600">
-                    <X className="h-4 w-4" />
-                  </button>
-                )}
-                <button
-                  type="button"
-                  className="p-1.5 text-slate-400 hover:text-blue-500 transition-colors"
-                  onClick={async () => { await loadCurrentLocation(); setSearch(tCheckin("nearbyQuery")); setDropdownOpen(true); }}
-                >
-                  <MapPinned className="h-4 w-4" />
-                </button>
-              </div>
-
-              {/* Dropdown */}
-              {dropdownOpen && (
-                <div
-                  className="absolute left-0 right-0 top-full z-50 max-h-64 overflow-y-auto rounded-b-2xl"
-                  style={{ background: "#fff", border: "1px solid #e2e8f0", borderTop: "none", boxShadow: "0 12px 32px rgba(0,0,0,0.12)" }}
-                  onPointerDown={(e) => e.stopPropagation()}
-                >
-                  {/* Manual create */}
-                  <button
-                    type="button"
-                    onClick={openManual}
-                    className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-slate-50 transition-colors"
-                  >
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl" style={{ background: "rgba(99,102,241,0.1)" }}>
-                      <Plus className="h-4 w-4 text-indigo-500" />
-                    </div>
-                    <div>
-                      <div className="text-sm font-medium text-slate-900">
-                        {search.trim().length >= 2 ? t("createNamed", { name: search.trim() }) : t("addNewLead")}
-                      </div>
-                      <div className="text-xs text-slate-500">{t("fillManually")}</div>
-                    </div>
-                  </button>
-
-                  {/* Google Places loading */}
-                  {placeQuery.isFetching && (
-                    <div className="flex items-center gap-2 px-4 py-3 text-sm text-slate-500" style={{ borderTop: "1px solid #f1f5f9" }}>
-                      <Loader2 className="h-4 w-4 animate-spin" />{t("searchingPlaces")}
-                    </div>
-                  )}
-
-                  {/* Google Places results */}
-                  {placeQuery.data?.results.map((place) => {
-                    const existing = findMatchingLead(place, allLeads);
-                    return (
-                      <button
-                        key={place.placeId}
-                        type="button"
-                        onClick={() => pickPlace(place)}
-                        className="flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-slate-50 transition-colors"
-                        style={{ borderTop: "1px solid #f1f5f9" }}
-                      >
-                        {/* Badge under the icon — beside the text it pushed the
-                            name and address into an ellipsis. */}
-                        <div className="flex w-14 shrink-0 flex-col items-center gap-1">
-                          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-50">
-                            <Building2 className="h-4 w-4 text-indigo-500" />
-                          </div>
-                          {existing ? (
-                            <span className="text-[9px] font-bold uppercase tracking-wider text-blue-600">{t("exists")}</span>
-                          ) : (
-                            <span className="flex items-center gap-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-500">
-                              <GoogleLogo className="h-2.5 w-2.5" />
-                              Google
-                            </span>
-                          )}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="text-sm font-medium text-slate-900 break-words">{place.name}</div>
-                          <div className="text-xs text-slate-500 break-words">{place.address}</div>
-                        </div>
-                      </button>
-                    );
-                  })}
-
-                  {!placeQuery.isFetching && !placeQuery.data?.results?.length && search.trim().length < 3 && (
-                    <div className="px-4 py-3 text-sm text-slate-400">{t("typeMore")}</div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Manual form */}
-          {manualForm && (
-            <div className="space-y-2.5">
-              <button
-                type="button"
-                onClick={() => setManualForm(null)}
-                className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 transition-colors mb-1"
-              >
-                {t("backToSearch")}
-              </button>
-              {(["name", "phone", "email", "website", "industry", "address", "city"] as const).map((key) => (
-                <input
-                  key={key}
-                  value={manualForm[key]}
-                  onChange={mf(key)}
-                  placeholder={t(MANUAL_FIELD_KEYS[key])}
-                  className={inputCls}
-                  style={inputStyle}
-                />
-              ))}
-              <StateSelect
-                value={manualForm.state}
-                onValueChange={(state) => setManualForm((previous) => previous ? { ...previous, state } : previous)}
-                placeholder={t("fieldState")}
-              />
-              <button
-                disabled={saving || !manualForm.name.trim()}
-                onClick={saveManual}
-                className="w-full rounded-xl py-2.5 text-sm font-semibold text-white transition-all disabled:opacity-40 mt-1"
-                style={{ background: "linear-gradient(135deg, #3b82f6, #6366f1)" }}
-              >
-                {saving ? <Loader2 className="inline mr-2 h-4 w-4 animate-spin" /> : null}
-                {t("saveLead")}
-              </button>
-            </div>
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
 
 // ─── Lead Card (phone) ────────────────────────────────────────────────────────
 
@@ -334,8 +71,9 @@ function LeadPiecesChip({ lead, summary, onOpen }: { lead: FullSalesLead; summar
   );
 }
 
-function LeadCard({ lead, onOpen, onMore, pieces, onOpenPieces }: {
+function LeadCard({ lead, onOpen, onMore, pieces, onOpenPieces, lastVisit }: {
   lead: FullSalesLead;
+  lastVisit: Date | null;
   pieces?: LeadTagSummary;
   onOpenPieces?: () => void;
   onOpen: () => void;
@@ -347,58 +85,64 @@ function LeadCard({ lead, onOpen, onMore, pieces, onOpenPieces }: {
     <div
       role="button"
       tabIndex={0}
-      className="w-full cursor-pointer rounded-2xl p-4 text-left transition-all"
-      style={{ ...GLASS, boxShadow: "0 4px 20px rgba(0,0,0,0.25)" }}
+      className={`w-full cursor-pointer rounded-2xl p-4 text-left transition-colors hover:bg-white/[0.06] ${GLASS_CLASS}`}
       onClick={onOpen}
       onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onOpen(); } }}
     >
       <LeadCardBody
         lead={lead}
-        subtitle={pieces && onOpenPieces ? <LeadPiecesChip lead={lead} summary={pieces} onOpen={onOpenPieces} /> : undefined}
+        subtitle={
+          <div className="space-y-1.5">
+            <LeadRowFacts lead={lead} lastVisit={lastVisit} />
+            {pieces && onOpenPieces ? <LeadPiecesChip lead={lead} summary={pieces} onOpen={onOpenPieces} /> : null}
+          </div>
+        }
         right={
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="icon"
             title={t("moreActions")}
             aria-label={t("moreActions")}
-            className="flex h-9 w-9 items-center justify-center rounded-xl text-white/40 transition-colors hover:bg-white/10 hover:text-white"
+            className="text-white/45"
             onClick={(e) => { e.stopPropagation(); onMore(); }}
             data-testid={`lead-${lead.id}-more`}
           >
-            <MoreVertical className="h-4 w-4" />
-          </button>
+            <MoreVertical aria-hidden="true" />
+          </Button>
         }
       />
     </div>
   );
 }
 
-function LeadActionSheet({ lead, onClose, onSell, onCheckIn, onDelete }: {
+function LeadActionSheet({ lead, onClose, onSell, onCheckIn, onDelete, canDelete }: {
   lead: FullSalesLead | null;
   onClose: () => void;
   onSell: () => void;
   onCheckIn: () => void;
   onDelete: () => void;
+  /** Only the owner, a Rep Admin of its organization or a manager may delete it (leadAccess). */
+  canDelete: boolean;
 }) {
   const t = useT(leadsMessages);
   const items = [
     { key: "sell", label: t("salesAndConsignment"), icon: DollarSign, run: onSell, cls: "text-emerald-300" },
     { key: "checkin", label: t("checkIn"), icon: LogIn, run: onCheckIn, cls: "text-blue-300" },
-    { key: "delete", label: t("delete"), icon: Trash2, run: onDelete, cls: "text-red-400" },
+    ...(canDelete ? [{ key: "delete", label: t("delete"), icon: Trash2, run: onDelete, cls: "text-red-300" }] : []),
   ];
   return (
     <BottomSheet open={Boolean(lead)} onClose={onClose} title={lead?.name}>
-      <p className="mb-3 truncate px-1 text-base font-bold text-white">{lead?.name}</p>
       <div className="space-y-1.5 pb-1">
         {items.map(({ key, label, icon: Icon, run, cls }) => (
           <button
             key={key}
             type="button"
             onClick={() => { onClose(); run(); }}
-            className="flex min-h-[52px] w-full items-center gap-3 rounded-2xl px-4 text-left text-[15px] font-semibold text-white/85 active:bg-white/10"
-            style={{ background: "rgba(255,255,255,0.04)" }}
+            className={`flex min-h-[52px] w-full items-center gap-3 rounded-2xl px-4 text-left text-[15px] font-semibold text-white/85 active:bg-white/10 ${GLASS_CLASS}`}
             data-testid={`lead-action-${key}`}
           >
-            <Icon className={`h-5 w-5 ${cls}`} />
+            <Icon className={`h-5 w-5 ${cls}`} aria-hidden="true" />
             {label}
           </button>
         ))}
@@ -409,33 +153,48 @@ function LeadActionSheet({ lead, onClose, onSell, onCheckIn, onDelete }: {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-const LEAD_FILTERS = ["all", "followup", "lead", "customer"] as const;
+const LEAD_FILTERS = ["all", "followup", "lead", "customer", "prospect"] as const;
 type LeadFilter = (typeof LEAD_FILTERS)[number];
 const LEAD_FILTER_LABEL = {
   all: "filterAll",
   followup: "filterFollowUp",
   lead: "filterLeads",
   customer: "filterCustomers",
+  prospect: "tabProspects",
 } as const satisfies Record<LeadFilter, string>;
 
-/** `lead` covers worked prospects too: a check-in makes a company a lead even if its row still says prospect. */
-function matchesLeadFilter(lead: FullSalesLead, filter: LeadFilter): boolean {
-  if (filter === "followup") return Boolean(lead.nextVisitDueAt);
-  if (filter === "lead") return ["lead", "active", "prospect"].includes(lead.status);
-  if (filter === "customer") return lead.status === "customer";
+/**
+ * `lead` covers worked prospects too: a check-in makes a company a lead even if its row still says prospect.
+ * `lastOutcome` is the status of the company's latest finished visit (for "Follow-up").
+ */
+function matchesLeadFilter(lead: FullSalesLead, filter: LeadFilter, lastOutcome?: string | null): boolean {
+  if (filter === "followup") return needsFollowUp(lead, lastOutcome);
+  if (filter === "lead") return ["lead", "prospect"].includes(companyStage(lead.status));
+  if (filter === "customer") return companyStage(lead.status) === "customer";
+  // "prospect" lists the unvisited prospects, a separate pool (see `prospects` below).
   return true;
 }
 
 export function XpotLeads() {
   const t = useT(leadsMessages);
-  const { setLocation } = useXpotQueries();
+  const tc = useT(commonMessages);
+  const { setLocation, me } = useXpotQueries();
+  // A rep who only holds a piece at a company may not delete it (the server refuses).
+  const canDelete = useCallback((lead: FullSalesLead) => leadAccess(me, lead).owner, [me]);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const isDesktop = useIsDesktop();
+  // Management mode: the piece chips count every rep's pieces (getLeadTagSummaries).
+  const { canManage } = useViewerAccess();
   const [routeMatch, routeParams] = useRoute("/leads/:id");
   const routeId = routeMatch && /^\d+$/.test(routeParams.id) ? Number(routeParams.id) : null;
-  // ?status=customer&day=2026-10-12&q=bakery — survives reloads and opening a company.
-  const filters = useUrlFilters({ status: "all", day: "", q: "" });
+  // ?status=customer&day=2026-10-12&q=bakery&org=4 — survives reloads and opening a company.
+  const filters = useUrlFilters({ status: "all", day: "", q: "", org: "" });
+  // One organization's companies: a manager in management mode (the server ignores it for anyone else).
+  const organizationId = canManage && /^\d+$/.test(filters.values.org) ? Number(filters.values.org) : undefined;
+  const organizationOptions = (me?.organizations ?? [])
+    .filter((organization) => !organization.personal || organization.id === organizationId)
+    .map((organization) => ({ value: String(organization.id), label: organization.name }));
   const leadFilter: LeadFilter = (LEAD_FILTERS as readonly string[]).includes(filters.values.status) ? (filters.values.status as LeadFilter) : "all";
   const search = filters.values.q;
   const day = fromDayKey(filters.values.day);
@@ -445,7 +204,7 @@ export function XpotLeads() {
   const [actionLead, setActionLead] = useState<FullSalesLead | null>(null);
   const [addOpen, setAddOpen] = useState(false);
 
-  const { leadsQuery, deleteLeadMutation } = useLeads(routeId === null);
+  const { leadsQuery, deleteLeadMutation } = useLeads(routeId === null, organizationId);
   const leadDetailQuery = useQuery<{
     lead: Omit<FullSalesLead, "locations" | "contacts">;
     locations: FullSalesLead["locations"];
@@ -485,13 +244,17 @@ export function XpotLeads() {
     [visits],
   );
   const isWorkedLead = useCallback(
-    (lead: FullSalesLead) => lead.status !== "prospect" || checkedInLeadIds.has(lead.id),
+    (lead: FullSalesLead) => isWorkedCompany(lead, checkedInLeadIds),
     [checkedInLeadIds],
   );
   // Legacy prospect rows may already have completed visits. A real check-in is
   // authoritative: the company belongs in the worked-leads portfolio even if
   // an older record was never promoted from `prospect` in the database.
   const leads = allLeads.filter(isWorkedLead);
+  // Businesses saved (e.g. picked on the Dashboard) but never checked in stay out
+  // of the default view; the Prospects chip is where they can be found.
+  const prospects = allLeads.filter((lead) => !isWorkedLead(lead));
+  const pool = leadFilter === "prospect" ? prospects : leads;
   const visitsByLead = useMemo(() => {
     const map = new Map<number, EnrichedSalesVisit[]>();
     for (const v of visits ?? []) {
@@ -502,6 +265,10 @@ export function XpotLeads() {
     map.forEach((list) => list.sort((a, b) => at(b) - at(a)));
     return map;
   }, [visits]);
+  const lastOutcomeFor = useCallback(
+    (leadId: number) => visitsByLead.get(leadId)?.find((visit) => isFinishedVisitStatus(visit.status))?.status ?? null,
+    [visitsByLead],
+  );
   const lastVisitFor = useCallback((leadId: number) => {
     const v = visitsByLead.get(leadId)?.[0];
     const when = v?.checkedInAt ?? v?.createdAt;
@@ -529,22 +296,23 @@ export function XpotLeads() {
   }, [day, visits]);
 
   // Search and day narrow first; the status chips count what is left.
-  const baseList = useMemo(
-    () => leads.filter((lead) => leadMatchesSearch(lead, search) && (!visitedOnDay || visitedOnDay.has(lead.id))),
-    [leads, search, visitedOnDay],
+  const narrow = useCallback(
+    (list: FullSalesLead[]) => list.filter((lead) => leadMatchesSearch(lead, search) && (!visitedOnDay || visitedOnDay.has(lead.id))),
+    [search, visitedOnDay],
   );
+  const baseList = useMemo(() => narrow(pool), [narrow, pool]);
   const displayList = useMemo(() => {
-    const filtered = baseList.filter((lead) => matchesLeadFilter(lead, leadFilter));
+    const filtered = baseList.filter((lead) => matchesLeadFilter(lead, leadFilter, lastOutcomeFor(lead.id)));
     return [...filtered].sort((a, b) => {
-      const aDue = a.nextVisitDueAt ? new Date(a.nextVisitDueAt).getTime() : Number.POSITIVE_INFINITY;
-      const bDue = b.nextVisitDueAt ? new Date(b.nextVisitDueAt).getTime() : Number.POSITIVE_INFINITY;
+      const aDue = followUpDueTime(a);
+      const bDue = followUpDueTime(b);
       if (aDue !== bDue) return aDue - bDue;
       const aVisited = a.lastVisitAt ? new Date(a.lastVisitAt).getTime() : 0;
       const bVisited = b.lastVisitAt ? new Date(b.lastVisitAt).getTime() : 0;
       if (aVisited !== bVisited) return bVisited - aVisited;
       return a.name.localeCompare(b.name);
     });
-  }, [baseList, leadFilter]);
+  }, [baseList, leadFilter, lastOutcomeFor]);
 
   // Big portfolios render 50 at a time; a new filter starts from the top.
   const pagedLeads = usePagedList(displayList, { resetKey: `${leadFilter}|${search}|${filters.values.day}` });
@@ -564,23 +332,29 @@ export function XpotLeads() {
   // Moving between companies and closing replace history; only the first open
   // pushes. The query string rides along so the filters stay put.
   const openLead = (lead: FullSalesLead) => setLocation(`/leads/${lead.id}${currentSearch()}`, { replace: routeId != null });
-  const closeLead = useCallback(() => setLocation(`/leads${currentSearch()}`, { replace: true }), [setLocation]);
+  // A company opened from the Route, a task or a visit goes back there; else to the list.
+  const backOut = routeId != null && backLeavesSection("/leads");
+  const closeLead = useCallback(() => {
+    if (backLeavesSection("/leads")) window.history.back();
+    else setLocation(`/leads${currentSearch()}`, { replace: true });
+  }, [setLocation]);
 
+  // Stays open with the loader until the server answers (ConfirmDialog); a failure keeps it open.
   const handleDeleteLead = async () => {
     if (!leadPendingDelete) return;
-    try {
-      // Close the detail first: once the list refetches without it, the page
-      // would flash "not found".
-      if (leadPendingDelete.id === routeId) closeLead();
-      await deleteLeadMutation.mutateAsync(leadPendingDelete.id);
-      setLeadPendingDelete(null);
-    } catch {}
+    // Close the detail first: once the list refetches without it, the page
+    // would flash "not found".
+    if (leadPendingDelete.id === routeId) closeLead();
+    await deleteLeadMutation.mutateAsync(leadPendingDelete.id);
   };
 
+  const worked = narrow(leads);
   const filterChips = LEAD_FILTERS.map((id) => ({
     id,
     label: t(LEAD_FILTER_LABEL[id]),
-    count: baseList.filter((lead) => matchesLeadFilter(lead, id)).length,
+    count: id === "prospect"
+      ? narrow(prospects).length
+      : worked.filter((lead) => matchesLeadFilter(lead, id, lastOutcomeFor(lead.id))).length,
   }));
 
   const filterBar = (
@@ -588,25 +362,39 @@ export function XpotLeads() {
       testId="leads-filters"
       search={<FilterSearch value={search} onChange={(q) => filters.set({ q })} placeholder={t("searchLeads")} />}
       controls={
-        <FilterToggle
-          pressed={Boolean(day)}
-          onChange={(on) => filters.set({ day: on ? toDayKey(new Date()) : null })}
-          label={t("filterDate")}
-          icon={CalendarDays}
-          testId="leads-filter-day"
-        />
+        <>
+          {canManage && organizationOptions.length > 0 ? (
+            <FilterSelect
+              value={organizationId ? String(organizationId) : ""}
+              onChange={(org) => filters.set({ org: org || null })}
+              placeholder={t("filterAllOrganizations")}
+              options={organizationOptions}
+              icon={Building2}
+              testId="leads-filter-organization"
+            />
+          ) : null}
+          <FilterToggle
+            pressed={Boolean(day)}
+            onChange={(on) => filters.set({ day: on ? toDayKey(new Date()) : null })}
+            label={t("filterDate")}
+            icon={CalendarDays}
+            testId="leads-filter-day"
+          />
+        </>
       }
       actions={
-        <button
+        <Button
+          type="button"
+          variant="brand"
           onClick={() => setAddOpen(true)}
           title={t("newLead")}
+          aria-label={t("newLead")}
           data-shortcut="new"
-          className="flex h-10 w-10 shrink-0 items-center justify-center gap-2 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-80 lg:w-auto lg:px-4"
-          style={{ background: BRAND_GRADIENT }}
+          className="w-11 shrink-0 px-0 lg:w-auto lg:px-4"
         >
-          <Plus className="h-4 w-4" />
+          <Plus aria-hidden="true" />
           <span className="hidden lg:inline">{t("newLead")}</span>
-        </button>
+        </Button>
       }
       secondary={
         <div className="space-y-2.5">
@@ -621,26 +409,32 @@ export function XpotLeads() {
           <FilterChips items={filterChips} value={leadFilter} onChange={(status) => filters.set({ status })} ariaLabel={t("filterByStatus")} />
         </div>
       }
-      summary={{ shown: displayList.length, total: leads.length, active: filters.activeCount() > 0, onClear: () => filters.reset() }}
+      summary={{ shown: displayList.length, total: pool.length, active: filters.activeCount() > 0, onClear: () => filters.reset() }}
     />
   );
 
-  const emptyStates = leads.length === 0 && !search ? (
-    <EmptyState icon={Building2} title={t("noLeads")} hint={t("noLeadsHint")} cardStyle={GLASS}>
-      <button
-        onClick={() => setAddOpen(true)}
-        className="rounded-xl px-4 py-2 text-xs font-semibold text-white hover:opacity-80"
-        style={{ background: BRAND_GRADIENT }}
-      >
-        {t("addLead")}
-      </button>
+  // Loading and failure come before any "nothing here" message, which used to
+  // show "No companies yet" (with its Add button) while the list was loading.
+  const emptyStates = leadsQuery.isLoading ? (
+    <ListSkeleton rows={5} testId="leads-loading" />
+  ) : leadsQuery.isError ? (
+    <EmptyState tone="red" icon={Building2} title={t("loadFailed")} hint={(leadsQuery.error as Error).message}>
+      <RetryButton onRetry={() => void leadsQuery.refetch()} busy={leadsQuery.isFetching} />
+    </EmptyState>
+  ) : leadFilter === "prospect" && prospects.length === 0 ? (
+    <EmptyState icon={Building2} title={t("noProspects")} hint={t("noProspectsHint")} />
+  ) : leads.length === 0 && !search && leadFilter !== "prospect" ? (
+    <EmptyState icon={Building2} title={t("noLeads")} hint={t("noLeadsHint")}>
+      <Button type="button" variant="brand" size="sm" onClick={() => setAddOpen(true)}>
+        <Plus aria-hidden="true" /> {t("addLead")}
+      </Button>
     </EmptyState>
   ) : displayList.length > 0 ? null : search ? (
-    <EmptyState icon={Search} title={t("noResults", { query: search })} hint={t("chooseAnotherFilter")} cardStyle={GLASS} />
+    <EmptyState icon={Search} title={t("noResults", { query: search })} hint={t("chooseAnotherFilter")} />
   ) : day ? (
-    <EmptyState icon={CalendarDays} title={t("noCompaniesOnDate")} hint={t("chooseAnotherDate")} cardStyle={GLASS} />
+    <EmptyState icon={CalendarDays} title={t("noCompaniesOnDate")} hint={t("chooseAnotherDate")} />
   ) : (
-    <EmptyState icon={SlidersHorizontal} title={t("noLeadsInFilter")} hint={t("chooseAnotherFilter")} cardStyle={GLASS} />
+    <EmptyState icon={SlidersHorizontal} title={t("noLeadsInFilter")} hint={t("chooseAnotherFilter")} />
   );
 
   return (
@@ -653,14 +447,15 @@ export function XpotLeads() {
             pieces={piecesFor(selectedLead.id)}
             visits={visitsByLead.get(selectedLead.id) ?? []}
             onClose={closeLead}
+            backLabel={backOut ? tc("back") : undefined}
             onDelete={() => setLeadPendingDelete(selectedLead)}
             onConvertToCustomer={() => convertToCustomer.mutate(selectedLead.id)}
             converting={convertToCustomer.isPending}
           />
         ) : leadDetailQuery.isLoading ? (
-          <div className="flex justify-center py-16"><Loader2 className="h-5 w-5 animate-spin text-blue-400" /></div>
+          <ListSkeleton rows={3} rowClassName="h-28 rounded-2xl" testId="lead-detail-loading" />
         ) : (
-          <EmptyState icon={Building2} title={t("leadNotFound")} cardStyle={GLASS} />
+          <EmptyState icon={Building2} title={t("leadNotFound")} />
         )
       ) : (
         <>
@@ -675,7 +470,10 @@ export function XpotLeads() {
                   onSelect={openLead}
                   piecesFor={piecesFor}
                   lastVisitFor={lastVisitFor}
+                  onSell={setSalesLead}
+                  onCheckIn={(lead) => setLocation(`/route/check-in?leadId=${lead.id}`)}
                   onDelete={setLeadPendingDelete}
+                  canDelete={canDelete}
                 />
               )}
               <ListPager shown={pagedLeads.shown} total={pagedLeads.total} hasMore={pagedLeads.hasMore} onMore={pagedLeads.showMore} />
@@ -689,8 +487,9 @@ export function XpotLeads() {
                   lead={lead}
                   onOpen={() => openLead(lead)}
                   onMore={() => setActionLead(lead)}
+                  lastVisit={lastVisitFor(lead.id)}
                   pieces={piecesFor(lead.id)}
-                  onOpenPieces={() => setLocation(`/tags/pieces?lead=${lead.id}&name=${encodeURIComponent(lead.name)}`)}
+                  onOpenPieces={() => setLocation(leadPiecesPath(lead.id, lead.name, canManage))}
                 />
               ))}
               <ListPager shown={pagedLeads.shown} total={pagedLeads.total} hasMore={pagedLeads.hasMore} onMore={pagedLeads.showMore} />
@@ -705,61 +504,33 @@ export function XpotLeads() {
         onSell={() => actionLead && setSalesLead(actionLead)}
         onCheckIn={() => actionLead && setLocation(`/route/check-in?leadId=${actionLead.id}`)}
         onDelete={() => actionLead && setLeadPendingDelete(actionLead)}
+        canDelete={actionLead ? canDelete(actionLead) : false}
       />
 
       {/* Sales & consignment for one company, with no visit attached. */}
       <SheetDialog
         open={Boolean(salesLead)}
         onOpenChange={(o) => { if (!o) setSalesLead(null); }}
-        title={salesLead?.name ?? "Sales"}
+        title={salesLead?.name ?? t("salesAndConsignment")}
       >
-        {salesLead && <LeadSalesPanel leadId={salesLead.id} leadName={salesLead.name} compact />}
+        {salesLead && <LeadSalesPanel leadId={salesLead.id} leadName={salesLead.name} lead={salesLead} compact />}
       </SheetDialog>
 
-      {/* Manual creation is reserved for referrals and unplanned encounters. */}
-      <AddCompanyDialog
-        open={addOpen}
-        onOpenChange={setAddOpen}
-        allLeads={allLeads}
-      />
+      {/* The same "New company" dialog as check-in and the Dashboard (Google
+          autofill with coordinates, phone mask); created here as a lead, the
+          status this list shows. */}
+      <CreateLeadDialog open={addOpen} onOpenChange={setAddOpen} initialName="" status="lead" />
 
-      <AlertDialog
+      <ConfirmDialog
         open={Boolean(leadPendingDelete)}
-        onOpenChange={(open) => { if (!open && !deleteLeadMutation.isPending) setLeadPendingDelete(null); }}
-      >
-        <AlertDialogContent
-          className="max-w-xs rounded-2xl border-0 p-6"
-          style={{ background: "#0e1117", boxShadow: "0 24px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.07)" }}
-        >
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-base font-semibold text-white">
-              {t("deleteLeadTitle")}
-            </AlertDialogTitle>
-            <AlertDialogDescription className="text-sm text-white/45">
-              {leadPendingDelete ? t("deleteNamed", { name: leadPendingDelete.name }) : t("deleteGeneric")}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="mt-2 flex-row gap-2 sm:space-x-0">
-            <AlertDialogCancel
-              disabled={deleteLeadMutation.isPending}
-              className="flex-1 rounded-xl border-0 text-sm font-medium text-white/60 hover:text-white transition-colors"
-              style={{ background: "rgba(255,255,255,0.07)" }}
-            >
-              {t("keep")}
-            </AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              disabled={deleteLeadMutation.isPending}
-              onClick={(e) => { e.preventDefault(); void handleDeleteLead(); }}
-              className="flex-1 rounded-xl border-0 text-sm font-medium text-white"
-              style={{ background: "rgba(239,68,68,0.85)" }}
-            >
-              {deleteLeadMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              {t("delete")}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        onOpenChange={(open) => { if (!open) setLeadPendingDelete(null); }}
+        tone="danger"
+        title={t("deleteLeadTitle")}
+        description={leadPendingDelete ? t("deleteNamed", { name: leadPendingDelete.name }) : t("deleteGeneric")}
+        confirmLabel={t("delete")}
+        cancelLabel={t("keep")}
+        onConfirm={handleDeleteLead}
+      />
     </>
   );
 }

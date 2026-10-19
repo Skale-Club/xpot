@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { storage } from "../../storage.js";
 import { requireXpotUser, ensureXpotRep } from "./middleware.js";
+import { isFinishedVisitStatus } from "#shared/visit-status.js";
 
 export function createMetricsRouter() {
   const router = Router();
@@ -36,7 +37,7 @@ export function createMetricsRouter() {
       const dateKey = new Date(visit.createdAt).toISOString().split("T")[0];
       if (visitsByDay[dateKey]) {
         visitsByDay[dateKey].total++;
-        if (visit.status === "completed") {
+        if (isFinishedVisitStatus(visit.status)) {
           visitsByDay[dateKey].completed++;
         }
       }

@@ -13,12 +13,14 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis } from "recharts";
-import { formatCents } from "../../utils";
+import { formatCents, formatShortDate } from "../../utils";
+import { MONEY_CHART, MONEY_DUE_TONE } from "./moneyPalette";
 import { useSalesSummary } from "../../hooks/useSalesModule";
-import { Loader2 } from "@/components/ui/loader";
+import { ListSkeleton } from "@/components/xpot/ListSkeleton";
 import { PeriodSelector } from "@/components/xpot/DashboardKit";
 import { useUrlFilters } from "@/hooks/use-url-filters";
-import { EmptyState } from "@/components/xpot/EmptyState";
+import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
+import { InlineAlert } from "@/components/xpot/InlineAlert";
 import { useT } from "@/i18n";
 import { salesModuleMessages } from "@/i18n/messages/salesModule";
 
@@ -59,10 +61,11 @@ function SignalCard({
   );
 }
 
-function FinancialMetric({ label, value, accent }: { label: string; value: string; accent?: "emerald" | "red" | "amber" }) {
-  const color = accent === "emerald" ? "text-emerald-300" : accent === "red" ? "text-rose-300" : accent === "amber" ? "text-amber-300" : "text-white";
+/** A figure of the breakdown: profit emerald, money out or not earned the neutral cost tone (moneyPalette). */
+function FinancialMetric({ label, value, accent }: { label: string; value: string; accent?: "profit" | "cost" }) {
+  const color = accent ? MONEY_CHART[accent].text : "text-white";
   return (
-    <div className="min-w-0 border-l border-white/[0.075] pl-3 first:border-l-0 first:pl-0 lg:pl-5">
+    <div className="min-w-0 border-l border-white/[0.075] pl-3 first:border-l-0 first:pl-0 max-sm:odd:border-l-0 max-sm:odd:pl-0 lg:pl-5">
       <div className="truncate text-[9px] font-bold uppercase tracking-[0.17em] text-white/30 sm:text-[10px]">{label}</div>
       <div className={`mt-2 truncate text-sm font-bold tracking-[-0.02em] tabular-nums sm:text-lg lg:text-xl ${color}`}>{value}</div>
     </div>
@@ -77,22 +80,14 @@ export function SalesOverview({ onGoToConsignments }: { onGoToConsignments?: () 
   const s = query.data;
 
   if (query.isLoading && !s) {
-    return (
-      <div className="flex justify-center py-20">
-        <Loader2 className="h-6 w-6 animate-spin text-emerald-300" />
-      </div>
-    );
+    return <ListSkeleton rows={3} rowClassName="h-32 rounded-2xl" className="space-y-3" />;
   }
   if (!s) {
-    return (
-      <p className="rounded-3xl border border-white/[0.08] bg-white/[0.035] px-4 py-8 text-center text-sm text-white/40">
-        {t("loadFailed")}
-      </p>
-    );
+    return <ErrorState message={t("loadFailed")} onRetry={() => void query.refetch()} />;
   }
 
   const chart = s.daily.map((d) => ({
-    day: new Date(`${d.date}T12:00:00`).toLocaleDateString(t.locale, { month: "short", day: "numeric" }),
+    day: formatShortDate(`${d.date}T12:00:00`),
     profit: d.profitCents / 100,
     revenue: d.revenueCents / 100,
   }));
@@ -102,15 +97,16 @@ export function SalesOverview({ onGoToConsignments }: { onGoToConsignments?: () 
 
   return (
     <div className="space-y-4 lg:space-y-5">
-      <section className="grid gap-3 lg:grid-cols-12 lg:gap-4">
+      <section className="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-12 lg:gap-4">
         <div
-          className="relative isolate overflow-hidden rounded-[28px] border border-emerald-300/[0.16] p-5 shadow-[0_24px_70px_rgba(0,0,0,0.24)] sm:p-6 lg:col-span-7 lg:min-h-[248px] lg:p-7"
+          className="relative isolate min-w-0 overflow-hidden rounded-2xl border border-emerald-300/[0.16] p-5 shadow-[0_24px_70px_rgba(0,0,0,0.24)] sm:p-6 lg:col-span-7 lg:min-h-[248px] lg:p-7"
           style={{ background: "linear-gradient(140deg, rgba(11,54,49,0.84) 0%, rgba(11,35,38,0.96) 45%, rgba(9,20,32,0.98) 100%)" }}
         >
           <div className="pointer-events-none absolute -right-20 -top-24 h-72 w-72 rounded-full border-[42px] border-emerald-300/[0.055]" />
           <div className="pointer-events-none absolute -bottom-24 right-16 h-52 w-52 rounded-full bg-emerald-300/[0.08] blur-3xl" />
 
-          <div className="relative flex items-start justify-between gap-4">
+          {/* Wraps on a phone: the period picker drops under the figure instead of squeezing "30 days" onto two lines. */}
+          <div className="relative flex flex-wrap items-start justify-between gap-4">
             <div>
               <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-200/60">
                 <TrendingUp className="h-3.5 w-3.5" />
@@ -148,7 +144,7 @@ export function SalesOverview({ onGoToConsignments }: { onGoToConsignments?: () 
         </div>
 
         <div className="grid grid-cols-2 gap-3 lg:col-span-5 lg:grid-cols-2 lg:gap-4">
-          <SignalCard icon={CircleDollarSign} label={t("today")} value={formatCents(s.revenue.todayCents)} detail={t("keptAmount", { amount: formatCents(s.profit.todayCents) })} tone="blue" />
+          <SignalCard icon={CircleDollarSign} label={t("today")} value={formatCents(s.revenue.todayCents)} detail={t("keptAmount", { amount: formatCents(s.profit.todayCents) })} tone="emerald" />
           <SignalCard icon={ShoppingBag} label={t("salesPeriod", { days })} value={s.sales.periodCount} detail={t.plural("units", s.sales.unitsSold)} />
           <SignalCard icon={ReceiptText} label={t("grossRevenue")} value={formatCents(s.financial.grossCents)} detail={t("lastNDays", { days })} tone="emerald" />
           <SignalCard
@@ -156,7 +152,7 @@ export function SalesOverview({ onGoToConsignments }: { onGoToConsignments?: () 
             label={t("outstanding", { amount: formatCents(s.unpaid.cents) })}
             value={s.unpaid.count}
             detail={t.plural("notFullyPaid", s.unpaid.count)}
-            tone={s.unpaid.count > 0 ? "amber" : "neutral"}
+            tone={s.unpaid.count > 0 ? MONEY_DUE_TONE.outstanding : "neutral"}
           />
         </div>
       </section>
@@ -166,22 +162,20 @@ export function SalesOverview({ onGoToConsignments }: { onGoToConsignments?: () 
           <BarChart3 className="h-3.5 w-3.5 text-emerald-300/60" />
           {t("financialBreakdown")}
         </div>
-        <div className="grid grid-cols-4 gap-3">
+        {/* Two by two on a phone, where four columns cut the amounts ("$1,05…"). */}
+        <div className="grid grid-cols-2 gap-x-3 gap-y-4 sm:grid-cols-4 sm:gap-y-3">
           <FinancialMetric label={t("grossRevenue")} value={formatCents(s.financial.grossCents)} />
-          <FinancialMetric label={t("discountsGiven")} value={formatCents(s.financial.discountCents)} accent="red" />
-          <FinancialMetric label={t("acquisitionCosts")} value={formatCents(s.financial.costCents)} accent="amber" />
-          <FinancialMetric label={t("grossProfitMetric")} value={formatCents(s.financial.grossProfitCents)} accent="emerald" />
+          <FinancialMetric label={t("discountsGiven")} value={formatCents(s.financial.discountCents)} accent="cost" />
+          <FinancialMetric label={t("acquisitionCosts")} value={formatCents(s.financial.costCents)} accent="cost" />
+          <FinancialMetric label={t("grossProfitMetric")} value={formatCents(s.financial.grossProfitCents)} accent="profit" />
         </div>
       </section>
 
+      {/* Outstanding is to be collected, not late: amber like its tile (MONEY_DUE_TONE). */}
       {s.unpaid.count > 0 && (
-        <div className="flex items-center gap-3 rounded-2xl border border-rose-400/20 bg-rose-400/[0.07] px-4 py-3.5 shadow-[inset_3px_0_0_rgba(251,113,133,0.55)]">
-          <AlertTriangle className="h-4 w-4 shrink-0 text-rose-300" />
-          <div className="min-w-0 flex-1">
-            <div className="text-sm font-semibold text-white">{t("outstanding", { amount: formatCents(s.unpaid.cents) })}</div>
-            <div className="text-[11px] text-white/40">{t.plural("notFullyPaid", s.unpaid.count)}</div>
-          </div>
-        </div>
+        <InlineAlert tone="warning" title={t("outstanding", { amount: formatCents(s.unpaid.cents) })}>
+          <span className="text-[11px] text-white/40">{t.plural("notFullyPaid", s.unpaid.count)}</span>
+        </InlineAlert>
       )}
 
       {chart.length > 1 && (
@@ -192,8 +186,8 @@ export function SalesOverview({ onGoToConsignments }: { onGoToConsignments?: () 
               <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/28">{t("lastNDays", { days })}</div>
             </div>
             <div className="flex items-center gap-4 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/40">
-              <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-400" />{t("kept")}</span>
-              <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-sky-400/60" />{t("billed")}</span>
+              <span className="flex items-center gap-1.5"><span className={`h-2 w-2 rounded-full ${MONEY_CHART.profit.swatch}`} />{t("kept")}</span>
+              <span className="flex items-center gap-1.5"><span className={`h-2 w-2 rounded-full ${MONEY_CHART.revenue.swatch}`} />{t("billed")}</span>
             </div>
           </div>
           <div className="h-52 w-full px-1 pb-3 pt-5 sm:h-60 lg:h-[300px] lg:px-3">
@@ -201,12 +195,12 @@ export function SalesOverview({ onGoToConsignments }: { onGoToConsignments?: () 
               <AreaChart data={chart} margin={{ top: 8, right: 12, left: 12, bottom: 0 }}>
                 <defs>
                   <linearGradient id="salesProfitFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#34d399" stopOpacity={0.34} />
-                    <stop offset="80%" stopColor="#34d399" stopOpacity={0.02} />
+                    <stop offset="0%" stopColor={MONEY_CHART.profit.stroke} stopOpacity={0.34} />
+                    <stop offset="80%" stopColor={MONEY_CHART.profit.stroke} stopOpacity={0.02} />
                   </linearGradient>
                   <linearGradient id="salesRevenueFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#38bdf8" stopOpacity={0.12} />
-                    <stop offset="90%" stopColor="#38bdf8" stopOpacity={0} />
+                    <stop offset="0%" stopColor={MONEY_CHART.revenue.stroke} stopOpacity={0.12} />
+                    <stop offset="90%" stopColor={MONEY_CHART.revenue.stroke} stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid vertical={false} stroke="rgba(255,255,255,0.055)" strokeDasharray="3 5" />
@@ -216,29 +210,24 @@ export function SalesOverview({ onGoToConsignments }: { onGoToConsignments?: () 
                   formatter={(v: number, name) => [formatCents(Math.round(v * 100)), name === "profit" ? t("kept") : t("billed")]}
                   cursor={{ stroke: "rgba(255,255,255,0.12)", strokeWidth: 1, strokeDasharray: "4 4" }}
                 />
-                <Area type="monotone" dataKey="revenue" stroke="#38bdf8" strokeOpacity={0.48} strokeWidth={1.5} fill="url(#salesRevenueFill)" />
-                <Area type="monotone" dataKey="profit" stroke="#34d399" strokeWidth={2.5} fill="url(#salesProfitFill)" />
+                <Area type="monotone" dataKey="revenue" stroke={MONEY_CHART.revenue.stroke} strokeOpacity={0.6} strokeWidth={1.5} fill="url(#salesRevenueFill)" />
+                <Area type="monotone" dataKey="profit" stroke={MONEY_CHART.profit.stroke} strokeWidth={2.5} fill="url(#salesProfitFill)" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
         </section>
       )}
 
-      <section className="grid gap-4 lg:grid-cols-12">
+      <section className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-12">
         <button
           type="button"
           onClick={onGoToConsignments}
           disabled={!onGoToConsignments}
-          className="group relative isolate overflow-hidden rounded-[26px] border p-5 text-left transition-all hover:-translate-y-0.5 hover:border-indigo-300/30 active:translate-y-0 disabled:hover:translate-y-0 lg:col-span-5 lg:p-6"
-          style={{
-            background: s.consignment.dueCount > 0 ? "linear-gradient(145deg, rgba(74,25,35,0.7), rgba(14,19,34,0.96))" : "linear-gradient(145deg, rgba(29,35,78,0.78), rgba(13,19,36,0.96))",
-            borderColor: s.consignment.dueCount > 0 ? "rgba(251,113,133,0.22)" : "rgba(129,140,248,0.2)",
-          }}
+          className={`group relative isolate flex min-w-0 flex-col overflow-hidden rounded-2xl border p-5 text-left transition-colors lg:col-span-5 lg:p-6 ${s.consignment.dueCount > 0 ? "border-red-400/25 bg-red-500/[0.07]" : "border-white/[0.09] bg-white/[0.04] hover:bg-white/[0.06]"}`}
         >
-          <div className="pointer-events-none absolute -right-14 -top-14 h-44 w-44 rounded-full border-[28px] border-indigo-300/[0.05]" />
           <div className="relative flex items-start justify-between gap-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-indigo-300/15 bg-indigo-300/[0.08]">
-              <Boxes className="h-[18px] w-[18px] text-indigo-300" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.05]">
+              <Boxes className="h-[18px] w-[18px] text-white/60" aria-hidden="true" />
             </div>
             <ArrowRight className="h-4 w-4 text-white/25 transition-transform group-hover:translate-x-1 group-hover:text-white/55" />
           </div>
@@ -260,7 +249,7 @@ export function SalesOverview({ onGoToConsignments }: { onGoToConsignments?: () 
           {(s.consignment.dueCount > 0 || s.consignment.dueSoonCount > 0) && (
             <div className="relative mt-5 flex items-center gap-2 border-t border-white/[0.07] pt-3 text-[11px]">
               <CalendarClock className="h-3.5 w-3.5 shrink-0 text-white/35" />
-              <span className={s.consignment.dueCount > 0 ? "text-rose-300" : "text-white/45"}>
+              <span className={s.consignment.dueCount > 0 ? "text-red-300" : "text-white/45"}>
                 {s.consignment.dueCount > 0 ? t.plural("settlementsOverdue", s.consignment.dueCount) : null}
                 {s.consignment.dueCount > 0 && s.consignment.dueSoonCount > 0 ? " · " : null}
                 {s.consignment.dueSoonCount > 0 ? t("dueWithinWeek", { count: s.consignment.dueSoonCount }) : null}
@@ -269,7 +258,7 @@ export function SalesOverview({ onGoToConsignments }: { onGoToConsignments?: () 
           )}
         </button>
 
-        <div className="rounded-[26px] border border-white/[0.075] bg-white/[0.028] p-5 lg:col-span-7 lg:p-6">
+        <div className="min-w-0 rounded-2xl border border-white/[0.07] bg-white/[0.025] p-4 sm:p-5 lg:col-span-7 lg:p-6">
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
               <div className="text-sm font-bold text-white">{t("byProduct")}</div>

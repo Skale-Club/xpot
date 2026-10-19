@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import type { TagActor } from "#shared/tagAccess.js";
 import { repModules } from "#shared/modules.js";
-import { accessDenial, ensureXpotRep, isManagerOrAdmin } from "../routes/xpot/middleware.js";
+import { accessDenial, ensureXpotRep, isManagerOrAdmin, viewsAsRep } from "../routes/xpot/middleware.js";
 import { membershipsForRep } from "../organizations/service.js";
 
 // Who is acting on the Tags API. Built from Xpot's own rep identity, read from
@@ -33,15 +33,17 @@ async function loadActor(req: Request, res: Response): Promise<(TagActor & { isA
     repId: found.rep.id,
     isManager,
     isAdmin: found.user.isAdmin,
+    inManagement: isManager && !viewsAsRep(req),
     organizationIds: active.map((membership) => membership.organizationId),
     managedOrganizationIds: active.filter((membership) => membership.role === "admin").map((membership) => membership.organizationId),
   };
 }
 
-const asActor = ({ userId, repId, isManager, organizationIds, managedOrganizationIds }: TagActor & { isAdmin: boolean }): TagActor => ({
+const asActor = ({ userId, repId, isManager, inManagement, organizationIds, managedOrganizationIds }: TagActor & { isAdmin: boolean }): TagActor => ({
   userId,
   repId,
   isManager,
+  inManagement,
   organizationIds,
   managedOrganizationIds,
 });

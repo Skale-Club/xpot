@@ -2,11 +2,14 @@ import { Router } from "express";
 import { z } from "zod";
 import { and, desc, eq, ilike, lt, or, sql, type SQL } from "drizzle-orm";
 import { db } from "../../db.js";
-import { prospectingRuns, salesReps, systemEvents, type SystemEvent } from "#shared/schema.js";
+import { prospectingJobs, prospectingRuns, salesReps, systemEvents, type SystemEvent } from "#shared/schema.js";
 import type { SystemEventDetail, SystemEventRow } from "#shared/system-health.js";
 import { getCurrentSessionUser, requireSuperAdmin, requireXpotManager } from "./middleware.js";
 import { systemHealthSnapshot, toRecentRun } from "../../observability/health.js";
 import { recordSystemEvent } from "../../observability/events.js";
+import { listSyncProblems } from "../../observability/syncProblems.js";
+import { retryAutomaticRoute } from "../../prospecting/auto-route.js";
+import { cancelProspectingJob, tickProspectingQueueSafely } from "../../prospecting/queue.js";
 import { rateLimit } from "../../tags/rateLimit.js";
 import { storage } from "../../storage.js";
 
@@ -38,6 +41,40 @@ export function createSystemHealthRouter() {
 
   router.get("/admin/system-health", async (_req, res) => {
     res.set("Cache-Control", "no-store").json(await systemHealthSnapshot());
+  });
+
+  // Records that did not reach the CRM; Status retries them through POST /sync/retry.
+  router.get("/admin/system-health/sync-problems", async (_req, res) => {
+    res.set("Cache-Control", "no-store").json({ problems: await listSyncProblems() });
+  });
+
+  // A finished search whose route was never built: ask the builder again, for
+  // whichever person owns the search (the rep-side retry only reaches one's own).
+  router.post("/admin/system-health/jobs/:id/retry-route", async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ message: "Invalid job id" });
+    const [job] = await db.select({ id: prospectingJobs.id, repId: prospectingJobs.repId })
+      .from(prospectingJobs).where(eq(prospectingJobs.id, id)).limit(1);
+    if (!job) return res.status(404).json({ message: "Prospecting job not found" });
+    const retried = await retryAutomaticRoute(job.id, job.repId);
+    if (!retried) return res.status(409).json({ code: "route_not_retryable", message: "This route is not ready to retry." });
+    void tickProspectingQueueSafely();
+    res.status(202).json({ jobId: retried.id, routePlanningStatus: retried.routePlanningStatus });
+  });
+
+  // A search that is stuck (running, waiting, or finished with no route): stop
+  // it for whichever person owns it, so their queue and their day are free again.
+  router.post("/admin/system-health/jobs/:id/cancel", async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ message: "Invalid job id" });
+    const result = await cancelProspectingJob(id);
+    if (result.outcome === "not_found") return res.status(404).json({ message: "Prospecting job not found" });
+    if (result.outcome === "not_cancellable") {
+      return res.status(409).json({ code: "search_not_cancellable", message: "This search has already finished." });
+    }
+    const actor = (req as any).xpotActor as { user: { userId: string } };
+    console.log(`[prospecting] job #${result.jobId} (rep #${result.repId}) cancelled from Status by ${actor.user.userId}; ${result.cancelledRuns} search(es) stopped`);
+    res.json({ jobId: result.jobId, status: result.status, routePlanningStatus: result.routePlanningStatus, cancelledRuns: result.cancelledRuns });
   });
 
   router.get("/admin/system-events", async (req, res) => {

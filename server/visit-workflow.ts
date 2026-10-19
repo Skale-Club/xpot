@@ -148,6 +148,7 @@ export async function finishVisitTransaction(input: {
           .where(and(eq(prospectingRoutes.id, linked.routeId), inArray(prospectingRoutes.status, ["published", "in_progress"])));
       }
     }
-    return visit;
+    // The route the visit was a stop of: check-out goes back to it for the next stop.
+    return { ...visit, routeId: linked?.routeId ?? null };
   });
 }

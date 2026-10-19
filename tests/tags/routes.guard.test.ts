@@ -20,7 +20,6 @@ test("tag endpoints refuse anonymous callers", async () => {
     const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     const calls: Array<[string, string]> = [
       ["GET", "/api/xpot/tags"],
-      ["GET", "/api/xpot/tags/summary"],
       ["GET", "/api/xpot/tags/by-lead"],
       ["GET", "/api/xpot/tags/lookup/A7K3P9X2"],
       ["GET", `/api/xpot/tags/${ID}`],
@@ -49,6 +48,7 @@ test("tag endpoints refuse anonymous callers", async () => {
       ["GET", "/api/xpot/admin/tag-kits"],
       ["POST", "/api/xpot/admin/tag-kits"],
       ["POST", "/api/xpot/admin/tag-kits/return"],
+      ["GET", "/api/xpot/admin/tag-batch-options"],
       ["GET", "/api/xpot/admin/tag-batches"],
       ["POST", "/api/xpot/admin/tag-batches"],
       ["POST", `/api/xpot/admin/tag-batches/${ID}/scan`],

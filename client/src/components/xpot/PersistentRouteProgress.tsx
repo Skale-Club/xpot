@@ -76,7 +76,7 @@ function ProgressRail({
           <span
             key={step}
             className={step < activeStep
-              ? "h-1.5 w-1.5 rounded-full bg-sky-300 shadow-[0_0_5px_rgba(125,211,252,0.7)]"
+              ? "h-1.5 w-1.5 rounded-full bg-emerald-300 shadow-[0_0_5px_rgba(110,231,183,0.6)]"
               : step === activeStep
                 ? "h-2.5 w-2.5 rounded-full border border-indigo-100/80 bg-indigo-400 shadow-[0_0_0_2px_rgba(20,27,49,0.95)]"
                 : "h-1.5 w-1.5 rounded-full border border-white/25 bg-[#171d30]"}
@@ -141,7 +141,7 @@ export function PersistentRouteProgress({ collapsed = false, className = "" }: {
         href={destination}
         aria-label={accessibleLabel}
         title={accessibleLabel}
-        className={`group relative mx-auto flex h-11 w-11 items-center justify-center overflow-hidden rounded-xl border border-indigo-300/20 bg-indigo-400/[0.08] text-indigo-200 transition hover:border-indigo-300/40 hover:bg-indigo-400/[0.14] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300/60 ${className}`}
+        className={`group relative mx-auto flex h-11 w-11 items-center justify-center overflow-hidden rounded-xl border border-indigo-300/20 bg-indigo-400/[0.08] text-indigo-200 transition hover:border-indigo-300/40 hover:bg-indigo-400/[0.14] ${className}`}
         data-testid="persistent-route-progress-collapsed"
       >
         <Radar className={`h-[18px] w-[18px] ${isSearching ? "animate-pulse" : ""}`} aria-hidden="true" />
@@ -154,7 +154,7 @@ export function PersistentRouteProgress({ collapsed = false, className = "" }: {
     <Link
       href={destination}
       aria-label={accessibleLabel}
-      className={`group relative block overflow-hidden rounded-2xl border border-indigo-300/20 bg-indigo-400/[0.07] px-3 py-2.5 shadow-[0_10px_28px_rgba(14,20,43,0.22)] transition hover:border-indigo-300/35 hover:bg-indigo-400/[0.11] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300/60 active:scale-[0.985] ${className}`}
+      className={`group relative block overflow-hidden rounded-2xl border border-indigo-300/20 bg-indigo-400/[0.07] px-3 py-2.5 shadow-[0_10px_28px_rgba(14,20,43,0.22)] transition hover:border-indigo-300/35 hover:bg-indigo-400/[0.11] active:scale-[0.985] ${className}`}
       data-testid="persistent-route-progress"
     >
       <span className="flex items-center gap-2.5">

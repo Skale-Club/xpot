@@ -1,6 +1,20 @@
 import type { LucideIcon } from "lucide-react";
 import { Check, ChevronDown, ChevronRight } from "lucide-react";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { Segmented } from "./Segmented";
+import { GLASS_SUBTLE_CLASS, SURFACE_MODAL, type ModuleAccent } from "./surface";
+
+// Dashboard parts: DashboardSection (also exported as SectionCard), the
+// PeriodSelector (a small Segmented), MetricSelector, KpiTile (the one stat
+// tile; Stat in ./Stat.tsx is the plain label + number), EmptyMetricState and
+// the AttentionList rows. Containers use GLASS_SUBTLE; focus is the global outline.
+
+/** Icon tile of a section per module: indigo in Visits and the account pages, violet in Tags. */
+const SECTION_ICON: Record<ModuleAccent, string> = {
+  visits: "bg-indigo-500/[0.12] text-indigo-300",
+  tags: "bg-violet-500/[0.12] text-violet-300",
+  account: "bg-indigo-500/[0.12] text-indigo-300",
+};
 
 export function DashboardSection({
   title,
@@ -9,6 +23,8 @@ export function DashboardSection({
   children,
   className = "",
   bodyClassName = "p-4",
+  accent,
+  testId,
 }: {
   title: ReactNode;
   icon?: LucideIcon;
@@ -16,13 +32,16 @@ export function DashboardSection({
   children: ReactNode;
   className?: string;
   bodyClassName?: string;
+  /** Tints the icon tile with the module accent (violet in Tags); indigo by default. */
+  accent?: ModuleAccent;
+  testId?: string;
 }) {
   return (
-    <section className={`overflow-hidden rounded-[18px] border border-white/[0.07] bg-white/[0.025] ${className}`}>
-      <header className="flex min-h-12 items-center justify-between gap-3 border-b border-white/[0.06] px-4 py-3">
+    <section className={`overflow-hidden rounded-2xl ${GLASS_SUBTLE_CLASS} ${className}`} data-testid={testId}>
+      <header className="flex min-h-12 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-white/[0.06] px-4 py-3">
         <div className="flex min-w-0 items-center gap-2.5">
           {Icon ? (
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-indigo-500/[0.12] text-indigo-300">
+            <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${SECTION_ICON[accent ?? "visits"]}`}>
               <Icon className="h-3.5 w-3.5" aria-hidden="true" />
             </span>
           ) : null}
@@ -35,31 +54,40 @@ export function DashboardSection({
   );
 }
 
+/**
+ * A card with a title row (icon, title, actions) and a body: the one "section
+ * with a heading" of the app. Same as DashboardSection, with `actions` named
+ * like PageHeader's.
+ */
+export function SectionCard({
+  actions,
+  ...props
+}: Omit<Parameters<typeof DashboardSection>[0], "action"> & { actions?: ReactNode }) {
+  return <DashboardSection {...props} action={actions} />;
+}
+
 export function PeriodSelector({
   value,
   onChange,
   options,
   ariaLabel,
+  accent,
 }: {
   value: number;
   onChange: (value: number) => void;
   options: readonly { value: number; label: string }[];
   ariaLabel: string;
+  accent?: ModuleAccent;
 }) {
   return (
-    <div className="inline-flex rounded-lg border border-white/[0.07] bg-black/15 p-0.5" role="group" aria-label={ariaLabel}>
-      {options.map((option) => (
-        <button
-          key={option.value}
-          type="button"
-          aria-pressed={value === option.value}
-          onClick={() => onChange(option.value)}
-          className={`rounded-md px-2 py-1 text-[10px] font-bold tracking-wide transition-colors ${value === option.value ? "bg-white/10 text-white" : "text-white/35 hover:text-white/65"}`}
-        >
-          {option.label}
-        </button>
-      ))}
-    </div>
+    <Segmented
+      size="sm"
+      ariaLabel={ariaLabel}
+      accent={accent}
+      value={value}
+      onChange={onChange}
+      items={options.map((option) => ({ id: option.value, label: option.label }))}
+    />
   );
 }
 
@@ -123,7 +151,7 @@ export function MetricSelector<T extends string>({
             moveSelection(event.key === "ArrowDown" ? 1 : -1);
           }
         }}
-        className={`group inline-flex h-[28px] min-w-[92px] items-center gap-2 rounded-lg border px-2.5 text-[11px] font-bold tracking-wide outline-none transition-all ${open ? "border-indigo-400/45 bg-indigo-400/[0.09] text-white shadow-[0_0_0_3px_rgba(99,102,241,0.1)]" : "border-white/[0.08] bg-white/[0.035] text-white/70 hover:border-white/[0.15] hover:bg-white/[0.055] hover:text-white"} focus-visible:border-indigo-400/60 focus-visible:ring-2 focus-visible:ring-indigo-400/20`}
+        className={`group inline-flex h-[28px] min-w-[92px] items-center gap-2 rounded-lg border px-2.5 text-[11px] font-bold tracking-wide outline-none transition-all ${open ? "border-indigo-400/45 bg-indigo-400/[0.09] text-white shadow-[0_0_0_3px_rgba(99,102,241,0.1)]" : "border-white/[0.08] bg-white/[0.035] text-white/70 hover:border-white/[0.15] hover:bg-white/[0.055] hover:text-white"}`}
       >
         <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${selected?.swatchClassName ?? "bg-indigo-400"}`} aria-hidden="true" />
         <span className="min-w-0 flex-1 truncate text-left">{selected?.label}</span>
@@ -135,7 +163,8 @@ export function MetricSelector<T extends string>({
           id={listboxId}
           role="listbox"
           aria-label={ariaLabel}
-          className="absolute right-0 top-[calc(100%+6px)] z-50 min-w-[142px] overflow-hidden rounded-xl border border-white/[0.1] bg-[#0b1020]/95 p-1.5 shadow-[0_16px_44px_rgba(0,0,0,0.5)] backdrop-blur-xl"
+          className="absolute right-0 top-[calc(100%+6px)] z-50 min-w-[142px] overflow-hidden rounded-xl border border-white/[0.1] p-1.5 shadow-[0_16px_44px_rgba(0,0,0,0.5)] backdrop-blur-xl"
+          style={{ background: SURFACE_MODAL }}
         >
           {options.map((option) => {
             const isSelected = option.value === value;
@@ -164,11 +193,16 @@ export function MetricSelector<T extends string>({
   );
 }
 
+/**
+ * The one KPI tile: icon, big number, label. With `onClick` the whole tile is a
+ * button that opens the list behind the number; without it, a plain card.
+ * Emerald is for money only, violet for Tags only.
+ */
 export function KpiTile({
   label,
   value,
   icon: Icon,
-  accent,
+  accent = "blue",
   detail,
   onClick,
   loading = false,
@@ -176,9 +210,9 @@ export function KpiTile({
   label: string;
   value: ReactNode;
   icon: LucideIcon;
-  accent: "blue" | "emerald" | "violet" | "amber";
+  accent?: "blue" | "emerald" | "violet" | "amber";
   detail?: ReactNode;
-  onClick: () => void;
+  onClick?: () => void;
   loading?: boolean;
 }) {
   const tones = {
@@ -188,17 +222,17 @@ export function KpiTile({
     amber: "bg-amber-500/[0.12] text-amber-300 ring-amber-400/[0.15]",
   } as const;
 
+  const Root = onClick ? "button" : "div";
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="group relative min-w-0 rounded-2xl border border-white/[0.07] bg-white/[0.03] p-3 text-left transition-colors hover:border-white/[0.13] hover:bg-white/[0.045] focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-400 lg:p-4"
+    <Root
+      {...(onClick ? { type: "button" as const, onClick } : {})}
+      className={`group relative min-w-0 rounded-2xl ${GLASS_SUBTLE_CLASS} p-3 text-left lg:p-4 ${onClick ? "transition-colors hover:border-white/[0.13] hover:bg-white/[0.045]" : ""}`}
     >
       <div className="flex items-start justify-between gap-2">
         <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] ring-1 ${tones[accent]} lg:h-9 lg:w-9`}>
           <Icon className="h-4 w-4" aria-hidden="true" />
         </span>
-        <ChevronRight className="mt-1 hidden h-3.5 w-3.5 text-white/15 transition group-hover:translate-x-0.5 group-hover:text-white/45 lg:block" aria-hidden="true" />
+        {onClick ? <ChevronRight className="mt-1 hidden h-3.5 w-3.5 text-white/15 transition group-hover:translate-x-0.5 group-hover:text-white/45 lg:block" aria-hidden="true" /> : null}
       </div>
       {loading ? (
         <div className="mt-3 h-7 w-16 animate-pulse rounded-md bg-white/10" />
@@ -207,7 +241,7 @@ export function KpiTile({
       )}
       <div className="mt-1.5 truncate text-[9px] font-bold uppercase tracking-[0.12em] text-white/35 lg:text-[10px]">{label}</div>
       {detail ? <div className="mt-1 hidden truncate text-[11px] text-white/30 lg:block">{detail}</div> : null}
-    </button>
+    </Root>
   );
 }
 
@@ -252,7 +286,8 @@ export function AttentionItem({
   title: string;
   detail?: string;
   trailing?: ReactNode;
-  tone?: "neutral" | "blue" | "violet" | "amber" | "emerald";
+  /** Amber needs a step; red is late (overdue). */
+  tone?: "neutral" | "blue" | "violet" | "amber" | "emerald" | "red";
   onClick: () => void;
 }) {
   const tones = {
@@ -261,10 +296,11 @@ export function AttentionItem({
     violet: "bg-violet-500/[0.12] text-violet-300",
     amber: "bg-amber-500/[0.12] text-amber-300",
     emerald: "bg-emerald-500/[0.12] text-emerald-300",
+    red: "bg-red-500/[0.12] text-red-300",
   } as const;
 
   return (
-    <button type="button" onClick={onClick} className="group flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-white/[0.025] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-indigo-400">
+    <button type="button" onClick={onClick} className="group flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-white/[0.025] focus-visible:!-outline-offset-2">
       <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] ${tones[tone]}`}>
         <Icon className="h-4 w-4" aria-hidden="true" />
       </span>

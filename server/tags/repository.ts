@@ -2,6 +2,7 @@ import { and, eq, inArray, isNull, sql, type SQL } from "drizzle-orm";
 import { db } from "../db.js";
 import {
   salesLeads,
+  salesProducts,
   salesReps,
   salesSaleTags,
   tagAcquisitionLines,
@@ -10,6 +11,7 @@ import {
   tagBatches,
   tagDestinationHistory,
   tagEvents,
+  tagKitItems,
   tagKits,
   tagStockMovements,
   tags,
@@ -23,26 +25,33 @@ import type {
   LeadTagSummary,
   TagAnalytics,
   TagBatchItem,
+  TagBatchOption,
   TagDetail,
   TagHistoryEntry,
   TagKitItem,
+  TagKitPiece,
   TagListItem,
   TagOverview,
   TagDashboard,
-  TagPieceDashboard,
-  TagRepSummary,
 } from "#shared/tagsApi.js";
 import { JOURNEY_PRODUCT_LABELS, tagActionEntry, type JourneySource } from "#shared/tagJourney.js";
 import { resolveTagFace } from "#shared/tagFace.js";
+import type { TagStockMetric } from "#shared/tagMetrics.js";
+import { kitCode } from "#shared/tagKits.js";
+import { tagSystemReason } from "#shared/tagReasons.js";
+import { checkCodes, handOutBlocker, takeBackBlocker, type DistributionCheck, type DistributionPiece } from "#shared/tagDistribution.js";
+import type { TagPieceQueue } from "#shared/tagQueues.js";
 import { parseTagIntakeScan } from "#shared/tagIntake.js";
 import { generateUniqueCodes } from "./codes.js";
-import { TagError, pgError } from "./errors.js";
+import { TagError, pgError, tagErrorBody } from "./errors.js";
 import { journeyContext, recordJourney } from "./journey.js";
+import { countMetricSql, stockMetricSql } from "./metrics.js";
+import { countQueueSql, pieceQueueSql } from "./queues.js";
 import type { PublicTag } from "./publicHandler.js";
 
 // TagError and pgError live in ./errors.ts (journey.ts needs them too, and
 // the repository imports journey.ts); re-exported so existing imports work.
-export { TagError, pgError };
+export { TagError, pgError, tagErrorBody };
 
 export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -92,8 +101,14 @@ export interface TagListFilters {
   /** Only this reseller's pieces (always set for a reseller). */
   repId?: number;
   kitId?: string;
+  /** Only this organization's pieces (tags.organization_id). */
+  organizationId?: number;
   /** Pieces in house stock (no reseller). */
   house?: boolean;
+  /** Only pieces counted by this stock number (shared/tagMetrics.ts), e.g. `house` for the company stock card. */
+  metric?: TagStockMetric;
+  /** Only pieces in this Overview "Needs action" queue (shared/tagQueues.ts). */
+  queue?: TagPieceQueue;
   method?: "qr" | "nfc";
   search?: string;
   limit?: number;
@@ -124,6 +139,7 @@ type TagRow = {
   rep_id: number | null;
   rep_name: string | null;
   kit_id: string | null;
+  kit_number: number | null;
   batch_id: string | null;
   batch_code: string | null;
   qr: number;
@@ -164,6 +180,7 @@ function toListItem(r: TagRow): TagListItem {
     repId: r.rep_id,
     repName: r.rep_name,
     kitId: r.kit_id,
+    kitCode: r.kit_number == null ? null : kitCode(Number(r.kit_number)),
     batchId: r.batch_id,
     batchCode: r.batch_code,
     qrInteractions: Number(r.qr ?? 0),
@@ -183,15 +200,17 @@ function tagListQuery(where: SQL, limit: number, offset = 0): SQL {
            t.face, b.face AS batch_face, t.status, t.stock_status, t.ownership_type, t.custodian_rep_id,
            t.internal_use_note, t.nfc_provisioning_status, t.label,
            t.destination_type, t.destination_url, t.lead_id, l.name AS lead_name, t.rep_id, r.display_name AS rep_name,
-           t.kit_id, t.batch_id, b.batch_code, t.activated_at, t.sold_at, t.created_at,
+           t.kit_id, k.kit_number, t.batch_id, b.batch_code, t.activated_at, t.sold_at, t.created_at,
            sold.sale_id, sold.net_total_cents AS sold_price_cents, acquired.acquisition_cost_cents,
            COALESCE(s.qr, 0)::int AS qr, COALESCE(s.nfc, 0)::int AS nfc, s.last_interaction_at
     FROM tags t
     LEFT JOIN sales_leads l ON l.id = t.lead_id
     LEFT JOIN sales_reps r ON r.id = t.rep_id
     LEFT JOIN tag_batches b ON b.id = t.batch_id
+    LEFT JOIN tag_kits k ON k.id = t.kit_id
     LEFT JOIN LATERAL (
-      SELECT st.sale_id, si.net_total_cents
+      -- A Visits line can carry several pieces: each one is its share.
+      SELECT st.sale_id, round(si.net_total_cents::numeric / GREATEST(si.quantity, 1))::int AS net_total_cents
       FROM sales_sale_tags st
       JOIN sales_sale_items si ON si.id = st.sale_item_id
       WHERE st.tag_id = t.id AND st.status = 'active'
@@ -227,7 +246,10 @@ export async function listTags(filters: TagListFilters): Promise<TagListItem[]> 
   if (filters.batchId) conds.push(sql`t.batch_id = ${filters.batchId}`);
   if (filters.repId !== undefined) conds.push(sql`t.rep_id = ${filters.repId}`);
   if (filters.kitId) conds.push(sql`t.kit_id = ${filters.kitId}`);
+  if (filters.organizationId !== undefined) conds.push(sql`t.organization_id = ${filters.organizationId}`);
   if (filters.house) conds.push(sql`t.rep_id IS NULL`);
+  if (filters.metric) conds.push(stockMetricSql(filters.metric));
+  if (filters.queue) conds.push(pieceQueueSql(filters.queue));
   if (filters.method === "qr") conds.push(sql`COALESCE(s.qr, 0) > 0`);
   if (filters.method === "nfc") conds.push(sql`COALESCE(s.nfc, 0) > 0`);
   if (filters.search) {
@@ -311,7 +333,7 @@ export async function getTagDetail(id: string, baseUrl: string): Promise<TagDeta
 
 export async function lockTag(tx: Tx, id: string): Promise<Tag> {
   const [tag] = await tx.select().from(tags).where(eq(tags.id, id)).for("update");
-  if (!tag) throw new TagError("Tag not found", 404);
+  if (!tag) throw new TagError("Tag not found", 404, "tag_not_found");
   return tag;
 }
 
@@ -334,6 +356,12 @@ export async function writeHistory(
   });
 }
 
+/** A piece can be sold only as a physical catalog product (server/tags/sales.ts maps each piece to one). */
+async function assertPhysicalProduct(executor: typeof db | Tx, productId: number) {
+  const [product] = await executor.select({ kind: salesProducts.kind }).from(salesProducts).where(eq(salesProducts.id, productId));
+  if (!product || product.kind !== "physical") throw new TagError("Choose a physical product from the sales catalog", 400);
+}
+
 export interface TagUpdate {
   label?: string | null;
   productType?: string;
@@ -354,16 +382,23 @@ export async function updateTag(id: string, patch: TagUpdate, userId: string | n
   const updated = await db.transaction(async (tx) => {
     const tag = await lockTag(tx, id);
     before = tag;
-    if (tag.status === "retired") throw new TagError("A retired tag cannot be edited");
+    if (tag.status === "retired") throw new TagError("A retired tag cannot be edited", 409, "tag_retired_locked");
     const next = {
       destinationUrl: patch.destinationUrl !== undefined ? patch.destinationUrl : tag.destinationUrl,
       destinationType: patch.destinationType !== undefined ? patch.destinationType : tag.destinationType,
     };
     if (tag.status === "active" && (!next.destinationUrl || !next.destinationType)) {
-      throw new TagError("An active tag must keep a destination; disable it first");
+      throw new TagError("An active tag must keep a destination; disable it first", 400, "tag_active_needs_destination");
     }
     if (patch.productType && patch.productType !== tag.productType && tag.status !== "inventory") {
       throw new TagError("Product type can only change while the tag is in inventory");
+    }
+    if (patch.salesProductId !== undefined && patch.salesProductId !== tag.salesProductId) {
+      if (patch.salesProductId !== null) await assertPhysicalProduct(tx, patch.salesProductId);
+      const [activeSale] = await tx.select({ id: salesSaleTags.id }).from(salesSaleTags)
+        .where(and(eq(salesSaleTags.tagId, tag.id), eq(salesSaleTags.status, "active")))
+        .limit(1);
+      if (activeSale) throw new TagError("A sold piece keeps the catalog product it was sold as", 409, "tag_sold_keeps_product");
     }
     await writeHistory(tx, tag, next, userId, patch.reason ?? null);
     const [updated] = await tx
@@ -406,7 +441,7 @@ export async function updateTag(id: string, patch: TagUpdate, userId: string | n
 export async function transitionTag(
   id: string,
   action: Exclude<TagAction, "assign">,
-  actor: Pick<TagActor, "userId" | "repId">,
+  actor: Pick<TagActor, "userId" | "repId" | "inManagement">,
   reason?: string | null,
   source: JourneySource = "admin",
 ): Promise<Tag> {
@@ -415,11 +450,11 @@ export async function transitionTag(
     const tag = await lockTag(tx, id);
     fromStatus = tag.status;
     const plan = planTransition(tag, action);
-    if (!plan.ok) throw new TagError(plan.error, 409);
+    if (!plan.ok) throw new TagError(plan.error, 409, plan.code);
     const now = new Date();
     const set: Partial<Tag> = { status: plan.status, updatedAt: now };
     if (action === "activate") {
-      Object.assign(set, { activatedAt: now, activatedByRepId: actor.repId, disabledAt: null, ...activationCredit(tag, actor.repId) });
+      Object.assign(set, { activatedAt: now, activatedByRepId: actor.repId, disabledAt: null, ...activationCredit(tag, actor) });
     }
     if (action === "disable") set.disabledAt = now;
     if (action === "retire") set.disabledAt = tag.disabledAt ?? now;
@@ -427,14 +462,14 @@ export async function transitionTag(
       const [activeSale] = await tx.select({ id: salesSaleTags.id }).from(salesSaleTags)
         .where(and(eq(salesSaleTags.tagId, tag.id), eq(salesSaleTags.status, "active")))
         .limit(1);
-      if (activeSale) throw new TagError("Cancel the financial sale before unassigning this piece", 409);
+      if (activeSale) throw new TagError("Cancel the financial sale before clearing this piece's customer", 409, "tag_sale_blocks_clear");
       // Back to unconfigured stock in the same hands. The previous customer's
       // destination must not follow the piece.
       Object.assign(set, {
         leadId: null, destinationUrl: null, destinationType: null, utmEnabled: false, utmCampaign: null,
         assignedAt: null, activatedAt: null, disabledAt: null, soldAt: null, activatedByRepId: null,
       });
-      await writeHistory(tx, tag, { destinationUrl: null, destinationType: null }, actor.userId, reason ?? "Unassigned");
+      await writeHistory(tx, tag, { destinationUrl: null, destinationType: null }, actor.userId, reason ?? tagSystemReason("unlinked"));
     }
     const [updated] = await tx.update(tags).set(set).where(eq(tags.id, id)).returning();
     console.log(`[tags] ${action} ${tag.publicCode}: ${tag.status} → ${plan.status} (user ${actor.userId})`);
@@ -472,21 +507,21 @@ export async function assignTag(
     const tag = await lockTag(tx, id);
     fromStatus = tag.status;
     const plan = planTransition(tag, "assign");
-    if (!plan.ok) throw new TagError(plan.error, 409);
+    if (!plan.ok) throw new TagError(plan.error, 409, plan.code);
     let leadId: number;
     if (target.leadId) {
       const [lead] = await tx.select({ id: salesLeads.id, name: salesLeads.name }).from(salesLeads).where(eq(salesLeads.id, target.leadId));
-      if (!lead) throw new TagError("Customer not found", 404);
+      if (!lead) throw new TagError("Customer not found", 404, "lead_not_found");
       leadId = lead.id;
       leadLabel = lead.name;
     } else if (target.leadName?.trim()) {
       // Checked before creating anything, so a refused move leaves no orphan lead.
-      if (tag.leadId && tag.status === "active") throw new TagError("Disable the tag before moving it to another customer", 409);
+      if (tag.leadId && tag.status === "active") throw new TagError("Disable the tag before moving it to another customer", 409, "tag_pause_before_move");
       leadId = await createLeadForSale(tx, target.leadName.trim(), tag.repId ?? actorRepId);
       leadLabel = target.leadName.trim();
       newLead = true;
     } else {
-      throw new TagError("Choose the customer", 400);
+      throw new TagError("Choose the customer", 400, "tag_customer_required");
     }
     const changingOwner = tag.leadId !== leadId;
     const set: Partial<Tag> = {
@@ -497,9 +532,9 @@ export async function assignTag(
     };
     // A new owner never inherits the old owner's destination.
     if (changingOwner && tag.leadId && (tag.destinationUrl || tag.destinationType)) {
-      if (tag.status === "active") throw new TagError("Disable the tag before moving it to another customer", 409);
+      if (tag.status === "active") throw new TagError("Disable the tag before moving it to another customer", 409, "tag_pause_before_move");
       Object.assign(set, { destinationUrl: null, destinationType: null, utmEnabled: false, utmCampaign: null });
-      await writeHistory(tx, tag, { destinationUrl: null, destinationType: null }, userId, "Re-assigned to another customer");
+      await writeHistory(tx, tag, { destinationUrl: null, destinationType: null }, userId, tagSystemReason("reassigned"));
     }
     const [updated] = await tx.update(tags).set(set).where(eq(tags.id, id)).returning();
     console.log(`[tags] assign ${tag.publicCode} → lead ${leadId} (user ${userId ?? "?"})`);
@@ -519,17 +554,18 @@ export async function assignTag(
   return updated;
 }
 
-/** Admin: one standalone piece (not part of a manufacturing batch), in house stock. */
+/** Admin: one standalone piece (not part of a manufacturing batch), in house stock. It needs a catalog product to be sellable. */
 export async function createSingleTag(
-  input: { productType: string; salesProductId?: number; face?: string | null; label?: string | null },
+  input: { productType: string; salesProductId: number; face?: string | null; label?: string | null },
   userId: string | null = null,
   source: JourneySource = "admin",
 ): Promise<Tag> {
+  await assertPhysicalProduct(db, input.salesProductId);
   const [code] = await generateUniqueCodes(1, findExistingCodes);
   const organizationId = await companyOrganizationId();
   const [tag] = await db
     .insert(tags)
-    .values({ organizationId, publicCode: code, productType: input.productType, salesProductId: input.salesProductId ?? null, face: input.face ?? null, label: input.label ?? null, status: "inventory" })
+    .values({ organizationId, publicCode: code, productType: input.productType, salesProductId: input.salesProductId, face: input.face ?? null, label: input.label ?? null, status: "inventory" })
     .returning();
   console.log(`[tags] created standalone tag ${code}`);
   await recordJourney({
@@ -550,45 +586,92 @@ async function findExistingCodes(codes: string[]): Promise<Set<string>> {
   return new Set(found.map((r) => r.code));
 }
 
-/** Admin: move a piece (and, if sold, its sale credit) to another reseller or back to the house. */
+/**
+ * Admin "Move": hand one piece to another rep, or take it back to house stock, through the same stock rules as kits
+ * and returns. Back to the house is a `return` movement, as returnToHouse writes it (company stock, no custodian).
+ * To a rep it is a `transfer`: the new rep becomes the custodian of company stock (no cost is captured here, so
+ * nothing is bought). Either way an open acquisition of the previous rep is closed and the piece leaves its kit.
+ * Sold pieces stay with their seller, and a piece set up for a customer must have the customer cleared first, as
+ * for a return.
+ */
 export async function setTagRep(id: string, repId: number | null, userId: string | null, source: JourneySource = "admin"): Promise<Tag> {
   let previous: { repId: number | null; name: string } = { repId: null, name: "house" };
   let next = "house";
   const organizationId = repId === null ? await companyOrganizationId() : await organizationIdForRep(repId);
   const updated = await db.transaction(async (tx) => {
     const tag = await lockTag(tx, id);
+    if (tag.repId === repId) return null;
     const names = async (rid: number | null) =>
       rid === null ? "house" : (await tx.select({ n: salesReps.displayName }).from(salesReps).where(eq(salesReps.id, rid)))[0]?.n ?? `rep ${rid}`;
+    const [activeSale] = await tx.select({ id: salesSaleTags.id }).from(salesSaleTags)
+      .where(and(eq(salesSaleTags.tagId, tag.id), eq(salesSaleTags.status, "active")))
+      .limit(1);
+    if (activeSale) throw new TagError("A sold piece stays with its seller; cancel the sale before moving it", 409, "tag_sold_stays");
+    if (tag.stockStatus !== "available") throw new TagError(`A piece in ${tag.stockStatus} stock cannot be moved`, 409, "tag_stock_cannot_move");
+    if (tag.status !== "inventory") throw new TagError("Clear the customer before moving this piece", 409, "tag_clear_customer_first");
     previous = { repId: tag.repId, name: await names(tag.repId) };
     next = await names(repId);
+    const now = new Date();
+    await tx
+      .update(tagAcquisitionUnits)
+      .set({ returnedAt: now })
+      .where(and(eq(tagAcquisitionUnits.tagId, tag.id), isNull(tagAcquisitionUnits.returnedAt)));
     const [updated] = await tx
       .update(tags)
-      .set({ organizationId, repId, kitId: repId === tag.repId ? tag.kitId : null, updatedAt: new Date() })
+      .set({
+        organizationId,
+        repId,
+        kitId: null,
+        custodianRepId: repId,
+        ownershipType: "company",
+        stockUpdatedAt: now,
+        updatedAt: now,
+      })
       .where(eq(tags.id, id))
       .returning();
+    if (tag.kitId) await markKitItemsLeft(tx, [{ kitId: tag.kitId, tagId: tag.id }], repId === null ? "returned" : "moved", now);
+    await tx.insert(tagStockMovements).values({
+      tagId: tag.id,
+      movementType: repId === null ? "return" : "transfer",
+      fromStockStatus: tag.stockStatus,
+      toStockStatus: updated.stockStatus,
+      fromOwnershipType: tag.ownershipType,
+      toOwnershipType: updated.ownershipType,
+      fromCustodianRepId: tag.custodianRepId,
+      toCustodianRepId: repId,
+      referenceType: tag.kitId ? "kit" : null,
+      referenceId: tag.kitId,
+      actorUserId: userId,
+    });
     console.log(`[tags] ${tag.publicCode} reseller ${tag.repId ?? "house"} → ${repId ?? "house"} (user ${userId ?? "?"})`);
     return updated;
   });
-  if (previous.repId !== repId) {
-    await recordJourney({
-      kind: "execution",
-      action: "reseller_changed",
-      title: `Tag ${updated.publicCode} moved from ${previous.name} to ${next}`,
-      tagId: id,
-      repId,
-      beforeValue: previous.name,
-      afterValue: next,
-    }, journeyContext(userId, source));
-  }
+  if (!updated) return (await getTagRow(id))!;
+  await recordJourney({
+    kind: "execution",
+    action: "reseller_changed",
+    title: `Tag ${updated.publicCode} moved from ${previous.name} to ${next}`,
+    tagId: id,
+    repId,
+    beforeValue: previous.name,
+    afterValue: next,
+  }, journeyContext(userId, source));
   return updated;
 }
 
 // ─── Leads (the businesses pieces are sold to) ────────────────────────────────
 
-/** True when the actor may sell pieces to this lead (see canUseLead). */
+/**
+ * True when the actor may sell pieces to this lead (see canUseLead), or when the
+ * company already holds one of the actor's pieces: a lead a manager created and
+ * linked a reseller's piece to is that reseller's customer too.
+ */
 export async function leadUsableBy(actor: TagActor, leadId: number, executor: typeof db | Tx = db): Promise<boolean> {
   const [lead] = await executor.select({ organizationId: salesLeads.organizationId, ownerRepId: salesLeads.ownerRepId }).from(salesLeads).where(eq(salesLeads.id, leadId));
-  return !!lead && canUseLead(actor, lead);
+  if (!lead) return false;
+  if (canUseLead(actor, lead)) return true;
+  const [held] = await executor.select({ id: tags.id }).from(tags).where(and(eq(tags.leadId, leadId), eq(tags.repId, actor.repId))).limit(1);
+  return !!held;
 }
 
 /** A business met while configuring a piece. It becomes a customer only after a financial sale. */
@@ -610,15 +693,35 @@ export async function rememberLeadPlace(tx: Tx, leadId: number, placeId: string 
     .where(and(eq(salesLeads.id, leadId), isNull(salesLeads.googlePlaceId)));
 }
 
-/** A lead that bought a piece is a customer. */
-export async function markLeadCustomer(tx: Tx, leadId: number) {
-  await tx
-    .update(salesLeads)
-    .set({ status: "customer", updatedAt: new Date() })
-    .where(and(eq(salesLeads.id, leadId), sql`${salesLeads.status} <> 'customer'`));
+// ─── Kits (pieces handed to a reseller) ───────────────────────────────────────
+
+/** The kit's packing list, written once at the hand-over (tag_kit_items). */
+export async function recordKitItems(
+  tx: Tx,
+  kitId: string,
+  pieces: ReadonlyArray<{ id: string; publicCode: string; batchId: string | null }>,
+  at: Date,
+): Promise<void> {
+  if (!pieces.length) return;
+  await tx.insert(tagKitItems)
+    .values(pieces.map((p) => ({ kitId, tagId: p.id, publicCode: p.publicCode, batchId: p.batchId, handedOutAt: at })))
+    .onConflictDoNothing();
 }
 
-// ─── Kits (pieces handed to a reseller) ───────────────────────────────────────
+/** Pieces leaving the kit they were handed out in: back to house stock, or to another reseller. */
+export async function markKitItemsLeft(
+  tx: Tx,
+  pieces: ReadonlyArray<{ kitId: string | null; tagId: string }>,
+  reason: "returned" | "moved",
+  at: Date,
+): Promise<void> {
+  for (const p of pieces) {
+    if (!p.kitId) continue;
+    await tx.update(tagKitItems)
+      .set({ leftAt: at, leftReason: reason })
+      .where(and(eq(tagKitItems.kitId, p.kitId), eq(tagKitItems.tagId, p.tagId), isNull(tagKitItems.leftAt)));
+  }
+}
 
 export interface KitInput {
   repId: number;
@@ -634,6 +737,12 @@ export interface KitInput {
   note?: string | null;
   /** Partner's cost per physical piece. Zero is valid for house/owner stock. */
   unitCostCents?: number;
+  /**
+   * Who owns the pieces once handed over. Without a cost they always stay the company's (consignment: the rep is
+   * only the custodian). With a cost they become the rep's (a wholesale purchase) unless the caller says `company`:
+   * a rep on the zero-cost rule holds company stock even when a reference cost is recorded.
+   */
+  ownershipType?: "company" | "rep";
 }
 
 /**
@@ -662,10 +771,18 @@ export async function deliverKit(input: KitInput, userId: string | null, source:
         .for("update");
       const found = new Set(picked.map((t) => t.publicCode));
       const missing = codes.filter((c) => !found.has(c));
-      if (missing.length) throw new TagError(`Unknown codes: ${missing.join(", ")}`, 404);
+      if (missing.length) throw new TagError(`Unknown codes: ${missing.join(", ")}`, 404, "tag_codes_unknown", { codes: missing.join(", ") });
       const unavailable = picked.filter((t) => t.status !== "inventory" || t.stockStatus !== "available" || t.repId !== null ||
         (input.sourceOrganizationId !== undefined && t.organizationId !== input.sourceOrganizationId)).map((t) => t.publicCode);
-      if (unavailable.length) throw new TagError(`Not in house stock: ${unavailable.join(", ")}`, 409);
+      if (unavailable.length) throw new TagError(`Not in house stock: ${unavailable.join(", ")}`, 409, "tag_not_house_stock", { codes: unavailable.join(", ") });
+      // Same rule as the dry run (shared/tagDistribution.ts handOutBlocker): a sold piece never goes into a kit.
+      const sold = picked.length ? await tx.select({ tagId: salesSaleTags.tagId }).from(salesSaleTags)
+        .where(and(inArray(salesSaleTags.tagId, picked.map((t) => t.id)), eq(salesSaleTags.status, "active"))) : [];
+      if (sold.length) {
+        const soldIds = new Set(sold.map((s) => s.tagId));
+        const soldCodes = picked.filter((t) => soldIds.has(t.id)).map((t) => t.publicCode);
+        throw new TagError(`Not in house stock: ${soldCodes.join(", ")}`, 409, "tag_not_house_stock", { codes: soldCodes.join(", ") });
+      }
     } else if (input.batchId && input.quantity) {
       picked = await tx
         .select({
@@ -679,16 +796,17 @@ export async function deliverKit(input: KitInput, userId: string | null, source:
           eq(tags.status, "inventory"),
           eq(tags.stockStatus, "available"),
           isNull(tags.repId),
+          sql`NOT EXISTS (SELECT 1 FROM sales_sale_tags st WHERE st.tag_id = ${tags.id} AND st.status = 'active')`,
           ...(input.sourceOrganizationId !== undefined ? [eq(tags.organizationId, input.sourceOrganizationId)] : []),
         ))
         .orderBy(tags.serialNumber, tags.publicCode)
         .limit(input.quantity)
         .for("update");
       if (picked.length < input.quantity) {
-        throw new TagError(`Only ${picked.length} unsold pieces left in house stock for that batch`, 409);
+        throw new TagError(`Only ${picked.length} unsold pieces left in house stock for that batch`, 409, "kit_batch_short", { count: picked.length });
       }
     } else {
-      throw new TagError("Choose the pieces: codes, or a batch and a quantity");
+      throw new TagError("Choose the pieces: codes, or a batch and a quantity", 400, "kit_pieces_required");
     }
 
     const [kit] = await tx
@@ -696,7 +814,7 @@ export async function deliverKit(input: KitInput, userId: string | null, source:
       .values({ organizationId, repId: input.repId, note: input.note ?? null, createdByUserId: userId })
       .returning({ id: tagKits.id });
     const now = new Date();
-    const ownershipType = input.unitCostCents === undefined ? "company" : "rep";
+    const ownershipType = input.unitCostCents === undefined ? "company" : input.ownershipType ?? "rep";
     await tx
       .update(tags)
       .set({
@@ -709,6 +827,7 @@ export async function deliverKit(input: KitInput, userId: string | null, source:
         updatedAt: now,
       })
       .where(inArray(tags.id, picked.map((t) => t.id)));
+    await recordKitItems(tx, kit.id, picked, now);
     await tx.insert(tagStockMovements).values(picked.map((tag) => ({
       tagId: tag.id,
       movementType: "transfer",
@@ -781,20 +900,24 @@ export async function deliverKit(input: KitInput, userId: string | null, source:
   return kit;
 }
 
-export async function listKits(filter: { repId?: number; kitId?: string } = {}): Promise<TagKitItem[]> {
+export async function listKits(filter: { repId?: number; kitId?: string; organizationId?: number } = {}): Promise<TagKitItem[]> {
   const conds: SQL[] = [sql`true`];
   if (filter.repId !== undefined) conds.push(sql`k.rep_id = ${filter.repId}`);
+  if (filter.organizationId !== undefined) conds.push(sql`k.organization_id = ${filter.organizationId}`);
   if (filter.kitId) conds.push(sql`k.id = ${filter.kitId}`);
   const list = await rows<{
-    id: string; rep_id: number; rep_name: string | null; note: string | null; created_at: Date; piece_count: number; unsold_count: number;
-    acquisition_source: string | null; unit_cost_cents: number | null;
+    id: string; kit_number: number; rep_id: number; rep_name: string | null; note: string | null; created_at: Date; piece_count: number;
+    unsold_count: number; returnable_count: number; sold_count: number; acquisition_source: string | null; unit_cost_cents: number | null;
+    handed_out: number; returned: number; moved: number; ownership_type: string | null;
   }>(sql`
-    SELECT k.id, k.rep_id, r.display_name AS rep_name, k.note, k.created_at,
+    SELECT k.id, k.kit_number, k.rep_id, r.display_name AS rep_name, k.note, k.created_at,
       count(t.id)::int AS piece_count,
-      count(t.id) FILTER (WHERE t.rep_id = k.rep_id AND NOT EXISTS (
-        SELECT 1 FROM sales_sale_tags st WHERE st.tag_id = t.id AND st.status = 'active'
-      ))::int AS unsold_count,
-      acq.source AS acquisition_source, acq.unit_cost_cents
+      count(t.id) FILTER (WHERE t.rep_id = k.rep_id AND ${stockMetricSql("withResellers")})::int AS unsold_count,
+      count(t.id) FILTER (WHERE t.rep_id = k.rep_id AND ${stockMetricSql("returnable")})::int AS returnable_count,
+      ${countMetricSql("sold")} AS sold_count,
+      acq.source AS acquisition_source, acq.unit_cost_cents,
+      items.handed_out, items.returned, items.moved,
+      COALESCE(own.to_ownership_type, CASE WHEN acq.source = 'stuscle' THEN 'rep' END) AS ownership_type
     FROM tag_kits k
     LEFT JOIN sales_reps r ON r.id = k.rep_id
     LEFT JOIN tags t ON t.kit_id = k.id
@@ -807,21 +930,134 @@ export async function listKits(filter: { repId?: number; kitId?: string } = {}):
       ORDER BY a.created_at DESC
       LIMIT 1
     ) acq ON true
+    LEFT JOIN LATERAL (
+      SELECT count(*)::int AS handed_out,
+        count(*) FILTER (WHERE i.left_reason = 'returned')::int AS returned,
+        count(*) FILTER (WHERE i.left_at IS NOT NULL AND i.left_reason IS DISTINCT FROM 'returned')::int AS moved
+      FROM tag_kit_items i WHERE i.kit_id = k.id
+    ) items ON true
+    LEFT JOIN LATERAL (
+      SELECT m.to_ownership_type FROM tag_stock_movements m
+      WHERE m.reference_type = 'kit' AND m.reference_id = k.id::text AND m.movement_type = 'transfer' AND m.to_custodian_rep_id = k.rep_id
+      ORDER BY m.created_at LIMIT 1
+    ) own ON true
     WHERE ${sql.join(conds, sql` AND `)}
-    GROUP BY k.id, r.display_name, acq.source, acq.unit_cost_cents
+    GROUP BY k.id, r.display_name, acq.source, acq.unit_cost_cents, items.handed_out, items.returned, items.moved, own.to_ownership_type
     ORDER BY k.created_at DESC
   `);
-  return list.map((k) => ({
-    id: k.id,
-    repId: k.rep_id,
-    repName: k.rep_name,
-    note: k.note,
-    createdAt: iso(k.created_at)!,
-    pieceCount: Number(k.piece_count),
-    unsoldCount: Number(k.unsold_count),
-    acquisitionSource: k.acquisition_source,
-    unitCostCents: k.unit_cost_cents === null ? null : Number(k.unit_cost_cents),
+  return list.map((k) => {
+    const pieceCount = Number(k.piece_count);
+    const soldCount = Number(k.sold_count);
+    return {
+      id: k.id,
+      kitNumber: Number(k.kit_number),
+      kitCode: kitCode(Number(k.kit_number)),
+      repId: k.rep_id,
+      repName: k.rep_name,
+      note: k.note,
+      createdAt: iso(k.created_at)!,
+      ownershipType: k.ownership_type,
+      // A kit older than its packing list still counts the pieces it holds.
+      handedOutCount: Math.max(Number(k.handed_out ?? 0), pieceCount),
+      returnedCount: Number(k.returned ?? 0),
+      movedCount: Number(k.moved ?? 0),
+      stillWithCount: pieceCount - soldCount,
+      pieceCount,
+      unsoldCount: Number(k.unsold_count),
+      returnableCount: Number(k.returnable_count),
+      soldCount,
+      acquisitionSource: k.acquisition_source,
+      unitCostCents: k.unit_cost_cents === null ? null : Number(k.unit_cost_cents),
+    };
+  });
+}
+
+/** What a kit handed out (its packing list), each piece with where it is now. */
+export async function getKitItems(kitId: string): Promise<TagKitPiece[] | null> {
+  const [kit] = await db.select({ id: tagKits.id, repId: tagKits.repId }).from(tagKits).where(eq(tagKits.id, kitId)).limit(1);
+  if (!kit) return null;
+  const list = await rows<{
+    public_code: string; tag_id: string | null; serial_number: number | null; batch_code: string | null; product_type: string | null;
+    face: string | null; batch_face: string | null; handed_out_at: Date; left_at: Date | null; left_reason: string | null; sold: boolean;
+  }>(sql`
+    SELECT i.public_code, i.tag_id, t.serial_number, b.batch_code, t.product_type, t.face, b.face AS batch_face,
+           i.handed_out_at, i.left_at, i.left_reason,
+           EXISTS (SELECT 1 FROM sales_sale_tags st WHERE st.tag_id = t.id AND st.status = 'active') AS sold
+    FROM tag_kit_items i
+    LEFT JOIN tags t ON t.id = i.tag_id
+    LEFT JOIN tag_batches b ON b.id = COALESCE(t.batch_id, i.batch_id)
+    WHERE i.kit_id = ${kitId}
+    ORDER BY b.batch_code NULLS LAST, t.serial_number NULLS LAST, i.public_code
+  `);
+  return list.map((r) => ({
+    code: r.public_code,
+    tagId: r.tag_id,
+    serialNumber: r.serial_number,
+    batchCode: r.batch_code,
+    productType: r.product_type,
+    face: r.product_type ? faceOf({ face: r.face, batch_face: r.batch_face, product_type: r.product_type }) : null,
+    handedOutAt: iso(r.handed_out_at)!,
+    state: r.left_at ? (r.left_reason === "returned" ? "returned" : "moved") : r.sold ? "sold" : "in_kit",
+    leftAt: iso(r.left_at),
   }));
+}
+
+// ─── Distribution dry runs (Hand out, Take back) ──────────────────────────────
+
+type CheckRow = {
+  id: string; public_code: string; status: string; stock_status: string; rep_id: number | null; rep_name: string | null;
+  serial_number: number | null; batch_code: string | null; product_type: string; kit_number: number | null; sold: boolean;
+};
+
+async function piecesForCheck(where: SQL, limit?: number): Promise<CheckRow[]> {
+  return rows<CheckRow>(sql`
+    SELECT t.id, t.public_code, t.status, t.stock_status, t.rep_id, r.display_name AS rep_name, t.serial_number, b.batch_code,
+           t.product_type, k.kit_number,
+           EXISTS (SELECT 1 FROM sales_sale_tags st WHERE st.tag_id = t.id AND st.status = 'active') AS sold
+    FROM tags t
+    LEFT JOIN sales_reps r ON r.id = t.rep_id
+    LEFT JOIN tag_batches b ON b.id = t.batch_id
+    LEFT JOIN tag_kits k ON k.id = t.kit_id
+    WHERE ${where}
+    ORDER BY t.serial_number NULLS LAST, t.public_code
+    ${limit ? sql`LIMIT ${limit}` : sql``}
+  `);
+}
+
+const checkPiece = (r: CheckRow): DistributionPiece => ({ status: r.status, stockStatus: r.stock_status, repId: r.rep_id, sold: !!r.sold });
+const describeCheck = (_code: string, r: CheckRow | undefined) => ({
+  tagId: r?.id ?? null,
+  batchCode: r?.batch_code ?? null,
+  serialNumber: r?.serial_number ?? null,
+  productType: r?.product_type ?? null,
+  repId: r?.rep_id ?? null,
+  repName: r?.rep_name ?? null,
+  kitCode: r?.kit_number ? kitCode(Number(r.kit_number)) : null,
+});
+
+/**
+ * Hand out, dry run: per code, can it go into a kit now and why not. With a batch and a quantity instead, the next
+ * pieces "next N from batch" would take, in the same order deliverKit picks them. Nothing moves.
+ */
+export async function checkHandOut(input: { codes?: string[]; batchId?: string; quantity?: number }): Promise<DistributionCheck> {
+  if (input.batchId && input.quantity) {
+    const picked = await piecesForCheck(sql`t.batch_id = ${input.batchId} AND ${stockMetricSql("handOut")}`, input.quantity);
+    return checkCodes(picked.map((r) => r.public_code), new Map(picked.map((r) => [r.public_code, r])), (r) => handOutBlocker(checkPiece(r)), describeCheck);
+  }
+  const codes = input.codes ?? [];
+  const found = codes.length ? await piecesForCheck(sql`t.public_code IN ${sqlList(Array.from(new Set(codes)))}`) : [];
+  return checkCodes(codes, new Map(found.map((r) => [r.public_code, r])), (r) => handOutBlocker(checkPiece(r)), describeCheck);
+}
+
+/** Take back, dry run: per code, can it come back to house stock now and why not. Nothing moves. */
+export async function checkTakeBack(codes: string[]): Promise<DistributionCheck> {
+  const found = codes.length ? await piecesForCheck(sql`t.public_code IN ${sqlList(Array.from(new Set(codes)))}`) : [];
+  return checkCodes(codes, new Map(found.map((r) => [r.public_code, r])), (r) => takeBackBlocker(checkPiece(r)), describeCheck);
+}
+
+/** `(a, b, c)` for an IN list (never empty: callers check). */
+function sqlList(values: readonly string[]): SQL {
+  return sql`(${sql.join(values.map((v) => sql`${v}`), sql`, `)})`;
 }
 
 /** Admin: unsold pieces back from a reseller to house stock (kit returned, reseller left). */
@@ -850,16 +1086,16 @@ export async function returnToHouse(
       .for("update");
     const found = new Set(picked.map((t) => t.publicCode));
     const missing = codes.filter((c) => !found.has(c));
-    if (missing.length) throw new TagError(`Unknown codes: ${missing.join(", ")}`, 404);
+    if (missing.length) throw new TagError(`Unknown codes: ${missing.join(", ")}`, 404, "tag_codes_unknown", { codes: missing.join(", ") });
     const activeSales = picked.length ? await tx.select({ tagId: salesSaleTags.tagId }).from(salesSaleTags)
       .where(and(inArray(salesSaleTags.tagId, picked.map((tag) => tag.id)), eq(salesSaleTags.status, "active"))) : [];
     if (activeSales.length) {
       const soldIds = new Set(activeSales.map((sale) => sale.tagId));
       const soldCodes = picked.filter((tag) => soldIds.has(tag.id)).map((tag) => tag.publicCode);
-      throw new TagError(`Already sold, cannot return: ${soldCodes.join(", ")}`, 409);
+      throw new TagError(`Already sold, cannot return: ${soldCodes.join(", ")}`, 409, "return_already_sold", { codes: soldCodes.join(", ") });
     }
     const configured = picked.filter((t) => t.status !== "inventory" || t.stockStatus !== "available").map((t) => t.publicCode);
-    if (configured.length) throw new TagError(`Unassign these configured pieces before returning them: ${configured.join(", ")}`, 409);
+    if (configured.length) throw new TagError(`Clear the customer of these set-up pieces before returning them: ${configured.join(", ")}`, 409, "return_configured", { codes: configured.join(", ") });
     const alreadyInHouse = picked.filter((t) => t.repId === null).map((t) => t.publicCode);
     const moving = picked.filter((t) => t.repId !== null);
     if (moving.length) {
@@ -880,6 +1116,7 @@ export async function returnToHouse(
           updatedAt: now,
         })
         .where(inArray(tags.id, moving.map((t) => t.id)));
+      await markKitItemsLeft(tx, moving.map((t) => ({ kitId: t.kitId, tagId: t.id })), "returned", now);
       await tx.insert(tagStockMovements).values(moving.map((tag) => ({
         tagId: tag.id,
         movementType: "return",
@@ -990,7 +1227,7 @@ export async function createBatch(input: BatchInput, userId: string | null, sour
     }, journeyContext(userId, source));
     return batch;
   } catch (err) {
-    if (pgError(err).code === "23505") throw new TagError(`Batch code ${batchCode} already exists`, 409);
+    if (pgError(err).code === "23505") throw new TagError(`Batch code ${batchCode} already exists`, 409, "batch_code_taken", { code: batchCode });
     throw err;
   }
 }
@@ -1068,7 +1305,7 @@ async function createIssuedBatch(input: BatchInput, userId: string | null, sourc
       const pg = pgError(err);
       if (pg.code === "23505" && pg.constraint === "tags_public_code_unique" && attempt < 3 && !pinned) continue;
       if (pg.code === "23505" && pg.constraint === "tags_public_code_unique") throw new TagError("Public codes already exist", 409);
-      if (pg.code === "23505") throw new TagError(`Batch code ${batchCode} already exists`, 409);
+      if (pg.code === "23505") throw new TagError(`Batch code ${batchCode} already exists`, 409, "batch_code_taken", { code: batchCode });
       throw err;
     }
   }
@@ -1103,8 +1340,8 @@ export async function scanTagIntoBatch(
 
   const result = await db.transaction(async (tx) => {
     const [batch] = await tx.select().from(tagBatches).where(eq(tagBatches.id, batchId)).for("update");
-    if (!batch) throw new TagError("Batch not found", 404);
-    if (batch.status !== "open") throw new TagError("This batch is closed and no longer accepts scans", 409);
+    if (!batch) throw new TagError("Batch not found", 404, "batch_not_found");
+    if (batch.status !== "open") throw new TagError("This batch is closed and no longer accepts scans", 409, "batch_closed");
 
     if (idempotencyKey && userId) {
       const [sameRequest] = await tx.select().from(tags).where(and(
@@ -1113,7 +1350,7 @@ export async function scanTagIntoBatch(
       )).limit(1);
       if (sameRequest) {
         if (sameRequest.batchId !== batchId || sameRequest.publicCode !== parsed.publicCode) {
-          throw new TagError("This scan request was already used for another piece", 409);
+          throw new TagError("This scan request was already used for another piece", 409, "scan_reused");
         }
         return { tag: sameRequest, batchCount: batch.quantity, receivedCount: await receivedCountOf(tx, batchId), alreadyRegistered: true };
       }
@@ -1121,7 +1358,7 @@ export async function scanTagIntoBatch(
 
     const [existing] = await tx.select().from(tags).where(eq(tags.publicCode, parsed.publicCode)).for("update");
     if (existing) {
-      if (existing.batchId !== batchId) throw new TagError(`Piece ${parsed.publicCode} already belongs to another batch`, 409);
+      if (existing.batchId !== batchId) throw new TagError(`Piece ${parsed.publicCode} already belongs to another batch`, 409, "piece_other_batch", { code: parsed.publicCode });
       if (existing.stockStatus !== "pending") {
         return { tag: existing, batchCount: batch.quantity, receivedCount: await receivedCountOf(tx, batchId), alreadyRegistered: true };
       }
@@ -1137,6 +1374,12 @@ export async function scanTagIntoBatch(
         stockUpdatedAt: now,
         updatedAt: now,
       }).where(eq(tags.id, existing.id)).returning();
+      // A read undone at the station and made again keeps the station's key for this code; the first intake row
+      // (append-only) still holds it, so the second one goes without (the piece's own key guards the retry).
+      const [keyTaken] = idempotencyKey && userId
+        ? await tx.select({ id: tagStockMovements.id }).from(tagStockMovements)
+          .where(and(eq(tagStockMovements.actorUserId, userId), eq(tagStockMovements.idempotencyKey, idempotencyKey))).limit(1)
+        : [];
       await tx.insert(tagStockMovements).values({
         tagId: existing.id,
         movementType: "intake",
@@ -1147,13 +1390,13 @@ export async function scanTagIntoBatch(
         actorUserId: userId,
         referenceType: "batch",
         referenceId: batch.id,
-        idempotencyKey,
+        idempotencyKey: keyTaken ? null : idempotencyKey,
       });
       await tx.update(tagBatches).set({ updatedAt: now }).where(eq(tagBatches.id, batch.id));
       return { tag: received, batchCount: batch.quantity, receivedCount: await receivedCountOf(tx, batchId), alreadyRegistered: false };
     }
     if (batch.codeSource === "issued") {
-      throw new TagError(`Piece ${parsed.publicCode} was not issued to this batch`, 409);
+      throw new TagError(`Piece ${parsed.publicCode} was not issued to this batch`, 409, "piece_not_in_batch", { code: parsed.publicCode });
     }
 
     const now = new Date();
@@ -1206,6 +1449,88 @@ export async function scanTagIntoBatch(
   }
   return result;
 }
+
+/** How long after a read the intake station may still undo it. */
+export const INTAKE_UNDO_WINDOW_MS = 30 * 60_000;
+const INTAKE_UNDONE = "intake undone";
+
+/**
+ * Undo a read the intake station just made (the operator scanned the wrong piece, or too early). Only a piece
+ * received into this open batch within INTAKE_UNDO_WINDOW_MS and untouched since (still house stock, no customer,
+ * no chip write, no stock movement but its intake, no sale). The piece goes back to `pending` (not received) and
+ * stays registered to the batch: stock movements are append-only, so a received piece is never deleted; reading it
+ * again receives it again. Anything else is refused: use the piece's own actions instead.
+ */
+export async function undoBatchIntake(
+  batchId: string,
+  tagId: string,
+  userId: string | null,
+  source: JourneySource = "admin",
+  now: Date = new Date(),
+): Promise<{ publicCode: string; batchCount: number; receivedCount: number }> {
+  const result = await db.transaction(async (tx) => {
+    const [batch] = await tx.select().from(tagBatches).where(eq(tagBatches.id, batchId)).for("update");
+    if (!batch) throw new TagError("Batch not found", 404, "batch_not_found");
+    if (batch.status !== "open") throw new TagError("This batch is closed and no longer accepts scans", 409, "batch_closed");
+    const tag = await lockTag(tx, tagId);
+    if (tag.batchId !== batchId) throw new TagError(`Piece ${tag.publicCode} was not issued to this batch`, 409, "piece_not_in_batch", { code: tag.publicCode });
+    const receivedAt = tag.registeredAt ? new Date(tag.registeredAt).getTime() : null;
+    if (tag.stockStatus === "pending" || receivedAt === null) {
+      throw new TagError(`Piece ${tag.publicCode} has not been received`, 409, "intake_undo_blocked", { code: tag.publicCode });
+    }
+    if (now.getTime() - receivedAt > INTAKE_UNDO_WINDOW_MS) {
+      throw new TagError(`Piece ${tag.publicCode} was received too long ago to undo`, 409, "intake_undo_expired", { code: tag.publicCode });
+    }
+    // Only its intake (and earlier undos of it) may be on record.
+    const [otherMove] = await tx.select({ id: tagStockMovements.id }).from(tagStockMovements)
+      .where(and(
+        eq(tagStockMovements.tagId, tag.id),
+        sql`${tagStockMovements.movementType} NOT IN ('intake', 'issue', 'migration')`,
+        sql`NOT (${tagStockMovements.movementType} = 'adjustment' AND ${tagStockMovements.reason} = ${INTAKE_UNDONE})`,
+      ))
+      .limit(1);
+    const [sale] = await tx.select({ id: salesSaleTags.id }).from(salesSaleTags).where(eq(salesSaleTags.tagId, tag.id)).limit(1);
+    const touched = tag.stockStatus !== "available" || tag.status !== "inventory" || tag.repId !== null || tag.kitId !== null ||
+      tag.leadId !== null || tag.destinationUrl !== null || tag.nfcProvisioningStatus !== "not_programmed" || !!otherMove || !!sale;
+    if (touched) throw new TagError(`Piece ${tag.publicCode} changed after it was received`, 409, "intake_undo_blocked", { code: tag.publicCode });
+
+    await tx.update(tags).set({
+      stockStatus: "pending",
+      registeredAt: null,
+      registeredByUserId: null,
+      scannedPayload: null,
+      intakeIdempotencyKey: null,
+      stockUpdatedAt: now,
+      updatedAt: now,
+    }).where(eq(tags.id, tag.id));
+    await tx.insert(tagStockMovements).values({
+      tagId: tag.id,
+      movementType: "adjustment",
+      fromStockStatus: "available",
+      toStockStatus: "pending",
+      fromOwnershipType: tag.ownershipType,
+      toOwnershipType: tag.ownershipType,
+      actorUserId: userId,
+      referenceType: "batch",
+      referenceId: batch.id,
+      reason: INTAKE_UNDONE,
+    });
+    await tx.update(tagBatches).set({ updatedAt: now }).where(eq(tagBatches.id, batch.id));
+    return { publicCode: tag.publicCode, batchCount: batch.quantity, receivedCount: await receivedCountOf(tx, batchId) };
+  });
+  await recordJourney({
+    kind: "execution",
+    action: "piece_intake_undone",
+    title: `Read of piece ${result.publicCode} undone (${result.receivedCount}/${result.batchCount})`,
+    batchId,
+    tagId,
+    beforeValue: "available",
+    afterValue: "pending",
+    metadata: { code: result.publicCode, receivedCount: result.receivedCount, batchCount: result.batchCount },
+  }, journeyContext(userId, source));
+  return result;
+}
+
 
 export async function setTagInternalUse(
   id: string,
@@ -1313,7 +1638,7 @@ export async function markTagDamaged(
     if (tag.status !== "inventory" || tag.repId !== null || tag.leadId !== null) {
       throw new TagError("Only unassigned company stock can be marked damaged", 409);
     }
-    if (tag.stockStatus === "damaged") throw new TagError("This piece is already marked damaged", 409);
+    if (tag.stockStatus === "damaged") throw new TagError("This piece is already marked damaged", 409, "tag_already_damaged");
     if (tag.stockStatus !== "available" && tag.stockStatus !== "pending") {
       throw new TagError(`A piece in ${tag.stockStatus} stock cannot be marked damaged`, 409);
     }
@@ -1359,7 +1684,7 @@ export async function setBatchIntakeStatus(
 ) {
   const now = new Date();
   const [previous] = await db.select().from(tagBatches).where(eq(tagBatches.id, id)).limit(1);
-  if (!previous) throw new TagError("Batch not found", 404);
+  if (!previous) throw new TagError("Batch not found", 404, "batch_not_found");
   if (previous.status === "cancelled") throw new TagError("A cancelled batch cannot be changed", 409);
   if (previous.status === status) return previous;
   const [batch] = await db.update(tagBatches).set(status === "closed" ? {
@@ -1392,20 +1717,35 @@ export async function updateBatch(
   userId: string | null = null,
   source: JourneySource = "admin",
 ) {
-  const [previous] = await db.select({ status: tagBatches.status }).from(tagBatches).where(eq(tagBatches.id, id)).limit(1);
-  if (!previous) throw new TagError("Batch not found", 404);
+  const [previous] = await db.select({ status: tagBatches.status, salesProductId: tagBatches.salesProductId }).from(tagBatches).where(eq(tagBatches.id, id)).limit(1);
+  if (!previous) throw new TagError("Batch not found", 404, "batch_not_found");
   const batch = await db.transaction(async (tx) => {
+    const productChanged = input.salesProductId !== undefined && input.salesProductId !== previous.salesProductId;
+    if (productChanged) await assertPhysicalProduct(tx, input.salesProductId!);
     const [updated] = await tx
       .update(tagBatches)
       .set({ ...input, updatedAt: new Date() })
       .where(eq(tagBatches.id, id))
       .returning();
-    if (input.salesProductId !== undefined) {
-      await tx.update(tags).set({ salesProductId: input.salesProductId, updatedAt: new Date() }).where(eq(tags.batchId, id));
+    if (productChanged) {
+      // A new catalog product for the run reaches only the pieces that followed the batch's old one (or had none) and
+      // are not sold: a piece mapped on its own keeps its product, and a sold piece keeps the product it was sold as.
+      const now = new Date();
+      const sold = sql`EXISTS (SELECT 1 FROM sales_sale_tags st WHERE st.tag_id = ${tags.id} AND st.status = 'active')`;
+      const followsBatch = previous.salesProductId === null
+        ? sql`${tags.salesProductId} IS NULL`
+        : sql`(${tags.salesProductId} IS NULL OR ${tags.salesProductId} = ${previous.salesProductId})`;
+      if (previous.salesProductId !== null) {
+        // Sold pieces that only inherited the batch's product are pinned to it before the batch changes.
+        await tx.update(tags).set({ salesProductId: previous.salesProductId, updatedAt: now })
+          .where(and(eq(tags.batchId, id), isNull(tags.salesProductId), sold));
+      }
+      await tx.update(tags).set({ salesProductId: input.salesProductId, updatedAt: now })
+        .where(and(eq(tags.batchId, id), followsBatch, sql`NOT ${sold}`));
     }
     return updated;
   });
-  if (!batch) throw new TagError("Batch not found", 404);
+  if (!batch) throw new TagError("Batch not found", 404, "batch_not_found");
   if (input.status && input.status !== previous.status) {
     await recordJourney({
       kind: "execution",
@@ -1430,18 +1770,22 @@ const PRODUCTION_STEP_SQL = sql`(
 interface BatchRow {
   id: string; batch_code: string; name: string; product_type: string; sales_product_id: number | null;
   face: string | null; vendor: string | null; quantity: number; status: string; code_source: string;
-  notes: string | null; created_at: Date; tag_count: number; pending_count: number; house_count: number;
-  with_resellers_count: number; active_count: number; nfc_verified_count: number; last_production_action: string | null;
+  notes: string | null; created_at: Date; tag_count: number; pending_count: number; house_count: number; hand_out_count: number;
+  with_resellers_count: number; sold_count: number; damaged_count: number; active_count: number; nfc_verified_count: number;
+  last_production_action: string | null;
 }
 
 const BATCH_SELECT = sql`
   SELECT b.id, b.batch_code, b.name, b.product_type, b.sales_product_id, b.face, b.vendor, count(t.id)::int AS quantity,
     b.status, b.code_source, b.notes, b.created_at, b.created_by_user_id, b.updated_at,
     count(t.id)::int AS tag_count,
-    count(t.id) FILTER (WHERE t.stock_status = 'pending')::int AS pending_count,
-    count(t.id) FILTER (WHERE t.status = 'inventory' AND t.rep_id IS NULL AND t.stock_status = 'available')::int AS house_count,
-    count(t.id) FILTER (WHERE t.rep_id IS NOT NULL)::int AS with_resellers_count,
-    count(t.id) FILTER (WHERE t.status = 'active')::int AS active_count,
+    ${countMetricSql("notReceived")} AS pending_count,
+    ${countMetricSql("house")} AS house_count,
+    ${countMetricSql("handOut")} AS hand_out_count,
+    ${countMetricSql("withResellers")} AS with_resellers_count,
+    ${countMetricSql("sold")} AS sold_count,
+    ${countMetricSql("damaged")} AS damaged_count,
+    ${countMetricSql("live")} AS active_count,
     count(t.id) FILTER (WHERE t.nfc_provisioning_status IN ('verified', 'locked'))::int AS nfc_verified_count,
     ${PRODUCTION_STEP_SQL} AS last_production_action
   FROM tag_batches b
@@ -1470,7 +1814,10 @@ function batchItem(b: BatchRow): TagBatchItem {
     pendingCount,
     receivedCount: tagCount - pendingCount,
     houseCount: Number(b.house_count),
+    handOutCount: Number(b.hand_out_count),
     withResellersCount: Number(b.with_resellers_count),
+    soldCount: Number(b.sold_count),
+    damagedCount: Number(b.damaged_count),
     activeCount: Number(b.active_count),
     nfcVerifiedCount: Number(b.nfc_verified_count),
   };
@@ -1479,6 +1826,19 @@ function batchItem(b: BatchRow): TagBatchItem {
 export async function listBatches(): Promise<TagBatchItem[]> {
   const list = await rows<BatchRow>(sql`${BATCH_SELECT} GROUP BY b.id ORDER BY b.created_at DESC`);
   return list.map(batchItem);
+}
+
+/** What managers need to pick a batch (Give a kit, the Pieces filter): no vendor, notes or production details. */
+export async function listBatchOptions(): Promise<TagBatchOption[]> {
+  return (await listBatches()).map((b) => ({
+    id: b.id,
+    batchCode: b.batchCode,
+    name: b.name,
+    productType: b.productType,
+    face: b.face,
+    houseCount: b.houseCount,
+    handOutCount: b.handOutCount,
+  }));
 }
 
 export async function getBatch(id: string) {
@@ -1635,20 +1995,49 @@ export async function getOverview(now: Date = new Date(), timezoneOffsetMinutes 
   const since7 = new Date(now.getTime() - 7 * 86_400_000);
   const since30 = new Date(now.getTime() - 30 * 86_400_000);
 
+  // Digital statuses count by tags.status alone, so each card matches its
+  // `?status=` list; damaged is the physical stock status (`?stock=damaged`).
   const statusRows = await rows<{ status: string; count: number }>(sql`
-    SELECT CASE WHEN stock_status = 'damaged' THEN 'damaged' ELSE status END AS status, count(*)::int AS count
-    FROM tags GROUP BY CASE WHEN stock_status = 'damaged' THEN 'damaged' ELSE status END
+    SELECT status, count(*)::int AS count FROM tags GROUP BY status
   `);
-  const [stockRow] = await rows<{ house: number; with_resellers: number }>(sql`
-    SELECT
-      count(*) FILTER (WHERE t.rep_id IS NULL)::int AS house,
-      count(*) FILTER (WHERE t.rep_id IS NOT NULL)::int AS with_resellers
+  // The stock numbers every Tags screen shares (shared/tagMetrics.ts).
+  const [stockRow] = await rows<{
+    house: number; with_resellers: number; damaged: number; not_received: number; sold: number; live: number;
+    chip_pending: number; scanned_not_live: number; no_product: number;
+  }>(sql`
+    SELECT ${countMetricSql("house")} AS house,
+           ${countMetricSql("withResellers")} AS with_resellers,
+           ${countMetricSql("damaged")} AS damaged,
+           ${countMetricSql("notReceived")} AS not_received,
+           ${countMetricSql("sold")} AS sold,
+           ${countMetricSql("live")} AS live,
+           ${countQueueSql("chipPending", now)} AS chip_pending,
+           ${countQueueSql("scannedNotLive", now)} AS scanned_not_live,
+           ${countQueueSql("noProduct", now)} AS no_product
     FROM tags t
-    WHERE t.status <> 'retired' AND t.stock_status = 'available'
-      AND NOT EXISTS (SELECT 1 FROM sales_sale_tags st WHERE st.tag_id = t.id AND st.status = 'active')
   `);
-  const counts: TagOverview["counts"] = { total: 0, inventory: 0, assigned: 0, active: 0, disabled: 0, retired: 0, damaged: 0 };
+  // The other two queues are not pieces: paid Stuscle orders waiting for their pieces, and batches still receiving.
+  const [queueRow] = await rows<{ stuscle_orders: number; batches_not_received: number }>(sql`
+    SELECT (SELECT count(*)::int FROM tag_acquisitions a WHERE a.status = 'pending') AS stuscle_orders,
+           (SELECT count(DISTINCT b.id)::int FROM tag_batches b JOIN tags t ON t.batch_id = b.id
+             WHERE b.status <> 'cancelled' AND ${stockMetricSql("notReceived")}) AS batches_not_received
+  `);
+  const counts: TagOverview["counts"] = { total: 0, inventory: 0, assigned: 0, active: 0, disabled: 0, retired: 0, damaged: Number(stockRow?.damaged ?? 0) };
   const stock = { house: Number(stockRow?.house ?? 0), withResellers: Number(stockRow?.with_resellers ?? 0) };
+  const funnel: TagOverview["funnel"] = {
+    notReceived: Number(stockRow?.not_received ?? 0),
+    house: stock.house,
+    withResellers: stock.withResellers,
+    sold: Number(stockRow?.sold ?? 0),
+    live: Number(stockRow?.live ?? 0),
+  };
+  const queues: TagOverview["queues"] = {
+    stuscleOrders: Number(queueRow?.stuscle_orders ?? 0),
+    batchesNotReceived: Number(queueRow?.batches_not_received ?? 0),
+    chipPending: Number(stockRow?.chip_pending ?? 0),
+    scannedNotLive: Number(stockRow?.scanned_not_live ?? 0),
+    noProduct: Number(stockRow?.no_product ?? 0),
+  };
   for (const r of statusRows) {
     counts.total += Number(r.count);
     if (r.status in counts) counts[r.status as TagStatus] = Number(r.count);
@@ -1698,6 +2087,8 @@ export async function getOverview(now: Date = new Date(), timezoneOffsetMinutes 
   return {
     counts,
     stock,
+    funnel,
+    queues,
     interactions: { today: Number(m?.today ?? 0), last7: Number(m?.last7 ?? 0), last30: Number(m?.last30 ?? 0) },
     split30: { qr: Number(m?.qr30 ?? 0), nfc: Number(m?.nfc30 ?? 0) },
     approxUnique30: Number(m?.unique30 ?? 0),
@@ -1730,8 +2121,9 @@ export async function getOverview(now: Date = new Date(), timezoneOffsetMinutes 
 export async function getLeadTagSummaries(actor: TagActor, now: Date = new Date()): Promise<LeadTagSummary[]> {
   const since30 = new Date(now.getTime() - 30 * 86_400_000);
   const scope = actor.isManager ? sql`true` : sql`t.rep_id = ${actor.repId}`;
-  const list = await rows<{ lead_id: number; pieces: number; live: number; scans30: number }>(sql`
+  const list = await rows<{ lead_id: number; name: string | null; pieces: number; live: number; scans30: number }>(sql`
     SELECT t.lead_id,
+           (SELECT l.name FROM sales_leads l WHERE l.id = t.lead_id) AS name,
            count(*)::int AS pieces,
            count(*) FILTER (WHERE t.status = 'active')::int AS live,
            COALESCE(sum(s.n), 0)::int AS scans30
@@ -1743,7 +2135,7 @@ export async function getLeadTagSummaries(actor: TagActor, now: Date = new Date(
     WHERE t.lead_id IS NOT NULL AND ${scope}
     GROUP BY t.lead_id
   `);
-  return list.map((r) => ({ leadId: r.lead_id, pieces: r.pieces, live: r.live, scansLast30: r.scans30 }));
+  return list.map((r) => ({ leadId: r.lead_id, name: r.name?.trim() || null, pieces: r.pieces, live: r.live, scansLast30: r.scans30 }));
 }
 
 /**
@@ -1771,11 +2163,16 @@ export async function getTagDashboard(repId: number | null, days = 30, now: Date
   const eventScope = repId === null ? sql`true` : sql`e.rep_id = ${repId}`;
   const inPeriod = sql`e.occurred_at >= ${since} AND ${COUNTABLE} AND ${eventScope}`;
 
+  // The shared stock numbers (shared/tagMetrics.ts), so the dashboard reads what Overview, Inventory and
+  // Resellers read: "in stock" is the unsold stock in resellers' hands (the rep's own, for a rep), set-up and
+  // live pieces included; "sold" is an active financial sale in the period (as the Resellers report counts it).
   const [totals] = await rows<{ in_stock: number; active: number; sold: number; missing: number }>(sql`
     SELECT
-      count(*) FILTER (WHERE t.status = 'inventory' AND t.stock_status = 'available')::int AS in_stock,
+      ${countMetricSql("withResellers")} AS in_stock,
       count(*) FILTER (WHERE t.status = 'active')::int AS active,
-      count(*) FILTER (WHERE t.sold_at >= ${since})::int AS sold,
+      count(*) FILTER (WHERE EXISTS (
+        SELECT 1 FROM sales_sale_tags st WHERE st.tag_id = t.id AND st.status = 'active' AND st.sold_at >= ${since}
+      ))::int AS sold,
       count(*) FILTER (WHERE t.status IN ('assigned', 'active') AND t.nfc_provisioning_status IN ('not_programmed', 'failed'))::int AS missing
     FROM tags t WHERE ${tagScope}
   `);
@@ -1876,74 +2273,6 @@ export async function getTagDashboard(repId: number | null, days = 30, now: Date
       accessMethod: scan.access_method,
       occurredAt: iso(scan.occurred_at)!,
     })),
-  };
-}
-
-/** A single piece's recent traffic, kept deliberately smaller than the fleet dashboard. */
-export async function getTagPieceDashboard(tagId: string, days = 30, now: Date = new Date()): Promise<TagPieceDashboard> {
-  const since = new Date(now.getTime() - (days - 1) * 86_400_000);
-  since.setUTCHours(0, 0, 0, 0);
-  const inPeriod = sql`e.tag_id = ${tagId} AND e.occurred_at >= ${since} AND ${COUNTABLE}`;
-
-  const [scans] = await rows<{ qr: number; nfc: number; visitors: number; last_interaction_at: Date | null }>(sql`
-    SELECT count(*) FILTER (WHERE e.access_method = 'qr')::int AS qr,
-           count(*) FILTER (WHERE e.access_method = 'nfc')::int AS nfc,
-           count(DISTINCT e.visitor_day_key)::int AS visitors,
-           max(e.occurred_at) AS last_interaction_at
-    FROM tag_events e WHERE ${inPeriod}
-  `);
-  const daily = await rows<{ day: string; qr: number; nfc: number }>(sql`
-    SELECT to_char(d, 'YYYY-MM-DD') AS day,
-           count(e.id) FILTER (WHERE e.access_method = 'qr')::int AS qr,
-           count(e.id) FILTER (WHERE e.access_method = 'nfc')::int AS nfc
-    FROM generate_series(${since}::timestamptz, ${now}::timestamptz, interval '1 day') d
-    LEFT JOIN tag_events e ON e.tag_id = ${tagId}
-      AND e.occurred_at >= d AND e.occurred_at < d + interval '1 day'
-      AND ${COUNTABLE}
-    GROUP BY d ORDER BY d
-  `);
-  const devices = await rows<{ os: string | null; scans: number }>(sql`
-    SELECT e.os_family AS os, count(*)::int AS scans
-    FROM tag_events e WHERE ${inPeriod}
-    GROUP BY e.os_family ORDER BY scans DESC LIMIT 3
-  `);
-
-  return {
-    days,
-    scans: { qr: Number(scans?.qr ?? 0), nfc: Number(scans?.nfc ?? 0) },
-    visitors: Number(scans?.visitors ?? 0),
-    lastInteractionAt: iso(scans?.last_interaction_at),
-    daily: daily.map((d) => ({ day: d.day, qr: Number(d.qr), nfc: Number(d.nfc) })),
-    devices: devices.map((d) => ({ os: d.os ?? "other", scans: Number(d.scans) })),
-  };
-}
-
-export async function getRepSummary(repId: number, now: Date = new Date()): Promise<TagRepSummary> {
-  const since30 = new Date(now.getTime() - 30 * 86_400_000);
-  const [t] = await rows<{ in_stock: number; active: number; sold30: number }>(sql`
-    SELECT
-      count(*) FILTER (WHERE t.status <> 'retired' AND sold.sold_at IS NULL)::int AS in_stock,
-      count(*) FILTER (WHERE t.status = 'active')::int AS active,
-      count(*) FILTER (WHERE sold.sold_at >= ${since30})::int AS sold30
-    FROM tags t
-    LEFT JOIN LATERAL (
-      SELECT st.sold_at FROM sales_sale_tags st
-      WHERE st.tag_id = t.id AND st.status = 'active'
-      ORDER BY st.sold_at DESC LIMIT 1
-    ) sold ON true
-    WHERE t.rep_id = ${repId}
-  `);
-  const [e] = await rows<{ qr: number; nfc: number }>(sql`
-    SELECT count(*) FILTER (WHERE e.access_method = 'qr')::int AS qr,
-           count(*) FILTER (WHERE e.access_method = 'nfc')::int AS nfc
-    FROM tag_events e
-    WHERE e.rep_id = ${repId} AND e.occurred_at >= ${since30} AND ${COUNTABLE}
-  `);
-  return {
-    inStock: Number(t?.in_stock ?? 0),
-    active: Number(t?.active ?? 0),
-    soldLast30: Number(t?.sold30 ?? 0),
-    scansLast30: { qr: Number(e?.qr ?? 0), nfc: Number(e?.nfc ?? 0) },
   };
 }
 

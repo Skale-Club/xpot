@@ -1,4 +1,10 @@
 import { useEffect, useRef, type ReactNode } from "react";
+import { Link } from "wouter";
+import { Maximize2, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useT } from "@/i18n";
+import { commonMessages } from "@/i18n/messages/common";
+import { OVERLAY_CLASS, SURFACE_MODAL_CLASS } from "./surface";
 
 /** From xl, without `popup`: the pop-up turns back into a sticky column beside the list. */
 const SIDE_COLUMN =
@@ -8,8 +14,9 @@ const SIDE_COLUMN =
  * Desktop list + detail. From `xl` the detail is a sticky column beside the
  * list; between `lg` and `xl` it opens as a centered pop-up over the list. With nothing
  * selected, `placeholder` fills the column (xl only). Escape closes the detail
- * unless a dialog is open on top of it or focus is in a form field. With
- * `popup` the detail is always the centered pop-up, at every width.
+ * unless a dialog is open on top of it or focus is in a form field; closing
+ * gives focus back to the row it was opened from. With `popup` the detail is
+ * always the centered pop-up, at every width.
  */
 export function MasterDetail({
   list,
@@ -29,6 +36,26 @@ export function MasterDetail({
 }) {
   const open = detail != null;
   const asideRef = useRef<HTMLElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  // While the detail is open, remember the list item that has focus (the row
+  // clicked or reached with the keyboard); when it closes, focus goes back
+  // there instead of to the top of the page.
+  useEffect(() => {
+    if (!open) return;
+    const inList = (el: EventTarget | null): el is HTMLElement => el instanceof HTMLElement && el !== listRef.current && !!listRef.current?.contains(el);
+    let opener = inList(document.activeElement) ? document.activeElement : null;
+    const onFocus = (event: FocusEvent) => {
+      if (inList(event.target)) opener = event.target;
+    };
+    document.addEventListener("focusin", onFocus);
+    return () => {
+      document.removeEventListener("focusin", onFocus);
+      const active = document.activeElement;
+      const lost = !active || active === document.body || !active.isConnected;
+      if (opener?.isConnected && lost) opener.focus({ preventScroll: true });
+    };
+  }, [open]);
 
   // Between lg and xl the detail is a pop-up over the list: stop the page
   // behind it from scrolling and send keyboard focus into it.
@@ -58,14 +85,15 @@ export function MasterDetail({
 
   return (
     <div className={popup ? "" : "grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_420px]"}>
-      <div className="min-w-0 space-y-2">{list}</div>
+      <div ref={listRef} className="min-w-0 space-y-2">{list}</div>
       {open ? (
         <>
-          <button type="button" aria-label={closeLabel} onClick={onClose} className={`fixed inset-0 z-40 bg-black/50 ${popup ? "" : "xl:hidden"}`} />
+          <button type="button" aria-label={closeLabel} onClick={onClose} className={`fixed inset-0 z-40 ${OVERLAY_CLASS} ${popup ? "" : "xl:hidden"}`} />
           <aside
             ref={asideRef}
             tabIndex={-1}
-            className={`fixed left-1/2 top-1/2 z-50 max-h-[88vh] w-[560px] max-w-[92vw] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-[24px] border border-white/10 bg-[#080c18] p-4 shadow-2xl outline-none ${popup ? "" : SIDE_COLUMN}`}
+            data-focus-container
+            className={`fixed left-1/2 top-1/2 z-50 max-h-[88vh] w-[560px] max-w-[92vw] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-3xl ${SURFACE_MODAL_CLASS} p-4 shadow-2xl outline-none ${popup ? "" : SIDE_COLUMN}`}
           >
             {detail}
           </aside>
@@ -73,6 +101,36 @@ export function MasterDetail({
       ) : placeholder && !popup ? (
         <aside className="sticky top-[88px] hidden xl:block">{placeholder}</aside>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * The top row of a detail shown in the pane: "Open full page" (the record's own
+ * page, the link to share) and Close.
+ */
+export function PaneBar({ fullHref, onClose, testId }: { fullHref: string; onClose: () => void; testId?: string }) {
+  const tc = useT(commonMessages);
+  return (
+    <div className="flex items-center justify-between gap-2" data-testid={testId}>
+      <Button asChild variant="ghost" size="sm" className="-ml-2">
+        <Link href={fullHref} data-testid={testId ? `${testId}-full-page` : undefined}>
+          <Maximize2 aria-hidden="true" />
+          {tc("openFullPage")}
+        </Link>
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        onClick={onClose}
+        aria-label={tc("close")}
+        title={tc("close")}
+        className="-mr-2 shrink-0 text-white/45"
+        data-testid={testId ? `${testId}-close` : undefined}
+      >
+        <X aria-hidden="true" />
+      </Button>
     </div>
   );
 }

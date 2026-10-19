@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState, type ComponentType, type ReactNode } from "react";
-import { Link, useLocation } from "wouter";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ExternalLink, Link2, MapPin, Package, Plus, Radio, ScanLine, Search, Star, Unlink } from "lucide-react";
-import type { TagListItem } from "@shared/tagsApi";
+import { Building2, ExternalLink, Link2, Package, Plus, Radio, ScanLine, Star, Unlink } from "lucide-react";
+import type { LeadTagSummary, TagListItem } from "@shared/tagsApi";
 import { validateChipContent } from "@shared/chipContent";
 import { guessDestinationType, normalizeUrlInput } from "@shared/tagApp";
+import { stockBlock } from "@shared/tags";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
@@ -12,18 +13,26 @@ import { leadsMessages } from "@/i18n/messages/leads";
 import { apiRequest } from "@/lib/queryClient";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { MasterDetail } from "@/components/xpot/MasterDetail";
+import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
+import { KpiTile } from "@/components/xpot/DashboardKit";
+import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
+import { ListSkeleton } from "@/components/xpot/ListSkeleton";
+import { ACCENT_SELECTED } from "@/components/xpot/surface";
 import { GoogleLogo } from "@/components/ui/google-logo";
 import { TagPieceMention } from "@/components/xpot/TagProductThumbnail";
 import { InlineField, validateEmail } from "@/pages/xpot/components/InlineField";
 import { InlineStateSelect } from "@/components/StateSelect";
 import { useXpotModules } from "@/components/ModuleSwitch";
 import { LeadContacts } from "@/pages/xpot/components/leads/LeadContacts";
-import type { FullSalesLead, GoogleBusinessProfile } from "@/pages/xpot/types";
+import type { FullSalesLead, GoogleBusinessProfile, SalesLead, SalesLeadContact, SalesLeadLocation } from "@/pages/xpot/types";
 import { usePlaceSearch } from "@/pages/xpot/usePlaceSearch";
 import TagScreen from "./TagScreen";
-import { APP_BASE, errorText, shortUrl, tagPath, tagsGet, tagsPost, useBanner } from "./lib";
+import { APP_BASE, errorText, shortUrl, tagPath, tagsGet, tagsPost, useBanner, type BannerState } from "./lib";
+import { formatCount } from "./charts";
+import { PlacePicker } from "./PlacePicker";
 import {
-  Banner, BottomSheet, BTN_PRIMARY, BTN_TERTIARY, CARD, EYEBROW_MUTED, INPUT, LinkInput, Pill, SHEET_TITLE, SOLD_TONE, STATUS_TONE, Spinner,
+  Banner, BottomSheet, CARD, EYEBROW_MUTED, LinkInput, ChipMark, PieceStatusPills, ScanCounts, SheetActions, Spinner, TopBar,
 } from "./ui";
 
 // One customer of the reseller: the company (its details, contacts and Google
@@ -31,12 +40,12 @@ import {
 // with what can be done to them from here: open, link another, change the
 // link of several at once, unlink.
 
-const MINI_BTN =
-  "inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] px-3 text-sm font-semibold text-white/85 transition-colors hover:bg-white/[0.08] active:bg-white/10 disabled:opacity-40";
+/** GET /api/xpot/leads/:id. */
+type LeadDetail = { lead: SalesLead; locations: SalesLeadLocation[]; contacts: SalesLeadContact[] };
 
 /** Pieces this person can link to a customer: their own, unconfigured, physically in hand. */
 function isFreePiece(tag: TagListItem) {
-  return !tag.leadId && tag.status === "inventory" && tag.stockStatus !== "pending";
+  return !tag.leadId && tag.status === "inventory" && !stockBlock(tag.stockStatus);
 }
 
 /** The link most of a customer's pieces already open, offered as the default for a new one. */
@@ -44,20 +53,6 @@ function usualLink(pieces: TagListItem[]): string {
   const counts = new Map<string, number>();
   for (const p of pieces) if (p.destinationUrl) counts.set(p.destinationUrl, (counts.get(p.destinationUrl) ?? 0) + 1);
   return Array.from(counts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "";
-}
-
-function Metric({ icon: Icon, value, label }: { icon: ComponentType<{ className?: string }>; value: number; label: string }) {
-  return (
-    <div className="flex min-w-0 items-center gap-2.5 px-3 py-2.5 sm:px-4">
-      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-violet-400/[0.09] text-violet-300/80">
-        <Icon className="h-3.5 w-3.5" />
-      </span>
-      <span className="min-w-0">
-        <strong className="block text-base font-bold leading-none tabular-nums text-white/90">{value}</strong>
-        <span className="mt-1 block truncate text-[10px] font-medium text-white/35">{label}</span>
-      </span>
-    </div>
-  );
 }
 
 function Panel({ title, right, children }: { title: ReactNode; right?: ReactNode; children: ReactNode }) {
@@ -72,12 +67,8 @@ function Panel({ title, right, children }: { title: ReactNode; right?: ReactNode
   );
 }
 
-function SheetHeading({ children }: { children: ReactNode }) {
-  return children ? <h2 className={`${SHEET_TITLE} mb-4`}>{children}</h2> : null;
-}
-
 /** The company's Google Business Profile: live rating when linked, a search to link it when not. */
-function GoogleProfile({ lead, onDone }: { lead: FullSalesLead; onDone: (text: string, ok: boolean) => void }) {
+function GoogleProfile({ lead, onDone, banner }: { lead: FullSalesLead; onDone: (text: string, ok: boolean) => void; banner: BannerState }) {
   const t = useT(tagsMessages);
   const tc = useT(commonMessages);
   const qc = useQueryClient();
@@ -120,9 +111,9 @@ function GoogleProfile({ lead, onDone }: { lead: FullSalesLead; onDone: (text: s
     <Panel
       title={<span className="flex items-center gap-1.5"><GoogleLogo className="h-3.5 w-3.5" />{t("customerGoogle")}</span>}
       right={connected ? (
-        <button type="button" disabled={busy} onClick={() => void savePlace(null)} className="text-[11px] font-semibold text-white/25 transition hover:text-red-300 disabled:opacity-40">
+        <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => void savePlace(null)} className="text-white/45 hover:text-red-300">
           {t("customerGoogleUnlink")}
-        </button>
+        </Button>
       ) : null}
     >
       {connected ? (
@@ -143,7 +134,7 @@ function GoogleProfile({ lead, onDone }: { lead: FullSalesLead; onDone: (text: s
               </p>
             )}
             {p?.mapsUrl && (
-              <a href={p.mapsUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-sm font-semibold text-blue-300 hover:text-blue-200">
+              <a href={p.mapsUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-sm font-semibold text-violet-300 hover:text-violet-200">
                 {t("customerGoogleMaps")} <ExternalLink className="h-3.5 w-3.5" />
               </a>
             )}
@@ -152,51 +143,30 @@ function GoogleProfile({ lead, onDone }: { lead: FullSalesLead; onDone: (text: s
       ) : (
         <>
           <p className="text-sm text-white/45">{t("customerGoogleNone")}</p>
-          <button type="button" className={`${MINI_BTN} mt-3`} onClick={() => { setSearch(lead.name); setPicking(true); }}>
+          <Button type="button" variant="secondary" size="sm" className="mt-3" onClick={() => { setSearch(lead.name); setPicking(true); }}>
             <GoogleLogo className="h-4 w-4" />
             {t("customerGoogleLink")}
-          </button>
+          </Button>
         </>
       )}
 
-      <BottomSheet open={picking} onClose={() => setPicking(false)} title={t("customerGoogleLink")}>
-        <SheetHeading>{t("customerGoogleLink")}</SheetHeading>
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
-          <input
-            type="search"
-            autoFocus
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={t("customerGoogleSearch")}
-            aria-label={t("customerGoogleSearch")}
-            className={`${INPUT} pl-10`}
-            data-testid="input-google-search"
-          />
-        </div>
-        <div className="mt-3 max-h-[50vh] space-y-1.5 overflow-y-auto">
-          {results.isFetching && !results.data ? (
-            <div className="flex justify-center py-6 text-white/40"><Spinner /></div>
-          ) : results.data?.results.length ? (
-            results.data.results.map((place) => (
-              <button
-                key={place.placeId}
-                type="button"
-                disabled={busy}
-                onClick={() => void savePlace(place.placeId)}
-                className="flex w-full items-start gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-left hover:bg-white/[0.07] disabled:opacity-50"
-              >
-                <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-white/35" />
-                <span className="min-w-0">
-                  <span className="block truncate text-sm font-semibold text-white">{place.name}</span>
-                  <span className="block truncate text-xs text-white/45">{place.address}</span>
-                </span>
-              </button>
-            ))
-          ) : search.trim().length >= 2 && !results.isFetching ? (
-            <p className="py-6 text-center text-sm text-white/40">{t("customerGoogleNoResults")}</p>
-          ) : null}
-        </div>
+      <BottomSheet open={picking} onClose={() => setPicking(false)} title={t("customerGoogleLink")} banner={banner}>
+        {/* The same business picker as the review-link search. */}
+        <PlacePicker
+          query={search}
+          onQuery={setSearch}
+          placeholder={t("customerGoogleSearch")}
+          autoFocus
+          inputTestId="input-google-search"
+          loading={results.isFetching}
+          places={results.data ? results.data.results.map((place) => ({ ...place, key: place.placeId })) : null}
+          emptyText={search.trim().length >= 2 && !results.isFetching ? t("customerGoogleNoResults") : undefined}
+          disabled={busy}
+          onPick={(place) => void savePlace(place.placeId)}
+        />
+        <Button type="button" variant="ghost" size="lg" onClick={() => setPicking(false)} className="mt-4 w-full">
+          {tc("cancel")}
+        </Button>
       </BottomSheet>
     </Panel>
   );
@@ -212,20 +182,26 @@ export default function CustomerScreen({ leadId }: { leadId: number }) {
   const canEditAddress = useXpotModules().includes("visits");
   const { banner, show } = useBanner();
 
-  const leadsQuery = useQuery<FullSalesLead[]>({ queryKey: ["/api/xpot/leads"], staleTime: 60_000 });
-  const lead = leadsQuery.data?.find((l) => l.id === leadId) ?? null;
+  // The company itself, not a search through the leads list: that list is paged and
+  // scoped, and a customer holding the person's pieces must open whoever created it.
+  const leadQuery = useQuery<LeadDetail>({ queryKey: ["/api/xpot/leads", leadId], staleTime: 60_000 });
+  const lead = useMemo<FullSalesLead | null>(
+    () => (leadQuery.data?.lead ? { ...leadQuery.data.lead, locations: leadQuery.data.locations ?? [], contacts: leadQuery.data.contacts ?? [] } : null),
+    [leadQuery.data],
+  );
   // Every piece the person holds: this customer's, and the free ones that can be linked to it.
   const piecesQuery = useQuery({
+    // The same key and request as My pieces (PiecesScreen): whichever screen fills the cache, it holds every piece.
     queryKey: ["tags", "list", null, null],
-    queryFn: () => tagsGet<TagListItem[]>("/api/xpot/tags?mine=1"),
+    queryFn: () => tagsGet<TagListItem[]>("/api/xpot/tags?mine=1&limit=2000"),
     staleTime: 15_000,
   });
   const pieces = useMemo(() => (piecesQuery.data ?? []).filter((p) => p.leadId === leadId), [piecesQuery.data, leadId]);
   const freePieces = useMemo(() => (piecesQuery.data ?? []).filter(isFreePiece), [piecesQuery.data]);
-  const totals = useMemo(
-    () => pieces.reduce((sum, p) => ({ live: sum.live + (p.status === "active" ? 1 : 0), scans: sum.scans + p.qrInteractions + p.nfcInteractions }), { live: 0, scans: 0 }),
-    [pieces],
-  );
+  const live = useMemo(() => pieces.filter((p) => p.status === "active").length, [pieces]);
+  // The same 30-day count the Customers list shows; the pieces' own counters are all-time.
+  const summariesQuery = useQuery<LeadTagSummary[]>({ queryKey: ["/api/xpot/tags/by-lead"], staleTime: 15_000 });
+  const scans30 = summariesQuery.data?.find((s) => s.leadId === leadId)?.scansLast30 ?? 0;
 
   const [openCode, setOpenCode] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -234,6 +210,7 @@ export default function CustomerScreen({ leadId }: { leadId: number }) {
   const [changing, setChanging] = useState(false);
   const [link, setLink] = useState("");
   const [unlinking, setUnlinking] = useState<TagListItem | null>(null);
+  const [unlinkError, setUnlinkError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const refresh = () => Promise.all([
@@ -264,9 +241,8 @@ export default function CustomerScreen({ leadId }: { leadId: number }) {
         state: loc?.state ?? null,
         postalCode: loc?.postalCode ?? null,
         country: loc?.country,
-        lat: loc?.lat ?? null,
-        lng: loc?.lng ?? null,
-        geofenceRadiusMeters: loc?.geofenceRadiusMeters,
+        // Coordinates and radius are left out: the server keeps them while the
+        // address is the same and re-places the company when it changes.
         [key]: key === "addressLine1" ? v : v || null,
       });
       await qc.invalidateQueries({ queryKey: ["/api/xpot/leads"] });
@@ -337,32 +313,43 @@ export default function CustomerScreen({ leadId }: { leadId: number }) {
       : { tone: "ok", text: t("customerChangeLinkDone") });
   };
 
+  // ConfirmDialog closes when this resolves and keeps the error up when it throws.
   const unlink = async () => {
     if (!unlinking) return;
-    setBusy(true);
+    setUnlinkError(null);
     try {
       await tagsPost(`/api/xpot/tags/${unlinking.id}/unassign`, {});
       await refresh();
       show({ tone: "ok", text: t("customerUnlinked") });
     } catch (err) {
-      show({ tone: "error", text: errorText(err, tc("requestFailed")) });
-    } finally {
-      setBusy(false);
-      setUnlinking(null);
+      setUnlinkError(errorText(err, tc("requestFailed")));
+      throw err;
     }
   };
 
-  if (leadsQuery.isLoading || piecesQuery.isLoading) {
-    return <div className="flex justify-center py-20 text-white/40"><Spinner className="h-7 w-7" /></div>;
+  if (leadQuery.isLoading || piecesQuery.isLoading) {
+    return (
+      <>
+        <TopBar title={t("customersTitle")} back={`${APP_BASE}/customers`} />
+        <ListSkeleton rows={4} />
+      </>
+    );
   }
   if (!lead) {
     return (
-      <div className={`${CARD} px-6 py-12 text-center`}>
-        <p className="text-base font-bold text-white">{t("customerNotFound")}</p>
-        <Link href={`${APP_BASE}/customers`} className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-blue-300">
-          <ArrowLeft className="h-4 w-4" />{t("customersTitle")}
-        </Link>
-      </div>
+      <>
+        <TopBar title={t("customersTitle")} back={`${APP_BASE}/customers`} />
+        <EmptyState
+          tone="tags"
+          icon={Building2}
+          title={t("customerNotFound")}
+          action={
+            <Button type="button" variant="secondary" onClick={() => navigate(`${APP_BASE}/customers`)}>
+              {t("customersTitle")}
+            </Button>
+          }
+        />
+      </>
     );
   }
 
@@ -376,43 +363,48 @@ export default function CustomerScreen({ leadId }: { leadId: number }) {
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.07] px-4 py-3">
         <h2 className={EYEBROW_MUTED}>{t("customerPieces")}</h2>
         <div className="flex flex-wrap gap-1.5">
-          <button type="button" className={MINI_BTN} disabled={!pieces.length} onClick={() => { setLink(usualLink(targets)); setChanging(true); }} data-testid="customer-change-link">
-            <Link2 className="h-4 w-4" />
-            {t("customerChangeLink")}{selected.size ? ` (${selected.size})` : ""}
-          </button>
-          <button
+          <Button type="button" variant="secondary" size="sm" disabled={!pieces.length} onClick={() => { setLink(usualLink(targets)); setChanging(true); }} data-testid="customer-change-link">
+            <Link2 />
+            {t("customerChangeLink")}{selected.size ? ` (${formatCount(selected.size, t.locale)})` : ""}
+          </Button>
+          <Button
             type="button"
-            className={MINI_BTN}
+            variant="secondary"
+            size="sm"
             onClick={() => { setLinkPieceId(freePieces[0]?.id ?? ""); setLink(usualLink(pieces)); setLinking(true); }}
             data-testid="customer-link-piece"
           >
-            <Plus className="h-4 w-4" />
+            <Plus />
             {t("customerLinkPiece")}
-          </button>
+          </Button>
         </div>
       </div>
-      {pieces.length === 0 ? (
-        <p className="px-4 py-10 text-center text-sm text-white/40">{t("customerNoPieces")}</p>
+      {piecesQuery.error && !piecesQuery.data ? (
+        <div className="p-4">
+          <ErrorState compact message={errorText(piecesQuery.error, tc("requestFailed"))} onRetry={() => void piecesQuery.refetch()} />
+        </div>
+      ) : pieces.length === 0 ? (
+        <EmptyState compact tone="tags" icon={Package} title={t("customerNoPieces")} cardStyle={{}} />
       ) : (
         <ul className="divide-y divide-white/[0.05]">
-          <li className="flex items-center gap-3 px-4 py-2 text-[10px] uppercase tracking-widest text-white/35">
+          <li className={`flex items-center gap-3 px-4 py-2 ${EYEBROW_MUTED}`}>
             <input
               type="checkbox"
               checked={allSelected}
               onChange={() => setSelected(allSelected ? new Set() : new Set(pieces.map((p) => p.id)))}
               aria-label={t("customerSelectAll")}
-              className="h-4 w-4 accent-blue-500"
+              className="h-4 w-4 accent-violet-500"
             />
             <span className="flex-1">{t("colCode")}</span>
             <span className="hidden w-48 md:block">{t("colLink")}</span>
             <span className="w-24">{t("colStatus")}</span>
-            <span className="w-20 text-right">{t("colScans")}</span>
-            <span className="w-9" />
+            <span className="hidden w-24 text-right sm:block">{t("colScans")}</span>
+            <span className="w-10" />
           </li>
           {pieces.map((p) => (
             <li
               key={p.id}
-              className={`flex cursor-pointer items-center gap-3 px-4 py-2.5 transition-colors hover:bg-white/[0.03] ${selected.has(p.id) ? "bg-blue-500/[0.08]" : ""}`}
+              className={`flex cursor-pointer items-center gap-3 px-4 py-2.5 transition-colors hover:bg-white/[0.03] ${selected.has(p.id) ? ACCENT_SELECTED.tags.row : ""}`}
               onClick={() => openPiece(p.publicCode)}
               data-testid={`customer-piece-${p.publicCode}`}
             >
@@ -422,32 +414,32 @@ export default function CustomerScreen({ leadId }: { leadId: number }) {
                 onClick={(e) => e.stopPropagation()}
                 onChange={() => toggle(p.id)}
                 aria-label={t("customerSelectPiece", { code: p.publicCode })}
-                className="h-4 w-4 shrink-0 accent-blue-500"
+                className="h-4 w-4 shrink-0 accent-violet-500"
               />
               <TagPieceMention publicCode={p.publicCode} productType={p.productType} face={p.face} batchCode={p.batchCode} details={p.label ?? undefined} className="min-w-0 flex-1" />
               <span className="hidden w-48 truncate text-xs text-white/45 md:block">{p.destinationUrl ? shortUrl(p.destinationUrl) : "—"}</span>
-              <span className="flex w-24 flex-wrap gap-1">
-                <Pill tone={STATUS_TONE[p.status] ?? "slate"}>{t(`status_${p.status}` as "status_active")}</Pill>
-                {p.saleId && <Pill tone={SOLD_TONE}>{t("soldBadge")}</Pill>}
+              <span className="flex w-24 flex-wrap items-center gap-1">
+                <PieceStatusPills tag={p} />
+                <ChipMark tag={p} />
               </span>
-              <span className="w-20 text-right tabular-nums">
-                {p.status === "active" ? (
-                  <>
-                    <span className="block font-semibold text-white">{p.qrInteractions + p.nfcInteractions}</span>
-                    <span className="block text-[11px] text-white/40">{p.qrInteractions} QR · {p.nfcInteractions} NFC</span>
-                  </>
-                ) : <span className="text-white/20">—</span>}
+              <span className="hidden w-24 text-right sm:block">
+                <ScanCounts qr={p.qrInteractions} nfc={p.nfcInteractions} />
               </span>
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); setUnlinking(p); }}
-                aria-label={t("customerUnlink")}
-                title={t("customerUnlink")}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white/35 hover:bg-white/[0.08] hover:text-red-300"
-                data-testid={`customer-unlink-${p.publicCode}`}
-              >
-                <Unlink className="h-4 w-4" />
-              </button>
+              {/* A sold piece keeps its customer until the sale is cancelled (the server refuses; the piece screen hides it too). */}
+              {p.saleId !== null ? (
+                <span className="w-10 shrink-0" aria-hidden="true" />
+              ) : (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setUnlinkError(null); setUnlinking(p); }}
+                  aria-label={t("customerUnlink")}
+                  title={t("customerUnlink")}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white/35 hover:bg-white/[0.08] hover:text-red-300"
+                  data-testid={`customer-unlink-${p.publicCode}`}
+                >
+                  <Unlink className="h-4 w-4" />
+                </button>
+              )}
             </li>
           ))}
         </ul>
@@ -457,33 +449,18 @@ export default function CustomerScreen({ leadId }: { leadId: number }) {
 
   return (
     <section data-testid="tags-customer-screen">
-      {/* One identity surface: company first, operational numbers second. */}
-      <header className="mb-4 rounded-[20px] border border-white/[0.08] bg-white/[0.025] p-3 sm:p-4 lg:flex lg:items-center lg:justify-between lg:gap-4">
-        <div className="flex min-w-0 flex-1 items-center gap-2.5">
-          <Link
-            href={`${APP_BASE}/customers`}
-            aria-label={tc("back")}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white/55 transition-colors hover:bg-white/[0.06] hover:text-white active:bg-white/10"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-          <span className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-violet-500/[0.1] text-violet-300 sm:flex">
-            <Package className="h-5 w-5" aria-hidden="true" />
-          </span>
-          <div className="min-w-0 flex-1" data-testid="customer-name">
-            <InlineField label="" large value={lead.name} onSave={(v) => void saveLead("name", v)} validate={(v) => (v.trim() ? null : t("customerNameRequired"))} />
-            {subtitle && <p className="truncate text-sm text-white/45">{subtitle}</p>}
-          </div>
-        </div>
-        <div className="mt-3 grid grid-cols-3 divide-x divide-white/[0.06] rounded-xl border border-white/[0.06] bg-black/[0.12] lg:mt-0 lg:w-[420px] lg:shrink-0">
-          <Metric icon={Package} value={pieces.length} label={t("customersPieces")} />
-          <Metric icon={Radio} value={totals.live} label={t("customersLive")} />
-          <Metric icon={ScanLine} value={totals.scans} label={t("customersScans30")} />
-        </div>
-      </header>
+      {/* The same TopBar as every Tags screen; the name is edited in the Company panel. */}
+      <div data-testid="customer-name">
+        <TopBar title={lead.name} back={`${APP_BASE}/customers`} sub={subtitle ? <p className="truncate text-sm text-white/45">{subtitle}</p> : undefined} />
+      </div>
+      <div className="mb-4 grid grid-cols-3 gap-2 lg:max-w-xl">
+        <KpiTile accent="violet" icon={Package} value={formatCount(pieces.length, t.locale)} label={t("customersPieces")} />
+        <KpiTile accent="violet" icon={Radio} value={formatCount(live, t.locale)} label={t("customersLive")} />
+        <KpiTile accent="violet" icon={ScanLine} value={formatCount(scans30, t.locale)} label={t("customersScans30")} />
+      </div>
       <Banner banner={banner} />
 
-      <div className="mt-4 grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
+      <div className="mt-4 grid grid-cols-[minmax(0,1fr)] items-start gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
         <MasterDetail
           popup
           closeLabel={t("closePane")}
@@ -496,6 +473,9 @@ export default function CustomerScreen({ leadId }: { leadId: number }) {
           <Panel title={t("customerCompany")}>
             {/* Click any line to edit it; Enter or leaving the field saves, Escape cancels. */}
             <div className="grid grid-cols-2 gap-x-4" data-testid="customer-company">
+              <div className="col-span-2">
+                <InlineField label={t("customerName")} value={lead.name} onSave={(v) => void saveLead("name", v)} validate={(v) => (v.trim() ? null : t("customerNameRequired"))} />
+              </div>
               <InlineField label={tl("fieldIndustry")} value={lead.industry ?? ""} onSave={(v) => void saveLead("industry", v)} />
               <InlineField label={tl("fieldPhone")} value={lead.phone ?? ""} onSave={(v) => void saveLead("phone", v)} linkable={!!lead.phone} linkHref={lead.phone ? `tel:${lead.phone}` : undefined} />
               <InlineField label={tl("fieldEmail")} value={lead.email ?? ""} onSave={(v) => void saveLead("email", v)} linkable={!!lead.email} linkHref={lead.email ? `mailto:${lead.email}` : undefined} validate={validateEmail} />
@@ -515,25 +495,29 @@ export default function CustomerScreen({ leadId }: { leadId: number }) {
               ) : (
                 // The address drives Visits check-ins, so only Visits users change it.
                 <div className="col-span-2 py-1.5">
-                  <span className="text-[10px] font-semibold uppercase tracking-widest text-white/30">{tl("fieldAddress")}</span>
+                  <span className={EYEBROW_MUTED}>{tl("fieldAddress")}</span>
                   <p className="mt-0.5 text-sm text-white/80">{address || "\u2014"}</p>
                 </div>
               )}
               <div className="col-span-2 mt-3 border-t border-white/[0.06] pt-3">
                 <h3 className={`${EYEBROW_MUTED} mb-2.5`}>{t("customerContacts")}</h3>
-                <LeadContacts leadId={lead.id} contacts={lead.contacts ?? []} />
+                <LeadContacts leadId={lead.id} contacts={lead.contacts ?? []} accent="tags" />
               </div>
             </div>
           </Panel>
 
-          <GoogleProfile lead={lead} onDone={(text, ok) => show({ tone: ok ? "ok" : "error", text })} />
+          <GoogleProfile lead={lead} banner={banner} onDone={(text, ok) => show({ tone: ok ? "ok" : "error", text })} />
         </div>
       </div>
 
-      <BottomSheet open={linking} onClose={() => setLinking(false)} title={t("customerLinkPieceTitle", { name: lead.name })}>
-        <SheetHeading>{t("customerLinkPieceTitle", { name: lead.name })}</SheetHeading>
+      <BottomSheet open={linking} onClose={() => setLinking(false)} title={t("customerLinkPieceTitle", { name: lead.name })} banner={banner}>
         {freePieces.length === 0 ? (
-          <p className="py-6 text-center text-sm text-white/45">{t("customerNoStock")}</p>
+          <div className="space-y-4">
+            <EmptyState compact tone="tags" icon={Package} title={t("customerNoStock")} />
+            <Button type="button" variant="ghost" size="lg" onClick={() => setLinking(false)} className="w-full">
+              {tc("close")}
+            </Button>
+          </div>
         ) : (
           <div className="space-y-4">
             <p className="text-sm text-white/50">{t("customerLinkPieceHint")}</p>
@@ -541,53 +525,54 @@ export default function CustomerScreen({ leadId }: { leadId: number }) {
               {freePieces.map((p) => (
                 <label
                   key={p.id}
-                  className={`flex cursor-pointer items-center gap-3 rounded-2xl border px-3 py-2.5 ${linkPieceId === p.id ? "border-blue-400/50 bg-blue-500/10" : "border-white/10 bg-white/[0.03] hover:bg-white/[0.06]"}`}
+                  className={`flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border px-3 py-2.5 ${linkPieceId === p.id ? `border-violet-400/50 ${ACCENT_SELECTED.tags.row}` : "border-white/10 bg-white/[0.03] hover:bg-white/[0.06]"}`}
                 >
-                  <input type="radio" name="link-piece" checked={linkPieceId === p.id} onChange={() => setLinkPieceId(p.id)} className="accent-blue-500" />
+                  <input type="radio" name="link-piece" checked={linkPieceId === p.id} onChange={() => setLinkPieceId(p.id)} className="accent-violet-500" />
                   <TagPieceMention publicCode={p.publicCode} productType={p.productType} face={p.face} batchCode={p.batchCode} className="min-w-0 flex-1" />
                 </label>
               ))}
             </div>
             <LinkInput key={linkPieceId} value={link} onChange={setLink} face={freePieces.find((p) => p.id === linkPieceId)?.face} placeholder={t("linkPlaceholder")} onPasteFailed={() => show({ tone: "error", text: tc("pasteFailed") })} />
-            <button type="button" className={BTN_PRIMARY} disabled={busy || !linkPieceId || !link.trim()} onClick={() => void linkPiece()}>
-              {busy ? <Spinner /> : <Plus className="h-5 w-5" />}
-              {t("customerLinkPiece")}
-            </button>
+            <SheetActions>
+              <Button type="button" variant="brand" accent="tags" size="lg" loading={busy} disabled={!linkPieceId || !link.trim()} onClick={() => void linkPiece()} className="w-full">
+                <Plus className="!size-5" />
+                {t("customerLinkPiece")}
+              </Button>
+              <Button type="button" variant="ghost" size="lg" onClick={() => setLinking(false)} className="w-full">
+                {tc("cancel")}
+              </Button>
+            </SheetActions>
           </div>
         )}
       </BottomSheet>
 
-      <BottomSheet open={changing} onClose={() => setChanging(false)} title={t.plural("customerChangeLinkTitle", targets.length)}>
-        <SheetHeading>{t.plural("customerChangeLinkTitle", targets.length)}</SheetHeading>
+      <BottomSheet open={changing} onClose={() => setChanging(false)} title={t.plural("customerChangeLinkTitle", targets.length)} banner={banner}>
         <div className="space-y-4">
           <p className="text-sm text-white/50">{t("customerChangeLinkHint")}</p>
           <LinkInput value={link} onChange={setLink} face={targets[0]?.face} placeholder={t("linkPlaceholder")} onPasteFailed={() => show({ tone: "error", text: tc("pasteFailed") })} />
-          <button type="button" className={BTN_PRIMARY} disabled={busy || !link.trim()} onClick={() => void changeLink()}>
-            {busy ? <Spinner /> : <Link2 className="h-5 w-5" />}
-            {t("customerChangeLink")}
-          </button>
+          <SheetActions>
+            <Button type="button" variant="brand" accent="tags" size="lg" loading={busy} disabled={!link.trim()} onClick={() => void changeLink()} className="w-full">
+              <Link2 className="!size-5" />
+              {t("customerChangeLink")}
+            </Button>
+            <Button type="button" variant="ghost" size="lg" onClick={() => setChanging(false)} className="w-full">
+              {tc("cancel")}
+            </Button>
+          </SheetActions>
         </div>
       </BottomSheet>
 
-      <BottomSheet open={unlinking != null} onClose={() => setUnlinking(null)} title={unlinking ? t("customerUnlinkTitle", { code: unlinking.publicCode }) : undefined}>
-        <SheetHeading>{unlinking ? t("customerUnlinkTitle", { code: unlinking.publicCode }) : undefined}</SheetHeading>
-        <div className="space-y-4">
-          <p className="text-sm text-white/55">{t("customerUnlinkHint")}</p>
-          <div className="grid grid-cols-2 gap-2">
-            <button type="button" className={BTN_TERTIARY} onClick={() => setUnlinking(null)}>{tc("cancel")}</button>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void unlink()}
-              className="flex min-h-[48px] items-center justify-center gap-2 rounded-2xl bg-red-500 px-5 text-base font-bold text-white active:bg-red-600 disabled:opacity-50"
-              data-testid="customer-unlink-confirm"
-            >
-              {busy ? <Spinner /> : <Unlink className="h-5 w-5" />}
-              {t("customerUnlink")}
-            </button>
-          </div>
-        </div>
-      </BottomSheet>
+      <ConfirmDialog
+        open={unlinking != null}
+        onOpenChange={(open) => { if (!open) setUnlinking(null); }}
+        tone="danger"
+        title={unlinking ? t("customerUnlinkTitle", { code: unlinking.publicCode }) : ""}
+        description={t("customerUnlinkHint")}
+        confirmLabel={t("customerUnlink")}
+        error={unlinkError}
+        testId="customer-unlink-confirm"
+        onConfirm={() => unlink()}
+      />
     </section>
   );
 }

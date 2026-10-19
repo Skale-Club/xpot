@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, Lock, ShieldAlert, X } from "lucide-react";
+import { Check, Lock, RotateCw, ShieldAlert } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { InlineAlert } from "@/components/xpot/InlineAlert";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
-import { errorText, haptic } from "./lib";
-import { BTN_PRIMARY, BTN_TERTIARY, BottomSheet, SHEET_TITLE, Spinner, TapAnimation, type Identity } from "./ui";
-import { canLockChip, lockChip, mapNfcError } from "./webNfc";
-
-const isIos = () =>
-  typeof navigator !== "undefined" && (/iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1));
+import { errorText, haptic, isIos } from "./lib";
+import { BottomSheet, SHEET_TITLE, SheetActions, Spinner, StepList, TapAnimation, type Identity } from "./ui";
+import { canLockChip, lockChip, mapNfcError, nfcMode } from "./webNfc";
 
 /**
  * Makes a written chip read-only for good, so nobody can rewrite it later.
@@ -27,6 +26,8 @@ export default function LockSheet({ open, identity, onClose, onLocked }: {
   const tc = useT(commonMessages);
   const [phase, setPhase] = useState<"idle" | "locking" | "saving" | "done" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
+  // The chip was sealed but recording it failed: a retry only records it (the chip cannot be locked twice).
+  const [chipLocked, setChipLocked] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
   const cancel = useCallback(() => {
@@ -39,6 +40,7 @@ export default function LockSheet({ open, identity, onClose, onLocked }: {
       cancel();
       setPhase("idle");
       setError(null);
+      setChipLocked(false);
     }
     return cancel;
   }, [open, cancel]);
@@ -51,19 +53,19 @@ export default function LockSheet({ open, identity, onClose, onLocked }: {
     setPhase("locking");
     try {
       await lockChip(ctrl.signal);
-      haptic([60, 40, 60]);
-      setPhase("saving");
-      await onLocked?.();
-      setPhase("done");
     } catch (err) {
       const e = mapNfcError(err);
       if (e.silent) return setPhase("idle");
       setError(e.code === "nfcGeneric" ? errorText(err, t("nfcGeneric")) : t(e.code));
       setPhase("error");
+      return;
     }
+    haptic([60, 40, 60]);
+    setChipLocked(true);
+    await markLocked();
   };
 
-  /** iPhone: locked with NFC Tools; record it. */
+  /** Another phone: locked with NFC Tools; record it. */
   const markLocked = async () => {
     setError(null);
     setPhase("saving");
@@ -82,33 +84,23 @@ export default function LockSheet({ open, identity, onClose, onLocked }: {
   };
 
   return (
-    <BottomSheet open={open} onClose={close} title={t("lockTitle")}>
-      <div className="flex items-center justify-between">
-        <h2 className={`${SHEET_TITLE} flex items-center gap-2`}>
-          <Lock className="h-5 w-5 text-amber-300" />
-          {t("lockTitle")}
-        </h2>
-        <button type="button" onClick={close} aria-label={tc("close")} className="flex h-11 w-11 items-center justify-center rounded-full text-white/60 active:bg-white/10">
-          <X className="h-5 w-5" />
-        </button>
-      </div>
-
+    <BottomSheet open={open} onClose={close} title={t("lockTitle")} icon={<Lock className="h-5 w-5 shrink-0 text-white/60" />}>
       {phase === "done" ? (
         <div className="mt-6 text-center">
           <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-emerald-500 text-white">
             <Check className="h-10 w-10" />
           </div>
           <p className={`mt-3 ${SHEET_TITLE}`}>{t("lockDone")}</p>
-          <button type="button" onClick={close} className={`${BTN_PRIMARY} mt-5`}>
+          <Button type="button" variant="brand" accent="tags" size="lg" onClick={close} className="mt-5 w-full">
             {tc("done")}
-          </button>
+          </Button>
         </div>
       ) : phase === "locking" ? (
         <>
           <TapAnimation identity={identity} icon={Lock} label={t("lockHold")} sub={t("lockHoldSub")} />
-          <button type="button" onClick={() => { cancel(); setPhase("idle"); }} className={BTN_TERTIARY}>
+          <Button type="button" variant="ghost" size="lg" onClick={() => { cancel(); setPhase("idle"); }} className="w-full">
             {tc("cancel")}
-          </button>
+          </Button>
         </>
       ) : phase === "saving" ? (
         <div className="flex flex-col items-center py-8 text-white/60">
@@ -117,39 +109,35 @@ export default function LockSheet({ open, identity, onClose, onLocked }: {
       ) : (
         <div className="mt-3 space-y-4">
           <p className="text-sm text-white/70">{identity === "direct" ? t("lockExplainDirect") : t("lockExplainXpot")}</p>
-          <p className="flex items-center gap-2 rounded-2xl border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-sm font-semibold text-amber-100">
-            <ShieldAlert className="h-4 w-4 shrink-0 text-amber-300" />
-            {t("lockWarning")}
-          </p>
-          {error && (
-            <p role="alert" className="rounded-2xl border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm font-medium text-red-100">
-              {error}
-            </p>
-          )}
+          <InlineAlert tone="warning" icon={ShieldAlert}>
+            <span className="font-semibold text-amber-100">{t("lockWarning")}</span>
+          </InlineAlert>
+          {error && <InlineAlert tone="error">{error}</InlineAlert>}
           {canLockChip() ? (
-            <button type="button" onClick={() => void start()} className={BTN_PRIMARY} data-testid="button-lock-now">
-              <Lock className="h-5 w-5" />
-              {phase === "error" ? tc("retry") : t("lockNow")}
-            </button>
-          ) : isIos() ? (
-            // iPhone: the app cannot lock; NFC Tools can, and the person tells us it is done.
+            <SheetActions>
+              <Button type="button" variant="brand" accent="tags" size="lg" onClick={() => void (chipLocked ? markLocked() : start())} className="w-full" data-testid="button-lock-now">
+                {phase === "error" ? <RotateCw className="!size-5" /> : <Lock className="!size-5" />}
+                {phase === "error" ? tc("retry") : t("lockNow")}
+              </Button>
+              <Button type="button" variant="ghost" size="lg" onClick={close} className="w-full">
+                {tc("cancel")}
+              </Button>
+            </SheetActions>
+          ) : nfcMode() === "app" ? (
+            // Another phone: the app cannot lock; NFC Tools can, and the person tells us it is done.
             <>
-              <ol className="space-y-2">
-                {(["lockIphone1", "lockIphone2", "lockIphone3"] as const).map((step, i) => (
-                  <li key={step} className="flex gap-3 text-sm text-white/75">
-                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-amber-400/15 text-xs font-bold text-amber-300">{i + 1}</span>
-                    <span className="pt-0.5">{t(step)}</span>
-                  </li>
-                ))}
-              </ol>
-              <button type="button" onClick={() => void markLocked()} className={BTN_PRIMARY} data-testid="button-lock-marked">
-                <Lock className="h-5 w-5" />
-                {t("lockIphoneDone")}
-              </button>
+              <StepList steps={(["lockIphone1", "lockIphone2", isIos() ? "lockIphone3" : "lockPhone3"] as const).map((step) => ({ key: step, text: t(step) }))} />
+              <SheetActions>
+                <Button type="button" variant="brand" accent="tags" size="lg" onClick={() => void markLocked()} className="w-full" data-testid="button-lock-marked">
+                  <Lock className="!size-5" />
+                  {t("lockIphoneDone")}
+                </Button>
+                <Button type="button" variant="ghost" size="lg" onClick={close} className="w-full">
+                  {tc("cancel")}
+                </Button>
+              </SheetActions>
             </>
-          ) : (
-            <p className="text-sm text-white/50">{t("lockUnsupported")}</p>
-          )}
+          ) : null}
         </div>
       )}
     </BottomSheet>

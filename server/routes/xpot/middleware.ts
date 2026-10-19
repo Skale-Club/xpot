@@ -93,7 +93,6 @@ export const VISITS_ONLY_PATHS = [
   "/sync",
   "/map",
   "/prospecting",
-  "/xphere",
   "/products",
   "/sales",
   "/consignments",
@@ -136,6 +135,64 @@ export function viewsAsRep(req: Request): boolean {
 /** Whether this request's lists span every rep: a manager or admin, unless viewing as a rep. */
 export function listsEveryone(req: Request, actor: { user: SessionUser; rep: { role: string } }): boolean {
   return isManagerOrAdmin(actor) && !viewsAsRep(req);
+}
+
+/**
+ * The app's management mode is on ("X-Xpot-View: manage"). A manager's lists
+ * widen without it too (no header means management, as before); for a Rep
+ * Admin of an organization it is the only way their lists widen, so an API
+ * call that says nothing gets their own records.
+ */
+export function inManagementView(req: Request): boolean {
+  return req.get("x-xpot-view") === "manage";
+}
+
+/**
+ * Whose records a list shows:
+ * - `everyone`: a manager or admin in management mode (listsEveryone);
+ * - `organizations`: a Rep Admin in management mode, the organizations they
+ *   run and no other (managedOrganizationIds);
+ * - `own`: everyone else, and both of them with management mode off. Their own
+ *   records, in the organizations they are still active in (null: no limit).
+ * Lists that have no organization (visits, opportunities, Tags) widen only
+ * for `everyone`.
+ */
+export type ListScope =
+  | { kind: "everyone" }
+  | { kind: "organizations"; organizationIds: number[]; activeOrganizationIds: number[] | null }
+  | { kind: "own"; activeOrganizationIds: number[] | null };
+
+export async function listScope(req: Request, actor: XpotActor): Promise<ListScope> {
+  if (listsEveryone(req, actor)) return { kind: "everyone" };
+  const { activeOrganizationIds, managedOrganizationIds } = await import("../../organizations/service.js");
+  const active = await activeOrganizationIds(actor);
+  if (!isManagerOrAdmin(actor) && inManagementView(req)) {
+    const managed = await managedOrganizationIds(actor);
+    if (managed?.length) return { kind: "organizations", organizationIds: managed, activeOrganizationIds: active };
+  }
+  return { kind: "own", activeOrganizationIds: active };
+}
+
+/**
+ * The repId / organizationIds filters of a sales or consignment list for a
+ * scope. `requestedRepId` (?repId=) narrows a wide scope to one person, and
+ * `requestedOrganizationId` (?organizationId=) a manager's everyone to one
+ * organization; both are ignored in a narrower scope. Asking for yourself is
+ * your own records, in every scope (the Dashboard does).
+ */
+export function recordFilters(
+  scope: ListScope,
+  actor: Pick<XpotActor, "rep">,
+  requestedRepId?: number,
+  requestedOrganizationId?: number,
+): { repId?: number; organizationIds?: number[] } {
+  if (scope.kind === "everyone") {
+    return { repId: requestedRepId, organizationIds: requestedOrganizationId ? [requestedOrganizationId] : undefined };
+  }
+  if (scope.kind === "organizations" && requestedRepId !== actor.rep.id) {
+    return { repId: requestedRepId, organizationIds: scope.organizationIds };
+  }
+  return { repId: actor.rep.id, organizationIds: scope.activeOrganizationIds ?? undefined };
 }
 
 export async function requireXpotManager(req: Request, res: Response, next: NextFunction) {
@@ -183,8 +240,21 @@ export function requireSuperAdmin(req: Request, res: Response, next: NextFunctio
 
 export type XpotActor = NonNullable<Awaited<ReturnType<typeof ensureXpotRep>>>;
 
-export async function canAccessLead(actor: XpotActor, lead: { ownerRepId: number | null; organizationId: number }): Promise<boolean> {
+export async function canAccessLead(
+  actor: XpotActor,
+  lead: { id?: number; ownerRepId: number | null; organizationId: number },
+  options: { viaPieces?: boolean } = {},
+): Promise<boolean> {
   if (isManagerOrAdmin(actor)) return true;
+  if (await ownsOrManagesLead(actor, lead)) return true;
+  // The company holding one of the rep's Tags pieces is their customer too, even
+  // when someone else created the lead (a manager linked the piece, or the lead
+  // landed in another of the rep's Organizations). Reading and editing it is
+  // allowed; destructive calls pass viaPieces: false.
+  return options.viaPieces !== false && lead.id != null && storage.leadHoldsRepPiece(lead.id, actor.rep.id);
+}
+
+async function ownsOrManagesLead(actor: XpotActor, lead: { ownerRepId: number | null; organizationId: number }): Promise<boolean> {
   // Transitional compatibility for isolated unit-test fixtures and pre-migration rows.
   // Production migration 0023 makes organization_id NOT NULL.
   if (!lead.organizationId) return lead.ownerRepId === actor.rep.id;
@@ -193,8 +263,31 @@ export async function canAccessLead(actor: XpotActor, lead: { ownerRepId: number
   return lead.ownerRepId === actor.rep.id || canManageOrganizationForActor(actor, lead.organizationId);
 }
 
+/**
+ * Owner-level access: the lead's owner, a Rep Admin of its Organization, or a
+ * manager. Holding a piece there is not enough. Deleting, changing the owner or
+ * the funnel status, CRM sync and removing photos need this.
+ */
+export function ownsLead(actor: XpotActor, lead: { ownerRepId: number | null; organizationId: number }): Promise<boolean> {
+  return canAccessLead(actor, lead, { viaPieces: false });
+}
+
+/** 403 for a caller with piece-only access to a lead (see ownsLead). */
+export function refuseNotOwner(res: Response) {
+  return res.status(403).json({ code: "lead_owner_only", message: "Only the company's owner or a manager can do this." });
+}
+
+/**
+ * What a lead route needs: `read` (the default: reading and editing details,
+ * piece holders included), `owner` (ownsLead), or `records`. A sale or stock
+ * recorded on a lead is filed under the lead's Organization, and sales lists and
+ * GET /sales/:id are scoped by Organization, so a piece holder outside it would
+ * never see what they recorded: they are refused instead.
+ */
+export type LeadNeed = "read" | "owner" | "records";
+
 /** Load a lead and enforce access. Returns null after writing the error response. */
-export async function loadAccessibleLead(req: Request, res: Response, leadId: number) {
+export async function loadAccessibleLead(req: Request, res: Response, leadId: number, need: LeadNeed = "read") {
   const actor = (req as any).xpotActor as XpotActor;
   if (!Number.isFinite(leadId) || leadId <= 0) {
     res.status(400).json({ message: "Invalid lead id" });
@@ -206,8 +299,22 @@ export async function loadAccessibleLead(req: Request, res: Response, leadId: nu
     return null;
   }
   if (!(await canAccessLead(actor, lead))) {
-    res.status(403).json({ message: "Access denied" });
+    res.status(403).json({ code: "access_denied", message: "Access denied" });
     return null;
+  }
+  if (need === "owner" && !(await ownsLead(actor, lead))) {
+    refuseNotOwner(res);
+    return null;
+  }
+  if (need === "records" && !(await ownsLead(actor, lead))) {
+    const { canViewOrganizationForActor } = await import("../../organizations/service.js");
+    if (!(await canViewOrganizationForActor(actor, lead.organizationId))) {
+      res.status(403).json({
+        code: "lead_other_organization",
+        message: "This company is in an Organization you don't belong to, so what you record here would not show up for you. Ask a manager.",
+      });
+      return null;
+    }
   }
   return lead;
 }

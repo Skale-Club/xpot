@@ -3,6 +3,7 @@
 // Errors carry a code; the screens turn it into words in the user's language.
 
 import { contentKindOf } from "@shared/chipContent";
+import { currentPlatform, isIpad } from "@/lib/device";
 
 interface NdefRecordLike {
   recordType: string;
@@ -58,6 +59,23 @@ function getCtor(): NdefReaderCtor | null {
 
 export function isWebNfcSupported(): boolean {
   return getCtor() !== null;
+}
+
+/**
+ * How chips are handled on this device, so a screen offers only what works here:
+ *   web   Chrome on Android: the app reads, writes and locks chips itself.
+ *   app   Any other phone (iPhone, other Android browsers): NFC Tools writes and
+ *         locks the chip; the app cannot read it.
+ *   none  A computer or an iPad: no NFC at all; it hands the job to the phone with a QR.
+ */
+export type NfcMode = "web" | "app" | "none";
+
+export function nfcMode(): NfcMode {
+  if (isWebNfcSupported()) return "web";
+  if (isIpad()) return "none";
+  if (currentPlatform() !== "other") return "app";
+  // A tablet with an unusual user agent still has a touch screen.
+  return typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches ? "app" : "none";
 }
 
 export function mapNfcError(err: unknown): NfcError {

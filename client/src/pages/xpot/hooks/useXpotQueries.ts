@@ -10,10 +10,7 @@ import { checkinMessages } from "@/i18n/messages/checkin";
 import { tabs } from "../utils";
 import { useXpotShared } from "./useXpotShared";
 import { getHttpStatus } from "@/lib/pwa";
-import type { DashboardResponse, FullSalesLead, EnrichedSalesVisit, XpotMeResponse } from "../types";
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyMutation = ReturnType<typeof useMutation<any, any, any, any>>;
+import type { DashboardResponse, XpotMeResponse } from "../types";
 
 
 export function useXpotQueries() {

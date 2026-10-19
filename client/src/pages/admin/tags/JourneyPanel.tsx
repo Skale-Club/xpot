@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { Archive, Bot, Check, ChevronRight, ClipboardList, Cog, History, Plus, User } from "lucide-react";
+import { Archive, Bot, Check, ChevronRight, ClipboardList, Cog, History, Layers, Plus, User } from "lucide-react";
 import { ListPager } from "@/components/xpot/pagination";
 import { JOURNEY_PRODUCTION_ACTIONS, isClosedPlanStatus } from "@shared/tagJourney";
 import type { TagJourneyEntryItem, TagPlanItem } from "@shared/tagsApi";
@@ -9,10 +9,16 @@ import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/i18n";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
 import { shellMessages } from "@/i18n/messages/shell";
-import { tagsMessages } from "@/i18n/messages/tags";
+import { Button } from "@/components/ui/button";
+import { SectionCard } from "@/components/xpot/DashboardKit";
+import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
+import { PILL_DOTS, toneOf, JOURNEY_KIND_TONE } from "@/components/xpot/StatusPill";
+import { adminTagsUiMessages } from "@/i18n/messages/adminTagsUi";
 import { errorMessage, formatDate, formatDateTime, formatTime, invalidateAdminTags, sendJson } from "./api";
-import { BTN_GHOST, CARD } from "./ui";
 import { Loading } from "./pieces-shared";
+import { groupJourneyRows, journeyValueKind } from "./journey-group";
+import { kitShort } from "@/components/piece/pieceView";
+import { useTagLabels } from "./labels";
 import { NewEntryDialog, NewPlanDialog, PlanStatusDialog } from "./JourneyForms";
 import {
   EntryStatusBadge,
@@ -31,7 +37,13 @@ import {
 
 const TAGS_BASE = "/admin/tags";
 const SMALL_BTN =
-  "inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-white/60 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-40";
+  "inline-flex min-h-9 items-center gap-1 rounded-lg px-2 text-xs font-medium text-white/60 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-40";
+/**
+ * Archiving is occasional: on a mouse it shows on hover or keyboard focus, not on every row; on touch
+ * (no hover) it is always visible, since there is nothing to hover.
+ */
+const HOVER_REVEAL =
+  "[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:focus-visible:opacity-100 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-focus-within:opacity-100";
 const LINK = "font-mono hover:text-white hover:underline";
 
 /** Who did it: the AI session (MCP), a person (rep name, else email) or the system. */
@@ -79,22 +91,15 @@ function MetadataDetails({ metadata }: { metadata: Record<string, unknown> }) {
   );
 }
 
-/** Timeline dot: the entry's kind at a glance (a decision, a risk, a result...). */
-const KIND_DOT: Record<string, string> = {
-  execution: "bg-white/40",
-  decision: "bg-blue-400",
-  insight: "bg-violet-400",
-  observation: "bg-white/25",
-  risk: "bg-amber-400",
-  result: "bg-emerald-400",
-};
+/** Timeline dot: the entry's kind at a glance (a decision, a risk, a result...), in the kind's tone. */
+const kindDot = (kind: string) => PILL_DOTS[toneOf(JOURNEY_KIND_TONE, kind)];
 
 /** Production steps get a label of their own; system actions repeat what the title says. */
 const LABELLED_ACTIONS = new Set<string>(JOURNEY_PRODUCTION_ACTIONS);
 
 function EntryRow({ entry, showScope }: { entry: TagJourneyEntryItem; showScope: boolean }) {
   const t = useT(manageTagsMessages);
-  const tt = useT(tagsMessages);
+  const tagLabels = useTagLabels();
   const labels = useJourneyLabels();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
@@ -104,19 +109,14 @@ function EntryRow({ entry, showScope }: { entry: TagJourneyEntryItem; showScope:
     onError: (err) => toast({ title: t("couldNotUpdateEntry"), description: errorMessage(err), variant: "destructive" }),
   });
   const dimmed = entry.status === "archived" || entry.status === "superseded";
-  // A piece's status change reads as the status names people see (Available → Live).
-  const isStatusChange = !!entry.action?.startsWith("tag_");
-  const value = (v: string) => {
-    if (!isStatusChange) return v;
-    const key = `status_${v}`;
-    const label = tt(key as never);
-    return label === key ? v : label;
-  };
+  // A piece's status or stock change reads as the names people see (Not set up → Live, In stock → Internal use).
+  const valueKind = journeyValueKind(entry.action);
+  const value = (v: string) => (valueKind === "status" ? tagLabels.status(v) : valueKind === "stock" ? tagLabels.stock(v) : v);
   const actorName = entry.actor === "human" ? entry.actorName ?? entry.actorEmail : null;
   const labelledAction = entry.action && LABELLED_ACTIONS.has(entry.action) ? entry.action : null;
   return (
     <li className={`group relative min-w-0 space-y-1 py-3 pl-5 ${dimmed ? "opacity-60" : ""}`} data-testid="journey-entry">
-      <span className={`absolute -left-[4.5px] top-[1.15rem] h-2 w-2 rounded-full ${KIND_DOT[entry.kind] ?? "bg-white/40"}`} aria-hidden />
+      <span className={`absolute -left-[4.5px] top-[1.15rem] h-2 w-2 rounded-full ${kindDot(entry.kind)}`} aria-hidden />
       {/* Only what is not routine: execution and "active" are the norm, so they stay quiet. */}
       {(entry.kind !== "execution" || labelledAction || entry.status !== "active") && (
         <div className="flex flex-wrap items-center gap-2">
@@ -153,7 +153,7 @@ function EntryRow({ entry, showScope }: { entry: TagJourneyEntryItem; showScope:
             {entry.serialNumber ? ` #${entry.serialNumber}` : ""}
           </button>
         )}
-        {entry.kitId && <span className="font-mono">{t("kitShort", { id: entry.kitId.slice(0, 8) })}</span>}
+        {entry.kitId && <span className="font-mono">{t("kitShort", { id: kitShort(entry.kitId, entry.kitCode) ?? "" })}</span>}
         {entry.repName && entry.repName !== actorName && <span>{entry.repName}</span>}
         {entry.leadName && <span className="text-white/60">{entry.leadName}</span>}
         {entry.planTitle && (
@@ -169,11 +169,10 @@ function EntryRow({ entry, showScope }: { entry: TagJourneyEntryItem; showScope:
               {t("approve")}
             </button>
           )}
-          {/* Archiving is occasional: it shows on hover or keyboard focus, not on every row. */}
           {!dimmed && (
             <button
               type="button"
-              className={`${SMALL_BTN} opacity-0 focus-visible:opacity-100 group-hover:opacity-100`}
+              className={`${SMALL_BTN} ${HOVER_REVEAL}`}
               onClick={() => review.mutate("archived")}
               disabled={review.isPending}
               data-testid="journey-entry-archive"
@@ -188,10 +187,55 @@ function EntryRow({ entry, showScope }: { entry: TagJourneyEntryItem; showScope:
   );
 }
 
+/** A run of the same automatic entry ("24 similar entries"), folded until opened. */
+function EntryGroup({ entries, showScope }: { entries: TagJourneyEntryItem[]; showScope: boolean }) {
+  const t = useT(adminTagsUiMessages);
+  const [open, setOpen] = useState(false);
+  const newest = entries[0];
+  const oldest = entries[entries.length - 1];
+  if (open) {
+    return (
+      <>
+        {entries.map((e) => (
+          <EntryRow key={e.id} entry={e} showScope={showScope} />
+        ))}
+        <li className="py-2 pl-5">
+          <button type="button" className={SMALL_BTN} onClick={() => setOpen(false)} aria-expanded>
+            <ChevronRight className="h-3 w-3 -rotate-90" />
+            {t("journeyGroupHide")}
+          </button>
+        </li>
+      </>
+    );
+  }
+  return (
+    <li className="relative min-w-0 space-y-1 py-3 pl-5" data-testid="journey-entry-group">
+      <span className={`absolute -left-[4.5px] top-[1.15rem] h-2 w-2 rounded-full ${kindDot(newest.kind)}`} aria-hidden />
+      <p className="flex items-center gap-1.5 text-xs font-medium text-white/55">
+        <Layers className="h-3 w-3" aria-hidden="true" />
+        {t("journeyGroup", { count: entries.length })}
+      </p>
+      <p className="break-words font-medium text-white">{newest.title}</p>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-white/40">
+        <span>
+          {formatTime(oldest.occurredAt)} – {formatTime(newest.occurredAt)}
+        </span>
+        <ActorLabel entry={newest} />
+        <span className="ml-auto">
+          <button type="button" className={SMALL_BTN} onClick={() => setOpen(true)} aria-expanded={false} data-testid="journey-entry-group-open">
+            <ChevronRight className="h-3 w-3 rotate-90" />
+            {t("journeyGroupShow")}
+          </button>
+        </span>
+      </div>
+    </li>
+  );
+}
+
 function PlanList({ plans, onOpen }: { plans: TagPlanItem[]; onOpen: (plan: TagPlanItem) => void }) {
   const t = useT(manageTagsMessages);
   const labels = useJourneyLabels();
-  if (plans.length === 0) return <p className="text-sm text-white/40">{t("noPlans")}</p>;
+  if (plans.length === 0) return <EmptyState compact dense tone="tags" icon={ClipboardList} title={t("noPlans")} cardStyle={{}} />;
   return (
     <ul className="divide-y divide-white/5">
       {plans.map((p) => (
@@ -199,7 +243,7 @@ function PlanList({ plans, onOpen }: { plans: TagPlanItem[]; onOpen: (plan: TagP
           <button
             type="button"
             onClick={() => onOpen(p)}
-            className={`w-full min-w-0 space-y-1 py-2.5 text-left ${isClosedPlanStatus(p.status) ? "opacity-70" : ""}`}
+            className={`w-full min-w-0 space-y-1 py-2.5 text-left transition-colors hover:bg-white/[0.03] ${isClosedPlanStatus(p.status) ? "opacity-70" : ""}`}
             data-testid="journey-plan"
           >
             <div className="flex flex-wrap items-center gap-2">
@@ -249,7 +293,7 @@ function JourneyPanelBody({ scope, filters, title, search = "" }: { scope: Journ
   const [entryOpen, setEntryOpen] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
   const [plan, setPlan] = useState<TagPlanItem | null>(null);
-  const { data, isLoading, isError, error, hasMore, loadingMore, loadMore } = useJourney({ ...scope, ...filters }, true);
+  const { data, isLoading, isError, error, refetch, hasMore, loadingMore, loadMore } = useJourney({ ...scope, ...filters }, true);
   const scopeLabel = scope.tagId ? ("piece" as const) : scope.batchId ? ("batch" as const) : undefined;
   const repFiltered = filters?.repId != null;
   // Search runs over what is loaded: titles, notes, codes, customers, reps.
@@ -261,60 +305,65 @@ function JourneyPanelBody({ scope, filters, title, search = "" }: { scope: Journ
   );
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[1fr_320px]" data-testid="admin-tags-journey">
-      <section className={`${CARD} min-w-0 p-4`}>
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <h3 className="flex items-center gap-2 text-sm font-semibold text-white">
-            <History className="h-4 w-4 text-white/50" />
-            {title ?? ts("manageJourney")}
-          </h3>
-          <button type="button" className={BTN_GHOST} onClick={() => setEntryOpen(true)} data-testid="journey-record">
+    <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]" data-testid="admin-tags-journey">
+      <SectionCard
+        accent="tags"
+        icon={History}
+        title={title ?? ts("manageJourney")}
+        className="min-w-0"
+        actions={
+          <Button type="button" variant="secondary" size="sm" className="min-h-10" onClick={() => setEntryOpen(true)} data-testid="journey-record">
             <Plus className="h-3.5 w-3.5" />
             {t("journeyRecord")}
-          </button>
-        </div>
+          </Button>
+        }
+      >
         {isLoading ? (
-          <Loading className="py-10" />
+          <Loading rows={4} />
         ) : isError ? (
-          <p className="text-sm text-red-400">{t("journeyLoadError")} {errorMessage(error)}</p>
+          <ErrorState compact title={t("journeyLoadError")} message={errorMessage(error)} onRetry={() => void refetch()} />
         ) : !data || data.entries.length === 0 ? (
-          <div className="px-4 py-10 text-center text-sm text-white/40">
-            {t("journeyEmpty")}
-          </div>
+          <EmptyState compact tone="tags" icon={History} title={t("journeyEmpty")} cardStyle={{}} />
         ) : entries.length === 0 ? (
-          <div className="px-4 py-10 text-center text-sm text-white/40">{t("journeyNoMatch")}</div>
+          <EmptyState compact tone="tags" icon={History} title={t("journeyNoMatch")} cardStyle={{}} />
         ) : (
           <div className="space-y-3">
             {groupByDay(entries).map((g) => (
               <div key={g.day}>
                 <p className="py-1 text-xs font-semibold uppercase tracking-wider text-white/40">{g.day}</p>
                 <ul className="ml-[3px] divide-y divide-white/5 border-l border-white/10">
-                  {g.entries.map((e) => (
-                    <EntryRow key={e.id} entry={e} showScope={!scope.tagId} />
-                  ))}
+                  {groupJourneyRows(g.entries).map((row) =>
+                    row.type === "group" ? (
+                      <EntryGroup key={row.key} entries={row.entries} showScope={!scope.tagId} />
+                    ) : (
+                      <EntryRow key={row.entry.id} entry={row.entry} showScope={!scope.tagId} />
+                    ),
+                  )}
                 </ul>
               </div>
             ))}
             <ListPager shown={data.entries.length} hasMore={hasMore} onMore={loadMore} loading={loadingMore} pageSize={JOURNEY_PAGE} />
           </div>
         )}
-      </section>
+      </SectionCard>
 
-      <section className={`${CARD} h-fit min-w-0 p-4`}>
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <h3 className="flex items-center gap-2 text-sm font-semibold text-white">
-            <ClipboardList className="h-4 w-4 text-white/50" />
-            {t("plans")}
-          </h3>
-          <button type="button" className={BTN_GHOST} onClick={() => setPlanOpen(true)} data-testid="journey-new-plan">
+      <SectionCard
+        accent="tags"
+        icon={ClipboardList}
+        title={t("plans")}
+        className="h-fit min-w-0"
+        bodyClassName="px-4 py-2"
+        actions={
+          <Button type="button" variant="secondary" size="sm" className="min-h-10" onClick={() => setPlanOpen(true)} data-testid="journey-new-plan">
             <Plus className="h-3.5 w-3.5" />
             {t("newPlanButton")}
-          </button>
-        </div>
-        {isLoading ? <Loading className="py-6" /> : <PlanList plans={data?.plans ?? []} onOpen={setPlan} />}
+          </Button>
+        }
+      >
+        {isLoading ? <Loading rows={2} /> : <PlanList plans={data?.plans ?? []} onOpen={setPlan} />}
         {repFiltered && <p className="mt-2 text-[11px] text-white/40">{t("plansHiddenRep")}</p>}
-        {scopeLabel && <p className="mt-2 text-[11px] text-white/40">{t(scopeLabel === "piece" ? "attachedPanelPiece" : "attachedPanelBatch")}</p>}
-      </section>
+        {scopeLabel && <p className="my-2 text-[11px] text-white/40">{t(scopeLabel === "piece" ? "attachedPanelPiece" : "attachedPanelBatch")}</p>}
+      </SectionCard>
 
       <NewEntryDialog open={entryOpen} onOpenChange={setEntryOpen} scope={scope} scopeLabel={scopeLabel} />
       <NewPlanDialog open={planOpen} onOpenChange={setPlanOpen} scope={scope} scopeLabel={scopeLabel} />

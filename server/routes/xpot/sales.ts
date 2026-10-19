@@ -2,12 +2,12 @@ import { Router } from "express";
 import { z } from "zod";
 import { storage } from "../../storage.js";
 import { salesStorage } from "../../storage-sales.js";
-import { requireXpotUser, isManagerOrAdmin, loadAccessibleLead, type XpotActor, listsEveryone } from "./middleware.js";
+import { requireXpotUser, isManagerOrAdmin, loadAccessibleLead, type XpotActor, listScope, recordFilters } from "./middleware.js";
 import { xpotSaleCreateSchema, xpotSalePaymentSchema, xpotSaleCancelSchema } from "#shared/xpot.js";
 import { allocateSaleLineTotals, computeSaleTotals, paymentStatusFor } from "#shared/pricing.js";
 import { syncSaleToXphere } from "./xphere-sync.js";
 import { cancelTagLinksForSale } from "../../tags/sales.js";
-import { activeOrganizationIds, canManageOrganizationForActor, canViewOrganizationForActor, managedOrganizationIds } from "../../organizations/service.js";
+import { canManageOrganizationForActor, canViewOrganizationForActor } from "../../organizations/service.js";
 
 // Direct sales: what the rep closes on the spot (a website, a marketing plan,
 // a handful of keychains sold outright). Consignment settlements also land
@@ -20,6 +20,7 @@ export function createSalesRouter() {
     leadId: z.coerce.number().int().positive().optional(),
     visitId: z.coerce.number().int().positive().optional(),
     repId: z.coerce.number().int().positive().optional(),
+    organizationId: z.coerce.number().int().positive().optional(),
     status: z.enum(["completed", "cancelled"]).optional(),
     source: z.enum(["sales", "tags", "voice", "visit", "lead"]).optional(),
     days: z.coerce.number().int().min(1).max(365).optional(),
@@ -27,40 +28,25 @@ export function createSalesRouter() {
     offset: z.coerce.number().int().min(0).optional(),
   });
 
-  // GET /sales — rep sees own; manager/admin sees all (optional ?repId=).
+  // GET /sales — whose sales follow management mode (listScope): your own with
+  // it off; on, a manager's everyone (optional ?repId=, ?organizationId=) and a
+  // Rep Admin's organizations.
   router.get("/sales", async (req, res) => {
     const actor = (req as any).xpotActor as XpotActor;
     const q = listQuerySchema.parse(req.query);
-    let repId: number | undefined;
-    let organizationIds: number[] | undefined;
-    if (listsEveryone(req, actor)) repId = q.repId;
-    else {
-      const managed = await managedOrganizationIds(actor);
-      if (managed?.length) organizationIds = managed;
-      else {
-        repId = actor.rep.id;
-        organizationIds = (await activeOrganizationIds(actor)) ?? undefined;
-      }
-    }
+    const { repId, organizationIds } = recordFilters(await listScope(req, actor), actor, q.repId, q.organizationId);
     const since = q.days ? new Date(Date.now() - q.days * 24 * 60 * 60 * 1000) : undefined;
     res.json(await salesStorage.listSales({ repId, organizationIds, leadId: q.leadId, visitId: q.visitId, status: q.status, source: q.source, since, limit: q.limit, offset: q.offset }));
   });
 
-  // GET /sales/summary?days=30[&repId=] — revenue, by product, daily series, consignment stock.
+  // GET /sales/summary?days=30[&repId=] — revenue, by product, daily series,
+  // consignment stock, in the same scope as the lists (the Dashboard asks for
+  // its own repId, so it stays personal in every mode).
   router.get("/sales/summary", async (req, res) => {
     const actor = (req as any).xpotActor as XpotActor;
     const days = Math.min(Math.max(Number(req.query.days) || 30, 1), 365);
-    let repId: number | undefined;
-    let organizationIds: number[] | undefined;
-    if (listsEveryone(req, actor)) repId = req.query.repId ? Number(req.query.repId) : undefined;
-    else {
-      const managed = await managedOrganizationIds(actor);
-      if (managed?.length) organizationIds = managed;
-      else {
-        repId = actor.rep.id;
-        organizationIds = (await activeOrganizationIds(actor)) ?? undefined;
-      }
-    }
+    const requested = Number(req.query.repId);
+    const { repId, organizationIds } = recordFilters(await listScope(req, actor), actor, Number.isInteger(requested) && requested > 0 ? requested : undefined);
     res.json(await salesStorage.salesSummary({ repId, organizationIds, days }));
   });
 
@@ -74,10 +60,10 @@ export function createSalesRouter() {
   router.get("/sales/:id", async (req, res) => {
     const actor = (req as any).xpotActor as XpotActor;
     const sale = await salesStorage.getSale(Number(req.params.id));
-    if (!sale) return res.status(404).json({ message: "Sale not found" });
+    if (!sale) return res.status(404).json({ code: "sale_not_found", message: "Sale not found" });
     if (!isManagerOrAdmin(actor) && (!(await canViewOrganizationForActor(actor, sale.sale.organizationId)) ||
       (sale.sale.repId !== actor.rep.id && !(await canManageOrganizationForActor(actor, sale.sale.organizationId))))) {
-      return res.status(403).json({ message: "Access denied" });
+      return res.status(403).json({ code: "access_denied", message: "Access denied" });
     }
     res.json(sale);
   });
@@ -88,13 +74,13 @@ export function createSalesRouter() {
     const actor = (req as any).xpotActor as XpotActor;
     const input = xpotSaleCreateSchema.parse(req.body);
 
-    const lead = await loadAccessibleLead(req, res, input.leadId);
+    const lead = await loadAccessibleLead(req, res, input.leadId, "records");
     if (!lead) return;
 
     if (input.visitId) {
       const visit = await storage.getSalesVisit(input.visitId);
       if (!visit || visit.leadId !== lead.id) {
-        return res.status(400).json({ message: "Visit does not belong to this lead" });
+        return res.status(400).json({ code: "visit_mismatch", message: "Visit does not belong to this lead" });
       }
     }
 
@@ -112,7 +98,7 @@ export function createSalesRouter() {
       if (item.productId) {
         const priced = await salesStorage.priceProduct(item.productId, item.quantity);
         if (!priced) return res.status(400).json({ message: `Product ${item.productId} not found` });
-        if (!priced.product.isActive) return res.status(400).json({ message: `${priced.product.name} is no longer sold` });
+        if (!priced.product.isActive) return res.status(400).json({ code: "product_not_sold", message: `${priced.product.name} is no longer sold`, params: { product: priced.product.name } });
         description = description || priced.product.name;
         unitPriceCents = unitPriceCents ?? priced.unitPriceCents;
         // Frozen here: editing the product's cost later must not rewrite the
@@ -121,7 +107,7 @@ export function createSalesRouter() {
         currency = priced.product.currency;
       }
       if (unitPriceCents === undefined) {
-        return res.status(400).json({ message: `Unit price required for "${description}"` });
+        return res.status(400).json({ code: "unit_price_required", message: `Unit price required for "${description}"`, params: { item: description } });
       }
       lines.push({
         productId: item.productId ?? null,
@@ -187,13 +173,13 @@ export function createSalesRouter() {
   router.patch("/sales/:id/payment", async (req, res) => {
     const actor = (req as any).xpotActor as XpotActor;
     const existing = await salesStorage.getSale(Number(req.params.id));
-    if (!existing) return res.status(404).json({ message: "Sale not found" });
+    if (!existing) return res.status(404).json({ code: "sale_not_found", message: "Sale not found" });
     if (!isManagerOrAdmin(actor) && (!(await canViewOrganizationForActor(actor, existing.sale.organizationId)) ||
       (existing.sale.repId !== actor.rep.id && !(await canManageOrganizationForActor(actor, existing.sale.organizationId))))) {
-      return res.status(403).json({ message: "Access denied" });
+      return res.status(403).json({ code: "access_denied", message: "Access denied" });
     }
     if (existing.sale.status === "cancelled") {
-      return res.status(400).json({ message: "Sale is cancelled" });
+      return res.status(400).json({ code: "sale_cancelled", message: "Sale is cancelled" });
     }
     const input = xpotSalePaymentSchema.parse(req.body);
     const total = existing.sale.totalCents;
@@ -217,14 +203,14 @@ export function createSalesRouter() {
   router.post("/sales/:id/cancel", async (req, res) => {
     const actor = (req as any).xpotActor as XpotActor;
     const existing = await salesStorage.getSale(Number(req.params.id));
-    if (!existing) return res.status(404).json({ message: "Sale not found" });
+    if (!existing) return res.status(404).json({ code: "sale_not_found", message: "Sale not found" });
     if (!isManagerOrAdmin(actor) && (!(await canViewOrganizationForActor(actor, existing.sale.organizationId)) ||
       (existing.sale.repId !== actor.rep.id && !(await canManageOrganizationForActor(actor, existing.sale.organizationId))))) {
-      return res.status(403).json({ message: "Access denied" });
+      return res.status(403).json({ code: "access_denied", message: "Access denied" });
     }
     if (existing.sale.status === "cancelled") return res.json(existing);
     if (existing.sale.kind === "consignment_settlement") {
-      return res.status(400).json({ message: "Settlement sales cannot be cancelled. Record a stock adjustment on the consignment instead." });
+      return res.status(400).json({ code: "settlement_sale_not_cancellable", message: "Settlement sales cannot be cancelled. Record a stock adjustment on the consignment instead." });
     }
     const { reason } = xpotSaleCancelSchema.parse(req.body ?? {});
     await salesStorage.updateSale(existing.sale.id, {
@@ -232,7 +218,8 @@ export function createSalesRouter() {
       cancelledAt: new Date(),
       cancelReason: reason ?? null,
     });
-    if (existing.sale.source === "tags") await cancelTagLinksForSale(existing.sale.id);
+    // Pieces can sit on any sale (sold from Tags, or linked to a Visits sale later).
+    await cancelTagLinksForSale(existing.sale.id, actor.user.userId);
     res.json(await salesStorage.getSale(existing.sale.id));
   });
 

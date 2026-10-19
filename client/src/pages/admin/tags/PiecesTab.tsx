@@ -1,19 +1,28 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useCallback, useMemo, useState, type FormEvent } from "react";
+import { useSearchParams } from "wouter";
 import { useMutation } from "@tanstack/react-query";
-import { CHIP_STATUS_TONE, Pill } from "@/components/xpot/StatusPill";
-import { Building2, CircleDot, Layers, Package, Plus, ScanLine, Users } from "lucide-react";
+import { Boxes, Building2, CircleDot, Layers, Network, Nfc, Package, Plus, ScanLine, Users } from "lucide-react";
 import { FilterBar, FilterSearch, FilterSelect } from "@/components/xpot/filters";
 import { useUrlFilters } from "@/hooks/use-url-filters";
 import { ListPager, useOffsetPages } from "@/components/xpot/pagination";
-import { TAG_PRODUCT_TYPES, TAG_STATUSES } from "@shared/tags";
+import { TAG_PRODUCT_TYPES, TAG_STATUSES, TAG_STOCK_STATUSES } from "@shared/tags";
+import { countStockMetric, type TagStockMetric } from "@shared/tagMetrics";
 import type { TagDetail, TagListItem } from "@shared/tagsApi";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
-import { TagPieceMention } from "@/components/xpot/TagProductThumbnail";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { ADMIN_TAGS_KEY, errorMessage, formatDateTime, getJson, invalidateAdminTags, sendJson, STALE_MS, withQuery } from "./api";
-import { BTN, BTN_GHOST, CARD, Empty, INPUT, PieceStatusPill, TD, TH } from "./ui";
-import { Loading, LoadError, Select, useBatchOptions, useLeads, useReps } from "./pieces-shared";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/xpot/EmptyState";
+import { Field, Input, Select } from "@/components/xpot/Field";
+import { ADMIN_TAGS_KEY, errorMessage, getJson, invalidateAdminTags, sendJson, STALE_MS, withQuery } from "./api";
+import { Loading, LoadError, organizationFilterOptions, useBatchOptions, useLeads, useOrganizations, useReps } from "./pieces-shared";
+import { useViewerAccess } from "@/lib/adminMode";
+import { catalogOptions, useTagCatalog } from "./batches-shared";
+import { PieceTable, type PieceColumn } from "./piece-table";
+import { PieceDetail } from "./PieceDetail";
+import { MasterDetail } from "@/components/xpot/MasterDetail";
+import { useIsDesktop } from "@/hooks/use-is-desktop";
+import { useIsSuperAdmin } from "@/components/xpot/AdminBadge";
 import { useTagLabels } from "./labels";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
@@ -21,33 +30,49 @@ import { shellMessages } from "@/i18n/messages/shell";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
 import { manageTagsPiecesMessages } from "@/i18n/messages/manageTagsPieces";
+import { manageTagsBatchesMessages } from "@/i18n/messages/manageTagsBatches";
 
 /** Pieces per server page; the next page loads as you reach the end. */
 const PAGE = 100;
+
+const ALL_COLUMNS: readonly PieceColumn[] = ["customer", "destination", "reseller", "chip", "scans", "lastInteraction", "batch"];
+const PANE_COLUMNS: readonly PieceColumn[] = ["customer", "reseller"];
+
+/** Whether a piece is open in the pane now (the next open replaces it in history). */
+const current = () => new URLSearchParams(window.location.search).has("piece");
 
 const METHOD_KEYS = [
   { value: "qr", key: "methodQr" },
   { value: "nfc", key: "methodNfc" },
 ] as const;
 
-/** Filters live in the URL (?status=…&rep=house…) so Overview links and the back button keep them. */
-const PIECE_FILTERS = { status: "", product: "", rep: "", lead: "", batch: "", method: "", search: "" };
+/**
+ * Filters live in the URL (?status=…&stock=house…) so Overview links and the back button keep them. `status` is the
+ * digital status (the link) and `stock` the physical piece, separately: nothing is added behind the user's back.
+ */
+const PIECE_FILTERS = { status: "", stock: "", product: "", rep: "", lead: "", batch: "", method: "", search: "", org: "" };
 type Filters = Record<keyof typeof PIECE_FILTERS, string>;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const posInt = (v: string | undefined) => (v && /^\d+$/.test(v) && Number(v) > 0 ? v : undefined);
 
+/** Stock filter values that are a shared stock number (shared/tagMetrics.ts) rather than one stock status. */
+const STOCK_METRIC_FILTERS: Record<string, TagStockMetric> = { house: "house", reps: "withResellers", sold: "sold" };
+
 /** Translate the URL filters into the list endpoint's query (listQuerySchema), dropping junk. */
 function listUrl(f: Filters, limit: number, offset: number): string {
   return withQuery("/api/xpot/tags", {
     status: f.status && (TAG_STATUSES as readonly string[]).includes(f.status) ? f.status : undefined,
-    stockStatus: f.status === "damaged" ? "damaged" : f.status === "inventory" ? "available" : undefined,
+    metric: STOCK_METRIC_FILTERS[f.stock],
+    stockStatus: !STOCK_METRIC_FILTERS[f.stock] && (TAG_STOCK_STATUSES as readonly string[]).includes(f.stock) ? f.stock : undefined,
     productType: f.product && (TAG_PRODUCT_TYPES as readonly string[]).includes(f.product) ? f.product : undefined,
     house: f.rep === "house" ? "1" : undefined,
     repId: f.rep !== "house" ? posInt(f.rep) : undefined,
     leadId: posInt(f.lead),
     batchId: f.batch && UUID.test(f.batch) ? f.batch : undefined,
     method: f.method === "qr" || f.method === "nfc" ? f.method : undefined,
+    // Platform management only: the server ignores it for anyone else.
+    organizationId: posInt(f.org),
     search: f.search.trim().slice(0, 100),
     limit,
     offset: offset || undefined,
@@ -60,17 +85,21 @@ function NewPieceDialog({ open, onOpenChange, onCreated }: { open: boolean; onOp
   const tc = useT(commonMessages);
   const ts = useT(shellMessages);
   const tg = useT(manageTagsMessages);
+  const tb = useT(manageTagsBatchesMessages);
   const labels = useTagLabels();
-  const [productType, setProductType] = useState<string | undefined>("google_review_sign");
-  const [face, setFace] = useState<string | undefined>(undefined);
+  const [productType, setProductType] = useState("google_review_sign");
+  const [face, setFace] = useState("");
   const [label, setLabel] = useState("");
+  // Required: without a catalog product the piece could never be sold (server/tags/sales.ts).
+  const [salesProductId, setSalesProductId] = useState("");
+  const { data: catalog = [] } = useTagCatalog();
   const create = useMutation({
-    mutationFn: () => sendJson<TagDetail>("POST", "/api/xpot/admin/tags", { productType, face: face ?? null, label }),
+    mutationFn: () => sendJson<TagDetail>("POST", "/api/xpot/admin/tags", { productType, salesProductId: Number(salesProductId), face: face || null, label }),
     onSuccess: (tag) => {
       void invalidateAdminTags();
       onOpenChange(false);
       setLabel("");
-      setFace(undefined);
+      setFace("");
       toast({ title: t("pieceCreated", { code: tag.publicCode }), description: t("pieceCreatedHint") });
       onCreated(tag.id);
     },
@@ -78,34 +107,36 @@ function NewPieceDialog({ open, onOpenChange, onCreated }: { open: boolean; onOp
   });
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    if (productType && !create.isPending) create.mutate();
+    if (productType && salesProductId && !create.isPending) create.mutate();
   };
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="border-white/10 bg-[#0d1326] text-white">
+      <DialogContent>
         <form onSubmit={submit} className="space-y-4">
           <DialogHeader>
             <DialogTitle>{t("newPieceTitle")}</DialogTitle>
-            <DialogDescription className="text-white/50">{t("newPieceDescription", { batches: ts("manageBatches") })}</DialogDescription>
+            <DialogDescription>{t("newPieceDescription", { batches: ts("manageBatches") })}</DialogDescription>
           </DialogHeader>
-          <label className="block space-y-1.5">
-            <span className="text-xs font-medium text-white/60">{t("productType")}</span>
-            <Select value={productType} onChange={setProductType} placeholder={t("choose")} options={labels.productOptions} allowEmpty={false} testId="new-piece-product" />
-          </label>
-          <label className="block space-y-1.5">
-            <span className="text-xs font-medium text-white/60">{tg("printedOnPiece")}</span>
+          <Field label={t("productType")}>
+            <Select value={productType} onChange={(e) => setProductType(e.target.value)} options={labels.productOptions} data-testid="new-piece-product" />
+          </Field>
+          <Field label={tb("fieldCatalogProduct")} hint={tb("catalogProductHint")}>
+            <Select value={salesProductId} onChange={(e) => setSalesProductId(e.target.value)} placeholder={tb("chooseCatalogProduct")} options={catalogOptions(catalog)} data-testid="new-piece-catalog" />
+          </Field>
+          <Field label={tg("printedOnPiece")} id="new-piece-face">
             <div className="flex items-center gap-2">
-              <TagFaceIcon face={face ?? (productType === "google_review_sign" ? "google_review" : null)} size="md" />
-              <Select value={face} onChange={setFace} placeholder={t("faceFromProductGoogle")} options={labels.faceOptions} testId="new-piece-face" />
+              <TagFaceIcon face={face || (productType === "google_review_sign" ? "google_review" : null)} size="md" />
+              <div className="min-w-0 flex-1">
+                <Select id="new-piece-face" value={face} onChange={(e) => setFace(e.target.value)} placeholder={t("faceFromProductGoogle")} options={labels.faceOptions} data-testid="new-piece-face" />
+              </div>
             </div>
-          </label>
-          <label className="block space-y-1.5">
-            <span className="text-xs font-medium text-white/60">{t("internalLabelOptional")}</span>
-            <input className={INPUT} value={label} onChange={(e) => setLabel(e.target.value)} maxLength={120} data-testid="new-piece-label" />
-          </label>
+          </Field>
+          <Field label={t("internalLabelOptional")}>
+            <Input value={label} onChange={(e) => setLabel(e.target.value)} maxLength={120} data-testid="new-piece-label" />
+          </Field>
           <DialogFooter className="gap-2">
-            <button type="button" className={BTN_GHOST} onClick={() => onOpenChange(false)}>{tc("cancel")}</button>
-            <button type="submit" className={BTN} disabled={!productType || create.isPending} data-testid="new-piece-create">{t("createPiece")}</button>
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>{tc("cancel")}</Button>
+            <Button type="submit" variant="brand" accent="tags" disabled={!productType || !salesProductId} loading={create.isPending} data-testid="new-piece-create">{t("createPiece")}</Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -113,93 +144,9 @@ function NewPieceDialog({ open, onOpenChange, onCreated }: { open: boolean; onOp
   );
 }
 
-function ChipStatusPill({ status, label }: { status: string; label: string }) {
-  return <Pill tone={CHIP_STATUS_TONE[status] ?? "slate"}>{label}</Pill>;
-}
-
-function PiecesTable({ tags, onOpen }: { tags: TagListItem[]; onOpen: (id: string) => void }) {
-  const tm = useT(manageTagsPiecesMessages);
-  const tg = useT(manageTagsMessages);
-  const labels = useTagLabels();
-  return (
-    <>
-      {/* Phones: tappable cards */}
-      <ul className="space-y-2 md:hidden">
-        {tags.map((t) => (
-          <li key={t.id}>
-            <button type="button" onClick={() => onOpen(t.id)} className={`${CARD} w-full p-3 text-left active:bg-white/[0.06]`} data-testid={`admin-piece-card-${t.publicCode}`}>
-              <div className="flex items-center justify-between gap-2">
-                <TagPieceMention
-                  publicCode={t.publicCode}
-                  productType={t.productType}
-                  face={t.face}
-                  batchCode={t.batchCode}
-                  customer={t.leadName}
-                  className="min-w-0 flex-1"
-                />
-                <PieceStatusPill status={t.status} stockStatus={t.stockStatus} />
-              </div>
-              <div className="mt-2 truncate text-xs text-white/50">
-                {[t.repName ?? tm("houseStock"), t.batchCode].filter(Boolean).join(" · ")}
-              </div>
-              <div className="mt-0.5 text-xs tabular-nums text-white/40">
-                {tm("cardStats", { qr: t.qrInteractions, nfc: t.nfcInteractions, chip: labels.chip(t.nfcStatus), last: formatDateTime(t.lastInteractionAt) })}
-              </div>
-            </button>
-          </li>
-        ))}
-      </ul>
-
-      {/* Desktop: table */}
-      <div className={`${CARD} hidden overflow-x-auto md:block`}>
-        <table className="w-full min-w-[960px]">
-          <thead className="border-b border-white/10">
-            <tr>
-              <th className={TH}>{tg("colCode")}</th>
-              <th className={`${TH} text-center`}>{tg("colStatus")}</th>
-              <th className={TH}>{tg("colCustomer")}</th>
-              <th className={TH}>{tg("colReseller")}</th>
-              <th className={TH}>{tm("colDestination")}</th>
-              <th className={TH}>{tm("colChip")}</th>
-              <th className={`${TH} text-right`}>QR</th>
-              <th className={`${TH} text-right`}>NFC</th>
-              <th className={TH}>{tm("colLastInteraction")}</th>
-              <th className={TH}>{tg("colBatch")}</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-white/5">
-            {tags.map((t) => (
-              <tr key={t.id} className="cursor-pointer hover:bg-white/[0.04]" onClick={() => onOpen(t.id)} data-testid={`admin-piece-row-${t.publicCode}`}>
-                <td className={`${TD} max-w-[260px]`}>
-                  <TagPieceMention
-                    publicCode={t.publicCode}
-                    productType={t.productType}
-                    face={t.face}
-                    batchCode={t.batchCode}
-                    details={[t.serialNumber ? `#${t.serialNumber}` : null, t.label].filter(Boolean).join(" · ") || undefined}
-                    className="max-w-full"
-                  />
-                </td>
-                <td className={`${TD} text-center`}><PieceStatusPill status={t.status} stockStatus={t.stockStatus} /></td>
-                <td className={`${TD} max-w-[180px] truncate`}>{t.leadName ?? <span className="text-white/30">—</span>}</td>
-                <td className={`${TD} max-w-[160px] truncate`}>{t.repName ?? <span className="text-white/40">{tg("house")}</span>}</td>
-                <td className={TD}>{labels.destination(t.destinationType)}</td>
-                <td className={TD}><ChipStatusPill status={t.nfcStatus} label={labels.chip(t.nfcStatus)} /></td>
-                <td className={`${TD} text-right tabular-nums`}>{t.qrInteractions}</td>
-                <td className={`${TD} text-right tabular-nums`}>{t.nfcInteractions}</td>
-                <td className={`${TD} whitespace-nowrap text-xs`}>{formatDateTime(t.lastInteractionAt)}</td>
-                <td className={`${TD} font-mono text-xs`}>{t.batchCode ?? "—"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </>
-  );
-}
-
 export function PiecesTab({ go }: { go: (path: string) => void }) {
   const tm = useT(manageTagsPiecesMessages);
+  const tc = useT(commonMessages);
   const tt = useT(tagsMessages);
   const tg = useT(manageTagsMessages);
   const labels = useTagLabels();
@@ -207,9 +154,32 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
   const filters = urlFilters.values;
   const set = urlFilters.set;
   const [creating, setCreating] = useState(false);
+  // A piece outside a batch is production, the global admin's (POST /api/xpot/admin/tags is admin-only).
+  const isAdmin = useIsSuperAdmin();
   const { data: reps = [] } = useReps();
   const { data: leads = [] } = useLeads();
   const { data: batches = [] } = useBatchOptions();
+  // The organization filter is platform management's (?org=, also the Organizations page's "See all in Inventory").
+  const { canManage } = useViewerAccess();
+  const { data: organizations = [] } = useOrganizations(canManage);
+  // On a computer a piece opens in the side pane (?piece=<id>, so the link is shareable); its own page,
+  // /admin/tags/pieces/:id, stays for phones and "Open full page". Moving between pieces and closing
+  // replace history; only the first open pushes.
+  const isDesktop = useIsDesktop();
+  const [params, setParams] = useSearchParams();
+  const paneId = params.get("piece") || null;
+  const setPane = useCallback(
+    (id: string | null) =>
+      setParams((current) => {
+        const next = new URLSearchParams(current);
+        if (id) next.set("piece", id);
+        else next.delete("piece");
+        return next;
+      }, { replace: !id || current() }),
+    [setParams],
+  );
+  const openPiece = (id: string) => (isDesktop ? setPane(id) : go(`/pieces/${id}`));
+  const closePiece = useCallback(() => setPane(null), [setPane]);
 
   const pieces = useOffsetPages<TagListItem>({
     queryKey: [ADMIN_TAGS_KEY, "pieces", listUrl(filters, PAGE, 0)],
@@ -218,17 +188,15 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
     staleTime: STALE_MS,
     fetchPage: (pageUrl) => getJson<TagListItem[]>(pageUrl),
   });
-  const { items: tags, isLoading, error } = pieces;
+  const { items: tags, isLoading, error, refetch } = pieces;
 
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    for (const t of tags) {
-      const status = t.stockStatus === "damaged" ? "damaged" : t.status;
-      counts[status] = (counts[status] ?? 0) + 1;
-    }
+    for (const t of tags) counts[t.status] = (counts[t.status] ?? 0) + 1;
     return counts;
   }, [tags]);
-  const houseCount = useMemo(() => tags.filter((t) => t.repId === null).length, [tags]);
+  // Of the loaded pieces, the company stock as Overview counts it.
+  const houseCount = useMemo(() => countStockMetric(tags, "house"), [tags]);
   const hasFilters = urlFilters.activeCount() > 0;
 
   const repOptions = [{ value: "house", label: tm("houseStockNoReseller") }, ...reps.map((r) => ({ value: String(r.id), label: labels.repOption(r) }))];
@@ -239,6 +207,41 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
   const batchOptions = batches.map((b) => ({ value: b.id, label: b.batchCode }));
   if (filters.batch && !batchOptions.some((o) => o.value === filters.batch)) batchOptions.push({ value: filters.batch, label: tm("selectedBatch") });
   const methodOptions = METHOD_KEYS.map((m) => ({ value: m.value, label: tm(m.key) }));
+  const orgOptions = organizationFilterOptions(organizations, filters.org, (id) => tg("organizationNumber", { id }));
+
+  // A phone has no pane: a shared ?piece= link shows the piece's page.
+  if (!isDesktop && paneId) return <PieceDetail id={paneId} go={go} />;
+
+  const list = isLoading ? (
+    <Loading rows={6} />
+  ) : error ? (
+    <LoadError what={tm("whatPieces")} error={error} onRetry={() => void refetch()} />
+  ) : tags.length === 0 ? (
+    <EmptyState tone="tags" icon={Nfc} title={hasFilters ? tm("noMatch") : tm("noPiecesYet")} />
+  ) : (
+    <>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-white/50" data-testid="admin-pieces-counts">
+        <span className="font-semibold text-white/80">
+          {tt.plural("pieces", tags.length, pieces.hasMore ? { count: `${tags.length}+` } : undefined)}
+        </span>
+        {TAG_STATUSES.filter((s) => statusCounts[s]).map((s) => (
+          <span key={s} className="tabular-nums">
+            {tm("statusCount", { label: labels.status(s), count: statusCounts[s] })}
+          </span>
+        ))}
+        <span className="tabular-nums">{tm("inHouse", { count: houseCount })}</span>
+      </div>
+      <PieceTable
+        pieces={tags}
+        onOpen={openPiece}
+        // Beside the pane the table keeps what identifies a piece and where it is.
+        columns={paneId ? PANE_COLUMNS : ALL_COLUMNS}
+        selectedId={paneId}
+        testId="admin-pieces-table"
+      />
+      <ListPager shown={tags.length} hasMore={pieces.hasMore} onMore={pieces.loadMore} loading={pieces.loadingMore} pageSize={PAGE} />
+    </>
+  );
 
   return (
     <div className="space-y-4" data-testid="admin-tags-pieces">
@@ -246,48 +249,42 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
         testId="admin-pieces-filters"
         search={<FilterSearch value={filters.search} onChange={(search) => set({ search })} placeholder={tm("searchPlaceholder")} debounceMs={350} testId="admin-pieces-search" />}
         actions={
-          <button type="button" className={`${BTN} h-10 rounded-xl`} onClick={() => setCreating(true)} data-testid="admin-pieces-new">
-            <Plus className="h-4 w-4" />{tm("newPiece")}
-          </button>
+          isAdmin ? (
+            <Button type="button" variant="brand" accent="tags" className="min-h-10" onClick={() => setCreating(true)} data-testid="admin-pieces-new">
+              <Plus className="h-4 w-4" />{tm("newPiece")}
+            </Button>
+          ) : undefined
         }
         controls={
           <>
             <FilterSelect value={filters.status} onChange={(status) => set({ status })} placeholder={tm("allStatuses")} options={labels.statusOptions} icon={CircleDot} testId="admin-pieces-status" />
+            <FilterSelect value={filters.stock} onChange={(stock) => set({ stock })} placeholder={tm("allStock")} options={labels.stockOptions} icon={Boxes} testId="admin-pieces-stock" />
             <FilterSelect value={filters.product} onChange={(product) => set({ product })} placeholder={tm("allProducts")} options={labels.productOptions} icon={Package} />
             <FilterSelect value={filters.rep} onChange={(rep) => set({ rep })} placeholder={tg("allResellers")} options={repOptions} icon={Users} testId="admin-pieces-rep" />
             <FilterSelect value={filters.lead} onChange={(lead) => set({ lead })} placeholder={tm("allCustomers")} options={leadOptions} icon={Building2} />
             <FilterSelect value={filters.batch} onChange={(batch) => set({ batch })} placeholder={tm("allBatches")} options={batchOptions} icon={Layers} />
             <FilterSelect value={filters.method} onChange={(method) => set({ method })} placeholder={tm("anyMethod")} options={methodOptions} icon={ScanLine} />
+            {canManage ? (
+              <FilterSelect value={filters.org} onChange={(org) => set({ org })} placeholder={tg("allOrganizations")} options={orgOptions} icon={Network} testId="admin-pieces-org" />
+            ) : null}
           </>
         }
         summary={{ shown: tags.length, active: hasFilters, onClear: () => urlFilters.reset() }}
       />
 
-      {isLoading ? (
-        <Loading />
-      ) : error ? (
-        <LoadError what={tm("whatPieces")} error={error} />
-      ) : tags.length === 0 ? (
-        <Empty>{hasFilters ? tm("noMatch") : tm("noPiecesYet")}</Empty>
+      {isDesktop ? (
+        // The pane stays mounted whatever the list shows (loading, empty, error).
+        <MasterDetail
+          closeLabel={tc("close")}
+          onClose={closePiece}
+          list={list}
+          detail={paneId ? <PieceDetail key={paneId} id={paneId} go={go} onClose={closePiece} /> : null}
+        />
       ) : (
-        <>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-white/50" data-testid="admin-pieces-counts">
-            <span className="font-semibold text-white/80">
-              {tt.plural("pieces", tags.length, pieces.hasMore ? { count: `${tags.length}+` } : undefined)}
-            </span>
-            {TAG_STATUSES.filter((s) => statusCounts[s]).map((s) => (
-              <span key={s} className="tabular-nums">
-                {tm("statusCount", { label: labels.status(s), count: statusCounts[s] })}
-              </span>
-            ))}
-            <span className="tabular-nums">{tm("inHouse", { count: houseCount })}</span>
-          </div>
-          <PiecesTable tags={tags} onOpen={(id) => go(`/pieces/${id}`)} />
-          <ListPager shown={tags.length} hasMore={pieces.hasMore} onMore={pieces.loadMore} loading={pieces.loadingMore} pageSize={PAGE} />
-        </>
+        list
       )}
 
-      <NewPieceDialog open={creating} onOpenChange={setCreating} onCreated={(id) => go(`/pieces/${id}`)} />
+      {isAdmin ? <NewPieceDialog open={creating} onOpenChange={setCreating} onCreated={openPiece} /> : null}
     </div>
   );
 }

@@ -36,6 +36,7 @@ function JourneyTabBody() {
 
   return (
     <div className="space-y-4" data-testid="admin-tags-journey-tab">
+      <p className="text-sm text-white/55" data-testid="journey-intro">{t("journeyIntro")}</p>
       <FilterBar
         testId="journey-filters"
         search={<FilterSearch value={q} onChange={(next) => filters.set({ q: next })} placeholder={t("journeySearch")} testId="journey-search" />}

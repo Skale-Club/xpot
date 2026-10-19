@@ -19,7 +19,7 @@ const REVIEW = "https://search.google.com/local/writereview?placeid=ChIJN1t_tDeu
 
 type Entry = {
   id: string; kind: string; action: string | null; title: string; content: string | null;
-  batchId: string | null; tagId: string | null; kitId: string | null; repId: number | null; repName: string | null;
+  batchId: string | null; tagId: string | null; kitId: string | null; kitCode: string | null; repId: number | null; repName: string | null;
   leadId: number | null; leadName: string | null; planId: string | null; planTitle: string | null;
   beforeValue: string | null; afterValue: string | null; source: string; actor: string;
   actorUserId: string | null; actorEmail: string | null; actorRepId: number | null; actorName: string | null;
@@ -129,6 +129,9 @@ test.skipIf(!enabled)("journey: trail, stories, plans, append-only, admin-only A
     assert.equal(delivered[0].title, "Kit of 3 pieces delivered to Ana");
     assert.equal(delivered[0].repId, repId["jt-ana"]);
     assert.equal(delivered[0].repName, "Ana");
+    // The kit is named by its code (K-0001), as on every other screen.
+    assert.equal(delivered[0].kitCode, kit.json.kitCode);
+    assert.match(delivered[0].kitCode ?? "", /^K-\d{4,}$/);
     assert.equal(delivered[0].batchId, batch.id, "one batch: the entry belongs to it");
     assert.equal(delivered[0].content, "WhatsApp order #1");
     assert.deepEqual([...delivered[0].metadata.codes].sort(), [a1, a2, a3].map((t) => t.publicCode).sort());
@@ -266,7 +269,7 @@ test.skipIf(!enabled)("journey: trail, stories, plans, append-only, admin-only A
     assert.deepEqual([moves[0].beforeValue, moves[0].afterValue, moves[0].repId], ["house", "Bruno", repId["jt-bruno"]]);
     assert.deepEqual([moves[1].beforeValue, moves[1].afterValue, moves[1].repId], ["Bruno", "house", null]);
 
-    const single = await api("POST", "/api/xpot/admin/tags", "jt-admin", { productType: "custom", label: "Demo piece" });
+    const single = await api("POST", "/api/xpot/admin/tags", "jt-admin", { productType: "custom", salesProductId, label: "Demo piece" });
     assert.equal(single.status, 201, single.text);
     const singleStory = await story(`tagId=${single.json.id}`);
     assert.deepEqual(actions(singleStory), ["tag_created"]);

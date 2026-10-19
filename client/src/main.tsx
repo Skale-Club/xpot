@@ -8,6 +8,10 @@ import { Toaster } from "./components/ui/toaster";
 import "./index.css";
 // Attaches the beforeinstallprompt listener before React mounts (the event can fire first).
 import "./hooks/use-install-app";
+// Marks history entries the app pushes, so Back buttons can return to the previous screen.
+import "./lib/inAppHistory";
+// Its Back / Forward listener must be added before the router's (unsaved-changes guard).
+import "./hooks/useUnsavedChangesGuard";
 import { installGlobalErrorReporting } from "./lib/errorReporting";
 
 installGlobalErrorReporting();

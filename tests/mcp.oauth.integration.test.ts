@@ -175,6 +175,7 @@ test.skipIf(!enabled)("mcp oauth: register, consent, PKCE exchange, tools, refre
     assert.equal(list[0].redirectHost, "client.test");
     assert.equal(list[0].userLabel, "admin@mo.test");
     assert.ok(list[0].lastUsedAt, "use is stamped");
+    assert.deepEqual(list[0].scopes, ["xpot:journey"], "the grant is listed");
     assert.equal((await fetch(`${base}/api/xpot/admin/mcp-connections`, { headers: { "x-test-user": "mo-rep" } })).status, 403);
 
     // ── Losing admin cuts access at once; getting it back restores it ───────

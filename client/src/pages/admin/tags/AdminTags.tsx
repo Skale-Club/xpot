@@ -2,17 +2,20 @@ import { useState, type FormEvent } from "react";
 import { Tabs } from "@/components/xpot/Tabs";
 import { useLocation } from "wouter";
 import { ScanLine } from "lucide-react";
-import { normalizeTagCode } from "@shared/tags";
+import { parseTagIntakeScan } from "@shared/tagIntake";
 import { useToast } from "@/hooks/use-toast";
 import { errorMessage, getJson } from "./api";
-import { BTN, INPUT } from "./ui";
-import { OverviewTab } from "./OverviewTab";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/xpot/Field";
+import { isTagPieceQueue } from "@shared/tagQueues";
+import { OverviewQueue, OverviewTab } from "./OverviewTab";
 import { PiecesTab } from "./PiecesTab";
 import { PieceDetail } from "./PieceDetail";
 import { KitsTab } from "./KitsTab";
 import { BatchesTab } from "./BatchesTab";
 import { BatchDetail } from "./BatchDetail";
 import { TeamTab } from "./TeamTab";
+import { ShowcaseTab } from "./ShowcaseTab";
 import { ProvisionersTab } from "./ProvisionersTab";
 import { JourneyTab } from "./JourneyTab";
 import { useIsSuperAdmin } from "@/components/xpot/AdminBadge";
@@ -20,13 +23,15 @@ import { useT } from "@/i18n";
 import { shellMessages } from "@/i18n/messages/shell";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
 
-// Same order and names as the Tags "Manage" group in the sidebar (components/xpot/moduleNav.ts).
+// "shop" is the Tags › Shop showcase (the Xpot admin's). Same order and names as the Tags "Manage" group in the sidebar (components/xpot/moduleNav.ts): the piece's life,
+// production first. "kits" is Distribution (Hand out, Stuscle orders, Kits, Take back); the URL stays /kits.
 const TABS = [
   { id: "overview", labelKey: "manageOverview" },
+  { id: "batches", labelKey: "manageBatches", adminOnly: true },
   { id: "pieces", labelKey: "managePieces" },
   { id: "kits", labelKey: "manageKits" },
   { id: "team", labelKey: "manageResellers" },
-  { id: "batches", labelKey: "manageBatches", adminOnly: true },
+  { id: "shop", labelKey: "manageShop", adminOnly: true },
   { id: "journey", labelKey: "manageJourney", adminOnly: true },
   { id: "provisioners", labelKey: "manageWriters", adminOnly: true },
 ] as const satisfies ReadonlyArray<{ id: string; labelKey: string; adminOnly?: boolean }>;
@@ -34,15 +39,20 @@ type TabId = (typeof TABS)[number]["id"];
 
 export const ADMIN_TAGS_BASE = "/admin/tags";
 
-/** Type the code printed on a piece, open its record. On desktop it sits in the top bar (AdminApp). */
-export function CodeLookup({ onFound }: { onFound: (id: string) => void }) {
+/**
+ * Type the code printed on a piece, or paste what its QR / chip holds (https://xpot.place/q/CODE, /n/CODE, the app's
+ * /tags/t/CODE), and open its record. Same parser as batch intake (shared/tagIntake.ts); the host serving the app
+ * counts as a tag host too. On desktop it sits in the top bar (AdminApp).
+ */
+export function CodeLookup({ onFound, fill = false }: { onFound: (id: string) => void; /** Take the full row (the phone strip). */ fill?: boolean }) {
   const t = useT(manageTagsMessages);
   const { toast } = useToast();
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    const normalized = normalizeTagCode(code);
+    const scan = parseTagIntakeScan(code, [window.location.hostname]);
+    const normalized = scan.ok ? scan.publicCode : null;
     if (!normalized) {
       toast({ title: t("invalidCode"), description: t("invalidCodeHint"), variant: "destructive" });
       return;
@@ -59,21 +69,22 @@ export function CodeLookup({ onFound }: { onFound: (id: string) => void }) {
     }
   };
   return (
-    <form onSubmit={submit} className="flex gap-2">
-      <input
+    <form onSubmit={submit} className={`flex min-w-0 gap-2 ${fill ? "w-full" : ""}`}>
+      <Input
         value={code}
-        onChange={(e) => setCode(e.target.value.toUpperCase())}
+        onChange={(e) => setCode(e.target.value)}
         placeholder={t("codePlaceholder")}
-        className={`${INPUT} w-48 font-mono`}
+        aria-label={t("codePlaceholder")}
+        className={`min-h-10 min-w-0 font-mono ${fill ? "flex-1" : "w-48 xl:w-60"}`}
         autoCapitalize="characters"
         autoCorrect="off"
         spellCheck={false}
         data-testid="admin-tag-code-lookup"
       />
-      <button type="submit" disabled={busy || !code.trim()} className={BTN}>
+      <Button type="submit" variant="brand" accent="tags" className="min-h-10 shrink-0" disabled={!code.trim()} loading={busy}>
         <ScanLine className="h-4 w-4" />
         {t("open")}
-      </button>
+      </Button>
     </form>
   );
 }
@@ -105,17 +116,19 @@ export function AdminTags() {
           ariaLabel={ts("navManage")}
           idPrefix="admin-tags"
           fill={false}
-          className="min-w-0 flex-1"
+          accent="tags"
+          className="min-w-0 basis-full"
         />
-        <CodeLookup onFound={(tagId) => go(`/pieces/${tagId}`)} />
+        <CodeLookup fill onFound={(tagId) => go(`/pieces/${tagId}`)} />
       </div>
 
-      {tab === "overview" && <OverviewTab go={go} />}
+      {tab === "overview" && (isTagPieceQueue(id) ? <OverviewQueue queue={id} go={go} /> : <OverviewTab go={go} />)}
       {tab === "pieces" && (id ? <PieceDetail id={id} go={go} /> : <PiecesTab go={go} />)}
       {tab === "kits" && <KitsTab go={go} />}
       {tab === "batches" && isAdmin && (id ? <BatchDetail id={id} go={go} /> : <BatchesTab go={go} />)}
       {tab === "journey" && isAdmin && <JourneyTab />}
       {tab === "team" && <TeamTab go={go} />}
+      {tab === "shop" && isAdmin && <ShowcaseTab />}
       {tab === "provisioners" && isAdmin && <ProvisionersTab go={go} />}
     </div>
   );

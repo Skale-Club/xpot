@@ -17,7 +17,7 @@ export const roundSearchBias = (n: number) => Math.round(n * 1e3) / 1e3;
 // too, so typing "barbershop" should cost one call, not nine.
 export const PLACE_SEARCH_DEBOUNCE_MS = 300;
 
-function useDebouncedValue<T>(value: T, delayMs: number): T {
+export function useDebouncedValue<T>(value: T, delayMs: number): T {
   const [debounced, setDebounced] = useState(value);
   useEffect(() => {
     const id = window.setTimeout(() => setDebounced(value), delayMs);
@@ -41,6 +41,10 @@ export function usePlaceSearch(
     // When the key does change (typing, or moving a block), keep the previous
     // results on screen instead of collapsing the dropdown to a spinner.
     placeholderData: keepPreviousData,
+    // Closing and reopening the results (Esc, blur, a second tap) re-enables
+    // this query; without this it refetched the same text every time. The
+    // server keeps place results for 60 s too (server/routes/xpot/place-search.ts).
+    staleTime: 60_000,
     queryFn: async () => {
       const params = new URLSearchParams({ q: deferredSearch });
       if (typeof lat === "number" && typeof lng === "number") {

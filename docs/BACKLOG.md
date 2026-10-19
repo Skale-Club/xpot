@@ -1,6 +1,13 @@
 # Backlog Xpot
 
-**Rev. 4** · base `7020bc4` · 52 itens · **29 concluídos** · 3 obsoletos · 20 abertos
+**Rev. 5** · base `claude/ux-overhaul` · 83 itens · **62 concluídos** · 3 obsoletos · 18 abertos
+
+> **Rev. 5 (revisão de UX, 2026-10-18):** entrou a área **UXR**, com o que a
+> revisão de UX fez e o que deixou aberto (resumo em
+> [`UX_OVERHAUL.md`](./UX_OVERHAUL.md)). Conferidos no código e marcados ✅:
+> MOD-21 (uma venda de peças de Tags é uma linha de `sales_sales` e aparece em
+> Vendas; ativar continua não sendo venda, decisão 5 da revisão) e MOD-22
+> (Minhas peças pede sempre `?mine=1`, também para o gerente).
 
 > **Rev. 4 (conferência com o código, 2026-10-05):** os contadores não fechavam
 > (o cabeçalho dizia 30 concluídos, a tabela somava 24 e os itens marcados ✅
@@ -36,8 +43,9 @@ Detalhamento e referências completas de arquivo:linha em [`AUDITORIA.md`](./AUD
 | DAT — integridade de dados | 6 | 5 | 0 | 1 |
 | PRF — performance | 5 | 1 | 0 | 4 |
 | DOC — testes e documentação | 5 | 5 | 0 | 0 |
-| MOD — módulos Visitas e Tags | 3 | 1 | 0 | 2 |
-| **Total** | **52** | **29** | **3** | **20** |
+| MOD — módulos Visitas e Tags | 3 | 3 | 0 | 0 |
+| UXR — revisão de UX (out/2026) | 31 | 31 | 0 | 0 |
+| **Total** | **83** | **62** | **3** | **18** |
 
 ### Novidades desta revisão
 
@@ -188,8 +196,57 @@ O que ficou aberto do plano [`MODULES.md`](./MODULES.md), executado no #31.
 | ID | Sev | Item | Estado |
 |---|---|---|---|
 | MOD-19 | Médio | **Telas de gestão traduzidas (EN/PT/ES).** `i18n/messages/manage.ts`, `manageTags*.ts`; `tests/i18n-messages.test.ts` confere placeholders e plurais em todos os dicionários. Também a área de Vendas (#34). | ✅ #33 |
-| MOD-21 | Médio | **Peça vendida em Tags contar em Vendas.** Hoje a ativação de uma peça (`tags.sold_at`) não vira linha em `sales_sales`, e a aba Vendas não a mostra. Depende da decisão D5 do `MODULES.md`. | Decidir (D5) |
-| MOD-22 | Baixo | **"Minhas peças" do gerente lista todas as peças** (`server/tags/routes.ts:412`) e duplica Tags › Gestão › Todas as peças. Vender não depende dessa lista: a peça é aberta lendo o QR/NFC ou digitando o código, e ao ser ativada passa a ser do gerente (`saleCredit`). Proposta: "Minhas peças" mostra só as do próprio gerente; o link "Ver peças" de um cliente de Visitas leva o gerente à Gestão filtrada por cliente; a busca (⌘K) do gerente procura em todas. | Decidir com o dono |
+| ✅ MOD-21 | Médio | **Peça vendida em Tags contar em Vendas.** Hoje a ativação de uma peça (`tags.sold_at`) não vira linha em `sales_sales`, e a aba Vendas não a mostra. Depende da decisão D5 do `MODULES.md`. | ✅ conferido em 2026-10-18: "Vender esta peça" (`POST /api/xpot/tag-sales`) cria a venda em `sales_sales` e liga cada peça em `sales_sale_tags`; ela aparece em Vendas e a peça mostra "Abrir em Vendas". Ativar nunca é venda (UXR, decisão 5) |
+| ✅ MOD-22 | Baixo | **"Minhas peças" do gerente lista todas as peças** (`server/tags/routes.ts:412`) e duplica Tags › Gestão › Todas as peças. Vender não depende dessa lista: a peça é aberta lendo o QR/NFC ou digitando o código, e ao ser ativada passa a ser do gerente (`saleCredit`). Proposta: "Minhas peças" mostra só as do próprio gerente; o link "Ver peças" de um cliente de Visitas leva o gerente à Gestão filtrada por cliente; a busca (⌘K) do gerente procura em todas. | ✅ conferido em 2026-10-18: `PiecesScreen.tsx` pede sempre `?mine=1`, e as peças de um cliente abrem `/admin/tags/pieces?lead=…` em modo gestão |
+
+
+## UXR — Revisão de UX (out/2026)
+
+A revisão de UX feita sobre `0f4b5be`, integrada na branch `claude/ux-overhaul`.
+O que mudou e por quê, as seis decisões de produto e como conferir:
+[`UX_OVERHAUL.md`](./UX_OVERHAUL.md). Os commits citados estão nessa branch.
+
+### Feito
+
+| ID | Sev | Item | Estado |
+|---|---|---|---|
+| ✅ UXR-01 | Alto | **Editar o endereço apagava as coordenadas** e voltava o raio para 150; o raio padrão não tinha efeito. | ✅ `b5deef1` |
+| ✅ UXR-02 | Alto | **"Concluídas hoje" e "Últimas visitas" contavam só `completed`.** Visitas encerradas como Venda feita, Retorno etc. sumiam. | ✅ `58c1d27` (`shared/visit-status.ts`) |
+| ✅ UXR-03 | Alto | **"Exigir GPS no check-in" não exigia GPS.** As regras agora dizem o que fazem e as exceções ganham selo. | ✅ `bfb2f51` |
+| ✅ UXR-04 | Alto | **"Vendida" e o estoque com várias contas na mesma tela.** Uma definição por número, `shared/tagMetrics.ts`, em todas as telas. | ✅ `eb84399` |
+| ✅ UXR-05 | Alto | **Ativar uma peça da casa passava a peça para quem clicou.** Pela gestão, ela fica no estoque da casa; ativar nunca é venda. | ✅ `efd3904`, `ba1974b` |
+| ✅ UXR-06 | Alto | **Voz e IA ignoravam os interruptores** (Groq usado mesmo desligado; ligar o OpenAI desligava o Groq). | ✅ `09acad5` (`server/lib/providerChoice.ts`, migração 0052) |
+| ✅ UXR-07 | Alto | **MCP concedia mais do que dizia; chaves do Xphere expostas.** Escopo real no card, escopos por conexão, chaves mascaradas com troca. | ✅ `e544ded`, `7cea706` |
+| ✅ UXR-08 | Alto | **"Admin" em Pessoas promovia a admin global sem aviso.** Aviso e confirmação, ninguém muda o próprio papel, recusas separadas de bloqueios. | ✅ `d0957e6` |
+| ✅ UXR-09 | Alto | **Clientes do revendedor sem nome e "Cliente não encontrado".** O revendedor vê e abre as empresas que têm peças dele. | ✅ `0fffdda` |
+| ✅ UXR-10 | Médio | **Vocabulário: a mesma palavra com significados diferentes.** Glossário aplicado em EN/PT/ES; recusas do servidor com códigos traduzidos no cliente. | ✅ `baad4db` (merge da Fase 1) |
+| ✅ UXR-11 | Médio | **Três kits de componentes paralelos.** Um kit visual único, e todas as telas migradas para ele. | ✅ `bed0f3a` e os merges da Fase 2b (`547a0d8`, `6fd9ce3`, `df276bb`, `4c29bcd`, `55c54ec`) |
+| ✅ UXR-12 | Alto | **Menu: "Organização" com assuntos soltos, gestão escondida no celular.** Um mapa de telas, grupos Administração e Plataforma, modo gestão com chip de escopo, aba Gestão no celular, voltar para a origem. | ✅ `d274b28`, `33800b6`, `828233c` |
+| ✅ UXR-13 | Médio | **Configurações / Conta / Informações da conta.** Quatro abas: Perfil, Acesso, Idioma, Vínculos. | ✅ `0f127b7` |
+| ✅ UXR-14 | Médio | **Integrações, Marca e Saúde soltas.** Integrações por função com último teste e erro; Marca e site público; Status com serviços e sync do CRM. | ✅ `4fe4d41`, `a262bb8`, `3ce2174`, `3389934` |
+| ✅ UXR-15 | Alto | **Quatro caminhos para entregar peças; kit sem histórico.** Distribuição com simulação, kits numerados com histórico (`tag_kit_items`), recebimento do lote com desfazer. | ✅ `35d83fe`, `d6805d0` (migração 0054) |
+| ✅ UXR-16 | Alto | **Duas telas de peça que não se ligavam; cancelar venda deixava a peça vendida.** Uma tela por seções conforme o papel; cancelar devolve ao estoque. | ✅ `524ae0a`, `1e50189`, `88b85c0` |
+| ✅ UXR-17 | Alto | **Cinco lugares para gerenciar pessoas.** Pessoas é o único lugar; Organizações só vincula pessoas existentes; Visão geral de Visitas por período e por vendedor. | ✅ `1ddaeee`, `02afe53` |
+| ✅ UXR-18 | Baixo | **Código morto** (Fase 4a): `RouteSettings`, importação CSV sem tela, a API Xphere do vendedor, `markLeadCustomer`, `/tags/summary`, 216 chaves de i18n sem uso (com teste que impede novas). As rotas-alias antigas ficam, por causa de favoritos. | ✅ Fase 4a (`f9ecb66`, `f63cfcd`, `85a38d5`) |
+| ✅ UXR-19 | Baixo | **README e docs desatualizados** (local do MCP, Xphere em Configurações, "por usuário", `PROSPECTING_DAILY_ROUTE.md` inexistente). | ✅ Fase 4b |
+| ✅ UXR-28 | Baixo | **`GET /api/xpot/tags/:id/dashboard` sem chamadores** desde a tela única de peça. Remover. | ✅ Fase 4a (`36e1951`) |
+| ✅ UXR-20 | Médio | **Cancelar uma busca de prospecção presa.** O vendedor cancela a própria busca na Rota e o admin do Xpot qualquer uma em Status (buscas em andamento e rotas não montadas). As buscas na fila ou rodando viram `cancelled` e o worker não as envia nem salva mais; a rota fica como falha, para começar outra busca ou montar a rota de novo. O motor não tem cancelamento na API: o Xpot só deixa de esperar. | ✅ `c6583de` |
+| ✅ UXR-21 | Baixo | **Filtro por vendedor no histórico de visitas.** Só para quem gerencia a plataforma em modo gestão (`?rep=`, `GET /visits?repId=` pelo `listScope`); a pessoa em Pessoas ganhou "Visitas da pessoa". | ✅ `5c52090`, `002aba4` |
+| ✅ UXR-26 | Baixo | **Recusas antigas com motivo próprio aparecem como Bloqueado.** Marcador explícito `sales_reps.refused_at` (migração 0055), posto ao recusar e limpo ao desbloquear; preenchido para as recusas com os textos padrão. Recusas antigas com motivo digitado à mão não deixaram rastro que as separe de um bloqueio e continuam como Bloqueado. | ✅ `4fc85c3` |
+| ✅ UXR-29 | Baixo | **Retry de oportunidades em Status › Sync do CRM.** `POST /sync/retry` aceita `sales_opportunity` (reenvia ao GoHighLevel, legado; o Xphere não recebe oportunidades) e registra a tentativa. | ✅ `17da62a` |
+| ✅ UXR-31 | Baixo | **Quem cancela uma venda de Tags.** Decidido: o vendedor que registrou a venda (com Visitas) cancela a própria; gerentes, qualquer uma. A tela da peça mostra "Cancelar venda" a esse vendedor também. | ✅ `13fd2eb` |
+| ✅ UXR-24 | Baixo | **Tipos de lugar do Google sem tradução.** `primaryType` aparece cru na busca de empresas (`PlaceLeadSearch`); não há fonte de tradução. | ✅ `2177dc9`: a busca devolve o código do tipo (Table A); `lib/placeTypes.ts` traduz os tipos comuns (EN/PT/ES, `messages/placeTypes.ts`), senão usa o nome do Google e por fim humaniza o código. Vale para a busca de empresas, as sugestões de setor da rota e o setor da empresa importada |
+| ✅ UXR-25 | Baixo | **Página de consentimento OAuth (MCP) e resultados de "Testar" das integrações em inglês.** | ✅ `3cde97c` (consentimento e recusas em EN/PT/ES pelo Accept-Language), `eddd6bd` e `e9b3a51` (o Testar devolve código e parâmetros, o cartão traduz e guarda o texto do provedor em "Detalhes") |
+| ✅ UXR-22 | Médio | **Filtro por organização em Inventário, Kits e Empresas.** As abas de Organizações eram listas só de leitura. | ✅ Empresas (`?org=`, `GET /leads?organizationId=`) no merge do modo gestão; Inventário e Kits: `63d789d`, `e675b77` (`organizationId` em `GET /api/xpot/tags` e `GET /api/xpot/admin/tag-kits`, só para gerente/admin em modo gestão, ignorado para os demais; filtro Organização em `?org=`); as abas Estoque, Kits e Empresas de Organizações levam à lista filtrada: `e675b77`, `7312a8d` |
+| ✅ UXR-23 | Baixo | **MasterDetail nas telas de detalhe da gestão.** No computador, a peça do Inventário abre no painel lateral (`?piece=<id>`) e o evento do log de Status também (`?event=<id>`), com "Abrir em página inteira"; as páginas `/admin/tags/pieces/:id` e `/admin/health/events/:id` continuam. Esc fecha e o foco volta à linha (vale para todo MasterDetail). Celular: página inteira. O lote fica em página inteira: é uma área de trabalho (leitura de entrada, recebimento, impressão), não um registro para consultar de passagem. | ✅ `d4b26a2` |
+| ✅ UXR-27 | Baixo | **Linhas do Xphere e o card CRM de Integrações levam à pessoa** (`/admin/reps/:repId`); o card CRM lista quem está conectado. | ✅ `78d8a3e` |
+| ✅ UXR-30 | Baixo | **Aviso de alterações não salvas em Integrações** em toda saída: troca de aba, menu lateral, paleta, Voltar/Avançar do navegador, fechar a aba (cards de provedor e linhas do Xphere). O Voltar/Avançar e a paleta passaram a valer também para a Landing. | ✅ `8008315` |
+
+### Aberto
+
+| ID | Sev | Item | Estado |
+|---|---|---|---|
+| — | — | Nenhum item da área UXR em aberto. | — |
 
 ---
 

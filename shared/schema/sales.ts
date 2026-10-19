@@ -1,6 +1,5 @@
 import { sql } from "drizzle-orm";
 import { bigserial, pgTable, text, serial, integer, timestamp, boolean, jsonb, pgEnum, uniqueIndex, index } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { users } from "./auth.js";
 // Note: in the source project there was a FK to a `vcards` table (Skale Club's vCard feature).
@@ -102,6 +101,8 @@ export const salesReps = pgTable("sales_reps", {
   // Set when an admin blocks the rep (partnership ended); null = pending or active.
   blockedAt: timestamp("blocked_at"),
   blockedReason: text("blocked_reason"),
+  // Set with blockedAt when the block is a refused sign-up (listed as "Refused"); migrations/0055_rep_refused_at.sql.
+  refusedAt: timestamp("refused_at", { withTimezone: true }),
   // Personal code for wholesale prices in the Stuscle store (shared/wholesale.ts).
   wholesaleCode: text("wholesale_code"),
   // Economic model for physical Tags. Access role does not imply cost policy.

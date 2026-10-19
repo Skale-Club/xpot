@@ -210,9 +210,9 @@ export async function expireStaleJobs(now = new Date()) {
 export async function createJob(tagId: string, userId: string | null, baseUrl: string, targetDeviceId?: string | null) {
   return db.transaction(async (tx) => {
     const [tag] = await tx.select().from(tags).where(eq(tags.id, tagId)).for("update");
-    if (!tag) throw new TagError("Tag not found", 404);
+    if (!tag) throw new TagError("Tag not found", 404, "tag_not_found");
     if (tag.status === "retired") throw new TagError("A retired tag cannot be programmed", 409);
-    if (tag.nfcProvisioningStatus === "locked") throw new TagError("This chip is locked and cannot be rewritten", 409);
+    if (tag.nfcProvisioningStatus === "locked") throw new TagError("This chip is locked and cannot be rewritten", 409, "chip_locked");
     if (targetDeviceId) {
       const [device] = await tx
         .select({ status: tagProvisioningDevices.status })

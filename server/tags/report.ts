@@ -2,11 +2,14 @@ import { sql } from "drizzle-orm";
 import type { TagRepReportRow, TagTeamReport } from "#shared/tagsApi.js";
 import { resolveTagFace } from "#shared/tagFace.js";
 import { COUNTABLE, iso, rows } from "./repository.js";
+import { stockMetricSql } from "./metrics.js";
 
 /**
  * Admin report for [from, to): one row per reseller who ever held, sold or
  * activated a piece (plus every active rep with a kit), and one for pieces
- * with no reseller. "Sold" = pieces whose sale counted inside the window;
+ * with no reseller. "Sold" = pieces whose financial sale counted inside the
+ * window (activation is not a sale); "in stock" = the unsold stock in their
+ * hands, company stock on the no-reseller row (shared/tagMetrics.ts);
  * scans count against the reseller who held the piece when it was scanned.
  */
 export async function getTeamReport(from: Date, to: Date): Promise<TagTeamReport> {
@@ -14,7 +17,7 @@ export async function getTeamReport(from: Date, to: Date): Promise<TagTeamReport
     rows<{ rep_id: number | null; sold: number; in_stock: number; active_now: number; total: number; customers: number; last_sale_at: Date | null }>(sql`
       SELECT t.rep_id,
         count(*) FILTER (WHERE sold.sold_at >= ${from} AND sold.sold_at < ${to})::int AS sold,
-        count(*) FILTER (WHERE t.status <> 'retired' AND sold.sold_at IS NULL)::int AS in_stock,
+        count(*) FILTER (WHERE ${stockMetricSql("withResellers")} OR ${stockMetricSql("house")})::int AS in_stock,
         count(*) FILTER (WHERE t.status = 'active')::int AS active_now,
         count(*) FILTER (WHERE sold.sold_at IS NOT NULL)::int AS total,
         count(DISTINCT t.lead_id) FILTER (WHERE sold.sold_at IS NOT NULL)::int AS customers,

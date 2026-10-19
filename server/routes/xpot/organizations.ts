@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { refusalBody } from "../../lib/validation.js";
 import { managesEveryOrganization } from "#shared/organizations.js";
 import { XPOT_MODULES } from "#shared/modules.js";
 import { requireXpotUser, type XpotActor } from "./middleware.js";
@@ -21,7 +22,9 @@ import {
   updateOrganizationMember,
   type OrganizationActor,
 } from "../../organizations/service.js";
-import { deliverKit } from "../../tags/repository.js";
+import { deliverKit, TagError, tagErrorBody } from "../../tags/repository.js";
+import { kitCostRequired, kitOwnership } from "#shared/tagKits.js";
+import { storage } from "../../storage.js";
 
 const id = z.coerce.number().int().positive();
 const membershipRole = z.enum(["admin", "member"]);
@@ -36,8 +39,9 @@ function route(handler: (req: any) => Promise<unknown>, status = 200) {
       res.status(status).json(await handler(req));
     } catch (error) {
       if (error instanceof OrganizationError || error instanceof AccountError) {
-        return res.status(error.status).json({ message: error.message });
+        return res.status(error.status).json(refusalBody(error));
       }
+      if (error instanceof TagError) return res.status(error.status).json(tagErrorBody(error));
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: error.issues[0]?.message ?? "Invalid input" });
       }
@@ -49,12 +53,12 @@ function route(handler: (req: any) => Promise<unknown>, status = 200) {
 
 async function assertRepAdminMayChange(actor: OrganizationActor, organizationId: number, repId: number, nextRole?: "admin" | "member") {
   if (managesEveryOrganization(actor)) return;
-  if (actor.rep.id === repId) throw new OrganizationError("You cannot change your own Organization access.", 400);
-  if (nextRole === "admin") throw new OrganizationError("Only an Admin or Manager can assign Rep Admin access.", 403);
+  if (actor.rep.id === repId) throw new OrganizationError("You can't change your own organization access.", 400, "organization_own_access");
+  if (nextRole === "admin") throw new OrganizationError("Only an Xpot admin or a manager can make someone org admin.", 403, "organization_admin_assign");
   const members = await listOrganizationMembers(organizationId, actor);
   const target = members.find((member) => member.repId === repId);
   if (target?.membershipRole === "admin") {
-    throw new OrganizationError("Only an Admin or Manager can change a Rep Admin.", 403);
+    throw new OrganizationError("Only an Xpot admin or a manager can change an org admin.", 403, "organization_admin_change");
   }
 }
 
@@ -94,21 +98,25 @@ export function createOrganizationsRouter() {
       repId: z.number().int().positive(),
       membershipRole: membershipRole.default("member"),
     }).strict().safeParse(req.body);
+    // Only platform management adds people (the Organizations screen offers it
+    // to them alone). A Rep Admin could otherwise pull anyone on the platform,
+    // by id, into their Organization: the newest membership is where that
+    // person's new companies and pieces land (organizationIdForRep), so the
+    // Rep Admin would then see and manage them.
+    if (!managesEveryOrganization(actor)) {
+      throw new OrganizationError("An Xpot admin or a manager adds people to an organization.", 403, "organization_add_people");
+    }
     if (existing.success) {
-      if (!managesEveryOrganization(actor) && existing.data.membershipRole === "admin") {
-        throw new OrganizationError("Only an Admin or Manager can assign Rep Admin access.", 403);
-      }
       return addOrganizationMember(organizationId, existing.data.repId, existing.data.membershipRole, actor);
     }
 
+    // New people are created in People (/admin/reps), where access is decided.
+    // This older body (name + phone) stays for API callers with platform management.
     const created = resellerAccountSchema.extend({
       role: z.literal("rep").default("rep"),
       modules: z.array(z.enum(XPOT_MODULES)).min(1).default([...XPOT_MODULES]),
       membershipRole: membershipRole.default("member"),
     }).strict().parse(req.body);
-    if (!managesEveryOrganization(actor) && created.membershipRole === "admin") {
-      throw new OrganizationError("Only an Admin or Manager can assign Rep Admin access.", 403);
-    }
     const { membershipRole: role, ...account } = created;
     const rep = await createResellerAccount(
       account,
@@ -157,9 +165,17 @@ export function createOrganizationsRouter() {
     }).strict().parse(req.body);
     const members = await listOrganizationMembers(organizationId, actor);
     const target = members.find((member) => member.repId === input.repId && member.isActive && !member.blockedAt);
-    if (!target) throw new OrganizationError("The target Rep is not active in this Organization.", 400);
+    if (!target) throw new OrganizationError("This person is not active in this organization.", 400, "organization_member_inactive");
+    // The same cost rule as the Distribution hand-out (server/tags/routes.ts, shared/tagKits.ts): a rep on the
+    // zero-cost rule holds company stock even with a reference cost; the acquisition rule needs a cost.
+    const rep = await storage.getSalesRep(input.repId);
+    const policy = rep?.costPolicy === "zero" ? "zero" : "acquisition";
+    if (kitCostRequired(policy) && input.unitCostCents === undefined) {
+      throw new TagError("Unit acquisition cost is required for this partner", 400, "tag_cost_required");
+    }
     return deliverKit({
       ...input,
+      ownershipType: kitOwnership(policy),
       organizationId,
       sourceOrganizationId: managesEveryOrganization(actor) ? undefined : organizationId,
     }, actor.user.userId);

@@ -39,47 +39,56 @@ export interface IntegrationProviderDef {
   /** "Used for" badge in the UI. */
   category: "Maps" | "Voice" | "AI" | "Pipeline" | "Messaging";
   fields: IntegrationFieldDef[];
+  /** Primary or fallback for its job (voice transcription, AI text): shown as a hint on the card. */
+  role?: "primary" | "fallback";
   /**
-   * Optional group id — only one provider in a group can be enabled at a time.
-   * The UI auto-disables siblings when you turn one on; the server enforces
-   * the same invariant on save so direct API calls can't violate it.
+   * The server environment can supply this provider. "override": an env key wins over
+   * whatever the panel saved. "fallback": the env is used while the panel's own config is
+   * off or incomplete.
    */
-  mutexGroup?: string;
+  envMode?: "override" | "fallback";
+  /** Phone sign-in codes are sent through it: turning it off can lock everyone out. */
+  requiredForSignIn?: boolean;
+  /** Kept working, but no longer the recommended way (labelled "Legacy"). */
+  legacy?: boolean;
 }
 
 export const INTEGRATION_PROVIDERS: IntegrationProviderDef[] = [
   {
     provider: "google_places",
     label: "Google Places",
-    description: "Business search at check-in (Places API v1).",
+    description: "Business search at check-in and in prospecting, address autocomplete and map images.",
     table: "settings",
     category: "Maps",
+    envMode: "fallback",
     fields: [{ key: "apiKey", label: "API Key", secret: true, placeholder: "AIza..." }],
   },
   {
     provider: "groq",
     label: "Groq — Whisper (voice)",
-    description: "Visit audio transcription (whisper-large-v3-turbo). Primary voice provider.",
+    description: "Primary for visit voice notes: turns the recording into text.",
     table: "chat",
     category: "Voice",
-    mutexGroup: "voice",
+    role: "primary",
     fields: [{ key: "apiKey", label: "API Key", secret: true, placeholder: "gsk_..." }],
   },
   {
     provider: "openai",
     label: "OpenAI — Whisper (voice fallback)",
-    description: "Transcription fallback when Groq fails (/audio/transcriptions, whisper-1).",
+    description: "Fallback for visit voice notes: used when Groq is off or fails.",
     table: "chat",
     category: "Voice",
-    mutexGroup: "voice",
+    role: "fallback",
     fields: [{ key: "apiKey", label: "API Key", secret: true, placeholder: "sk-..." }],
   },
   {
     provider: "openrouter",
     label: "OpenRouter — LLM",
-    description: "Visit summaries and other AI functions. Primary LLM provider.",
+    description: "Primary for AI text: visit summaries and suggested follow-ups.",
     table: "chat",
     category: "AI",
+    role: "primary",
+    envMode: "override",
     fields: [
       { key: "apiKey", label: "API Key", secret: true, placeholder: "sk-or-..." },
       {
@@ -106,9 +115,11 @@ export const INTEGRATION_PROVIDERS: IntegrationProviderDef[] = [
   {
     provider: "gemini",
     label: "Gemini — LLM (fallback)",
-    description: "Summary fallback when OpenRouter is not configured.",
+    description: "Fallback for AI text: used when OpenRouter is off or has no key.",
     table: "chat",
     category: "AI",
+    role: "fallback",
+    envMode: "override",
     fields: [
       { key: "apiKey", label: "API Key", secret: true, placeholder: "AIza..." },
       {
@@ -130,21 +141,25 @@ export const INTEGRATION_PROVIDERS: IntegrationProviderDef[] = [
   {
     provider: "gohighlevel",
     label: "GoHighLevel",
-    description: "Contact, opportunity and task sync.",
+    description: "Legacy contact, opportunity and task sync, kept for accounts that still use it. Xphere is the current CRM sync.",
     table: "settings",
     category: "Pipeline",
+    legacy: true,
     fields: [
-      { key: "apiKey", label: "API Key", secret: true, placeholder: "Bearer token / PIT" },
-      { key: "locationId", label: "Location ID", optional: true },
+      { key: "apiKey", label: "API Key", secret: true, placeholder: "Private integration token" },
+      // Every sync call is scoped to a location (helpers.ts), so it is required.
+      { key: "locationId", label: "Location ID" },
       { key: "calendarId", label: "Calendar ID", optional: true },
     ],
   },
   {
     provider: "twilio",
-    label: "Twilio | SMS",
-    description: "Sign-in codes and team notices by SMS. Needs the Account SID, the Auth Token and a From number or a Messaging Service.",
+    label: "Twilio",
+    description: "Sign-in codes by SMS. Needs the Account SID, the Auth Token and a From number or a Messaging Service.",
     table: "settings",
     category: "Messaging",
+    envMode: "fallback",
+    requiredForSignIn: true,
     fields: [
       { key: "accountSid", label: "Account SID", placeholder: "AC..." },
       { key: "apiKey", label: "Auth Token", secret: true },
@@ -156,15 +171,6 @@ export const INTEGRATION_PROVIDERS: IntegrationProviderDef[] = [
 
 export function getProviderDef(provider: string): IntegrationProviderDef | undefined {
   return INTEGRATION_PROVIDERS.find((p) => p.provider === provider);
-}
-
-/** All providers sharing the same mutex group (excluding the given one). */
-export function getMutexSiblings(provider: string): IntegrationProviderDef[] {
-  const def = getProviderDef(provider);
-  if (!def?.mutexGroup) return [];
-  return INTEGRATION_PROVIDERS.filter(
-    (p) => p.provider !== provider && p.mutexGroup === def.mutexGroup
-  );
 }
 
 /** Shape returned to the browser — secrets are masked, never the raw key. */
@@ -180,21 +186,136 @@ export interface IntegrationStatus {
   config: Partial<Record<ConfigFieldKey, string>>;
   /** What is still missing for the provider to work, or null when it is ready. */
   problem: string | null;
+  /** The same gap as a stable code, for the screen to word in its language. */
+  problemCode: IntegrationProblemCode | null;
+  /**
+   * Where the configuration in force comes from: what is saved in this panel, the
+   * server environment (see envMode), or nowhere (the provider is not in use).
+   */
+  source: IntegrationSource;
+  /** The server environment has its own settings for this provider (see envMode). */
+  envAvailable: boolean;
   updatedAt: string | null;
 }
 
-/** Setup gaps for a provider given what is saved. Null means it has everything it needs. */
-export function integrationProblem(
-  provider: string,
-  state: { hasApiKey: boolean; config: Partial<Record<ConfigFieldKey, string>> }
-): string | null {
+export type IntegrationSource = "panel" | "env" | "none";
+
+export type IntegrationProblemCode =
+  | "missing_api_key"
+  | "missing_location_id"
+  | "missing_account_sid"
+  | "missing_auth_token"
+  | "missing_sender";
+
+const PROBLEM_MESSAGES: Record<IntegrationProblemCode, string> = {
+  missing_api_key: "No API key on file, so calls will fail. Paste a key and click Save.",
+  missing_location_id: "Location ID is missing; every sync needs it.",
+  missing_account_sid: "Account SID is missing.",
+  missing_auth_token: "Auth Token is missing.",
+  missing_sender: "Set a From number or a Messaging Service SID.",
+};
+
+type ProblemState = { hasApiKey: boolean; config: Partial<Record<ConfigFieldKey, string>>; locationId?: string | null };
+
+/** Setup gaps for a provider given what is saved, as a code. Null means it has everything it needs. */
+export function integrationProblemCode(provider: string, state: ProblemState): IntegrationProblemCode | null {
   if (provider === "twilio") {
-    if (!state.config.accountSid) return "Account SID is missing.";
-    if (!state.hasApiKey) return "Auth Token is missing.";
-    if (!state.config.fromNumber && !state.config.messagingServiceSid) {
-      return "Set a From number or a Messaging Service SID.";
-    }
+    if (!state.config.accountSid) return "missing_account_sid";
+    if (!state.hasApiKey) return "missing_auth_token";
+    if (!state.config.fromNumber && !state.config.messagingServiceSid) return "missing_sender";
     return null;
   }
-  return state.hasApiKey ? null : "No API key on file, so calls will fail. Paste a key and click Save.";
+  if (!state.hasApiKey) return "missing_api_key";
+  if (provider === "gohighlevel" && !state.locationId?.trim()) return "missing_location_id";
+  return null;
+}
+
+/** Setup gaps for a provider given what is saved, in English. Null means it has everything it needs. */
+export function integrationProblem(provider: string, state: ProblemState): string | null {
+  const code = integrationProblemCode(provider, state);
+  return code ? PROBLEM_MESSAGES[code] : null;
+}
+
+/**
+ * One status per provider, shown by every pill and dot that talks about it
+ * (Integrations cards and Status alike):
+ *   live   = in use: switched on and complete here, or set by the server environment
+ *   broken = switched on here but something is missing
+ *   idle   = switched off, with a key saved (turn on to use it)
+ *   off    = switched off, nothing saved
+ */
+export type StatusKey = "live" | "broken" | "idle" | "off";
+
+export function integrationStatusKey(s: Pick<IntegrationStatus, "enabled" | "problem" | "hasApiKey" | "source"> | undefined): StatusKey {
+  if (!s) return "off";
+  if (s.source === "env") return "live";
+  if (s.enabled && !s.problem) return "live";
+  if (s.enabled) return "broken";
+  if (s.hasApiKey) return "idle";
+  return "off";
+}
+
+// ── Services: Integrations grouped by the job they do, shared with Status ──
+//
+// Admin › Integrations shows one card per job and Admin › Status one row per
+// service; both read GET /api/xpot/admin/integrations/services
+// (server/observability/services.ts), so the two screens never disagree.
+
+/** The job a service does, in the order the Integrations page shows them. */
+export const SERVICE_JOBS = ["signIn", "maps", "voice", "ai", "crm", "assistants", "infra"] as const;
+export type ServiceJob = (typeof SERVICE_JOBS)[number];
+
+/** Services that live only in the server environment: shown, never edited, values never sent. */
+export const INFRA_SERVICES = ["file_storage", "prospecting_engine", "push", "wholesale", "telegram"] as const;
+export type InfraServiceId = (typeof INFRA_SERVICES)[number];
+
+/**
+ * Every service, by job. Providers of the registry keep their `provider` id;
+ * a job with two providers lists them primary first (the order they are tried in).
+ */
+export const SERVICES_BY_JOB: Record<ServiceJob, readonly string[]> = {
+  signIn: ["twilio"],
+  maps: ["google_places", "route_optimization"],
+  voice: ["groq", "openai"],
+  ai: ["openrouter", "gemini"],
+  crm: ["xphere", "gohighlevel"],
+  assistants: ["mcp"],
+  infra: INFRA_SERVICES,
+};
+
+export function serviceJob(id: string): ServiceJob | null {
+  return SERVICE_JOBS.find((job) => SERVICES_BY_JOB[job].includes(id)) ?? null;
+}
+
+export interface ServiceEvent {
+  message: string;
+  at: string;
+  /** The Status event behind it (system_events.id), when there is one. */
+  eventId: number | null;
+}
+
+/** One service as Integrations and Status show it. Never carries a secret. */
+export interface ServiceStatus {
+  id: string;
+  job: ServiceJob;
+  status: StatusKey;
+  /** Where its settings come from: saved in Integrations, the server environment, or nowhere. */
+  source: IntegrationSource;
+  /** For a job with a primary and a fallback: the one doing the work right now. */
+  active: boolean;
+  /** A short code for what is configured, e.g. file storage "r2" | "supabase". */
+  variant: string | null;
+  /** A count the row shows, e.g. people connected to Xphere, assistants with access. */
+  count: number | null;
+  /** The last Test from Integrations (provider cards only). */
+  lastTest: { ok: boolean; message: string; at: string } | null;
+  /** The last time it was seen working: a passing test, a synced record, a used token. */
+  lastSuccessAt: string | null;
+  /** The latest failure the app recorded for it (system events, CRM sync log). */
+  lastError: ServiceEvent | null;
+}
+
+export interface ServicesResponse {
+  generatedAt: string;
+  services: ServiceStatus[];
 }

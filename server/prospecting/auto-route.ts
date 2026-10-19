@@ -10,6 +10,7 @@ import {
 } from "#shared/schema.js";
 import type { RouteCandidate } from "./route-optimizer.js";
 import { optimizeRouteWithGoogle } from "./google-route-optimizer.js";
+import { openWindowsOn, secondsUntilDayEnd } from "./opening-hours.js";
 import { sendPushNotification } from "../push-notifications.js";
 import { publishProspectingRouteForRep } from "./route-publisher.js";
 import { MAX_DAILY_PROSPECTING_SESSIONS } from "#shared/prospecting.js";
@@ -195,12 +196,15 @@ async function buildAutomaticRoute(job: ProspectingJob) {
       lng: prospectingCandidates.lng,
       score: prospectingCandidates.score,
       scoreReasons: prospectingCandidates.scoreReasons,
+      openHours: sql<string | null>`${prospectingCandidates.rawPayload}->>'open_hours'`,
+      timeZone: sql<string | null>`${prospectingCandidates.rawPayload}->>'timezone'`,
     }).from(prospectingCandidates).where(and(
       eq(prospectingCandidates.jobId, job.id),
       eq(prospectingCandidates.repId, job.repId),
       notInArray(prospectingCandidates.status, ["discarded", "visited"]),
     )).orderBy(sql`${prospectingCandidates.score} desc`, asc(prospectingCandidates.id));
 
+  const plannedStartAt = new Date();
   const missingCoordinates: number[] = [];
   const seenLeadIds = new Set<number>();
   const seenPlaceIds = new Set<string>();
@@ -225,13 +229,15 @@ async function buildAutomaticRoute(job: ProspectingJob) {
       score: candidate.score,
       scoreReasons: candidate.scoreReasons,
       serviceDurationSeconds: job.defaultVisitMinutes * 60,
+      openWindows: openWindowsOn(candidate, plannedStartAt),
     });
     if (candidate.leadId) seenLeadIds.add(candidate.leadId);
     if (candidate.googlePlaceId) seenPlaceIds.add(candidate.googlePlaceId);
   }
   if (!candidates.length) throw new NoAutomaticRouteCandidatesError();
-
-  const plannedStartAt = new Date();
+  // Same-day routes end by 10 PM where the businesses are.
+  const dayLeftSeconds = secondsUntilDayEnd(discovered.find((candidate) => candidate.timeZone)?.timeZone, plannedStartAt);
+  const shiftDurationSeconds = Math.min(job.shiftDurationMinutes * 60, dayLeftSeconds ?? Infinity);
   return db.transaction(async (tx) => {
     // Keep the paid optimizer idempotent across workers and browser retries.
     await tx.execute(sql`select pg_advisory_xact_lock(${job.repId}, hashtext(${routeDate}))`);
@@ -245,7 +251,7 @@ async function buildAutomaticRoute(job: ProspectingJob) {
 
     const optimized = await optimizeRouteWithGoogle({
       plannedStartAt,
-      shiftDurationSeconds: job.shiftDurationMinutes * 60,
+      shiftDurationSeconds,
       maxStops: 60,
       candidates,
     });

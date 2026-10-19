@@ -9,33 +9,102 @@ Xpot is two products in one app, with one sign-in:
 
 | Part | For | What it holds |
 |---|---|---|
-| **Visits** | Field reps | GPS check-in at a business, voice notes, leads, direct sales and consigned stock, the dashboard. Mirrors into the Xphere CRM |
-| **Tags** | Resellers and Skale Club | Physical QR/NFC pieces: batches, kits handed to resellers, selling and pointing a piece, writing its chip, the production Journey |
-| **Account** | Everyone | Settings (profile, language, password), and for managers the Organization pages: People, Integrations, Branding |
+| **Visits** | Field reps | The day's route, GPS check-in at a company, voice notes, companies, tasks, direct sales and consigned stock, the dashboard. Mirrors into the Xphere CRM |
+| **Tags** | Resellers and Skale Club | Physical QR/NFC pieces: batches and intake, Distribution (kits handed to resellers and taken back), selling and pointing a piece, writing its chip, the Production log |
+| **Account** | Everyone | Settings (Profile, Sign-in, Language, Memberships); for managers Administration (People, Organizations); for the Xpot admin Platform (Integrations, Brand & public site, Status) |
 
 The two modules are kept apart in the interface because their audiences differ:
-a reseller may sell pieces and never make a visit. They share two things on
-purpose. **People** are one table (`sales_reps`) whatever they do. **Businesses**
+a reseller may sell pieces and never make a visit. They share three things on
+purpose. **People** are one table (`sales_reps`) whatever they do. **Companies**
 are one table (`sales_leads`): the shop a rep visits is the shop that buys a
-piece, and Tags creates its customers there (`source: "tag_sale"`).
+piece, and Tags creates its customers there (`source: "tag_sale"`). **Sales**
+are one table (`sales_sales`): selling Tags pieces creates a sale there and
+links each exact piece through `sales_sale_tags`, so it shows in Sales too.
 
-What looks shared but is not: a Visits "sale" is a row in `sales_sales`; a
-Tags "sale" is a piece going live (`tags.sold_at`) and never becomes a
-`sales_sales` row. Whether it should is decision D5 (backlog MOD-21).
-The history of this split is in [MODULES.md](./MODULES.md).
+Putting a piece live (`tags.status = 'active'`) is **not a sale** and never
+counts as one: "sold" means an active `sales_sale_tags` row (the sale service
+also owns `tags.sold_at`), on every screen and in every report
+(`shared/tagMetrics.ts`). Cancelling the sale puts the piece back in stock with
+its seller and its former ownership. The history of the module
+split is in [MODULES.md](./MODULES.md); the October 2026 UX overhaul is in
+[UX_OVERHAUL.md](./UX_OVERHAUL.md).
 
 ### Roles
 
-| Role | How it is stored | Reach |
+| Role (UI name) | How it is stored | Reach |
 |---|---|---|
-| rep | `sales_reps.role = 'rep'` with `visits` in `modules` | Their own leads, visits, sales |
-| reseller | Not a role: a `rep` whose `modules` is just `{tags}` | The pieces in their own kit and the leads they own |
-| manager | `role = 'manager'` | Everything in both modules, plus each module's Manage group and People, minus the global admin's items below |
-| admin | `role = 'admin'` | What a manager has, plus acting on managers and admins |
-| global admin | `users.is_admin` (Skale Club; an admin created in People gets it too) | Everything, plus the items only it sees, each tagged "Admin" in the UI: Tags batches, the Journey, the NFC writers (and writing a piece's chip), MCP, Integrations, Branding, Xphere and deleting an account (People › a blocked person). Client: `isSuperAdmin()` and `adminOnly` nav items; server: `requireSuperAdmin` and `requireTagAdmin` answer 403 to everyone else |
+| Rep | `sales_reps.role = 'rep'` with `visits` in `modules` | Their own companies, visits, sales and tasks |
+| Reseller | Not a role: a `rep` whose `modules` is just `{tags}` | The pieces in their own kit, their own companies and the companies holding their pieces |
+| Manager | `role = 'manager'` | In management mode: everything in both modules, each module's Manage group and Administration (People, Organizations), minus the Xpot admin's items below. Out of it, the same screens as a rep |
+| Xpot admin | `role = 'admin'`, which always goes with `users.is_admin` (`storage.updateSalesRepAccountProfile` writes both and signs the person out when it changes) | What a manager has, plus the items only it sees: the Platform group (Integrations, Brand & public site, Status), Xphere, Tags batches, the Production log, the NFC writers (and writing a piece's chip from the desktop), MCP, changing roles, acting on managers and admins, deleting an account. The "Xpot admin" tag marks these in the UI. Client: `isSuperAdmin()` and `adminOnly` nav items; server: `requireSuperAdmin` and `requireTagAdmin` answer 403 to everyone else |
+| Org admin | `organization_memberships.role = 'admin'` in one organization; not a platform role | Manages that organization's members (suspend, remove, org role) and opens its records. In management mode their Companies, Sales (summary, sales, consignments) and Tasks lists show that organization (below); out of it, their own. Adding existing people and creating accounts stay with managers (an org admin who posts a new account gets 403) |
 
 Every person also needs `is_active` and no `blocked_at`. A phone that signs up
-starts pending; an admin approves it in People (`/admin/reps`).
+starts pending; a manager approves it in People (`/admin/reps`), choosing at
+least one module, or refuses it (shown as "Refused", apart from "Blocked").
+Nobody can change their own role, and only the Xpot admin changes roles.
+
+### Organizations and personal workspaces
+
+Every person belongs to at least one organization (`organizations`,
+`organization_memberships`, with an audit log). New records go to the person's
+newest active membership (`organizationIdForRep`). A person who was never
+assigned gets an automatic one-person workspace (`ensureOrganizationForRep`,
+slug `rep-<id>`); `isPersonalOrganization` (`shared/organizations.ts`) treats
+it as personal while that person is its only member, or it has none. The
+Organizations screen hides personal workspaces behind "Show personal
+workspaces", and People shows them with a "Personal workspace" pill. Plain reps
+don't see Organizations in their navigation; it is under Administration for
+managers.
+
+### Management mode
+
+Managers, the Xpot admin and org admins also work as reps, so the app has a
+view switch: **management mode** (`client/src/lib/adminMode.ts`, kept per
+device, off after sign-out). One rule for everyone: off is the person's own
+records; on is the scope they manage. Every API call carries `X-Xpot-View: rep`
+while it is off and `X-Xpot-View: manage` while it is on. The server reads it
+through `listScope(req, actor)` in `server/routes/xpot/middleware.ts`:
+
+- `everyone`: a manager or the Xpot admin with the mode on. A call without the
+  header counts as on for them, as before (`listsEveryone`, `viewsAsRep`;
+  `listActor` and `TagActor.inManagement` in Tags).
+- `organizations`: an org admin of a real team (`runsATeam`, an organization
+  other than their personal workspace) with `manage`: the organizations they
+  run (`managedOrganizationIds`), never another. Only `manage` widens theirs,
+  so a call without the header gets their own records.
+- `own`: everyone else, and both of the above with the mode off.
+
+`recordFilters` turns the scope into the sales and consignment filters;
+`?repId=` of yourself is always your own records (the Dashboard asks for it,
+so it stays personal in every mode). The header only chooses the view: what
+someone may open or change is still `isManagerOrAdmin` and the ownership rules
+(an org admin opens and settles their organization's consignments, as with its
+sales). An org admin's mode grants nothing else: no Manage screens, no
+Administration, no admin endpoints (`useViewerAccess().canManage` stays false;
+`reach` is `"organization"`).
+
+The lists that widen in a manager's management mode are Companies (`/leads`,
+with `?organizationId=` to pick one organization, the Companies filter
+`?org=`), Visits, Sales (`/sales` also takes `?organizationId=`) and
+consignments, opportunities, the sync log, the Tags home and Tags customers,
+and Tasks, which also needs its "Whole team" filter (`?team=1`; the server
+ignores `all` and `repId` while the mode is off). An org admin's widens only
+the ones with an organization: Companies, Sales' summary, sales and
+consignments, and Tasks ("Whole team"); visits, opportunities and Tags stay
+their own (`organizationWideList`). My pieces never widens (it always asks for
+`?mine=1`), and a piece's stock movements are shown only in management mode.
+`managementScope(path)` in `moduleNav.ts` lists the screens that get the scope
+chip ("Viewing: everyone / my organization / only me", `ScopeChip`, worded by
+`scopeChipState`), which is also the switch where the mode would change the
+list. Opening an `/admin/...` page turns a manager's mode on with a toast
+(`AdminApp`); leaving it on a management screen goes to `repScreenFor(path)`.
+An org admin turns it on from the sidebar, Settings › Memberships or the chip
+and stays on the same screen; the amber bar says "lists show your
+organization".
+Putting a house piece live in management mode keeps it in house stock; a
+manager out of management mode who puts one live becomes its holder, as before
+(`activationCredit`, `shared/tagAccess.ts`).
 
 ## 2. Granting and enforcing modules
 
@@ -72,9 +141,16 @@ tab bar per module (`MobileTabBar`).
 
 - **`moduleNav.ts` is the single map from URL to module.** `contextOfPath(path)`
   says whether a path is Visits, Tags or the account; `moduleGroups()` lists a
-  module's screens and, for managers, its Manage group; `organizationItems()`
-  lists the Organization pages. The sidebar, the command palette (Ctrl/⌘+K) and
-  `AdminApp` all read it, and `tests/module-nav.test.ts` covers it. URLs carry
+  module's screens and, for managers, its Manage group; `accountGroups()` gives
+  Administration (`administrationItems()`: People, Organizations) to managers
+  and Platform (`platformItems()`: Integrations, Brand & public site, Status) to
+  the Xpot admin; `accountSection()` says which of Settings, Administration or
+  Platform an account page is; `paletteExtras()` adds the screens no sidebar
+  lists (the visit, a plain chip, the landing editor). The sidebar, the phone
+  tab bars (`VisitsTabBar`, `TagsTabBar`, each with a Manage tab in management
+  mode), the command palette (Ctrl/⌘+K), the crumb, the page title and
+  `AdminApp` all read it, so a screen has one name everywhere, and
+  `tests/module-nav.test.ts` covers it. URLs carry
   no module prefix on purpose: management pages keep their `/admin/...` URLs
   (saved links, the installed app's `start_url`), and the map decides that
   `/admin/products` is Visits and `/admin/tags/kits` is Tags.
@@ -88,8 +164,11 @@ tab bar per module (`MobileTabBar`).
   "live" and success across the app.
 - **`ModuleBadge`** (`client/src/components/xpot/ModuleBadge.tsx`): a small
   label in the other module's colour wherever a screen shows that module's data
-  (the Tags card on the dashboard, a lead's pieces, "Sell a piece" at check-in),
-  so crossing from one module to the other is visible.
+  (the Tags card on the dashboard, a company's pieces, "Set up a piece" at
+  check-in), so crossing from one module to the other is visible.
+- **The UI kit** (tokens, Button, Pill and its tone maps, EmptyState,
+  ConfirmDialog, Field, CompactDataTable, formatters…) is indexed in
+  [UI_KIT.md](./UI_KIT.md). New screens use it.
 - On desktop the sidebar has a segmented Visits | Tags switch
   (`SidebarModuleSwitch`), and the top bar shows the path ("Tags › Batches"),
   which also goes into the browser tab's title.
@@ -100,10 +179,27 @@ tab bar per module (`MobileTabBar`).
   every in-screen navigation, such as opening a detail pane (`/leads/12`).
 - **`SessionGate`**: what a module shows while `/api/xpot/me` loads, or a way
   back to sign-in when it fails.
-- **Errors from the API.** `apiRequest` (`client/src/lib/queryClient.ts`) throws
-  `ApiError` with the HTTP `status` and the server's own `message`, so a toast
-  can show `err.message` as is. The server answers `{ message }` for every error
-  and never sends internal error text on a 500.
+- **Errors from the API.** The server answers `{ message }` for every error,
+  with an English sentence, and never sends internal error text on a 500. Two
+  additions let the client word it in the user's language:
+  - Refusals people hit carry a stable `code` and its `params`
+    (`{ message, code, params }`): `TagError` / `tagErrorBody()` in
+    `server/tags/errors.ts`, `TagSaleError`, the stock transitions and the
+    Visits routes. `serverErrorText()` in `client/src/lib/apiErrors.ts` looks up
+    `srv_<code>` in `i18n/messages/apiErrors.ts` and falls back to the server's
+    message. `tests/server-error-codes.test.ts` checks that every code the
+    server sends has a translation.
+  - A failed validation answers `{ message, code: "invalid_input", errors:
+    [{ path, message, code, params }] }` (`server/lib/validation.ts`), with field
+    codes such as `required`, `too_long`, `invalid_url`, `invalid_color`.
+    `parseFieldErrors()` and `describeApiError()` in `client/src/lib/apiErrors.ts`
+    read it (and the older Zod shapes) and name the field in the toast.
+
+  `apiRequest` (`client/src/lib/queryClient.ts`) throws `ApiError` with the HTTP
+  `status`, the `code`, the field errors and a message that is already
+  translated; the Tags fetch helpers (`HttpError` in `pages/tags/lib.ts`,
+  `AdminHttpError` in `pages/admin/tags/api.ts`) translate the same way. So a
+  toast can show `err.message` as is.
 
 ## 4. Directory map
 
@@ -111,18 +207,24 @@ tab bar per module (`MobileTabBar`).
 client/                    React app (Vite)
   src/App.tsx              Top-level routes: landing, login, legal, /admin/*, /settings, /tags/*, Visits
   src/components/
-    xpot/                  The shell: AppLayout, moduleNav, surface (colours), ModuleBadge,
-                           CommandPalette, MobileTabBar, MasterDetail (list + detail pane)
+    xpot/                  The shell and the UI kit: AppLayout, moduleNav, surface (colours), ModuleBadge,
+                           CommandPalette, MobileTabBar, VisitsTabBar, ScopeChip, MasterDetail,
+                           StatusPill (Pill + tone maps), ConfirmDialog, Field, CompactDataTable… (UI_KIT.md)
+    piece/                 The one piece screen's sections (header, customer & destination, chip,
+                           sale, performance, management, activity) and pieceView.ts, its pure rules
     ModuleSwitch.tsx       Phone module switch, useXpotModules, rememberModule
     PhoneSignIn.tsx        The phone + code sign-in form
     ui/                    shadcn/ui primitives
   src/pages/
     xpot/                  Visits: check-in, dashboard, visits, leads, sales, settings, landing
     tags/                  Tags: home, pieces, piece screen, review link, NFC writing (Web NFC), QR scanner
-    admin/                 Manage and Organization pages; admin/tags/ is Tags › Manage
+    admin/                 Manage, Administration and Platform pages; admin/tags/ is Tags › Manage,
+                           admin/platform/ holds the Integrations hub and Brand & public site,
+                           PersonDetail.tsx is a person's page in People
     legal/                 Privacy and terms
-  src/i18n/                EN/PT/ES messages, one file per area
-  src/lib/                 Query client, PWA helpers, MODULE_HOME, Supabase client
+  src/i18n/                EN/PT/ES messages, one file per area; apiErrors.ts words the server's codes
+  src/lib/                 Query client, apiErrors (server codes and field errors), format.ts and
+                           dates.ts (formatters), adminMode (management mode), PWA helpers, MODULE_HOME
 server/
   index.ts                 Boot: makes sure the Supabase buckets exist (public "uploads", fallback "private-uploads"), starts Express
   app.ts                   createApp: env check, legacy-host redirect, body limits, sessions, routes
@@ -135,6 +237,15 @@ server/
   wholesale/               Stuscle wholesale code check
   integrations/ghl.ts      GoHighLevel client (legacy)
   lib/ai.ts                LLM client: OpenRouter, Gemini fallback
+  lib/providerChoice.ts    Pure chooser: which saved provider does voice (Groq, then OpenAI) and AI
+                           text (OpenRouter, then Gemini); each only when switched on with a key,
+                           env keys override the panel for OpenRouter and Gemini. Integrations shows
+                           the same answer as "In use now"
+  lib/validation.ts        The one 400 shape for invalid input: { message, code, errors[] }
+  observability/           events.ts (system_events, the app's error log), health.ts (prospecting
+                           worker and searches), services.ts (one list of outside services, read by
+                           Integrations and Status), syncProblems.ts (CRM records whose last sync failed)
+  organizations/           Organizations, memberships, personal workspaces, who may manage which
   lib/files.ts             Private files (photos, voice notes): R2 or the private Supabase bucket,
                            references, signed URLs, best-effort cleanup
   routes/xpot/files.ts     GET /api/xpot/files?ref=…: access check, then a 5-minute signed URL
@@ -147,6 +258,14 @@ shared/                    Code both sides import
   tags.ts, tagAccess.ts, tagApp.ts, tagFace.ts, tagJourney.ts, tagProvisioning.ts, tagsApi.ts
                            Tags rules: codes and URLs, who may act, scanned payloads, faces,
                            the Journey, the NFC writer protocol, API response shapes
+  tagMetrics.ts            One definition per stock number (house, with resellers, sold, live, not
+                           received, damaged, hand out, returnable); server/tags/metrics.ts turns
+                           it into SQL, the screens apply it to loaded pieces
+  tagKits.ts, tagDistribution.ts, tagQueues.ts, tagSales.ts
+                           Kit cost rule and kit codes (K-0001), per-code hand-out/take-back refusals,
+                           the Overview "Needs action" queues, which customer a sale suggests
+  visit-status.ts, organizations.ts, system-health.ts
+                           Which visit statuses count as finished, personal workspaces, Status types
   pricing.ts, visit-actions.ts, xpot.ts
                            Sales arithmetic, the LLM ↔ sales contract, Visits validation schemas
   integrations-registry.ts The Integrations panel's providers, used by server and client
@@ -159,21 +278,30 @@ nfc-provisioner/           Electron app that writes and verifies NFC chips over 
 
 ## 5. Tables
 
-52 tables, all in `shared/schema/`, plus `_xpot_migrations`, which the migration
+59 tables, all in `shared/schema/`, plus `_xpot_migrations`, which the migration
 runner creates for its own bookkeeping.
 
 | Group | Tables |
 |---|---|
-| People, organizations and businesses | `organizations`, `organization_memberships`, `organization_audit_log`, `sales_reps`, `sales_leads`, `sales_lead_locations`, `sales_lead_contacts` |
-| Visits | `sales_visits`, `sales_visit_notes`, `sales_visit_actions`, `sales_tasks`, `sales_opportunities_local`, `sales_app_settings` |
+| People, organizations and companies | `organizations`, `organization_memberships`, `organization_audit_log`, `sales_reps`, `sales_leads`, `sales_lead_locations`, `sales_lead_contacts` |
+| Visits | `sales_visits`, `sales_visit_notes`, `sales_visit_actions`, `sales_tasks`, `sales_opportunities_local`, `sales_app_settings`, `sales_push_subscriptions` |
 | Prospecting | `prospecting_jobs`, `prospecting_runs`, `prospecting_candidates`, `prospecting_routes`, `prospecting_route_stops` |
 | Sales module | `sales_products`, `sales_product_price_tiers`, `sales_sales`, `sales_sale_items`, `sales_sale_tags`, `sales_consignments`, `sales_consignment_movements` |
-| Integrations | `xphere_integrations`, `sales_sync_events`, `chat_integrations`, `integration_settings` |
-| Tags | `tag_batches`, `tags`, `tag_kits`, `tag_destination_history`, `tag_events`, `tag_direct_writes`, `tag_acquisitions`, `tag_acquisition_lines`, `tag_acquisition_units`, `tag_stock_movements` |
+| Integrations | `xphere_integrations`, `sales_sync_events`, `chat_integrations`, `integration_settings`, `integration_checks` (each provider's last Test) |
+| Tags | `tag_batches`, `tags`, `tag_kits`, `tag_kit_items` (what each kit handed out, and when and why each piece left it), `tag_destination_history`, `tag_events`, `tag_direct_writes`, `tag_acquisitions`, `tag_acquisition_lines`, `tag_acquisition_units`, `tag_stock_movements` (append-only: a trigger refuses updates and deletes) |
 | NFC writer | `tag_provisioning_devices`, `tag_provisioning_jobs`, `tag_provisioning_events` |
 | Tags Journey | `tag_plans`, `tag_journey_entries` |
-| Account | `users`, `sessions`, `auth_phone_codes`, `app_branding` |
+| Account and public site | `users`, `sessions`, `auth_phone_codes`, `auth_access_requests`, `app_branding`, `landing_page_contents` |
+| Observability | `system_events` |
 | MCP | `mcp_tokens`, `mcp_oauth_clients`, `mcp_oauth_codes`, `mcp_oauth_tokens` |
+
+**Kit history.** A kit used to be "the pieces whose `tags.kit_id` points at
+it", so returns and moves made a kit's counts shrink and nothing kept what was
+handed out. Since migration 0054 each kit has a sequential `kit_number` (shown
+as K-0001, `kitCode()` in `shared/tagKits.ts`) and `tag_kit_items` gets one row
+per piece at the hand-over (a kit given out, or a Stuscle order fulfilled),
+written once; returns and moves set `left_at` / `left_reason`. Distribution ›
+Kits reads handed out / returned / moved / still with the reseller from it.
 
 Files are not in the database: business photos (`sales_leads.photos`) and voice
 notes (`sales_visit_notes.audio_url`) hold a storage reference such as
@@ -216,17 +344,29 @@ starting together never apply one twice. Files are written to be re-runnable
 | `0018_mcp_oauth` | OAuth 2.1 clients, codes and tokens for MCP |
 | `0019_tag_face` | `tag_batches.face`, `tags.face`: what is printed on a piece |
 | `0020_rep_deleted_at` | `sales_reps.deleted_at`: a deleted account kept as an anonymous placeholder for its sales |
+| `0020_tag_product_models` … `0051_system_events` | Not listed one by one here: Tags models, sales and acquisitions, organizations, batch intake and the stock ledger, prospecting routes, tasks, the landing page, push and the error log. Most files open with a comment saying what they do |
+| `0052_honour_ai_provider_switches` | Switches on Groq and Gemini rows that already have a key, because the switch is now honoured (`server/lib/providerChoice.ts`) and nothing that worked should stop |
+| `0053_integration_checks` | `integration_checks`: each provider's last Test result, kept apart from its settings row |
+| `0054_tag_kit_items` | `tag_kits.kit_number` and `tag_kit_items` (kit history), backfilled from the kit journey entries, the kit stock movements and the pieces still in each kit |
+
+Two files can share a number (`0020`, `0033`, `0035`, `0047`): the runner
+tracks migrations by file name, so both apply, in name order.
 
 ## 7. MCP
 
 `POST /mcp` serves Streamable HTTP, statelessly: a fresh server per request,
 so any instance can answer any call (`server/mcp/server.ts`). Callers are
-admins only, through an OAuth 2.1 connection or a static token. Journey tools
-live in `server/mcp/tools/tagJourney.ts`; account-bound prospecting tools live
-in `server/mcp/tools/prospecting.ts`:
+admins only, through an OAuth 2.1 connection or a static token, and an
+assistant acts as the admin who connected it. Journey tools live in
+`server/mcp/tools/tagJourney.ts`, account-bound prospecting tools in
+`server/mcp/tools/prospecting.ts` and task tools (`tasks_list`, `tasks_get`,
+`tasks_create`, `tasks_update` and the status shortcuts) in
+`server/mcp/tools/tasks.ts`. The card is Platform › Integrations › AI
+assistants (`/admin/integrations/mcp`); it lists each connection's scopes.
 
-OAuth connections are least-privilege: `xpot:journey` exposes only the Tags Journey family and
-`xpot:prospecting` exposes only the prospecting family. Static admin tokens retain both families
+OAuth connections are least-privilege: `xpot:journey` exposes only the Tags Journey family,
+`xpot:prospecting` only the prospecting family and `xpot:tasks` only the task family
+(`MCP_TOKEN_SCOPES` in `shared/tagsApi.ts`). Static admin tokens keep every family
 for backwards compatibility.
 
 | Tool | What it does |
@@ -253,11 +393,14 @@ for backwards compatibility.
   is the handler's own decision. `tests/routes-composition.test.ts` mounts the
   whole `/api/xpot` composition, because a guard in one router can leak onto the
   routers mounted after it (#32).
-- **Integration tests** (`*.integration.test.ts`, seven files) run against a
-  real Postgres and skip themselves unless `TAGS_INTEGRATION=1`. Point
-  `DATABASE_URL` at a disposable database and run `npm run migrate` first. CI
-  does this with a throwaway Postgres 17 service (`.github/workflows/ci.yml`)
-  for all seven, one file at a time (several truncate the same tables).
+- **Integration tests** (`*.integration.test.ts`, 22 files). The ones built on
+  PGlite, an in-memory Postgres (People, Status, tasks scope, routes, lead
+  location and follow-ups, organizations…), run in the normal `npm test`. The
+  others run against a real Postgres and skip themselves unless
+  `TAGS_INTEGRATION=1`: point `DATABASE_URL` at a disposable database and run
+  `npm run migrate` first. CI does this for seven of them with a throwaway
+  Postgres 17 service (`.github/workflows/ci.yml`). Run them one file at a time
+  (`--no-file-parallelism`): several truncate the same tables.
 - **Schema changes are SQL migrations, never `drizzle-kit push`.** About 25
   indexes and partial unique constraints exist only in `migrations/*.sql` (one
   active consignment per lead, unique phone, one open provisioning job per

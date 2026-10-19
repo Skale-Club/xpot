@@ -7,10 +7,13 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { useXpotModules } from "@/components/ModuleSwitch";
 import { useT } from "@/i18n";
 import { shellMessages } from "@/i18n/messages/shell";
+import { navIaMessages } from "@/i18n/messages/navIa";
 import { TagPieceMention } from "@/components/xpot/TagProductThumbnail";
 import { tagsGet } from "@/pages/tags/lib";
 import type { FullSalesLead } from "@/pages/xpot/types";
 import { GradientTopLine } from "@/components/xpot/GradientTopLine";
+import { navigateGuarded } from "@/hooks/useUnsavedChangesGuard";
+import { ACCENT_SELECTED, SURFACE_MODAL, type ModuleAccent } from "@/components/xpot/surface";
 
 type Entry = {
   key: string;
@@ -24,18 +27,35 @@ type Entry = {
 
 const LIMIT_PER_GROUP = 8;
 
+/**
+ * The shortcuts the screen behind the palette supports (useDesktopShortcuts):
+ * N only where a page marks its "new" button, J/K only over a table of rows.
+ */
+export function availableShortcuts(root: Pick<Document, "querySelector">): Array<"search" | "new" | "rows"> {
+  return [
+    "search",
+    ...(root.querySelector('[data-shortcut="new"]') ? (["new"] as const) : []),
+    ...(root.querySelector("main table tbody tr[tabindex]") ? (["rows"] as const) : []),
+  ];
+}
+
 /** Ctrl/⌘+K: jump to a page, a company or a piece. Desktop only. */
 export function CommandPalette({
   open,
   onOpenChange,
   pages,
+  accent = "visits",
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Screens to jump to; `group` names the module they belong to (current module first). */
   pages: Array<{ href: string; label: string; icon: LucideIcon; group?: string }>;
+  /** Highlight colour of the selected row: the module the palette was opened from. */
+  accent?: ModuleAccent;
 }) {
   const t = useT(shellMessages);
+  const tn = useT(navIaMessages);
+  const selected = ACCENT_SELECTED[accent];
   const [, navigate] = useLocation();
   const modules = useXpotModules();
   const [query, setQuery] = useState("");
@@ -55,12 +75,15 @@ export function CommandPalette({
     staleTime: 15_000,
   });
 
+  const [shortcuts, setShortcuts] = useState<ReturnType<typeof availableShortcuts>>(["search"]);
   useEffect(() => {
     if (open) {
       setQuery("");
       setIndex(0);
+      setShortcuts(availableShortcuts(document));
     }
   }, [open]);
+  const shortcutLabel = { search: tn("shortcutSearch"), new: tn("shortcutNew"), rows: tn("shortcutRows") };
 
   const entries = useMemo<Entry[]>(() => {
     const q = query.trim().toLowerCase();
@@ -111,7 +134,8 @@ export function CommandPalette({
   const go = (entry: Entry | undefined) => {
     if (!entry) return;
     onOpenChange(false);
-    navigate(entry.href);
+    // A screen with unsaved changes (Landing, Integrations) asks before the palette leaves it.
+    navigateGuarded(entry.href, navigate);
   };
 
   let lastGroup = "";
@@ -119,7 +143,7 @@ export function CommandPalette({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         className="top-[15vh] max-w-xl translate-y-0 gap-0 overflow-hidden rounded-2xl border-white/10 p-0 [&>button]:hidden"
-        style={{ background: "#0d1322" }}
+        style={{ background: SURFACE_MODAL }}
       >
         <GradientTopLine />
         <DialogTitle className="sr-only">{t("searchEverything")}</DialogTitle>
@@ -163,7 +187,7 @@ export function CommandPalette({
                     data-index={i}
                     onMouseMove={() => setIndex(i)}
                     onClick={() => go(entry)}
-                    className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left ${i === index ? "bg-blue-500/15" : ""}`}
+                    className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left ${i === index ? selected.row : ""}`}
                   >
                     {entry.piece ? (
                       <TagPieceMention
@@ -173,7 +197,7 @@ export function CommandPalette({
                       />
                     ) : (
                       <>
-                        <Icon className={`h-4 w-4 shrink-0 ${i === index ? "text-blue-300" : "text-white/35"}`} />
+                        <Icon className={`h-4 w-4 shrink-0 ${i === index ? selected.icon : "text-white/35"}`} />
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-sm font-semibold text-white">{entry.label}</span>
                           {entry.sub && <span className="block truncate text-xs text-white/40">{entry.sub}</span>}
@@ -188,7 +212,7 @@ export function CommandPalette({
           )}
         </div>
         <div className="border-t border-white/[0.08] px-4 py-2 text-[11px] text-white/30">
-          {t("paletteHint")} · {t("shortcutsHint")}
+          {t("paletteHint")} · {tn("shortcutsLabel")}: {shortcuts.map((key) => shortcutLabel[key]).join(" · ")}
         </div>
       </DialogContent>
     </Dialog>
