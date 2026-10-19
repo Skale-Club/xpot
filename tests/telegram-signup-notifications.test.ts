@@ -44,13 +44,11 @@ test("completed lead formatting is structured and escapes user content", async (
   const { formatSignupLeadTelegram } = await import("../server/auth/telegram.js");
   const text = formatSignupLeadTelegram({
     name: "Maria <Teste>", phone: "+15085550199", email: "maria@example.com",
-    workCity: "Worcester", workRegion: "Massachusetts", hasVehicle: true,
-    languages: ["en", "pt"], occupation: "Delivery driver", salesExperience: "some",
-    fieldSalesReadiness: "ready", availability: "evenings", message: "Ready & available", test: true,
+    workCity: "Worcester & Co", workRegion: "MA", hasVehicle: true, test: true,
   });
   assert.match(text, /LEAD DE TESTE/);
   assert.match(text, /Maria &lt;Teste&gt;/);
-  assert.match(text, /Ready &amp; available/);
+  assert.match(text, /Worcester &amp; Co, MA/);
   assert.match(text, /<b>Área de atuação<\/b>/);
 });
 

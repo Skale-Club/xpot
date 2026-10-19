@@ -5,13 +5,6 @@ export interface SignupLeadTelegram {
   workCity: string;
   workRegion: string;
   hasVehicle: boolean;
-  languages: string[];
-  otherLanguages?: string;
-  occupation: string;
-  salesExperience: "none" | "some" | "experienced";
-  fieldSalesReadiness: "ready" | "with_support" | "not_ready";
-  availability: "weekdays" | "evenings" | "weekends" | "flexible";
-  message?: string;
   test?: boolean;
 }
 
@@ -19,14 +12,7 @@ export function escapeTelegramHtml(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-const SALES = { none: "Sem experiência", some: "Alguma experiência", experienced: "Experiente" } as const;
-const READINESS = { ready: "Pronto para vender presencialmente", with_support: "Pronto com apoio inicial", not_ready: "Ainda não se sente preparado" } as const;
-const AVAILABILITY = { weekdays: "Dias de semana", evenings: "À noite", weekends: "Fins de semana", flexible: "Horários flexíveis" } as const;
-const LANGUAGES: Record<string, string> = { en: "Inglês", pt: "Português", es: "Espanhol", other: "Outro" };
-
 export function formatSignupLeadTelegram(lead: SignupLeadTelegram): string {
-  const languages = lead.languages.map((language) => LANGUAGES[language] ?? language);
-  if (lead.otherLanguages?.trim()) languages.push(lead.otherLanguages.trim());
   return [
     lead.test ? "<b>LEAD DE TESTE · XPOT</b>" : "<b>NOVO LEAD · XPOT</b>",
     "Formulário concluído",
@@ -39,18 +25,10 @@ export function formatSignupLeadTelegram(lead: SignupLeadTelegram): string {
     "<b>Área de atuação</b>",
     `Local: ${escapeTelegramHtml(lead.workCity)}, ${escapeTelegramHtml(lead.workRegion)}`,
     `Veículo próprio: ${lead.hasVehicle ? "Sim" : "Não"}`,
-    `Idiomas: ${escapeTelegramHtml(languages.join(", "))}`,
-    "",
-    "<b>Perfil</b>",
-    `Ocupação: ${escapeTelegramHtml(lead.occupation)}`,
-    `Experiência em vendas: ${SALES[lead.salesExperience]}`,
-    `Venda presencial: ${READINESS[lead.fieldSalesReadiness]}`,
-    `Disponibilidade: ${AVAILABILITY[lead.availability]}`,
     "",
     "<b>Confirmações</b>",
-    "Investimento no kit inicial: confirmado",
-    "Atividade em campo: confirmada",
-    ...(lead.message?.trim() ? ["", "<b>Mensagem</b>", escapeTelegramHtml(lead.message.trim())] : []),
+    "Kit inicial: entendeu como funciona",
+    "Conta ativa: entendeu como manter",
   ].join("\n");
 }
 
