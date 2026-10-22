@@ -269,6 +269,27 @@ export function registerProductionRoutes(app: Express, deps: { device: readonly 
     }
   });
 
+  // The catalog as the bench needs it: a model with its versions (to find the bed whose fixed file it uploads).
+  app.get("/api/provisioner/print-models/:ref", ...bench, async (req, res) => {
+    try {
+      res.json(await production.getModel(req.params.ref));
+    } catch (err) {
+      fail(res, err, "Failed to load the print model");
+    }
+  });
+
+  // A part's fixed print file, uploaded from the bench (the same rule as the admin route: only while unused).
+  app.post("/api/provisioner/print-models/:ref/versions/:versionId/beds/:label/file", ...bench, rawFile, async (req, res) => {
+    const versionId = uuidParam(req.params.versionId, res);
+    if (!versionId) return;
+    try {
+      const { filename } = uploadQuery.parse(req.query);
+      res.status(201).json(await production.attachBedFile(req.params.ref, versionId, req.params.label, filename, uploadBody(req), null));
+    } catch (err) {
+      fail(res, err, "Failed to upload the print file");
+    }
+  });
+
   app.post("/api/provisioner/print-jobs/:id/complete", ...bench, async (req, res) => {
     const id = uuidParam(req.params.id, res);
     if (!id) return;

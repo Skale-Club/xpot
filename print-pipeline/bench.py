@@ -4,6 +4,7 @@
     python bench.py ticket <order-id> [--out job.json]            take the order and write what build needs
     python bench.py attach <order-id> <file-or-dir>... [--report report.json] [--no-ready]
     python bench.py fail <order-id> --message "why"
+    python bench.py attach-bed <model-slug> <bed-label> <file>    a part's fixed print file, on its current version
     python bench.py whoami
 
 The order comes from Xpot (Tags > Production > Queue); `ticket` gives its codes, bed positions and the version's
@@ -166,6 +167,23 @@ def cmd_attach(args):
     print(f'Order {done["id"]} is {done["status"]}.')
 
 
+def cmd_attach_bed(args):
+    creds = load_credentials()
+    slug = urllib.parse.quote(args.model)
+    _, model = request(creds['server'], 'GET', f'/api/provisioner/print-models/{slug}', creds['token'])
+    version = model.get('currentVersion')
+    if not version:
+        sys.exit(f'{args.model} has no version yet.')
+    name = os.path.basename(args.file)
+    with open(args.file, 'rb') as f:
+        data = f.read()
+    label = urllib.parse.quote(args.bed)
+    _, updated = request(creds['server'], 'POST', f'/api/provisioner/print-models/{slug}/versions/{version["id"]}/beds/{label}/file',
+                         creds['token'], raw=data, query={'filename': name})
+    bed = next(b for b in updated['beds'] if b['label'].lower() == args.bed.lower())
+    print(f'{args.model} v{updated["version"]} bed {bed["label"]}: {bed["fileName"]} ({bed["fileBytes"]} bytes)')
+
+
 def cmd_fail(args):
     creds = load_credentials()
     claim(creds, args.order)
@@ -193,6 +211,11 @@ def main(argv=None):
     p.add_argument('--report', help='report.json whose numbers (minutes, swaps, grams, qr_check) go on the order')
     p.add_argument('--no-ready', action='store_true')
     p.set_defaults(run=cmd_attach)
+    p = sub.add_parser('attach-bed', help="upload a part's fixed print file to a bed of its current version")
+    p.add_argument('model')
+    p.add_argument('bed')
+    p.add_argument('file')
+    p.set_defaults(run=cmd_attach_bed)
     p = sub.add_parser('fail', help='mark an order failed')
     p.add_argument('order')
     p.add_argument('--message', required=True)

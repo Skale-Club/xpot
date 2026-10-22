@@ -121,6 +121,11 @@ export const printBedSchema = z.object({
   copies: z.number().int().positive().max(1000),
   /** Bed positions in copy order, as seen facing the printer ("front-left", …); for the serial map. */
   positions: z.array(z.string().trim().min(1).max(40)).max(1000).optional(),
+  /** Where each copy sits on the bed, in copy order: mm from the bed centre, and an optional turn (the 3MF builder's `copies`). */
+  slots: z.array(z.object({
+    offset: z.tuple([z.number().min(-200).max(200), z.number().min(-200).max(200)]),
+    rotation: z.number().min(-360).max(360).optional(),
+  }).strict()).max(1000).optional(),
   minutes: z.number().nonnegative().max(10_000).nullable().optional(),
   swaps: z.number().int().nonnegative().max(10_000).nullable().optional(),
   /** Grams per filament, by the name on the AMS slot ("White PLA": 99.7). */
@@ -146,7 +151,11 @@ export const printVersionInputSchema = z.object({
   builder: z.preprocess((v) => (typeof v === "string" ? v.trim() || null : v), z.string().regex(/^[a-z][a-z0-9_.-]{1,60}$/, "Builder: lowercase id like plate.menu").nullable().optional()),
   /** What the builder takes besides the code: size, theme, pocket depth, font… */
   params: z.record(z.unknown()).default({}),
-  /** Slicer settings laid over the builder's base recipe (wall_loops, top_shell_layers, …). */
+  /**
+   * The bed recipe the 3MF builder reads (print-pipeline/lib/build_3mf.py): template, orientation, pause_top_z,
+   * top_band, first_layer_sequence, settings_files and `settings` (wall_loops, top_shell_layers, the filament colours
+   * and purge matrix…), without the per-piece `parts` and `copies`, which the builder writes for each order.
+   */
   recipe: z.record(z.unknown()).default({}),
   beds: z.array(printBedSchema).min(1, "A version needs at least one bed layout").max(20),
   consumes: z.array(printConsumeSchema).max(10).default([]),
@@ -161,6 +170,9 @@ export const printVersionInputSchema = z.object({
     seen.add(key);
     if (bed.positions && bed.positions.length !== bed.copies) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["beds", index, "positions"], message: "One position per copy" });
+    }
+    if (bed.slots && bed.slots.length !== bed.copies) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["beds", index, "slots"], message: "One slot per copy" });
     }
   });
 });

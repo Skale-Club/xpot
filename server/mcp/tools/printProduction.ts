@@ -41,8 +41,8 @@ function errorMessage(err: unknown): string {
   return "Internal error";
 }
 
-const BED_DOC = "beds: [{ label (\"x4\"), copies, positions? (one per copy, as seen facing the printer: front-left, …), minutes?, swaps?, grams? ({\"White PLA\": 99.7}), ams? ([{slot, colour}]), pause? ({z, text}) }]";
-const VERSION_DOC = `{ builder? (print-pipeline builder id: plate.menu, plate.google, plate.instagram, plate.venmo, stand.google, stand.instagram; omit for a part), params? (what the builder takes: size, theme, pocket depth, font…), recipe? (slicer settings over the builder's base recipe: wall_loops, top_shell_layers…), ${BED_DOC}, consumes? ([{part: slug, perPiece}]), changelog (required from v2: what changed and why), fixesBatch? (batch code whose problem this fixes) }`;
+const BED_DOC = "beds: [{ label (\"x4\"), copies, positions? (one per copy, as seen facing the printer: front-left, …), slots? (one per copy: {offset: [x, y] mm from the bed centre, rotation?}), minutes?, swaps?, grams? ({\"White PLA\": 99.7}), ams? ([{slot, colour}]), pause? ({z, text}) }]";
+const VERSION_DOC = `{ builder? (print-pipeline builder id: plate.menu, plate.google, plate.instagram, plate.venmo, stand.google, stand.instagram; omit for a part), params? (what the builder takes: size, theme, pocket depth, font…), recipe? (the bed recipe for the 3MF builder without parts/copies: template, orientation, pause_top_z, top_band, first_layer_sequence, settings {wall_loops, top_shell_layers, filament_colour…}), ${BED_DOC}, consumes? ([{part: slug, perPiece}]), changelog (required from v2: what changed and why), fixesBatch? (batch code whose problem this fixes) }`;
 
 export function registerPrintProductionTools(server: McpServer, caller: McpCaller) {
   async function run(tool: string, body: () => Promise<unknown>) {

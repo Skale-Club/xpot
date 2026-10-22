@@ -41,6 +41,13 @@ describe("print schemas", () => {
     expect(printVersionInputSchema.safeParse({ beds: [] }).success).toBe(false);
   });
 
+  it("takes one bed slot per copy, each an offset in mm and an optional turn", () => {
+    const slots = [{ offset: [-72.5, -53.5] }, { offset: [72.5, -53.5], rotation: 90 }, { offset: [-72.5, 53.5] }, { offset: [72.5, 53.5] }];
+    expect(printVersionInputSchema.safeParse({ beds: [{ ...bed, slots }] }).success).toBe(true);
+    expect(printVersionInputSchema.safeParse({ beds: [{ ...bed, slots: slots.slice(1) }] }).success).toBe(false);
+    expect(printVersionInputSchema.safeParse({ beds: [{ ...bed, slots: [{ offset: [0] }, ...slots.slice(1)] }] }).success).toBe(false);
+  });
+
   it("asks a serialized model for its product, sales product and prefix, and not a part", () => {
     expect(printModelInputSchema.safeParse({ slug: "base-large", kind: "part", title: "Base" }).success).toBe(true);
     expect(printModelInputSchema.safeParse({ slug: "plate", kind: "serialized", title: "Plate" }).success).toBe(false);
