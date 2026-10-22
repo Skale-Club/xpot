@@ -19,8 +19,8 @@ import { useTagLabels } from "./labels";
 import { Loading, LoadError } from "./pieces-shared";
 import { PrintModelPage } from "./production-model";
 import { PrintJobPage } from "./production-job";
-import { JobList, PrintDialog } from "./production-orders";
-import { ModelStatusPill, PRODUCTION_BASE, PrinterCards, bedSummary, usePrintModels, type JobFilter } from "./production-shared";
+import { PrintDialog, RequestList } from "./production-orders";
+import { ModelStatusPill, PRODUCTION_BASE, bedSummary, usePrintModels, type JobFilter } from "./production-shared";
 
 // Manage › Production (the Xpot admin's, docs/PRINT_EXECUTION_PLAN.md): the catalog of what the house prints and
 // the queue of print orders. Paths: /admin/tags/production[/queue | /models/<slug> | /jobs/<id>].
@@ -95,7 +95,7 @@ function CatalogView({ go }: { go: Go }) {
       )}
 
       {creating && <NewModelDialog onClose={() => setCreating(false)} onCreated={(slug) => go(`${PRODUCTION_BASE}/models/${slug}`)} />}
-      {printing && <PrintDialog model={printing} onClose={() => setPrinting(null)} onOrdered={(job) => go(`${PRODUCTION_BASE}/jobs/${job.id}`)} />}
+      {printing && <PrintDialog model={printing} onClose={() => setPrinting(null)} onOrdered={() => go(`${PRODUCTION_BASE}/queue`)} />}
     </div>
   );
 }
@@ -248,8 +248,7 @@ function QueueView({ go }: { go: Go }) {
           accent="tags"
         />
       </div>
-      <PrinterCards />
-      <JobList filter={filter} go={go} />
+      <RequestList filter={filter} go={go} />
     </div>
   );
 }

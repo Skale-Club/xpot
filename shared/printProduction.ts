@@ -6,8 +6,11 @@
 //            code (a Stand base, a G token). It never changes when the recipe improves.
 //   version  the frozen recipe that produced a batch: builder + parameters, slicer settings, bed layouts. A version
 //            an order used is never edited; an improvement is a new version with a changelog.
-//   order    "print N pieces of this version" (print_jobs). For a serialized model it creates the batch and its
-//            codes; for a part it is the file and a count.
+//   request  "print N pieces of this model" (print_requests), split into plates of at most one bed each; the last
+//            plate may be partial (10 on a 4-up bed: 4 + 4 + 2).
+//   plate    one bed to print (print_jobs, "print order" in the API): for a serialized model it owns its batch and
+//            codes; for a part it is the fixed file and a count. The admin downloads it, prints it in Bambu Studio
+//            and marks it printed: nothing is sent to the printer from here.
 
 import { z } from "zod";
 import { TAG_PRODUCT_TYPES } from "./tags.js";
@@ -53,8 +56,21 @@ export const PRINT_FILE_MAX_BYTES = 64 * 1024 * 1024;
 export const PRINT_PART_REASONS = ["printed", "assembled", "used", "adjustment"] as const;
 export type PrintPartReason = (typeof PRINT_PART_REASONS)[number];
 
-/** How many bed copies one order may print in a row (a full plate of tokens is ~270 pieces). */
+/** How many plates one request may make (a full plate of tokens is ~270 pieces). */
 export const PRINT_MAX_PLATES = 20;
+
+/**
+ * How a request of `quantity` pieces fills beds of `copies`: full plates, then the rest on a partial one
+ * (10 on 4 → [4, 4, 2]). A part's plate is its fixed file and is never partial: the count rounds up to whole plates.
+ */
+export function splitIntoPlates(quantity: number, copies: number, partial = true): number[] {
+  if (!Number.isInteger(quantity) || quantity < 1 || !Number.isInteger(copies) || copies < 1) return [];
+  const full = Math.floor(quantity / copies);
+  const rest = quantity % copies;
+  const plates: number[] = Array.from({ length: full }, () => copies);
+  if (rest) plates.push(partial ? rest : copies);
+  return plates;
+}
 
 // ─── Order state machine ──────────────────────────────────────────────────────
 
@@ -221,8 +237,10 @@ export const printJobCreateSchema = z.object({
   model: z.string().trim().min(1).max(80),
   /** The bed label; omitted: the version's first bed. */
   bed: z.string().trim().min(1).max(40).optional(),
-  /** How many times the bed is printed (a serialized order issues copies × plates codes). */
-  plates: z.number().int().positive().max(PRINT_MAX_PLATES).default(1),
+  /** How many pieces: split into plates of the bed's copies, the last one partial. Omitted: one full bed (or `plates`). */
+  quantity: z.number().int().positive().max(10_000).optional(),
+  /** Whole beds instead of a count of pieces (`quantity` wins when both come). */
+  plates: z.number().int().positive().max(PRINT_MAX_PLATES).optional(),
   notes: optionalText(2000),
   /**
    * Link an existing batch instead of issuing codes (the orders behind batches made before this catalog existed).
@@ -335,10 +353,31 @@ export interface PrintJobItem {
   updatedAt: string;
   /** No bench event for a while on a `building` order. */
   stale: boolean;
-  /** Send to printer: asked by an admin, taken by a bench, accepted by the printer. */
-  sendRequestedAt: string | null;
-  sendClaimedAt: string | null;
-  sentAt: string | null;
+  /** The request this plate belongs to, its place in it ("plate 2 of 3") and how many pieces the request asked for. */
+  requestId: string | null;
+  plateNumber: number;
+  plateCount: number;
+  requestQuantity: number;
+  /** The print files to download: the Bambu Studio project (.3mf) and the sliced, checked file (.gcode.3mf). */
+  downloads: Array<{ id: string; kind: PrintFileKind; filename: string }>;
+}
+
+/** What was asked, with its plates (a redone plate shows next to the one it replaces). */
+export interface PrintRequestItem {
+  id: string;
+  modelId: string;
+  modelSlug: string;
+  modelTitle: string;
+  modelKind: PrintModelKind;
+  version: number;
+  bedLabel: string;
+  /** Pieces asked for (a part's plates may round it up to whole beds). */
+  quantity: number;
+  notes: string | null;
+  createdAt: string;
+  /** Some plate still to build or print. */
+  open: boolean;
+  plates: PrintJobItem[];
 }
 
 export interface PrintJobPiece {
@@ -370,53 +409,26 @@ export interface PrintJobTicket {
   tags: Array<{ serial_number: string; public_code: string; qr_url: string; nfc_url: string; position: string | null }>;
 }
 
-// ─── The printer (phase 3) ────────────────────────────────────────────────────
-
-/** What a bench reads from its printer over MQTT (`pushall` → `print`), as it posts it. Bambu's gcode_state values. */
-export const PRINTER_STATES = ["IDLE", "PREPARE", "RUNNING", "PAUSE", "FINISH", "FAILED", "OFFLINE", "UNKNOWN"] as const;
-export type PrinterState = (typeof PRINTER_STATES)[number];
-
-/** A printer that can take a new job now. */
-export const PRINTER_FREE_STATES: readonly PrinterState[] = ["IDLE", "FINISH", "FAILED"];
-
-export const printerStatusSchema = z.object({
-  name: z.string().trim().min(1).max(60),
-  model: z.string().trim().max(20).nullable().optional(),
-  state: z.enum(PRINTER_STATES),
-  percent: z.number().min(0).max(100).nullable().optional(),
-  remainingMinutes: z.number().min(0).max(100_000).nullable().optional(),
-  subtask: z.string().max(200).nullable().optional(),
-  layer: z.number().int().min(0).max(100_000).nullable().optional(),
-  totalLayers: z.number().int().min(0).max(100_000).nullable().optional(),
-  error: z.string().max(300).nullable().optional(),
-  ams: z.array(z.object({ tray: z.number().int().min(0).max(16), colour: z.string().max(12).nullable(), type: z.string().max(30).nullable() }).strict()).max(16).optional(),
-}).strict();
-export type PrinterStatus = z.infer<typeof printerStatusSchema>;
-
-export interface PrinterItem {
-  deviceId: string;
-  deviceName: string;
-  status: PrinterStatus | null;
-  statusAt: string | null;
-  /** No status for a while: the bench is off or lost the printer. */
-  stale: boolean;
-}
-
-/** After this long without a status, a printer is shown as unknown. */
-export const PRINTER_STATUS_STALE_MS = 5 * 60_000;
-
-/** What the bench gets when it takes a send: the sliced file to fetch and how to start it. */
-export interface PrintSendTicket {
-  job: { id: string; quantity: number; batchCode: string | null; modelTitle: string };
-  file: { id: string; filename: string; sha256: string; bytes: number; url: string };
-  /** AMS slot per project filament, from the bed (slot 1 → tray 0). */
-  amsMapping: number[];
-  /** What the printer shows as the job's name. */
-  subtaskName: string;
-}
-
 /** After how long without news a `building` order is shown as stuck (the bench died or lost the network). */
 export const PRINT_JOB_STALE_MS = 30 * 60_000;
+
+/** How long a printed plate stays in the bench's Print Now folder (Printed/) before the bench clears it. */
+export const PRINT_NOW_PRINTED_DAYS = 14;
+
+/** A plate as the bench mirrors it into the Print Now folder: where it goes and the files to fetch (signed links). */
+export interface PrintNowPlate {
+  id: string;
+  status: PrintJobStatus;
+  requestId: string | null;
+  requestCreatedAt: string;
+  requestQuantity: number;
+  plateNumber: number;
+  plateCount: number;
+  quantity: number;
+  batchCode: string | null;
+  modelTitle: string;
+  files: Array<{ id: string; kind: PrintFileKind; filename: string; sha256: string; bytes: number; url: string }>;
+}
 
 /** The serial map a bed and its pieces give, in copy order: plate n, copy k → position k. */
 export function bedPosition(bed: Pick<PrintBed, "positions" | "copies"> | null, serialNumber: number | null): string | null {

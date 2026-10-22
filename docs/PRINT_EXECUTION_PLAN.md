@@ -1,8 +1,10 @@
 # Plano de execução: produção das peças impressas dentro do Xpot
 
 **Status:** proposto e aprovado em 2026-10-22 (decisões D1 e D2 da seção 13; D3 e D4 tomadas como recomendadas). Fases 0 a 5
-implementadas no mesmo dia (seção 11, "Feito"), Skale-Club/xpot#108 a #113. Falta o que só o dono faz (seção 11, fase 5,
-"Para o dono"): parear a bancada, configurar a impressora e reconectar o MCP para a carga do catálogo.
+implementadas no mesmo dia (seção 11, "Feito"), Skale-Club/xpot#108 a #113. **Corrigido no mesmo dia (seção 15): nada vai
+direto para a impressora.** Um pedido é "N peças de um modelo", dividido em placas; cada placa é baixada, impressa à mão no
+Bambu Studio e marcada impressa no Xpot, e o Bench mantém a pasta Print Now organizada. Falta o que só o dono faz: parear o
+Bench e escolher a pasta Print Now (seção 15).
 **Público:** produto, engenharia e operação
 **Objetivo:** pedir, gerar, imprimir e receber qualquer peça do catálogo sem sair do Xpot e sem chamar o Claude, que passa a entrar só para desenhar faces, variantes e versões novas.
 
@@ -257,6 +259,9 @@ Uma ordem `building` sem evento há 30 min aparece na Fila como "sem resposta", 
 
 ### 7.3 Fase 3: a impressora
 
+> **Revogada em 2026-10-22 (seção 15).** O dono não quer que o sistema mande arquivos para a impressora: o envio por FTPS/MQTT,
+> o estado da impressora e o `bench.py printer` saíram. O texto abaixo fica como registro.
+
 O Bench fala com a A1 em modo LAN, sem conta (a conta do dono é Google SSO e nunca é usada): upload do `gcode.3mf` por FTPS
 (`<ip>:990`, usuário `bblp`, senha = código de acesso) e comando de impressão e estado por MQTT (`mqtts://<ip>:8883`). IP, serial
 e código de acesso ficam no Bench, nunca no Xpot. **O comando de iniciar impressão por MQTT em modo LAN na A1 não foi confirmado
@@ -273,8 +278,9 @@ Mesmo escopo `xpot:journey` (admin de Tags); registradas em `server/mcp/tools/pr
 | `print_models_list` | o catálogo com versão atual, estado, estoque de parts |
 | `print_model_create` | um modelo `design_needed` ou `ready` (com a v1 junto) |
 | `print_model_version_create` | a receita de uma versão (`builder`, `params`, `recipe`, `beds`, `changelog`, `fixes_batch_id`); vira `current` e leva o modelo a `ready` |
-| `print_jobs_list`, `print_job_get` | a fila e uma ordem com relatório e arquivos (URLs assinadas) |
-| `print_job_create` | o 5.1 por MCP (cria lote + ordem); substitui o uso de `tags_batch_create` para produção própria, que continua existindo para fornecedores |
+| `print_requests_list` | os pedidos com as placas (seção 15) |
+| `print_jobs_list`, `print_job_get` | as placas uma a uma, e uma placa com relatório e arquivos (URLs assinadas) |
+| `print_job_create` | um pedido por quantidade (seção 15): "uma placa com 6 do stand X"; cada placa cria seu lote; substitui o uso de `tags_batch_create` para produção própria, que continua existindo para fornecedores |
 | `print_job_update` | `printed`, `failed`, `cancelled`, com motivo |
 
 O upload de arquivos não passa pelo MCP: na fase 1 é `bench.py attach --job <id> <dir>` com o token do dispositivo, ou o
@@ -539,3 +545,62 @@ para Xpot Bench) atualizados; este plano marcado implementado.
 - Travar chips, gravar NFC: continuam como estão (Bench › NFC e o celular).
 - Modelos não NFC do repositório 3D (chaveiros, wall art, expositores): o pipeline é deles também, mas o catálogo do Xpot só
   recebe o que o Xpot vende ou usa.
+
+## 15. Correção de 2026-10-22: pedido por quantidade, impressão à mão
+
+O dono corrigiu o fluxo no mesmo dia: **o sistema não envia nada para a impressora.** O que ele quer é organização dos
+arquivos e dos pedidos:
+
+- escolher o modelo e a **quantidade**; o sistema gera as placas prontas para imprimir;
+- **baixar** a placa, abrir no Bambu Studio, configurar e imprimir à mão;
+- **marcar impressa** no Xpot, para controle de produção e estoque;
+- a pasta **Print Now** só com as placas que importam, organizadas por pedido, item e estado (sem arquivos soltos e testes);
+- pedir pela IA ("crie uma placa com 6 do stand Y") e baixar itens avulsos, sempre registrando o que foi impresso.
+
+### 15.1 Pedido e placas
+
+- `print_requests` (migração 0062): modelo, versão, mesa, **quantidade de peças**, notas, origem (painel ou MCP).
+- O pedido vira **placas** de no máximo uma mesa: 10 Stands numa mesa de 4 = placas de 4 + 4 + 2. A última é **parcial**: o
+  gerador já usava só as primeiras posições da mesa (`pipeline.bed_recipe`). Até 20 placas por pedido.
+- Cada placa é uma linha de `print_jobs` (a "ordem" da API) com `request_id` e `plate_number`, **seu próprio lote** (os
+  códigos da placa, numerados 1..n, nas posições da mesa), seus arquivos e seu estado: aguardando arquivo → gerando → pronta
+  para imprimir → impressa (ou falhou / cancelada). "Imprimir de novo" refaz a placa no mesmo lugar do pedido.
+- Uma peça sem código (base, token) imprime o arquivo fixo da mesa: a quantidade sobe para mesas inteiras (8 bases numa mesa
+  de 6 = 2 placas, 12 bases).
+- Item avulso = um pedido de 1 peça (uma placa com uma peça). O arquivo fixo de uma peça sem código também se baixa no catálogo.
+- As ordens criadas antes viraram pedidos de uma placa (o pedido tem o id da ordem).
+
+### 15.2 O painel
+
+- **Fila**: um cartão por pedido (modelo, versão, peças pedidas, data, notas) com as placas: "Placa 2 de 3", peças, lote,
+  estado, **baixar Projeto (.3mf)** e **Fatiado (.gcode.3mf)**, e **Marcar impressa**. Filtros: abertos, concluídos, todos.
+- **Imprimir** (catálogo e página do modelo): quantidade de peças, com a divisão em placas antes de confirmar.
+- **Página da placa**: o que carregar no AMS, a pausa, o mapa de posições e códigos, os arquivos. Sem "Enviar para a
+  impressora" nem "Imprimindo agora".
+- A página do lote e a entrada no estoque por leitura do QR não mudam.
+
+### 15.3 O Bench e a pasta Print Now
+
+O Bench (no PC com o Bambu Studio) continua **gerando** as placas: meshes por código, `.3mf`, fatiamento offline, conferência
+dos QR e da pausa, e sobe os arquivos. Ele **não fala mais com a impressora** (`printer.py` saiu). Ele também mantém a pasta:
+
+```
+python print-pipeline/bench.py folder "<caminho>/Print Now"
+
+Print Now/
+  Para imprimir/2026-10-22 15h53 - Stand Large - Instagram - Black - 10 un/
+    IG-2026-004 - placa 1 de 3 - 4 un.3mf          projeto do Bambu Studio
+    IG-2026-004 - placa 1 de 3 - 4 un.gcode.3mf    fatiado e conferido
+  Impressos/...                                    placas marcadas impressas nos últimos 14 dias
+```
+
+- O Xpot diz o que pertence à pasta (`GET /api/provisioner/print-now`, links assinados); `bench.py run` sincroniza a cada
+  minuto e `bench.py sync` sincroniza uma vez.
+- Placa marcada impressa vai para `Impressos/`; cancelada, falha ou impressa há mais de 14 dias sai da pasta (continua no Xpot).
+- O Bench só move ou apaga arquivos que ele mesmo escreveu (`.xpot-print-now.json`); o resto da pasta nunca é tocado. Os
+  arquivos antigos da Print Now do Drive ficam onde estão até o dono decidir (sugestão: mover para um arquivo morto).
+
+### 15.4 IA
+
+`print_job_create { model, quantity }` cria o pedido e devolve as placas; `print_requests_list` mostra os pedidos e o que falta
+imprimir; `print_job_update printed` marca uma placa impressa, sempre depois de o dono confirmar.

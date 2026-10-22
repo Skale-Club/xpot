@@ -1,11 +1,13 @@
 # print-pipeline
 
-Turns a Tags › Production print order into the files the Bambu Lab A1 prints: per-code meshes, the `.3mf`, the
-offline slice (`.gcode.3mf`) and the checks (every QR decoded from layer 1 of the G-code, the chip pause before
-the first bridge). Xpot is the record of what was ordered, built and printed; this folder holds no state.
+Turns the plates of a Tags › Production request into the files the Bambu Lab A1 prints: per-code meshes, the `.3mf`
+(the Bambu Studio project), the offline slice (`.gcode.3mf`) and the checks (every QR decoded from layer 1 of the
+G-code, the chip pause before the first bridge), and keeps the Print Now folder. Nothing is sent to the printer: you
+open a plate in Bambu Studio, print it and mark it printed in Xpot. Xpot is the record of what was asked, built and
+printed; this folder holds no state.
 Plan: [`../docs/PRINT_EXECUTION_PLAN.md`](../docs/PRINT_EXECUTION_PLAN.md).
 
-## Set up the bench (once, on the computer next to the printer)
+## Set up the bench (once, on the computer with Bambu Studio)
 
 ```bash
 pip install -r print-pipeline/requirements.txt
@@ -32,34 +34,42 @@ The code comes from Xpot › Tags › NFC writers › pair a computer. The token
 python print-pipeline/bench.py run
 ```
 
-Takes every order whose version has a builder, oldest first, builds it, uploads the files and marks it ready (or
-failed, with the reason, which shows on the order in Xpot). Start it with Windows (a shortcut to
-`pythonw print-pipeline\bench.py run` in `shell:startup`) and the queue builds itself. `bench.py build <order-id>`
-does one order now.
+Takes every plate whose version has a builder, oldest first, builds it, uploads the files and marks it ready (or
+failed, with the reason, which shows on the plate in Xpot). A partial plate (the last 2 of a request of 10 on a 4-up
+bed) fills the first slots of the bed. Start it with Windows (a shortcut to `pythonw print-pipeline\bench.py run` in
+`shell:startup`) and the plates build themselves. `bench.py build <order-id>` does one plate now.
 
 Manual halves, for a file built by hand (a part, a design not ported yet): `bench.py ticket <order-id>` writes the
 order's codes, positions and recipe; `bench.py attach <order-id> <folder>` uploads the files and marks it ready;
 `bench.py attach-bed <model> <bed> <file>` puts a part's fixed file on its current version.
 
-## The printer (send to printer)
+## The Print Now folder
 
 ```bash
-python print-pipeline/bench.py printer setup
+python print-pipeline/bench.py folder "<path>/Print Now"
 ```
 
-Takes the printer's IP, serial and name from bambu-cli's config when it is there (or asks), then asks the access code
-(the printer's screen: Settings › Network, with LAN mode on) without showing it, saves everything in
-`%LOCALAPPDATA%\XpotBench\printer.json` and reads the printer's state once. From then on `bench.py run` also sends
-the orders an admin sent from Xpot (only when the printer is free) and reports the printer's state every minute.
-`bench.py printer status` reads it now. The access code never leaves this computer.
+From then on `bench.py run` keeps that folder as Xpot's list of plates, every minute (`bench.py sync` does it once):
+
+```
+Print Now/
+  Para imprimir/2026-10-22 15h53 - Stand Large - Instagram - Black - 10 un/
+    IG-2026-004 - placa 1 de 3 - 4 un.3mf          the Bambu Studio project (open, check, slice, print)
+    IG-2026-004 - placa 1 de 3 - 4 un.gcode.3mf    the slice the bench checked (every QR, the pause)
+  Impressos/...                                    plates marked printed in the last 14 days
+```
+
+A plate marked printed moves to `Impressos/`; a cancelled or failed one, or one printed more than two weeks ago,
+leaves the folder (it stays downloadable in Xpot). The bench only moves or removes the files it wrote itself, listed
+in `.xpot-print-now.json`: anything else in the folder is never touched.
 
 ## Layout
 
 | Path | What it is |
 |---|---|
-| `bench.py` | the bench (pair, run, build, doctor, ticket, attach, attach-bed, fail) |
-| `pipeline.py` | one order → meshes, `.3mf` per bed, slice, checks, serial map, `report.json` |
-| `printer.py` | the A1 on the LAN: FTPS upload, MQTT status and start (standard library only) |
+| `bench.py` | the bench (pair, run, folder, sync, build, doctor, ticket, attach, attach-bed, fail) |
+| `pipeline.py` | one plate → meshes, `.3mf`, slice, checks, serial map, `report.json` |
+| `print_now.py` | the Print Now folder: Xpot's plates by status and request (standard library only) |
 | `builders/` | the builder ids a version names (`plate.instagram`, `plate.google`, `plate.menu`, `plate.venmo`, `stand.google`, `stand.instagram`): one code → that piece's meshes and parts |
 | `nfc/Stand/source/design/`, `nfc/Plate/source/` | the geometry, copied from the 3D Printing repo (`NFC Signs/*/source/`) on 2026-10-22 |
 | `nfc/*/source/mesh/` | the Fusion sample meshes the Stand cards and the G tokens start from |
@@ -67,7 +77,7 @@ the orders an admin sent from Xpot (only when the printer is free) and reports t
 | `library/presets/` | the two A1 project templates the NFC recipes name |
 | `library/svg/` | the logos and the NFC mark, with their sources in `SOURCES.md` |
 | `catalog/` | `catalog.json`, the catalog loaded into Xpot (every model's v1), and `make_catalog.py`, which wrote it from the 3D repo's batch recipes |
-| `tests/` | `test_pipeline.py` (CI, standard library) and `rebuild.py` (on the bench: rebuild a batch and compare) |
+| `tests/` | `test_pipeline.py`, `test_print_now.py` (CI, standard library) and `rebuild.py` (on the bench: rebuild a batch and compare) |
 
 The copied geometry is unchanged except its paths (the repo root is the folder holding `bench.py`, the library is
 `library/`). The batch scripts' own `main()` entry points still point at the 3D repo's layout and are not used: the
