@@ -41,12 +41,25 @@ Manual halves, for a file built by hand (a part, a design not ported yet): `benc
 order's codes, positions and recipe; `bench.py attach <order-id> <folder>` uploads the files and marks it ready;
 `bench.py attach-bed <model> <bed> <file>` puts a part's fixed file on its current version.
 
+## The printer (send to printer)
+
+```bash
+python print-pipeline/bench.py printer setup
+```
+
+Takes the printer's IP, serial and name from bambu-cli's config when it is there (or asks), then asks the access code
+(the printer's screen: Settings › Network, with LAN mode on) without showing it, saves everything in
+`%LOCALAPPDATA%\XpotBench\printer.json` and reads the printer's state once. From then on `bench.py run` also sends
+the orders an admin sent from Xpot (only when the printer is free) and reports the printer's state every minute.
+`bench.py printer status` reads it now. The access code never leaves this computer.
+
 ## Layout
 
 | Path | What it is |
 |---|---|
 | `bench.py` | the bench (pair, run, build, doctor, ticket, attach, attach-bed, fail) |
 | `pipeline.py` | one order → meshes, `.3mf` per bed, slice, checks, serial map, `report.json` |
+| `printer.py` | the A1 on the LAN: FTPS upload, MQTT status and start (standard library only) |
 | `builders/` | the builder ids a version names (`plate.instagram`, `plate.google`, `plate.menu`, `plate.venmo`, `stand.google`, `stand.instagram`): one code → that piece's meshes and parts |
 | `nfc/Stand/source/design/`, `nfc/Plate/source/` | the geometry, copied from the 3D Printing repo (`NFC Signs/*/source/`) on 2026-10-22 |
 | `nfc/*/source/mesh/` | the Fusion sample meshes the Stand cards and the G tokens start from |

@@ -1,7 +1,7 @@
 # Plano de execução: produção das peças impressas dentro do Xpot
 
-**Status:** proposto e aprovado em 2026-10-22 (decisões D1 e D2 da seção 13; D3 e D4 tomadas como recomendadas). Fases 0, 1 e 2
-implementadas no mesmo dia (seção 11, "Feito"); a carga da seção 10 roda pelo MCP depois do deploy. Fases 3 a 5 abertas.
+**Status:** proposto e aprovado em 2026-10-22 (decisões D1 e D2 da seção 13; D3 e D4 tomadas como recomendadas). Fases 0 a 3
+implementadas no mesmo dia (seção 11, "Feito"); a carga da seção 10 roda pelo MCP depois do deploy. Fases 4 e 5 abertas.
 **Público:** produto, engenharia e operação
 **Objetivo:** pedir, gerar, imprimir e receber qualquer peça do catálogo sem sair do Xpot e sem chamar o Claude, que passa a entrar só para desenhar faces, variantes e versões novas.
 
@@ -434,6 +434,28 @@ só da mudança de `recipe`, sem tocar em Python; uma ordem com QR errado no G-c
 ordem; **Enviar para a impressora** na Fila.
 **Aceite:** uma ordem `ready` vai à impressora a partir do Xpot e aparece `printing`; sem MQTT, o arquivo está na impressora e o
 dono só confirma na tela dela.
+
+**Feito (2026-10-22):**
+
+- Migração `0060`: `print_jobs.send_requested_at/_by`, `send_claimed_at`, `send_device_id`, `sent_at`;
+  `tag_provisioning_devices.printer_status/_at`.
+- No painel: **Enviar para a impressora** numa ordem `ready` com `.gcode.3mf`, com confirmação (AMS, pausa, tempo); a ordem
+  mostra "esperando a bancada" / "enviando" e o motivo quando a impressora recusa; a Fila e a ordem mostram o estado de cada
+  impressora (estado, %, tempo restante, trabalho na mesa).
+- Na bancada: `print-pipeline/printer.py` (só biblioteca padrão): FTPS implícito na 990 e um cliente MQTT mínimo na 8883;
+  `bench.py printer setup` pede o código de acesso sem mostrar e grava só em `%LOCALAPPDATA%\XpotBench\printer.json`;
+  `bench.py run` envia o que o admin mandou (baixa o arquivo pelo link assinado, confere o sha256, recusa se a impressora não
+  está livre, sobe por FTPS, começa por MQTT, confere que começou) e informa o estado da impressora a cada minuto.
+- API do Bench: `POST /api/provisioner/print-sends/claim`, `POST /api/provisioner/print-jobs/:id/sent`,
+  `POST /api/provisioner/printer-status`; do admin: `POST /print-jobs/:id/send`, `/send/cancel`, `GET /print-printers`.
+
+**Diferenças e o que falta conferir:**
+
+- Mandar para a impressora é só pelo painel (um clique humano), não pelo MCP: move a máquina.
+- "Impressa" continua sendo o clique do dono; o estado `FINISH` da impressora aparece no cartão, mas não fecha a ordem.
+- **Não testado com a impressora:** o código de acesso não está nesta máquina (o `bambu-cli` só tem IP e serial). As portas
+  990 e 8883 da A1 respondem na rede. O formato do comando de início (`project_file`, `url file:///sdcard/<arquivo>`) é o que a
+  comunidade usa com a série A/P; se a A1 recusar, `url_template` em `printer.json` troca o formato sem mudar código.
 
 ### Fase 4 — Versões por feedback e parts (3–5 dias)
 

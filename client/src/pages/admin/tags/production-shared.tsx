@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import type { PrintBed, PrintJobItem, PrintJobStatus, PrintModelItem, PrintModelStatus } from "@shared/printProduction";
+import type { PrintBed, PrintJobItem, PrintJobStatus, PrintModelItem, PrintModelStatus, PrinterItem } from "@shared/printProduction";
 import { Pill, toneOf, type PillTone } from "@/components/xpot/StatusPill";
 import { translate, useT, type Translate } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
@@ -108,4 +108,63 @@ export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+const PRINTER_TONE: Record<string, PillTone> = {
+  IDLE: "slate",
+  PREPARE: "blue",
+  RUNNING: "blue",
+  PAUSE: "amber",
+  FINISH: "green",
+  FAILED: "red",
+  OFFLINE: "muted",
+  UNKNOWN: "muted",
+};
+
+export function usePrinters() {
+  return useQuery({
+    queryKey: [ADMIN_TAGS_KEY, "production", "printers"],
+    queryFn: () => getJson<PrinterItem[]>("/api/xpot/admin/print-printers"),
+    staleTime: 10_000,
+    refetchInterval: 15_000,
+  });
+}
+
+/** What each paired bench last read from its printer: state, progress, the job on the bed. Nothing when no bench prints. */
+export function PrinterCards() {
+  const t = useT(productionMessages);
+  const { data } = usePrinters();
+  if (!data?.length) return null;
+  return (
+    <div className="grid gap-2 sm:grid-cols-2" data-testid="production-printers">
+      {data.map((printer) => {
+        const status = printer.status;
+        const state = printer.stale || !status ? "UNKNOWN" : status.state;
+        return (
+          <div key={printer.deviceId} className="rounded-2xl border border-white/[0.08] bg-white/[0.03] p-3 text-sm">
+            <div className="flex items-center justify-between gap-2">
+              <span className="truncate font-semibold text-white">{status?.name ?? printer.deviceName}</span>
+              <Pill tone={toneOf(PRINTER_TONE, state)}>{t(`printerState_${state}` as never)}</Pill>
+            </div>
+            {status && !printer.stale && (state === "RUNNING" || state === "PAUSE" || state === "PREPARE") ? (
+              <div className="mt-2 space-y-1">
+                <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+                  <div className="h-full rounded-full bg-violet-400" style={{ width: `${Math.round(status.percent ?? 0)}%` }} />
+                </div>
+                <p className="truncate text-xs text-white/50">
+                  {status.subtask ? `${status.subtask} · ` : ""}
+                  {Math.round(status.percent ?? 0)}%
+                  {status.remainingMinutes ? ` · ${t("printerRemaining", { time: minutesText(status.remainingMinutes) })}` : ""}
+                </p>
+              </div>
+            ) : (
+              <p className="mt-1 text-xs text-white/40">
+                {printer.stale ? t("printerStale", { device: printer.deviceName }) : status?.error || t("printerIdleHint")}
+              </p>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
 }

@@ -10,6 +10,7 @@ import {
   printModelPatchSchema,
   printPartAdjustSchema,
   printVersionInputSchema,
+  printerStatusSchema,
   type PrintFileKind,
 } from "#shared/printProduction.js";
 import { requireTagAdmin } from "./access.js";
@@ -55,6 +56,12 @@ const claimSchema = z.object({ jobId: z.string().uuid().nullable().optional() })
 const benchEventSchema = z.object({
   type: z.string().regex(/^[a-z][a-z0-9_]{0,39}$/),
   detail: z.record(z.unknown()).nullable().optional(),
+}).strict();
+
+const sendResultSchema = z.object({
+  ok: z.boolean(),
+  error: z.string().max(1000).nullable().optional(),
+  printer: z.string().max(60).nullable().optional(),
 }).strict();
 
 const benchCompleteSchema = z.object({
@@ -219,6 +226,35 @@ export function registerProductionRoutes(app: Express, deps: { device: readonly 
     }
   });
 
+  // Send to printer: the admin's click is the confirmation; the bench on the printer's network does the sending.
+  app.post(`${jobs}/:id/send`, requireTagAdmin, async (req, res) => {
+    const id = uuidParam(req.params.id, res);
+    if (!id) return;
+    try {
+      res.json(await production.requestSend(id, userIdOf(req)));
+    } catch (err) {
+      fail(res, err, "Failed to send the order to the printer");
+    }
+  });
+
+  app.post(`${jobs}/:id/send/cancel`, requireTagAdmin, async (req, res) => {
+    const id = uuidParam(req.params.id, res);
+    if (!id) return;
+    try {
+      res.json(await production.cancelSend(id));
+    } catch (err) {
+      fail(res, err, "Failed to cancel the send");
+    }
+  });
+
+  app.get("/api/xpot/admin/print-printers", requireTagAdmin, async (_req, res) => {
+    try {
+      res.json(await production.listPrinters());
+    } catch (err) {
+      fail(res, err, "Failed to load the printers");
+    }
+  });
+
   app.get("/api/xpot/admin/print-files/:id", requireTagAdmin, async (req, res) => {
     const id = uuidParam(req.params.id, res);
     if (!id) return;
@@ -287,6 +323,38 @@ export function registerProductionRoutes(app: Express, deps: { device: readonly 
       res.status(201).json(await production.attachBedFile(req.params.ref, versionId, req.params.label, filename, uploadBody(req), null));
     } catch (err) {
       fail(res, err, "Failed to upload the print file");
+    }
+  });
+
+  // A send waiting for the printer: the order, its sliced file (signed link) and the AMS mapping; 204 when none.
+  app.post("/api/provisioner/print-sends/claim", ...bench, async (req, res) => {
+    try {
+      const ticket = await production.claimSend(deviceId(req));
+      if (!ticket) return res.status(204).end();
+      res.json(ticket);
+    } catch (err) {
+      fail(res, err, "Failed to claim the send");
+    }
+  });
+
+  app.post("/api/provisioner/print-jobs/:id/sent", ...bench, async (req, res) => {
+    const id = uuidParam(req.params.id, res);
+    if (!id) return;
+    try {
+      const body = sendResultSchema.parse(req.body);
+      const job = await production.sendResult(deviceId(req), id, body);
+      res.json({ id: job.id, status: job.status });
+    } catch (err) {
+      fail(res, err, "Failed to record the send");
+    }
+  });
+
+  app.post("/api/provisioner/printer-status", ...bench, async (req, res) => {
+    try {
+      await production.setPrinterStatus(deviceId(req), printerStatusSchema.parse(req.body));
+      res.json({ ok: true });
+    } catch (err) {
+      fail(res, err, "Failed to record the printer status");
     }
   });
 
