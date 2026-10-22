@@ -17,3 +17,7 @@ tsbuildinfo
 # Local design-tool scratch files and source backups
 .tmp-vectorcraft/
 Xpot Logo-font-backup.svg
+
+# Python bytecode (print-pipeline/)
+__pycache__/
+*.pyc

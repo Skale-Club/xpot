@@ -50,8 +50,11 @@ export type FileRef =
   | { kind: "stored"; backend: Backend; key: string }
   | { kind: "legacy"; url: string; publicPath: string | null };
 
-/** Keys are always kind/repId/file — nothing else is ever signed or deleted. */
-const KEY_PATTERN = /^(audio|photos)\/\d+\/[A-Za-z0-9._-]+$/;
+/**
+ * Keys are always kind/repId/file, or print/<order or model uuid>/file for Tags › Production's print files
+ * (served only by the admin route, server/tags/production.ts) — nothing else is ever signed or deleted.
+ */
+const KEY_PATTERN = /^(?:(audio|photos)\/\d+|print\/[0-9a-f-]{36})\/[A-Za-z0-9._-]+$/;
 
 export function isValidKey(key: string): boolean {
   return KEY_PATTERN.test(key);

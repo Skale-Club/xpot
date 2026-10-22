@@ -16,6 +16,7 @@ import {
   PackageOpen,
   Palette,
   PenLine,
+  Printer,
   Plug,
   Route,
   ShieldCheck,
@@ -150,6 +151,7 @@ type ShellKey =
   | "managePieces"
   | "manageKits"
   | "manageBatches"
+  | "manageProduction"
   | "manageJourney"
   | "manageResellers"
   | "manageShop"
@@ -225,6 +227,8 @@ export function moduleGroups(module: XpotModule, viewer: Viewer, l: Labels): Nav
       // (Distribution), sold by resellers; then the Xpot admin's tools.
       items: visibleTo(viewer, [
         { href: "/admin/tags/overview", label: l.shell("manageOverview"), icon: BarChart3, match: (p) => p === "/admin/tags" || tab("overview")(p) },
+        // What the house prints: the catalog of models and the print queue (docs/PRINT_EXECUTION_PLAN.md).
+        { href: "/admin/tags/production", label: l.shell("manageProduction"), icon: Printer, match: tab("production"), adminOnly: true },
         { href: "/admin/tags/batches", label: l.shell("manageBatches"), icon: Factory, match: tab("batches"), adminOnly: true },
         { href: "/admin/tags/pieces", label: l.shell("managePieces"), icon: Nfc, match: tab("pieces") },
         { href: "/admin/tags/kits", label: l.shell("manageKits"), icon: PackageOpen, match: tab("kits") },

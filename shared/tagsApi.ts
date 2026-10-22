@@ -228,6 +228,8 @@ export interface TagBatchItem {
   status: string;
   /** `issued` (Xpot generated the codes) or `scanned` (filled by scanning already-coded pieces). */
   codeSource: string;
+  /** The Tags › Production print order that issued it, when there is one. */
+  printJobId: string | null;
   /** Derived production stage (shared/tags.ts `batchStage`). */
   stage: string;
   /** Latest production step in the batch's journey (`sliced`, `printed`, …), or null. */
@@ -417,6 +419,8 @@ export interface ProvisionerDeviceItem {
   platform: string | null;
   appVersion: string | null;
   status: string;
+  /** 'nfc' (writes chips) and/or 'print' (the bench builds print files). */
+  capabilities: string[];
   tokenPrefix: string | null;
   pairingExpiresAt: string | null;
   lastSeenAt: string | null;
