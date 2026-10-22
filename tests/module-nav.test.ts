@@ -114,7 +114,7 @@ describe("moduleGroups", () => {
   it("a manager gets each module's own management, without the global admin's items", () => {
     const tags = hrefs(moduleGroups("tags", manager, labels));
     expect(tags).toEqual(expect.arrayContaining(["/admin/tags/overview", "/admin/tags/pieces", "/admin/tags/kits", "/admin/tags/team"]));
-    for (const href of ["/admin/tags/batches", "/admin/tags/shop", "/admin/tags/journey", "/admin/tags/provisioners"]) expect(tags).not.toContain(href);
+    for (const href of ["/admin/tags/production", "/admin/tags/batches", "/admin/tags/shop", "/admin/tags/journey", "/admin/tags/provisioners"]) expect(tags).not.toContain(href);
     const visits = hrefs(moduleGroups("visits", manager, labels));
     expect(visits).toEqual(expect.arrayContaining(["/admin/overview", "/admin/products", "/admin/settings"]));
     expect(visits).not.toContain("/admin/xphere");
@@ -123,6 +123,7 @@ describe("moduleGroups", () => {
   it("orders Tags › Manage along a piece's life", () => {
     expect(moduleGroups("tags", admin, labels)[1].items.map((i) => i.href)).toEqual([
       "/admin/tags/overview",
+      "/admin/tags/production",
       "/admin/tags/batches",
       "/admin/tags/pieces",
       "/admin/tags/kits",
@@ -135,7 +136,7 @@ describe("moduleGroups", () => {
   it("the global admin sees everything, and exactly those extra items carry the Xpot admin tag", () => {
     const extra = (m: "visits" | "tags") =>
       moduleGroups(m, admin, labels).flatMap((g) => g.items).filter((i) => i.adminOnly).map((i) => i.href);
-    expect(extra("tags")).toEqual(["/admin/tags/batches", "/admin/tags/shop", "/admin/tags/journey", "/admin/tags/provisioners"]);
+    expect(extra("tags")).toEqual(["/admin/tags/production", "/admin/tags/batches", "/admin/tags/shop", "/admin/tags/journey", "/admin/tags/provisioners"]);
     expect(extra("visits")).toEqual([]);
     // Platform is the Xpot admin's as a whole: one tag on the group, none on its items.
     expect(accountGroups(admin, labels).map((g) => Boolean(g.adminOnly))).toEqual([false, true]);

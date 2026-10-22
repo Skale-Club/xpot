@@ -51,6 +51,7 @@ function toDeviceItem(d: TagProvisioningDevice): ProvisionerDeviceItem {
     platform: d.platform,
     appVersion: d.appVersion,
     status: d.status,
+    capabilities: d.capabilities ?? ["nfc"],
     tokenPrefix: d.tokenPrefix,
     pairingExpiresAt: d.status === "pairing" ? iso(d.pairingExpiresAt) : null,
     lastSeenAt: iso(d.lastSeenAt),
@@ -78,7 +79,7 @@ export async function createPairing(deviceName: string, userId: string | null) {
 }
 
 /** Desktop step 2: trade the code for a scoped token, shown to the app once. */
-export async function redeemPairing(input: { pairingCode: string; platform?: string | null; appVersion?: string | null }) {
+export async function redeemPairing(input: { pairingCode: string; platform?: string | null; appVersion?: string | null; capabilities?: string[] }) {
   const code = normalizePairingCode(input.pairingCode);
   if (!code) throw new TagError("Invalid or expired pairing code", 401);
   return db.transaction(async (tx) => {
@@ -106,6 +107,8 @@ export async function redeemPairing(input: { pairingCode: string; platform?: str
         lastSeenAt: new Date(),
         platform: input.platform ?? null,
         appVersion: input.appVersion ?? null,
+        // The NFC writer sends nothing (it writes chips); the bench says 'print' (Tags › Production).
+        capabilities: input.capabilities?.length ? Array.from(new Set(input.capabilities)) : ["nfc"],
       })
       .where(eq(tagProvisioningDevices.id, device.id))
       .returning();

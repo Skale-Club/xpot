@@ -1200,8 +1200,11 @@ export interface BatchInput {
  * supplier, and each piece enters stock when it is scanned into the batch. Without, the batch starts empty and every
  * scan of an already-coded piece creates it (docs/TAG_INVENTORY_EXECUTION_PLAN.md).
  */
-export async function createBatch(input: BatchInput, userId: string | null, source: JourneySource = "admin") {
-  if (input.quantity || input.publicCodes?.length) return createIssuedBatch(input, userId, source);
+/** Runs inside the transaction that issues the codes, with the new batch (Tags › Production links its print order). */
+export type BatchCreatedHook = (tx: Tx, batch: typeof tagBatches.$inferSelect) => Promise<void>;
+
+export async function createBatch(input: BatchInput, userId: string | null, source: JourneySource = "admin", onIssued?: BatchCreatedHook) {
+  if (input.quantity || input.publicCodes?.length) return createIssuedBatch(input, userId, source, onIssued);
   const batchCode = input.batchCode?.trim() || (await nextBatchCode(input.productType));
   try {
     const [batch] = await db.insert(tagBatches).values({
@@ -1232,7 +1235,7 @@ export async function createBatch(input: BatchInput, userId: string | null, sour
   }
 }
 
-async function createIssuedBatch(input: BatchInput, userId: string | null, source: JourneySource) {
+async function createIssuedBatch(input: BatchInput, userId: string | null, source: JourneySource, onIssued?: BatchCreatedHook) {
   const batchCode = input.batchCode?.trim() || (await nextBatchCode(input.productType));
   const organizationId = await companyOrganizationId();
   const pinned = Boolean(input.publicCodes?.length);
@@ -1288,6 +1291,7 @@ async function createIssuedBatch(input: BatchInput, userId: string | null, sourc
           referenceType: "batch",
           referenceId: batch.id,
         })));
+        if (onIssued) await onIssued(tx, batch);
         return batch;
       });
       console.log(`[tags] batch ${batch.batchCode} created with ${quantity} ${pinned ? "pinned" : "issued"} codes (user ${userId ?? "?"})`);
@@ -1769,7 +1773,7 @@ const PRODUCTION_STEP_SQL = sql`(
 
 interface BatchRow {
   id: string; batch_code: string; name: string; product_type: string; sales_product_id: number | null;
-  face: string | null; vendor: string | null; quantity: number; status: string; code_source: string;
+  face: string | null; vendor: string | null; quantity: number; status: string; code_source: string; print_job_id: string | null;
   notes: string | null; created_at: Date; tag_count: number; pending_count: number; house_count: number; hand_out_count: number;
   with_resellers_count: number; sold_count: number; damaged_count: number; active_count: number; nfc_verified_count: number;
   last_production_action: string | null;
@@ -1777,7 +1781,7 @@ interface BatchRow {
 
 const BATCH_SELECT = sql`
   SELECT b.id, b.batch_code, b.name, b.product_type, b.sales_product_id, b.face, b.vendor, count(t.id)::int AS quantity,
-    b.status, b.code_source, b.notes, b.created_at, b.created_by_user_id, b.updated_at,
+    b.status, b.code_source, b.print_job_id, b.notes, b.created_at, b.created_by_user_id, b.updated_at,
     count(t.id)::int AS tag_count,
     ${countMetricSql("notReceived")} AS pending_count,
     ${countMetricSql("house")} AS house_count,
@@ -1806,6 +1810,7 @@ function batchItem(b: BatchRow): TagBatchItem {
     quantity: Number(b.quantity),
     status: b.status,
     codeSource: b.code_source,
+    printJobId: b.print_job_id,
     stage: batchStage({ status: b.status, codeSource: b.code_source, tagCount, pendingCount, lastProductionAction: b.last_production_action }),
     lastProductionAction: b.last_production_action,
     notes: b.notes,

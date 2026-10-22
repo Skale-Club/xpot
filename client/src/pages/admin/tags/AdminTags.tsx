@@ -16,6 +16,7 @@ import { BatchesTab } from "./BatchesTab";
 import { BatchDetail } from "./BatchDetail";
 import { TeamTab } from "./TeamTab";
 import { ShowcaseTab } from "./ShowcaseTab";
+import { ProductionTab } from "./ProductionTab";
 import { ProvisionersTab } from "./ProvisionersTab";
 import { JourneyTab } from "./JourneyTab";
 import { useIsSuperAdmin } from "@/components/xpot/AdminBadge";
@@ -27,6 +28,7 @@ import { manageTagsMessages } from "@/i18n/messages/manageTags";
 // production first. "kits" is Distribution (Hand out, Stuscle orders, Kits, Take back); the URL stays /kits.
 const TABS = [
   { id: "overview", labelKey: "manageOverview" },
+  { id: "production", labelKey: "manageProduction", adminOnly: true },
   { id: "batches", labelKey: "manageBatches", adminOnly: true },
   { id: "pieces", labelKey: "managePieces" },
   { id: "kits", labelKey: "manageKits" },
@@ -96,7 +98,7 @@ export function CodeLookup({ onFound, fill = false }: { onFound: (id: string) =>
 export function AdminTags() {
   const [location, setLocation] = useLocation();
   const ts = useT(shellMessages);
-  const [tabSegment, idSegment] = location.replace(/^\/admin\/tags\/?/, "").split("/");
+  const [tabSegment, idSegment, ...more] = location.replace(/^\/admin\/tags\/?/, "").split("/");
   // Batches, the Journey and the NFC writers are the global admin's: managers
   // neither see their tabs nor reach them by URL (and the API answers 403).
   const isAdmin = useIsSuperAdmin();
@@ -125,6 +127,7 @@ export function AdminTags() {
       {tab === "overview" && (isTagPieceQueue(id) ? <OverviewQueue queue={id} go={go} /> : <OverviewTab go={go} />)}
       {tab === "pieces" && (id ? <PieceDetail id={id} go={go} /> : <PiecesTab go={go} />)}
       {tab === "kits" && <KitsTab go={go} />}
+      {tab === "production" && isAdmin && <ProductionTab rest={[idSegment ?? "", ...more].map(decodeURIComponent)} go={go} />}
       {tab === "batches" && isAdmin && (id ? <BatchDetail id={id} go={go} /> : <BatchesTab go={go} />)}
       {tab === "journey" && isAdmin && <JourneyTab />}
       {tab === "team" && <TeamTab go={go} />}

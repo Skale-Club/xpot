@@ -38,15 +38,15 @@ const SCOPE_LABELS: Record<string, Record<ConsentLang, { title: string; detail: 
   "xpot:journey": {
     en: {
       title: "Read and record the Tags production log",
-      detail: "Timeline, plans, batches and pieces: read them, record entries and create plans. Entries it marks as proposed wait for an admin.",
+      detail: "Timeline, plans, batches and pieces: read them, record entries and create plans. Entries it marks as proposed wait for an admin. Also the print catalog and queue: models, recipe versions and print orders.",
     },
     pt: {
       title: "Ler e registrar o diário de produção das Tags",
-      detail: "Linha do tempo, planos, lotes e peças: ler, registrar entradas e criar planos. As entradas que ele marcar como propostas esperam um admin.",
+      detail: "Linha do tempo, planos, lotes e peças: ler, registrar entradas e criar planos. As entradas que ele marcar como propostas esperam um admin. Também o catálogo e a fila de impressão: modelos, versões das receitas e ordens de impressão.",
     },
     es: {
       title: "Leer y registrar el diario de producción de Tags",
-      detail: "Línea de tiempo, planes, lotes y piezas: leerlos, registrar entradas y crear planes. Las entradas que marque como propuestas esperan a un admin.",
+      detail: "Línea de tiempo, planes, lotes y piezas: leerlos, registrar entradas y crear planes. Las entradas que marque como propuestas esperan a un admin. También el catálogo y la cola de impresión: modelos, versiones de las recetas y órdenes de impresión.",
     },
   },
   "xpot:prospecting": {

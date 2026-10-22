@@ -26,6 +26,8 @@ export const tagBatches = pgTable("tag_batches", {
   // Where the pieces' codes came from: issued by Xpot at creation (printed in-house or by a supplier; the pieces start
   // `pending` and enter stock when scanned) or read from pieces already coded (an empty batch filled by scanning).
   codeSource: text("code_source").notNull().default("scanned"),
+  // The print order that issued this batch (Tags › Production); FK print_jobs.id in migrations/0059.
+  printJobId: uuid("print_job_id"),
   notes: text("notes"),
   createdByUserId: text("created_by_user_id"),
   closedAt: timestamp("closed_at", { withTimezone: true }),
@@ -60,6 +62,8 @@ export const tagProvisioningDevices = pgTable("tag_provisioning_devices", {
   platform: text("platform"),
   appVersion: text("app_version"),
   status: text("status").notNull().default("pairing"),
+  // 'nfc' (writes chips) and/or 'print' (the bench builds print files); migrations/0059.
+  capabilities: jsonb("capabilities").$type<string[]>().notNull().default(sql`'["nfc"]'::jsonb`),
   pairingCodeHash: text("pairing_code_hash"),
   pairingExpiresAt: timestamp("pairing_expires_at", { withTimezone: true }),
   tokenHash: text("token_hash"),
@@ -396,6 +400,109 @@ export const tagJourneyEntries = pgTable("tag_journey_entries", {
 }, (table) => ({
   occurredIdx: index("tag_journey_entries_occurred_idx").on(table.occurredAt.desc()),
 }));
+
+// ─── Production (catalog, versions, print orders) ────────────────────────────
+// SQL: migrations/0059_print_production.sql. Allowed values: shared/printProduction.ts. Admin-only.
+
+export const printModels = pgTable("print_models", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  slug: text("slug").notNull(),
+  kind: text("kind").notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  productType: text("product_type"),
+  face: text("face"),
+  theme: text("theme"),
+  salesProductId: integer("sales_product_id").references(() => salesProducts.id, { onDelete: "set null" }),
+  batchPrefix: text("batch_prefix"),
+  status: text("status").notNull().default("design_needed"),
+  // FK print_model_versions.id in SQL (kept off here: the two tables point at each other).
+  currentVersionId: uuid("current_version_id"),
+  partOnHand: integer("part_on_hand").notNull().default(0),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdByUserId: text("created_by_user_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  slugIdx: uniqueIndex("print_models_slug_unique").on(table.slug),
+}));
+
+export const printModelVersions = pgTable("print_model_versions", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  modelId: uuid("model_id").notNull().references(() => printModels.id, { onDelete: "cascade" }),
+  version: integer("version").notNull(),
+  status: text("status").notNull().default("current"),
+  builder: text("builder"),
+  params: jsonb("params").$type<Record<string, unknown>>().notNull().default({}),
+  recipe: jsonb("recipe").$type<Record<string, unknown>>().notNull().default({}),
+  beds: jsonb("beds").$type<Array<Record<string, unknown>>>().notNull().default(sql`'[]'::jsonb`),
+  consumes: jsonb("consumes").$type<Array<{ part: string; perPiece: number }>>().notNull().default(sql`'[]'::jsonb`),
+  changelog: text("changelog"),
+  fixesBatchId: uuid("fixes_batch_id").references(() => tagBatches.id, { onDelete: "set null" }),
+  source: text("source").notNull().default("admin"),
+  createdByUserId: text("created_by_user_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  numberIdx: uniqueIndex("print_model_versions_number_unique").on(table.modelId, table.version),
+}));
+
+export const printJobs = pgTable("print_jobs", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  modelId: uuid("model_id").notNull().references(() => printModels.id, { onDelete: "restrict" }),
+  versionId: uuid("version_id").notNull().references(() => printModelVersions.id, { onDelete: "restrict" }),
+  bedLabel: text("bed_label").notNull(),
+  plates: integer("plates").notNull().default(1),
+  quantity: integer("quantity").notNull(),
+  batchId: uuid("batch_id").references(() => tagBatches.id, { onDelete: "set null" }),
+  status: text("status").notNull().default("requested"),
+  deviceId: uuid("device_id").references(() => tagProvisioningDevices.id, { onDelete: "set null" }),
+  report: jsonb("report").$type<Record<string, unknown>>().notNull().default({}),
+  notes: text("notes"),
+  errorCode: text("error_code"),
+  errorMessage: text("error_message"),
+  requestedByUserId: text("requested_by_user_id"),
+  claimedAt: timestamp("claimed_at", { withTimezone: true }),
+  builtAt: timestamp("built_at", { withTimezone: true }),
+  printedAt: timestamp("printed_at", { withTimezone: true }),
+  lastEventAt: timestamp("last_event_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  statusIdx: index("print_jobs_status_idx").on(table.status, table.createdAt),
+  modelIdx: index("print_jobs_model_idx").on(table.modelId, table.createdAt),
+}));
+
+export const printJobFiles = pgTable("print_job_files", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobId: uuid("job_id").notNull().references(() => printJobs.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull(),
+  fileRef: text("file_ref").notNull(),
+  filename: text("filename").notNull(),
+  bytes: integer("bytes").notNull(),
+  sha256: text("sha256").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  jobIdx: index("print_job_files_job_idx").on(table.jobId, table.createdAt),
+}));
+
+export const printPartMovements = pgTable("print_part_movements", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  modelId: uuid("model_id").notNull().references(() => printModels.id, { onDelete: "cascade" }),
+  delta: integer("delta").notNull(),
+  reason: text("reason").notNull(),
+  jobId: uuid("job_id").references(() => printJobs.id, { onDelete: "set null" }),
+  batchId: uuid("batch_id").references(() => tagBatches.id, { onDelete: "set null" }),
+  note: text("note"),
+  actorUserId: text("actor_user_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  modelIdx: index("print_part_movements_model_idx").on(table.modelId, table.createdAt),
+}));
+
+export type PrintModelRow = typeof printModels.$inferSelect;
+export type PrintModelVersionRow = typeof printModelVersions.$inferSelect;
+export type PrintJobRow = typeof printJobs.$inferSelect;
+export type PrintJobFileRow = typeof printJobFiles.$inferSelect;
 
 export type TagBatch = typeof tagBatches.$inferSelect;
 export type TagKit = typeof tagKits.$inferSelect;

@@ -119,6 +119,8 @@ test.skipIf(!enabled)("mcp: token via admin API, tools over Streamable HTTP, rev
     try {
       const tools = (await client.listTools()).tools.map((t) => t.name).sort();
       assert.deepEqual(tools, [
+        "print_job_create", "print_job_get", "print_job_update", "print_jobs_list",
+        "print_model_create", "print_model_get", "print_model_update", "print_model_version_create", "print_models_list",
         "prospecting_create_today", "prospecting_job_get",
         "tags_batch_create", "tags_batch_get", "tags_batch_scan", "tags_batches_list", "tags_get", "tags_journey_get", "tags_journey_record", "tags_journey_review",
         "tags_plan_create", "tags_plan_update", "tags_plans_list",

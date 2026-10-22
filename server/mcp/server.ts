@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { Request, Response } from "express";
 import { registerTagJourneyTools } from "./tools/tagJourney.js";
+import { registerPrintProductionTools } from "./tools/printProduction.js";
 import { registerProspectingTools } from "./tools/prospecting.js";
 import { registerTaskTools } from "./tools/tasks.js";
 
@@ -20,7 +21,11 @@ export interface McpCaller {
 
 function buildMcpServer(caller: McpCaller): McpServer {
   const server = new McpServer({ name: "xpot", version: "1.0.0" });
-  if (caller.scopes.includes("xpot:journey")) registerTagJourneyTools(server, caller);
+  if (caller.scopes.includes("xpot:journey")) {
+    registerTagJourneyTools(server, caller);
+    // Tags › Production (print catalog and queue): the same admin-only production side as the journey.
+    registerPrintProductionTools(server, caller);
+  }
   if (caller.scopes.includes("xpot:prospecting")) registerProspectingTools(server, caller);
   if (caller.scopes.includes("xpot:tasks")) registerTaskTools(server, caller);
   return server;

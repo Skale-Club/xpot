@@ -31,6 +31,7 @@ New here? Read [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) first.
 | [prospecting-planner-ux.md](docs/prospecting-planner-ux.md) | How the route planner behaves for the rep (city + sectors, expansion, review) |
 | [prospecting-engine-runbook.md](docs/prospecting-engine-runbook.md) | Operating the prospecting engine connection |
 | [TAG_SALES_EXECUTION_PLAN.md](docs/TAG_SALES_EXECUTION_PLAN.md) | Execution plan for linking physical pieces to sales, Stuscle acquisitions and partner margins, in Portuguese |
+| [PRINT_EXECUTION_PLAN.md](docs/PRINT_EXECUTION_PLAN.md) | Execution plan for producing the 3D-printed pieces from inside Xpot: print models, versions, a print queue and the bench app building the files, in Portuguese |
 | [DESKTOP.md](docs/DESKTOP.md) | The plan that brought the rep app to the desktop (#17 to #27), in Portuguese |
 | [AUDITORIA.md](docs/AUDITORIA.md) | The 2026-09-01 technical audit; a historical snapshot, in Portuguese |
 | [nfc-provisioner/README.md](nfc-provisioner/README.md) | The desktop NFC writer app |
@@ -245,6 +246,8 @@ the `_xpot_migrations` bookkeeping table the migration runner creates.
 - `tag_showcase_items` (the Shop entries: piece models and ready-made kits; migration 0057)
 - `tag_provisioning_devices`, `tag_provisioning_jobs`, `tag_provisioning_events` (NFC writer)
 - `tag_plans`, `tag_journey_entries` (the Production log and the automatic activity)
+- `print_models`, `print_model_versions`, `print_jobs`, `print_job_files`, `print_part_movements`
+  (Tags › Production: the print catalog, recipe versions and the print queue; migration 0059)
 
 **Account and infrastructure**
 - `users`, `sessions`, `auth_phone_codes`, `auth_access_requests`
@@ -362,6 +365,17 @@ Xpot. Approved reps buy at wholesale with a personal code:
   `server/tags/showcase.ts`, `shared/tagShowcase.ts`, `stuscleKitUrl` in `shared/wholesale.ts`.
 - Without `XPOT_WHOLESALE_SECRET` the endpoint answers 503 and the store sells
   retail only. Code in `server/wholesale/`, `shared/wholesale.ts`.
+- **Production (Tags › Manage › Production).** What the house prints, in the Xpot
+  admin's hands: a catalog of print models (a serialized plate or stand, or a part
+  with no code such as a base), each with versioned recipes, and a queue of print
+  orders. Ordering a serialized model issues its batch and codes in the same step;
+  the print file is attached by the bench (`print-pipeline/bench.py`, a paired
+  device with the `print` capability) or by hand, and the order goes ready →
+  printing → printed. Pieces still enter stock only by scanning each printed QR
+  into the batch. Files live in the private store under `print/<uuid>/` and are
+  served to admins by a signed redirect. Plan: `docs/PRINT_EXECUTION_PLAN.md`.
+  Code in `server/tags/production.ts`, `server/tags/productionRoutes.ts`,
+  `shared/printProduction.ts`, MCP `print_*` tools in `server/mcp/tools/printProduction.ts`.
 
 ## Files (photos, voice notes, avatars)
 

@@ -44,6 +44,7 @@ import { createTagSale, linkTagToSale, listLinkableSales, TagSaleError } from ".
 import { syncSaleToXphere } from "../routes/xpot/xphere-sync.js";
 import { fulfillAcquisition, listAcquisitions } from "./acquisitions.js";
 import { registerShowcaseRoutes } from "./showcase.js";
+import { registerProductionRoutes } from "./productionRoutes.js";
 import { salesStorage } from "../storage-sales.js";
 
 // Xpot Tags HTTP API. Four audiences:
@@ -394,6 +395,7 @@ const pairSchema = z.object({
   pairingCode: z.string().min(1).max(20),
   platform: optionalText(40),
   appVersion: optionalText(40),
+  capabilities: z.array(z.enum(["nfc", "print"])).min(1).max(2).optional(),
 }).strict();
 
 const deviceEventSchema = z.object({
@@ -1164,7 +1166,7 @@ export function registerTagRoutes(app: Express) {
   app.get("/api/provisioner/session", ...device, (req, res) => {
     const d = req.provisionerDevice!;
     res.json({
-      device: { id: d.id, deviceName: d.deviceName },
+      device: { id: d.id, deviceName: d.deviceName, capabilities: d.capabilities ?? ["nfc"] },
       protocolVersion: PROVISIONER_PROTOCOL_VERSION,
       baseUrl: tagBaseUrl(),
     });
@@ -1200,4 +1202,7 @@ export function registerTagRoutes(app: Express) {
       fail(res, err, "Failed to complete job");
     }
   });
+
+  // Tags › Production: the catalog, the print queue and the bench's side of it (docs/PRINT_EXECUTION_PLAN.md).
+  registerProductionRoutes(app, { device, fail });
 }

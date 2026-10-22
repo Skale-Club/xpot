@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Check, Download, Factory, Layers, LockKeyhole, PackagePlus, Pencil, RotateCcw } from "lucide-react";
+import { Check, Download, Factory, Layers, LockKeyhole, PackagePlus, Pencil, Printer, RotateCcw } from "lucide-react";
 import { FilterBar, FilterChips } from "@/components/xpot/filters";
 import { useUrlFilters } from "@/hooks/use-url-filters";
 import type { TagListItem } from "@shared/tagsApi";
@@ -32,6 +32,7 @@ import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { manageTagsBatchesMessages } from "@/i18n/messages/manageTagsBatches";
 import { adminTagsFlowMessages } from "@/i18n/messages/adminTagsFlow";
+import { productionMessages } from "@/i18n/messages/production";
 
 interface BatchDetailData {
   id: string;
@@ -45,6 +46,8 @@ interface BatchDetailData {
   quantity: number;
   status: string;
   codeSource: string;
+  /** The Tags › Production print order that issued it. */
+  printJobId: string | null;
   stage: string;
   tagCount: number;
   pendingCount: number;
@@ -255,6 +258,7 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
   const filter = FILTERS.some((f) => f.id === url.values.pieces) ? url.values.pieces : "all";
   const t = useT(manageTagsBatchesMessages);
   const tf = useT(adminTagsFlowMessages);
+  const tp = useT(productionMessages);
   const labels = useTagLabels();
   const { toast } = useToast();
   const { data: batch, isLoading, error, refetch } = useQuery<BatchDetailData>({
@@ -336,6 +340,12 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
                 {labels.product(batch.productType)} · {labels.face(face)} · {batch.vendor || t("noVendor")} ·{" "}
                 {tf("piecesReceivedOf", { received: batch.receivedCount, total: batch.tagCount })} · {t("createdOn", { date: formatDate(batch.createdAt) })}
               </p>
+              {batch.printJobId ? (
+                <button type="button" className="mt-1 inline-flex items-center gap-1 text-xs text-violet-300 hover:underline" onClick={() => go(`/production/jobs/${batch.printJobId}`)} data-testid="batch-print-order">
+                  <Printer className="h-3.5 w-3.5" aria-hidden="true" />
+                  {tp("batchPrintOrder")}
+                </button>
+              ) : null}
               {batch.notes && !editing && <p className="mt-2 whitespace-pre-wrap text-sm text-white/60">{batch.notes}</p>}
             </div>
           </div>
