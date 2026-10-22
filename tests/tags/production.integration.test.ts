@@ -357,4 +357,18 @@ describe("parts", () => {
     const negative = await request(app, "POST", "/api/xpot/admin/print-models/base-large/part-count", { delta: -11 });
     expect(negative.body.code).toBe("print_part_negative");
   });
+
+  it("takes a part's fixed file from the bench too", async () => {
+    const app = admin();
+    const model = await createPart(app);
+    const bench = await pairDevice(app, "Bench PC", ["print"]);
+    const read = await request(app, "GET", "/api/provisioner/print-models/base-large", undefined, bench);
+    expect(read.body.currentVersion.id).toBe(model.currentVersion.id);
+    const label = encodeURIComponent("x6 full plate");
+    const upload = await request(app, "POST", `/api/provisioner/print-models/base-large/versions/${model.currentVersion.id}/beds/${label}/file?filename=bases.gcode.3mf`, bytes("bases"), bench);
+    expect(upload.status).toBe(201);
+    expect(upload.body.beds[0]).toMatchObject({ fileName: "bases.gcode.3mf", fileBytes: 5 });
+    const nfcOnly = await pairDevice(app, "NFC writer");
+    expect((await request(app, "GET", "/api/provisioner/print-models/base-large", undefined, nfcOnly)).status).toBe(403);
+  });
 });
