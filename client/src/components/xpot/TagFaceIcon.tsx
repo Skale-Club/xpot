@@ -24,6 +24,15 @@ function WhatsAppGlyph({ className }: { className: string }) {
   );
 }
 
+// The "v" of the Venmo wordmark (Wikimedia Commons "Venmo Logo.svg"), alone.
+function VenmoGlyph({ className }: { className: string }) {
+  return (
+    <svg viewBox="-1.25 0.8 39.1 39.1" className={className} fill="currentColor" aria-hidden="true" focusable="false">
+      <path d="m 34.5771,0.822021 c 1.4203,2.345309 2.0606,4.760989 2.0606,7.812489 0,9.73269 -8.31,22.37619 -15.0545,31.25429 H 6.17825 L 0,2.95296 13.4887,1.67258 16.7552,27.9548 c 3.0522,-4.9714 6.8186,-12.7838 6.8186,-18.11027 0,-2.91551 -0.4995,-4.90135 -1.2803,-6.53647 z" />
+    </svg>
+  );
+}
+
 type Tile = { background: string; color: string; glyph: (cls: string) => ReactNode };
 
 const TILES: Record<TagFace, Tile> = {
@@ -44,6 +53,7 @@ const TILES: Record<TagFace, Tile> = {
   menu: { background: "#ea580c", color: "#fff", glyph: (c) => <UtensilsCrossed className={c} /> },
   booking: { background: "#0d9488", color: "#fff", glyph: (c) => <CalendarCheck className={c} /> },
   vcard: { background: "#7c3aed", color: "#fff", glyph: (c) => <Contact className={c} /> },
+  venmo: { background: "#008CFF", color: "#fff", glyph: (c) => <VenmoGlyph className={c} /> },
   custom: { background: "linear-gradient(135deg, #5b8cff, #22d3ee)", color: "#fff", glyph: (c) => <Sparkles className={c} /> },
 };
 
