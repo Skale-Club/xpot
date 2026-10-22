@@ -1,7 +1,8 @@
 # Plano de execução: produção das peças impressas dentro do Xpot
 
-**Status:** proposto e aprovado em 2026-10-22 (decisões D1 e D2 da seção 13; D3 e D4 tomadas como recomendadas). Fases 0 a 4
-implementadas no mesmo dia (seção 11, "Feito"); a carga da seção 10 roda pelo MCP depois do deploy. Fase 5 aberta.
+**Status:** proposto e aprovado em 2026-10-22 (decisões D1 e D2 da seção 13; D3 e D4 tomadas como recomendadas). Fases 0 a 5
+implementadas no mesmo dia (seção 11, "Feito"), Skale-Club/xpot#108 a #113. Falta o que só o dono faz (seção 11, fase 5,
+"Para o dono"): parear a bancada, configurar a impressora e reconectar o MCP para a carga do catálogo.
 **Público:** produto, engenharia e operação
 **Objetivo:** pedir, gerar, imprimir e receber qualquer peça do catálogo sem sair do Xpot e sem chamar o Claude, que passa a entrar só para desenhar faces, variantes e versões novas.
 
@@ -483,6 +484,28 @@ ponto de reposição). A tela não foi conferida no navegador (falta sessão de 
 
 Decision log do repositório 3D, `docs/HANDOFF.md`, `docs/MODULES.md` e o `README.md` do `nfc-provisioner/` (renomeado nos textos
 para Xpot Bench) atualizados; este plano marcado implementado.
+
+**Feito (2026-10-22):**
+
+- Repositório 3D (Drive): aviso no topo de `NFC Signs/README.md` e do doc 16, item em "Open items" do `CLAUDE.md`, entrada no
+  decision log de 2026-10-22 e o plano de 2026-10-10 marcado como substituído. Nenhum arquivo do Drive foi apagado.
+- Xpot: `docs/HANDOFF.md` (seção Tags › Production), `nfc-provisioner/README.md` (o mesmo pareamento serve à bancada),
+  `README.md` (o `print-pipeline/README.md` na tabela de documentos). `docs/MODULES.md` não muda: Produção é uma aba de
+  Tags › Gestão, como Lotes. O app de NFC não foi renomeado: a bancada é o `bench.py` (fase 2).
+- Catálogo: as v1 declaram o que cada peça consome na montagem (base, token G, adesivo ou tag redonda) e as peças sem código
+  têm ponto de reposição.
+
+**Para o dono (uma vez, nesta ordem):**
+
+1. Reconectar o servidor MCP `xpot` (as ferramentas `print_*` só aparecem numa conexão nova) e pedir ao Claude a carga do
+   catálogo (`print-pipeline/catalog/catalog.json`: modelos, v1, peças sem código e uma ordem por lote de hoje com
+   `existingBatch`).
+2. Parear a bancada: Tags › NFC writers → código → `python print-pipeline/bench.py pair <código>`;
+   `pip install -r print-pipeline/requirements.txt`; `python print-pipeline/bench.py doctor`.
+3. `python print-pipeline/bench.py printer setup` (digita o código de acesso da A1; fica só nesse computador).
+4. Subir os arquivos fixos das peças sem código (`bench.py attach-bed <modelo> <bancada> <arquivo de PRINT NOW>`) e os dos
+   lotes já fatiados (`bench.py attach <ordem> <pasta>`); depois disso `PRINT NOW/` pode ser esvaziado.
+5. Deixar `pythonw print-pipeline\bench.py run` iniciando com o Windows (`shell:startup`).
 
 ## 12. Riscos
 

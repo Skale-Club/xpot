@@ -161,6 +161,29 @@ menu_black['version']['changelog'] = ('v1: the Menu recipe of LPLATE-2026-005 in
                                       'older, tighter pocket (pause z 1.16).')
 menu_black['description'] = None
 
+# What one piece takes when its batch is assembled (Xpot takes these off the parts' counts, plan s5.5).
+CONSUMES = {
+    'stand-large-google-white': [('base-large', 1), ('g-token-large-relief', 1), ('nfc-tag-round-25', 1)],
+    'stand-large-google-black': [('base-large', 1), ('g-token-large-relief', 1), ('nfc-tag-round-25', 1)],
+    'stand-large-instagram-white': [('base-large', 1), ('nfc-tag-round-25', 1)],
+    'stand-large-instagram-black': [('base-large', 1), ('nfc-tag-round-25', 1)],
+    'stand-small-google-white': [('base-small', 1), ('g-token-small-stand', 1), ('nfc-tag-round-25', 1)],
+    'plate-large-instagram-white': [('nfc-tag-round-25', 1)],
+    'plate-large-instagram-black': [('nfc-tag-round-25', 1)],
+    'plate-large-google-white': [('g-token-flush-20', 1), ('nfc-tag-round-25', 1)],
+    'plate-large-menu-black': [('nfc-sticker-10x20', 1)],
+    'plate-large-menu-white': [('nfc-sticker-10x20', 1)],
+    'plate-large-venmo-mixed': [('nfc-sticker-10x20', 1)],
+    'plate-small-instagram-black': [('nfc-tag-round-25', 1)],
+    'plate-small-google-white': [('g-token-flush-13-small', 1), ('nfc-tag-round-25', 1)],
+}
+for m in models:
+    if m['version'] and m['slug'] in CONSUMES:
+        m['version']['consumes'] = [{'part': part, 'perPiece': n} for part, n in CONSUMES[m['slug']]]
+# Below these counts the catalog warns (plan s3.4).
+REORDER = {'base-large': 8, 'base-small': 4, 'g-token-large-relief': 8, 'g-token-flush-20': 8, 'g-token-flush-13-small': 16,
+           'nfc-sticker-10x20': 20, 'nfc-tag-round-25': 8, 'washer-ballast': 40}
+
 # Models in the catalog with no design yet: the brands and faces most likely to be asked for.
 design_needed = [
     ('plate-large-venmo-white', 'Plate Large · Pay here Venmo · White', 'large_plate', 'venmo', 'white', 'LPLATE', 'plate-large', 26),
@@ -221,6 +244,7 @@ parts = [
 ]
 for p in parts:
     p['kind'] = 'part'
+    p['partReorderAt'] = REORDER.get(p['slug'])
 
 os.makedirs(os.path.dirname(OUT), exist_ok=True)
 with open(OUT, 'w', encoding='utf-8', newline='\n') as f:

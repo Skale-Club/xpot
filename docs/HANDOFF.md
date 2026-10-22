@@ -16,6 +16,25 @@ Everything below is in the repo; nothing lives only in a chat.
 - UI copy exists in EN/PT/ES (`client/src/i18n/messages/*.ts`); TypeScript fails the build if a key
   is missing in one language, and `tests/i18n-messages.test.ts` checks placeholders.
 
+## Tags › Production: the print catalog, queue and bench (2026-10-22, #108-#113)
+
+The 3D-printed NFC pieces are ordered, built and tracked in Xpot (plan: `docs/PRINT_EXECUTION_PLAN.md`):
+
+- **Catalog** (Tags › Manage › Production): print models (a serialized plate/stand, or a part with no code) with
+  versioned recipes. A recipe fix is a new version with a changelog; a new face/font/colour is a builder in
+  `print-pipeline/builders/` plus a version over MCP (`print_model_version_create`).
+- **Queue:** "Print" issues the batch and codes with the order; the bench (`print-pipeline/bench.py run`, on the PC next
+  to the A1) builds, slices, checks every QR from the G-code, attaches the files and marks it ready; *Send to the
+  printer* starts it over the LAN (the printer's access code stays on the bench). Pieces still enter stock only by
+  scanning each printed QR into the batch.
+- **Feedback:** *Record a problem* on an order opens the model's next version prefilled; *Mark assembled* takes the
+  bases/G tokens/chips the version consumes off the parts' counts; parts warn below their reorder point.
+- **Before changing a builder:** `python print-pipeline/tests/rebuild.py …` must rebuild a printed batch byte for byte
+  (see `print-pipeline/README.md`). The Drive's `NFC Signs/*/source/` copies are history.
+- **Owner's one-time setup** (not done by Claude): pair the bench (Tags › NFC writers → pairing code →
+  `bench.py pair <code>`), `bench.py printer setup` (types the printer's access code), and reconnect the `xpot` MCP so
+  `print_*` tools show up for the catalog load (`print-pipeline/catalog/catalog.json`).
+
 ## Done today (all merged and live unless noted)
 
 | PR | What |
