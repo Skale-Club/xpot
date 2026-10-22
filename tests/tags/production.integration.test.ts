@@ -4,8 +4,9 @@ import express from "express";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { memoryStore, type MemoryStore } from "../helpers/memoryStore.js";
 
-// Tags › Production (docs/PRINT_EXECUTION_PLAN.md): catalog, versions, print orders, files, the bench's side and
-// part counts, end to end through the HTTP routes on an in-process Postgres (PGlite) with every migration applied.
+// Tags › Production (docs/PRINT_EXECUTION_PLAN.md): catalog, versions, print requests and their plates, files, the
+// bench's side (building, the Print Now folder) and part counts, end to end through the HTTP routes on an in-process
+// Postgres (PGlite) with every migration applied.
 
 const pg = vi.hoisted(() => ({ client: null as any }));
 
@@ -103,6 +104,13 @@ async function createSerializedModel(app: express.Express, withVersion = true) {
   });
 }
 
+/** Ask for a print and open its first plate (the print order the single-plate tests follow). */
+async function firstPlate(app: express.Express, body: Record<string, unknown>) {
+  const created = await request(app, "POST", "/api/xpot/admin/print-jobs", body);
+  expect(created.status).toBe(201);
+  return (await request(app, "GET", `/api/xpot/admin/print-jobs/${created.body.plates[0].id}`)).body;
+}
+
 /** A device paired through the real flow (admin pairing code → /api/provisioner/pair). */
 async function pairDevice(app: express.Express, name: string, capabilities?: string[]) {
   const pairing = await request(app, "POST", "/api/xpot/admin/tag-provisioners", { deviceName: name });
@@ -126,7 +134,7 @@ afterAll(() => setFileStoresForTests(null));
 beforeEach(async () => {
   store = memoryStore("r2");
   setFileStoresForTests({ r2: store, supabase: null, public: null });
-  await q(`TRUNCATE print_part_movements, print_job_files, print_jobs, print_model_versions, print_models,
+  await q(`TRUNCATE print_part_movements, print_job_files, print_jobs, print_requests, print_model_versions, print_models,
     tag_journey_entries, tag_provisioning_devices, tags, tag_batches, sales_products, sales_reps, users RESTART IDENTITY CASCADE`);
   await q("INSERT INTO users (id, email, first_name, is_admin) VALUES ('print-admin', 'print-admin@print.test', 'Admin', true)");
   await q("INSERT INTO sales_reps (user_id, display_name, email, role, is_active) VALUES ('print-admin', 'Admin', 'print-admin@print.test', 'admin', true)");
@@ -188,29 +196,26 @@ describe("serialized print orders", () => {
     await createSerializedModel(app);
     const first = await request(app, "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white" });
     expect(first.status).toBe(201);
-    expect(first.body).toMatchObject({ status: "requested", quantity: 4, pieceCount: 4, receivedCount: 0, batchCode: `TPLATE-${year}-001`, version: 1 });
-    expect(first.body.pieces.map((p: any) => p.position)).toEqual(["front-left", "front-right", "back-left", "back-right"]);
-    expect(first.body.pieces.every((p: any) => p.stockStatus === "pending")).toBe(true);
+    expect(first.body).toMatchObject({ quantity: 4, open: true, modelSlug: "plate-large-menu-white", version: 1 });
+    expect(first.body.plates).toHaveLength(1);
+    const plate = (await request(app, "GET", `/api/xpot/admin/print-jobs/${first.body.plates[0].id}`)).body;
+    expect(plate).toMatchObject({
+      status: "requested", quantity: 4, pieceCount: 4, receivedCount: 0, batchCode: `TPLATE-${year}-001`, version: 1,
+      requestId: first.body.id, plateNumber: 1, plateCount: 1, requestQuantity: 4,
+    });
+    expect(plate.pieces.map((p: any) => p.position)).toEqual(["front-left", "front-right", "back-left", "back-right"]);
+    expect(plate.pieces.every((p: any) => p.stockStatus === "pending")).toBe(true);
 
-    const [batch] = await q("SELECT code_source, print_job_id, face, product_type FROM tag_batches WHERE id = $1", [first.body.batchId]);
-    expect(batch).toEqual({ code_source: "issued", print_job_id: first.body.id, face: "menu", product_type: "large_plate" });
-    const listed = (await request(app, "GET", "/api/xpot/admin/tag-batches")).body.find((b: any) => b.id === first.body.batchId);
-    expect(listed.printJobId).toBe(first.body.id);
-
-    const two = await request(app, "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white", plates: 2 });
-    expect(two.body).toMatchObject({ batchCode: `TPLATE-${year}-002`, quantity: 8, plates: 2 });
-    expect(two.body.pieces.map((p: any) => p.position).slice(4)).toEqual(["front-left", "front-right", "back-left", "back-right"]);
-
-    const queue = (await request(app, "GET", "/api/xpot/admin/print-jobs")).body;
-    expect(queue).toHaveLength(2);
-    const catalog = (await request(app, "GET", "/api/xpot/admin/print-models")).body;
-    expect(catalog[0]).toMatchObject({ openJobs: 2, onHand: 0 });
+    const [batch] = await q("SELECT code_source, print_job_id, face, product_type FROM tag_batches WHERE id = $1", [plate.batchId]);
+    expect(batch).toEqual({ code_source: "issued", print_job_id: plate.id, face: "menu", product_type: "large_plate" });
+    const listed = (await request(app, "GET", "/api/xpot/admin/tag-batches")).body.find((b: any) => b.id === plate.batchId);
+    expect(listed.printJobId).toBe(plate.id);
   });
 
   it("goes requested → building → ready through the bench, then printed from the panel", async () => {
     const app = admin();
     await createSerializedModel(app);
-    const order = (await request(app, "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white" })).body;
+    const order = await firstPlate(app, { model: "plate-large-menu-white" });
 
     const nfcOnly = await pairDevice(app, "NFC writer");
     expect((await request(app, "POST", "/api/provisioner/print-jobs/claim", {}, nfcOnly)).status).toBe(403);
@@ -260,7 +265,7 @@ describe("serialized print orders", () => {
   it("lets the admin attach a file by hand and mark the order ready", async () => {
     const app = admin();
     await createSerializedModel(app);
-    const order = (await request(app, "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white" })).body;
+    const order = await firstPlate(app, { model: "plate-large-menu-white" });
     const file = await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/files?filename=batch.3mf`, bytes("3mf"));
     expect(file.body.kind).toBe("3mf");
     const ready = await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/transition`, { action: "complete" });
@@ -270,7 +275,7 @@ describe("serialized print orders", () => {
   it("prints a failed order again on the same batch while none of its pieces was received", async () => {
     const app = admin();
     await createSerializedModel(app);
-    const order = (await request(app, "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white" })).body;
+    const order = await firstPlate(app, { model: "plate-large-menu-white" });
     const failed = await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/transition`, { action: "fail", reason: "Round tags lifted into the nozzle" });
     expect(failed.body).toMatchObject({ status: "failed", errorMessage: "Round tags lifted into the nozzle" });
 
@@ -292,7 +297,8 @@ describe("serialized print orders", () => {
 
     const linked = await request(app, "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white", existingBatch: legacy.body.batchCode });
     expect(linked.status).toBe(201);
-    expect(linked.body).toMatchObject({ status: "printed", batchId: legacy.body.id, quantity: 4, printedAt: "2026-10-21T12:00:00.000Z" });
+    expect(linked.body).toMatchObject({ quantity: 4, open: false });
+    expect(linked.body.plates[0]).toMatchObject({ status: "printed", batchId: legacy.body.id, quantity: 4, printedAt: "2026-10-21T12:00:00.000Z", plateNumber: 1 });
 
     const twice = await request(app, "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white", existingBatch: legacy.body.batchCode });
     expect(twice.status).toBe(409);
@@ -306,70 +312,101 @@ describe("serialized print orders", () => {
   });
 });
 
-describe("send to printer", () => {
-  async function readyOrder(app: express.Express, bench: Record<string, string>, sliced = true) {
+describe("print requests", () => {
+  it("splits a quantity into full plates and a partial last one, each with its own batch", async () => {
+    const app = admin();
     await createSerializedModel(app);
-    const order = (await request(app, "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white" })).body;
-    await request(app, "POST", "/api/provisioner/print-jobs/claim", { jobId: order.id }, bench);
-    const name = sliced ? "plates.gcode.3mf" : "plates.3mf";
-    await request(app, "POST", `/api/provisioner/print-jobs/${order.id}/files?filename=${name}`, bytes("gcode"), bench);
-    await request(app, "POST", `/api/provisioner/print-jobs/${order.id}/complete`, { outcome: "ready" }, bench);
-    return order;
-  }
-
-  it("goes from the admin's click through the bench to printing, once", async () => {
-    const app = admin();
-    const bench = await pairDevice(app, "Bench PC", ["print"]);
-    const order = await readyOrder(app, bench);
-    expect((await request(app, "POST", "/api/provisioner/print-sends/claim", {}, bench)).status).toBe(204);
-
-    const asked = await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/send`);
-    expect(asked.status).toBe(200);
-    expect(asked.body.sendRequestedAt).toBeTruthy();
-    expect((await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/send`)).body.code).toBe("print_send_pending");
-
-    const ticket = await request(app, "POST", "/api/provisioner/print-sends/claim", {}, bench);
-    expect(ticket.status).toBe(200);
-    expect(ticket.body).toMatchObject({ job: { id: order.id, quantity: 4 }, file: { filename: "plates.gcode.3mf" }, amsMapping: [0, 1] });
-    expect(ticket.body.file.url).toMatch(/^https:\/\/signed\.example\/r2\/print\//);
-    expect(ticket.body.subtaskName).toMatch(new RegExp(`^TPLATE-${year}-001 Plate Large Menu White$`));
-    expect((await request(app, "POST", "/api/provisioner/print-sends/claim", {}, bench)).status).toBe(204);
-    expect((await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/send/cancel`)).body.code).toBe("print_send_in_progress");
-
-    const sent = await request(app, "POST", `/api/provisioner/print-jobs/${order.id}/sent`, { ok: true, printer: "Jujubinha" }, bench);
-    expect(sent.body.status).toBe("printing");
-    const detail = (await request(app, "GET", `/api/xpot/admin/print-jobs/${order.id}`)).body;
-    expect(detail.sentAt).toBeTruthy();
-    expect(detail.report.printer).toBe("Jujubinha");
-  });
-
-  it("clears the request and keeps the reason when the printer refuses", async () => {
-    const app = admin();
-    const bench = await pairDevice(app, "Bench PC", ["print"]);
-    const order = await readyOrder(app, bench);
-    await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/send`);
-    await request(app, "POST", "/api/provisioner/print-sends/claim", {}, bench);
-    const refused = await request(app, "POST", `/api/provisioner/print-jobs/${order.id}/sent`, { ok: false, error: "Printer busy: RUNNING" }, bench);
-    expect(refused.body.status).toBe("ready");
-    const detail = (await request(app, "GET", `/api/xpot/admin/print-jobs/${order.id}`)).body;
-    expect(detail.sendRequestedAt).toBeNull();
-    expect(detail.report.sendError.message).toBe("Printer busy: RUNNING");
-  });
-
-  it("needs a sliced file, and shows each bench's printer", async () => {
-    const app = admin();
-    const bench = await pairDevice(app, "Bench PC", ["print"]);
-    const order = await readyOrder(app, bench, false);
-    expect((await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/send`)).body.code).toBe("print_send_no_gcode");
-
-    expect((await request(app, "GET", "/api/xpot/admin/print-printers")).body).toEqual([
-      expect.objectContaining({ deviceName: "Bench PC", status: null, stale: true }),
+    const asked = await request(app, "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white", quantity: 10, notes: "For the fair" });
+    expect(asked.status).toBe(201);
+    expect(asked.body).toMatchObject({ quantity: 10, notes: "For the fair", open: true });
+    expect(asked.body.plates.map((p: any) => [p.plateNumber, p.plateCount, p.quantity, p.batchCode, p.status])).toEqual([
+      [1, 3, 4, `TPLATE-${year}-001`, "requested"],
+      [2, 3, 4, `TPLATE-${year}-002`, "requested"],
+      [3, 3, 2, `TPLATE-${year}-003`, "requested"],
     ]);
-    const status = { name: "Jujubinha", model: "N2S", state: "RUNNING", percent: 42, remainingMinutes: 161, subtask: "TPLATE-2026-001" };
-    expect((await request(app, "POST", "/api/provisioner/printer-status", status, bench)).status).toBe(200);
-    expect((await request(app, "POST", "/api/provisioner/printer-status", { ...status, state: "BOILING" }, bench)).status).toBe(400);
-    const printers = (await request(app, "GET", "/api/xpot/admin/print-printers")).body;
-    expect(printers[0]).toMatchObject({ status, stale: false });
+    const partial = (await request(app, "GET", `/api/xpot/admin/print-jobs/${asked.body.plates[2].id}`)).body;
+    expect(partial.pieces.map((p: any) => [p.serialNumber, p.position])).toEqual([[1, "front-left"], [2, "front-right"]]);
+    const batch = (await request(app, "GET", "/api/xpot/admin/tag-batches")).body.find((b: any) => b.id === partial.batchId);
+    expect(batch.name).toBe("Plate Large · Menu · White · v1 · plate 3/3 · 2 of x4");
+
+    const bench = await pairDevice(app, "Bench PC", ["print"]);
+    const tickets = [];
+    for (let i = 0; i < 3; i++) tickets.push((await request(app, "POST", "/api/provisioner/print-jobs/claim", {}, bench)).body);
+    expect(tickets.map((ticket) => [ticket.job.id, ticket.tags.length])).toEqual(asked.body.plates.map((p: any) => [p.id, p.quantity]));
+
+    const byOne = await request(app, "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white", quantity: 1 });
+    expect(byOne.body.plates.map((p: any) => p.quantity)).toEqual([1]);
+    const wholeBeds = await request(app, "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white", plates: 2 });
+    expect(wholeBeds.body).toMatchObject({ quantity: 8 });
+    expect(wholeBeds.body.plates.map((p: any) => p.quantity)).toEqual([4, 4]);
+
+    const tooMany = await request(app, "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white", quantity: 81 });
+    expect(tooMany.status).toBe(400);
+    expect(tooMany.body).toMatchObject({ code: "print_too_many_plates", params: { max: 80 } });
+  });
+
+  it("lists requests with their plates, open until every plate is printed, failed or cancelled", async () => {
+    const app = admin();
+    await createSerializedModel(app);
+    const asked = (await request(app, "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white", quantity: 6 })).body;
+    const [one, two] = asked.plates;
+    await request(app, "POST", `/api/xpot/admin/print-jobs/${one.id}/files?filename=plate.3mf`, bytes("3mf"));
+    await request(app, "POST", `/api/xpot/admin/print-jobs/${one.id}/transition`, { action: "complete" });
+    await request(app, "POST", `/api/xpot/admin/print-jobs/${one.id}/transition`, { action: "printed" });
+    await request(app, "POST", `/api/xpot/admin/print-jobs/${two.id}/transition`, { action: "fail", reason: "Lifted" });
+
+    const redo = await request(app, "POST", `/api/xpot/admin/print-jobs/${two.id}/redo`);
+    expect(redo.body).toMatchObject({ requestId: asked.id, plateNumber: 2, plateCount: 2, batchCode: two.batchCode, status: "requested" });
+
+    const open = (await request(app, "GET", "/api/xpot/admin/print-requests")).body;
+    expect(open).toHaveLength(1);
+    expect(open[0].plates.map((p: any) => [p.plateNumber, p.status])).toEqual([[1, "printed"], [2, "failed"], [2, "requested"]]);
+    expect(open[0].plates[0].downloads).toEqual([expect.objectContaining({ kind: "3mf", filename: "plate.3mf" })]);
+
+    await request(app, "POST", `/api/xpot/admin/print-jobs/${redo.body.id}/transition`, { action: "cancel" });
+    expect((await request(app, "GET", "/api/xpot/admin/print-requests")).body).toEqual([]);
+    const done = (await request(app, "GET", "/api/xpot/admin/print-requests?status=done&model=plate-large-menu-white")).body;
+    expect(done.map((r: any) => [r.id, r.open])).toEqual([[asked.id, false]]);
+    expect((await request(app, "GET", `/api/xpot/admin/print-requests/${asked.id}`)).body.plates).toHaveLength(3);
+    expect((await request(app, "GET", `/api/xpot/admin/print-requests/${crypto.randomUUID()}`)).body.code).toBe("print_request_not_found");
+  });
+
+  it("gives the bench the plates its Print Now folder holds, with signed links, and nothing is sent to a printer", async () => {
+    const app = admin();
+    await createSerializedModel(app);
+    const bench = await pairDevice(app, "Bench PC", ["print"]);
+    const asked = (await request(app, "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white", quantity: 6 })).body;
+    for (const plate of asked.plates) {
+      await request(app, "POST", "/api/provisioner/print-jobs/claim", { jobId: plate.id }, bench);
+      await request(app, "POST", `/api/provisioner/print-jobs/${plate.id}/files?filename=plate.3mf`, bytes("3mf"), bench);
+      await request(app, "POST", `/api/provisioner/print-jobs/${plate.id}/files?filename=plate.gcode.3mf`, bytes("gcode"), bench);
+      await request(app, "POST", `/api/provisioner/print-jobs/${plate.id}/complete`, { outcome: "ready" }, bench);
+    }
+    await request(app, "POST", `/api/xpot/admin/print-jobs/${asked.plates[0].id}/transition`, { action: "printed" });
+
+    const listed = await request(app, "GET", "/api/provisioner/print-now", undefined, bench);
+    expect(listed.status).toBe(200);
+    expect(listed.body.map((p: any) => [p.plateNumber, p.plateCount, p.quantity, p.status, p.requestQuantity])).toEqual([[1, 2, 4, "printed", 6], [2, 2, 2, "ready", 6]]);
+    expect(listed.body[1].files.map((f: any) => f.kind).sort()).toEqual(["3mf", "gcode_3mf"]);
+    expect(listed.body[1].files[0].url).toMatch(/^https:\/\/signed\.example\/r2\/print\//);
+
+    const nfcOnly = await pairDevice(app, "NFC writer");
+    expect((await request(app, "GET", "/api/provisioner/print-now", undefined, nfcOnly)).status).toBe(403);
+    expect((await request(app, "POST", `/api/xpot/admin/print-jobs/${asked.plates[1].id}/send`)).status).toBe(404);
+    expect((await request(app, "POST", "/api/provisioner/print-sends/claim", {}, bench)).status).toBe(404);
+  });
+
+  it("makes every order made before requests a request of one plate", async () => {
+    const migration = readFileSync(join(process.cwd(), "migrations", "0062_print_requests.sql"), "utf8");
+    const app = admin();
+    await createSerializedModel(app);
+    const plate = await firstPlate(app, { model: "plate-large-menu-white" });
+    await q("UPDATE print_jobs SET request_id = NULL, plate_number = NULL");
+    await q("DELETE FROM print_requests");
+    await pg.client.exec(migration);
+    const [row] = await q("SELECT request_id, plate_number FROM print_jobs WHERE id = $1", [plate.id]);
+    expect(row).toEqual({ request_id: plate.id, plate_number: 1 });
+    expect((await request(app, "GET", `/api/xpot/admin/print-requests/${plate.id}`)).body).toMatchObject({ quantity: 4, plates: [expect.objectContaining({ id: plate.id })] });
   });
 });
 
@@ -383,7 +420,7 @@ describe("feedback and assembly", () => {
       face: "google_review", theme: "white", salesProductId: await salesProductId(), batchPrefix: "TSTAND",
       version: { builder: "stand.google", beds: [bedX4], consumes },
     });
-    const order = (await request(app, "POST", "/api/xpot/admin/print-jobs", { model: "stand-large-google-white" })).body;
+    const order = await firstPlate(app, { model: "stand-large-google-white" });
     await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/files?filename=cards.gcode.3mf`, bytes("gcode"));
     await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/transition`, { action: "complete" });
     await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/transition`, { action: "printed" });
@@ -452,8 +489,8 @@ describe("parts", () => {
     const label = encodeURIComponent("x6 full plate");
 
     const noFile = await request(app, "POST", "/api/xpot/admin/print-jobs", { model: "base-large" });
-    expect(noFile.body.status).toBe("requested");
-    await request(app, "POST", `/api/xpot/admin/print-jobs/${noFile.body.id}/transition`, { action: "cancel" });
+    expect(noFile.body.plates[0].status).toBe("requested");
+    await request(app, "POST", `/api/xpot/admin/print-jobs/${noFile.body.plates[0].id}/transition`, { action: "cancel" });
 
     const forged = await request(app, "POST", "/api/xpot/admin/print-models/base-large/versions", {
       beds: [{ label: "x6", copies: 6, fileRef: "r2:photos/1/secret.jpg" }], changelog: "forged",
@@ -465,22 +502,24 @@ describe("parts", () => {
     expect(upload.body.beds[0]).toMatchObject({ fileName: "6-BASES-LARGE.gcode.3mf", fileBytes: 5 });
     expect((await request(app, "GET", `/api/xpot/admin/print-models/base-large/versions/${versionId}/beds/${label}/file`)).status).toBe(302);
 
-    const order = await request(app, "POST", "/api/xpot/admin/print-jobs", { model: "base-large", plates: 2 });
-    expect(order.body).toMatchObject({ status: "ready", quantity: 12, batchId: null });
+    // 8 bases on a 6-up bed: a part's plate is its fixed file, so two whole plates (12).
+    const asked = await request(app, "POST", "/api/xpot/admin/print-jobs", { model: "base-large", quantity: 8 });
+    expect(asked.body).toMatchObject({ quantity: 8 });
+    expect(asked.body.plates.map((p: any) => [p.quantity, p.status, p.batchId])).toEqual([[6, "ready", null], [6, "ready", null]]);
+    const order = await request(app, "GET", `/api/xpot/admin/print-jobs/${asked.body.plates[0].id}`);
     expect(order.body.files).toEqual([expect.objectContaining({ kind: "gcode_3mf", filename: "6-BASES-LARGE.gcode.3mf" })]);
 
     const locked = await request(app, "POST", `/api/xpot/admin/print-models/base-large/versions/${versionId}/beds/${label}/file?filename=new.3mf`, bytes("x"));
     expect(locked.status).toBe(409);
 
-    await request(app, "POST", `/api/xpot/admin/print-jobs/${order.body.id}/transition`, { action: "start" });
-    await request(app, "POST", `/api/xpot/admin/print-jobs/${order.body.id}/transition`, { action: "printed" });
+    for (const plate of asked.body.plates) await request(app, "POST", `/api/xpot/admin/print-jobs/${plate.id}/transition`, { action: "printed" });
     let detail = (await request(app, "GET", "/api/xpot/admin/print-models/base-large")).body;
     expect(detail.onHand).toBe(12);
 
     const used = await request(app, "POST", "/api/xpot/admin/print-models/base-large/part-count", { delta: -2, reason: "used", note: "Two bases for samples" });
     expect(used.body.onHand).toBe(10);
     detail = used.body;
-    expect(detail.partMovements.map((m: any) => [m.delta, m.reason])).toEqual([[-2, "used"], [12, "printed"]]);
+    expect(detail.partMovements.map((m: any) => [m.delta, m.reason])).toEqual([[-2, "used"], [6, "printed"], [6, "printed"]]);
     const negative = await request(app, "POST", "/api/xpot/admin/print-models/base-large/part-count", { delta: -11 });
     expect(negative.body.code).toBe("print_part_negative");
   });

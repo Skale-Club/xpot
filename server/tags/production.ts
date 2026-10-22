@@ -7,8 +7,8 @@ import {
   printModelVersions,
   printModels,
   printPartMovements,
+  printRequests,
   tagBatches,
-  tagProvisioningDevices,
   type PrintJobRow,
   type PrintModelRow,
 } from "#shared/schema.js";
@@ -16,10 +16,12 @@ import {
   PRINT_FILE_CONTENT_TYPES,
   PRINT_FILE_MAX_BYTES,
   PRINT_JOB_STALE_MS,
-  PRINTER_STATUS_STALE_MS,
+  PRINT_MAX_PLATES,
+  PRINT_NOW_PRINTED_DAYS,
   bedPosition,
   nextPrintBatchCode,
   planPrintJobTransition,
+  splitIntoPlates,
   type PrintBed,
   type PrintFileKind,
   type PrintJobAction,
@@ -37,13 +39,12 @@ import {
   type PrintModelPatch,
   type PrintModelStatus,
   type PrintModelVersionItem,
+  type PrintNowPlate,
   type PrintPartReason,
+  type PrintRequestItem,
   type PrintVersionInput,
   type PrintVersionSource,
   type PrintVersionStatus,
-  type PrinterItem,
-  type PrinterStatus,
-  type PrintSendTicket,
 } from "#shared/printProduction.js";
 import { TAG_DEFAULT_PUBLIC_BASE_URL, buildTagUrls, padSerial } from "#shared/tags.js";
 import type { JourneySource } from "#shared/tagJourney.js";
@@ -54,10 +55,12 @@ import { countMetricSql } from "./metrics.js";
 import { createBatch, getBatchProduction, iso, rows, type Tx } from "./repository.js";
 
 // Tags › Production (docs/PRINT_EXECUTION_PLAN.md): the catalog of what the house prints (models), the frozen
-// recipes (versions) and the queue of print orders with their files. Rules and types: shared/printProduction.ts.
-// A serialized order issues its batch through the same createBatch as Tags › Batches, in the same transaction;
-// stock still enters only by scanning each printed piece into that batch. Everything here is the global admin's,
-// plus the paired bench app (a provisioner device with the 'print' capability) for building and attaching files.
+// recipes (versions), the print requests ("N pieces of this model") and their plates (print orders) with their files.
+// Rules and types: shared/printProduction.ts. A serialized plate issues its batch through the same createBatch as
+// Tags › Batches, in the same transaction; stock still enters only by scanning each printed piece into that batch.
+// Printing is by hand: the admin downloads a plate, prints it in Bambu Studio and marks it printed. Everything here
+// is the global admin's, plus the paired bench app (a provisioner device with the 'print' capability), which builds
+// the plates' files and mirrors them into its Print Now folder.
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -382,7 +385,8 @@ interface JobRow {
   batch_code: string | null; piece_count: number | null; received_count: number | null; device_name: string | null;
   notes: string | null; error_message: string | null; report: Record<string, unknown> | null; created_at: Date | string;
   built_at: Date | string | null; printed_at: Date | string | null; updated_at: Date | string; last_event_at: Date | string | null;
-  send_requested_at: Date | string | null; send_claimed_at: Date | string | null; sent_at: Date | string | null;
+  request_id: string | null; plate_number: number; plate_count: number; request_quantity: number;
+  request_created_at: Date | string; downloads: Array<{ id: string; kind: string; filename: string }> | null;
 }
 
 const JOB_SELECT = sql`
@@ -392,10 +396,16 @@ const JOB_SELECT = sql`
     CASE WHEN j.batch_id IS NULL THEN NULL
       ELSE (SELECT count(*)::int FROM tags t WHERE t.batch_id = j.batch_id AND t.stock_status <> 'pending') END AS received_count,
     d.device_name, j.notes, j.error_message, j.report, j.created_at, j.built_at, j.printed_at, j.updated_at, j.last_event_at,
-    j.send_requested_at, j.send_claimed_at, j.sent_at
+    j.request_id, COALESCE(j.plate_number, 1) AS plate_number,
+    CASE WHEN j.request_id IS NULL THEN 1
+      ELSE (SELECT count(DISTINCT COALESCE(j2.plate_number, 1))::int FROM print_jobs j2 WHERE j2.request_id = j.request_id) END AS plate_count,
+    COALESCE(r.quantity, j.quantity) AS request_quantity, COALESCE(r.created_at, j.created_at) AS request_created_at,
+    (SELECT json_agg(json_build_object('id', f.id, 'kind', f.kind, 'filename', f.filename) ORDER BY f.created_at DESC)
+      FROM print_job_files f WHERE f.job_id = j.id AND f.kind IN ('3mf', 'gcode_3mf')) AS downloads
   FROM print_jobs j
   JOIN print_models m ON m.id = j.model_id
   JOIN print_model_versions v ON v.id = j.version_id
+  LEFT JOIN print_requests r ON r.id = j.request_id
   LEFT JOIN tag_batches b ON b.id = j.batch_id
   LEFT JOIN tag_provisioning_devices d ON d.id = j.device_id`;
 
@@ -426,9 +436,11 @@ function jobItem(j: JobRow, now = Date.now()): PrintJobItem {
     printedAt: iso(j.printed_at),
     updatedAt: iso(j.updated_at)!,
     stale: j.status === "building" && now - new Date(lastNews).getTime() > PRINT_JOB_STALE_MS,
-    sendRequestedAt: iso(j.send_requested_at),
-    sendClaimedAt: iso(j.send_claimed_at),
-    sentAt: iso(j.sent_at),
+    requestId: j.request_id,
+    plateNumber: Number(j.plate_number),
+    plateCount: Number(j.plate_count),
+    requestQuantity: Number(j.request_quantity),
+    downloads: (j.downloads ?? []).map((f) => ({ id: f.id, kind: f.kind as PrintFileKind, filename: f.filename })),
   };
 }
 
@@ -441,7 +453,61 @@ export async function listJobs(filter: JobListFilter = "open", modelRef?: string
   else if (filter !== "all") conds.push(sql`j.status = ${filter}`);
   if (modelRef) conds.push(sql`j.model_id = ${(await resolveModel(modelRef)).id}`);
   const where = conds.length ? sql`WHERE ${sql.join(conds, sql` AND `)}` : sql``;
-  return (await rows<JobRow>(sql`${JOB_SELECT} ${where} ORDER BY j.created_at DESC LIMIT 200`)).map((j) => jobItem(j));
+  return (await rows<JobRow>(sql`${JOB_SELECT} ${where} ORDER BY j.created_at DESC, j.plate_number LIMIT 200`)).map((j) => jobItem(j));
+}
+
+// ─── Requests ─────────────────────────────────────────────────────────────────
+
+interface RequestRow {
+  id: string; model_id: string; model_slug: string; model_title: string; model_kind: string; version_number: number;
+  bed_label: string; quantity: number; notes: string | null; created_at: Date | string; open: boolean;
+}
+
+const OPEN_PLATE = sql`j.status IN ('requested', 'building', 'ready', 'printing')`;
+
+const REQUEST_SELECT = sql`
+  SELECT r.id, r.model_id, m.slug AS model_slug, m.title AS model_title, m.kind AS model_kind, v.version AS version_number,
+    r.bed_label, r.quantity, r.notes, r.created_at,
+    EXISTS (SELECT 1 FROM print_jobs j WHERE j.request_id = r.id AND ${OPEN_PLATE}) AS open
+  FROM print_requests r
+  JOIN print_models m ON m.id = r.model_id
+  JOIN print_model_versions v ON v.id = r.version_id`;
+
+async function withPlates(list: RequestRow[]): Promise<PrintRequestItem[]> {
+  if (!list.length) return [];
+  const ids = sql.join(list.map((r) => sql`${r.id}`), sql`, `);
+  const plates = (await rows<JobRow>(sql`${JOB_SELECT} WHERE j.request_id IN (${ids}) ORDER BY j.plate_number, j.created_at`)).map((j) => jobItem(j));
+  return list.map((r) => ({
+    id: r.id,
+    modelId: r.model_id,
+    modelSlug: r.model_slug,
+    modelTitle: r.model_title,
+    modelKind: r.model_kind as PrintModelKind,
+    version: Number(r.version_number),
+    bedLabel: r.bed_label,
+    quantity: Number(r.quantity),
+    notes: r.notes,
+    createdAt: iso(r.created_at)!,
+    open: Boolean(r.open),
+    plates: plates.filter((p) => p.requestId === r.id),
+  }));
+}
+
+/** The requests, newest first, each with its plates: open (some plate still to build or print), done, or all. */
+export async function listRequests(filter: "open" | "done" | "all" = "open", modelRef?: string | null): Promise<PrintRequestItem[]> {
+  const conds = [];
+  if (filter === "open") conds.push(sql`EXISTS (SELECT 1 FROM print_jobs j WHERE j.request_id = r.id AND ${OPEN_PLATE})`);
+  else if (filter === "done") conds.push(sql`NOT EXISTS (SELECT 1 FROM print_jobs j WHERE j.request_id = r.id AND ${OPEN_PLATE})`);
+  if (modelRef) conds.push(sql`r.model_id = ${(await resolveModel(modelRef)).id}`);
+  const where = conds.length ? sql`WHERE ${sql.join(conds, sql` AND `)}` : sql``;
+  return withPlates(await rows<RequestRow>(sql`${REQUEST_SELECT} ${where} ORDER BY r.created_at DESC LIMIT 100`));
+}
+
+export async function getRequest(id: string): Promise<PrintRequestItem> {
+  if (!UUID.test(id)) throw new TagError("Print request not found", 404, "print_request_not_found");
+  const [request] = await withPlates(await rows<RequestRow>(sql`${REQUEST_SELECT} WHERE r.id = ${id}`));
+  if (!request) throw new TagError("Print request not found", 404, "print_request_not_found");
+  return request;
 }
 
 async function loadJob(id: string): Promise<PrintJobRow> {
@@ -515,7 +581,7 @@ async function existingCodes(prefix: string, year: number): Promise<string[]> {
 }
 
 /** The order behind a batch made before the catalog existed: its status follows what the batch already went through. */
-async function linkExistingBatch(model: PrintModelRow, version: VersionRow, bed: PrintBed, input: PrintJobCreateInput, userId: string | null) {
+async function linkExistingBatch(model: PrintModelRow, version: VersionRow, bed: PrintBed, input: PrintJobCreateInput, userId: string | null, source: JourneySource) {
   const batchId = await resolveBatchId(input.existingBatch!);
   const batch = (await getBatchProduction(batchId))?.batch;
   if (!batch) throw new TagError("Batch not found", 404, "batch_not_found");
@@ -534,8 +600,14 @@ async function linkExistingBatch(model: PrintModelRow, version: VersionRow, bed:
         SELECT occurred_at FROM tag_journey_entries WHERE batch_id = ${batchId} AND action = 'printed' AND status = 'active'
         ORDER BY occurred_at DESC LIMIT 1`)
     : [];
+  const notes = input.notes ?? `Linked to ${batch.batchCode}, made before the catalog`;
   return db.transaction(async (tx) => {
+    const [request] = await tx.insert(printRequests).values({
+      modelId: model.id, versionId: version.id, bedLabel: bed.label, quantity: batch.tagCount, notes, source, requestedByUserId: userId,
+    }).returning({ id: printRequests.id });
     const [job] = await tx.insert(printJobs).values({
+      requestId: request.id,
+      plateNumber: 1,
       modelId: model.id,
       versionId: version.id,
       bedLabel: bed.label,
@@ -543,7 +615,7 @@ async function linkExistingBatch(model: PrintModelRow, version: VersionRow, bed:
       quantity: batch.tagCount,
       batchId,
       status: printed ? "printed" : "requested",
-      notes: input.notes ?? `Linked to ${batch.batchCode}, made before the catalog`,
+      notes,
       requestedByUserId: userId,
       printedAt: printed ? new Date(printedEntry?.occurred_at ?? Date.now()) : null,
     }).returning();
@@ -552,73 +624,80 @@ async function linkExistingBatch(model: PrintModelRow, version: VersionRow, bed:
   });
 }
 
-export async function createJob(input: PrintJobCreateInput, userId: string | null, source: JourneySource = "admin"): Promise<PrintJobDetail> {
-  const model = await resolveModel(input.model);
-  const version = await currentVersionOf(model);
-  const bed = pickBed(version, input.bed);
+interface PlateContext {
+  requestId: string;
+  plateNumber: number;
+  plateCount: number;
+  notes: string | null;
+  userId: string | null;
+  source: JourneySource;
+}
 
-  if (model.kind === "part") {
-    if (input.existingBatch) throw new TagError("A part has no batch", 400);
-    const ready = Boolean(bed.fileRef);
-    const job = await db.transaction(async (tx) => {
-      const [job] = await tx.insert(printJobs).values({
-        modelId: model.id,
-        versionId: version.id,
-        bedLabel: bed.label,
-        plates: input.plates,
-        quantity: bed.copies * input.plates,
-        status: ready ? "ready" : "requested",
-        notes: input.notes ?? null,
-        requestedByUserId: userId,
-        builtAt: ready ? new Date() : null,
-      }).returning();
-      if (ready) {
-        const name = bed.fileName ?? "print.3mf";
-        await tx.insert(printJobFiles).values({
-          jobId: job.id,
-          kind: fileKindFor(name),
-          fileRef: bed.fileRef!,
-          filename: name,
-          bytes: bed.fileBytes ?? 0,
-          sha256: bed.fileSha256 ?? "",
-        });
-      }
-      return job;
-    });
-    return getJob(job.id);
-  }
+/** A part's plate: its fixed file, ready at once when the bed has one. Returns the order id. */
+async function createPartPlate(model: PrintModelRow, version: VersionRow, bed: PrintBed, ctx: PlateContext): Promise<string> {
+  const ready = Boolean(bed.fileRef);
+  return db.transaction(async (tx) => {
+    const [job] = await tx.insert(printJobs).values({
+      requestId: ctx.requestId,
+      plateNumber: ctx.plateNumber,
+      modelId: model.id,
+      versionId: version.id,
+      bedLabel: bed.label,
+      plates: 1,
+      quantity: bed.copies,
+      status: ready ? "ready" : "requested",
+      notes: ctx.notes,
+      requestedByUserId: ctx.userId,
+      builtAt: ready ? new Date() : null,
+    }).returning({ id: printJobs.id });
+    if (ready) {
+      const name = bed.fileName ?? "print.3mf";
+      await tx.insert(printJobFiles).values({
+        jobId: job.id,
+        kind: fileKindFor(name),
+        fileRef: bed.fileRef!,
+        filename: name,
+        bytes: bed.fileBytes ?? 0,
+        sha256: bed.fileSha256 ?? "",
+      });
+    }
+    return job.id;
+  });
+}
 
-  if (input.existingBatch) return getJob((await linkExistingBatch(model, version, bed, input, userId)).id);
-
+/** A serialized plate of `quantity` pieces: its batch (fresh codes) and its order, in one transaction. Returns the order id. */
+async function createSerializedPlate(model: PrintModelRow, version: VersionRow, bed: PrintBed, quantity: number, ctx: PlateContext): Promise<string> {
   if (!model.batchPrefix || !model.productType || !model.salesProductId) {
     throw new TagError("This model needs a product, a sales product and a batch prefix before printing", 409, "print_model_incomplete");
   }
-  const quantity = bed.copies * input.plates;
   const year = new Date().getUTCFullYear();
+  const plate = ctx.plateCount > 1 ? ` · plate ${ctx.plateNumber}/${ctx.plateCount}` : "";
   for (let attempt = 1; ; attempt++) {
     const batchCode = nextPrintBatchCode(model.batchPrefix, year, await existingCodes(model.batchPrefix, year));
     let jobId: string | null = null;
     try {
       await createBatch({
-        name: `${model.title} · v${version.version} · ${bed.label}${input.plates > 1 ? ` × ${input.plates}` : ""}`,
+        name: `${model.title} · v${version.version}${plate} · ${quantity} of ${bed.label}`,
         batchCode,
         productType: model.productType,
         salesProductId: model.salesProductId,
         face: model.face,
         vendor: "Skale Club",
-        notes: input.notes ?? null,
+        notes: ctx.notes,
         quantity,
-      }, userId, source, async (tx: Tx, batch) => {
+      }, ctx.userId, ctx.source, async (tx: Tx, batch) => {
         const [job] = await tx.insert(printJobs).values({
+          requestId: ctx.requestId,
+          plateNumber: ctx.plateNumber,
           modelId: model.id,
           versionId: version.id,
           bedLabel: bed.label,
-          plates: input.plates,
+          plates: 1,
           quantity,
           batchId: batch.id,
           status: "requested",
-          notes: input.notes ?? null,
-          requestedByUserId: userId,
+          notes: ctx.notes,
+          requestedByUserId: ctx.userId,
         }).returning({ id: printJobs.id });
         await tx.update(tagBatches).set({ printJobId: job.id }).where(eq(tagBatches.id, batch.id));
         jobId = job.id;
@@ -627,13 +706,53 @@ export async function createJob(input: PrintJobCreateInput, userId: string | nul
       if (err instanceof TagError && err.code === "batch_code_taken" && attempt < 3) continue;
       throw err;
     }
-    console.log(`[production] order ${jobId} for ${model.slug} v${version.version}: ${quantity} pieces, batch ${batchCode} (user ${userId ?? "?"})`);
-    return getJob(jobId!);
+    return jobId!;
   }
 }
 
-/** Print a failed or cancelled order again: the same version and bed, and the same batch while none of its pieces was received. */
-export async function redoJob(id: string, userId: string | null): Promise<PrintJobDetail> {
+/**
+ * A print request: `quantity` pieces (or whole `plates`) of a model's current version, split into plates of at most
+ * one bed each, the last one partial (10 on a 4-up bed: 4 + 4 + 2). Each serialized plate issues its own batch; a
+ * part's plates are its fixed file, so its count rounds up to whole beds. `existingBatch` links a batch made before
+ * the catalog instead, as a request of one plate.
+ */
+export async function createJob(input: PrintJobCreateInput, userId: string | null, source: JourneySource = "admin"): Promise<PrintRequestItem> {
+  const model = await resolveModel(input.model);
+  const version = await currentVersionOf(model);
+  const bed = pickBed(version, input.bed);
+
+  if (input.existingBatch) {
+    if (model.kind === "part") throw new TagError("A part has no batch", 400);
+    const job = await linkExistingBatch(model, version, bed, input, userId, source);
+    return getRequest(job.requestId!);
+  }
+  if (model.kind === "serialized" && (!model.batchPrefix || !model.productType || !model.salesProductId)) {
+    throw new TagError("This model needs a product, a sales product and a batch prefix before printing", 409, "print_model_incomplete");
+  }
+  const quantity = input.quantity ?? bed.copies * (input.plates ?? 1);
+  const plates = splitIntoPlates(quantity, bed.copies, model.kind === "serialized");
+  if (plates.length > PRINT_MAX_PLATES) {
+    throw new TagError(`At most ${PRINT_MAX_PLATES} plates in one request: up to ${PRINT_MAX_PLATES * bed.copies} pieces on ${bed.label}`, 400,
+      "print_too_many_plates", { max: PRINT_MAX_PLATES * bed.copies });
+  }
+  const notes = input.notes ?? null;
+  const [request] = await db.insert(printRequests).values({
+    modelId: model.id, versionId: version.id, bedLabel: bed.label, quantity, notes, source, requestedByUserId: userId,
+  }).returning({ id: printRequests.id });
+  for (let index = 0; index < plates.length; index++) {
+    const ctx: PlateContext = { requestId: request.id, plateNumber: index + 1, plateCount: plates.length, notes, userId, source };
+    if (model.kind === "part") await createPartPlate(model, version, bed, ctx);
+    else await createSerializedPlate(model, version, bed, plates[index], ctx);
+  }
+  console.log(`[production] request ${request.id} for ${model.slug} v${version.version}: ${quantity} pieces on ${plates.length} plate(s) [${plates.join(", ")}] (user ${userId ?? "?"})`);
+  return getRequest(request.id);
+}
+
+/**
+ * Print a failed or cancelled plate again, in the same request and place: the same batch while none of its pieces was
+ * received (the same version and bed), else a fresh batch from the current version.
+ */
+export async function redoJob(id: string, userId: string | null, source: JourneySource = "admin"): Promise<PrintJobDetail> {
   const job = await loadJob(id);
   if (job.status !== "failed" && job.status !== "cancelled") throw new TagError("Only a failed or cancelled order can be printed again", 409, "print_job_state");
   const [model] = await db.select().from(printModels).where(eq(printModels.id, job.modelId)).limit(1);
@@ -641,11 +760,19 @@ export async function redoJob(id: string, userId: string | null): Promise<PrintJ
   const reuse = job.batchId
     ? Number((await rows<{ n: number }>(sql`SELECT count(*)::int AS n FROM tags WHERE batch_id = ${job.batchId} AND stock_status <> 'pending'`))[0]?.n ?? 0) === 0
     : false;
+  const [{ plate_count: plateCount }] = await rows<{ plate_count: number }>(sql`
+    SELECT count(DISTINCT COALESCE(plate_number, 1))::int AS plate_count FROM print_jobs WHERE request_id = ${job.requestId}`);
+  const ctx: PlateContext = {
+    requestId: job.requestId!, plateNumber: job.plateNumber ?? 1, plateCount: Number(plateCount) || 1, notes: job.notes, userId, source,
+  };
   if (model.kind === "serialized" && !reuse) {
-    return createJob({ model: model.id, bed: job.bedLabel, plates: job.plates, notes: job.notes }, userId);
+    const version = await currentVersionOf(model);
+    return getJob(await createSerializedPlate(model, version, pickBed(version, job.bedLabel), job.quantity, ctx));
   }
   const created = await db.transaction(async (tx) => {
     const [next] = await tx.insert(printJobs).values({
+      requestId: job.requestId,
+      plateNumber: job.plateNumber,
       modelId: job.modelId,
       versionId: job.versionId,
       bedLabel: job.bedLabel,
@@ -716,7 +843,7 @@ export async function transitionJob(id: string, input: TransitionInput): Promise
       action: "printed",
       title: `Batch ${batch?.batchCode ?? ""} printed`.trim(),
       batchId: job.batchId,
-      metadata: { printJobId: job.id, bed: job.bedLabel, plates: job.plates },
+      metadata: { printJobId: job.id, bed: job.bedLabel, plate: job.plateNumber ?? 1, pieces: job.quantity },
     } : {
       kind: "observation",
       action: "print_failed",
@@ -875,122 +1002,45 @@ export async function completeFromBench(deviceId: string, jobId: string, input: 
 }
 
 
-// ─── Send to printer (phase 3, docs/PRINT_EXECUTION_PLAN.md §7.3) ─────────────
-// The admin's click is the confirmation before hardware moves; the bench on the printer's network does the sending
-// (FTPS upload, MQTT start) with an access code that never leaves it, and reports back.
+// ─── The bench's Print Now folder ─────────────────────────────────────────────
 
-/** A bench that took a send and went quiet for this long gives it back to the queue. */
-const SEND_CLAIM_TTL_MS = 15 * 60_000;
-
-function latestSliced(files: Array<typeof printJobFiles.$inferSelect>) {
-  return files.filter((f) => f.kind === "gcode_3mf").sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0] ?? null;
-}
-
-export async function requestSend(id: string, userId: string | null): Promise<PrintJobDetail> {
-  const job = await loadJob(id);
-  if (job.status !== "ready") throw new TagError("Only an order ready to print can be sent to the printer", 409, "print_send_not_ready");
-  if (job.sendRequestedAt && !job.sentAt) throw new TagError("This order is already on its way to the printer", 409, "print_send_pending");
-  const files = await db.select().from(printJobFiles).where(eq(printJobFiles.jobId, job.id));
-  if (!latestSliced(files)) throw new TagError("This order has no sliced file (.gcode.3mf) to send", 409, "print_send_no_gcode");
-  await db.update(printJobs).set({
-    sendRequestedAt: new Date(),
-    sendRequestedByUserId: userId,
-    sendClaimedAt: null,
-    sendDeviceId: null,
-    updatedAt: new Date(),
-  }).where(eq(printJobs.id, job.id));
-  return getJob(job.id);
-}
-
-export async function cancelSend(id: string): Promise<PrintJobDetail> {
-  const job = await loadJob(id);
-  if (!job.sendRequestedAt || job.sentAt) throw new TagError("Nothing waiting to be sent", 409, "print_send_none");
-  const fresh = job.sendClaimedAt && Date.now() - job.sendClaimedAt.getTime() < SEND_CLAIM_TTL_MS;
-  if (fresh) throw new TagError("The bench is sending it right now", 409, "print_send_in_progress");
-  await db.update(printJobs).set({ sendRequestedAt: null, sendRequestedByUserId: null, sendClaimedAt: null, sendDeviceId: null, updatedAt: new Date() })
-    .where(eq(printJobs.id, job.id));
-  return getJob(job.id);
-}
-
-/** The oldest send waiting for this bench (or given up by another one), with a signed link to its sliced file. */
-export async function claimSend(deviceId: string): Promise<PrintSendTicket | null> {
-  const now = new Date();
-  const stale = new Date(now.getTime() - SEND_CLAIM_TTL_MS);
-  const [claimed] = await rows<{ id: string }>(sql`
-    UPDATE print_jobs SET send_claimed_at = ${now}, send_device_id = ${deviceId}, updated_at = ${now}
-    WHERE id = (
-      SELECT j.id FROM print_jobs j
-      WHERE j.status = 'ready' AND j.send_requested_at IS NOT NULL AND j.sent_at IS NULL
-        AND (j.send_claimed_at IS NULL OR j.send_claimed_at < ${stale})
-      ORDER BY j.send_requested_at
-      FOR UPDATE SKIP LOCKED
-      LIMIT 1
-    )
-    RETURNING id`);
-  if (!claimed) return null;
-  const job = await getJob(claimed.id);
-  const files = await db.select().from(printJobFiles).where(eq(printJobFiles.jobId, job.id));
-  const file = latestSliced(files);
-  if (!file) throw new TagError("This order has no sliced file to send", 409, "print_send_no_gcode");
-  // Project filament n (1-based, the AMS slot the recipe names) prints from tray n-1 of the AMS lite.
-  const slots = (job.bed?.ams ?? []).map((a) => a.slot).sort((a, b) => a - b);
-  const amsMapping = slots.length ? Array.from({ length: Math.max(...slots) }, (_, i) => i) : [0, 1, 2, 3];
-  return {
-    job: { id: job.id, quantity: job.quantity, batchCode: job.batchCode, modelTitle: job.modelTitle },
-    file: { id: file.id, filename: file.filename, sha256: file.sha256, bytes: file.bytes, url: await signedFileUrl(file.fileRef) },
-    amsMapping,
-    subtaskName: (job.batchCode ? `${job.batchCode} ` : "") + job.modelTitle.replace(/[^A-Za-z0-9 ._-]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 60),
-  };
-}
-
-export interface SendResult {
-  ok: boolean;
-  error?: string | null;
-  printer?: string | null;
-}
-
-/** The bench says how the send went: started (the order is `printing`) or refused (the request is cleared, with why). */
-export async function sendResult(deviceId: string, id: string, input: SendResult): Promise<PrintJobDetail> {
-  const job = await loadJob(id);
-  if (job.sendDeviceId !== deviceId || !job.sendClaimedAt || job.sentAt) {
-    throw new TagError("This bench is not sending that order", 409, "print_send_not_claimed");
+/**
+ * The plates the bench mirrors into its Print Now folder: every plate ready to print (or printing), and the ones
+ * printed in the last PRINT_NOW_PRINTED_DAYS days, each with its project and sliced file (latest of each kind) behind
+ * a short-lived signed link. Anything else leaves the folder.
+ */
+export async function printNowPlates(): Promise<PrintNowPlate[]> {
+  const since = new Date(Date.now() - PRINT_NOW_PRINTED_DAYS * 24 * 60 * 60_000);
+  const list = await rows<JobRow>(sql`${JOB_SELECT}
+    WHERE j.status IN ('ready', 'printing') OR (j.status = 'printed' AND j.printed_at >= ${since})
+    ORDER BY COALESCE(r.created_at, j.created_at), j.plate_number`);
+  if (!list.length) return [];
+  const ids = sql.join(list.map((j) => sql`${j.id}`), sql`, `);
+  const files = await rows<{ id: string; job_id: string; kind: string; file_ref: string; filename: string; bytes: number; sha256: string }>(sql`
+    SELECT DISTINCT ON (job_id, kind) id, job_id, kind, file_ref, filename, bytes, sha256
+    FROM print_job_files WHERE job_id IN (${ids}) AND kind IN ('3mf', 'gcode_3mf')
+    ORDER BY job_id, kind, created_at DESC`);
+  const out: PrintNowPlate[] = [];
+  for (const j of list) {
+    const own = files.filter((f) => f.job_id === j.id);
+    if (!own.length) continue;
+    out.push({
+      id: j.id,
+      status: j.status as PrintJobStatus,
+      requestId: j.request_id,
+      requestCreatedAt: iso(j.request_created_at)!,
+      requestQuantity: Number(j.request_quantity),
+      plateNumber: Number(j.plate_number),
+      plateCount: Number(j.plate_count),
+      quantity: Number(j.quantity),
+      batchCode: j.batch_code,
+      modelTitle: j.model_title,
+      files: await Promise.all(own.map(async (f) => ({
+        id: f.id, kind: f.kind as PrintFileKind, filename: f.filename, sha256: f.sha256, bytes: Number(f.bytes), url: await signedFileUrl(f.file_ref),
+      }))),
+    });
   }
-  const now = new Date();
-  if (!input.ok) {
-    await db.update(printJobs).set({
-      sendRequestedAt: null,
-      sendClaimedAt: null,
-      sendDeviceId: null,
-      report: { ...(job.report ?? {}), sendError: { at: now.toISOString(), message: input.error ?? "The printer refused the job" } },
-      updatedAt: now,
-    }).where(eq(printJobs.id, job.id));
-    return getJob(job.id);
-  }
-  await db.update(printJobs).set({
-    sentAt: now,
-    report: { ...(job.report ?? {}), sendError: null, printer: input.printer ?? null },
-    updatedAt: now,
-  }).where(eq(printJobs.id, job.id));
-  return transitionJob(job.id, { action: "start", userId: null, source: "system" });
-}
-
-export async function setPrinterStatus(deviceId: string, status: PrinterStatus): Promise<void> {
-  await db.update(tagProvisioningDevices).set({ printerStatus: status as Record<string, unknown>, printerStatusAt: new Date() })
-    .where(eq(tagProvisioningDevices.id, deviceId));
-}
-
-export async function listPrinters(): Promise<PrinterItem[]> {
-  const list = await db.select().from(tagProvisioningDevices).where(eq(tagProvisioningDevices.status, "active"));
-  const now = Date.now();
-  return list
-    .filter((d) => (d.capabilities ?? []).includes("print"))
-    .map((d) => ({
-      deviceId: d.id,
-      deviceName: d.deviceName,
-      status: (d.printerStatus as PrinterStatus | null) ?? null,
-      statusAt: d.printerStatusAt ? d.printerStatusAt.toISOString() : null,
-      stale: !d.printerStatusAt || now - d.printerStatusAt.getTime() > PRINTER_STATUS_STALE_MS,
-    }));
+  return out;
 }
 
 // ─── Feedback and assembly (phase 4, docs/PRINT_EXECUTION_PLAN.md §5.4-5.5) ───

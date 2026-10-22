@@ -15,10 +15,11 @@ import { TagError } from "../../tags/errors.js";
 import * as production from "../../tags/production.js";
 import type { McpCaller } from "../server.js";
 
-// Tags › Production for an AI session (docs/PRINT_EXECUTION_PLAN.md §8): the catalog of what the house prints, the
-// versions of each recipe, and the print queue. The same service and zod schemas as the admin API. A design session
-// registers a model's first version here (and a fix as the next version, with its changelog); files go up through
-// the bench (`bench.py attach`), never through MCP.
+// Tags › Production for an AI session (docs/PRINT_EXECUTION_PLAN.md §8, §15): the catalog of what the house prints,
+// the versions of each recipe, and the print requests with their plates. The same service and zod schemas as the admin
+// API. "Make a plate of 6 of stand X" is print_job_create with a quantity; the bench builds the plates' files and the
+// admin downloads and prints them by hand. A design session registers a model's first version here (and a fix as the
+// next version, with its changelog); files go up through the bench (`bench.py attach`), never through MCP.
 
 const objectParam = z.preprocess((v) => {
   if (typeof v === "string") {
@@ -97,15 +98,22 @@ export function registerPrintProductionTools(server: McpServer, caller: McpCalle
   );
 
   server.tool(
+    "print_requests_list",
+    "The print requests, newest first, each with its plates (requestId, plateNumber of plateCount, pieces, batch, status, files to download). status: open (some plate still to build or print, the default), done, all; model? (slug) to narrow it.",
+    { status: z.enum(["open", "done", "all"]).optional(), model: z.string().min(1).optional() },
+    async ({ status, model }) => run("print_requests_list", () => production.listRequests(status ?? "open", model ?? null)),
+  );
+
+  server.tool(
     "print_jobs_list",
-    `The print queue. status: open (requested|building|ready|printing, the default), done (printed|failed|cancelled), all, or one of ${PRINT_JOB_STATUSES.join("|")}; model? (slug) to narrow it.`,
+    `The plates (print orders) one by one, newest first. status: open (requested|building|ready|printing, the default), done (printed|failed|cancelled), all, or one of ${PRINT_JOB_STATUSES.join("|")}; model? (slug) to narrow it.`,
     { status: z.enum(["open", "done", "all", ...PRINT_JOB_STATUSES]).optional(), model: z.string().min(1).optional() },
     async ({ status, model }) => run("print_jobs_list", () => production.listJobs(status ?? "open", model ?? null)),
   );
 
   server.tool(
     "print_job_get",
-    "One print order: model, version, bed (AMS, pause, positions), batch and its pieces with bed positions and codes, files (each with a signed download url valid ~5 minutes, when storage is configured) and the build report.",
+    "One plate (print order): model, version, its place in the request (plate n of N), bed (AMS, pause, positions), batch and its pieces with bed positions and codes, files (each with a signed download url valid ~5 minutes, when storage is configured) and the build report.",
     { job: z.string().uuid() },
     async ({ job }) =>
       run("print_job_get", async () => {
@@ -123,18 +131,18 @@ export function registerPrintProductionTools(server: McpServer, caller: McpCalle
 
   server.tool(
     "print_job_create",
-    "Order a print of a model's current version. `order`: { model (slug or uuid), bed? (label; default the first), plates? (how many times the bed is printed, default 1), notes?, existingBatch? (batch code: link a batch made before the catalog instead of issuing codes; the order follows what the batch went through) }. A serialized order issues its batch (fresh codes, pieces pending until each printed QR is scanned in) in the same step; a part order is ready at once when its bed has a fixed file.",
+    "Ask for a print: \"a plate of 6 of stand X\", \"print plate Y\". `order`: { model (slug or uuid), quantity? (pieces; split into plates of the bed's copies, the last one partial: 10 on a 4-up bed = 4 + 4 + 2; default one full bed), bed? (label; default the first), plates? (whole beds instead of a quantity), notes?, existingBatch? (batch code: link a batch made before the catalog instead of issuing codes) }. Returns the request with its plates. Each serialized plate issues its own batch (fresh codes, pieces pending until each printed QR is scanned in) and waits for the bench to build its files; a part's plates are its fixed file (whole beds, ready at once when the bed has one). Nothing is sent to the printer: the admin downloads each plate, prints it and marks it printed (print_job_update printed).",
     { order: objectParam },
     async ({ order }) => run("print_job_create", () => production.createJob(printJobCreateSchema.parse(order), null, "mcp")),
   );
 
   server.tool(
     "print_job_update",
-    "Move a print order: start (ready → printing), printed (ready|printing → printed: the batch's journey records `printed`, a part's count goes up), fail (with reason), cancel, release (a building order whose bench died goes back to requested), complete (a requested/building order with its file attached becomes ready), redo (a failed/cancelled order is printed again: same version and bed, same batch while none of its pieces was received), assembled (a printed batch was assembled: the parts its version consumes come off their counts), problem (`reason` says what came out wrong: an observation for the next version to fix). Only `printed` and `assembled` after the user confirmed it physically happened.",
+    "Move a plate (print order): start (ready → printing), printed (ready|printing → printed: the batch's journey records `printed`, a part's count goes up), fail (with reason), cancel, release (a building order whose bench died goes back to requested), complete (a requested/building order with its file attached becomes ready), redo (a failed/cancelled order is printed again: same version and bed, same batch while none of its pieces was received), assembled (a printed batch was assembled: the parts its version consumes come off their counts), problem (`reason` says what came out wrong: an observation for the next version to fix). Only `printed` and `assembled` after the user confirmed it physically happened.",
     { job: z.string().uuid(), action: z.enum(["start", "printed", "fail", "cancel", "release", "complete", "redo", "assembled", "problem"]), reason: z.string().max(2000).optional() },
     async ({ job, action, reason }) =>
       run("print_job_update", () => {
-        if (action === "redo") return production.redoJob(job, null);
+        if (action === "redo") return production.redoJob(job, null, "mcp");
         if (action === "assembled") return production.markAssembled(job, null, "mcp");
         if (action === "problem") return production.recordProblem(job, printProblemSchema.parse({ text: reason ?? "" }).text, null, "mcp");
         return production.transitionJob(job, { action, reason: reason ?? null, userId: null, source: "mcp" });

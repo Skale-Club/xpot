@@ -49,6 +49,12 @@ class BedRecipeTest(unittest.TestCase):
         self.assertNotIn('rotation_z_deg', cfg['copies'][0])
         self.assertEqual(cfg['copies'][3]['parts'], ['White - Menu Plate 004', 'Black - Menu Art 004'])
 
+    def test_a_partial_plate_fills_the_first_slots(self):
+        cfg = bed_recipe(ticket(), TAGS[:2], PARTS, 3, 3)
+        self.assertEqual(len(cfg['copies']), 2)
+        self.assertEqual([c['offset'] for c in cfg['copies']], [[-72.5, -53.5], [72.5, -53.5]])
+        self.assertTrue(cfg['name'].endswith('plate 3 of 3'))
+
     def test_a_bed_without_its_slots_cannot_be_built(self):
         t = ticket()
         t['version']['bed']['slots'] = t['version']['bed']['slots'][:3]
@@ -86,6 +92,8 @@ class CatalogTest(unittest.TestCase):
             if not version:
                 continue
             with self.subTest(model=model['slug']):
+                if version['builder'] is None:  # kept as a record of a batch; never built here (the legacy Small Stand)
+                    continue
                 self.assertIn(f"'{version['builder']}':", source)
                 for bed in version['beds']:
                     self.assertEqual(len(bed['slots']), bed['copies'])

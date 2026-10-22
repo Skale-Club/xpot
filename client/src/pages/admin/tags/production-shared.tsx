@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import type { PrintBed, PrintJobItem, PrintJobStatus, PrintModelItem, PrintModelStatus, PrinterItem } from "@shared/printProduction";
+import type { PrintBed, PrintJobItem, PrintJobStatus, PrintModelItem, PrintModelStatus, PrintRequestItem } from "@shared/printProduction";
 import { Pill, toneOf, type PillTone } from "@/components/xpot/StatusPill";
 import { translate, useT, type Translate } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
@@ -8,13 +8,13 @@ import { serverErrorText } from "@/lib/apiErrors";
 import { AdminHttpError, ADMIN_TAGS_KEY, STALE_MS, getJson, withQuery } from "./api";
 
 // Tags › Production (docs/PRINT_EXECUTION_PLAN.md): the queries, pills and the upload shared by the catalog, the
-// model page, the queue and the order page. Every query key starts with ADMIN_TAGS_KEY, so invalidateAdminTags()
-// refreshes them with the rest of the Tags admin (a print order also creates a batch).
+// model page, the queue of requests and the plate page. Every query key starts with ADMIN_TAGS_KEY, so
+// invalidateAdminTags() refreshes them with the rest of the Tags admin (a plate also creates a batch).
 
 export const PRODUCTION_BASE = "/production";
 
 export const MODELS_KEY = [ADMIN_TAGS_KEY, "production", "models"] as const;
-export const JOBS_KEY = [ADMIN_TAGS_KEY, "production", "jobs"] as const;
+export const REQUESTS_KEY = [ADMIN_TAGS_KEY, "production", "requests"] as const;
 
 export type JobFilter = "open" | "done" | "all";
 
@@ -26,14 +26,23 @@ export function usePrintModels() {
   });
 }
 
-export function usePrintJobs(filter: JobFilter, model?: string) {
+/** The requests with their plates, newest first. */
+export function usePrintRequests(filter: JobFilter, model?: string) {
   return useQuery({
-    queryKey: [...JOBS_KEY, filter, model ?? null],
-    queryFn: () => getJson<PrintJobItem[]>(withQuery("/api/xpot/admin/print-jobs", { status: filter, model })),
+    queryKey: [...REQUESTS_KEY, filter, model ?? null],
+    queryFn: () => getJson<PrintRequestItem[]>(withQuery("/api/xpot/admin/print-requests", { status: filter, model })),
     staleTime: STALE_MS,
-    // A bench may be building: keep the open queue fresh while it is on screen.
+    // The bench may be building a plate: keep open requests fresh while they are on screen.
     refetchInterval: filter === "open" ? 20_000 : false,
   });
+}
+
+/** The newest file of each kind a plate offers: the Bambu Studio project and the checked slice. */
+export function plateDownloads(job: Pick<PrintJobItem, "downloads">) {
+  return {
+    project: job.downloads.find((f) => f.kind === "3mf") ?? null,
+    sliced: job.downloads.find((f) => f.kind === "gcode_3mf") ?? null,
+  };
 }
 
 const JOB_TONE: Record<PrintJobStatus, PillTone> = {
@@ -108,63 +117,4 @@ export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-}
-
-const PRINTER_TONE: Record<string, PillTone> = {
-  IDLE: "slate",
-  PREPARE: "blue",
-  RUNNING: "blue",
-  PAUSE: "amber",
-  FINISH: "green",
-  FAILED: "red",
-  OFFLINE: "muted",
-  UNKNOWN: "muted",
-};
-
-export function usePrinters() {
-  return useQuery({
-    queryKey: [ADMIN_TAGS_KEY, "production", "printers"],
-    queryFn: () => getJson<PrinterItem[]>("/api/xpot/admin/print-printers"),
-    staleTime: 10_000,
-    refetchInterval: 15_000,
-  });
-}
-
-/** What each paired bench last read from its printer: state, progress, the job on the bed. Nothing when no bench prints. */
-export function PrinterCards() {
-  const t = useT(productionMessages);
-  const { data } = usePrinters();
-  if (!data?.length) return null;
-  return (
-    <div className="grid gap-2 sm:grid-cols-2" data-testid="production-printers">
-      {data.map((printer) => {
-        const status = printer.status;
-        const state = printer.stale || !status ? "UNKNOWN" : status.state;
-        return (
-          <div key={printer.deviceId} className="rounded-2xl border border-white/[0.08] bg-white/[0.03] p-3 text-sm">
-            <div className="flex items-center justify-between gap-2">
-              <span className="truncate font-semibold text-white">{status?.name ?? printer.deviceName}</span>
-              <Pill tone={toneOf(PRINTER_TONE, state)}>{t(`printerState_${state}` as never)}</Pill>
-            </div>
-            {status && !printer.stale && (state === "RUNNING" || state === "PAUSE" || state === "PREPARE") ? (
-              <div className="mt-2 space-y-1">
-                <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
-                  <div className="h-full rounded-full bg-violet-400" style={{ width: `${Math.round(status.percent ?? 0)}%` }} />
-                </div>
-                <p className="truncate text-xs text-white/50">
-                  {status.subtask ? `${status.subtask} · ` : ""}
-                  {Math.round(status.percent ?? 0)}%
-                  {status.remainingMinutes ? ` · ${t("printerRemaining", { time: minutesText(status.remainingMinutes) })}` : ""}
-                </p>
-              </div>
-            ) : (
-              <p className="mt-1 text-xs text-white/40">
-                {printer.stale ? t("printerStale", { device: printer.deviceName }) : status?.error || t("printerIdleHint")}
-              </p>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
 }

@@ -19,7 +19,7 @@ import { productionMessages } from "@/i18n/messages/production";
 import { ADMIN_TAGS_KEY, STALE_MS, errorMessage, formatDate, getJson, invalidateAdminTags, sendJson } from "./api";
 import { useTagLabels } from "./labels";
 import { Loading, LoadError } from "./pieces-shared";
-import { JobList, PrintDialog } from "./production-orders";
+import { PrintDialog, RequestList } from "./production-orders";
 import { KindPill, ModelStatusPill, PRODUCTION_BASE, bedSummary, formatBytes, uploadFile } from "./production-shared";
 
 // One print model: what it is, its versions (newest first, with what changed and why), the orders that printed it,
@@ -146,10 +146,10 @@ export function PrintModelPage({ slug, go }: { slug: string; go: Go }) {
 
       <section className="space-y-2">
         <h2 className="text-xs font-semibold uppercase tracking-wide text-white/40">{t("ordersTitle")}</h2>
-        <JobList filter="all" model={model.slug} go={go} emptyHint={t("ordersEmptyHint")} />
+        <RequestList filter="all" model={model.slug} go={go} emptyHint={t("ordersEmptyHint")} />
       </section>
 
-      {printing && <PrintDialog model={model} onClose={() => setPrinting(false)} onOrdered={(job) => go(`${PRODUCTION_BASE}/jobs/${job.id}`)} />}
+      {printing && <PrintDialog model={model} onClose={() => setPrinting(false)} />}
       {versioning && <VersionDialog model={model} fix={fix} onClose={() => { setVersioning(false); setFix(null); }} />}
       {editing && <EditModelDialog model={model} onClose={() => setEditing(false)} onRetire={() => { setEditing(false); setRetiring(true); }} />}
       {counting && <CountDialog model={model} onClose={() => setCounting(false)} />}

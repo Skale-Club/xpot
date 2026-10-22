@@ -855,7 +855,7 @@
    "sortOrder": 90,
    "description": "The first Small Stand cards (2026-10-04), QR on skale.club/q/ (redirects to Xpot). Kept for its batch; retired.",
    "version": {
-    "builder": "stand.google",
+    "builder": null,
     "params": {
      "size": "small",
      "theme": "white"

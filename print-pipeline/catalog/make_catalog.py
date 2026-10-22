@@ -77,7 +77,7 @@ models = [
                {'minutes': 347.9, 'swaps': 6, 'grams': {'Black PLA': 130.91, 'White PLA': 3.44, 'Silk PLA': 2.51}},
                ['Black PLA', 'White PLA', 'Silk PLA Dual-Color pink-purple'], ROUND, ['IG-2026-003'], sort=13),
     serialized('stand-small-google-white', 'Stand Small · Google Review · White (legacy)', 'small_stand', 'google_review', 'white', 'REV',
-               'stand-small', 'stand.google', {'size': 'small', 'theme': 'white'},
+               'stand-small', None, {'size': 'small', 'theme': 'white'},
                'Stand/production/REV-2026-001/build-v2-pla-001-002-003-004.json', ['front-left', 'back-left', 'front-right', 'back-right'],
                {}, ['White PLA', 'Black PLA', 'Yellow PLA'], ROUND, ['REV-2026-001'], sort=90,
                description='The first Small Stand cards (2026-10-04), QR on skale.club/q/ (redirects to Xpot). Kept for its batch; retired.'),

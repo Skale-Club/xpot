@@ -11,7 +11,6 @@ import {
   printPartAdjustSchema,
   printProblemSchema,
   printVersionInputSchema,
-  printerStatusSchema,
   type PrintFileKind,
 } from "#shared/printProduction.js";
 import { requireTagAdmin } from "./access.js";
@@ -19,8 +18,10 @@ import { TagError } from "./errors.js";
 import * as production from "./production.js";
 
 // Tags › Production HTTP API (docs/PRINT_EXECUTION_PLAN.md). Two audiences:
-//   /api/xpot/admin/print-*        — the global admin (catalog, versions, queue, files)
-//   /api/provisioner/print-jobs/*  — a paired bench app (device token with the 'print' capability)
+//   /api/xpot/admin/print-*        — the global admin (catalog, versions, requests and their plates, files)
+//   /api/provisioner/print-*       — a paired bench app (device token with the 'print' capability): builds the
+//                                    plates' files and mirrors them into its Print Now folder (nothing goes to the
+//                                    printer from here: the admin prints by hand and marks the plate printed)
 // File uploads are the raw bytes (application/octet-stream) with ?kind=&filename=, up to 64 MB; downloads redirect to
 // a short-lived signed URL. Registered from routes.ts, which owns the device middleware.
 
@@ -52,17 +53,16 @@ const jobListQuery = z.object({
   model: z.string().trim().min(1).max(80).optional(),
 }).strict();
 
+const requestListQuery = z.object({
+  status: z.enum(["open", "done", "all"]).default("open"),
+  model: z.string().trim().min(1).max(80).optional(),
+}).strict();
+
 const claimSchema = z.object({ jobId: z.string().uuid().nullable().optional() }).strict();
 
 const benchEventSchema = z.object({
   type: z.string().regex(/^[a-z][a-z0-9_]{0,39}$/),
   detail: z.record(z.unknown()).nullable().optional(),
-}).strict();
-
-const sendResultSchema = z.object({
-  ok: z.boolean(),
-  error: z.string().max(1000).nullable().optional(),
-  printer: z.string().max(60).nullable().optional(),
 }).strict();
 
 const benchCompleteSchema = z.object({
@@ -91,6 +91,7 @@ export function registerProductionRoutes(app: Express, deps: { device: readonly 
   const { fail } = deps;
   const models = "/api/xpot/admin/print-models";
   const jobs = "/api/xpot/admin/print-jobs";
+  const requests = "/api/xpot/admin/print-requests";
 
   // ─── Catalog ────────────────────────────────────────────────────────────────
 
@@ -176,11 +177,31 @@ export function registerProductionRoutes(app: Express, deps: { device: readonly 
     }
   });
 
+  // A request: N pieces of a model, split into plates (the answer is the request with its plates).
   app.post(jobs, requireTagAdmin, async (req, res) => {
     try {
       res.status(201).json(await production.createJob(printJobCreateSchema.parse(req.body), userIdOf(req), "admin"));
     } catch (err) {
       fail(res, err, "Failed to create the print order");
+    }
+  });
+
+  app.get(requests, requireTagAdmin, async (req, res) => {
+    try {
+      const { status, model } = requestListQuery.parse(req.query);
+      res.json(await production.listRequests(status, model ?? null));
+    } catch (err) {
+      fail(res, err, "Failed to load the print requests");
+    }
+  });
+
+  app.get(`${requests}/:id`, requireTagAdmin, async (req, res) => {
+    const id = uuidParam(req.params.id, res);
+    if (!id) return;
+    try {
+      res.json(await production.getRequest(id));
+    } catch (err) {
+      fail(res, err, "Failed to load the print request");
     }
   });
 
@@ -246,35 +267,6 @@ export function registerProductionRoutes(app: Express, deps: { device: readonly 
       res.json(await production.markAssembled(id, userIdOf(req)));
     } catch (err) {
       fail(res, err, "Failed to mark the order assembled");
-    }
-  });
-
-  // Send to printer: the admin's click is the confirmation; the bench on the printer's network does the sending.
-  app.post(`${jobs}/:id/send`, requireTagAdmin, async (req, res) => {
-    const id = uuidParam(req.params.id, res);
-    if (!id) return;
-    try {
-      res.json(await production.requestSend(id, userIdOf(req)));
-    } catch (err) {
-      fail(res, err, "Failed to send the order to the printer");
-    }
-  });
-
-  app.post(`${jobs}/:id/send/cancel`, requireTagAdmin, async (req, res) => {
-    const id = uuidParam(req.params.id, res);
-    if (!id) return;
-    try {
-      res.json(await production.cancelSend(id));
-    } catch (err) {
-      fail(res, err, "Failed to cancel the send");
-    }
-  });
-
-  app.get("/api/xpot/admin/print-printers", requireTagAdmin, async (_req, res) => {
-    try {
-      res.json(await production.listPrinters());
-    } catch (err) {
-      fail(res, err, "Failed to load the printers");
     }
   });
 
@@ -349,35 +341,13 @@ export function registerProductionRoutes(app: Express, deps: { device: readonly 
     }
   });
 
-  // A send waiting for the printer: the order, its sliced file (signed link) and the AMS mapping; 204 when none.
-  app.post("/api/provisioner/print-sends/claim", ...bench, async (req, res) => {
+  // What the bench's Print Now folder should hold: plates to print and recently printed, with signed file links.
+  app.get("/api/provisioner/print-now", ...bench, async (_req, res) => {
     try {
-      const ticket = await production.claimSend(deviceId(req));
-      if (!ticket) return res.status(204).end();
-      res.json(ticket);
+      res.set("Cache-Control", "no-store");
+      res.json(await production.printNowPlates());
     } catch (err) {
-      fail(res, err, "Failed to claim the send");
-    }
-  });
-
-  app.post("/api/provisioner/print-jobs/:id/sent", ...bench, async (req, res) => {
-    const id = uuidParam(req.params.id, res);
-    if (!id) return;
-    try {
-      const body = sendResultSchema.parse(req.body);
-      const job = await production.sendResult(deviceId(req), id, body);
-      res.json({ id: job.id, status: job.status });
-    } catch (err) {
-      fail(res, err, "Failed to record the send");
-    }
-  });
-
-  app.post("/api/provisioner/printer-status", ...bench, async (req, res) => {
-    try {
-      await production.setPrinterStatus(deviceId(req), printerStatusSchema.parse(req.body));
-      res.json({ ok: true });
-    } catch (err) {
-      fail(res, err, "Failed to record the printer status");
+      fail(res, err, "Failed to list the plates to print");
     }
   });
 

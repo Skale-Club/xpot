@@ -451,8 +451,26 @@ export const printModelVersions = pgTable("print_model_versions", {
   numberIdx: uniqueIndex("print_model_versions_number_unique").on(table.modelId, table.version),
 }));
 
+// What was asked: N pieces of a model, split into plates (print_jobs) of at most one bed each (migrations/0062).
+export const printRequests = pgTable("print_requests", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  modelId: uuid("model_id").notNull().references(() => printModels.id, { onDelete: "restrict" }),
+  versionId: uuid("version_id").notNull().references(() => printModelVersions.id, { onDelete: "restrict" }),
+  bedLabel: text("bed_label").notNull(),
+  quantity: integer("quantity").notNull(),
+  notes: text("notes"),
+  source: text("source").notNull().default("admin"),
+  requestedByUserId: text("requested_by_user_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  createdIdx: index("print_requests_created_idx").on(table.createdAt),
+}));
+
 export const printJobs = pgTable("print_jobs", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  // The request this plate belongs to and its place in it (migrations/0062).
+  requestId: uuid("request_id").references(() => printRequests.id, { onDelete: "set null" }),
+  plateNumber: integer("plate_number"),
   modelId: uuid("model_id").notNull().references(() => printModels.id, { onDelete: "restrict" }),
   versionId: uuid("version_id").notNull().references(() => printModelVersions.id, { onDelete: "restrict" }),
   bedLabel: text("bed_label").notNull(),
@@ -470,7 +488,7 @@ export const printJobs = pgTable("print_jobs", {
   builtAt: timestamp("built_at", { withTimezone: true }),
   printedAt: timestamp("printed_at", { withTimezone: true }),
   lastEventAt: timestamp("last_event_at", { withTimezone: true }),
-  // Send to printer (migrations/0060): the admin's request, the bench that took it, and when the printer accepted it.
+  // Send to printer (migrations/0060), unused since 0062: plates are downloaded and printed by hand.
   sendRequestedAt: timestamp("send_requested_at", { withTimezone: true }),
   sendRequestedByUserId: text("send_requested_by_user_id"),
   sendClaimedAt: timestamp("send_claimed_at", { withTimezone: true }),
@@ -512,6 +530,7 @@ export const printPartMovements = pgTable("print_part_movements", {
 
 export type PrintModelRow = typeof printModels.$inferSelect;
 export type PrintModelVersionRow = typeof printModelVersions.$inferSelect;
+export type PrintRequestRow = typeof printRequests.$inferSelect;
 export type PrintJobRow = typeof printJobs.$inferSelect;
 export type PrintJobFileRow = typeof printJobFiles.$inferSelect;
 

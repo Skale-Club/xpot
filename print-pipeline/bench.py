@@ -1,30 +1,31 @@
-"""Xpot Bench: the computer next to the printer builds Xpot's print orders into print files and attaches them.
+"""Xpot Bench: this computer builds the plates asked for in Xpot into print files and keeps the Print Now folder.
 
     python bench.py pair <pairing-code> [--server https://xpot.place]
-    python bench.py run [--interval 20]                    take buildable orders one after another, forever
-    python bench.py build <order-id> [--out DIR] [--no-slice]   build one order now (claims it if needed)
+    python bench.py run [--interval 20]                    build plates as they are asked for and keep Print Now, forever
+    python bench.py folder [PATH]                          the Print Now folder (shown without PATH)
+    python bench.py sync                                   bring the Print Now folder up to date once
+    python bench.py build <order-id> [--out DIR] [--no-slice]   build one plate now (claims it if needed)
     python bench.py doctor                                 Python packages, Bambu Studio and the fonts the faces need
-    python bench.py ticket <order-id> [--out job.json]     take an order and write what a build needs
+    python bench.py ticket <order-id> [--out job.json]     take a plate and write what a build needs
     python bench.py attach <order-id> <file-or-dir>... [--report report.json] [--no-ready]
     python bench.py attach-bed <model-slug> <bed-label> <file>   a part's fixed print file, on its current version
     python bench.py fail <order-id> --message "why"
     python bench.py whoami
-    python bench.py printer setup | status                 the A1 on this network (its access code stays on this computer)
 
-An order comes from Xpot (Tags > Production > Queue). `build` and `run` do the whole job: claim the order, build every
-bed with pipeline.py (meshes per code, .3mf, offline slice, QR check from the G-code), upload the files and mark the
-order ready with the numbers, or failed with the reason. `ticket`/`attach` are the manual halves of the same thing.
+A request comes from Xpot (Tags > Production, or an AI session): N pieces of a model, split into plates of one bed
+each, the last one partial. `build` and `run` do each plate's whole job: claim it, build it with pipeline.py (meshes per
+code, .3mf, offline slice, QR check from the G-code), upload the files and mark it ready with the numbers, or failed
+with the reason. `ticket`/`attach` are the manual halves of the same thing.
 
-With the printer set up, `run` also sends the orders an admin sent from Xpot (Send to printer): it uploads the
-sliced file over FTPS and starts it over MQTT, only when the printer is free, and reports the printer's state.
+Nothing is sent to the printer. With a folder set, `run` keeps it as Xpot's list of plates (print_now.py): ready plates
+in "Para imprimir/<request>/", printed ones in "Impressos/<request>/" for two weeks, the rest removed. Open a plate in
+Bambu Studio, print it, and mark it printed in Xpot.
 
 Pairing: Xpot > Tags > NFC writers > pair a computer gives a one-time code; this script trades it for a device token
 paired as a print bench, saved in the user's profile (never in the repository). pair/ticket/attach need only the
 standard library; build/run need requirements.txt and Bambu Studio (docs/PRINT_EXECUTION_PLAN.md s6-7).
 """
 import argparse
-import getpass
-import hashlib
 import json
 import os
 import platform
@@ -37,7 +38,7 @@ import urllib.request
 
 PROTOCOL_HEADER = 'x-provisioner-protocol'
 PROTOCOL_VERSION = '1'
-APP_VERSION = 'bench-cli-2'
+APP_VERSION = 'bench-cli-3'
 DEFAULT_SERVER = 'https://xpot.place'
 
 KINDS = {
@@ -60,6 +61,26 @@ class BenchHttpError(Exception):
 def credentials_path():
     base = os.environ.get('LOCALAPPDATA') or os.path.join(os.path.expanduser('~'), '.config')
     return os.path.join(base, 'XpotBench', 'credentials.json')
+
+
+def settings_path():
+    return os.path.join(os.path.dirname(credentials_path()), 'settings.json')
+
+
+def load_settings():
+    try:
+        with open(settings_path(), encoding='utf-8') as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def save_settings(settings):
+    path = settings_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, 'w', encoding='utf-8') as f:
+        json.dump(settings, f, indent=2)
+    return path
 
 
 def work_root():
@@ -248,92 +269,65 @@ def cmd_build(args):
     sys.exit(0 if build_ticket(creds, ticket, args.out, do_slice=not args.no_slice) else 1)
 
 
-def send_to_printer(creds, printer_cfg):
-    """One send an admin asked for, if any: fetch the sliced file, start it on the printer, say how it went."""
-    import printer
-    status, ticket = request(creds['server'], 'POST', '/api/provisioner/print-sends/claim', creds['token'], {})
-    if status == 204 or not ticket:
-        return False
-    job_id = ticket['job']['id']
-    print(f'Send {job_id}: {ticket["subtaskName"]} ({ticket["file"]["filename"]})')
-    try:
-        with urllib.request.urlopen(ticket['file']['url'], timeout=300) as res:
-            data = res.read()
-        if hashlib.sha256(data).hexdigest() != ticket['file']['sha256']:
-            raise printer.PrinterError('the downloaded file does not match its checksum')
-        name = f"xpot-{job_id[:8]}.gcode.3mf"
-        started = printer.send_and_start(printer_cfg, name, data, ticket['subtaskName'], ticket['amsMapping'])
-        request(creds['server'], 'POST', f'/api/provisioner/print-jobs/{job_id}/sent', creds['token'],
-                {'ok': True, 'printer': printer_cfg.get('name')})
-        request(creds['server'], 'POST', '/api/provisioner/printer-status', creds['token'], started)
-        print(f'  started on {printer_cfg.get("name")}: {started["state"]}')
-    except (printer.PrinterError, OSError, urllib.error.URLError) as err:
-        request(creds['server'], 'POST', f'/api/provisioner/print-jobs/{job_id}/sent', creds['token'], {'ok': False, 'error': str(err)[:1000]})
-        print(f'  not started: {err}')
-    return True
+def fetch(url):
+    with urllib.request.urlopen(url, timeout=300) as res:
+        return res.read()
 
 
-def report_printer(creds, printer_cfg):
-    import printer
-    try:
-        state = printer.status(printer_cfg)
-    except (printer.PrinterError, OSError) as err:
-        state = {'name': printer_cfg.get('name') or 'Printer', 'state': 'OFFLINE', 'error': str(err)[:300]}
-    request(creds['server'], 'POST', '/api/provisioner/printer-status', creds['token'], state)
+def sync_print_now(creds, folder, quiet=False):
+    """Make the Print Now folder hold the plates Xpot lists. Returns what changed."""
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import print_now
+    _, plates = request(creds['server'], 'GET', '/api/provisioner/print-now', creds['token'])
+    changed = print_now.sync(folder, plates or [], fetch, log=(lambda _m: None) if quiet else print)
+    if not quiet or changed['added'] or changed['moved'] or changed['removed']:
+        print(f"{time.strftime('%H:%M:%S')} Print Now: {changed['added']} added, {changed['moved']} moved, "
+              f"{changed['removed']} removed, {changed['kept']} as they were ({folder})")
+    return changed
 
 
 def cmd_run(args):
     creds = load_credentials()
-    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    import printer
-    printer_cfg = printer.load_config()
-    where = f', printer {printer_cfg.get("name") or printer_cfg["ip"]}' if printer_cfg else ', no printer set up'
+    folder = load_settings().get('print_now')
+    where = f', Print Now in {folder}' if folder else ' (no Print Now folder: python bench.py folder <path>)'
     print(f'Xpot Bench watching {creds["server"]} every {args.interval}s{where} (Ctrl+C stops).')
-    last_status = 0.0
+    last_sync = None
     while True:
         try:
-            if printer_cfg and send_to_printer(creds, printer_cfg):
-                last_status = time.monotonic()
-                continue
             ticket = claim(creds)
             if ticket:
                 build_ticket(creds, ticket)
+                last_sync = None  # the new plate goes into the folder at once
                 continue  # look for the next one at once
-            if printer_cfg and time.monotonic() - last_status >= 60:
-                report_printer(creds, printer_cfg)
-                last_status = time.monotonic()
+            if folder and (last_sync is None or time.monotonic() - last_sync >= 60):
+                sync_print_now(creds, folder, quiet=True)
+                last_sync = time.monotonic()
         except BenchHttpError as err:
             print(f'{time.strftime("%H:%M:%S")} {err}')
         except (urllib.error.URLError, TimeoutError, ConnectionError) as err:
             print(f'{time.strftime("%H:%M:%S")} no connection: {err}')
+        except (OSError, ValueError) as err:
+            print(f'{time.strftime("%H:%M:%S")} Print Now: {err}')
         time.sleep(args.interval)
 
 
-def cmd_printer(args):
-    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    import printer
-    if args.action == 'setup':
-        known = printer.bambu_cli_machine() or {}
-        current = printer.load_config() or {}
-        ip = args.ip or current.get('ip') or known.get('ip') or input('Printer IP: ').strip()
-        serial = args.serial or current.get('serial') or known.get('id') or input('Printer serial: ').strip()
-        name = args.name or current.get('name') or known.get('name') or 'Printer'
-        print(f'{name} at {ip}, serial {serial[:4]}…  The access code is on the printer: Settings > Network (LAN mode on).')
-        code = getpass.getpass('Access code (not shown): ').strip()
-        cfg = {'name': name, 'ip': ip, 'serial': serial, 'model': known.get('model') or current.get('model'), 'access_code': code,
-               'url_template': current.get('url_template') or printer.DEFAULT_URL}
-        path = printer.save_config(cfg)
-        print(f'Saved in {path} (this computer only).')
-    cfg = printer.load_config()
-    if not cfg:
-        sys.exit('No printer set up: python bench.py printer setup')
-    state = printer.status(cfg)
-    print(json.dumps(state, indent=2))
-    try:
-        creds = load_credentials()
-        request(creds['server'], 'POST', '/api/provisioner/printer-status', creds['token'], state)
-    except SystemExit:
-        pass  # not paired yet: the status is only shown here
+def cmd_folder(args):
+    settings = load_settings()
+    if args.path:
+        folder = os.path.abspath(os.path.expanduser(args.path))
+        os.makedirs(folder, exist_ok=True)
+        settings['print_now'] = folder
+        save_settings(settings)
+        print(f'Print Now folder: {folder}. Only the files the bench writes there are ever moved or removed.')
+    else:
+        print(settings.get('print_now') or 'No Print Now folder yet: python bench.py folder <path>')
+
+
+def cmd_sync(_args):
+    folder = load_settings().get('print_now')
+    if not folder:
+        sys.exit('No Print Now folder yet: python bench.py folder <path>')
+    sync_print_now(load_credentials(), folder)
 
 
 def cmd_ticket(args):
@@ -399,9 +393,14 @@ def main(argv=None):
     p.add_argument('code')
     p.add_argument('--server', default=DEFAULT_SERVER)
     p.set_defaults(run=cmd_pair)
-    p = sub.add_parser('run', help='build orders as they come, forever')
+    p = sub.add_parser('run', help='build plates as they are asked for and keep Print Now, forever')
     p.add_argument('--interval', type=int, default=20)
     p.set_defaults(run=cmd_run)
+    p = sub.add_parser('folder', help='set or show the Print Now folder')
+    p.add_argument('path', nargs='?')
+    p.set_defaults(run=cmd_folder)
+    p = sub.add_parser('sync', help='bring the Print Now folder up to date once')
+    p.set_defaults(run=cmd_sync)
     p = sub.add_parser('build', help='build one order now')
     p.add_argument('order')
     p.add_argument('--out')
@@ -409,12 +408,6 @@ def main(argv=None):
     p.set_defaults(run=cmd_build)
     p = sub.add_parser('doctor', help='check Python packages, Bambu Studio and fonts')
     p.set_defaults(run=cmd_doctor)
-    p = sub.add_parser('printer', help='set up or read the printer on this network')
-    p.add_argument('action', choices=['setup', 'status'])
-    p.add_argument('--ip')
-    p.add_argument('--serial')
-    p.add_argument('--name')
-    p.set_defaults(run=cmd_printer)
     p = sub.add_parser('whoami', help='the paired device and server')
     p.set_defaults(run=cmd_whoami)
     p = sub.add_parser('ticket', help='take an order and print what build needs')

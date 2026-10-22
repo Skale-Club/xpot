@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { AlertTriangle, ClipboardList, Download, FileUp, Files, Hammer, MessageSquareWarning, Printer, RotateCcw, ScanLine, Send } from "lucide-react";
+import { AlertTriangle, ClipboardList, Download, FileUp, Files, Hammer, MessageSquareWarning, RotateCcw, ScanLine } from "lucide-react";
 import type { PrintJobDetail, PrintJobFileItem } from "@shared/printProduction";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
@@ -13,13 +13,14 @@ import { useT } from "@/i18n";
 import { productionMessages } from "@/i18n/messages/production";
 import { ADMIN_TAGS_KEY, errorMessage, formatDateTime, getJson, invalidateAdminTags, sendJson } from "./api";
 import { Loading, LoadError } from "./pieces-shared";
-import { JobStatusPill, PRODUCTION_BASE, PrinterCards, formatBytes, minutesText, uploadFile } from "./production-shared";
+import { JobStatusPill, PRODUCTION_BASE, formatBytes, minutesText, uploadFile } from "./production-shared";
 
-// One print order: what to load in the AMS, where the printer pauses and which code sits where on the bed, the files
-// to download, and the steps (ready → printing → printed). Pieces enter stock on the batch page, by scanning each one.
+// One plate of a print request: what to load in the AMS, where the printer pauses and which code sits where on the
+// bed, the files to download (print it by hand in Bambu Studio), and the steps (ready → printed). Pieces enter stock on
+// the batch page, by scanning each one.
 
 type Go = (path: string) => void;
-type Step = "complete" | "start" | "printed" | "fail" | "cancel" | "release";
+type Step = "complete" | "printed" | "fail" | "cancel" | "release";
 
 const FILE_ORDER = ["gcode_3mf", "3mf", "serial_map", "preview", "report"] as const;
 
@@ -28,16 +29,15 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
   const { toast } = useToast();
   const input = useRef<HTMLInputElement>(null);
   const [confirming, setConfirming] = useState<Step | null>(null);
-  const [sending, setSending] = useState(false);
   const [reporting, setReporting] = useState(false);
   const [assembling, setAssembling] = useState(false);
   const { data: job, isLoading, error, refetch } = useQuery({
     queryKey: [ADMIN_TAGS_KEY, "production", "job", id],
     queryFn: () => getJson<PrintJobDetail>(`/api/xpot/admin/print-jobs/${id}`),
-    // The bench may be building it, or sending it to the printer, right now.
+    // The bench may be building it right now.
     refetchInterval: (query) => {
       const d = query.state.data;
-      return d && (d.status === "building" || d.status === "requested" || (d.sendRequestedAt && !d.sentAt)) ? 10_000 : false;
+      return d && (d.status === "building" || d.status === "requested") ? 10_000 : false;
     },
   });
   const step = useMutation({
@@ -57,14 +57,6 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
       go(`${PRODUCTION_BASE}/jobs/${next.id}`);
     },
     onError: (err) => toast({ title: t("couldNotUpdateOrder"), description: errorMessage(err), variant: "destructive" }),
-  });
-  const send = useMutation({
-    mutationFn: (cancel: boolean) => sendJson<PrintJobDetail>("POST", `/api/xpot/admin/print-jobs/${id}/send${cancel ? "/cancel" : ""}`),
-    onSuccess: async (_job, cancel) => {
-      await invalidateAdminTags();
-      toast({ title: cancel ? t("sendCancelled") : t("sendQueued") });
-    },
-    onError: (err) => toast({ title: t("couldNotSend"), description: errorMessage(err), variant: "destructive" }),
   });
   const problem = useMutation({
     mutationFn: (text: string) => sendJson("POST", `/api/xpot/admin/print-jobs/${id}/problem`, { text }),
@@ -105,14 +97,10 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
   const minutes = report.minutes ?? bed?.minutes ?? null;
   const swaps = report.swaps ?? bed?.swaps ?? null;
   const takesFiles = !["printed", "cancelled"].includes(job.status);
-  const hasSliced = job.files.some((f) => f.kind === "gcode_3mf");
-  const sendError = (job.report as { sendError?: { message?: string } | null }).sendError ?? null;
-  const waitingForPrinter = Boolean(job.sendRequestedAt && !job.sentAt);
   const assembledAt = (job.report as { assembledAt?: string }).assembledAt ?? null;
   const canAssemble = Boolean(job.batchId) && job.status === "printed" && !assembledAt;
   const confirmText: Record<Step, { title: string; body: string; label: string; reason?: "required" | "optional" }> = {
     complete: { title: t("confirmCompleteTitle"), body: t("confirmCompleteBody"), label: t("markReady") },
-    start: { title: t("confirmStartTitle"), body: t("confirmStartBody"), label: t("startPrinting") },
     printed: { title: t("confirmPrintedTitle"), body: job.batchId ? t("confirmPrintedBodyBatch") : t.plural("confirmPrintedBodyPart", job.quantity), label: t("markPrinted") },
     fail: { title: t("confirmFailTitle"), body: t("confirmFailBody"), label: t("markFailed"), reason: "required" },
     cancel: { title: t("confirmCancelTitle"), body: job.batchId ? t("confirmCancelBodyBatch") : t("confirmCancelBody"), label: t("cancelOrder"), reason: "optional" },
@@ -129,7 +117,8 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
           </button>
           <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-white/45">
             <JobStatusPill status={job.status} />
-            <span>v{job.version} · {job.bedLabel}{job.plates > 1 ? ` × ${job.plates}` : ""}</span>
+            <span className="font-medium text-white/70">{t("plateOf", { number: job.plateNumber, total: job.plateCount })}</span>
+            <span>v{job.version} · {job.bedLabel}</span>
             {job.batchCode ? <span className="font-mono">{job.batchCode}</span> : null}
             {job.deviceName ? <span>{t("builtBy", { device: job.deviceName })}</span> : null}
             <span>{formatDateTime(job.createdAt)}</span>
@@ -147,18 +136,6 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
           ) : null}
           {(job.status === "requested" || job.status === "building") && hasPrintFile ? (
             <Button type="button" variant="secondary" size="sm" onClick={() => setConfirming("complete")}>{t("markReady")}</Button>
-          ) : null}
-          {job.status === "ready" && !waitingForPrinter ? (
-            <Button type="button" variant="secondary" size="sm" onClick={() => setConfirming("start")}>
-              <Printer />
-              {t("startPrinting")}
-            </Button>
-          ) : null}
-          {job.status === "ready" && hasSliced && !waitingForPrinter ? (
-            <Button type="button" variant="brand" accent="tags" size="sm" onClick={() => setSending(true)} data-testid="production-send">
-              <Send />
-              {t("sendToPrinter")}
-            </Button>
           ) : null}
           {job.status === "ready" || job.status === "printing" ? (
             <Button type="button" variant="brand" accent="tags" size="sm" onClick={() => setConfirming("printed")} data-testid="production-mark-printed">
@@ -187,17 +164,6 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
       </header>
 
       {job.stale ? <InlineAlert tone="warning" title={t("staleTitle")}>{t("staleBody")}</InlineAlert> : null}
-      {waitingForPrinter ? (
-        <InlineAlert
-          tone="info"
-          title={job.sendClaimedAt ? t("sendingTitle") : t("sendQueuedTitle")}
-          action={!job.sendClaimedAt ? <Button type="button" variant="ghost" size="sm" loading={send.isPending} onClick={() => send.mutate(true)}>{t("cancelSend")}</Button> : undefined}
-        >
-          {job.sendClaimedAt ? t("sendingBody") : t("sendQueuedBody")}
-        </InlineAlert>
-      ) : null}
-      {sendError?.message && job.status === "ready" ? <InlineAlert tone="warning" title={t("sendFailedTitle")}>{sendError.message}</InlineAlert> : null}
-      {job.status === "ready" || job.status === "printing" ? <PrinterCards /> : null}
       {job.status === "requested" ? <InlineAlert tone="info" title={t("requestedTitle")}>{job.builder ? t("requestedBodyBench") : t("requestedBodyHand")}</InlineAlert> : null}
       {job.status === "failed" && job.errorMessage ? <InlineAlert tone="error" title={t("failedTitle")}>{job.errorMessage}</InlineAlert> : null}
       {job.notes ? <p className="max-w-3xl whitespace-pre-line text-sm text-white/60">{job.notes}</p> : null}
@@ -344,20 +310,6 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
         ].filter(Boolean).join(" ")}
         confirmLabel={t("markAssembled")}
         onConfirm={() => assemble.mutateAsync()}
-      />
-
-      <ConfirmDialog
-        open={sending}
-        onOpenChange={setSending}
-        title={t("confirmSendTitle")}
-        description={[
-          t("confirmSendBody"),
-          bed?.ams?.length ? `AMS: ${bed.ams.map((a) => `${a.slot} ${a.colour}`).join(" · ")}.` : "",
-          bed?.pause ? t("confirmSendPause", { z: bed.pause.z }) : "",
-          minutes ? t("confirmSendTime", { time: minutesText(minutes) }) : "",
-        ].filter(Boolean).join(" ")}
-        confirmLabel={t("sendToPrinter")}
-        onConfirm={() => send.mutateAsync(false)}
       />
 
       {confirming ? (
