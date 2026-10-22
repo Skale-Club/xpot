@@ -23,6 +23,7 @@ export const TAG_FACES = [
   "menu",
   "booking",
   "vcard",
+  "venmo",
   "custom",
 ] as const;
 export type TagFace = (typeof TAG_FACES)[number];
@@ -41,6 +42,7 @@ export const TAG_FACE_LABELS: Record<TagFace, string> = {
   menu: "Menu",
   booking: "Booking",
   vcard: "Contact card",
+  venmo: "Venmo",
   custom: "Custom",
 };
 

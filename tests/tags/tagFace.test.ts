@@ -30,6 +30,11 @@ test("non-social faces are first-class: website, phone call, email", () => {
   for (const face of ["website", "phone", "email", "custom"]) assert.ok((TAG_FACES as readonly string[]).includes(face));
 });
 
+test("payment faces are first-class: Venmo", () => {
+  assert.ok(isTagFace("venmo"));
+  assert.equal(tagFaceLabel("venmo"), "Venmo");
+});
+
 test("a batch accepts a face and rejects an unknown one", () => {
   const base = { name: "Instagram plaques", productType: "custom", salesProductId: 1, quantity: 4 };
   assert.equal(batchCreateSchema.parse({ ...base, face: "instagram" }).face, "instagram");
