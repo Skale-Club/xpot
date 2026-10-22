@@ -64,6 +64,9 @@ export const tagProvisioningDevices = pgTable("tag_provisioning_devices", {
   status: text("status").notNull().default("pairing"),
   // 'nfc' (writes chips) and/or 'print' (the bench builds print files); migrations/0059.
   capabilities: jsonb("capabilities").$type<string[]>().notNull().default(sql`'["nfc"]'::jsonb`),
+  // The last state a print bench read from its printer (migrations/0060; shared/printProduction.ts PrinterStatus).
+  printerStatus: jsonb("printer_status").$type<Record<string, unknown>>(),
+  printerStatusAt: timestamp("printer_status_at", { withTimezone: true }),
   pairingCodeHash: text("pairing_code_hash"),
   pairingExpiresAt: timestamp("pairing_expires_at", { withTimezone: true }),
   tokenHash: text("token_hash"),
@@ -465,6 +468,12 @@ export const printJobs = pgTable("print_jobs", {
   builtAt: timestamp("built_at", { withTimezone: true }),
   printedAt: timestamp("printed_at", { withTimezone: true }),
   lastEventAt: timestamp("last_event_at", { withTimezone: true }),
+  // Send to printer (migrations/0060): the admin's request, the bench that took it, and when the printer accepted it.
+  sendRequestedAt: timestamp("send_requested_at", { withTimezone: true }),
+  sendRequestedByUserId: text("send_requested_by_user_id"),
+  sendClaimedAt: timestamp("send_claimed_at", { withTimezone: true }),
+  sendDeviceId: uuid("send_device_id").references(() => tagProvisioningDevices.id, { onDelete: "set null" }),
+  sentAt: timestamp("sent_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({

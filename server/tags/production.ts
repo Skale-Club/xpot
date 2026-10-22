@@ -8,6 +8,7 @@ import {
   printModels,
   printPartMovements,
   tagBatches,
+  tagProvisioningDevices,
   type PrintJobRow,
   type PrintModelRow,
 } from "#shared/schema.js";
@@ -15,6 +16,7 @@ import {
   PRINT_FILE_CONTENT_TYPES,
   PRINT_FILE_MAX_BYTES,
   PRINT_JOB_STALE_MS,
+  PRINTER_STATUS_STALE_MS,
   bedPosition,
   nextPrintBatchCode,
   planPrintJobTransition,
@@ -39,6 +41,9 @@ import {
   type PrintVersionInput,
   type PrintVersionSource,
   type PrintVersionStatus,
+  type PrinterItem,
+  type PrinterStatus,
+  type PrintSendTicket,
 } from "#shared/printProduction.js";
 import { TAG_DEFAULT_PUBLIC_BASE_URL, buildTagUrls, padSerial } from "#shared/tags.js";
 import type { JourneySource } from "#shared/tagJourney.js";
@@ -374,6 +379,7 @@ interface JobRow {
   batch_code: string | null; piece_count: number | null; received_count: number | null; device_name: string | null;
   notes: string | null; error_message: string | null; report: Record<string, unknown> | null; created_at: Date | string;
   built_at: Date | string | null; printed_at: Date | string | null; updated_at: Date | string; last_event_at: Date | string | null;
+  send_requested_at: Date | string | null; send_claimed_at: Date | string | null; sent_at: Date | string | null;
 }
 
 const JOB_SELECT = sql`
@@ -382,7 +388,8 @@ const JOB_SELECT = sql`
     CASE WHEN j.batch_id IS NULL THEN NULL ELSE (SELECT count(*)::int FROM tags t WHERE t.batch_id = j.batch_id) END AS piece_count,
     CASE WHEN j.batch_id IS NULL THEN NULL
       ELSE (SELECT count(*)::int FROM tags t WHERE t.batch_id = j.batch_id AND t.stock_status <> 'pending') END AS received_count,
-    d.device_name, j.notes, j.error_message, j.report, j.created_at, j.built_at, j.printed_at, j.updated_at, j.last_event_at
+    d.device_name, j.notes, j.error_message, j.report, j.created_at, j.built_at, j.printed_at, j.updated_at, j.last_event_at,
+    j.send_requested_at, j.send_claimed_at, j.sent_at
   FROM print_jobs j
   JOIN print_models m ON m.id = j.model_id
   JOIN print_model_versions v ON v.id = j.version_id
@@ -416,6 +423,9 @@ function jobItem(j: JobRow, now = Date.now()): PrintJobItem {
     printedAt: iso(j.printed_at),
     updatedAt: iso(j.updated_at)!,
     stale: j.status === "building" && now - new Date(lastNews).getTime() > PRINT_JOB_STALE_MS,
+    sendRequestedAt: iso(j.send_requested_at),
+    sendClaimedAt: iso(j.send_claimed_at),
+    sentAt: iso(j.sent_at),
   };
 }
 
@@ -860,3 +870,121 @@ export async function completeFromBench(deviceId: string, jobId: string, input: 
   return detail;
 }
 
+
+// ─── Send to printer (phase 3, docs/PRINT_EXECUTION_PLAN.md §7.3) ─────────────
+// The admin's click is the confirmation before hardware moves; the bench on the printer's network does the sending
+// (FTPS upload, MQTT start) with an access code that never leaves it, and reports back.
+
+/** A bench that took a send and went quiet for this long gives it back to the queue. */
+const SEND_CLAIM_TTL_MS = 15 * 60_000;
+
+function latestSliced(files: Array<typeof printJobFiles.$inferSelect>) {
+  return files.filter((f) => f.kind === "gcode_3mf").sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0] ?? null;
+}
+
+export async function requestSend(id: string, userId: string | null): Promise<PrintJobDetail> {
+  const job = await loadJob(id);
+  if (job.status !== "ready") throw new TagError("Only an order ready to print can be sent to the printer", 409, "print_send_not_ready");
+  if (job.sendRequestedAt && !job.sentAt) throw new TagError("This order is already on its way to the printer", 409, "print_send_pending");
+  const files = await db.select().from(printJobFiles).where(eq(printJobFiles.jobId, job.id));
+  if (!latestSliced(files)) throw new TagError("This order has no sliced file (.gcode.3mf) to send", 409, "print_send_no_gcode");
+  await db.update(printJobs).set({
+    sendRequestedAt: new Date(),
+    sendRequestedByUserId: userId,
+    sendClaimedAt: null,
+    sendDeviceId: null,
+    updatedAt: new Date(),
+  }).where(eq(printJobs.id, job.id));
+  return getJob(job.id);
+}
+
+export async function cancelSend(id: string): Promise<PrintJobDetail> {
+  const job = await loadJob(id);
+  if (!job.sendRequestedAt || job.sentAt) throw new TagError("Nothing waiting to be sent", 409, "print_send_none");
+  const fresh = job.sendClaimedAt && Date.now() - job.sendClaimedAt.getTime() < SEND_CLAIM_TTL_MS;
+  if (fresh) throw new TagError("The bench is sending it right now", 409, "print_send_in_progress");
+  await db.update(printJobs).set({ sendRequestedAt: null, sendRequestedByUserId: null, sendClaimedAt: null, sendDeviceId: null, updatedAt: new Date() })
+    .where(eq(printJobs.id, job.id));
+  return getJob(job.id);
+}
+
+/** The oldest send waiting for this bench (or given up by another one), with a signed link to its sliced file. */
+export async function claimSend(deviceId: string): Promise<PrintSendTicket | null> {
+  const now = new Date();
+  const stale = new Date(now.getTime() - SEND_CLAIM_TTL_MS);
+  const [claimed] = await rows<{ id: string }>(sql`
+    UPDATE print_jobs SET send_claimed_at = ${now}, send_device_id = ${deviceId}, updated_at = ${now}
+    WHERE id = (
+      SELECT j.id FROM print_jobs j
+      WHERE j.status = 'ready' AND j.send_requested_at IS NOT NULL AND j.sent_at IS NULL
+        AND (j.send_claimed_at IS NULL OR j.send_claimed_at < ${stale})
+      ORDER BY j.send_requested_at
+      FOR UPDATE SKIP LOCKED
+      LIMIT 1
+    )
+    RETURNING id`);
+  if (!claimed) return null;
+  const job = await getJob(claimed.id);
+  const files = await db.select().from(printJobFiles).where(eq(printJobFiles.jobId, job.id));
+  const file = latestSliced(files);
+  if (!file) throw new TagError("This order has no sliced file to send", 409, "print_send_no_gcode");
+  // Project filament n (1-based, the AMS slot the recipe names) prints from tray n-1 of the AMS lite.
+  const slots = (job.bed?.ams ?? []).map((a) => a.slot).sort((a, b) => a - b);
+  const amsMapping = slots.length ? Array.from({ length: Math.max(...slots) }, (_, i) => i) : [0, 1, 2, 3];
+  return {
+    job: { id: job.id, quantity: job.quantity, batchCode: job.batchCode, modelTitle: job.modelTitle },
+    file: { id: file.id, filename: file.filename, sha256: file.sha256, bytes: file.bytes, url: await signedFileUrl(file.fileRef) },
+    amsMapping,
+    subtaskName: (job.batchCode ? `${job.batchCode} ` : "") + job.modelTitle.replace(/[^A-Za-z0-9 ._-]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 60),
+  };
+}
+
+export interface SendResult {
+  ok: boolean;
+  error?: string | null;
+  printer?: string | null;
+}
+
+/** The bench says how the send went: started (the order is `printing`) or refused (the request is cleared, with why). */
+export async function sendResult(deviceId: string, id: string, input: SendResult): Promise<PrintJobDetail> {
+  const job = await loadJob(id);
+  if (job.sendDeviceId !== deviceId || !job.sendClaimedAt || job.sentAt) {
+    throw new TagError("This bench is not sending that order", 409, "print_send_not_claimed");
+  }
+  const now = new Date();
+  if (!input.ok) {
+    await db.update(printJobs).set({
+      sendRequestedAt: null,
+      sendClaimedAt: null,
+      sendDeviceId: null,
+      report: { ...(job.report ?? {}), sendError: { at: now.toISOString(), message: input.error ?? "The printer refused the job" } },
+      updatedAt: now,
+    }).where(eq(printJobs.id, job.id));
+    return getJob(job.id);
+  }
+  await db.update(printJobs).set({
+    sentAt: now,
+    report: { ...(job.report ?? {}), sendError: null, printer: input.printer ?? null },
+    updatedAt: now,
+  }).where(eq(printJobs.id, job.id));
+  return transitionJob(job.id, { action: "start", userId: null, source: "system" });
+}
+
+export async function setPrinterStatus(deviceId: string, status: PrinterStatus): Promise<void> {
+  await db.update(tagProvisioningDevices).set({ printerStatus: status as Record<string, unknown>, printerStatusAt: new Date() })
+    .where(eq(tagProvisioningDevices.id, deviceId));
+}
+
+export async function listPrinters(): Promise<PrinterItem[]> {
+  const list = await db.select().from(tagProvisioningDevices).where(eq(tagProvisioningDevices.status, "active"));
+  const now = Date.now();
+  return list
+    .filter((d) => (d.capabilities ?? []).includes("print"))
+    .map((d) => ({
+      deviceId: d.id,
+      deviceName: d.deviceName,
+      status: (d.printerStatus as PrinterStatus | null) ?? null,
+      statusAt: d.printerStatusAt ? d.printerStatusAt.toISOString() : null,
+      stale: !d.printerStatusAt || now - d.printerStatusAt.getTime() > PRINTER_STATUS_STALE_MS,
+    }));
+}

@@ -306,6 +306,73 @@ describe("serialized print orders", () => {
   });
 });
 
+describe("send to printer", () => {
+  async function readyOrder(app: express.Express, bench: Record<string, string>, sliced = true) {
+    await createSerializedModel(app);
+    const order = (await request(app, "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white" })).body;
+    await request(app, "POST", "/api/provisioner/print-jobs/claim", { jobId: order.id }, bench);
+    const name = sliced ? "plates.gcode.3mf" : "plates.3mf";
+    await request(app, "POST", `/api/provisioner/print-jobs/${order.id}/files?filename=${name}`, bytes("gcode"), bench);
+    await request(app, "POST", `/api/provisioner/print-jobs/${order.id}/complete`, { outcome: "ready" }, bench);
+    return order;
+  }
+
+  it("goes from the admin's click through the bench to printing, once", async () => {
+    const app = admin();
+    const bench = await pairDevice(app, "Bench PC", ["print"]);
+    const order = await readyOrder(app, bench);
+    expect((await request(app, "POST", "/api/provisioner/print-sends/claim", {}, bench)).status).toBe(204);
+
+    const asked = await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/send`);
+    expect(asked.status).toBe(200);
+    expect(asked.body.sendRequestedAt).toBeTruthy();
+    expect((await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/send`)).body.code).toBe("print_send_pending");
+
+    const ticket = await request(app, "POST", "/api/provisioner/print-sends/claim", {}, bench);
+    expect(ticket.status).toBe(200);
+    expect(ticket.body).toMatchObject({ job: { id: order.id, quantity: 4 }, file: { filename: "plates.gcode.3mf" }, amsMapping: [0, 1] });
+    expect(ticket.body.file.url).toMatch(/^https:\/\/signed\.example\/r2\/print\//);
+    expect(ticket.body.subtaskName).toMatch(new RegExp(`^TPLATE-${year}-001 Plate Large Menu White$`));
+    expect((await request(app, "POST", "/api/provisioner/print-sends/claim", {}, bench)).status).toBe(204);
+    expect((await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/send/cancel`)).body.code).toBe("print_send_in_progress");
+
+    const sent = await request(app, "POST", `/api/provisioner/print-jobs/${order.id}/sent`, { ok: true, printer: "Jujubinha" }, bench);
+    expect(sent.body.status).toBe("printing");
+    const detail = (await request(app, "GET", `/api/xpot/admin/print-jobs/${order.id}`)).body;
+    expect(detail.sentAt).toBeTruthy();
+    expect(detail.report.printer).toBe("Jujubinha");
+  });
+
+  it("clears the request and keeps the reason when the printer refuses", async () => {
+    const app = admin();
+    const bench = await pairDevice(app, "Bench PC", ["print"]);
+    const order = await readyOrder(app, bench);
+    await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/send`);
+    await request(app, "POST", "/api/provisioner/print-sends/claim", {}, bench);
+    const refused = await request(app, "POST", `/api/provisioner/print-jobs/${order.id}/sent`, { ok: false, error: "Printer busy: RUNNING" }, bench);
+    expect(refused.body.status).toBe("ready");
+    const detail = (await request(app, "GET", `/api/xpot/admin/print-jobs/${order.id}`)).body;
+    expect(detail.sendRequestedAt).toBeNull();
+    expect(detail.report.sendError.message).toBe("Printer busy: RUNNING");
+  });
+
+  it("needs a sliced file, and shows each bench's printer", async () => {
+    const app = admin();
+    const bench = await pairDevice(app, "Bench PC", ["print"]);
+    const order = await readyOrder(app, bench, false);
+    expect((await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/send`)).body.code).toBe("print_send_no_gcode");
+
+    expect((await request(app, "GET", "/api/xpot/admin/print-printers")).body).toEqual([
+      expect.objectContaining({ deviceName: "Bench PC", status: null, stale: true }),
+    ]);
+    const status = { name: "Jujubinha", model: "N2S", state: "RUNNING", percent: 42, remainingMinutes: 161, subtask: "TPLATE-2026-001" };
+    expect((await request(app, "POST", "/api/provisioner/printer-status", status, bench)).status).toBe(200);
+    expect((await request(app, "POST", "/api/provisioner/printer-status", { ...status, state: "BOILING" }, bench)).status).toBe(400);
+    const printers = (await request(app, "GET", "/api/xpot/admin/print-printers")).body;
+    expect(printers[0]).toMatchObject({ status, stale: false });
+  });
+});
+
 describe("parts", () => {
   async function createPart(app: express.Express) {
     const created = await request(app, "POST", "/api/xpot/admin/print-models", {
