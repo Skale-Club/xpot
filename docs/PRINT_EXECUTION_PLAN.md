@@ -1,7 +1,7 @@
 # Plano de execução: produção das peças impressas dentro do Xpot
 
-**Status:** proposto e aprovado em 2026-10-22 (decisões D1 e D2 da seção 13; D3 e D4 tomadas como recomendadas). Fases 0 e 1
-implementadas no mesmo dia (seção 11, "Feito"); a carga da seção 10 roda depois do deploy. Fases 2 a 5 abertas.
+**Status:** proposto e aprovado em 2026-10-22 (decisões D1 e D2 da seção 13; D3 e D4 tomadas como recomendadas). Fases 0, 1 e 2
+implementadas no mesmo dia (seção 11, "Feito"); a carga da seção 10 roda pelo MCP depois do deploy. Fases 3 a 5 abertas.
 **Público:** produto, engenharia e operação
 **Objetivo:** pedir, gerar, imprimir e receber qualquer peça do catálogo sem sair do Xpot e sem chamar o Claude, que passa a entrar só para desenhar faces, variantes e versões novas.
 
@@ -392,6 +392,41 @@ para cá.
 **Aceite:** `Imprimir 4 × Plate Large Menu White` chega a `ready` sem o Claude; LPLATE-2026-006 e SPLATE-2026-002 reconstruídos
 pelo Bench dão malhas byte-idênticas às de `production/` e o mesmo tempo de fatiamento (311.4 e 334.7 min); a Menu branca v2 sai
 só da mudança de `recipe`, sem tocar em Python; uma ordem com QR errado no G-code termina `failed`, nunca `ready`.
+
+**Feito (2026-10-22):**
+
+- O pipeline saiu do Drive: `print-pipeline/nfc/` traz os geradores do repositório 3D (`NFC Signs/*/source/`) com as malhas de
+  amostra, `library/` o montador de 3MF, as checagens de G-code, os dois modelos de projeto da A1 e os SVG. A única mudança no
+  código copiado são os caminhos.
+- `builders/`: os seis ids (`plate.instagram`, `plate.google`, `plate.menu`, `plate.venmo`, `stand.google`, `stand.instagram`).
+- `pipeline.py`: ordem → malhas por código → `.3mf` por bancada (receita da versão + slots) → fatiamento offline (Bambu Studio com
+  datadir vazio, sem conta) e export do `.gcode.3mf` → `gcode-qr-check` (todo QR da camada 1 lê o próprio código) e
+  `gcode-verify` (pausa antes da primeira ponte quando a bancada tem pausa) → `serial-map.csv` e `report.json`.
+- `bench.py run` é o Bench: pega a ordem mais antiga com gerador, gera, anexa e marca `ready`, ou `failed` com o motivo.
+  `build`, `doctor`, `ticket`, `attach`, `attach-bed`, `fail` e `pair` completam.
+- `catalog/catalog.json` (13 modelos com v1, 11 sem desenho, 9 peças sem código) e o script que o escreveu a partir dos lotes.
+- `requirements.txt` com as versões exatas; o CI compila tudo e roda `tests/test_pipeline.py`.
+
+**Aceite medido (2026-10-22, `tests/rebuild.py`):**
+
+| Lote | Malhas | Fatiamento |
+|---|---|---|
+| LPLATE-2026-006 (Venmo, misto) | 12/12 idênticas | 311,4 min, 25 trocas, 56,9 + 52,38 + 2,73 g, 4/4 QR, pausa Z 1,80: igual ao lote |
+| SPLATE-2026-002 (Google Small) | 24/24 idênticas | 334,6 min (o lote anotou 334,7), 6 trocas, mesmas gramas, 8/8 QR, pausa Z 2,76 |
+| LPLATE-2026-002, -003, -005, SPLATE-2026-001, REV-2026-003, -004, IG-2026-003 | todas idênticas | — |
+| LPLATE-2026-005 com `wall_loops 4`, `top_shell_layers 6` (a Menu branca v2) | 8/8 idênticas | 283,5 min, +8,7 g de branco, 4/4 QR: só receita, nenhum Python |
+| LPLATE-2026-004 (Menu preto) | arte idêntica, corpo diferente | o lote imprimiu o bolso antigo (pausa Z 1,16); a v1 do catálogo usa o bolso padrão de hoje (pausa Z 1,32): 275,3 min, 4/4 QR |
+
+**Diferenças em relação ao texto acima:**
+
+- O Bench é o `bench.py run` (Python), não uma aba no app Electron: o pipeline já é Python, e o Electron só lançaria esse
+  processo. Para rodar com o Windows, um atalho para `pythonw print-pipelineench.py run` em `shell:startup`. O app de NFC
+  continua igual.
+- Sem venv automática: `pip install -r print-pipeline/requirements.txt` uma vez e `bench.py doctor` confere tudo.
+- Os modelos `.3mf` são só dois e pequenos (15 KB): no git direto, sem LFS.
+- `PRINT NOW/` só é esvaziado depois da carga (os arquivos das peças sem código sobem com `bench.py attach-bed`).
+- "Imprimir 4 × Plate Large Menu White chega a ready sem o Claude" depende de a bancada estar pareada e rodando: confere-se
+  na primeira ordem real.
 
 ### Fase 3 — A impressora (3–5 dias)
 

@@ -1,32 +1,37 @@
-"""Xpot Bench from the command line: pair with Xpot, take a print order, attach its files, mark it ready.
+"""Xpot Bench: the computer next to the printer builds Xpot's print orders into print files and attaches them.
 
     python bench.py pair <pairing-code> [--server https://xpot.place]
-    python bench.py ticket <order-id> [--out job.json]            take the order and write what build needs
+    python bench.py run [--interval 20]                    take buildable orders one after another, forever
+    python bench.py build <order-id> [--out DIR] [--no-slice]   build one order now (claims it if needed)
+    python bench.py doctor                                 Python packages, Bambu Studio and the fonts the faces need
+    python bench.py ticket <order-id> [--out job.json]     take an order and write what a build needs
     python bench.py attach <order-id> <file-or-dir>... [--report report.json] [--no-ready]
+    python bench.py attach-bed <model-slug> <bed-label> <file>   a part's fixed print file, on its current version
     python bench.py fail <order-id> --message "why"
-    python bench.py attach-bed <model-slug> <bed-label> <file>    a part's fixed print file, on its current version
     python bench.py whoami
 
-The order comes from Xpot (Tags > Production > Queue); `ticket` gives its codes, bed positions and the version's
-builder, params and recipe as JSON (docs/PRINT_EXECUTION_PLAN.md s6). `attach` uploads the files a build produced
-(the .3mf project, the sliced .gcode.3mf, the serial map, report.json, the layer-1 preview) and, unless --no-ready,
-marks the order ready with the numbers of report.json. Phase 2 runs the same steps inside the bench app.
+An order comes from Xpot (Tags > Production > Queue). `build` and `run` do the whole job: claim the order, build every
+bed with pipeline.py (meshes per code, .3mf, offline slice, QR check from the G-code), upload the files and mark the
+order ready with the numbers, or failed with the reason. `ticket`/`attach` are the manual halves of the same thing.
 
 Pairing: Xpot > Tags > NFC writers > pair a computer gives a one-time code; this script trades it for a device token
-paired as a print bench, saved in the user's profile (never in the repository). Standard library only, Python 3.9+.
+paired as a print bench, saved in the user's profile (never in the repository). pair/ticket/attach need only the
+standard library; build/run need requirements.txt and Bambu Studio (docs/PRINT_EXECUTION_PLAN.md s6-7).
 """
 import argparse
 import json
 import os
 import platform
 import sys
+import time
+import traceback
 import urllib.error
 import urllib.parse
 import urllib.request
 
 PROTOCOL_HEADER = 'x-provisioner-protocol'
 PROTOCOL_VERSION = '1'
-APP_VERSION = 'bench-cli-1'
+APP_VERSION = 'bench-cli-2'
 DEFAULT_SERVER = 'https://xpot.place'
 
 KINDS = {
@@ -37,10 +42,23 @@ KINDS = {
     '.png': 'preview',
 }
 
+# The faces' fonts (Windows): the Stand and Plate text, and the approved Menu titles.
+FONTS = ['segoeuib.ttf', 'segoeuiz.ttf', 'InriaSerif-Bold.otf', 'InriaSerif-BoldItalic.otf', 'Metropolis-Medium.otf']
+PACKAGES = ['numpy', 'shapely', 'manifold3d', 'trimesh', 'matplotlib', 'fitz', 'segno', 'cv2', 'scipy', 'lxml', 'PIL']
+
+
+class BenchHttpError(Exception):
+    pass
+
 
 def credentials_path():
     base = os.environ.get('LOCALAPPDATA') or os.path.join(os.path.expanduser('~'), '.config')
     return os.path.join(base, 'XpotBench', 'credentials.json')
+
+
+def work_root():
+    base = os.environ.get('LOCALAPPDATA') or os.path.join(os.path.expanduser('~'), '.cache')
+    return os.path.join(base, 'XpotBench', 'work')
 
 
 def load_credentials():
@@ -82,7 +100,7 @@ def request(server, method, path, token=None, body=None, raw=None, query=None):
             message = json.loads(text).get('message', text)
         except ValueError:
             message = text
-        sys.exit(f'{method} {path}: HTTP {err.code}: {message}')
+        raise BenchHttpError(f'{method} {path}: HTTP {err.code}: {message}') from None
 
 
 def kind_for(name):
@@ -112,11 +130,69 @@ def collect(paths):
     return files
 
 
-def claim(creds, job_id):
+def claim(creds, job_id=None):
+    """The given order, or the oldest buildable one (None when there is nothing to do)."""
     status, ticket = request(creds['server'], 'POST', '/api/provisioner/print-jobs/claim', creds['token'], {'jobId': job_id})
     if status == 204 or not ticket:
-        sys.exit('Nothing to claim.')
+        return None
     return ticket
+
+
+def event(creds, job_id, kind, detail=None):
+    try:
+        request(creds['server'], 'POST', f'/api/provisioner/print-jobs/{job_id}/events', creds['token'],
+                {'type': kind, 'detail': detail})
+    except BenchHttpError:
+        pass  # progress notes are best effort; the build goes on
+
+
+def upload(creds, job_id, path):
+    name = os.path.basename(path)
+    with open(path, 'rb') as f:
+        data = f.read()
+    _, item = request(creds['server'], 'POST', f'/api/provisioner/print-jobs/{job_id}/files', creds['token'],
+                      raw=data, query={'kind': kind_for(name), 'filename': name})
+    print(f'  attached {item["filename"]} ({item["kind"]}, {item["bytes"]} bytes)')
+    return item
+
+
+def complete(creds, job_id, outcome, report=None, message=None):
+    body = {'outcome': outcome, 'report': report or {}}
+    if outcome == 'failed':
+        body.update(errorCode='build_failed', errorMessage=(message or 'build failed')[:1000])
+    _, done = request(creds['server'], 'POST', f'/api/provisioner/print-jobs/{job_id}/complete', creds['token'], body)
+    return done
+
+
+def build_ticket(creds, ticket, out=None, do_slice=True):
+    """Build an order already claimed, attach its files and mark it ready (or failed). Returns True when ready."""
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from pipeline import BuildFailed, build_order
+
+    job_id = ticket['job']['id']
+    batch = (ticket.get('batch') or {}).get('batchCode') or '-'
+    out = out or os.path.join(work_root(), job_id)
+    os.makedirs(out, exist_ok=True)
+    print(f'Order {job_id}: {ticket["model"]["title"]} v{ticket["version"]["version"]}, {len(ticket["tags"])} codes, batch {batch}')
+    event(creds, job_id, 'build_started', {'pieces': len(ticket['tags'])})
+    try:
+        report = build_order(ticket, out, do_slice=do_slice)
+    except BuildFailed as err:
+        done = complete(creds, job_id, 'failed', message=str(err))
+        print(f'  failed: {err}\nOrder {done["id"]} is {done["status"]}.')
+        return False
+    except Exception as err:  # a bug or a missing tool: the order says so instead of staying stuck in `building`
+        done = complete(creds, job_id, 'failed', message=f'{type(err).__name__}: {err}')
+        print(traceback.format_exc())
+        print(f'Order {done["id"]} is {done["status"]}.')
+        return False
+    files = report.pop('_files')
+    event(creds, job_id, 'built', {k: report.get(k) for k in ('minutes', 'swaps', 'qr_check')})
+    for path in files:
+        upload(creds, job_id, path)
+    done = complete(creds, job_id, 'ready', report)
+    print(f'Order {done["id"]} is {done["status"]}: {report.get("minutes")} min, {report.get("swaps")} swaps, QR {report.get("qr_check")}.')
+    return True
 
 
 def cmd_pair(args):
@@ -133,8 +209,59 @@ def cmd_whoami(_args):
     print(json.dumps({'server': creds['server'], **session}, indent=2))
 
 
+def cmd_doctor(_args):
+    import importlib
+    ok = True
+    print(f'Python {platform.python_version()} ({sys.executable})')
+    for name in PACKAGES:
+        try:
+            module = importlib.import_module(name)
+            print(f'  ok      {name} {getattr(module, "__version__", "")}')
+        except Exception as err:  # noqa: BLE001 - report every missing piece at once
+            ok = False
+            print(f'  MISSING {name}: {type(err).__name__} (pip install -r requirements.txt)')
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from pipeline import studio_path
+    studio = studio_path()
+    print(f'  {"ok     " if os.path.exists(studio) else "MISSING"} Bambu Studio: {studio}')
+    ok = ok and os.path.exists(studio)
+    dirs = [os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Microsoft', 'Windows', 'Fonts'), r'C:\Windows\Fonts']
+    for font in FONTS:
+        found = any(os.path.exists(os.path.join(d, font)) for d in dirs)
+        ok = ok and found
+        print(f'  {"ok     " if found else "MISSING"} font {font}')
+    print('Credentials:', credentials_path() if os.path.exists(credentials_path()) else 'not paired yet')
+    sys.exit(0 if ok else 1)
+
+
+def cmd_build(args):
+    creds = load_credentials()
+    ticket = claim(creds, args.order)
+    if not ticket:
+        sys.exit('Nothing to claim.')
+    sys.exit(0 if build_ticket(creds, ticket, args.out, do_slice=not args.no_slice) else 1)
+
+
+def cmd_run(args):
+    creds = load_credentials()
+    print(f'Xpot Bench watching {creds["server"]} every {args.interval}s (Ctrl+C stops).')
+    while True:
+        try:
+            ticket = claim(creds)
+            if ticket:
+                build_ticket(creds, ticket)
+                continue  # look for the next one at once
+        except BenchHttpError as err:
+            print(f'{time.strftime("%H:%M:%S")} {err}')
+        except (urllib.error.URLError, TimeoutError, ConnectionError) as err:
+            print(f'{time.strftime("%H:%M:%S")} no connection: {err}')
+        time.sleep(args.interval)
+
+
 def cmd_ticket(args):
     ticket = claim(load_credentials(), args.order)
+    if not ticket:
+        sys.exit('Nothing to claim.')
     text = json.dumps(ticket, indent=2)
     if args.out:
         with open(args.out, 'w', encoding='utf-8') as f:
@@ -147,14 +274,10 @@ def cmd_ticket(args):
 def cmd_attach(args):
     creds = load_credentials()
     files = collect(args.paths)
-    claim(creds, args.order)
+    if not claim(creds, args.order):
+        sys.exit('Nothing to claim.')
     for path in files:
-        name = os.path.basename(path)
-        with open(path, 'rb') as f:
-            data = f.read()
-        _, item = request(creds['server'], 'POST', f'/api/provisioner/print-jobs/{args.order}/files', creds['token'],
-                          raw=data, query={'kind': kind_for(name), 'filename': name})
-        print(f'  attached {item["filename"]} ({item["kind"]}, {item["bytes"]} bytes, sha256 {item["sha256"][:12]})')
+        upload(creds, args.order, path)
     if args.no_ready:
         print('Files attached; the order stays building (run attach again without --no-ready when done).')
         return
@@ -162,8 +285,7 @@ def cmd_attach(args):
     if args.report:
         with open(args.report, encoding='utf-8') as f:
             report = json.load(f)
-    _, done = request(creds['server'], 'POST', f'/api/provisioner/print-jobs/{args.order}/complete', creds['token'],
-                      {'outcome': 'ready', 'report': report})
+    done = complete(creds, args.order, 'ready', report)
     print(f'Order {done["id"]} is {done["status"]}.')
 
 
@@ -186,9 +308,9 @@ def cmd_attach_bed(args):
 
 def cmd_fail(args):
     creds = load_credentials()
-    claim(creds, args.order)
-    _, done = request(creds['server'], 'POST', f'/api/provisioner/print-jobs/{args.order}/complete', creds['token'],
-                      {'outcome': 'failed', 'errorCode': 'build_failed', 'errorMessage': args.message})
+    if not claim(creds, args.order):
+        sys.exit('Nothing to claim.')
+    done = complete(creds, args.order, 'failed', message=args.message)
     print(f'Order {done["id"]} is {done["status"]}.')
 
 
@@ -199,6 +321,16 @@ def main(argv=None):
     p.add_argument('code')
     p.add_argument('--server', default=DEFAULT_SERVER)
     p.set_defaults(run=cmd_pair)
+    p = sub.add_parser('run', help='build orders as they come, forever')
+    p.add_argument('--interval', type=int, default=20)
+    p.set_defaults(run=cmd_run)
+    p = sub.add_parser('build', help='build one order now')
+    p.add_argument('order')
+    p.add_argument('--out')
+    p.add_argument('--no-slice', action='store_true', help='meshes and .3mf only (a dry run; the order still becomes ready)')
+    p.set_defaults(run=cmd_build)
+    p = sub.add_parser('doctor', help='check Python packages, Bambu Studio and fonts')
+    p.set_defaults(run=cmd_doctor)
     p = sub.add_parser('whoami', help='the paired device and server')
     p.set_defaults(run=cmd_whoami)
     p = sub.add_parser('ticket', help='take an order and print what build needs')
@@ -221,7 +353,10 @@ def main(argv=None):
     p.add_argument('--message', required=True)
     p.set_defaults(run=cmd_fail)
     args = ap.parse_args(argv)
-    args.run(args)
+    try:
+        args.run(args)
+    except BenchHttpError as err:
+        sys.exit(str(err))
 
 
 if __name__ == '__main__':

@@ -1,0 +1,2972 @@
+{
+ "_about": "The print catalog loaded into Xpot (docs/PRINT_EXECUTION_PLAN.md s10). Serialized v1 recipes are the bed recipes of each model's latest batch in the 3D Printing repo; part beds name the fixed files of PRINT NOW.",
+ "models": [
+  {
+   "slug": "stand-large-google-white",
+   "kind": "serialized",
+   "title": "Stand Large · Google Review · White",
+   "productType": "large_stand",
+   "face": "google_review",
+   "theme": "white",
+   "batchPrefix": "REV",
+   "salesProduct": "stand-large",
+   "sortOrder": 10,
+   "description": "Production plate, batch REV-2026-003, serials 001-002-003-004: one Google card per Smart Tags code, PLA. Written by production.py plate; settings from build-google-large-test-pla.json.",
+   "version": {
+    "builder": "stand.google",
+    "params": {
+     "size": "large",
+     "theme": "white"
+    },
+    "recipe": {
+     "template": "a1-pla-wallart-template-6slot.3mf",
+     "orientation": "face-down",
+     "pause_top_z": 2.76,
+     "_pause": "The cavity roof is at print z 2.92; with 0.16 layers and no top band, pause at the start of the 2.92-3.08 roof layer.",
+     "top_band": null,
+     "settings_files": [],
+     "settings": {
+      "layer_height": "0.16",
+      "wall_loops": "3",
+      "wall_generator": "arachne",
+      "precise_outer_wall": "1",
+      "top_shell_layers": "5",
+      "top_shell_thickness": "0",
+      "bottom_shell_layers": "3",
+      "sparse_infill_density": "15%",
+      "interface_shells": "1",
+      "only_one_wall_first_layer": "1",
+      "enable_support": "0",
+      "enable_prime_tower": "1",
+      "prime_tower_width": "30",
+      "prime_tower_brim_width": "0",
+      "wipe_tower_x": [
+       "110.5",
+       "200"
+      ],
+      "wipe_tower_y": [
+       "110.5",
+       "128"
+      ],
+      "textured_plate_temp": [
+       "55",
+       "55",
+       "55",
+       "55",
+       "55",
+       "55"
+      ],
+      "textured_plate_temp_initial_layer": [
+       "60",
+       "60",
+       "60",
+       "60",
+       "60",
+       "60"
+      ],
+      "filament_colour": [
+       "#F2F2F2",
+       "#161616",
+       "#FBBC05",
+       "#4285F4",
+       "#EA4335",
+       "#34A853"
+      ],
+      "filament_multi_colour": [
+       "#F2F2F2",
+       "#161616",
+       "#FBBC05",
+       "#4285F4",
+       "#EA4335",
+       "#34A853"
+      ],
+      "elefant_foot_compensation": "0",
+      "initial_layer_speed": "30",
+      "initial_layer_infill_speed": "50",
+      "flush_volumes_matrix": [
+       "0",
+       "161",
+       "323",
+       "273",
+       "278",
+       "219",
+       "597",
+       "0",
+       "648",
+       "495",
+       "477",
+       "450",
+       "452",
+       "214",
+       "0",
+       "324",
+       "247",
+       "278",
+       "518",
+       "197",
+       "509",
+       "0",
+       "307",
+       "266",
+       "539",
+       "192",
+       "415",
+       "401",
+       "0",
+       "366",
+       "482",
+       "175",
+       "487",
+       "280",
+       "284",
+       "0"
+      ],
+      "top_surface_speed": [
+       "60"
+      ]
+     },
+     "first_layer_sequence": [
+      2,
+      3,
+      1
+     ],
+     "_first_layer_sequence": "Art first on the face (layer 1): black, then the colour, then the body (white) last, which seals it (user, 2026-10-11: white first on 2026-10-10 came out worse). Dark tile: the same rule mirrored, the art (white + colours) first and the black body last. Rule: the body filament is always last on the face."
+    },
+    "beds": [
+     {
+      "label": "x4",
+      "copies": 4,
+      "positions": [
+       "lower-left",
+       "lower-right",
+       "upper-right",
+       "upper-left"
+      ],
+      "slots": [
+       {
+        "offset": [
+         -53.5,
+         -70.5
+        ],
+        "rotation": 90.0
+       },
+       {
+        "offset": [
+         70.5,
+         -53.5
+        ]
+       },
+       {
+        "offset": [
+         53.5,
+         70.5
+        ],
+        "rotation": 90.0
+       },
+       {
+        "offset": [
+         -70.5,
+         53.5
+        ]
+       }
+      ],
+      "minutes": 349.2,
+      "swaps": 7,
+      "ams": [
+       {
+        "slot": 1,
+        "colour": "White PLA"
+       },
+       {
+        "slot": 2,
+        "colour": "Black PLA"
+       },
+       {
+        "slot": 3,
+        "colour": "Yellow PLA"
+       }
+      ],
+      "pause": {
+       "z": 2.76,
+       "text": "Insert one programmed round NFC tag (NTAG215, 25 mm, 0.8 mm or thinner) into each cavity, by the serial map; resume."
+      }
+     }
+    ],
+    "changelog": "v1: the recipe of REV-2026-003 (Stand/production/REV-2026-003/build-large-pla-001-002-003-004.json)"
+   },
+   "batches": [
+    "REV-2026-002",
+    "REV-2026-003"
+   ]
+  },
+  {
+   "slug": "stand-large-google-black",
+   "kind": "serialized",
+   "title": "Stand Large · Google Review · Black",
+   "productType": "large_stand",
+   "face": "google_review",
+   "theme": "black",
+   "batchPrefix": "REV",
+   "salesProduct": "stand-large",
+   "sortOrder": 11,
+   "description": "Production plate, batch REV-2026-004, serials 001-002-003-004: black Google Large Stand card with white artwork and an inverted white-on-black QR, PLA. Generated by production.py plate from build-google-large-test-pla.json, then mirrored to the documented dark-card colourway by swapping the body/art filament slots.",
+   "version": {
+    "builder": "stand.google",
+    "params": {
+     "size": "large",
+     "theme": "black"
+    },
+    "recipe": {
+     "template": "a1-pla-wallart-template-6slot.3mf",
+     "orientation": "face-down",
+     "pause_top_z": 2.76,
+     "_pause": "The cavity roof is at print z 2.92; with 0.16 layers and no top band, pause at the start of the 2.92-3.08 roof layer.",
+     "top_band": null,
+     "settings_files": [],
+     "settings": {
+      "layer_height": "0.16",
+      "wall_loops": "3",
+      "wall_generator": "arachne",
+      "precise_outer_wall": "1",
+      "top_shell_layers": "5",
+      "top_shell_thickness": "0",
+      "bottom_shell_layers": "3",
+      "sparse_infill_density": "15%",
+      "interface_shells": "1",
+      "only_one_wall_first_layer": "1",
+      "enable_support": "0",
+      "enable_prime_tower": "1",
+      "prime_tower_width": "30",
+      "prime_tower_brim_width": "0",
+      "wipe_tower_x": [
+       "110.5",
+       "200"
+      ],
+      "wipe_tower_y": [
+       "110.5",
+       "128"
+      ],
+      "textured_plate_temp": [
+       "55",
+       "55",
+       "55",
+       "55",
+       "55",
+       "55"
+      ],
+      "textured_plate_temp_initial_layer": [
+       "60",
+       "60",
+       "60",
+       "60",
+       "60",
+       "60"
+      ],
+      "filament_colour": [
+       "#161616",
+       "#F2F2F2",
+       "#FBBC05",
+       "#4285F4",
+       "#EA4335",
+       "#34A853"
+      ],
+      "filament_multi_colour": [
+       "#161616",
+       "#F2F2F2",
+       "#FBBC05",
+       "#4285F4",
+       "#EA4335",
+       "#34A853"
+      ],
+      "elefant_foot_compensation": "0",
+      "initial_layer_speed": "30",
+      "initial_layer_infill_speed": "50",
+      "flush_volumes_matrix": [
+       "0",
+       "597",
+       "323",
+       "273",
+       "278",
+       "219",
+       "161",
+       "0",
+       "648",
+       "495",
+       "477",
+       "450",
+       "214",
+       "452",
+       "0",
+       "324",
+       "247",
+       "278",
+       "197",
+       "518",
+       "509",
+       "0",
+       "307",
+       "266",
+       "192",
+       "539",
+       "415",
+       "401",
+       "0",
+       "366",
+       "175",
+       "482",
+       "487",
+       "280",
+       "284",
+       "0"
+      ],
+      "top_surface_speed": [
+       "60"
+      ]
+     },
+     "first_layer_sequence": [
+      2,
+      3,
+      1
+     ],
+     "_first_layer_sequence": "Dark-card mirror: white artwork first, then yellow stars, then the black body last so the body seals around the face details. The QR is inverted (white modules on black); validate the physical print on iPhone and several Android camera apps before sale."
+    },
+    "beds": [
+     {
+      "label": "x4",
+      "copies": 4,
+      "positions": [
+       "lower-left",
+       "lower-right",
+       "upper-right",
+       "upper-left"
+      ],
+      "slots": [
+       {
+        "offset": [
+         -53.5,
+         -70.5
+        ],
+        "rotation": 90.0
+       },
+       {
+        "offset": [
+         70.5,
+         -53.5
+        ]
+       },
+       {
+        "offset": [
+         53.5,
+         70.5
+        ],
+        "rotation": 90.0
+       },
+       {
+        "offset": [
+         -70.5,
+         53.5
+        ]
+       }
+      ],
+      "minutes": 348.1,
+      "swaps": 7,
+      "grams": {
+       "Black PLA": 131.54,
+       "White PLA": 2.89,
+       "Yellow PLA": 1.47
+      },
+      "ams": [
+       {
+        "slot": 1,
+        "colour": "Black PLA"
+       },
+       {
+        "slot": 2,
+        "colour": "White PLA"
+       },
+       {
+        "slot": 3,
+        "colour": "Yellow PLA"
+       }
+      ],
+      "pause": {
+       "z": 2.76,
+       "text": "Insert one programmed round NFC tag (NTAG215, 25 mm, 0.8 mm or thinner) into each cavity, by the serial map; resume."
+      }
+     }
+    ],
+    "changelog": "v1: the recipe of REV-2026-004 (Stand/production/REV-2026-004/build-large-pla-001-002-003-004.json)"
+   },
+   "batches": [
+    "REV-2026-004"
+   ]
+  },
+  {
+   "slug": "stand-large-instagram-white",
+   "kind": "serialized",
+   "title": "Stand Large · Instagram · White",
+   "productType": "large_stand",
+   "face": "instagram",
+   "theme": "white",
+   "batchPrefix": "IG",
+   "salesProduct": "stand-large",
+   "sortOrder": 12,
+   "description": "Production plate IG-2026-002: four Large Instagram cards, one live Xpot code each, PLA. White card, Black art, Silk logo (Eryone Silk PLA Dual-Color pink to purple). Same pinwheel, settings and NFC pause as the sample recipe. Written by make_instagram_batch.py; build with --stl-dir production/IG-2026-002/mesh.",
+   "version": {
+    "builder": "stand.instagram",
+    "params": {
+     "size": "large",
+     "theme": "white"
+    },
+    "recipe": {
+     "template": "a1-pla-wallart-template-6slot.3mf",
+     "orientation": "face-down",
+     "pause_top_z": 2.76,
+     "_pause": "The cavity roof is at print z 2.92; with 0.16 layers and no top band, pause at the start of the 2.92-3.08 roof layer.",
+     "top_band": null,
+     "settings_files": [],
+     "settings": {
+      "layer_height": "0.16",
+      "wall_loops": "3",
+      "wall_generator": "arachne",
+      "precise_outer_wall": "1",
+      "top_shell_layers": "5",
+      "top_shell_thickness": "0",
+      "bottom_shell_layers": "3",
+      "sparse_infill_density": "15%",
+      "interface_shells": "1",
+      "only_one_wall_first_layer": "1",
+      "enable_support": "0",
+      "enable_prime_tower": "1",
+      "prime_tower_width": "30",
+      "prime_tower_brim_width": "0",
+      "wipe_tower_x": [
+       "110.5",
+       "200"
+      ],
+      "wipe_tower_y": [
+       "110.5",
+       "128"
+      ],
+      "textured_plate_temp": [
+       "55",
+       "55",
+       "55",
+       "55",
+       "55",
+       "55"
+      ],
+      "textured_plate_temp_initial_layer": [
+       "60",
+       "60",
+       "60",
+       "60",
+       "60",
+       "60"
+      ],
+      "filament_colour": [
+       "#F2F2F2",
+       "#161616",
+       "#FF66CC",
+       "#4285F4",
+       "#EA4335",
+       "#34A853"
+      ],
+      "filament_multi_colour": [
+       "#F2F2F2",
+       "#161616",
+       "#FF66CC",
+       "#4285F4",
+       "#EA4335",
+       "#34A853"
+      ],
+      "elefant_foot_compensation": "0",
+      "initial_layer_speed": "30",
+      "initial_layer_infill_speed": "50",
+      "flush_volumes_matrix": [
+       "0",
+       "161",
+       "323",
+       "273",
+       "278",
+       "219",
+       "597",
+       "0",
+       "648",
+       "495",
+       "477",
+       "450",
+       "452",
+       "214",
+       "0",
+       "324",
+       "247",
+       "278",
+       "518",
+       "197",
+       "509",
+       "0",
+       "307",
+       "266",
+       "539",
+       "192",
+       "415",
+       "401",
+       "0",
+       "366",
+       "482",
+       "175",
+       "487",
+       "280",
+       "284",
+       "0"
+      ],
+      "top_surface_speed": [
+       "60"
+      ]
+     }
+    },
+    "beds": [
+     {
+      "label": "x4",
+      "copies": 4,
+      "positions": [
+       "lower-left",
+       "lower-right",
+       "upper-right",
+       "upper-left"
+      ],
+      "slots": [
+       {
+        "offset": [
+         -53.5,
+         -70.5
+        ],
+        "rotation": 90.0
+       },
+       {
+        "offset": [
+         70.5,
+         -53.5
+        ]
+       },
+       {
+        "offset": [
+         53.5,
+         70.5
+        ],
+        "rotation": 90.0
+       },
+       {
+        "offset": [
+         -70.5,
+         53.5
+        ]
+       }
+      ],
+      "minutes": 349.5,
+      "swaps": 6,
+      "ams": [
+       {
+        "slot": 1,
+        "colour": "White PLA"
+       },
+       {
+        "slot": 2,
+        "colour": "Black PLA"
+       },
+       {
+        "slot": 3,
+        "colour": "Silk PLA Dual-Color pink-purple"
+       }
+      ],
+      "pause": {
+       "z": 2.76,
+       "text": "Insert one programmed round NFC tag (NTAG215, 25 mm, 0.8 mm or thinner) into each cavity, by the serial map; resume."
+      }
+     }
+    ],
+    "changelog": "v1: the recipe of IG-2026-002 (Stand/production/IG-2026-002/build-instagram-large-pla-001-002-003-004.json)"
+   },
+   "batches": [
+    "IG-2026-001",
+    "IG-2026-002"
+   ]
+  },
+  {
+   "slug": "stand-large-instagram-black",
+   "kind": "serialized",
+   "title": "Stand Large · Instagram · Black",
+   "productType": "large_stand",
+   "face": "instagram",
+   "theme": "black",
+   "batchPrefix": "IG",
+   "salesProduct": "stand-large",
+   "sortOrder": 13,
+   "description": "Production plate IG-2026-003: four black Large Instagram cards, one live Xpot code each, PLA. Black card, white artwork and inverted QR, Silk logo (Eryone Silk PLA Dual-Color pink to purple). Generated by make_instagram_batch.py, then mirrored to the dark-card colourway by swapping the body/art filament colours and correctly permuting the flush matrix.",
+   "version": {
+    "builder": "stand.instagram",
+    "params": {
+     "size": "large",
+     "theme": "black"
+    },
+    "recipe": {
+     "template": "a1-pla-wallart-template-6slot.3mf",
+     "orientation": "face-down",
+     "pause_top_z": 2.76,
+     "_pause": "The cavity roof is at print z 2.92; with 0.16 layers and no top band, pause at the start of the 2.92-3.08 roof layer.",
+     "top_band": null,
+     "settings_files": [],
+     "settings": {
+      "layer_height": "0.16",
+      "wall_loops": "3",
+      "wall_generator": "arachne",
+      "precise_outer_wall": "1",
+      "top_shell_layers": "5",
+      "top_shell_thickness": "0",
+      "bottom_shell_layers": "3",
+      "sparse_infill_density": "15%",
+      "interface_shells": "1",
+      "only_one_wall_first_layer": "1",
+      "enable_support": "0",
+      "enable_prime_tower": "1",
+      "prime_tower_width": "30",
+      "prime_tower_brim_width": "0",
+      "wipe_tower_x": [
+       "110.5",
+       "200"
+      ],
+      "wipe_tower_y": [
+       "110.5",
+       "128"
+      ],
+      "textured_plate_temp": [
+       "55",
+       "55",
+       "55",
+       "55",
+       "55",
+       "55"
+      ],
+      "textured_plate_temp_initial_layer": [
+       "60",
+       "60",
+       "60",
+       "60",
+       "60",
+       "60"
+      ],
+      "filament_colour": [
+       "#161616",
+       "#F2F2F2",
+       "#FF66CC",
+       "#4285F4",
+       "#EA4335",
+       "#34A853"
+      ],
+      "filament_multi_colour": [
+       "#161616",
+       "#F2F2F2",
+       "#FF66CC",
+       "#4285F4",
+       "#EA4335",
+       "#34A853"
+      ],
+      "elefant_foot_compensation": "0",
+      "initial_layer_speed": "30",
+      "initial_layer_infill_speed": "50",
+      "flush_volumes_matrix": [
+       "0",
+       "597",
+       "648",
+       "495",
+       "477",
+       "450",
+       "161",
+       "0",
+       "323",
+       "273",
+       "278",
+       "219",
+       "214",
+       "452",
+       "0",
+       "324",
+       "247",
+       "278",
+       "197",
+       "518",
+       "509",
+       "0",
+       "307",
+       "266",
+       "192",
+       "539",
+       "415",
+       "401",
+       "0",
+       "366",
+       "175",
+       "482",
+       "487",
+       "280",
+       "284",
+       "0"
+      ],
+      "top_surface_speed": [
+       "60"
+      ]
+     },
+     "first_layer_sequence": [
+      2,
+      3,
+      1
+     ],
+     "_first_layer_sequence": "Dark-card mirror: white artwork first, then the dual-colour Silk logo, then the black body last so the body seals around the face details. The QR is inverted (white modules on black); validate the physical print on iPhone and several Android camera apps before sale."
+    },
+    "beds": [
+     {
+      "label": "x4",
+      "copies": 4,
+      "positions": [
+       "lower-left",
+       "lower-right",
+       "upper-right",
+       "upper-left"
+      ],
+      "slots": [
+       {
+        "offset": [
+         -53.5,
+         -70.5
+        ],
+        "rotation": 90.0
+       },
+       {
+        "offset": [
+         70.5,
+         -53.5
+        ]
+       },
+       {
+        "offset": [
+         53.5,
+         70.5
+        ],
+        "rotation": 90.0
+       },
+       {
+        "offset": [
+         -70.5,
+         53.5
+        ]
+       }
+      ],
+      "minutes": 347.9,
+      "swaps": 6,
+      "grams": {
+       "Black PLA": 130.91,
+       "White PLA": 3.44,
+       "Silk PLA": 2.51
+      },
+      "ams": [
+       {
+        "slot": 1,
+        "colour": "Black PLA"
+       },
+       {
+        "slot": 2,
+        "colour": "White PLA"
+       },
+       {
+        "slot": 3,
+        "colour": "Silk PLA Dual-Color pink-purple"
+       }
+      ],
+      "pause": {
+       "z": 2.76,
+       "text": "Insert one programmed round NFC tag (NTAG215, 25 mm, 0.8 mm or thinner) into each cavity, by the serial map; resume."
+      }
+     }
+    ],
+    "changelog": "v1: the recipe of IG-2026-003 (Stand/production/IG-2026-003/build-instagram-large-pla-001-002-003-004.json)"
+   },
+   "batches": [
+    "IG-2026-003"
+   ]
+  },
+  {
+   "slug": "stand-small-google-white",
+   "kind": "serialized",
+   "title": "Stand Small · Google Review · White (legacy)",
+   "productType": "small_stand",
+   "face": "google_review",
+   "theme": "white",
+   "batchPrefix": "REV",
+   "salesProduct": "stand-small",
+   "sortOrder": 90,
+   "description": "The first Small Stand cards (2026-10-04), QR on skale.club/q/ (redirects to Xpot). Kept for its batch; retired.",
+   "version": {
+    "builder": "stand.google",
+    "params": {
+     "size": "small",
+     "theme": "white"
+    },
+    "recipe": {
+     "template": "a1-pla-wallart-template-6slot.3mf",
+     "orientation": "face-down",
+     "pause_top_z": 3.08,
+     "_pause": "first roof layer over the NFC cavity: the cavity ends at print z 2.92, the next 0.16 layer is 2.92-3.08 (no top band, so no 0.08 layers). gcode-verify 2026-10-03: pause at 3.08, first Bridge on that layer after it The pause is written on every plate; plate 2 (tokens, 1.0 mm tall) never reaches it.",
+     "top_band": null,
+     "_top_band": "none, on purpose (2026-10-03): face-down, so the top is the card's BACK, not the face. The slow 0.08 band there cost 24 min per card (78.1 -> 54.0 min single, A/B sliced). The face is the first layer and is untouched.",
+     "settings_files": [],
+     "settings": {
+      "_grid": "the keychains' grid: first layer 0.20, then 0.16 (inlay 0.52, cavity 1.64-2.92)",
+      "layer_height": "0.16",
+      "_geometry": "keychain-baseline walls and shells, copied inline because that preset also carries PETG-only top flow",
+      "wall_loops": "3",
+      "wall_generator": "arachne",
+      "precise_outer_wall": "1",
+      "top_shell_layers": "6",
+      "bottom_shell_layers": "4",
+      "sparse_infill_density": "30%",
+      "interface_shells": "1",
+      "only_one_wall_first_layer": "1",
+      "_first_layer": "the face is the first layer: keep the template's 0.36 line for the QR's 0.8 mm modules",
+      "enable_support": "0",
+      "_enable_support": "the G recess opens onto the plate; its ceiling is a ~3 mm bridge (projection slice, 2026-10-02)",
+      "wipe_tower_x": [
+       "215",
+       "180"
+      ],
+      "wipe_tower_y": [
+       "100",
+       "150"
+      ],
+      "textured_plate_temp": [
+       "55",
+       "55",
+       "55",
+       "55",
+       "55",
+       "55"
+      ],
+      "textured_plate_temp_initial_layer": [
+       "60",
+       "60",
+       "60",
+       "60",
+       "60",
+       "60"
+      ],
+      "filament_colour": [
+       "#F2F2F2",
+       "#161616",
+       "#FBBC05",
+       "#4285F4",
+       "#EA4335",
+       "#34A853"
+      ],
+      "filament_multi_colour": [
+       "#F2F2F2",
+       "#161616",
+       "#FBBC05",
+       "#4285F4",
+       "#EA4335",
+       "#34A853"
+      ],
+      "_first_layer_fix": "the PLA face tests (2026-10-03): elephant-foot compensation 0 (it thinned every letter 0.075 per side), layer 1 slow",
+      "elefant_foot_compensation": "0",
+      "initial_layer_speed": "20",
+      "initial_layer_infill_speed": "30",
+      "flush_volumes_matrix": [
+       "0",
+       "161",
+       "323",
+       "273",
+       "278",
+       "219",
+       "597",
+       "0",
+       "648",
+       "495",
+       "477",
+       "450",
+       "452",
+       "214",
+       "0",
+       "324",
+       "247",
+       "278",
+       "518",
+       "197",
+       "509",
+       "0",
+       "307",
+       "266",
+       "539",
+       "192",
+       "415",
+       "401",
+       "0",
+       "366",
+       "482",
+       "175",
+       "487",
+       "280",
+       "284",
+       "0"
+      ]
+     },
+     "_size": "SMALL version (user, 2026-10-03: \"too small, keep it saved in case it is needed\"): card 60 x 85 x 3.56, base 68 x 48 x 12, lean 20 deg. Fusion Tools/NFC Counter Plaque version 8; archive/NFC Plaque Small - Fusion v8.f3d; meshes source/mesh/small/."
+    },
+    "beds": [
+     {
+      "label": "x4",
+      "copies": 4,
+      "positions": [
+       "front-left",
+       "back-left",
+       "front-right",
+       "back-right"
+      ],
+      "slots": [
+       {
+        "offset": [
+         -32.5,
+         -48.0
+        ]
+       },
+       {
+        "offset": [
+         -32.5,
+         47.0
+        ]
+       },
+       {
+        "offset": [
+         32.5,
+         -48.0
+        ]
+       },
+       {
+        "offset": [
+         32.5,
+         47.0
+        ]
+       }
+      ],
+      "ams": [
+       {
+        "slot": 1,
+        "colour": "White PLA"
+       },
+       {
+        "slot": 2,
+        "colour": "Black PLA"
+       },
+       {
+        "slot": 3,
+        "colour": "Yellow PLA"
+       }
+      ],
+      "pause": {
+       "z": 3.08,
+       "text": "Insert one programmed round NFC tag (NTAG215, 25 mm, 0.8 mm or thinner) into each cavity, by the serial map; resume."
+      }
+     }
+    ],
+    "changelog": "v1: the recipe of REV-2026-001 (Stand/production/REV-2026-001/build-v2-pla-001-002-003-004.json)"
+   },
+   "batches": [
+    "REV-2026-001"
+   ]
+  },
+  {
+   "slug": "plate-large-instagram-white",
+   "kind": "serialized",
+   "title": "Plate Large · Instagram · White",
+   "productType": "large_plate",
+   "face": "instagram",
+   "theme": "white",
+   "batchPrefix": "LPLATE",
+   "salesProduct": "plate-large",
+   "sortOrder": 20,
+   "description": "Instagram NFC Plate, Large 103 x 103 x 3.56, white, four on one A1 plate (2 x 2 around the prime tower: NFC/Plate/NOTES.md, 'Sizes for the A1'). Meshes from source/design/tile_per_code.py, one folder per code (<serial>/White_Instagram_Plate.stl, Black_Instagram_Art.stl, Silk_Instagram_Logo.stl). Settings, filaments and the NFC pause are the Instagram Stand cards' (build-instagram-large-sample-pla.json, finish v4): white tile, black art, Eryone Silk PLA Dual-Color pink to purple icon; prints face-down; the tag goes in at the pause, z 2.76.",
+   "version": {
+    "builder": "plate.instagram",
+    "params": {
+     "size": "large",
+     "theme": "white"
+    },
+    "recipe": {
+     "template": "a1-pla-wallart-template-6slot.3mf",
+     "orientation": "face-down",
+     "pause_top_z": 2.76,
+     "_pause": "The cavity roof is at print z 2.92; with 0.16 layers and no top band, pause at the start of the 2.92-3.08 roof layer.",
+     "top_band": null,
+     "settings_files": [],
+     "settings": {
+      "layer_height": "0.16",
+      "wall_loops": "3",
+      "wall_generator": "arachne",
+      "precise_outer_wall": "1",
+      "top_shell_layers": "5",
+      "top_shell_thickness": "0",
+      "bottom_shell_layers": "3",
+      "sparse_infill_density": "15%",
+      "interface_shells": "1",
+      "only_one_wall_first_layer": "1",
+      "enable_support": "0",
+      "enable_prime_tower": "1",
+      "prime_tower_width": "30",
+      "prime_tower_brim_width": "0",
+      "wipe_tower_x": [
+       "113",
+       "113"
+      ],
+      "wipe_tower_y": [
+       "113",
+       "113"
+      ],
+      "textured_plate_temp": [
+       "55",
+       "55",
+       "55",
+       "55",
+       "55",
+       "55"
+      ],
+      "textured_plate_temp_initial_layer": [
+       "60",
+       "60",
+       "60",
+       "60",
+       "60",
+       "60"
+      ],
+      "filament_colour": [
+       "#F2F2F2",
+       "#161616",
+       "#FF66CC",
+       "#4285F4",
+       "#EA4335",
+       "#34A853"
+      ],
+      "filament_multi_colour": [
+       "#F2F2F2",
+       "#161616",
+       "#FF66CC",
+       "#4285F4",
+       "#EA4335",
+       "#34A853"
+      ],
+      "elefant_foot_compensation": "0",
+      "initial_layer_speed": "30",
+      "initial_layer_infill_speed": "50",
+      "flush_volumes_matrix": [
+       "0",
+       "161",
+       "323",
+       "273",
+       "278",
+       "219",
+       "597",
+       "0",
+       "648",
+       "495",
+       "477",
+       "450",
+       "452",
+       "214",
+       "0",
+       "324",
+       "247",
+       "278",
+       "518",
+       "197",
+       "509",
+       "0",
+       "307",
+       "266",
+       "539",
+       "192",
+       "415",
+       "401",
+       "0",
+       "366",
+       "482",
+       "175",
+       "487",
+       "280",
+       "284",
+       "0"
+      ],
+      "top_surface_speed": [
+       "60"
+      ]
+     },
+     "_tower": "Tower 30 mm at x 113-143 in a 42 mm channel (tiles at +-72.5, 4 mm from the plate edges): with the packing-study spacing (+-70.5, 4 mm each side of the tower) Bambu Studio refused the slice, 'G-code conflicts ... move the wipe tower further from other models' (2026-10-10).",
+     "first_layer_sequence": [
+      1,
+      2,
+      3
+     ],
+     "_first_layer_sequence": "White first on the face (first layer), then the others (user, 2026-10-10: \"o branco antes\")"
+    },
+    "beds": [
+     {
+      "label": "x4",
+      "copies": 4,
+      "positions": [
+       "front-left",
+       "front-right",
+       "back-left",
+       "back-right"
+      ],
+      "slots": [
+       {
+        "offset": [
+         -72.5,
+         -53.5
+        ]
+       },
+       {
+        "offset": [
+         72.5,
+         -53.5
+        ]
+       },
+       {
+        "offset": [
+         -72.5,
+         53.5
+        ]
+       },
+       {
+        "offset": [
+         72.5,
+         53.5
+        ]
+       }
+      ],
+      "minutes": 275.2,
+      "swaps": 7,
+      "ams": [
+       {
+        "slot": 1,
+        "colour": "White PLA"
+       },
+       {
+        "slot": 2,
+        "colour": "Black PLA"
+       },
+       {
+        "slot": 3,
+        "colour": "Silk PLA Dual-Color pink-purple"
+       }
+      ],
+      "pause": {
+       "z": 2.76,
+       "text": "Insert one programmed round NFC tag (NTAG215, 25 mm, 0.8 mm or thinner) into each cavity, by the serial map; resume."
+      }
+     }
+    ],
+    "changelog": "v1: the recipe of LPLATE-2026-001 (Plate/production/LPLATE-2026-001/build-large-pla-001-002-003-004.json)"
+   },
+   "batches": [
+    "LPLATE-2026-001"
+   ]
+  },
+  {
+   "slug": "plate-large-instagram-black",
+   "kind": "serialized",
+   "title": "Plate Large · Instagram · Black",
+   "productType": "large_plate",
+   "face": "instagram",
+   "theme": "black",
+   "batchPrefix": "LPLATE",
+   "salesProduct": "plate-large",
+   "sortOrder": 21,
+   "description": "Production plate LPLATE-2026-003: four black Large Instagram plates, one live Xpot code each. Black body, white artwork, normal dark-on-light QR on a white panel with a 2-module border, and Eryone Silk PLA Dual-Color pink-to-purple logo. The filament slots and both axes of the purge matrix are swapped for the dark colourway.",
+   "version": {
+    "builder": "plate.instagram",
+    "params": {
+     "size": "large",
+     "theme": "black"
+    },
+    "recipe": {
+     "template": "a1-pla-wallart-template-6slot.3mf",
+     "orientation": "face-down",
+     "pause_top_z": 2.76,
+     "_pause": "The cavity roof is at print z 2.92; with 0.16 layers and no top band, pause at the start of the 2.92-3.08 roof layer.",
+     "top_band": null,
+     "settings_files": [],
+     "settings": {
+      "layer_height": "0.16",
+      "wall_loops": "3",
+      "wall_generator": "arachne",
+      "precise_outer_wall": "1",
+      "top_shell_layers": "5",
+      "top_shell_thickness": "0",
+      "bottom_shell_layers": "3",
+      "sparse_infill_density": "15%",
+      "interface_shells": "1",
+      "only_one_wall_first_layer": "1",
+      "enable_support": "0",
+      "enable_prime_tower": "1",
+      "prime_tower_width": "30",
+      "prime_tower_brim_width": "0",
+      "wipe_tower_x": [
+       "113",
+       "113"
+      ],
+      "wipe_tower_y": [
+       "113",
+       "113"
+      ],
+      "textured_plate_temp": [
+       "55",
+       "55",
+       "55",
+       "55",
+       "55",
+       "55"
+      ],
+      "textured_plate_temp_initial_layer": [
+       "60",
+       "60",
+       "60",
+       "60",
+       "60",
+       "60"
+      ],
+      "filament_colour": [
+       "#161616",
+       "#F2F2F2",
+       "#FF66CC",
+       "#4285F4",
+       "#EA4335",
+       "#34A853"
+      ],
+      "filament_multi_colour": [
+       "#161616",
+       "#F2F2F2",
+       "#FF66CC",
+       "#4285F4",
+       "#EA4335",
+       "#34A853"
+      ],
+      "elefant_foot_compensation": "0",
+      "initial_layer_speed": "30",
+      "initial_layer_infill_speed": "50",
+      "flush_volumes_matrix": [
+       "0",
+       "597",
+       "648",
+       "495",
+       "477",
+       "450",
+       "161",
+       "0",
+       "323",
+       "273",
+       "278",
+       "219",
+       "214",
+       "452",
+       "0",
+       "324",
+       "247",
+       "278",
+       "197",
+       "518",
+       "509",
+       "0",
+       "307",
+       "266",
+       "192",
+       "539",
+       "415",
+       "401",
+       "0",
+       "366",
+       "175",
+       "482",
+       "487",
+       "280",
+       "284",
+       "0"
+      ],
+      "top_surface_speed": [
+       "60"
+      ]
+     },
+     "_tower": "Tower 30 mm at x 113-143 in a 42 mm channel (tiles at +-72.5, 4 mm from the plate edges): with the packing-study spacing (+-70.5, 4 mm each side of the tower) Bambu Studio refused the slice, 'G-code conflicts ... move the wipe tower further from other models' (2026-10-10).",
+     "first_layer_sequence": [
+      2,
+      3,
+      1
+     ],
+     "_first_layer_sequence": "White artwork first, then the dual-colour Silk logo, then the black body last so the body seals around the face details. The QR remains normal dark-on-light on its white panel."
+    },
+    "beds": [
+     {
+      "label": "x4",
+      "copies": 4,
+      "positions": [
+       "front-left",
+       "front-right",
+       "back-left",
+       "back-right"
+      ],
+      "slots": [
+       {
+        "offset": [
+         -72.5,
+         -53.5
+        ]
+       },
+       {
+        "offset": [
+         72.5,
+         -53.5
+        ]
+       },
+       {
+        "offset": [
+         -72.5,
+         53.5
+        ]
+       },
+       {
+        "offset": [
+         72.5,
+         53.5
+        ]
+       }
+      ],
+      "minutes": 276.2,
+      "swaps": 6,
+      "ams": [
+       {
+        "slot": 1,
+        "colour": "Black PLA"
+       },
+       {
+        "slot": 2,
+        "colour": "White PLA"
+       },
+       {
+        "slot": 3,
+        "colour": "Silk PLA Dual-Color pink-purple"
+       }
+      ],
+      "pause": {
+       "z": 2.76,
+       "text": "Insert one programmed round NFC tag (NTAG215, 25 mm, 0.8 mm or thinner) into each cavity, by the serial map; resume."
+      }
+     }
+    ],
+    "changelog": "v1: the recipe of LPLATE-2026-003 (Plate/production/LPLATE-2026-003/build-large-pla-001-002-003-004.json)"
+   },
+   "batches": [
+    "LPLATE-2026-003"
+   ]
+  },
+  {
+   "slug": "plate-large-google-white",
+   "kind": "serialized",
+   "title": "Plate Large · Google Review · White",
+   "productType": "large_plate",
+   "face": "google_review",
+   "theme": "white",
+   "batchPrefix": "LPLATE",
+   "salesProduct": "plate-large",
+   "sortOrder": 22,
+   "description": "Google Review face; the G is a separate flat four-colour token (g-token-flush-20) glued flush into its pocket.",
+   "version": {
+    "builder": "plate.google",
+    "params": {
+     "size": "large",
+     "theme": "white"
+    },
+    "recipe": {
+     "template": "a1-pla-wallart-template-6slot.3mf",
+     "orientation": "face-down",
+     "pause_top_z": 2.76,
+     "_pause": "The cavity roof is at print z 2.92; with 0.16 layers and no top band, pause at the start of the 2.92-3.08 roof layer.",
+     "top_band": null,
+     "settings_files": [],
+     "settings": {
+      "layer_height": "0.16",
+      "wall_loops": "3",
+      "wall_generator": "arachne",
+      "precise_outer_wall": "1",
+      "top_shell_layers": "5",
+      "top_shell_thickness": "0",
+      "bottom_shell_layers": "3",
+      "sparse_infill_density": "15%",
+      "interface_shells": "1",
+      "only_one_wall_first_layer": "1",
+      "enable_support": "0",
+      "enable_prime_tower": "1",
+      "prime_tower_width": "30",
+      "prime_tower_brim_width": "0",
+      "wipe_tower_x": [
+       "113",
+       "113"
+      ],
+      "wipe_tower_y": [
+       "113",
+       "113"
+      ],
+      "textured_plate_temp": [
+       "55",
+       "55",
+       "55",
+       "55",
+       "55",
+       "55"
+      ],
+      "textured_plate_temp_initial_layer": [
+       "60",
+       "60",
+       "60",
+       "60",
+       "60",
+       "60"
+      ],
+      "filament_colour": [
+       "#F2F2F2",
+       "#161616",
+       "#FBBC05",
+       "#4285F4",
+       "#EA4335",
+       "#34A853"
+      ],
+      "filament_multi_colour": [
+       "#F2F2F2",
+       "#161616",
+       "#FBBC05",
+       "#4285F4",
+       "#EA4335",
+       "#34A853"
+      ],
+      "elefant_foot_compensation": "0",
+      "initial_layer_speed": "30",
+      "initial_layer_infill_speed": "50",
+      "flush_volumes_matrix": [
+       "0",
+       "161",
+       "323",
+       "273",
+       "278",
+       "219",
+       "597",
+       "0",
+       "648",
+       "495",
+       "477",
+       "450",
+       "452",
+       "214",
+       "0",
+       "324",
+       "247",
+       "278",
+       "518",
+       "197",
+       "509",
+       "0",
+       "307",
+       "266",
+       "539",
+       "192",
+       "415",
+       "401",
+       "0",
+       "366",
+       "482",
+       "175",
+       "487",
+       "280",
+       "284",
+       "0"
+      ],
+      "top_surface_speed": [
+       "60"
+      ]
+     },
+     "_tower": "Tower 30 mm at x 113-143 in a 42 mm channel (tiles at +-72.5, 4 mm from the plate edges): with the packing-study spacing (+-70.5, 4 mm each side of the tower) Bambu Studio refused the slice, 'G-code conflicts ... move the wipe tower further from other models' (2026-10-10).",
+     "first_layer_sequence": [
+      2,
+      3,
+      1
+     ],
+     "_first_layer_sequence": "Art first on the face (layer 1): black, then the colour, then the body (white) last, which seals it (user, 2026-10-11: white first on 2026-10-10 came out worse). Dark tile: the same rule mirrored, the art (white + colours) first and the black body last. Rule: the body filament is always last on the face."
+    },
+    "beds": [
+     {
+      "label": "x4",
+      "copies": 4,
+      "positions": [
+       "front-left",
+       "front-right",
+       "back-left",
+       "back-right"
+      ],
+      "slots": [
+       {
+        "offset": [
+         -72.5,
+         -53.5
+        ]
+       },
+       {
+        "offset": [
+         72.5,
+         -53.5
+        ]
+       },
+       {
+        "offset": [
+         -72.5,
+         53.5
+        ]
+       },
+       {
+        "offset": [
+         72.5,
+         53.5
+        ]
+       }
+      ],
+      "minutes": 271.5,
+      "swaps": 6,
+      "grams": {
+       "White PLA": 99.71,
+       "Black PLA": 2.27,
+       "Yellow PLA": 1.43
+      },
+      "ams": [
+       {
+        "slot": 1,
+        "colour": "White PLA"
+       },
+       {
+        "slot": 2,
+        "colour": "Black PLA"
+       },
+       {
+        "slot": 3,
+        "colour": "Yellow PLA"
+       }
+      ],
+      "pause": {
+       "z": 2.76,
+       "text": "Insert one programmed round NFC tag (NTAG215, 25 mm, 0.8 mm or thinner) into each cavity, by the serial map; resume."
+      }
+     }
+    ],
+    "changelog": "v1: the recipe of LPLATE-2026-002 (Plate/production/LPLATE-2026-002/build-large-pla-001-002-003-004.json)"
+   },
+   "batches": [
+    "LPLATE-2026-002"
+   ]
+  },
+  {
+   "slug": "plate-large-menu-black",
+   "kind": "serialized",
+   "title": "Plate Large · Menu · Black",
+   "productType": "large_plate",
+   "face": "menu",
+   "theme": "black",
+   "batchPrefix": "LPLATE",
+   "salesProduct": "plate-large",
+   "sortOrder": 23,
+   "description": null,
+   "version": {
+    "builder": "plate.menu",
+    "params": {
+     "size": "large",
+     "theme": "black",
+     "font": "Inria Serif Bold"
+    },
+    "recipe": {
+     "template": "a1-pla-wallart-template-6slot.3mf",
+     "orientation": "face-down",
+     "pause_top_z": 1.32,
+     "_pause": "Sticker pockets at print z 0.68-1.16; the pause runs before the 1.16-1.32 roof layer. Press one blank 10 x 20 NTAG213 sticker flat, adhesive down, long side left-right, into each pocket; resume.",
+     "top_band": null,
+     "settings_files": [],
+     "settings": {
+      "layer_height": "0.16",
+      "wall_loops": "3",
+      "wall_generator": "arachne",
+      "precise_outer_wall": "1",
+      "top_shell_layers": "5",
+      "top_shell_thickness": "0",
+      "bottom_shell_layers": "3",
+      "sparse_infill_density": "15%",
+      "interface_shells": "1",
+      "only_one_wall_first_layer": "1",
+      "enable_support": "0",
+      "enable_prime_tower": "1",
+      "prime_tower_width": "30",
+      "prime_tower_brim_width": "0",
+      "wipe_tower_x": [
+       "113",
+       "113"
+      ],
+      "wipe_tower_y": [
+       "113",
+       "113"
+      ],
+      "textured_plate_temp": [
+       "55",
+       "55",
+       "55",
+       "55",
+       "55",
+       "55"
+      ],
+      "textured_plate_temp_initial_layer": [
+       "60",
+       "60",
+       "60",
+       "60",
+       "60",
+       "60"
+      ],
+      "filament_colour": [
+       "#161616",
+       "#F2F2F2",
+       "#FF66CC",
+       "#4285F4",
+       "#EA4335",
+       "#34A853"
+      ],
+      "filament_multi_colour": [
+       "#161616",
+       "#F2F2F2",
+       "#FF66CC",
+       "#4285F4",
+       "#EA4335",
+       "#34A853"
+      ],
+      "elefant_foot_compensation": "0",
+      "initial_layer_speed": "30",
+      "initial_layer_infill_speed": "50",
+      "flush_volumes_matrix": [
+       "0",
+       "597",
+       "648",
+       "495",
+       "477",
+       "450",
+       "161",
+       "0",
+       "323",
+       "273",
+       "278",
+       "219",
+       "214",
+       "452",
+       "0",
+       "324",
+       "247",
+       "278",
+       "197",
+       "518",
+       "509",
+       "0",
+       "307",
+       "266",
+       "192",
+       "539",
+       "415",
+       "401",
+       "0",
+       "366",
+       "175",
+       "482",
+       "487",
+       "280",
+       "284",
+       "0"
+      ],
+      "top_surface_speed": [
+       "60"
+      ]
+     },
+     "_tower": "Tower 30 mm at x 113-143 in a 42 mm channel (tiles at +-72.5, 4 mm from the plate edges): with the packing-study spacing (+-70.5, 4 mm each side of the tower) Bambu Studio refused the slice, 'G-code conflicts ... move the wipe tower further from other models' (2026-10-10).",
+     "first_layer_sequence": [
+      2,
+      1
+     ],
+     "_first_layer_sequence": "White Menu art first; black body last."
+    },
+    "beds": [
+     {
+      "label": "x4",
+      "copies": 4,
+      "positions": [
+       "front-left",
+       "front-right",
+       "back-left",
+       "back-right"
+      ],
+      "slots": [
+       {
+        "offset": [
+         -72.5,
+         -53.5
+        ]
+       },
+       {
+        "offset": [
+         72.5,
+         -53.5
+        ]
+       },
+       {
+        "offset": [
+         -72.5,
+         53.5
+        ]
+       },
+       {
+        "offset": [
+         72.5,
+         53.5
+        ]
+       }
+      ],
+      "ams": [
+       {
+        "slot": 1,
+        "colour": "Black PLA"
+       },
+       {
+        "slot": 2,
+        "colour": "White PLA"
+       }
+      ],
+      "pause": {
+       "z": 1.32,
+       "text": "Press one blank 10 x 20 NTAG213 sticker flat, adhesive down, long side left-right, into each pocket; resume."
+      },
+      "minutes": 275.3,
+      "swaps": 3,
+      "grams": {
+       "Black PLA": 98.49,
+       "White PLA": 4.63
+      }
+     }
+    ],
+    "changelog": "v1: the Menu recipe of LPLATE-2026-005 in black (slots 1 and 2 swapped) with the standard sticker pocket 0.68 mm behind the black face, pause z 1.32. LPLATE-2026-004 printed an older, tighter pocket (pause z 1.16)."
+   },
+   "batches": [
+    "LPLATE-2026-004"
+   ]
+  },
+  {
+   "slug": "plate-large-menu-white",
+   "kind": "serialized",
+   "title": "Plate Large · Menu · White",
+   "productType": "large_plate",
+   "face": "menu",
+   "theme": "white",
+   "batchPrefix": "LPLATE",
+   "salesProduct": "plate-large",
+   "sortOrder": 24,
+   "description": "Four white 103 x 103 x 3.56 Menu plates; Inria Serif Bold; normal 31 mm QR straight on the white body. LeadSeals 10 x 20 x 0.15 NTAG213 sticker (ASIN B0CMXHWTYH) in a 23.00 x 13.00 x 0.48 pocket 1.16 mm behind the face, under Tap here (doc 16 §5).",
+   "version": {
+    "builder": "plate.menu",
+    "params": {
+     "size": "large",
+     "theme": "white",
+     "font": "Inria Serif Bold"
+    },
+    "recipe": {
+     "template": "a1-pla-wallart-template-6slot.3mf",
+     "orientation": "face-down",
+     "pause_top_z": 1.8,
+     "_pause": "Sticker pockets at print z 1.16-1.64; the pause runs before the 1.64-1.8 roof layer. Press one blank 10 x 20 NTAG213 sticker flat, adhesive down, long side left-right, into each pocket; resume.",
+     "top_band": null,
+     "settings_files": [],
+     "settings": {
+      "layer_height": "0.16",
+      "wall_loops": "3",
+      "wall_generator": "arachne",
+      "precise_outer_wall": "1",
+      "top_shell_layers": "5",
+      "top_shell_thickness": "0",
+      "bottom_shell_layers": "3",
+      "sparse_infill_density": "15%",
+      "interface_shells": "1",
+      "only_one_wall_first_layer": "1",
+      "enable_support": "0",
+      "enable_prime_tower": "1",
+      "prime_tower_width": "30",
+      "prime_tower_brim_width": "0",
+      "wipe_tower_x": [
+       "113",
+       "113"
+      ],
+      "wipe_tower_y": [
+       "113",
+       "113"
+      ],
+      "textured_plate_temp": [
+       "55",
+       "55",
+       "55",
+       "55",
+       "55",
+       "55"
+      ],
+      "textured_plate_temp_initial_layer": [
+       "60",
+       "60",
+       "60",
+       "60",
+       "60",
+       "60"
+      ],
+      "filament_colour": [
+       "#F2F2F2",
+       "#161616",
+       "#FF66CC",
+       "#4285F4",
+       "#EA4335",
+       "#34A853"
+      ],
+      "filament_multi_colour": [
+       "#F2F2F2",
+       "#161616",
+       "#FF66CC",
+       "#4285F4",
+       "#EA4335",
+       "#34A853"
+      ],
+      "elefant_foot_compensation": "0",
+      "initial_layer_speed": "30",
+      "initial_layer_infill_speed": "50",
+      "flush_volumes_matrix": [
+       "0",
+       "161",
+       "323",
+       "273",
+       "278",
+       "219",
+       "597",
+       "0",
+       "648",
+       "495",
+       "477",
+       "450",
+       "452",
+       "214",
+       "0",
+       "324",
+       "247",
+       "278",
+       "518",
+       "197",
+       "509",
+       "0",
+       "307",
+       "266",
+       "539",
+       "192",
+       "415",
+       "401",
+       "0",
+       "366",
+       "482",
+       "175",
+       "487",
+       "280",
+       "284",
+       "0"
+      ],
+      "top_surface_speed": [
+       "60"
+      ]
+     },
+     "_tower": "Tower 30 mm at x 113-143 in a 42 mm channel (tiles at +-72.5, 4 mm from the plate edges): with the packing-study spacing (+-70.5, 4 mm each side of the tower) Bambu Studio refused the slice, 'G-code conflicts ... move the wipe tower further from other models' (2026-10-10).",
+     "first_layer_sequence": [
+      2,
+      1
+     ],
+     "_first_layer_sequence": "Black Menu art first; white body last."
+    },
+    "beds": [
+     {
+      "label": "x4",
+      "copies": 4,
+      "positions": [
+       "front-left",
+       "front-right",
+       "back-left",
+       "back-right"
+      ],
+      "slots": [
+       {
+        "offset": [
+         -72.5,
+         -53.5
+        ]
+       },
+       {
+        "offset": [
+         72.5,
+         -53.5
+        ]
+       },
+       {
+        "offset": [
+         -72.5,
+         53.5
+        ]
+       },
+       {
+        "offset": [
+         72.5,
+         53.5
+        ]
+       }
+      ],
+      "minutes": 273.5,
+      "swaps": 3,
+      "grams": {
+       "White PLA": 100.04,
+       "Black PLA": 3.51
+      },
+      "ams": [
+       {
+        "slot": 1,
+        "colour": "White PLA"
+       },
+       {
+        "slot": 2,
+        "colour": "Black PLA"
+       }
+      ],
+      "pause": {
+       "z": 1.8,
+       "text": "Press one blank 10 x 20 NTAG213 sticker flat, adhesive down, long side left-right, into each pocket; resume."
+      }
+     }
+    ],
+    "changelog": "v1: the recipe of LPLATE-2026-005 (Plate/production/LPLATE-2026-005/build-menu-large-white-pla-sticker.json)"
+   },
+   "batches": [
+    "LPLATE-2026-005"
+   ]
+  },
+  {
+   "slug": "plate-large-venmo-mixed",
+   "kind": "serialized",
+   "title": "Plate Large · Pay here Venmo · 2 White + 2 Black",
+   "productType": "large_plate",
+   "face": "venmo",
+   "theme": "mixed",
+   "batchPrefix": "LPLATE",
+   "salesProduct": "plate-large",
+   "sortOrder": 25,
+   "description": "Four 103 x 103 x 3.56 \"Pay here\" Venmo plates: 001-002 white body + black art, 003-004 black body + white art and a white QR panel; the Venmo wordmark in blue on all four. LeadSeals 10 x 20 NTAG213 sticker in a 23.00 x 13.00 x 0.48 pocket 1.16 mm behind the face, under Tap here (doc 16 §5).",
+   "version": {
+    "builder": "plate.venmo",
+    "params": {
+     "size": "large",
+     "themes": [
+      "white",
+      "white",
+      "black",
+      "black"
+     ]
+    },
+    "recipe": {
+     "template": "a1-pla-wallart-template-6slot.3mf",
+     "orientation": "face-down",
+     "pause_top_z": 1.8,
+     "_pause": "Sticker pockets at print z 1.16-1.64 on all four plates; the pause runs before the 1.64-1.8 roof layer. Press one blank 10 x 20 NTAG213 sticker flat, adhesive down, long side left-right, into each pocket; resume.",
+     "top_band": null,
+     "settings_files": [],
+     "settings": {
+      "layer_height": "0.16",
+      "wall_loops": "3",
+      "wall_generator": "arachne",
+      "precise_outer_wall": "1",
+      "top_shell_layers": "5",
+      "top_shell_thickness": "0",
+      "bottom_shell_layers": "3",
+      "sparse_infill_density": "15%",
+      "interface_shells": "1",
+      "only_one_wall_first_layer": "1",
+      "enable_support": "0",
+      "enable_prime_tower": "1",
+      "prime_tower_width": "30",
+      "prime_tower_brim_width": "0",
+      "wipe_tower_x": [
+       "113",
+       "113"
+      ],
+      "wipe_tower_y": [
+       "113",
+       "113"
+      ],
+      "textured_plate_temp": [
+       "55",
+       "55",
+       "55",
+       "55",
+       "55",
+       "55"
+      ],
+      "textured_plate_temp_initial_layer": [
+       "60",
+       "60",
+       "60",
+       "60",
+       "60",
+       "60"
+      ],
+      "filament_colour": [
+       "#F2F2F2",
+       "#161616",
+       "#008CFF",
+       "#4285F4",
+       "#EA4335",
+       "#34A853"
+      ],
+      "filament_multi_colour": [
+       "#F2F2F2",
+       "#161616",
+       "#008CFF",
+       "#4285F4",
+       "#EA4335",
+       "#34A853"
+      ],
+      "elefant_foot_compensation": "0",
+      "initial_layer_speed": "30",
+      "initial_layer_infill_speed": "50",
+      "flush_volumes_matrix": [
+       "0",
+       "161",
+       "323",
+       "273",
+       "278",
+       "219",
+       "597",
+       "0",
+       "648",
+       "495",
+       "477",
+       "450",
+       "452",
+       "214",
+       "0",
+       "324",
+       "247",
+       "278",
+       "518",
+       "197",
+       "509",
+       "0",
+       "307",
+       "266",
+       "539",
+       "192",
+       "415",
+       "401",
+       "0",
+       "366",
+       "482",
+       "175",
+       "487",
+       "280",
+       "284",
+       "0"
+      ],
+      "top_surface_speed": [
+       "60"
+      ]
+     },
+     "_tower": "Tower 30 mm at x 113-143 in a 42 mm channel (tiles at +-72.5, 4 mm from the plate edges): with the packing-study spacing (+-70.5, 4 mm each side of the tower) Bambu Studio refused the slice, 'G-code conflicts ... move the wipe tower further from other models' (2026-10-10).",
+     "first_layer_sequence": [
+      2,
+      3,
+      1
+     ],
+     "_first_layer_sequence": "Black art, then blue logo, then white; every layer holds both body colours."
+    },
+    "beds": [
+     {
+      "label": "x4",
+      "copies": 4,
+      "positions": [
+       "front-left",
+       "front-right",
+       "back-left",
+       "back-right"
+      ],
+      "slots": [
+       {
+        "offset": [
+         -72.5,
+         -53.5
+        ]
+       },
+       {
+        "offset": [
+         72.5,
+         -53.5
+        ]
+       },
+       {
+        "offset": [
+         -72.5,
+         53.5
+        ]
+       },
+       {
+        "offset": [
+         72.5,
+         53.5
+        ]
+       }
+      ],
+      "minutes": 311.4,
+      "swaps": 25,
+      "grams": {
+       "White PLA": 56.9,
+       "Black PLA": 52.38,
+       "Blue PLA": 2.73
+      },
+      "ams": [
+       {
+        "slot": 1,
+        "colour": "White PLA"
+       },
+       {
+        "slot": 2,
+        "colour": "Black PLA"
+       },
+       {
+        "slot": 3,
+        "colour": "Blue PLA (Venmo #008CFF)"
+       }
+      ],
+      "pause": {
+       "z": 1.8,
+       "text": "Press one blank 10 x 20 NTAG213 sticker flat, adhesive down, long side left-right, into each pocket; resume."
+      }
+     }
+    ],
+    "changelog": "v1: the recipe of LPLATE-2026-006 (Plate/production/LPLATE-2026-006/build-venmo-large-white-black-pla-sticker.json)"
+   },
+   "batches": [
+    "LPLATE-2026-006"
+   ]
+  },
+  {
+   "slug": "plate-small-instagram-black",
+   "kind": "serialized",
+   "title": "Plate Small · Instagram · Black",
+   "productType": "small_plate",
+   "face": "instagram",
+   "theme": "black",
+   "batchPrefix": "SPLATE",
+   "salesProduct": "plate-small",
+   "sortOrder": 30,
+   "description": "Production plate SPLATE-2026-001: 8 black Small Instagram plates, one live Xpot code each. Each plate is 78 x 78 x 3.56 mm in an eight-up 3 x 3 layout with the prime tower in the center cell. Black body, white artwork, normal dark-on-light QR on a white panel with a 1-module border, and Eryone Silk PLA Dual-Color pink-to-purple logo. The filament slots and both axes of the purge matrix are swapped for the dark colourway.",
+   "version": {
+    "builder": "plate.instagram",
+    "params": {
+     "size": "small",
+     "theme": "black"
+    },
+    "recipe": {
+     "template": "a1-pla-wallart-template-6slot.3mf",
+     "orientation": "face-down",
+     "pause_top_z": 2.76,
+     "_pause": "The cavity roof is at print z 2.92; with 0.16 layers and no top band, pause at the start of the 2.92-3.08 roof layer.",
+     "top_band": null,
+     "settings_files": [],
+     "settings": {
+      "layer_height": "0.16",
+      "wall_loops": "3",
+      "wall_generator": "arachne",
+      "precise_outer_wall": "1",
+      "top_shell_layers": "5",
+      "top_shell_thickness": "0",
+      "bottom_shell_layers": "3",
+      "sparse_infill_density": "15%",
+      "interface_shells": "1",
+      "only_one_wall_first_layer": "1",
+      "enable_support": "0",
+      "enable_prime_tower": "1",
+      "prime_tower_width": "30",
+      "prime_tower_brim_width": "0",
+      "wipe_tower_x": [
+       "113",
+       "113"
+      ],
+      "wipe_tower_y": [
+       "113",
+       "113"
+      ],
+      "textured_plate_temp": [
+       "55",
+       "55",
+       "55",
+       "55",
+       "55",
+       "55"
+      ],
+      "textured_plate_temp_initial_layer": [
+       "60",
+       "60",
+       "60",
+       "60",
+       "60",
+       "60"
+      ],
+      "filament_colour": [
+       "#161616",
+       "#F2F2F2",
+       "#FF66CC",
+       "#4285F4",
+       "#EA4335",
+       "#34A853"
+      ],
+      "filament_multi_colour": [
+       "#161616",
+       "#F2F2F2",
+       "#FF66CC",
+       "#4285F4",
+       "#EA4335",
+       "#34A853"
+      ],
+      "elefant_foot_compensation": "0",
+      "initial_layer_speed": "30",
+      "initial_layer_infill_speed": "50",
+      "flush_volumes_matrix": [
+       "0",
+       "597",
+       "648",
+       "495",
+       "477",
+       "450",
+       "161",
+       "0",
+       "323",
+       "273",
+       "278",
+       "219",
+       "214",
+       "452",
+       "0",
+       "324",
+       "247",
+       "278",
+       "197",
+       "518",
+       "509",
+       "0",
+       "307",
+       "266",
+       "192",
+       "539",
+       "415",
+       "401",
+       "0",
+       "366",
+       "175",
+       "482",
+       "487",
+       "280",
+       "284",
+       "0"
+      ],
+      "top_surface_speed": [
+       "60"
+      ]
+     },
+     "_tower": "Tower 30 mm at x 113-143 in a 42 mm channel (tiles at +-72.5, 4 mm from the plate edges): with the packing-study spacing (+-70.5, 4 mm each side of the tower) Bambu Studio refused the slice, 'G-code conflicts ... move the wipe tower further from other models' (2026-10-10).",
+     "first_layer_sequence": [
+      2,
+      3,
+      1
+     ],
+     "_first_layer_sequence": "White artwork first, then the dual-colour Silk logo, then the black body last so the body seals around the face details. The QR remains normal dark-on-light on its white panel."
+    },
+    "beds": [
+     {
+      "label": "x8",
+      "copies": 8,
+      "positions": [
+       "front-left",
+       "front-center",
+       "front-right",
+       "middle-left",
+       "middle-right",
+       "back-left",
+       "back-center",
+       "back-right"
+      ],
+      "slots": [
+       {
+        "offset": [
+         -82.0,
+         -82.0
+        ]
+       },
+       {
+        "offset": [
+         0.0,
+         -82.0
+        ]
+       },
+       {
+        "offset": [
+         82.0,
+         -82.0
+        ]
+       },
+       {
+        "offset": [
+         -82.0,
+         0.0
+        ]
+       },
+       {
+        "offset": [
+         82.0,
+         0.0
+        ]
+       },
+       {
+        "offset": [
+         -82.0,
+         82.0
+        ]
+       },
+       {
+        "offset": [
+         0.0,
+         82.0
+        ]
+       },
+       {
+        "offset": [
+         82.0,
+         82.0
+        ]
+       }
+      ],
+      "minutes": 332.4,
+      "swaps": 6,
+      "grams": {
+       "Black PLA": 118.42,
+       "White PLA": 3.36,
+       "Silk PLA": 1.83
+      },
+      "ams": [
+       {
+        "slot": 1,
+        "colour": "Black PLA"
+       },
+       {
+        "slot": 2,
+        "colour": "White PLA"
+       },
+       {
+        "slot": 3,
+        "colour": "Silk PLA Dual-Color pink-purple"
+       }
+      ],
+      "pause": {
+       "z": 2.76,
+       "text": "Insert one programmed round NFC tag (NTAG215, 25 mm, 0.8 mm or thinner) into each cavity, by the serial map; resume."
+      }
+     }
+    ],
+    "changelog": "v1: the recipe of SPLATE-2026-001 (Plate/production/SPLATE-2026-001/build-small-pla-001-002-003-004-005-006-007-008.json)"
+   },
+   "batches": [
+    "SPLATE-2026-001"
+   ]
+  },
+  {
+   "slug": "plate-small-google-white",
+   "kind": "serialized",
+   "title": "Plate Small · Google Review · White",
+   "productType": "small_plate",
+   "face": "google_review",
+   "theme": "white",
+   "batchPrefix": "SPLATE",
+   "salesProduct": "plate-small",
+   "sortOrder": 31,
+   "description": "Google Review face; the G is a separate flat 13 mm token (g-token-flush-13-small) glued flush into its pocket.",
+   "version": {
+    "builder": "plate.google",
+    "params": {
+     "size": "small",
+     "theme": "white"
+    },
+    "recipe": {
+     "template": "a1-pla-wallart-template-6slot.3mf",
+     "orientation": "face-down",
+     "pause_top_z": 2.76,
+     "_pause": "The cavity roof is at print z 2.92; with 0.16 layers and no top band, pause at the start of the 2.92-3.08 roof layer.",
+     "top_band": null,
+     "settings_files": [],
+     "settings": {
+      "layer_height": "0.16",
+      "wall_loops": "3",
+      "wall_generator": "arachne",
+      "precise_outer_wall": "1",
+      "top_shell_layers": "5",
+      "top_shell_thickness": "0",
+      "bottom_shell_layers": "3",
+      "sparse_infill_density": "15%",
+      "interface_shells": "1",
+      "only_one_wall_first_layer": "1",
+      "enable_support": "0",
+      "enable_prime_tower": "1",
+      "prime_tower_width": "30",
+      "prime_tower_brim_width": "0",
+      "wipe_tower_x": [
+       "113",
+       "113"
+      ],
+      "wipe_tower_y": [
+       "113",
+       "113"
+      ],
+      "textured_plate_temp": [
+       "55",
+       "55",
+       "55",
+       "55",
+       "55",
+       "55"
+      ],
+      "textured_plate_temp_initial_layer": [
+       "60",
+       "60",
+       "60",
+       "60",
+       "60",
+       "60"
+      ],
+      "filament_colour": [
+       "#F2F2F2",
+       "#161616",
+       "#FBBC05",
+       "#4285F4",
+       "#EA4335",
+       "#34A853"
+      ],
+      "filament_multi_colour": [
+       "#F2F2F2",
+       "#161616",
+       "#FBBC05",
+       "#4285F4",
+       "#EA4335",
+       "#34A853"
+      ],
+      "elefant_foot_compensation": "0",
+      "initial_layer_speed": "30",
+      "initial_layer_infill_speed": "50",
+      "flush_volumes_matrix": [
+       "0",
+       "161",
+       "323",
+       "273",
+       "278",
+       "219",
+       "597",
+       "0",
+       "648",
+       "495",
+       "477",
+       "450",
+       "452",
+       "214",
+       "0",
+       "324",
+       "247",
+       "278",
+       "518",
+       "197",
+       "509",
+       "0",
+       "307",
+       "266",
+       "539",
+       "192",
+       "415",
+       "401",
+       "0",
+       "366",
+       "482",
+       "175",
+       "487",
+       "280",
+       "284",
+       "0"
+      ],
+      "top_surface_speed": [
+       "60"
+      ]
+     },
+     "_tower": "Tower 30 mm at x 113-143 in a 42 mm channel (tiles at +-72.5, 4 mm from the plate edges): with the packing-study spacing (+-70.5, 4 mm each side of the tower) Bambu Studio refused the slice, 'G-code conflicts ... move the wipe tower further from other models' (2026-10-10).",
+     "first_layer_sequence": [
+      2,
+      3,
+      1
+     ],
+     "_first_layer_sequence": "Art first on the face (layer 1): black, then the colour, then the body (white) last, which seals it (user, 2026-10-11: white first on 2026-10-10 came out worse). Dark tile: the same rule mirrored, the art (white + colours) first and the black body last. Rule: the body filament is always last on the face."
+    },
+    "beds": [
+     {
+      "label": "x8",
+      "copies": 8,
+      "positions": [
+       "front-left",
+       "front-center",
+       "front-right",
+       "middle-left",
+       "middle-right",
+       "back-left",
+       "back-center",
+       "back-right"
+      ],
+      "slots": [
+       {
+        "offset": [
+         -82.0,
+         -82.0
+        ]
+       },
+       {
+        "offset": [
+         0.0,
+         -82.0
+        ]
+       },
+       {
+        "offset": [
+         82.0,
+         -82.0
+        ]
+       },
+       {
+        "offset": [
+         -82.0,
+         0.0
+        ]
+       },
+       {
+        "offset": [
+         82.0,
+         0.0
+        ]
+       },
+       {
+        "offset": [
+         -82.0,
+         82.0
+        ]
+       },
+       {
+        "offset": [
+         0.0,
+         82.0
+        ]
+       },
+       {
+        "offset": [
+         82.0,
+         82.0
+        ]
+       }
+      ],
+      "minutes": 334.7,
+      "swaps": 6,
+      "grams": {
+       "White PLA": 119.11,
+       "Black PLA": 2.45,
+       "Yellow PLA": 1.5
+      },
+      "ams": [
+       {
+        "slot": 1,
+        "colour": "White PLA"
+       },
+       {
+        "slot": 2,
+        "colour": "Black PLA"
+       },
+       {
+        "slot": 3,
+        "colour": "Yellow PLA"
+       }
+      ],
+      "pause": {
+       "z": 2.76,
+       "text": "Insert one programmed round NFC tag (NTAG215, 25 mm, 0.8 mm or thinner) into each cavity, by the serial map; resume."
+      }
+     }
+    ],
+    "changelog": "v1: the recipe of SPLATE-2026-002 (Plate/production/SPLATE-2026-002/build-small-pla-001-002-003-004-005-006-007-008.json)"
+   },
+   "batches": [
+    "SPLATE-2026-002"
+   ]
+  },
+  {
+   "slug": "plate-large-venmo-white",
+   "kind": "serialized",
+   "title": "Plate Large · Pay here Venmo · White",
+   "productType": "large_plate",
+   "face": "venmo",
+   "theme": "white",
+   "batchPrefix": "LPLATE",
+   "salesProduct": "plate-large",
+   "sortOrder": 26,
+   "description": null,
+   "version": null,
+   "batches": []
+  },
+  {
+   "slug": "plate-large-venmo-black",
+   "kind": "serialized",
+   "title": "Plate Large · Pay here Venmo · Black",
+   "productType": "large_plate",
+   "face": "venmo",
+   "theme": "black",
+   "batchPrefix": "LPLATE",
+   "salesProduct": "plate-large",
+   "sortOrder": 27,
+   "description": null,
+   "version": null,
+   "batches": []
+  },
+  {
+   "slug": "plate-large-zelle-white",
+   "kind": "serialized",
+   "title": "Plate Large · Pay here Zelle · White",
+   "productType": "large_plate",
+   "face": "custom",
+   "theme": "white",
+   "batchPrefix": "LPLATE",
+   "salesProduct": "plate-large",
+   "sortOrder": 40,
+   "description": null,
+   "version": null,
+   "batches": []
+  },
+  {
+   "slug": "plate-large-cashapp-white",
+   "kind": "serialized",
+   "title": "Plate Large · Pay here Cash App · White",
+   "productType": "large_plate",
+   "face": "custom",
+   "theme": "white",
+   "batchPrefix": "LPLATE",
+   "salesProduct": "plate-large",
+   "sortOrder": 41,
+   "description": null,
+   "version": null,
+   "batches": []
+  },
+  {
+   "slug": "plate-large-paypal-white",
+   "kind": "serialized",
+   "title": "Plate Large · Pay here PayPal · White",
+   "productType": "large_plate",
+   "face": "custom",
+   "theme": "white",
+   "batchPrefix": "LPLATE",
+   "salesProduct": "plate-large",
+   "sortOrder": 42,
+   "description": null,
+   "version": null,
+   "batches": []
+  },
+  {
+   "slug": "plate-large-whatsapp-white",
+   "kind": "serialized",
+   "title": "Plate Large · WhatsApp · White",
+   "productType": "large_plate",
+   "face": "whatsapp",
+   "theme": "white",
+   "batchPrefix": "LPLATE",
+   "salesProduct": "plate-large",
+   "sortOrder": 43,
+   "description": null,
+   "version": null,
+   "batches": []
+  },
+  {
+   "slug": "plate-large-facebook-white",
+   "kind": "serialized",
+   "title": "Plate Large · Facebook · White",
+   "productType": "large_plate",
+   "face": "facebook",
+   "theme": "white",
+   "batchPrefix": "LPLATE",
+   "salesProduct": "plate-large",
+   "sortOrder": 44,
+   "description": null,
+   "version": null,
+   "batches": []
+  },
+  {
+   "slug": "plate-large-tiktok-black",
+   "kind": "serialized",
+   "title": "Plate Large · TikTok · Black",
+   "productType": "large_plate",
+   "face": "tiktok",
+   "theme": "black",
+   "batchPrefix": "LPLATE",
+   "salesProduct": "plate-large",
+   "sortOrder": 45,
+   "description": null,
+   "version": null,
+   "batches": []
+  },
+  {
+   "slug": "plate-large-wifi-white",
+   "kind": "serialized",
+   "title": "Plate Large · Wi-Fi · White",
+   "productType": "large_plate",
+   "face": "custom",
+   "theme": "white",
+   "batchPrefix": "LPLATE",
+   "salesProduct": "plate-large",
+   "sortOrder": 46,
+   "description": null,
+   "version": null,
+   "batches": []
+  },
+  {
+   "slug": "plate-large-menu-italic-white",
+   "kind": "serialized",
+   "title": "Plate Large · Menu (Inria Serif Bold Italic) · White",
+   "productType": "large_plate",
+   "face": "menu",
+   "theme": "white",
+   "batchPrefix": "LPLATE",
+   "salesProduct": "plate-large",
+   "sortOrder": 28,
+   "description": null,
+   "version": null,
+   "batches": []
+  },
+  {
+   "slug": "plate-large-menu-metropolis-white",
+   "kind": "serialized",
+   "title": "Plate Large · Menu (Metropolis spaced caps) · White",
+   "productType": "large_plate",
+   "face": "menu",
+   "theme": "white",
+   "batchPrefix": "LPLATE",
+   "salesProduct": "plate-large",
+   "sortOrder": 29,
+   "description": null,
+   "version": null,
+   "batches": []
+  }
+ ],
+ "parts": [
+  {
+   "slug": "base-large",
+   "title": "Stand base · Large",
+   "sortOrder": 60,
+   "description": "Weighted base for the Large Stand card, 111 x 69 x 14 mm; five washers per base at the pause.",
+   "beds": [
+    {
+     "label": "x4",
+     "copies": 4,
+     "minutes": 233.7,
+     "pause": {
+      "z": 11.12,
+      "text": "Five washers per base (20), filling the pocket; resume."
+     },
+     "file": "Stand/PRINT NOW/2 - BASES LARGE - PLA x4.3mf"
+    },
+    {
+     "label": "x6 full plate",
+     "copies": 6,
+     "minutes": 345.8,
+     "pause": {
+      "z": 11.12,
+      "text": "Five washers per base (30); resume."
+     },
+     "file": "Stand/PRINT NOW/6 - BASES LARGE - FULL PLATE - PLA x6.3mf"
+    }
+   ],
+   "kind": "part"
+  },
+  {
+   "slug": "base-small",
+   "title": "Stand base · Small",
+   "sortOrder": 61,
+   "description": "Weighted base for the Small Stand card, 68 x 48 x 12 mm; five washers per base at the pause.",
+   "beds": [
+    {
+     "label": "x4",
+     "copies": 4,
+     "minutes": 119.0,
+     "pause": {
+      "z": 11.12,
+      "text": "Five washers per base (20); resume."
+     },
+     "file": "Stand/PRINT NOW/4 - BASES SMALL - PLA x4.3mf"
+    },
+    {
+     "label": "x12 full plate",
+     "copies": 12,
+     "minutes": 340.5,
+     "pause": {
+      "z": 11.12,
+      "text": "Five washers per base (60); resume."
+     },
+     "file": "Stand/PRINT NOW/5 - BASES SMALL - FULL PLATE - PLA x12.3mf"
+    }
+   ],
+   "kind": "part"
+  },
+  {
+   "slug": "g-token-large-relief",
+   "title": "Google G token · Large Stand (rounded relief v2)",
+   "sortOrder": 62,
+   "description": "The 26 mm four-colour G that sits on the Large Google Stand card. Prints face-up, no pause.",
+   "beds": [
+    {
+     "label": "x4",
+     "copies": 4,
+     "minutes": 95.1,
+     "swaps": 39,
+     "file": "Stand/PRINT NOW/3 - G TOKENS LARGE ROUNDED v2 - PLA x4.3mf"
+    },
+    {
+     "label": "x36 full plate",
+     "copies": 36,
+     "minutes": 205.6,
+     "swaps": 39,
+     "file": "Stand/PRINT NOW/7 - G TOKENS LARGE ROUNDED v2 - FULL PLATE - PLA x36.3mf"
+    },
+    {
+     "label": "x75 max plate",
+     "copies": 75,
+     "minutes": 338.6,
+     "swaps": 39,
+     "file": "Stand/PRINT NOW/8 - G TOKENS LARGE ROUNDED v2 - MAX PLATE - PLA x75.3mf"
+    }
+   ],
+   "kind": "part"
+  },
+  {
+   "slug": "g-token-small-stand",
+   "title": "Google G token · Small Stand (13.5 mm)",
+   "sortOrder": 63,
+   "description": "The 13.5 mm G for the Small Stand card. Prints face-up, no pause.",
+   "beds": [
+    {
+     "label": "x273 max plate",
+     "copies": 273,
+     "minutes": 174.3,
+     "swaps": 12,
+     "file": "Stand/PRINT NOW/9 - G TOKENS SMALL 13.5MM - MAX PLATE - PLA x273.3mf"
+    }
+   ],
+   "kind": "part"
+  },
+  {
+   "slug": "g-token-flush-20",
+   "title": "Google G token · Large Plate (flush 20 mm)",
+   "sortOrder": 64,
+   "description": "Flat four-colour G, 20 x 1.16 mm, glued flush into the Large Google Plate.",
+   "beds": [
+    {
+     "label": "x8",
+     "copies": 8,
+     "file": "Plate/PRINT NOW/2 - G TOKENS FLUSH 20mm - PLA x8.3mf"
+    },
+    {
+     "label": "x112 full plate",
+     "copies": 112,
+     "file": "Plate/PRINT NOW/3 - G TOKENS FLUSH 20mm - FULL PLATE - PLA x112.3mf"
+    }
+   ],
+   "kind": "part"
+  },
+  {
+   "slug": "g-token-flush-13-small",
+   "title": "Google G token · Small Plate (flush 13 mm)",
+   "sortOrder": 65,
+   "description": "Flat four-colour G, 13 x 1.16 mm, glued flush into the Small Google Plate.",
+   "beds": [
+    {
+     "label": "x30",
+     "copies": 30,
+     "file": "Plate/PRINT NOW/5 - G TOKENS FLUSH 13mm SMALL - PLA x30.3mf"
+    },
+    {
+     "label": "x240 full plate",
+     "copies": 240,
+     "file": "Plate/PRINT NOW/4 - G TOKENS FLUSH 13mm SMALL - FULL PLATE - PLA x240.3mf"
+    }
+   ],
+   "kind": "part"
+  },
+  {
+   "slug": "nfc-sticker-10x20",
+   "title": "NFC sticker 10 x 20 NTAG213 (bought)",
+   "sortOrder": 70,
+   "description": "LeadSeals 10 x 20 x 0.15 mm NTAG213 (ASIN B0CMXHWTYH), the standard chip of every piece since 2026-10-21. Bought, not printed: only the count.",
+   "beds": [
+    {
+     "label": "bought",
+     "copies": 1
+    }
+   ],
+   "kind": "part"
+  },
+  {
+   "slug": "nfc-tag-round-25",
+   "title": "NFC tag round 25 mm NTAG215 (bought)",
+   "sortOrder": 71,
+   "description": "The round tag of the Stands and the first Plates. Bought, not printed: only the count.",
+   "beds": [
+    {
+     "label": "bought",
+     "copies": 1
+    }
+   ],
+   "kind": "part"
+  },
+  {
+   "slug": "washer-ballast",
+   "title": "Washer ballast for Stand bases (bought)",
+   "sortOrder": 72,
+   "description": "Five per base, dropped in at the base pause. Bought, not printed: only the count.",
+   "beds": [
+    {
+     "label": "bought",
+     "copies": 1
+    }
+   ],
+   "kind": "part"
+  }
+ ]
+}

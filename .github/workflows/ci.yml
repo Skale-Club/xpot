@@ -49,9 +49,12 @@ jobs:
       - name: Type check
         run: npm run check
 
-      # The print pipeline (docs/PRINT_EXECUTION_PLAN.md): every Python file must at least compile.
-      - name: Compile print pipeline
-        run: python3 -m compileall -q print-pipeline
+      # The print pipeline (docs/PRINT_EXECUTION_PLAN.md): every Python file compiles, and the parts that need no
+      # geometry packages, fonts or slicer (bed recipe, builder registry, catalog) pass their tests.
+      - name: Print pipeline
+        run: |
+          python3 -m compileall -q print-pipeline
+          python3 -m unittest discover -s print-pipeline/tests -p "test_*.py"
 
       - name: Unit tests
         run: npm test
