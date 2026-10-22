@@ -1,0 +1,3 @@
+# Meshes and A1 projects are binary: never convert their line endings (the rebuild check compares bytes).
+*.stl binary
+*.3mf binary
