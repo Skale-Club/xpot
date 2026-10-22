@@ -192,7 +192,21 @@
       }
      }
     ],
-    "changelog": "v1: the recipe of REV-2026-003 (Stand/production/REV-2026-003/build-large-pla-001-002-003-004.json)"
+    "changelog": "v1: the recipe of REV-2026-003 (Stand/production/REV-2026-003/build-large-pla-001-002-003-004.json)",
+    "consumes": [
+     {
+      "part": "base-large",
+      "perPiece": 1
+     },
+     {
+      "part": "g-token-large-relief",
+      "perPiece": 1
+     },
+     {
+      "part": "nfc-tag-round-25",
+      "perPiece": 1
+     }
+    ]
    },
    "batches": [
     "REV-2026-002",
@@ -395,7 +409,21 @@
       }
      }
     ],
-    "changelog": "v1: the recipe of REV-2026-004 (Stand/production/REV-2026-004/build-large-pla-001-002-003-004.json)"
+    "changelog": "v1: the recipe of REV-2026-004 (Stand/production/REV-2026-004/build-large-pla-001-002-003-004.json)",
+    "consumes": [
+     {
+      "part": "base-large",
+      "perPiece": 1
+     },
+     {
+      "part": "g-token-large-relief",
+      "perPiece": 1
+     },
+     {
+      "part": "nfc-tag-round-25",
+      "perPiece": 1
+     }
+    ]
    },
    "batches": [
     "REV-2026-004"
@@ -586,7 +614,17 @@
       }
      }
     ],
-    "changelog": "v1: the recipe of IG-2026-002 (Stand/production/IG-2026-002/build-instagram-large-pla-001-002-003-004.json)"
+    "changelog": "v1: the recipe of IG-2026-002 (Stand/production/IG-2026-002/build-instagram-large-pla-001-002-003-004.json)",
+    "consumes": [
+     {
+      "part": "base-large",
+      "perPiece": 1
+     },
+     {
+      "part": "nfc-tag-round-25",
+      "perPiece": 1
+     }
+    ]
    },
    "batches": [
     "IG-2026-001",
@@ -789,7 +827,17 @@
       }
      }
     ],
-    "changelog": "v1: the recipe of IG-2026-003 (Stand/production/IG-2026-003/build-instagram-large-pla-001-002-003-004.json)"
+    "changelog": "v1: the recipe of IG-2026-003 (Stand/production/IG-2026-003/build-instagram-large-pla-001-002-003-004.json)",
+    "consumes": [
+     {
+      "part": "base-large",
+      "perPiece": 1
+     },
+     {
+      "part": "nfc-tag-round-25",
+      "perPiece": 1
+     }
+    ]
    },
    "batches": [
     "IG-2026-003"
@@ -976,7 +1024,21 @@
       }
      }
     ],
-    "changelog": "v1: the recipe of REV-2026-001 (Stand/production/REV-2026-001/build-v2-pla-001-002-003-004.json)"
+    "changelog": "v1: the recipe of REV-2026-001 (Stand/production/REV-2026-001/build-v2-pla-001-002-003-004.json)",
+    "consumes": [
+     {
+      "part": "base-small",
+      "perPiece": 1
+     },
+     {
+      "part": "g-token-small-stand",
+      "perPiece": 1
+     },
+     {
+      "part": "nfc-tag-round-25",
+      "perPiece": 1
+     }
+    ]
    },
    "batches": [
     "REV-2026-001"
@@ -1172,7 +1234,13 @@
       }
      }
     ],
-    "changelog": "v1: the recipe of LPLATE-2026-001 (Plate/production/LPLATE-2026-001/build-large-pla-001-002-003-004.json)"
+    "changelog": "v1: the recipe of LPLATE-2026-001 (Plate/production/LPLATE-2026-001/build-large-pla-001-002-003-004.json)",
+    "consumes": [
+     {
+      "part": "nfc-tag-round-25",
+      "perPiece": 1
+     }
+    ]
    },
    "batches": [
     "LPLATE-2026-001"
@@ -1368,7 +1436,13 @@
       }
      }
     ],
-    "changelog": "v1: the recipe of LPLATE-2026-003 (Plate/production/LPLATE-2026-003/build-large-pla-001-002-003-004.json)"
+    "changelog": "v1: the recipe of LPLATE-2026-003 (Plate/production/LPLATE-2026-003/build-large-pla-001-002-003-004.json)",
+    "consumes": [
+     {
+      "part": "nfc-tag-round-25",
+      "perPiece": 1
+     }
+    ]
    },
    "batches": [
     "LPLATE-2026-003"
@@ -1569,7 +1643,17 @@
       }
      }
     ],
-    "changelog": "v1: the recipe of LPLATE-2026-002 (Plate/production/LPLATE-2026-002/build-large-pla-001-002-003-004.json)"
+    "changelog": "v1: the recipe of LPLATE-2026-002 (Plate/production/LPLATE-2026-002/build-large-pla-001-002-003-004.json)",
+    "consumes": [
+     {
+      "part": "g-token-flush-20",
+      "perPiece": 1
+     },
+     {
+      "part": "nfc-tag-round-25",
+      "perPiece": 1
+     }
+    ]
    },
    "batches": [
     "LPLATE-2026-002"
@@ -1765,7 +1849,13 @@
       }
      }
     ],
-    "changelog": "v1: the Menu recipe of LPLATE-2026-005 in black (slots 1 and 2 swapped) with the standard sticker pocket 0.68 mm behind the black face, pause z 1.32. LPLATE-2026-004 printed an older, tighter pocket (pause z 1.16)."
+    "changelog": "v1: the Menu recipe of LPLATE-2026-005 in black (slots 1 and 2 swapped) with the standard sticker pocket 0.68 mm behind the black face, pause z 1.32. LPLATE-2026-004 printed an older, tighter pocket (pause z 1.16).",
+    "consumes": [
+     {
+      "part": "nfc-sticker-10x20",
+      "perPiece": 1
+     }
+    ]
    },
    "batches": [
     "LPLATE-2026-004"
@@ -1961,7 +2051,13 @@
       }
      }
     ],
-    "changelog": "v1: the recipe of LPLATE-2026-005 (Plate/production/LPLATE-2026-005/build-menu-large-white-pla-sticker.json)"
+    "changelog": "v1: the recipe of LPLATE-2026-005 (Plate/production/LPLATE-2026-005/build-menu-large-white-pla-sticker.json)",
+    "consumes": [
+     {
+      "part": "nfc-sticker-10x20",
+      "perPiece": 1
+     }
+    ]
    },
    "batches": [
     "LPLATE-2026-005"
@@ -2167,7 +2263,13 @@
       }
      }
     ],
-    "changelog": "v1: the recipe of LPLATE-2026-006 (Plate/production/LPLATE-2026-006/build-venmo-large-white-black-pla-sticker.json)"
+    "changelog": "v1: the recipe of LPLATE-2026-006 (Plate/production/LPLATE-2026-006/build-venmo-large-white-black-pla-sticker.json)",
+    "consumes": [
+     {
+      "part": "nfc-sticker-10x20",
+      "perPiece": 1
+     }
+    ]
    },
    "batches": [
     "LPLATE-2026-006"
@@ -2396,7 +2498,13 @@
       }
      }
     ],
-    "changelog": "v1: the recipe of SPLATE-2026-001 (Plate/production/SPLATE-2026-001/build-small-pla-001-002-003-004-005-006-007-008.json)"
+    "changelog": "v1: the recipe of SPLATE-2026-001 (Plate/production/SPLATE-2026-001/build-small-pla-001-002-003-004-005-006-007-008.json)",
+    "consumes": [
+     {
+      "part": "nfc-tag-round-25",
+      "perPiece": 1
+     }
+    ]
    },
    "batches": [
     "SPLATE-2026-001"
@@ -2625,7 +2733,17 @@
       }
      }
     ],
-    "changelog": "v1: the recipe of SPLATE-2026-002 (Plate/production/SPLATE-2026-002/build-small-pla-001-002-003-004-005-006-007-008.json)"
+    "changelog": "v1: the recipe of SPLATE-2026-002 (Plate/production/SPLATE-2026-002/build-small-pla-001-002-003-004-005-006-007-008.json)",
+    "consumes": [
+     {
+      "part": "g-token-flush-13-small",
+      "perPiece": 1
+     },
+     {
+      "part": "nfc-tag-round-25",
+      "perPiece": 1
+     }
+    ]
    },
    "batches": [
     "SPLATE-2026-002"
@@ -2814,7 +2932,8 @@
      "file": "Stand/PRINT NOW/6 - BASES LARGE - FULL PLATE - PLA x6.3mf"
     }
    ],
-   "kind": "part"
+   "kind": "part",
+   "partReorderAt": 8
   },
   {
    "slug": "base-small",
@@ -2843,7 +2962,8 @@
      "file": "Stand/PRINT NOW/5 - BASES SMALL - FULL PLATE - PLA x12.3mf"
     }
    ],
-   "kind": "part"
+   "kind": "part",
+   "partReorderAt": 4
   },
   {
    "slug": "g-token-large-relief",
@@ -2873,7 +2993,8 @@
      "file": "Stand/PRINT NOW/8 - G TOKENS LARGE ROUNDED v2 - MAX PLATE - PLA x75.3mf"
     }
    ],
-   "kind": "part"
+   "kind": "part",
+   "partReorderAt": 8
   },
   {
    "slug": "g-token-small-stand",
@@ -2889,7 +3010,8 @@
      "file": "Stand/PRINT NOW/9 - G TOKENS SMALL 13.5MM - MAX PLATE - PLA x273.3mf"
     }
    ],
-   "kind": "part"
+   "kind": "part",
+   "partReorderAt": null
   },
   {
    "slug": "g-token-flush-20",
@@ -2908,7 +3030,8 @@
      "file": "Plate/PRINT NOW/3 - G TOKENS FLUSH 20mm - FULL PLATE - PLA x112.3mf"
     }
    ],
-   "kind": "part"
+   "kind": "part",
+   "partReorderAt": 8
   },
   {
    "slug": "g-token-flush-13-small",
@@ -2927,7 +3050,8 @@
      "file": "Plate/PRINT NOW/4 - G TOKENS FLUSH 13mm SMALL - FULL PLATE - PLA x240.3mf"
     }
    ],
-   "kind": "part"
+   "kind": "part",
+   "partReorderAt": 16
   },
   {
    "slug": "nfc-sticker-10x20",
@@ -2940,7 +3064,8 @@
      "copies": 1
     }
    ],
-   "kind": "part"
+   "kind": "part",
+   "partReorderAt": 20
   },
   {
    "slug": "nfc-tag-round-25",
@@ -2953,7 +3078,8 @@
      "copies": 1
     }
    ],
-   "kind": "part"
+   "kind": "part",
+   "partReorderAt": 8
   },
   {
    "slug": "washer-ballast",
@@ -2966,7 +3092,8 @@
      "copies": 1
     }
    ],
-   "kind": "part"
+   "kind": "part",
+   "partReorderAt": 40
   }
  ]
 }

@@ -32,6 +32,7 @@ New here? Read [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) first.
 | [prospecting-engine-runbook.md](docs/prospecting-engine-runbook.md) | Operating the prospecting engine connection |
 | [TAG_SALES_EXECUTION_PLAN.md](docs/TAG_SALES_EXECUTION_PLAN.md) | Execution plan for linking physical pieces to sales, Stuscle acquisitions and partner margins, in Portuguese |
 | [PRINT_EXECUTION_PLAN.md](docs/PRINT_EXECUTION_PLAN.md) | Execution plan for producing the 3D-printed pieces from inside Xpot: print models, versions, a print queue and the bench app building the files, in Portuguese |
+| [print-pipeline/README.md](print-pipeline/README.md) | The print bench: setting it up next to the printer, the builders, the rebuild check |
 | [DESKTOP.md](docs/DESKTOP.md) | The plan that brought the rep app to the desktop (#17 to #27), in Portuguese |
 | [AUDITORIA.md](docs/AUDITORIA.md) | The 2026-09-01 technical audit; a historical snapshot, in Portuguese |
 | [nfc-provisioner/README.md](nfc-provisioner/README.md) | The desktop NFC writer app |

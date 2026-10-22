@@ -19,6 +19,10 @@ The domain comes from the server (`TAG_PUBLIC_BASE_URL`, default
 `https://xpot.place`); the app just writes the `expectedUrl` each job carries.
 Changing where a tag points happens in Xpot, never by rewriting the chip.
 
+> **The same pairing serves the print bench.** `print-pipeline/bench.py pair <code>` pairs a computer with the
+> `print` capability: it builds Tags › Production print orders and sends them to the printer
+> (`print-pipeline/README.md`). This app keeps writing chips; one computer can run both.
+
 ## Hardware
 
 - Reader: ACR122U or any PC/SC NFC reader (SAM slots are ignored; keep only one
