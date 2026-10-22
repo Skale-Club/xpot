@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Download, FileUp, History, Layers, PackageCheck, Pencil, Printer } from "lucide-react";
 import { PRINT_PART_REASONS, type PrintBed, type PrintModelDetail, type PrintModelVersionItem } from "@shared/printProduction";
@@ -33,6 +33,16 @@ export function PrintModelPage({ slug, go }: { slug: string; go: Go }) {
   const { toast } = useToast();
   const [printing, setPrinting] = useState(false);
   const [versioning, setVersioning] = useState(false);
+  // From an order's "Record a problem": open the next version with the problem and its batch filled in.
+  const [fix, setFix] = useState<{ note: string; batch: string } | null>(null);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const note = params.get("note");
+    if (!note) return;
+    setFix({ note, batch: params.get("fix") ?? "" });
+    setVersioning(true);
+    window.history.replaceState(null, "", window.location.pathname);
+  }, []);
   const [editing, setEditing] = useState(false);
   const [counting, setCounting] = useState(false);
   const [retiring, setRetiring] = useState(false);
@@ -66,6 +76,7 @@ export function PrintModelPage({ slug, go }: { slug: string; go: Go }) {
             <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-white/45">
               <KindPill kind={model.kind} />
               <ModelStatusPill status={model.status} />
+              {model.lowStock ? <Pill tone="amber">{t("lowStock", { count: model.partReorderAt ?? 0 })}</Pill> : null}
               <span className="font-mono">{model.slug}</span>
               {model.productType ? <span>{labels.product(model.productType)}</span> : null}
               {model.theme ? <span>{model.theme}</span> : null}
@@ -139,7 +150,7 @@ export function PrintModelPage({ slug, go }: { slug: string; go: Go }) {
       </section>
 
       {printing && <PrintDialog model={model} onClose={() => setPrinting(false)} onOrdered={(job) => go(`${PRODUCTION_BASE}/jobs/${job.id}`)} />}
-      {versioning && <VersionDialog model={model} onClose={() => setVersioning(false)} />}
+      {versioning && <VersionDialog model={model} fix={fix} onClose={() => { setVersioning(false); setFix(null); }} />}
       {editing && <EditModelDialog model={model} onClose={() => setEditing(false)} onRetire={() => { setEditing(false); setRetiring(true); }} />}
       {counting && <CountDialog model={model} onClose={() => setCounting(false)} />}
       <ConfirmDialog
@@ -236,7 +247,7 @@ function parseJson(text: string): { ok: true; value: unknown } | { ok: false } {
 }
 
 /** The next version, prefilled from the current one: change what has to change and say why. */
-function VersionDialog({ model, onClose }: { model: PrintModelDetail; onClose: () => void }) {
+function VersionDialog({ model, fix, onClose }: { model: PrintModelDetail; fix: { note: string; batch: string } | null; onClose: () => void }) {
   const t = useT(productionMessages);
   const tc = useT(commonMessages);
   const { toast } = useToast();
@@ -249,8 +260,8 @@ function VersionDialog({ model, onClose }: { model: PrintModelDetail; onClose: (
     // A part's fixed file belongs to the version that printed it: the next version starts without it.
     beds: pretty((current?.beds ?? blankBed).map(({ fileRef: _r, fileName: _n, fileBytes: _b, fileSha256: _s, ...bed }) => bed)),
     consumes: pretty(current?.consumes ?? []),
-    changelog: "",
-    fixesBatch: "",
+    changelog: fix?.note ?? "",
+    fixesBatch: fix?.batch ?? "",
   });
   const parsed = { params: parseJson(form.params), recipe: parseJson(form.recipe), beds: parseJson(form.beds), consumes: parseJson(form.consumes) };
   const jsonOk = Object.values(parsed).every((p) => p.ok);
@@ -322,7 +333,13 @@ function EditModelDialog({ model, onClose, onRetire }: { model: PrintModelDetail
   const t = useT(productionMessages);
   const tc = useT(commonMessages);
   const { toast } = useToast();
-  const [form, setForm] = useState({ title: model.title, theme: model.theme ?? "", description: model.description ?? "", sortOrder: String(model.sortOrder) });
+  const [form, setForm] = useState({
+    title: model.title,
+    theme: model.theme ?? "",
+    description: model.description ?? "",
+    sortOrder: String(model.sortOrder),
+    reorderAt: model.partReorderAt === null ? "" : String(model.partReorderAt),
+  });
   const save = useMutation({
     mutationFn: () =>
       sendJson<PrintModelDetail>("PATCH", `/api/xpot/admin/print-models/${encodeURIComponent(model.slug)}`, {
@@ -330,6 +347,7 @@ function EditModelDialog({ model, onClose, onRetire }: { model: PrintModelDetail
         theme: form.theme,
         description: form.description,
         sortOrder: Number.parseInt(form.sortOrder, 10) || 0,
+        ...(model.kind === "part" ? { partReorderAt: form.reorderAt.trim() === "" ? null : Math.max(0, Number.parseInt(form.reorderAt, 10) || 0) } : {}),
       }),
     onSuccess: async () => {
       await invalidateAdminTags();
@@ -355,6 +373,11 @@ function EditModelDialog({ model, onClose, onRetire }: { model: PrintModelDetail
           <Field label={t("fieldOrder")}>
             <Input type="number" inputMode="numeric" value={form.sortOrder} onChange={(e) => setForm({ ...form, sortOrder: e.target.value })} />
           </Field>
+          {model.kind === "part" ? (
+            <Field label={t("fieldReorderAt")} hint={t("fieldReorderAtHint")} className="sm:col-span-2">
+              <Input type="number" inputMode="numeric" min={0} value={form.reorderAt} onChange={(e) => setForm({ ...form, reorderAt: e.target.value })} />
+            </Field>
+          ) : null}
           <Field label={t("fieldDescription")} className="sm:col-span-2">
             <Textarea value={form.description} rows={3} maxLength={2000} onChange={(e) => setForm({ ...form, description: e.target.value })} />
           </Field>

@@ -49,7 +49,7 @@ import { TAG_DEFAULT_PUBLIC_BASE_URL, buildTagUrls, padSerial } from "#shared/ta
 import type { JourneySource } from "#shared/tagJourney.js";
 import { FileStorageUnavailableError, parseRef, putPrivateFile, resolveFileUrl } from "../lib/files.js";
 import { TagError, pgError } from "./errors.js";
-import { journeyContext, recordJourney, resolveBatchId } from "./journey.js";
+import { createJourneyEntry, journeyContext, recordJourney, resolveBatchId } from "./journey.js";
 import { countMetricSql } from "./metrics.js";
 import { createBatch, getBatchProduction, iso, rows, type Tx } from "./repository.js";
 
@@ -100,14 +100,14 @@ function versionItem(v: VersionRow): PrintModelVersionItem {
 interface ModelRow {
   id: string; slug: string; kind: string; title: string; description: string | null; product_type: string | null;
   face: string | null; theme: string | null; sales_product_id: number | null; batch_prefix: string | null; status: string;
-  current_version_id: string | null; part_on_hand: number; sort_order: number; created_at: Date | string; updated_at: Date | string;
+  current_version_id: string | null; part_on_hand: number; part_reorder_at: number | null; sort_order: number; created_at: Date | string; updated_at: Date | string;
   open_jobs: number; house_count: number; with_resellers_count: number;
 }
 
 // A serialized model's stock: the pieces of the batches its orders issued, counted like the rest of Tags.
 const MODEL_SELECT = sql`
   SELECT m.id, m.slug, m.kind, m.title, m.description, m.product_type, m.face, m.theme, m.sales_product_id, m.batch_prefix,
-    m.status, m.current_version_id, m.part_on_hand, m.sort_order, m.created_at, m.updated_at,
+    m.status, m.current_version_id, m.part_on_hand, m.part_reorder_at, m.sort_order, m.created_at, m.updated_at,
     (SELECT count(*)::int FROM print_jobs j WHERE j.model_id = m.id
       AND j.status IN ('requested', 'building', 'ready', 'printing')) AS open_jobs,
     (SELECT ${countMetricSql("house")} FROM tags t JOIN tag_batches b ON b.id = t.batch_id
@@ -135,6 +135,8 @@ function modelItem(m: ModelRow, current: PrintModelVersionItem | null): PrintMod
     onHand: kind === "part" ? Number(m.part_on_hand) : Number(m.house_count),
     withResellers: kind === "part" ? 0 : Number(m.with_resellers_count),
     openJobs: Number(m.open_jobs),
+    partReorderAt: m.part_reorder_at === null ? null : Number(m.part_reorder_at),
+    lowStock: kind === "part" && m.part_reorder_at !== null && Number(m.part_on_hand) < Number(m.part_reorder_at),
     createdAt: iso(m.created_at)!,
     updatedAt: iso(m.updated_at)!,
   };
@@ -226,6 +228,7 @@ export async function updateModel(ref: string, patch: PrintModelPatch): Promise<
     salesProductId: serialized && patch.salesProductId !== undefined ? patch.salesProductId : model.salesProductId,
     batchPrefix: serialized && patch.batchPrefix !== undefined ? patch.batchPrefix : model.batchPrefix,
     sortOrder: patch.sortOrder ?? model.sortOrder,
+    partReorderAt: model.kind === "part" && patch.partReorderAt !== undefined ? patch.partReorderAt : model.partReorderAt,
   };
   if (serialized && (!next.salesProductId || !next.batchPrefix)) {
     throw new TagError("A serialized model needs a sales product and a batch prefix", 400, "print_model_incomplete");
@@ -479,6 +482,7 @@ export async function getJob(id: string): Promise<PrintJobDetail> {
   return {
     ...jobItem(row),
     bed,
+    consumes: version?.consumes ?? [],
     builder: version?.builder ?? null,
     params: version?.params ?? {},
     recipe: version?.recipe ?? {},
@@ -987,4 +991,73 @@ export async function listPrinters(): Promise<PrinterItem[]> {
       statusAt: d.printerStatusAt ? d.printerStatusAt.toISOString() : null,
       stale: !d.printerStatusAt || now - d.printerStatusAt.getTime() > PRINTER_STATUS_STALE_MS,
     }));
+}
+
+// ─── Feedback and assembly (phase 4, docs/PRINT_EXECUTION_PLAN.md §5.4-5.5) ───
+
+/**
+ * "This print came out wrong": an observation on the batch's (or the model's) journey, with the order and version, so
+ * the next version can say what it fixes. Making that version is a separate step (the model page opens it prefilled).
+ */
+export async function recordProblem(id: string, text: string, userId: string | null, source: JourneySource = "admin") {
+  const job = await getJob(id);
+  return createJourneyEntry({
+    kind: "observation",
+    action: "print_problem",
+    title: `Problem on ${job.batchCode ?? job.modelTitle} (v${job.version})`.slice(0, 200),
+    content: text,
+    batchId: job.batchId,
+    metadata: { printJobId: job.id, model: job.modelSlug, version: job.version, versionId: job.versionId },
+  }, journeyContext(userId, source));
+}
+
+/** The batch is assembled: the journey says so, and the parts its version consumes come off their counts. */
+export async function markAssembled(id: string, userId: string | null, source: JourneySource = "admin"): Promise<PrintJobDetail> {
+  const job = await loadJob(id);
+  if (!job.batchId) throw new TagError("Only a print order of pieces with codes is assembled", 400, "print_assemble_part");
+  if (job.status !== "printed") throw new TagError("Mark the order printed before assembling it", 409, "print_assemble_not_printed");
+  if ((job.report as { assembledAt?: string } | null)?.assembledAt) throw new TagError("This order is already assembled", 409, "print_assemble_done");
+  const [batch] = await db.select({ batchCode: tagBatches.batchCode }).from(tagBatches).where(eq(tagBatches.id, job.batchId)).limit(1);
+  await createJourneyEntry({
+    kind: "execution",
+    action: "assembled",
+    title: `Batch ${batch?.batchCode ?? ""} assembled`.trim(),
+    batchId: job.batchId,
+    metadata: { printJobId: job.id },
+  }, journeyContext(userId, source));
+  await db.update(printJobs).set({ report: { ...(job.report ?? {}), assembledAt: new Date().toISOString() }, updatedAt: new Date() })
+    .where(eq(printJobs.id, job.id));
+  return getJob(job.id);
+}
+
+/**
+ * Called whenever an `assembled` step is written for a batch (from the order, the journey panel or MCP): its order's
+ * version says which parts one piece takes; each comes off its count once per batch. A count may go below zero —
+ * that is a recount to do, shown in the catalog, not a reason to refuse the step.
+ */
+export async function consumeForAssembly(batchId: string, userId: string | null): Promise<number> {
+  const [done] = await rows<{ n: number }>(sql`
+    SELECT count(*)::int AS n FROM print_part_movements WHERE batch_id = ${batchId} AND reason = 'assembled'`);
+  if (Number(done?.n ?? 0) > 0) return 0;
+  const [job] = await rows<{ id: string; consumes: Array<{ part: string; perPiece: number }> | null }>(sql`
+    SELECT j.id, v.consumes FROM print_jobs j JOIN print_model_versions v ON v.id = j.version_id
+    WHERE j.batch_id = ${batchId} AND j.status NOT IN ('failed', 'cancelled')
+    ORDER BY j.created_at DESC LIMIT 1`);
+  const consumes = job?.consumes ?? [];
+  if (!job || !consumes.length) return 0;
+  const [{ pieces }] = await rows<{ pieces: number }>(sql`
+    SELECT count(*)::int AS pieces FROM tags WHERE batch_id = ${batchId} AND stock_status <> 'pending'`);
+  if (!Number(pieces)) return 0;
+  let moved = 0;
+  await db.transaction(async (tx) => {
+    for (const use of consumes) {
+      const [part] = await tx.select().from(printModels).where(eq(printModels.slug, use.part)).limit(1);
+      if (!part || part.kind !== "part") continue;
+      const delta = -use.perPiece * Number(pieces);
+      await tx.insert(printPartMovements).values({ modelId: part.id, delta, reason: "assembled", jobId: job.id, batchId, actorUserId: userId });
+      await tx.update(printModels).set({ partOnHand: sql`${printModels.partOnHand} + ${delta}`, updatedAt: new Date() }).where(eq(printModels.id, part.id));
+      moved++;
+    }
+  });
+  return moved;
 }

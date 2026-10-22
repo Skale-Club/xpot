@@ -128,6 +128,16 @@ async function insertEntry(input: JourneyEntryInput, ctx: JourneyContext): Promi
 /** Adds an entry and returns it; errors reach the caller (admin API, MCP). */
 export async function createJourneyEntry(input: JourneyEntryInput, ctx: JourneyContext): Promise<TagJourneyEntryItem> {
   const id = await insertEntry(input, ctx);
+  if (input.action === "assembled" && input.batchId && (input.status ?? "active") === "active") {
+    // Tags › Production: assembling a batch uses up the parts its version consumes (bases, G tokens). Never fails the
+    // entry: a count that did not move is visible in the catalog. Imported here to keep production.ts → journey.ts one-way.
+    try {
+      const { consumeForAssembly } = await import("./production.js");
+      await consumeForAssembly(input.batchId, ctx.userId);
+    } catch (err) {
+      console.error("[journey] could not take the assembled batch's parts off their counts:", err);
+    }
+  }
   const [entry] = await listEntriesWhere(sql`j.id = ${id}`, 1);
   return entry;
 }
