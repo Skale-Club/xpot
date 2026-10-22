@@ -1,7 +1,7 @@
 # Plano de execução: produção das peças impressas dentro do Xpot
 
-**Status:** proposto e aprovado em 2026-10-22 (decisões D1 e D2 da seção 13; D3 e D4 tomadas como recomendadas). Fases 0 a 3
-implementadas no mesmo dia (seção 11, "Feito"); a carga da seção 10 roda pelo MCP depois do deploy. Fases 4 e 5 abertas.
+**Status:** proposto e aprovado em 2026-10-22 (decisões D1 e D2 da seção 13; D3 e D4 tomadas como recomendadas). Fases 0 a 4
+implementadas no mesmo dia (seção 11, "Feito"); a carga da seção 10 roda pelo MCP depois do deploy. Fase 5 aberta.
 **Público:** produto, engenharia e operação
 **Objetivo:** pedir, gerar, imprimir e receber qualquer peça do catálogo sem sair do Xpot e sem chamar o Claude, que passa a entrar só para desenhar faces, variantes e versões novas.
 
@@ -463,6 +463,21 @@ dono só confirma na tela dela.
 manual; alerta de estoque baixo de parts no Catálogo.
 **Aceite:** a sequência 5.4 inteira acontece no painel; montar um lote de 4 Stands desconta 4 bases e 4 tokens; o extrato explica
 cada número.
+
+**Feito (2026-10-22):**
+
+- **Registrar problema** na ordem (pronta, imprimindo, impressa ou falhou): uma observação `print_problem` no diário do lote,
+  com a ordem e a versão; em seguida a página do modelo abre **Nova versão** com o problema no changelog e o lote em "corrige".
+- **Marcar montado** numa ordem impressa: escreve `assembled` no diário do lote e tira das contagens as peças que a versão consome
+  (`consumes`), multiplicadas pelas peças recebidas. Vale também para `assembled` escrito pelo diário ou pelo MCP; acontece uma vez
+  por lote. A contagem pode ficar negativa (é uma recontagem a fazer, não um motivo para recusar a montagem).
+- **Ponto de reposição** nas peças sem código (`print_models.part_reorder_at`, migração `0061`): abaixo dele o catálogo e a página
+  do modelo mostram "Abaixo de N".
+- MCP: `print_job_update` ganhou `assembled` e `problem`; `print_model_update` aceita `partReorderAt`.
+
+**Aceite:** coberto por `tests/tags/production.integration.test.ts` (problema no diário do lote; montar desconta 3 bases para 3
+peças recebidas, uma vez só, mesmo com um segundo `assembled` pelo diário; extrato `-3 assembled`, `+10 printed`; alerta abaixo do
+ponto de reposição). A tela não foi conferida no navegador (falta sessão de admin local).
 
 ### Fase 5 — Fechamento (1 dia)
 

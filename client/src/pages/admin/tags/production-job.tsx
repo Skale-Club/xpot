@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { AlertTriangle, ClipboardList, Download, FileUp, Files, Printer, RotateCcw, ScanLine, Send } from "lucide-react";
+import { AlertTriangle, ClipboardList, Download, FileUp, Files, Hammer, MessageSquareWarning, Printer, RotateCcw, ScanLine, Send } from "lucide-react";
 import type { PrintJobDetail, PrintJobFileItem } from "@shared/printProduction";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
@@ -29,6 +29,8 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
   const input = useRef<HTMLInputElement>(null);
   const [confirming, setConfirming] = useState<Step | null>(null);
   const [sending, setSending] = useState(false);
+  const [reporting, setReporting] = useState(false);
+  const [assembling, setAssembling] = useState(false);
   const { data: job, isLoading, error, refetch } = useQuery({
     queryKey: [ADMIN_TAGS_KEY, "production", "job", id],
     queryFn: () => getJson<PrintJobDetail>(`/api/xpot/admin/print-jobs/${id}`),
@@ -64,6 +66,25 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
     },
     onError: (err) => toast({ title: t("couldNotSend"), description: errorMessage(err), variant: "destructive" }),
   });
+  const problem = useMutation({
+    mutationFn: (text: string) => sendJson("POST", `/api/xpot/admin/print-jobs/${id}/problem`, { text }),
+    onSuccess: async (_entry, text) => {
+      await invalidateAdminTags();
+      toast({ title: t("problemRecorded") });
+      // The fix is the model's next version: open it with this problem filled in.
+      const params = new URLSearchParams({ note: text, ...(job?.batchCode ? { fix: job.batchCode } : {}) });
+      go(`${PRODUCTION_BASE}/models/${job?.modelSlug}?${params.toString()}`);
+    },
+    onError: (err) => toast({ title: t("couldNotRecordProblem"), description: errorMessage(err), variant: "destructive" }),
+  });
+  const assemble = useMutation({
+    mutationFn: () => sendJson<PrintJobDetail>("POST", `/api/xpot/admin/print-jobs/${id}/assembled`),
+    onSuccess: async () => {
+      await invalidateAdminTags();
+      toast({ title: t("assembledDone") });
+    },
+    onError: (err) => toast({ title: t("couldNotUpdateOrder"), description: errorMessage(err), variant: "destructive" }),
+  });
   const upload = useMutation({
     mutationFn: (file: File) => uploadFile<PrintJobFileItem>(`/api/xpot/admin/print-jobs/${id}/files`, file),
     onSuccess: async () => {
@@ -87,6 +108,8 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
   const hasSliced = job.files.some((f) => f.kind === "gcode_3mf");
   const sendError = (job.report as { sendError?: { message?: string } | null }).sendError ?? null;
   const waitingForPrinter = Boolean(job.sendRequestedAt && !job.sentAt);
+  const assembledAt = (job.report as { assembledAt?: string }).assembledAt ?? null;
+  const canAssemble = Boolean(job.batchId) && job.status === "printed" && !assembledAt;
   const confirmText: Record<Step, { title: string; body: string; label: string; reason?: "required" | "optional" }> = {
     complete: { title: t("confirmCompleteTitle"), body: t("confirmCompleteBody"), label: t("markReady") },
     start: { title: t("confirmStartTitle"), body: t("confirmStartBody"), label: t("startPrinting") },
@@ -140,6 +163,18 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
           {job.status === "ready" || job.status === "printing" ? (
             <Button type="button" variant="brand" accent="tags" size="sm" onClick={() => setConfirming("printed")} data-testid="production-mark-printed">
               {t("markPrinted")}
+            </Button>
+          ) : null}
+          {["ready", "printing", "printed", "failed"].includes(job.status) ? (
+            <Button type="button" variant="ghost" size="sm" onClick={() => setReporting(true)} data-testid="production-problem">
+              <MessageSquareWarning />
+              {t("recordProblem")}
+            </Button>
+          ) : null}
+          {canAssemble ? (
+            <Button type="button" variant="secondary" size="sm" onClick={() => setAssembling(true)} data-testid="production-assembled">
+              <Hammer />
+              {t("markAssembled")}
             </Button>
           ) : null}
           {job.status === "failed" || job.status === "cancelled" ? (
@@ -285,6 +320,31 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
           }}
         />
       </SectionCard>
+
+      <ConfirmDialog
+        open={reporting}
+        onOpenChange={setReporting}
+        title={t("problemTitle")}
+        description={t("problemBody")}
+        confirmLabel={t("recordProblem")}
+        reason="required"
+        reasonLabel={t("problemLabel")}
+        onConfirm={(text) => problem.mutateAsync(text)}
+      />
+
+      <ConfirmDialog
+        open={assembling}
+        onOpenChange={setAssembling}
+        title={t("confirmAssembledTitle")}
+        description={[
+          t("confirmAssembledBody"),
+          job.consumes.length
+            ? t("confirmAssembledConsumes", { list: job.consumes.map((c) => `${c.perPiece * (job.receivedCount ?? job.quantity)} × ${c.part}`).join(", ") })
+            : "",
+        ].filter(Boolean).join(" ")}
+        confirmLabel={t("markAssembled")}
+        onConfirm={() => assemble.mutateAsync()}
+      />
 
       <ConfirmDialog
         open={sending}

@@ -6,6 +6,7 @@ import {
   printJobCreateSchema,
   printModelInputSchema,
   printModelPatchSchema,
+  printProblemSchema,
   printVersionInputSchema,
 } from "#shared/printProduction.js";
 import { TAG_PRODUCT_TYPES } from "#shared/tags.js";
@@ -82,7 +83,7 @@ export function registerPrintProductionTools(server: McpServer, caller: McpCalle
 
   server.tool(
     "print_model_update",
-    "Patch a print model: title, description, theme, face, salesProductId, batchPrefix, sortOrder, retired (true retires it; false brings it back). The recipe never changes here: a recipe change is a new version (print_model_version_create).",
+    "Patch a print model: title, description, theme, face, salesProductId, batchPrefix, sortOrder, partReorderAt (a part's reorder point; below it the catalog warns), retired (true retires it; false brings it back). The recipe never changes here: a recipe change is a new version (print_model_version_create).",
     { model: z.string().min(1), patch: objectParam },
     async ({ model, patch }) => run("print_model_update", () => production.updateModel(model, printModelPatchSchema.parse(patch))),
   );
@@ -129,10 +130,14 @@ export function registerPrintProductionTools(server: McpServer, caller: McpCalle
 
   server.tool(
     "print_job_update",
-    "Move a print order: start (ready → printing), printed (ready|printing → printed: the batch's journey records `printed`, a part's count goes up), fail (with reason), cancel, release (a building order whose bench died goes back to requested), complete (a requested/building order with its file attached becomes ready), redo (a failed/cancelled order is printed again: same version and bed, same batch while none of its pieces was received). Only `printed` after the user confirmed the print came off the bed.",
-    { job: z.string().uuid(), action: z.enum(["start", "printed", "fail", "cancel", "release", "complete", "redo"]), reason: z.string().max(500).optional() },
+    "Move a print order: start (ready → printing), printed (ready|printing → printed: the batch's journey records `printed`, a part's count goes up), fail (with reason), cancel, release (a building order whose bench died goes back to requested), complete (a requested/building order with its file attached becomes ready), redo (a failed/cancelled order is printed again: same version and bed, same batch while none of its pieces was received), assembled (a printed batch was assembled: the parts its version consumes come off their counts), problem (`reason` says what came out wrong: an observation for the next version to fix). Only `printed` and `assembled` after the user confirmed it physically happened.",
+    { job: z.string().uuid(), action: z.enum(["start", "printed", "fail", "cancel", "release", "complete", "redo", "assembled", "problem"]), reason: z.string().max(2000).optional() },
     async ({ job, action, reason }) =>
-      run("print_job_update", () =>
-        action === "redo" ? production.redoJob(job, null) : production.transitionJob(job, { action, reason: reason ?? null, userId: null, source: "mcp" })),
+      run("print_job_update", () => {
+        if (action === "redo") return production.redoJob(job, null);
+        if (action === "assembled") return production.markAssembled(job, null, "mcp");
+        if (action === "problem") return production.recordProblem(job, printProblemSchema.parse({ text: reason ?? "" }).text, null, "mcp");
+        return production.transitionJob(job, { action, reason: reason ?? null, userId: null, source: "mcp" });
+      }),
   );
 }

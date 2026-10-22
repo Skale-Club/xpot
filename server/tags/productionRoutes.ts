@@ -9,6 +9,7 @@ import {
   printModelInputSchema,
   printModelPatchSchema,
   printPartAdjustSchema,
+  printProblemSchema,
   printVersionInputSchema,
   printerStatusSchema,
   type PrintFileKind,
@@ -223,6 +224,28 @@ export function registerProductionRoutes(app: Express, deps: { device: readonly 
       res.status(201).json(await production.attachJobFile(id, resolved, filename, uploadBody(req)));
     } catch (err) {
       fail(res, err, "Failed to upload the print file");
+    }
+  });
+
+  // Something came out wrong: an observation on the journey, for the next version to fix.
+  app.post(`${jobs}/:id/problem`, requireTagAdmin, async (req, res) => {
+    const id = uuidParam(req.params.id, res);
+    if (!id) return;
+    try {
+      const { text } = printProblemSchema.parse(req.body);
+      res.status(201).json(await production.recordProblem(id, text, userIdOf(req)));
+    } catch (err) {
+      fail(res, err, "Failed to record the problem");
+    }
+  });
+
+  app.post(`${jobs}/:id/assembled`, requireTagAdmin, async (req, res) => {
+    const id = uuidParam(req.params.id, res);
+    if (!id) return;
+    try {
+      res.json(await production.markAssembled(id, userIdOf(req)));
+    } catch (err) {
+      fail(res, err, "Failed to mark the order assembled");
     }
   });
 

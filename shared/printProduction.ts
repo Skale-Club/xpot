@@ -209,6 +209,8 @@ export const printModelPatchSchema = z.object({
   salesProductId: z.number().int().positive().nullable().optional(),
   batchPrefix: z.preprocess((v) => (typeof v === "string" ? v.trim().toUpperCase() || null : v), z.string().regex(PRINT_BATCH_PREFIX_PATTERN).nullable().optional()),
   sortOrder: z.number().int().min(-1000).max(100_000).optional(),
+  /** A part's reorder point: below it the catalog warns. Null: no alert. */
+  partReorderAt: z.number().int().min(0).max(100_000).nullable().optional(),
   /** Only `retired` ⇄ back: `ready`/`design_needed` follow from having a current version. */
   retired: z.boolean().optional(),
 }).strict();
@@ -229,6 +231,10 @@ export const printJobCreateSchema = z.object({
   existingBatch: optionalText(80),
 }).strict();
 export type PrintJobCreateInput = z.infer<typeof printJobCreateSchema>;
+
+export const printProblemSchema = z.object({
+  text: z.string().trim().min(3, "Say what went wrong").max(2000),
+}).strict();
 
 export const printJobUpdateSchema = z.object({
   action: z.enum(["start", "printed", "fail", "cancel", "release", "complete"]),
@@ -281,6 +287,9 @@ export interface PrintModelItem {
   withResellers: number;
   /** Orders not finished yet (requested … printing). */
   openJobs: number;
+  /** A part's reorder point, and whether its count is below it. */
+  partReorderAt: number | null;
+  lowStock: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -343,6 +352,8 @@ export interface PrintJobPiece {
 
 export interface PrintJobDetail extends PrintJobItem {
   bed: PrintBed | null;
+  /** The parts one piece of this version takes when it is assembled (a Stand: a base and a G token). */
+  consumes: Array<{ part: string; perPiece: number }>;
   builder: string | null;
   params: Record<string, unknown>;
   recipe: Record<string, unknown>;

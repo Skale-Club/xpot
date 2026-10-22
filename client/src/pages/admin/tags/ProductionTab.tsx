@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/xpot/EmptyState";
 import { Field, Input, Select, Textarea } from "@/components/xpot/Field";
 import { Tabs } from "@/components/xpot/Tabs";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
+import { Pill } from "@/components/xpot/StatusPill";
 import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
@@ -111,6 +112,7 @@ function ModelCard({ model, onOpen, onPrint }: { model: PrintModelItem; onOpen: 
           <span className="block truncate text-sm font-semibold text-white">{model.title}</span>
           <span className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-white/45">
             <ModelStatusPill status={model.status} />
+            {model.lowStock ? <Pill tone="amber">{t("lowStock", { count: model.partReorderAt ?? 0 })}</Pill> : null}
             {version ? <span>v{version.version}</span> : null}
             {bed ? <span className="truncate">{bedSummary(bed, t)}</span> : null}
           </span>

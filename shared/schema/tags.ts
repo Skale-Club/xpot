@@ -422,6 +422,8 @@ export const printModels = pgTable("print_models", {
   // FK print_model_versions.id in SQL (kept off here: the two tables point at each other).
   currentVersionId: uuid("current_version_id"),
   partOnHand: integer("part_on_hand").notNull().default(0),
+  // Below this count the catalog warns (migrations/0061); null: no alert.
+  partReorderAt: integer("part_reorder_at"),
   sortOrder: integer("sort_order").notNull().default(0),
   createdByUserId: text("created_by_user_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

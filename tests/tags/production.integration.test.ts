@@ -373,6 +373,66 @@ describe("send to printer", () => {
   });
 });
 
+describe("feedback and assembly", () => {
+  async function printedOrder(app: express.Express, consumes: Array<{ part: string; perPiece: number }> = []) {
+    await request(app, "POST", "/api/xpot/admin/print-models", {
+      slug: "base-large", kind: "part", title: "Stand base · Large", version: { beds: [{ label: "x4", copies: 4 }] },
+    });
+    await request(app, "POST", "/api/xpot/admin/print-models", {
+      slug: "stand-large-google-white", kind: "serialized", title: "Stand Large · Google · White", productType: "large_stand",
+      face: "google_review", theme: "white", salesProductId: await salesProductId(), batchPrefix: "TSTAND",
+      version: { builder: "stand.google", beds: [bedX4], consumes },
+    });
+    const order = (await request(app, "POST", "/api/xpot/admin/print-jobs", { model: "stand-large-google-white" })).body;
+    await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/files?filename=cards.gcode.3mf`, bytes("gcode"));
+    await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/transition`, { action: "complete" });
+    await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/transition`, { action: "printed" });
+    return order;
+  }
+
+  it("records a problem on the batch's log, for the next version to fix", async () => {
+    const app = admin();
+    const order = await printedOrder(app);
+    const res = await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/problem`, { text: "White came out translucent" });
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ kind: "observation", action: "print_problem", content: "White came out translucent" });
+    const [entry] = await q("SELECT batch_id, metadata FROM tag_journey_entries WHERE action = 'print_problem'");
+    expect(entry.batch_id).toBe(order.batchId);
+    expect(entry.metadata).toMatchObject({ printJobId: order.id, version: 1 });
+    expect((await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/problem`, { text: "" })).status).toBe(400);
+  });
+
+  it("takes the parts a piece consumes off their counts once, for the pieces received", async () => {
+    const app = admin();
+    const order = await printedOrder(app, [{ part: "base-large", perPiece: 1 }]);
+    await request(app, "POST", "/api/xpot/admin/print-models/base-large/part-count", { delta: 10, reason: "printed" });
+    for (const piece of order.pieces.slice(0, 3)) {
+      expect((await request(app, "POST", `/api/xpot/admin/tag-batches/${order.batchId}/scan`, { value: piece.publicCode })).status).toBe(201);
+    }
+    const assembled = await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/assembled`);
+    expect(assembled.status).toBe(200);
+    expect(assembled.body.report.assembledAt).toBeTruthy();
+    expect((await request(app, "GET", "/api/xpot/admin/print-models/base-large")).body.onHand).toBe(7);
+    expect((await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/assembled`)).body.code).toBe("print_assemble_done");
+
+    // The same step written from the journey panel (or MCP) does not take them twice.
+    await request(app, "POST", "/api/xpot/admin/tag-journey", { kind: "execution", action: "assembled", title: "Assembled again", batchId: order.batchId });
+    expect((await request(app, "GET", "/api/xpot/admin/print-models/base-large")).body.onHand).toBe(7);
+    const moves = (await request(app, "GET", "/api/xpot/admin/print-models/base-large")).body.partMovements;
+    expect(moves.map((m: any) => [m.delta, m.reason])).toEqual([[-3, "assembled"], [10, "printed"]]);
+  });
+
+  it("warns below a part's reorder point", async () => {
+    const app = admin();
+    await printedOrder(app);
+    const set = await request(app, "PATCH", "/api/xpot/admin/print-models/base-large", { partReorderAt: 6 });
+    expect(set.body).toMatchObject({ partReorderAt: 6, lowStock: true, onHand: 0 });
+    await request(app, "POST", "/api/xpot/admin/print-models/base-large/part-count", { delta: 6 });
+    expect((await request(app, "GET", "/api/xpot/admin/print-models")).body.find((m: any) => m.slug === "base-large").lowStock).toBe(false);
+    expect((await request(app, "PATCH", "/api/xpot/admin/print-models/stand-large-google-white", { partReorderAt: 3 })).body.partReorderAt).toBeNull();
+  });
+});
+
 describe("parts", () => {
   async function createPart(app: express.Express) {
     const created = await request(app, "POST", "/api/xpot/admin/print-models", {
