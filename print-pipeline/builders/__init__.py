@@ -103,7 +103,12 @@ def _stand(module_name, face, tag, index, params, out_dir, batch):
     if params.get('size', 'large') != 'large':
         raise BuildError('only the Large Stand card has a builder')
     theme = _theme(params, index)
-    report = module.build(tag['public_code'], batch, tag['serial_number'], str(out_dir))
+    mount = params.get('nfc_mount', 'embedded_round')
+    if mount != 'embedded_round' and face != 'Google':
+        raise BuildError(f'nfc_mount {mount!r}: only the Google Stand has the sticker pocket')
+    # Without nfc_mount the call is the one every printed batch was built with (tests/rebuild.py).
+    extra = {} if mount == 'embedded_round' else {'nfc_mount': mount, 'theme': theme}
+    report = module.build(tag['public_code'], batch, tag['serial_number'], str(out_dir), **extra)
     _check_url(report.get('qr_url') or (report.get('qr') or {}).get('url'), tag)
     # The black Stand prints the same meshes with the body and art filaments swapped in the recipe.
     body, art = _pair(theme)
