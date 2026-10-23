@@ -30,6 +30,16 @@ touched. Each file has a header comment with usage; this page is the index.
 - **Focus** is drawn only by the global outline in `index.css` (brand blue).
   Components don't add focus rings; rows inside clipped containers pull the
   outline in with `focus-visible:!-outline-offset-2`.
+- **The phone keyboard** never covers what is being typed. `lib/visualViewport.ts`
+  keeps `--app-vvh` / `--app-vv-top` (the area the keyboard leaves visible) and
+  `html[data-keyboard="open"]` current. Dialogs, alert dialogs and the Tags sheet
+  centre in that area on their own (`.xpot-modal-shell`, `.xpot-visible-area`),
+  so callers never set `top` or `max-h` on them. Popups placed under a field
+  measure room with `visibleViewport()`, not `innerHeight`. A bar pinned to the
+  bottom of the screen takes `data-hide-on-keyboard`; a form can compact itself
+  with the `[html[data-keyboard=open]_&]:` variant. A step's primary action is on
+  screen once: when it lives inside the field (the route planner), the footer
+  does not repeat it.
 - **Text** goes through i18n (`client/src/i18n/messages`); kit strings are in
   `common.ts` and `kit.ts`. Dates, money, distances and durations go through
   `lib/format.ts`.

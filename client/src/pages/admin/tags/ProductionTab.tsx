@@ -167,7 +167,7 @@ function NewModelDialog({ onClose, onCreated }: { onClose: () => void; onCreated
   });
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[90vh] max-w-xl overflow-y-auto">
+      <DialogContent className="max-w-xl">
         <DialogHeader>
           <DialogTitle>{t("newModel")}</DialogTitle>
           <DialogDescription>{t("newModelDesc")}</DialogDescription>

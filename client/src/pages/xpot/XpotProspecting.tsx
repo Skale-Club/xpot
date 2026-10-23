@@ -147,6 +147,9 @@ const SHIFT_HOUR_OPTIONS = PROSPECTING_SHIFT_MINUTES.map((minutes) => minutes / 
 /** The removable city and sector chips of the planner: one tone for both. */
 const TAG_CHIP = "inline-flex min-h-11 max-w-full items-center gap-2.5 rounded-2xl border border-blue-300/20 bg-blue-500/15 py-1.5 pl-4 pr-2 text-base font-semibold text-blue-100";
 const TAG_CHIP_REMOVE = "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-blue-100/65 transition hover:bg-white/10 hover:text-white";
+/** The planner's text field: icon, input and its Continue in one rounded row, ringed as a whole on focus. */
+const PLANNER_FIELD = "xpot-sector-combobox relative flex min-h-14 items-center rounded-2xl border border-white/15 bg-black/20 transition focus-within:border-indigo-300/70 focus-within:bg-black/30 focus-within:shadow-[0_0_0_3px_rgba(129,140,248,0.16)]";
+const PLANNER_INPUT = "h-14 min-w-0 flex-1 bg-transparent pl-11 pr-2 text-base text-white outline-none placeholder:text-white/30 disabled:cursor-not-allowed";
 
 /** A swatch of the map legend, drawn from the marker colours. */
 function LegendItem({ tone, glyph, label }: { tone: { background: string; border: string; text: string }; glyph?: string | null; label: string }) {
@@ -230,6 +233,7 @@ export function XpotProspecting() {
   const [routeParams, setRouteParams] = useSearchParams();
   const [initialDraft] = useState(loadRouteDraft);
   const cityInputRef = useRef<HTMLInputElement>(null);
+  const cityAnchorRef = useRef<HTMLDivElement>(null);
   const sectorInputRef = useRef<HTMLInputElement>(null);
   const sectorAnchorRef = useRef<HTMLDivElement>(null);
   const [city, setCity] = useState(initialDraft.city);
@@ -873,20 +877,24 @@ export function XpotProspecting() {
     if (refocus) window.requestAnimationFrame(() => sectorInputRef.current?.focus());
   };
 
-  // On phones the keyboard covers the dialog footer, so the text steps also
-  // carry their Continue button inside the field, right next to what is typed.
-  // mousedown is cancelled so the input keeps focus: a blur would close the
-  // keyboard, shift the layout and make the tap miss.
-  const inFieldContinue = canAdvancePlanning ? (
+  // The text steps (city, sectors) carry their one Continue inside the field,
+  // right next to what is typed and above the phone keyboard; the footer then
+  // only has Back, so the action is never on screen twice. It sits in the
+  // field's row (not over the text), so what is typed keeps the rest of the
+  // width. mousedown is cancelled so the input keeps focus: a blur would close
+  // the keyboard, shift the layout and make the tap miss.
+  const textStep = planningStep === 0 || planningStep === 1;
+  const inFieldContinue = (
     <Button
       type="submit"
       variant="brand"
+      disabled={!canAdvancePlanning}
       onMouseDown={(event) => event.preventDefault()}
-      className="absolute right-2 top-1/2 min-h-10 -translate-y-1/2 gap-1 pl-3.5 pr-2.5 font-bold"
+      className="mr-2 min-h-10 shrink-0 gap-1 pl-3 pr-2 font-bold sm:pl-3.5 sm:pr-2.5"
     >
       {t("continue")}<ChevronRight />
     </Button>
-  ) : null;
+  );
 
   const removeSector = (niche: string) => {
     setSectors(parsedSearches.filter((search) => search.niche !== niche).map((search) => search.query).join(", "));
@@ -962,12 +970,13 @@ export function XpotProspecting() {
               onInteractOutside={(event) => {
                 if ((event.target as HTMLElement | null)?.closest?.(`[${SUGGESTIONS_ATTRIBUTE}]`)) event.preventDefault();
               }}
-              className="max-h-[calc(100dvh-2rem)] w-[calc(100%-1.5rem)] max-w-2xl gap-0 p-0 sm:rounded-[28px]"
+              className="w-[calc(100%-1.5rem)] max-w-2xl gap-0 p-0 sm:rounded-[28px]"
             >
               <GradientTopLine glow />
               <DialogTitle className="sr-only">{planningTitles[planningStep]}</DialogTitle>
               <DialogDescription className="sr-only">{planningBodies[planningStep]}</DialogDescription>
-              <div className="min-h-[500px] p-5 sm:p-8">
+              {/* A fixed minimum height only from sm: on a phone it would push the field under the keyboard. */}
+              <div className="p-4 sm:min-h-[500px] sm:p-8">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-indigo-500/15 text-indigo-300"><Radar className="h-5 w-5" /></span>
@@ -983,20 +992,23 @@ export function XpotProspecting() {
             {[0, 1, 2, 3].map((step) => <span key={step} className={`h-1 rounded-full transition-colors ${step <= planningStep ? "bg-gradient-to-r from-indigo-400 to-sky-400" : "bg-white/10"}`} />)}
           </div>
 
-          <form className="flex min-h-[390px] flex-col" onSubmit={submitPlanningStep}>
-            <div className="flex-1 py-9 sm:py-12">
+          <form className="flex flex-col sm:min-h-[390px]" onSubmit={submitPlanningStep}>
+            {/* While the keyboard is up the step's explanation steps aside, so the
+                field, its suggestions and the chips fit in what stays visible. */}
+            <div className="flex-1 py-6 sm:py-12 [html[data-keyboard=open]_&]:py-4">
               <h1 className="max-w-xl text-2xl font-bold tracking-tight text-white sm:text-3xl">{planningTitles[planningStep]}</h1>
-              <p className="mt-3 max-w-xl text-sm leading-6 text-white/55 sm:text-base">{planningBodies[planningStep]}</p>
+              <p className="mt-3 max-w-xl text-sm leading-6 text-white/55 sm:text-base [html[data-keyboard=open]_&]:hidden">{planningBodies[planningStep]}</p>
 
               {planningStep === 0 ? (
-                <div className="mt-8">
+                <div className="mt-6 sm:mt-8 [html[data-keyboard=open]_&]:mt-4">
                   <label className="sr-only" htmlFor="prospecting-city">{t("cityLabel")}</label>
-                  <div className="relative">
+                  <div ref={cityAnchorRef} className={PLANNER_FIELD}>
                     <MapPin className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-indigo-300" />
                     <input
                       autoFocus
                       id="prospecting-city"
                       ref={cityInputRef}
+                      enterKeyHint="next"
                       value={city}
                       onChange={(event) => { setCity(event.target.value); setCitySuggestionsOpen(true); }}
                       onFocus={() => setCitySuggestionsOpen(true)}
@@ -1009,11 +1021,11 @@ export function XpotProspecting() {
                       aria-controls="prospecting-city-suggestions"
                       aria-expanded={citySuggestionsOpen && cities.length < MAX_PROSPECTING_CITIES && deferredCity.length >= 2}
                       aria-describedby="prospecting-cities-help"
-                      className={`h-14 w-full rounded-2xl border border-white/15 bg-black/20 pl-12 text-base text-white outline-none transition placeholder:text-white/30 focus:border-indigo-300/70 focus:bg-black/30 disabled:cursor-not-allowed ${inFieldContinue ? "pr-36" : "pr-4"}`}
+                      className={PLANNER_INPUT}
                     />
                     {inFieldContinue}
                     <FloatingSuggestions
-                      anchorRef={cityInputRef}
+                      anchorRef={cityAnchorRef}
                       id="prospecting-city-suggestions"
                       open={citySuggestionsOpen && cities.length < MAX_PROSPECTING_CITIES && deferredCity.length >= 2}
                     >
@@ -1049,9 +1061,9 @@ export function XpotProspecting() {
               ) : null}
 
               {planningStep === 1 ? (
-                <div className="mt-8">
+                <div className="mt-6 sm:mt-8 [html[data-keyboard=open]_&]:mt-4">
                   <label className="sr-only" htmlFor="prospecting-sectors">{t("sectorsLabel")}</label>
-                  <div ref={sectorAnchorRef} className="xpot-sector-combobox relative flex min-h-14 items-center rounded-2xl border border-white/15 bg-black/20 transition focus-within:border-indigo-300/70 focus-within:bg-black/30 focus-within:shadow-[0_0_0_3px_rgba(129,140,248,0.16)]">
+                  <div ref={sectorAnchorRef} className={PLANNER_FIELD}>
                     <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-indigo-300" />
                     <input
                       autoFocus
@@ -1077,7 +1089,7 @@ export function XpotProspecting() {
                       aria-controls="prospecting-sector-suggestions"
                       aria-expanded={sectorSuggestionsOpen && sectorFragment.length >= 2 && (sectorPlacesQuery.isFetching || sectorPlacesQuery.isError || googleSectorSuggestions.length > 0)}
                       aria-describedby="prospecting-sectors-help"
-                      className={`h-14 min-w-0 flex-1 bg-transparent pl-12 text-base text-white outline-none placeholder:text-white/30 disabled:cursor-not-allowed ${inFieldContinue ? "pr-36" : "pr-4"}`}
+                      className={PLANNER_INPUT}
                     />
                     {inFieldContinue}
                     <FloatingSuggestions
@@ -1151,14 +1163,17 @@ export function XpotProspecting() {
               ) : null}
             </div>
 
-            <div className="flex items-center gap-3 border-t border-white/10 pt-5">
-              {planningStep > 0 ? (
+            {/* The first step has nothing to go back to and its Continue is in the field: no footer. */}
+            {planningStep > 0 ? (
+              <div className="flex items-center gap-3 border-t border-white/10 pt-5 [html[data-keyboard=open]_&]:pt-3">
                 <Button type="button" variant="ghost" size="lg" onClick={() => setPlanningStep((planningStep - 1) as PlanningStep)} className="px-3 text-sm"><ChevronLeft />{t("back")}</Button>
-              ) : <span />}
-              <Button type="submit" variant="brand" size="lg" disabled={!canAdvancePlanning} loading={createJob.isPending} aria-label={createJob.isPending ? t("creating") : undefined} className="ml-auto min-w-36 px-5 text-sm font-bold">
-                {planningStep === 3 ? <><RouteIcon />{t("buildToday")}</> : <>{t("continue")}<ChevronRight /></>}
-              </Button>
-            </div>
+                {textStep ? null : (
+                  <Button type="submit" variant="brand" size="lg" disabled={!canAdvancePlanning} loading={createJob.isPending} aria-label={createJob.isPending ? t("creating") : undefined} className="ml-auto min-w-36 px-5 text-sm font-bold">
+                    {planningStep === 3 ? <><RouteIcon />{t("buildToday")}</> : <>{t("continue")}<ChevronRight /></>}
+                  </Button>
+                )}
+              </div>
+            ) : null}
           </form>
               </div>
             </DialogContent>
@@ -1634,7 +1649,7 @@ export function XpotProspecting() {
       />
 
       <Dialog open={selectedStop !== null} onOpenChange={(open) => { if (!open) setSelectedStopId(null); }}>
-        <DialogContent className="max-h-[calc(100dvh-2rem)] gap-0 p-0 sm:max-w-lg">
+        <DialogContent className="gap-0 p-0 sm:max-w-lg">
           {selectedStop && routeDetails ? (() => {
             const tone = stopMarkerTone(selectedStop, currentStopId, nextStopId);
             const checkingInHere = prepareCheckIn.isPending && prepareCheckIn.variables?.stopId === selectedStop.id;

@@ -103,7 +103,7 @@ function ShowcaseDialog({ item, open, onOpenChange }: { item: TagShowcaseItem | 
   const ready = form.title.trim().length > 0 && payload !== null && (!kit || payload.items.length > 0);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] max-w-xl overflow-y-auto">
+      <DialogContent className="max-w-xl">
         <DialogHeader>
           <DialogTitle>{item ? t("shopEdit") : t("shopNew")}</DialogTitle>
           <DialogDescription>{t("shopDialogDesc")}</DialogDescription>

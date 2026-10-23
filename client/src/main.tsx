@@ -12,6 +12,8 @@ import "./hooks/use-install-app";
 import "./lib/inAppHistory";
 // Its Back / Forward listener must be added before the router's (unsaved-changes guard).
 import "./hooks/useUnsavedChangesGuard";
+// Keeps --app-vvh / --app-vv-top and html[data-keyboard] in step with the phone keyboard.
+import "./lib/visualViewport";
 import { installGlobalErrorReporting } from "./lib/errorReporting";
 
 installGlobalErrorReporting();

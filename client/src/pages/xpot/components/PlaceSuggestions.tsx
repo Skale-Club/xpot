@@ -4,6 +4,7 @@ import type { LucideIcon } from "lucide-react";
 import { GoogleLogo } from "@/components/ui/google-logo";
 import { Loader2 } from "@/components/ui/loader";
 import { SURFACE_MODAL_CLASS } from "@/components/xpot/surface";
+import { visibleViewport } from "@/lib/visualViewport";
 
 // The one Google place-suggestion dropdown (route planner cities and sectors,
 // Settings › Route home address). It is portalled to <body> and placed under
@@ -44,8 +45,11 @@ export function FloatingSuggestions({
     const rect = anchor.getBoundingClientRect();
     const viewportWidth = document.documentElement.clientWidth;
     const viewportHeight = window.innerHeight;
-    const spaceBelow = viewportHeight - rect.bottom - SUGGESTIONS_GAP - SUGGESTIONS_VIEWPORT_GAP;
-    const spaceAbove = rect.top - SUGGESTIONS_GAP - SUGGESTIONS_VIEWPORT_GAP;
+    // Room above the keyboard, not to the bottom of the screen: a list placed
+    // under the field would otherwise open behind the keyboard.
+    const view = visibleViewport();
+    const spaceBelow = view.bottom - rect.bottom - SUGGESTIONS_GAP - SUGGESTIONS_VIEWPORT_GAP;
+    const spaceAbove = rect.top - view.top - SUGGESTIONS_GAP - SUGGESTIONS_VIEWPORT_GAP;
     const placeAbove = spaceBelow < 180 && spaceAbove > spaceBelow;
     const maxHeight = Math.min(SUGGESTIONS_MAX_HEIGHT, Math.max(112, placeAbove ? spaceAbove : spaceBelow));
     const width = Math.min(rect.width, viewportWidth - SUGGESTIONS_VIEWPORT_GAP * 2);
@@ -70,10 +74,15 @@ export function FloatingSuggestions({
     if (anchorRef.current) observer?.observe(anchorRef.current);
     window.addEventListener("resize", updatePosition);
     window.addEventListener("scroll", updatePosition, true);
+    // The keyboard opening or the page panning under it moves the field.
+    window.visualViewport?.addEventListener("resize", updatePosition);
+    window.visualViewport?.addEventListener("scroll", updatePosition);
     return () => {
       observer?.disconnect();
       window.removeEventListener("resize", updatePosition);
       window.removeEventListener("scroll", updatePosition, true);
+      window.visualViewport?.removeEventListener("resize", updatePosition);
+      window.visualViewport?.removeEventListener("scroll", updatePosition);
     };
   }, [anchorRef, open, updatePosition]);
 

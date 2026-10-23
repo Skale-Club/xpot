@@ -14,6 +14,7 @@ import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { cn } from "@/lib/utils";
+import { visibleViewport } from "@/lib/visualViewport";
 import { formatCount, NFC_COLOR, QR_COLOR } from "./charts";
 import { copyToClipboard, haptic, readClipboard, type BannerState } from "./lib";
 
@@ -321,8 +322,10 @@ export function LinkInput({
     const r = field.current?.getBoundingClientRect();
     if (!r) return;
     const width = Math.min(Math.max(r.width, 220), 280);
-    const below = window.innerHeight - r.bottom;
-    setMenuAt(below >= 260 || below >= r.top ? { left: r.left, width, top: r.bottom + 6 } : { left: r.left, width, bottom: window.innerHeight - r.top + 6 });
+    // Room under the field above the keyboard, not under the field in the whole screen.
+    const view = visibleViewport();
+    const below = view.bottom - r.bottom;
+    setMenuAt(below >= 260 || below >= r.top - view.top ? { left: r.left, width, top: r.bottom + 6 } : { left: r.left, width, bottom: window.innerHeight - r.top + 6 });
   };
   useEffect(() => {
     if (!menuAt) return;
@@ -570,9 +573,10 @@ export function BottomSheet({ open, onClose, children, title, icon, banner }: {
   }, [open]);
   if (!open) return null;
   return (
-    // Centered on every screen (the owner found bottom sheets awkward on the phone).
+    // Centered on every screen (the owner found bottom sheets awkward on the phone),
+    // in the part the keyboard leaves visible (xpot-visible-area, index.css).
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center p-4 lg:p-6"
+      className="xpot-visible-area fixed inset-x-0 z-[60] flex items-center justify-center p-4 lg:p-6"
       style={{ paddingTop: "calc(env(safe-area-inset-top) + 16px)", paddingBottom: "calc(env(safe-area-inset-bottom) + 16px)" }}
       role="dialog"
       aria-modal="true"

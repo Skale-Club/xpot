@@ -74,7 +74,7 @@ export function PackingListDialog({ kit, onOpenChange }: { kit: TagKitItem | nul
   const rep = kit ? kit.repName ?? t("resellerNumber", { id: kit.repId }) : "";
   return (
     <Dialog open={!!kit} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto" data-testid="kit-packing-list">
+      <DialogContent data-testid="kit-packing-list">
         <DialogHeader>
           <DialogTitle>{kit ? tf("packingListTitleCode", { code: kit.kitCode }) : t("packingListTitle")}</DialogTitle>
           <DialogDescription>
