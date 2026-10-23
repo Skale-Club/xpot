@@ -292,7 +292,7 @@ function VersionDialog({ model, fix, onClose }: { model: PrintModelDetail; fix: 
   );
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>{current ? t("newVersionTitle", { version: current.version + 1 }) : t("firstVersion")}</DialogTitle>
           <DialogDescription>{t("versionDialogDesc")}</DialogDescription>

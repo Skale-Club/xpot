@@ -16,7 +16,8 @@ export function MobileTabBar({ tabs, activeId, onSelect, module }: { tabs: Mobil
   const accent = MODULE_ACCENT[module];
   const orderedTabs = orderMobileTabs(tabs, module);
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-50 px-4 pt-2" style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 16px)" }}>
+    // Hidden while the keyboard is up (index.css), so it never covers the field being typed in.
+    <nav data-hide-on-keyboard className="fixed inset-x-0 bottom-0 z-50 px-4 pt-2" style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 16px)" }}>
       <div
         className="mx-auto flex max-w-md items-center gap-1 rounded-2xl border border-white/10 px-2 py-1.5"
         style={{ background: "rgba(15, 23, 42, 0.85)", backdropFilter: "blur(20px)" }}

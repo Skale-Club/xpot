@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Building2, LocateFixed, Plus, Search, X } from "lucide-react";
 import { DotsLoader } from "@/components/ui/spinner";
 import { Pill } from "@/components/xpot/StatusPill";
@@ -9,8 +9,15 @@ import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { usePlaceSearch } from "../usePlaceSearch";
 import { matchSavedLead } from "../utils";
 import { placeTypeLabel } from "@/lib/placeTypes";
+import { visibleViewport } from "@/lib/visualViewport";
 import { useLeadLookup } from "../hooks/useLeadLookup";
 import type { FullSalesLead, GeoState, GooglePlaceResult } from "../types";
+
+/** Gap kept between the phone list and the keyboard (list margin and border included). */
+const LIST_EDGE_GAP = 20;
+/** Below this much room under the field the field scrolls up first. */
+const LIST_MIN_ROOM = 240;
+const LIST_MIN_HEIGHT = 160;
 
 type Item =
   | { kind: "lead"; key: string; lead: FullSalesLead }
@@ -87,6 +94,39 @@ export const PlaceLeadSearch = forwardRef<PlaceLeadSearchHandle, {
   ], [isDesktop, leadResults, places]);
 
   useEffect(() => { setActiveIndex(-1); }, [query]);
+
+  // On a phone the list opens under the field and the keyboard covers the
+  // screen's lower half: the list is cut to the room left above the keyboard,
+  // and when that room is too small the field scrolls up to make some (once
+  // per opening), so the last row ("create a company") stays reachable.
+  const [phoneListMax, setPhoneListMax] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    if (!open || isDesktop) {
+      setPhoneListMax(null);
+      return;
+    }
+    let revealed = false;
+    const measure = () => {
+      const field = inputRef.current;
+      if (!field) return;
+      const room = visibleViewport().bottom - field.getBoundingClientRect().bottom - LIST_EDGE_GAP;
+      if (room < LIST_MIN_ROOM && !revealed) {
+        revealed = true;
+        field.scrollIntoView({ block: "start", behavior: "smooth" });
+      }
+      setPhoneListMax(Math.max(LIST_MIN_HEIGHT, room));
+    };
+    measure();
+    const vv = window.visualViewport;
+    vv?.addEventListener("resize", measure);
+    vv?.addEventListener("scroll", measure);
+    window.addEventListener("scroll", measure, true);
+    return () => {
+      vv?.removeEventListener("resize", measure);
+      vv?.removeEventListener("scroll", measure);
+      window.removeEventListener("scroll", measure, true);
+    };
+  }, [open, isDesktop]);
 
   const pick = (item: Item) => {
     setOpen(false);
@@ -236,7 +276,8 @@ export const PlaceLeadSearch = forwardRef<PlaceLeadSearchHandle, {
           aria-expanded={open}
           aria-autocomplete="list"
           aria-activedescendant={items[activeIndex]?.key}
-          className={`w-full bg-transparent pl-12 pr-2 font-medium text-white placeholder:text-white/30 focus:outline-none ${tall ? "h-14 text-[16px]" : "h-12 text-[15px]"}`}
+          enterKeyHint="search"
+          className={`w-full scroll-mt-4 bg-transparent pl-12 pr-2 font-medium text-white placeholder:text-white/30 focus:outline-none ${tall ? "h-14 text-[16px]" : "h-12 text-[15px]"}`}
           data-testid="place-lead-search"
         />
         <div className="flex shrink-0 items-center gap-1 pr-2">
@@ -279,7 +320,7 @@ export const PlaceLeadSearch = forwardRef<PlaceLeadSearchHandle, {
               </div>
             </div>
           ) : (
-            <div className="max-h-[60vh] overflow-y-auto p-2">
+            <div className="max-h-[60vh] overflow-y-auto overscroll-contain p-2" style={phoneListMax ? { maxHeight: `min(60vh, ${phoneListMax}px)` } : undefined}>
               {leadRows.length ? <>{sectionLabel(t("searchSectionLeads"))}{leadRows}</> : null}
               <div className={leadRows.length ? "mt-2 border-t border-white/[0.06] pt-2" : ""}>
                 {sectionLabel(t("searchSectionGoogle"), <GoogleLogo className="h-3.5 w-3.5 opacity-70" />)}

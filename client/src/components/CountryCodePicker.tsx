@@ -4,6 +4,7 @@ import { Check, ChevronDown } from "lucide-react";
 import { PHONE_COUNTRIES } from "@shared/phone";
 import { CountryFlag } from "@/components/CountryFlag";
 import { SURFACE_MODAL_CLASS } from "@/components/xpot/surface";
+import { visibleViewport } from "@/lib/visualViewport";
 
 // The country code next to a phone field. A native <select> can't show an
 // image inside its options, so this is a small listbox with SVG flags.
@@ -39,8 +40,10 @@ export function CountryCodePicker({
 
     const rect = trigger.getBoundingClientRect();
     const desiredHeight = Math.min(PHONE_COUNTRIES.length * 44 + 8, 280);
-    const spaceBelow = window.innerHeight - rect.bottom - VIEWPORT_GAP - POPUP_GAP;
-    const spaceAbove = rect.top - VIEWPORT_GAP - POPUP_GAP;
+    // Measured against what the keyboard leaves visible, so the list never opens behind it.
+    const view = visibleViewport();
+    const spaceBelow = view.bottom - rect.bottom - VIEWPORT_GAP - POPUP_GAP;
+    const spaceAbove = rect.top - view.top - VIEWPORT_GAP - POPUP_GAP;
     const placeBelow = spaceBelow >= Math.min(desiredHeight, 176) || spaceBelow >= spaceAbove;
     const availableHeight = placeBelow ? spaceBelow : spaceAbove;
     const maxHeight = Math.max(120, Math.min(desiredHeight, availableHeight));
@@ -48,7 +51,7 @@ export function CountryCodePicker({
     const left = Math.max(VIEWPORT_GAP, Math.min(rect.left, window.innerWidth - width - VIEWPORT_GAP));
     const top = placeBelow
       ? rect.bottom + POPUP_GAP
-      : Math.max(VIEWPORT_GAP, rect.top - POPUP_GAP - maxHeight);
+      : Math.max(view.top + VIEWPORT_GAP, rect.top - POPUP_GAP - maxHeight);
 
     setPopupPosition({ left, top, width, maxHeight });
   }, []);
@@ -68,9 +71,13 @@ export function CountryCodePicker({
     positionPopup();
     window.addEventListener("resize", positionPopup);
     window.addEventListener("scroll", positionPopup, true);
+    window.visualViewport?.addEventListener("resize", positionPopup);
+    window.visualViewport?.addEventListener("scroll", positionPopup);
     return () => {
       window.removeEventListener("resize", positionPopup);
       window.removeEventListener("scroll", positionPopup, true);
+      window.visualViewport?.removeEventListener("resize", positionPopup);
+      window.visualViewport?.removeEventListener("scroll", positionPopup);
     };
   }, [open, positionPopup]);
 
