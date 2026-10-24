@@ -1,9 +1,9 @@
 import type { Dictionary } from "../index";
 
 // The shell's information architecture (Phase 3a): the Platform group, the
-// visit screen's own title, the management-mode scope chip and toast, the
-// palette's shortcut hints, and the Settings tabs (Sign-in, Memberships and
-// the Administration entry). Nav labels shared with older screens stay in shell.ts.
+// visit screen's own title, the management-mode toast, the
+// palette's shortcut hints, and the Settings sections (Sign-in and
+// Administration). Nav labels shared with older screens stay in shell.ts.
 
 const en = {
   // Sidebar and palette groups (shell.ts has Administration = navOrganization)
@@ -14,13 +14,7 @@ const en = {
   // Management mode
   managementOnTitle: "Management mode on",
   managementOnBody: "Lists show the whole team. Leave it from the amber bar.",
-  scopeEveryone: "Viewing: everyone",
-  scopeOnlyMe: "Viewing: only me",
-  scopeToEveryone: "Show the whole team (management mode)",
-  scopeToOnlyMe: "Show only my records",
   /** A Rep Admin in management mode: the organizations they run. */
-  scopeOrganization: "Viewing: my organization",
-  scopeToOrganization: "Show my organization (management mode)",
 
   // Command palette footer: only the shortcuts this screen supports
   shortcutsLabel: "Shortcuts",
@@ -57,12 +51,6 @@ export const navIaMessages: Dictionary<typeof en> = {
 
     managementOnTitle: "Modo gestão ligado",
     managementOnBody: "As listas mostram toda a equipe. Saia pela barra âmbar.",
-    scopeEveryone: "Vendo: todos",
-    scopeOnlyMe: "Vendo: só eu",
-    scopeToEveryone: "Mostrar toda a equipe (modo gestão)",
-    scopeToOnlyMe: "Mostrar só os meus registros",
-    scopeOrganization: "Vendo: minha organização",
-    scopeToOrganization: "Mostrar minha organização (modo gestão)",
 
     shortcutsLabel: "Atalhos",
     shortcutSearch: "/ buscar",
@@ -94,12 +82,6 @@ export const navIaMessages: Dictionary<typeof en> = {
 
     managementOnTitle: "Modo gestión activado",
     managementOnBody: "Las listas muestran a todo el equipo. Sal desde la barra ámbar.",
-    scopeEveryone: "Viendo: todos",
-    scopeOnlyMe: "Viendo: solo yo",
-    scopeToEveryone: "Mostrar a todo el equipo (modo gestión)",
-    scopeToOnlyMe: "Mostrar solo mis registros",
-    scopeOrganization: "Viendo: mi organización",
-    scopeToOrganization: "Mostrar mi organización (modo gestión)",
 
     shortcutsLabel: "Atajos",
     shortcutSearch: "/ buscar",

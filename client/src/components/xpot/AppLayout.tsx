@@ -50,7 +50,6 @@ import { ScreenErrorBoundary } from "./ScreenErrorBoundary";
 import { UserGreeting } from "./UserGreeting";
 import { dashboardMessages } from "@/i18n/messages/dashboard";
 import { PersistentRouteProgress } from "./PersistentRouteProgress";
-import { ScopeChip } from "./ScopeChip";
 import { useAvatarUpload } from "./useAvatarUpload";
 import { navigateGuarded } from "@/hooks/useUnsavedChangesGuard";
 
@@ -540,7 +539,7 @@ export function AppLayout({
         <DesktopTopBar
           title={title}
           crumb={crumb}
-          actions={<><ScopeChip />{topBarActions}</>}
+          actions={topBarActions}
           onSearch={() => setPaletteOpen(true)}
         />
         <ActiveVisitBanner />
@@ -551,8 +550,6 @@ export function AppLayout({
           style={mobileColumnStyle}
         >
           {mobileHeader ? <div className="lg:hidden">{mobileHeader}</div> : null}
-          {/* Whose records the list shows (managers); on desktop it sits in the top bar. */}
-          <div className="flex justify-end empty:hidden lg:hidden [&:not(:empty)]:mb-3"><ScopeChip /></div>
           <main id="xpot-main-content" tabIndex={-1} className="flex-1">
             <ScreenErrorBoundary resetKey={location}>{children}</ScreenErrorBoundary>
           </main>

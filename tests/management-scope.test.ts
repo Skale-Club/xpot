@@ -1,8 +1,8 @@
-// The scope chip says exactly whose records a list shows (moduleNav.ts
-// scopeChipState), and the server's filters for each scope match it
+// Who has management mode, which lists a Rep Admin's mode widens
+// (moduleNav.ts organizationWideList), and the server's filters for each scope
 // (server/routes/xpot/middleware.ts recordFilters).
 import { describe, expect, it, vi } from "vitest";
-import { organizationWideList, scopeChipState } from "../client/src/components/xpot/moduleNav";
+import { organizationWideList } from "../client/src/components/xpot/moduleNav";
 import { managementReach } from "../client/src/lib/adminMode";
 import { runsATeam } from "../shared/organizations";
 
@@ -33,43 +33,13 @@ describe("who has management mode", () => {
   });
 });
 
-describe("scope chip", () => {
-  it("says only me with management mode off, for everyone who has the mode", () => {
-    for (const reach of ["everyone", "organization"] as const) {
-      expect(scopeChipState("/leads", reach, false, false)).toEqual({ label: "mine", toggles: true });
-      expect(scopeChipState("/sales", reach, false, false)).toEqual({ label: "mine", toggles: true });
-    }
+describe("lists a Rep Admin's management mode widens", () => {
+  it("Companies, Tasks and Sales except the pipeline", () => {
+    for (const path of ["/leads", "/leads/4", "/tasks", "/sales", "/sales/sales/3", "/sales/stock"]) expect(organizationWideList(path)).toBe(true);
   });
 
-  it("says everyone for a manager in management mode", () => {
-    expect(scopeChipState("/leads", "everyone", true, false)).toEqual({ label: "everyone", toggles: true });
-    expect(scopeChipState("/dashboard/history", "everyone", true, false)).toEqual({ label: "everyone", toggles: true });
-    expect(scopeChipState("/tags", "everyone", true, false)).toEqual({ label: "everyone", toggles: true });
-  });
-
-  it("says my organization for a Rep Admin on the lists their mode widens", () => {
-    for (const path of ["/leads", "/leads/4", "/sales", "/sales/sales/3", "/sales/stock"]) {
-      expect(scopeChipState(path, "organization", true, false)).toEqual({ label: "organization", toggles: true });
-    }
-  });
-
-  it("says only me, and is no switch, where a Rep Admin's mode widens nothing", () => {
-    for (const path of ["/dashboard/history", "/sales/pipeline", "/tags", "/tags/customers"]) {
-      expect(organizationWideList(path)).toBe(false);
-      expect(scopeChipState(path, "organization", true, false)).toEqual({ label: "mine", toggles: false });
-    }
-  });
-
-  it("on Tasks follows the Whole team filter", () => {
-    expect(scopeChipState("/tasks", "organization", true, false)?.label).toBe("mine");
-    expect(scopeChipState("/tasks", "organization", true, true)?.label).toBe("organization");
-    expect(scopeChipState("/tasks", "everyone", true, true)?.label).toBe("everyone");
-  });
-
-  it("is not there without management mode or off the lists", () => {
-    expect(scopeChipState("/leads", null, false, false)).toBeNull();
-    expect(scopeChipState("/dashboard", "everyone", true, false)).toBeNull();
-    expect(scopeChipState("/tags/pieces", "organization", true, false)).toBeNull();
+  it("not visits, the pipeline or Tags: those stay their own", () => {
+    for (const path of ["/dashboard/history", "/sales/pipeline", "/tags", "/tags/customers"]) expect(organizationWideList(path)).toBe(false);
   });
 });
 

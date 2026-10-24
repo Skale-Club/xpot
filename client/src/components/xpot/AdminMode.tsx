@@ -10,7 +10,7 @@ import { contextOfPath, repScreenFor } from "./moduleNav";
 
 // The two sides of the app, kept visibly apart. Settings is the person's own
 // (language, profile, sign-in); management lives in management mode, entered
-// from the sidebar, the scope chip on a list or Settings, and marked by an
+// from the sidebar or Settings › Administration, and marked by an
 // amber bar on every screen until it is left.
 
 /** Where each module's management starts. */
@@ -71,7 +71,7 @@ export function AdminModeBar() {
       data-testid="admin-mode-bar"
     >
       <Shield className="h-4 w-4 shrink-0 text-amber-300" />
-      {/* A phone has room for the name only; the lists' scope chip says the rest. */}
+      {/* A phone has room for the name only; wider screens say whose lists show. */}
       <span className="min-w-0 flex-1 truncate text-sm font-semibold">
         <span className="sm:hidden">{t("adminModeEnter")}</span>
         <span className="hidden sm:inline">{t(reach === "organization" ? "adminModeOnOrganization" : "adminModeOn")}</span>
