@@ -1,0 +1,254 @@
+/*
+ * Mobile surface lift.
+ *
+ * Xpot is a dark UI whose cards are faint white veils (white at 2-6% opacity)
+ * over a near-black page, so on a phone, in daylight, a card and the page read
+ * as the same colour. Below the `lg` breakpoint (where the sidebar layout
+ * starts) this file raises every translucent-white fill, border and divider the
+ * app already uses, keeping their order, so cards stand apart from the
+ * background. Desktop is untouched.
+ *
+ *   fill   = --m-fill-base + original alpha * --m-fill-k
+ *   border = --m-line-base + original alpha * --m-line-k
+ *
+ * To make cards brighter or dimmer on phones, change the four numbers below;
+ * nothing else needs to move. The selectors below are generated from the
+ * `bg-white/…`, `border-white/…` and `divide-white/…` utilities in use and
+ * from the inline `rgba(255, 255, 255, …)` styles. A new alpha value that is not
+ * listed is simply not lifted: add it here.
+ */
+@media (max-width: 1023.98px) {
+  :root {
+    --m-fill-base: 0.05;
+    --m-fill-k: 0.9;
+    --m-line-base: 0.07;
+    --m-line-k: 0.9;
+  }
+
+  /* --- fills --- */
+  [class~="bg-white/[0.02]"] {
+    background-color: rgb(255 255 255 / calc(var(--m-fill-base) + 0.02 * var(--m-fill-k)));
+  }
+  [class~="bg-white/[0.025]"] {
+    background-color: rgb(255 255 255 / calc(var(--m-fill-base) + 0.025 * var(--m-fill-k)));
+  }
+  [class~="bg-white/[0.028]"] {
+    background-color: rgb(255 255 255 / calc(var(--m-fill-base) + 0.028 * var(--m-fill-k)));
+  }
+  [class~="bg-white/[0.03]"] {
+    background-color: rgb(255 255 255 / calc(var(--m-fill-base) + 0.03 * var(--m-fill-k)));
+  }
+  [class~="bg-white/[0.032]"] {
+    background-color: rgb(255 255 255 / calc(var(--m-fill-base) + 0.032 * var(--m-fill-k)));
+  }
+  [class~="bg-white/[0.035]"] {
+    background-color: rgb(255 255 255 / calc(var(--m-fill-base) + 0.035 * var(--m-fill-k)));
+  }
+  [class~="bg-white/[0.04]"] {
+    background-color: rgb(255 255 255 / calc(var(--m-fill-base) + 0.04 * var(--m-fill-k)));
+  }
+  [class~="bg-white/[0.045]"] {
+    background-color: rgb(255 255 255 / calc(var(--m-fill-base) + 0.045 * var(--m-fill-k)));
+  }
+  [class~="bg-white/[0.05]"],
+  [class~="bg-white/5"] {
+    background-color: rgb(255 255 255 / calc(var(--m-fill-base) + 0.05 * var(--m-fill-k)));
+  }
+  [class~="bg-white/[0.06]"] {
+    background-color: rgb(255 255 255 / calc(var(--m-fill-base) + 0.06 * var(--m-fill-k)));
+  }
+  [class~="bg-white/[0.07]"] {
+    background-color: rgb(255 255 255 / calc(var(--m-fill-base) + 0.07 * var(--m-fill-k)));
+  }
+  [class~="bg-white/[0.08]"] {
+    background-color: rgb(255 255 255 / calc(var(--m-fill-base) + 0.08 * var(--m-fill-k)));
+  }
+  [class~="bg-white/10"] {
+    background-color: rgb(255 255 255 / calc(var(--m-fill-base) + 0.1 * var(--m-fill-k)));
+  }
+  [class~="bg-white/[0.12]"] {
+    background-color: rgb(255 255 255 / calc(var(--m-fill-base) + 0.12 * var(--m-fill-k)));
+  }
+  [class~="bg-white/15"] {
+    background-color: rgb(255 255 255 / calc(var(--m-fill-base) + 0.15 * var(--m-fill-k)));
+  }
+  [class~="hover:bg-white/[0.02]"]:hover {
+    background-color: rgb(255 255 255 / calc(var(--m-fill-base) + 0.02 * var(--m-fill-k)));
+  }
+  [class~="hover:bg-white/[0.025]"]:hover {
+    background-color: rgb(255 255 255 / calc(var(--m-fill-base) + 0.025 * var(--m-fill-k)));
+  }
+  [class~="hover:bg-white/[0.03]"]:hover {
+    background-color: rgb(255 255 255 / calc(var(--m-fill-base) + 0.03 * var(--m-fill-k)));
+  }
+  [class~="hover:bg-white/[0.035]"]:hover {
+    background-color: rgb(255 255 255 / calc(var(--m-fill-base) + 0.035 * var(--m-fill-k)));
+  }
+  [class~="hover:bg-white/[0.04]"]:hover {
+    background-color: rgb(255 255 255 / calc(var(--m-fill-base) + 0.04 * var(--m-fill-k)));
+  }
+  [class~="hover:bg-white/[0.045]"]:hover {
+    background-color: rgb(255 255 255 / calc(var(--m-fill-base) + 0.045 * var(--m-fill-k)));
+  }
+  [class~="hover:bg-white/[0.05]"]:hover,
+  [class~="focus-visible:bg-white/[0.05]"]:focus-visible,
+  [class~="hover:bg-white/5"]:hover,
+  [class~="active:bg-white/[0.05]"]:active {
+    background-color: rgb(255 255 255 / calc(var(--m-fill-base) + 0.05 * var(--m-fill-k)));
+  }
+  [class~="hover:bg-white/[0.055]"]:hover {
+    background-color: rgb(255 255 255 / calc(var(--m-fill-base) + 0.055 * var(--m-fill-k)));
+  }
+  [class~="hover:bg-white/[0.06]"]:hover,
+  [class~="focus-visible:bg-white/[0.06]"]:focus-visible {
+    background-color: rgb(255 255 255 / calc(var(--m-fill-base) + 0.06 * var(--m-fill-k)));
+  }
+  [class~="hover:bg-white/[0.07]"]:hover {
+    background-color: rgb(255 255 255 / calc(var(--m-fill-base) + 0.07 * var(--m-fill-k)));
+  }
+  [class~="hover:bg-white/[0.08]"]:hover {
+    background-color: rgb(255 255 255 / calc(var(--m-fill-base) + 0.08 * var(--m-fill-k)));
+  }
+  [class~="hover:bg-white/10"]:hover,
+  [class~="active:bg-white/10"]:active,
+  [class~="hover:bg-white/[0.1]"]:hover {
+    background-color: rgb(255 255 255 / calc(var(--m-fill-base) + 0.1 * var(--m-fill-k)));
+  }
+  /* --- borders --- */
+  [class~="border-white/[0.02]"] {
+    border-color: rgb(255 255 255 / calc(var(--m-line-base) + 0.02 * var(--m-line-k)));
+  }
+  [class~="border-white/[0.04]"] {
+    border-color: rgb(255 255 255 / calc(var(--m-line-base) + 0.04 * var(--m-line-k)));
+  }
+  [class~="border-white/5"],
+  [class~="border-white/[0.05]"] {
+    border-color: rgb(255 255 255 / calc(var(--m-line-base) + 0.05 * var(--m-line-k)));
+  }
+  [class~="border-white/[0.06]"] {
+    border-color: rgb(255 255 255 / calc(var(--m-line-base) + 0.06 * var(--m-line-k)));
+  }
+  [class~="border-white/[0.07]"] {
+    border-color: rgb(255 255 255 / calc(var(--m-line-base) + 0.07 * var(--m-line-k)));
+  }
+  [class~="border-white/[0.075]"] {
+    border-color: rgb(255 255 255 / calc(var(--m-line-base) + 0.075 * var(--m-line-k)));
+  }
+  [class~="border-white/[0.08]"] {
+    border-color: rgb(255 255 255 / calc(var(--m-line-base) + 0.08 * var(--m-line-k)));
+  }
+  [class~="border-white/[0.09]"] {
+    border-color: rgb(255 255 255 / calc(var(--m-line-base) + 0.09 * var(--m-line-k)));
+  }
+  [class~="border-white/10"],
+  [class~="border-white/[0.1]"] {
+    border-color: rgb(255 255 255 / calc(var(--m-line-base) + 0.1 * var(--m-line-k)));
+  }
+  [class~="border-white/[0.12]"],
+  [class~="border-white/12"] {
+    border-color: rgb(255 255 255 / calc(var(--m-line-base) + 0.12 * var(--m-line-k)));
+  }
+  [class~="border-white/15"] {
+    border-color: rgb(255 255 255 / calc(var(--m-line-base) + 0.15 * var(--m-line-k)));
+  }
+  [class~="hover:border-white/[0.12]"]:hover {
+    border-color: rgb(255 255 255 / calc(var(--m-line-base) + 0.12 * var(--m-line-k)));
+  }
+  [class~="hover:border-white/[0.13]"]:hover {
+    border-color: rgb(255 255 255 / calc(var(--m-line-base) + 0.13 * var(--m-line-k)));
+  }
+  [class~="hover:border-white/[0.15]"]:hover,
+  [class~="hover:border-white/15"]:hover {
+    border-color: rgb(255 255 255 / calc(var(--m-line-base) + 0.15 * var(--m-line-k)));
+  }
+  /* --- dividers --- */
+  [class~="divide-white/5"] > :not([hidden]) ~ :not([hidden]),
+  [class~="divide-white/[0.05]"] > :not([hidden]) ~ :not([hidden]) {
+    border-color: rgb(255 255 255 / calc(var(--m-line-base) + 0.05 * var(--m-line-k)));
+  }
+  [class~="divide-white/[0.055]"] > :not([hidden]) ~ :not([hidden]) {
+    border-color: rgb(255 255 255 / calc(var(--m-line-base) + 0.055 * var(--m-line-k)));
+  }
+  [class~="divide-white/[0.06]"] > :not([hidden]) ~ :not([hidden]) {
+    border-color: rgb(255 255 255 / calc(var(--m-line-base) + 0.06 * var(--m-line-k)));
+  }
+  [class~="divide-white/[0.07]"] > :not([hidden]) ~ :not([hidden]) {
+    border-color: rgb(255 255 255 / calc(var(--m-line-base) + 0.07 * var(--m-line-k)));
+  }
+  [class~="divide-white/[0.08]"] > :not([hidden]) ~ :not([hidden]) {
+    border-color: rgb(255 255 255 / calc(var(--m-line-base) + 0.08 * var(--m-line-k)));
+  }
+  [class~="divide-white/10"] > :not([hidden]) ~ :not([hidden]) {
+    border-color: rgb(255 255 255 / calc(var(--m-line-base) + 0.1 * var(--m-line-k)));
+  }
+
+  /* inline styles: React writes them as `background: rgba(255, 255, 255, 0.04)` */
+  [style*="background: rgba(255, 255, 255, 0.025)"] {
+    background-color: rgb(255 255 255 / calc(var(--m-fill-base) + 0.025 * var(--m-fill-k))) !important;
+  }
+  [style*="background: rgba(255, 255, 255, 0.03)"] {
+    background-color: rgb(255 255 255 / calc(var(--m-fill-base) + 0.03 * var(--m-fill-k))) !important;
+  }
+  [style*="background: rgba(255, 255, 255, 0.04)"] {
+    background-color: rgb(255 255 255 / calc(var(--m-fill-base) + 0.04 * var(--m-fill-k))) !important;
+  }
+  [style*="background: rgba(255, 255, 255, 0.05)"] {
+    background-color: rgb(255 255 255 / calc(var(--m-fill-base) + 0.05 * var(--m-fill-k))) !important;
+  }
+  [style*="background: rgba(255, 255, 255, 0.06)"] {
+    background-color: rgb(255 255 255 / calc(var(--m-fill-base) + 0.06 * var(--m-fill-k))) !important;
+  }
+  [style*="background: rgba(255, 255, 255, 0.07)"] {
+    background-color: rgb(255 255 255 / calc(var(--m-fill-base) + 0.07 * var(--m-fill-k))) !important;
+  }
+  [style*="background: rgba(255, 255, 255, 0.08)"] {
+    background-color: rgb(255 255 255 / calc(var(--m-fill-base) + 0.08 * var(--m-fill-k))) !important;
+  }
+  [style*="background: rgba(255, 255, 255, 0.1)"] {
+    background-color: rgb(255 255 255 / calc(var(--m-fill-base) + 0.1 * var(--m-fill-k))) !important;
+  }
+  [style*="solid rgba(255, 255, 255, 0.04)"],
+  [style*="border: rgba(255, 255, 255, 0.04)"] {
+    border-color: rgb(255 255 255 / calc(var(--m-line-base) + 0.04 * var(--m-line-k))) !important;
+  }
+  [style*="solid rgba(255, 255, 255, 0.05)"],
+  [style*="border: rgba(255, 255, 255, 0.05)"] {
+    border-color: rgb(255 255 255 / calc(var(--m-line-base) + 0.05 * var(--m-line-k))) !important;
+  }
+  [style*="solid rgba(255, 255, 255, 0.06)"],
+  [style*="border: rgba(255, 255, 255, 0.06)"] {
+    border-color: rgb(255 255 255 / calc(var(--m-line-base) + 0.06 * var(--m-line-k))) !important;
+  }
+  [style*="solid rgba(255, 255, 255, 0.07)"],
+  [style*="border: rgba(255, 255, 255, 0.07)"] {
+    border-color: rgb(255 255 255 / calc(var(--m-line-base) + 0.07 * var(--m-line-k))) !important;
+  }
+  [style*="solid rgba(255, 255, 255, 0.075)"],
+  [style*="border: rgba(255, 255, 255, 0.075)"] {
+    border-color: rgb(255 255 255 / calc(var(--m-line-base) + 0.075 * var(--m-line-k))) !important;
+  }
+  [style*="solid rgba(255, 255, 255, 0.08)"],
+  [style*="border: rgba(255, 255, 255, 0.08)"] {
+    border-color: rgb(255 255 255 / calc(var(--m-line-base) + 0.08 * var(--m-line-k))) !important;
+  }
+  [style*="solid rgba(255, 255, 255, 0.085)"],
+  [style*="border: rgba(255, 255, 255, 0.085)"] {
+    border-color: rgb(255 255 255 / calc(var(--m-line-base) + 0.085 * var(--m-line-k))) !important;
+  }
+  [style*="solid rgba(255, 255, 255, 0.09)"],
+  [style*="border: rgba(255, 255, 255, 0.09)"] {
+    border-color: rgb(255 255 255 / calc(var(--m-line-base) + 0.09 * var(--m-line-k))) !important;
+  }
+  [style*="solid rgba(255, 255, 255, 0.1)"],
+  [style*="border: rgba(255, 255, 255, 0.1)"] {
+    border-color: rgb(255 255 255 / calc(var(--m-line-base) + 0.1 * var(--m-line-k))) !important;
+  }
+  [style*="solid rgba(255, 255, 255, 0.11)"],
+  [style*="border: rgba(255, 255, 255, 0.11)"] {
+    border-color: rgb(255 255 255 / calc(var(--m-line-base) + 0.11 * var(--m-line-k))) !important;
+  }
+  [style*="solid rgba(255, 255, 255, 0.12)"],
+  [style*="border: rgba(255, 255, 255, 0.12)"] {
+    border-color: rgb(255 255 255 / calc(var(--m-line-base) + 0.12 * var(--m-line-k))) !important;
+  }
+}

@@ -44,6 +44,17 @@ touched. Each file has a header comment with usage; this page is the index.
   `common.ts` and `kit.ts`. Dates, money, distances and durations go through
   `lib/format.ts`.
 
+## Phone contrast (`client/src/mobile-surfaces.css`)
+
+Cards are faint white veils (2–6%) over a near-black page, which read as one
+colour on a phone in daylight. Below `lg` that file raises every translucent-white
+fill, border and divider the screens already use (`bg-white/…`,
+`border-white/…`, `divide-white/…`, their `hover:` states and the inline
+`rgba(255, 255, 255, …)` of `GLASS`), keeping their order. Desktop is untouched.
+Fill = `--m-fill-base` + alpha × `--m-fill-k`; border = `--m-line-base` + alpha ×
+`--m-line-k`: change those four numbers to make cards brighter or dimmer on
+phones. A new alpha value is lifted only once it is listed in that file.
+
 ## Tokens (`components/xpot/surface.ts`)
 
 | Token | Value | Use |
