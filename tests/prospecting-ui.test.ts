@@ -3,8 +3,11 @@ import {
   exclusionCounts,
   moveIdByOffset,
   parseSectorSearches,
+  localDateKey,
   persistentProspectingJob,
   prospectingProgress,
+  routesByDay,
+  routeUsage,
   reorderIdsAroundTarget,
   routeDisplayName,
   routeStopProgress,
@@ -126,19 +129,44 @@ describe("prospecting UI helpers", () => {
   });
 
   it("keeps active and recent unrouted searches resumable from the shell", () => {
-    const now = new Date("2026-10-14T16:00:00Z");
+    const now = new Date("2026-10-14T16:00:00");
+    const today = localDateKey(now);
     const jobs = [
-      { id: 4, status: "completed", createdAt: "2026-10-14T15:00:00Z" },
-      { id: 3, status: "running", createdAt: "2026-10-14T14:00:00Z" },
-      { id: 2, status: "completed", createdAt: "2026-10-12T14:00:00Z" },
+      { id: 4, status: "completed", createdAt: new Date("2026-10-14T15:00:00").toISOString() },
+      { id: 3, status: "running", createdAt: new Date("2026-10-14T14:00:00").toISOString() },
+      { id: 2, status: "completed", createdAt: new Date("2026-10-12T14:00:00").toISOString() },
     ];
     expect(persistentProspectingJob(jobs, [], now)?.job.id).toBe(3);
-    expect(persistentProspectingJob(jobs, [{ id: 9, jobId: 4, status: "published" }], now)?.job.id).toBe(3);
-    expect(persistentProspectingJob(jobs.filter((job) => job.id !== 3), [{ id: 9, jobId: 4, status: "published" }], now))
+    expect(persistentProspectingJob(jobs, [{ id: 9, jobId: 4, status: "published", routeDate: today }], now)?.job.id).toBe(3);
+    expect(persistentProspectingJob(jobs.filter((job) => job.id !== 3), [{ id: 9, jobId: 4, status: "published", routeDate: today }], now))
       .toMatchObject({ job: { id: 4 }, route: { id: 9 } });
     expect(persistentProspectingJob([
-      { id: 5, status: "completed", routePlanningStatus: "ready", createdAt: "2026-10-14T15:30:00Z" },
+      { id: 5, status: "completed", routePlanningStatus: "ready", createdAt: new Date("2026-10-14T15:30:00").toISOString() },
     ], [], now)).toBeNull();
+  });
+
+  it("drops yesterday's search and route from the shell", () => {
+    // Built Friday evening, seen Saturday morning: less than a day old, but expired.
+    const saturday = new Date("2026-10-24T09:00:00");
+    const fridayJob = { id: 7, status: "completed", routePlanningStatus: "ready", createdAt: new Date("2026-10-23T19:00:00").toISOString() };
+    const fridayRoute = { id: 11, jobId: 7, status: "published", routeDate: "2026-10-23" };
+    expect(persistentProspectingJob([fridayJob], [fridayRoute], saturday)).toBeNull();
+    expect(persistentProspectingJob([{ ...fridayJob, routePlanningStatus: "building" }], [], saturday)).toBeNull();
+  });
+
+  it("tells a used route from an unused one and groups the history by day", () => {
+    expect(routeUsage({ stopCount: 12, visitedStopCount: 5 })).toEqual({ used: true, visited: 5, total: 12 });
+    expect(routeUsage({ stopCount: 12, visitedStopCount: 0 })).toEqual({ used: false, visited: 0, total: 12 });
+    expect(routeUsage({})).toEqual({ used: false, visited: 0, total: 0 });
+    const days = routesByDay([
+      { id: 1, routeDate: "2026-10-22" },
+      { id: 2, routeDate: "2026-10-24" },
+      { id: 3, routeDate: "2026-10-22" },
+    ]);
+    expect(days.map((group) => [group.day, group.routes.map((route) => route.id)])).toEqual([
+      ["2026-10-24", [2]],
+      ["2026-10-22", [1, 3]],
+    ]);
   });
 
   it("summarizes exclusions and caps the explicit route selection", () => {

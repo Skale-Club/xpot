@@ -1,6 +1,6 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { BellRing, Building2, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Clock3, ExternalLink, GripVertical, Home, Map as MapIcon, MapPin, MapPinCheck, Navigation, Nfc, Phone, Radar, RefreshCw, RotateCw, Route as RouteIcon, SearchX, Search, ShieldCheck, Sparkles, Star, Trash2, X } from "lucide-react";
+import { BellRing, Building2, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Clock3, ExternalLink, GripVertical, Home, Map as MapIcon, MapPin, MapPinCheck, Navigation, Nfc, PencilLine, Phone, Radar, RotateCw, Route as RouteIcon, SearchX, Search, ShieldCheck, Sparkles, Star, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "@/components/ui/loader";
 import { useToast } from "@/hooks/use-toast";
@@ -9,7 +9,6 @@ import { prospectingMessages } from "@/i18n/messages/prospecting";
 import { prospectingUiMessages } from "@/i18n/messages/prospectingUi";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { routePushSupported, subscribeToRoutePush } from "@/lib/pushNotifications";
-import { useViewerAccess } from "@/lib/adminMode";
 import { formatDistance, formatDuration, formatTime } from "@/lib/format";
 import { Link, useLocation, useSearchParams } from "wouter";
 import { RoutePreviewMap, type RouteLandmark } from "./components/RoutePreviewMap";
@@ -32,14 +31,18 @@ import {
   eligibleCandidates as eligibleOf,
   exclusionCounts,
   isStopOpen,
+  localDateKey,
   searchPhase,
   MAX_PROSPECTING_SECTORS,
   moveIdByOffset,
   parseSectorSearches,
   prospectingProgress,
   reorderIdsAroundTarget,
+  routeDateLabel,
   routeDisplayName,
   routeFill,
+  routesByDay,
+  routeUsage,
   routeStatusIcon,
   routeStatusLabel,
   routeStatusTone,
@@ -51,7 +54,6 @@ import {
   MAP_POINT_TONES,
   routeOfJob,
   todayRouteOf,
-  selectableCandidateIds,
   serverNowMs,
   wholeMinutes,
   type ProspectingTiming,
@@ -109,6 +111,9 @@ type ProspectingRoute = {
   totalDistanceMeters: number;
   optimizationMeta: { encodedPolyline?: string; returnHome?: boolean };
   createdAt: string;
+  /** From the routes list only: its stops, and how many got a check-in. */
+  stopCount?: number;
+  visitedStopCount?: number;
 };
 
 type RouteStop = {
@@ -196,13 +201,6 @@ function compactIdempotencyPart(value: string) {
     hash = Math.imul(hash, 16777619);
   }
   return (hash >>> 0).toString(36);
-}
-
-function localDateKey(date = new Date()) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
 }
 
 function driveMinutes(seconds: number) {
@@ -328,14 +326,9 @@ export function XpotProspecting() {
     const jobId = Number(routeParams.get("jobId"));
     return Number.isSafeInteger(jobId) && jobId > 0 ? jobId : null;
   }, [routeParams]);
-  const recentUnroutedJobId = useMemo(() => {
-    const routedJobIds = new Set((routesQuery.data ?? []).map((route) => route.jobId).filter((id): id is number => id !== null));
-    const cutoff = Date.now() - 12 * 60 * 60 * 1000;
-    return (jobsQuery.data ?? []).find((job) => !routedJobIds.has(job.id)
-      && job.routePlanningStatus !== "ready"
-      && new Date(job.createdAt).getTime() >= cutoff)?.id ?? null;
-  }, [jobsQuery.data, routesQuery.data]);
-  const activeJobId = requestedJobId ?? selectedJobId ?? (todayRoutes.length === 0 ? todayJobs[0]?.id ?? recentUnroutedJobId : null) ?? null;
+  // Routes are same-day: only today's search opens by itself. Yesterday's
+  // search and route are history, even when they are less than a day old.
+  const activeJobId = requestedJobId ?? selectedJobId ?? (todayRoutes.length === 0 ? todayJobs[0]?.id : null) ?? null;
   const activeRouteId = useMemo(() => {
     const routeId = Number(routeParams.get("routeId"));
     return Number.isSafeInteger(routeId) && routeId > 0 ? routeId : null;
@@ -424,32 +417,32 @@ export function XpotProspecting() {
     onError: (error: Error) => toast({ title: t("errorTitle"), description: error.message, variant: "destructive" }),
   });
 
-  const { isSuperAdmin } = useViewerAccess();
-  const createRoute = useMutation({
-    // rebuild replaces today's route; the server only honours it for the platform owner.
-    mutationFn: async (options: { rebuild?: boolean } | void) => {
-      if (!detailsQuery.data) throw new Error(t("emptyCandidates"));
-      const candidateIds = selectableCandidateIds(detailsQuery.data.candidates);
-      if (!candidateIds.length) throw new Error(t("routeSelectionRequired"));
-      const response = await apiRequest("POST", "/api/xpot/prospecting/routes", {
-        routeDate: today,
-        plannedStartAt: new Date().toISOString(),
-        jobId: detailsQuery.data.job.id,
-        candidateIds,
-        shiftDurationMinutes: detailsQuery.data.job.shiftDurationMinutes,
-        defaultVisitMinutes: detailsQuery.data.job.defaultVisitMinutes,
-        rebuild: options ? options.rebuild ?? false : false,
-      });
-      return response.json() as Promise<RouteDetails>;
-    },
-    onSuccess: async (data, options) => {
-      if (options && options.rebuild) toast({ title: t("routeRebuilt") });
-      openRoute(data.route.id);
-      await queryClient.invalidateQueries({ queryKey: ["/api/xpot/prospecting/routes"] });
-      queryClient.setQueryData(["/api/xpot/prospecting/routes", data.route.id], data);
+  // "Redo route" starts the day over: today's route is cancelled (its unvisited
+  // places go back to the pool) and the planner opens for new cities and
+  // business types. The new search counts toward the daily route limit.
+  const [redoRouteOpen, setRedoRouteOpen] = useState(false);
+  const [plannerAfterRedo, setPlannerAfterRedo] = useState(false);
+  const cancelRoute = useMutation({
+    mutationFn: async (routeId: number) => (await apiRequest("PATCH", `/api/xpot/prospecting/routes/${routeId}/status`, { status: "cancelled" })).json() as Promise<ProspectingRoute>,
+    onSuccess: async (route) => {
+      closeRoute();
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["/api/xpot/prospecting/routes"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/xpot/prospecting/routes", route.id] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/xpot/visits"] }),
+      ]);
+      setRedoRouteOpen(false);
+      setPlannerAfterRedo(true);
     },
     onError: (error: Error) => toast({ title: t("errorTitle"), description: error.message, variant: "destructive" }),
   });
+  // The planner opens once the confirmation has closed, not on top of it.
+  useEffect(() => {
+    if (!plannerAfterRedo || redoRouteOpen) return;
+    setPlannerAfterRedo(false);
+    setPlanningStep(0);
+    setBuilderOpen(true);
+  }, [plannerAfterRedo, redoRouteOpen]);
 
   const retryAutomaticRoute = useMutation({
     mutationFn: async (jobId: number) => (await apiRequest("POST", `/api/xpot/prospecting/jobs/${jobId}/route/retry`, {})).json() as Promise<ProspectingJobDetails>,
@@ -633,7 +626,9 @@ export function XpotProspecting() {
     };
   }, [routeDetails]);
   const selectedStop = routeDetails?.stops.find((stop) => stop.id === selectedStopId) ?? null;
-  const canReorderRoute = routeDetails ? ["draft", "published"].includes(routeDetails.route.status) : false;
+  // An expired route (an earlier day) is history: it can be looked at, not changed or worked.
+  const canReorderRoute = routeDetails ? routeIsToday && ["draft", "published"].includes(routeDetails.route.status) : false;
+  const canRedoRoute = Boolean(activeTodayRoute) && !dailyRouteLimitReached;
   // One count of found places everywhere on the card: the ones the route can use.
   const eligibleCandidates = useMemo(() => eligibleOf(details?.candidates ?? []), [details?.candidates]);
   const canShowCandidates = details?.job.status === "completed";
@@ -832,14 +827,25 @@ export function XpotProspecting() {
     () => (routesQuery.data ?? []).filter((route) => route.id !== activeTodayRoute?.id),
     [routesQuery.data, activeTodayRoute?.id],
   );
+  const historyDays = useMemo(
+    () => routesByDay(showFullHistory ? routeHistory : routeHistory.slice(0, ROUTE_HISTORY_PREVIEW)),
+    [routeHistory, showFullHistory],
+  );
   const routeSummaryLine = (route: ProspectingRoute) => tu("routeLine", {
     status: routeStatusLabel(route.status, t, route.routeDate < today),
     duration: formatDuration(route.totalDurationSeconds),
     distance: formatDistance(route.totalDistanceMeters, t.locale),
   });
+  // A route reads as its search's area ("Framingham, MA"); one built without a search, as its day.
+  const routeTitle = (route: ProspectingRoute) => (route.jobId !== null ? jobsQuery.data?.find((job) => job.id === route.jobId)?.location : undefined)
+    ?? routeDisplayName(route, t.locale);
+  const routeVisitedLine = (route: ProspectingRoute) => {
+    const usage = routeUsage(route);
+    return t.plural("routeVisited", usage.total, { visited: usage.visited });
+  };
+  const todayCompleted = todayRoutes.some((route) => route.status === "completed");
   const openTodayAction = () => {
-    if (activeTodayRoute) openRoute(activeTodayRoute.id);
-    else if (pendingTodayJob) openJob(pendingTodayJob.id);
+    if (pendingTodayJob) openJob(pendingTodayJob.id);
     else setBuilderOpen(true);
   };
 
@@ -909,28 +915,48 @@ export function XpotProspecting() {
       {!loadingExistingPlan && !details && !routeDetails ? (
         <>
           {/* No top padding: the layout already spaces every page from the header. */}
-          <section className="flex w-full pb-1">
-            <Button type="button" variant="brand" onClick={openTodayAction} disabled={!activeTodayRoute && !pendingTodayJob && dailyRouteLimitReached} className="min-h-[92px] w-full justify-start gap-4 whitespace-normal rounded-[22px] p-4 text-left [&_svg]:size-6 lg:min-h-20 lg:px-6">
-              <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/15">
-                {pendingTodayJob && !activeTodayRoute ? <Loader2 className="h-6 w-6" /> : activeTodayRoute ? <MapIcon /> : <RouteIcon />}
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-lg font-bold tracking-tight">{activeTodayRoute
-                  ? t("viewRoute")
-                  : pendingTodayJob
+          {activeTodayRoute ? (
+            // Today's route exists: no "build" button, only that route, to open and edit or to redo.
+            <section className={`w-full rounded-[22px] p-4 lg:px-6 ${GLASS_CLASS}`} data-testid="today-route-card">
+              <div className="flex items-center gap-4">
+                <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-blue-500/15 text-blue-200"><MapIcon className="h-6 w-6" aria-hidden="true" /></span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-indigo-300">{t("todayRouteTitle")}</p>
+                  <p className="mt-0.5 truncate text-lg font-bold tracking-tight text-white first-letter:uppercase">{routeTitle(activeTodayRoute)}</p>
+                  <p className="mt-0.5 text-sm leading-5 text-white/65">{routeSummaryLine(activeTodayRoute)}</p>
+                  {routeUsage(activeTodayRoute).total > 0 ? <p className="text-xs leading-5 text-white/45">{routeVisitedLine(activeTodayRoute)}</p> : null}
+                </div>
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <Button type="button" variant="brand" onClick={() => openRoute(activeTodayRoute.id)} className="min-w-0 px-2 sm:px-4">
+                  <PencilLine />{t("openAndEditRoute")}
+                </Button>
+                <Button type="button" variant="secondary" onClick={() => setRedoRouteOpen(true)} disabled={!canRedoRoute} className="min-w-0 px-2 sm:px-4">
+                  <RotateCw />{t("redoRoute")}
+                </Button>
+              </div>
+              {dailyRouteLimitReached ? <p className="mt-2 text-xs leading-5 text-white/50">{t("dailyRouteLimit", { count: MAX_DAILY_PROSPECTING_SESSIONS })}</p> : null}
+            </section>
+          ) : (
+            <section className="flex w-full pb-1">
+              <Button type="button" variant="brand" onClick={openTodayAction} disabled={!pendingTodayJob && dailyRouteLimitReached} className="min-h-[92px] w-full justify-start gap-4 whitespace-normal rounded-[22px] p-4 text-left [&_svg]:size-6 lg:min-h-20 lg:px-6">
+                <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/15">
+                  {pendingTodayJob ? <Loader2 className="h-6 w-6" /> : <RouteIcon />}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-lg font-bold tracking-tight">{pendingTodayJob
                     ? t("todayRoutePreparing")
-                    : todayRoutes.some((route) => route.status === "completed") ? t("openAnotherRoute") : t("openBuilder")}</span>
-                <span className="mt-1 block text-sm leading-5 text-white/75">{activeTodayRoute
-                  ? routeSummaryLine(activeTodayRoute)
-                  : pendingTodayJob
+                    : todayCompleted ? t("openAnotherRoute") : t("openBuilder")}</span>
+                  <span className="mt-1 block text-sm leading-5 text-white/75">{pendingTodayJob
                     ? t("todayRoutePreparingHint")
                     : dailyRouteLimitReached
                       ? t("dailyRouteLimit", { count: MAX_DAILY_PROSPECTING_SESSIONS })
-                      : t("todayOnlyHint")}</span>
-              </span>
-              <ChevronRight className="shrink-0 text-white/90" />
-            </Button>
-          </section>
+                      : todayCompleted ? t("todayRouteCompleted") : t("todayOnlyHint")}</span>
+                </span>
+                <ChevronRight className="shrink-0 text-white/90" />
+              </Button>
+            </section>
+          )}
 
           <section className="border-t border-white/[0.08] pt-6">
             <div className="flex min-h-9 items-center gap-2 text-white/85">
@@ -938,26 +964,35 @@ export function XpotProspecting() {
               <h2 className="text-sm font-bold">{t("routeHistory")}</h2>
             </div>
             {routeHistory.length ? (
-              <div className="mt-3 divide-y divide-white/[0.08] border-y border-white/[0.08]">
-                {(showFullHistory ? routeHistory : routeHistory.slice(0, ROUTE_HISTORY_PREVIEW)).map((route) => {
-                  const StatusIcon = routeStatusIcon(route.status);
-                  return (
-                    <button key={route.id} type="button" onClick={() => openRoute(route.id)} className="flex min-h-[76px] w-full items-center gap-3 py-3 text-left transition hover:bg-white/[0.025]">
-                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/[0.06] text-white/55"><StatusIcon className="h-5 w-5" aria-hidden="true" /></span>
-                      <span className="min-w-0 flex-1">
-                        <span className="flex min-w-0 items-center gap-2">
-                          <strong className="truncate text-sm text-white/90 first-letter:uppercase">{routeDisplayName(route, t.locale)}</strong>
-                          <Pill tone={routeStatusTone(route.status)} dot className="shrink-0">{routeStatusLabel(route.status, t, route.routeDate < today)}</Pill>
-                        </span>
-                        <span className="mt-1 block truncate text-xs text-white/45">{tu("routePlanLine", {
-                          duration: formatDuration(route.totalDurationSeconds),
-                          distance: formatDistance(route.totalDistanceMeters, t.locale),
-                        })}</span>
-                      </span>
-                      <ChevronRight className="h-4 w-4 shrink-0 text-white/30" />
-                    </button>
-                  );
-                })}
+              // One block per day; each route says whether it was used (a stop got a check-in).
+              <div className="mt-3 space-y-5">
+                {historyDays.map(({ day, routes }) => (
+                  <div key={day}>
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-white/40">{day === today ? t("historyToday") : routeDateLabel(day, t.locale)}</h3>
+                    <div className="mt-1.5 divide-y divide-white/[0.08] border-y border-white/[0.08]">
+                      {routes.map((route) => {
+                        const StatusIcon = routeStatusIcon(route.status);
+                        const { used } = routeUsage(route);
+                        return (
+                          <button key={route.id} type="button" onClick={() => openRoute(route.id)} className="flex min-h-[76px] w-full items-center gap-3 py-3 text-left transition hover:bg-white/[0.025]">
+                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/[0.06] text-white/55"><StatusIcon className="h-5 w-5" aria-hidden="true" /></span>
+                            <span className="min-w-0 flex-1">
+                              <span className="flex min-w-0 items-center gap-2">
+                                <strong className="truncate text-sm text-white/90 first-letter:uppercase">{routeTitle(route)}</strong>
+                                <Pill tone={used ? "green" : "muted"} dot className="shrink-0">{used ? t("routeUsed") : t("routeNotUsed")}</Pill>
+                              </span>
+                              <span className="mt-1 block truncate text-xs text-white/45">
+                                {routeStatusLabel(route.status, t, route.routeDate < today)}
+                                {routeUsage(route).total > 0 ? ` · ${routeVisitedLine(route)}` : ""}
+                              </span>
+                            </span>
+                            <ChevronRight className="h-4 w-4 shrink-0 text-white/30" />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
               </div>
             ) : <div className="mt-3"><EmptyState compact dense icon={RouteIcon} title={t("noRouteHistory")} /></div>}
             {!showFullHistory && routeHistory.length > ROUTE_HISTORY_PREVIEW ? (
@@ -970,13 +1005,15 @@ export function XpotProspecting() {
               onInteractOutside={(event) => {
                 if ((event.target as HTMLElement | null)?.closest?.(`[${SUGGESTIONS_ATTRIBUTE}]`)) event.preventDefault();
               }}
+              phoneSheet
               className="w-[calc(100%-1.5rem)] max-w-2xl gap-0 p-0 sm:rounded-[28px]"
             >
               <GradientTopLine glow />
               <DialogTitle className="sr-only">{planningTitles[planningStep]}</DialogTitle>
               <DialogDescription className="sr-only">{planningBodies[planningStep]}</DialogDescription>
-              {/* A fixed minimum height only from sm: on a phone it would push the field under the keyboard. */}
-              <div className="p-4 sm:min-h-[500px] sm:p-8">
+              {/* On a phone the planner fills the visible screen (phoneSheet) and its
+                  footer sits at the bottom; a fixed minimum height only from sm. */}
+              <div className="flex flex-col p-4 sm:min-h-[500px] sm:p-8">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-indigo-500/15 text-indigo-300"><Radar className="h-5 w-5" /></span>
@@ -992,7 +1029,7 @@ export function XpotProspecting() {
             {[0, 1, 2, 3].map((step) => <span key={step} className={`h-1 rounded-full transition-colors ${step <= planningStep ? "bg-gradient-to-r from-indigo-400 to-sky-400" : "bg-white/10"}`} />)}
           </div>
 
-          <form className="flex flex-col sm:min-h-[390px]" onSubmit={submitPlanningStep}>
+          <form className="flex flex-1 flex-col sm:min-h-[390px]" onSubmit={submitPlanningStep}>
             {/* While the keyboard is up the step's explanation steps aside, so the
                 field, its suggestions and the chips fit in what stays visible. */}
             <div className="flex-1 py-6 sm:py-12 [html[data-keyboard=open]_&]:py-4">
@@ -1404,15 +1441,9 @@ export function XpotProspecting() {
                 ) : null}
                 {directionsUrl ? <Button asChild variant="secondary" className="w-full sm:w-auto"><a href={directionsUrl} target="_blank" rel="noreferrer"><Navigation />{t("openMaps")}</a></Button> : null}
                 {appleDirectionsUrl ? <Button asChild variant="secondary" className="w-full sm:w-auto"><a href={appleDirectionsUrl} target="_blank" rel="noreferrer"><Navigation />{t("openAppleMaps")}</a></Button> : null}
-                {isSuperAdmin && details ? (
-                  <Button
-                    variant="outline"
-                    onClick={() => createRoute.mutate({ rebuild: true })}
-                    disabled={["queued", "running"].includes(details.job.status)}
-                    loading={createRoute.isPending}
-                    className="w-full sm:w-auto"
-                  >
-                    <RefreshCw />{t("rebuildRoute")}
+                {activeTodayRoute?.id === routeDetails.route.id ? (
+                  <Button variant="outline" onClick={() => setRedoRouteOpen(true)} disabled={!canRedoRoute} className="w-full sm:w-auto">
+                    <RotateCw />{t("redoRoute")}
                   </Button>
                 ) : null}
               </div>
@@ -1439,7 +1470,8 @@ export function XpotProspecting() {
                           ? "border-blue-300/30 bg-blue-400/[0.1] text-blue-100/85 shadow-[inset_-1px_0_0_rgba(147,197,253,0.12)]"
                           : "border-white/10 bg-white/[0.035] text-white/45";
                   const checkingInHere = prepareCheckIn.isPending && prepareCheckIn.variables?.stopId === stop.id;
-                  const canRemoveThisStop = routeDetails.stops.length > 1
+                  const canRemoveThisStop = routeIsToday
+                    && routeDetails.stops.length > 1
                     && ["draft", "published", "in_progress"].includes(routeDetails.route.status)
                     && ["planned", "en_route"].includes(stop.status);
                   return (
@@ -1554,7 +1586,7 @@ export function XpotProspecting() {
                         </span>
                       </div>
                       <div className="col-start-2 flex self-end justify-end gap-2 px-3 pb-3 sm:col-start-3 sm:row-start-1 sm:shrink-0 sm:self-end sm:pb-3 sm:pl-0 sm:pr-3 sm:pt-12">
-                        {isStopOpen(stop.status) ? (
+                        {routeIsToday && isStopOpen(stop.status) ? (
                           <Button
                             type="button"
                             variant="brand"
@@ -1631,6 +1663,19 @@ export function XpotProspecting() {
         cancelLabel={t("keepSearch")}
         testId="button-cancel-search-confirm"
         onConfirm={() => (details ? cancelJob.mutateAsync(details.job.id) : undefined)}
+      />
+
+      <ConfirmDialog
+        open={redoRouteOpen && activeTodayRoute !== undefined}
+        onOpenChange={setRedoRouteOpen}
+        tone="danger"
+        title={t("redoRouteTitle")}
+        description={t("redoRouteBody", { count: MAX_DAILY_PROSPECTING_SESSIONS })}
+        confirmLabel={<><RotateCw className="h-4 w-4" />{t("redoRoute")}</>}
+        cancelLabel={t("keepRoute")}
+        confirmDisabled={!canRedoRoute}
+        testId="button-redo-route-confirm"
+        onConfirm={() => (activeTodayRoute ? cancelRoute.mutateAsync(activeTodayRoute.id) : undefined)}
       />
 
       <ConfirmDialog
@@ -1733,7 +1778,7 @@ export function XpotProspecting() {
                 </div>
 
                 <div className="space-y-2">
-                  {isStopOpen(selectedStop.status) ? (
+                  {routeIsToday && isStopOpen(selectedStop.status) ? (
                     <Button type="button" variant="brand" onClick={() => prepareCheckIn.mutate({ routeId: routeDetails.route.id, stopId: selectedStop.id })} loading={checkingInHere} className="w-full font-bold">
                       <MapPinCheck />{t("checkIn")}
                     </Button>

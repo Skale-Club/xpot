@@ -228,6 +228,44 @@ select:focus-visible {
     top: var(--app-vv-top, 0px);
     height: var(--app-vvh, 100dvh);
   }
+
+  /* <DialogContent phoneSheet> (the route planner): on a phone the dialog fills
+     exactly what the keyboard leaves visible instead of floating in the middle,
+     so no part of it is ever off screen and its field sits high enough for the
+     suggestions to open below it. From sm it is a centred dialog again. The
+     two-class selector outranks the caller's width and padding utilities. */
+  @media (max-width: 639.98px) {
+    .xpot-modal-shell.xpot-phone-sheet {
+      top: var(--app-vv-top, 0px);
+      left: 0;
+      width: 100%;
+      max-width: none;
+      height: var(--app-vvh, 100dvh);
+      max-height: none;
+      --tw-translate-x: 0;
+      --tw-translate-y: 0;
+      --tw-enter-translate-x: 0;
+      --tw-enter-translate-y: 0;
+      --tw-exit-translate-x: 0;
+      --tw-exit-translate-y: 0;
+      border-width: 0;
+      border-radius: 0;
+      /* The installed app draws under the status bar (black-translucent). */
+      padding-top: env(safe-area-inset-top, 0px);
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
+    .xpot-modal-shell.xpot-phone-sheet > [data-dialog-close] {
+      top: calc(env(safe-area-inset-top, 0px) + 0.5rem);
+    }
+    /* With the keyboard up the visible area starts below the status bar. */
+    html[data-keyboard="open"] .xpot-modal-shell.xpot-phone-sheet {
+      padding-top: 0;
+      padding-bottom: 0;
+    }
+    html[data-keyboard="open"] .xpot-modal-shell.xpot-phone-sheet > [data-dialog-close] {
+      top: 0.5rem;
+    }
+  }
 }
 
 /* While the keyboard is up, bars pinned to the bottom of the screen (the phone

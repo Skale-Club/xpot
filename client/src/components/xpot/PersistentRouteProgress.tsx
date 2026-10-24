@@ -27,7 +27,7 @@ type ProspectingJobDetails = {
   timing?: ProspectingTiming;
 };
 
-type ProspectingRoute = { id: number; jobId: number | null; status: string; createdAt: string | null };
+type ProspectingRoute = { id: number; jobId: number | null; status: string; routeDate: string; createdAt: string | null };
 
 function stageStatus(stage: ProspectingProgressStage, t: ReturnType<typeof useT<typeof prospectingMessages.en>>) {
   if (stage === "queued") return t("statusQueued");

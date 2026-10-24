@@ -138,26 +138,33 @@ type PersistentProspectingJob = {
   routePlanningStatus?: string;
 };
 
+/** The rep's calendar day ("2026-10-24") on this device: the key a route's routeDate is stored in. */
+export function localDateKey(date = new Date()) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
 /**
  * The search worth keeping in the global shell. Running work always wins; a
  * completed search stays visible while the server is building its route. Once
- * route planning is ready, the route itself becomes the destination.
+ * route planning is ready, the route itself becomes the destination. Routes are
+ * same-day, so yesterday's search and route never show: they are history.
  */
 export function persistentProspectingJob<
   T extends PersistentProspectingJob,
-  R extends { id: number; jobId: number | null; status: string; createdAt?: string | Date | null },
+  R extends { id: number; jobId: number | null; status: string; routeDate: string },
 >(
   jobs: T[],
   routes: R[],
   now = new Date(),
 ): { job: T; route: R | null } | null {
-  const recentCutoff = now.getTime() - 24 * 60 * 60 * 1000;
+  const today = localDateKey(now);
   const activeJob = jobs.find((job) => job.status === "queued" || job.status === "running");
   if (activeJob) return { job: activeJob, route: routes.find((route) => route.jobId === activeJob.id) ?? null };
 
-  const recentJob = jobs.find((job) => job.status === "completed" && new Date(job.createdAt).getTime() >= recentCutoff);
+  const recentJob = jobs.find((job) => job.status === "completed" && localDateKey(new Date(job.createdAt)) === today);
   if (!recentJob) return null;
   const route = routes.find((candidate) => candidate.jobId === recentJob.id
+    && candidate.routeDate === today
     && !["completed", "cancelled"].includes(candidate.status)) ?? null;
   if (route) return { job: recentJob, route };
   return recentJob.routePlanningStatus !== "ready" ? { job: recentJob, route: null } : null;
@@ -247,6 +254,26 @@ export function todayRouteOf<T extends { routeDate: string; status: string }>(
   const ofDay = (routes ?? []).filter((route) => route.routeDate === day);
   return ofDay.find((route) => ACTIVE_ROUTE_STATUSES.includes(route.status))
     ?? (includeCompleted ? ofDay.find((route) => route.status === "completed") : undefined);
+}
+
+/**
+ * Whether a route was used: at least one of its stops got a check-in. The
+ * routes list carries the counts (GET /prospecting/routes).
+ */
+export function routeUsage(route: { stopCount?: number; visitedStopCount?: number }) {
+  const visited = route.visitedStopCount ?? 0;
+  return { used: visited > 0, visited, total: route.stopCount ?? 0 };
+}
+
+/** Routes grouped by day, newest first, keeping the list's order inside a day. */
+export function routesByDay<T extends { routeDate: string }>(routes: T[]) {
+  const days: Array<{ day: string; routes: T[] }> = [];
+  for (const route of [...routes].sort((a, b) => b.routeDate.localeCompare(a.routeDate))) {
+    const last = days[days.length - 1];
+    if (last?.day === route.routeDate) last.routes.push(route);
+    else days.push({ day: route.routeDate, routes: [route] });
+  }
+  return days;
 }
 
 /**

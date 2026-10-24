@@ -169,6 +169,21 @@ test("a published legacy automatic route removes the origin drive from its work 
   expect(firstRebuilt.travel_distance_meters).toBe(0);
 });
 
+test("the routes list says how many stops each route has and how many got a check-in", async () => {
+  const created = await request("POST", "/api/xpot/prospecting/routes", routeBody());
+  expect(created.status).toBe(201);
+  const [first] = created.body.stops as Array<{ id: number }>;
+  await q(`UPDATE prospecting_route_stops SET status = 'completed' WHERE id = $1`, [first.id]);
+
+  const list = await request("GET", "/api/xpot/prospecting/routes");
+  expect(list.status).toBe(200);
+  expect(list.body.find((route: { id: number }) => route.id === created.body.route.id)).toMatchObject({
+    id: created.body.route.id,
+    stopCount: 2,
+    visitedStopCount: 1,
+  });
+});
+
 test("a route visits each business once and never a visited one", async () => {
   const created = await request("POST", "/api/xpot/prospecting/routes", routeBody());
   expect(created.status).toBe(201);

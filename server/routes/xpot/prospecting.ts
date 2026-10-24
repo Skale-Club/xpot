@@ -276,9 +276,17 @@ export function createProspectingRouter() {
 
   router.get("/prospecting/routes", async (req, res) => {
     const actor = (req as any).xpotActor as NonNullable<Awaited<ReturnType<typeof ensureXpotRep>>>;
-    res.json(await db.select().from(prospectingRoutes)
+    // The history says whether a past route was used: how many of its stops got a check-in.
+    // The outer column is spelled out: inside a select list drizzle prints it as a bare
+    // "id", which the subquery would read as the stop's own id.
+    const rows = await db.select({
+      route: prospectingRoutes,
+      stopCount: sql<number>`(select count(*)::int from prospecting_route_stops s where s.route_id = "prospecting_routes"."id")`,
+      visitedStopCount: sql<number>`(select count(*)::int from prospecting_route_stops s where s.route_id = "prospecting_routes"."id" and s.status in ('checked_in', 'completed'))`,
+    }).from(prospectingRoutes)
       .where(eq(prospectingRoutes.repId, actor.rep.id))
-      .orderBy(desc(prospectingRoutes.routeDate), desc(prospectingRoutes.createdAt)));
+      .orderBy(desc(prospectingRoutes.routeDate), desc(prospectingRoutes.createdAt));
+    res.json(rows.map(({ route, stopCount, visitedStopCount }) => ({ ...route, stopCount, visitedStopCount })));
   });
 
   router.post("/prospecting/routes", async (req, res) => {

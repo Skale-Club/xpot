@@ -7,7 +7,6 @@ import type { Dictionary } from "../index";
 
 const en = {
   routeLine: "{status} · {duration} planned · {distance}",
-  routePlanLine: "{duration} planned · {distance}",
   routeDetailLine: "{count} stops · about {duration} · {distance}",
   noEligibleTitle: "No eligible places found",
   noEligibleHint: "Every business found here is already a customer, was visited or conflicts with another route. Try another city or more business types.",
@@ -41,7 +40,6 @@ export const prospectingUiMessages: Dictionary<typeof en> = {
   en,
   pt: {
     routeLine: "{status} · duração prevista {duration} · {distance}",
-    routePlanLine: "Duração prevista {duration} · {distance}",
     routeDetailLine: "{count} paradas · cerca de {duration} · {distance}",
     noEligibleTitle: "Nenhum local elegível encontrado",
     noEligibleHint: "Todas as empresas encontradas aqui já são clientes, já foram visitadas ou conflitam com outra rota. Tente outra cidade ou mais tipos de negócio.",
@@ -72,7 +70,6 @@ export const prospectingUiMessages: Dictionary<typeof en> = {
   },
   es: {
     routeLine: "{status} · duración prevista {duration} · {distance}",
-    routePlanLine: "Duración prevista {duration} · {distance}",
     routeDetailLine: "{count} paradas · cerca de {duration} · {distance}",
     noEligibleTitle: "No se encontraron lugares elegibles",
     noEligibleHint: "Todos los negocios encontrados aquí ya son clientes, ya fueron visitados o chocan con otra ruta. Prueba otra ciudad o más tipos de negocio.",

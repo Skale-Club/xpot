@@ -7,8 +7,11 @@ import { SURFACE_MODAL_CLASS } from "@/components/xpot/surface";
 import { visibleViewport } from "@/lib/visualViewport";
 
 // The one Google place-suggestion dropdown (route planner cities and sectors,
-// Settings › Route home address). It is portalled to <body> and placed under
-// (or above) its field, so it is never clipped by a dialog or a scroll box.
+// Settings › Route home address). Outside a dialog it is portalled to <body>
+// and placed under (or above) its field, so no scroll box clips it. Inside a
+// dialog it is drawn in the dialog, always under the field: a modal dialog
+// blocks touch scrolling everywhere else, so a list left in <body> could not
+// be dragged to its end.
 //
 //   <FloatingSuggestions anchorRef={inputRef} id="city-list" open={open}>
 //     <SuggestionStatus loading={query.isFetching} error={query.isError} … />
@@ -37,12 +40,30 @@ export function FloatingSuggestions({
   open: boolean;
 }) {
   const [style, setStyle] = useState<CSSProperties | null>(null);
+  const [container, setContainer] = useState<HTMLElement | null>(null);
 
   const updatePosition = useCallback(() => {
     const anchor = anchorRef.current;
     if (!anchor) return;
 
     const rect = anchor.getBoundingClientRect();
+    const dialog = anchor.closest<HTMLElement>('[role="dialog"], [role="alertdialog"]');
+    setContainer(dialog);
+    if (dialog) {
+      // Positioned in the dialog's own coordinates, so it scrolls with it.
+      const box = dialog.getBoundingClientRect();
+      const bottom = Math.min(visibleViewport().bottom, box.bottom);
+      const maxHeight = Math.min(SUGGESTIONS_MAX_HEIGHT, Math.max(112, bottom - rect.bottom - SUGGESTIONS_GAP - SUGGESTIONS_VIEWPORT_GAP));
+      setStyle({
+        position: "absolute",
+        top: rect.bottom - box.top - dialog.clientTop + dialog.scrollTop + SUGGESTIONS_GAP,
+        left: rect.left - box.left - dialog.clientLeft + dialog.scrollLeft,
+        maxHeight,
+        width: Math.min(rect.width, dialog.clientWidth - SUGGESTIONS_VIEWPORT_GAP * 2),
+      });
+      return;
+    }
+
     const viewportWidth = document.documentElement.clientWidth;
     const viewportHeight = window.innerHeight;
     // Room above the keyboard, not to the bottom of the screen: a list placed
@@ -94,11 +115,11 @@ export function FloatingSuggestions({
       role="listbox"
       {...{ [SUGGESTIONS_ATTRIBUTE]: "" }}
       style={style}
-      className={`pointer-events-auto fixed z-[100] overflow-y-auto overscroll-contain rounded-2xl shadow-[0_18px_44px_rgba(0,0,0,0.55)] ${SURFACE_MODAL_CLASS}`}
+      className={`pointer-events-auto fixed z-[100] touch-pan-y overflow-y-auto overscroll-contain rounded-2xl shadow-[0_18px_44px_rgba(0,0,0,0.55)] ${SURFACE_MODAL_CLASS}`}
     >
       {children}
     </div>,
-    document.body,
+    container ?? document.body,
   );
 }
 
