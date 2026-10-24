@@ -58,8 +58,12 @@ export const DANGER_SURFACE = {
  */
 export const DANGER_OUTLINE = "border-red-400/30 text-red-300 hover:border-red-400/40 hover:bg-red-500/10 hover:text-red-200";
 
-/** Page background behind every shell (app, tags, settings, admin). */
-export const PAGE_GRADIENT = "linear-gradient(160deg, #060912 0%, #090f1c 50%, #060c14 100%)";
+/**
+ * Page background behind every shell (app, tags, settings, admin). It never gets
+ * lighter than PAGE_BASE by more than a hair, so the card fills stand out
+ * against it; on phones `mobile-surfaces.css` also lifts the cards themselves.
+ */
+export const PAGE_GRADIENT = "linear-gradient(160deg, #060912 0%, #070b15 50%, #060b11 100%)";
 
 /** The solid colour PAGE_GRADIENT starts from: boot screen, theme-color, full-page loaders. */
 export const PAGE_BASE = "#060912";
