@@ -9,6 +9,10 @@ const en = {
 
   // Profile
   sectionProfile: "Profile",
+  editProfile: "Photo, name and phone",
+  // A row of the phone list: management mode on or off
+  modeOn: "On",
+  modeOff: "Off",
   firstName: "First name",
   firstNamePlaceholder: "First name",
   lastName: "Last name",
@@ -57,6 +61,9 @@ export const settingsMessages: Dictionary<typeof en> = {
     languageHint: "Escolha o idioma do app neste aparelho.",
 
     sectionProfile: "Perfil",
+    editProfile: "Foto, nome e telefone",
+    modeOn: "Ligado",
+    modeOff: "Desligado",
     firstName: "Nome",
     firstNamePlaceholder: "Nome",
     lastName: "Sobrenome",
@@ -98,6 +105,9 @@ export const settingsMessages: Dictionary<typeof en> = {
     languageHint: "Elige el idioma de la app en este dispositivo.",
 
     sectionProfile: "Perfil",
+    editProfile: "Foto, nombre y teléfono",
+    modeOn: "Activado",
+    modeOff: "Desactivado",
     firstName: "Nombre",
     firstNamePlaceholder: "Nombre",
     lastName: "Apellido",
