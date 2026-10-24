@@ -96,6 +96,12 @@ their own (`organizationWideList`). My pieces never widens (it always asks for
 `?mine=1`), and a piece's stock movements are shown only in management mode.
 The amber bar across the top (`AdminModeBar`) is what says a list shows more
 than the person's own records; lists carry no per-screen scope label.
+One teammate's work is at Organizations › an organization › Team › the person
+(`OrganizationPerson`, `/organizations/:id/people/:repId`, reached from Settings ›
+Administration › Organizations and team): Companies, Visits, Tasks and Sales from
+the usual endpoints with `?repId=`, in management mode (the page turns it on). A
+manager gets anyone's; a Rep Admin only inside the organizations they run, visits
+included through their company (`visitsInOrganizations`).
 Opening an `/admin/...` page turns a manager's mode on with a toast
 (`AdminApp`); leaving it on a management screen goes to `repScreenFor(path)`.
 An org admin turns it on from the sidebar or Settings › Administration and

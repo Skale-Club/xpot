@@ -195,6 +195,21 @@ export function recordFilters(
   return { repId: actor.rep.id, organizationIds: scope.activeOrganizationIds ?? undefined };
 }
 
+/**
+ * A teammate's visits as a Rep Admin may see them: the ones at companies in
+ * the organizations they run. A visit has no organization of its own; its
+ * company does. A visit whose company is unknown is left out.
+ */
+export function visitsInOrganizations<V extends { leadId: number }>(
+  visits: V[],
+  leads: Array<{ id: number; organizationId: number }>,
+  organizationIds: number[],
+): V[] {
+  const allowed = new Set(organizationIds);
+  const organizationOf = new Map(leads.map((lead) => [lead.id, lead.organizationId]));
+  return visits.filter((visit) => allowed.has(organizationOf.get(visit.leadId) ?? -1));
+}
+
 export async function requireXpotManager(req: Request, res: Response, next: NextFunction) {
   try {
     const actor = await ensureXpotRep(req);

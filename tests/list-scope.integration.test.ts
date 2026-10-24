@@ -29,6 +29,7 @@ const { createSalesRouter } = await import("../server/routes/xpot/sales.js");
 const { createConsignmentsRouter } = await import("../server/routes/xpot/consignments.js");
 const { createLeadsRouter } = await import("../server/routes/xpot/leads.js");
 const { createTasksRouter } = await import("../server/routes/xpot/tasks.js");
+const { createVisitsRouter } = await import("../server/routes/xpot/visits.js");
 
 const q = async (text: string, params: unknown[] = []) => (await pg.client.query(text, params)).rows as any[];
 const one = async (text: string, params: unknown[] = []) => (await q(text, params))[0];
@@ -71,7 +72,11 @@ beforeAll(async () => {
       [organizationId, lead, product, repId],
     );
     await q(`INSERT INTO sales_tasks (organization_id, rep_id, type, title, status) VALUES ($1, $2, 'call', $3, 'pending')`, [organizationId, repId, `${person} task`]);
+    await q(`INSERT INTO sales_visits (rep_id, lead_id) VALUES ($1, $2)`, [repId, lead]);
   }
+  // mate also visited the outsider's company, in Team B: not lead's to see.
+  const outsiderCompany = await one(`SELECT id FROM sales_leads WHERE name = 'outsider company'`);
+  await q(`INSERT INTO sales_visits (rep_id, lead_id) VALUES ($1, $2)`, [people.mate.id, outsiderCompany.id]);
 });
 
 type View = "rep" | "manage" | undefined;
@@ -86,6 +91,7 @@ async function get(person: Person, path: string, view: View): Promise<any> {
   server.use("/api/xpot", createConsignmentsRouter());
   server.use("/api/xpot", createLeadsRouter());
   server.use("/api/xpot", createTasksRouter());
+  server.use("/api/xpot", createVisitsRouter());
   return new Promise((resolve, reject) => {
     const listener = server.listen(0, async () => {
       const { port } = listener.address() as { port: number };
@@ -209,5 +215,44 @@ describe("a platform manager", () => {
   test("ignores the organization filter with management mode off", async () => {
     const companies = await get("boss", `/api/xpot/leads?organizationId=${teamB}`, "rep");
     expect(companies.map((lead: any) => nameOfRep.get(lead.ownerRepId))).toEqual(["boss"]);
+  });
+});
+
+describe("one teammate (Organizations › a person)", () => {
+  const owners = (rows: any[], pick: (row: any) => number) => rows.map((row) => nameOfRep.get(pick(row))).sort();
+  const visitCompanies = (rows: any[]) => rows.map((visit: any) => visit.lead?.name).sort();
+
+  test("a Rep Admin sees that teammate's companies, sales, tasks and visits in their organization", async () => {
+    const id = people.mate.id;
+    expect(owners(await get("lead", `/api/xpot/leads?repId=${id}`, "manage"), (lead) => lead.ownerRepId)).toEqual(["mate"]);
+    expect(owners(await get("lead", `/api/xpot/sales?repId=${id}`, "manage"), (row) => row.sale.repId)).toEqual(["mate"]);
+    expect(owners(await get("lead", `/api/xpot/tasks?repId=${id}`, "manage"), (task) => task.repId)).toEqual(["mate"]);
+    // Not the visit to Team B's company: that is outside what lead runs.
+    expect(visitCompanies(await get("lead", `/api/xpot/visits?repId=${id}`, "manage"))).toEqual(["mate company"]);
+  });
+
+  test("a Rep Admin gets nothing of someone in another organization", async () => {
+    const id = people.outsider.id;
+    expect(await get("lead", `/api/xpot/leads?repId=${id}`, "manage")).toEqual([]);
+    expect(await get("lead", `/api/xpot/sales?repId=${id}`, "manage")).toEqual([]);
+    expect(await get("lead", `/api/xpot/tasks?repId=${id}`, "manage")).toEqual([]);
+    expect(await get("lead", `/api/xpot/visits?repId=${id}`, "manage")).toEqual([]);
+  });
+
+  test("with management mode off, asking for a teammate is still your own", async () => {
+    const id = people.mate.id;
+    expect(owners(await get("lead", `/api/xpot/leads?repId=${id}`, "rep"), (lead) => lead.ownerRepId)).toEqual(["lead"]);
+    expect(visitCompanies(await get("lead", `/api/xpot/visits?repId=${id}`, "rep"))).toEqual(["lead company"]);
+  });
+
+  test("a plain rep can't look at a teammate", async () => {
+    const id = people.lead.id;
+    expect(owners(await get("mate", `/api/xpot/leads?repId=${id}`, "manage"), (lead) => lead.ownerRepId)).toEqual(["mate"]);
+    expect(visitCompanies(await get("mate", `/api/xpot/visits?repId=${id}`, "manage"))).toEqual(["mate company", "outsider company"]);
+  });
+
+  test("a platform manager sees anyone's, in every organization", async () => {
+    expect(visitCompanies(await get("boss", `/api/xpot/visits?repId=${people.mate.id}`, "manage"))).toEqual(["mate company", "outsider company"]);
+    expect(owners(await get("boss", `/api/xpot/leads?repId=${people.outsider.id}`, "manage"), (lead) => lead.ownerRepId)).toEqual(["outsider"]);
   });
 });

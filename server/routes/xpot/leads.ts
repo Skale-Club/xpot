@@ -23,7 +23,8 @@ export function createLeadsRouter() {
 
   // GET /leads — whose companies follow management mode (listScope): with it
   // off, your own; on, a manager's everyone (optional ?repId= and
-  // ?organizationId=) and a Rep Admin's organizations.
+  // ?organizationId=) and a Rep Admin's organizations (optional ?repId= of a
+  // teammate, still inside those organizations).
   router.get("/leads", async (req, res) => {
     const actor = (req as any).xpotActor as XpotActor;
 
@@ -33,11 +34,19 @@ export function createLeadsRouter() {
     // Whose follow-up tasks count: everyone's for a manager, the rep's own otherwise (as on GET /leads/:id).
     let taskRepId: number | undefined;
     const scope = await listScope(req, actor);
+    const requestedRepId = Number(req.query.repId);
+    const teammate = Number.isInteger(requestedRepId) && requestedRepId > 0 && requestedRepId !== actor.rep.id ? requestedRepId : undefined;
     if (scope.kind === "everyone") {
       // Manager can filter by a specific rep, and by one organization
       ownerRepId = req.query.repId ? Number(req.query.repId) : undefined;
       const organizationId = Number(req.query.organizationId);
       if (Number.isInteger(organizationId) && organizationId > 0) organizationIds = [organizationId];
+    } else if (scope.kind === "organizations" && teammate) {
+      // One teammate's companies (Organizations › a person), only inside the
+      // organizations this Rep Admin runs; their follow-ups are the ones that count.
+      ownerRepId = teammate;
+      organizationIds = scope.organizationIds;
+      taskRepId = teammate;
     } else {
       // Their own leads wherever they belong, plus the companies holding their
       // Tags pieces (a rep is often Rep Admin of their personal Organization and
