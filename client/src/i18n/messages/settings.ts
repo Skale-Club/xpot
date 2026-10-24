@@ -5,7 +5,6 @@ import type { Dictionary } from "../index";
 
 const en = {
   title: "Settings",
-  settingsSections: "Settings sections",
   languageHint: "Choose the language of the app on this device.",
 
   // Profile
@@ -39,8 +38,7 @@ const en = {
   showPassword: "Show password",
   hidePassword: "Hide password",
 
-  // Account info
-  sectionAccount: "Memberships",
+  // Access (Settings › Administration, management mode on)
   role: "Role",
   role_rep: "Rep",
   role_manager: "Manager",
@@ -56,7 +54,6 @@ export const settingsMessages: Dictionary<typeof en> = {
   en,
   pt: {
     title: "Configurações",
-    settingsSections: "Seções das configurações",
     languageHint: "Escolha o idioma do app neste aparelho.",
 
     sectionProfile: "Perfil",
@@ -88,7 +85,6 @@ export const settingsMessages: Dictionary<typeof en> = {
     showPassword: "Mostrar senha",
     hidePassword: "Ocultar senha",
 
-    sectionAccount: "Vínculos",
     role: "Papel",
     role_rep: "Vendedor",
     role_manager: "Gerente",
@@ -99,7 +95,6 @@ export const settingsMessages: Dictionary<typeof en> = {
   },
   es: {
     title: "Ajustes",
-    settingsSections: "Secciones de ajustes",
     languageHint: "Elige el idioma de la app en este dispositivo.",
 
     sectionProfile: "Perfil",
@@ -131,7 +126,6 @@ export const settingsMessages: Dictionary<typeof en> = {
     showPassword: "Mostrar contraseña",
     hidePassword: "Ocultar contraseña",
 
-    sectionAccount: "Membresías",
     role: "Rol",
     role_rep: "Vendedor",
     role_manager: "Gerente",

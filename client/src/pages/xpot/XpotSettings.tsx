@@ -1,9 +1,7 @@
 import { useState, useRef, useEffect } from "react";
-import { Tabs } from "@/components/xpot/Tabs";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useLocation, useSearchParams } from "wouter";
 import {
-  BadgeInfo,
   Building2,
   Camera,
   ChevronDown,
@@ -11,13 +9,9 @@ import {
   Eye,
   EyeOff,
   HeartPulse,
-  KeyRound,
-  Languages,
   Palette,
   Plug,
   Save,
-  Shield,
-  UserRound,
   Users,
 } from "lucide-react";
 import { isSuperAdmin } from "@shared/modules";
@@ -70,12 +64,20 @@ const COUNTRIES = [
   { code: "CN", dial: "+86", name: "China" },
 ];
 
-// Settings is the person's own, in four tabs: Profile (photo, names, contact
-// phone), Sign-in (the sign-in phone, read-only; the password only for an
-// email login; installing the app), Language, and Memberships (role, modules,
-// organizations, the Tags wholesale code and, for managers, Administration).
-const SETTINGS_TABS = ["profile", "signin", "language", "memberships"] as const;
-type SettingsTab = (typeof SETTINGS_TABS)[number];
+// Settings is the person's own, one page read top to bottom (no tabs to swipe
+// on a phone): Profile (photo, names, contact phone, the Tags wholesale code),
+// Sign-in (the sign-in phone, read-only; the password only for an email login;
+// installing the app) and Language. Administration follows only for someone
+// who can manage: the management-mode switch, and with the mode on, their
+// access (role, modules, organizations) and the admin pages.
+const SETTINGS_SECTIONS = ["profile", "signin", "language", "administration"] as const;
+type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
+
+/** `?tab=` from older links: "memberships" now lives under Administration. */
+function sectionFromParam(value: string | null): SettingsSection | null {
+  if (value === "memberships") return "administration";
+  return SETTINGS_SECTIONS.find((id) => id === value) ?? null;
+}
 
 /** Country name in the app's language; falls back to the English name. */
 function countryName(code: string, fallback: string, locale: string): string {
@@ -193,20 +195,20 @@ function CountryPhoneInput({
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ id, title, children }: { id?: SettingsSection; title: string; children: React.ReactNode }) {
   return (
-    <div className="space-y-3">
+    <section id={id ? `settings-${id}` : undefined} className="scroll-mt-24 space-y-3" data-testid={id ? `settings-section-${id}` : undefined}>
       <h2 className="px-1 text-base font-bold text-white/90">{title}</h2>
       <div className={`space-y-4 rounded-2xl ${GLASS_CLASS} p-4`}>
         {children}
       </div>
-    </div>
+    </section>
   );
 }
 
 export function XpotSettings() {
   const [, setLocation] = useLocation();
-  const [params, setParams] = useSearchParams();
+  const [params] = useSearchParams();
   const modules = useXpotModules();
   const { toast } = useToast();
   const t = useT(settingsMessages);
@@ -218,22 +220,15 @@ export function XpotSettings() {
   const access = useViewerAccess();
   const avatar = useAvatarUpload();
   const [initialized, setInitialized] = useState(false);
-  // The tab rides in the URL (?tab=memberships), so a link can open it.
-  const activeTab: SettingsTab = SETTINGS_TABS.find((id) => id === params.get("tab")) ?? "profile";
-  const setActiveTab = (tab: SettingsTab) =>
-    setParams((current) => {
-      const next = new URLSearchParams(current);
-      if (tab === "profile") next.delete("tab");
-      else next.set("tab", tab);
-      return next;
-    }, { replace: true });
+  // A link can point at a section (?tab=administration, from an admin page's Back).
+  const linkedSection = sectionFromParam(params.get("tab"));
 
   const meQuery = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
   const me = meQuery.data;
-  // The tab strip scrolls sideways on a phone: keep the open tab (from a link too) in view.
   useEffect(() => {
-    document.getElementById(`settings-tab-${activeTab}`)?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }, [activeTab, meQuery.isLoading]);
+    if (!linkedSection || linkedSection === "profile" || meQuery.isLoading) return;
+    document.getElementById(`settings-${linkedSection}`)?.scrollIntoView({ block: "start" });
+  }, [linkedSection, meQuery.isLoading]);
 
   const [displayName, setDisplayName] = useState("");
   const [firstName, setFirstName] = useState("");
@@ -339,12 +334,6 @@ export function XpotSettings() {
   };
 
   const isSaving = profileMutation.isPending;
-  const settingsTabs = [
-    { id: "profile", label: t("sectionProfile"), icon: UserRound },
-    { id: "signin", label: tn("tabSignIn"), icon: KeyRound },
-    { id: "language", label: tc("language"), icon: Languages },
-    { id: "memberships", label: t("sectionAccount"), icon: BadgeInfo },
-  ] satisfies Array<{ id: SettingsTab; label: string; icon: typeof UserRound }>;
 
   const name = me ? me.rep.displayName || [me.user.firstName, me.user.lastName].filter(Boolean).join(" ").trim() : "";
   const initials = name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
@@ -352,8 +341,10 @@ export function XpotSettings() {
   const hasEmailLogin = Boolean(me?.user.email);
   const signInPhone = me?.user.phone ? formatPhone(me.user.phone) : null;
   const modulesLabel = modules.map((m) => (m === "visits" ? tc("moduleVisits") : tc("moduleTags")));
-  // Administration: managers, in or out of management mode (opening one of its pages turns the mode on).
-  const administration = access.hasAdminAccess ? [
+  // Administration: someone who can manage sees the management-mode switch; the
+  // admin pages and their access details only with the mode on.
+  const canManage = access.hasAdminAccess || access.reach === "organization";
+  const administration = access.hasAdminAccess && access.adminMode ? [
     { href: "/admin/reps", label: ts("orgPeople"), icon: Users },
     { href: "/organizations", label: ts("navOrganizations"), icon: Building2 },
     ...(isSuperAdmin(me) ? [
@@ -362,17 +353,11 @@ export function XpotSettings() {
       { href: "/admin/health", label: ts("orgSystemHealth"), icon: HeartPulse, adminOnly: true },
     ] : []),
   ] : [];
-  const openAdministration = () => {
-    setActiveTab("memberships");
-    window.setTimeout(() => document.getElementById("settings-administration")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
-  };
 
   return (
     <AppLayout title={t("title")} size="wide" mobileMaxWidth="max-w-lg" mobileColumnClassName="pb-20 pt-6">
-      <div>
-        {/* Header (phone only; the desktop top bar shows the title). Settings is the
-            person's own: profile, sign-in, language, memberships; a manager also
-            finds the way to Administration here, on every device. */}
+      <div className="mx-auto w-full max-w-2xl">
+        {/* Header (phone only; the desktop top bar shows the title). */}
         <div className="lg:hidden">
           <PageHeader
             onBack={() => setLocation(homeForModules(modules))}
@@ -383,255 +368,197 @@ export function XpotSettings() {
           />
         </div>
 
-        {administration.length > 0 && activeTab !== "memberships" && (
-          <button
-            type="button"
-            onClick={openAdministration}
-            className={`mb-5 flex w-full items-center gap-3 rounded-2xl ${GLASS_CLASS} px-4 py-3 text-left transition-colors hover:bg-white/[0.06]`}
-            data-testid="settings-administration-entry"
-          >
-            <Shield className="h-4 w-4 shrink-0 text-white/50" />
-            <span className="min-w-0 flex-1">
-              <span className="block text-sm font-semibold text-white">{tn("administration")}</span>
-              <span className="block truncate text-xs text-white/45">{administration.map((item) => item.label).join(" · ")}</span>
-            </span>
-            <ChevronRight className="h-4 w-4 shrink-0 text-white/35" />
-          </button>
-        )}
+        <div className="space-y-8">
+          <Section id="profile" title={t("sectionProfile")}>
+            <div className="flex items-center gap-4">
+              <button
+                type="button"
+                onClick={avatar.pick}
+                disabled={avatar.pending}
+                aria-label={avatar.label}
+                className="group relative shrink-0 rounded-[22px] transition-transform active:scale-95 disabled:cursor-wait"
+                data-testid="settings-avatar"
+              >
+                {me?.rep.avatarUrl ? (
+                  <img src={me.rep.avatarUrl} alt="" className="h-16 w-16 rounded-[22px] border border-white/10 object-cover" />
+                ) : (
+                  <span className="flex h-16 w-16 items-center justify-center rounded-[22px] text-xl font-bold text-white" style={{ background: BRAND_GRADIENT }}>
+                    {initials}
+                  </span>
+                )}
+                <span className={`absolute inset-0 flex items-center justify-center rounded-[22px] bg-black/60 transition-opacity ${avatar.pending ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`} aria-hidden="true">
+                  <Camera className="h-5 w-5 text-white" />
+                </span>
+              </button>
+              <input {...avatar.inputProps} />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-white">{tn("photo")}</p>
+                <p className="text-xs text-white/45">{tn("photoHint")}</p>
+                <Button type="button" variant="secondary" size="sm" className="mt-2" onClick={avatar.pick} loading={avatar.pending}>
+                  <Camera />
+                  {avatar.label}
+                </Button>
+              </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label={t("firstName")}>
+                <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder={t("firstNamePlaceholder")} />
+              </Field>
+              <Field label={t("lastName")}>
+                <Input value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder={t("lastNamePlaceholder")} />
+              </Field>
+              <Field label={t("displayName")}>
+                <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder={t("displayNamePlaceholder")} />
+              </Field>
+              <div className="sm:col-span-2">
+                <Field label={tn("contactPhone")}>
+                  <CountryPhoneInput value={phone} onChange={setPhone} />
+                </Field>
+              </div>
+            </div>
+            {me?.rep.wholesaleCode && (
+              <div>
+                <p className={EYEBROW}>{tt("wholesaleCode")}</p>
+                <div className="mt-1.5 flex items-center gap-2">
+                  <span className="font-mono text-base font-bold tracking-[0.12em] text-white" data-testid="settings-wholesale-code">{me.rep.wholesaleCode}</span>
+                  <CopyButton value={me.rep.wholesaleCode} iconOnly />
+                </div>
+              </div>
+            )}
+            <FormFooter dirty={profileDirty} onCancel={profileDirty ? resetProfile : undefined}>
+              <Button variant="brand" onClick={handleSaveProfile} disabled={!profileDirty || !displayName.trim()} loading={isSaving}>
+                <Save />
+                {t("saveProfile")}
+              </Button>
+            </FormFooter>
+          </Section>
 
-        <div className="w-full">
-          <Tabs
-            tabs={settingsTabs.map((tab) => ({ ...tab, testId: `settings-tab-${tab.id}` }))}
-            value={activeTab}
-            onChange={setActiveTab}
-            ariaLabel={t("settingsSections")}
-            idPrefix="settings"
-            testId="settings-tabs"
-            accent="account"
-          />
+          <Section id="signin" title={tn("tabSignIn")}>
+            <Field label={tn("signInPhone")} hint={tn("signInPhoneHint")}>
+              <Input value={signInPhone ?? tn("signInPhoneNone")} readOnly disabled data-testid="settings-sign-in-phone" />
+            </Field>
+            {hasEmailLogin && (
+              <Field label={tn("signInEmail")}>
+                <Input value={me?.user.email ?? ""} readOnly disabled />
+              </Field>
+            )}
+            <InstallAppRow />
+          </Section>
 
-          <div
-            id={`settings-panel-${activeTab}`}
-            role="tabpanel"
-            aria-labelledby={`settings-tab-${activeTab}`}
-            data-testid={`settings-panel-${activeTab}`}
-            className="mt-5 animate-in fade-in slide-in-from-bottom-1 duration-200"
-          >
-            {activeTab === "profile" && (
-              <Section title={t("sectionProfile")}>
-                <div className="flex items-center gap-4">
+          {hasEmailLogin && (
+            <Section title={tn("password")}>
+              <p className="text-sm text-white/45">{tn("passwordHint")}</p>
+              <Field label={t("currentPassword")}>
+                <div className="relative">
+                  <Input
+                    type={showPwd ? "text" : "password"}
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    placeholder={t("currentPasswordPlaceholder")}
+                    className="pr-12"
+                  />
                   <button
                     type="button"
-                    onClick={avatar.pick}
-                    disabled={avatar.pending}
-                    aria-label={avatar.label}
-                    className="group relative shrink-0 rounded-[22px] transition-transform active:scale-95 disabled:cursor-wait"
-                    data-testid="settings-avatar"
+                    onClick={() => setShowPwd(!showPwd)}
+                    className="absolute right-1 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg text-white/30 hover:text-white/60"
+                    aria-label={showPwd ? t("hidePassword") : t("showPassword")}
                   >
-                    {me?.rep.avatarUrl ? (
-                      <img src={me.rep.avatarUrl} alt="" className="h-16 w-16 rounded-[22px] border border-white/10 object-cover" />
-                    ) : (
-                      <span className="flex h-16 w-16 items-center justify-center rounded-[22px] text-xl font-bold text-white" style={{ background: BRAND_GRADIENT }}>
-                        {initials}
-                      </span>
-                    )}
-                    <span className={`absolute inset-0 flex items-center justify-center rounded-[22px] bg-black/60 transition-opacity ${avatar.pending ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`} aria-hidden="true">
-                      <Camera className="h-5 w-5 text-white" />
-                    </span>
+                    {showPwd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
-                  <input {...avatar.inputProps} />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-white">{tn("photo")}</p>
-                    <p className="text-xs text-white/45">{tn("photoHint")}</p>
-                    <Button type="button" variant="secondary" size="sm" className="mt-2" onClick={avatar.pick} loading={avatar.pending}>
-                      <Camera />
-                      {avatar.label}
-                    </Button>
-                  </div>
                 </div>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Field label={t("firstName")}>
-                    <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder={t("firstNamePlaceholder")} />
-                  </Field>
-                  <Field label={t("lastName")}>
-                    <Input value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder={t("lastNamePlaceholder")} />
-                  </Field>
-                  <Field label={t("displayName")}>
-                    <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder={t("displayNamePlaceholder")} />
-                  </Field>
+              </Field>
+              <Field label={t("newPassword")}>
+                <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder={t("newPasswordPlaceholder")} />
+              </Field>
+              <Field
+                label={t("confirmPassword")}
+                error={newPassword && confirmPassword && newPassword !== confirmPassword ? t("passwordsMismatch") : undefined}
+              >
+                <Input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder={t("confirmPasswordPlaceholder")} />
+              </Field>
+              <FormFooter dirty={passwordDirty} onCancel={passwordDirty ? resetPassword : undefined}>
+                <Button
+                  variant="brand"
+                  onClick={handleChangePassword}
+                  disabled={!currentPassword || !newPassword || newPassword !== confirmPassword}
+                  loading={passwordMutation.isPending}
+                >
+                  {t("changePassword")}
+                </Button>
+              </FormFooter>
+            </Section>
+          )}
+
+          <Section id="language" title={tc("language")}>
+            <p className="text-sm text-white/45">{t("languageHint")}</p>
+            <LanguageList />
+          </Section>
+
+          {canManage && (
+            <Section id="administration" title={tn("administration")}>
+              <SwitchRow
+                checked={access.adminMode}
+                onCheckedChange={access.setAdminMode}
+                label={tn("managementMode")}
+                hint={access.hasAdminAccess ? tn("managementModeHint") : tn("managementModeOrgHint")}
+                testId="settings-management-mode"
+              />
+
+              {access.adminMode && (
+                <dl className="grid gap-4 border-t border-white/[0.06] pt-4 sm:grid-cols-2" data-testid="settings-access">
+                  <div>
+                    <dt className={EYEBROW}>{t("role")}</dt>
+                    <dd className="mt-1.5 text-sm font-semibold text-white" data-testid="settings-role">
+                      {me?.user.isAdmin ? t("role_admin") : me?.rep.role ? roleLabel(me.rep.role, t) : "—"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className={EYEBROW}>{tn("modules")}</dt>
+                    <dd className="mt-1.5 flex flex-wrap gap-1.5">
+                      {modulesLabel.length ? modulesLabel.map((label) => <Pill key={label} tone="slate">{label}</Pill>) : <span className="text-sm text-white/45">—</span>}
+                    </dd>
+                  </div>
                   <div className="sm:col-span-2">
-                    <Field label={tn("contactPhone")}>
-                      <CountryPhoneInput value={phone} onChange={setPhone} />
-                    </Field>
+                    <dt className={EYEBROW}>{tn("organizations")}</dt>
+                    <dd className="mt-1.5">
+                      {me?.organizations?.length ? (
+                        <ul className="space-y-1.5">
+                          {me.organizations.map((organization) => (
+                            <li key={organization.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2">
+                              <span className="min-w-0 truncate text-sm text-white/85">{organization.name}</span>
+                              {organization.membershipRole && (
+                                <Pill tone="slate">{organization.membershipRole === "admin" ? to("roleRepAdmin") : to("roleRep")}</Pill>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <span className="text-sm text-white/45">{tn("noOrganizations")}</span>
+                      )}
+                    </dd>
                   </div>
-                </div>
-                <FormFooter dirty={profileDirty} onCancel={profileDirty ? resetProfile : undefined}>
-                  <Button variant="brand" onClick={handleSaveProfile} disabled={!profileDirty || !displayName.trim()} loading={isSaving}>
-                    <Save />
-                    {t("saveProfile")}
-                  </Button>
-                </FormFooter>
-              </Section>
-            )}
+                </dl>
+              )}
 
-            {activeTab === "signin" && (
-              <div className="space-y-6">
-                <Section title={tn("tabSignIn")}>
-                  <Field label={tn("signInPhone")} hint={tn("signInPhoneHint")}>
-                    <Input value={signInPhone ?? tn("signInPhoneNone")} readOnly disabled data-testid="settings-sign-in-phone" />
-                  </Field>
-                  {hasEmailLogin && (
-                    <Field label={tn("signInEmail")}>
-                      <Input value={me?.user.email ?? ""} readOnly disabled />
-                    </Field>
-                  )}
-                  <InstallAppRow />
-                </Section>
-
-                {hasEmailLogin && (
-                  <Section title={tn("password")}>
-                    <p className="text-sm text-white/45">{tn("passwordHint")}</p>
-                    <Field label={t("currentPassword")}>
-                      <div className="relative">
-                        <Input
-                          type={showPwd ? "text" : "password"}
-                          value={currentPassword}
-                          onChange={(e) => setCurrentPassword(e.target.value)}
-                          placeholder={t("currentPasswordPlaceholder")}
-                          className="pr-12"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowPwd(!showPwd)}
-                          className="absolute right-1 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg text-white/30 hover:text-white/60"
-                          aria-label={showPwd ? t("hidePassword") : t("showPassword")}
-                        >
-                          {showPwd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </button>
-                      </div>
-                    </Field>
-                    <Field label={t("newPassword")}>
-                      <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder={t("newPasswordPlaceholder")} />
-                    </Field>
-                    <Field
-                      label={t("confirmPassword")}
-                      error={newPassword && confirmPassword && newPassword !== confirmPassword ? t("passwordsMismatch") : undefined}
+              {administration.length > 0 && <p className="text-sm text-white/45">{tn("administrationHint")}</p>}
+              {administration.length > 0 && (
+                <nav aria-label={tn("administration")} className="divide-y divide-white/[0.06] overflow-hidden rounded-xl border border-white/[0.08]">
+                  {administration.map(({ href, label, icon: Icon, ...item }) => (
+                    <Link
+                      key={href}
+                      href={href}
+                      className="flex min-h-12 items-center gap-3 bg-white/[0.03] px-3.5 py-2.5 text-sm text-white/85 transition-colors hover:bg-white/[0.06]"
                     >
-                      <Input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder={t("confirmPasswordPlaceholder")} />
-                    </Field>
-                    <FormFooter dirty={passwordDirty} onCancel={passwordDirty ? resetPassword : undefined}>
-                      <Button
-                        variant="brand"
-                        onClick={handleChangePassword}
-                        disabled={!currentPassword || !newPassword || newPassword !== confirmPassword}
-                        loading={passwordMutation.isPending}
-                      >
-                        {t("changePassword")}
-                      </Button>
-                    </FormFooter>
-                  </Section>
-                )}
-              </div>
-            )}
-
-            {activeTab === "language" && (
-              <Section title={tc("language")}>
-                <p className="text-sm text-white/45">{t("languageHint")}</p>
-                <LanguageList />
-              </Section>
-            )}
-
-            {activeTab === "memberships" && (
-              <div className="space-y-6">
-                <Section title={t("sectionAccount")}>
-                  <dl className="grid gap-4 sm:grid-cols-2">
-                    <div>
-                      <dt className={EYEBROW}>{t("role")}</dt>
-                      <dd className="mt-1.5 text-sm font-semibold text-white" data-testid="settings-role">
-                        {me?.user.isAdmin ? t("role_admin") : me?.rep.role ? roleLabel(me.rep.role, t) : "—"}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className={EYEBROW}>{tn("modules")}</dt>
-                      <dd className="mt-1.5 flex flex-wrap gap-1.5">
-                        {modulesLabel.length ? modulesLabel.map((label) => <Pill key={label} tone="slate">{label}</Pill>) : <span className="text-sm text-white/45">—</span>}
-                      </dd>
-                    </div>
-                    <div className="sm:col-span-2">
-                      <dt className={EYEBROW}>{tn("organizations")}</dt>
-                      <dd className="mt-1.5">
-                        {me?.organizations?.length ? (
-                          <ul className="space-y-1.5">
-                            {me.organizations.map((organization) => (
-                              <li key={organization.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2">
-                                <span className="min-w-0 truncate text-sm text-white/85">{organization.name}</span>
-                                {organization.membershipRole && (
-                                  <Pill tone="slate">{organization.membershipRole === "admin" ? to("roleRepAdmin") : to("roleRep")}</Pill>
-                                )}
-                              </li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <span className="text-sm text-white/45">{tn("noOrganizations")}</span>
-                        )}
-                      </dd>
-                    </div>
-                    {me?.rep.wholesaleCode && (
-                      <div className="sm:col-span-2">
-                        <dt className={EYEBROW}>{tt("wholesaleCode")}</dt>
-                        <dd className="mt-1.5 flex items-center gap-2">
-                          <span className="font-mono text-base font-bold tracking-[0.12em] text-white" data-testid="settings-wholesale-code">{me.rep.wholesaleCode}</span>
-                          <CopyButton value={me.rep.wholesaleCode} iconOnly />
-                        </dd>
-                      </div>
-                    )}
-                  </dl>
-                </Section>
-
-                {administration.length > 0 && (
-                  <div id="settings-administration" className="scroll-mt-24">
-                    <Section title={tn("administration")}>
-                      <p className="text-sm text-white/45">{tn("administrationHint")}</p>
-                      <SwitchRow
-                        checked={access.adminMode}
-                        onCheckedChange={access.setAdminMode}
-                        label={tn("managementMode")}
-                        hint={tn("managementModeHint")}
-                        testId="settings-management-mode"
-                      />
-                      <nav aria-label={tn("administration")} className="divide-y divide-white/[0.06] overflow-hidden rounded-xl border border-white/[0.08]">
-                        {administration.map(({ href, label, icon: Icon, ...item }) => (
-                          <Link
-                            key={href}
-                            href={href}
-                            className="flex min-h-12 items-center gap-3 bg-white/[0.03] px-3.5 py-2.5 text-sm text-white/85 transition-colors hover:bg-white/[0.06]"
-                          >
-                            <Icon className="h-4 w-4 shrink-0 text-white/45" />
-                            <span className="min-w-0 flex-1 truncate">{label}</span>
-                            {"adminOnly" in item && item.adminOnly ? <AdminBadge /> : null}
-                            <ChevronRight className="h-4 w-4 shrink-0 text-white/30" />
-                          </Link>
-                        ))}
-                      </nav>
-                    </Section>
-                  </div>
-                )}
-
-                {/* A Rep Admin's management mode: their organization's lists, nothing to administer. */}
-                {access.reach === "organization" && (
-                  <Section title={tn("managementMode")}>
-                    <SwitchRow
-                      checked={access.adminMode}
-                      onCheckedChange={access.setAdminMode}
-                      label={tn("managementMode")}
-                      hint={tn("managementModeOrgHint")}
-                      testId="settings-management-mode"
-                    />
-                  </Section>
-                )}
-              </div>
-            )}
-          </div>
+                      <Icon className="h-4 w-4 shrink-0 text-white/45" />
+                      <span className="min-w-0 flex-1 truncate">{label}</span>
+                      {"adminOnly" in item && item.adminOnly ? <AdminBadge /> : null}
+                      <ChevronRight className="h-4 w-4 shrink-0 text-white/30" />
+                    </Link>
+                  ))}
+                </nav>
+              )}
+            </Section>
+          )}
         </div>
       </div>
     </AppLayout>

@@ -112,7 +112,7 @@ function OrganizationsList() {
     <AppLayout title={t("title")} size="wide">
       <div className="space-y-6">
         {/* Back to Settings, where Administration lists this page (the phone has no sidebar). */}
-        <PageHeader backHref="/settings?tab=memberships" title={t("title")} description={t("intro")} className="mb-0" />
+        <PageHeader backHref="/settings?tab=administration" title={t("title")} description={t("intro")} className="mb-0" />
 
         {mayCreate && (
           <form

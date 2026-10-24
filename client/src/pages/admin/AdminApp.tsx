@@ -117,7 +117,7 @@ export function AdminApp({ section }: { section: string }) {
   const current = [...paletteExtras("platform", labels), ...siblings, ...administrationItems(labels), ...platform, ...tagsManage].find((i) => i.match(location));
   const title = current?.label ?? t("navManage");
   // Administration and Platform are reached from Settings; a module's management goes back to the module.
-  const back = active === "tags" ? moduleEntryPath("tags") : area ? "/settings?tab=memberships" : moduleEntryPath("visits");
+  const back = active === "tags" ? moduleEntryPath("tags") : area ? "/settings?tab=administration" : moduleEntryPath("visits");
   const heading = active === "tags"
     ? `${tc("moduleTags")} · ${t("navManage")}`
     : area === "administration"
