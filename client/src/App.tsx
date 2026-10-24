@@ -33,6 +33,7 @@ const XpotSettings = lazy(() => import("./pages/xpot/XpotSettings").then((module
 const TagsApp = lazy(() => import("./pages/tags/TagsApp").then((module) => ({ default: module.TagsApp })));
 const XpotLandingPage = lazy(() => import("./pages/xpot/XpotLandingPage").then((module) => ({ default: module.XpotLandingPage })));
 const OrganizationsPage = lazy(() => import("./pages/xpot/OrganizationsPage").then((module) => ({ default: module.OrganizationsPage })));
+const OrganizationPerson = lazy(() => import("./pages/xpot/OrganizationPerson").then((module) => ({ default: module.OrganizationPerson })));
 
 function PageLoader() {
   return (
@@ -211,6 +212,10 @@ export default function App() {
         <Route path="/pt/terms">{() => <LegalPage doc="terms" />}</Route>
         <Route path="/es/privacy">{() => <LegalPage doc="privacy" />}</Route>
         <Route path="/es/terms">{() => <LegalPage doc="terms" />}</Route>
+        {/* One teammate's work: Organizations › an organization › Team › a person. */}
+        <Route path="/organizations/:organizationId/people/:repId">
+          {(params) => <OrganizationPerson organizationId={Number(params.organizationId)} repId={Number(params.repId)} />}
+        </Route>
         <Route path="/organizations/:organizationId">
           {(params) => <OrganizationsPage organizationId={Number(params.organizationId)} />}
         </Route>

@@ -363,7 +363,6 @@ export function XpotSettings() {
   const canManage = access.hasAdminAccess || access.reach === "organization";
   const administration = access.hasAdminAccess && access.adminMode ? [
     { href: "/admin/reps", label: ts("orgPeople"), icon: Users },
-    { href: "/organizations", label: ts("navOrganizations"), icon: Building2 },
     ...(isSuperAdmin(me) ? [
       { href: "/admin/integrations", label: ts("orgIntegrations"), icon: Plug, adminOnly: true },
       { href: "/admin/branding", label: ts("orgBranding"), icon: Palette, adminOnly: true },
@@ -522,6 +521,20 @@ export function XpotSettings() {
               hint={access.hasAdminAccess ? tn("managementModeHint") : tn("managementModeOrgHint")}
               testId="settings-management-mode"
             />
+
+            {/* The team: pick an organization, open a person, see their work. Off or on, it is one tap away. */}
+            <Link
+              href="/organizations"
+              className="flex min-h-14 items-center gap-3 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3.5 py-2.5 transition-colors hover:bg-white/[0.06]"
+              data-testid="settings-organizations"
+            >
+              <Building2 className="h-4 w-4 shrink-0 text-white/55" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium text-white">{tn("organizationsAndTeam")}</span>
+                <span className="block truncate text-xs text-white/45">{tn("organizationsAndTeamHint")}</span>
+              </span>
+              <ChevronRight className="h-4 w-4 shrink-0 text-white/30" />
+            </Link>
 
             {access.adminMode && (
               <dl className="grid gap-4 border-t border-white/[0.06] pt-4 sm:grid-cols-2" data-testid="settings-access">

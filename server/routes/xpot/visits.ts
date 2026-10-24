@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { storage } from "../../storage.js";
-import { requireXpotUser, ensureXpotRep, loadAccessibleLead, listScope, type XpotActor } from "./middleware.js";
+import { requireXpotUser, ensureXpotRep, loadAccessibleLead, listScope, visitsInOrganizations, type XpotActor } from "./middleware.js";
 import type { SalesVisitStatus } from "#shared/schema/sales.js";
 import { getDistanceMeters, syncTaskToGhl, syncVisitToGhl, syncVisitToXphere } from "./helpers.js";
 import { xpotCheckInSchema, xpotCheckOutSchema, xpotVisitNoteUpsertSchema, xpotVisitSummarySchema } from "#shared/xpot.js";
@@ -19,15 +19,22 @@ export function createVisitsRouter() {
     const actor = (req as any).xpotActor as Awaited<ReturnType<typeof ensureXpotRep>>;
     const leadId = typeof req.query.leadId === "string" ? Number(req.query.leadId) : undefined;
     // ?repId= narrows the list to one person (the history's "Seller" filter,
-    // People's "Their visits"). Visits have no organization, so only the
-    // "everyone" scope widens (a manager in management mode) and only it
-    // honours the filter; anyone else gets their own visits.
+    // People's "Their visits", Organizations › a person). A manager in
+    // management mode ("everyone") may ask for anyone. Visits have no
+    // organization of their own, so a Rep Admin asking for a teammate gets
+    // that person's visits to companies in the organizations they run
+    // (visitsInOrganizations below); anyone else gets their own visits.
     const repFilter = Number(req.query.repId);
+    const requested = Number.isInteger(repFilter) && repFilter > 0 ? repFilter : undefined;
     const scope = await listScope(req, actor as XpotActor);
-    const visits = await storage.listSalesVisits({
-      repId: scope.kind === "everyone" ? (Number.isInteger(repFilter) && repFilter > 0 ? repFilter : undefined) : actor!.rep.id,
+    const teammate = scope.kind === "organizations" && requested && requested !== actor!.rep.id ? requested : undefined;
+    const listed = await storage.listSalesVisits({
+      repId: scope.kind === "everyone" ? requested : teammate ?? actor!.rep.id,
       leadId,
     });
+    const visits = teammate && scope.kind === "organizations"
+      ? visitsInOrganizations(listed, await storage.getSalesLeadsByIds(Array.from(new Set(listed.map((visit) => visit.leadId)))), scope.organizationIds)
+      : listed;
     // Four queries for the whole list. This used to read the lead, its
     // locations and the note one visit at a time: three round trips per visit,
     // thousands for a rep with a long history.

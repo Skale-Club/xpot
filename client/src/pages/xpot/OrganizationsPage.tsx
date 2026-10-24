@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Building2, ChevronRight, Package, PackageOpen, Settings, ShieldCheck, UserPlus, Users } from "lucide-react";
-import { Link, useLocation } from "wouter";
+import { Link, useLocation, useSearchParams } from "wouter";
 import { Button } from "@/components/ui/button";
 import { AppLayout } from "@/components/xpot/AppLayout";
 import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
@@ -179,7 +179,9 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
   const tt = useT(tagsMessages);
   const tw = useT(peopleWorkspaceMessages);
   const ts = useT(shellMessages);
-  const [tab, setTab] = useState<WorkspaceTab>("overview");
+  // ?tab=team: a person's page links back to the team it was opened from.
+  const [params] = useSearchParams();
+  const [tab, setTab] = useState<WorkspaceTab>(params.get("tab") === "team" ? "team" : "overview");
   const { data: me } = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"] });
   const base = `/api/xpot/organizations/${organizationId}`;
   const organization = useQuery<Organization>({ queryKey: [base] });
@@ -271,6 +273,7 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
             ) : mayManageTeam ? (
               <p className="text-xs text-white/45">{tw("addExistingManagersOnly")}</p>
             ) : null}
+            {mayManageTeam && <p className="text-sm text-white/55">{t("teamHint")}</p>}
             {members.isLoading ? <ListSkeleton rows={3} /> : members.isError ? (
               <ErrorState message={describeApiError(members.error)} onRetry={() => void members.refetch()} />
             ) : (
@@ -281,9 +284,9 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
                 return (
                   <div key={member.repId} className="flex flex-wrap items-center gap-3 px-4 py-3">
                     <div className="min-w-0 flex-1">
-                      {/* The person themselves (access, role, every membership) is in People. */}
-                      {platformManager ? (
-                        <Link href={`/admin/reps/${member.repId}`} className="block truncate font-medium text-white hover:text-blue-200">{member.displayName}</Link>
+                      {/* Their work (companies, visits, tasks, sales) for whoever manages the team; the person themselves (access, role, every membership) is in People. */}
+                      {mayManageTeam ? (
+                        <Link href={`/organizations/${organizationId}/people/${member.repId}`} className="block truncate font-medium text-white hover:text-blue-200" data-testid={`organization-member-${member.repId}`}>{member.displayName}</Link>
                       ) : (
                         <p className="truncate font-medium text-white">{member.displayName}</p>
                       )}

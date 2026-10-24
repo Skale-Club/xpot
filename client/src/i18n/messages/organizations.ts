@@ -68,6 +68,19 @@ const en = {
   orgName: "Organization name",
   orgSaved: "Organization saved",
   settingsReadOnly: "Only an Xpot admin or a manager can edit organization settings.",
+
+  // Team › one person (OrganizationPerson.tsx)
+  teamHint: "Tap a person to see their companies, visits, tasks and sales.",
+  openInPeople: "Open in People",
+  personNotAllowed: "Only someone who manages a team can look at a teammate's work.",
+  personNotMember: "This person is not in this organization.",
+  personNoCompanies: "No companies yet.",
+  personNoVisits: "No visits in the organizations you manage.",
+  personNoTasks: "No open tasks.",
+  personNoSales: "No sales yet.",
+  lastVisit: "Last visit {date}",
+  neverVisited: "Not visited yet",
+  noDueDate: "No due date",
 };
 
 export const organizationsMessages: Dictionary<typeof en> = {
@@ -136,6 +149,18 @@ export const organizationsMessages: Dictionary<typeof en> = {
     orgName: "Nome da organização",
     orgSaved: "Organização salva",
     settingsReadOnly: "Só um admin do Xpot ou um gerente pode editar as configurações da organização.",
+
+    teamHint: "Toque numa pessoa para ver as empresas, visitas, tarefas e vendas dela.",
+    openInPeople: "Abrir em Pessoas",
+    personNotAllowed: "Só quem gerencia uma equipe pode ver o trabalho de um colega.",
+    personNotMember: "Esta pessoa não está nesta organização.",
+    personNoCompanies: "Nenhuma empresa ainda.",
+    personNoVisits: "Nenhuma visita nas organizações que você gerencia.",
+    personNoTasks: "Nenhuma tarefa em aberto.",
+    personNoSales: "Nenhuma venda ainda.",
+    lastVisit: "Última visita {date}",
+    neverVisited: "Ainda não visitada",
+    noDueDate: "Sem prazo",
   },
   es: {
     title: "Organizaciones",
@@ -201,5 +226,17 @@ export const organizationsMessages: Dictionary<typeof en> = {
     orgName: "Nombre de la organización",
     orgSaved: "Organización guardada",
     settingsReadOnly: "Solo un admin de Xpot o un gerente puede editar los ajustes de la organización.",
+
+    teamHint: "Toca una persona para ver sus empresas, visitas, tareas y ventas.",
+    openInPeople: "Abrir en Personas",
+    personNotAllowed: "Solo quien gestiona un equipo puede ver el trabajo de un compañero.",
+    personNotMember: "Esta persona no está en esta organización.",
+    personNoCompanies: "Todavía no hay empresas.",
+    personNoVisits: "No hay visitas en las organizaciones que gestionas.",
+    personNoTasks: "No hay tareas abiertas.",
+    personNoSales: "Todavía no hay ventas.",
+    lastVisit: "Última visita {date}",
+    neverVisited: "Aún no visitada",
+    noDueDate: "Sin fecha",
   },
 };
