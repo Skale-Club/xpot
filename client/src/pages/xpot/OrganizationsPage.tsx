@@ -22,6 +22,7 @@ import { describeApiError } from "@/lib/apiErrors";
 import { formatDate } from "@/lib/dates";
 import { formatPhone } from "@/lib/format";
 import { useToast } from "@/hooks/use-toast";
+import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { organizationsMessages } from "@/i18n/messages/organizations";
@@ -39,6 +40,10 @@ import type { XpotMeResponse } from "./types";
 // Inventory, Kits and Companies tabs list the organization's records by name,
 // each row opening it on its own screen; for platform management, "See all in
 // Inventory / Distribution / Companies" opens the full list filtered to the organization (?org=).
+// On desktop an organization is a tab bar (Overview, Team, Inventory, Kits,
+// Companies, Settings); on a phone, a list of those sections with their counts,
+// each opening its own screen (?tab=). A member's name opens their work
+// (OrganizationPerson.tsx).
 
 type Organization = {
   id: number;
@@ -170,7 +175,8 @@ function OrganizationsList() {
   );
 }
 
-type WorkspaceTab = "overview" | "team" | "inventory" | "kits" | "customers" | "settings";
+const WORKSPACE_TABS = ["overview", "team", "inventory", "kits", "customers", "settings"] as const;
+type WorkspaceTab = (typeof WORKSPACE_TABS)[number];
 
 function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
   const qc = useQueryClient();
@@ -179,9 +185,28 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
   const tt = useT(tagsMessages);
   const tw = useT(peopleWorkspaceMessages);
   const ts = useT(shellMessages);
-  // ?tab=team: a person's page links back to the team it was opened from.
-  const [params] = useSearchParams();
-  const [tab, setTab] = useState<WorkspaceTab>(params.get("tab") === "team" ? "team" : "overview");
+  // The open section rides in the URL (?tab=team: a person's page links back to
+  // the team it came from). Desktop shows a tab bar, Overview first. A phone has
+  // no tab strip to swipe: its first screen lists the sections with their
+  // counts, and each opens its own screen (a history entry, so Back returns).
+  const isDesktop = useIsDesktop();
+  const [, navigate] = useLocation();
+  const [params, setParams] = useSearchParams();
+  const urlTab = WORKSPACE_TABS.find((id) => id === params.get("tab")) ?? null;
+  const tab: WorkspaceTab | null = urlTab ?? (isDesktop ? "overview" : null);
+  const home = `/organizations/${organizationId}`;
+  const setTab = (next: WorkspaceTab) => {
+    if (!isDesktop) {
+      navigate(`${home}?tab=${next}`);
+      return;
+    }
+    setParams((current) => {
+      const updated = new URLSearchParams(current);
+      if (next === "overview") updated.delete("tab");
+      else updated.set("tab", next);
+      return updated;
+    }, { replace: true });
+  };
   const { data: me } = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"] });
   const base = `/api/xpot/organizations/${organizationId}`;
   const organization = useQuery<Organization>({ queryKey: [base] });
@@ -244,6 +269,8 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
     );
   }
   const org = organization.data;
+  // A phone inside one section: its header names the section, Back returns to the list.
+  const phoneSection = !isDesktop && tab ? tabs.find((item) => item.id === tab) : undefined;
   const confirmCopy = pending ? {
     suspend: { title: t("suspendTitle", { name: pending.member.displayName }), body: t("suspendBody"), label: t("suspend"), danger: true },
     reactivate: { title: t("reactivateTitle", { name: pending.member.displayName }), body: t("reactivateBody"), label: t("reactivate"), danger: false },
@@ -255,15 +282,20 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
   return (
     <AppLayout title={org.name} size="wide">
       <div className="space-y-5">
-        <PageHeader
-          backHref="/organizations"
-          backLabel={t("backToList")}
-          title={org.name}
-          description={membership?.role === "admin" ? t("roleRepAdmin") : platformManager ? t("platformManagement") : t("roleRep")}
-          className="mb-0"
-        />
+        {phoneSection ? (
+          <PageHeader backHref={home} backLabel={org.name} eyebrow={org.name} title={phoneSection.label} className="mb-0" />
+        ) : (
+          <PageHeader
+            backHref="/organizations"
+            backLabel={t("backToList")}
+            title={org.name}
+            description={membership?.role === "admin" ? t("roleRepAdmin") : platformManager ? t("platformManagement") : t("roleRep")}
+            className="mb-0"
+          />
+        )}
 
-        <Tabs tabs={tabs} value={tab} onChange={setTab} ariaLabel={org.name} idPrefix="organization" fill={false} accent="account" />
+        {isDesktop && tab && <Tabs tabs={tabs} value={tab} onChange={setTab} ariaLabel={org.name} idPrefix="organization" fill={false} accent="account" />}
+        {!tab && <SectionList organization={org} tabs={tabs} onOpen={setTab} />}
 
         {tab === "overview" && <Overview organization={org} onOpen={setTab} />}
         {tab === "team" && (
@@ -408,6 +440,40 @@ function Overview({ organization, onOpen }: { organization: Organization; onOpen
         </button>
       ))}
     </div>
+  );
+}
+
+/** A phone's first screen: each section of the organization as a row with its count, opening its own screen. */
+function SectionList({ organization, tabs, onOpen }: {
+  organization: Organization;
+  tabs: Array<{ id: WorkspaceTab; label: string; icon: typeof Users }>;
+  onOpen: (tab: WorkspaceTab) => void;
+}) {
+  const counts: Partial<Record<WorkspaceTab, number>> = {
+    team: organization.counts?.members ?? organization.memberCount,
+    inventory: organization.counts?.pieces,
+    kits: organization.counts?.kits,
+    customers: organization.counts?.customers,
+  };
+  return (
+    <nav aria-label={organization.name} className={`divide-y divide-white/[0.06] overflow-hidden rounded-2xl ${GLASS_CLASS}`} data-testid="organization-sections">
+      {tabs.filter((item) => item.id !== "overview").map(({ id, label, icon: Icon }) => (
+        <button
+          key={id}
+          type="button"
+          onClick={() => onOpen(id)}
+          className="flex min-h-14 w-full items-center gap-3 px-4 py-3 text-left transition-colors active:bg-white/[0.06]"
+          data-testid={`organization-open-${id}`}
+        >
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] text-white/70">
+            <Icon className="h-4 w-4" />
+          </span>
+          <span className="min-w-0 flex-1 truncate text-[15px] font-medium text-white">{label}</span>
+          {counts[id] != null && <span className="shrink-0 text-sm tabular-nums text-white/45">{counts[id]}</span>}
+          <ChevronRight className="h-4 w-4 shrink-0 text-white/30" />
+        </button>
+      ))}
+    </nav>
   );
 }
 
