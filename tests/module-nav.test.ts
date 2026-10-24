@@ -10,7 +10,6 @@ import {
   activeVisitsTab,
   administrationItems,
   contextOfPath,
-  managementScope,
   moduleGroups,
   paletteExtras,
   platformItems,
@@ -171,15 +170,6 @@ describe("accountGroups", () => {
     expect(paletteExtras("visits", labels).map((i) => i.href)).toEqual(["/route/check-in"]);
     expect(paletteExtras("tags", labels).map((i) => i.href)).toEqual(["/tags/direct"]);
     expect(paletteExtras("platform", labels).map((i) => i.href)).toEqual(["/admin/landing"]);
-  });
-});
-
-describe("managementScope", () => {
-  it("marks the lists management mode widens, Tasks apart", () => {
-    for (const p of ["/leads", "/leads/4", "/dashboard/history", "/sales", "/sales/stock", "/tags", "/tags/customers"]) expect(managementScope(p)).toBe("list");
-    expect(managementScope("/tasks")).toBe("tasks");
-    // Mixed or personal screens: no chip.
-    for (const p of ["/dashboard", "/route", "/route/check-in", "/tags/pieces", "/settings", "/admin/overview", "/admin/tags/pieces"]) expect(managementScope(p)).toBeNull();
   });
 });
 

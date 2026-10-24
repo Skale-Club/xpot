@@ -282,20 +282,6 @@ export function paletteExtras(area: XpotModule | "platform", l: Labels): NavItem
 }
 
 /**
- * The lists that management mode widens from the person's own records to the
- * whole team, where the scope chip says which one is on show. Tasks widen
- * only with its "Whole team" filter on top of the mode ("tasks").
- */
-export function managementScope(path: string): "list" | "tasks" | null {
-  if (contextOfPath(path) === "visits" && starts("/tasks")(path)) return "tasks";
-  const screen = contextOfPath(path) === "visits" ? visitsScreen(path) : null;
-  if (screen === "leads" || screen === "visits" || screen === "sales") return "list";
-  // The Tags dashboard and customers widen; My pieces is the person's own in every mode.
-  if (path === "/tags" || starts("/tags/customers")(path)) return "list";
-  return null;
-}
-
-/**
  * The lists a Rep Admin's management mode widens to the organizations they run
  * (server/routes/xpot/middleware.ts listScope): Companies, Tasks (its "Whole
  * team") and Sales' summary, sales and consignments. Visits, the pipeline and
@@ -306,29 +292,6 @@ export function organizationWideList(path: string): boolean {
   const screen = visitsScreen(path);
   if (screen === "leads" || screen === "tasks") return true;
   return screen === "sales" && parseSalesPath(path).tab !== "pipeline";
-}
-
-/** "Viewing: everyone / my organization / only me". */
-export type ScopeLabel = "everyone" | "organization" | "mine";
-
-/**
- * What the scope chip says on a list, and whether tapping it changes the list.
- * `reach` is what the person's management mode shows ("everyone" for a manager,
- * "organization" for a Rep Admin; null: no mode, no chip); `teamFilter` is
- * Tasks' "Whole team". Where the mode would not widen the list (a Rep Admin's
- * visits), the chip says "only me" and is not a switch.
- */
-export function scopeChipState(
-  path: string,
-  reach: "everyone" | "organization" | null,
-  adminMode: boolean,
-  teamFilter: boolean,
-): { label: ScopeLabel; toggles: boolean } | null {
-  const scope = managementScope(path);
-  if (!reach || !scope) return null;
-  const widens = reach === "everyone" || organizationWideList(path);
-  const wide = adminMode && widens && (scope !== "tasks" || teamFilter);
-  return { label: wide ? (reach === "everyone" ? "everyone" : "organization") : "mine", toggles: widens };
 }
 
 /**

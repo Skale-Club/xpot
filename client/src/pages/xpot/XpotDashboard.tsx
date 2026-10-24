@@ -85,7 +85,7 @@ function DashboardOverview() {
   const [activityMetric, setActivityMetric] = useState<ActivityMetric>("visits");
   // The Dashboard is the person's own day (its visits and tasks are theirs in
   // every mode), so its money is too: management mode would otherwise widen
-  // only these tiles to the team, with no scope chip to say so.
+  // only these tiles to the team.
   const salesSummary = useSalesSummary(periodDays * 2, me?.rep.id, Boolean(me));
   const routesQuery = useQuery<DashboardRoute[]>({ queryKey: ["/api/xpot/prospecting/routes"] });
   const isDesktop = useIsDesktop();

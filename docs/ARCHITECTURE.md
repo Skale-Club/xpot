@@ -94,13 +94,12 @@ the ones with an organization: Companies, Sales' summary, sales and
 consignments, and Tasks ("Whole team"); visits, opportunities and Tags stay
 their own (`organizationWideList`). My pieces never widens (it always asks for
 `?mine=1`), and a piece's stock movements are shown only in management mode.
-`managementScope(path)` in `moduleNav.ts` lists the screens that get the scope
-chip ("Viewing: everyone / my organization / only me", `ScopeChip`, worded by
-`scopeChipState`), which is also the switch where the mode would change the
-list. Opening an `/admin/...` page turns a manager's mode on with a toast
+The amber bar across the top (`AdminModeBar`) is what says a list shows more
+than the person's own records; lists carry no per-screen scope label.
+Opening an `/admin/...` page turns a manager's mode on with a toast
 (`AdminApp`); leaving it on a management screen goes to `repScreenFor(path)`.
-An org admin turns it on from the sidebar, Settings › Memberships or the chip
-and stays on the same screen; the amber bar says "lists show your
+An org admin turns it on from the sidebar or Settings › Administration and
+stays on the same screen; the amber bar says "lists show your
 organization".
 Putting a house piece live in management mode keeps it in house stock; a
 manager out of management mode who puts one live becomes its holder, as before
@@ -208,7 +207,7 @@ client/                    React app (Vite)
   src/App.tsx              Top-level routes: landing, login, legal, /admin/*, /settings, /tags/*, Visits
   src/components/
     xpot/                  The shell and the UI kit: AppLayout, moduleNav, surface (colours), ModuleBadge,
-                           CommandPalette, MobileTabBar, VisitsTabBar, ScopeChip, MasterDetail,
+                           CommandPalette, MobileTabBar, VisitsTabBar, MasterDetail,
                            StatusPill (Pill + tone maps), ConfirmDialog, Field, CompactDataTable… (UI_KIT.md)
     piece/                 The one piece screen's sections (header, customer & destination, chip,
                            sale, performance, management, activity) and pieceView.ts, its pure rules

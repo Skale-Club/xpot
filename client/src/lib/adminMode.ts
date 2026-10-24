@@ -20,8 +20,8 @@ import type { XpotMeResponse } from "../pages/xpot/types";
 // without the header gets their own records.
 //
 // Off by default, and off again after signing out (signOut clears it). The
-// sidebar's "Management mode", the scope chip on the lists (ScopeChip) and the
-// switch in Settings › Memberships enter it; opening an /admin page turns it on
+// sidebar's "Management mode" and the switch in Settings › Administration
+// enter it; opening an /admin page turns it on
 // with a toast (AdminApp); the amber bar shown on every screen while it is on
 // leaves it (AdminModeBar).
 
