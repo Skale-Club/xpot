@@ -20,17 +20,17 @@ const DEFAULT_BRANDING = {
 };
 
 /**
- * The manifest's icons. The icon URLs redirect to whatever was uploaded, so the
- * declared `type` must be that file's own (a JPG declared as image/png makes
- * some installers drop the icon).
+ * The manifest's icons: static, pre-composited PNGs (client/public/pwa) so the
+ * home-screen icon never depends on the uploaded favicon's format or framing.
+ * "any" is a dark rounded tile; "maskable" is full-bleed dark with the mark
+ * inside Android's safe zone.
  */
-export function manifestIcons(contentType: string | null | undefined) {
-  const type = contentType === "image/vnd.microsoft.icon" ? "image/x-icon" : contentType || "image/png";
-  if (type === "image/svg+xml") return [{ src: "/api/branding/icon-512.png", sizes: "any", type, purpose: "any" }];
+export function manifestIcons() {
   return [
-    { src: "/api/branding/icon-192.png", sizes: "192x192", type, purpose: "any" },
-    { src: "/api/branding/icon-512.png", sizes: "512x512", type, purpose: "any" },
-    { src: "/api/branding/icon-512.png", sizes: "512x512", type, purpose: "maskable" },
+    { src: "/pwa/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+    { src: "/pwa/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+    { src: "/pwa/icon-maskable-192.png", sizes: "192x192", type: "image/png", purpose: "maskable" },
+    { src: "/pwa/icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
   ];
 }
 
@@ -60,9 +60,23 @@ export function createBrandingPublicRouter() {
 
   router.get("/favicon", (_req, res) => redirectToIcon(res));
   router.get("/favicon.ico", (_req, res) => redirectToIcon(res));
-  router.get("/icon-192.png", (_req, res) => redirectToIcon(res));
-  router.get("/icon-512.png", (_req, res) => redirectToIcon(res));
-  router.get("/apple-touch-icon.png", (_req, res) => redirectToIcon(res));
+
+  // Home-screen icons are pre-composited static PNGs (client/public/pwa), not
+  // the raw uploaded favicon: the OS crops them (Android circle/squircle, iOS
+  // rounded corners) and can't show transparency, so they need a full-bleed
+  // dark plate with the mark inside the safe zone. Regenerate them if the mark
+  // ever changes.
+  const PWA_ICON_PATHS: Record<string, string> = {
+    "/icon-192.png": "/pwa/icon-192.png",
+    "/icon-512.png": "/pwa/icon-512.png",
+    "/apple-touch-icon.png": "/pwa/apple-touch-icon.png",
+  };
+  for (const [route, target] of Object.entries(PWA_ICON_PATHS)) {
+    router.get(route, (_req, res) => {
+      res.set("Cache-Control", "public, max-age=300");
+      res.redirect(302, target);
+    });
+  }
 
   router.get("/logo", async (_req, res) => {
     const b = await publicBranding();
@@ -72,7 +86,7 @@ export function createBrandingPublicRouter() {
 
   router.get("/manifest.webmanifest", async (_req, res) => {
     const b = await publicBranding();
-    const icons = manifestIcons(b.faviconContentType);
+    const icons = manifestIcons();
 
     res.set("Content-Type", "application/manifest+json; charset=utf-8");
     res.set("Cache-Control", "public, max-age=300");

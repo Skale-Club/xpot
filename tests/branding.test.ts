@@ -7,15 +7,11 @@ vi.mock("../server/storage.js", () => ({ storage: { getAppBranding } }));
 const { createBrandingPublicRouter, manifestIcons } = await import("../server/routes/xpot/branding.js");
 
 describe("manifest icons", () => {
-  it("declare the uploaded file's own type", () => {
-    expect(manifestIcons("image/jpeg").map((i) => i.type)).toEqual(["image/jpeg", "image/jpeg", "image/jpeg"]);
-    expect(manifestIcons("image/webp")[0]).toMatchObject({ type: "image/webp", sizes: "192x192" });
-    expect(manifestIcons("image/vnd.microsoft.icon")[0].type).toBe("image/x-icon");
-    expect(manifestIcons(null)[0].type).toBe("image/png");
-  });
-
-  it("give an SVG one scalable entry", () => {
-    expect(manifestIcons("image/svg+xml")).toEqual([{ src: "/api/branding/icon-512.png", sizes: "any", type: "image/svg+xml", purpose: "any" }]);
+  it("declare the static PWA icons, with separate any and maskable entries", () => {
+    const icons = manifestIcons();
+    expect(icons.every((i) => i.type === "image/png" && i.src.startsWith("/pwa/"))).toBe(true);
+    expect(icons.filter((i) => i.purpose === "any").map((i) => i.sizes)).toEqual(["192x192", "512x512"]);
+    expect(icons.filter((i) => i.purpose === "maskable").map((i) => i.sizes)).toEqual(["192x192", "512x512"]);
   });
 });
 
