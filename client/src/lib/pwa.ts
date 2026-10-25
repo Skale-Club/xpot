@@ -97,3 +97,30 @@ export function resolveInstallMode(input: {
 
   return "hidden";
 }
+
+// ── iPhone/iPad instructions ─────────────────────────────────────────────────
+//
+// In "ios" mode the steps depend on where Share is and whether this browser can
+// add to the home screen at all (tested in tests/pwa-install-mode).
+//
+//   safari  Share in Safari's bar (bottom on iPhone, top on iPad).
+//   chrome  Share at the end of the address bar.
+//   other   Firefox, Edge, Opera: Share is in the browser menu.
+//   in-app  Instagram, Facebook, the Google app, LinkedIn…: their built-in
+//           browser has no Add to Home Screen, so the rep opens Safari first.
+//           Any iOS WebView without a "Safari/" token counts too.
+
+export type IosDevice = "iphone" | "ipad";
+export type IosBrowser = "safari" | "chrome" | "other" | "in-app";
+
+const IN_APP_BROWSER = /FBAN|FBAV|FB_IAB|Instagram|LinkedInApp|GSA\/|Line\/|MicroMessenger|BytedanceWebview|musical_ly|Snapchat|Pinterest|Twitter/;
+
+export function resolveIosGuide(input: { userAgent: string; maxTouchPoints: number }): { device: IosDevice; browser: IosBrowser } {
+  const { userAgent, maxTouchPoints } = input;
+  const device: IosDevice = /iPad/.test(userAgent) || (/Macintosh/.test(userAgent) && maxTouchPoints > 1) ? "ipad" : "iphone";
+  let browser: IosBrowser = "safari";
+  if (IN_APP_BROWSER.test(userAgent) || !/Safari\//.test(userAgent)) browser = "in-app";
+  else if (/CriOS/.test(userAgent)) browser = "chrome";
+  else if (/FxiOS|EdgiOS|OPiOS|OPT\//.test(userAgent)) browser = "other";
+  return { device, browser };
+}
