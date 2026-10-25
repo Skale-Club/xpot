@@ -3,7 +3,7 @@
 // (Firefox, an installed app) or hiding it on iPhones, which never fire a prompt.
 
 import { describe, expect, it } from "vitest";
-import { resolveInstallMode } from "../client/src/lib/pwa.js";
+import { resolveInstallMode, resolveIosGuide } from "../client/src/lib/pwa.js";
 
 const UA = {
   androidChrome: "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36",
@@ -49,5 +49,34 @@ describe("resolveInstallMode", () => {
     // Chromium that hasn't (or won't) fire beforeinstallprompt.
     expect(resolveInstallMode({ ...base, userAgent: UA.macChrome })).toBe("hidden");
     expect(resolveInstallMode({ ...base, userAgent: UA.androidChrome })).toBe("hidden");
+  });
+});
+
+describe("resolveIosGuide", () => {
+  const iphoneInstagram =
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Instagram 350.0.0.0 (iPhone15,2; iOS 18_0; pt_BR)";
+  const iphoneGoogleApp =
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) GSA/340.0.0 Mobile/15E148 Safari/604.1";
+  const iphoneWebView = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148";
+  const iphoneFirefox =
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) FxiOS/131.0 Mobile/15E148 Safari/605.1.15";
+  const ipadSafari =
+    "Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
+
+  it("tells iPhone browsers apart by where Share is", () => {
+    expect(resolveIosGuide({ userAgent: UA.iphoneSafari, maxTouchPoints: 5 })).toEqual({ device: "iphone", browser: "safari" });
+    expect(resolveIosGuide({ userAgent: UA.iphoneChrome, maxTouchPoints: 5 })).toEqual({ device: "iphone", browser: "chrome" });
+    expect(resolveIosGuide({ userAgent: iphoneFirefox, maxTouchPoints: 5 })).toEqual({ device: "iphone", browser: "other" });
+  });
+
+  it("sends in-app browsers to Safari first", () => {
+    expect(resolveIosGuide({ userAgent: iphoneInstagram, maxTouchPoints: 5 }).browser).toBe("in-app");
+    expect(resolveIosGuide({ userAgent: iphoneGoogleApp, maxTouchPoints: 5 }).browser).toBe("in-app");
+    expect(resolveIosGuide({ userAgent: iphoneWebView, maxTouchPoints: 5 }).browser).toBe("in-app");
+  });
+
+  it("recognises the iPad, including Safari's desktop-mode user agent", () => {
+    expect(resolveIosGuide({ userAgent: ipadSafari, maxTouchPoints: 5 })).toEqual({ device: "ipad", browser: "safari" });
+    expect(resolveIosGuide({ userAgent: UA.ipadDesktopMode, maxTouchPoints: 5 })).toEqual({ device: "ipad", browser: "safari" });
   });
 });

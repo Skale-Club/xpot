@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import { Download, Share, SquarePlus } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useInstallApp } from "@/hooks/use-install-app";
+import { resolveIosGuide, type IosBrowser, type IosDevice } from "@/lib/pwa";
 import { useT } from "@/i18n";
 import { shellMessages } from "@/i18n/messages/shell";
 import { GradientTopLine } from "@/components/xpot/GradientTopLine";
@@ -12,13 +13,15 @@ import { GradientTopLine } from "@/components/xpot/GradientTopLine";
 // installed or the browser can't install it.
 
 /**
- * Where Share lives depends on the iPhone browser: Safari's bottom bar (behind
- * ••• in the compact layout), Chrome's address bar, the menu elsewhere.
+ * Where Share lives: Safari's bottom bar on iPhone (behind ••• in the compact
+ * layout) or its top bar on iPad, Chrome's address bar, the menu elsewhere.
+ * An in-app browser (Instagram, the Google app…) can't add to the home screen,
+ * so its steps start in Safari.
  */
-function iosShareStep(userAgent: string) {
-  if (/CriOS/.test(userAgent)) return "installIosStep1Chrome" as const;
-  if (/FxiOS|EdgiOS|OPiOS|OPT\//.test(userAgent)) return "installIosStep1Other" as const;
-  return "installIosStep1" as const;
+function iosShareStep({ device, browser }: { device: IosDevice; browser: IosBrowser }) {
+  if (browser === "chrome") return "installIosStep1Chrome" as const;
+  if (browser === "other") return "installIosStep1Other" as const;
+  return device === "ipad" ? ("installIpadStep1" as const) : ("installIosStep1" as const);
 }
 
 function Steps({ steps }: { steps: ReactNode[] }) {
@@ -39,10 +42,12 @@ function Steps({ steps }: { steps: ReactNode[] }) {
 /** Browsers with no install prompt (iPhone, Safari on Mac) get the steps instead. */
 function InstructionsDialog({ mode, open, onOpenChange }: { mode: "ios" | "safari-mac"; open: boolean; onOpenChange: (open: boolean) => void }) {
   const t = useT(shellMessages);
-  const [before, after] = t(iosShareStep(navigator.userAgent)).split("{icon}");
+  const guide = resolveIosGuide({ userAgent: navigator.userAgent, maxTouchPoints: navigator.maxTouchPoints ?? 0 });
+  const [before, after] = t(iosShareStep(guide)).split("{icon}");
   const steps =
     mode === "ios"
       ? [
+          ...(guide.browser === "in-app" ? [t("installInAppStep1")] : []),
           <>
             {before}
             <Share className="mx-0.5 inline h-4 w-4 -translate-y-0.5 text-blue-400" aria-hidden="true" />
@@ -61,7 +66,7 @@ function InstructionsDialog({ mode, open, onOpenChange }: { mode: "ios" | "safar
       <DialogContent className="max-w-sm overflow-hidden rounded-2xl border-white/10 bg-[#0b1020] text-white" data-testid="install-instructions">
         <GradientTopLine />
         <DialogHeader>
-          <DialogTitle>{mode === "ios" ? t("installIosTitle") : t("installMacTitle")}</DialogTitle>
+          <DialogTitle>{mode === "safari-mac" ? t("installMacTitle") : guide.device === "ipad" ? t("installIpadTitle") : t("installIosTitle")}</DialogTitle>
           <DialogDescription className="text-white/45">{t("installAppHint")}</DialogDescription>
         </DialogHeader>
         <Steps steps={steps} />
@@ -117,7 +122,9 @@ export function InstallAppSidebarItem({ collapsed }: { collapsed: boolean }) {
 /**
  * "Install app" pill for the Settings page header, on the right of the title.
  * Tinted with the brand blue so it reads as an offer rather than one more grey
- * control.
+ * control. Under 380px (iPhone SE, mini) it drops the icon, and under 360px
+ * (Display Zoom) it keeps only the icon, so a long title ("Configurações")
+ * still fits on one line.
  */
 export function InstallAppHeaderButton({ className = "" }: { className?: string }) {
   const t = useT(shellMessages);
@@ -128,11 +135,11 @@ export function InstallAppHeaderButton({ className = "" }: { className?: string 
       <button
         type="button"
         onClick={action.onClick}
-        className={`flex h-9 items-center gap-1.5 rounded-full border border-blue-400/30 bg-blue-500/15 px-3.5 text-sm font-semibold text-blue-200 transition-all hover:bg-blue-500/25 hover:text-white active:scale-95 touch-manipulation ${className}`}
+        className={`flex h-9 items-center gap-1.5 rounded-full border border-blue-400/30 bg-blue-500/15 px-3.5 text-sm font-semibold text-blue-200 transition-all hover:bg-blue-500/25 hover:text-white active:scale-95 touch-manipulation max-[379px]:px-3 max-[359px]:w-9 max-[359px]:justify-center max-[359px]:px-0 ${className}`}
         data-testid="settings-install-app"
       >
-        <Download className="h-4 w-4 shrink-0" aria-hidden="true" />
-        <span className="whitespace-nowrap">{t("installApp")}</span>
+        <Download className="h-4 w-4 shrink-0 min-[360px]:max-[379px]:hidden" aria-hidden="true" />
+        <span className="whitespace-nowrap max-[359px]:sr-only">{t("installApp")}</span>
       </button>
       {action.dialog}
     </>
