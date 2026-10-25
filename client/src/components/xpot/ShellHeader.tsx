@@ -8,7 +8,6 @@ import { useT } from "@/i18n";
 import { shellMessages } from "@/i18n/messages/shell";
 import type { XpotMeResponse } from "@/pages/xpot/types";
 import { UserGreeting } from "./UserGreeting";
-import { InstallAppIconButton } from "./InstallApp";
 import { useAvatarUpload } from "./useAvatarUpload";
 import { subscribeToRoutePush } from "@/lib/pushNotifications";
 import { navigateGuarded } from "@/hooks/useUnsavedChangesGuard";
@@ -16,9 +15,10 @@ import { navigateGuarded } from "@/hooks/useUnsavedChangesGuard";
 // The person at the top of every phone screen, in both modules: their photo
 // (tap to change it; Settings › Profile has it too), the greeting, the date,
 // and the buttons that belong to the whole app rather than one module:
-// Install app (only while the browser can install it), Settings and sign out. Management is a tab of each module's bar (Manage) and
-// a switch in Settings, not a button here. The Visits/Tags switch sits right
-// below it. On desktop the sidebar has the buttons and the same identity block.
+// Settings and sign out. Install app lives in the Settings header; management
+// is a tab of each module's bar (Manage) and a switch in Settings, not a
+// button here. The Visits/Tags switch sits right below it. On desktop the
+// sidebar has the buttons and the same identity block.
 
 function useOnline() {
   const [online, setOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
@@ -99,7 +99,6 @@ export function ShellHeader({ module, actions = true }: { module: XpotModule; ac
 
       {actions && (
         <div className="relative z-10 flex shrink-0 items-center gap-1.5">
-          <InstallAppIconButton />
           <button type="button" onClick={() => navigateGuarded("/settings", navigate)} title={ts("navSettings")} aria-label={ts("navSettings")} className={ICON_BUTTON} data-testid="shell-settings">
             <Settings className="h-[18px] w-[18px]" />
           </button>

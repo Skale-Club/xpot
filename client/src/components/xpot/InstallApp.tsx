@@ -6,10 +6,20 @@ import { useT } from "@/i18n";
 import { shellMessages } from "@/i18n/messages/shell";
 import { GradientTopLine } from "@/components/xpot/GradientTopLine";
 
-// "Install app", offered where the rep goes looking (the phone header beside
-// Settings, the sidebar footer, Settings › Sign-in) and nowhere else: no
-// banner, no pop-up on load. Renders nothing when the app is already installed
-// or the browser can't install it.
+// "Install app", offered where the rep goes looking (the Settings header on a
+// phone, the sidebar footer, Settings › Sign-in on desktop) and nowhere else:
+// no banner, no pop-up on load. Renders nothing when the app is already
+// installed or the browser can't install it.
+
+/**
+ * Where Share lives depends on the iPhone browser: Safari's bottom bar (behind
+ * ••• in the compact layout), Chrome's address bar, the menu elsewhere.
+ */
+function iosShareStep(userAgent: string) {
+  if (/CriOS/.test(userAgent)) return "installIosStep1Chrome" as const;
+  if (/FxiOS|EdgiOS|OPiOS|OPT\//.test(userAgent)) return "installIosStep1Other" as const;
+  return "installIosStep1" as const;
+}
 
 function Steps({ steps }: { steps: ReactNode[] }) {
   return (
@@ -29,7 +39,7 @@ function Steps({ steps }: { steps: ReactNode[] }) {
 /** Browsers with no install prompt (iPhone, Safari on Mac) get the steps instead. */
 function InstructionsDialog({ mode, open, onOpenChange }: { mode: "ios" | "safari-mac"; open: boolean; onOpenChange: (open: boolean) => void }) {
   const t = useT(shellMessages);
-  const [before, after] = t("installIosStep1").split("{icon}");
+  const [before, after] = t(iosShareStep(navigator.userAgent)).split("{icon}");
   const steps =
     mode === "ios"
       ? [
@@ -105,10 +115,11 @@ export function InstallAppSidebarItem({ collapsed }: { collapsed: boolean }) {
 }
 
 /**
- * Round icon button for the phone header, next to Settings. Tinted with the
- * brand blue so it reads as an offer rather than one more grey control.
+ * "Install app" pill for the Settings page header, on the right of the title.
+ * Tinted with the brand blue so it reads as an offer rather than one more grey
+ * control.
  */
-export function InstallAppIconButton({ className = "" }: { className?: string }) {
+export function InstallAppHeaderButton({ className = "" }: { className?: string }) {
   const t = useT(shellMessages);
   const action = useInstallAction();
   if (!action) return null;
@@ -117,12 +128,11 @@ export function InstallAppIconButton({ className = "" }: { className?: string })
       <button
         type="button"
         onClick={action.onClick}
-        title={t("installApp")}
-        aria-label={t("installApp")}
-        className={`flex h-10 w-10 items-center justify-center rounded-[18px] border border-blue-400/30 bg-blue-500/15 text-blue-300 transition-all hover:bg-blue-500/25 hover:text-blue-200 active:scale-95 touch-manipulation ${className}`}
-        data-testid="shell-install-app"
+        className={`flex h-9 items-center gap-1.5 rounded-full border border-blue-400/30 bg-blue-500/15 px-3.5 text-sm font-semibold text-blue-200 transition-all hover:bg-blue-500/25 hover:text-white active:scale-95 touch-manipulation ${className}`}
+        data-testid="settings-install-app"
       >
-        <Download className="h-[18px] w-[18px]" />
+        <Download className="h-4 w-4 shrink-0" aria-hidden="true" />
+        <span className="whitespace-nowrap">{t("installApp")}</span>
       </button>
       {action.dialog}
     </>
@@ -136,7 +146,7 @@ export function InstallAppRow({ className = "" }: { className?: string }) {
   if (!action) return null;
   return (
     <>
-      <div className={`flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 ${className}`} data-testid="settings-install-app">
+      <div className={`flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 ${className}`} data-testid="settings-install-app-row">
         <Download className="h-4 w-4 shrink-0 text-white/50" />
         <p className="min-w-0 flex-1 text-xs text-white/50">{t("installAppHint")}</p>
         <button

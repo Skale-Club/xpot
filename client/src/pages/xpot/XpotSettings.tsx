@@ -46,7 +46,7 @@ import { tagsMessages } from "@/i18n/messages/tags";
 import type { XpotMeResponse } from "./types";
 import { AppLayout } from "@/components/xpot/AppLayout";
 import { homeForModules, useXpotModules } from "@/components/ModuleSwitch";
-import { InstallAppRow } from "@/components/xpot/InstallApp";
+import { InstallAppHeaderButton, InstallAppRow } from "@/components/xpot/InstallApp";
 
 const COUNTRIES = [
   { code: "BR", dial: "+55", name: "Brazil" },
@@ -641,6 +641,7 @@ export function XpotSettings() {
         onBack={() => setLocation(homeForModules(modules))}
         backLabel={tc("back")}
         title={t("title")}
+        actions={<InstallAppHeaderButton />}
         className="mb-6"
       />
 
@@ -664,8 +665,6 @@ export function XpotSettings() {
           </span>
           <ChevronRight className="h-5 w-5 shrink-0 text-white/35" />
         </button>
-
-        <InstallAppRow />
 
         <nav aria-label={t("title")} className={`divide-y divide-white/[0.06] overflow-hidden rounded-2xl ${GLASS_CLASS}`}>
           {rows.map(({ id, icon: Icon, value }) => (
