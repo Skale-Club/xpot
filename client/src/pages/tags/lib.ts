@@ -153,12 +153,13 @@ export class HttpError extends Error {
   }
 }
 
-async function call<T>(method: "GET" | "POST", url: string, body?: unknown, extraHeaders?: Record<string, string>): Promise<T> {
+async function call<T>(method: "GET" | "POST", url: string, body?: unknown, extraHeaders?: Record<string, string>, signal?: AbortSignal): Promise<T> {
   const res = await fetch(url, {
     method,
     credentials: "include",
     headers: { ...viewHeaders(), ...(body === undefined ? {} : { "Content-Type": "application/json" }), ...extraHeaders },
     body: body === undefined ? undefined : JSON.stringify(body),
+    signal,
   });
   if (res.status === 401) {
     // Session gone: back to the sign-in screen.
@@ -178,7 +179,7 @@ async function call<T>(method: "GET" | "POST", url: string, body?: unknown, extr
 }
 
 export const tagsGet = <T,>(url: string) => call<T>("GET", url);
-export const tagsPost = <T,>(url: string, body: unknown = {}) => call<T>("POST", url, body);
+export const tagsPost = <T,>(url: string, body: unknown = {}, signal?: AbortSignal) => call<T>("POST", url, body, undefined, signal);
 export const tagsPostIdempotent = <T,>(url: string, body: unknown, key: string) =>
   call<T>("POST", url, body, { "Idempotency-Key": key });
 

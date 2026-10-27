@@ -38,6 +38,8 @@ export type NfcErrorCode =
   | "nfcRemoved"
   | "nfcInsecure"
   | "nfcBusy"
+  | "nfcTimeout"
+  | "nfcInterrupted"
   | "nfcGeneric"
   | "nfcNoBrowser";
 
@@ -54,7 +56,48 @@ export class NfcError extends Error {
 }
 
 function getCtor(): NdefReaderCtor | null {
+  if (typeof window === "undefined") return null;
   return (window as unknown as { NDEFReader?: NdefReaderCtor }).NDEFReader ?? null;
+}
+
+// A missing tap (or a suspended Android NFC service) need not reject the native
+// promise. Bound the wait ourselves and release the radio on every exit path.
+export const NFC_TIMEOUT_MS = 30_000;
+
+function runNfcOperation<T>(signal: AbortSignal, operation: (session: AbortSignal) => Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    if (signal.aborted) return reject(new NfcError("nfcCancelled"));
+    if (typeof window !== "undefined" && window.isSecureContext === false) {
+      return reject(new NfcError("nfcInsecure"));
+    }
+    const session = new AbortController();
+    let settled = false;
+    const finish = (outcome: { value: T } | { error: NfcError }) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      signal.removeEventListener("abort", onAbort);
+      session.abort();
+      if ("error" in outcome) reject(outcome.error);
+      else resolve(outcome.value);
+    };
+    const onAbort = () => finish({ error: new NfcError("nfcCancelled") });
+    const timer = setTimeout(() => finish({ error: new NfcError("nfcTimeout") }), NFC_TIMEOUT_MS);
+    signal.addEventListener("abort", onAbort, { once: true });
+    const fail = (err: unknown) => {
+      const error = mapNfcError(err);
+      // Only our caller's abort is a silent cancellation. A native interruption
+      // without it must leave the waiting screen and offer a retry.
+      finish({ error: error.silent ? new NfcError("nfcInterrupted") : error });
+    };
+    try {
+      // Invoke synchronously: the first NFC permission prompt needs the click's
+      // user activation. Do not put a permission query or a network await here.
+      operation(session.signal).then((value) => finish({ value }), fail);
+    } catch (err) {
+      fail(err);
+    }
+  });
 }
 
 export function isWebNfcSupported(): boolean {
@@ -172,7 +215,7 @@ function readNext(signal: AbortSignal): Promise<NfcReading> {
 /** Waits for the next tap and returns what the chip holds. */
 export async function scanOnce(signal: AbortSignal): Promise<NfcReading> {
   try {
-    return await readNext(signal);
+    return await runNfcOperation(signal, readNext);
   } catch (err) {
     throw mapNfcError(err);
   }
@@ -190,7 +233,7 @@ export async function writeContent(value: string, signal: AbortSignal): Promise<
     ? { recordType: "mime", mediaType: "text/vcard", data: new TextEncoder().encode(value) }
     : { recordType: "url", data: value };
   try {
-    await new Ctor().write({ records: [record] }, { overwrite: true, signal });
+    await runNfcOperation(signal, (session) => new Ctor().write({ records: [record] }, { overwrite: true, signal: session }));
   } catch (err) {
     throw mapNfcError(err);
   }
@@ -209,7 +252,7 @@ export async function lockChip(signal: AbortSignal): Promise<void> {
   const reader = new Ctor();
   if (typeof reader.makeReadOnly !== "function") throw new NfcError("nfcUnsupported");
   try {
-    await reader.makeReadOnly({ signal });
+    await runNfcOperation(signal, (session) => reader.makeReadOnly!({ signal: session }));
   } catch (err) {
     throw mapNfcError(err);
   }

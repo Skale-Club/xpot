@@ -124,12 +124,14 @@ export default function HomeScreen() {
     setSheet({ kind: "nfc" });
     try {
       const reading = await scanOnce(ctrl.signal);
+      if (ctrl.signal.aborted) return;
       haptic(40);
       setSheet(null);
       if (reading.kind === "url") await handleScan(reading.url);
       else if (reading.kind === "text") await handleScan(reading.text);
       else setSheet({ kind: "empty" });
     } catch (err) {
+      if (ctrl.signal.aborted) return;
       const e = mapNfcError(err);
       if (e.silent) return;
       setSheet(null);

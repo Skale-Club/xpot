@@ -10,6 +10,7 @@ import { BottomSheet, CARD, CopyButton, EYEBROW_MUTED, SHEET_TITLE, SheetActions
 import { canLockChip, mapNfcError, nfcMode, readBack, writeContent } from "./webNfc";
 import { contentKindOf } from "@shared/chipContent";
 import { ContinueOnPhone } from "./ContinueOnPhone";
+import { ChipSaveTimeout, saveChipProgress } from "./saveChipProgress";
 
 export interface WriteResult {
   method: "web_nfc" | "manual";
@@ -24,7 +25,7 @@ interface Props {
   identity: Identity;
   onClose: () => void;
   /** Report the result. May throw: the sheet shows the message and lets the user retry. */
-  onDone: (result: WriteResult) => Promise<void> | void;
+  onDone: (result: WriteResult, signal?: AbortSignal) => Promise<void> | void;
   /** This screen on the phone; desktop shows it as a QR. */
   continueUrl?: string;
   continueHint?: string;
@@ -57,6 +58,7 @@ export default function WriteSheet({ open, url, identity, onClose, onDone, conti
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
   const [lastVerified, setLastVerified] = useState(false);
+  const [chipWritten, setChipWritten] = useState(false);
   // The chip is written but saving that failed: a retry saves again instead of asking for another tap.
   const [unsaved, setUnsaved] = useState<WriteResult | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -72,44 +74,59 @@ export default function WriteSheet({ open, url, identity, onClose, onDone, conti
       setPhase("idle");
       setError(null);
       setUnsaved(null);
+      setChipWritten(false);
     }
     return cancel;
   }, [open, cancel]);
 
   const report = useCallback(
-    async (result: WriteResult) => {
+    async (result: WriteResult, signal?: AbortSignal) => {
+      if (signal?.aborted) return;
+      cancel();
+      const ctrl = new AbortController();
+      abortRef.current = ctrl;
+      setError(null);
       setPhase("saving");
       try {
-        await onDone(result);
+        await saveChipProgress((request) => onDone(result, request), ctrl.signal);
+        if (ctrl.signal.aborted) return;
         haptic([60, 40, 60]);
         setUnsaved(null);
         setLastVerified(result.verified);
         setPhase("done");
       } catch (err) {
+        if (ctrl.signal.aborted) return;
         setUnsaved(result);
-        setError(errorText(err, tc("requestFailed")));
+        setError(err instanceof ChipSaveTimeout ? t("chipSaveTimeout") : errorText(err, tc("requestFailed")));
         setPhase("error");
       }
     },
-    [onDone, tc],
+    [onDone, cancel, t, tc],
   );
 
-  const startWrite = useCallback(async () => {
+  const startWrite = useCallback(async (verifyOnly = false) => {
     cancel();
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     setError(null);
     setUnsaved(null);
-    setPhase("writing");
+    setPhase(verifyOnly ? "verifying" : "writing");
     try {
-      await writeContent(url, ctrl.signal);
-      haptic(40);
-      setPhase("verifying");
+      if (!verifyOnly) {
+        setChipWritten(false);
+        await writeContent(url, ctrl.signal);
+        if (ctrl.signal.aborted) return;
+        setChipWritten(true);
+        haptic(40);
+        setPhase("verifying");
+      }
       const readback = await readBack(ctrl.signal);
-      if (readback === url) return await report({ method: "web_nfc", verified: true, readbackUrl: readback });
+      if (ctrl.signal.aborted) return;
+      if (readback === url) return await report({ method: "web_nfc", verified: true, readbackUrl: readback }, ctrl.signal);
       setError(readback ? t("chipOtherLink", { url: readback }) : t("chipNoLink"));
       setPhase("error");
     } catch (err) {
+      if (ctrl.signal.aborted) return;
       const e = mapNfcError(err);
       if (e.silent) return;
       setError(t(e.code));
@@ -216,11 +233,18 @@ export default function WriteSheet({ open, url, identity, onClose, onDone, conti
       ) : supported ? (
         <div className="mt-5 space-y-3">
           {errorBox}
+          {chipWritten && !unsaved && <p className="text-sm text-white/70">{t("writtenNeedsCheck")}</p>}
           <SheetActions>
-            <Button type="button" variant="brand" accent="tags" size="lg" onClick={() => void (unsaved ? report(unsaved) : startWrite())} className="w-full" data-testid="button-write-now">
+            <Button type="button" variant="brand" accent="tags" size="lg" onClick={() => void (unsaved ? report(unsaved) : startWrite(chipWritten))} className="w-full" data-testid="button-write-now">
               {phase === "error" ? <RotateCw className="!size-5" /> : <Nfc className="!size-5" />}
-              {phase === "error" ? tc("retry") : t("writeNow")}
+              {chipWritten && !unsaved ? t("verifyAgain") : phase === "error" ? tc("retry") : t("writeNow")}
             </Button>
+            {chipWritten && !unsaved && (
+              <>
+                <Button type="button" variant="secondary" onClick={() => void startWrite()} className="w-full">{t("rewriteChip")}</Button>
+                <Button type="button" variant="ghost" onClick={skipVerify} className="w-full">{t("skipCheck")}</Button>
+              </>
+            )}
             <Button type="button" variant="ghost" onClick={() => void report({ method: "manual", verified: false, readbackUrl: null })} className="w-full">
               {t("wroteElsewhere")}
             </Button>
