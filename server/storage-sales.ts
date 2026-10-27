@@ -659,6 +659,9 @@ export async function runReturn(input: {
       throw new Error(`Only ${current.quantityOnHand} on record; cannot return ${input.quantity}.`);
     }
     const onHandAfter = current.quantityOnHand - input.quantity;
+    // Closing with units still on record would hide them: a closed agreement
+    // leaves the summaries and refuses every later return or settlement.
+    if (input.close && onHandAfter > 0) throw new ConsignmentUnitsLeftError(onHandAfter);
     const [movement] = await tx
       .insert(salesConsignmentMovements)
       .values({
@@ -728,12 +731,20 @@ export async function runAdjustment(input: {
   });
 }
 
+/** Units still on record block closing; thrown inside the transaction that would close. */
+export class ConsignmentUnitsLeftError extends Error {
+  constructor(public count: number) {
+    super(`${count} units still on record. Return or settle them first.`);
+  }
+}
+
+/** Close an agreement with nothing left on record; undefined when units remain (checked in the same statement). */
 export async function closeConsignment(id: number): Promise<SalesConsignment | undefined> {
   const now = new Date();
   const [updated] = await db
     .update(salesConsignments)
     .set({ status: "closed", closedAt: now, nextVisitDueAt: null, updatedAt: now })
-    .where(eq(salesConsignments.id, id))
+    .where(and(eq(salesConsignments.id, id), eq(salesConsignments.quantityOnHand, 0)))
     .returning();
   return updated;
 }

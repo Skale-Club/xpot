@@ -4,7 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import { storage, type SalesRepProfilePatch } from "../../storage.js";
 import { requireXpotUser, ensureXpotRep } from "./middleware.js";
 import { getSupabaseAdmin } from "../../lib/supabase.js";
-import { discardFiles } from "../../lib/files.js";
+import { discardFiles, isRepAvatarUrl } from "../../lib/files.js";
 import { randomUUID } from "crypto";
 import { listOrganizations, membershipsForRep } from "../../organizations/service.js";
 import { eq } from "drizzle-orm";
@@ -95,7 +95,15 @@ export function createAuthRouter() {
       }
       if (repData.displayName !== undefined) repPatch.displayName = repData.displayName;
       if (repData.phone !== undefined) repPatch.phone = repData.phone ?? undefined;
-      if (repData.avatarUrl !== undefined) repPatch.avatarUrl = repData.avatarUrl ?? undefined;
+      if (repData.avatarUrl !== undefined) {
+        // Only clearing it, or the rep's own uploaded picture (POST /me/avatar
+        // sets it): the value is what a later replacement or account deletion
+        // removes from storage.
+        if (repData.avatarUrl !== null && !isRepAvatarUrl(repData.avatarUrl, actor!.rep.id)) {
+          return res.status(400).json({ code: "avatar_not_uploaded", message: "Upload the picture through /me/avatar." });
+        }
+        repPatch.avatarUrl = repData.avatarUrl ?? undefined;
+      }
 
       const userPatch: { firstName?: string | null; lastName?: string | null } = {};
       if (firstName !== undefined) userPatch.firstName = firstName;
@@ -167,7 +175,9 @@ export function createAuthRouter() {
       ]);
       res.json({ avatarUrl, rep: updated });
       // The replaced picture would otherwise stay in the public bucket for good.
-      if (previous && previous !== avatarUrl) void discardFiles([previous], `avatar of rep #${actor!.rep.id}`);
+      if (previous && previous !== avatarUrl && isRepAvatarUrl(previous, actor!.rep.id)) {
+        void discardFiles([previous], `avatar of rep #${actor!.rep.id}`);
+      }
     } catch (err) {
       console.error("[POST /api/xpot/me/avatar]", err);
       res.status(500).json({ message: "Failed to upload avatar" });

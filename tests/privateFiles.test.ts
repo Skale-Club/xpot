@@ -275,4 +275,18 @@ describe("files are deleted with what they belong to", () => {
     expect(r2.removed).toEqual(["audio/1/visit_50_1.webm"]);
     expect(r2.objects.has(res.body.note.audioUrl.slice(3))).toBe(true);
   });
+
+  it("keeps the format the recorder really used (security review A14)", async () => {
+    const put = vi.spyOn(r2, "put");
+    const mp4 = await request(appFor("user-a"), "POST", "/visits/50/audio", { audioData: "data:audio/mp4;base64,AAAAGGZ0eXA=", durationSeconds: 3 });
+    expect(mp4.status).toBe(200);
+    expect(mp4.body.note.audioUrl).toMatch(/^r2:audio\/1\/visit_50_\d+\.m4a$/);
+    expect(put).toHaveBeenLastCalledWith(expect.stringMatching(/\.m4a$/), expect.anything(), "audio/mp4");
+    const opus = await request(appFor("user-a"), "POST", "/visits/50/audio", { audioData: "data:audio/webm;codecs=opus;base64,GkXfow==", durationSeconds: 3 });
+    expect(opus.body.note.audioUrl).toMatch(/\.webm$/);
+    expect(put).toHaveBeenLastCalledWith(expect.anything(), expect.anything(), "audio/webm");
+    expect([...(put.mock.lastCall![1] as Uint8Array)]).toEqual([0x1a, 0x45, 0xdf, 0xa3]);
+    const other = await request(appFor("user-a"), "POST", "/visits/50/audio", { audioData: "data:text/html;base64,PGh0bWw+", durationSeconds: 3 });
+    expect(other.status).toBe(400);
+  });
 });

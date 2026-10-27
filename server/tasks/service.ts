@@ -217,7 +217,17 @@ export async function createTask({ actor, source, input, skipXphereSync }: Creat
       eq(salesTasks.source, source),
       eq(salesTasks.idempotencyKey, input.idempotencyKey),
     ));
-    if (existing) return (await enrich([existing]))[0];
+    if (existing) {
+      // A repeat of this caller's own request gets its task back. The key is
+      // shared by the whole Organization, so anyone else's (or a different
+      // request reusing it) is refused instead of being handed that task.
+      const sameRequest = existing.repId === repId
+        && (existing.createdByRepId == null || existing.createdByRepId === actor.rep.id);
+      if (!sameRequest || !(await canManageTask(actor, existing))) {
+        throw new TaskServiceError("This idempotency key was already used for another request.", 409);
+      }
+      return (await enrich([existing]))[0];
+    }
   }
 
   const task = await storage.createSalesTask({

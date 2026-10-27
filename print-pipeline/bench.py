@@ -280,9 +280,9 @@ def sync_print_now(creds, folder, quiet=False):
     import print_now
     _, plates = request(creds['server'], 'GET', '/api/provisioner/print-now', creds['token'])
     changed = print_now.sync(folder, plates or [], fetch, log=(lambda _m: None) if quiet else print)
-    if not quiet or changed['added'] or changed['moved'] or changed['removed']:
+    if not quiet or changed['added'] or changed['moved'] or changed['removed'] or changed['skipped']:
         print(f"{time.strftime('%H:%M:%S')} Print Now: {changed['added']} added, {changed['moved']} moved, "
-              f"{changed['removed']} removed, {changed['kept']} as they were ({folder})")
+              f"{changed['removed']} removed, {changed['kept']} as they were, {changed['skipped']} skipped ({folder})")
     return changed
 
 

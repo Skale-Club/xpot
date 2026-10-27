@@ -324,51 +324,76 @@ export async function createTagSale(input: TagSaleCreateInput, actor: TagActor, 
  * It keeps its customer and destination; removing the customer is a separate step.
  */
 export async function cancelTagLinksForSale(saleId: number, actorUserId: string | null = null) {
-  await db.transaction(async (tx) => {
-    const links = await tx
-      .select({ tagId: salesSaleTags.tagId })
-      .from(salesSaleTags)
-      .where(and(eq(salesSaleTags.saleId, saleId), eq(salesSaleTags.status, "active")))
-      .for("update");
-    if (!links.length) return;
-    const now = new Date();
-    const tagIds = links.map((link) => link.tagId);
-    await tx.update(salesSaleTags).set({ status: "cancelled", endedAt: now }).where(and(eq(salesSaleTags.saleId, saleId), eq(salesSaleTags.status, "active")));
-    await tx.update(tags).set({ soldAt: null, updatedAt: now }).where(inArray(tags.id, tagIds));
+  await db.transaction((tx) => releaseSalePieces(tx, saleId, actorUserId));
+}
 
-    const [pieces, saleMovements] = await Promise.all([
-      tx.select({ id: tags.id, repId: tags.repId, stockStatus: tags.stockStatus, ownershipType: tags.ownershipType, custodianRepId: tags.custodianRepId })
-        .from(tags).where(inArray(tags.id, tagIds)).for("update"),
-      tx.select({ tagId: tagStockMovements.tagId, fromOwnershipType: tagStockMovements.fromOwnershipType })
-        .from(tagStockMovements)
-        .where(and(inArray(tagStockMovements.tagId, tagIds), eq(tagStockMovements.movementType, "sale"), eq(tagStockMovements.referenceType, "sale"), eq(tagStockMovements.referenceId, String(saleId)))),
-    ]);
-    const ownershipBefore = new Map(saleMovements.map((m) => [m.tagId, m.fromOwnershipType]));
-    for (const piece of pieces) {
-      if (piece.stockStatus !== "sold") continue;
-      const ownershipType = ownershipBefore.get(piece.id) ?? "company";
-      await tx.update(tags).set({
-        stockStatus: "available",
-        ownershipType,
-        custodianRepId: piece.repId,
-        stockUpdatedAt: now,
-      }).where(eq(tags.id, piece.id));
-      await tx.insert(tagStockMovements).values({
-        tagId: piece.id,
-        movementType: "restore",
-        fromStockStatus: piece.stockStatus,
-        toStockStatus: "available",
-        fromOwnershipType: piece.ownershipType,
-        toOwnershipType: ownershipType,
-        fromCustodianRepId: piece.custodianRepId,
-        toCustodianRepId: piece.repId,
-        referenceType: "sale",
-        referenceId: String(saleId),
-        actorUserId,
-        reason: tagSystemReason("sale_cancelled"),
-      });
+/**
+ * Cancel a direct sale and give its pieces back in one transaction, so a failure
+ * leaves the sale as it was instead of cancelled with pieces still sold. The sale
+ * row is locked first (linkTagToSale takes it in the same order), so a piece
+ * cannot be linked while the sale is being cancelled. An already cancelled sale
+ * is not touched, but any piece still linked to it is released (a retry repairs
+ * a cancellation from before this was one transaction).
+ */
+export async function cancelSale(saleId: number, reason: string | null, actorUserId: string | null) {
+  await db.transaction(async (tx) => {
+    const [sale] = await tx.select({ status: salesSales.status }).from(salesSales).where(eq(salesSales.id, saleId)).for("update");
+    if (!sale) throw new TagSaleError("Sale not found", 404, "sale_not_found");
+    if (sale.status !== "cancelled") {
+      const now = new Date();
+      await tx.update(salesSales).set({ status: "cancelled", cancelledAt: now, cancelReason: reason, updatedAt: now })
+        .where(eq(salesSales.id, saleId));
     }
+    await releaseSalePieces(tx, saleId, actorUserId);
   });
+}
+
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+async function releaseSalePieces(tx: Tx, saleId: number, actorUserId: string | null) {
+  const links = await tx
+    .select({ tagId: salesSaleTags.tagId })
+    .from(salesSaleTags)
+    .where(and(eq(salesSaleTags.saleId, saleId), eq(salesSaleTags.status, "active")))
+    .for("update");
+  if (!links.length) return;
+  const now = new Date();
+  const tagIds = links.map((link) => link.tagId);
+  await tx.update(salesSaleTags).set({ status: "cancelled", endedAt: now }).where(and(eq(salesSaleTags.saleId, saleId), eq(salesSaleTags.status, "active")));
+  await tx.update(tags).set({ soldAt: null, updatedAt: now }).where(inArray(tags.id, tagIds));
+
+  const [pieces, saleMovements] = await Promise.all([
+    tx.select({ id: tags.id, repId: tags.repId, stockStatus: tags.stockStatus, ownershipType: tags.ownershipType, custodianRepId: tags.custodianRepId })
+      .from(tags).where(inArray(tags.id, tagIds)).for("update"),
+    tx.select({ tagId: tagStockMovements.tagId, fromOwnershipType: tagStockMovements.fromOwnershipType })
+      .from(tagStockMovements)
+      .where(and(inArray(tagStockMovements.tagId, tagIds), eq(tagStockMovements.movementType, "sale"), eq(tagStockMovements.referenceType, "sale"), eq(tagStockMovements.referenceId, String(saleId)))),
+  ]);
+  const ownershipBefore = new Map(saleMovements.map((m) => [m.tagId, m.fromOwnershipType]));
+  for (const piece of pieces) {
+    if (piece.stockStatus !== "sold") continue;
+    const ownershipType = ownershipBefore.get(piece.id) ?? "company";
+    await tx.update(tags).set({
+      stockStatus: "available",
+      ownershipType,
+      custodianRepId: piece.repId,
+      stockUpdatedAt: now,
+    }).where(eq(tags.id, piece.id));
+    await tx.insert(tagStockMovements).values({
+      tagId: piece.id,
+      movementType: "restore",
+      fromStockStatus: piece.stockStatus,
+      toStockStatus: "available",
+      fromOwnershipType: piece.ownershipType,
+      toOwnershipType: ownershipType,
+      fromCustodianRepId: piece.custodianRepId,
+      toCustodianRepId: piece.repId,
+      referenceType: "sale",
+      referenceId: String(saleId),
+      actorUserId,
+      reason: tagSystemReason("sale_cancelled"),
+    });
+  }
 }
 
 /** The product a piece sells as: its own, else its batch's. */
@@ -453,7 +478,11 @@ export async function listLinkableSales(tagId: string): Promise<LinkableSaleItem
  */
 export async function linkTagToSale(tagId: string, saleItemId: number, actor: TagActor) {
   await db.transaction(async (tx) => {
-    // Lock the piece, then the sale line, so two links cannot take its last unit.
+    // Lock the sale and its line, then the piece: two links cannot take the
+    // line's last unit, and a cancellation (cancelSale, same order) cannot run
+    // in between and leave this piece sold on a cancelled sale.
+    const [locked] = await tx.select({ saleId: salesSaleItems.saleId }).from(salesSaleItems).where(eq(salesSaleItems.id, saleItemId));
+    if (locked) await tx.select({ id: salesSales.id }).from(salesSales).where(eq(salesSales.id, locked.saleId)).for("update");
     await tx.select({ id: tags.id }).from(tags).where(eq(tags.id, tagId)).for("update");
     const piece = await pieceForLink(tx, tagId);
     if (!piece) throw new TagSaleError("Piece not found", 404, "tag_not_found");

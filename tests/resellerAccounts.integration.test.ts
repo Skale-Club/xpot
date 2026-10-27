@@ -45,6 +45,10 @@ test.skipIf(!enabled)("reseller access: create, approve, block, unblock, phone",
     // Managers can't mint admins.
     const adminInput = accounts.resellerAccountSchema.parse({ displayName: "Boss", phone: "5550110002", role: "admin" });
     await assert.rejects(accounts.createResellerAccount(adminInput, manager), (err: any) => err.status === 403);
+    // Nor other managers (security review A05).
+    const managerInput = accounts.resellerAccountSchema.parse({ displayName: "Mgr", phone: "5550110009", role: "manager" });
+    await assert.rejects(accounts.createResellerAccount(managerInput, manager), (err: any) => err.code === "manager_create_admin_only");
+    assert.equal((await db.execute(sql`SELECT 1 FROM users WHERE phone = '+15550110009'`)).rows.length, 0);
     const boss = await accounts.createResellerAccount(adminInput, admin);
 
     // A self sign-up waits for approval.

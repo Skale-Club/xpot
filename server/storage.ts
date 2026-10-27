@@ -205,6 +205,14 @@ function withEncryptedApiKey<T extends { apiKey?: string | null }>(data: T): T {
   return data.apiKey ? { ...data, apiKey: encryptSecret(data.apiKey) } : data;
 }
 
+/**
+ * Holding a piece (tags t) opens its customer only while the holder is still an
+ * active, unblocked member of the piece's Organization: suspending or removing
+ * someone there must end it. The customer's own Organization may differ.
+ */
+const pieceMembershipJoin = sql`JOIN organization_memberships pm ON pm.organization_id = t.organization_id
+  AND pm.rep_id = t.rep_id AND pm.is_active AND pm.blocked_at IS NULL`;
+
 export class DatabaseStorage implements IStorage {
   // ── Settings + integrations ──
 
@@ -445,7 +453,7 @@ export class DatabaseStorage implements IStorage {
           : activeOrganizationIds.length
             ? and(eq(salesLeads.ownerRepId, repId), inArray(salesLeads.organizationId, activeOrganizationIds))
             : undefined,
-        sql`EXISTS (SELECT 1 FROM tags t WHERE t.lead_id = ${salesLeads.id} AND t.rep_id = ${repId})`,
+        sql`EXISTS (SELECT 1 FROM tags t ${pieceMembershipJoin} WHERE t.lead_id = ${salesLeads.id} AND t.rep_id = ${repId})`,
       ));
     }
     if (filters.search) {
@@ -464,16 +472,17 @@ export class DatabaseStorage implements IStorage {
         )
       );
     }
+    // Ends on the id so pages (?offset=) never overlap or skip a company with the same updatedAt.
     if (conditions.length) {
-      const query = db.select().from(salesLeads).where(and(...conditions)).orderBy(desc(salesLeads.updatedAt));
+      const query = db.select().from(salesLeads).where(and(...conditions)).orderBy(desc(salesLeads.updatedAt), desc(salesLeads.id));
       return filters.limit ? await query.limit(filters.limit).offset(filters.offset ?? 0) : await query;
     }
-    const query = db.select().from(salesLeads).orderBy(desc(salesLeads.updatedAt));
+    const query = db.select().from(salesLeads).orderBy(desc(salesLeads.updatedAt), desc(salesLeads.id));
     return filters.limit ? await query.limit(filters.limit).offset(filters.offset ?? 0) : await query;
   }
 
   async leadHoldsRepPiece(leadId: number, repId: number): Promise<boolean> {
-    const found = await db.execute(sql`SELECT 1 FROM tags WHERE lead_id = ${leadId} AND rep_id = ${repId} LIMIT 1`);
+    const found = await db.execute(sql`SELECT 1 FROM tags t ${pieceMembershipJoin} WHERE t.lead_id = ${leadId} AND t.rep_id = ${repId} LIMIT 1`);
     return found.rows.length > 0;
   }
 

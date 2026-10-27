@@ -22,7 +22,7 @@ vi.mock("../server/db.js", async () => {
 });
 
 const { applyAction } = await import("../server/routes/xpot/visit-actions.js");
-const { updateTask } = await import("../server/tasks/service.js");
+const { createTask, updateTask } = await import("../server/tasks/service.js");
 const { createInboundRouter } = await import("../server/routes/xpot/inbound.js");
 
 const q = async (text: string, params: unknown[] = []) => (await pg.client.query(text, params)).rows as any[];
@@ -125,5 +125,28 @@ describe("canonical task lifecycle from visit audio", () => {
     expect(completed.completedAt).toBeTruthy();
     const reopened = await updateTask(actor as any, task.id, { status: "pending" });
     expect(reopened.completedAt).toBeNull();
+  });
+});
+
+describe("idempotent create (security review A06)", () => {
+  it("gives a repeat its own task back and refuses the key to a teammate", async () => {
+    const { rep, org } = (globalThis as any).__taskFixture;
+    await q(`INSERT INTO users (id, email) VALUES ('mate-user', 'mate@xpot.test')`);
+    const [mate] = await q(`INSERT INTO sales_reps (user_id, display_name) VALUES ('mate-user', 'Mate') RETURNING id`);
+    await q(`INSERT INTO organization_memberships (organization_id, rep_id, role) VALUES ($1, $2, 'member')`, [org.id, mate.id]);
+    const actorOf = (r: any, userId: string) => ({
+      rep: { ...r, role: "rep", isActive: true, modules: ["visits"] },
+      user: { userId, email: null, firstName: null, lastName: null, isAdmin: false },
+    }) as any;
+    const owner = actorOf(rep, "voice-user");
+    const input = { title: "Private follow-up", idempotencyKey: "a06-key", organizationId: org.id } as any;
+
+    const first = await createTask({ actor: owner, source: "manual", input, skipXphereSync: true });
+    const again = await createTask({ actor: owner, source: "manual", input, skipXphereSync: true });
+    expect(again.id).toBe(first.id);
+
+    await expect(createTask({ actor: actorOf(mate, "mate-user"), source: "manual", input, skipXphereSync: true }))
+      .rejects.toMatchObject({ status: 409 });
+    expect((await q(`SELECT count(*)::int AS count FROM sales_tasks WHERE idempotency_key = 'a06-key'`))[0].count).toBe(1);
   });
 });

@@ -6,7 +6,7 @@ import { requireXpotUser, isManagerOrAdmin, loadAccessibleLead, type XpotActor, 
 import { xpotSaleCreateSchema, xpotSalePaymentSchema, xpotSaleCancelSchema } from "#shared/xpot.js";
 import { allocateSaleLineTotals, computeSaleTotals, paymentStatusFor } from "#shared/pricing.js";
 import { syncSaleToXphere } from "./xphere-sync.js";
-import { cancelTagLinksForSale } from "../../tags/sales.js";
+import { cancelSale } from "../../tags/sales.js";
 import { canManageOrganizationForActor, canViewOrganizationForActor } from "../../organizations/service.js";
 
 // Direct sales: what the rep closes on the spot (a website, a marketing plan,
@@ -208,18 +208,14 @@ export function createSalesRouter() {
       (existing.sale.repId !== actor.rep.id && !(await canManageOrganizationForActor(actor, existing.sale.organizationId))))) {
       return res.status(403).json({ code: "access_denied", message: "Access denied" });
     }
-    if (existing.sale.status === "cancelled") return res.json(existing);
     if (existing.sale.kind === "consignment_settlement") {
       return res.status(400).json({ code: "settlement_sale_not_cancellable", message: "Settlement sales cannot be cancelled. Record a stock adjustment on the consignment instead." });
     }
     const { reason } = xpotSaleCancelSchema.parse(req.body ?? {});
-    await salesStorage.updateSale(existing.sale.id, {
-      status: "cancelled",
-      cancelledAt: new Date(),
-      cancelReason: reason ?? null,
-    });
-    // Pieces can sit on any sale (sold from Tags, or linked to a Visits sale later).
-    await cancelTagLinksForSale(existing.sale.id, actor.user.userId);
+    // Pieces can sit on any sale (sold from Tags, or linked to a Visits sale
+    // later); they go back to stock in the same transaction. Cancelling again
+    // only releases pieces a failed earlier attempt left behind.
+    await cancelSale(existing.sale.id, reason ?? null, actor.user.userId);
     res.json(await salesStorage.getSale(existing.sale.id));
   });
 

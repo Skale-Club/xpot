@@ -105,6 +105,8 @@ export interface TagListFilters {
   kitId?: string;
   /** Only this organization's pieces (tags.organization_id). */
   organizationId?: number;
+  /** Only pieces of these organizations; empty means none (a reseller's active memberships). */
+  organizationIds?: readonly number[];
   /** Pieces in house stock (no reseller). */
   house?: boolean;
   /** Only pieces counted by this stock number (shared/tagMetrics.ts), e.g. `house` for the company stock card. */
@@ -249,6 +251,10 @@ export async function listTags(filters: TagListFilters): Promise<TagListItem[]> 
   if (filters.repId !== undefined) conds.push(sql`t.rep_id = ${filters.repId}`);
   if (filters.kitId) conds.push(sql`t.kit_id = ${filters.kitId}`);
   if (filters.organizationId !== undefined) conds.push(sql`t.organization_id = ${filters.organizationId}`);
+  if (filters.organizationIds !== undefined) {
+    if (!filters.organizationIds.length) return [];
+    conds.push(sql`t.organization_id IN (${sql.join(filters.organizationIds.map((id) => sql`${id}`), sql`, `)})`);
+  }
   if (filters.house) conds.push(sql`t.rep_id IS NULL`);
   if (filters.metric) conds.push(stockMetricSql(filters.metric));
   if (filters.queue) conds.push(pieceQueueSql(filters.queue));
@@ -2186,16 +2192,18 @@ export async function getLeadTagSummaries(actor: TagActor, now: Date = new Date(
 }
 
 /**
- * A phone opened this tag's /n/ link, which only the chip holds: the chip is
- * written right. Promotes a not-yet-checked chip to verified; a locked or
- * already verified one is left alone.
+ * A phone opened this tag's /n/ link after someone signed in reported writing
+ * the chip without a read-back (NFC Tools on an iPhone: "programmed"). That tap
+ * is the check of that write, so the chip becomes verified. The link alone is
+ * no proof (anyone can open it): a chip nobody reported writing, or whose write
+ * failed, stays as it is and keeps its place in the production queue.
  */
 export async function confirmNfcFromTap(tagId: string): Promise<void> {
   const now = new Date();
   await db
     .update(tags)
     .set({ nfcProvisioningStatus: "verified", nfcVerifiedAt: now, nfcProgrammedAt: sql`coalesce(${tags.nfcProgrammedAt}, ${now})`, updatedAt: now })
-    .where(and(eq(tags.id, tagId), inArray(tags.nfcProvisioningStatus, ["not_programmed", "programmed", "failed"])));
+    .where(and(eq(tags.id, tagId), eq(tags.nfcProvisioningStatus, "programmed")));
 }
 
 /**

@@ -86,6 +86,47 @@ export function uploaderRepId(ref: string): number | null {
   return match ? Number(match[1]) : null;
 }
 
+/**
+ * The rep's own uploaded picture: a public "uploads" URL of this Supabase
+ * project under avatars/<repId>/, as POST /me/avatar writes it. Nothing else
+ * stored on a profile may be deleted on the rep's behalf.
+ */
+export function isRepAvatarUrl(ref: string | null | undefined, repId: number): boolean {
+  const parsed = parseRef(ref);
+  if (parsed?.kind !== "legacy" || !parsed.publicPath || !process.env.SUPABASE_URL) return false;
+  try {
+    if (new URL(parsed.url).origin !== new URL(process.env.SUPABASE_URL).origin) return false;
+  } catch {
+    return false;
+  }
+  return new RegExp(`^avatars/${repId}/[A-Za-z0-9_-][A-Za-z0-9._-]*$`).test(parsed.publicPath);
+}
+
+/** Recorder formats a voice note may arrive in, and the extension each is stored and transcribed under. */
+const AUDIO_TYPES: Record<string, string> = {
+  "audio/webm": "webm",
+  "audio/mp4": "m4a",
+  "audio/x-m4a": "m4a",
+  "audio/aac": "aac",
+  "audio/ogg": "ogg",
+  "audio/mpeg": "mp3",
+  "audio/wav": "wav",
+};
+
+/**
+ * A recorder's data: URL (FileReader.readAsDataURL of a MediaRecorder blob) as
+ * bytes plus its real type: Safari records MP4/AAC where Chrome records WebM, and
+ * a type may carry codec parameters ("audio/webm;codecs=opus"). Data without a
+ * data: header is the old clients' WebM. null for a type that is not audio we keep.
+ */
+export function parseAudioDataUrl(data: string): { buffer: Buffer; contentType: string; extension: string } | null {
+  const header = data.match(/^data:([^;,]+)((?:;[^;,]*)*?);base64,/i);
+  const contentType = header ? header[1].trim().toLowerCase() : "audio/webm";
+  const extension = AUDIO_TYPES[contentType];
+  if (!extension) return null;
+  return { buffer: Buffer.from(header ? data.slice(header[0].length) : data, "base64"), contentType, extension };
+}
+
 // ─── Backends ────────────────────────────────────────────────────────────────
 
 function r2Config() {
