@@ -482,7 +482,10 @@ export function registerTagRoutes(app: Express) {
       // only a manager or admin in management mode gets every piece, and ?organizationId= narrows that alone.
       const { mine, organizationId, ...rest } = filters;
       const own = mine || !actor.inManagement;
-      res.json(await repo.listTags(own ? { ...rest, repId: actor.repId, house: undefined } : { ...rest, organizationId }));
+      // A reseller's pieces in the Organizations they are still active in, as GET /:id
+      // allows (canWorkOnTag): leaving one takes its pieces off the list too.
+      const organizationIds = actor.isManager ? undefined : actor.organizationIds ?? [];
+      res.json(await repo.listTags(own ? { ...rest, repId: actor.repId, house: undefined, organizationIds } : { ...rest, organizationId }));
     } catch (err) {
       fail(res, err, "Failed to load tags");
     }

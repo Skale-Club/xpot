@@ -77,6 +77,13 @@ const storage = {
   ),
   getSalesOpportunity: vi.fn(async (id: number) => store.opportunities.find((o) => o.id === id)),
   updateSalesOpportunity: vi.fn(async (id: number, data: any) => ({ id, ...data })),
+  createSalesOpportunity: vi.fn(async (input: any) => {
+    const created = { id: 500 + store.opportunities.length, ...input };
+    store.opportunities.push(created);
+    return created;
+  }),
+  updateSalesRepProfile: vi.fn(async (id: number, data: any) => ({ ...store.reps.get(id), ...data })),
+  updateUserProfile: vi.fn(async (_userId: string, data: any) => data),
   listSalesVisits: vi.fn(async () => []),
   listSalesReps: vi.fn(async () => [...store.reps.values()]),
   listSalesSyncEvents: vi.fn(async () => []),
@@ -98,6 +105,8 @@ vi.mock("../server/organizations/service.js", () => ({
   organizationIdForRep: vi.fn(async () => 1),
   canManageOrganizationForActor: vi.fn(async () => false),
   canViewOrganizationForActor: vi.fn(async () => true),
+  listOrganizations: vi.fn(async () => []),
+  membershipsForRep: vi.fn(async () => []),
 }));
 // leads.ts now enriches the list with sales totals; that module reaches db.ts,
 // which refuses to load without a database. None of these cases need it.
@@ -147,6 +156,9 @@ const { createOpportunitiesRouter } = await import("../server/routes/xpot/opport
 const { createLeadsRouter } = await import("../server/routes/xpot/leads.js");
 const { createVisitsRouter } = await import("../server/routes/xpot/visits.js");
 const { createAdminRouter } = await import("../server/routes/xpot/admin.js");
+const { createAuthRouter } = await import("../server/routes/xpot/auth.js");
+const { createResellerAccount, resellerAccountSchema } = await import("../server/routes/xpot/resellerAccounts.js");
+const { syncOpportunityToGhl } = await import("../server/routes/xpot/helpers.js");
 const { ensureXpotRep, requireVisitsModule, VISITS_ONLY_PATHS } = await import("../server/routes/xpot/middleware.js");
 
 // ─── Harness ─────────────────────────────────────────────────────────────────
@@ -276,6 +288,87 @@ describe("SEG-03 — a rep cannot edit another rep's opportunity", () => {
   it("allows a rep to edit their own", async () => {
     const res = await request(appFor(router, "user-a"), "PATCH", "/opportunities/300", { value: 5000 });
     expect(res.status).toBe(200);
+  });
+});
+
+describe("A01 — a deal can only be opened on a company and visit the rep may use", () => {
+  const router = createOpportunitiesRouter();
+  beforeEach(() => {
+    storage.createSalesOpportunity.mockClear();
+    vi.mocked(syncOpportunityToGhl).mockClear();
+    store.visits = new Map([
+      [70, { id: 70, repId: 1, leadId: 10 }],
+      [80, { id: 80, repId: 2, leadId: 20 }],
+      [90, { id: 90, repId: 2, leadId: 10 }],
+    ]);
+  });
+
+  it("refuses another rep's company before inserting or syncing", async () => {
+    const res = await request(appFor(router, "user-a"), "POST", "/opportunities", { leadId: 20, title: "Steal" });
+    expect(res.status).toBe(403);
+    expect(storage.createSalesOpportunity).not.toHaveBeenCalled();
+    expect(syncOpportunityToGhl).not.toHaveBeenCalled();
+  });
+
+  it("refuses a visit at another company, or someone else's visit", async () => {
+    for (const visitId of [80, 90, 999]) {
+      const res = await request(appFor(router, "user-a"), "POST", "/opportunities", { leadId: 10, visitId, title: "Deal" });
+      expect(res.status, String(visitId)).toBeGreaterThanOrEqual(400);
+    }
+    expect(storage.createSalesOpportunity).not.toHaveBeenCalled();
+  });
+
+  it("opens a deal on the rep's own company and visit", async () => {
+    const res = await request(appFor(router, "user-a"), "POST", "/opportunities", { leadId: 10, visitId: 70, title: "Deal" });
+    expect(res.status).toBe(201);
+    expect(storage.createSalesOpportunity).toHaveBeenCalledWith(expect.objectContaining({ leadId: 10, visitId: 70, repId: 1 }));
+  });
+
+  it("does not show the company of an old deal linked to someone else's", async () => {
+    store.opportunities.push({ id: 301, repId: 1, leadId: 20, title: "Old bad link", status: "open" });
+    const res = await request(appFor(router, "user-a"), "GET", "/opportunities");
+    expect(res.status).toBe(200);
+    const byId = new Map(res.body.map((o: any) => [o.id, o]));
+    expect((byId.get(301) as any).lead).toBeUndefined();
+    expect((byId.get(300) as any).lead).toMatchObject({ id: 10 });
+  });
+});
+
+describe("A02 — a profile cannot point its avatar at someone else's file", () => {
+  const router = createAuthRouter();
+  const base = "https://proj.supabase.co/storage/v1/object/public/uploads";
+  beforeEach(() => {
+    process.env.SUPABASE_URL = "https://proj.supabase.co";
+    storage.updateSalesRepProfile.mockClear();
+  });
+
+  it("refuses another rep's avatar, a private reference, and a look-alike host", async () => {
+    for (const avatarUrl of [
+      `${base}/avatars/2/1_x.jpg`,
+      `${base}/photos/1/lead_1_2.jpg`,
+      `https://evil.test/storage/v1/object/public/uploads/avatars/1/1_x.jpg`,
+      `${base}/avatars/1/..%2F..%2Fphotos%2F2%2Fa.jpg`,
+    ]) {
+      const res = await request(appFor(router, "user-a"), "PATCH", "/me", { avatarUrl });
+      expect(res.status, avatarUrl).toBe(400);
+    }
+    expect(storage.updateSalesRepProfile).not.toHaveBeenCalled();
+  });
+
+  it("keeps the rep's own uploaded picture, and clearing it", async () => {
+    for (const avatarUrl of [`${base}/avatars/1/1_x.jpg`, null]) {
+      const res = await request(appFor(router, "user-a"), "PATCH", "/me", { avatarUrl });
+      expect(res.status).toBe(200);
+    }
+  });
+});
+
+describe("A05 — a manager creates plain reps only", () => {
+  const manager = { userId: "user-m", isAdmin: false };
+  it.each(["manager", "admin"] as const)("refuses a new %s before touching the database", async (role) => {
+    const input = resellerAccountSchema.parse({ displayName: "New", phone: "5550110009", role });
+    // db is an empty double here: reaching an insert would fail with a TypeError, not a 403.
+    await expect(createResellerAccount(input, manager)).rejects.toMatchObject({ status: 403 });
   });
 });
 

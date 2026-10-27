@@ -3,13 +3,15 @@
     <folder>/Para imprimir/<request>/<plate files>     plates ready to print (download, open in Bambu Studio, print)
     <folder>/Impressos/<request>/<plate files>         plates marked printed in Xpot in the last 14 days
 
-    <request> = "2026-10-22 15h53 - Stand Large - Instagram - Black - 10 un"
+    <request> = "2026-10-22 15h53 - Stand Large - Instagram - Black - 10 un - 1a2b3c4d"  (the request's id, so two
+                identical requests asked in the same minute never share a folder)
     <plate>   = "IG-2026-004 - placa 1 de 3 - 4 un.3mf"  (the Bambu Studio project) and ".gcode.3mf" (sliced and checked)
 
 Xpot says which plates belong (GET /api/provisioner/print-now); sync() downloads what is missing, moves a plate to
 Impressos when it is marked printed, and removes what no longer belongs (cancelled, failed, printed long ago). It only
-ever touches the files it wrote itself, listed in <folder>/.xpot-print-now.json: anything else in the folder is left
-alone. Standard library only.
+ever touches the files it wrote itself, listed in <folder>/.xpot-print-now.json and still byte for byte what it wrote
+(same SHA-256): anything else in the folder, a file edited by hand included, is left alone, and a plate whose place
+is taken by such a file is skipped with a warning rather than written over. Standard library only.
 """
 from __future__ import annotations
 
@@ -34,7 +36,7 @@ def request_folder(plate: dict, tz=None) -> str:
     """One folder per request: when it was asked, what, how many."""
     created = datetime.fromisoformat(plate['requestCreatedAt'].replace('Z', '+00:00'))
     created = created.astimezone(tz) if tz else created.astimezone()
-    return _safe(f"{created:%Y-%m-%d %Hh%M} - {plate['modelTitle']} - {plate['requestQuantity']} un")
+    return _safe(f"{created:%Y-%m-%d %Hh%M} - {plate['modelTitle']} - {plate['requestQuantity']} un - {plate['requestId'][:8]}")
 
 
 def plate_file(plate: dict, kind: str) -> str:
@@ -53,7 +55,12 @@ def layout(plates: list, tz=None) -> dict:
         for f in plate.get('files') or []:
             if f['kind'] not in ('3mf', 'gcode_3mf'):
                 continue
-            out[os.path.join(status_dir, folder, plate_file(plate, f['kind']))] = (plate, f)
+            rel = os.path.join(status_dir, folder, plate_file(plate, f['kind']))
+            if rel in out:
+                # Same request, same name (a malformed list): the plate's own id keeps them apart.
+                name, ext = plate_file(plate, f['kind']).split('.', 1)
+                rel = os.path.join(status_dir, folder, _safe(f"{name} - {plate['id'][:8]}") + '.' + ext)
+            out[rel] = (plate, f)
     return out
 
 
@@ -74,10 +81,27 @@ def _save_manifest(root: str, files: dict) -> None:
     os.replace(tmp, path)
 
 
+def _inside(root: str, rel: str) -> str | None:
+    """The full path of `rel`, or None when it would leave the folder (a manifest edited by hand)."""
+    base = os.path.realpath(root)
+    full = os.path.realpath(os.path.join(base, rel))
+    return full if os.path.commonpath([base, full]) == base and full != base else None
+
+
+def _sha256(path: str) -> str:
+    digest = hashlib.sha256()
+    with open(path, 'rb') as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b''):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def _ours(root: str, rel: str, entry: dict) -> bool:
-    """The file is still the one we wrote (same size): safe to move or delete."""
-    full = os.path.join(root, rel)
-    return os.path.isfile(full) and os.path.getsize(full) == entry.get('bytes')
+    """The file is still exactly the one we wrote (same size and SHA-256): safe to move or delete."""
+    full = _inside(root, rel)
+    if not full or not os.path.isfile(full) or os.path.getsize(full) != entry.get('bytes'):
+        return False
+    return bool(entry.get('sha256')) and _sha256(full) == entry['sha256']
 
 
 def _prune_empty(root: str) -> None:
@@ -96,22 +120,29 @@ def sync(root: str, plates: list, fetch, log=print, tz=None) -> dict:
     os.makedirs(root, exist_ok=True)
     want = layout(plates, tz)
     have = _load_manifest(root)
-    done = {'added': 0, 'moved': 0, 'removed': 0, 'kept': 0}
+    done = {'added': 0, 'moved': 0, 'removed': 0, 'kept': 0, 'skipped': 0}
     by_file = {entry.get('file'): rel for rel, entry in have.items() if _ours(root, rel, entry)}
     kept = {}
 
     for rel, (plate, f) in want.items():
         entry = {'plate': plate['id'], 'file': f['id'], 'sha256': f['sha256'], 'bytes': f['bytes']}
-        full = os.path.join(root, rel)
+        full = _inside(root, rel)
+        if not full:
+            continue
         old = have.get(rel)
         if old and old.get('file') == f['id'] and _ours(root, rel, old):
             kept[rel] = entry
             done['kept'] += 1
             continue
+        if os.path.lexists(full) and not (old and _ours(root, rel, old)):
+            # Someone's file (or ours, edited since) sits where this plate goes: never written over.
+            log(f"  skipped {rel}: a file Print Now did not write (or one edited since) is in its place")
+            done['skipped'] += 1
+            continue
         os.makedirs(os.path.dirname(full), exist_ok=True)
         src = by_file.get(f['id'])
-        if src and src != rel and os.path.isfile(os.path.join(root, src)):
-            os.replace(os.path.join(root, src), full)
+        if src and src != rel and _ours(root, src, have[src]):
+            os.replace(_inside(root, src), full)
             by_file.pop(f['id'], None)
             log(f'  moved {rel}')
             done['moved'] += 1
@@ -131,7 +162,7 @@ def sync(root: str, plates: list, fetch, log=print, tz=None) -> dict:
         if rel in kept:
             continue
         if _ours(root, rel, entry):
-            os.remove(os.path.join(root, rel))
+            os.remove(_inside(root, rel))
             log(f'  removed {rel}')
             done['removed'] += 1
         # a file changed or deleted by hand is no longer ours: it is forgotten, never touched

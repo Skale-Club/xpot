@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, fetchAllPages } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useXpotShared } from "./useXpotShared";
 import { useXpotQueries } from "./useXpotQueries";
@@ -28,10 +28,12 @@ export function useLeads(enabled = true, organizationId?: number) {
   const { xpotMeQuery } = useXpotQueries();
 
   // Under the "/api/xpot/leads" prefix, so every lead mutation's invalidation refreshes it too.
+  // Both load every page (the bare key through the default query function): the
+  // screen searches, filters and counts the whole portfolio, not its first page.
   const leadsQuery = useQuery<FullSalesLead[]>(organizationId
     ? {
       queryKey: ["/api/xpot/leads", "organization", organizationId],
-      queryFn: async () => (await apiRequest("GET", `/api/xpot/leads?organizationId=${organizationId}`)).json(),
+      queryFn: () => fetchAllPages<FullSalesLead>(`/api/xpot/leads?organizationId=${organizationId}`),
       enabled: xpotMeQuery.isSuccess && enabled,
     }
     : { queryKey: ["/api/xpot/leads"], enabled: xpotMeQuery.isSuccess && enabled });

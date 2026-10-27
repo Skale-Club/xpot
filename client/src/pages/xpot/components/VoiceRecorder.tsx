@@ -83,7 +83,10 @@ export function VoiceRecorder({
       chunksRef.current = [];
       mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       mediaRecorder.onstop = () => {
-        setAudioBlob(new Blob(chunksRef.current, { type: "audio/webm" }));
+        // What the browser really recorded (MP4/AAC when WebM/Opus is not supported), so the
+        // server stores and transcribes it under the right type.
+        const type = mediaRecorder.mimeType || chunksRef.current[0]?.type || "audio/webm";
+        setAudioBlob(new Blob(chunksRef.current, { type }));
         stream.getTracks().forEach((t) => t.stop());
       };
       mediaRecorder.start();

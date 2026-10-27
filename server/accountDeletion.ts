@@ -46,7 +46,7 @@ import {
   users,
   xphereIntegrations,
 } from "#shared/schema.js";
-import { discardFiles, sweepRepFiles, uploaderRepId } from "./lib/files.js";
+import { discardFiles, isRepAvatarUrl, sweepRepFiles, uploaderRepId } from "./lib/files.js";
 import { getSupabaseAdmin } from "./lib/supabase.js";
 
 export class AccountDeletionError extends Error {
@@ -92,7 +92,8 @@ export async function deleteRepAccountRows(repId: number) {
     const [rep] = await tx.select().from(salesReps).where(eq(salesReps.id, repId));
     if (!rep || rep.deletedAt) throw new AccountDeletionError("Person not found", 404, "rep_not_found");
     const [user] = await tx.select().from(users).where(eq(users.id, rep.userId));
-    const files: string[] = [rep.avatarUrl, user?.profileImageUrl].filter((f): f is string => Boolean(f));
+    // Only their own uploaded picture: a profile value pointing anywhere else is not theirs to delete.
+    const files: string[] = [rep.avatarUrl, user?.profileImageUrl].filter((f): f is string => isRepAvatarUrl(f, repId));
 
     // Businesses the rep owns: delete, unless sales/consignments must be kept.
     const ownedLeadIds = (await tx.select({ id: salesLeads.id }).from(salesLeads).where(eq(salesLeads.ownerRepId, repId))).map((l) => l.id);

@@ -1,9 +1,9 @@
 import { Router } from "express";
 import { z } from "zod";
 import { storage } from "../../storage.js";
-import { salesStorage } from "../../storage-sales.js";
+import { salesStorage, ConsignmentUnitsLeftError } from "../../storage-sales.js";
 import { requireXpotUser, isManagerOrAdmin, loadAccessibleLead, type XpotActor, listScope, recordFilters } from "./middleware.js";
-import { canManageOrganizationForActor } from "../../organizations/service.js";
+import { canManageOrganizationForActor, canViewOrganizationForActor } from "../../organizations/service.js";
 import {
   xpotConsignmentDepositSchema,
   xpotConsignmentSettleSchema,
@@ -27,8 +27,11 @@ export function createConsignmentsRouter() {
       return null;
     }
     // The rep who left the stock, a Rep Admin of its organization (as with a sale), or a manager.
-    if (!isManagerOrAdmin(actor) && row.consignment.repId !== actor.rep.id &&
-      !(await canManageOrganizationForActor(actor, row.consignment.organizationId))) {
+    // Either of the first two only while still active there: leaving or being
+    // suspended from the organization ends it, as it does for its sales.
+    const organizationId = row.consignment.organizationId;
+    if (!isManagerOrAdmin(actor) && (!(await canViewOrganizationForActor(actor, organizationId)) ||
+      (row.consignment.repId !== actor.rep.id && !(await canManageOrganizationForActor(actor, organizationId))))) {
       res.status(403).json({ code: "access_denied", message: "Access denied" });
       return null;
     }
@@ -164,6 +167,9 @@ export function createConsignmentsRouter() {
       });
       res.json({ ...(await salesStorage.getConsignment(row.consignment.id)), movement: result.movement });
     } catch (err) {
+      if (err instanceof ConsignmentUnitsLeftError) {
+        return res.status(400).json({ code: "consignment_units_left", message: err.message, params: { count: err.count } });
+      }
       res.status(400).json({ message: (err as Error).message });
     }
   });
@@ -193,7 +199,12 @@ export function createConsignmentsRouter() {
     if (row.consignment.quantityOnHand > 0) {
       return res.status(400).json({ code: "consignment_units_left", message: `${row.consignment.quantityOnHand} units still on record. Return or settle them first.`, params: { count: row.consignment.quantityOnHand } });
     }
-    await salesStorage.closeConsignment(row.consignment.id);
+    // The count above can be stale by now; closeConsignment re-checks it.
+    if (!(await salesStorage.closeConsignment(row.consignment.id))) {
+      const current = await salesStorage.getConsignment(row.consignment.id);
+      const count = current?.consignment.quantityOnHand ?? 0;
+      return res.status(400).json({ code: "consignment_units_left", message: `${count} units still on record. Return or settle them first.`, params: { count } });
+    }
     res.json(await salesStorage.getConsignment(row.consignment.id));
   });
 

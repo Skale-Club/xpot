@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createR2Store,
   discardFiles,
+  isRepAvatarUrl,
   legacyPublicPath,
   parseRef,
   setFileStoresForTests,
@@ -75,5 +76,31 @@ describe("discardFiles", () => {
     await expect(discardFiles(["r2:photos/1/a.jpg", "supabase:photos/1/b.jpg"], "ctx")).resolves.toEqual({ deleted: 0, failed: 2 });
     expect(errors).toHaveBeenCalledTimes(2);
     errors.mockRestore();
+  });
+});
+
+describe("isRepAvatarUrl", () => {
+  const base = "https://proj.supabase.co/storage/v1/object/public/uploads";
+  afterEach(() => { delete process.env.SUPABASE_URL; });
+
+  it("accepts only this project's public avatars/<repId>/ files", () => {
+    process.env.SUPABASE_URL = "https://proj.supabase.co";
+    expect(isRepAvatarUrl(`${base}/avatars/7/1700_abc.jpg`, 7)).toBe(true);
+    for (const ref of [
+      `${base}/avatars/8/1700_abc.jpg`,
+      `${base}/photos/7/lead_1_2.jpg`,
+      `${base}/avatars/7/..`,
+      `${base}/avatars/7/a%2F..%2F..%2Fphotos%2F8%2Fx.jpg`,
+      "https://evil.test/storage/v1/object/public/uploads/avatars/7/1700_abc.jpg",
+      "r2:photos/7/lead_1_2.jpg",
+      "supabase:audio/7/v.webm",
+      null,
+    ]) {
+      expect(isRepAvatarUrl(ref, 7), String(ref)).toBe(false);
+    }
+  });
+
+  it("trusts nothing when the storage project is not configured", () => {
+    expect(isRepAvatarUrl(`${base}/avatars/7/1700_abc.jpg`, 7)).toBe(false);
   });
 });

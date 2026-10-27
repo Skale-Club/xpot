@@ -60,11 +60,44 @@ export async function apiRequest(
 }
 
 type UnauthorizedBehavior = "returnNull" | "throw";
+/** Rows per page of a list the app loads whole (the server's cap for GET /api/xpot/leads). */
+export const LIST_PAGE_SIZE = 200;
+/** Pages fetched before giving up on loading a list whole (10,000 rows). */
+const LIST_MAX_PAGES = 50;
+
+/**
+ * Every page of a paged list (?limit=&offset=), concatenated: the Companies
+ * screen filters, searches and counts what it holds, so one page would quietly
+ * hide the rest. Stops at a short page, or after LIST_MAX_PAGES.
+ */
+export async function fetchAllPages<T>(path: string): Promise<T[]> {
+  const rows: T[] = [];
+  for (let page = 0; page < LIST_MAX_PAGES; page++) {
+    const sep = path.includes("?") ? "&" : "?";
+    const res = await fetch(`${path}${sep}limit=${LIST_PAGE_SIZE}&offset=${page * LIST_PAGE_SIZE}`, {
+      credentials: "include",
+      headers: viewHeaders(),
+    });
+    await throwIfResNotOk(res);
+    const batch = (await res.json()) as T[];
+    rows.push(...batch);
+    if (batch.length < LIST_PAGE_SIZE) return rows;
+  }
+  console.warn(`[queries] ${path}: stopped after ${LIST_MAX_PAGES} pages`);
+  return rows;
+}
+
+/** Lists cached under a bare key that are loaded whole (fetchAllPages), whoever asks for them. */
+const WHOLE_LISTS = new Set(["/api/xpot/leads"]);
+
 export const getQueryFn: <T>(options: {
   on401: UnauthorizedBehavior;
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
+    if (queryKey.length === 1 && WHOLE_LISTS.has(queryKey[0] as string)) {
+      return (await fetchAllPages(queryKey[0] as string)) as never;
+    }
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 15000);
     let res: Response;

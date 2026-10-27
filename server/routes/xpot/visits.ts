@@ -5,7 +5,7 @@ import type { SalesVisitStatus } from "#shared/schema/sales.js";
 import { getDistanceMeters, syncTaskToGhl, syncVisitToGhl, syncVisitToXphere } from "./helpers.js";
 import { xpotCheckInSchema, xpotCheckOutSchema, xpotVisitNoteUpsertSchema, xpotVisitSummarySchema } from "#shared/xpot.js";
 import { salesStorage } from "../../storage-sales.js";
-import { activeStore, discardFiles, putPrivateFile } from "../../lib/files.js";
+import { activeStore, discardFiles, parseAudioDataUrl, putPrivateFile } from "../../lib/files.js";
 import { finishVisitTransaction, startVisitTransaction } from "../../visit-workflow.js";
 import { saveVisitSummaryTransaction } from "../../visit-summary.js";
 import { evaluateCheckInGeofence } from "../../check-in-geofence.js";
@@ -323,12 +323,18 @@ export function createVisitsRouter() {
       return res.status(503).json({ message: "Storage not configured" });
     }
 
+    // Stored and transcribed as what the recorder really produced (WebM on
+    // Chrome/Android, MP4 on older Safari), not always labelled WebM.
+    const audio = typeof audioData === "string" ? parseAudioDataUrl(audioData) : null;
+    if (!audio) {
+      return res.status(400).json({ message: "Unsupported audio format" });
+    }
+
     try {
-      const base64Data = audioData.replace(/^data:audio\/\w+;base64,/, "");
-      const buffer = Buffer.from(base64Data, "base64");
-      const filename = `visit_${visitId}_${Date.now()}.webm`;
+      const { buffer, contentType } = audio;
+      const filename = `visit_${visitId}_${Date.now()}.${audio.extension}`;
       // Private: the note keeps a storage reference, read through GET /files.
-      const audioUrl = await putPrivateFile(`audio/${actor!.rep.id}/${filename}`, buffer, "audio/webm");
+      const audioUrl = await putPrivateFile(`audio/${actor!.rep.id}/${filename}`, buffer, contentType);
       const previousAudio = (await storage.getSalesVisitNote(visitId))?.audioUrl;
 
       // Transcribe (best-effort — does not block save on failure): Groq first,
@@ -340,7 +346,7 @@ export function createVisitsRouter() {
       ]);
       for (const pick of transcriptionProviders({ groq: groqIntegration, openai: openaiIntegration })) {
         try {
-          const file = new File([buffer], filename, { type: "audio/webm" });
+          const file = new File([buffer], filename, { type: contentType });
           let transcription: unknown;
           if (pick.provider === "groq") {
             const Groq = (await import("groq-sdk")).default;

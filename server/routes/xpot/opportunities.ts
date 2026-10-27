@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { storage } from "../../storage.js";
-import { requireXpotUser, ensureXpotRep, isManagerOrAdmin, listsEveryone } from "./middleware.js";
+import { requireXpotUser, ensureXpotRep, isManagerOrAdmin, listsEveryone, canAccessLead, loadAccessibleLead, type XpotActor } from "./middleware.js";
 import { syncOpportunityToGhl } from "./helpers.js";
 import { xpotOpportunityCreateSchema, xpotOpportunityUpdateSchema } from "#shared/xpot.js";
 import { getGHLPipelines } from "../../integrations/ghl.js";
@@ -34,13 +34,30 @@ export function createOpportunitiesRouter() {
 
     // One query for every lead instead of one per opportunity.
     const leads = await storage.getSalesLeadsByIds(Array.from(new Set(opportunities.map((item) => item.leadId))));
-    const leadById = new Map(leads.map((lead) => [lead.id, lead]));
+    // A deal filed on a company the caller can no longer open (or one linked
+    // before the create route checked it) keeps its row but not the company.
+    const allowed = await Promise.all(leads.map((lead) => canAccessLead(actor as XpotActor, lead)));
+    const leadById = new Map(leads.filter((_, i) => allowed[i]).map((lead) => [lead.id, lead]));
     res.json(opportunities.map((item) => ({ ...item, lead: leadById.get(item.leadId) })));
   });
 
   router.post("/opportunities", async (req, res) => {
     const actor = (req as any).xpotActor as Awaited<ReturnType<typeof ensureXpotRep>>;
     const input = xpotOpportunityCreateSchema.parse(req.body);
+
+    // The deal is created under the caller and its company is then listed and
+    // pushed to the CRM, so both the company and the visit must be theirs to use.
+    const lead = await loadAccessibleLead(req, res, input.leadId);
+    if (!lead) return;
+    if (input.visitId) {
+      const visit = await storage.getSalesVisit(input.visitId);
+      if (!visit || visit.leadId !== lead.id) {
+        return res.status(400).json({ code: "visit_mismatch", message: "Visit does not belong to this lead" });
+      }
+      if (!isManagerOrAdmin(actor!) && visit.repId !== actor!.rep.id) {
+        return res.status(403).json({ code: "access_denied", message: "Access denied" });
+      }
+    }
 
     const opportunity = await storage.createSalesOpportunity({
       ...input,

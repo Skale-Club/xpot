@@ -16,5 +16,9 @@ export default defineConfig({
     // The first test of a file that boots the server routes pays for a cold
     // import of the whole graph; under a parallel run that can pass 5s.
     testTimeout: 20_000,
+    // The production container runs in UTC, and the older `timestamp` (no time
+    // zone) columns are read back in the process's zone: without this, a run on
+    // a machine in America/New_York fails tests that pass in CI.
+    env: { TZ: "UTC" },
   },
 });

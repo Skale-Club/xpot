@@ -99,13 +99,19 @@ async function record(
   } catch (err) {
     console.error(`[tags] failed to record ${eventType} for ${tag.publicCode}:`, err);
   }
-  if (method === "nfc" && deps.confirmNfc && !isBotUserAgent(req.get("user-agent") ?? "")) {
+  // Only a phone can tap a chip; the same link opened on a computer checks nothing.
+  if (method === "nfc" && deps.confirmNfc && isPhoneUserAgent(req.get("user-agent") ?? "")) {
     try {
       await deps.confirmNfc(tag.id);
     } catch (err) {
       console.error(`[tags] failed to confirm the chip of ${tag.publicCode}:`, err);
     }
   }
+}
+
+/** iPhone or Android, the phones that read Xpot chips; bots never count. */
+export function isPhoneUserAgent(ua: string): boolean {
+  return /\b(iPhone|Android)\b/i.test(ua) && !isBotUserAgent(ua);
 }
 
 /**

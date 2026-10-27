@@ -1,5 +1,6 @@
-// A tap on /n/<code> proves the chip holds that link: the only way to check a
-// chip written on an iPhone with NFC Tools. QR scans and bots must not count.
+// A tap on /n/<code> from a phone checks a chip written on an iPhone with NFC
+// Tools (reported as "programmed"; repository.confirmNfcFromTap only promotes
+// that). QR scans, bots and the link opened on a computer must not count.
 
 import { describe, expect, it } from "vitest";
 import { createTagRedirectHandler } from "../../server/tags/publicHandler.js";
@@ -38,5 +39,16 @@ describe("confirming a chip by a real tap", () => {
   it("does not confirm on a QR scan or a bot", async () => {
     expect(await scan("qr", IPHONE, "10.0.0.2")).toEqual([]);
     expect(await scan("nfc", "Googlebot/2.1 (+http://www.google.com/bot.html)", "10.0.0.3")).toEqual([]);
+  });
+
+  it("does not confirm when the link is opened on a computer (security review A10)", async () => {
+    const desktop = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36";
+    expect(await scan("nfc", desktop, "10.0.0.4")).toEqual([]);
+    expect(await scan("nfc", "curl/8.4.0", "10.0.0.5")).toEqual([]);
+  });
+
+  it("confirms on an Android tap too", async () => {
+    const android = "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36";
+    expect(await scan("nfc", android, "10.0.0.6")).toEqual(["tag-1"]);
   });
 });

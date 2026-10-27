@@ -5,6 +5,7 @@ import { ErrorState } from "@/components/xpot/EmptyState";
 import { ListSkeleton } from "@/components/xpot/ListSkeleton";
 import { EYEBROW } from "@/components/xpot/surface";
 import { AdminHttpError, ADMIN_TAGS_KEY, errorMessage, getJson, STALE_MS } from "./api";
+import { fetchAllPages } from "@/lib/queryClient";
 import { useT } from "@/i18n";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
 
@@ -47,7 +48,7 @@ export function useLeads() {
   return useQuery<LeadOption[]>({
     queryKey: [ADMIN_TAGS_KEY, "pickers", "leads"],
     queryFn: async () => {
-      const leads = await getJson<Array<{ id: number; name: string; googlePlaceId?: string | null; locations?: Array<{ city?: string | null }> }>>("/api/xpot/leads");
+      const leads = await fetchAllPages<{ id: number; name: string; googlePlaceId?: string | null; locations?: Array<{ city?: string | null }> }>("/api/xpot/leads");
       return leads
         .map((l) => ({ id: l.id, name: l.name, city: l.locations?.[0]?.city ?? null, googlePlaceId: l.googlePlaceId ?? null }))
         .sort((a, b) => a.name.localeCompare(b.name));
