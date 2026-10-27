@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { visibleViewport } from "@/lib/visualViewport";
 import { formatCount, NFC_COLOR, QR_COLOR } from "./charts";
 import { copyToClipboard, haptic, readClipboard, type BannerState } from "./lib";
+import { useCloseOnBack } from "./useCloseOnBack";
 
 // Class kit for the Tags screens, derived from the shared kit (docs/UI_KIT.md).
 // The module's accent is violet (MODULE_ACCENT.tags): the primary action is
@@ -521,7 +522,7 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
  * message inside, since the page banner sits behind the pop-up. Escape closes it,
  * focus starts inside and Tab stays inside until it closes.
  */
-export function BottomSheet({ open, onClose, children, title, icon, banner }: {
+export function BottomSheet({ open, onClose, children, title, icon, banner, closeOnBack = false }: {
   open: boolean;
   onClose: () => void;
   children: ReactNode;
@@ -529,8 +530,11 @@ export function BottomSheet({ open, onClose, children, title, icon, banner }: {
   /** Shown before the title. */
   icon?: ReactNode;
   banner?: BannerState;
+  /** The phone's Back closes the sheet instead of leaving the screen (useCloseOnBack). */
+  closeOnBack?: boolean;
 }) {
   const t = useT(commonMessages);
+  useCloseOnBack(open, onClose, closeOnBack);
   const panel = useRef<HTMLDivElement>(null);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;

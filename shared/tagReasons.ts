@@ -18,6 +18,10 @@ export const TAG_SYSTEM_REASONS = [
   "sale_linked",
   /** The intake station undid a read. */
   "intake_undone",
+  /** Received into stock from the phone (the piece screen), not at the intake station. */
+  "received_field",
+  /** Handed back to house stock from the phone by whoever held it. */
+  "returned_field",
 ] as const;
 export type TagSystemReason = (typeof TAG_SYSTEM_REASONS)[number];
 

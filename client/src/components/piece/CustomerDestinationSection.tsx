@@ -15,6 +15,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
+import { pieceCustodyMessages } from "@/i18n/messages/pieceCustody";
 import { manageTagsPiecesMessages } from "@/i18n/messages/manageTagsPieces";
 import LeadPicker, { leadPayload, type LeadChoice } from "@/pages/tags/LeadPicker";
 import { GenerateReviewButton, ReviewLinkAssist } from "@/pages/tags/ReviewLinkSheet";
@@ -40,6 +41,7 @@ type ConfirmAction = Extract<PieceAction, "activate" | "disable" | "unassign">;
 export function CustomerDestinationSection() {
   const { tag, viewer, notify, banner, refresh } = usePiece();
   const t = useT(tagsMessages);
+  const tcu = useT(pieceCustodyMessages);
   const tc = useT(commonMessages);
   const tm = useT(manageTagsPiecesMessages);
   const qc = useQueryClient();
@@ -302,7 +304,10 @@ export function CustomerDestinationSection() {
           {/* The server refuses setting up a piece that is not in stock (shared/tags.ts planTransition). */}
           {stock && (
             <div className="mt-2" data-testid="text-stock-blocked">
-              <InlineAlert tone="warning">{t(`stockBlocked_${stock}`)}</InlineAlert>
+              <InlineAlert tone="warning">
+                {/* The custody card above receives it (shared/tagCustody.ts): say so instead of "ask the admin". */}
+                {stock === "pending" && tag.custody?.receive && !tag.custody.receive.blocker ? tcu("pendingReceiveFirst") : t(`stockBlocked_${stock}`)}
+              </InlineAlert>
             </div>
           )}
           {!retired && (

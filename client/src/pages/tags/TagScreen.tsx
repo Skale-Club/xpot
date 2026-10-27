@@ -2,23 +2,25 @@ import { useCallback, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ScanLine, X } from "lucide-react";
-import type { TagDetail } from "@shared/tagsApi";
+import type { TagDetail, TagLimitedView } from "@shared/tagsApi";
 import { CODE_HEADING_TOPBAR, TagPieceVisual } from "@/components/xpot/TagProductThumbnail";
 import { Button } from "@/components/ui/button";
 import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
 import { useXpotModules } from "@/components/ModuleSwitch";
 import { PieceBody } from "@/components/piece/PieceBody";
-import { PieceProvider, type PieceContextValue } from "@/components/piece/PieceContext";
+import { invalidatePieceViews, pieceSend, PieceProvider, type PieceContextValue } from "@/components/piece/PieceContext";
 import { PieceFacts, PieceModelLine, PieceStatusChips } from "@/components/piece/PieceHeader";
 import type { PieceViewer } from "@/components/piece/pieceView";
 import { useViewerAccess } from "@/lib/adminMode";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
+import { pieceCustodyMessages } from "@/i18n/messages/pieceCustody";
 import { nfcMode } from "./webNfc";
 import { cameFromInApp } from "@/lib/inAppHistory";
 import { APP_BASE, errorText, lookupTag, pushRecent, tagsGet, useBanner } from "./lib";
 import { Banner, Spinner, TopBar } from "./ui";
+import { LimitedPiece } from "./LimitedPiece";
 
 // One piece, opened by scanning it or from the list: the reseller side of the
 // one piece screen (components/piece). The header says what it is, its three
@@ -26,12 +28,18 @@ import { Banner, Spinner, TopBar } from "./ui";
 // Customer & destination, Chip, Sale and Performance. A manager in management
 // mode also gets Management, with a link to the admin piece page.
 
-type Loaded = { kind: "ok"; tag: TagDetail } | { kind: "not_found" } | { kind: "not_yours" };
+type Loaded =
+  | { kind: "ok"; tag: TagDetail }
+  /** A piece of the viewer's Organization they don't hold (shared/tagCustody.ts): what it is and where it is. */
+  | { kind: "limited"; piece: TagLimitedView }
+  | { kind: "not_found" }
+  | { kind: "not_yours" };
 
 async function fetchTag(code: string): Promise<Loaded> {
   const found = await lookupTag(code);
   if (!found.ok) return { kind: found.reason };
-  return { kind: "ok", tag: await tagsGet<TagDetail>(`/api/xpot/tags/${found.id}`) };
+  const piece = await tagsGet<TagDetail | TagLimitedView>(`/api/xpot/tags/${found.id}`);
+  return "limited" in piece ? { kind: "limited", piece } : { kind: "ok", tag: piece };
 }
 
 export default function TagScreen({ code, onClose }: {
@@ -41,6 +49,7 @@ export default function TagScreen({ code, onClose }: {
 }) {
   const t = useT(tagsMessages);
   const tc = useT(commonMessages);
+  const tcu = useT(pieceCustodyMessages);
   const [, navigate] = useLocation();
   const qc = useQueryClient();
   const { banner, show } = useBanner();
@@ -94,6 +103,28 @@ export default function TagScreen({ code, onClose }: {
         <div className="flex justify-center py-20 text-white/40">
           <Spinner className="h-8 w-8" />
         </div>
+      </>
+    );
+  }
+
+  if (data?.kind === "limited") {
+    return (
+      <>
+        <LimitedPiece
+          piece={data.piece}
+          back={back}
+          onBack={back ? goBack : undefined}
+          right={closeButton}
+          onReceive={async (into) => {
+            // Received into the viewer's own stock, the piece is theirs: the full screen takes over.
+            const detail = await pieceSend<TagDetail>("POST", `/api/xpot/tags/${data.piece.id}/receive`, { into });
+            const next: Loaded = { kind: "ok", tag: detail };
+            qc.setQueryData(queryKey, next);
+            invalidatePieceViews(qc);
+            show({ tone: "ok", text: into === "house" ? tcu("received_house") : tcu("received_me") });
+          }}
+        />
+        <Banner banner={banner} />
       </>
     );
   }

@@ -2,6 +2,7 @@
 // app. Dates travel as ISO strings.
 
 import type { TagQueueCounts } from "./tagQueues.js";
+import type { PieceCustodyActions } from "./tagCustody.js";
 
 export interface TagMetrics {
   interactions: number;
@@ -92,6 +93,26 @@ export interface TagDetail extends TagListItem {
   qrUrl: string;
   nfcUrl: string;
   history: TagHistoryEntry[];
+  /** What the viewer may do about who holds the piece (shared/tagCustody.ts); absent when not worked out. */
+  custody?: PieceCustodyActions | null;
+}
+
+/**
+ * GET /api/xpot/tags/:id for a viewer with limited access (shared/tagCustody.ts pieceAccess): a piece
+ * of their Organization held by someone else, by the house, or not received yet. What it is, where
+ * it is and what they may do about it; never its customer, link, chip or sale.
+ */
+export interface TagLimitedView {
+  limited: true;
+  id: string;
+  publicCode: string;
+  productType: string;
+  face: string | null;
+  batchCode: string | null;
+  stockStatus: string;
+  repId: number | null;
+  repName: string | null;
+  custody: PieceCustodyActions;
 }
 
 /** One financial sale a piece was part of (sales_sale_tags + sales_sales). */

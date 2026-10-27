@@ -1,12 +1,14 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Lock, Nfc, Smartphone } from "lucide-react";
+import { Eraser, Lock, Nfc, Smartphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InlineAlert } from "@/components/xpot/InlineAlert";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
+import { pieceCustodyMessages } from "@/i18n/messages/pieceCustody";
 import WriteSheet, { manualSteps, manualTitle, type WriteResult } from "@/pages/tags/WriteSheet";
 import LockSheet from "@/pages/tags/LockSheet";
+import EraseSheet from "@/pages/tags/EraseSheet";
 import { canLockChip, nfcMode } from "@/pages/tags/webNfc";
 import { tagPath } from "@/pages/tags/lib";
 import { CARD, CHIP_TONE, CopyButton, EYEBROW_MUTED, Pill, Spinner, StepList } from "@/pages/tags/ui";
@@ -25,6 +27,7 @@ export function ChipSection({ desktopWriter }: {
   const { tag, viewer } = usePiece();
   const t = useT(tagsMessages);
   const tc = useT(commonMessages);
+  const tcu = useT(pieceCustodyMessages);
   const write = usePieceWrite();
   // A phone without Web NFC (iPhone): written with NFC Tools, confirmed by a real tap.
   // A computer or an iPad has no NFC: the write continues on the phone (a QR).
@@ -32,6 +35,7 @@ export function ChipSection({ desktopWriter }: {
   const manualFlow = nfc === "app";
   const [writeOpen, setWriteOpen] = useState(false);
   const [lockOpen, setLockOpen] = useState(false);
+  const [eraseOpen, setEraseOpen] = useState(false);
   // iPhone: the NFC Tools steps, shown by themselves until the chip is confirmed, then on "Rewrite".
   const [manualOpen, setManualOpen] = useState(false);
 
@@ -42,6 +46,8 @@ export function ChipSection({ desktopWriter }: {
   // Another phone locks only a chip a tap confirmed (lock a wrong chip and it is lost);
   // a computer cannot lock, so it gets no padlock.
   const canLock = !locked && !retired && (manualFlow ? chipConfirmed : nfc === "web" && canLockChip() && !chipMissing);
+  // Erasing a written chip (testing the piece, or starting over) needs a phone; a locked chip can't be erased.
+  const canErase = !locked && !retired && nfc !== "none" && tag.nfcStatus !== "not_programmed";
 
   // "Continue on the phone" (…?write=1) opens the write straight away.
   useEffect(() => {
@@ -114,18 +120,26 @@ export function ChipSection({ desktopWriter }: {
           )}
         </div>
       ) : (
-        <Button
-          type="button"
-          variant={chipMissing ? "brand" : "secondary"}
-          accent="tags"
-          size="lg"
-          onClick={() => (manualFlow ? setManualOpen(true) : setWriteOpen(true))}
-          className="mt-3 w-full"
-          data-testid="button-write-chip"
-        >
-          <Nfc className="!size-5" />
-          {chipMissing ? t("writeChip") : t("rewriteChip")}
-        </Button>
+        <>
+          <Button
+            type="button"
+            variant={chipMissing ? "brand" : "secondary"}
+            accent="tags"
+            size="lg"
+            onClick={() => (manualFlow ? setManualOpen(true) : setWriteOpen(true))}
+            className="mt-3 w-full"
+            data-testid="button-write-chip"
+          >
+            <Nfc className="!size-5" />
+            {chipMissing ? t("writeChip") : t("rewriteChip")}
+          </Button>
+          {canErase && (
+            <Button type="button" variant="ghost" onClick={() => setEraseOpen(true)} className="mt-2 w-full" data-testid="button-erase-chip">
+              <Eraser className="!size-4" />
+              {tcu("eraseChip")}
+            </Button>
+          )}
+        </>
       )}
 
       {desktopWriter && viewer.isAdmin ? <div className="mt-4">{desktopWriter}</div> : null}
@@ -136,6 +150,14 @@ export function ChipSection({ desktopWriter }: {
         onClose={() => setLockOpen(false)}
         onLocked={async (signal) => {
           await write("POST", `/api/xpot/tags/${tag.id}/nfc-locked`, {}, signal);
+        }}
+      />
+      <EraseSheet
+        open={eraseOpen}
+        identity="xpot"
+        onClose={() => setEraseOpen(false)}
+        onErased={async (signal) => {
+          await write("POST", `/api/xpot/tags/${tag.id}/nfc-erased`, {}, signal);
         }}
       />
       <WriteSheet

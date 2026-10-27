@@ -12,6 +12,7 @@ import {
   normalizeTagCode,
 } from "#shared/tags.js";
 import { canWorkOnTag } from "#shared/tagAccess.js";
+import { pieceAccess, RECEIVE_TARGETS } from "#shared/tagCustody.js";
 import { TAG_STOCK_METRIC_NAMES } from "#shared/tagMetrics.js";
 import { kitCostRequired, kitOwnership } from "#shared/tagKits.js";
 import { TAG_PIECE_QUEUES } from "#shared/tagQueues.js";
@@ -35,6 +36,7 @@ import { buildBatchZip, qrPng, qrSvg } from "./qrAssets.js";
 import { normalizeIpKey, rateLimit } from "./rateLimit.js";
 import * as repo from "./repository.js";
 import * as field from "./field.js";
+import * as custody from "./custody.js";
 import * as provisioning from "./provisioning.js";
 import { getTeamReport } from "./report.js";
 import { getPieceActivity } from "./pieceActivity.js";
@@ -176,6 +178,7 @@ const tagPatchSchema = z.object({
 }).strict();
 
 const actionSchema = z.object({ reason: optionalText(300) }).strict();
+const receiveSchema = z.object({ into: z.enum(RECEIVE_TARGETS) }).strict();
 
 const destinationChangeSchema = z.object({
   destinationUrl,
@@ -459,8 +462,10 @@ export function registerTagRoutes(app: Express) {
       const code = normalizeTagCode(req.params.code);
       const tag = code ? await repo.getTagByCode(code) : null;
       if (!tag) return res.status(404).json({ message: "No tag with that code" });
-      if (!canWorkOnTag(actorOf(req), tag)) return res.status(403).json({ message: "This piece is not in your kit." });
-      res.json({ id: tag.id, publicCode: tag.publicCode });
+      // Limited: a piece of the viewer's Organization they don't hold (shared/tagCustody.ts); GET /:id says what they may see.
+      const access = pieceAccess(actorOf(req), tag);
+      if (access === "none") return res.status(403).json({ message: "This piece is not in your kit." });
+      res.json({ id: tag.id, publicCode: tag.publicCode, access });
     } catch (err) {
       fail(res, err, "Failed to look up tag");
     }
@@ -516,8 +521,12 @@ export function registerTagRoutes(app: Express) {
     const id = idParam(req, res);
     if (!id) return;
     try {
-      if (!(await tagForActor(req, res, id))) return;
-      res.json(await repo.getTagDetail(id, tagBaseUrl()));
+      const tag = await repo.getTagRow(id);
+      if (!tag) return res.status(404).json({ message: "Tag not found" });
+      const actor = actorOf(req);
+      const access = pieceAccess(actor, tag);
+      if (access === "none") return res.status(403).json({ message: "This piece is not in your kit." });
+      res.json(access === "full" ? await repo.getTagDetail(id, tagBaseUrl(), actor) : await repo.getTagLimitedView(id, actor));
     } catch (err) {
       fail(res, err, "Failed to load tag");
     }
@@ -557,7 +566,7 @@ export function registerTagRoutes(app: Express) {
     if (!id) return;
     try {
       await field.quickActivateTag(id, quickActivateSchema.parse(req.body), actorOf(req));
-      res.json(await repo.getTagDetail(id, tagBaseUrl()));
+      res.json(await repo.getTagDetail(id, tagBaseUrl(), actorOf(req)));
     } catch (err) {
       fail(res, err, "Failed to activate tag");
     }
@@ -583,7 +592,7 @@ export function registerTagRoutes(app: Express) {
       if (!(await tagForActor(req, res, id))) return;
       const { saleItemId } = z.object({ saleItemId: z.number().int().positive() }).strict().parse(req.body);
       await linkTagToSale(id, saleItemId, actorOf(req));
-      res.json(await repo.getTagDetail(id, tagBaseUrl()));
+      res.json(await repo.getTagDetail(id, tagBaseUrl(), actorOf(req)));
     } catch (err) {
       fail(res, err, "Failed to link the sale");
     }
@@ -598,7 +607,7 @@ export function registerTagRoutes(app: Express) {
         if (!(await tagForActor(req, res, id))) return;
         const { reason } = actionSchema.parse(req.body ?? {});
         await repo.transitionTag(id, action, actorOf(req), reason, "field");
-        res.json(await repo.getTagDetail(id, tagBaseUrl()));
+        res.json(await repo.getTagDetail(id, tagBaseUrl(), actorOf(req)));
       } catch (err) {
         fail(res, err, `Failed to ${action} tag`);
       }
@@ -613,7 +622,7 @@ export function registerTagRoutes(app: Express) {
     try {
       const input = destinationChangeSchema.parse(req.body);
       await field.changeTagDestination(id, input, actorOf(req));
-      res.json(await repo.getTagDetail(id, tagBaseUrl()));
+      res.json(await repo.getTagDetail(id, tagBaseUrl(), actorOf(req)));
     } catch (err) {
       fail(res, err, "Failed to change the link");
     }
@@ -629,7 +638,7 @@ export function registerTagRoutes(app: Express) {
       const { reason } = actionSchema.parse(req.body ?? {});
       // No reason typed: the history row gets the "customer removed" code (transitionTag), worded by the app.
       await repo.transitionTag(id, "unassign", actorOf(req), reason ?? null, "field");
-      res.json(await repo.getTagDetail(id, tagBaseUrl()));
+      res.json(await repo.getTagDetail(id, tagBaseUrl(), actorOf(req)));
     } catch (err) {
       fail(res, err, "Failed to unlink the piece");
     }
@@ -640,9 +649,47 @@ export function registerTagRoutes(app: Express) {
     if (!id) return;
     try {
       await field.recordPhoneWrite(id, nfcWrittenSchema.parse(req.body), tagBaseUrl(), actorOf(req));
-      res.json(await repo.getTagDetail(id, tagBaseUrl()));
+      res.json(await repo.getTagDetail(id, tagBaseUrl(), actorOf(req)));
     } catch (err) {
       fail(res, err, "Failed to record chip write");
+    }
+  });
+
+  // The phone erased this tag's chip (testing it, or starting over). Never moves stock.
+  app.post(`${fieldBase}/:id/nfc-erased`, requireTagUser, async (req, res) => {
+    const id = idParam(req, res);
+    if (!id) return;
+    try {
+      await field.recordPhoneErase(id, actorOf(req));
+      res.json(await repo.getTagDetail(id, tagBaseUrl(), actorOf(req)));
+    } catch (err) {
+      fail(res, err, "Failed to record chip erase");
+    }
+  });
+
+  // Receive a printed piece never received into stock: the house's (management) or the caller's own.
+  // Explicit only: reading or writing a piece never receives it (docs/TAG_CUSTODY_EXECUTION_PLAN.md §2.2).
+  app.post(`${fieldBase}/:id/receive`, requireTagUser, async (req, res) => {
+    const id = idParam(req, res);
+    if (!id) return;
+    try {
+      const { into } = receiveSchema.parse(req.body ?? {});
+      await custody.receivePiece(id, into, actorOf(req));
+      res.json(await repo.getTagDetail(id, tagBaseUrl(), actorOf(req)));
+    } catch (err) {
+      fail(res, err, "Failed to receive the piece");
+    }
+  });
+
+  // Hand a piece back to house stock (received by mistake, or only to test it): Take back, from the phone.
+  app.post(`${fieldBase}/:id/return-to-house`, requireTagUser, async (req, res) => {
+    const id = idParam(req, res);
+    if (!id) return;
+    try {
+      await custody.returnPieceToHouse(id, actorOf(req));
+      res.json(await repo.getTagDetail(id, tagBaseUrl(), actorOf(req)));
+    } catch (err) {
+      fail(res, err, "Failed to return the piece to the house");
     }
   });
 
@@ -652,7 +699,7 @@ export function registerTagRoutes(app: Express) {
     if (!id) return;
     try {
       await field.recordPhoneLock(id, actorOf(req));
-      res.json(await repo.getTagDetail(id, tagBaseUrl()));
+      res.json(await repo.getTagDetail(id, tagBaseUrl(), actorOf(req)));
     } catch (err) {
       fail(res, err, "Failed to record chip lock");
     }
@@ -734,7 +781,7 @@ export function registerTagRoutes(app: Express) {
   app.post(adminBase, requireTagAdmin, async (req, res) => {
     try {
       const tag = await repo.createSingleTag(tagCreateSchema.parse(req.body), userIdOf(req));
-      res.status(201).json(await repo.getTagDetail(tag.id, tagBaseUrl()));
+      res.status(201).json(await repo.getTagDetail(tag.id, tagBaseUrl(), actorOf(req)));
     } catch (err) {
       fail(res, err, "Failed to create tag");
     }
@@ -745,7 +792,7 @@ export function registerTagRoutes(app: Express) {
     if (!id) return;
     try {
       await repo.updateTag(id, tagPatchSchema.parse(req.body), userIdOf(req));
-      res.json(await repo.getTagDetail(id, tagBaseUrl()));
+      res.json(await repo.getTagDetail(id, tagBaseUrl(), actorOf(req)));
     } catch (err) {
       fail(res, err, "Failed to update tag");
     }
@@ -757,7 +804,7 @@ export function registerTagRoutes(app: Express) {
     try {
       const { purpose } = z.object({ purpose: z.string().trim().min(1).max(300) }).strict().parse(req.body);
       await repo.setTagInternalUse(id, purpose, userIdOf(req));
-      res.json(await repo.getTagDetail(id, tagBaseUrl()));
+      res.json(await repo.getTagDetail(id, tagBaseUrl(), actorOf(req)));
     } catch (err) {
       fail(res, err, "Failed to move piece to internal use");
     }
@@ -769,7 +816,7 @@ export function registerTagRoutes(app: Express) {
     try {
       const { reason } = z.object({ reason: z.string().trim().min(1).max(300) }).strict().parse(req.body);
       await repo.returnInternalTagToStock(id, reason, userIdOf(req));
-      res.json(await repo.getTagDetail(id, tagBaseUrl()));
+      res.json(await repo.getTagDetail(id, tagBaseUrl(), actorOf(req)));
     } catch (err) {
       fail(res, err, "Failed to return piece to stock");
     }
@@ -781,7 +828,7 @@ export function registerTagRoutes(app: Express) {
     try {
       const { reason } = z.object({ reason: z.string().trim().min(1).max(300) }).strict().parse(req.body);
       await repo.markTagDamaged(id, reason, userIdOf(req));
-      res.json(await repo.getTagDetail(id, tagBaseUrl()));
+      res.json(await repo.getTagDetail(id, tagBaseUrl(), actorOf(req)));
     } catch (err) {
       fail(res, err, "Failed to mark piece damaged");
     }
@@ -797,7 +844,7 @@ export function registerTagRoutes(app: Express) {
         .refine((v) => !!v.leadId !== !!v.leadName, "Send either leadId or leadName")
         .parse(req.body);
       await repo.assignTag(id, { leadId: target.leadId, leadName: target.leadName ?? undefined }, userIdOf(req), actorOf(req).repId);
-      res.json(await repo.getTagDetail(id, tagBaseUrl()));
+      res.json(await repo.getTagDetail(id, tagBaseUrl(), actorOf(req)));
     } catch (err) {
       fail(res, err, "Failed to assign tag");
     }
@@ -810,7 +857,7 @@ export function registerTagRoutes(app: Express) {
       try {
         const { reason } = actionSchema.parse(req.body ?? {});
         await repo.transitionTag(id, action, actorOf(req), reason);
-        res.json(await repo.getTagDetail(id, tagBaseUrl()));
+        res.json(await repo.getTagDetail(id, tagBaseUrl(), actorOf(req)));
       } catch (err) {
         fail(res, err, `Failed to ${action} tag`);
       }
@@ -824,7 +871,7 @@ export function registerTagRoutes(app: Express) {
     try {
       const { repId } = z.object({ repId: z.number().int().positive().nullable() }).strict().parse(req.body);
       await repo.setTagRep(id, repId, userIdOf(req));
-      res.json(await repo.getTagDetail(id, tagBaseUrl()));
+      res.json(await repo.getTagDetail(id, tagBaseUrl(), actorOf(req)));
     } catch (err) {
       fail(res, err, "Failed to change reseller");
     }

@@ -68,7 +68,7 @@ jobs:
           npx vitest run --no-file-parallelism tests/tags/tags.integration.test.ts tests/tags/journey.integration.test.ts tests/mcp.integration.test.ts tests/resellerAccounts.integration.test.ts tests/phoneAuth.integration.test.ts tests/wholesale.integration.test.ts tests/mcp.oauth.integration.test.ts \
             tests/tags/stockMetrics.integration.test.ts tests/tags/distribution.integration.test.ts tests/tags/pieceScreen.integration.test.ts \
             tests/tags/resellerCustomers.integration.test.ts tests/tags/organizationKits.integration.test.ts tests/leadPieceAccess.integration.test.ts \
-            tests/tags/organizationFilter.integration.test.ts
+            tests/tags/organizationFilter.integration.test.ts tests/tags/custody.integration.test.ts
 
       - name: Build
         run: npm run build
