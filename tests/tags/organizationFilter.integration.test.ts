@@ -106,13 +106,17 @@ test.skipIf(!enabled)("organization filter: Inventory and Kits narrow for manage
       assert.equal((await api("GET", "/api/xpot/admin/tag-kits", user)).json.length, 2, user);
     }
 
+    // A reseller lists only pieces of an Organization they are active in, as the piece itself
+    // allows (security review A09): Ana's are in North, where she is not a member yet.
+    assert.deepEqual((await api("GET", "/api/xpot/tags", "of-ana")).json, []);
+    await db.execute(sql`INSERT INTO organization_memberships (organization_id, rep_id, role) VALUES (${orgA.id}, ${repId["of-ana"]}, 'member')
+      ON CONFLICT DO NOTHING`);
     // A reseller: their own pieces whatever organization they ask for.
     const anaSouth = await api("GET", `/api/xpot/tags?organizationId=${orgB.id}`, "of-ana");
     assert.equal(anaSouth.status, 200, anaSouth.text);
     assert.deepEqual(codesOf(anaSouth.json), [codes[0], codes[1]]);
     // A Rep Admin in management mode: Tags lists do not widen for them (listScope), so still their own.
-    await db.execute(sql`INSERT INTO organization_memberships (organization_id, rep_id, role) VALUES (${orgA.id}, ${repId["of-ana"]}, 'admin')
-      ON CONFLICT DO NOTHING`);
+    await db.execute(sql`UPDATE organization_memberships SET role = 'admin' WHERE organization_id = ${orgA.id} AND rep_id = ${repId["of-ana"]}`);
     const anaManaging = await api("GET", `/api/xpot/tags?organizationId=${orgB.id}`, "of-ana", undefined, { "x-xpot-view": "manage" });
     assert.deepEqual(codesOf(anaManaging.json), [codes[0], codes[1]]);
     // Kits stay management's.
