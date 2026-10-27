@@ -91,14 +91,15 @@ export default function DirectScreen() {
   };
   const ready = kind === "url" ? !!link.trim() : !!content.value;
 
-  const onWritten = async (result: WriteResult) => {
+  const onWritten = async (result: WriteResult, signal?: AbortSignal) => {
     await tagsPost<{ id: string }>("/api/xpot/tag-direct-writes", {
       url: target,
       label: label.trim() || undefined,
       method: result.method,
       verified: result.verified,
       ...leadPayload(lead),
-    });
+    }, signal);
+    signal?.throwIfAborted();
     pushRecent({ kind: "direct", value: target });
     void qc.invalidateQueries({ queryKey: WRITES_KEY });
     if (lead && !lead.leadId) void qc.invalidateQueries({ queryKey: ["/api/xpot/leads"] });

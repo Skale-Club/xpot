@@ -36,8 +36,8 @@ export function usePiece(): PieceContextValue {
 }
 
 /** A JSON call with the app's view header ("viewing as a rep" when management mode is off). */
-export async function pieceSend<T>(method: "POST" | "PATCH", url: string, body: unknown = {}): Promise<T> {
-  const res = await apiRequest(method, url, body);
+export async function pieceSend<T>(method: "POST" | "PATCH", url: string, body: unknown = {}, signal?: AbortSignal): Promise<T> {
+  const res = await apiRequest(method, url, body, signal);
   return (await res.json()) as T;
 }
 
@@ -54,8 +54,9 @@ export function usePieceWrite() {
   const { changed } = usePiece();
   const qc = useQueryClient();
   return useCallback(
-    async (method: "POST" | "PATCH", url: string, body: unknown = {}) => {
-      const detail = await pieceSend<TagDetail>(method, url, body);
+    async (method: "POST" | "PATCH", url: string, body: unknown = {}, signal?: AbortSignal) => {
+      const detail = await pieceSend<TagDetail>(method, url, body, signal);
+      signal?.throwIfAborted();
       changed(detail);
       invalidatePieceViews(qc);
       return detail;

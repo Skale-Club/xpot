@@ -8,6 +8,7 @@ import { tagsMessages } from "@/i18n/messages/tags";
 import { errorText, haptic, isIos } from "./lib";
 import { BottomSheet, SHEET_TITLE, SheetActions, Spinner, StepList, TapAnimation, type Identity } from "./ui";
 import { canLockChip, lockChip, mapNfcError, nfcMode } from "./webNfc";
+import { ChipSaveTimeout, saveChipProgress } from "./saveChipProgress";
 
 /**
  * Makes a written chip read-only for good, so nobody can rewrite it later.
@@ -20,7 +21,7 @@ export default function LockSheet({ open, identity, onClose, onLocked }: {
   identity: Identity;
   onClose: () => void;
   /** Record the lock (Xpot pieces). May throw: the sheet shows the message. */
-  onLocked?: () => Promise<void>;
+  onLocked?: (signal?: AbortSignal) => Promise<void>;
 }) {
   const t = useT(tagsMessages);
   const tc = useT(commonMessages);
@@ -53,7 +54,9 @@ export default function LockSheet({ open, identity, onClose, onLocked }: {
     setPhase("locking");
     try {
       await lockChip(ctrl.signal);
+      if (ctrl.signal.aborted) return;
     } catch (err) {
+      if (ctrl.signal.aborted) return;
       const e = mapNfcError(err);
       if (e.silent) return setPhase("idle");
       setError(e.code === "nfcGeneric" ? errorText(err, t("nfcGeneric")) : t(e.code));
@@ -67,13 +70,18 @@ export default function LockSheet({ open, identity, onClose, onLocked }: {
 
   /** Another phone: locked with NFC Tools; record it. */
   const markLocked = async () => {
+    cancel();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
     setError(null);
     setPhase("saving");
     try {
-      await onLocked?.();
+      await saveChipProgress((request) => onLocked?.(request), ctrl.signal);
+      if (ctrl.signal.aborted) return;
       setPhase("done");
     } catch (err) {
-      setError(errorText(err, t("nfcGeneric")));
+      if (ctrl.signal.aborted) return;
+      setError(err instanceof ChipSaveTimeout ? t("chipSaveTimeout") : errorText(err, t("nfcGeneric")));
       setPhase("error");
     }
   };
