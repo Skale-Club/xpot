@@ -20,6 +20,7 @@ import {
 } from "#shared/schema.js";
 import { batchStage, buildTagUrls, planTransition, type TagAction, type TagStatus } from "#shared/tags.js";
 import { activationCredit, canUseLead, type TagActor } from "#shared/tagAccess.js";
+import { custodyActions, type PieceCustodyActions } from "#shared/tagCustody.js";
 import { companyOrganizationId, organizationIdForRep } from "../organizations/service.js";
 import type {
   LeadTagSummary,
@@ -30,6 +31,7 @@ import type {
   TagHistoryEntry,
   TagKitItem,
   TagKitPiece,
+  TagLimitedView,
   TagListItem,
   TagOverview,
   TagDashboard,
@@ -313,11 +315,21 @@ async function historyFor(where: SQL, limit: number): Promise<Array<TagHistoryEn
   }));
 }
 
-export async function getTagDetail(id: string, baseUrl: string): Promise<TagDetail | null> {
+/** What `actor` may do about who holds the piece (shared/tagCustody.ts), from the piece as stored. */
+export async function custodyFor(actor: TagActor, tag: Tag, sold: boolean): Promise<PieceCustodyActions | null> {
+  const [batch] = tag.batchId
+    ? await db.select({ status: tagBatches.status }).from(tagBatches).where(eq(tagBatches.id, tag.batchId)).limit(1)
+    : [];
+  return custodyActions(actor, { ...tag, sold }, batch?.status ?? null);
+}
+
+/** The piece screen's record. Given the viewer, it also says what they may do about its custody. */
+export async function getTagDetail(id: string, baseUrl: string, actor?: TagActor): Promise<TagDetail | null> {
   const tag = await getTagRow(id);
   if (!tag) return null;
   const [item] = (await rows<TagRow>(tagListQuery(sql`t.id = ${id}`, 1))).map(toListItem);
   const history = await historyFor(sql`h.tag_id = ${id}`, 100);
+  const custody = actor ? await custodyFor(actor, tag, item.saleId !== null) : undefined;
   return {
     ...item,
     utmEnabled: tag.utmEnabled,
@@ -328,6 +340,28 @@ export async function getTagDetail(id: string, baseUrl: string): Promise<TagDeta
     updatedAt: iso(tag.updatedAt)!,
     ...buildTagUrls(baseUrl, tag.publicCode),
     history: history.map(({ tagId: _t, publicCode: _p, productType: _pt, face: _f, batchCode: _b, ...h }) => h),
+    ...(custody !== undefined ? { custody } : {}),
+  };
+}
+
+/** The piece as a viewer with limited access sees it (TagLimitedView); null when they have none. */
+export async function getTagLimitedView(id: string, actor: TagActor): Promise<TagLimitedView | null> {
+  const tag = await getTagRow(id);
+  if (!tag) return null;
+  const [item] = (await rows<TagRow>(tagListQuery(sql`t.id = ${id}`, 1))).map(toListItem);
+  const custody = await custodyFor(actor, tag, item.saleId !== null);
+  if (!custody) return null;
+  return {
+    limited: true,
+    id: item.id,
+    publicCode: item.publicCode,
+    productType: item.productType,
+    face: item.face,
+    batchCode: item.batchCode,
+    stockStatus: item.stockStatus,
+    repId: item.repId,
+    repName: item.repName,
+    custody,
   };
 }
 
@@ -594,7 +628,14 @@ async function findExistingCodes(codes: string[]): Promise<Set<string>> {
  * Sold pieces stay with their seller, and a piece set up for a customer must have the customer cleared first, as
  * for a return.
  */
-export async function setTagRep(id: string, repId: number | null, userId: string | null, source: JourneySource = "admin"): Promise<Tag> {
+export async function setTagRep(
+  id: string,
+  repId: number | null,
+  userId: string | null,
+  source: JourneySource = "admin",
+  /** Stored on the stock movement (a system reason code, tagSystemReason). */
+  reason: string | null = null,
+): Promise<Tag> {
   let previous: { repId: number | null; name: string } = { repId: null, name: "house" };
   let next = "house";
   const organizationId = repId === null ? await companyOrganizationId() : await organizationIdForRep(repId);
@@ -642,6 +683,7 @@ export async function setTagRep(id: string, repId: number | null, userId: string
       referenceType: tag.kitId ? "kit" : null,
       referenceId: tag.kitId,
       actorUserId: userId,
+      reason,
     });
     console.log(`[tags] ${tag.publicCode} reseller ${tag.repId ?? "house"} → ${repId ?? "house"} (user ${userId ?? "?"})`);
     return updated;
@@ -1324,7 +1366,7 @@ export interface BatchScanResult {
   alreadyRegistered: boolean;
 }
 
-async function receivedCountOf(tx: Tx | typeof db, batchId: string): Promise<number> {
+export async function receivedCountOf(tx: Tx | typeof db, batchId: string): Promise<number> {
   const [row] = await tx.select({ n: sql<number>`count(*)::int` }).from(tags)
     .where(and(eq(tags.batchId, batchId), sql`${tags.stockStatus} <> 'pending'`));
   return Number(row?.n ?? 0);

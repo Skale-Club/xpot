@@ -239,6 +239,20 @@ export async function writeContent(value: string, signal: AbortSignal): Promise<
   }
 }
 
+/**
+ * Erases the chip on the next tap: writes an empty NDEF message, so it opens nothing until it is
+ * written again. A locked chip refuses (the browser reports it as an error).
+ */
+export async function eraseChip(signal: AbortSignal): Promise<void> {
+  const Ctor = getCtor();
+  if (!Ctor) throw new NfcError("nfcNoBrowser");
+  try {
+    await runNfcOperation(signal, (session) => new Ctor().write({ records: [{ recordType: "empty" }] }, { overwrite: true, signal: session }));
+  } catch (err) {
+    throw mapNfcError(err);
+  }
+}
+
 /** Whether this browser can lock a chip (Chrome 100+ on Android). */
 export function canLockChip(): boolean {
   const Ctor = getCtor();

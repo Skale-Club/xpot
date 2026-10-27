@@ -282,6 +282,48 @@ export async function recordPhoneLock(id: string, actor: TagActor) {
   }, journeyContext(actor.userId, "field", actor.repId));
 }
 
+/**
+ * The phone erased the chip (an empty NDEF message): it reads as never written again, so the next
+ * write starts from scratch. A locked chip can't be erased. Like every chip operation, this never
+ * touches who holds the piece or its stock.
+ */
+export async function recordPhoneErase(id: string, actor: TagActor) {
+  let publicCode = "";
+  let previous = "";
+  await db.transaction(async (tx) => {
+    const [tag] = await tx.select().from(tags).where(eq(tags.id, id)).for("update");
+    if (!tag) throw new TagError("Tag not found", 404, "tag_not_found");
+    assertCanWork(actor, tag);
+    publicCode = tag.publicCode;
+    previous = tag.nfcProvisioningStatus;
+    if (tag.nfcProvisioningStatus === "locked") throw new TagError("This chip is locked and cannot be erased", 409, "chip_locked_cannot_erase");
+    const now = new Date();
+    await tx.update(tags).set({
+      nfcProvisioningStatus: "not_programmed",
+      nfcProgrammedAt: null,
+      nfcVerifiedAt: null,
+      nfcProvisioningDeviceId: null,
+      updatedAt: now,
+    }).where(eq(tags.id, id));
+    await tx.insert(tagProvisioningEvents).values({
+      jobId: null,
+      tagId: tag.id,
+      deviceId: null,
+      eventType: "erase_completed",
+      detail: { source: "field_app", userId: actor.userId, previousStatus: tag.nfcProvisioningStatus },
+    });
+    console.log(`[tags] phone erase ${tag.publicCode} (rep ${actor.repId})`);
+  });
+  await recordJourney({
+    kind: "execution",
+    action: "nfc_erased",
+    title: `NFC chip of ${publicCode} erased (phone)`,
+    tagId: id,
+    beforeValue: previous,
+    afterValue: "not_programmed",
+  }, journeyContext(actor.userId, "field", actor.repId));
+}
+
 // ─── Direct pieces ────────────────────────────────────────────────────────────
 
 export interface DirectWriteInput {

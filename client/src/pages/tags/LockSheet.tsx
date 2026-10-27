@@ -92,7 +92,7 @@ export default function LockSheet({ open, identity, onClose, onLocked }: {
   };
 
   return (
-    <BottomSheet open={open} onClose={close} title={t("lockTitle")} icon={<Lock className="h-5 w-5 shrink-0 text-white/60" />}>
+    <BottomSheet open={open} onClose={close} title={t("lockTitle")} icon={<Lock className="h-5 w-5 shrink-0 text-white/60" />} closeOnBack>
       {phase === "done" ? (
         <div className="mt-6 text-center">
           <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-emerald-500 text-white">

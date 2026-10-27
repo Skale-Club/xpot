@@ -96,6 +96,8 @@ const en = {
   reason_sale_cancelled: "Sale cancelled",
   reason_sale_linked: "Linked to a sale already recorded",
   reason_intake_undone: "Read undone at the intake station",
+  reason_received_field: "Received from the phone",
+  reason_returned_field: "Handed back to the house from the phone",
 };
 
 export const pieceScreenMessages: Dictionary<typeof en> = {
@@ -187,6 +189,8 @@ export const pieceScreenMessages: Dictionary<typeof en> = {
     reason_sale_cancelled: "Venda cancelada",
     reason_sale_linked: "Vinculada a uma venda já registrada",
     reason_intake_undone: "Leitura desfeita na estação de recebimento",
+    reason_received_field: "Recebida pelo celular",
+    reason_returned_field: "Devolvida à casa pelo celular",
   },
   es: {
     dimDigital: "Digital",
@@ -275,5 +279,7 @@ export const pieceScreenMessages: Dictionary<typeof en> = {
     reason_sale_cancelled: "Venta cancelada",
     reason_sale_linked: "Vinculada a una venta ya registrada",
     reason_intake_undone: "Lectura deshecha en la estación de recepción",
+    reason_received_field: "Recibida desde el teléfono",
+    reason_returned_field: "Devuelta a la casa desde el teléfono",
   },
 };

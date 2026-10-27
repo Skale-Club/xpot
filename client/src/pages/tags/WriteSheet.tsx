@@ -147,7 +147,7 @@ export default function WriteSheet({ open, url, identity, onClose, onDone, conti
   const errorBox = phase === "error" && error && <InlineAlert tone="error">{error}</InlineAlert>;
 
   return (
-    <BottomSheet open={open} onClose={close} title={t("writeTitle")}>
+    <BottomSheet open={open} onClose={close} title={t("writeTitle")} closeOnBack>
       <div className={`${CARD} p-4`}>
         <p className={EYEBROW_MUTED}>{t("writeUrl")}</p>
         <p className="mt-1 whitespace-pre-wrap break-all font-mono text-sm tracking-wide text-white" data-testid="text-write-url">
