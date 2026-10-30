@@ -229,6 +229,28 @@ describe("3D preview", () => {
     expect(store.removed).toContain(firstKey);
     expect((await request(app, "GET", "/api/xpot/admin/print-models/plate-large-menu-white")).body.currentVersion.preview.fileName).toBe("menu-v2.glb");
   });
+
+  it("takes a preview as raw bytes with an MCP token (preview.py --upload), and nothing without a valid one", async () => {
+    const { registerMcpRoutes } = await import("../../server/mcp/routes.js");
+    const { createMcpToken, revokeMcpToken } = await import("../../server/mcp/tokens.js");
+    await createSerializedModel(admin());
+    const mcp = express();
+    registerMcpRoutes(mcp);
+    const { token, secret } = await createMcpToken("preview upload", "print-admin");
+    const path = "/mcp/print-preview/plate-large-menu-white";
+
+    expect((await request(mcp, "POST", path, glb("x"))).status).toBe(401);
+    expect((await request(mcp, "POST", path, glb("x"), { authorization: "Bearer xpot_not_a_real_token" })).status).toBe(401);
+    expect((await request(mcp, "POST", path, bytes("not a model"), { authorization: `Bearer ${secret}` })).status).toBe(400);
+
+    const sent = await request(mcp, "POST", path, glb("from the bench pc"), { authorization: `Bearer ${secret}` });
+    expect(sent.status).toBe(201);
+    expect(sent.body).toMatchObject({ model: "plate-large-menu-white", version: 1, preview: { fileName: "plate-large-menu-white-preview.glb", bytes: 29 } });
+    expect((await request(admin(), "GET", "/api/xpot/admin/print-models/plate-large-menu-white")).body.currentVersion.preview.bytes).toBe(29);
+
+    await revokeMcpToken(token.id);
+    expect((await request(mcp, "POST", path, glb("again"), { authorization: `Bearer ${secret}` })).status).toBe(401);
+  });
 });
 
 describe("serialized print orders", () => {

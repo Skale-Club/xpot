@@ -1,6 +1,10 @@
 """The 3D preview of a catalog version: one sample piece as a coloured GLB that Xpot shows in Tags > Production.
 
-    python preview.py <version.json> <out.glb> [--code A7K3P9X2]
+    python preview.py <version.json> <out.glb> [--code A7K3P9X2] [--upload <model-slug> [--version-id <uuid>]]
+
+--upload sends the GLB to Xpot as that model's preview (the version in the JSON, or --version-id): POST
+<XPOT_URL>/mcp/print-preview/<model> with the MCP token in XPOT_MCP_TOKEN (Tags > Settings > MCP tokens);
+XPOT_URL defaults to https://xpot.place.
 
 <version.json> is the version as Xpot lists it (print_model_get's currentVersion, or the model with it): builder,
 params, recipe. The builder makes one piece with the sample code (never a client's code: the QR of a preview must not
@@ -135,15 +139,41 @@ def build_preview(version: dict, out: Path, code: str = SAMPLE_CODE) -> dict:
             'colours': [c for _, _, c in meshes], 'size_mm': size_mm, 'code': code}
 
 
+def upload(glb: Path, model: str, version_id: str | None = None) -> dict:
+    """Set the GLB as the model's preview in Xpot (the server checks the MCP token like /mcp does)."""
+    import os
+    import urllib.error
+    import urllib.parse
+    import urllib.request
+    token = os.environ.get('XPOT_MCP_TOKEN')
+    if not token:
+        raise SystemExit('XPOT_MCP_TOKEN is not set: an MCP token from Tags > Settings > MCP tokens')
+    base = os.environ.get('XPOT_URL', 'https://xpot.place').rstrip('/')
+    query = f'?{urllib.parse.urlencode({"version": version_id})}' if version_id else ''
+    request = urllib.request.Request(f'{base}/mcp/print-preview/{urllib.parse.quote(model)}{query}', data=glb.read_bytes(),
+                                     method='POST', headers={'Authorization': f'Bearer {token}',
+                                                             'Content-Type': 'application/octet-stream'})
+    try:
+        with urllib.request.urlopen(request, timeout=120) as response:
+            return json.loads(response.read())
+    except urllib.error.HTTPError as err:
+        raise SystemExit(f'upload of {model} failed ({err.code}): {err.read().decode(errors="replace")[:300]}')
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument('version', help='the version JSON (print_model_get output, or its currentVersion)')
     ap.add_argument('out', help='the .glb to write')
     ap.add_argument('--code', default=SAMPLE_CODE)
+    ap.add_argument('--upload', metavar='MODEL', help='send it to Xpot as this model\'s preview')
+    ap.add_argument('--version-id', help='with --upload: this version instead of the current one')
     args = ap.parse_args()
     data = json.loads(Path(args.version).read_text(encoding='utf-8'))
     version = data.get('currentVersion') or data
-    print(json.dumps(build_preview(version, Path(args.out), args.code), indent=1))
+    result = build_preview(version, Path(args.out), args.code)
+    if args.upload:
+        result['uploaded'] = upload(Path(args.out), args.upload, args.version_id or version.get('id'))
+    print(json.dumps(result, indent=1))
 
 
 if __name__ == '__main__':
