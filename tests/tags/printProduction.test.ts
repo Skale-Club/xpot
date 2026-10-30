@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   bedPosition,
+  canMarkPrinted,
   nextPrintBatchCode,
   planPrintJobTransition,
   printModelInputSchema,
@@ -24,10 +25,16 @@ describe("print order state machine", () => {
     expect(planPrintJobTransition("printing", "printed")).toEqual({ ok: true, status: "printed" });
     expect(planPrintJobTransition("ready", "printed")).toEqual({ ok: true, status: "printed" });
     expect(planPrintJobTransition("building", "release")).toEqual({ ok: true, status: "requested" });
-    expect(planPrintJobTransition("requested", "printed")).toMatchObject({ ok: false, code: "print_job_state" });
+    expect(planPrintJobTransition("requested", "printed")).toEqual({ ok: true, status: "printed" });
+    expect(planPrintJobTransition("building", "printed")).toMatchObject({ ok: false, code: "print_job_state" });
     expect(planPrintJobTransition("printed", "cancel")).toMatchObject({ ok: false, error: "A printed print order cannot be cancelled" });
     expect(planPrintJobTransition("printing", "cancel").ok).toBe(false);
     expect(planPrintJobTransition("failed", "fail").ok).toBe(false);
+  });
+
+  it("lets a plate printed by hand without a file be marked printed, but not one a bench is building", () => {
+    expect(["requested", "building", "ready", "printing", "printed", "failed", "cancelled"].filter(canMarkPrinted))
+      .toEqual(["requested", "ready", "printing"]);
   });
 });
 

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { AlertTriangle, ChevronRight, Download, Printer } from "lucide-react";
-import { PRINT_MAX_PLATES, splitIntoPlates, type PrintJobDetail, type PrintJobItem, type PrintModelItem, type PrintRequestItem } from "@shared/printProduction";
+import { PRINT_MAX_PLATES, canMarkPrinted, splitIntoPlates, type PrintJobDetail, type PrintJobItem, type PrintModelItem, type PrintRequestItem } from "@shared/printProduction";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
@@ -182,7 +182,7 @@ function PlateRow({ plate, go, onPrinted }: { plate: PrintJobItem; go: Go; onPri
       <span className="flex flex-wrap items-center gap-1">
         {live && project ? <DownloadButton id={project.id} label={t("downloadProject")} /> : null}
         {live && sliced ? <DownloadButton id={sliced.id} label={t("downloadSliced")} /> : null}
-        {plate.status === "ready" || plate.status === "printing" ? (
+        {canMarkPrinted(plate.status) ? (
           <Button type="button" variant="brand" accent="tags" size="sm" onClick={onPrinted} data-testid="production-plate-printed">
             {t("markPrinted")}
           </Button>

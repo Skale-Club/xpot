@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { AlertTriangle, ClipboardList, Download, FileUp, Files, Hammer, MessageSquareWarning, RotateCcw, ScanLine } from "lucide-react";
-import type { PrintJobDetail, PrintJobFileItem } from "@shared/printProduction";
+import { canMarkPrinted, type PrintJobDetail, type PrintJobFileItem } from "@shared/printProduction";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
 import { SectionCard } from "@/components/xpot/DashboardKit";
@@ -137,7 +137,7 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
           {(job.status === "requested" || job.status === "building") && hasPrintFile ? (
             <Button type="button" variant="secondary" size="sm" onClick={() => setConfirming("complete")}>{t("markReady")}</Button>
           ) : null}
-          {job.status === "ready" || job.status === "printing" ? (
+          {canMarkPrinted(job.status) ? (
             <Button type="button" variant="brand" accent="tags" size="sm" onClick={() => setConfirming("printed")} data-testid="production-mark-printed">
               {t("markPrinted")}
             </Button>
