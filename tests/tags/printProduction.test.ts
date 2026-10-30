@@ -4,8 +4,11 @@ import {
   canMarkPrinted,
   nextPrintBatchCode,
   planPrintJobTransition,
+  printJobStockSchema,
+  printJobUpdateSchema,
   printModelInputSchema,
   printVersionInputSchema,
+  splitPrintedPieces,
 } from "../../shared/printProduction";
 
 describe("print batch codes", () => {
@@ -74,5 +77,34 @@ describe("bed positions", () => {
     expect(bedPosition(bed, 6)).toBe("front-right");
     expect(bedPosition({ copies: 4 }, 2)).toBeNull();
     expect(bedPosition(bed, null)).toBeNull();
+  });
+});
+
+describe("marking a plate printed", () => {
+  const pieces = [
+    { publicCode: "AAAA0001", stockStatus: "pending" },
+    { publicCode: "AAAA0002", stockStatus: "pending" },
+    { publicCode: "AAAA0003", stockStatus: "pending" },
+    { publicCode: "AAAA0004", stockStatus: "available" },
+  ];
+
+  it("stays backward compatible and takes bad pieces only with printed", () => {
+    expect(printJobUpdateSchema.parse({ action: "printed" })).toEqual({ action: "printed" });
+    expect(printJobUpdateSchema.parse({ action: "printed", badPieces: [" AAAA0002 "] }).badPieces).toEqual(["AAAA0002"]);
+    expect(printJobUpdateSchema.safeParse({ action: "fail", reason: "Lifted", badPieces: ["AAAA0002"] }).success).toBe(false);
+    expect(printJobUpdateSchema.safeParse({ action: "fail", reason: "Lifted", badPieces: [] }).success).toBe(true);
+    expect(printJobStockSchema.parse({})).toEqual({});
+    expect(printJobStockSchema.safeParse({ badPieces: [""] }).success).toBe(false);
+  });
+
+  it("puts every pending piece in stock unless it is listed as bad", () => {
+    expect(splitPrintedPieces(pieces)).toEqual({ good: ["AAAA0001", "AAAA0002", "AAAA0003"], bad: [], unknown: [] });
+    expect(splitPrintedPieces(pieces, ["AAAA0002"])).toEqual({ good: ["AAAA0001", "AAAA0003"], bad: ["AAAA0002"], unknown: [] });
+  });
+
+  it("reads codes as typed, leaves non-pending pieces alone and reports a code outside the batch", () => {
+    expect(splitPrintedPieces(pieces, ["aaaa-0003"]).bad).toEqual(["AAAA0003"]);
+    expect(splitPrintedPieces(pieces, ["AAAA0004"])).toEqual({ good: ["AAAA0001", "AAAA0002", "AAAA0003"], bad: [], unknown: [] });
+    expect(splitPrintedPieces(pieces, ["ZZZZ9999", "AAAA0001"])).toEqual({ good: ["AAAA0002", "AAAA0003"], bad: ["AAAA0001"], unknown: ["ZZZZ9999"] });
   });
 });

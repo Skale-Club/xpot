@@ -13,7 +13,7 @@
 //            and marks it printed: nothing is sent to the printer from here.
 
 import { z } from "zod";
-import { TAG_PRODUCT_TYPES } from "./tags.js";
+import { TAG_PRODUCT_TYPES, normalizeTagCode } from "./tags.js";
 import { TAG_FACES } from "./tagFace.js";
 
 export const PRINT_MODEL_KINDS = ["serialized", "part"] as const;
@@ -277,10 +277,51 @@ export const printProblemSchema = z.object({
   text: z.string().trim().min(3, "Say what went wrong").max(2000),
 }).strict();
 
+// Public codes of the pieces that came out bad on the plate (damaged, not stock). Printed only.
+const badPiecesField = z.array(z.string().trim().min(1).max(40)).max(1000).optional();
+
 export const printJobUpdateSchema = z.object({
   action: z.enum(["start", "printed", "fail", "cancel", "release", "complete"]),
   reason: optionalText(500),
-}).strict();
+  /** `printed`: pieces that came out bad (public codes of the plate's batch); the rest of the batch goes into stock. */
+  badPieces: badPiecesField,
+}).strict().refine((v) => !v.badPieces?.length || v.action === "printed", {
+  message: "Only a printed plate can list bad pieces",
+  path: ["badPieces"],
+});
+
+/** Put the pending pieces of an already printed plate into stock (`POST /print-jobs/:id/stock`). */
+export const printJobStockSchema = z.object({ badPieces: badPiecesField }).strict();
+
+export interface PrintedPieceSplit {
+  /** Pending pieces that go into house stock. */
+  good: string[];
+  /** Pending pieces marked bad: they become damaged. */
+  bad: string[];
+  /** Codes of `badPieces` that are not pieces of the plate's batch. */
+  unknown: string[];
+}
+
+/**
+ * Splits a plate's pieces when it is printed: the pending ones are good unless listed as bad. `badPieces` may be
+ * written as typed (case, dashes, O/0); a code outside the batch is reported, never ignored. Pieces that are not
+ * pending any more (already in stock, damaged) are left alone.
+ */
+export function splitPrintedPieces(
+  pieces: ReadonlyArray<{ publicCode: string; stockStatus: string }>,
+  badPieces: readonly string[] = [],
+): PrintedPieceSplit {
+  const known = new Set(pieces.map((p) => p.publicCode));
+  const wanted = new Set<string>();
+  const unknown: string[] = [];
+  for (const raw of badPieces) {
+    const code = normalizeTagCode(raw);
+    if (code && known.has(code)) wanted.add(code);
+    else unknown.push(raw);
+  }
+  const pending = pieces.filter((p) => p.stockStatus === "pending").map((p) => p.publicCode);
+  return { good: pending.filter((c) => !wanted.has(c)), bad: pending.filter((c) => wanted.has(c)), unknown };
+}
 
 export const printPartAdjustSchema = z.object({
   delta: z.number().int().min(-100_000).max(100_000).refine((n) => n !== 0, "Change the count by at least one"),
@@ -365,8 +406,10 @@ export interface PrintJobItem {
   status: PrintJobStatus;
   batchId: string | null;
   batchCode: string | null;
-  /** Serialized orders: pieces scanned into stock out of the batch's pieces. */
+  /** Serialized orders: pieces in stock (not pending, not damaged) out of the batch's pieces. */
   receivedCount: number | null;
+  /** Serialized orders: pieces still pending (a plate printed before stock followed "printed" may still have some). */
+  pendingCount: number | null;
   pieceCount: number | null;
   deviceName: string | null;
   notes: string | null;
@@ -400,7 +443,7 @@ export interface PrintRequestItem {
   quantity: number;
   notes: string | null;
   createdAt: string;
-  /** Some plate still to build/print, or printed pieces still to receive. */
+  /** Some plate still to build or print. */
   open: boolean;
   plates: PrintJobItem[];
 }

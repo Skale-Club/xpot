@@ -1,61 +1,12 @@
-// Batches: production stage filters, a batch's stage stepper and the intake station's
+// Batches: a batch's stage stepper and the intake station's
 // read outcomes. The stage is derived from the batch's pieces and its journey (shared/tags.ts batchStage): a "Mark as
 // done" button writes the journey step, which moves the stage. Pure, unit-tested (tests/admin-tags-flow.test.ts).
 
 import { parseTagIntakeScan } from "@shared/tagIntake";
 import type { TagBatchStage } from "@shared/tags";
 
-/** The pipeline, in order; cancelled batches are listed after it. */
+/** The pipeline, in order. */
 export const BATCH_PIPELINE = ["issued", "built", "printed", "receiving", "received"] as const satisfies readonly TagBatchStage[];
-
-export interface StagedBatch {
-  stage: string;
-  pendingCount: number;
-}
-
-/** Batches grouped by stage, pipeline order then cancelled; empty stages are left out. */
-export function groupBatchesByStage<B extends StagedBatch>(batches: readonly B[]): Array<{ stage: string; batches: B[] }> {
-  const order: string[] = [...BATCH_PIPELINE, "cancelled"];
-  const groups = new Map<string, B[]>();
-  for (const b of batches) {
-    const stage = order.includes(b.stage) ? b.stage : "issued";
-    groups.set(stage, [...(groups.get(stage) ?? []), b]);
-  }
-  return order.filter((stage) => groups.has(stage)).map((stage) => ({ stage, batches: groups.get(stage)! }));
-}
-
-/** The Overview's "batches with pieces not received" list: still expecting pieces, not cancelled. */
-export const isAwaitingPieces = (b: StagedBatch) => b.pendingCount > 0 && b.stage !== "cancelled";
-
-interface SearchableBatch extends StagedBatch {
-  batchCode: string;
-  name: string;
-  productType: string;
-  face: string | null;
-  vendor: string | null;
-  createdAt: string;
-}
-
-const searchText = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-
-/** The list combines deep-linked filters and searches both stored and translated product names. */
-export function filterBatchList<B extends SearchableBatch>(batches: readonly B[], filters: {
-  stage: string; pendingOnly: boolean; q: string; product: string; sort: string;
-}, productLabel: (batch: B) => string = () => ""): B[] {
-  const words = searchText(filters.q.trim()).split(/\s+/).filter(Boolean);
-  return batches.filter((batch) => {
-    if (filters.stage && batch.stage !== filters.stage) return false;
-    if (filters.pendingOnly && !isAwaitingPieces(batch)) return false;
-    if (filters.product && batch.productType !== filters.product) return false;
-    const text = searchText([batch.batchCode, batch.name, batch.vendor, batch.productType, batch.face, productLabel(batch)].filter(Boolean).join(" "));
-    return words.every((word) => text.includes(word));
-  }).sort((a, b) => {
-    const date = new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    if (filters.sort === "oldest") return -date;
-    if (filters.sort === "pending") return (isAwaitingPieces(b) ? b.pendingCount : 0) - (isAwaitingPieces(a) ? a.pendingCount : 0) || date;
-    return date;
-  });
-}
 
 export type StepState = "done" | "current" | "todo";
 

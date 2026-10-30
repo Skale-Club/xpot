@@ -1,12 +1,10 @@
 import { useMemo } from "react";
-import { TAG_BATCH_STATUSES, TAG_DESTINATION_TYPES, TAG_PRODUCT_TYPES, TAG_STATUSES } from "@shared/tags";
-
-/** The physical states the Pieces "Stock" filter offers (the rest are rare or not reached yet). */
-const STOCK_FILTER_STATUSES = ["pending", "available", "damaged", "internal_use", "lost"] as const;
+import { TAG_BATCH_STATUSES, TAG_DESTINATION_TYPES, TAG_PRODUCT_TYPES } from "@shared/tags";
 import { TAG_FACES } from "@shared/tagFace";
 import { useT } from "@/i18n";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
+import { WHERE_OPTIONS, type PlaceId, type Where } from "./where-model";
 
 // Labels for the values a piece carries (product, destination, face, status, chip, scan event) and
 // a batch's status, in the language in use. The piece, product and chip names come from the Tags
@@ -42,18 +40,25 @@ export function useTagLabels() {
     const destinationOptions: Option[] = TAG_DESTINATION_TYPES.map((value) => ({ value, label: destination(value) }));
     /** What can be printed on a piece; a picker's empty option means "use the batch's / product's". */
     const faceOptions: Option[] = TAG_FACES.map((value) => ({ value, label: face(value) }));
-    /** Digital status only; the physical side is stockOptions. */
-    const statusOptions: Option[] = TAG_STATUSES.map((value) => ({ value, label: status(value) }));
-    /**
-     * The Pieces "Stock" filter: physical states, a financial sale, and the two stock numbers of Overview
-     * (shared/tagMetrics.ts) so a card opens the exact list it counts.
-     */
-    const stockOptions: Option[] = [
-      { value: "house", label: t("stockFilter_house") },
-      { value: "reps", label: t("stockFilter_reps") },
-      ...STOCK_FILTER_STATUSES.map((value) => ({ value, label: stock(value) })),
-      { value: "sold", label: stock("sold") },
-    ];
+    /** The Pieces "Where is it" words: the shared stock numbers (shared/tagMetrics.ts) plus the end states, in plain language. */
+    const where = (value: Where | PlaceId): string => {
+      switch (value) {
+        case "house": return t("stockFilter_house");
+        case "withResellers": return t("stockFilter_reps");
+        case "sold": return stock("sold");
+        case "live": return status("active");
+        case "notReceived": return stock("pending");
+        case "damaged": return stock("damaged");
+        case "lost": return stock("lost");
+        case "disabled": return status("disabled");
+        case "retired": return status("retired");
+        case "reserved": return stock("reserved");
+        case "internalUse": return stock("internal_use");
+      }
+    };
+    /** A piece's one answer: where it is, then "· Live" when its link works. */
+    const wherePiece = (place: PlaceId, live: boolean) => (live ? t("whereAndLive", { where: where(place), live: status("active") }) : where(place));
+    const whereOptions: Option[] = WHERE_OPTIONS.map((value) => ({ value, label: where(value) }));
     const batchStatusOptions: Option[] = TAG_BATCH_STATUSES.map((value) => ({ value, label: batchStatus(value) }));
     /** A reseller in a picker, flagged when switched off. */
     const repOption = (r: { displayName: string; isActive: boolean }) => (r.isActive ? r.displayName : t("repOff", { name: r.displayName }));
@@ -70,8 +75,9 @@ export function useTagLabels() {
       productOptions,
       destinationOptions,
       faceOptions,
-      statusOptions,
-      stockOptions,
+      where,
+      wherePiece,
+      whereOptions,
       batchStatusOptions,
       repOption,
     };

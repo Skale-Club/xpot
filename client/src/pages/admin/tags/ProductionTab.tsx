@@ -21,14 +21,14 @@ import { PrintModelPage } from "./production-model";
 import { PrintJobPage } from "./production-job";
 import { PrintDialog, RequestList } from "./production-orders";
 import { ModelStatusPill, PRODUCTION_BASE, bedSummary, usePrintModels, type JobFilter } from "./production-shared";
-import { BatchesTab } from "./BatchesTab";
 import { BatchDetail } from "./BatchDetail";
 import { ProductionWizard } from "./production-wizard";
-import { productionPath } from "./production-workflow";
+import { batchPrefixFromTitle, productionPath, slugFromTitle } from "./production-workflow";
 import { ProductionIdentity } from "./production-identity";
 
 // Manage › Production (the Xpot admin's, docs/PRINT_EXECUTION_PLAN.md): the catalog of what the house prints and
-// the queue of print orders. Paths: /admin/tags/production[/queue | /models/<slug> | /jobs/<id>].
+// the queue of print orders. Paths: /admin/tags/production[/queue | /models/<slug> | /jobs/<id> | /batches/<id>];
+// /batches with no id is the queue (marking a plate printed puts its pieces in stock, so there is no receiving list).
 
 type Go = (path: string) => void;
 
@@ -41,7 +41,7 @@ export function ProductionTab({ rest, go }: { rest: string[]; go: Go }) {
   if (view === "models" && id) return <PrintModelPage slug={id} go={navigate} />;
   if (view === "jobs" && id) return <PrintJobPage id={id} go={navigate} />;
   if (view === "batches" && id) return <BatchDetail id={id} go={navigate} />;
-  const tab = view === "batches" ? "batches" : view === "models" ? "catalog" : "queue";
+  const tab = view === "models" ? "catalog" : "queue";
   return (
     <div className="space-y-4" data-testid="admin-production">
       <header className="flex flex-wrap items-start justify-between gap-4">
@@ -51,17 +51,16 @@ export function ProductionTab({ rest, go }: { rest: string[]; go: Go }) {
       <Tabs
         tabs={[
           { id: "queue", label: u("requests"), testId: "production-tab-queue" },
-          { id: "batches", label: u("receiving"), testId: "production-tab-batches" },
           { id: "catalog", label: u("models"), testId: "production-tab-catalog" },
         ]}
         value={tab}
-        onChange={(next) => navigate(next === "batches" ? `${PRODUCTION_BASE}/batches` : next === "catalog" ? `${PRODUCTION_BASE}/models` : `${PRODUCTION_BASE}/queue`)}
+        onChange={(next) => navigate(next === "catalog" ? `${PRODUCTION_BASE}/models` : `${PRODUCTION_BASE}/queue`)}
         ariaLabel={t("productionNav")}
         idPrefix="production"
         fill={false}
         accent="tags"
       />
-      {tab === "catalog" ? <CatalogView go={navigate} /> : tab === "batches" ? <BatchesTab go={navigate} embedded onCreate={() => setCreating(true)} /> : <QueueView go={navigate} />}
+      {tab === "catalog" ? <CatalogView go={navigate} /> : <QueueView go={navigate} />}
       {creating ? <ProductionWizard onClose={() => setCreating(false)} onOrdered={(request) => navigate(request.plates.length === 1 ? `${PRODUCTION_BASE}/jobs/${request.plates[0].id}` : `${PRODUCTION_BASE}/queue`)} onCreated={(batchId) => navigate(`/batches/${batchId}?tab=receive`)} /> : null}
     </div>
   );
@@ -156,6 +155,14 @@ function NewModelDialog({ onClose, onCreated }: { onClose: () => void; onCreated
   const { toast } = useToast();
   const { data: catalog = [] } = useTagCatalog();
   const [form, setForm] = useState({ kind: "serialized", title: "", slug: "", productType: "", face: "", theme: "", salesProductId: "", batchPrefix: "", description: "" });
+  // The slug and the batch prefix follow the title until the person types in them (emptying one hands it back).
+  const [typed, setTyped] = useState({ slug: false, batchPrefix: false });
+  const setTitle = (title: string) => setForm((f) => ({
+    ...f,
+    title,
+    ...(typed.slug ? {} : { slug: slugFromTitle(title) }),
+    ...(typed.batchPrefix ? {} : { batchPrefix: batchPrefixFromTitle(title) }),
+  }));
   const serialized = form.kind === "serialized";
   const slug = form.slug.trim().toLowerCase();
   const ready = form.title.trim() && SLUG.test(slug) && (!serialized || (form.productType && form.salesProductId && form.batchPrefix.trim()));
@@ -201,10 +208,10 @@ function NewModelDialog({ onClose, onCreated }: { onClose: () => void; onCreated
             <Input value={form.theme} maxLength={40} onChange={(e) => setForm({ ...form, theme: e.target.value })} />
           </Field>
           <Field label={t("fieldTitle")} required className="sm:col-span-2">
-            <Input value={form.title} maxLength={120} onChange={(e) => setForm({ ...form, title: e.target.value })} data-testid="production-model-title" />
+            <Input value={form.title} maxLength={120} onChange={(e) => setTitle(e.target.value)} data-testid="production-model-title" />
           </Field>
           <Field label={t("fieldSlug")} hint={t("fieldSlugHint")} required className="sm:col-span-2" error={form.slug && !SLUG.test(slug) ? t("fieldSlugInvalid") : undefined}>
-            <Input value={form.slug} maxLength={80} spellCheck={false} className="font-mono" placeholder="plate-large-menu-white" onChange={(e) => setForm({ ...form, slug: e.target.value })} />
+            <Input value={form.slug} maxLength={80} spellCheck={false} className="font-mono" placeholder="plate-large-menu-white" onChange={(e) => { setTyped({ ...typed, slug: e.target.value !== "" }); setForm({ ...form, slug: e.target.value }); }} />
           </Field>
           {serialized && (
             <>
@@ -218,7 +225,7 @@ function NewModelDialog({ onClose, onCreated }: { onClose: () => void; onCreated
                 <Select value={form.salesProductId} onChange={(e) => setForm({ ...form, salesProductId: e.target.value })} placeholder={t("choose")} options={catalogOptions(catalog)} />
               </Field>
               <Field label={t("fieldBatchPrefix")} hint={t("fieldBatchPrefixHint")} required>
-                <Input value={form.batchPrefix} maxLength={12} className="font-mono uppercase" placeholder="LPLATE" onChange={(e) => setForm({ ...form, batchPrefix: e.target.value })} />
+                <Input value={form.batchPrefix} maxLength={12} className="font-mono uppercase" placeholder="LPLATE" onChange={(e) => { setTyped({ ...typed, batchPrefix: e.target.value !== "" }); setForm({ ...form, batchPrefix: e.target.value }); }} />
               </Field>
             </>
           )}

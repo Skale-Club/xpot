@@ -33,6 +33,7 @@ import type { XpotMeResponse } from "@/pages/xpot/types";
 import { isXphereQueryKey, maskInboundKey } from "./integrationsUi";
 import { SERVICES_KEY } from "./platform/servicesUi";
 import { personStatus, type PeopleStatus } from "./peopleFilters";
+import { PersonTagsSales } from "./PersonTagsSales";
 
 // One person in Account › People (/admin/reps/:repId): every decision about
 // them in one pane, by section. Access (approve, refuse, block, unblock,
@@ -223,6 +224,8 @@ export function PersonDetail({ rep, onClose, onGone }: { rep: Rep; onClose?: () 
       {modules.includes("tags") && (
         <Section title={tw("sectionTags")} icon={Tag} testId="person-tags">
           <TagsTerms key={rep.id} rep={rep} />
+          {/* What the Resellers screen used to show for them (a manager's report); a sign-up has no sales yet. */}
+          {status !== "pending" && <div className="mt-4 border-t border-white/[0.06] pt-4"><PersonTagsSales key={rep.id} rep={rep} /></div>}
         </Section>
       )}
 

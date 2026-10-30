@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PrintModelItem, PrintRequestItem } from "../shared/printProduction";
-import { canPrintModel, printableBeds, printQuantity, productionJourneyStep, productionNeedsAction, productionPath } from "../client/src/pages/admin/tags/production-workflow";
+import { batchPrefixFromTitle, canPrintModel, pendingPieces, printableBeds, printQuantity, productionJourneyStep, productionNeedsAction, productionPath, showPlateNumber, slugFromTitle } from "../client/src/pages/admin/tags/production-workflow";
 
 const model = {
   id: "model", kind: "serialized", status: "ready", productType: "large_plate", face: "google_review", salesProductId: 1,
@@ -9,13 +9,14 @@ const model = {
 const batch = { id: "batch", batchCode: "LP-001", productType: "large_plate", face: "google_review", salesProductId: 1, tagCount: 6 };
 
 describe("unified production", () => {
-  it("advances from files to printing to receiving, completing only after the pieces enter stock", () => {
-    const job = { status: "requested", batchId: "batch", quantity: 4, receivedCount: 0, pieceCount: 4 };
+  it("advances from preparing to printing to done, where marking printed is the last step", () => {
+    const job = { status: "requested" } as const;
     expect(productionJourneyStep(job)).toBe(0);
-    expect(productionJourneyStep({ ...job, status: "ready" })).toBe(1);
-    expect(productionJourneyStep({ ...job, status: "printed" })).toBe(2);
-    expect(productionJourneyStep({ ...job, status: "printed", receivedCount: 4 })).toBe(3);
-    expect(productionJourneyStep({ ...job, status: "printed", batchId: null })).toBe(3);
+    expect(productionJourneyStep({ status: "building" })).toBe(0);
+    expect(productionJourneyStep({ status: "ready" })).toBe(1);
+    expect(productionJourneyStep({ status: "printing" })).toBe(1);
+    expect(productionJourneyStep({ status: "printed" })).toBe(2);
+    expect(productionJourneyStep({ status: "failed" })).toBe(0);
   });
   it("keeps batch links and filters inside Production without changing other paths", () => {
     expect(productionPath("/batches?pending=1")).toBe("/production/batches?pending=1");
@@ -43,12 +44,40 @@ describe("unified production", () => {
     for (const raw of ["", "0", "-1", "1.5", "NaN", "10001"]) expect(printQuantity(raw, 4, true).valid).toBe(false);
     expect(printQuantity("5", 4, false)).toMatchObject({ valid: true, plates: [4, 4], pieces: 8 });
   });
-  it("keeps a printed order actionable until its pieces are physically received", () => {
-    const request = (overrides: object) => ({ open: false, plates: [{ status: "printed", batchId: "b", receivedCount: 0, pieceCount: 4, quantity: 4, ...overrides }] }) as PrintRequestItem;
-    expect(productionNeedsAction(request({}))).toBe(true);
-    expect(productionNeedsAction(request({ receivedCount: 4 }))).toBe(false);
-    expect(productionNeedsAction(request({ status: "cancelled" }))).toBe(false);
-    expect(productionNeedsAction(request({ batchId: null }))).toBe(false);
-    expect(productionNeedsAction({ ...request({}), open: true })).toBe(true);
+  it("treats a request as open only until every plate is printed", () => {
+    const request = (...statuses: string[]) => ({ open: false, plates: statuses.map((status) => ({ status })) }) as unknown as PrintRequestItem;
+    expect(productionNeedsAction(request("printed"))).toBe(false);
+    expect(productionNeedsAction(request("printed", "failed", "cancelled"))).toBe(false);
+    for (const status of ["requested", "building", "ready", "printing"]) expect(productionNeedsAction(request("printed", status))).toBe(true);
+    expect(productionNeedsAction({ ...request("printed"), open: true })).toBe(true);
+  });
+  it("offers to stock a printed plate only while its pieces are still pending", () => {
+    expect(pendingPieces({ status: "printed", batchId: "b", pendingCount: 4 })).toBe(4);
+    expect(pendingPieces({ status: "printed", batchId: "b", pendingCount: 0 })).toBe(0);
+    expect(pendingPieces({ status: "printed", batchId: null, pendingCount: null })).toBe(0);
+    expect(pendingPieces({ status: "ready", batchId: "b", pendingCount: 4 })).toBe(0);
+  });
+  it("names the plate only when the request has several", () => {
+    expect(showPlateNumber({ plateCount: 1 })).toBe(false);
+    expect(showPlateNumber({ plateCount: 3 })).toBe(true);
+  });
+  it("fills a new model's slug from its title in kebab-case", () => {
+    expect(slugFromTitle("Plate Large · Menu · White")).toBe("plate-large-menu-white");
+    expect(slugFromTitle("  Placa Pequeña — Café!  ")).toBe("placa-pequena-cafe");
+    expect(slugFromTitle("Stand base (L)")).toBe("stand-base-l");
+    expect(slugFromTitle("***")).toBe("");
+    expect(slugFromTitle("a".repeat(120)).length).toBe(80);
+  });
+  it("fills the batch prefix with up to 12 uppercase letters and digits that start with a letter", () => {
+    expect(batchPrefixFromTitle("Stand Base")).toBe("STANDBASE");
+    expect(batchPrefixFromTitle("Plate Large Menu White")).toBe("PLALARMENWHI");
+    expect(batchPrefixFromTitle("Placa Pequeña")).toBe("PLACAPEQUENA");
+    expect(batchPrefixFromTitle("3D Stand")).toBe("DSTAND");
+    expect(batchPrefixFromTitle("A")).toBe("");
+    expect(batchPrefixFromTitle("12 34")).toBe("");
+    for (const title of ["Plate Large Menu White", "Supercalifragilisticexpialidocious", "Stand Large Google Review White Edition", "x y z"]) {
+      const prefix = batchPrefixFromTitle(title);
+      if (prefix) expect(prefix).toMatch(/^[A-Z][A-Z0-9]{1,11}$/);
+    }
   });
 });

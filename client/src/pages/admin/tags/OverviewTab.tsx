@@ -6,7 +6,6 @@ import {
   Building2,
   CalendarDays,
   CalendarRange,
-  ChevronRight,
   ClipboardCheck,
   Inbox,
   Layers,
@@ -14,13 +13,10 @@ import {
   Nfc,
   Package,
   PackageX,
-  Radio,
   ScanLine,
-  ShoppingBag,
   Truck,
   UserRound,
   Users,
-  Warehouse,
   type LucideIcon,
 } from "lucide-react";
 import type { TagListItem, TagOverview } from "@shared/tagsApi";
@@ -48,9 +44,7 @@ import {
   activityFeed,
   needsActionQueues,
   pieceQueueCard,
-  stockFunnel,
   type ActivityFilter,
-  type FunnelStepId,
   type QueueId,
 } from "./overview-model";
 
@@ -68,14 +62,6 @@ const QUEUE_ICONS: Record<QueueId, LucideIcon> = {
   chipPending: Nfc,
   scannedNotLive: ScanLine,
   noProduct: PackageX,
-};
-
-const FUNNEL_ICONS: Record<FunnelStepId, LucideIcon> = {
-  notReceived: Truck,
-  house: Warehouse,
-  withResellers: Users,
-  sold: ShoppingBag,
-  live: Radio,
 };
 
 /** Row 1: what needs someone now. Each count opens the list it counts. */
@@ -104,28 +90,7 @@ function NeedsAction({ overview, go }: { overview: TagOverview; go: Go }) {
   );
 }
 
-/** Row 2: the stock funnel, one shared stock number per step, each opening the pieces it counts. */
-function StockFunnel({ overview, go }: { overview: TagOverview; go: Go }) {
-  const t = useT(adminTagsFlowMessages);
-  const steps = stockFunnel(overview.funnel);
-  return (
-    <SectionCard accent="tags" icon={Package} title={t("funnelTitle")} testId="overview-funnel">
-      <ol className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
-        {steps.map((step, i) => (
-          <li key={step.id} className="relative grid" data-testid={`overview-funnel-${step.id}`}>
-            <KpiTile accent="violet" icon={FUNNEL_ICONS[step.id]} label={t(step.labelKey)} value={step.count} detail={t(step.hintKey)} onClick={() => go(step.href)} />
-            {i < steps.length - 1 ? (
-              <ChevronRight className="pointer-events-none absolute -right-3 top-1/2 hidden h-4 w-4 -translate-y-1/2 text-white/25 xl:block" aria-hidden="true" />
-            ) : null}
-          </li>
-        ))}
-      </ol>
-      <p className="mt-3 text-xs text-white/40">{t("funnelFootnote")}</p>
-    </SectionCard>
-  );
-}
-
-/** Row 3: scans (kept from the old Overview). */
+/** Row 2: scans (kept from the old Overview). */
 function Scans({ overview }: { overview: TagOverview }) {
   const t = useT(manageTagsMessages);
   const tf = useT(adminTagsFlowMessages);
@@ -294,17 +259,22 @@ export function OverviewQueue({ queue, go }: { queue: TagPieceQueue; go: Go }) {
   );
 }
 
-/**
- * Overview: (1) what needs action, (2) the stock funnel (not received → house stock → with resellers → sold → live),
- * (3) scans, then the fleet analytics with the one Top pieces list, and one activity feed.
- */
-export function OverviewTab({ go }: { go: Go }) {
-  const t = useT(manageTagsMessages);
-  const { data, isLoading, error, refetch } = useQuery<TagOverview>({
+/** The Overview payload; the panel home reads the same cache for its "Today" rows. */
+export function useTagOverview() {
+  return useQuery<TagOverview>({
     queryKey: [ADMIN_TAGS_KEY, "overview"],
     queryFn: () => getJson(`/api/xpot/admin/tags/overview?timezoneOffset=${new Date().getTimezoneOffset()}`),
     staleTime: STALE_MS,
   });
+}
+
+/**
+ * Overview: (1) what needs action, (2) scans, then the fleet analytics with the one Top pieces list, and one
+ * activity feed. The stock breakdown lives at the top of Inventory.
+ */
+export function OverviewTab({ go }: { go: Go }) {
+  const t = useT(manageTagsMessages);
+  const { data, isLoading, error, refetch } = useTagOverview();
 
   if (isLoading) return <Loading rows={6} />;
   if (error || !data) return <LoadError what={t("whatOverview")} error={error} onRetry={() => void refetch()} />;
@@ -312,7 +282,6 @@ export function OverviewTab({ go }: { go: Go }) {
   return (
     <div className="min-w-0 space-y-4" data-testid="admin-tags-overview">
       <NeedsAction overview={data} go={go} />
-      <StockFunnel overview={data} go={go} />
       <Scans overview={data} />
       <FleetAnalytics go={go} />
       <ActivityFeed overview={data} go={go} />

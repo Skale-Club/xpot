@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { AlertTriangle, ClipboardList, Download, FileUp, Files, Hammer, MessageSquareWarning, RotateCcw, ScanLine } from "lucide-react";
+import { AlertTriangle, ClipboardList, Download, FileUp, Files, Hammer, MessageSquareWarning, PackageCheck, Printer, QrCode, RotateCcw } from "lucide-react";
 import { canMarkPrinted, type PrintJobDetail, type PrintJobFileItem } from "@shared/printProduction";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
@@ -16,29 +16,18 @@ import { Loading, LoadError } from "./pieces-shared";
 import { JobStatusPill, PRODUCTION_BASE, formatBytes, minutesText, uploadFile, usePrintModels } from "./production-shared";
 import { ProductionIdentity } from "./production-identity";
 import { workspacesMessages } from "@/i18n/messages/workspaces";
-import { BatchReceiveStation, type ReceiveBatch } from "./batch-receive";
 import { plateDownloads } from "./production-shared";
-import { productionJourneyStep } from "./production-workflow";
+import { pendingPieces, productionJourneyStep, showPlateNumber } from "./production-workflow";
 import { PrintPreviewCard } from "./production-preview";
+import { PrintedDialog } from "./production-printed-dialog";
 
-// One print plate, from file preparation through printing and scanning pieces into stock.
+// One print plate, from file preparation through printing. Marking it printed puts its pieces in stock.
 
 type Go = (path: string) => void;
-type Step = "complete" | "printed" | "fail" | "cancel" | "release";
+type Step = "complete" | "fail" | "cancel" | "release";
 
 const FILE_ORDER = ["gcode_3mf", "3mf", "serial_map", "preview", "report"] as const;
 
-/** Receive the pieces in the order itself, without opening the batch's administration tabs. */
-function OrderReceiving({ batchId }: { batchId: string }) {
-  const t = useT(workspacesMessages);
-  const { data, error, isLoading, refetch } = useQuery({
-    queryKey: [ADMIN_TAGS_KEY, "batch", batchId],
-    queryFn: () => getJson<ReceiveBatch>(`/api/xpot/admin/tag-batches/${batchId}`),
-  });
-  return <SectionCard title={t("receive")} accent="tags" icon={ScanLine}>
-    {isLoading ? <Loading rows={2} /> : error ? <LoadError what={t("receive")} error={error} onRetry={() => void refetch()} /> : data ? <BatchReceiveStation batch={data} /> : null}
-  </SectionCard>;
-}
 export function PrintJobPage({ id, go }: { id: string; go: Go }) {
   const t = useT(productionMessages);
   const tw = useT(workspacesMessages);
@@ -46,6 +35,7 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
   const { toast } = useToast();
   const input = useRef<HTMLInputElement>(null);
   const [confirming, setConfirming] = useState<Step | null>(null);
+  const [marking, setMarking] = useState(false);
   const [reporting, setReporting] = useState(false);
   const [assembling, setAssembling] = useState(false);
   const { data: job, isLoading, error, refetch } = useQuery({
@@ -94,6 +84,15 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
     },
     onError: (err) => toast({ title: t("couldNotUpdateOrder"), description: errorMessage(err), variant: "destructive" }),
   });
+  // Plates printed before "printed" put the pieces in stock still show them pending.
+  const stock = useMutation({
+    mutationFn: () => sendJson<PrintJobDetail>("POST", `/api/xpot/admin/print-jobs/${id}/stock`),
+    onSuccess: async () => {
+      await invalidateAdminTags();
+      toast({ title: t("piecesStocked") });
+    },
+    onError: (err) => toast({ title: t("couldNotUpdateOrder"), description: errorMessage(err), variant: "destructive" }),
+  });
   const upload = useMutation({
     mutationFn: (file: File) => uploadFile<PrintJobFileItem>(`/api/xpot/admin/print-jobs/${id}/files`, file),
     onSuccess: async () => {
@@ -114,6 +113,7 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
   const minutes = report.minutes ?? bed?.minutes ?? null;
   const swaps = report.swaps ?? bed?.swaps ?? null;
   const journeyStep = productionJourneyStep(job);
+  const pending = pendingPieces(job);
   const downloads = plateDownloads(job);
   const download = downloads.sliced ?? downloads.project;
   const takesFiles = !["printed", "cancelled"].includes(job.status);
@@ -121,7 +121,6 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
   const canAssemble = Boolean(job.batchId) && job.status === "printed" && job.consumes.length > 0 && !assembledAt;
   const confirmText: Record<Step, { title: string; body: string; label: string; reason?: "required" | "optional" }> = {
     complete: { title: t("confirmCompleteTitle"), body: t("confirmCompleteBody"), label: t("markReady") },
-    printed: { title: t("confirmPrintedTitle"), body: job.batchId ? t("confirmPrintedBodyBatch") : t.plural("confirmPrintedBodyPart", job.quantity), label: t("markPrinted") },
     fail: { title: t("confirmFailTitle"), body: t("confirmFailBody"), label: t("markFailed"), reason: "required" },
     cancel: { title: t("confirmCancelTitle"), body: job.batchId ? t("confirmCancelBodyBatch") : t("confirmCancelBody"), label: t("cancelOrder"), reason: "optional" },
     release: { title: t("confirmReleaseTitle"), body: t("confirmReleaseBody"), label: t("release") },
@@ -137,7 +136,7 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
           </button>
           <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-white/45">
             <JobStatusPill status={job.status} />
-            <span className="font-medium text-white/70">{t("plateOf", { number: job.plateNumber, total: job.plateCount })}</span>
+            {showPlateNumber(job) ? <span className="font-medium text-white/70">{t("plateOf", { number: job.plateNumber, total: job.plateCount })}</span> : null}
             <span>v{job.version} · {job.bedLabel}</span>
             {job.batchCode ? <span className="font-mono">{job.batchCode}</span> : null}
             {job.deviceName ? <span>{t("builtBy", { device: job.deviceName })}</span> : null}
@@ -159,7 +158,7 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
           ) : null}
           {/* The next-action card offers it for ready/printing; here, a requested plate printed by hand without a file. */}
           {canMarkPrinted(job.status) && journeyStep !== 1 ? (
-            <Button type="button" variant="ghost" size="sm" onClick={() => setConfirming("printed")} data-testid="production-mark-printed-by-hand">
+            <Button type="button" variant="ghost" size="sm" onClick={() => setMarking(true)} data-testid="production-mark-printed-by-hand">
               {t("markPrinted")}
             </Button>
           ) : null}
@@ -184,22 +183,25 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
         </div></details>
       </header>
 
-      <ol className="grid grid-cols-4 gap-2" aria-label={tw("nextAction")} data-testid="production-journey">
-        {[tw("prepare"), tw("print"), tw("receive"), tw("complete")].map((label, index) => <li key={label} aria-current={journeyStep === index ? "step" : undefined} className={`rounded-xl border px-2 py-3 text-center text-xs font-medium ${index === journeyStep ? "border-violet-400/40 bg-violet-500/10 text-violet-100" : index < journeyStep ? "border-emerald-400/15 bg-emerald-500/[0.03] text-emerald-200/70" : "border-white/[0.07] text-white/35"}`}>{label}</li>)}
+      <ol className="grid grid-cols-3 gap-2" aria-label={tw("nextAction")} data-testid="production-journey">
+        {[tw("prepare"), tw("print"), tw("complete")].map((label, index) => <li key={label} aria-current={journeyStep === index ? "step" : undefined} className={`rounded-xl border px-2 py-3 text-center text-xs font-medium ${index === journeyStep ? "border-violet-400/40 bg-violet-500/10 text-violet-100" : index < journeyStep ? "border-emerald-400/15 bg-emerald-500/[0.03] text-emerald-200/70" : "border-white/[0.07] text-white/35"}`}>{label}</li>)}
       </ol>
-      <SectionCard title={tw("nextAction")} accent="tags" icon={journeyStep === 2 ? ScanLine : Files}>
+      <SectionCard title={tw("nextAction")} accent="tags" icon={journeyStep === 2 ? PackageCheck : Files}>
         <div className="space-y-3">
-          <div className="flex flex-wrap items-center gap-2 text-xs text-white/55"><JobStatusPill status={job.status} /><span>{t("plateOf", { number: job.plateNumber, total: job.plateCount })}</span><span>{t.plural("pieceCount", job.quantity)}</span>{job.batchCode ? <span className="font-mono">{job.batchCode}</span> : null}</div>
-          <p className="text-sm leading-relaxed text-white/65">{job.status === "failed" || job.status === "cancelled" ? t(`jobStatus_${job.status}` as never) : journeyStep === 3 ? tw("receivedHint") : journeyStep === 2 ? t("scanInBody") : journeyStep === 1 ? tw("printingHint") : t(job.builder ? "requestedBodyBench" : "requestedBodyHand")}</p>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-white/55"><JobStatusPill status={job.status} />{showPlateNumber(job) ? <span>{t("plateOf", { number: job.plateNumber, total: job.plateCount })}</span> : null}<span>{t.plural("pieceCount", job.quantity)}</span>{job.batchCode ? <span className="font-mono">{job.batchCode}</span> : null}</div>
+          <p className="text-sm leading-relaxed text-white/65">{job.status === "failed" || job.status === "cancelled" ? t(`jobStatus_${job.status}` as never) : journeyStep === 2 ? (pending ? t.plural("pendingPiecesBody", pending) : tw("receivedHint")) : journeyStep === 1 ? tw("printingHint") : t(job.builder ? "requestedBodyBench" : "requestedBodyHand")}</p>
           {job.status === "failed" || job.status === "cancelled" ? <Button variant="brand" accent="tags" loading={redo.isPending} onClick={() => redo.mutate()}><RotateCcw />{t("redo")}</Button> : null}
           {journeyStep === 1 ? <div className="flex flex-wrap gap-2">
             {download ? <Button asChild variant="secondary"><a href={`/api/xpot/admin/print-files/${download.id}`} target="_blank" rel="noopener noreferrer" data-testid="production-primary-download"><Download />{tw("downloadPrint")}</a></Button> : null}
-            <Button variant="brand" accent="tags" onClick={() => setConfirming("printed")} data-testid="production-mark-printed">{t("markPrinted")}</Button>
+            <Button variant="brand" accent="tags" onClick={() => setMarking(true)} data-testid="production-mark-printed"><Printer />{t("markPrinted")}</Button>
           </div> : null}
-          {journeyStep === 3 && canAssemble ? <Button variant="brand" accent="tags" onClick={() => setAssembling(true)}>{t("markAssembled")}</Button> : null}
+          {journeyStep === 2 ? <div className="flex flex-wrap items-center gap-2">
+            {pending ? <Button variant="brand" accent="tags" loading={stock.isPending} onClick={() => stock.mutate()} data-testid="production-stock-pending"><PackageCheck />{t.plural("putInStock", pending)}</Button> : null}
+            {canAssemble ? <Button variant={pending ? "secondary" : "brand"} accent="tags" onClick={() => setAssembling(true)}>{t("markAssembled")}</Button> : null}
+            {job.batchId ? <Button variant="ghost" size="sm" onClick={() => go(`${PRODUCTION_BASE}/batches/${job.batchId}?tab=receive`)} data-testid="production-check-qr"><QrCode />{t("checkQrCodes")}</Button> : null}
+          </div> : null}
         </div>
       </SectionCard>
-      {journeyStep === 2 && job.batchId ? <OrderReceiving batchId={job.batchId} /> : null}
       {job.stale ? <InlineAlert tone="warning" title={t("staleTitle")}>{t("staleBody")}</InlineAlert> : null}
       {job.status === "failed" && job.errorMessage ? <InlineAlert tone="error" title={t("failedTitle")}>{job.errorMessage}</InlineAlert> : null}
       {job.notes ? <p className="max-w-3xl whitespace-pre-line text-sm text-white/60">{job.notes}</p> : null}
@@ -257,7 +259,7 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
                       <td className="py-1.5 pr-3 text-white/70">{piece.position ?? "—"}</td>
                       <td className="py-1.5 pr-3 font-mono text-white/70">{piece.serialNumber ?? "—"}</td>
                       <td className="py-1.5 pr-3 font-mono text-white">{piece.publicCode}</td>
-                      <td className="py-1.5 text-white/60">{piece.stockStatus === "pending" ? t("stockPending") : t("stockReceived")}</td>
+                      <td className="py-1.5 text-white/60">{piece.stockStatus === "pending" ? t("stockPending") : piece.stockStatus === "damaged" ? t("stockDamaged") : t("stockReceived")}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -335,6 +337,8 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
         confirmLabel={t("markAssembled")}
         onConfirm={() => assemble.mutateAsync()}
       />
+
+      <PrintedDialog job={marking ? job : null} onClose={() => setMarking(false)} />
 
       {confirming ? (
         <ConfirmDialog

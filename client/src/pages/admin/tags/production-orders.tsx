@@ -1,20 +1,17 @@
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
 import { AlertTriangle, ChevronRight, Download, Printer } from "lucide-react";
-import { canMarkPrinted, type PrintJobDetail, type PrintJobItem, type PrintModelItem, type PrintRequestItem } from "@shared/printProduction";
+import { canMarkPrinted, type PrintJobItem, type PrintModelItem, type PrintRequestItem } from "@shared/printProduction";
 import { Button } from "@/components/ui/button";
 import { ProductionWizard } from "./production-wizard";
-import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
 import { EmptyState } from "@/components/xpot/EmptyState";
-import { productionNeedsAction } from "./production-workflow";
-import { useToast } from "@/hooks/use-toast";
+import { productionNeedsAction, showPlateNumber } from "./production-workflow";
 import { useT } from "@/i18n";
-import { unifiedProductionMessages } from "@/i18n/messages/unifiedProduction";
 import { productionMessages } from "@/i18n/messages/production";
-import { errorMessage, formatDate, invalidateAdminTags, sendJson } from "./api";
+import { formatDate } from "./api";
 import { Loading, LoadError } from "./pieces-shared";
 import { JobStatusPill, PRODUCTION_BASE, plateDownloads, usePrintModels, usePrintRequests, type JobFilter } from "./production-shared";
 import { ProductionIdentity } from "./production-identity";
+import { PrintedDialog } from "./production-printed-dialog";
 
 // Asking for a print and listing the requests: the catalog, the queue and a model's page all use these. A request is
 // N pieces of a model, split into plates of one bed each (the last one partial); each plate is downloaded, printed by
@@ -33,15 +30,6 @@ export function RequestList({ filter, model, go, emptyHint }: { filter: JobFilte
   const modelById = new Map(models.map((item) => [item.id, item]));
   const requests = data?.filter((request) => filter === "all" || productionNeedsAction(request) === (filter === "open"));
   const [printing, setPrinting] = useState<PrintJobItem | null>(null);
-  const { toast } = useToast();
-  const printed = useMutation({
-    mutationFn: (job: PrintJobItem) => sendJson<PrintJobDetail>("POST", `/api/xpot/admin/print-jobs/${job.id}/transition`, { action: "printed" }),
-    onSuccess: async (updated) => {
-      await invalidateAdminTags();
-      toast({ title: t("orderNow", { status: t(`jobStatus_${updated.status}` as never) }) });
-    },
-    onError: (err) => toast({ title: t("couldNotUpdateOrder"), description: errorMessage(err), variant: "destructive" }),
-  });
   if (error && !data) return <LoadError what={t("queueWhat")} error={error} onRetry={() => void refetch()} />;
   if (isLoading) return <Loading rows={4} />;
   if (!requests?.length) return <EmptyState tone="tags" icon={Printer} title={t("queueEmpty")} hint={emptyHint ?? t("queueEmptyHint")} />;
@@ -69,24 +57,13 @@ export function RequestList({ filter, model, go, emptyHint }: { filter: JobFilte
           </li>
         ))}
       </ul>
-      <ConfirmDialog
-        open={Boolean(printing)}
-        onOpenChange={(open) => !open && setPrinting(null)}
-        title={t("confirmPrintedTitle")}
-        description={printing?.batchId ? t("confirmPrintedBodyBatch") : t.plural("confirmPrintedBodyPart", printing?.quantity ?? 0)}
-        confirmLabel={t("markPrinted")}
-        onConfirm={async () => {
-          if (printing) await printed.mutateAsync(printing);
-          setPrinting(null);
-        }}
-      />
+      <PrintedDialog job={printing} onClose={() => setPrinting(null)} />
     </>
   );
 }
 
 function PlateRow({ plate, go, onPrinted }: { plate: PrintJobItem; go: Go; onPrinted: () => void }) {
   const t = useT(productionMessages);
-  const u = useT(unifiedProductionMessages);
   const { project, sliced } = plateDownloads(plate);
   const live = !["failed", "cancelled"].includes(plate.status);
   return (
@@ -97,7 +74,7 @@ function PlateRow({ plate, go, onPrinted }: { plate: PrintJobItem; go: Go; onPri
         className="flex min-w-0 flex-1 items-center gap-2 text-left hover:underline"
         data-testid="production-job-row"
       >
-        <span className="text-sm font-medium text-white">{t("plateOf", { number: plate.plateNumber, total: plate.plateCount })}</span>
+        {showPlateNumber(plate) ? <span className="text-sm font-medium text-white">{t("plateOf", { number: plate.plateNumber, total: plate.plateCount })}</span> : null}
         <span className="flex flex-wrap items-center gap-1.5 text-xs text-white/45">
           <JobStatusPill status={plate.status} />
           <span>{t.plural("pieceCount", plate.quantity)}</span>
@@ -111,10 +88,10 @@ function PlateRow({ plate, go, onPrinted }: { plate: PrintJobItem; go: Go; onPri
         {live && sliced ? <DownloadButton id={sliced.id} label={t("downloadSliced")} /> : null}
         {canMarkPrinted(plate.status) ? (
           <Button type="button" variant="brand" accent="tags" size="sm" onClick={onPrinted} data-testid="production-plate-printed">
+            <Printer />
             {t("markPrinted")}
           </Button>
         ) : null}
-        {plate.status === "printed" && plate.batchId && (plate.receivedCount ?? 0) < (plate.pieceCount ?? plate.quantity) ? <Button type="button" variant="brand" accent="tags" size="sm" onClick={() => go(`${PRODUCTION_BASE}/jobs/${plate.id}`)} data-testid="production-plate-receive">{u("receivePieces")}</Button> : null}
         <ChevronRight className="h-4 w-4 shrink-0 text-white/30" aria-hidden="true" />
       </span>
     </li>

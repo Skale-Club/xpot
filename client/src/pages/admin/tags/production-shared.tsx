@@ -32,7 +32,7 @@ export function usePrintRequests(filter: JobFilter, model?: string) {
     queryKey: [...REQUESTS_KEY, filter, model ?? null],
     queryFn: () => getJson<PrintRequestItem[]>(withQuery("/api/xpot/admin/print-requests", { status: filter, model })),
     staleTime: STALE_MS,
-    // File generation and physical receiving both change the request while it is on screen.
+    // The bench builds the files while the request is on screen.
     refetchInterval: 20_000,
   });
 }

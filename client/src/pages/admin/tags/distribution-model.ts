@@ -1,4 +1,4 @@
-// Distribution (Hand out, Stuscle orders, Kits, Take back): the view names in the URL, the code list a station
+// Distribution (Hand out, Stuscle orders, Take back): the view names in the URL, the code list a station
 // builds, and the message key for every reason a code is refused. Pure, unit-tested (tests/admin-tags-distribution.test.ts).
 
 import type { HandOutBlocker, ReceiveBlocker, SellBlocker, TakeBackBlocker } from "@shared/tagDistribution";
@@ -6,13 +6,22 @@ import type { adminTagsFlowMessages } from "@/i18n/messages/adminTagsFlow";
 
 type FlowKey = keyof (typeof adminTagsFlowMessages)["en"];
 
-/** Sub-views of /admin/tags/kits, kept in `?view=`. */
-export const DISTRIBUTION_VIEWS = ["handout", "orders", "kits", "returns"] as const;
+/** Sub-views of /admin/tags/kits, kept in `?view=`. The kits history lives inside Hand out ("Past hand-outs"). */
+export const DISTRIBUTION_VIEWS = ["handout", "orders", "returns"] as const;
 export type DistributionView = (typeof DISTRIBUTION_VIEWS)[number];
 
+/** `?view=kits` was its own view; old links (Organizations, bookmarks) still land on Hand out, history open. */
 export function distributionView(value: string | null | undefined): DistributionView {
   return (DISTRIBUTION_VIEWS as readonly string[]).includes(value ?? "") ? (value as DistributionView) : "handout";
 }
+
+/** Past hand-outs open by default for an old `?view=kits` link or when a kit filter (?kitRep=, ?org=) is in the URL. */
+export function pastHandOutsOpen(view: string | null | undefined, kitRep?: string | null, org?: string | null): boolean {
+  return view === "kits" || !!kitRep || !!org;
+}
+
+/** How many past hand-outs show before "Show all" (a filter or an old kits link shows them all). */
+export const PAST_HAND_OUTS_PREVIEW = 5;
 
 /** Where Hand out opens for a batch (Batch detail › Hand out). */
 export function handOutHref(batchId?: string): string {

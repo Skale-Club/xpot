@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Inbox, Network, PackageCheck, PackageOpen, Users } from "lucide-react";
+import { ChevronRight, Inbox, Network, PackageCheck, PackageOpen, Users } from "lucide-react";
 import { FilterBar, FilterSelect } from "@/components/xpot/filters";
 import { useUrlFilters } from "@/hooks/use-url-filters";
 import type { TagKitItem } from "@shared/tagsApi";
@@ -18,7 +18,9 @@ import { useViewerAccess } from "@/lib/adminMode";
 import { HandOutFlow, parseCodes } from "./kits-give-form";
 import { KitList } from "./kits-list";
 import { ReturnsStation } from "./returns-station";
-import { distributionView, type DistributionView } from "./distribution-model";
+import { CameraButton, CodeEntry, ContinuousCamera, feedback } from "./scan-station";
+import { readCode } from "./batches-model";
+import { PAST_HAND_OUTS_PREVIEW, addCodes, distributionView, pastHandOutsOpen, type DistributionView } from "./distribution-model";
 import { useT } from "@/i18n";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
 import { manageTagsBatchesMessages } from "@/i18n/messages/manageTagsBatches";
@@ -57,8 +59,12 @@ const pendingOf = (list: AcquisitionInboxItem[] | undefined) => (list ?? []).fil
 
 function AcquisitionInbox() {
   const t = useT(manageTagsBatchesMessages);
+  const tf = useT(adminTagsFlowMessages);
   const { toast } = useToast();
   const [codesById, setCodesById] = useState<Record<string, string>>({});
+  // One camera at a time (it reads into the order it was opened on); a note for what the last read did not add.
+  const [cameraId, setCameraId] = useState<string | null>(null);
+  const [noteById, setNoteById] = useState<Record<string, string>>({});
   const query = useAcquisitions();
   const fulfill = useMutation({
     mutationFn: ({ id, codes }: { id: string; codes: string[] }) =>
@@ -70,6 +76,25 @@ function AcquisitionInbox() {
     onError: (err) => toast({ title: t("acquisitionFulfillFailed"), description: errorMessage(err), variant: "destructive" }),
   });
   const pending = pendingOf(query.data);
+
+  /** Camera or hand-scanner reads join the order's list (the textarea stays the source of truth), once each; non-codes are refused. */
+  const addReads = (id: string, reads: string[], fromCamera = false) => {
+    const valid: string[] = [];
+    const invalid: string[] = [];
+    for (const raw of reads) {
+      const code = readCode(raw, [window.location.hostname]);
+      if (code) valid.push(code);
+      else invalid.push(raw);
+    }
+    const text = codesById[id] ?? "";
+    const result = addCodes(parseCodes(text).codes, valid);
+    if (result.added.length) setCodesById((current) => ({ ...current, [id]: `${text}${text && !/\s$/.test(text) ? "\n" : ""}${result.added.join("\n")}` }));
+    setNoteById((current) => ({ ...current, [id]: invalid.length ? t("notACode", { codes: invalid.slice(0, 6).join(", ") }) : result.repeated.length ? tf("alreadyOnList", { codes: result.repeated.slice(0, 6).join(", ") }) : "" }));
+    if (invalid.length) feedback("error");
+    else if (!result.added.length && (fromCamera || reads.length === 1)) feedback("warn");
+    else if (result.added.length) feedback("ok");
+  };
+
   if (query.isLoading) return <Loading rows={2} />;
   if (query.isError) return <LoadError compact what={t("acquisitionsLoadFailed")} error={query.error} onRetry={() => void query.refetch()} />;
   if (!pending.length) return <EmptyState compact dense tone="tags" icon={Inbox} title={t("noPendingAcquisitions")} cardStyle={{}} />;
@@ -92,9 +117,19 @@ function AcquisitionInbox() {
             <div className="mt-3 flex flex-wrap gap-1.5">
               {item.lines.map((line) => <span key={line.id} className="rounded-lg bg-white/[0.05] px-2 py-1 text-xs text-white/55">{line.externalSku ?? t("catalogProduct")} · {line.quantity}</span>)}
             </div>
+            <div className="mt-3 flex flex-wrap items-start gap-2">
+              <div className="min-w-0 flex-1 basis-56">
+                <CodeEntry onReads={(reads) => addReads(item.acquisition.id, reads)} autoFocus={false} testId={`stuscle-code-entry-${item.acquisition.id}`} />
+              </div>
+              <CameraButton on={cameraId === item.acquisition.id} onToggle={() => setCameraId((current) => (current === item.acquisition.id ? null : item.acquisition.id))} />
+            </div>
+            {cameraId === item.acquisition.id ? (
+              <div className="mt-2"><ContinuousCamera onRead={(text) => addReads(item.acquisition.id, [text], true)} onClose={() => setCameraId(null)} /></div>
+            ) : null}
             <Textarea value={codesById[item.acquisition.id] ?? ""}
               onChange={(event) => setCodesById((current) => ({ ...current, [item.acquisition.id]: event.target.value }))}
-              rows={3} className="mt-3 font-mono" placeholder={t("acquisitionCodesPlaceholder")} aria-label={t("acquisitionCodesPlaceholder")} />
+              rows={3} className="mt-2 font-mono" placeholder={t("acquisitionCodesPlaceholder")} aria-label={t("acquisitionCodesPlaceholder")} />
+            {noteById[item.acquisition.id] ? <p className="mt-1.5 text-xs text-amber-300" role="status">{noteById[item.acquisition.id]}</p> : null}
             <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
               <p className={`text-xs ${parsed.invalid.length ? "text-red-300" : "text-white/40"}`}>
                 {parsed.invalid.length ? t("notACode", { codes: parsed.invalid.slice(0, 6).join(", ") }) : t("acquisitionCodesProgress", { count: parsed.codes.length, expected })}
@@ -112,7 +147,8 @@ function AcquisitionInbox() {
 }
 
 /** The kits handed out so far, newest first, filtered by reseller (?kitRep=12) and, for platform management, organization (?org=3). */
-function KitsView({ go }: { go: (path: string) => void }) {
+function KitsView({ go, showAllFirst }: { go: (path: string) => void; showAllFirst: boolean }) {
+  const [showAll, setShowAll] = useState(showAllFirst);
   const kitFilters = useUrlFilters({ kitRep: "", org: "" });
   const repFilter = /^\d+$/.test(kitFilters.values.kitRep) ? Number(kitFilters.values.kitRep) : null;
   const { canManage } = useViewerAccess();
@@ -121,6 +157,7 @@ function KitsView({ go }: { go: (path: string) => void }) {
   const { data: organizations = [] } = useOrganizations(canManage);
   const t = useT(manageTagsBatchesMessages);
   const tm = useT(manageTagsMessages);
+  const tf = useT(adminTagsFlowMessages);
   const kitsUrl = withQuery("/api/xpot/admin/tag-kits", { repId: repFilter, organizationId: orgFilter });
   const kits = useQuery<TagKitItem[]>({
     queryKey: [ADMIN_TAGS_KEY, "kits", kitsUrl],
@@ -128,6 +165,9 @@ function KitsView({ go }: { go: (path: string) => void }) {
     staleTime: STALE_MS,
   });
   const list = kits.data ?? [];
+  const filtered = repFilter != null || orgFilter != null;
+  // Latest few until asked for more; a filter (or an old kits link) shows everything it matches.
+  const preview = !showAll && !filtered && list.length > PAST_HAND_OUTS_PREVIEW;
   return (
     <div className="space-y-3">
       <FilterBar
@@ -157,7 +197,7 @@ function KitsView({ go }: { go: (path: string) => void }) {
             ) : null}
           </>
         }
-        summary={{ shown: list.length, active: repFilter != null || orgFilter != null, onClear: () => kitFilters.reset() }}
+        summary={{ shown: list.length, active: filtered, onClear: () => kitFilters.reset() }}
       />
       {kits.isLoading ? (
         <Loading rows={3} />
@@ -166,23 +206,45 @@ function KitsView({ go }: { go: (path: string) => void }) {
       ) : list.length === 0 ? (
         <EmptyState compact tone="tags" icon={PackageOpen} title={orgFilter ? t("noKitsMatch") : repFilter ? t("noKitsForReseller") : t("noKitsYet")} cardStyle={{}} />
       ) : (
-        <KitList kits={list} go={go} />
+        <>
+          <KitList kits={preview ? list.slice(0, PAST_HAND_OUTS_PREVIEW) : list} go={go} />
+          {preview ? <Button type="button" variant="ghost" size="sm" onClick={() => setShowAll(true)} data-testid="past-hand-outs-show-all">{tf("showAllHandOuts", { count: list.length })}</Button> : null}
+        </>
       )}
     </div>
   );
 }
 
-const VIEW_LABELS = { handout: "viewHandOut", orders: "viewOrders", kits: "viewKits", returns: "viewReturns" } as const satisfies Record<DistributionView, string>;
+const VIEW_LABELS = { handout: "viewHandOut", orders: "viewOrders", returns: "viewReturns" } as const satisfies Record<DistributionView, string>;
+
+/** Hand out's second half: what earlier hand-overs gave, collapsed until asked for (or until a link or filter points at it). */
+function PastHandOuts({ go, wantOpen }: { go: (path: string) => void; wantOpen: boolean }) {
+  const t = useT(adminTagsFlowMessages);
+  const [open, setOpen] = useState(wantOpen);
+  useEffect(() => {
+    if (wantOpen) setOpen(true);
+  }, [wantOpen]);
+  return (
+    <details open={open} onToggle={(event) => setOpen(event.currentTarget.open)} className="group" data-testid="admin-tags-past-hand-outs">
+      <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-sm font-semibold text-white/80 [&::-webkit-details-marker]:hidden">
+        <ChevronRight className="h-4 w-4 text-white/40 transition-transform group-open:rotate-90" aria-hidden="true" />
+        {t("pastHandOuts")}
+      </summary>
+      <div className="mt-2">{open ? <KitsView go={go} showAllFirst={wantOpen} /> : null}</div>
+    </details>
+  );
+}
 
 /**
  * Distribution (/admin/tags/kits): pieces from house stock to resellers and back. Views, kept in `?view=`: Hand out
- * (step by step), Stuscle orders (wholesale orders waiting for their pieces), Kits (what each hand-over gave, for
- * good) and Take back (a scan station).
+ * (step by step, with the past hand-outs below), Stuscle orders (wholesale orders waiting for their pieces) and
+ * Take back (a scan station). `?view=kits` is the old history view: it opens Hand out with the history expanded.
  */
 export function KitsTab({ go }: { go: (path: string) => void }) {
   const t = useT(adminTagsFlowMessages);
-  const url = useUrlFilters({ view: "handout" });
+  const url = useUrlFilters({ view: "handout", kitRep: "", org: "" });
   const view = distributionView(url.values.view);
+  const historyWanted = pastHandOutsOpen(url.values.view, url.values.kitRep, url.values.org);
   const orders = useAcquisitions();
   const pendingOrders = pendingOf(orders.data).length;
 
@@ -200,9 +262,13 @@ export function KitsTab({ go }: { go: (path: string) => void }) {
         ariaLabel={t("distributionTitle")}
         className="max-w-2xl"
       />
-      {view === "handout" && <HandOutFlow />}
+      {view === "handout" && (
+        <>
+          <HandOutFlow />
+          <PastHandOuts go={go} wantOpen={historyWanted} />
+        </>
+      )}
       {view === "orders" && <AcquisitionInbox />}
-      {view === "kits" && <KitsView go={go} />}
       {view === "returns" && <ReturnsStation />}
     </div>
   );

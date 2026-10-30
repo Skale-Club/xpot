@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { useLocation } from "wouter";
+import { Redirect, useLocation } from "wouter";
 import { ScanLine, ShieldAlert } from "lucide-react";
 import { EmptyState } from "@/components/xpot/EmptyState";
 import { parseTagIntakeScan } from "@shared/tagIntake";
@@ -13,7 +13,6 @@ import { PiecesTab } from "./PiecesTab";
 import { PieceDetail } from "./PieceDetail";
 import { KitsTab } from "./KitsTab";
 import { productionPath } from "./production-workflow";
-import { TeamTab } from "./TeamTab";
 import { ShowcaseTab } from "./ShowcaseTab";
 import { ProductionTab } from "./ProductionTab";
 import { ProvisionersTab } from "./ProvisionersTab";
@@ -30,7 +29,6 @@ const TABS = [
   { id: "production", labelKey: "manageProduction", adminOnly: true },
   { id: "pieces", labelKey: "managePieces" },
   { id: "kits", labelKey: "manageKits" },
-  { id: "team", labelKey: "manageResellers" },
   { id: "shop", labelKey: "manageShop", adminOnly: true },
   { id: "journey", labelKey: "manageJourney", adminOnly: true },
   { id: "provisioners", labelKey: "manageWriters", adminOnly: true },
@@ -91,7 +89,7 @@ export function CodeLookup({ onFound, fill = false }: { onFound: (id: string) =>
 
 /**
  * Admin → Tags: stock, resellers' kits, batches from the factory, the admin-only
- * Journey, the team report and the desktop NFC writers. Paths: /admin/tags/<tab>[/<id>].
+ * Journey and the desktop NFC writers. Paths: /admin/tags/<tab>[/<id>].
  */
 export function AdminTags() {
   const [location, setLocation] = useLocation();
@@ -102,6 +100,8 @@ export function AdminTags() {
   const isAdmin = useIsSuperAdmin();
   const tabs = TABS.filter((t) => isAdmin || !("adminOnly" in t));
   const tab: TabId = tabSegment === "batches" && isAdmin ? "production" : tabs.find((t) => t.id === tabSegment)?.id ?? "overview";
+  // The per-reseller report moved into People › person (Tags sales); old links still land there.
+  if (tabSegment === "team") return <Redirect to="/admin/reps" />;
   const id = idSegment ? decodeURIComponent(idSegment) : null;
   const go = (path: string) => setLocation(`${ADMIN_TAGS_BASE}${productionPath(path)}`);
   const requested = TABS.find((item) => item.id === tabSegment);
@@ -114,7 +114,6 @@ export function AdminTags() {
       {tab === "kits" && <KitsTab go={go} />}
       {tab === "production" && isAdmin && <ProductionTab rest={(tabSegment === "batches" ? ["batches", idSegment ?? "", ...more] : [idSegment ?? "", ...more]).map(decodeURIComponent)} go={go} />}
       {tab === "journey" && isAdmin && <JourneyTab />}
-      {tab === "team" && <TeamTab go={go} />}
       {tab === "shop" && isAdmin && <ShowcaseTab />}
       {tab === "provisioners" && isAdmin && <ProvisionersTab go={go} />}
     </div>
