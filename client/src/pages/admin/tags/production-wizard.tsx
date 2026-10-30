@@ -13,7 +13,6 @@ import { manageTagsBatchesMessages } from "@/i18n/messages/manageTagsBatches";
 import { batchWorkspaceMessages } from "@/i18n/messages/batchWorkspace";
 import { productionMessages } from "@/i18n/messages/production";
 import { unifiedProductionMessages } from "@/i18n/messages/unifiedProduction";
-import { workspacesMessages } from "@/i18n/messages/workspaces";
 import { ProductionIdentity, ProductionPlatePreview } from "./production-identity";
 import { errorMessage, invalidateAdminTags, sendJson } from "./api";
 import { catalogOptions, useTagCatalog } from "./batches-shared";
@@ -41,7 +40,6 @@ export function ProductionWizard({ onClose, onCreated, onOrdered, onCloseAutoFoc
   const tc = useT(commonMessages);
   const tp = useT(productionMessages);
   const u = useT(unifiedProductionMessages);
-  const wp = useT(workspacesMessages);
   const labels = useTagLabels();
   const { data: catalog = [], isLoading: catalogLoading, error: catalogError, refetch: reloadCatalog } = useTagCatalog();
   const modelsQuery = usePrintModels();
@@ -53,6 +51,8 @@ export function ProductionWizard({ onClose, onCreated, onOrdered, onCloseAutoFoc
   const beds = model ? printableBeds(model, existingBatch) : [];
   const bed = beds.find((b) => b.label === bedLabel) ?? beds[0];
   const [step, setStep] = useState(0);
+  // Printing is the way in; supplier orders and existing codes sit behind a small link.
+  const [otherWays, setOtherWays] = useState(false);
   const stepHeading = useRef<HTMLHeadingElement>(null);
   const stepHeadingId = useId();
   useEffect(() => { stepHeading.current?.focus(); }, [step]);
@@ -120,7 +120,7 @@ export function ProductionWizard({ onClose, onCreated, onOrdered, onCloseAutoFoc
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5 sm:px-6" data-testid="production-wizard-body">
           <fieldset disabled={busy} aria-labelledby={stepHeadingId} className="min-w-0 space-y-6">
             <h2 id={stepHeadingId} ref={stepHeading} tabIndex={-1} className="text-sm font-semibold text-white/85 outline-none">{printing ? stepNames[step] : step === 0 ? tw("batchIdentity") : step === 1 ? tw("codeSetup") : tw("stepReview")}</h2>
-            {step === 0 && !initialModel && !existingBatch ? <details open={!printing} className="space-y-3"><summary className="cursor-pointer text-xs font-medium text-white/50">{wp("otherSources")}</summary><Field label={u("source")}><Select value={form.codes} onChange={(e) => set({ codes: e.target.value as typeof form.codes })} options={[{ value: "print", label: u("sourcePrint") }, { value: "issued", label: u("sourceSupplier") }, { value: "scanned", label: u("sourceReceive") }]} data-testid="production-source" /></Field></details> : null}
+            {step === 0 && !initialModel && !existingBatch && (otherWays || !printing) ? <Field label={u("source")}><Select value={form.codes} onChange={(e) => set({ codes: e.target.value as typeof form.codes })} options={[{ value: "print", label: u("sourcePrint") }, { value: "issued", label: u("sourceSupplier") }, { value: "scanned", label: u("sourceReceive") }]} data-testid="production-source" /></Field> : null}
             {step === 0 && printing ? <div className="space-y-4">
               {modelsQuery.isLoading && !initialModel ? <p role="status" className="text-sm text-white/50">{u("loadingModels")}</p> : modelsQuery.error && !modelsQuery.data && !initialModel ? <p role="alert" className="text-sm text-red-300">{u("modelsError")} <button type="button" className="underline" onClick={() => void modelsQuery.refetch()}>{tw("retryCatalog")}</button></p> : <>
                 <fieldset className="space-y-2"><legend className="mb-2 text-xs font-semibold text-white/60">{u("printModel")}</legend>
@@ -135,6 +135,7 @@ export function ProductionWizard({ onClose, onCreated, onOrdered, onCloseAutoFoc
                 {model ? <><ProductionIdentity model={model} hero /><p className="text-xs leading-relaxed text-white/45">{u("automaticCodes")}</p></> : null}
               </>}
             </div> : null}
+            {step === 0 && printing && !initialModel && !existingBatch && !otherWays ? <button type="button" onClick={() => setOtherWays(true)} className="text-xs text-white/50 underline underline-offset-2 hover:text-white" data-testid="production-other-ways">{u("otherWays")}</button> : null}
             {step === 0 && !printing ? <div className="space-y-4">
               <Field label={t("fieldNameRequired")}><Input value={form.name} onChange={(e) => set({ name: e.target.value })} required maxLength={120} placeholder={t("namePlaceholder")} autoFocus /></Field>
               <div className="grid gap-3 sm:grid-cols-2">

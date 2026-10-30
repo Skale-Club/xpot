@@ -51,7 +51,8 @@ const en = {
   distributionIntro: "Pieces from house stock to resellers, and back. Every hand-over is a kit with its own code and packing list.",
   viewHandOut: "Hand out",
   viewOrders: "Stuscle orders",
-  viewKits: "Kits",
+  pastHandOuts: "Past hand-outs",
+  showAllHandOuts: "Show all {count}",
   viewReturns: "Take back",
 
   // Hand out
@@ -134,19 +135,7 @@ const en = {
   queueNoProductHint: "Pieces that can't be sold until they get a catalog product",
   queueEmpty: "Nothing here: this queue is clear.",
   backToOverview: "Overview",
-  thePieces: "the pieces",
-  funnelTitle: "Stock",
-  funnelNotReceived: "Not received",
-  funnelNotReceivedHint: "Codes issued, piece not in stock yet",
-  funnelHouse: "House stock",
-  funnelHouseHint: "In stock, no reseller, unsold",
-  funnelWithResellers: "With resellers",
-  funnelWithResellersHint: "In resellers' hands, unsold",
-  funnelSold: "Sold",
-  funnelSoldHint: "A recorded sale",
-  funnelLive: "Live",
-  funnelLiveHint: "QR and NFC lead to the customer",
-  funnelFootnote: "Sold means a recorded sale; putting a piece live is not a sale. Each number opens the pieces it counts.",
+  thePieces: "the pieces",
   localDay: "Your local day",
   scansFootnote: "Scans count real visits only: bots and repeated hits are left out.",
   analyticsTitle: "Scans by piece",
@@ -161,27 +150,16 @@ const en = {
   activityDestinationPill: "Destination",
 
   // Resellers
-  openInPeople: "Open in People",
-  teamLinksFootnote: "A name opens the person in People; a number opens those pieces in Inventory.",
   sellBlocked: "Blocked",
   sellTagsOff: "Tags off",
   sellNoCostRule: "Cost rule not set",
   sellNoWholesaleCode: "No wholesale code",
 
   // Batches
-  colPiecesReceived: "Pieces received",
-  pipelineLabel: "Production pipeline",
-  filterAwaitingPieces: "Awaiting pieces",
-  noBatchesMatch: "No batch matches this filter.",
-  batchCount_one: "{count} batch",
-  batchCount_other: "{count} batches",
   piecesReceivedOf: "{received} of {total} pieces received",
   tabSummary: "Summary",
   tabPrint: "Print",
   tabReceive: "Receive",
-  tabPieces: "Pieces",
-  tabHandOut: "Hand out",
-  tabActivity: "Activity",
   productionStage: "Production stage",
   stageIssuedHint: "Mark Print file ready and Printed when they happen; Receiving and In stock follow from scanning the pieces.",
   stageScannedHint: "Pieces enter stock as they are scanned; close the batch when every piece is in.",
@@ -199,7 +177,10 @@ const en = {
   printScannedNote: "This batch was filled by scanning pieces that already had a code: the files list them for your records.",
   generating: "Generating…",
   downloadFailed: "Could not download the file",
-  handOutFromBatch: "Hand out from this batch",
+  handOutAction: "Hand out",
+  seePiecesInInventory: "See pieces in Inventory",
+  printOrderLine: "This batch comes from a print order: its stage, files and Mark printed live on the order page.",
+  openPrintOrder: "Open print order",
 
   // Receive station
   receiveTitle: "Receive {code}",
@@ -269,7 +250,8 @@ export const adminTagsFlowMessages: Dictionary<typeof en> = {
     distributionIntro: "Peças do estoque da casa para os revendedores, e de volta. Cada entrega é um kit com código e lista de separação.",
     viewHandOut: "Entregar",
     viewOrders: "Pedidos Stuscle",
-    viewKits: "Kits",
+    pastHandOuts: "Entregas anteriores",
+    showAllHandOuts: "Ver todas ({count})",
     viewReturns: "Recolher",
 
     stepReseller: "Revendedor",
@@ -348,19 +330,7 @@ export const adminTagsFlowMessages: Dictionary<typeof en> = {
     queueNoProductHint: "Peças que não podem ser vendidas até ter um produto do catálogo",
     queueEmpty: "Nada aqui: esta fila está limpa.",
     backToOverview: "Visão geral",
-    thePieces: "as peças",
-    funnelTitle: "Estoque",
-    funnelNotReceived: "Não recebidas",
-    funnelNotReceivedHint: "Código emitido, peça ainda fora do estoque",
-    funnelHouse: "Estoque da casa",
-    funnelHouseHint: "Em estoque, sem revendedor, não vendidas",
-    funnelWithResellers: "Com revendedores",
-    funnelWithResellersHint: "Nas mãos dos revendedores, não vendidas",
-    funnelSold: "Vendidas",
-    funnelSoldHint: "Uma venda registrada",
-    funnelLive: "No ar",
-    funnelLiveHint: "QR e NFC levam ao cliente",
-    funnelFootnote: "Vendida é uma venda registrada; pôr uma peça no ar não é venda. Cada número abre as peças que conta.",
+    thePieces: "as peças",
     localDay: "Seu dia local",
     scansFootnote: "As leituras contam só visitas reais: robôs e repetições ficam de fora.",
     analyticsTitle: "Leituras por peça",
@@ -374,26 +344,15 @@ export const adminTagsFlowMessages: Dictionary<typeof en> = {
     activityLive: "No ar",
     activityDestinationPill: "Destino",
 
-    openInPeople: "Abrir em Pessoas",
-    teamLinksFootnote: "Um nome abre a pessoa em Pessoas; um número abre essas peças no Inventário.",
     sellBlocked: "Bloqueado",
     sellTagsOff: "Tags desligado",
     sellNoCostRule: "Regra de custo não definida",
     sellNoWholesaleCode: "Sem código de atacado",
 
-    colPiecesReceived: "Peças recebidas",
-    pipelineLabel: "Etapas de produção",
-    filterAwaitingPieces: "Esperando peças",
-    noBatchesMatch: "Nenhum lote corresponde a este filtro.",
-    batchCount_one: "{count} lote",
-    batchCount_other: "{count} lotes",
     piecesReceivedOf: "{received} de {total} peças recebidas",
     tabSummary: "Resumo",
     tabPrint: "Impressão",
     tabReceive: "Receber",
-    tabPieces: "Peças",
-    tabHandOut: "Entregar",
-    tabActivity: "Atividade",
     productionStage: "Etapa de produção",
     stageIssuedHint: "Marque Arquivo pronto e Impresso quando acontecerem; Recebendo e Em estoque vêm da leitura das peças.",
     stageScannedHint: "As peças entram no estoque conforme são lidas; feche o lote quando todas entrarem.",
@@ -411,7 +370,10 @@ export const adminTagsFlowMessages: Dictionary<typeof en> = {
     printScannedNote: "Este lote foi preenchido lendo peças que já tinham código: os arquivos as listam para seu controle.",
     generating: "Gerando…",
     downloadFailed: "Não foi possível baixar o arquivo",
-    handOutFromBatch: "Entregar deste lote",
+    handOutAction: "Entregar",
+    seePiecesInInventory: "Ver peças no Inventário",
+    printOrderLine: "Este lote vem de um pedido de impressão: etapa, arquivos e Marcar impresso ficam na página do pedido.",
+    openPrintOrder: "Abrir pedido de impressão",
 
     receiveTitle: "Receber {code}",
     receiveClosed: "Este lote está fechado: reabra para receber peças.",
@@ -477,7 +439,8 @@ export const adminTagsFlowMessages: Dictionary<typeof en> = {
     distributionIntro: "Piezas del stock de la casa a los revendedores, y de vuelta. Cada entrega es un kit con su código y su lista de empaque.",
     viewHandOut: "Entregar",
     viewOrders: "Pedidos Stuscle",
-    viewKits: "Kits",
+    pastHandOuts: "Entregas anteriores",
+    showAllHandOuts: "Ver todas ({count})",
     viewReturns: "Devolver",
 
     stepReseller: "Revendedor",
@@ -556,19 +519,7 @@ export const adminTagsFlowMessages: Dictionary<typeof en> = {
     queueNoProductHint: "Piezas que no se pueden vender hasta tener un producto del catálogo",
     queueEmpty: "Nada aquí: esta cola está al día.",
     backToOverview: "Resumen",
-    thePieces: "las piezas",
-    funnelTitle: "Stock",
-    funnelNotReceived: "No recibidas",
-    funnelNotReceivedHint: "Código emitido, pieza aún fuera del stock",
-    funnelHouse: "Stock de la casa",
-    funnelHouseHint: "En stock, sin revendedor, no vendidas",
-    funnelWithResellers: "Con revendedores",
-    funnelWithResellersHint: "En manos de revendedores, no vendidas",
-    funnelSold: "Vendidas",
-    funnelSoldHint: "Una venta registrada",
-    funnelLive: "Activas",
-    funnelLiveHint: "QR y NFC llevan al cliente",
-    funnelFootnote: "Vendida es una venta registrada; activar una pieza no es una venta. Cada número abre las piezas que cuenta.",
+    thePieces: "las piezas",
     localDay: "Tu día local",
     scansFootnote: "Las lecturas cuentan solo visitas reales: se excluyen bots y repeticiones.",
     analyticsTitle: "Lecturas por pieza",
@@ -582,26 +533,15 @@ export const adminTagsFlowMessages: Dictionary<typeof en> = {
     activityLive: "Activa",
     activityDestinationPill: "Destino",
 
-    openInPeople: "Abrir en Personas",
-    teamLinksFootnote: "Un nombre abre a la persona en Personas; un número abre esas piezas en el Inventario.",
     sellBlocked: "Bloqueado",
     sellTagsOff: "Tags apagado",
     sellNoCostRule: "Regla de costo sin definir",
     sellNoWholesaleCode: "Sin código mayorista",
 
-    colPiecesReceived: "Piezas recibidas",
-    pipelineLabel: "Etapas de producción",
-    filterAwaitingPieces: "Esperando piezas",
-    noBatchesMatch: "Ningún lote coincide con este filtro.",
-    batchCount_one: "{count} lote",
-    batchCount_other: "{count} lotes",
     piecesReceivedOf: "{received} de {total} piezas recibidas",
     tabSummary: "Resumen",
     tabPrint: "Impresión",
     tabReceive: "Recibir",
-    tabPieces: "Piezas",
-    tabHandOut: "Entregar",
-    tabActivity: "Actividad",
     productionStage: "Etapa de producción",
     stageIssuedHint: "Marca Archivo listo e Impreso cuando sucedan; Recibiendo y En stock salen de leer las piezas.",
     stageScannedHint: "Las piezas entran al stock a medida que se leen; cierra el lote cuando estén todas.",
@@ -619,7 +559,10 @@ export const adminTagsFlowMessages: Dictionary<typeof en> = {
     printScannedNote: "Este lote se llenó leyendo piezas que ya tenían código: los archivos las listan para tu control.",
     generating: "Generando…",
     downloadFailed: "No se pudo descargar el archivo",
-    handOutFromBatch: "Entregar de este lote",
+    handOutAction: "Entregar",
+    seePiecesInInventory: "Ver piezas en Inventario",
+    printOrderLine: "Este lote viene de un pedido de impresión: etapa, archivos y Marcar impreso están en la página del pedido.",
+    openPrintOrder: "Abrir pedido de impresión",
 
     receiveTitle: "Recibir {code}",
     receiveClosed: "Este lote está cerrado: reábrelo para recibir piezas.",

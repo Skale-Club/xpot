@@ -154,7 +154,6 @@ type ShellKey =
   | "manageBatches"
   | "manageProduction"
   | "manageJourney"
-  | "manageResellers"
   | "manageShop"
   | "manageWriters"
   | "orgPeople"
@@ -232,7 +231,6 @@ export function moduleGroups(module: XpotModule, viewer: Viewer, l: Labels): Nav
         { href: "/admin/tags/production", label: l.shell("manageProduction"), icon: Printer, match: (p) => tab("production")(p) || tab("batches")(p), adminOnly: true },
         { href: "/admin/tags/pieces", label: l.shell("managePieces"), icon: Nfc, match: tab("pieces") },
         { href: "/admin/tags/kits", label: l.shell("manageKits"), icon: PackageOpen, match: tab("kits") },
-        { href: "/admin/tags/team", label: l.shell("manageResellers"), icon: Users, match: tab("team") },
         // The showcase the resellers see in Tags › Shop: the Xpot admin keeps it.
         { href: "/admin/tags/shop", label: l.shell("manageShop"), icon: ShoppingBag, match: tab("shop"), adminOnly: true },
         { href: "/admin/tags/journey", label: l.shell("manageJourney"), icon: Route, match: tab("journey"), adminOnly: true },
@@ -290,10 +288,10 @@ export function managementGroups(modules: readonly XpotModule[], viewer: Viewer,
     { href: "/admin/work/sales", label: l.shell("tabSales"), icon: DollarSign, match: starts("/admin/work/sales") },
     ...visits.filter((item) => item.href === "/admin/overview").map((item) => ({ ...item, match: starts(item.href) })),
   ] });
-  groups.push({ label: names.team, collapsible: viewer.isAdmin, items: [...administrationItems(l), ...tags.filter((item) => item.href === "/admin/tags/team")] });
+  groups.push({ label: names.team, collapsible: viewer.isAdmin, items: administrationItems(l) });
   groups.push({ label: names.system, collapsible: true, items: [
     ...visits.filter((item) => item.href !== "/admin/overview"),
-    ...tags.filter((item) => !operations.includes(item.href) && item.href !== "/admin/tags/team"),
+    ...tags.filter((item) => !operations.includes(item.href)),
     ...(viewer.isAdmin ? platformItems(l) : []),
   ] });
   return groups.filter((group) => group.items.length > 0);

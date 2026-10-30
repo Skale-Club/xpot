@@ -47,6 +47,11 @@ describe("dedicated management navigation", () => {
     for (const path of ["/admin/tags/production", "/admin/tags/provisioners", "/admin/integrations", "/admin/branding", "/admin/health"]) expect(paths).not.toContain(path);
     expect(managementGroups(["visits", "tags"], rep, labels, panelNames)).toEqual([]);
   });
+  it("has one place for people: People and Organizations, no Resellers destination", () => {
+    const groups = managementGroups(["visits", "tags"], admin, labels, panelNames);
+    expect(groups.find((group) => group.label === "People")?.items.map((item) => item.href)).toEqual(["/admin/reps", "/organizations"]);
+    expect(hrefs(groups)).not.toContain("/admin/tags/team");
+  });
   it("gives organization admins their scoped team tools without global setup", () => {
     expect(hrefs(organizationPanelGroups(["visits", "tags"], labels))).toEqual(["/organizations", "/admin/work/leads", "/admin/work/tasks", "/admin/work/sales"]);
     expect(hrefs(organizationPanelGroups(["tags"], labels))).toEqual(["/organizations"]);
@@ -147,7 +152,8 @@ describe("moduleGroups", () => {
   });
   it("a manager gets each module's own management, without the global admin's items", () => {
     const tags = hrefs(moduleGroups("tags", manager, labels));
-    expect(tags).toEqual(expect.arrayContaining(["/admin/tags/overview", "/admin/tags/pieces", "/admin/tags/kits", "/admin/tags/team"]));
+    expect(tags).toEqual(expect.arrayContaining(["/admin/tags/overview", "/admin/tags/pieces", "/admin/tags/kits"]));
+    expect(tags).not.toContain("/admin/tags/team");
     for (const href of ["/admin/tags/production", "/admin/tags/batches", "/admin/tags/shop", "/admin/tags/journey", "/admin/tags/provisioners"]) expect(tags).not.toContain(href);
     const visits = hrefs(moduleGroups("visits", manager, labels));
     expect(visits).toEqual(expect.arrayContaining(["/admin/overview", "/admin/products", "/admin/settings"]));
@@ -160,7 +166,6 @@ describe("moduleGroups", () => {
       "/admin/tags/production",
       "/admin/tags/pieces",
       "/admin/tags/kits",
-      "/admin/tags/team",
       "/admin/tags/shop",
       "/admin/tags/journey",
       "/admin/tags/provisioners",

@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db.js";
 import {
   printJobFiles,
@@ -9,6 +9,8 @@ import {
   printPartMovements,
   printRequests,
   tagBatches,
+  tagStockMovements,
+  tags,
   type PrintJobRow,
   type PrintModelRow,
 } from "#shared/schema.js";
@@ -24,6 +26,7 @@ import {
   nextPrintBatchCode,
   planPrintJobTransition,
   splitIntoPlates,
+  splitPrintedPieces,
   type PrintBed,
   type PrintFileKind,
   type PrintJobAction,
@@ -61,7 +64,8 @@ import { createBatch, getBatchProduction, iso, rows, type Tx } from "./repositor
 // Tags › Production (docs/PRINT_EXECUTION_PLAN.md): the catalog of what the house prints (models), the frozen
 // recipes (versions), the print requests ("N pieces of this model") and their plates (print orders) with their files.
 // Rules and types: shared/printProduction.ts. A serialized plate issues its batch through the same createBatch as
-// Tags › Batches, in the same transaction; stock still enters only by scanning each printed piece into that batch.
+// Tags › Batches, in the same transaction; marking the plate printed puts its pieces in house stock (the ones that
+// came out bad become damaged), so no scan is needed. The scan station of the batch stays as an optional QR check.
 // Printing is by hand: the admin downloads a plate, prints it in Bambu Studio and marks it printed. Everything here
 // is the global admin's, plus the paired bench app (a provisioner device with the 'print' capability), which builds
 // the plates' files and mirrors them into its Print Now folder.
@@ -464,7 +468,7 @@ export async function currentPreview(modelRef: string): Promise<{ body: Uint8Arr
 interface JobRow {
   id: string; model_id: string; model_slug: string; model_title: string; model_kind: string; version_id: string;
   version_number: number; bed_label: string; plates: number; quantity: number; status: string; batch_id: string | null;
-  batch_code: string | null; piece_count: number | null; received_count: number | null; device_name: string | null;
+  batch_code: string | null; piece_count: number | null; received_count: number | null; pending_count: number | null; device_name: string | null;
   notes: string | null; error_message: string | null; report: Record<string, unknown> | null; created_at: Date | string;
   built_at: Date | string | null; printed_at: Date | string | null; updated_at: Date | string; last_event_at: Date | string | null;
   request_id: string | null; plate_number: number; plate_count: number; request_quantity: number;
@@ -476,7 +480,9 @@ const JOB_SELECT = sql`
     v.version AS version_number, j.bed_label, j.plates, j.quantity, j.status, j.batch_id, b.batch_code,
     CASE WHEN j.batch_id IS NULL THEN NULL ELSE (SELECT count(*)::int FROM tags t WHERE t.batch_id = j.batch_id) END AS piece_count,
     CASE WHEN j.batch_id IS NULL THEN NULL
-      ELSE (SELECT count(*)::int FROM tags t WHERE t.batch_id = j.batch_id AND t.stock_status <> 'pending') END AS received_count,
+      ELSE (SELECT count(*)::int FROM tags t WHERE t.batch_id = j.batch_id AND t.stock_status NOT IN ('pending', 'damaged')) END AS received_count,
+    CASE WHEN j.batch_id IS NULL THEN NULL
+      ELSE (SELECT count(*)::int FROM tags t WHERE t.batch_id = j.batch_id AND t.stock_status = 'pending') END AS pending_count,
     d.device_name, j.notes, j.error_message, j.report, j.created_at, j.built_at, j.printed_at, j.updated_at, j.last_event_at,
     j.request_id, COALESCE(j.plate_number, 1) AS plate_number,
     CASE WHEN j.request_id IS NULL THEN 1
@@ -508,6 +514,7 @@ function jobItem(j: JobRow, now = Date.now()): PrintJobItem {
     batchId: j.batch_id,
     batchCode: j.batch_code,
     receivedCount: j.received_count === null ? null : Number(j.received_count),
+    pendingCount: j.pending_count === null ? null : Number(j.pending_count),
     pieceCount: j.piece_count === null ? null : Number(j.piece_count),
     deviceName: j.device_name,
     notes: j.notes,
@@ -545,12 +552,9 @@ interface RequestRow {
   bed_label: string; quantity: number; notes: string | null; created_at: Date | string; open: boolean;
 }
 
-// Printing and physical receiving belong to one request. Apply this before LIMIT so older
-// requests awaiting pieces are not hidden behind a page of newer completed requests.
-const OPEN_PLATE = sql`(j.status IN ('requested', 'building', 'ready', 'printing') OR
-  (j.status = 'printed' AND j.batch_id IS NOT NULL AND EXISTS (
-    SELECT 1 FROM tags pending_piece WHERE pending_piece.batch_id = j.batch_id AND pending_piece.stock_status = 'pending'
-  )))`;
+// A plate is open until it is printed: marking it printed also puts its pieces in stock, so nothing is left to do.
+// Applied before LIMIT so older open requests are not hidden behind a page of newer completed ones.
+const OPEN_PLATE = sql`j.status IN ('requested', 'building', 'ready', 'printing')`;
 
 const REQUEST_SELECT = sql`
   SELECT r.id, r.model_id, m.slug AS model_slug, m.title AS model_title, m.kind AS model_kind, v.version AS version_number,
@@ -580,7 +584,7 @@ async function withPlates(list: RequestRow[]): Promise<PrintRequestItem[]> {
   }));
 }
 
-/** Requests stay open while a plate needs printing or its printed pieces need receiving. */
+/** The requests, newest first, each with its plates: open (some plate still to build or print), done, or all. */
 export async function listRequests(filter: "open" | "done" | "all" = "open", modelRef?: string | null): Promise<PrintRequestItem[]> {
   const conds = [];
   if (filter === "open") conds.push(sql`EXISTS (SELECT 1 FROM print_jobs j WHERE j.request_id = r.id AND ${OPEN_PLATE})`);
@@ -888,13 +892,113 @@ export async function redoJob(id: string, userId: string | null, source: Journey
 export interface TransitionInput {
   action: PrintJobAction;
   reason?: string | null;
+  /** `printed`: public codes of the pieces that came out bad (they become damaged; the rest go into stock). */
+  badPieces?: readonly string[];
   userId: string | null;
   source?: JourneySource;
 }
 
+const BAD_PIECE_REASON = "Came out bad on the printer plate";
+
+interface StockedPieces { stocked: Array<{ id: string; publicCode: string }>; damaged: Array<{ id: string; publicCode: string }> }
+
+/**
+ * Puts a printed plate's pending pieces in house stock: the same end state as a successful intake scan (available,
+ * company-owned, registered, one `intake` movement each), without the scan. The pieces listed in `badPieces` become
+ * damaged instead (the same state and `damage` movement as markTagDamaged). A piece that is not pending any more is
+ * left alone, so repeating it is harmless. Runs inside the caller's transaction.
+ */
+async function stockPrintedPieces(tx: Tx, batchId: string, badPieces: readonly string[], userId: string | null): Promise<StockedPieces> {
+  const [batch] = await tx.select().from(tagBatches).where(eq(tagBatches.id, batchId)).for("update");
+  if (!batch) throw new TagError("Batch not found", 404, "batch_not_found");
+  const list = await tx.select().from(tags).where(eq(tags.batchId, batchId)).for("update");
+  const split = splitPrintedPieces(list, badPieces);
+  if (split.unknown.length) {
+    throw new TagError(`Piece ${split.unknown[0]} is not in this plate's batch`, 400, "piece_not_in_batch", { code: split.unknown[0] });
+  }
+  const none: StockedPieces = { stocked: [], damaged: [] };
+  if (batch.status === "cancelled") return none;
+  const good = new Set(split.good);
+  const bad = new Set(split.bad);
+  const goodTags = list.filter((t) => good.has(t.publicCode));
+  const badTags = list.filter((t) => bad.has(t.publicCode));
+  if (!goodTags.length && !badTags.length) return none;
+  const now = new Date();
+  if (goodTags.length) {
+    await tx.update(tags).set({
+      stockStatus: "available",
+      ownershipType: "company",
+      registeredAt: now,
+      registeredByUserId: userId,
+      stockUpdatedAt: now,
+      updatedAt: now,
+    }).where(inArray(tags.id, goodTags.map((t) => t.id)));
+    await tx.insert(tagStockMovements).values(goodTags.map((t) => ({
+      tagId: t.id,
+      movementType: "intake",
+      fromStockStatus: "pending",
+      toStockStatus: "available",
+      fromOwnershipType: t.ownershipType,
+      toOwnershipType: "company",
+      actorUserId: userId,
+      referenceType: "batch",
+      referenceId: batch.id,
+    })));
+  }
+  if (badTags.length) {
+    await tx.update(tags).set({ stockStatus: "damaged", internalUseNote: null, stockUpdatedAt: now, updatedAt: now })
+      .where(inArray(tags.id, badTags.map((t) => t.id)));
+    await tx.insert(tagStockMovements).values(badTags.map((t) => ({
+      tagId: t.id,
+      movementType: "damage",
+      fromStockStatus: "pending",
+      toStockStatus: "damaged",
+      fromOwnershipType: t.ownershipType,
+      toOwnershipType: t.ownershipType,
+      fromCustodianRepId: t.custodianRepId,
+      toCustodianRepId: t.custodianRepId,
+      actorUserId: userId,
+      reason: BAD_PIECE_REASON,
+    })));
+  }
+  await tx.update(tagBatches).set({ updatedAt: now }).where(eq(tagBatches.id, batch.id));
+  return {
+    stocked: goodTags.map((t) => ({ id: t.id, publicCode: t.publicCode })),
+    damaged: badTags.map((t) => ({ id: t.id, publicCode: t.publicCode })),
+  };
+}
+
+/** The journey after the stock moved: one entry for the batch, one per damaged piece (like markTagDamaged). */
+async function recordStocked(batchId: string, result: StockedPieces, userId: string | null, source: JourneySource) {
+  if (!result.stocked.length && !result.damaged.length) return;
+  const [batch] = await db.select({ batchCode: tagBatches.batchCode }).from(tagBatches).where(eq(tagBatches.id, batchId)).limit(1);
+  const ctx = journeyContext(userId, source);
+  await recordJourney({
+    kind: "execution",
+    action: "pieces_stocked",
+    title: `Batch ${batch?.batchCode ?? ""}: ${result.stocked.length} printed piece${result.stocked.length === 1 ? "" : "s"} put in stock`,
+    batchId,
+    afterValue: "available",
+    metadata: { stocked: result.stocked.length, damaged: result.damaged.length, method: "printed" },
+  }, ctx);
+  for (const piece of result.damaged) {
+    await recordJourney({
+      kind: "execution",
+      action: "piece_damaged",
+      title: `Piece ${piece.publicCode} marked damaged`,
+      content: BAD_PIECE_REASON,
+      tagId: piece.id,
+      batchId,
+      beforeValue: "pending",
+      afterValue: "damaged",
+    }, ctx);
+  }
+}
+
 /**
  * Moves an order through its state machine (shared/printProduction.ts) with the side effects of each step:
- * `printed` records the batch's `printed` journey step (or adds a part's pieces to its count), `complete`
+ * `printed` records the batch's `printed` journey step and puts the batch's pending pieces in house stock, in the
+ * same transaction (the `badPieces` come out damaged instead), or adds a part's pieces to its count; `complete`
  * needs a print file, `fail` keeps the reason.
  */
 export async function transitionJob(id: string, input: TransitionInput): Promise<PrintJobDetail> {
@@ -909,7 +1013,7 @@ export async function transitionJob(id: string, input: TransitionInput): Promise
     }
   }
   const [model] = await db.select().from(printModels).where(eq(printModels.id, job.modelId)).limit(1);
-  await db.transaction(async (tx) => {
+  const stocked = await db.transaction(async (tx) => {
     const updated = await tx.update(printJobs).set({
       status: plan.status,
       updatedAt: now,
@@ -923,6 +1027,8 @@ export async function transitionJob(id: string, input: TransitionInput): Promise
       await tx.insert(printPartMovements).values({ modelId: model.id, delta: job.quantity, reason: "printed", jobId: job.id, actorUserId: input.userId });
       await tx.update(printModels).set({ partOnHand: sql`${printModels.partOnHand} + ${job.quantity}`, updatedAt: now }).where(eq(printModels.id, model.id));
     }
+    // Printed by hand and checked by eye: the good pieces are stock now, without scanning each QR.
+    return input.action === "printed" && job.batchId ? stockPrintedPieces(tx, job.batchId, input.badPieces ?? [], input.userId) : null;
   });
   if (job.batchId && (input.action === "printed" || input.action === "fail")) {
     const [batch] = await db.select({ batchCode: tagBatches.batchCode }).from(tagBatches).where(eq(tagBatches.id, job.batchId)).limit(1);
@@ -941,6 +1047,23 @@ export async function transitionJob(id: string, input: TransitionInput): Promise
       metadata: { printJobId: job.id },
     }, journeyContext(input.userId, input.source));
   }
+  if (stocked && job.batchId) await recordStocked(job.batchId, stocked, input.userId, input.source ?? "admin");
+  return getJob(job.id);
+}
+
+/**
+ * Plates printed before marking printed stocked the pieces: their batch still shows its pieces pending. This puts
+ * them in stock the same way (and `badPieces` come out damaged). Only a printed plate with a batch; repeating it
+ * when nothing is pending changes nothing.
+ */
+export async function stockJob(id: string, input: { badPieces?: readonly string[]; userId: string | null; source?: JourneySource }): Promise<PrintJobDetail> {
+  const job = await loadJob(id);
+  if (job.status !== "printed" || !job.batchId) {
+    throw new TagError("Only a printed plate with codes can put its pieces in stock", 409, "print_job_state");
+  }
+  const batchId = job.batchId;
+  const stocked = await db.transaction((tx) => stockPrintedPieces(tx, batchId, input.badPieces ?? [], input.userId));
+  await recordStocked(batchId, stocked, input.userId, input.source ?? "admin");
   return getJob(job.id);
 }
 
@@ -1184,7 +1307,7 @@ export async function consumeForAssembly(batchId: string, userId: string | null)
   const consumes = job?.consumes ?? [];
   if (!job || !consumes.length) return 0;
   const [{ pieces }] = await rows<{ pieces: number }>(sql`
-    SELECT count(*)::int AS pieces FROM tags WHERE batch_id = ${batchId} AND stock_status <> 'pending'`);
+    SELECT count(*)::int AS pieces FROM tags WHERE batch_id = ${batchId} AND stock_status NOT IN ('pending', 'damaged')`);
   if (!Number(pieces)) return 0;
   let moved = 0;
   await db.transaction(async (tx) => {

@@ -17,7 +17,7 @@ import { BackLink } from "@/components/xpot/PageHeader";
 import { ListPager, usePagedList } from "@/components/xpot/pagination";
 import { Pill } from "@/components/xpot/StatusPill";
 import { GLASS_CLASS } from "@/components/xpot/surface";
-import { XPOT_MODULES, type XpotModule } from "@shared/modules";
+import { XPOT_MODULES, repModules, type XpotModule } from "@shared/modules";
 import { formatPhone } from "@shared/phone";
 import { CountryCodePicker } from "@/components/CountryCodePicker";
 import { useT, type Translate } from "@/i18n";
@@ -28,6 +28,7 @@ import { settingsMessages } from "@/i18n/messages/settings";
 import { signinMessages } from "@/i18n/messages/signin";
 import { filterPeople, peopleFiltersFromParams, type PeopleFilters } from "./peopleFilters";
 import { MODULE_KEYS, ModuleChecks, PersonDetail, PersonPills, REPS_KEY, ROLES, ROLE_KEYS, Setting, send, type Rep } from "./PersonDetail";
+import { SellBlockerPills } from "./PersonTagsSales";
 
 // Who may use Xpot, and everything about each person: the one place people
 // are created, approved, blocked and deleted (Organizations only adds existing
@@ -180,6 +181,8 @@ function PersonRow({ rep, selected, onOpen }: { rep: Rep; selected: boolean; onO
       </span>
       <span className="flex flex-wrap items-center gap-2">
         <PersonPills rep={rep} />
+        {/* Only an approved person with Tags: what stops them selling (blocked is already the status pill). */}
+        {rep.access === "active" && repModules(rep).includes("tags") && <SellBlockerPills rep={rep} />}
       </span>
       <ChevronRight className="hidden h-4 w-4 shrink-0 text-white/25 sm:block" aria-hidden="true" />
     </button>

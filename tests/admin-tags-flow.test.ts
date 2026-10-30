@@ -1,16 +1,14 @@
-// Phase 3c pure helpers of the Tags management screens: the Overview funnel, queues and activity feed; the Batches
-// pipeline and stage stepper; the intake station's read outcomes; Distribution's code list and per-code messages.
+// Phase 3c pure helpers of the Tags management screens: the Overview queues and activity feed; the batch stage
+// stepper; the intake station's read outcomes; Distribution's code list and per-code messages.
 
 import { describe, expect, it } from "vitest";
 import { HAND_OUT_BLOCKERS, RECEIVE_BLOCKERS, SELL_BLOCKERS, TAKE_BACK_BLOCKERS } from "../shared/tagDistribution";
 import { TAG_PIECE_QUEUES } from "../shared/tagQueues";
 import { adminTagsFlowMessages } from "../client/src/i18n/messages/adminTagsFlow";
-import { activityFeed, needsActionQueues, pieceQueueCard, stockFunnel } from "../client/src/pages/admin/tags/overview-model";
+import { activityFeed, needsActionQueues, pieceQueueCard } from "../client/src/pages/admin/tags/overview-model";
 import {
   canMarkStep,
-  groupBatchesByStage,
   intakeKey,
-  isAwaitingPieces,
   readCode,
   readErrorStatus,
   splitReads,
@@ -21,6 +19,7 @@ import {
   distributionView,
   handOutHref,
   HAND_OUT_REASON_KEYS,
+  pastHandOutsOpen,
   RECEIVE_BLOCKER_KEYS,
   reasonKey,
   SELL_BLOCKER_KEYS,
@@ -28,32 +27,6 @@ import {
 } from "../client/src/pages/admin/tags/distribution-model";
 
 const en = adminTagsFlowMessages.en as Record<string, string>;
-
-describe("Overview stock funnel", () => {
-  const steps = stockFunnel({ notReceived: 4, house: 10, withResellers: 7, sold: 3, live: 2 });
-
-  it("is not received → house → resellers → sold → live, one shared stock number each", () => {
-    expect(steps.map((s) => [s.id, s.metric, s.count])).toEqual([
-      ["notReceived", "notReceived", 4],
-      ["house", "house", 10],
-      ["withResellers", "withResellers", 7],
-      ["sold", "sold", 3],
-      ["live", "live", 2],
-    ]);
-  });
-
-  it("links each step to the Pieces filter that lists the same number", () => {
-    // PiecesTab: stock=house|reps|sold are metrics; stock=pending is the stock status the notReceived metric is.
-    expect(Object.fromEntries(steps.map((s) => [s.id, s.href]))).toEqual({
-      notReceived: "/pieces?stock=pending",
-      house: "/pieces?stock=house",
-      withResellers: "/pieces?stock=reps",
-      sold: "/pieces?stock=sold",
-      live: "/pieces?status=active",
-    });
-    for (const s of steps) expect(en[s.labelKey] && en[s.hintKey]).toBeTruthy();
-  });
-});
 
 describe("Overview needs-action queues", () => {
   const counts = { stuscleOrders: 1, batchesNotReceived: 2, chipPending: 3, scannedNotLive: 0, noProduct: 5 };
@@ -90,19 +63,6 @@ describe("Overview activity feed", () => {
   it("filters by kind", () => {
     expect(activityFeed(overview, "scans").map((i) => i.key)).toEqual(["e1"]);
     expect(activityFeed(overview, "destination").map((i) => i.key)).toEqual(["ch1"]);
-  });
-});
-
-describe("Batches pipeline", () => {
-  const b = (stage: string, pendingCount = 0) => ({ stage, pendingCount });
-
-  it("groups by stage in pipeline order, cancelled last, empty stages left out", () => {
-    const groups = groupBatchesByStage([b("received"), b("issued", 3), b("cancelled", 2), b("receiving", 1), b("issued", 4)]);
-    expect(groups.map((g) => [g.stage, g.batches.length])).toEqual([["issued", 2], ["receiving", 1], ["received", 1], ["cancelled", 1]]);
-  });
-
-  it("lists as awaiting pieces only live batches with codes not received", () => {
-    expect([b("issued", 3), b("received"), b("cancelled", 2)].map(isAwaitingPieces)).toEqual([true, false, false]);
   });
 });
 
@@ -163,6 +123,15 @@ describe("Distribution", () => {
     expect(distributionView("nope")).toBe("handout");
     expect(distributionView(null)).toBe("handout");
     expect(handOutHref("b-1")).toBe("/kits?view=handout&batch=b-1");
+  });
+
+  it("keeps old ?view=kits links working: Hand out, with Past hand-outs open", () => {
+    expect(distributionView("kits")).toBe("handout");
+    expect(pastHandOutsOpen("kits")).toBe(true);
+    expect(pastHandOutsOpen("handout", "12", "")).toBe(true);
+    expect(pastHandOutsOpen("handout", "", "3")).toBe(true);
+    expect(pastHandOutsOpen("handout", "", "")).toBe(false);
+    expect(pastHandOutsOpen(null)).toBe(false);
   });
 
   it("adds codes once, in reading order, telling which were already there", () => {

@@ -7,6 +7,7 @@ import {
   PRINT_JOB_STATUSES,
   PRINT_PREVIEW_CONTENT_TYPE,
   printJobCreateSchema,
+  printJobStockSchema,
   printJobUpdateSchema,
   printModelInputSchema,
   printModelPatchSchema,
@@ -271,10 +272,23 @@ export function registerProductionRoutes(app: Express, deps: { device: readonly 
     const id = uuidParam(req.params.id, res);
     if (!id) return;
     try {
-      const { action, reason } = printJobUpdateSchema.parse(req.body);
-      res.json(await production.transitionJob(id, { action, reason: reason ?? null, userId: userIdOf(req), source: "admin" }));
+      const { action, reason, badPieces } = printJobUpdateSchema.parse(req.body);
+      res.json(await production.transitionJob(id, { action, reason: reason ?? null, badPieces, userId: userIdOf(req), source: "admin" }));
     } catch (err) {
       fail(res, err, "Failed to update the print order");
+    }
+  });
+
+  // A plate printed before marking printed stocked its pieces: put the pending ones in house stock now (the listed
+  // bad pieces become damaged). The same code path as the `printed` transition.
+  app.post(`${jobs}/:id/stock`, requireTagAdmin, async (req, res) => {
+    const id = uuidParam(req.params.id, res);
+    if (!id) return;
+    try {
+      const { badPieces } = printJobStockSchema.parse(req.body ?? {});
+      res.json(await production.stockJob(id, { badPieces, userId: userIdOf(req), source: "admin" }));
+    } catch (err) {
+      fail(res, err, "Failed to put the pieces in stock");
     }
   });
 

@@ -3,7 +3,7 @@ import { Package } from "lucide-react";
 import type { TagListItem } from "@shared/tagsApi";
 import { CompactDataTable, type CompactDataColumn } from "@/components/xpot/CompactDataTable";
 import { EmptyState } from "@/components/xpot/EmptyState";
-import { CHIP_STATUS_TONE, Pill, toneOf } from "@/components/xpot/StatusPill";
+import { CHIP_STATUS_TONE, Pill, SOLD_TONE, toneOf, type PillTone } from "@/components/xpot/StatusPill";
 import { GLASS_CLASS } from "@/components/xpot/surface";
 import { TagPieceMention } from "@/components/xpot/TagProductThumbnail";
 import { ListPager, usePagedList } from "@/components/xpot/pagination";
@@ -12,12 +12,12 @@ import { manageTagsMessages } from "@/i18n/messages/manageTags";
 import { manageTagsPiecesMessages } from "@/i18n/messages/manageTagsPieces";
 import { formatDate, formatDateTime } from "./api";
 import { useTagLabels } from "./labels";
-import { PieceStatusPill } from "./ui";
+import { pieceWhere, type PlaceId } from "./where-model";
 
 // The one pieces table of the Tags admin: Inventory, a batch's pieces and a kit's pieces. On
-// CompactDataTable from md up, tappable cards on phones. Every row shows the digital status and the
-// physical stock (or "Sold") side by side; the caller picks the optional columns. Text and pills
-// align left, counts right.
+// CompactDataTable from md up, tappable cards on phones. Every row shows one "Where" pill (where the piece
+// is, then "· Live" when its link works; where-model.ts); the caller picks the optional columns. Text and
+// pills align left, counts right.
 
 /** Optional columns, always drawn in this order after Code and Status; "destination" is a line under the customer. */
 export type PieceColumn = "customer" | "destination" | "reseller" | "chip" | "scans" | "lastInteraction" | "sold" | "batch";
@@ -31,6 +31,27 @@ export interface PieceSelection {
   /** Codes are the piece's public code. */
   onToggle: (code: string) => void;
   onToggleAll: (codes: string[], on: boolean) => void;
+}
+
+/** A place's colour; a live piece is green (blue once sold, so "Sold" never reads as plain "Live"). */
+const PLACE_TONE: Record<PlaceId, PillTone> = {
+  house: "slate",
+  withResellers: "violet",
+  sold: SOLD_TONE,
+  notReceived: "amber",
+  damaged: "red",
+  lost: "red",
+  disabled: "red",
+  retired: "muted",
+  reserved: "blue",
+  internalUse: "slate",
+};
+
+/** The one status pill of a piece: where it is, and whether it is live. */
+export function WherePill({ piece }: { piece: TagListItem }) {
+  const labels = useTagLabels();
+  const { place, live } = pieceWhere(piece);
+  return <Pill tone={live && place !== "sold" ? "green" : PLACE_TONE[place]}>{labels.wherePiece(place, live)}</Pill>;
 }
 
 function Checkbox({ checked, disabled, label, onChange }: { checked: boolean; disabled?: boolean; label: string; onChange: (on: boolean) => void }) {
@@ -174,7 +195,7 @@ export function PieceTable({
         />
       ),
     },
-    { key: "status", label: tm("colStatus"), render: (p) => <PieceStatusPill status={p.status} stockStatus={p.stockStatus} saleId={p.saleId} /> },
+    { key: "where", label: tm("colWhere"), render: (p) => <WherePill piece={p} /> },
     ...ORDER.filter(has).map((column) => cells[column]),
   ];
 
@@ -200,7 +221,7 @@ export function PieceTable({
                   customer={has("customer") ? p.leadName : null}
                   className="max-w-full"
                 />
-                <div className="mt-2"><PieceStatusPill status={p.status} stockStatus={p.stockStatus} saleId={p.saleId} /></div>
+                <div className="mt-2"><WherePill piece={p} /></div>
                 {meta ? <p className="mt-1.5 truncate text-xs text-white/50">{meta}</p> : null}
                 {has("scans") ? (
                   <p className="mt-0.5 text-xs tabular-nums text-white/40">

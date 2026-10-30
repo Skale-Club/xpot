@@ -1,39 +1,11 @@
-// Overview: the "Needs action" queues, the stock funnel and the activity feed. Each number links to the list that
-// reproduces it: funnel steps are the shared stock numbers (shared/tagMetrics.ts) the Pieces "Stock" filter lists,
-// piece queues open /overview/<queue> (GET /api/xpot/tags?queue=). Pure, unit-tested (tests/admin-tags-overview.test.ts).
+// Overview: the "Needs action" queues and the activity feed. Each number links to the list that reproduces it: piece
+// queues open /overview/<queue> (GET /api/xpot/tags?queue=). Pure, unit-tested (tests/admin-tags-overview.test.ts).
 
-import type { TagStockMetric } from "@shared/tagMetrics";
 import type { TagPieceQueue, TagQueueCounts } from "@shared/tagQueues";
 import type { TagOverview } from "@shared/tagsApi";
 import type { adminTagsFlowMessages } from "@/i18n/messages/adminTagsFlow";
 
 type FlowKey = keyof (typeof adminTagsFlowMessages)["en"];
-
-export type FunnelStepId = keyof TagOverview["funnel"];
-
-export interface FunnelStep {
-  id: FunnelStepId;
-  /** The shared stock number the step counts. */
-  metric: TagStockMetric;
-  count: number;
-  /** Path under /admin/tags of the list behind the count. */
-  href: string;
-  labelKey: FlowKey;
-  hintKey: FlowKey;
-}
-
-/** Each step, its stock number and the Pieces filter that lists exactly it (PiecesTab STOCK_METRIC_FILTERS). */
-const FUNNEL: ReadonlyArray<Omit<FunnelStep, "count">> = [
-  { id: "notReceived", metric: "notReceived", href: "/pieces?stock=pending", labelKey: "funnelNotReceived", hintKey: "funnelNotReceivedHint" },
-  { id: "house", metric: "house", href: "/pieces?stock=house", labelKey: "funnelHouse", hintKey: "funnelHouseHint" },
-  { id: "withResellers", metric: "withResellers", href: "/pieces?stock=reps", labelKey: "funnelWithResellers", hintKey: "funnelWithResellersHint" },
-  { id: "sold", metric: "sold", href: "/pieces?stock=sold", labelKey: "funnelSold", hintKey: "funnelSoldHint" },
-  { id: "live", metric: "live", href: "/pieces?status=active", labelKey: "funnelLive", hintKey: "funnelLiveHint" },
-];
-
-export function stockFunnel(funnel: TagOverview["funnel"]): FunnelStep[] {
-  return FUNNEL.map((step) => ({ ...step, count: funnel[step.id] }));
-}
 
 export type QueueId = keyof TagQueueCounts;
 

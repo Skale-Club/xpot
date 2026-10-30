@@ -351,8 +351,15 @@ describe("serialized print orders", () => {
     expect(printed.body.status).toBe("printed");
     const steps = (await q("SELECT action FROM tag_journey_entries WHERE batch_id = $1 AND action IN ('sliced', 'printed') ORDER BY occurred_at", [order.batchId])).map((r) => r.action);
     expect(steps).toEqual(["sliced", "printed"]);
+    // Marking it printed put the whole batch in house stock: nothing is left to scan.
+    expect(printed.body).toMatchObject({ pieceCount: 4, receivedCount: 4, pendingCount: 0 });
+    const stocked = await q("SELECT stock_status, ownership_type, registered_at IS NOT NULL AS registered FROM tags WHERE batch_id = $1", [order.batchId]);
+    expect(stocked).toEqual(Array(4).fill({ stock_status: "available", ownership_type: "company", registered: true }));
+    const intakes = await q("SELECT m.from_stock_status, m.to_stock_status FROM tag_stock_movements m JOIN tags t ON t.id = m.tag_id WHERE t.batch_id = $1 AND m.movement_type = 'intake'", [order.batchId]);
+    expect(intakes).toEqual(Array(4).fill({ from_stock_status: "pending", to_stock_status: "available" }));
+    expect((await q("SELECT count(*)::int AS n FROM tag_journey_entries WHERE batch_id = $1 AND action = 'pieces_stocked'", [order.batchId]))[0].n).toBe(1);
     const batch = (await request(app, "GET", "/api/xpot/admin/tag-batches")).body.find((b: any) => b.id === order.batchId);
-    expect(batch.stage).toBe("printed");
+    expect(batch.stage).toBe("received");
 
     const again = await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/transition`, { action: "printed" });
     expect(again.status).toBe(409);
@@ -393,7 +400,7 @@ describe("serialized print orders", () => {
 
     const linked = await request(app, "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white", existingBatch: legacy.body.batchCode });
     expect(linked.status).toBe(201);
-    expect(linked.body).toMatchObject({ quantity: 4, open: true });
+    expect(linked.body).toMatchObject({ quantity: 4, open: false });
     expect(linked.body.plates[0]).toMatchObject({ status: "printed", batchId: legacy.body.id, quantity: 4, printedAt: "2026-10-21T12:00:00.000Z", plateNumber: 1 });
 
     const twice = await request(app, "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white", existingBatch: legacy.body.batchCode });
@@ -441,7 +448,7 @@ describe("print requests", () => {
     expect(tooMany.body).toMatchObject({ code: "print_too_many_plates", params: { max: 80 } });
   });
 
-  it("keeps printed requests open until receiving is complete, while failed/cancelled plates do not block completion", async () => {
+  it("keeps a request open until every plate is printed, while failed/cancelled plates do not block completion", async () => {
     const app = admin();
     await createSerializedModel(app);
     const asked = (await request(app, "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white", quantity: 6 })).body;
@@ -459,22 +466,65 @@ describe("print requests", () => {
     expect(open[0].plates.map((p: any) => [p.plateNumber, p.status])).toEqual([[1, "printed"], [2, "failed"], [2, "requested"]]);
     expect(open[0].plates[0].downloads).toEqual([expect.objectContaining({ kind: "3mf", filename: "plate.3mf" })]);
 
+    // The printed plate is done (its pieces are in stock); the redone one is what keeps the request open.
     await request(app, "POST", `/api/xpot/admin/print-jobs/${redo.body.id}/transition`, { action: "cancel" });
-    expect((await request(app, "GET", "/api/xpot/admin/print-requests")).body.map((r: any) => r.id)).toEqual([asked.id]);
-    expect((await request(app, "GET", "/api/xpot/admin/print-requests?status=done")).body).toEqual([]);
-    const pieces = await q("SELECT public_code FROM tags WHERE batch_id = $1 ORDER BY serial_number", [one.batchId]);
-    for (const piece of pieces.slice(0, -1)) {
-      const received = await request(app, "POST", `/api/xpot/admin/tag-batches/${one.batchId}/scan`, { value: piece.public_code, idempotencyKey: `receive:${piece.public_code}` });
-      expect(received.status).toBe(201);
-    }
-    expect((await request(app, "GET", "/api/xpot/admin/print-requests")).body).toHaveLength(1);
-    const last = pieces[pieces.length - 1];
-    expect((await request(app, "POST", `/api/xpot/admin/tag-batches/${one.batchId}/scan`, { value: last.public_code, idempotencyKey: `receive:${last.public_code}` })).status).toBe(201);
     expect((await request(app, "GET", "/api/xpot/admin/print-requests")).body).toEqual([]);
     const done = (await request(app, "GET", "/api/xpot/admin/print-requests?status=done&model=plate-large-menu-white")).body;
     expect(done.map((r: any) => [r.id, r.open])).toEqual([[asked.id, false]]);
     expect((await request(app, "GET", `/api/xpot/admin/print-requests/${asked.id}`)).body.plates).toHaveLength(3);
     expect((await request(app, "GET", `/api/xpot/admin/print-requests/${crypto.randomUUID()}`)).body.code).toBe("print_request_not_found");
+  });
+
+  it("puts the good pieces in stock and the ones listed as bad become damaged, all or nothing", async () => {
+    const app = admin();
+    await createSerializedModel(app);
+    const order = await firstPlate(app, { model: "plate-large-menu-white" });
+    await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/files?filename=plate.3mf`, bytes("3mf"));
+    await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/transition`, { action: "complete" });
+    const [bad, other] = [order.pieces[1].publicCode as string, order.pieces[2].publicCode as string];
+
+    // A code outside the batch refuses the whole step: the plate is not printed and no piece moved.
+    const refused = await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/transition`, { action: "printed", badPieces: ["ZZZZ9999"] });
+    expect(refused.status).toBe(400);
+    expect(refused.body.code).toBe("piece_not_in_batch");
+    expect((await request(app, "GET", `/api/xpot/admin/print-jobs/${order.id}`)).body).toMatchObject({ status: "ready", pendingCount: 4 });
+    expect((await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/transition`, { action: "fail", reason: "x", badPieces: [bad] })).status).toBe(400);
+
+    const printed = await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/transition`, { action: "printed", badPieces: [bad.toLowerCase()] });
+    expect(printed.status).toBe(200);
+    expect(printed.body).toMatchObject({ status: "printed", pieceCount: 4, receivedCount: 3, pendingCount: 0 });
+    const status = Object.fromEntries((await q("SELECT public_code, stock_status FROM tags WHERE batch_id = $1", [order.batchId])).map((t) => [t.public_code, t.stock_status]));
+    expect(status[bad]).toBe("damaged");
+    expect(status[other]).toBe("available");
+    expect(Object.values(status).filter((v) => v === "available")).toHaveLength(3);
+    const [move] = await q("SELECT m.movement_type, m.from_stock_status, m.to_stock_status, m.reason FROM tag_stock_movements m JOIN tags t ON t.id = m.tag_id WHERE t.public_code = $1 AND m.movement_type = 'damage'", [bad]);
+    expect(move).toMatchObject({ movement_type: "damage", from_stock_status: "pending", to_stock_status: "damaged" });
+    expect((await q("SELECT count(*)::int AS n FROM tag_journey_entries WHERE batch_id = $1 AND action = 'piece_damaged'", [order.batchId]))[0].n).toBe(1);
+  });
+
+  it("puts the pending pieces of a plate printed before this change in stock, and only once", async () => {
+    const app = admin();
+    await createSerializedModel(app);
+    const order = await firstPlate(app, { model: "plate-large-menu-white" });
+    expect((await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/stock`)).body.code).toBe("print_job_state");
+
+    await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/files?filename=plate.3mf`, bytes("3mf"));
+    await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/transition`, { action: "complete" });
+    await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/transition`, { action: "printed" });
+    // The old behaviour: printed, every piece still waiting for its scan.
+    await q("UPDATE tags SET stock_status = 'pending', registered_at = NULL WHERE batch_id = $1", [order.batchId]);
+    expect((await request(app, "GET", `/api/xpot/admin/print-jobs/${order.id}`)).body).toMatchObject({ receivedCount: 0, pendingCount: 4 });
+
+    const bad = order.pieces[3].publicCode as string;
+    const stocked = await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/stock`, { badPieces: [bad] });
+    expect(stocked.status).toBe(200);
+    expect(stocked.body).toMatchObject({ status: "printed", receivedCount: 3, pendingCount: 0 });
+    expect((await q("SELECT stock_status FROM tags WHERE public_code = $1", [bad]))[0].stock_status).toBe("damaged");
+
+    const again = await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/stock`);
+    expect(again.status).toBe(200);
+    expect(again.body).toMatchObject({ receivedCount: 3, pendingCount: 0 });
+    expect((await q("SELECT count(*)::int AS n FROM tag_stock_movements WHERE movement_type = 'intake'"))[0].n).toBe(3 + 4);
   });
 
   it("gives the bench the plates its Print Now folder holds, with signed links, and nothing is sent to a printer", async () => {
@@ -545,24 +595,24 @@ describe("feedback and assembly", () => {
     expect((await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/problem`, { text: "" })).status).toBe(400);
   });
 
-  it("takes the parts a piece consumes off their counts once, for the pieces received", async () => {
+  it("takes the parts a piece consumes off their counts once, for the pieces in stock", async () => {
     const app = admin();
     const order = await printedOrder(app, [{ part: "base-large", perPiece: 1 }]);
     await request(app, "POST", "/api/xpot/admin/print-models/base-large/part-count", { delta: 10, reason: "printed" });
-    for (const piece of order.pieces.slice(0, 3)) {
-      expect((await request(app, "POST", `/api/xpot/admin/tag-batches/${order.batchId}/scan`, { value: piece.publicCode })).status).toBe(201);
-    }
+    // One piece was marked bad (not stock) and one is still pending: only the two in stock are assembled.
+    await q("UPDATE tags SET stock_status = 'damaged' WHERE public_code = $1", [order.pieces[0].publicCode]);
+    await q("UPDATE tags SET stock_status = 'pending' WHERE public_code = $1", [order.pieces[1].publicCode]);
     const assembled = await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/assembled`);
     expect(assembled.status).toBe(200);
     expect(assembled.body.report.assembledAt).toBeTruthy();
-    expect((await request(app, "GET", "/api/xpot/admin/print-models/base-large")).body.onHand).toBe(7);
+    expect((await request(app, "GET", "/api/xpot/admin/print-models/base-large")).body.onHand).toBe(8);
     expect((await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/assembled`)).body.code).toBe("print_assemble_done");
 
     // The same step written from the journey panel (or MCP) does not take them twice.
     await request(app, "POST", "/api/xpot/admin/tag-journey", { kind: "execution", action: "assembled", title: "Assembled again", batchId: order.batchId });
-    expect((await request(app, "GET", "/api/xpot/admin/print-models/base-large")).body.onHand).toBe(7);
+    expect((await request(app, "GET", "/api/xpot/admin/print-models/base-large")).body.onHand).toBe(8);
     const moves = (await request(app, "GET", "/api/xpot/admin/print-models/base-large")).body.partMovements;
-    expect(moves.map((m: any) => [m.delta, m.reason])).toEqual([[-3, "assembled"], [10, "printed"]]);
+    expect(moves.map((m: any) => [m.delta, m.reason])).toEqual([[-2, "assembled"], [10, "printed"]]);
   });
 
   it("warns below a part's reorder point", async () => {

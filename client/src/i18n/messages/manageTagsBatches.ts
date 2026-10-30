@@ -44,7 +44,6 @@ const en = {
   createIssuedBatch_one: "Issue {count} code",
   createIssuedBatch_other: "Issue {count} codes",
   receivedCount: "{received} of {total} received",
-  pendingPieces: "Not received",
   receiveIntro: "Scan each piece once it is printed or delivered: it enters house stock, and the scan proves its QR reads.",
   fieldNameRequired: "Name *",
   namePlaceholder: "Google Review signs — first batch",
@@ -55,7 +54,6 @@ const en = {
   batchCodeAutomatic: "Automatic",
   legacyHint: "Migration only. One code per line; leave empty to generate new codes.",
   generating: "Generating…",
-  colCreated: "Created",
 
   // Batch detail
   filterAll: "All",
@@ -74,13 +72,6 @@ const en = {
   chipsShare: "{percent} of chips",
   manufacturingIntro:
     "The CSV maps serial → code → QR/NFC link → QR file. The ZIP holds the CSV plus one SVG (optionally a 1200px PNG) per piece. Write each NFC chip with its row's nfc_url and lock it only after its QR and NFC both pass a phone test.",
-  givePiecesTitle: "Hand out pieces to a reseller",
-  noHouseLeft: "No pieces of this batch are left in house stock.",
-  giveKitIntro_one: "Hand out the next unsold house-stock piece of this batch to a reseller as a kit ({count} available).",
-  giveKitIntro_other: "Hand out the next unsold house-stock pieces of this batch to a reseller as a kit ({count} available).",
-  piecesHeading: "Pieces ({count})",
-  noPiecesMatch: "No pieces match this filter.",
-  batchJourney: "Batch activity",
   addPiecesIntro: "Scan one piece at a time. Only accepted scans enter this batch and house stock.",
   registeredCount: "{count} registered",
   scanPlaceholder: "Scan or type the Xpot QR/NFC link or code",
@@ -211,7 +202,6 @@ export const manageTagsBatchesMessages: Dictionary<typeof en> = {
     createIssuedBatch_one: "Emitir {count} código",
     createIssuedBatch_other: "Emitir {count} códigos",
     receivedCount: "{received} de {total} recebidas",
-    pendingPieces: "Não recebidas",
     receiveIntro: "Escaneie cada peça quando ela estiver impressa ou entregue: ela entra no estoque da casa, e a leitura prova que o QR funciona.",
     fieldNameRequired: "Nome *",
     namePlaceholder: "Placas de avaliação Google — primeiro lote",
@@ -222,7 +212,6 @@ export const manageTagsBatchesMessages: Dictionary<typeof en> = {
     batchCodeAutomatic: "Automático",
     legacyHint: "Só para migração. Um código por linha; deixe vazio para gerar códigos novos.",
     generating: "Gerando…",
-    colCreated: "Criado",
 
     // Batch detail
     filterAll: "Todas",
@@ -241,13 +230,6 @@ export const manageTagsBatchesMessages: Dictionary<typeof en> = {
     chipsShare: "{percent} dos chips",
     manufacturingIntro:
       "O CSV liga número de série → código → link QR/NFC → arquivo do QR. O ZIP traz o CSV mais um SVG (opcionalmente um PNG de 1200px) por peça. Grave cada chip NFC com o nfc_url da sua linha e lacre-o só depois que o QR e o NFC passarem num teste com o celular.",
-    givePiecesTitle: "Entregar peças a um revendedor",
-    noHouseLeft: "Nenhuma peça deste lote restou no estoque da casa.",
-    giveKitIntro_one: "Entregue as próximas peças não vendidas do estoque da casa deste lote a um revendedor, como um kit ({count} disponível).",
-    giveKitIntro_other: "Entregue as próximas peças não vendidas do estoque da casa deste lote a um revendedor, como um kit ({count} disponíveis).",
-    piecesHeading: "Peças ({count})",
-    noPiecesMatch: "Nenhuma peça corresponde a este filtro.",
-    batchJourney: "Atividade do lote",
     addPiecesIntro: "Escaneie uma peça por vez. Somente leituras aceitas entram neste lote e no estoque da casa.",
     registeredCount: "{count} cadastradas",
     scanPlaceholder: "Escaneie ou digite o link/código QR ou NFC do Xpot",
@@ -375,7 +357,6 @@ export const manageTagsBatchesMessages: Dictionary<typeof en> = {
     createIssuedBatch_one: "Emitir {count} código",
     createIssuedBatch_other: "Emitir {count} códigos",
     receivedCount: "{received} de {total} recibidas",
-    pendingPieces: "No recibidas",
     receiveIntro: "Escanea cada pieza cuando esté impresa o entregada: entra al stock de la casa, y la lectura prueba que su QR funciona.",
     fieldNameRequired: "Nombre *",
     namePlaceholder: "Placas de reseñas de Google — primer lote",
@@ -386,7 +367,6 @@ export const manageTagsBatchesMessages: Dictionary<typeof en> = {
     batchCodeAutomatic: "Automático",
     legacyHint: "Solo para migración. Un código por línea; déjalo vacío para generar códigos nuevos.",
     generating: "Generando…",
-    colCreated: "Creado",
 
     // Batch detail
     filterAll: "Todas",
@@ -405,13 +385,6 @@ export const manageTagsBatchesMessages: Dictionary<typeof en> = {
     chipsShare: "{percent} de los chips",
     manufacturingIntro:
       "El CSV relaciona número de serie → código → enlace QR/NFC → archivo del QR. El ZIP trae el CSV más un SVG (opcionalmente un PNG de 1200px) por pieza. Graba cada chip NFC con el nfc_url de su fila y séllalo solo después de que su QR y su NFC pasen una prueba con el teléfono.",
-    givePiecesTitle: "Entregar piezas a un revendedor",
-    noHouseLeft: "No quedan piezas de este lote en el stock de la casa.",
-    giveKitIntro_one: "Entrega las próximas piezas sin vender del stock de la casa de este lote a un revendedor como kit ({count} disponible).",
-    giveKitIntro_other: "Entrega las próximas piezas sin vender del stock de la casa de este lote a un revendedor como kit ({count} disponibles).",
-    piecesHeading: "Piezas ({count})",
-    noPiecesMatch: "Ninguna pieza coincide con este filtro.",
-    batchJourney: "Actividad del lote",
     addPiecesIntro: "Escanea una pieza a la vez. Solo las lecturas aceptadas entran en este lote y en el stock de la casa.",
     registeredCount: "{count} registradas",
     scanPlaceholder: "Escanea o escribe el enlace/código QR o NFC de Xpot",

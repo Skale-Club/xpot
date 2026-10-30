@@ -1,13 +1,12 @@
-import { useCallback, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useSearchParams } from "wouter";
-import { useMutation } from "@tanstack/react-query";
-import { Boxes, Building2, CircleDot, Layers, Network, Nfc, Package, Plus, ScanLine, Users } from "lucide-react";
-import { FilterBar, FilterSearch, FilterSelect } from "@/components/xpot/filters";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { Building2, Layers, MapPin, Network, Nfc, Package, Plus, ScanLine, SlidersHorizontal, Users } from "lucide-react";
+import { FilterBar, FilterChips, FilterSearch, FilterSelect, FilterToggle } from "@/components/xpot/filters";
 import { useUrlFilters } from "@/hooks/use-url-filters";
 import { ListPager, useOffsetPages } from "@/components/xpot/pagination";
-import { TAG_PRODUCT_TYPES, TAG_STATUSES, TAG_STOCK_STATUSES } from "@shared/tags";
-import { countStockMetric, type TagStockMetric } from "@shared/tagMetrics";
-import type { TagDetail, TagListItem } from "@shared/tagsApi";
+import { TAG_PRODUCT_TYPES } from "@shared/tags";
+import type { TagDetail, TagListItem, TagOverview } from "@shared/tagsApi";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
@@ -24,10 +23,10 @@ import { MasterDetail } from "@/components/xpot/MasterDetail";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { useIsSuperAdmin } from "@/components/xpot/AdminBadge";
 import { useTagLabels } from "./labels";
+import { WHERE_CHIPS, whereQuery, whereSelection, type WhereChip } from "./where-model";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { shellMessages } from "@/i18n/messages/shell";
-import { tagsMessages } from "@/i18n/messages/tags";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
 import { manageTagsPiecesMessages } from "@/i18n/messages/manageTagsPieces";
 import { manageTagsBatchesMessages } from "@/i18n/messages/manageTagsBatches";
@@ -47,24 +46,21 @@ const METHOD_KEYS = [
 ] as const;
 
 /**
- * Filters live in the URL (?status=…&stock=house…) so Overview links and the back button keep them. `status` is the
- * digital status (the link) and `stock` the physical piece, separately: nothing is added behind the user's back.
+ * Filters live in the URL (?where=house&product=…) so Overview links and the back button keep them. `where` is the one
+ * "where is it" answer (where-model.ts); `status` and `stock` are the old two-filter URLs, still honoured.
  */
-const PIECE_FILTERS = { status: "", stock: "", product: "", rep: "", lead: "", batch: "", method: "", search: "", org: "" };
+const PIECE_FILTERS = { where: "", status: "", stock: "", product: "", rep: "", lead: "", batch: "", method: "", search: "", org: "" };
 type Filters = Record<keyof typeof PIECE_FILTERS, string>;
+/** The filters behind "More filters". */
+const MORE_FILTERS = ["rep", "lead", "batch", "method", "org"] as const;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const posInt = (v: string | undefined) => (v && /^\d+$/.test(v) && Number(v) > 0 ? v : undefined);
 
-/** Stock filter values that are a shared stock number (shared/tagMetrics.ts) rather than one stock status. */
-const STOCK_METRIC_FILTERS: Record<string, TagStockMetric> = { house: "house", reps: "withResellers", sold: "sold" };
-
 /** Translate the URL filters into the list endpoint's query (listQuerySchema), dropping junk. */
 function listUrl(f: Filters, limit: number, offset: number): string {
   return withQuery("/api/xpot/tags", {
-    status: f.status && (TAG_STATUSES as readonly string[]).includes(f.status) ? f.status : undefined,
-    metric: STOCK_METRIC_FILTERS[f.stock],
-    stockStatus: !STOCK_METRIC_FILTERS[f.stock] && (TAG_STOCK_STATUSES as readonly string[]).includes(f.stock) ? f.stock : undefined,
+    ...whereQuery(f),
     productType: f.product && (TAG_PRODUCT_TYPES as readonly string[]).includes(f.product) ? f.product : undefined,
     house: f.rep === "house" ? "1" : undefined,
     repId: f.rep !== "house" ? posInt(f.rep) : undefined,
@@ -147,7 +143,6 @@ function NewPieceDialog({ open, onOpenChange, onCreated }: { open: boolean; onOp
 export function PiecesTab({ go }: { go: (path: string) => void }) {
   const tm = useT(manageTagsPiecesMessages);
   const tc = useT(commonMessages);
-  const tt = useT(tagsMessages);
   const tg = useT(manageTagsMessages);
   const labels = useTagLabels();
   const urlFilters = useUrlFilters(PIECE_FILTERS);
@@ -190,14 +185,22 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
   });
   const { items: tags, isLoading, error, refetch } = pieces;
 
-  const statusCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const t of tags) counts[t.status] = (counts[t.status] ?? 0) + 1;
-    return counts;
-  }, [tags]);
-  // Of the loaded pieces, the company stock as Overview counts it.
-  const houseCount = useMemo(() => countStockMetric(tags, "house"), [tags]);
+  // The stock summary's totals: the same query as Overview (shared cache), so a chip reads what Overview counts and
+  // not the loaded page. A fleet-wide number, so it is left out while one organization is picked.
+  const { data: overview } = useQuery<TagOverview>({
+    queryKey: [ADMIN_TAGS_KEY, "overview"],
+    queryFn: () => getJson(`/api/xpot/admin/tags/overview?timezoneOffset=${new Date().getTimezoneOffset()}`),
+    staleTime: STALE_MS,
+  });
   const hasFilters = urlFilters.activeCount() > 0;
+  const where = whereSelection(filters);
+  const chipCount = (id: WhereChip) => (filters.org ? undefined : overview?.funnel[id]);
+  // "More filters" opens by itself whenever one of them narrows the list (a link, the back button), so it never hides one.
+  const moreActive = urlFilters.activeCount([...MORE_FILTERS]);
+  const [moreOpen, setMoreOpen] = useState(moreActive > 0);
+  useEffect(() => {
+    if (moreActive > 0) setMoreOpen(true);
+  }, [moreActive]);
 
   const repOptions = [{ value: "house", label: tm("houseStockNoReseller") }, ...reps.map((r) => ({ value: String(r.id), label: labels.repOption(r) }))];
   // A rep/lead/batch in the URL that isn't in the pickers (e.g. still loading) still shows as selected.
@@ -206,6 +209,12 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
   if (filters.lead && !leadOptions.some((o) => o.value === filters.lead)) leadOptions.push({ value: filters.lead, label: tm("customerNumber", { id: filters.lead }) });
   const batchOptions = batches.map((b) => ({ value: b.id, label: b.batchCode }));
   if (filters.batch && !batchOptions.some((o) => o.value === filters.batch)) batchOptions.push({ value: filters.batch, label: tm("selectedBatch") });
+  // An old ?status= / ?stock= value with no bucket of its own (e.g. "Set up, not live") still shows as chosen.
+  const whereOptions = [...labels.whereOptions];
+  if (where && !whereOptions.some((o) => o.value === where)) {
+    const [kind, raw] = where.split(":");
+    whereOptions.push({ value: where, label: kind === "status" ? labels.status(raw) : labels.stock(raw) });
+  }
   const methodOptions = METHOD_KEYS.map((m) => ({ value: m.value, label: tm(m.key) }));
   const orgOptions = organizationFilterOptions(organizations, filters.org, (id) => tg("organizationNumber", { id }));
 
@@ -220,17 +229,6 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
     <EmptyState tone="tags" icon={Nfc} title={hasFilters ? tm("noMatch") : tm("noPiecesYet")} />
   ) : (
     <>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-white/50" data-testid="admin-pieces-counts">
-        <span className="font-semibold text-white/80">
-          {tt.plural("pieces", tags.length, pieces.hasMore ? { count: `${tags.length}+` } : undefined)}
-        </span>
-        {TAG_STATUSES.filter((s) => statusCounts[s]).map((s) => (
-          <span key={s} className="tabular-nums">
-            {tm("statusCount", { label: labels.status(s), count: statusCounts[s] })}
-          </span>
-        ))}
-        <span className="tabular-nums">{tm("inHouse", { count: houseCount })}</span>
-      </div>
       <PieceTable
         pieces={tags}
         onOpen={openPiece}
@@ -245,31 +243,45 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
 
   return (
     <div className="space-y-4" data-testid="admin-tags-pieces">
+      <FilterChips<WhereChip | "">
+        ariaLabel={tg("stockSummary")}
+        accent="tags"
+        value={WHERE_CHIPS.find((id) => id === where) ?? ""}
+        onChange={(id) => set({ where: id === where ? "" : id, status: "", stock: "" })}
+        items={WHERE_CHIPS.map((id) => ({ id, label: labels.where(id), count: chipCount(id), testId: `admin-pieces-chip-${id}` }))}
+      />
       <FilterBar
         testId="admin-pieces-filters"
         search={<FilterSearch value={filters.search} onChange={(search) => set({ search })} placeholder={tm("searchPlaceholder")} debounceMs={350} testId="admin-pieces-search" />}
         actions={
           isAdmin ? (
-            <Button type="button" variant="brand" accent="tags" className="min-h-10" onClick={() => setCreating(true)} data-testid="admin-pieces-new">
+            // Quiet on purpose: a loose piece outside any production is the exception, not the way to add stock.
+            <Button type="button" variant="ghost" className="min-h-10" onClick={() => setCreating(true)} data-testid="admin-pieces-new">
               <Plus className="h-4 w-4" />{tm("newPiece")}
             </Button>
           ) : undefined
         }
         controls={
           <>
-            <FilterSelect value={filters.status} onChange={(status) => set({ status })} placeholder={tm("allStatuses")} options={labels.statusOptions} icon={CircleDot} testId="admin-pieces-status" />
-            <FilterSelect value={filters.stock} onChange={(stock) => set({ stock })} placeholder={tm("allStock")} options={labels.stockOptions} icon={Boxes} testId="admin-pieces-stock" />
+            <FilterSelect value={where} onChange={(next) => set({ where: next, status: "", stock: "" })} placeholder={tg("allWhere")} options={whereOptions} icon={MapPin} testId="admin-pieces-where" />
             <FilterSelect value={filters.product} onChange={(product) => set({ product })} placeholder={tm("allProducts")} options={labels.productOptions} icon={Package} />
-            <FilterSelect value={filters.rep} onChange={(rep) => set({ rep })} placeholder={tg("allResellers")} options={repOptions} icon={Users} testId="admin-pieces-rep" />
-            <FilterSelect value={filters.lead} onChange={(lead) => set({ lead })} placeholder={tm("allCustomers")} options={leadOptions} icon={Building2} />
-            <FilterSelect value={filters.batch} onChange={(batch) => set({ batch })} placeholder={tm("allBatches")} options={batchOptions} icon={Layers} />
-            <FilterSelect value={filters.method} onChange={(method) => set({ method })} placeholder={tm("anyMethod")} options={methodOptions} icon={ScanLine} />
-            {canManage ? (
-              <FilterSelect value={filters.org} onChange={(org) => set({ org })} placeholder={tg("allOrganizations")} options={orgOptions} icon={Network} testId="admin-pieces-org" />
-            ) : null}
+            <FilterToggle pressed={moreOpen} onChange={setMoreOpen} icon={SlidersHorizontal} label={moreActive ? tg("moreFiltersCount", { count: moreActive }) : tg("moreFilters")} testId="admin-pieces-more" />
           </>
         }
-        summary={{ shown: tags.length, active: hasFilters, onClear: () => urlFilters.reset() }}
+        secondary={
+          moreOpen ? (
+            <div className="flex flex-wrap items-center gap-2" data-testid="admin-pieces-more-filters">
+              <FilterSelect value={filters.rep} onChange={(rep) => set({ rep })} placeholder={tg("allResellers")} options={repOptions} icon={Users} testId="admin-pieces-rep" />
+              <FilterSelect value={filters.lead} onChange={(lead) => set({ lead })} placeholder={tm("allCustomers")} options={leadOptions} icon={Building2} />
+              <FilterSelect value={filters.batch} onChange={(batch) => set({ batch })} placeholder={tm("allBatches")} options={batchOptions} icon={Layers} />
+              <FilterSelect value={filters.method} onChange={(method) => set({ method })} placeholder={tm("anyMethod")} options={methodOptions} icon={ScanLine} />
+              {canManage ? (
+                <FilterSelect value={filters.org} onChange={(org) => set({ org })} placeholder={tg("allOrganizations")} options={orgOptions} icon={Network} testId="admin-pieces-org" />
+              ) : null}
+            </div>
+          ) : undefined
+        }
+        summary={{ shown: pieces.hasMore ? undefined : tags.length, active: hasFilters, onClear: () => urlFilters.reset() }}
       />
 
       {isDesktop ? (
