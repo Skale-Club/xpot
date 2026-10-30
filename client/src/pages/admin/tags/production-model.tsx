@@ -112,49 +112,57 @@ export function PrintModelPage({ slug, go }: { slug: string; go: Go }) {
         <Stat card label={t("statOpenOrders")} value={model.openJobs} />
       </div>
 
-      {!part && model.currentVersion ? (
-        <PrintPreviewCard modelSlug={model.slug} versionId={model.currentVersion.id} preview={model.currentVersion.preview} />
-      ) : null}
+      {/* Two columns on a computer: what was asked and how it is made on the left, the 3D view held in place on the
+          right. A phone stacks them, the 3D first. */}
+      <div className={!part && model.currentVersion ? "grid items-start gap-5 lg:grid-cols-2" : ""}>
+        {!part && model.currentVersion ? (
+          <div className="lg:sticky lg:top-4 lg:order-2">
+            <PrintPreviewCard modelSlug={model.slug} versionId={model.currentVersion.id} preview={model.currentVersion.preview} />
+          </div>
+        ) : null}
 
-      {part ? (
-        <SectionCard title={t("partCountTitle")} icon={PackageCheck} accent="tags" actions={<Button type="button" variant="secondary" size="sm" onClick={() => setCounting(true)}>{t("adjustCount")}</Button>}>
-          {model.partMovements.length ? (
-            <ul className="divide-y divide-white/[0.06] text-sm">
-              {model.partMovements.map((m) => (
-                <li key={m.id} className="flex items-center justify-between gap-3 py-2">
-                  <span className="min-w-0 text-white/70">
-                    {t(`partReason_${m.reason}` as never)}
-                    {m.note ? <span className="text-white/45"> · {m.note}</span> : null}
-                  </span>
-                  <span className="flex shrink-0 items-center gap-3">
-                    <span className={m.delta > 0 ? "font-semibold text-emerald-300" : "font-semibold text-red-300"}>{m.delta > 0 ? `+${m.delta}` : m.delta}</span>
-                    <span className="text-xs text-white/40">{formatDate(m.createdAt)}</span>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-sm text-white/50">{t("partCountEmpty")}</p>
-          )}
-        </SectionCard>
-      ) : null}
+        <div className="min-w-0 space-y-5 lg:order-1">
+          <section className="space-y-2">
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-white/40">{t("ordersTitle")}</h2>
+            <RequestList filter="all" model={model.slug} go={go} emptyHint={t("ordersEmptyHint")} />
+          </section>
 
-      <SectionCard title={t("versionsTitle")} icon={Layers} accent="tags" bodyClassName="p-0">
-        {model.versions.length ? (
-          <ul className="divide-y divide-white/[0.06]">
-            {model.versions.map((version) => (
-              <VersionRow key={version.id} model={model} version={version} />
-            ))}
-          </ul>
-        ) : (
-          <p className="p-4 text-sm text-white/50">{t("versionsEmpty")}</p>
-        )}
-      </SectionCard>
+          {part ? (
+            <SectionCard title={t("partCountTitle")} icon={PackageCheck} accent="tags" actions={<Button type="button" variant="secondary" size="sm" onClick={() => setCounting(true)}>{t("adjustCount")}</Button>}>
+              {model.partMovements.length ? (
+                <ul className="divide-y divide-white/[0.06] text-sm">
+                  {model.partMovements.map((m) => (
+                    <li key={m.id} className="flex items-center justify-between gap-3 py-2">
+                      <span className="min-w-0 text-white/70">
+                        {t(`partReason_${m.reason}` as never)}
+                        {m.note ? <span className="text-white/45"> · {m.note}</span> : null}
+                      </span>
+                      <span className="flex shrink-0 items-center gap-3">
+                        <span className={m.delta > 0 ? "font-semibold text-emerald-300" : "font-semibold text-red-300"}>{m.delta > 0 ? `+${m.delta}` : m.delta}</span>
+                        <span className="text-xs text-white/40">{formatDate(m.createdAt)}</span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-white/50">{t("partCountEmpty")}</p>
+              )}
+            </SectionCard>
+          ) : null}
 
-      <section className="space-y-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-white/40">{t("ordersTitle")}</h2>
-        <RequestList filter="all" model={model.slug} go={go} emptyHint={t("ordersEmptyHint")} />
-      </section>
+          <SectionCard title={t("versionsTitle")} icon={Layers} accent="tags" bodyClassName="p-0">
+            {model.versions.length ? (
+              <ul className="divide-y divide-white/[0.06]">
+                {model.versions.map((version) => (
+                  <VersionRow key={version.id} model={model} version={version} />
+                ))}
+              </ul>
+            ) : (
+              <p className="p-4 text-sm text-white/50">{t("versionsEmpty")}</p>
+            )}
+          </SectionCard>
+        </div>
+      </div>
 
       {printing && <PrintDialog model={model} onClose={() => setPrinting(false)} />}
       {versioning && <VersionDialog model={model} fix={fix} onClose={() => { setVersioning(false); setFix(null); }} />}
