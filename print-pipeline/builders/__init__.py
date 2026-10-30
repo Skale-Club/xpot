@@ -61,7 +61,10 @@ def plate_google(tag, index, params, out_dir):
     import tile_per_code_google
     if _theme(params, index, ('white',)) != 'white':
         raise BuildError('the Google Plate is white only')
-    report = tile_per_code_google.build(tag['public_code'], str(out_dir), size=params.get('size', 'large'))
+    # Without nfc_mount the call is the one every printed batch was built with (tests/rebuild.py).
+    mount = params.get('nfc_mount', 'embedded_round')
+    extra = {} if mount == 'embedded_round' else {'nfc_mount': mount}
+    report = tile_per_code_google.build(tag['public_code'], str(out_dir), size=params.get('size', 'large'), **extra)
     _check_url((report.get('qr') or {}).get('url') or report.get('qr_url'), tag)
     return report, [('White - Plate', 'White_Google_Plate.stl', 1), ('Black - Art', 'Black_Google_Art.stl', 2),
                     ('Yellow - Stars', 'Yellow_Google_Stars.stl', 3)]
