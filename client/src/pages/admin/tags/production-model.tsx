@@ -12,6 +12,7 @@ import { BackLink } from "@/components/xpot/PageHeader";
 import { Pill } from "@/components/xpot/StatusPill";
 import { Stat } from "@/components/xpot/Stat";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
+import { TagPieceVisual } from "@/components/xpot/TagProductThumbnail";
 import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
@@ -60,7 +61,7 @@ export function PrintModelPage({ slug, go }: { slug: string; go: Go }) {
     onError: (err) => toast({ title: t("couldNotSaveModel"), description: errorMessage(err), variant: "destructive" }),
   });
 
-  const back = <BackLink onBack={() => go(PRODUCTION_BASE)}>{t("tabCatalog")}</BackLink>;
+  const back = <BackLink onBack={() => go(`${PRODUCTION_BASE}/models`)}>{t("tabCatalog")}</BackLink>;
   if (error && !model) return <div className="space-y-4">{back}<LoadError what={t("modelWhat")} error={error} onRetry={() => void refetch()} /></div>;
   if (isLoading || !model) return <div className="space-y-4">{back}<Loading rows={4} /></div>;
 
@@ -70,12 +71,13 @@ export function PrintModelPage({ slug, go }: { slug: string; go: Go }) {
       {back}
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
-          {!part ? <TagFaceIcon face={model.face} size="md" /> : null}
+          {!part ? <TagPieceVisual productType={model.productType ?? "custom"} face={model.face} theme={model.theme} size="lg" /> : null}
           <div className="min-w-0">
             <h1 className="truncate text-xl font-semibold text-white">{model.title}</h1>
             <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-white/45">
               <KindPill kind={model.kind} />
               <ModelStatusPill status={model.status} />
+              {model.face ? <><TagFaceIcon face={model.face} size="xs" /><span>{labels.face(model.face)}</span></> : null}
               {model.lowStock ? <Pill tone="amber">{t("lowStock", { count: model.partReorderAt ?? 0 })}</Pill> : null}
               <span className="font-mono">{model.slug}</span>
               {model.productType ? <span>{labels.product(model.productType)}</span> : null}

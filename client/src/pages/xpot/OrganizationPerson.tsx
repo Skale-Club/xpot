@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Building2, ChevronRight, DollarSign, ListTodo, MapPin, ShieldCheck, UserRound } from "lucide-react";
 import { Link, useSearchParams } from "wouter";
@@ -25,9 +25,8 @@ import type { EnrichedSalesVisit, FullSalesLead, SalesTask } from "./types";
 // each row opening the record.
 // The lists come from the usual endpoints with ?repId=; the server keeps a Rep
 // Admin to the organizations they run (server/routes/xpot/middleware.ts
-// listScope, visitsInOrganizations) and a manager sees anyone. They only widen
-// in management mode, so this page turns it on and waits for it: with the mode
-// off the same calls would answer with the viewer's own records.
+// listScope, visitsInOrganizations) and a manager sees anyone. Organization
+// URLs use the management scope without changing the user's personal application.
 
 type Member = {
   repId: number;
@@ -57,11 +56,7 @@ export function OrganizationPerson({ organizationId, repId }: { organizationId: 
       return updated;
     }, { replace: true });
 
-  // Someone who can manage looks at a teammate in management mode, so the lists
-  // widen; the amber bar says so and leaves it.
-  useEffect(() => {
-    if (access.reach && !access.adminMode) access.setAdminMode(true);
-  }, [access.reach, access.adminMode, access.setAdminMode]);
+  // The management frame identifies whose workspace is open.
   const ready = access.adminMode;
 
   const base = `/api/xpot/organizations/${organizationId}`;
@@ -172,7 +167,7 @@ export function OrganizationPerson({ organizationId, repId }: { organizationId: 
             icon={Building2}
             rows={(companies.data ?? []).map((lead) => ({
               key: lead.id,
-              href: `/leads/${lead.id}`,
+              href: `/admin/work/leads/${lead.id}`,
               title: lead.name,
               detail: lead.lastVisitAt ? t("lastVisit", { date: formatDate(lead.lastVisitAt) }) : t("neverVisited"),
               trailing: <LeadStatePill status={lead.status} />,
@@ -186,7 +181,7 @@ export function OrganizationPerson({ organizationId, repId }: { organizationId: 
             icon={MapPin}
             rows={(visits.data ?? []).map((visit) => ({
               key: visit.id,
-              href: `/leads/${visit.leadId}`,
+              href: `/admin/work/leads/${visit.leadId}`,
               title: visit.lead?.name ?? "—",
               detail: formatDate(visit.checkedInAt ?? visit.scheduledAt ?? visit.createdAt),
               trailing: <StatusBadge status={visit.status} />,
@@ -202,7 +197,7 @@ export function OrganizationPerson({ organizationId, repId }: { organizationId: 
               const overdue = !!task.dueAt && new Date(task.dueAt).getTime() < Date.now();
               return {
                 key: task.id,
-                href: task.leadId ? `/leads/${task.leadId}` : undefined,
+                href: task.leadId ? `/admin/work/leads/${task.leadId}` : undefined,
                 title: task.title,
                 detail: task.dueAt ? <span className={overdue ? "text-red-300" : undefined}>{formatDate(task.dueAt)}</span> : t("noDueDate"),
               };
@@ -216,7 +211,7 @@ export function OrganizationPerson({ organizationId, repId }: { organizationId: 
             icon={DollarSign}
             rows={(sales.data ?? []).map(({ sale, lead }) => ({
               key: sale.id,
-              href: salesPath("sales", sale.id),
+              href: `/admin/work${salesPath("sales", sale.id)}`,
               title: lead?.name ?? "—",
               detail: formatDate(sale.soldAt),
               trailing: <span className="text-sm font-semibold tabular-nums text-white">{formatMoney(sale.totalCents)}</span>,

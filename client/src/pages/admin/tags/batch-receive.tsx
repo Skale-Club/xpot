@@ -68,7 +68,7 @@ export interface ReceiveBatch {
  * a beep and a buzz; "Undo last read" takes back a read made by mistake; "Close batch" stays at hand, with the
  * pending warning. A read retried (a timeout, a double tap) never counts twice: its key is stable per code.
  */
-export function BatchReceiveStation({ batch, onRequestClose }: { batch: ReceiveBatch; onRequestClose: () => void }) {
+export function BatchReceiveStation({ batch, onRequestClose }: { batch: ReceiveBatch; onRequestClose?: () => void }) {
   const t = useT(adminTagsFlowMessages);
   const tb = useT(manageTagsBatchesMessages);
   const { toast } = useToast();
@@ -228,7 +228,7 @@ export function BatchReceiveStation({ batch, onRequestClose }: { batch: ReceiveB
 
       {/* Close batch stays at hand, with what is still missing. */}
       {/* Above the phone's tab bar (components/xpot/MobileTabBar.tsx) unless full screen covers it. */}
-      <div className={`sticky z-10 mx-auto mt-3 w-full max-w-3xl ${full ? "bottom-[max(env(safe-area-inset-bottom),8px)]" : "bottom-[calc(env(safe-area-inset-bottom)+96px)] lg:bottom-3"}`}>
+      {onRequestClose ? <div className="sticky bottom-[max(env(safe-area-inset-bottom),8px)] z-10 mx-auto mt-3 w-full max-w-3xl">
         <div className={`flex flex-wrap items-center justify-between gap-2 rounded-2xl ${GLASS_SUBTLE_CLASS} bg-background/95 px-3 py-2 backdrop-blur`}>
           <p className="text-xs text-white/60">{issued && pending ? <span className="text-amber-300">{t.plural("stillToReceive", pending)}</span> : t("closeWhenDone")}</p>
           <Button type="button" variant="secondary" size="sm" onClick={() => { setFull(false); onRequestClose(); }} data-testid="intake-close-batch">
@@ -236,7 +236,7 @@ export function BatchReceiveStation({ batch, onRequestClose }: { batch: ReceiveB
             {tb("closeBatch")}
           </Button>
         </div>
-      </div>
+      </div> : null}
     </div>
   );
 }

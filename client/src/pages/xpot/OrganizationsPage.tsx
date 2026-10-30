@@ -19,6 +19,7 @@ import { DANGER_OUTLINE, GLASS_CLASS, GLASS_SUBTLE_CLASS } from "@/components/xp
 import { Tabs } from "@/components/xpot/Tabs";
 import { apiRequest } from "@/lib/queryClient";
 import { describeApiError } from "@/lib/apiErrors";
+import { managementReach } from "@/lib/adminMode";
 import { formatDate } from "@/lib/dates";
 import { formatPhone } from "@/lib/format";
 import { useToast } from "@/hooks/use-toast";
@@ -116,8 +117,7 @@ function OrganizationsList() {
   return (
     <AppLayout title={t("title")} size="wide">
       <div className="space-y-6">
-        {/* Back to Settings, where Administration lists this page (the phone has no sidebar). */}
-        <PageHeader backHref="/settings?tab=administration" title={t("title")} description={t("intro")} className="mb-0" />
+        <PageHeader backHref={mayCreate ? "/admin" : undefined} title={t("title")} description={t("intro")} className="mb-0" />
 
         {mayCreate && (
           <form
@@ -341,19 +341,19 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
           </div>
         )}
         {tab === "inventory" && (
-          <RecordList query={inventory} empty={t("noPieces")} rowHref={(row) => (platformManager ? `/admin/tags/pieces/${row.id}` : `/tags/pieces/${encodeURIComponent(row.publicCode)}`)}
+          <RecordList query={inventory} empty={t("noPieces")} rowHref={(row) => (platformManager ? `/admin/tags/pieces/${row.id}` : `${managementReach(me) ? "/admin/work" : ""}/tags/pieces/${encodeURIComponent(row.publicCode)}`)}
             seeAll={platformManager ? { href: `/admin/tags/pieces?org=${organizationId}`, label: t("seeAllIn", { screen: ts("managePieces") }), testId: "organization-inventory-all" } : undefined}
             render={(row) => <><span className="font-mono text-sm text-white">{row.publicCode}</span><span className="text-xs text-white/45">{lookup(tt, `product_${row.productType}`, String(row.productType ?? ""))} · {lookup(tt, `status_${row.status}`, String(row.status ?? ""))}</span></>} />
         )}
         {tab === "kits" && (
-          <RecordList query={kits} empty={t("noKits")} rowHref={(row) => (platformManager ? `/admin/tags/kits?view=kits&org=${organizationId}${row.repId ? `&kitRep=${row.repId}` : ""}` : "/tags/pieces")}
+          <RecordList query={kits} empty={t("noKits")} rowHref={(row) => (platformManager ? `/admin/tags/kits?view=kits&org=${organizationId}${row.repId ? `&kitRep=${row.repId}` : ""}` : `${managementReach(me) ? "/admin/work" : ""}/tags/pieces`)}
             seeAll={platformManager ? { href: `/admin/tags/kits?view=kits&org=${organizationId}`, label: t("seeAllIn", { screen: ts("manageKits") }), testId: "organization-kits-all" } : undefined}
             render={(row) => <><span className="text-sm text-white"><span className="font-mono">{kitCode(row.kitNumber)}</span><span className="text-white/45"> · {formatDate(row.createdAt)}</span>{row.note ? <span className="text-white/45"> · {row.note}</span> : null}</span><span className="text-xs text-white/45">{repName(row.repId)}</span></>} />
         )}
         {tab === "customers" && (
-          <RecordList query={customers} empty={t("noCustomers")} rowHref={(row) => (usesVisits ? `/leads/${row.id}` : `/tags/customers/${row.id}`)}
+          <RecordList query={customers} empty={t("noCustomers")} rowHref={(row) => `${managementReach(me) ? "/admin/work" : ""}${usesVisits ? `/leads/${row.id}` : `/tags/customers/${row.id}`}`}
             // Companies (Visits) has the organization filter, for platform management in management mode.
-            seeAll={platformManager && usesVisits ? { href: `/leads?org=${organizationId}`, label: t("seeAllIn", { screen: ts("tabLeads") }), testId: "organization-customers-all" } : undefined}
+            seeAll={platformManager && usesVisits ? { href: `/admin/work/leads?org=${organizationId}`, label: t("seeAllIn", { screen: ts("tabLeads") }), testId: "organization-customers-all" } : undefined}
             render={(row) => <><span className="text-sm font-medium text-white">{row.name}</span><span className="text-xs text-white/45">{lookup(t, `customer_${row.status}`, String(row.status ?? ""))} · {repName(row.ownerRepId)}</span></>} />
         )}
         {tab === "settings" && <OrganizationSettings key={`${org.name}|${org.isActive}`} organization={org} mayEdit={platformManager} />}

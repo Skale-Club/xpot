@@ -463,7 +463,12 @@ interface RequestRow {
   bed_label: string; quantity: number; notes: string | null; created_at: Date | string; open: boolean;
 }
 
-const OPEN_PLATE = sql`j.status IN ('requested', 'building', 'ready', 'printing')`;
+// Printing and physical receiving belong to one request. Apply this before LIMIT so older
+// requests awaiting pieces are not hidden behind a page of newer completed requests.
+const OPEN_PLATE = sql`(j.status IN ('requested', 'building', 'ready', 'printing') OR
+  (j.status = 'printed' AND j.batch_id IS NOT NULL AND EXISTS (
+    SELECT 1 FROM tags pending_piece WHERE pending_piece.batch_id = j.batch_id AND pending_piece.stock_status = 'pending'
+  )))`;
 
 const REQUEST_SELECT = sql`
   SELECT r.id, r.model_id, m.slug AS model_slug, m.title AS model_title, m.kind AS model_kind, v.version AS version_number,
@@ -493,7 +498,7 @@ async function withPlates(list: RequestRow[]): Promise<PrintRequestItem[]> {
   }));
 }
 
-/** The requests, newest first, each with its plates: open (some plate still to build or print), done, or all. */
+/** Requests stay open while a plate needs printing or its printed pieces need receiving. */
 export async function listRequests(filter: "open" | "done" | "all" = "open", modelRef?: string | null): Promise<PrintRequestItem[]> {
   const conds = [];
   if (filter === "open") conds.push(sql`EXISTS (SELECT 1 FROM print_jobs j WHERE j.request_id = r.id AND ${OPEN_PLATE})`);

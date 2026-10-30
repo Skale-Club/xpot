@@ -39,14 +39,8 @@ const en = {
   batchIssuedDesc_one: "{count} code issued. Scan the piece once it is made to put it in stock.",
   batchIssuedDesc_other: "{count} codes issued. Scan each piece once it is made to put it in stock.",
   couldNotCreateBatch: "Could not create batch",
-  newBatchTitle: "New production batch",
-  newBatchIntro:
-    "Issue codes for pieces you will print or order, or open an empty batch for pieces that already have a code. Either way, a piece enters stock when it is scanned.",
   createEmptyBatch: "Create empty batch",
-  codesIssued: "Issue codes now",
-  codesIssuedHint: "For pieces you will print or order: the codes go into the print file or to the supplier, and each piece enters stock when you scan it once it is made.",
   codesScanned: "Empty batch",
-  codesScannedHint: "For pieces that already carry an Xpot code: scan them one by one into stock.",
   createIssuedBatch_one: "Issue {count} code",
   createIssuedBatch_other: "Issue {count} codes",
   receivedCount: "{received} of {total} received",
@@ -54,7 +48,6 @@ const en = {
   receiveIntro: "Scan each piece once it is printed or delivered: it enters house stock, and the scan proves its QR reads.",
   fieldNameRequired: "Name *",
   namePlaceholder: "Google Review signs — first batch",
-  printedHintNew: "The mark on every piece of this batch: Instagram, Google, a phone, an envelope…",
   fieldQuantityRequired: "Quantity *",
   quantityRange: "1 to {max}",
   fieldBatchCode: "Batch code",
@@ -62,8 +55,6 @@ const en = {
   batchCodeAutomatic: "Automatic",
   legacyHint: "Migration only. One code per line; leave empty to generate new codes.",
   generating: "Generating…",
-  newBatch: "New batch",
-  noBatchesYet: "No batches yet. Create an empty batch when the physical pieces arrive.",
   colCreated: "Created",
 
   // Batch detail
@@ -81,7 +72,6 @@ const en = {
   liveCount_one: "{count} live",
   liveCount_other: "{count} live",
   chipsShare: "{percent} of chips",
-  manufacturingPackage: "Manufacturing package",
   manufacturingIntro:
     "The CSV maps serial → code → QR/NFC link → QR file. The ZIP holds the CSV plus one SVG (optionally a 1200px PNG) per piece. Write each NFC chip with its row's nfc_url and lock it only after its QR and NFC both pass a phone test.",
   givePiecesTitle: "Hand out pieces to a reseller",
@@ -216,14 +206,8 @@ export const manageTagsBatchesMessages: Dictionary<typeof en> = {
     batchIssuedDesc_one: "{count} código emitido. Escaneie a peça quando estiver pronta para colocá-la no estoque.",
     batchIssuedDesc_other: "{count} códigos emitidos. Escaneie cada peça quando estiver pronta para colocá-la no estoque.",
     couldNotCreateBatch: "Não foi possível criar o lote",
-    newBatchTitle: "Novo lote de produção",
-    newBatchIntro:
-      "Emita códigos para peças que você vai imprimir ou encomendar, ou abra um lote vazio para peças que já têm código. Nos dois casos, a peça entra no estoque quando é escaneada.",
     createEmptyBatch: "Criar lote vazio",
-    codesIssued: "Emitir códigos agora",
-    codesIssuedHint: "Para peças que você vai imprimir ou encomendar: os códigos vão para o arquivo de impressão ou para o fornecedor, e cada peça entra no estoque quando você a escaneia depois de pronta.",
     codesScanned: "Lote vazio",
-    codesScannedHint: "Para peças que já têm um código Xpot: escaneie uma por uma para o estoque.",
     createIssuedBatch_one: "Emitir {count} código",
     createIssuedBatch_other: "Emitir {count} códigos",
     receivedCount: "{received} de {total} recebidas",
@@ -231,7 +215,6 @@ export const manageTagsBatchesMessages: Dictionary<typeof en> = {
     receiveIntro: "Escaneie cada peça quando ela estiver impressa ou entregue: ela entra no estoque da casa, e a leitura prova que o QR funciona.",
     fieldNameRequired: "Nome *",
     namePlaceholder: "Placas de avaliação Google — primeiro lote",
-    printedHintNew: "A marca em todas as peças deste lote: Instagram, Google, um telefone, um envelope…",
     fieldQuantityRequired: "Quantidade *",
     quantityRange: "De 1 a {max}",
     fieldBatchCode: "Código do lote",
@@ -239,8 +222,6 @@ export const manageTagsBatchesMessages: Dictionary<typeof en> = {
     batchCodeAutomatic: "Automático",
     legacyHint: "Só para migração. Um código por linha; deixe vazio para gerar códigos novos.",
     generating: "Gerando…",
-    newBatch: "Novo lote",
-    noBatchesYet: "Nenhum lote ainda. Crie um lote vazio quando as peças físicas chegarem.",
     colCreated: "Criado",
 
     // Batch detail
@@ -258,7 +239,6 @@ export const manageTagsBatchesMessages: Dictionary<typeof en> = {
     liveCount_one: "{count} no ar",
     liveCount_other: "{count} no ar",
     chipsShare: "{percent} dos chips",
-    manufacturingPackage: "Pacote de fabricação",
     manufacturingIntro:
       "O CSV liga número de série → código → link QR/NFC → arquivo do QR. O ZIP traz o CSV mais um SVG (opcionalmente um PNG de 1200px) por peça. Grave cada chip NFC com o nfc_url da sua linha e lacre-o só depois que o QR e o NFC passarem num teste com o celular.",
     givePiecesTitle: "Entregar peças a um revendedor",
@@ -390,14 +370,8 @@ export const manageTagsBatchesMessages: Dictionary<typeof en> = {
     batchIssuedDesc_one: "{count} código emitido. Escanea la pieza cuando esté hecha para añadirla al stock.",
     batchIssuedDesc_other: "{count} códigos emitidos. Escanea cada pieza cuando esté hecha para añadirla al stock.",
     couldNotCreateBatch: "No se pudo crear el lote",
-    newBatchTitle: "Nuevo lote de producción",
-    newBatchIntro:
-      "Emite códigos para piezas que vas a imprimir o encargar, o abre un lote vacío para piezas que ya tienen código. En ambos casos, la pieza entra al stock al escanearla.",
     createEmptyBatch: "Crear lote vacío",
-    codesIssued: "Emitir códigos ahora",
-    codesIssuedHint: "Para piezas que vas a imprimir o encargar: los códigos van al archivo de impresión o al proveedor, y cada pieza entra al stock cuando la escaneas ya hecha.",
     codesScanned: "Lote vacío",
-    codesScannedHint: "Para piezas que ya llevan un código Xpot: escanéalas una por una al stock.",
     createIssuedBatch_one: "Emitir {count} código",
     createIssuedBatch_other: "Emitir {count} códigos",
     receivedCount: "{received} de {total} recibidas",
@@ -405,7 +379,6 @@ export const manageTagsBatchesMessages: Dictionary<typeof en> = {
     receiveIntro: "Escanea cada pieza cuando esté impresa o entregada: entra al stock de la casa, y la lectura prueba que su QR funciona.",
     fieldNameRequired: "Nombre *",
     namePlaceholder: "Placas de reseñas de Google — primer lote",
-    printedHintNew: "La marca en todas las piezas de este lote: Instagram, Google, un teléfono, un sobre…",
     fieldQuantityRequired: "Cantidad *",
     quantityRange: "De 1 a {max}",
     fieldBatchCode: "Código del lote",
@@ -413,8 +386,6 @@ export const manageTagsBatchesMessages: Dictionary<typeof en> = {
     batchCodeAutomatic: "Automático",
     legacyHint: "Solo para migración. Un código por línea; déjalo vacío para generar códigos nuevos.",
     generating: "Generando…",
-    newBatch: "Nuevo lote",
-    noBatchesYet: "Aún no hay lotes. Crea un lote vacío cuando lleguen las piezas físicas.",
     colCreated: "Creado",
 
     // Batch detail
@@ -432,7 +403,6 @@ export const manageTagsBatchesMessages: Dictionary<typeof en> = {
     liveCount_one: "{count} activa",
     liveCount_other: "{count} activas",
     chipsShare: "{percent} de los chips",
-    manufacturingPackage: "Paquete de fabricación",
     manufacturingIntro:
       "El CSV relaciona número de serie → código → enlace QR/NFC → archivo del QR. El ZIP trae el CSV más un SVG (opcionalmente un PNG de 1200px) por pieza. Graba cada chip NFC con el nfc_url de su fila y séllalo solo después de que su QR y su NFC pasen una prueba con el teléfono.",
     givePiecesTitle: "Entregar piezas a un revendedor",

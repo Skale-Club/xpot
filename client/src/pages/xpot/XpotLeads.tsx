@@ -489,7 +489,7 @@ export function XpotLeads() {
                   onMore={() => setActionLead(lead)}
                   lastVisit={lastVisitFor(lead.id)}
                   pieces={piecesFor(lead.id)}
-                  onOpenPieces={() => setLocation(leadPiecesPath(lead.id, lead.name, canManage))}
+                  onOpenPieces={() => setLocation(`${canManage ? "~" : ""}${leadPiecesPath(lead.id, lead.name, canManage)}`)}
                 />
               ))}
               <ListPager shown={pagedLeads.shown} total={pagedLeads.total} hasMore={pagedLeads.hasMore} onMore={pagedLeads.showMore} />

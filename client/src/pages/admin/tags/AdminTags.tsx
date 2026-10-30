@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
-import { Tabs } from "@/components/xpot/Tabs";
 import { useLocation } from "wouter";
-import { ScanLine } from "lucide-react";
+import { ScanLine, ShieldAlert } from "lucide-react";
+import { EmptyState } from "@/components/xpot/EmptyState";
 import { parseTagIntakeScan } from "@shared/tagIntake";
 import { useToast } from "@/hooks/use-toast";
 import { errorMessage, getJson } from "./api";
@@ -12,8 +12,7 @@ import { OverviewQueue, OverviewTab } from "./OverviewTab";
 import { PiecesTab } from "./PiecesTab";
 import { PieceDetail } from "./PieceDetail";
 import { KitsTab } from "./KitsTab";
-import { BatchesTab } from "./BatchesTab";
-import { BatchDetail } from "./BatchDetail";
+import { productionPath } from "./production-workflow";
 import { TeamTab } from "./TeamTab";
 import { ShowcaseTab } from "./ShowcaseTab";
 import { ProductionTab } from "./ProductionTab";
@@ -21,15 +20,14 @@ import { ProvisionersTab } from "./ProvisionersTab";
 import { JourneyTab } from "./JourneyTab";
 import { useIsSuperAdmin } from "@/components/xpot/AdminBadge";
 import { useT } from "@/i18n";
-import { shellMessages } from "@/i18n/messages/shell";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
+import { manageMessages } from "@/i18n/messages/manage";
 
 // "shop" is the Tags › Shop showcase (the Xpot admin's). Same order and names as the Tags "Manage" group in the sidebar (components/xpot/moduleNav.ts): the piece's life,
 // production first. "kits" is Distribution (Hand out, Stuscle orders, Kits, Take back); the URL stays /kits.
 const TABS = [
   { id: "overview", labelKey: "manageOverview" },
   { id: "production", labelKey: "manageProduction", adminOnly: true },
-  { id: "batches", labelKey: "manageBatches", adminOnly: true },
   { id: "pieces", labelKey: "managePieces" },
   { id: "kits", labelKey: "manageKits" },
   { id: "team", labelKey: "manageResellers" },
@@ -97,38 +95,24 @@ export function CodeLookup({ onFound, fill = false }: { onFound: (id: string) =>
  */
 export function AdminTags() {
   const [location, setLocation] = useLocation();
-  const ts = useT(shellMessages);
+  const tm = useT(manageMessages);
   const [tabSegment, idSegment, ...more] = location.replace(/^\/admin\/tags\/?/, "").split("/");
   // Batches, the Journey and the NFC writers are the global admin's: managers
   // neither see their tabs nor reach them by URL (and the API answers 403).
   const isAdmin = useIsSuperAdmin();
   const tabs = TABS.filter((t) => isAdmin || !("adminOnly" in t));
-  const tab: TabId = tabs.find((t) => t.id === tabSegment)?.id ?? "overview";
+  const tab: TabId = tabSegment === "batches" && isAdmin ? "production" : tabs.find((t) => t.id === tabSegment)?.id ?? "overview";
   const id = idSegment ? decodeURIComponent(idSegment) : null;
-  const go = (path: string) => setLocation(`${ADMIN_TAGS_BASE}${path}`);
+  const go = (path: string) => setLocation(`${ADMIN_TAGS_BASE}${productionPath(path)}`);
+  const requested = TABS.find((item) => item.id === tabSegment);
+  if (!isAdmin && ((requested && "adminOnly" in requested) || tabSegment === "batches")) return <EmptyState tone="red" icon={ShieldAlert} title={tm("accessRestricted")} hint={tm("noAdminPermission")} />;
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3 lg:hidden">
-        {/* The desktop sidebar lists these as the Tags "Manage" group; the phone keeps the strip. */}
-        <Tabs
-          tabs={tabs.map((t) => ({ id: t.id, label: ts(t.labelKey), testId: `admin-tags-tab-${t.id}` }))}
-          value={tab}
-          onChange={(id) => go(`/${id}`)}
-          ariaLabel={ts("navManage")}
-          idPrefix="admin-tags"
-          fill={false}
-          accent="tags"
-          className="min-w-0 basis-full"
-        />
-        <CodeLookup fill onFound={(tagId) => go(`/pieces/${tagId}`)} />
-      </div>
-
       {tab === "overview" && (isTagPieceQueue(id) ? <OverviewQueue queue={id} go={go} /> : <OverviewTab go={go} />)}
       {tab === "pieces" && (id ? <PieceDetail id={id} go={go} /> : <PiecesTab go={go} />)}
       {tab === "kits" && <KitsTab go={go} />}
-      {tab === "production" && isAdmin && <ProductionTab rest={[idSegment ?? "", ...more].map(decodeURIComponent)} go={go} />}
-      {tab === "batches" && isAdmin && (id ? <BatchDetail id={id} go={go} /> : <BatchesTab go={go} />)}
+      {tab === "production" && isAdmin && <ProductionTab rest={(tabSegment === "batches" ? ["batches", idSegment ?? "", ...more] : [idSegment ?? "", ...more]).map(decodeURIComponent)} go={go} />}
       {tab === "journey" && isAdmin && <JourneyTab />}
       {tab === "team" && <TeamTab go={go} />}
       {tab === "shop" && isAdmin && <ShowcaseTab />}

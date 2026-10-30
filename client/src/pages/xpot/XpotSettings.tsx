@@ -2,31 +2,22 @@ import { useState, useRef, useEffect } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useLocation, useSearchParams } from "wouter";
 import {
-  Building2,
   Camera,
   ChevronDown,
   ChevronRight,
   Eye,
   EyeOff,
-  HeartPulse,
   KeyRound,
   Languages,
-  Palette,
-  Plug,
   Save,
   Shield,
-  Users,
 } from "lucide-react";
-import { isSuperAdmin } from "@shared/modules";
 import { Button } from "@/components/ui/button";
 import { AppLoader } from "@/components/ui/spinner";
 import { Field, FIELD_CONTROL, Input } from "@/components/xpot/Field";
 import { FormFooter } from "@/components/xpot/FormFooter";
 import { PageHeader } from "@/components/xpot/PageHeader";
-import { Pill } from "@/components/xpot/StatusPill";
-import { SwitchRow } from "@/components/xpot/SwitchRow";
 import { CopyButton } from "@/components/xpot/CopyButton";
-import { AdminBadge } from "@/components/xpot/AdminBadge";
 import { useAvatarUpload } from "@/components/xpot/useAvatarUpload";
 import { ACCENT_SELECTED, BRAND_GRADIENT, EYEBROW, GLASS_CLASS, SURFACE_MODAL_CLASS } from "@/components/xpot/surface";
 import { CountryFlag } from "@/components/CountryFlag";
@@ -40,8 +31,7 @@ import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { commonMessages } from "@/i18n/messages/common";
 import { settingsMessages } from "@/i18n/messages/settings";
 import { navIaMessages } from "@/i18n/messages/navIa";
-import { shellMessages } from "@/i18n/messages/shell";
-import { organizationsMessages } from "@/i18n/messages/organizations";
+import { workspacesMessages } from "@/i18n/messages/workspaces";
 import { tagsMessages } from "@/i18n/messages/tags";
 import type { XpotMeResponse } from "./types";
 import { AppLayout } from "@/components/xpot/AppLayout";
@@ -95,10 +85,6 @@ function countryName(code: string, fallback: string, locale: string): string {
   }
 }
 
-/** Translated role label; unknown roles show as stored. */
-function roleLabel(role: string, t: (key: "role_rep" | "role_manager" | "role_admin") => string): string {
-  return role === "rep" || role === "manager" || role === "admin" ? t(`role_${role}`) : role;
-}
 
 function parsePhone(phone: string): { dial: string; local: string } {
   for (const c of COUNTRIES) {
@@ -222,8 +208,7 @@ export function XpotSettings() {
   const t = useT(settingsMessages);
   const tc = useT(commonMessages);
   const tn = useT(navIaMessages);
-  const ts = useT(shellMessages);
-  const to = useT(organizationsMessages);
+  const tw = useT(workspacesMessages);
   const tt = useT(tagsMessages);
   const access = useViewerAccess();
   const avatar = useAvatarUpload();
@@ -357,19 +342,9 @@ export function XpotSettings() {
   // The password is only for the legacy email sign-in: an account without an email has none.
   const hasEmailLogin = Boolean(me?.user.email);
   const signInPhone = me?.user.phone ? formatPhone(me.user.phone) : null;
-  const modulesLabel = modules.map((m) => (m === "visits" ? tc("moduleVisits") : tc("moduleTags")));
   // Administration: someone who can manage sees the management-mode switch; the
   // admin pages and their access details only with the mode on.
   const canManage = access.hasAdminAccess || access.reach === "organization";
-  const administration = access.hasAdminAccess && access.adminMode ? [
-    { href: "/admin/reps", label: ts("orgPeople"), icon: Users },
-    ...(isSuperAdmin(me) ? [
-      { href: "/admin/integrations", label: ts("orgIntegrations"), icon: Plug, adminOnly: true },
-      { href: "/admin/branding", label: ts("orgBranding"), icon: Palette, adminOnly: true },
-      { href: "/admin/health", label: ts("orgSystemHealth"), icon: HeartPulse, adminOnly: true },
-    ] : []),
-  ] : [];
-
   // One section's content. On a phone it is the inner screen, whose header
   // already carries the title (`titled` false); on desktop the stacked page.
   const renderSection = (id: SettingsSection, titled: boolean) => {
@@ -512,85 +487,10 @@ export function XpotSettings() {
 
       case "administration":
         if (!canManage) return null;
-        return (
-          <Section key={id} id={id} title={tn("administration")} titled={titled}>
-            <SwitchRow
-              checked={access.adminMode}
-              onCheckedChange={access.setAdminMode}
-              label={tn("managementMode")}
-              hint={access.hasAdminAccess ? tn("managementModeHint") : tn("managementModeOrgHint")}
-              testId="settings-management-mode"
-            />
-
-            {/* The team: pick an organization, open a person, see their work. Off or on, it is one tap away. */}
-            <Link
-              href="/organizations"
-              className="flex min-h-14 items-center gap-3 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3.5 py-2.5 transition-colors hover:bg-white/[0.06]"
-              data-testid="settings-organizations"
-            >
-              <Building2 className="h-4 w-4 shrink-0 text-white/55" />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium text-white">{tn("organizationsAndTeam")}</span>
-                <span className="block truncate text-xs text-white/45">{tn("organizationsAndTeamHint")}</span>
-              </span>
-              <ChevronRight className="h-4 w-4 shrink-0 text-white/30" />
-            </Link>
-
-            {access.adminMode && (
-              <dl className="grid gap-4 border-t border-white/[0.06] pt-4 sm:grid-cols-2" data-testid="settings-access">
-                <div>
-                  <dt className={EYEBROW}>{t("role")}</dt>
-                  <dd className="mt-1.5 text-sm font-semibold text-white" data-testid="settings-role">
-                    {me?.user.isAdmin ? t("role_admin") : me?.rep.role ? roleLabel(me.rep.role, t) : "—"}
-                  </dd>
-                </div>
-                <div>
-                  <dt className={EYEBROW}>{tn("modules")}</dt>
-                  <dd className="mt-1.5 flex flex-wrap gap-1.5">
-                    {modulesLabel.length ? modulesLabel.map((label) => <Pill key={label} tone="slate">{label}</Pill>) : <span className="text-sm text-white/45">—</span>}
-                  </dd>
-                </div>
-                <div className="sm:col-span-2">
-                  <dt className={EYEBROW}>{tn("organizations")}</dt>
-                  <dd className="mt-1.5">
-                    {me?.organizations?.length ? (
-                      <ul className="space-y-1.5">
-                        {me.organizations.map((organization) => (
-                          <li key={organization.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2">
-                            <span className="min-w-0 truncate text-sm text-white/85">{organization.name}</span>
-                            {organization.membershipRole && (
-                              <Pill tone="slate">{organization.membershipRole === "admin" ? to("roleRepAdmin") : to("roleRep")}</Pill>
-                            )}
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <span className="text-sm text-white/45">{tn("noOrganizations")}</span>
-                    )}
-                  </dd>
-                </div>
-              </dl>
-            )}
-
-            {administration.length > 0 && <p className="text-sm text-white/45">{tn("administrationHint")}</p>}
-            {administration.length > 0 && (
-              <nav aria-label={tn("administration")} className="divide-y divide-white/[0.06] overflow-hidden rounded-xl border border-white/[0.08]">
-                {administration.map(({ href, label, icon: Icon, ...item }) => (
-                  <Link
-                    key={href}
-                    href={href}
-                    className="flex min-h-12 items-center gap-3 bg-white/[0.03] px-3.5 py-2.5 text-sm text-white/85 transition-colors hover:bg-white/[0.06]"
-                  >
-                    <Icon className="h-4 w-4 shrink-0 text-white/45" />
-                    <span className="min-w-0 flex-1 truncate">{label}</span>
-                    {"adminOnly" in item && item.adminOnly ? <AdminBadge /> : null}
-                    <ChevronRight className="h-4 w-4 shrink-0 text-white/30" />
-                  </Link>
-                ))}
-              </nav>
-            )}
-          </Section>
-        );
+        return <Section key={id} id={id} title={tw(me?.user.isAdmin ? "superAdmin" : "management")} titled={titled}>
+          <p className="text-sm leading-relaxed text-white/50">{tw(me?.user.isAdmin ? "panelHint" : "teamHint")}</p>
+          <Button asChild variant="secondary"><Link href={access.hasAdminAccess ? "/admin" : "/organizations"} data-testid="settings-open-panel"><Shield className="h-4 w-4" />{tw("openPanel")}</Link></Button>
+        </Section>;
     }
   };
 
@@ -598,7 +498,7 @@ export function XpotSettings() {
     profile: t("sectionProfile"),
     signin: tn("tabSignIn"),
     language: tc("language"),
-    administration: tn("administration"),
+    administration: tw(me?.user.isAdmin ? "superAdmin" : "management"),
   };
 
   // Desktop: the whole page, top to bottom.
@@ -632,7 +532,7 @@ export function XpotSettings() {
   const rows: Array<{ id: SettingsSection; icon: typeof Languages; value?: string }> = [
     { id: "signin", icon: KeyRound, value: signInPhone ?? undefined },
     { id: "language", icon: Languages, value: LANG_LABELS[lang] },
-    ...(canManage ? [{ id: "administration" as const, icon: Shield, value: access.adminMode ? t("modeOn") : t("modeOff") }] : []),
+    ...(canManage ? [{ id: "administration" as const, icon: Shield, value: tw("openPanel") }] : []),
   ];
 
   return (

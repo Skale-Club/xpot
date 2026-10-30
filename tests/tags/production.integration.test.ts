@@ -297,7 +297,7 @@ describe("serialized print orders", () => {
 
     const linked = await request(app, "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white", existingBatch: legacy.body.batchCode });
     expect(linked.status).toBe(201);
-    expect(linked.body).toMatchObject({ quantity: 4, open: false });
+    expect(linked.body).toMatchObject({ quantity: 4, open: true });
     expect(linked.body.plates[0]).toMatchObject({ status: "printed", batchId: legacy.body.id, quantity: 4, printedAt: "2026-10-21T12:00:00.000Z", plateNumber: 1 });
 
     const twice = await request(app, "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white", existingBatch: legacy.body.batchCode });
@@ -345,7 +345,7 @@ describe("print requests", () => {
     expect(tooMany.body).toMatchObject({ code: "print_too_many_plates", params: { max: 80 } });
   });
 
-  it("lists requests with their plates, open until every plate is printed, failed or cancelled", async () => {
+  it("keeps printed requests open until receiving is complete, while failed/cancelled plates do not block completion", async () => {
     const app = admin();
     await createSerializedModel(app);
     const asked = (await request(app, "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white", quantity: 6 })).body;
@@ -364,6 +364,16 @@ describe("print requests", () => {
     expect(open[0].plates[0].downloads).toEqual([expect.objectContaining({ kind: "3mf", filename: "plate.3mf" })]);
 
     await request(app, "POST", `/api/xpot/admin/print-jobs/${redo.body.id}/transition`, { action: "cancel" });
+    expect((await request(app, "GET", "/api/xpot/admin/print-requests")).body.map((r: any) => r.id)).toEqual([asked.id]);
+    expect((await request(app, "GET", "/api/xpot/admin/print-requests?status=done")).body).toEqual([]);
+    const pieces = await q("SELECT public_code FROM tags WHERE batch_id = $1 ORDER BY serial_number", [one.batchId]);
+    for (const piece of pieces.slice(0, -1)) {
+      const received = await request(app, "POST", `/api/xpot/admin/tag-batches/${one.batchId}/scan`, { value: piece.public_code, idempotencyKey: `receive:${piece.public_code}` });
+      expect(received.status).toBe(201);
+    }
+    expect((await request(app, "GET", "/api/xpot/admin/print-requests")).body).toHaveLength(1);
+    const last = pieces[pieces.length - 1];
+    expect((await request(app, "POST", `/api/xpot/admin/tag-batches/${one.batchId}/scan`, { value: last.public_code, idempotencyKey: `receive:${last.public_code}` })).status).toBe(201);
     expect((await request(app, "GET", "/api/xpot/admin/print-requests")).body).toEqual([]);
     const done = (await request(app, "GET", "/api/xpot/admin/print-requests?status=done&model=plate-large-menu-white")).body;
     expect(done.map((r: any) => [r.id, r.open])).toEqual([[asked.id, false]]);
