@@ -19,7 +19,8 @@ import type { McpCaller } from "../server.js";
 // the versions of each recipe, and the print requests with their plates. The same service and zod schemas as the admin
 // API. "Make a plate of 6 of stand X" is print_job_create with a quantity; the bench builds the plates' files and the
 // admin downloads and prints them by hand. A design session registers a model's first version here (and a fix as the
-// next version, with its changelog); files go up through the bench (`bench.py attach`), never through MCP.
+// next version, with its changelog); files go up through the bench (`bench.py attach`), never through MCP. A version's
+// 3D preview goes up with `print-pipeline/preview.py --upload` (raw bytes to POST /mcp/print-preview, same token).
 
 const objectParam = z.preprocess((v) => {
   if (typeof v === "string") {

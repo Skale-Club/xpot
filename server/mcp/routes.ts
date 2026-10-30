@@ -1,7 +1,9 @@
-import type { Express, NextFunction, Request, Response } from "express";
+import express, { type Express, type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
+import { PRINT_PREVIEW_CONTENT_TYPE, PRINT_PREVIEW_MAX_BYTES } from "#shared/printProduction.js";
 import { requireTagAdmin } from "../tags/access.js";
 import { TagError } from "../tags/errors.js";
+import * as production from "../tags/production.js";
 import { authenticateOauthAccess, createMcpOauthRouter, protectedResourceMetadataUrl } from "./oauth.js";
 import { listConnections, looksLikeOauthAccessToken, revokeClientTokens } from "./oauthStore.js";
 import { handleMcpRequest, type McpCaller } from "./server.js";
@@ -116,12 +118,13 @@ export function registerMcpRoutes(app: Express) {
       .status(401)
       .json({ message });
 
-  app.options("/mcp", mcpCors);
-
-  app.post("/mcp", mcpCors, async (req, res) => {
+  /** The caller behind the request's bearer token (a static MCP token or an OAuth access token); null once answered. */
+  async function callerOf(req: Request, res: Response): Promise<McpCaller | null> {
     const secret = bearerSecret(req.headers.authorization);
-    if (!secret) return unauthorized(req, res, "invalid_request", "Authorization: Bearer <token> required");
-
+    if (!secret) {
+      unauthorized(req, res, "invalid_request", "Authorization: Bearer <token> required");
+      return null;
+    }
     let caller: McpCaller | null = null;
     try {
       if (looksLikeMcpSecret(secret)) {
@@ -139,13 +142,50 @@ export function registerMcpRoutes(app: Express) {
         }
       } else if (looksLikeOauthAccessToken(secret)) {
         const result = await authenticateOauthAccess(secret);
-        if (result && "denied" in result) return res.status(403).json({ message: result.denied });
+        if (result && "denied" in result) {
+          res.status(403).json({ message: result.denied });
+          return null;
+        }
         caller = result?.caller ?? null;
       }
     } catch (err) {
-      return fail(res, err, "Failed to verify token");
+      fail(res, err, "Failed to verify token");
+      return null;
     }
-    if (!caller) return unauthorized(req, res, "invalid_token", "Invalid, expired or revoked MCP token");
+    if (!caller) unauthorized(req, res, "invalid_token", "Invalid, expired or revoked MCP token");
+    return caller;
+  }
+
+  // A version's 3D preview (print-pipeline/preview.py --upload): the one file that comes in with an MCP token,
+  // as raw bytes over HTTP, because a GLB is far too big to pass inside a tool call. Print files still go up through
+  // the bench only. ?version= picks a version (default the current one).
+  app.post(
+    "/mcp/print-preview/:model",
+    express.raw({ type: ["application/octet-stream", PRINT_PREVIEW_CONTENT_TYPE], limit: PRINT_PREVIEW_MAX_BYTES }),
+    async (req, res) => {
+      const caller = await callerOf(req, res);
+      if (!caller) return;
+      try {
+        if (!Buffer.isBuffer(req.body)) throw new TagError("Send the .glb as application/octet-stream", 415);
+        const query = z.object({ version: z.string().uuid().optional() }).strict().parse(req.query);
+        const model = req.params.model;
+        const versionId = query.version ?? (await production.getModel(model)).currentVersion?.id;
+        if (!versionId) throw new TagError("This model has no current version", 409);
+        const body = new Uint8Array(req.body.buffer, req.body.byteOffset, req.body.byteLength);
+        const updated = await production.attachVersionPreview(model, versionId, `${model}-preview.glb`, body, caller.userId);
+        console.log(`[mcp] print-preview caller=${caller.label} ${model} v${updated.version} ${body.byteLength} B`);
+        res.status(201).json({ model, version: updated.version, versionId: updated.id, preview: updated.preview });
+      } catch (err) {
+        fail(res, err, "Failed to upload the 3D preview");
+      }
+    },
+  );
+
+  app.options("/mcp", mcpCors);
+
+  app.post("/mcp", mcpCors, async (req, res) => {
+    const caller = await callerOf(req, res);
+    if (!caller) return;
 
     try {
       await handleMcpRequest(req, res, caller);

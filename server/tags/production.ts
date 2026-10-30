@@ -18,6 +18,8 @@ import {
   PRINT_JOB_STALE_MS,
   PRINT_MAX_PLATES,
   PRINT_NOW_PRINTED_DAYS,
+  PRINT_PREVIEW_CONTENT_TYPE,
+  PRINT_PREVIEW_MAX_BYTES,
   bedPosition,
   nextPrintBatchCode,
   planPrintJobTransition,
@@ -41,6 +43,7 @@ import {
   type PrintModelVersionItem,
   type PrintNowPlate,
   type PrintPartReason,
+  type PrintPreviewInfo,
   type PrintRequestItem,
   type PrintVersionInput,
   type PrintVersionSource,
@@ -48,7 +51,7 @@ import {
 } from "#shared/printProduction.js";
 import { TAG_DEFAULT_PUBLIC_BASE_URL, buildTagUrls, padSerial } from "#shared/tags.js";
 import type { JourneySource } from "#shared/tagJourney.js";
-import { FileStorageUnavailableError, parseRef, putPrivateFile, resolveFileUrl } from "../lib/files.js";
+import { FileStorageUnavailableError, discardFiles, getPrivateFile, parseRef, putPrivateFile, resolveFileUrl } from "../lib/files.js";
 import { TagError, pgError } from "./errors.js";
 import { createJourneyEntry, journeyContext, recordJourney, resolveBatchId } from "./journey.js";
 import { countMetricSql } from "./metrics.js";
@@ -71,10 +74,21 @@ interface VersionRow {
   params: Record<string, unknown> | null; recipe: Record<string, unknown> | null; beds: PrintBed[] | null;
   consumes: Array<{ part: string; perPiece: number }> | null; changelog: string | null; fixes_batch_id: string | null;
   fixes_batch_code: string | null; source: string; created_at: Date | string; job_count: number;
+  preview: StoredPreview | null;
+}
+
+/** What print_model_versions.preview holds: the file's ref stays on the server. */
+interface StoredPreview extends PrintPreviewInfo {
+  fileRef: string;
+}
+
+function previewInfo(stored: StoredPreview | null | undefined): PrintPreviewInfo | null {
+  if (!stored?.fileRef) return null;
+  return { fileName: stored.fileName, bytes: Number(stored.bytes), sha256: stored.sha256, uploadedAt: stored.uploadedAt };
 }
 
 const VERSION_SELECT = sql`
-  SELECT v.id, v.model_id, v.version, v.status, v.builder, v.params, v.recipe, v.beds, v.consumes, v.changelog,
+  SELECT v.id, v.model_id, v.version, v.status, v.builder, v.params, v.recipe, v.beds, v.consumes, v.preview, v.changelog,
     v.fixes_batch_id, fb.batch_code AS fixes_batch_code, v.source, v.created_at,
     (SELECT count(*)::int FROM print_jobs j WHERE j.version_id = v.id) AS job_count
   FROM print_model_versions v
@@ -97,6 +111,7 @@ function versionItem(v: VersionRow): PrintModelVersionItem {
     source: v.source as PrintVersionSource,
     createdAt: iso(v.created_at)!,
     jobCount: Number(v.job_count),
+    preview: previewInfo(v.preview),
   };
 }
 
@@ -321,13 +336,13 @@ export function fileKindFor(name: string): PrintFileKind {
   return "3mf";
 }
 
-async function storeFile(owner: string, filename: string, body: Uint8Array, kind: PrintFileKind) {
+async function storeFile(owner: string, filename: string, body: Uint8Array, contentType: string) {
   if (!body.byteLength) throw new TagError("The file is empty", 400, "print_file_empty");
   if (body.byteLength > PRINT_FILE_MAX_BYTES) throw new TagError("The file is larger than 64 MB", 413, "print_file_too_large");
   const name = safeFileName(filename);
   const sha256 = crypto.createHash("sha256").update(body).digest("hex");
   try {
-    const ref = await putPrivateFile(`print/${owner}/${Date.now()}-${name}`, body, PRINT_FILE_CONTENT_TYPES[kind]);
+    const ref = await putPrivateFile(`print/${owner}/${Date.now()}-${name}`, body, contentType);
     return { ref, name, sha256, bytes: body.byteLength };
   } catch (err) {
     if (err instanceof FileStorageUnavailableError) throw new TagError("File storage is not configured", 503, "print_storage_unavailable");
@@ -361,7 +376,7 @@ export async function attachBedFile(modelRef: string, versionId: string, bedLabe
   const beds = version.beds ?? [];
   const index = beds.findIndex((bed) => bed.label.toLowerCase() === bedLabel.toLowerCase());
   if (index < 0) throw new TagError("No bed with that label in this version", 404);
-  const stored = await storeFile(versionId, filename, body, fileKindFor(filename));
+  const stored = await storeFile(versionId, filename, body, PRINT_FILE_CONTENT_TYPES[fileKindFor(filename)]);
   const updated = beds.map((bed, i) => (i === index ? { ...bed, fileRef: stored.ref, fileName: stored.name, fileBytes: stored.bytes, fileSha256: stored.sha256 } : bed));
   await db.update(printModelVersions).set({ beds: updated as Array<Record<string, unknown>> }).where(eq(printModelVersions.id, versionId));
   console.log(`[production] bed ${bedLabel} of ${model.slug} v${version.version}: file ${stored.name} (${stored.bytes} B, user ${userId ?? "?"})`);
@@ -375,6 +390,44 @@ export async function bedFileRef(modelRef: string, versionId: string, bedLabel: 
   const bed = version?.beds?.find((b) => b.label.toLowerCase() === bedLabel.toLowerCase());
   if (!bed?.fileRef) throw new TagError("This bed has no print file", 404);
   return bed.fileRef;
+}
+
+/** A binary glTF starts with the magic "glTF" and version 2. */
+export function isGlb(body: Uint8Array): boolean {
+  return body.byteLength >= 12 && body[0] === 0x67 && body[1] === 0x6c && body[2] === 0x54 && body[3] === 0x46 && body[4] === 2;
+}
+
+/**
+ * A version's 3D preview (print-pipeline/preview.py: one sample piece, coloured by its AMS slots). Unlike a bed's
+ * print file it is not part of what an order printed, so it can be replaced at any time; the old file is dropped.
+ */
+export async function attachVersionPreview(modelRef: string, versionId: string, filename: string, body: Uint8Array, userId: string | null): Promise<PrintModelVersionItem> {
+  const model = await resolveModel(modelRef);
+  const [version] = await rows<VersionRow>(sql`${VERSION_SELECT} WHERE v.id = ${versionId} AND v.model_id = ${model.id}`);
+  if (!version) throw new TagError("Version not found", 404);
+  if (!isGlb(body)) throw new TagError("The preview must be a binary glTF (.glb)", 400, "print_preview_not_glb");
+  if (body.byteLength > PRINT_PREVIEW_MAX_BYTES) throw new TagError("The preview is larger than 16 MB", 413, "print_preview_too_large");
+  const stored = await storeFile(versionId, filename.toLowerCase().endsWith(".glb") ? filename : `${filename}.glb`, body, PRINT_PREVIEW_CONTENT_TYPE);
+  const preview: StoredPreview = { fileRef: stored.ref, fileName: stored.name, bytes: stored.bytes, sha256: stored.sha256, uploadedAt: new Date().toISOString() };
+  await db.update(printModelVersions).set({ preview: preview as unknown as Record<string, unknown> }).where(eq(printModelVersions.id, versionId));
+  if (version.preview?.fileRef) await discardFiles([version.preview.fileRef], `print preview of ${model.slug} v${version.version}`);
+  console.log(`[production] preview of ${model.slug} v${version.version}: ${stored.name} (${stored.bytes} B, user ${userId ?? "?"})`);
+  const [row] = await rows<VersionRow>(sql`${VERSION_SELECT} WHERE v.id = ${versionId}`);
+  return versionItem(row);
+}
+
+/** The preview's bytes, for the server to stream (the browser never fetches the storage bucket itself). */
+export async function versionPreview(modelRef: string, versionId: string): Promise<{ body: Uint8Array; sha256: string }> {
+  if (!UUID.test(versionId)) throw new TagError("Version not found", 404);
+  const model = await resolveModel(modelRef);
+  const [version] = await rows<VersionRow>(sql`${VERSION_SELECT} WHERE v.id = ${versionId} AND v.model_id = ${model.id}`);
+  if (!version?.preview?.fileRef) throw new TagError("This version has no 3D preview", 404, "print_preview_missing");
+  try {
+    return { body: await getPrivateFile(version.preview.fileRef), sha256: version.preview.sha256 };
+  } catch (err) {
+    if (err instanceof FileStorageUnavailableError) throw new TagError("File storage is not configured", 503, "print_storage_unavailable");
+    throw err;
+  }
 }
 
 // ─── Orders ───────────────────────────────────────────────────────────────────
@@ -559,6 +612,7 @@ export async function getJob(id: string): Promise<PrintJobDetail> {
     recipe: version?.recipe ?? {},
     files: files.map(fileItem),
     pieces: job.batchId ? await jobPieces(job.batchId, bed) : [],
+    preview: previewInfo(version?.preview),
   };
 }
 
@@ -867,7 +921,7 @@ export async function attachJobFile(id: string, kind: PrintFileKind, filename: s
     throw new TagError("This bench is not building that order", 409, "print_job_not_claimed");
   }
   if (["printed", "cancelled"].includes(job.status)) throw new TagError(`A ${job.status} order takes no more files`, 409, "print_job_state");
-  const stored = await storeFile(job.id, filename, body, kind);
+  const stored = await storeFile(job.id, filename, body, PRINT_FILE_CONTENT_TYPES[kind]);
   const [file] = await db.insert(printJobFiles).values({
     jobId: job.id,
     kind,

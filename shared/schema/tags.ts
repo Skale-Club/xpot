@@ -442,6 +442,8 @@ export const printModelVersions = pgTable("print_model_versions", {
   recipe: jsonb("recipe").$type<Record<string, unknown>>().notNull().default({}),
   beds: jsonb("beds").$type<Array<Record<string, unknown>>>().notNull().default(sql`'[]'::jsonb`),
   consumes: jsonb("consumes").$type<Array<{ part: string; perPiece: number }>>().notNull().default(sql`'[]'::jsonb`),
+  // The 3D preview (GLB of one sample piece): { fileRef, fileName, bytes, sha256, uploadedAt } (migrations/0064).
+  preview: jsonb("preview").$type<Record<string, unknown> | null>(),
   changelog: text("changelog"),
   fixesBatchId: uuid("fixes_batch_id").references(() => tagBatches.id, { onDelete: "set null" }),
   source: text("source").notNull().default("admin"),

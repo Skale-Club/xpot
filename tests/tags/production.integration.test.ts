@@ -190,6 +190,69 @@ describe("print catalog", () => {
   });
 });
 
+describe("3D preview", () => {
+  /** A minimal binary glTF header ("glTF", version 2) and some payload. */
+  const glb = (tail: string) => new Uint8Array([0x67, 0x6c, 0x54, 0x46, 2, 0, 0, 0, 20, 0, 0, 0, ...bytes(tail)]);
+
+  it("keeps one GLB per version, streams it from this origin and shows it on the version and its plates", async () => {
+    const app = admin();
+    const model = (await createSerializedModel(app)).body;
+    const versionId = model.currentVersion.id;
+    const path = `/api/xpot/admin/print-models/plate-large-menu-white/versions/${versionId}/preview`;
+    expect(model.currentVersion.preview).toBeNull();
+    expect((await request(app, "GET", path)).status).toBe(404);
+
+    const notGlb = await request(app, "POST", `${path}?filename=menu.glb`, bytes("not a model"));
+    expect(notGlb.status).toBe(400);
+    expect(notGlb.body.code).toBe("print_preview_not_glb");
+    expect((await request(appFor("print-manager"), "POST", `${path}?filename=menu.glb`, glb("x"))).status).toBe(403);
+
+    const first = await request(app, "POST", `${path}?filename=menu`, glb("first"));
+    expect(first.status).toBe(201);
+    expect(first.body.preview).toMatchObject({ fileName: "menu.glb", bytes: 17 });
+    expect(first.body.preview.fileRef).toBeUndefined();
+    const firstKey = Array.from(store.objects.keys()).find((k) => k.endsWith("-menu.glb"))!;
+
+    const streamed = await request(app, "GET", path);
+    expect(streamed.status).toBe(200);
+    expect(streamed.headers.get("content-type")).toContain("model/gltf-binary");
+    expect(streamed.headers.get("content-length")).toBe("17");
+    expect((await request(app, "GET", path, undefined, { "if-none-match": streamed.headers.get("etag")! })).status).toBe(304);
+
+    const plate = await firstPlate(app, { model: "plate-large-menu-white" });
+    expect(plate.preview).toMatchObject({ fileName: "menu.glb" });
+
+    // A preview is not what an order printed: it can be replaced after the version was used, and the old file goes.
+    const second = await request(app, "POST", `${path}?filename=menu-v2.glb`, glb("second one"));
+    expect(second.status).toBe(201);
+    expect(second.body.preview).toMatchObject({ fileName: "menu-v2.glb", bytes: 22 });
+    expect(store.removed).toContain(firstKey);
+    expect((await request(app, "GET", "/api/xpot/admin/print-models/plate-large-menu-white")).body.currentVersion.preview.fileName).toBe("menu-v2.glb");
+  });
+
+  it("takes a preview as raw bytes with an MCP token (preview.py --upload), and nothing without a valid one", async () => {
+    const { registerMcpRoutes } = await import("../../server/mcp/routes.js");
+    const { createMcpToken, revokeMcpToken } = await import("../../server/mcp/tokens.js");
+    await createSerializedModel(admin());
+    const mcp = express();
+    registerMcpRoutes(mcp);
+    const { token, secret } = await createMcpToken("preview upload", "print-admin");
+    const path = "/mcp/print-preview/plate-large-menu-white";
+
+    expect((await request(mcp, "POST", path, glb("x"))).status).toBe(401);
+    expect((await request(mcp, "POST", path, glb("x"), { authorization: "Bearer xpot_not_a_real_token" })).status).toBe(401);
+    expect((await request(mcp, "POST", path, bytes("not a model"), { authorization: `Bearer ${secret}` })).status).toBe(400);
+
+    const sent = await request(mcp, "POST", path, glb("from the bench pc"), { authorization: `Bearer ${secret}` });
+    expect(sent.status).toBe(201);
+    expect(sent.body).toMatchObject({ model: "plate-large-menu-white", version: 1, preview: { fileName: "plate-large-menu-white-preview.glb", bytes: 29 } });
+    expect((await request(admin(), "GET", "/api/xpot/admin/print-models/plate-large-menu-white")).body.currentVersion.preview.bytes).toBe(29);
+
+    await revokeMcpToken(token.id);
+    expect((await request(mcp, "POST", path, glb("again"), { authorization: `Bearer ${secret}` })).status).toBe(401);
+  });
+});
+
 describe("serialized print orders", () => {
   it("issues the batch and the order in one step, with the next code for the prefix", async () => {
     const app = admin();
