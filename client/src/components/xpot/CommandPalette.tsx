@@ -1,3 +1,4 @@
+import { useViewerAccess } from "@/lib/adminMode";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
@@ -58,6 +59,7 @@ export function CommandPalette({
   const selected = ACCENT_SELECTED[accent];
   const [, navigate] = useLocation();
   const modules = useXpotModules();
+  const { adminMode } = useViewerAccess();
   const [query, setQuery] = useState("");
   const [index, setIndex] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
@@ -103,7 +105,7 @@ export function CommandPalette({
             label: l.name,
             sub: [l.locations?.[0]?.city, l.industry].filter(Boolean).join(" · "),
             icon: Building2,
-            href: `/leads/${l.id}`,
+            href: `${adminMode ? "/admin/work" : ""}/leads/${l.id}`,
           }),
         );
       (pieces ?? [])
@@ -116,13 +118,13 @@ export function CommandPalette({
             label: p.publicCode,
             sub: [p.leadName, p.label].filter(Boolean).join(" · "),
             icon: Tag,
-            href: `/tags/pieces/${encodeURIComponent(p.publicCode)}`,
+            href: adminMode ? `/admin/tags/pieces/${p.id}` : `/tags/pieces/${encodeURIComponent(p.publicCode)}`,
             piece: p,
           }),
         );
     }
     return out;
-  }, [query, pages, leads, pieces, t]);
+  }, [query, pages, leads, pieces, t, adminMode]);
 
   useEffect(() => setIndex(0), [query]);
   // Results can shrink or grow while lists load; keep the highlight on a real row.

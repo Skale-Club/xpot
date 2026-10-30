@@ -4,7 +4,6 @@ import {
   Boxes,
   Building2,
   DollarSign,
-  Factory,
   FileText,
   HeartPulse,
   History,
@@ -53,6 +52,8 @@ export type NavGroup = {
   items: NavItem[];
   /** The whole group is the global admin's: the "Xpot admin" tag sits on its heading, not on each item. */
   adminOnly?: boolean;
+  /** Secondary setup tools start collapsed in the management panel. */
+  collapsible?: boolean;
 };
 
 /** Matches a path and everything under it ("/tags" matches "/tags/pieces", not "/tagsx"). */
@@ -228,8 +229,7 @@ export function moduleGroups(module: XpotModule, viewer: Viewer, l: Labels): Nav
       items: visibleTo(viewer, [
         { href: "/admin/tags/overview", label: l.shell("manageOverview"), icon: BarChart3, match: (p) => p === "/admin/tags" || tab("overview")(p) },
         // What the house prints: the catalog of models and the print queue (docs/PRINT_EXECUTION_PLAN.md).
-        { href: "/admin/tags/production", label: l.shell("manageProduction"), icon: Printer, match: tab("production"), adminOnly: true },
-        { href: "/admin/tags/batches", label: l.shell("manageBatches"), icon: Factory, match: tab("batches"), adminOnly: true },
+        { href: "/admin/tags/production", label: l.shell("manageProduction"), icon: Printer, match: (p) => tab("production")(p) || tab("batches")(p), adminOnly: true },
         { href: "/admin/tags/pieces", label: l.shell("managePieces"), icon: Nfc, match: tab("pieces") },
         { href: "/admin/tags/kits", label: l.shell("manageKits"), icon: PackageOpen, match: tab("kits") },
         { href: "/admin/tags/team", label: l.shell("manageResellers"), icon: Users, match: tab("team") },
@@ -272,6 +272,43 @@ export function accountGroups(viewer: Viewer, l: Labels): NavGroup[] {
     { label: l.shell("navOrganization"), items: administrationItems(l) },
     ...(viewer.isAdmin ? [{ label: l.nav("navPlatform"), items: platformItems(l), adminOnly: true }] : []),
   ];
+}
+
+/** A panel lists management destinations only; the personal application's navigation stays outside it. */
+export function managementGroups(modules: readonly XpotModule[], viewer: Viewer, l: Labels, names: {
+  home: string; tags: string; visits: string; team: string; system: string;
+}): NavGroup[] {
+  if (!viewer.canManage) return [];
+  const groups: NavGroup[] = [{ label: "", items: [{ href: "/admin", label: names.home, icon: LayoutDashboard, match: (path) => path === "/admin" }] }];
+  const tags = modules.includes("tags") ? moduleGroups("tags", viewer, l).slice(1).flatMap((group) => group.items) : [];
+  const visits = modules.includes("visits") ? moduleGroups("visits", viewer, l).slice(1).flatMap((group) => group.items) : [];
+  const operations = ["/admin/tags/production", "/admin/tags/pieces", "/admin/tags/kits", "/admin/tags/overview"];
+  if (tags.length) groups.push({ label: names.tags, items: operations.flatMap((href) => tags.filter((item) => item.href === href)) });
+  if (modules.includes("visits")) groups.push({ label: names.visits, collapsible: viewer.isAdmin, items: [
+    { href: "/admin/work/leads", label: l.shell("tabLeads"), icon: Building2, match: starts("/admin/work/leads") },
+    { href: "/admin/work/tasks", label: l.shell("tabTasks"), icon: ListTodo, match: starts("/admin/work/tasks") },
+    { href: "/admin/work/sales", label: l.shell("tabSales"), icon: DollarSign, match: starts("/admin/work/sales") },
+    ...visits.filter((item) => item.href === "/admin/overview").map((item) => ({ ...item, match: starts(item.href) })),
+  ] });
+  groups.push({ label: names.team, collapsible: viewer.isAdmin, items: [...administrationItems(l), ...tags.filter((item) => item.href === "/admin/tags/team")] });
+  groups.push({ label: names.system, collapsible: true, items: [
+    ...visits.filter((item) => item.href !== "/admin/overview"),
+    ...tags.filter((item) => !operations.includes(item.href) && item.href !== "/admin/tags/team"),
+    ...(viewer.isAdmin ? platformItems(l) : []),
+  ] });
+  return groups.filter((group) => group.items.length > 0);
+}
+
+/** Organization Rep Admins keep their team tools, without global admin destinations. */
+export function organizationPanelGroups(modules: readonly XpotModule[], l: Labels): NavGroup[] {
+  return [{ label: l.shell("navOrganization"), items: [
+    ...administrationItems(l).filter((item) => item.href === "/organizations"),
+    ...(modules.includes("visits") ? [
+      { href: "/admin/work/leads", label: l.shell("tabLeads"), icon: Building2, match: starts("/admin/work/leads") },
+      { href: "/admin/work/tasks", label: l.shell("tabTasks"), icon: ListTodo, match: starts("/admin/work/tasks") },
+      { href: "/admin/work/sales", label: l.shell("tabSales"), icon: DollarSign, match: starts("/admin/work/sales") },
+    ] : []),
+  ] }];
 }
 
 /** Screens the palette offers that no sidebar lists: the visit, a plain chip, the landing page editor. */

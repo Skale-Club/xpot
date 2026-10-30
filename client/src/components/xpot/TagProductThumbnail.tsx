@@ -21,6 +21,9 @@ const PLAQUE_PRODUCT_TYPES = new Set([
 const SIZES = {
   sm: {
     body: "w-7 gap-[3px] p-[3px] pb-1",
+    plateBody: "h-7 w-7 justify-between p-[3px]",
+    plateMark: "h-1.5 w-1.5",
+    plateFace: "2xs",
     corners: "rounded-[5px]",
     standCorners: "rounded-t-[5px] rounded-b-[2px]",
     mark: "h-2 w-2",
@@ -29,11 +32,25 @@ const SIZES = {
   },
   md: {
     body: "w-11 gap-1.5 p-1.5 pb-2",
+    plateBody: "h-11 w-11 justify-between p-1.5",
+    plateMark: "h-2 w-2",
+    plateFace: "xs",
     corners: "rounded-[8px]",
     standCorners: "rounded-t-[8px] rounded-b-[3px]",
     mark: "h-3 w-3",
     face: "sm",
     base: "h-2 w-12 rounded-b-[4px] rounded-t-[1px]",
+  },
+  lg: {
+    body: "h-32 w-24 justify-between p-3 pb-4",
+    plateBody: "h-24 w-24 justify-between p-3",
+    plateMark: "h-4 w-4",
+    plateFace: "lg",
+    corners: "rounded-xl",
+    standCorners: "rounded-t-xl rounded-b-[4px]",
+    mark: "h-6 w-6",
+    face: "lg",
+    base: "h-3 w-28 rounded-b-md rounded-t-[2px]",
   },
 } as const;
 
@@ -216,8 +233,8 @@ function isPlaque(productType: string, face: string | null | undefined): boolean
   return PLAQUE_PRODUCT_TYPES.has(productType) || (productType === "custom" && face === "instagram");
 }
 
-const VISUAL_SLOT = { sm: "w-9", md: "w-12" } as const;
-const VISUAL_FACE_SIZE = { sm: "md", md: "lg" } as const;
+const VISUAL_SLOT = { sm: "w-9", md: "w-12", lg: "w-28" } as const;
+const VISUAL_FACE_SIZE = { sm: "md", md: "lg", lg: "lg" } as const;
 
 /**
  * The picture of a piece in lists and headers: the plaque drawing when the
@@ -229,16 +246,18 @@ export function TagPieceVisual({
   face,
   size = "sm",
   title,
+  theme,
 }: {
   productType: string;
   face: string | null | undefined;
   size?: keyof typeof SIZES;
   title?: string;
+  theme?: string | null;
 }) {
   return (
     <span className={`inline-flex shrink-0 items-center justify-center ${VISUAL_SLOT[size]}`} title={title}>
       {isPlaque(productType, face) ? (
-        <TagProductThumbnail productType={productType} face={face} size={size} />
+        <TagProductThumbnail productType={productType} face={face} size={size} theme={theme} />
       ) : (
         <TagFaceIcon face={face} size={VISUAL_FACE_SIZE[size]} title={title} />
       )}
@@ -256,26 +275,31 @@ export function TagProductThumbnail({
   face,
   size = "md",
   className = "",
+  theme,
 }: {
   productType: string;
   face: string | null | undefined;
   size?: keyof typeof SIZES;
   className?: string;
+  theme?: string | null;
 }) {
   if (!isPlaque(productType, face)) return null;
 
   const s = SIZES[size];
-  const stand = plaqueModel(productType, face) === "Stand";
+  const model = plaqueModel(productType, face);
+  const stand = model === "Stand";
+  const plate = model === "Plate";
+  const dark = /^(black|preto|preta|negro|negra)(?:$|[\s_-])/i.test(theme?.trim() ?? "");
   return (
     <span className={`inline-flex shrink-0 flex-col items-center ${className}`} aria-hidden="true">
       <span
-        className={`flex flex-col items-center bg-gradient-to-b from-white to-[#ecebe7] text-neutral-800 shadow-[0_1px_3px_rgba(0,0,0,0.35)] ${s.body} ${stand ? s.standCorners : s.corners}`}
+        className={`flex flex-col items-center ${dark ? "bg-gradient-to-b from-neutral-700 to-neutral-900 text-white ring-1 ring-white/20" : "bg-gradient-to-b from-white to-[#ecebe7] text-neutral-800"} shadow-[0_1px_3px_rgba(0,0,0,0.35)] ${plate ? s.plateBody : s.body} ${stand ? s.standCorners : s.corners}`}
       >
         <span className="flex w-full items-center justify-between">
-          <Wifi className={`shrink-0 ${s.mark}`} strokeWidth={2.6} />
-          <MiniQr className={`shrink-0 ${s.mark}`} />
+          <Wifi className={`shrink-0 ${plate ? s.plateMark : s.mark}`} strokeWidth={2.6} />
+          <MiniQr className={`shrink-0 ${plate ? s.plateMark : s.mark}`} />
         </span>
-        <TagFaceIcon face={face} size={s.face} className="!shadow-none !ring-0" />
+        <TagFaceIcon face={face} size={plate ? s.plateFace : s.face} className="!shadow-none !ring-0" />
       </span>
       {/* The stand's foot. */}
       {stand ? <span className={`bg-black ${s.base}`} /> : null}

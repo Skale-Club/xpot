@@ -7,12 +7,12 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { EmptyState } from "@/components/xpot/EmptyState";
 import { Field, Input, Select, Textarea } from "@/components/xpot/Field";
 import { Tabs } from "@/components/xpot/Tabs";
-import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
 import { Pill } from "@/components/xpot/StatusPill";
 import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { productionMessages } from "@/i18n/messages/production";
+import { unifiedProductionMessages } from "@/i18n/messages/unifiedProduction";
 import { errorMessage, invalidateAdminTags, sendJson } from "./api";
 import { catalogOptions, useTagCatalog } from "./batches-shared";
 import { useTagLabels } from "./labels";
@@ -21,6 +21,11 @@ import { PrintModelPage } from "./production-model";
 import { PrintJobPage } from "./production-job";
 import { PrintDialog, RequestList } from "./production-orders";
 import { ModelStatusPill, PRODUCTION_BASE, bedSummary, usePrintModels, type JobFilter } from "./production-shared";
+import { BatchesTab } from "./BatchesTab";
+import { BatchDetail } from "./BatchDetail";
+import { ProductionWizard } from "./production-wizard";
+import { productionPath } from "./production-workflow";
+import { ProductionIdentity } from "./production-identity";
 
 // Manage › Production (the Xpot admin's, docs/PRINT_EXECUTION_PLAN.md): the catalog of what the house prints and
 // the queue of print orders. Paths: /admin/tags/production[/queue | /models/<slug> | /jobs/<id>].
@@ -29,25 +34,35 @@ type Go = (path: string) => void;
 
 export function ProductionTab({ rest, go }: { rest: string[]; go: Go }) {
   const t = useT(productionMessages);
+  const u = useT(unifiedProductionMessages);
+  const [creating, setCreating] = useState(false);
   const [view, id] = rest;
-  if (view === "models" && id) return <PrintModelPage slug={id} go={go} />;
-  if (view === "jobs" && id) return <PrintJobPage id={id} go={go} />;
-  const tab = view === "queue" ? "queue" : "catalog";
+  const navigate = (path: string) => go(productionPath(path));
+  if (view === "models" && id) return <PrintModelPage slug={id} go={navigate} />;
+  if (view === "jobs" && id) return <PrintJobPage id={id} go={navigate} />;
+  if (view === "batches" && id) return <BatchDetail id={id} go={navigate} />;
+  const tab = view === "batches" ? "batches" : view === "models" ? "catalog" : "queue";
   return (
     <div className="space-y-4" data-testid="admin-production">
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div><h1 className="text-2xl font-semibold tracking-tight text-white">{u("title")}</h1><p className="mt-1 max-w-2xl text-sm text-white/50">{u("intro")}</p></div>
+        <Button variant="brand" accent="tags" onClick={() => setCreating(true)} data-testid="production-new"><Plus className="h-4 w-4" />{u("newProduction")}</Button>
+      </header>
       <Tabs
         tabs={[
-          { id: "catalog", label: t("tabCatalog"), testId: "production-tab-catalog" },
-          { id: "queue", label: t("tabQueue"), testId: "production-tab-queue" },
+          { id: "queue", label: u("requests"), testId: "production-tab-queue" },
+          { id: "batches", label: u("receiving"), testId: "production-tab-batches" },
+          { id: "catalog", label: u("models"), testId: "production-tab-catalog" },
         ]}
         value={tab}
-        onChange={(next) => go(next === "queue" ? `${PRODUCTION_BASE}/queue` : PRODUCTION_BASE)}
+        onChange={(next) => navigate(next === "batches" ? `${PRODUCTION_BASE}/batches` : next === "catalog" ? `${PRODUCTION_BASE}/models` : `${PRODUCTION_BASE}/queue`)}
         ariaLabel={t("productionNav")}
         idPrefix="production"
         fill={false}
         accent="tags"
       />
-      {tab === "catalog" ? <CatalogView go={go} /> : <QueueView go={go} />}
+      {tab === "catalog" ? <CatalogView go={navigate} /> : tab === "batches" ? <BatchesTab go={navigate} embedded onCreate={() => setCreating(true)} /> : <QueueView go={navigate} />}
+      {creating ? <ProductionWizard onClose={() => setCreating(false)} onOrdered={(request) => navigate(request.plates.length === 1 ? `${PRODUCTION_BASE}/jobs/${request.plates[0].id}` : `${PRODUCTION_BASE}/queue`)} onCreated={(batchId) => navigate(`/batches/${batchId}?tab=receive`)} /> : null}
     </div>
   );
 }
@@ -107,9 +122,8 @@ function ModelCard({ model, onOpen, onPrint }: { model: PrintModelItem; onOpen: 
   return (
     <li className="flex flex-col gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-3" data-testid="production-model-card">
       <button type="button" onClick={onOpen} className="flex min-w-0 items-start gap-3 text-left">
-        {model.kind === "serialized" ? <TagFaceIcon face={model.face} size="md" /> : <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/5"><Shapes className="h-4 w-4 text-white/40" aria-hidden="true" /></span>}
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-semibold text-white">{model.title}</span>
+          <ProductionIdentity model={model} />
           <span className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-white/45">
             <ModelStatusPill status={model.status} />
             {model.lowStock ? <Pill tone="amber">{t("lowStock", { count: model.partReorderAt ?? 0 })}</Pill> : null}
@@ -229,11 +243,12 @@ function NewModelDialog({ onClose, onCreated }: { onClose: () => void; onCreated
 
 function QueueView({ go }: { go: Go }) {
   const t = useT(productionMessages);
+  const u = useT(unifiedProductionMessages);
   const [filter, setFilter] = useState<JobFilter>("open");
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <p className="min-w-0 max-w-2xl text-sm text-white/60">{t("queueIntro")}</p>
+        <p className="min-w-0 max-w-2xl text-sm text-white/60">{u("queueIntro")}</p>
         <Tabs
           tabs={[
             { id: "open", label: t("filterOpen") },

@@ -29,7 +29,7 @@ export function LeadPiecesPanel({ leadId, leadName, summary }: {
   const items = pieces.data ?? [];
   // Same scope as the counts above: everyone's pieces in management mode.
   const { canManage } = useViewerAccess();
-  const allHref = leadPiecesPath(leadId, leadName, canManage);
+  const allHref = `${canManage ? "~" : ""}${leadPiecesPath(leadId, leadName, canManage)}`;
 
   return (
     <div className="space-y-3" data-testid="lead-pieces-panel">
@@ -59,7 +59,7 @@ export function LeadPiecesPanel({ leadId, leadName, summary }: {
             return (
               <Link
                 key={piece.id}
-                href={`/tags/pieces/${encodeURIComponent(piece.publicCode)}`}
+                href={canManage ? `~/admin/tags/pieces/${piece.id}` : `/tags/pieces/${encodeURIComponent(piece.publicCode)}`}
                 className="group grid min-h-[70px] grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 px-3 py-2.5 transition-colors hover:bg-white/[0.035]"
                 data-testid={`lead-piece-${piece.publicCode}`}
               >
