@@ -19,7 +19,8 @@ import type { McpCaller } from "../server.js";
 // the versions of each recipe, and the print requests with their plates. The same service and zod schemas as the admin
 // API. "Make a plate of 6 of stand X" is print_job_create with a quantity; the bench builds the plates' files and the
 // admin downloads and prints them by hand. A design session registers a model's first version here (and a fix as the
-// next version, with its changelog); files go up through the bench (`bench.py attach`), never through MCP.
+// next version, with its changelog); print files go up through the bench (`bench.py attach`), never through MCP. The
+// one file MCP takes is a version's 3D preview (print-pipeline/preview.py), small and only for showing the piece.
 
 const objectParam = z.preprocess((v) => {
   if (typeof v === "string") {
@@ -31,6 +32,9 @@ const objectParam = z.preprocess((v) => {
   }
   return v;
 }, z.record(z.unknown()));
+
+/** Base64 in a tool call: a preview is ~0.4-1 MB, so 6 MB is room enough without huge messages. */
+const MCP_PREVIEW_MAX_BYTES = 6 * 1024 * 1024;
 
 const text = (value: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(value, null, 2) }] });
 const failure = (message: string) => ({ isError: true as const, content: [{ type: "text" as const, text: message }] });
@@ -95,6 +99,21 @@ export function registerPrintProductionTools(server: McpServer, caller: McpCalle
     { model: z.string().min(1), version: objectParam },
     async ({ model, version }) =>
       run("print_model_version_create", () => production.createVersion(model, printVersionInputSchema.parse(version), null, "mcp")),
+  );
+
+  server.tool(
+    "print_model_preview_upload",
+    `Set a version's 3D preview, the rotatable model the Production pages show: a binary glTF (.glb) of one sample piece, made by \`python print-pipeline/preview.py <version.json> <out.glb>\` (sample code A7K3P9X2, never a client's code). \`glbBase64\`: the file, base64, at most ${MCP_PREVIEW_MAX_BYTES / 1024 / 1024} MB. \`version\`: the version's uuid (default the current one). Replaces the previous preview; nothing about printing changes.`,
+    { model: z.string().min(1), version: z.string().uuid().optional(), glbBase64: z.string().min(16) },
+    async ({ model, version, glbBase64 }) =>
+      run("print_model_preview_upload", async () => {
+        const body = new Uint8Array(Buffer.from(glbBase64, "base64"));
+        if (body.byteLength > MCP_PREVIEW_MAX_BYTES) throw new TagError(`The preview is larger than ${MCP_PREVIEW_MAX_BYTES / 1024 / 1024} MB`, 413);
+        const target = version ?? (await production.getModel(model)).currentVersion?.id;
+        if (!target) throw new TagError("This model has no current version", 409);
+        const updated = await production.attachVersionPreview(model, target, `${model}-preview.glb`, body, null);
+        return { model, version: updated.version, versionId: updated.id, preview: updated.preview };
+      }),
   );
 
   server.tool(

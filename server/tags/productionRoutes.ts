@@ -4,6 +4,7 @@ import {
   PRINT_FILE_KINDS,
   PRINT_FILE_MAX_BYTES,
   PRINT_JOB_STATUSES,
+  PRINT_PREVIEW_CONTENT_TYPE,
   printJobCreateSchema,
   printJobUpdateSchema,
   printModelInputSchema,
@@ -35,6 +36,8 @@ const uploadQuery = z.object({
   kind: z.enum(PRINT_FILE_KINDS).optional(),
   filename: z.string().trim().min(1).max(200),
 }).strict();
+
+const previewQuery = z.object({ filename: z.string().trim().min(1).max(200) }).strict();
 
 function uploadBody(req: Request): Uint8Array {
   if (!Buffer.isBuffer(req.body)) throw new TagError("Send the file as application/octet-stream", 415, "print_file_type");
@@ -154,6 +157,32 @@ export function registerProductionRoutes(app: Express, deps: { device: readonly 
       await redirectToSigned(res, await production.bedFileRef(req.params.ref, versionId, req.params.label));
     } catch (err) {
       fail(res, err, "Failed to open the print file");
+    }
+  });
+
+  // A version's 3D preview (a .glb of one sample piece): replaced at any time; streamed by the server, so the
+  // viewer loads it from this origin.
+  app.post(`${models}/:ref/versions/:versionId/preview`, requireTagAdmin, rawFile, async (req, res) => {
+    const versionId = uuidParam(req.params.versionId, res);
+    if (!versionId) return;
+    try {
+      const { filename } = previewQuery.parse(req.query);
+      res.status(201).json(await production.attachVersionPreview(req.params.ref, versionId, filename, uploadBody(req), userIdOf(req)));
+    } catch (err) {
+      fail(res, err, "Failed to upload the 3D preview");
+    }
+  });
+
+  app.get(`${models}/:ref/versions/:versionId/preview`, requireTagAdmin, async (req, res) => {
+    const versionId = uuidParam(req.params.versionId, res);
+    if (!versionId) return;
+    try {
+      const { body, sha256 } = await production.versionPreview(req.params.ref, versionId);
+      res.set({ "Content-Type": PRINT_PREVIEW_CONTENT_TYPE, "Cache-Control": "private, max-age=3600", ETag: `"${sha256}"` });
+      if (req.headers["if-none-match"] === `"${sha256}"`) return res.status(304).end();
+      res.send(Buffer.from(body.buffer, body.byteOffset, body.byteLength));
+    } catch (err) {
+      fail(res, err, "Failed to open the 3D preview");
     }
   });
 

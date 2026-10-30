@@ -53,6 +53,22 @@ export const PRINT_FILE_CONTENT_TYPES: Record<PrintFileKind, string> = {
 /** One upload: a full A1 project with meshes stays well under this. */
 export const PRINT_FILE_MAX_BYTES = 64 * 1024 * 1024;
 
+/** A version's 3D preview: one sample piece as a binary glTF (print-pipeline/preview.py), shown in Production. */
+export const PRINT_PREVIEW_CONTENT_TYPE = "model/gltf-binary";
+export const PRINT_PREVIEW_MAX_BYTES = 16 * 1024 * 1024;
+
+export interface PrintPreviewInfo {
+  fileName: string;
+  bytes: number;
+  sha256: string;
+  uploadedAt: string;
+}
+
+/** Where the admin app loads a version's preview from (the server streams it from private storage). */
+export function printPreviewPath(modelSlug: string, versionId: string): string {
+  return `/api/xpot/admin/print-models/${encodeURIComponent(modelSlug)}/versions/${versionId}/preview`;
+}
+
 export const PRINT_PART_REASONS = ["printed", "assembled", "used", "adjustment"] as const;
 export type PrintPartReason = (typeof PRINT_PART_REASONS)[number];
 
@@ -291,6 +307,8 @@ export interface PrintModelVersionItem {
   createdAt: string;
   /** Orders printed with it. */
   jobCount: number;
+  /** The 3D preview of one sample piece, when one was uploaded. */
+  preview: PrintPreviewInfo | null;
 }
 
 export interface PrintModelItem {
@@ -405,6 +423,8 @@ export interface PrintJobDetail extends PrintJobItem {
   recipe: Record<string, unknown>;
   files: PrintJobFileItem[];
   pieces: PrintJobPiece[];
+  /** The version's 3D preview (one sample piece), when it has one. */
+  preview: PrintPreviewInfo | null;
 }
 
 /** What the bench receives when it claims an order: everything `bench.py build` needs, nothing else. */

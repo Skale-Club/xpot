@@ -287,6 +287,15 @@ export class FileStorageUnavailableError extends Error {
   }
 }
 
+/** The bytes of a stored private file, for the server to stream itself (no cross-origin fetch from the browser). */
+export async function getPrivateFile(ref: string): Promise<Uint8Array> {
+  const parsed = parseRef(ref);
+  if (!parsed || parsed.kind === "legacy") throw new Error(`Not a stored file: ${ref}`);
+  const store = storeFor(parsed.backend);
+  if (!store) throw new FileStorageUnavailableError();
+  return store.get(parsed.key);
+}
+
 /** A URL the browser can open now: signed for stored files, as-is for legacy public ones. */
 export async function resolveFileUrl(ref: string): Promise<string | null> {
   const parsed = parseRef(ref);

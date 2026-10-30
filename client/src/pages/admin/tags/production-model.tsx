@@ -21,6 +21,7 @@ import { ADMIN_TAGS_KEY, STALE_MS, errorMessage, formatDate, getJson, invalidate
 import { useTagLabels } from "./labels";
 import { Loading, LoadError } from "./pieces-shared";
 import { PrintDialog, RequestList } from "./production-orders";
+import { PrintPreviewCard } from "./production-preview";
 import { KindPill, ModelStatusPill, PRODUCTION_BASE, bedSummary, formatBytes, uploadFile } from "./production-shared";
 
 // One print model: what it is, its versions (newest first, with what changed and why), the orders that printed it,
@@ -110,6 +111,10 @@ export function PrintModelPage({ slug, go }: { slug: string; go: Go }) {
         {!part ? <Stat card label={t("statWithResellers")} value={model.withResellers} /> : null}
         <Stat card label={t("statOpenOrders")} value={model.openJobs} />
       </div>
+
+      {!part && model.currentVersion ? (
+        <PrintPreviewCard modelSlug={model.slug} versionId={model.currentVersion.id} preview={model.currentVersion.preview} />
+      ) : null}
 
       {part ? (
         <SectionCard title={t("partCountTitle")} icon={PackageCheck} accent="tags" actions={<Button type="button" variant="secondary" size="sm" onClick={() => setCounting(true)}>{t("adjustCount")}</Button>}>

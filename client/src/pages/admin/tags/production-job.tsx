@@ -19,6 +19,7 @@ import { workspacesMessages } from "@/i18n/messages/workspaces";
 import { BatchReceiveStation, type ReceiveBatch } from "./batch-receive";
 import { plateDownloads } from "./production-shared";
 import { productionJourneyStep } from "./production-workflow";
+import { PrintPreviewCard } from "./production-preview";
 
 // One print plate, from file preparation through printing and scanning pieces into stock.
 
@@ -209,6 +210,8 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
         {minutes ? <Stat card label={t("statTime")} value={minutesText(minutes)} detail={swaps !== null ? t.plural("swapCount", swaps) : undefined} /> : null}
         {report.qr_check ? <Stat card label={t("statQrCheck")} value={report.qr_check} /> : null}
       </div>
+
+      {job.preview ? <PrintPreviewCard modelSlug={job.modelSlug} versionId={job.versionId} preview={job.preview} canUpload={false} /> : null}
 
 {journeyStep <= 1 && (bed?.ams?.length || bed?.pause) ? <>      <SectionCard title={t("instructionsTitle")} icon={ClipboardList} accent="tags">
         <div className="space-y-4 text-sm">
