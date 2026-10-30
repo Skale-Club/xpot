@@ -71,6 +71,16 @@ configure('large')
 # (three 0.16 layers in print). G_CLEAR per side, as the Stand's pockets (face_art.G_CLEAR).
 POCKET = 1.16
 G_CLEAR = fa.G_CLEAR
+# nfc_mount 'sticker_10x20' (Large only, user 2026-10-29: "quero fazer com adesivo"): the LeadSeals 10 x 20 x 0.15
+# NTAG213 sticker in the doc 16 s5 pocket, 23.00 x 13.00 x 0.48, long side left-right: the Menu/Venmo plates' and
+# the Stand v2's settings. The white body is translucent, so the floor is 1.16 behind the face (print z 1.16-1.64,
+# pause at the start of the 1.64-1.80 roof). It cannot sit under the G like the round tag: the G pocket is 1.16
+# deep, so the two would meet. It is centred on the Tap here row instead, clear of the G pocket; no round cavity.
+STICKER_W, STICKER_H, STICKER_DEPTH, STICKER_RADIUS = 23.0, 13.0, 0.48, 0.8
+STICKER_Z0 = 1.16
+STICKER_Z1 = round(STICKER_Z0 + STICKER_DEPTH, 2)
+STICKER_PAUSE_TOP_Z = round(STICKER_Z1 + 0.16, 2)
+STICKER_GAP_G, STICKER_GAP_EDGE = 1.0, 3.0    # in plan: to the G pocket, and to the top edge (chamfer + walls)
 
 
 def layout(code):
@@ -98,10 +108,15 @@ def layout(code):
     gb = g_outline.bounds
     return {'black': simp(unary_union([tap, head, dark])), 'yellow': simp(stars), 'g_outline': g_outline,
             'g_pieces': g_pieces, 'qr': info, 'qr_dark': dark, 'qr_top': qr_top, 'space': space,
-            'headline_w': head_w, 'g_box': gb, 'nfc_centre_y': (gb[1] + gb[3]) / 2, 'nfc_centre_x': (gb[0] + gb[2]) / 2}
+            'headline_w': head_w, 'g_box': gb, 'nfc_centre_y': (gb[1] + gb[3]) / 2, 'nfc_centre_x': (gb[0] + gb[2]) / 2,
+            'tap_centre_y': m + t['icon_h'] / 2}
 
 
-def build(code, out_dir, size='large'):
+def build(code, out_dir, size='large', nfc_mount='embedded_round'):
+    if nfc_mount not in ('embedded_round', 'sticker_10x20'):
+        raise ValueError('unsupported nfc_mount')
+    if nfc_mount == 'sticker_10x20' and size != 'large':
+        raise ValueError('the sticker pocket is laid out for the Large plate only')
     configure(size)
     code = fa.normalize_code(code)
     art = layout(code)
@@ -111,13 +126,24 @@ def build(code, out_dir, size='large'):
     back_txt, _ = fa.text_geom(code, fa.BACK_SERIAL['code_cap'], S / 2, S / 2 + fa.BACK_SERIAL['code_cap'] / 2)
     back_txt = back_txt.buffer(-0.01, join_style='mitre').buffer(0.01, join_style='mitre')
     back = ig.to_tile_back(back_txt.simplify(SIMPLIFY, preserve_topology=True))
-    nfc = Point(art['nfc_centre_x'] - S / 2, S - art['nfc_centre_y']).buffer(NFC_D / 2, quad_segs=64)
     assert pocket.distance(black) > 0.3 and pocket.distance(yellow) > 0.3, 'G pocket runs into the face art'
-    assert TOP - POCKET - NFC_Z1 >= 0.48 - 1e-6, 'floor between the G pocket and the NFC cavity is too thin'
+    if nfc_mount == 'sticker_10x20':
+        w, h, cy = STICKER_W / 2, STICKER_H / 2, S - art['tap_centre_y']
+        nfc = ig._rounded_rect(-w, cy - h, w, cy + h, STICKER_RADIUS)
+        nfc_z0, nfc_z1 = TOP - STICKER_Z1, TOP - STICKER_Z0     # model z: print z = TOP - model z
+        assert nfc.distance(pocket) >= STICKER_GAP_G, 'sticker pocket runs into the G pocket'
+        assert S - (cy + h) >= STICKER_GAP_EDGE, 'sticker pocket too close to the top edge'
+        assert nfc_z1 < TOP - INLAY, 'sticker pocket must stay behind the face art'
+        cavity_expected = nfc.area * STICKER_DEPTH
+    else:
+        nfc = Point(art['nfc_centre_x'] - S / 2, S - art['nfc_centre_y']).buffer(NFC_D / 2, quad_segs=64)
+        nfc_z0, nfc_z1 = NFC_Z0, NFC_Z1
+        assert TOP - POCKET - NFC_Z1 >= 0.48 - 1e-6, 'floor between the G pocket and the NFC cavity is too thin'
+        cavity_expected = np.pi * (NFC_D / 2) ** 2 * (NFC_Z1 - NFC_Z0)
 
     tile = ig.body()
     plain = igc.to_trimesh(tile)
-    tile = tile - igc.prism(nfc, NFC_Z0, NFC_Z1)
+    tile = tile - igc.prism(nfc, nfc_z0, nfc_z1)
     solid_volume = igc.to_trimesh(tile).volume
     tile = (tile - igc.prism(unary_union([black, yellow]), TOP - INLAY, TOP + 0.2)
             - igc.prism(pocket, TOP - POCKET, TOP + 0.2) - igc.prism(back, -0.2, BACK_ENGRAVE))
@@ -131,9 +157,9 @@ def build(code, out_dir, size='large'):
         'qr_module_mm': art['qr']['module_mm'], 'space_above_qr_mm': round(art['space'], 2),
         'headline_width_mm': round(art['headline_w'], 2), 'nfc_centre_from_top_mm': round(art['nfc_centre_y'], 2),
         'g_box_mm': [round(v, 2) for v in art['g_box']], 'pocket_mm2': round(pocket.area, 1),
-        'pocket_depth_mm': POCKET, 'floor_over_nfc_mm': round(TOP - POCKET - NFC_Z1, 2),
+        'pocket_depth_mm': POCKET, 'floor_over_nfc_mm': round(TOP - POCKET - nfc_z1, 2),
         'plain_mm3': round(plain.volume, 1), 'cavity_mm3': round(plain.volume - solid_volume, 1),
-        'cavity_expected_mm3': round(np.pi * (NFC_D / 2) ** 2 * (NFC_Z1 - NFC_Z0), 1),
+        'cavity_expected_mm3': round(cavity_expected, 1),
         'tile_mm3': round(tile_tm.volume, 1), 'tile_expected_mm3': round(want, 1),
         'black_mm3': round(black_tm.volume, 2), 'black_expected_mm3': round(black.area * INLAY, 2),
         'yellow_mm3': round(yellow_tm.volume, 2), 'yellow_expected_mm3': round(yellow.area * INLAY, 2),
@@ -142,6 +168,11 @@ def build(code, out_dir, size='large'):
         'bad_edges': igc.welded_bad_edges(tile_tm) + igc.welded_bad_edges(black_tm) + igc.welded_bad_edges(yellow_tm),
         'tile_bounds': tile_tm.bounds.round(3).tolist(),
     }
+    if nfc_mount == 'sticker_10x20':
+        rep.update(nfc_mount=nfc_mount, sticker_pocket_mm=[STICKER_W, STICKER_H, STICKER_DEPTH],
+                   sticker_pocket_print_z=[STICKER_Z0, STICKER_Z1], pause_top_z=STICKER_PAUSE_TOP_Z,
+                   tag_face_distance_mm=STICKER_Z0, nfc_centre_from_top_mm=round(art['tap_centre_y'], 2),
+                   sticker_gap_to_g_pocket_mm=round(nfc.distance(pocket), 2))
     q = {'size': FACE['qr']['size'], 'modules': FACE['qr']['modules'], 'y': art['qr_top']}
     igc.H = S
     rep['qr_decoded_polygons'] = igc.decode_qr_polygons(to_tile(art['qr_dark']), q, art['qr']['url'])
