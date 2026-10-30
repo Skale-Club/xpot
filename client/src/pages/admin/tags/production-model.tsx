@@ -72,7 +72,7 @@ export function PrintModelPage({ slug, go }: { slug: string; go: Go }) {
       {back}
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
-          {!part ? <TagPieceVisual productType={model.productType ?? "custom"} face={model.face} theme={model.theme} size="lg" /> : null}
+          {!part ? <TagPieceVisual productType={model.productType ?? "custom"} face={model.face} theme={model.theme} modelSlug={model.slug} size="lg" /> : null}
           <div className="min-w-0">
             <h1 className="truncate text-xl font-semibold text-white">{model.title}</h1>
             <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-white/45">

@@ -1,6 +1,7 @@
 import express, { type Express, type NextFunction, type Request, type RequestHandler, type Response } from "express";
 import { z } from "zod";
 import {
+  PRINT_PREVIEW_CATALOG_PATH,
   PRINT_FILE_KINDS,
   PRINT_FILE_MAX_BYTES,
   PRINT_JOB_STATUSES,
@@ -15,7 +16,7 @@ import {
   printVersionInputSchema,
   type PrintFileKind,
 } from "#shared/printProduction.js";
-import { requireTagAdmin } from "./access.js";
+import { requireTagAdmin, requireTagUser } from "./access.js";
 import { TagError } from "./errors.js";
 import * as production from "./production.js";
 
@@ -179,6 +180,28 @@ export function registerProductionRoutes(app: Express, deps: { device: readonly 
     if (!versionId) return;
     try {
       const { body, sha256 } = await production.versionPreview(req.params.ref, versionId);
+      res.set({ "Content-Type": PRINT_PREVIEW_CONTENT_TYPE, "Cache-Control": "private, max-age=3600", ETag: `"${sha256}"` });
+      if (req.headers["if-none-match"] === `"${sha256}"`) return res.status(304).end();
+      res.send(Buffer.from(body.buffer, body.byteOffset, body.byteLength));
+    } catch (err) {
+      fail(res, err, "Failed to open the 3D preview");
+    }
+  });
+
+  // The same previews for every signed-in rep, because the piece pictures (lists, headers, customer screens) show them:
+  // the catalog says which model a piece is and the GLB is streamed by the server like the admin one above.
+  app.get(PRINT_PREVIEW_CATALOG_PATH, requireTagUser, async (_req, res) => {
+    try {
+      res.set("Cache-Control", "private, max-age=60");
+      res.json(await production.previewCatalog());
+    } catch (err) {
+      fail(res, err, "Failed to load the 3D previews");
+    }
+  });
+
+  app.get(`${PRINT_PREVIEW_CATALOG_PATH}/:ref/glb`, requireTagUser, async (req, res) => {
+    try {
+      const { body, sha256 } = await production.currentPreview(req.params.ref);
       res.set({ "Content-Type": PRINT_PREVIEW_CONTENT_TYPE, "Cache-Control": "private, max-age=3600", ETag: `"${sha256}"` });
       if (req.headers["if-none-match"] === `"${sha256}"`) return res.status(304).end();
       res.send(Buffer.from(body.buffer, body.byteOffset, body.byteLength));
