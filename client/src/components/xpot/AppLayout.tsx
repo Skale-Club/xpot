@@ -124,9 +124,15 @@ function useShellNav() {
       ...(access.reach ? [{ href: access.hasAdminAccess ? "/admin" : "/organizations", label: panelName, icon: ShieldCheck, match: () => false, group: tw("manageAccess") }] : []),
     ];
   const crumb = panel ? { label: panelName, context: "account" as const } : module ? { label: moduleLabel(module), context: module as ShellContext } : null;
-  return { context, module, modules, groups, pages, moduleLabel, me, crumb, panel, panelName, panelEntryAvailable: !!access.reach };
+  return { context, module, modules, groups, pages, moduleLabel, me, crumb, panel, panelName, panelHome: access.hasAdminAccess ? "/admin" : "/organizations", panelEntryAvailable: !!access.reach };
 }
-type Accent = (typeof MODULE_ACCENT)[ShellContext];
+type Accent = { solid: string; soft: string; strong: string; text: string };
+const MANAGEMENT_ACCENT: Accent = { solid: "#fbbf24", soft: "rgba(251,191,36,0.12)", strong: "rgba(251,191,36,0.2)", text: "text-amber-200" };
+
+/** The management panel has a separate surface from the personal app's dot grid. */
+function ManagementBackground({ children }: { children: ReactNode }) {
+  return <div className="min-h-screen text-white" style={{ background: "linear-gradient(150deg, #191810 0%, #101317 35%, #0c1015 100%)" }} data-testid="management-background">{children}</div>;
+}
 
 function SidebarLink({ item, collapsed, active, accent, warningLabel }: { item: NavItem; collapsed: boolean; active: boolean; accent: Accent; warningLabel?: string }) {
   const Icon = item.icon;
@@ -215,8 +221,8 @@ function DesktopSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
   const tw = useT(workspacesMessages);
   const avatar = useAvatarUpload();
   const [location, navigate] = useLocation();
-  const { context, module, modules, groups, moduleLabel, me, panel, panelName } = useShellNav();
-  const accent = MODULE_ACCENT[module ?? "account"];
+  const { context, module, modules, groups, moduleLabel, me, panel, panelName, panelHome } = useShellNav();
+  const accent = panel ? MANAGEMENT_ACCENT : MODULE_ACCENT[module ?? "account"];
   const online = useOnline();
   const routesQuery = useQuery<Array<{ routeDate: string; status: string }>>({
     queryKey: ["/api/xpot/prospecting/routes"],
@@ -239,17 +245,17 @@ function DesktopSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
   ];
   return (
     <aside
-      className={`fixed inset-y-0 left-0 z-40 hidden flex-col border-r border-white/[0.07] lg:flex ${collapsed ? "w-[72px]" : "w-60"}`}
-      style={{ background: "rgba(8, 12, 24, 0.92)", backdropFilter: "blur(20px)" }}
+      className={`fixed inset-y-0 left-0 z-40 hidden flex-col border-r ${panel ? "border-amber-200/10" : "border-white/[0.07]"} lg:flex ${collapsed ? "w-[72px]" : "w-60"}`}
+      style={{ background: panel ? "#171a1e" : "rgba(8, 12, 24, 0.92)", backdropFilter: "blur(20px)" }}
       data-testid="desktop-sidebar"
       data-context={context}
       data-workspace={panel ? "management" : "work"}
     >
       {/* Where you are, as a coloured line along the top. */}
-      <span className="absolute inset-x-0 top-0 h-0.5" style={{ background: MODULE_ACCENT[context].solid }} aria-hidden="true" />
+      <span className="absolute inset-x-0 top-0 h-0.5" style={{ background: panel ? MANAGEMENT_ACCENT.solid : MODULE_ACCENT[context].solid }} aria-hidden="true" />
       <div className={`flex h-16 shrink-0 items-center ${collapsed ? "justify-center" : "justify-between px-4"}`}>
         {!collapsed && (
-          <Link href={panel ? "/admin" : MODULE_HOME[module ?? modules[0] ?? "visits"]} className="flex items-center" aria-label="Xpot">
+          <Link href={panel ? panelHome : MODULE_HOME[module ?? modules[0] ?? "visits"]} className="flex items-center" aria-label="Xpot">
             <XpotLogo className="h-7 w-auto" decorative />
           </Link>
         )}
@@ -264,7 +270,7 @@ function DesktopSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
         </button>
       </div>
 
-      <div className="px-3 pb-3">
+      {!panel ? <div className="px-3 pb-3">
         <div className={`flex items-center ${collapsed ? "justify-center py-2" : "gap-3 px-2 py-2"}`}>
           <button
             type="button"
@@ -292,11 +298,11 @@ function DesktopSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
           <input {...avatar.inputProps} />
           {!collapsed && <UserGreeting name={firstName} compact />}
         </div>
-      </div>
+      </div> : null}
 
       <div className="px-3 pb-3">
         {!panel && !collapsed ? <p className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-wider text-white/35">{tw("userArea")}</p> : null}
-        {panel ? <div className={`flex min-h-10 items-center gap-2 rounded-xl border border-amber-400/20 bg-amber-400/[0.06] text-amber-100 ${collapsed ? "justify-center" : "px-3"}`} title={panelName}><ShieldCheck className="h-4 w-4 shrink-0" />{!collapsed && <span className="text-xs font-semibold">{panelName}</span>}</div> : <SidebarModuleSwitch collapsed={collapsed} module={module} modules={modules} label={moduleLabel} />}
+        {panel ? <div className={`flex min-h-20 items-center gap-3 border-b border-amber-200/10 pb-4 text-amber-100 ${collapsed ? "justify-center" : "px-2"}`} title={panelName}><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-amber-300/25 bg-amber-300/10"><ShieldCheck className="h-5 w-5" /></span>{!collapsed && <span className="text-base font-semibold leading-snug">{panelName}</span>}</div> : <SidebarModuleSwitch collapsed={collapsed} module={module} modules={modules} label={moduleLabel} />}
         {module === "visits" ? <PersistentRouteProgress collapsed={collapsed} className={collapsed ? "mt-2" : "mt-2.5"} /> : null}
       </div>
 
@@ -315,6 +321,7 @@ function DesktopSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
         })}      </nav>
 
       <div className="space-y-1 border-t border-white/[0.07] px-3 py-3">
+        {panel && !collapsed ? <p className="truncate px-3 pb-2 text-xs text-white/35">{name}</p> : null}
         <AdminModeSidebarItem collapsed={collapsed} />
         {!panel && <InstallAppSidebarItem collapsed={collapsed} />}
         {footer.map((item) => (
@@ -350,12 +357,13 @@ function useOnline() {
   return online;
 }
 
-function DesktopTopBar({ title, crumb, actions, onSearch }: {
+function DesktopTopBar({ title, crumb, actions, onSearch, management = false }: {
   title: ReactNode;
   /** The part of the app ("Tags", "Administration"), in its colour, before the title. */
   crumb: { label: string; context: ShellContext } | null;
   actions?: ReactNode;
   onSearch: () => void;
+  management?: boolean;
 }) {
   const t = useT(shellMessages);
   const online = useOnline();
@@ -363,12 +371,12 @@ function DesktopTopBar({ title, crumb, actions, onSearch }: {
   return (
     <header
       className="sticky top-0 z-30 hidden h-16 items-center gap-4 border-b border-white/[0.07] px-8 lg:flex"
-      style={{ background: "rgba(6, 9, 18, 0.8)", backdropFilter: "blur(20px)" }}
+      style={{ background: management ? "rgba(23, 26, 30, 0.94)" : "rgba(6, 9, 18, 0.8)", backdropFilter: "blur(20px)" }}
     >
       <h1 className="flex min-w-0 flex-1 items-center gap-2 truncate text-lg font-bold tracking-tight text-white" data-testid="top-bar-title">
         {crumb && (
           <>
-            <span className={`shrink-0 ${MODULE_ACCENT[crumb.context].text}`}>{crumb.label}</span>
+            <span className={`shrink-0 ${management ? "text-amber-200" : MODULE_ACCENT[crumb.context].text}`}>{crumb.label}</span>
             <span className="shrink-0 text-white/25" aria-hidden="true">›</span>
           </>
         )}
@@ -474,6 +482,7 @@ export function AppLayout({
   const togglePalette = useCallback(() => setPaletteOpen((o) => !o), []);
   useDesktopShortcuts({ enabled: isDesktop, onPalette: togglePalette });
   const { pages, crumb: area, panel, panelEntryAvailable } = useShellNav();
+  const Background = panel ? ManagementBackground : AppBackground;
   const tShell = useT(shellMessages);
   // "Visits › Visits" says it twice: a screen named like its module shows the name once.
   const crumb = area && area.label !== title ? area : null;
@@ -492,7 +501,7 @@ export function AppLayout({
   };
 
   return (
-    <AppBackground>
+    <Background>
       <a
         href="#xpot-main-content"
         className="fixed left-4 top-4 z-[1000] -translate-y-24 rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white shadow-xl transition-transform focus:translate-y-0"
@@ -507,6 +516,7 @@ export function AppLayout({
           crumb={crumb}
           actions={topBarActions}
           onSearch={() => setPaletteOpen(true)}
+          management={panel}
         />
         <ActiveVisitBanner />
         <div
@@ -521,9 +531,9 @@ export function AppLayout({
             <ScreenErrorBoundary resetKey={location}>{children}</ScreenErrorBoundary>
           </main>
         </div>
-        {mobileNav ? <div className="lg:hidden">{mobileNav}</div> : null}
+        {!panel && mobileNav ? <div className="lg:hidden">{mobileNav}</div> : null}
       </div>
       {isDesktop && <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} pages={pages} />}
-    </AppBackground>
+    </Background>
   );
 }
