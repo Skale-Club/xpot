@@ -33,6 +33,11 @@ import { commonMessages } from "@/i18n/messages/common";
 import { manageTagsBatchesMessages } from "@/i18n/messages/manageTagsBatches";
 import { adminTagsFlowMessages } from "@/i18n/messages/adminTagsFlow";
 import { productionMessages } from "@/i18n/messages/production";
+import { unifiedProductionMessages } from "@/i18n/messages/unifiedProduction";
+import type { PrintJobDetail } from "@shared/printProduction";
+import { JobStatusPill, plateDownloads } from "./production-shared";
+import { ProductionWizard } from "./production-wizard";
+import { ProductionIdentity } from "./production-identity";
 
 interface BatchDetailData {
   id: string;
@@ -201,7 +206,7 @@ function StageStepper({ batch }: { batch: BatchDetailData }) {
           <span className="text-xs text-white/45">
             {t(step.state === "done" ? "stepDone" : step.state === "current" ? (step.stage === batch.stage ? "stepInProgress" : "stepCurrent") : "stepTodo")}
           </span>
-          {canMarkStep(step, batch.stage) ? (
+          {!batch.printJobId && canMarkStep(step, batch.stage) ? (
             <Button type="button" variant="secondary" size="sm" loading={mark.isPending && mark.variables?.stage === step.stage} disabled={mark.isPending} onClick={() => mark.mutate(step)} data-testid={`batch-mark-${step.stage}`}>
               {t("markDone")}
             </Button>
@@ -248,17 +253,35 @@ function DownloadButton({ href, filename, children }: { href: string; filename: 
  * One production batch, in tabs (`?tab=`): Summary (stage stepper and numbers), Print (the manufacturing package),
  * Receive (the intake station), Pieces, Hand out (into Distribution, on this batch) and Activity (its journey).
  */
+function BatchPrintFiles({ jobId, go }: { jobId: string; go: (path: string) => void }) {
+  const t = useT(productionMessages);
+  const u = useT(unifiedProductionMessages);
+  const { data: job, isLoading, error, refetch } = useQuery({
+    queryKey: [ADMIN_TAGS_KEY, "production", "job", jobId],
+    queryFn: () => getJson<PrintJobDetail>(`/api/xpot/admin/print-jobs/${jobId}`),
+    refetchInterval: (query) => ["requested", "building"].includes(query.state.data?.status ?? "") ? 10_000 : false,
+  });
+  const files = job ? plateDownloads(job) : { project: null, sliced: null };
+  return <SectionCard accent="tags" icon={Printer} title={u("output")} actions={<Button variant="secondary" size="sm" onClick={() => go(`/production/jobs/${jobId}`)}>{u("openFiles")}</Button>}>
+    {isLoading ? <Loading rows={2} /> : error ? <LoadError what={t("orderWhat")} error={error} onRetry={() => void refetch()} /> : job ? <div className="space-y-3">
+      <JobStatusPill status={job.status} />
+      {files.project || files.sliced ? <div className="flex flex-wrap gap-2">{[files.project, files.sliced].filter((f) => !!f).map((file) => <Button key={file.id} asChild variant="brand" accent="tags"><a href={`/api/xpot/admin/print-files/${file.id}`} target="_blank" rel="noopener noreferrer"><Download className="h-4 w-4" />{t(file.kind === "gcode_3mf" ? "downloadSliced" : "downloadProject")}</a></Button>)}</div> : <p className="text-sm text-white/55">{job.errorMessage ?? t(job.builder ? "requestedBodyBench" : "requestedBodyHand")}</p>}
+    </div> : null}
+  </SectionCard>;
+}
+
 export function BatchDetail({ id, go }: { id: string; go: (path: string) => void }) {
   const [editing, setEditing] = useState(false);
   const [stateDialog, setStateDialog] = useState(false);
   const [changingState, setChangingState] = useState(false);
+  const [preparing, setPreparing] = useState(false);
   // ?tab=receive&pieces=sold — survive opening a piece and coming back.
   const url = useUrlFilters({ tab: "summary", pieces: "all" });
   const tab: BatchTab = (BATCH_TABS as readonly string[]).includes(url.values.tab) ? (url.values.tab as BatchTab) : "summary";
   const filter = FILTERS.some((f) => f.id === url.values.pieces) ? url.values.pieces : "all";
   const t = useT(manageTagsBatchesMessages);
   const tf = useT(adminTagsFlowMessages);
-  const tp = useT(productionMessages);
+  const u = useT(unifiedProductionMessages);
   const labels = useTagLabels();
   const { toast } = useToast();
   const { data: batch, isLoading, error, refetch } = useQuery<BatchDetailData>({
@@ -267,7 +290,7 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
     staleTime: STALE_MS,
   });
 
-  const back = <BackLink onBack={() => go("/batches")}>{t("allBatches")}</BackLink>;
+  const back = <BackLink onBack={() => go(batch?.printJobId ? `/production/jobs/${batch.printJobId}` : "/production/batches")}>{batch?.printJobId ? u("backToOrder") : u("receiving")}</BackLink>;
 
   if (isLoading) return <Loading rows={5} />;
   if (error || !batch) {
@@ -298,6 +321,7 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
   const shown = pieces.filter((p) => passes(activeFilter, p));
   const face = resolveTagFace({ batchFace: batch.face, productType: batch.productType });
   const fileBase = batch.batchCode.replace(/[^A-Za-z0-9._-]/g, "_");
+  const canPrepare = !batch.printJobId && batch.codeSource === "issued" && batch.tagCount > 0 && ["issued", "built"].includes(batch.stage) && batch.status !== "cancelled";
 
   const closing = batch.status === "open";
   const changeState = async (reopenReason: string) => {
@@ -323,6 +347,7 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
   return (
     <div className="min-w-0 space-y-5">
       {back}
+      {preparing ? <ProductionWizard existingBatch={{ ...batch, face }} onClose={() => setPreparing(false)} onOrdered={(request) => go(`/production/jobs/${request.plates[0].id}`)} /> : null}
 
       <div className={`space-y-4 rounded-2xl ${GLASS_CLASS} p-4 sm:p-5`}>
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -340,17 +365,13 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
                 {labels.product(batch.productType)} · {labels.face(face)} · {batch.vendor || t("noVendor")} ·{" "}
                 {tf("piecesReceivedOf", { received: batch.receivedCount, total: batch.tagCount })} · {t("createdOn", { date: formatDate(batch.createdAt) })}
               </p>
-              {batch.printJobId ? (
-                <button type="button" className="mt-1 inline-flex items-center gap-1 text-xs text-violet-300 hover:underline" onClick={() => go(`/production/jobs/${batch.printJobId}`)} data-testid="batch-print-order">
-                  <Printer className="h-3.5 w-3.5" aria-hidden="true" />
-                  {tp("batchPrintOrder")}
-                </button>
-              ) : null}
               {batch.notes && !editing && <p className="mt-2 whitespace-pre-wrap text-sm text-white/60">{batch.notes}</p>}
             </div>
           </div>
           {!editing && (
             <div className="flex flex-wrap gap-2">
+              {canPrepare ? <Button type="button" variant="brand" accent="tags" onClick={() => setPreparing(true)} data-testid="batch-prepare-print"><Printer className="h-4 w-4" />{u("requestFiles")}</Button> : null}
+              {batch.printJobId ? <Button type="button" variant="secondary" onClick={() => go(`/production/jobs/${batch.printJobId}`)}>{u("openFiles")}</Button> : null}
               <Button type="button" variant="secondary" onClick={() => setStateDialog(true)} data-testid="admin-batch-state">
                 {batch.status === "open" ? <LockKeyhole className="h-4 w-4" /> : <RotateCcw className="h-4 w-4" />}
                 {batch.status === "open" ? t("closeBatch") : t("reopenBatch")}
@@ -409,7 +430,9 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
       )}
 
       {tab === "print" && (
-        <SectionCard accent="tags" icon={Factory} title={t("manufacturingPackage")}>
+        <div className="space-y-4">
+        {batch.printJobId ? <BatchPrintFiles jobId={batch.printJobId} go={go} /> : canPrepare ? <SectionCard accent="tags" icon={Printer} title={u("output")}><p className="mb-3 text-sm text-white/55">{u("reuseCodesHint")}</p><Button variant="brand" accent="tags" onClick={() => setPreparing(true)}>{u("requestFiles")}</Button></SectionCard> : null}
+        <SectionCard accent="tags" icon={Factory} title={u("supplierFiles")}>
           <p className="mb-3 text-xs text-white/40">{t("manufacturingIntro")}</p>
           {batch.codeSource === "scanned" ? <InlineAlert tone="info">{tf("printScannedNote")}</InlineAlert> : null}
           <div className="mt-3 flex flex-wrap gap-2" data-testid="batch-print-downloads">
@@ -418,9 +441,10 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
             <DownloadButton href={`${exportBase}/qr-assets.zip?png=1`} filename={`${fileBase}-qr.zip`}>QR ZIP (SVG + PNG)</DownloadButton>
           </div>
         </SectionCard>
+        </div>
       )}
 
-      {tab === "receive" && <BatchReceiveStation batch={batch} onRequestClose={() => setStateDialog(true)} />}
+      {tab === "receive" && <><ProductionIdentity model={{ title: batch.name, productType: batch.productType, face }} hero /><BatchReceiveStation batch={batch} onRequestClose={() => setStateDialog(true)} /></>}
 
       {tab === "pieces" && (
         <SectionCard accent="tags" icon={Layers} title={t("piecesHeading", { count: shown.length })}>

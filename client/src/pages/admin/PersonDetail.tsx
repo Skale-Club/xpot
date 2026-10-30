@@ -239,7 +239,7 @@ export function PersonDetail({ rep, onClose, onGone }: { rep: Rep; onClose?: () 
             {/* The visits history narrowed to this person (management mode, ?rep=). */}
             {modules.includes("visits") && (
               <Button asChild variant="secondary" size="sm">
-                <Link href={`/dashboard/history?rep=${rep.id}`} data-testid="person-their-visits"><CalendarDays />{tw("theirVisits")}</Link>
+                <Link href={`/admin/work/dashboard/history?rep=${rep.id}`} data-testid="person-their-visits"><CalendarDays />{tw("theirVisits")}</Link>
               </Button>
             )}
             {modules.includes("tags") && (

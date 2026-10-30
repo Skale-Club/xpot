@@ -375,7 +375,7 @@ export interface PrintRequestItem {
   quantity: number;
   notes: string | null;
   createdAt: string;
-  /** Some plate still to build or print. */
+  /** Some plate still to build/print, or printed pieces still to receive. */
   open: boolean;
   plates: PrintJobItem[];
 }

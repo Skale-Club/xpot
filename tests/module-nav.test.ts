@@ -11,6 +11,8 @@ import {
   administrationItems,
   contextOfPath,
   moduleGroups,
+  managementGroups,
+  organizationPanelGroups,
   paletteExtras,
   platformItems,
   repScreenFor,
@@ -24,6 +26,32 @@ const rep = { canManage: false, isAdmin: false };
 const manager = { canManage: true, isAdmin: false };
 const admin = { canManage: true, isAdmin: true };
 const hrefs = (groups: ReturnType<typeof moduleGroups>) => groups.flatMap((g) => g.items.map((i) => i.href));
+const panelNames = { home: "Home", tags: "Operations", visits: "Visits", team: "People", system: "Settings" };
+
+describe("dedicated management navigation", () => {
+  it("keeps personal work screens out of the panel", () => {
+    const groups = managementGroups(["visits", "tags"], admin, labels, panelNames);
+    const paths = hrefs(groups);
+    expect(paths).toContain("/admin/tags/production");
+    expect(paths).toContain("/admin/work/leads");
+    expect(paths).not.toContain("/tags");
+    expect(paths).not.toContain("/dashboard");
+    expect(paths).not.toContain("/settings");
+    expect(groups.find((group) => group.label === "Settings")?.collapsible).toBe(true);
+    expect(new Set(paths).size).toBe(paths.length);
+    expect(groups.flatMap((group) => group.items).filter((item) => item.match("/admin")).map((item) => item.href)).toEqual(["/admin"]);
+  });
+  it("keeps global tools out of a manager's panel and every panel out of a rep's navigation", () => {
+    const paths = hrefs(managementGroups(["visits", "tags"], manager, labels, panelNames));
+    expect(paths).toContain("/admin/tags/pieces");
+    for (const path of ["/admin/tags/production", "/admin/tags/provisioners", "/admin/integrations", "/admin/branding", "/admin/health"]) expect(paths).not.toContain(path);
+    expect(managementGroups(["visits", "tags"], rep, labels, panelNames)).toEqual([]);
+  });
+  it("gives organization admins their scoped team tools without global setup", () => {
+    expect(hrefs(organizationPanelGroups(["visits", "tags"], labels))).toEqual(["/organizations", "/admin/work/leads", "/admin/work/tasks", "/admin/work/sales"]);
+    expect(hrefs(organizationPanelGroups(["tags"], labels))).toEqual(["/organizations"]);
+  });
+});
 
 describe("contextOfPath", () => {
   it("puts the field screens in Visits", () => {
@@ -79,6 +107,13 @@ describe("visitsScreen", () => {
 });
 
 describe("moduleGroups", () => {
+  it("keeps production and legacy batch URLs in one navigation entry", () => {
+    const items = moduleGroups("tags", admin, labels)[1].items;
+    for (const path of ["/admin/tags/production", "/admin/tags/production/batches/id", "/admin/tags/batches/id"]) {
+      expect(items.filter((item) => item.match(path)).map((item) => item.href)).toEqual(["/admin/tags/production"]);
+    }
+    expect(items.some((item) => item.href === "/admin/tags/batches")).toBe(false);
+  });
   it("an open piece keeps My pieces selected, not the dashboard", () => {
     const [work] = moduleGroups("tags", rep, labels);
     const active = (path: string) => work.items.filter((item) => item.match(path)).map((item) => item.href);
@@ -123,7 +158,6 @@ describe("moduleGroups", () => {
     expect(moduleGroups("tags", admin, labels)[1].items.map((i) => i.href)).toEqual([
       "/admin/tags/overview",
       "/admin/tags/production",
-      "/admin/tags/batches",
       "/admin/tags/pieces",
       "/admin/tags/kits",
       "/admin/tags/team",
@@ -135,7 +169,7 @@ describe("moduleGroups", () => {
   it("the global admin sees everything, and exactly those extra items carry the Xpot admin tag", () => {
     const extra = (m: "visits" | "tags") =>
       moduleGroups(m, admin, labels).flatMap((g) => g.items).filter((i) => i.adminOnly).map((i) => i.href);
-    expect(extra("tags")).toEqual(["/admin/tags/production", "/admin/tags/batches", "/admin/tags/shop", "/admin/tags/journey", "/admin/tags/provisioners"]);
+    expect(extra("tags")).toEqual(["/admin/tags/production", "/admin/tags/shop", "/admin/tags/journey", "/admin/tags/provisioners"]);
     expect(extra("visits")).toEqual([]);
     // Platform is the Xpot admin's as a whole: one tag on the group, none on its items.
     expect(accountGroups(admin, labels).map((g) => Boolean(g.adminOnly))).toEqual([false, true]);

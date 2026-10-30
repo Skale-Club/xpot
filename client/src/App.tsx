@@ -19,6 +19,7 @@ import { getHttpStatus, isStandaloneDisplay, resolveRootView } from "@/lib/pwa";
 import { getXpotHomePath, MODULE_HOME, rememberModuleRoute } from "@/lib/xpot";
 import type { XpotMeResponse } from "./pages/xpot/types";
 import { PersistentRouteProgress } from "@/components/xpot/PersistentRouteProgress";
+import { WorkspaceBoundary } from "@/components/xpot/WorkspaceBoundary";
 
 const XpotLeads = lazy(() => import("./pages/xpot/XpotLeads").then((module) => ({ default: module.XpotLeads })));
 const XpotSales = lazy(() => import("./pages/xpot/XpotSales").then((module) => ({ default: module.XpotSales })));
@@ -201,6 +202,7 @@ export default function App() {
   return (
     <Suspense fallback={<PageLoader />}>
       <Router>
+        <WorkspaceBoundary>
         <Switch>
         <Route path="/" component={RootRoute} />
         <Route path="/pt" component={RootRoute} />
@@ -225,8 +227,9 @@ export default function App() {
         <Route path="/admin/integrations/*?">{() => <AdminApp section="integrations" />}</Route>
         {/* One person: /admin/reps/:repId (People opens them beside the list or as a page). */}
         <Route path="/admin/reps/*?">{() => <AdminApp section="reps" />}</Route>
+        <Route path="/admin/work/*?">{() => <AdminApp section="work" />}</Route>
         <Route path="/admin/:section?">
-          {(params) => <AdminApp section={params.section ?? "overview"} />}
+          {(params) => <AdminApp section={params.section ?? "home"} />}
         </Route>
         <Route path="/settings" component={XpotSettings} />
         <Route path="/tags/*?" component={TagsApp} />
@@ -234,6 +237,7 @@ export default function App() {
           <VisitsGate />
         </Route>
         </Switch>
+        </WorkspaceBoundary>
       </Router>
     </Suspense>
   );

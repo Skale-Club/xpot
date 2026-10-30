@@ -25,11 +25,11 @@ function links(period: TeamPeriod) {
   const range = period === "today" ? "7" : period;
   return {
     reps: "/admin/reps?status=active&module=visits",
-    visits: period === "today" ? "/dashboard/history?view=day" : "/dashboard/history",
-    inProgress: "/dashboard/history?view=day&status=in_progress",
-    sales: `/sales?range=${range}`,
-    pipeline: "/sales/pipeline",
-    tasks: "/tasks",
+    visits: period === "today" ? "/admin/work/dashboard/history?view=day" : "/admin/work/dashboard/history",
+    inProgress: "/admin/work/dashboard/history?view=day&status=in_progress",
+    sales: `/admin/work/sales?range=${range}`,
+    pipeline: "/admin/work/sales/pipeline",
+    tasks: "/admin/work/tasks",
   };
 }
 

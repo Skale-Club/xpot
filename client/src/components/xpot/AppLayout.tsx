@@ -10,7 +10,7 @@ import {
   Search,
   Settings,
   Camera,
-  Users,
+  ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
 import type { XpotModule } from "@shared/modules";
@@ -24,6 +24,8 @@ import { commonMessages } from "@/i18n/messages/common";
 import { shellMessages } from "@/i18n/messages/shell";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { navIaMessages } from "@/i18n/messages/navIa";
+import { workspacesMessages } from "@/i18n/messages/workspaces";
+import { workspaceForPath } from "@/lib/workspace";
 import { signOut } from "@/lib/signOut";
 import type { XpotMeResponse } from "@/pages/xpot/types";
 import { AppBackground } from "./AppBackground";
@@ -32,14 +34,13 @@ import { useDesktopShortcuts } from "./useDesktopShortcuts";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { BRAND_GRADIENT, MODULE_ACCENT } from "./surface";
 import {
-  accountGroups,
-  accountSection,
+  managementGroups,
+  organizationPanelGroups,
   contextOfPath,
   moduleGroups,
   paletteExtras,
   starts,
   visitsScreen,
-  type NavGroup,
   type NavItem,
   type ShellContext,
 } from "./moduleNav";
@@ -88,67 +89,50 @@ function useShellNav() {
   const tc = useT(commonMessages);
   const tt = useT(tagsMessages);
   const tn = useT(navIaMessages);
+  const tw = useT(workspacesMessages);
   const [location] = useLocation();
   const modules = useXpotModules();
-  // Management items follow admin mode: off, a manager sees the app as a rep does.
   const access = useViewerAccess();
   const me = access.me;
-  const viewer = {
-    canManage: access.canManage,
-    isAdmin: access.isSuperAdmin,
-  };
+  const panel = access.adminMode;
+  const panelName = tw(me?.user.isAdmin ? "superAdmin" : "management");
+  const viewer = { canManage: access.canManage, isAdmin: access.isSuperAdmin };
   const labels = { shell: t, tags: tt, nav: tn };
-
   const context = contextOfPath(location);
   const settingsItem: NavItem = { href: "/settings", label: t("navSettings"), icon: Settings, match: starts("/settings") };
-  // Administration (managers) and Platform (the Xpot admin), only in management mode.
-  const account = me ? accountGroups(viewer, labels) : [];
-  // On an account page no module is current: the sidebar lists the account itself.
-  const module: XpotModule | null = context === "account" ? null : modules.includes(context) ? context : modules[0] ?? null;
+  const module: XpotModule | null = panel || context === "account" ? null : modules.includes(context) ? context : modules[0] ?? null;
   const groupsFor = (target: XpotModule) => {
-    const listed = moduleGroups(target, viewer, labels);
+    const listed = moduleGroups(target, { canManage: false, isAdmin: false }, labels);
     if (target !== "tags" || !modules.includes("visits")) return listed;
     return listed.map((group) => ({ ...group, items: group.items.filter((item) => item.href !== "/tags/customers") }));
   };
-  const groups: NavGroup[] = context === "account"
-    ? [{ label: "", items: [settingsItem] }, ...account]
-    : module
-      ? groupsFor(module)
-      : [];
-  const moduleLabel = (m: XpotModule) => (m === "visits" ? tc("moduleVisits") : tc("moduleTags"));
-
-  // Every screen for the command palette, grouped by where it lives, this module first;
-  // a Manage group reads "Visits · Manage", as on the phone.
+  const groups = panel
+    ? access.hasAdminAccess
+      ? managementGroups(modules, viewer, labels, { home: tw("home"), tags: tw("tagsGroup"), visits: tw("visitsGroup"), team: tw("teamGroup"), system: tw("systemGroup") })
+      : organizationPanelGroups(modules, labels)
+    : context === "account" ? [{ label: "", items: [settingsItem] }] : module ? groupsFor(module) : [];
+  const moduleLabel = (m: XpotModule) => tc(m === "visits" ? "moduleVisits" : "moduleTags");
   const order = module ? [module, ...modules.filter((m) => m !== module)] : modules;
-  const pages = [
-    ...order.flatMap((m) => {
-      const [work, ...manage] = groupsFor(m);
-      return [
-        ...[...(work?.items ?? []), ...paletteExtras(m, labels)].map((i) => ({ ...i, group: moduleLabel(m) })),
-        ...manage.flatMap((g) => g.items.map((i) => ({ ...i, group: `${moduleLabel(m)} · ${g.label}` }))),
-      ];
-    }),
-    { ...settingsItem, group: t("navSettings") },
-    ...account.flatMap((g) => g.items.map((i) => ({ ...i, group: g.label }))),
-    ...(viewer.isAdmin ? paletteExtras("platform", labels).map((i) => ({ ...i, group: tn("navPlatform") })) : []),
-  ];
-
-  // The part of the app before the title in the top bar: the module, or Administration / Platform.
-  const section = accountSection(location);
-  const crumb: { label: string; context: ShellContext } | null = context === "account"
-    ? section === "administration"
-      ? { label: t("navOrganization"), context }
-      : section === "platform"
-        ? { label: tn("navPlatform"), context }
-        : null
-    : module
-      ? { label: moduleLabel(module), context: module as ShellContext }
-      : null;
-
-  return { context, module, modules, groups, pages, moduleLabel, me, crumb, canManage: viewer.canManage };
+  const pages = panel
+    ? [
+      ...groups.flatMap((group) => group.items.map((item) => ({ ...item, group: group.label || panelName }))),
+      ...(viewer.isAdmin ? paletteExtras("platform", labels).map((item) => ({ ...item, group: tw("systemGroup") })) : []),
+    ]
+    : [
+      ...order.flatMap((m) => [...groupsFor(m).flatMap((group) => group.items), ...paletteExtras(m, labels)].map((item) => ({ ...item, group: moduleLabel(m) }))),
+      { ...settingsItem, group: t("navSettings") },
+      ...(access.reach ? [{ href: access.hasAdminAccess ? "/admin" : "/organizations", label: panelName, icon: ShieldCheck, match: () => false, group: tw("manageAccess") }] : []),
+    ];
+  const crumb = panel ? { label: panelName, context: "account" as const } : module ? { label: moduleLabel(module), context: module as ShellContext } : null;
+  return { context, module, modules, groups, pages, moduleLabel, me, crumb, panel, panelName, panelHome: access.hasAdminAccess ? "/admin" : "/organizations", panelEntryAvailable: !!access.reach };
 }
+type Accent = { solid: string; soft: string; strong: string; text: string };
+const MANAGEMENT_ACCENT: Accent = { solid: "#fbbf24", soft: "rgba(251,191,36,0.12)", strong: "rgba(251,191,36,0.2)", text: "text-amber-200" };
 
-type Accent = (typeof MODULE_ACCENT)[ShellContext];
+/** The management panel has a separate surface from the personal app's dot grid. */
+function ManagementBackground({ children }: { children: ReactNode }) {
+  return <div className="min-h-screen text-white" style={{ background: "linear-gradient(150deg, #191810 0%, #101317 35%, #0c1015 100%)" }} data-testid="management-background">{children}</div>;
+}
 
 function SidebarLink({ item, collapsed, active, accent, warningLabel }: { item: NavItem; collapsed: boolean; active: boolean; accent: Accent; warningLabel?: string }) {
   const Icon = item.icon;
@@ -234,15 +218,15 @@ function SidebarModuleSwitch({ collapsed, module, modules, label }: {
 function DesktopSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
   const t = useT(shellMessages);
   const td = useT(dashboardMessages);
-  const tn = useT(navIaMessages);
+  const tw = useT(workspacesMessages);
   const avatar = useAvatarUpload();
   const [location, navigate] = useLocation();
-  const { context, module, modules, groups, moduleLabel, me, canManage } = useShellNav();
-  const accent = MODULE_ACCENT[module ?? "account"];
+  const { context, module, modules, groups, moduleLabel, me, panel, panelName, panelHome } = useShellNav();
+  const accent = panel ? MANAGEMENT_ACCENT : MODULE_ACCENT[module ?? "account"];
   const online = useOnline();
   const routesQuery = useQuery<Array<{ routeDate: string; status: string }>>({
     queryKey: ["/api/xpot/prospecting/routes"],
-    enabled: module === "visits",
+    enabled: !panel && module === "visits",
   });
   const today = new Date();
   const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
@@ -256,25 +240,22 @@ function DesktopSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
 
   // The doors out of the module: Administration (managers, in management mode) and Settings.
   // On an account page the sidebar already lists both.
-  const footer: NavItem[] = context === "account"
-    ? []
-    : [
-        ...(canManage ? [{ href: "/admin/reps", label: tn("administration"), icon: Users, match: () => false }] : []),
-        { href: "/settings", label: t("navSettings"), icon: Settings, match: () => false },
-      ];
-
+  const footer: NavItem[] = panel || context === "account" ? [] : [
+    { href: "/settings", label: t("navSettings"), icon: Settings, match: () => false },
+  ];
   return (
     <aside
-      className={`fixed inset-y-0 left-0 z-40 hidden flex-col border-r border-white/[0.07] lg:flex ${collapsed ? "w-[72px]" : "w-60"}`}
-      style={{ background: "rgba(8, 12, 24, 0.92)", backdropFilter: "blur(20px)" }}
+      className={`fixed inset-y-0 left-0 z-40 hidden flex-col border-r ${panel ? "border-amber-200/10" : "border-white/[0.07]"} lg:flex ${collapsed ? "w-[72px]" : "w-60"}`}
+      style={{ background: panel ? "#171a1e" : "rgba(8, 12, 24, 0.92)", backdropFilter: "blur(20px)" }}
       data-testid="desktop-sidebar"
       data-context={context}
+      data-workspace={panel ? "management" : "work"}
     >
       {/* Where you are, as a coloured line along the top. */}
-      <span className="absolute inset-x-0 top-0 h-0.5" style={{ background: MODULE_ACCENT[context].solid }} aria-hidden="true" />
+      <span className="absolute inset-x-0 top-0 h-0.5" style={{ background: panel ? MANAGEMENT_ACCENT.solid : MODULE_ACCENT[context].solid }} aria-hidden="true" />
       <div className={`flex h-16 shrink-0 items-center ${collapsed ? "justify-center" : "justify-between px-4"}`}>
         {!collapsed && (
-          <Link href={MODULE_HOME[module ?? modules[0] ?? "visits"]} className="flex items-center" aria-label="Xpot">
+          <Link href={panel ? panelHome : MODULE_HOME[module ?? modules[0] ?? "visits"]} className="flex items-center" aria-label="Xpot">
             <XpotLogo className="h-7 w-auto" decorative />
           </Link>
         )}
@@ -289,7 +270,7 @@ function DesktopSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
         </button>
       </div>
 
-      <div className="px-3 pb-3">
+      {!panel ? <div className="px-3 pb-3">
         <div className={`flex items-center ${collapsed ? "justify-center py-2" : "gap-3 px-2 py-2"}`}>
           <button
             type="button"
@@ -317,40 +298,32 @@ function DesktopSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
           <input {...avatar.inputProps} />
           {!collapsed && <UserGreeting name={firstName} compact />}
         </div>
-      </div>
+      </div> : null}
 
       <div className="px-3 pb-3">
-        <SidebarModuleSwitch collapsed={collapsed} module={module} modules={modules} label={moduleLabel} />
+        {!panel && !collapsed ? <p className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-wider text-white/35">{tw("userArea")}</p> : null}
+        {panel ? <div className={`flex min-h-20 items-center gap-3 border-b border-amber-200/10 pb-4 text-amber-100 ${collapsed ? "justify-center" : "px-2"}`} title={panelName}><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-amber-300/25 bg-amber-300/10"><ShieldCheck className="h-5 w-5" /></span>{!collapsed && <span className="text-base font-semibold leading-snug">{panelName}</span>}</div> : <SidebarModuleSwitch collapsed={collapsed} module={module} modules={modules} label={moduleLabel} />}
         {module === "visits" ? <PersistentRouteProgress collapsed={collapsed} className={collapsed ? "mt-2" : "mt-2.5"} /> : null}
       </div>
 
-      <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-2" aria-label={module ? moduleLabel(module) : t("navSettings")}>
-        {groups.map((group, i) => (
-          <div key={group.label || i} className="space-y-1">
-            {group.label && !collapsed && (
-              <div className="flex items-center gap-2 px-3 pb-1 text-[10px] font-semibold uppercase tracking-widest text-white/30">
-                <span className="truncate">{group.label}</span>
-                {group.adminOnly && <AdminBadge className="ml-auto" />}
-              </div>
-            )}
-            {group.label && collapsed && <div className="mx-auto mb-2 h-px w-6 bg-white/10" aria-hidden="true" />}
-            {group.items.map((item) => (
-              <SidebarLink
-                key={item.href}
-                item={item}
-                collapsed={collapsed}
-                active={item.match(location)}
-                accent={accent}
-                warningLabel={item.href === "/route" && routeMissingToday ? td("noRouteToday") : undefined}
-              />
-            ))}
-          </div>
-        ))}
-      </nav>
+      <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-2" aria-label={panel ? panelName : module ? moduleLabel(module) : t("navSettings")}>
+        {groups.map((group, i) => {
+          const items = group.items.map((item) => <SidebarLink key={item.href} item={item} collapsed={collapsed} active={item.match(location)} accent={accent} warningLabel={item.href === "/route" && routeMissingToday ? td("noRouteToday") : undefined} />);
+          if (group.collapsible && !collapsed) return <details key={group.label || i} open={group.items.some((item) => item.match(location))} className="group/panel space-y-1">
+            <summary className="flex min-h-10 cursor-pointer list-none items-center justify-between gap-2 px-3 text-[10px] font-semibold uppercase tracking-widest text-white/40 [&::-webkit-details-marker]:hidden">{group.label}<span className="text-base transition-transform group-open/panel:rotate-90" aria-hidden="true">›</span></summary>
+            {items}
+          </details>;
+          return <div key={group.label || i} className="space-y-1">
+            {group.label && !collapsed ? <div className="flex items-center gap-2 px-3 pb-1 text-[10px] font-semibold uppercase tracking-widest text-white/35"><span className="truncate">{group.label}</span>{group.adminOnly && <AdminBadge className="ml-auto" />}</div> : null}
+            {group.label && collapsed ? <div className="mx-auto mb-2 h-px w-6 bg-white/10" aria-hidden="true" /> : null}
+            {items}
+          </div>;
+        })}      </nav>
 
       <div className="space-y-1 border-t border-white/[0.07] px-3 py-3">
+        {panel && !collapsed ? <p className="truncate px-3 pb-2 text-xs text-white/35">{name}</p> : null}
         <AdminModeSidebarItem collapsed={collapsed} />
-        <InstallAppSidebarItem collapsed={collapsed} />
+        {!panel && <InstallAppSidebarItem collapsed={collapsed} />}
         {footer.map((item) => (
           <SidebarLink key={item.href} item={item} collapsed={collapsed} active={item.match(location)} accent={MODULE_ACCENT.account} />
         ))}
@@ -384,12 +357,13 @@ function useOnline() {
   return online;
 }
 
-function DesktopTopBar({ title, crumb, actions, onSearch }: {
+function DesktopTopBar({ title, crumb, actions, onSearch, management = false }: {
   title: ReactNode;
   /** The part of the app ("Tags", "Administration"), in its colour, before the title. */
   crumb: { label: string; context: ShellContext } | null;
   actions?: ReactNode;
   onSearch: () => void;
+  management?: boolean;
 }) {
   const t = useT(shellMessages);
   const online = useOnline();
@@ -397,12 +371,12 @@ function DesktopTopBar({ title, crumb, actions, onSearch }: {
   return (
     <header
       className="sticky top-0 z-30 hidden h-16 items-center gap-4 border-b border-white/[0.07] px-8 lg:flex"
-      style={{ background: "rgba(6, 9, 18, 0.8)", backdropFilter: "blur(20px)" }}
+      style={{ background: management ? "rgba(23, 26, 30, 0.94)" : "rgba(6, 9, 18, 0.8)", backdropFilter: "blur(20px)" }}
     >
       <h1 className="flex min-w-0 flex-1 items-center gap-2 truncate text-lg font-bold tracking-tight text-white" data-testid="top-bar-title">
         {crumb && (
           <>
-            <span className={`shrink-0 ${MODULE_ACCENT[crumb.context].text}`}>{crumb.label}</span>
+            <span className={`shrink-0 ${management ? "text-amber-200" : MODULE_ACCENT[crumb.context].text}`}>{crumb.label}</span>
             <span className="shrink-0 text-white/25" aria-hidden="true">›</span>
           </>
         )}
@@ -448,7 +422,7 @@ function ActiveVisitBanner() {
   }, [visit]);
 
   // Everywhere but the visit screen itself, the route planner included (it is not the visit).
-  if (!visit || visitsScreen(location) === "visit") return null;
+  if (!visit || workspaceForPath(location) === "management" || visitsScreen(location) === "visit") return null;
   const lead = visit.lead?.name;
   return (
     <div className="px-4 pt-4 lg:px-8">
@@ -507,7 +481,8 @@ export function AppLayout({
   const [paletteOpen, setPaletteOpen] = useState(false);
   const togglePalette = useCallback(() => setPaletteOpen((o) => !o), []);
   useDesktopShortcuts({ enabled: isDesktop, onPalette: togglePalette });
-  const { pages, crumb: area } = useShellNav();
+  const { pages, crumb: area, panel, panelEntryAvailable } = useShellNav();
+  const Background = panel ? ManagementBackground : AppBackground;
   const tShell = useT(shellMessages);
   // "Visits › Visits" says it twice: a screen named like its module shows the name once.
   const crumb = area && area.label !== title ? area : null;
@@ -526,7 +501,7 @@ export function AppLayout({
   };
 
   return (
-    <AppBackground>
+    <Background>
       <a
         href="#xpot-main-content"
         className="fixed left-4 top-4 z-[1000] -translate-y-24 rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white shadow-xl transition-transform focus:translate-y-0"
@@ -541,6 +516,7 @@ export function AppLayout({
           crumb={crumb}
           actions={topBarActions}
           onSearch={() => setPaletteOpen(true)}
+          management={panel}
         />
         <ActiveVisitBanner />
         <div
@@ -549,14 +525,15 @@ export function AppLayout({
           }`}
           style={mobileColumnStyle}
         >
+          {!panel && panelEntryAvailable ? <div className="mb-4 lg:hidden"><AdminModeSidebarItem collapsed={false} mobile /></div> : null}
           {mobileHeader ? <div className="lg:hidden">{mobileHeader}</div> : null}
           <main id="xpot-main-content" tabIndex={-1} className="flex-1">
             <ScreenErrorBoundary resetKey={location}>{children}</ScreenErrorBoundary>
           </main>
         </div>
-        {mobileNav ? <div className="lg:hidden">{mobileNav}</div> : null}
+        {!panel && mobileNav ? <div className="lg:hidden">{mobileNav}</div> : null}
       </div>
       {isDesktop && <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} pages={pages} />}
-    </AppBackground>
+    </Background>
   );
 }

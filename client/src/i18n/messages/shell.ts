@@ -44,7 +44,6 @@ const en = {
   orgBranding: "Brand & public site",
   orgLanding: "Landing page",
   orgSystemHealth: "Status",
-  backToModule: "Back",
   signOut: "Sign out",
   collapseSidebar: "Collapse sidebar",
   expandSidebar: "Expand sidebar",
@@ -62,10 +61,6 @@ const en = {
   paletteHint: "↑↓ move · Enter open · Esc close",
 
   // Management mode (components/xpot/AdminMode.tsx): the management side, apart from personal Settings
-  adminModeEnter: "Management mode",
-  adminModeOn: "Management mode: lists show the whole team",
-  adminModeOnOrganization: "Management mode: lists show your organization",
-  adminModeExit: "Leave management",
 
   // Install the PWA (sidebar footer, Settings header)
   installApp: "Install app",
@@ -123,7 +118,6 @@ export const shellMessages: Dictionary<typeof en> = {
     orgBranding: "Marca e site público",
     orgLanding: "Landing page",
     orgSystemHealth: "Status",
-    backToModule: "Voltar",
     signOut: "Sair",
     collapseSidebar: "Recolher menu",
     expandSidebar: "Expandir menu",
@@ -139,11 +133,6 @@ export const shellMessages: Dictionary<typeof en> = {
     groupCompanies: "Empresas",
     groupPieces: "Peças",
     paletteHint: "↑↓ mover · Enter abrir · Esc fechar",
-
-    adminModeEnter: "Modo gestão",
-    adminModeOn: "Modo gestão: as listas mostram toda a equipe",
-    adminModeOnOrganization: "Modo gestão: as listas mostram a sua organização",
-    adminModeExit: "Sair da gestão",
 
     installApp: "Instalar app",
     installAppHint: "Abra o Xpot pela tela inicial como qualquer outro app, em tela cheia e mais rápido.",
@@ -197,7 +186,6 @@ export const shellMessages: Dictionary<typeof en> = {
     orgBranding: "Marca y sitio público",
     orgLanding: "Landing page",
     orgSystemHealth: "Estado",
-    backToModule: "Volver",
     signOut: "Cerrar sesión",
     collapseSidebar: "Contraer menú",
     expandSidebar: "Expandir menú",
@@ -213,11 +201,6 @@ export const shellMessages: Dictionary<typeof en> = {
     groupCompanies: "Empresas",
     groupPieces: "Piezas",
     paletteHint: "↑↓ mover · Enter abrir · Esc cerrar",
-
-    adminModeEnter: "Modo gestión",
-    adminModeOn: "Modo gestión: las listas muestran a todo el equipo",
-    adminModeOnOrganization: "Modo gestión: las listas muestran tu organización",
-    adminModeExit: "Salir de la gestión",
 
     installApp: "Instalar app",
     installAppHint: "Abre Xpot desde la pantalla de inicio como cualquier otra app, a pantalla completa y más rápido.",

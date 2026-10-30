@@ -13,19 +13,35 @@ import { useT } from "@/i18n";
 import { productionMessages } from "@/i18n/messages/production";
 import { ADMIN_TAGS_KEY, errorMessage, formatDateTime, getJson, invalidateAdminTags, sendJson } from "./api";
 import { Loading, LoadError } from "./pieces-shared";
-import { JobStatusPill, PRODUCTION_BASE, formatBytes, minutesText, uploadFile } from "./production-shared";
+import { JobStatusPill, PRODUCTION_BASE, formatBytes, minutesText, uploadFile, usePrintModels } from "./production-shared";
+import { ProductionIdentity } from "./production-identity";
+import { workspacesMessages } from "@/i18n/messages/workspaces";
+import { BatchReceiveStation, type ReceiveBatch } from "./batch-receive";
+import { plateDownloads } from "./production-shared";
+import { productionJourneyStep } from "./production-workflow";
 
-// One plate of a print request: what to load in the AMS, where the printer pauses and which code sits where on the
-// bed, the files to download (print it by hand in Bambu Studio), and the steps (ready → printed). Pieces enter stock on
-// the batch page, by scanning each one.
+// One print plate, from file preparation through printing and scanning pieces into stock.
 
 type Go = (path: string) => void;
 type Step = "complete" | "printed" | "fail" | "cancel" | "release";
 
 const FILE_ORDER = ["gcode_3mf", "3mf", "serial_map", "preview", "report"] as const;
 
+/** Receive the pieces in the order itself, without opening the batch's administration tabs. */
+function OrderReceiving({ batchId }: { batchId: string }) {
+  const t = useT(workspacesMessages);
+  const { data, error, isLoading, refetch } = useQuery({
+    queryKey: [ADMIN_TAGS_KEY, "batch", batchId],
+    queryFn: () => getJson<ReceiveBatch>(`/api/xpot/admin/tag-batches/${batchId}`),
+  });
+  return <SectionCard title={t("receive")} accent="tags" icon={ScanLine}>
+    {isLoading ? <Loading rows={2} /> : error ? <LoadError what={t("receive")} error={error} onRetry={() => void refetch()} /> : data ? <BatchReceiveStation batch={data} /> : null}
+  </SectionCard>;
+}
 export function PrintJobPage({ id, go }: { id: string; go: Go }) {
   const t = useT(productionMessages);
+  const tw = useT(workspacesMessages);
+  const { data: models = [] } = usePrintModels();
   const { toast } = useToast();
   const input = useRef<HTMLInputElement>(null);
   const [confirming, setConfirming] = useState<Step | null>(null);
@@ -96,9 +112,12 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
   const report = job.report as { minutes?: number; swaps?: number; qr_check?: string };
   const minutes = report.minutes ?? bed?.minutes ?? null;
   const swaps = report.swaps ?? bed?.swaps ?? null;
+  const journeyStep = productionJourneyStep(job);
+  const downloads = plateDownloads(job);
+  const download = downloads.sliced ?? downloads.project;
   const takesFiles = !["printed", "cancelled"].includes(job.status);
   const assembledAt = (job.report as { assembledAt?: string }).assembledAt ?? null;
-  const canAssemble = Boolean(job.batchId) && job.status === "printed" && !assembledAt;
+  const canAssemble = Boolean(job.batchId) && job.status === "printed" && job.consumes.length > 0 && !assembledAt;
   const confirmText: Record<Step, { title: string; body: string; label: string; reason?: "required" | "optional" }> = {
     complete: { title: t("confirmCompleteTitle"), body: t("confirmCompleteBody"), label: t("markReady") },
     printed: { title: t("confirmPrintedTitle"), body: job.batchId ? t("confirmPrintedBodyBatch") : t.plural("confirmPrintedBodyPart", job.quantity), label: t("markPrinted") },
@@ -113,7 +132,7 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <button type="button" className="block truncate text-left text-xl font-semibold text-white hover:underline" onClick={() => go(`${PRODUCTION_BASE}/models/${job.modelSlug}`)}>
-            {job.modelTitle}
+            <ProductionIdentity model={models.find((m) => m.id === job.modelId) ?? { title: job.modelTitle }} />
           </button>
           <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-white/45">
             <JobStatusPill status={job.status} />
@@ -124,7 +143,7 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
             <span>{formatDateTime(job.createdAt)}</span>
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <details className="relative"><summary className="flex min-h-10 cursor-pointer items-center rounded-xl border border-white/10 px-3 text-xs text-white/60">{tw("moreActions")}</summary><div className="mt-2 flex max-w-xl flex-wrap gap-2 rounded-xl border border-white/10 bg-white/[0.025] p-3">
           {job.status === "building" ? (
             <Button type="button" variant="ghost" size="sm" onClick={() => setConfirming("release")}>{t("release")}</Button>
           ) : null}
@@ -136,11 +155,6 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
           ) : null}
           {(job.status === "requested" || job.status === "building") && hasPrintFile ? (
             <Button type="button" variant="secondary" size="sm" onClick={() => setConfirming("complete")}>{t("markReady")}</Button>
-          ) : null}
-          {job.status === "ready" || job.status === "printing" ? (
-            <Button type="button" variant="brand" accent="tags" size="sm" onClick={() => setConfirming("printed")} data-testid="production-mark-printed">
-              {t("markPrinted")}
-            </Button>
           ) : null}
           {["ready", "printing", "printed", "failed"].includes(job.status) ? (
             <Button type="button" variant="ghost" size="sm" onClick={() => setReporting(true)} data-testid="production-problem">
@@ -160,11 +174,26 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
               {t("redo")}
             </Button>
           ) : null}
-        </div>
+        </div></details>
       </header>
 
+      <ol className="grid grid-cols-4 gap-2" aria-label={tw("nextAction")} data-testid="production-journey">
+        {[tw("prepare"), tw("print"), tw("receive"), tw("complete")].map((label, index) => <li key={label} aria-current={journeyStep === index ? "step" : undefined} className={`rounded-xl border px-2 py-3 text-center text-xs font-medium ${index === journeyStep ? "border-violet-400/40 bg-violet-500/10 text-violet-100" : index < journeyStep ? "border-emerald-400/15 bg-emerald-500/[0.03] text-emerald-200/70" : "border-white/[0.07] text-white/35"}`}>{label}</li>)}
+      </ol>
+      <SectionCard title={tw("nextAction")} accent="tags" icon={journeyStep === 2 ? ScanLine : Files}>
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-white/55"><JobStatusPill status={job.status} /><span>{t("plateOf", { number: job.plateNumber, total: job.plateCount })}</span><span>{t.plural("pieceCount", job.quantity)}</span>{job.batchCode ? <span className="font-mono">{job.batchCode}</span> : null}</div>
+          <p className="text-sm leading-relaxed text-white/65">{job.status === "failed" || job.status === "cancelled" ? t(`jobStatus_${job.status}` as never) : journeyStep === 3 ? tw("receivedHint") : journeyStep === 2 ? t("scanInBody") : journeyStep === 1 ? tw("printingHint") : t(job.builder ? "requestedBodyBench" : "requestedBodyHand")}</p>
+          {job.status === "failed" || job.status === "cancelled" ? <Button variant="brand" accent="tags" loading={redo.isPending} onClick={() => redo.mutate()}><RotateCcw />{t("redo")}</Button> : null}
+          {journeyStep === 1 ? <div className="flex flex-wrap gap-2">
+            {download ? <Button asChild variant="secondary"><a href={`/api/xpot/admin/print-files/${download.id}`} target="_blank" rel="noopener noreferrer" data-testid="production-primary-download"><Download />{tw("downloadPrint")}</a></Button> : null}
+            <Button variant="brand" accent="tags" onClick={() => setConfirming("printed")} data-testid="production-mark-printed">{t("markPrinted")}</Button>
+          </div> : null}
+          {journeyStep === 3 && canAssemble ? <Button variant="brand" accent="tags" onClick={() => setAssembling(true)}>{t("markAssembled")}</Button> : null}
+        </div>
+      </SectionCard>
+      {journeyStep === 2 && job.batchId ? <OrderReceiving batchId={job.batchId} /> : null}
       {job.stale ? <InlineAlert tone="warning" title={t("staleTitle")}>{t("staleBody")}</InlineAlert> : null}
-      {job.status === "requested" ? <InlineAlert tone="info" title={t("requestedTitle")}>{job.builder ? t("requestedBodyBench") : t("requestedBodyHand")}</InlineAlert> : null}
       {job.status === "failed" && job.errorMessage ? <InlineAlert tone="error" title={t("failedTitle")}>{job.errorMessage}</InlineAlert> : null}
       {job.notes ? <p className="max-w-3xl whitespace-pre-line text-sm text-white/60">{job.notes}</p> : null}
 
@@ -175,22 +204,7 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
         {report.qr_check ? <Stat card label={t("statQrCheck")} value={report.qr_check} /> : null}
       </div>
 
-      {job.batchId && job.status === "printed" && (job.receivedCount ?? 0) < (job.pieceCount ?? 0) ? (
-        <InlineAlert
-          tone="info"
-          title={t("scanInTitle")}
-          action={
-            <Button type="button" variant="secondary" size="sm" onClick={() => go(`/batches/${job.batchId}`)}>
-              <ScanLine />
-              {t("openBatch")}
-            </Button>
-          }
-        >
-          {t("scanInBody")}
-        </InlineAlert>
-      ) : null}
-
-      <SectionCard title={t("instructionsTitle")} icon={ClipboardList} accent="tags">
+{journeyStep <= 1 && (bed?.ams?.length || bed?.pause) ? <>      <SectionCard title={t("instructionsTitle")} icon={ClipboardList} accent="tags">
         <div className="space-y-4 text-sm">
           {bed?.ams?.length ? (
             <div>
@@ -213,7 +227,11 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
               </p>
             </div>
           ) : null}
-          {job.pieces.length ? (
+        </div>
+      </SectionCard>
+
+</> : null}
+<details className="space-y-3 rounded-2xl border border-white/10 p-4"><summary className="cursor-pointer text-sm font-medium text-white/60">{tw("technicalDetails")}</summary>          {job.pieces.length ? (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[420px] text-left text-sm">
                 <thead className="text-xs text-white/40">
@@ -236,12 +254,7 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
                 </tbody>
               </table>
             </div>
-          ) : null}
-          {!bed?.ams?.length && !bed?.pause && !job.pieces.length ? <p className="text-white/50">{t("noInstructions")}</p> : null}
-        </div>
-      </SectionCard>
-
-      <SectionCard
+          ) : null}      <SectionCard
         title={t("filesTitle")}
         icon={Files}
         accent="tags"
@@ -286,6 +299,8 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
           }}
         />
       </SectionCard>
+
+</details>
 
       <ConfirmDialog
         open={reporting}
