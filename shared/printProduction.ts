@@ -85,7 +85,9 @@ const TRANSITIONS: Record<PrintJobAction, { from: readonly PrintJobStatus[]; to:
   complete: { from: ["requested", "building"], to: "ready" },
   fail: { from: ["requested", "building", "ready", "printing"], to: "failed" },
   start: { from: ["ready"], to: "printing" },
-  printed: { from: ["ready", "printing"], to: "printed" },
+  // Also from requested: a plate printed by hand from a file made outside Xpot (or before the catalog) has no
+  // file to attach. Not from building, where a bench is still at work on it.
+  printed: { from: ["requested", "ready", "printing"], to: "printed" },
   cancel: { from: ["requested", "building", "ready"], to: "cancelled" },
 };
 
@@ -105,6 +107,11 @@ export function planPrintJobTransition(status: string, action: PrintJobAction): 
   const rule = TRANSITIONS[action];
   if (rule.from.includes(status as PrintJobStatus)) return { ok: true, status: rule.to };
   return { ok: false, error: `A ${status} print order cannot be ${ACTION_WORDS[action]}`, code: "print_job_state" };
+}
+
+/** Whether the admin may mark this order printed: what the "Mark printed" buttons show on. */
+export function canMarkPrinted(status: string): boolean {
+  return planPrintJobTransition(status, "printed").ok;
 }
 
 // ─── Batch codes ──────────────────────────────────────────────────────────────
