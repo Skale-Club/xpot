@@ -78,7 +78,7 @@ export function registerPrintProductionTools(server: McpServer, caller: McpCalle
 
   server.tool(
     "print_model_create",
-    `Add a model to the print catalog. \`model\`: { slug (lowercase-with-dashes, e.g. plate-large-menu-white), kind (${PRINT_MODEL_KINDS.join("|")}), title, description?, productType (${TAG_PRODUCT_TYPES.join("|")}; serialized only), face (${TAG_FACES.join("|")}; serialized only), theme? (white, black, mixed…), salesProductId (serialized), batchPrefix (serialized: LPLATE, SPLATE, REV, IG…), sortOrder?, version? (its v1: ${VERSION_DOC}) }. Without a version the model is design_needed and cannot be printed yet.`,
+    `Add a model to the print catalog. \`model\`: { slug (lowercase-with-dashes, e.g. plate-large-menu-white), kind (${PRINT_MODEL_KINDS.join("|")}), title, description?, productType (${TAG_PRODUCT_TYPES.join("|")}; serialized only), face (${TAG_FACES.join("|")}; serialized only), theme? (white, black, mixed…), salesProductId (serialized), batchPrefix (serialized: LPLATE, SPLATE, REV, IG…), sortOrder?, version? (its v1: ${VERSION_DOC}) }. Without a version the model is design_needed and cannot be printed yet. Project rule: a new model or version is not done until its 3D preview is attached (print-pipeline/preview.py --upload <model> --version-id <version uuid>, then print_model_get shows currentVersion.preview); parts with no builder have none.`,
     { model: objectParam },
     async ({ model }) => run("print_model_create", () => production.createModel(printModelInputSchema.parse(model), null, "mcp")),
   );
@@ -92,7 +92,7 @@ export function registerPrintProductionTools(server: McpServer, caller: McpCalle
 
   server.tool(
     "print_model_version_create",
-    `Register a model's next version and make it current (the previous one is superseded, still linked to what it printed). \`version\`: ${VERSION_DOC}. The model becomes ready. Record a version only once its design builds and its sample checks pass.`,
+    `Register a model's next version and make it current (the previous one is superseded, still linked to what it printed). \`version\`: ${VERSION_DOC}. The model becomes ready. Record a version only once its design builds and its sample checks pass. Project rule: a new model or version is not done until its 3D preview is attached (print-pipeline/preview.py --upload <model> --version-id <version uuid>, then print_model_get shows currentVersion.preview); parts with no builder have none.`,
     { model: z.string().min(1), version: objectParam },
     async ({ model, version }) =>
       run("print_model_version_create", () => production.createVersion(model, printVersionInputSchema.parse(version), null, "mcp")),

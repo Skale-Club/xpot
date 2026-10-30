@@ -97,6 +97,14 @@ Every mesh must come out byte-identical (2026-10-22: LPLATE-2026-002, -003, -005
 REV-2026-003, -004 and IG-2026-003 do; LPLATE-2026-004 printed an older Menu pocket), and the slice numbers match
 the batch's (LPLATE-2026-006: 311.4 min, 25 swaps, 4/4 QR; SPLATE-2026-002: 334.6 min, 8/8 QR).
 
+**Project rule: every new model, and every new version of one, gets its 3D preview** (user, 2026-10-30): right
+after `print_model_create` / `print_model_version_create`, build and attach it, then check `print_model_get` shows
+`currentVersion.preview`. Parts with no builder (bases, tokens, stickers) have none.
+
+```bash
+XPOT_MCP_TOKEN=... python print-pipeline/preview.py version.json preview.glb --upload <model-slug> --version-id <uuid>
+```
+
 ## Checks
 
 CI compiles every Python file and runs `tests/test_*.py`. The slicer never runs in CI: the bench slices and reports.
