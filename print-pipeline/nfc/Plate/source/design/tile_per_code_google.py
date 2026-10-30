@@ -21,6 +21,11 @@ Frame: tile face up, back at z 0, face at z T; x centred, y up from the bottom e
                              0.52 deep, the code engraved 0.32 into the back
     Black_Google_Art.stl     tap row + "Review us on Google" + QR (z T-0.52 .. T)
     Yellow_Google_Stars.stl  the five stars (z T-0.52 .. T)
+
+theme 'black' (Large, user 2026-10-30: "4 plates pretas do google"): a black tile with the art in white, the black
+Instagram Plate's way (tile_per_code.py): a normal dark-on-light QR on a white panel, the black body showing through
+as the dark modules, never the black Stand's inverted QR. Black_Google_Plate.stl, White_Google_Art.stl (text and the
+QR panel), Yellow_Google_Stars.stl. Black PLA is opaque, so the sticker sits 0.68 behind the face (pause z 1.32).
 """
 import os
 import sys
@@ -42,7 +47,7 @@ FACES = {
         'g': 20.0, 'g_gaps': (3.2, 2.4),
         'headline': {'text': 'Review us on Google', 'cap': 4.5},
         'stars': {'size': 7.0, 'gap': 2.2},
-        'qr': {'size': 31.0, 'modules': 25},
+        'qr': {'size': 31.0, 'modules': 25}, 'panel_quiet_modules': 2.0,
     },
     'small': {
         'margin': 6.0,
@@ -50,7 +55,7 @@ FACES = {
         'g': 13.0, 'g_gaps': (2.0, 1.5),
         'headline': {'text': 'Review us on Google', 'cap': 4.5},
         'stars': {'size': 5.8, 'gap': 1.6},
-        'qr': {'size': 20.0, 'modules': 25},
+        'qr': {'size': 20.0, 'modules': 25}, 'panel_quiet_modules': 1.0,
     },
 }
 SIZE, FACE, S = 'large', FACES['large'], 0.0
@@ -80,6 +85,9 @@ STICKER_W, STICKER_H, STICKER_DEPTH, STICKER_RADIUS = 23.0, 13.0, 0.48, 0.8
 STICKER_Z0 = 1.16
 STICKER_Z1 = round(STICKER_Z0 + STICKER_DEPTH, 2)
 STICKER_PAUSE_TOP_Z = round(STICKER_Z1 + 0.16, 2)
+# Black PLA is opaque: the antenna does not shadow through, so the black tile keeps the tag 0.68 behind the face
+# (print z 0.68-1.16, pause at the start of the 1.16-1.32 roof), as the black Stand and Menu plates.
+STICKER_Z0_BY_THEME = {'white': STICKER_Z0, 'black': 0.68}
 STICKER_GAP_G, STICKER_GAP_EDGE = 1.0, 3.0    # in plan: to the G pocket, and to the top edge (chamfer + walls)
 
 
@@ -112,7 +120,9 @@ def layout(code):
             'tap_centre_y': m + t['icon_h'] / 2}
 
 
-def build(code, out_dir, size='large', nfc_mount='embedded_round'):
+def build(code, out_dir, size='large', nfc_mount='embedded_round', theme='white'):
+    if theme not in ('white', 'black'):
+        raise ValueError('theme must be white or black')
     if nfc_mount not in ('embedded_round', 'sticker_10x20'):
         raise ValueError('unsupported nfc_mount')
     if nfc_mount == 'sticker_10x20' and size != 'large':
@@ -121,16 +131,32 @@ def build(code, out_dir, size='large', nfc_mount='embedded_round'):
     code = fa.normalize_code(code)
     art = layout(code)
     to_tile = ig.to_tile
-    black, yellow = to_tile(art['black']), to_tile(art['yellow'])
+    panel_tile = None
+    ink_comp = art['black']
+    if theme == 'black':
+        # The QR keeps its quiet zone on a white panel; the black body shows through as the dark modules.
+        module = FACE['qr']['size'] / FACE['qr']['modules']
+        border = FACE['panel_quiet_modules'] * module
+        p = FACE['qr']['size'] + 2 * border
+        x0, y0 = S / 2 - p / 2, art['qr_top'] - border
+        panel = ig._rounded_rect(x0, y0, x0 + p, y0 + p, border * 0.6)
+        ink_comp = unary_union([art['black'].difference(art['qr_dark']), panel.difference(art['qr_dark'])])
+        panel_tile = to_tile(panel)
+    # `black` is the art inlay whatever its colour: black on the white tile, white on the black one.
+    black, yellow = to_tile(ink_comp), to_tile(art['yellow'])
     pocket = to_tile(art['g_outline'].buffer(G_CLEAR, join_style='mitre')).simplify(SIMPLIFY, preserve_topology=True)
     back_txt, _ = fa.text_geom(code, fa.BACK_SERIAL['code_cap'], S / 2, S / 2 + fa.BACK_SERIAL['code_cap'] / 2)
     back_txt = back_txt.buffer(-0.01, join_style='mitre').buffer(0.01, join_style='mitre')
     back = ig.to_tile_back(back_txt.simplify(SIMPLIFY, preserve_topology=True))
     assert pocket.distance(black) > 0.3 and pocket.distance(yellow) > 0.3, 'G pocket runs into the face art'
+    if panel_tile is not None:
+        assert panel_tile.distance(yellow) > 0.3, 'QR panel runs into the stars'
     if nfc_mount == 'sticker_10x20':
         w, h, cy = STICKER_W / 2, STICKER_H / 2, S - art['tap_centre_y']
         nfc = ig._rounded_rect(-w, cy - h, w, cy + h, STICKER_RADIUS)
-        nfc_z0, nfc_z1 = TOP - STICKER_Z1, TOP - STICKER_Z0     # model z: print z = TOP - model z
+        sticker_z0 = STICKER_Z0_BY_THEME[theme]
+        sticker_z1 = round(sticker_z0 + STICKER_DEPTH, 2)
+        nfc_z0, nfc_z1 = TOP - sticker_z1, TOP - sticker_z0     # model z: print z = TOP - model z
         assert nfc.distance(pocket) >= STICKER_GAP_G, 'sticker pocket runs into the G pocket'
         assert S - (cy + h) >= STICKER_GAP_EDGE, 'sticker pocket too close to the top edge'
         assert nfc_z1 < TOP - INLAY, 'sticker pocket must stay behind the face art'
@@ -153,7 +179,8 @@ def build(code, out_dir, size='large', nfc_mount='embedded_round'):
 
     want = solid_volume - (black.area + yellow.area) * INLAY - pocket.area * POCKET - back.area * BACK_ENGRAVE
     rep = {
-        'code': code, 'size': size, 'tile_mm': S, 'qr_url': art['qr']['url'], 'qr_modules': art['qr']['modules'],
+        'code': code, 'size': size, 'theme': theme, 'qr_style': 'normal-on-white-panel' if theme == 'black' else 'normal',
+        'tile_mm': S, 'qr_url': art['qr']['url'], 'qr_modules': art['qr']['modules'],
         'qr_module_mm': art['qr']['module_mm'], 'space_above_qr_mm': round(art['space'], 2),
         'headline_width_mm': round(art['headline_w'], 2), 'nfc_centre_from_top_mm': round(art['nfc_centre_y'], 2),
         'g_box_mm': [round(v, 2) for v in art['g_box']], 'pocket_mm2': round(pocket.area, 1),
@@ -170,15 +197,16 @@ def build(code, out_dir, size='large', nfc_mount='embedded_round'):
     }
     if nfc_mount == 'sticker_10x20':
         rep.update(nfc_mount=nfc_mount, sticker_pocket_mm=[STICKER_W, STICKER_H, STICKER_DEPTH],
-                   sticker_pocket_print_z=[STICKER_Z0, STICKER_Z1], pause_top_z=STICKER_PAUSE_TOP_Z,
-                   tag_face_distance_mm=STICKER_Z0, nfc_centre_from_top_mm=round(art['tap_centre_y'], 2),
+                   sticker_pocket_print_z=[sticker_z0, sticker_z1], pause_top_z=round(sticker_z1 + 0.16, 2),
+                   tag_face_distance_mm=sticker_z0, nfc_centre_from_top_mm=round(art['tap_centre_y'], 2),
                    sticker_gap_to_g_pocket_mm=round(nfc.distance(pocket), 2))
     q = {'size': FACE['qr']['size'], 'modules': FACE['qr']['modules'], 'y': art['qr_top']}
     igc.H = S
     rep['qr_decoded_polygons'] = igc.decode_qr_polygons(to_tile(art['qr_dark']), q, art['qr']['url'])
     sec = igc.mesh_section_polygons(black_tm, TOP - INLAY / 2)
     qr_box = box(-q['size'] / 2 - 1, S - q['y'] - q['size'] - 1, q['size'] / 2 + 1, S - q['y'] + 1)
-    rep['qr_decoded_mesh'] = igc.decode_qr_polygons(sec.intersection(qr_box), q, art['qr']['url'])
+    mesh_qr_dark = panel_tile.difference(sec) if panel_tile is not None else sec
+    rep['qr_decoded_mesh'] = igc.decode_qr_polygons(mesh_qr_dark.intersection(qr_box), q, art['qr']['url'])
 
     ok = (abs(tile_tm.volume - want) / want < 0.005
           and abs(black_tm.volume - black.area * INLAY) / (black.area * INLAY) < 0.005
@@ -189,10 +217,11 @@ def build(code, out_dir, size='large', nfc_mount='embedded_round'):
           and abs(tile_tm.bounds[1][2] - TOP) < 1e-4 and abs(tile_tm.bounds[0][2]) < 1e-4)
     rep['ok'] = bool(ok)
     if not ok:
-        raise RuntimeError('Google %s plate failed its checks, nothing written: %s' % (size.title(), rep))
+        raise RuntimeError('Google %s %s plate failed its checks, nothing written: %s' % (size.title(), theme, rep))
     os.makedirs(out_dir, exist_ok=True)
-    tile_tm.export(os.path.join(out_dir, 'White_Google_Plate.stl'))
-    black_tm.export(os.path.join(out_dir, 'Black_Google_Art.stl'))
+    body_colour, art_colour = ('Black', 'White') if theme == 'black' else ('White', 'Black')
+    tile_tm.export(os.path.join(out_dir, '%s_Google_Plate.stl' % body_colour))
+    black_tm.export(os.path.join(out_dir, '%s_Google_Art.stl' % art_colour))
     yellow_tm.export(os.path.join(out_dir, 'Yellow_Google_Stars.stl'))
     return rep
 
@@ -200,5 +229,6 @@ def build(code, out_dir, size='large', nfc_mount='embedded_round'):
 if __name__ == '__main__':
     code = sys.argv[1] if len(sys.argv) > 1 and sys.argv[1] != '-' else fa.SAMPLE_CODE
     size = sys.argv[3] if len(sys.argv) > 3 else 'large'
+    theme = sys.argv[4] if len(sys.argv) > 4 else 'white'
     out = sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] != '-' else         os.path.join(PIECE, 'test', 'mesh', 'google-%s-sample' % size)
     print(build(code, out, size))
