@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Wifi } from "lucide-react";
+import { PieceThumb3D, usePieceModel } from "@/components/xpot/PieceThumb3D";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
 import { useT } from "@/i18n";
 import { tagsMessages } from "@/i18n/messages/tags";
@@ -177,7 +178,7 @@ export function TagPieceMention({
   const t = useT(tagsMessages);
   return (
     <span className={`inline-flex min-w-0 items-center gap-3 ${className}`} data-testid="tag-piece-mention">
-      <TagPieceVisual productType={productType} face={face} title={t(`face_${face ?? "none"}` as "face_none")} />
+      <TagPieceVisual productType={productType} face={face} batchCode={batchCode} title={t(`face_${face ?? "none"}` as "face_none")} />
       <span className="min-w-0">
         {customer ? <span className={LIST_TITLE}>{customer}</span> : <span className={LIST_CODE}>{publicCode}</span>}
         <span className="mt-1 flex min-w-0 items-center gap-1.5">
@@ -210,7 +211,7 @@ export function TagBatchMention({
   const t = useT(tagsMessages);
   return (
     <span className={`inline-flex min-w-0 items-center gap-3 ${className}`} data-testid="tag-batch-mention">
-      <TagPieceVisual productType={productType} face={face} title={t(`face_${face ?? "none"}` as "face_none")} />
+      <TagPieceVisual productType={productType} face={face} batchCode={batchCode} title={t(`face_${face ?? "none"}` as "face_none")} />
       <span className="min-w-0">
         <span className={LIST_CODE}>{batchCode}</span>
         {details ? <span className={`mt-1 block ${LIST_DETAILS}`}>{details}</span> : null}
@@ -234,12 +235,16 @@ function isPlaque(productType: string, face: string | null | undefined): boolean
 }
 
 const VISUAL_SLOT = { sm: "w-9", md: "w-12", lg: "w-28" } as const;
+/** The slot widths above in px: the 3D picture is a square that wide. */
+const VISUAL_SLOT_PX = { sm: 36, md: 48, lg: 112 } as const;
 const VISUAL_FACE_SIZE = { sm: "md", md: "lg", lg: "lg" } as const;
 
 /**
- * The picture of a piece in lists and headers: the plaque drawing when the
- * piece is a plaque (it already carries the printed face), otherwise the face
- * tile alone. A fixed-width slot keeps rows aligned across both.
+ * The picture of a piece in lists and headers, and the one place every screen gets it from. A piece with a 3D preview
+ * (Tags › Production) shows that, drawn small; any other piece, or one still loading, shows the plaque drawing when it
+ * is a plaque (it already carries the printed face), otherwise the face tile alone. A fixed-width slot keeps rows
+ * aligned across all of them. Pass `batchCode` (or `modelSlug`, or `theme`) whenever the screen has it: a piece alone
+ * does not say whether it is the white or the black one, and without that the flat drawing stays.
  */
 export function TagPieceVisual({
   productType,
@@ -247,20 +252,26 @@ export function TagPieceVisual({
   size = "sm",
   title,
   theme,
+  batchCode,
+  modelSlug,
 }: {
   productType: string;
   face: string | null | undefined;
   size?: keyof typeof SIZES;
   title?: string;
   theme?: string | null;
+  batchCode?: string | null;
+  modelSlug?: string | null;
 }) {
+  const model = usePieceModel({ productType, face, theme, batchCode, modelSlug });
+  const flat = isPlaque(productType, face) ? (
+    <TagProductThumbnail productType={productType} face={face} size={size} theme={theme} />
+  ) : (
+    <TagFaceIcon face={face} size={VISUAL_FACE_SIZE[size]} title={title} />
+  );
   return (
     <span className={`inline-flex shrink-0 items-center justify-center ${VISUAL_SLOT[size]}`} title={title}>
-      {isPlaque(productType, face) ? (
-        <TagProductThumbnail productType={productType} face={face} size={size} theme={theme} />
-      ) : (
-        <TagFaceIcon face={face} size={VISUAL_FACE_SIZE[size]} title={title} />
-      )}
+      {model ? <PieceThumb3D model={model} px={VISUAL_SLOT_PX[size]} fallback={flat} /> : flat}
     </span>
   );
 }

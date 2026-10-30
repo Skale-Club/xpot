@@ -43,6 +43,7 @@ import {
   type PrintModelVersionItem,
   type PrintNowPlate,
   type PrintPartReason,
+  type PrintPreviewCatalog,
   type PrintPreviewInfo,
   type PrintRequestItem,
   type PrintVersionInput,
@@ -428,6 +429,34 @@ export async function versionPreview(modelRef: string, versionId: string): Promi
     if (err instanceof FileStorageUnavailableError) throw new TagError("File storage is not configured", 503, "print_storage_unavailable");
     throw err;
   }
+}
+
+/** The models that have a 3D preview and the batches printed from them: what the piece pictures look up (any rep). */
+export async function previewCatalog(): Promise<PrintPreviewCatalog> {
+  const models = await rows<{ id: string; slug: string; title: string; product_type: string | null; face: string | null; theme: string | null; sha256: string }>(sql`
+    SELECT m.id, m.slug, m.title, m.product_type, m.face, m.theme, v.preview->>'sha256' AS sha256
+    FROM print_models m
+    JOIN print_model_versions v ON v.id = m.current_version_id
+    WHERE m.kind = 'serialized' AND v.preview->>'fileRef' IS NOT NULL
+    ORDER BY m.sort_order, m.title`);
+  if (!models.length) return { models: [], batches: {} };
+  const batches = await rows<{ batch_code: string; slug: string }>(sql`
+    SELECT DISTINCT b.batch_code, m.slug
+    FROM tag_batches b
+    JOIN print_jobs j ON j.id = b.print_job_id OR j.batch_id = b.id
+    JOIN print_models m ON m.id = j.model_id
+    WHERE m.id IN (${sql.join(models.map((m) => sql`${m.id}::uuid`), sql`, `)})`);
+  return {
+    models: models.map((m) => ({ slug: m.slug, title: m.title, productType: m.product_type, face: m.face, theme: m.theme, sha256: m.sha256 })),
+    batches: Object.fromEntries(batches.map((b) => [b.batch_code, b.slug])),
+  };
+}
+
+/** A model's current version's preview, for the server to stream (see versionPreview). */
+export async function currentPreview(modelRef: string): Promise<{ body: Uint8Array; sha256: string }> {
+  const model = await resolveModel(modelRef);
+  if (!model.currentVersionId) throw new TagError("This model has no 3D preview", 404, "print_preview_missing");
+  return versionPreview(model.id, model.currentVersionId);
 }
 
 // ─── Orders ───────────────────────────────────────────────────────────────────

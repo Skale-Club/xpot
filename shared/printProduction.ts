@@ -69,6 +69,24 @@ export function printPreviewPath(modelSlug: string, versionId: string): string {
   return `/api/xpot/admin/print-models/${encodeURIComponent(modelSlug)}/versions/${versionId}/preview`;
 }
 
+/**
+ * What every picture of a piece needs to show it in 3D (the piece template, client/src/components/xpot/PiecePicture):
+ * the models whose current version has a preview, and which of them each batch was printed from. A piece itself only
+ * carries its product type and face, never its colour, so the batch is what tells a white plate from a black one.
+ */
+export interface PrintPreviewCatalog {
+  models: Array<{ slug: string; title: string; productType: string | null; face: string | null; theme: string | null; sha256: string }>;
+  /** Batch code -> slug of the model it came from, for batches of models in `models`. */
+  batches: Record<string, string>;
+}
+
+export const PRINT_PREVIEW_CATALOG_PATH = "/api/xpot/print-previews";
+
+/** A model's current preview for any signed-in rep (the admin path above is for admins only). The hash busts the cache. */
+export function printModelPreviewPath(modelSlug: string, sha256: string): string {
+  return `${PRINT_PREVIEW_CATALOG_PATH}/${encodeURIComponent(modelSlug)}/glb?v=${sha256.slice(0, 12)}`;
+}
+
 export const PRINT_PART_REASONS = ["printed", "assembled", "used", "adjustment"] as const;
 export type PrintPartReason = (typeof PRINT_PART_REASONS)[number];
 

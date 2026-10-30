@@ -352,7 +352,7 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
       <div className={`space-y-4 rounded-2xl ${GLASS_CLASS} p-4 sm:p-5`}>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex min-w-0 items-start gap-3">
-            <TagPieceVisual productType={batch.productType} face={face} size="md" />
+            <TagPieceVisual productType={batch.productType} face={face} batchCode={batch.batchCode} size="md" />
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className={CODE_HEADING}>{batch.batchCode}</h2>
@@ -444,7 +444,7 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
         </div>
       )}
 
-      {tab === "receive" && <><ProductionIdentity model={{ title: batch.name, productType: batch.productType, face }} hero /><BatchReceiveStation batch={batch} onRequestClose={() => setStateDialog(true)} /></>}
+      {tab === "receive" && <><ProductionIdentity model={{ title: batch.name, productType: batch.productType, face, batchCode: batch.batchCode }} hero /><BatchReceiveStation batch={batch} onRequestClose={() => setStateDialog(true)} /></>}
 
       {tab === "pieces" && (
         <SectionCard accent="tags" icon={Layers} title={t("piecesHeading", { count: shown.length })}>
