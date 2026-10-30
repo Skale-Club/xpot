@@ -7,6 +7,10 @@ import { unifiedProductionMessages } from "@/i18n/messages/unifiedProduction";
 import { useTagLabels } from "./labels";
 
 export interface ProductionIdentityData {
+  /** The catalog model's slug, when this is one (it picks the 3D picture; a new-batch form has none). */
+  slug?: string;
+  /** The batch the picture stands for, when it is one: its model is where the colour comes from. */
+  batchCode?: string | null;
   title: string;
   productType?: string | null;
   face?: string | null;
@@ -18,7 +22,7 @@ export function ProductionIdentity({ model, hero = false }: { model: ProductionI
   const u = useT(unifiedProductionMessages);
   const labels = useTagLabels();
   const artwork = model.productType
-    ? <TagPieceVisual productType={model.productType} face={model.face} theme={model.theme} size={hero ? "lg" : "md"} />
+    ? <TagPieceVisual productType={model.productType} face={model.face} theme={model.theme} modelSlug={model.slug} batchCode={model.batchCode} size={hero ? "lg" : "md"} />
     : <Shapes className={hero ? "h-14 w-14 text-white/40" : "h-9 w-9 text-white/40"} aria-hidden="true" />;
 
   if (!hero) return <span className="flex min-w-0 items-center gap-3" data-testid="production-identity">
@@ -61,7 +65,7 @@ export function ProductionPlatePreview({ model, plates }: { model: ProductionIde
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
       {plates.slice(0, 3).map((count, index) => <div key={index} className="space-y-3 rounded-xl border border-white/[0.08] bg-black/10 p-3">
         <div className="grid min-h-12 grid-cols-2 place-items-center gap-2" aria-hidden="true">
-          {Array.from({ length: Math.min(count, 4) }, (_, copy) => <TagPieceVisual key={copy} productType={model.productType!} face={model.face} theme={model.theme} size="sm" />)}
+          {Array.from({ length: Math.min(count, 4) }, (_, copy) => <TagPieceVisual key={copy} productType={model.productType!} face={model.face} theme={model.theme} modelSlug={model.slug} size="sm" />)}
           {count > 4 ? <span className="col-span-2 text-xs tabular-nums text-white/50">+{count - 4}</span> : null}
         </div>
         <p className="text-xs font-medium text-white/75">{t("plateOf", { number: index + 1, total: plates.length })}</p>

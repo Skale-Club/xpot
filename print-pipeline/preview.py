@@ -32,9 +32,17 @@ FALLBACK = {'white': '#F2F2F2', 'black': '#161616', 'yellow': '#FBBC05', 'blue':
 MM = 0.001
 
 
-def _rgba(hex_colour: str) -> list[int]:
+def _linear(channel: int) -> float:
+    """One sRGB byte as the linear value glTF wants in baseColorFactor (the viewer converts it back for the screen)."""
+    c = channel / 255
+    return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+
+def _rgba(hex_colour: str) -> list[float]:
+    """The filament's hex colour as a glTF baseColorFactor. The factor is linear: writing the sRGB bytes as they are
+    lifted every colour (black PLA #161616 showed as #535353, white as #F9F9F9, the Google blue and red washed out)."""
     h = hex_colour.lstrip('#')[:6]
-    return [int(h[i:i + 2], 16) for i in (0, 2, 4)] + [255]
+    return [_linear(int(h[i:i + 2], 16)) for i in (0, 2, 4)] + [1.0]
 
 
 def part_colour(label: str, slot: int, recipe: dict) -> str:

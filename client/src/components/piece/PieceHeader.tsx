@@ -102,7 +102,7 @@ export function PieceHeader({ tag, actions }: { tag: TagDetail; actions?: ReactN
   return (
     <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start" data-testid="piece-header">
       <div className="flex min-w-0 flex-1 items-start gap-3 sm:gap-4">
-        <TagPieceVisual productType={tag.productType} face={tag.face} size="md" title={tt(`face_${tag.face ?? "none"}` as "face_none")} />
+        <TagPieceVisual productType={tag.productType} face={tag.face} batchCode={tag.batchCode} size="md" title={tt(`face_${tag.face ?? "none"}` as "face_none")} />
         <div className="min-w-0 flex-1 space-y-2">
           <h2 className={CODE_HEADING} data-testid="admin-piece-code">{tag.publicCode}</h2>
           <PieceModelLine tag={tag} />

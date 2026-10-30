@@ -9,6 +9,7 @@ import { ModuleSwitch, rememberModule, useXpotModules } from "@/components/Modul
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { shellMessages } from "@/i18n/messages/shell";
+import { PieceViewerHost } from "@/components/xpot/PieceViewer3D";
 import { ShellHeader } from "@/components/xpot/ShellHeader";
 import { AppLayout, MODULE_COLUMN } from "@/components/xpot/AppLayout";
 import { VisitsTabBar } from "@/components/xpot/VisitsTabBar";
@@ -239,6 +240,8 @@ export default function App() {
         </Switch>
         </WorkspaceBoundary>
       </Router>
+      {/* The 3D view a piece's small picture opens: one for the whole app, outside every list row it was clicked in. */}
+      <PieceViewerHost />
     </Suspense>
   );
 }

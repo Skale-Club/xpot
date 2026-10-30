@@ -230,6 +230,39 @@ describe("3D preview", () => {
     expect((await request(app, "GET", "/api/xpot/admin/print-models/plate-large-menu-white")).body.currentVersion.preview.fileName).toBe("menu-v2.glb");
   });
 
+  it("gives every signed-in rep the catalog of previews, which model each batch came from, and the model's GLB", async () => {
+    const app = admin();
+    const rep = appFor("print-manager");
+    const catalog = "/api/xpot/print-previews";
+    const model = (await createSerializedModel(app)).body;
+    expect((await request(appFor(null), "GET", catalog)).status).toBe(401);
+    // Not an admin, but a rep: the piece pictures of every screen need this. No preview yet, so nothing in it.
+    expect((await request(rep, "GET", catalog)).body).toEqual({ models: [], batches: {} });
+
+    const plate = await firstPlate(app, { model: "plate-large-menu-white" });
+    await request(app, "POST", `/api/xpot/admin/print-models/plate-large-menu-white/versions/${model.currentVersion.id}/preview?filename=menu.glb`, glb("first"));
+    // A model with no version, and so no preview, never shows up.
+    await request(app, "POST", "/api/xpot/admin/print-models", { slug: "plate-large-menu-black", kind: "serialized", title: "Plate Large · Menu · Black", productType: "large_plate", face: "menu", theme: "black", salesProductId: await salesProductId(), batchPrefix: "BPLATE" });
+
+    const listed = (await request(rep, "GET", catalog)).body;
+    expect(listed.models).toEqual([
+      { slug: "plate-large-menu-white", title: "Plate Large · Menu · White", productType: "large_plate", face: "menu", theme: "white", sha256: expect.stringMatching(/^[0-9a-f]{64}$/) },
+    ]);
+    // The batch is what says white or black: a piece only knows its type and face.
+    expect(listed.batches).toEqual({ [plate.batchCode]: "plate-large-menu-white" });
+
+    const glbPath = `${catalog}/plate-large-menu-white/glb`;
+    const streamed = await request(rep, "GET", glbPath);
+    expect(streamed.status).toBe(200);
+    expect(streamed.headers.get("content-type")).toContain("model/gltf-binary");
+    expect(streamed.headers.get("content-length")).toBe("17");
+    expect(streamed.headers.get("etag")).toBe(`"${listed.models[0].sha256}"`);
+    expect((await request(rep, "GET", glbPath, undefined, { "if-none-match": streamed.headers.get("etag")! })).status).toBe(304);
+    expect((await request(appFor(null), "GET", glbPath)).status).toBe(401);
+    expect((await request(rep, "GET", `${catalog}/plate-large-menu-black/glb`)).status).toBe(404);
+    expect((await request(rep, "GET", `${catalog}/no-such-model/glb`)).status).toBe(404);
+  });
+
   it("takes a preview as raw bytes with an MCP token (preview.py --upload), and nothing without a valid one", async () => {
     const { registerMcpRoutes } = await import("../../server/mcp/routes.js");
     const { createMcpToken, revokeMcpToken } = await import("../../server/mcp/tokens.js");

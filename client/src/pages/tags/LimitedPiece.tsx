@@ -47,7 +47,7 @@ export function LimitedPiece({ piece, back, onBack, right, onReceive }: {
         back={back}
         onBack={onBack}
         right={right}
-        picture={<TagPieceVisual productType={piece.productType} face={piece.face} size="md" title={t(`face_${piece.face ?? "none"}` as "face_none")} />}
+        picture={<TagPieceVisual productType={piece.productType} face={piece.face} batchCode={piece.batchCode} size="md" title={t(`face_${piece.face ?? "none"}` as "face_none")} />}
         sub={<TagModelChips productType={piece.productType} face={piece.face} batchCode={piece.batchCode} />}
       />
       <div className="-mt-1 mb-3 space-y-2" data-testid="piece-limited">
