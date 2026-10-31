@@ -24,29 +24,40 @@ from shapely.ops import unary_union
 import numpy as np
 fa, geom = tile.fa, tile.igc
 FONT = 'Inria Serif Bold'
+# The tile sizes of face_composition_tile.SIZES (the approved 2D Menu faces). Large: 103 mm, 31 mm QR at 1.24 mm
+# modules, its panel border 2 modules. Small (user, 2026-10-31: "small plate de menu preta"): 78 mm, 20 mm QR at
+# 0.8 mm modules, a 1-module border, as the Small Instagram Plate.
+MENU_SIZES = {
+    'large': dict(size=103., margin=8., tap=(7.2, 4.9, 2.5), title_cap=30., title_w=80., gap=4.5, sub=4.7,
+                  qr=31., border=2.48),
+    'small': dict(size=78., margin=6., tap=(6.0, 4.5, 2.0), title_cap=30., title_w=62., gap=3.5, sub=4.5,
+                  qr=20., border=.8),
+}
 
 
-def artwork(code):
-    composition.configure('large')
-    tile.configure_size('large')
-    size, cx, margin = 103., 51.5, 8.
-    tap, _ = fa.tap_row_geom(cx, dict(icon_h=7.2, cap=4.9, gap=2.5, label='Tap here', y=margin))
+def artwork(code, size='large'):
+    composition.configure(size)
+    tile.configure_size(size)
+    d = MENU_SIZES[size]
+    cx, margin, tap_h = d['size'] / 2, d['margin'], d['tap'][0]
+    tap, _ = fa.tap_row_geom(cx, dict(icon_h=tap_h, cap=d['tap'][1], gap=d['tap'][2], label='Tap here', y=margin))
     prop = composition._font(composition.MENU_FONTS[FONT][0])
     ref = TextPath((0, 0), 'H', size=100, prop=prop).get_extents().height
     path = TextPath((0, 0), 'Menu', size=100, prop=prop)
     ext = path.get_extents()
-    scale = min(30 / ref, 80 / ext.width)
+    scale = min(d['title_cap'] / ref, d['title_w'] / ext.width)
     cap = ref * scale
-    qr_top, qr_size, border = 64., 31., 2.48
-    group_h = cap + 4.5 + 4.7
-    space = (qr_top - border - (margin + 7.2) - group_h) / 2
+    qr_size, border = d['qr'], d['border']
+    qr_top = d['size'] - margin - qr_size
+    group_h = cap + d['gap'] + d['sub']
+    space = (qr_top - border - (margin + tap_h) - group_h) / 2
     assert space > 0
-    title_top = margin + 7.2 + space
+    title_top = margin + tap_h + space
     title = fa.even_odd([[(cx - ext.width * scale / 2 + (x-ext.x0)*scale,
                            title_top + cap - y*scale) for x,y in ring]
                          for ring in path.to_polygons(closed_only=True)])
-    sub, width = fa.text_geom('Scan or tap to view', 4.7, cx, title_top + cap + 4.5 + 4.7)
-    assert width < 87
+    sub, width = fa.text_geom('Scan or tap to view', d['sub'], cx, title_top + cap + d['gap'] + d['sub'])
+    assert width < d['size'] - 2 * margin
     dark, _, qr = fa.qr_geom(dict(x=cx-qr_size/2, y=qr_top, size=qr_size, modules=25), fa.QR_BASE+code)
     panel = tile._rounded_rect(cx-qr_size/2-border, qr_top-border,
                               cx+qr_size/2+border, qr_top+qr_size+border, border*.6)

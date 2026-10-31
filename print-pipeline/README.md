@@ -101,6 +101,15 @@ the batch's (LPLATE-2026-006: 311.4 min, 25 swaps, 4/4 QR; SPLATE-2026-002: 334.
 after `print_model_create` / `print_model_version_create`, build and attach it, then check `print_model_get` shows
 `currentVersion.preview`. Parts with no builder (bases, tokens, stickers) have none.
 
+**Project rule: every face comes in every form and every colour** (user, 2026-10-31): Menu, Google Review,
+Instagram, Venmo and any face added later each exist as Small Plate, Large Plate, Small Stand and Large Stand, in
+white, black, or a custom colour. Asked for one of them, make it; don't ask whether the other forms or colours are
+wanted. A missing combination is a gap to fill (the builder grows a size or theme), not a question.
+
+**Project rule: every new model uses the 10 x 20 NFC sticker** (user, 2026-10-31), Small sizes included: the
+standard 23 x 13 x 0.48 pocket (0.68 behind a black face, 1.16 behind a white one) and `consumes:
+nfc-sticker-10x20`, never the 25 mm round tag. If a builder has no sticker pocket for a size, give it one.
+
 ```bash
 XPOT_MCP_TOKEN=... python print-pipeline/preview.py version.json preview.glb --upload <model-slug> --version-id <uuid>
 ```
