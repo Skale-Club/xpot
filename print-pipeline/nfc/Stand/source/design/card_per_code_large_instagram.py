@@ -29,6 +29,7 @@ sys.path.insert(0, HERE)
 import face_art as fa  # noqa: E402
 import face_art_large as large  # noqa: E402
 import face_composition_large as fc  # noqa: E402
+import card_per_code_large as google  # noqa: E402   (the sticker pocket: size, place, depth by theme)
 
 large.configure()
 
@@ -121,14 +122,16 @@ def welded_bad_edges(tm):
     return int((c != 2).sum())
 
 
-def decode_qr_polygons(dark, q, url):
-    """Rasterise the QR polygons (card frame: x centred, y up) with a quiet zone and decode them."""
+def decode_qr_polygons(dark, q, url, card_h=None):
+    """Rasterise the QR polygons (card frame: x centred, y up) with a quiet zone and decode them. `card_h` is the
+    card's height (the module's H unless given: the Small Stand card passes its own)."""
     import cv2
     import fitz
+    card_h = H if card_h is None else card_h
     quiet = 4 * q['size'] / q['modules']
     x0, x1 = -q['size'] / 2 - quiet, q['size'] / 2 + quiet
-    y1 = H - q['y'] + quiet                     # card-frame y of the symbol's top edge + quiet
-    y0 = H - q['y'] - q['size'] - quiet
+    y1 = card_h - q['y'] + quiet                # card-frame y of the symbol's top edge + quiet
+    y0 = card_h - q['y'] - q['size'] - quiet
     paths = []
     for pg in fa.polys(dark):
         d = 'M' + ' L'.join('%.4f %.4f' % (x - x0, y1 - y) for x, y in list(pg.exterior.coords)[:-1]) + ' Z'
@@ -154,19 +157,30 @@ def mesh_section_polygons(tm, z):
     return fa.even_odd([list(f.exterior.coords)[:-1] for f in faces])
 
 
-def build(code, batch, serial, out_dir):
-    """Write the three STLs for one card. `batch` and `serial` are accepted for the ledger; the back carries the
-    code alone (user, 2026-10-04)."""
-    large.configure()
-    code = fa.normalize_code(code)
-    art = layout(code)
-    black, silk = fa.to_card(art['black']), fa.to_card(art['silk'])
-    back_comp, _ = fa.serial_geom(code)                       # code only: batch/serial ignored by serial_geom
-    s_back_comp, _ = fa.serial_geom(fa.SAMPLE_CODE)
-    back = fa.to_card_back(back_comp.simplify(SIMPLIFY, preserve_topology=True))
-    s_back, n_back = fa.to_card_back(s_back_comp), fa.to_card_back(back_comp)
-    assert back_comp.bounds[3] <= SLOT_LINE - 1.5, 'back serial reaches the slot'
+def sticker_pocket():
+    """The 23 x 13 sticker pocket outline, card frame, on the round tag's centre (as on the Large Google card)."""
+    cx, cy = google.ROUND_CENTRE
+    w, h, r = google.STICKER_W / 2, google.STICKER_H / 2, google.STICKER_RADIUS
+    return box(cx - w + r, cy - h + r, cx + w - r, cy + h - r).buffer(r, quad_segs=24)
 
+
+def check_sticker(card, pocket, print_z):
+    """A section through the pocket: one hole there, of the pocket's area; and none left of the round cavity."""
+    from shapely.geometry import Polygon
+    mid = CARD_T - sum(print_z) / 2
+    rings = sorted((Polygon(p) for p in card.slice(mid).to_polygons()), key=lambda p: -p.area)
+    here = [p for p in rings[1:] if p.intersects(pocket)]
+    section = round(sum(p.area for p in here), 2)
+    rep = {'sticker_section_mm2': section, 'sticker_expected_mm2': round(pocket.area, 2),
+           'round_cavity_filled': len(card.slice((google.ROUND_Z0 + google.ROUND_Z1) / 2).to_polygons()) == 1}
+    rep['sticker_ok'] = len(here) == 1 and abs(section - pocket.area) < 0.5 and rep['round_cavity_filled']
+    return rep
+
+
+def plain_card(s_back, n_back, nfc_mount='embedded_round', theme='white'):
+    """The Large Google sample card with its face, G pocket and back serial filled back to plain card, trimmed flat;
+    with the sticker, the round tag cavity filled too and the pocket cut after the plain volume is measured.
+    Returns (card, plain volume, plain shells, sticker or None). Any face is then cut into it at INLAY."""
     # the old Google G pocket footprint, from the Google layout's own G position
     r = fc.resolve_version('google')['logo']
     g_outline, _ = fa.g_geom({'x': r['x'], 'y': r['y'], 'size': r['size']})
@@ -184,6 +198,13 @@ def build(code, batch, serial, out_dir):
     # 3. the sample's back serial back to plain card (the code is re-engraved below)
     serial_fill = box(*unary_union([s_back, n_back]).bounds).buffer(0.3, join_style='mitre')
     card = card + prism(serial_fill, -OVER, BACK_ENGRAVE + OVER)
+    sticker = None
+    if nfc_mount == 'sticker_10x20':
+        # 3b. the round tag cavity back to plain card (the pocket is cut after the plain volume is measured)
+        round_fill = Point(*google.ROUND_CENTRE).buffer(google.ROUND_D / 2 + 0.3, quad_segs=64)
+        card = card + prism(round_fill, google.ROUND_Z0 - OVER, google.ROUND_Z1 + OVER)
+        pz0, pz1, pause = google.sticker_pocket_z(theme)
+        sticker = {'pocket': sticker_pocket(), 'print_z': [pz0, pz1], 'pause_top_z': pause}
     # 4. trim flat to the card's own faces
     slab = m3.Manifold.cube([hi[0] - lo[0] + 2, hi[1] - lo[1] + 2, TOP]).translate((lo[0] - 1, lo[1] - 1, 0.0))
     card = card ^ slab
@@ -191,6 +212,29 @@ def build(code, batch, serial, out_dir):
     plain_volume = plain.volume
     plain_shells = len(card.decompose())
 
+    if sticker:
+        card = card - prism(sticker['pocket'], TOP - sticker['print_z'][1], TOP - sticker['print_z'][0])
+    return card, plain_volume, plain_shells, sticker
+
+
+def build(code, batch, serial, out_dir, nfc_mount='embedded_round', theme='white'):
+    """Write the three STLs for one card. `batch` and `serial` are accepted for the ledger; the back carries the
+    code alone (user, 2026-10-04). nfc_mount 'sticker_10x20' fills the round tag cavity and cuts the Large Google
+    card's 10 x 20 sticker pocket instead, its depth by `theme` (the meshes are the same for both colours
+    otherwise)."""
+    if nfc_mount not in ('embedded_round', 'sticker_10x20'):
+        raise ValueError('unsupported nfc_mount')
+    large.configure()
+    code = fa.normalize_code(code)
+    art = layout(code)
+    black, silk = fa.to_card(art['black']), fa.to_card(art['silk'])
+    back_comp, _ = fa.serial_geom(code)                       # code only: batch/serial ignored by serial_geom
+    s_back_comp, _ = fa.serial_geom(fa.SAMPLE_CODE)
+    back = fa.to_card_back(back_comp.simplify(SIMPLIFY, preserve_topology=True))
+    s_back, n_back = fa.to_card_back(s_back_comp), fa.to_card_back(back_comp)
+    assert back_comp.bounds[3] <= SLOT_LINE - 1.5, 'back serial reaches the slot'
+
+    card, plain_volume, plain_shells, sticker = plain_card(s_back, n_back, nfc_mount, theme)
     # 5. cut the Instagram face and this code's back
     card = (card - prism(unary_union([black, silk]), TOP - INLAY, TOP + 0.2) - prism(back, -0.2, BACK_ENGRAVE))
     card_tm = to_trimesh(card)
@@ -198,6 +242,8 @@ def build(code, batch, serial, out_dir):
     silk_tm = to_trimesh(prism(silk, TOP - INLAY, TOP))
 
     want = plain_volume - (black.area + silk.area) * INLAY - back.area * BACK_ENGRAVE
+    if sticker:
+        want -= sticker['pocket'].area * google.STICKER_DEPTH
     rep = {
         'code': code, 'batch': batch, 'serial': str(serial), 'qr_url': art['qr']['url'],
         'qr_modules': art['qr']['modules'], 'qr_module_mm': art['qr']['module_mm'],
@@ -213,6 +259,11 @@ def build(code, batch, serial, out_dir):
         'bad_edges': welded_bad_edges(card_tm) + welded_bad_edges(black_tm) + welded_bad_edges(silk_tm),
         'card_bounds': card_tm.bounds.round(3).tolist(),
     }
+    if sticker:
+        rep.update(nfc_mount=nfc_mount, theme=theme,
+                   sticker_pocket_mm=[google.STICKER_W, google.STICKER_H, google.STICKER_DEPTH],
+                   sticker_pocket_print_z=sticker['print_z'], pause_top_z=sticker['pause_top_z'],
+                   tag_face_distance_mm=sticker['print_z'][0], **check_sticker(card, sticker['pocket'], sticker['print_z']))
 
     # QR must decode back to the URL, from the exact polygons and from the written art mesh
     q = {'size': FACE_IG['qr']['size'], 'modules': FACE_IG['qr']['modules'], 'y': FACE_IG['qr']['y']}
@@ -225,9 +276,10 @@ def build(code, batch, serial, out_dir):
           and abs(black_tm.volume - black.area * INLAY) / (black.area * INLAY) < 0.005
           and abs(silk_tm.volume - silk.area * INLAY) / (silk.area * INLAY) < 0.005
           and card_tm.is_watertight and black_tm.is_watertight and silk_tm.is_watertight
-          and rep['card_shells'] == 2 and plain_shells == 2 and rep['bad_edges'] == 0
+          and rep['card_shells'] == 2 and plain_shells == (1 if sticker else 2) and rep['bad_edges'] == 0
           and rep['qr_decoded_polygons'] == art['qr']['url'] and rep['qr_decoded_mesh'] == art['qr']['url']
-          and abs(card_tm.bounds[1][2] - TOP) < 1e-4 and abs(card_tm.bounds[0][2]) < 1e-4)
+          and abs(card_tm.bounds[1][2] - TOP) < 1e-4 and abs(card_tm.bounds[0][2]) < 1e-4
+          and (not sticker or rep['sticker_ok']))
     rep['ok'] = bool(ok)
     if not ok:
         raise RuntimeError('Instagram Large card failed its checks, nothing written: %s' % rep)

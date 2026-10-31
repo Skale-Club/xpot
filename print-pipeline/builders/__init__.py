@@ -2,7 +2,8 @@
 
 A builder turns one code into that piece's meshes and says which parts they are: (label, STL file, AMS slot). The
 bench lays the parts out on the bed with the version's slots and recipe (bench.py). The geometry itself is the 3D
-Printing repo's code, copied into nfc/ with its paths pointed here; nothing in it changed.
+Printing repo's code, copied into nfc/ with its paths pointed here; what was added here since (the sticker pocket,
+the Menu and Small Stand cards) leaves every printed batch's meshes byte-identical (tests/rebuild.py).
 
     build(tag, index, params, out_dir) -> (report, parts)
 
@@ -109,21 +110,43 @@ def plate_venmo(tag, index, params, out_dir):
 
 
 def _stand(module_name, face, tag, index, params, out_dir, batch):
-    module = __import__(module_name)
-    if params.get('size', 'large') != 'large':
-        raise BuildError('only the Large Stand card has a builder')
     theme = _theme(params, index)
     mount = params.get('nfc_mount', 'embedded_round')
-    if mount != 'embedded_round' and face != 'Google':
-        raise BuildError(f'nfc_mount {mount!r}: only the Google Stand has the sticker pocket')
-    # Without nfc_mount the call is the one every printed batch was built with (tests/rebuild.py).
-    extra = {} if mount == 'embedded_round' else {'nfc_mount': mount, 'theme': theme}
-    report = module.build(tag['public_code'], batch, tag['serial_number'], str(out_dir), **extra)
+    size = params.get('size', 'large')
+    if size not in ('large', 'small'):
+        raise BuildError(f'size {size!r}: large or small')
+    # The Small cards and the Menu card are new (2026-10-31): every face, both colours, only with the 10 x 20 sticker.
+    if (size == 'small' or face == 'Menu') and mount != 'sticker_10x20':
+        raise BuildError(f'nfc_mount {mount!r}: the {size.title()} {face} Stand card only takes sticker_10x20')
+    font = _menu_font(params, face)
+    if size == 'small':
+        import card_per_code_small
+        report = card_per_code_small.build(face.lower(), tag['public_code'], batch, tag['serial_number'], str(out_dir),
+                                           theme=theme, nfc_mount=mount, font=font)
+    else:
+        module = __import__(module_name)
+        if face == 'Menu':
+            extra = {'nfc_mount': mount, 'theme': theme, 'font': font}
+        else:
+            # Without nfc_mount the call is the one every printed batch was built with (tests/rebuild.py).
+            extra = {} if mount == 'embedded_round' else {'nfc_mount': mount, 'theme': theme}
+        report = module.build(tag['public_code'], batch, tag['serial_number'], str(out_dir), **extra)
     _check_url(report.get('qr_url') or (report.get('qr') or {}).get('url'), tag)
-    # The black Stand prints the same meshes with the body and art filaments swapped in the recipe.
+    # The black Stand prints the same file names with the body and art filaments swapped in the recipe.
     body, art = _pair(theme)
-    third = ('Yellow - Stars', 'Yellow_Google_Stars.stl', 3) if face == 'Google' else ('Silk - Logo', 'Silk_Instagram_Logo.stl', 3)
-    return report, [(f'{body} - Card', f'White_{face}_Card.stl', 1), (f'{art} - Art', f'Black_{face}_Art.stl', 2), third]
+    parts = [(f'{body} - Card', f'White_{face}_Card.stl', 1), (f'{art} - Art', f'Black_{face}_Art.stl', 2)]
+    if face == 'Google':
+        parts.append(('Yellow - Stars', 'Yellow_Google_Stars.stl', 3))
+    elif face == 'Instagram':
+        parts.append(('Silk - Logo', 'Silk_Instagram_Logo.stl', 3))
+    return report, parts
+
+
+def _menu_font(params, face):
+    font = params.get('font', 'Inria Serif Bold')
+    if face == 'Menu' and font not in MENU_FONTS_READY:
+        raise BuildError(f'menu font {font!r} has no layout yet: one of {", ".join(MENU_FONTS_READY)}')
+    return font
 
 
 def stand_google(tag, index, params, out_dir, batch=''):
@@ -134,6 +157,10 @@ def stand_instagram(tag, index, params, out_dir, batch=''):
     return _stand('card_per_code_large_instagram', 'Instagram', tag, index, params, out_dir, batch)
 
 
+def stand_menu(tag, index, params, out_dir, batch=''):
+    return _stand('card_per_code_large_menu', 'Menu', tag, index, params, out_dir, batch)
+
+
 BUILDERS = {
     'plate.instagram': plate_instagram,
     'plate.google': plate_google,
@@ -141,9 +168,10 @@ BUILDERS = {
     'plate.venmo': plate_venmo,
     'stand.google': stand_google,
     'stand.instagram': stand_instagram,
+    'stand.menu': stand_menu,
 }
 
-NEEDS_BATCH = {'stand.google', 'stand.instagram'}
+NEEDS_BATCH = {'stand.google', 'stand.instagram', 'stand.menu'}
 
 
 def build_piece(builder_id, tag, index, params, out_dir, batch=''):

@@ -10,7 +10,7 @@ XPOT_URL defaults to https://xpot.place.
 params, recipe. The builder makes one piece with the sample code (never a client's code: the QR of a preview must not
 be a live piece), exactly as the bench would, and each part takes the colour of its AMS slot from the recipe's
 filament_colour. The separate parts are put where they go, so the preview looks like the finished piece: the flat G
-token in the Google Plate's pocket; a Large Stand's card in its base's slot, with its relief G on the Google one.
+token in the Google Plate's pocket; a Stand's card in its base's slot (Large or Small), with its G on the Google one.
 
 Frame of the GLB: metres (glTF), x right, y up, the face toward +z, centred on the piece; what the viewer expects.
 """
@@ -70,9 +70,13 @@ def google_g_token(size: str) -> list[tuple[trimesh.Trimesh, str]]:
 
 
 STAND_MESH = ROOT / 'nfc' / 'Stand' / 'source' / 'mesh' / 'large'
+STAND_MESH_SMALL = ROOT / 'nfc' / 'Stand' / 'source' / 'mesh' / 'small'
 # The Large base's card slot, measured from its mesh (sections at z 5 and 13): 4.11 wide, its centre at y 14.73 at
 # z 5 and moving 0.364 per mm of height, so the card leans back atan(0.364) = 20 degrees; the floor is at z ~2.6.
 SLOT_CENTRE_Y5, SLOT_SLOPE, SLOT_FLOOR_Z = 14.725, 0.364, 2.6
+# The Small base (mesh/small/Black_Google_Base.stl, Fusion small-v9): the same 4.11 slot and 20 degrees, its centre
+# at y 11.455 at z 5. The Small card and its G token meshes sit at x -45 (Fusion laid the versions side by side).
+SLOT_CENTRE_Y5_SMALL, SMALL_X_OFF = 11.455, -45.0
 BASE_COLOUR = '#161616'
 
 
@@ -81,28 +85,32 @@ def _rotation_x(degrees: float):
     return trimesh.transformations.rotation_matrix(np.radians(degrees), [1, 0, 0])
 
 
-def stand_assembly(meshes: list[tuple[trimesh.Trimesh, str, str]], face: str) -> list[tuple[trimesh.Trimesh, str, str]]:
-    """The Large Stand as it stands: the card (and, for Google, its four-colour relief G) in the base's slot.
+def stand_assembly(meshes: list[tuple[trimesh.Trimesh, str, str]], face: str,
+                   size: str = 'large') -> list[tuple[trimesh.Trimesh, str, str]]:
+    """The Stand as it stands: the card (and, for Google, its four-colour G) in the base's slot, Large or Small.
 
     Card frame: x across, y up from the bottom edge, z from the back (0) to the face (3.56). Base frame: x across,
     y from the front edge, z up. The card turns face-front (-y) and leans back with the slot.
     """
     import numpy as np
+    mesh_dir = STAND_MESH_SMALL if size == 'small' else STAND_MESH
     card = list(meshes)
     if face == 'google':
         for colour, hex_colour in (('Blue', '#4285F4'), ('Red', '#EA4335'), ('Yellow', '#FBBC05'), ('Green', '#34A853')):
-            card.append((trimesh.load(next(STAND_MESH.glob(f'{colour}_Google_G_Token_*.stl')), force='mesh'), 'G token', hex_colour))
+            card.append((trimesh.load(next(mesh_dir.glob(f'{colour}_Google_G_Token_*.stl')), force='mesh'), 'G token', hex_colour))
     tilt = np.degrees(np.arctan(SLOT_SLOPE))
-    slot_y = SLOT_CENTRE_Y5 + SLOT_SLOPE * (SLOT_FLOOR_Z - 5)
+    slot_y = (SLOT_CENTRE_Y5_SMALL if size == 'small' else SLOT_CENTRE_Y5) + SLOT_SLOPE * (SLOT_FLOOR_Z - 5)
     half = 3.56 / 2
     place = (trimesh.transformations.translation_matrix([0, slot_y + half * np.cos(np.radians(tilt)), SLOT_FLOOR_Z])
              @ _rotation_x(-tilt) @ _rotation_x(90))
+    if size == 'small':
+        place = place @ trimesh.transformations.translation_matrix([-SMALL_X_OFF, 0, 0])
     placed = []
     for mesh, label, colour in card:
         mesh = mesh.copy()
         mesh.apply_transform(place)
         placed.append((mesh, label, colour))
-    base = trimesh.load(STAND_MESH / 'Black_Google_Base.stl', force='mesh')
+    base = trimesh.load(mesh_dir / 'Black_Google_Base.stl', force='mesh')
     placed.append((base, 'Base', BASE_COLOUR))
     # The viewer's frame: up is y, the face looks along +z.
     for mesh, _, _ in placed:
@@ -127,7 +135,7 @@ def build_preview(version: dict, out: Path, code: str = SAMPLE_CODE) -> dict:
         for mesh, hex_colour in google_g_token(params.get('size', 'large')):
             meshes.append((mesh, 'G token', hex_colour))
     if builder.startswith('stand.'):
-        meshes = stand_assembly(meshes, builder.split('.', 1)[1])
+        meshes = stand_assembly(meshes, builder.split('.', 1)[1], params.get('size', 'large'))
 
     centre = trimesh.util.concatenate([m for m, _, _ in meshes]).bounds.mean(axis=0)
     scene = trimesh.Scene()
