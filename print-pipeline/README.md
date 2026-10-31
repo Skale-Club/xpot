@@ -70,9 +70,9 @@ in `.xpot-print-now.json`: anything else in the folder is never touched.
 | `bench.py` | the bench (pair, run, folder, sync, build, doctor, ticket, attach, attach-bed, fail) |
 | `pipeline.py` | one plate → meshes, `.3mf`, slice, checks, serial map, `report.json` |
 | `print_now.py` | the Print Now folder: Xpot's plates by status and request (standard library only) |
-| `builders/` | the builder ids a version names (`plate.instagram`, `plate.google`, `plate.menu`, `plate.venmo`, `stand.google`, `stand.instagram`): one code → that piece's meshes and parts |
+| `builders/` | the builder ids a version names (`plate.instagram`, `plate.google`, `plate.menu`, `plate.venmo`, `stand.google`, `stand.instagram`, `stand.menu`): one code → that piece's meshes and parts |
 | `nfc/Stand/source/design/`, `nfc/Plate/source/` | the geometry, copied from the 3D Printing repo (`NFC Signs/*/source/`) on 2026-10-22 |
-| `nfc/*/source/mesh/` | the Fusion sample meshes the Stand cards and the G tokens start from |
+| `nfc/*/source/mesh/` | the Fusion sample meshes the Stand cards and the G tokens start from: `large/` the Large card and base; `small/` the retired Small card (Fusion v8) and its G token, with the live Small base (Fusion `small-v9`), copied on 2026-10-31 |
 | `library/scripts/` | `build-3mf-from-fusion.py` (the 3MF assembler), `gcode-qr-check.py`, `gcode-verify.py` |
 | `library/presets/` | the two A1 project templates the NFC recipes name |
 | `library/svg/` | the logos and the NFC mark, with their sources in `SOURCES.md` |
