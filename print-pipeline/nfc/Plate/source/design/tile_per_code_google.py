@@ -76,19 +76,14 @@ configure('large')
 # (three 0.16 layers in print). G_CLEAR per side, as the Stand's pockets (face_art.G_CLEAR).
 POCKET = 1.16
 G_CLEAR = fa.G_CLEAR
-# nfc_mount 'sticker_10x20' (Large only, user 2026-10-29: "quero fazer com adesivo"): the LeadSeals 10 x 20 x 0.15
-# NTAG213 sticker in the doc 16 s5 pocket, 23.00 x 13.00 x 0.48, long side left-right: the Menu/Venmo plates' and
-# the Stand v2's settings. The white body is translucent, so the floor is 1.16 behind the face (print z 1.16-1.64,
-# pause at the start of the 1.64-1.80 roof). It cannot sit under the G like the round tag: the G pocket is 1.16
-# deep, so the two would meet. It is centred on the Tap here row instead, clear of the G pocket; no round cavity.
-STICKER_W, STICKER_H, STICKER_DEPTH, STICKER_RADIUS = 23.0, 13.0, 0.48, 0.8
-STICKER_Z0 = 1.16
-STICKER_Z1 = round(STICKER_Z0 + STICKER_DEPTH, 2)
-STICKER_PAUSE_TOP_Z = round(STICKER_Z1 + 0.16, 2)
-# Black PLA is opaque: the antenna does not shadow through, so the black tile keeps the tag 0.68 behind the face
-# (print z 0.68-1.16, pause at the start of the 1.16-1.32 roof), as the black Stand and Menu plates.
-STICKER_Z0_BY_THEME = {'white': STICKER_Z0, 'black': 0.68}
-STICKER_GAP_G, STICKER_GAP_EDGE = 1.0, 3.0    # in plan: to the G pocket, and to the top edge (chamfer + walls)
+# nfc_mount 'sticker_10x20' (Large: user 2026-10-29, "quero fazer com adesivo"; Small: 2026-10-31, every model on
+# the sticker): the Instagram plate's pocket (tile_per_code.STICKER_*), 23.00 x 13.00 x 0.48, 1.16 behind a white
+# face (pause z 1.80), 0.68 behind a black one (pause z 1.32). It cannot sit under the G like the round tag: the G
+# pocket is 1.16 deep, so the two would meet. It is centred on the Tap here row instead, clear of the G pocket; on
+# the Small tile it moves 0.5 mm down to keep the top edge gap (tile_per_code.sticker_pocket). No round cavity.
+from tile_per_code import (STICKER_W, STICKER_H, STICKER_DEPTH, STICKER_Z0, STICKER_Z1,  # noqa: E402,F401
+                           STICKER_PAUSE_TOP_Z, STICKER_Z0_BY_THEME, STICKER_GAP_EDGE)
+STICKER_GAP_G = 1.0                           # in plan, to the G pocket
 
 
 def layout(code):
@@ -125,8 +120,6 @@ def build(code, out_dir, size='large', nfc_mount='embedded_round', theme='white'
         raise ValueError('theme must be white or black')
     if nfc_mount not in ('embedded_round', 'sticker_10x20'):
         raise ValueError('unsupported nfc_mount')
-    if nfc_mount == 'sticker_10x20' and size != 'large':
-        raise ValueError('the sticker pocket is laid out for the Large plate only')
     configure(size)
     code = fa.normalize_code(code)
     art = layout(code)
@@ -152,13 +145,11 @@ def build(code, out_dir, size='large', nfc_mount='embedded_round', theme='white'
     if panel_tile is not None:
         assert panel_tile.distance(yellow) > 0.3, 'QR panel runs into the stars'
     if nfc_mount == 'sticker_10x20':
-        w, h, cy = STICKER_W / 2, STICKER_H / 2, S - art['tap_centre_y']
-        nfc = ig._rounded_rect(-w, cy - h, w, cy + h, STICKER_RADIUS)
-        sticker_z0 = STICKER_Z0_BY_THEME[theme]
-        sticker_z1 = round(sticker_z0 + STICKER_DEPTH, 2)
+        nfc, sticker_from_top = ig.sticker_pocket(art['tap_centre_y'])
+        sticker_z0, sticker_z1, _ = ig.sticker_z(theme)
         nfc_z0, nfc_z1 = TOP - sticker_z1, TOP - sticker_z0     # model z: print z = TOP - model z
         assert nfc.distance(pocket) >= STICKER_GAP_G, 'sticker pocket runs into the G pocket'
-        assert S - (cy + h) >= STICKER_GAP_EDGE, 'sticker pocket too close to the top edge'
+        assert sticker_from_top - STICKER_H / 2 >= STICKER_GAP_EDGE,'sticker pocket too close to the top edge'
         assert nfc_z1 < TOP - INLAY, 'sticker pocket must stay behind the face art'
         cavity_expected = nfc.area * STICKER_DEPTH
     else:
@@ -198,7 +189,7 @@ def build(code, out_dir, size='large', nfc_mount='embedded_round', theme='white'
     if nfc_mount == 'sticker_10x20':
         rep.update(nfc_mount=nfc_mount, sticker_pocket_mm=[STICKER_W, STICKER_H, STICKER_DEPTH],
                    sticker_pocket_print_z=[sticker_z0, sticker_z1], pause_top_z=round(sticker_z1 + 0.16, 2),
-                   tag_face_distance_mm=sticker_z0, nfc_centre_from_top_mm=round(art['tap_centre_y'], 2),
+                   tag_face_distance_mm=sticker_z0, nfc_centre_from_top_mm=round(sticker_from_top, 2),
                    sticker_gap_to_g_pocket_mm=round(nfc.distance(pocket), 2))
     q = {'size': FACE['qr']['size'], 'modules': FACE['qr']['modules'], 'y': art['qr_top']}
     igc.H = S

@@ -12,7 +12,8 @@ Frame: tile face up, back at z 0, face at z T; x centred, y up from the bottom e
 top edge). It prints FACE-DOWN, like the cards: print z = T - z.
 
     White_Instagram_Plate.stl   the tile: 0.5 x 45 deg chamfer on both faces, the sealed NFC cavity, face inlays cut
-                                0.52 deep, the code engraved 0.32 into the back
+                                0.52 deep, the code engraved 0.32 into the back (nfc_mount 'sticker_10x20': the
+                                sealed 23 x 13 x 0.48 sticker pocket under Tap here instead of the round cavity)
     Black_Instagram_Art.stl     tap row + headline + QR (z T-0.52 .. T)
     Silk_Instagram_Logo.stl     the icon square minus the camera (the camera stays tile white)
 """
@@ -44,6 +45,17 @@ REAR_POCKET_DEPTH = 0.56                     # 0.15 tag + 0.36 cover + 0.05 mm b
 REAR_POCKET_RADIUS = 0.80
 REAR_COVER_EDGE_CLEARANCE = 0.15             # per side inside the pocket
 REAR_COVER_T = 0.36
+# nfc_mount 'sticker_10x20' (user 2026-10-31: every new model, Small too, on the 10 x 20 sticker): the LeadSeals
+# 10 x 20 x 0.15 NTAG213 sticker in the doc 16 s5 pocket, 23.00 x 13.00 x 0.48, long side left-right, sealed inside
+# the tile like the Menu/Venmo/Google plates'. The white body is translucent, so the floor is 1.16 behind the face
+# (print z 1.16-1.64, pause at the start of the 1.64-1.80 roof); black PLA is opaque and keeps it 0.68 behind
+# (print z 0.68-1.16, pause 1.32). Centred on the Tap here row, as the Google Plate's.
+STICKER_W, STICKER_H, STICKER_DEPTH, STICKER_RADIUS = 23.0, 13.0, 0.48, 0.8
+STICKER_Z0 = 1.16
+STICKER_Z1 = round(STICKER_Z0 + STICKER_DEPTH, 2)
+STICKER_PAUSE_TOP_Z = round(STICKER_Z1 + 0.16, 2)
+STICKER_Z0_BY_THEME = {'white': STICKER_Z0, 'black': 0.68}
+STICKER_GAP_EDGE = 3.0                       # in plan, to the top edge (chamfer + walls)
 SIZE_CONFIGS = {
     'large': {
         'size': 103.0, 'radius': 10.0, 'margin': 8.0,
@@ -108,7 +120,7 @@ def layout(code):
     simp = lambda g: g.simplify(SIMPLIFY, preserve_topology=True)
     return {'black': simp(unary_union([tap, head, dark])), 'silk': simp(silk), 'qr': info, 'qr_dark': dark,
             'qr_top': qr_top, 'space': space, 'icon_y': icon_y, 'headline_w': head_w,
-            'nfc_centre_y': icon_y + FACE['icon'] / 2}
+            'nfc_centre_y': icon_y + FACE['icon'] / 2, 'tap_centre_y': m + t['icon_h'] / 2}
 
 
 def to_tile(g):
@@ -137,10 +149,28 @@ def _rounded_rect(x0, y0, x1, y1, radius):
     return box(x0 + radius, y0 + radius, x1 - radius, y1 - radius).buffer(radius, quad_segs=24)
 
 
+def sticker_pocket(tap_centre_y):
+    """The sticker pocket in the tile frame and its centre from the top edge. Centred on the Tap here row; on the
+    Small tile that row (centre 9.0) would leave 2.5 mm to the top edge, so the pocket moves down just enough to keep
+    STICKER_GAP_EDGE (centre 9.5, still over the row). The Large row (11.6) is left where it was."""
+    w, h = STICKER_W / 2, STICKER_H / 2
+    from_top = max(tap_centre_y, STICKER_GAP_EDGE + h)
+    cy = S - from_top
+    assert S - (cy + h) >= STICKER_GAP_EDGE, 'sticker pocket too close to the top edge'
+    return _rounded_rect(-w, cy - h, w, cy + h, STICKER_RADIUS), from_top
+
+
+def sticker_z(theme):
+    """(z0, z1, pause_top_z) in print z: the pocket floor and roof, and the layer the pause runs before."""
+    z0 = STICKER_Z0_BY_THEME[theme]
+    z1 = round(z0 + STICKER_DEPTH, 2)
+    return z0, z1, round(z1 + 0.16, 2)
+
+
 def build(code, out_dir, theme='white', size='large', nfc_mount='embedded_round'):
     if theme not in ('white', 'black'):
         raise ValueError('theme must be white or black')
-    if nfc_mount not in ('embedded_round', 'rear_sticker_10x20', 'rear_sticker_10x20_covered'):
+    if nfc_mount not in ('embedded_round', 'sticker_10x20', 'rear_sticker_10x20', 'rear_sticker_10x20_covered'):
         raise ValueError('unsupported nfc_mount')
     configure_size(size)
     code = fa.normalize_code(code)
@@ -169,6 +199,12 @@ def build(code, out_dir, theme='white', size='large', nfc_mount='embedded_round'
     if nfc_mount == 'embedded_round':
         nfc = Point(0.0, nfc_centre_y).buffer(NFC_D / 2, quad_segs=64)
         nfc_z0, nfc_z1 = NFC_Z0, NFC_Z1
+        expected_shells = 2
+    elif nfc_mount == 'sticker_10x20':
+        nfc, sticker_from_top = sticker_pocket(art['tap_centre_y'])
+        sticker_z0, sticker_z1, pause_top_z = sticker_z(theme)
+        nfc_z0, nfc_z1 = TOP - sticker_z1, TOP - sticker_z0     # model z: print z = TOP - model z
+        assert nfc_z1 < TOP - INLAY, 'sticker pocket must stay behind the face art'
         expected_shells = 2
     else:
         pocket_w = REAR_TAG_W + 2 * REAR_POCKET_CLEARANCE
@@ -215,6 +251,11 @@ def build(code, out_dir, theme='white', size='large', nfc_mount='embedded_round'
         'bad_edges': igc.welded_bad_edges(tile_tm) + igc.welded_bad_edges(ink_tm) + igc.welded_bad_edges(silk_tm),
         'tile_bounds': tile_tm.bounds.round(3).tolist(),
     }
+    if nfc_mount == 'sticker_10x20':
+        rep.update(size=size, tile_mm=S, sticker_pocket_mm=[STICKER_W, STICKER_H, STICKER_DEPTH],
+                   sticker_pocket_print_z=[sticker_z0, sticker_z1], pause_top_z=pause_top_z,
+                   tag_face_distance_mm=sticker_z0, nfc_centre_from_top_mm=round(sticker_from_top, 2),
+                   sticker_gap_to_top_edge_mm=round(sticker_from_top - STICKER_H / 2, 2))
     if nfc_mount.startswith('rear_sticker_10x20'):
         rep['rear_tag_mm'] = [REAR_TAG_W, REAR_TAG_H, REAR_TAG_T]
         rep['rear_pocket_mm'] = [round(pocket_w, 2), round(pocket_h, 2), REAR_POCKET_DEPTH]
