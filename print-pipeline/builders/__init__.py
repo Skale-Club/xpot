@@ -83,8 +83,13 @@ def plate_menu(tag, index, params, out_dir):
     font = params.get('font', 'Inria Serif Bold')
     if font not in MENU_FONTS_READY:
         raise BuildError(f'menu font {font!r} has no layout yet: one of {", ".join(MENU_FONTS_READY)}')
+    size = params.get('size', 'large')
+    if size not in build_menu_batch.MENU_SIZES:
+        raise BuildError(f'menu size {size!r}: one of {", ".join(build_menu_batch.MENU_SIZES)}')
     build_menu_batch.FONT = font
-    report = sticker.build_one(tag['public_code'], Path(out_dir), placement=params.get('placement', 'under_tap'), theme=theme)
+    # Both sizes take the 10 x 20 sticker pocket under Tap here.
+    report = sticker.build_one(tag['public_code'], Path(out_dir), placement=params.get('placement', 'under_tap'),
+                               theme=theme, size=size)
     _check_url((report.get('qr') or {}).get('url'), tag)
     body, art = _pair(theme)
     return report, [(f'{body} - Menu Plate', f'{body}_Menu_Plate.stl', 1), (f'{art} - Menu Art', f'{art}_Menu_Art.stl', 2)]

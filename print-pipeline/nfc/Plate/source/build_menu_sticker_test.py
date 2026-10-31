@@ -41,7 +41,15 @@ PAUSE_TOP_Z = 1.32                  # first roof layer; the pause runs before it
 # deeper (user chose 1.16, 2026-10-21). Black is opaque and keeps 0.68.
 POCKET_Z0_BY_THEME = {'black': 0.68, 'white': 1.16}
 ART_DEPTH = 0.52
-TAP_ROW_BOTTOM = 8. + 7.2           # menu.artwork: margin + Tap here icon height, from the top of the face
+
+
+def tap_row_bottom(size):
+    """menu.artwork: margin + Tap here icon height, from the top of the face."""
+    d = menu.MENU_SIZES[size]
+    return d['margin'] + d['tap'][0]
+
+
+TAP_ROW_BOTTOM = tap_row_bottom('large')     # the Large Menu's, which the Venmo Plate shares
 
 
 def pocket_z(theme):
@@ -56,22 +64,24 @@ def stl_names(theme):
            ('White_Menu_Plate.stl', 'Black_Menu_Art.stl')
 
 
-def build_one(code, out, placement='under_tap', theme='black'):
+def build_one(code, out, placement='under_tap', theme='black', size='large'):
     """placement 'title': centred on the Menu title (TEST0002, 2026-10-21);
     'under_tap': centred in the gap between the Tap here row and the title (user: "um pouco mais pra cima").
     theme 'black': white art and a white QR panel on a black body; 'white': black art and the QR's dark
-    modules straight on a white body, no panel."""
-    ink_comp, dark, panel, qr, title_centre, space = menu.artwork(code)
+    modules straight on a white body, no panel. size 'large' (103 mm) or 'small' (78 mm), the same sticker pocket."""
+    ink_comp, dark, panel, qr, title_centre, space = menu.artwork(code, size)
+    d = menu.MENU_SIZES[size]
+    S, qs = d['size'], d['qr']
     if theme == 'white':
         ink_comp = unary_union([ink_comp.difference(panel), dark]).simplify(.002, preserve_topology=True)
-    nfc_top = title_centre if placement == 'title' else TAP_ROW_BOTTOM + space/2
+    nfc_top = title_centre if placement == 'title' else tap_row_bottom(size) + space/2
     pz0, pz1, _ = pocket_z(theme)
     ink, panel_tile = tile.to_tile(ink_comp), tile.to_tile(panel)
-    back_text, _ = fa.text_geom(code, 3.2, 51.5, 53.1)
+    back_text, _ = fa.text_geom(code, 3.2, S/2, S/2 + 1.6)
     back = tile.to_tile_back(back_text.buffer(-.01, join_style='mitre').buffer(.01, join_style='mitre')
                              .simplify(.002, preserve_topology=True))
-    w, h, cy = TAG_W/2 + CLEARANCE, TAG_H/2 + CLEARANCE, 103 - nfc_top
-    assert h + 1.5 < nfc_top < 103 - h - 1.5
+    w, h, cy = TAG_W/2 + CLEARANCE, TAG_H/2 + CLEARANCE, S - nfc_top
+    assert h + 1.5 < nfc_top < S - h - 1.5
     pocket = tile._rounded_rect(-w, cy - h, w, cy + h, .8)
     # model z runs from the back (0) to the face (TOP); print z = TOP - model z
     z0, z1 = tile.TOP - pz1, tile.TOP - pz0
@@ -83,12 +93,14 @@ def build_one(code, out, placement='under_tap', theme='black'):
     body_mesh = geom.to_trimesh(body)
     art_mesh = geom.to_trimesh(geom.prism(ink, tile.TOP - ART_DEPTH, tile.TOP))
     expected = plain_volume - pocket.area*(z1 - z0) - ink.area*ART_DEPTH - back.area*.32
-    q = dict(size=31., modules=25, y=64.)
-    geom.H = 103.
+    qr_top = S - d['margin'] - qs
+    q = dict(size=qs, modules=25, y=qr_top)
+    geom.H = S
     decoded = geom.decode_qr_polygons(tile.to_tile(dark), q, qr['url'])
     section = geom.mesh_section_polygons(art_mesh, tile.TOP - .26)
     mesh_dark = panel_tile.difference(section) if theme == 'black' else section
-    decoded_mesh = geom.decode_qr_polygons(mesh_dark.intersection(box(-16.5, 7., 16.5, 40.)), q, qr['url'])
+    qr_box = box(-qs/2 - 1, S - qr_top - qs - 1, qs/2 + 1, S - qr_top + 1)
+    decoded_mesh = geom.decode_qr_polygons(mesh_dark.intersection(qr_box), q, qr['url'])
     floor = geom.mesh_section_polygons(body_mesh, (z0 + z1)/2)
     hole_area = sum(i.area for p in getattr(floor, 'geoms', [floor]) for i in map(lambda r: type(p)(r), p.interiors))
     bad = geom.welded_bad_edges(body_mesh) + geom.welded_bad_edges(art_mesh)
@@ -104,7 +116,8 @@ def build_one(code, out, placement='under_tap', theme='black'):
                   pocket_mm=[2*w, 2*h, round(pz1 - pz0, 2)], pocket_print_z=[pz0, pz1],
                   pocket_section_mm2=hole_area, pocket_expected_mm2=pocket.area,
                   tag_face_distance_mm=pz0, air_over_tag_mm=round(pz1 - pz0 - TAG_T, 2),
-                  nfc_centre_from_top_mm=nfc_top, placement=placement, theme=theme)
+                  nfc_centre_from_top_mm=nfc_top, placement=placement, theme=theme, size=size, tile_mm=S,
+                  qr_module_mm=round(qs/25, 3), message_gap_mm=round(space, 2))
     if not ok: raise RuntimeError(report)
     out.mkdir(parents=True, exist_ok=True)
     body_name, art_name = stl_names(theme)
