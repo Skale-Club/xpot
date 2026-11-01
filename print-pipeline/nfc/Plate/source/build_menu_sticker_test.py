@@ -64,15 +64,17 @@ def stl_names(theme):
            ('White_Menu_Plate.stl', 'Black_Menu_Art.stl')
 
 
-def build_one(code, out, placement='under_tap', theme='black', size='large'):
+def build_one(code, out, placement='under_tap', theme='black', size='large', qr_style='panel'):
     """placement 'title': centred on the Menu title (TEST0002, 2026-10-21);
     'under_tap': centred in the gap between the Tap here row and the title (user: "um pouco mais pra cima").
     theme 'black': white art and a white QR panel on a black body; 'white': black art and the QR's dark
-    modules straight on a white body, no panel. size 'large' (103 mm) or 'small' (78 mm), the same sticker pocket."""
+    modules straight on a white body, no panel. qr_style 'inverted' (user, 2026-11-01, every black piece from now on): white
+    modules straight on the black body, no panel. size 'large' (103 mm) or 'small' (78 mm), the same sticker pocket."""
     ink_comp, dark, panel, qr, title_centre, space = menu.artwork(code, size)
     d = menu.MENU_SIZES[size]
     S, qs = d['size'], d['qr']
-    if theme == 'white':
+    no_panel = theme == 'white' or qr_style == 'inverted'
+    if no_panel:
         ink_comp = unary_union([ink_comp.difference(panel), dark]).simplify(.002, preserve_topology=True)
     nfc_top = title_centre if placement == 'title' else tap_row_bottom(size) + space/2
     pz0, pz1, _ = pocket_z(theme)
@@ -98,7 +100,7 @@ def build_one(code, out, placement='under_tap', theme='black', size='large'):
     geom.H = S
     decoded = geom.decode_qr_polygons(tile.to_tile(dark), q, qr['url'])
     section = geom.mesh_section_polygons(art_mesh, tile.TOP - .26)
-    mesh_dark = panel_tile.difference(section) if theme == 'black' else section
+    mesh_dark = section if no_panel else panel_tile.difference(section)
     qr_box = box(-qs/2 - 1, S - qr_top - qs - 1, qs/2 + 1, S - qr_top + 1)
     decoded_mesh = geom.decode_qr_polygons(mesh_dark.intersection(qr_box), q, qr['url'])
     floor = geom.mesh_section_polygons(body_mesh, (z0 + z1)/2)
