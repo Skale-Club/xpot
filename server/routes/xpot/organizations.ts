@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { z } from "zod";
 import { refusalBody } from "../../lib/validation.js";
-import { managesEveryOrganization } from "#shared/organizations.js";
+import { DISTRIBUTIONS, managesEveryOrganization } from "#shared/organizations.js";
+import { addOrganizationLink, listOrganizationLinks, removeOrganizationLink } from "../../organizations/links.js";
 import { XPOT_MODULES } from "#shared/modules.js";
 import { requireXpotUser, type XpotActor } from "./middleware.js";
 import { AccountError, createResellerAccount, resellerAccountSchema } from "./resellerAccounts.js";
@@ -95,9 +96,21 @@ export function createOrganizationsRouter() {
       name: z.string().trim().min(2).max(120).optional(),
       isActive: z.boolean().optional(),
       printsOwnPieces: z.boolean().optional(),
+      distribution: z.enum(DISTRIBUTIONS).optional(),
     }).strict().refine((value) => Object.keys(value).length > 0, "No changes supplied").parse(req.body);
     return updateOrganization(id.parse(req.params.organizationId), input, actorOf(req));
   }));
+
+  // The selling organizations linked to a partner that handles its own distribution (server/organizations/links.ts).
+  // Platform only: who may receive a partner's pieces is the platform's decision.
+  router.get("/organizations/:organizationId/links", route((req) =>
+    listOrganizationLinks(id.parse(req.params.organizationId), actorOf(req))));
+  router.post("/organizations/:organizationId/links", route((req) => {
+    const input = z.object({ sellerId: z.number().int().positive() }).strict().parse(req.body);
+    return addOrganizationLink(id.parse(req.params.organizationId), input.sellerId, actorOf(req));
+  }, 201));
+  router.delete("/organizations/:organizationId/links/:sellerId", route((req) =>
+    removeOrganizationLink(id.parse(req.params.organizationId), id.parse(req.params.sellerId), actorOf(req))));
 
   router.get("/organizations/:organizationId/members", route((req) =>
     listOrganizationMembers(id.parse(req.params.organizationId), actorOf(req))));

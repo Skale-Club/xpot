@@ -8,6 +8,7 @@ import { storage } from "../../storage.js";
 import { ensureWholesaleCode } from "../../wholesale/index.js";
 import { formatWholesaleCode } from "#shared/wholesale.js";
 import { ensureOrganizationForRep } from "../../organizations/service.js";
+import { handOutRecipients } from "../../organizations/links.js";
 import { refusalReason } from "#shared/repAccess.js";
 
 // Who may use Xpot is decided by the Xpot team. People sign up themselves (by
@@ -185,7 +186,9 @@ export type RepAccess = "active" | "pending" | "blocked";
 /**
  * Who Tags management can hand pieces to and filter by: everyone for the platform; for an organization's owner, the
  * active people of the organizations they run (never their sign-in phone or application). The code is only a yes or no
- * for them: what counts is whether the person can buy, and it is the person's own key to the store.
+ * for them: what counts is whether the person can buy, and it is the person's own key to the store. The owner of a partner
+ * that handles its own distribution also gets the active people of the organizations linked to it (the ones it may hand
+ * kits to), each labelled with `organizationName` (server/tags/distribution.ts).
  */
 export async function listTagPeople(organizationIds: readonly number[] | null) {
   const pick = <R extends { id: number; displayName: string; email: string | null; team: string | null; role: string; isActive: boolean; modules: string[] | null; costPolicy: string; costPolicyConfiguredAt: Date | null; blockedAt: Date | null }>(rep: R, wholesaleCode: string | null) => ({
@@ -202,7 +205,11 @@ export async function listTagPeople(organizationIds: readonly number[] | null) {
       isNull(organizationMemberships.blockedAt),
       isNull(salesReps.deletedAt),
     ));
-  return list.map(({ rep }) => pick(rep, rep.wholesaleCode ? "set" : null)).sort((a, b) => a.displayName.localeCompare(b.displayName));
+  const own = list.map(({ rep }) => pick(rep, rep.wholesaleCode ? "set" : null));
+  const seen = new Set(own.map((rep) => rep.id));
+  const linked = (await handOutRecipients(organizationIds)).filter((person) => !seen.has(person.id))
+    .map(({ organizationId, ...person }) => ({ ...pick(person, null), organizationName: person.organizationName }));
+  return [...own, ...linked].sort((a, b) => a.displayName.localeCompare(b.displayName));
 }
 
 export async function listRepsWithAccess() {

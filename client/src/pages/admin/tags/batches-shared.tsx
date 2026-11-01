@@ -47,6 +47,8 @@ export interface Reseller {
   costPolicyConfiguredAt?: string | null;
   blockedAt?: string | null;
   wholesaleCode?: string | null;
+  /** Only on the people of a linked organization (a partner handling its own distribution hands kits to them): where they sell. */
+  organizationName?: string;
 }
 
 export interface TagCatalogProduct {
@@ -123,7 +125,7 @@ export function ResellerSelect({
       placeholder={isLoading ? t("loadingOption") : includeAll ? t("allResellers") : t("chooseReseller")}
       options={list.map((r) => ({
         value: String(r.id),
-        label: `${r.displayName}${r.team ? ` · ${r.team}` : ""}${!r.isActive ? t("resellerInactive") : !hasTagsModule(r) ? t("resellerNoTags") : ""}`,
+        label: `${r.displayName}${r.organizationName ? ` · ${r.organizationName}` : r.team ? ` · ${r.team}` : ""}${!r.isActive ? t("resellerInactive") : !hasTagsModule(r) ? t("resellerNoTags") : ""}`,
       }))}
     />
   );

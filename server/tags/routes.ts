@@ -51,6 +51,8 @@ import { registerShopCatalogRoutes } from "./shopCatalog.js";
 import { registerProductionRoutes } from "./productionRoutes.js";
 import { salesStorage } from "../storage-sales.js";
 import { companyOrganizationId, organizationIdForRep, printingOrganization } from "../organizations/service.js";
+import { handOutProducers } from "../organizations/links.js";
+import { handOutSource } from "./distribution.js";
 
 // Xpot Tags HTTP API. Four audiences:
 //   /q/:code, /n/:code           — public redirects printed/programmed on pieces
@@ -987,10 +989,17 @@ export function registerTagRoutes(app: Express) {
       const input = kitSchema.parse(req.body);
       const rep = await storage.getSalesRep(input.repId);
       if (!rep) return res.status(404).json({ message: "Reseller not found" });
-      // Hand-outs come from the giver's house stock: the company's, or an organization's owner's own, to their own people.
+      // Hand-outs come from the giver's house stock: the company's, or an organization's owner's own, to their own people
+      // (and, for a partner that handles its own distribution, to the people of the organizations linked to it).
       const scope = tagScopeOf(req);
       const targetOrganization = await organizationIdForRep(input.repId);
-      if (scope !== null && !scope.includes(targetOrganization)) return res.status(403).json({ code: "organization_member_inactive", message: "This person is not active in this organization." });
+      const source = handOutSource({
+        scope,
+        targetOrganizationId: targetOrganization,
+        companyOrganizationId: await companyOrganizationId(),
+        producers: scope !== null && !scope.includes(targetOrganization) ? await handOutProducers(scope) : [],
+      });
+      if (!source.ok) return res.status(403).json({ code: "organization_member_inactive", message: "This person is not active in this organization." });
       const policy = rep.costPolicy === "zero" ? "zero" : "acquisition";
       // Acquisition rule: the rep buys the pieces. Zero-cost rule: company stock in the rep's custody (consignment),
       // even when a reference cost is recorded. The person handing out may pick the other ownership for one kit; a
@@ -999,7 +1008,7 @@ export function registerTagRoutes(app: Express) {
       if (kitCostRequired(policy, ownershipType) && input.unitCostCents === undefined) {
         return res.status(400).json({ code: "tag_cost_required", message: "Unit acquisition cost is required for this partner" });
       }
-      res.status(201).json(await repo.deliverKit({ ...input, ownershipType, organizationId: targetOrganization, sourceOrganizationId: scope !== null ? targetOrganization : await companyOrganizationId() }, userIdOf(req)));
+      res.status(201).json(await repo.deliverKit({ ...input, ownershipType, organizationId: targetOrganization, sourceOrganizationId: source.sourceOrganizationId }, userIdOf(req)));
     } catch (err) {
       fail(res, err, "Failed to deliver kit");
     }

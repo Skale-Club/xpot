@@ -35,6 +35,14 @@ export function runsATeam(
   return (organizations ?? []).some((organization) => organization.membershipRole === "admin" && !organization.personal);
 }
 
+/**
+ * Who handles an organization's orders (organizations.distribution, migrations/0070): `xpot` is Xpot (Stuscle, fulfilled
+ * from the company's stock; the US), `own` is the partner (outside the US; their house stock, to the organizations the
+ * platform linked to them). What each one means is server/tags/distribution.ts.
+ */
+export const DISTRIBUTIONS = ["xpot", "own"] as const;
+export type Distribution = (typeof DISTRIBUTIONS)[number];
+
 /** The company organization (Boston): every piece printed before branches existed, and parts, are its. */
 export const COMPANY_ORGANIZATION_SLUG = "xpot-company";
 
