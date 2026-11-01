@@ -1,6 +1,6 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { BellRing, Building2, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Clock3, ExternalLink, GripVertical, Home, Map as MapIcon, MapPin, MapPinCheck, Navigation, Nfc, PencilLine, Phone, Radar, RotateCw, Route as RouteIcon, SearchX, Search, ShieldCheck, Sparkles, Star, Trash2, X } from "lucide-react";
+import { ArrowLeftRight, BellRing, Building2, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Clock3, ExternalLink, GripVertical, Home, Map as MapIcon, MapPin, MapPinCheck, Navigation, Nfc, PencilLine, Phone, Play, Plus, Radar, RotateCw, Route as RouteIcon, SearchX, Search, ShieldCheck, Sparkles, Star, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "@/components/ui/loader";
 import { useToast } from "@/hooks/use-toast";
@@ -12,6 +12,7 @@ import { routePushSupported, subscribeToRoutePush } from "@/lib/pushNotification
 import { formatDistance, formatDuration, formatTime } from "@/lib/format";
 import { Link, useLocation, useSearchParams } from "wouter";
 import { RoutePreviewMap, type RouteLandmark } from "./components/RoutePreviewMap";
+import { RouteStopPicker, type StopPickerTarget } from "./components/RouteStopPicker";
 import { FloatingSuggestions, SuggestionOption, SuggestionStatus, SUGGESTIONS_ATTRIBUTE } from "./components/PlaceSuggestions";
 import { appleRouteUrl, googleRouteUrl, isAppleMobile, stopNavigationUrl } from "./prospectingMaps";
 import { ACCENT_SELECTED, GLASS, GLASS_CLASS, GLASS_SUBTLE_CLASS } from "@/components/xpot/surface";
@@ -31,6 +32,9 @@ import {
   eligibleCandidates as eligibleOf,
   exclusionCounts,
   isStopOpen,
+  canAddAfterStop,
+  keepsPastVisits,
+  unvisitedStopCount as countUnvisitedStops,
   localDateKey,
   searchPhase,
   MAX_PROSPECTING_SECTORS,
@@ -60,7 +64,14 @@ import {
 } from "./prospectingUi";
 import { useNow } from "@/hooks/use-now";
 import { placeTypeLabel } from "@/lib/placeTypes";
-import { MAX_DAILY_PROSPECTING_SESSIONS, PROSPECTING_DAY_END_HOUR, PROSPECTING_SHIFT_MINUTES, minutesUntilProspectingDayEnd } from "@shared/prospecting";
+import {
+  MAX_DAILY_PROSPECTING_SESSIONS,
+  PROSPECTING_DAY_END_HOUR,
+  PROSPECTING_SHIFT_MINUTES,
+  minutesUntilProspectingDayEnd,
+  type ProspectingRouteStopSource,
+  type ProspectingRouteStopWarning,
+} from "@shared/prospecting";
 
 type ProspectingJob = {
   id: number;
@@ -118,6 +129,7 @@ type ProspectingRoute = {
 
 type RouteStop = {
   id: number;
+  candidateId: number | null;
   leadId: number | null;
   visitId: number | null;
   position: number;
@@ -264,6 +276,7 @@ export function XpotProspecting() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [selectedStopId, setSelectedStopId] = useState<number | null>(null);
   const [stopPendingRemoval, setStopPendingRemoval] = useState<RouteStop | null>(null);
+  const [stopPicker, setStopPicker] = useState<StopPickerTarget | null>(null);
   const [draggedStopId, setDraggedStopId] = useState<number | null>(null);
   const [dragOverStopId, setDragOverStopId] = useState<number | null>(null);
   const [dragPlacement, setDragPlacement] = useState<"before" | "after" | null>(null);
@@ -376,6 +389,11 @@ export function XpotProspecting() {
   });
   // Progress follows elapsed time between polls, so the bar moves while a search runs.
   const now = useNow(5_000, detailsQuery.data?.job.status === "running");
+  // The card on the list follows today's route without opening it, so it needs the stops still ahead.
+  const todayRouteQuery = useQuery<RouteDetails>({
+    queryKey: ["/api/xpot/prospecting/routes", activeTodayRoute?.id],
+    enabled: activeTodayRoute !== undefined && activeRouteId === null,
+  });
   const routeQuery = useQuery<RouteDetails>({
     queryKey: ["/api/xpot/prospecting/routes", activeRouteId],
     enabled: activeRouteId !== null,
@@ -416,33 +434,6 @@ export function XpotProspecting() {
     },
     onError: (error: Error) => toast({ title: t("errorTitle"), description: error.message, variant: "destructive" }),
   });
-
-  // "Redo route" starts the day over: today's route is cancelled (its unvisited
-  // places go back to the pool) and the planner opens for new cities and
-  // business types. The new search counts toward the daily route limit.
-  const [redoRouteOpen, setRedoRouteOpen] = useState(false);
-  const [plannerAfterRedo, setPlannerAfterRedo] = useState(false);
-  const cancelRoute = useMutation({
-    mutationFn: async (routeId: number) => (await apiRequest("PATCH", `/api/xpot/prospecting/routes/${routeId}/status`, { status: "cancelled" })).json() as Promise<ProspectingRoute>,
-    onSuccess: async (route) => {
-      closeRoute();
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["/api/xpot/prospecting/routes"] }),
-        queryClient.invalidateQueries({ queryKey: ["/api/xpot/prospecting/routes", route.id] }),
-        queryClient.invalidateQueries({ queryKey: ["/api/xpot/visits"] }),
-      ]);
-      setRedoRouteOpen(false);
-      setPlannerAfterRedo(true);
-    },
-    onError: (error: Error) => toast({ title: t("errorTitle"), description: error.message, variant: "destructive" }),
-  });
-  // The planner opens once the confirmation has closed, not on top of it.
-  useEffect(() => {
-    if (!plannerAfterRedo || redoRouteOpen) return;
-    setPlannerAfterRedo(false);
-    setPlanningStep(0);
-    setBuilderOpen(true);
-  }, [plannerAfterRedo, redoRouteOpen]);
 
   const retryAutomaticRoute = useMutation({
     mutationFn: async (jobId: number) => (await apiRequest("POST", `/api/xpot/prospecting/jobs/${jobId}/route/retry`, {})).json() as Promise<ProspectingJobDetails>,
@@ -536,7 +527,7 @@ export function XpotProspecting() {
   const reorderRoute = useMutation({
     mutationFn: async ({ routeId, stopIds }: { routeId: number; stopIds: number[] }) => {
       const response = await apiRequest("PATCH", `/api/xpot/prospecting/routes/${routeId}/stops/order`, { stopIds });
-      return response.json() as Promise<{ reordered: true }>;
+      return response.json() as Promise<{ reordered: true; overtimeMinutes: number }>;
     },
     onMutate: async ({ routeId, stopIds }) => {
       const queryKey = ["/api/xpot/prospecting/routes", routeId];
@@ -554,13 +545,13 @@ export function XpotProspecting() {
       }
       return { previous, queryKey };
     },
-    onSuccess: async (_data, { routeId }) => {
+    onSuccess: async (data, { routeId }) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["/api/xpot/prospecting/routes", routeId] }),
         queryClient.invalidateQueries({ queryKey: ["/api/xpot/prospecting/routes"] }),
         queryClient.invalidateQueries({ queryKey: ["/api/xpot/visits"] }),
       ]);
-      toast({ title: t("routeReordered") });
+      toast({ title: t("routeReordered"), description: data.overtimeMinutes > 0 ? t("warnOvertime", { minutes: data.overtimeMinutes }) : undefined });
     },
     onError: (error: Error, _variables, context) => {
       if (context?.previous) queryClient.setQueryData(context.queryKey, context.previous);
@@ -583,6 +574,51 @@ export function XpotProspecting() {
       toast({ title: t("stopRemoved") });
     },
     onError: (error: Error) => toast({ title: t("removeStopUnavailable"), description: error.message, variant: "destructive" }),
+  });
+
+  // A hand edit may pick a customer or run past the chosen hours: the rep is told, never stopped.
+  const editNotice = (name: string, warnings: ProspectingRouteStopWarning[], overtimeMinutes: number) => [
+    ...warnings.map((warning) => t(warning === "existing_customer" ? "warnExistingCustomer" : "warnPreviouslyVisited", { name })),
+    ...(overtimeMinutes > 0 ? [t("warnOvertime", { minutes: overtimeMinutes })] : []),
+  ].join(" ") || undefined;
+
+  const addStop = useMutation({
+    mutationFn: async ({ routeId, body }: {
+      routeId: number;
+      name: string;
+      replacing: boolean;
+      body: { source: ProspectingRouteStopSource; replaceStopId?: number; afterStopId?: number };
+    }) => {
+      const response = await apiRequest("POST", `/api/xpot/prospecting/routes/${routeId}/stops`, body);
+      return response.json() as Promise<{ stopId: number; warnings: ProspectingRouteStopWarning[]; overtimeMinutes: number }>;
+    },
+    onSuccess: async (data, { routeId, name, replacing }) => {
+      setStopPicker(null);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["/api/xpot/prospecting/routes", routeId] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/xpot/prospecting/routes"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/xpot/prospecting/jobs"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/xpot/visits"] }),
+      ]);
+      toast({ title: t(replacing ? "stopReplaced" : "stopAdded"), description: editNotice(name, data.warnings, data.overtimeMinutes) });
+    },
+    onError: (error: Error) => toast({ title: t("stopAddUnavailable"), description: error.message, variant: "destructive" }),
+  });
+
+  // An earlier day's route comes back as today's with the stops it never reached.
+  const reuseRoute = useMutation({
+    mutationFn: async (routeId: number) => (await apiRequest("POST", `/api/xpot/prospecting/routes/${routeId}/reuse`, {
+      routeDate: today,
+      plannedStartAt: new Date().toISOString(),
+    })).json() as Promise<RouteDetails>,
+    onSuccess: async (data) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["/api/xpot/prospecting/routes"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/xpot/visits"] }),
+      ]);
+      openRoute(data.route.id);
+    },
+    onError: (error: Error) => toast({ title: t("reuseUnavailable"), description: error.message, variant: "destructive" }),
   });
 
   const ensureStopLead = useMutation({
@@ -627,8 +663,12 @@ export function XpotProspecting() {
   }, [routeDetails]);
   const selectedStop = routeDetails?.stops.find((stop) => stop.id === selectedStopId) ?? null;
   // An expired route (an earlier day) is history: it can be looked at, not changed or worked.
-  const canReorderRoute = routeDetails ? routeIsToday && ["draft", "published"].includes(routeDetails.route.status) : false;
-  const canRedoRoute = Boolean(activeTodayRoute) && !dailyRouteLimitReached;
+  // Today's route stays editable while it runs; what already happened keeps its place.
+  const canEditRoute = routeDetails ? routeIsToday && ["draft", "published", "in_progress"].includes(routeDetails.route.status) : false;
+  const canReorderRoute = canEditRoute;
+  const unvisitedStopCount = routeDetails ? countUnvisitedStops(routeDetails.stops) : 0;
+  const canOfferReuse = routeDetails ? routeDetails.route.routeDate < today && unvisitedStopCount > 0 : false;
+  const reuseBlocked = Boolean(activeTodayRoute) || dailyRouteLimitReached || todayRoutes.length >= MAX_DAILY_PROSPECTING_SESSIONS;
   // One count of found places everywhere on the card: the ones the route can use.
   const eligibleCandidates = useMemo(() => eligibleOf(details?.candidates ?? []), [details?.candidates]);
   const canShowCandidates = details?.job.status === "completed";
@@ -717,6 +757,14 @@ export function XpotProspecting() {
   const routeStart = routeDetails ? { lat: routeDetails.route.startLat, lng: routeDetails.route.startLng } : null;
   const directionsUrl = routeDetails && routeStart ? googleRouteUrl(routeStart, routeDetails.stops) : null;
   const appleDirectionsUrl = appleDevice && routeDetails && routeStart ? appleRouteUrl(routeStart, routeDetails.stops) : null;
+  const todayRouteDetails = todayRouteQuery.data;
+  // "Follow route": the stops still ahead, in order, in the phone's maps app.
+  const followRouteUrl = todayRouteDetails
+    ? (appleDevice ? appleRouteUrl : googleRouteUrl)(
+      { lat: todayRouteDetails.route.startLat, lng: todayRouteDetails.route.startLng },
+      todayRouteDetails.stops,
+    )
+    : null;
   // The route usually starts at stop 1; a start elsewhere and the rep's home (a
   // route set to end there) get their own markers.
   const routeLandmarks = useMemo<RouteLandmark[]>(() => {
@@ -770,7 +818,7 @@ export function XpotProspecting() {
   const saveStopOrder = (stopIds: number[]) => {
     if (!routeDetails || !canReorderRoute || reorderRoute.isPending) return;
     const currentOrder = routeDetails.stops.map((stop) => stop.id);
-    if (stopIds.every((stopId, index) => stopId === currentOrder[index])) {
+    if (!keepsPastVisits(routeDetails.stops, stopIds) || stopIds.every((stopId, index) => stopId === currentOrder[index])) {
       resetDragState();
       return;
     }
@@ -794,6 +842,18 @@ export function XpotProspecting() {
     if (!routeDetails || !canReorderRoute || reorderRoute.isPending) return;
     const stopIds = moveIdByOffset(routeDetails.stops.map((stop) => stop.id), stopId, offset);
     saveStopOrder(stopIds);
+  };
+  const pickStop = (source: ProspectingRouteStopSource, name: string) => {
+    if (!routeDetails || !stopPicker || addStop.isPending) return;
+    const target = stopPicker.stop.id;
+    addStop.mutate({
+      routeId: routeDetails.route.id,
+      name,
+      replacing: stopPicker.kind === "replace",
+      body: stopPicker.kind === "replace"
+        ? { source, replaceStopId: target }
+        : stopPicker.kind === "after" ? { source, afterStopId: target } : { source },
+    });
   };
   const openPlaqueSetup = (stop: RouteStop) => {
     if (stop.leadId) {
@@ -916,7 +976,8 @@ export function XpotProspecting() {
         <>
           {/* No top padding: the layout already spaces every page from the header. */}
           {activeTodayRoute ? (
-            // Today's route exists: no "build" button, only that route, to open and edit or to redo.
+            // Today's route exists: no "build" button. The rep follows it as it is or edits it;
+            // there is no redo, since a new search spends paid discovery calls.
             <section className={`w-full rounded-[22px] p-4 lg:px-6 ${GLASS_CLASS}`} data-testid="today-route-card">
               <div className="flex items-center gap-4">
                 <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-blue-500/15 text-blue-200"><MapIcon className="h-6 w-6" aria-hidden="true" /></span>
@@ -927,12 +988,34 @@ export function XpotProspecting() {
                   {routeUsage(activeTodayRoute).total > 0 ? <p className="text-xs leading-5 text-white/45">{routeVisitedLine(activeTodayRoute)}</p> : null}
                 </div>
               </div>
-              <div className="mt-4 grid grid-cols-2 gap-2">
-                <Button type="button" variant="brand" onClick={() => openRoute(activeTodayRoute.id)} className="min-w-0 px-2 sm:px-4">
-                  <PencilLine />{t("openAndEditRoute")}
-                </Button>
-                <Button type="button" variant="secondary" onClick={() => setRedoRouteOpen(true)} disabled={!canRedoRoute} className="min-w-0 px-2 sm:px-4">
-                  <RotateCw />{t("redoRoute")}
+              <div className="mt-4 flex gap-2">
+                {followRouteUrl ? (
+                  <Button asChild variant="brand" className="min-h-12 min-w-0 flex-1 text-base font-bold [&_svg]:size-5">
+                    <a
+                      href={followRouteUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      // A draft is published by the same tap, so its visits land on today's agenda.
+                      onClick={() => { if (activeTodayRoute.status === "draft") publishRoute.mutate(activeTodayRoute.id); }}
+                    >
+                      <Play className="fill-current" />{t("followRoute")}
+                    </a>
+                  </Button>
+                ) : (
+                  <Button type="button" variant="brand" disabled loading={todayRouteQuery.isLoading} className="min-h-12 min-w-0 flex-1 text-base font-bold [&_svg]:size-5">
+                    <Play className="fill-current" />{t("followRoute")}
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="icon"
+                  onClick={() => openRoute(activeTodayRoute.id)}
+                  aria-label={t("openAndEditRoute")}
+                  title={t("openAndEditRoute")}
+                  className="h-12 w-12 shrink-0 [&_svg]:size-5"
+                >
+                  <PencilLine />
                 </Button>
               </div>
               {dailyRouteLimitReached ? <p className="mt-2 text-xs leading-5 text-white/50">{t("dailyRouteLimit", { count: MAX_DAILY_PROSPECTING_SESSIONS })}</p> : null}
@@ -1432,6 +1515,18 @@ export function XpotProspecting() {
                 })()}
               </div>
               <div className="mt-4 grid gap-2 sm:flex sm:flex-wrap">
+                {canOfferReuse ? (
+                  <Button
+                    variant="brand"
+                    onClick={() => reuseRoute.mutate(routeDetails.route.id)}
+                    disabled={reuseBlocked}
+                    loading={reuseRoute.isPending}
+                    aria-label={reuseRoute.isPending ? t("reusing") : undefined}
+                    className="w-full sm:w-auto"
+                  >
+                    <RotateCw />{t("reuseRoute")}
+                  </Button>
+                ) : null}
                 {routeDetails.route.status === "draft" && routeIsToday ? (
                   <Button variant="brand" onClick={() => publishRoute.mutate(routeDetails.route.id)} loading={publishRoute.isPending} aria-label={publishRoute.isPending ? t("publishing") : undefined} className="w-full sm:w-auto">
                     <ShieldCheck />{t("publishRoute")}
@@ -1441,12 +1536,12 @@ export function XpotProspecting() {
                 ) : null}
                 {directionsUrl ? <Button asChild variant="secondary" className="w-full sm:w-auto"><a href={directionsUrl} target="_blank" rel="noreferrer"><Navigation />{t("openMaps")}</a></Button> : null}
                 {appleDirectionsUrl ? <Button asChild variant="secondary" className="w-full sm:w-auto"><a href={appleDirectionsUrl} target="_blank" rel="noreferrer"><Navigation />{t("openAppleMaps")}</a></Button> : null}
-                {activeTodayRoute?.id === routeDetails.route.id ? (
-                  <Button variant="outline" onClick={() => setRedoRouteOpen(true)} disabled={!canRedoRoute} className="w-full sm:w-auto">
-                    <RotateCw />{t("redoRoute")}
-                  </Button>
-                ) : null}
               </div>
+              {canOfferReuse ? (
+                <p className="mt-2 text-xs leading-5 text-white/50">{reuseBlocked
+                  ? t("reuseBlockedToday")
+                  : t.plural("reuseRouteHint", unvisitedStopCount)}</p>
+              ) : null}
             </div>
             <div className="border-t border-white/[0.08] pt-5">
               <div className="mb-3 flex items-center justify-between gap-3">
@@ -1503,10 +1598,10 @@ export function XpotProspecting() {
                       tabIndex={0}
                       data-route-stop-id={stop.id}
                       aria-label={t("openCompanyPreview", { name: stop.name })}
-                      className={`group relative grid min-h-[84px] cursor-pointer grid-cols-[3.5rem_minmax(0,1fr)] items-stretch overflow-hidden rounded-xl border bg-black/10 transition-[border-color,background-color,box-shadow,opacity,transform] hover:bg-white/[0.035] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300/60 sm:grid-cols-[3.5rem_minmax(0,1fr)_auto] [contain-intrinsic-size:84px] [content-visibility:auto] ${dragOverStopId === stop.id && draggedStopId !== stop.id ? "border-indigo-300/70 ring-2 ring-indigo-400/20" : "border-white/10"} ${draggedStopId === stop.id ? "scale-[0.995] opacity-45" : "opacity-100"} ${dragOverStopId === stop.id && draggedStopId !== stop.id && dragPlacement === "before" ? "before:absolute before:inset-x-2 before:top-0 before:z-30 before:h-0.5 before:rounded-full before:bg-indigo-300 before:shadow-[0_0_12px_rgba(165,180,252,0.9)]" : ""} ${dragOverStopId === stop.id && draggedStopId !== stop.id && dragPlacement === "after" ? "after:absolute after:inset-x-2 after:bottom-0 after:z-30 after:h-0.5 after:rounded-full after:bg-indigo-300 after:shadow-[0_0_12px_rgba(165,180,252,0.9)]" : ""}`}
+                      className={`group relative grid min-h-[84px] cursor-pointer grid-cols-[3.5rem_minmax(0,1fr)] items-stretch overflow-hidden rounded-xl border bg-black/10 transition-[border-color,background-color,box-shadow,opacity,transform] hover:bg-white/[0.035] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300/60 [contain-intrinsic-size:84px] [content-visibility:auto] ${dragOverStopId === stop.id && draggedStopId !== stop.id ? "border-indigo-300/70 ring-2 ring-indigo-400/20" : "border-white/10"} ${draggedStopId === stop.id ? "scale-[0.995] opacity-45" : "opacity-100"} ${dragOverStopId === stop.id && draggedStopId !== stop.id && dragPlacement === "before" ? "before:absolute before:inset-x-2 before:top-0 before:z-30 before:h-0.5 before:rounded-full before:bg-indigo-300 before:shadow-[0_0_12px_rgba(165,180,252,0.9)]" : ""} ${dragOverStopId === stop.id && draggedStopId !== stop.id && dragPlacement === "after" ? "after:absolute after:inset-x-2 after:bottom-0 after:z-30 after:h-0.5 after:rounded-full after:bg-indigo-300 after:shadow-[0_0_12px_rgba(165,180,252,0.9)]" : ""}`}
                     >
-                      <span className={`row-span-2 flex w-14 shrink-0 items-center justify-center self-stretch border-r px-2 text-sm font-bold tabular-nums transition-colors sm:row-span-1 ${numberRailClass}`}>{stopTone.glyph ?? stop.position}</span>
-                      {canReorderRoute ? (
+                      <span className={`row-span-2 flex w-14 shrink-0 items-center justify-center self-stretch border-r px-2 text-sm font-bold tabular-nums transition-colors ${numberRailClass}`}>{stopTone.glyph ?? stop.position}</span>
+                      {canReorderRoute && isStopOpen(stop.status) ? (
                         <button
                           type="button"
                           draggable={!reorderRoute.isPending}
@@ -1585,7 +1680,8 @@ export function XpotProspecting() {
                           {stop.origin === "ad_hoc" ? <Pill tone="slate" bordered>{t("stopExtra")}</Pill> : null}
                         </span>
                       </div>
-                      <div className="col-start-2 flex self-end justify-end gap-2 px-3 pb-3 sm:col-start-3 sm:row-start-1 sm:shrink-0 sm:self-end sm:pb-3 sm:pl-0 sm:pr-3 sm:pt-12">
+                      {/* Up to four actions: they sit under the name at every width, so it is never squeezed. */}
+                      <div className="col-start-2 flex self-end justify-end gap-2 px-3 pb-3">
                         {routeIsToday && isStopOpen(stop.status) ? (
                           <Button
                             type="button"
@@ -1620,6 +1716,22 @@ export function XpotProspecting() {
                             <Navigation strokeWidth={2} aria-hidden="true" />
                           </a>
                         </Button>
+                        {canEditRoute && isStopOpen(stop.status) ? (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="icon"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setStopPicker({ kind: "replace", stop });
+                            }}
+                            aria-label={t("replaceStopFor", { name: stop.name })}
+                            title={t("replaceStopFor", { name: stop.name })}
+                            className="[&_svg]:size-5"
+                          >
+                            <ArrowLeftRight strokeWidth={2} aria-hidden="true" />
+                          </Button>
+                        ) : null}
                         {canRemoveThisStop ? (
                           <Button
                             type="button"
@@ -1641,6 +1753,16 @@ export function XpotProspecting() {
                   );
                 })}
               </ol>
+              {canEditRoute && routeDetails.stops.length ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setStopPicker({ kind: "end", stop: routeDetails.stops[routeDetails.stops.length - 1] })}
+                  className="mt-2 w-full border border-dashed border-white/15 text-white/75 hover:text-white"
+                >
+                  <Plus />{t("addStop")}
+                </Button>
+              ) : null}
               {routeEndsHome && routeDetails.route.plannedEndAt ? (
                 <div className={`mt-2 flex min-h-12 items-center gap-3 rounded-xl px-4 text-sm text-white/70 ${GLASS_SUBTLE_CLASS}`}>
                   <Home className="h-4 w-4 shrink-0 text-white/45" aria-hidden="true" />
@@ -1663,19 +1785,6 @@ export function XpotProspecting() {
         cancelLabel={t("keepSearch")}
         testId="button-cancel-search-confirm"
         onConfirm={() => (details ? cancelJob.mutateAsync(details.job.id) : undefined)}
-      />
-
-      <ConfirmDialog
-        open={redoRouteOpen && activeTodayRoute !== undefined}
-        onOpenChange={setRedoRouteOpen}
-        tone="danger"
-        title={t("redoRouteTitle")}
-        description={t("redoRouteBody", { count: MAX_DAILY_PROSPECTING_SESSIONS })}
-        confirmLabel={<><RotateCw className="h-4 w-4" />{t("redoRoute")}</>}
-        cancelLabel={t("keepRoute")}
-        confirmDisabled={!canRedoRoute}
-        testId="button-redo-route-confirm"
-        onConfirm={() => (activeTodayRoute ? cancelRoute.mutateAsync(activeTodayRoute.id) : undefined)}
       />
 
       <ConfirmDialog
@@ -1791,6 +1900,24 @@ export function XpotProspecting() {
                       <a href={stopNavigationUrl(selectedStop, appleDevice)} target="_blank" rel="noreferrer"><Navigation />{appleDevice ? t("appleMaps") : t("googleMaps")}</a>
                     </Button>
                   </div>
+                  {canEditRoute ? (() => {
+                    // Nothing goes ahead of a visit that already happened.
+                    const canAddAfter = canAddAfterStop(routeDetails.stops, selectedStop.id);
+                    const open = (target: StopPickerTarget) => {
+                      setSelectedStopId(null);
+                      setStopPicker(target);
+                    };
+                    return (
+                      <div className="grid grid-cols-2 gap-2 border-t border-white/[0.08] pt-3">
+                        <Button type="button" variant="ghost" disabled={!isStopOpen(selectedStop.status)} onClick={() => open({ kind: "replace", stop: selectedStop })} className="min-w-0 px-2 sm:px-4">
+                          <ArrowLeftRight />{t("replaceStop")}
+                        </Button>
+                        <Button type="button" variant="ghost" disabled={!canAddAfter} onClick={() => open({ kind: "after", stop: selectedStop })} className="min-w-0 px-2 sm:px-4">
+                          <Plus />{t("addStopAfter")}
+                        </Button>
+                      </div>
+                    );
+                  })() : null}
                 </div>
               </div>
             </>
@@ -1798,6 +1925,15 @@ export function XpotProspecting() {
           })() : null}
         </DialogContent>
       </Dialog>
+
+      <RouteStopPicker
+        target={stopPicker}
+        jobId={routeDetails?.route.jobId ?? null}
+        routeStops={routeDetails?.stops ?? []}
+        pending={addStop.isPending}
+        onPick={pickStop}
+        onClose={() => setStopPicker(null)}
+      />
     </div>
   );
 }

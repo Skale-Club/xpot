@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import "maplibre-gl/dist/maplibre-gl.css";
+// MapLibre 6 finds its worker next to its own file at runtime, a path neither
+// Vite's dev pre-bundle nor the production build keeps. Vite bundles the
+// worker here and the map is told where it lives (setWorkerUrl below).
+import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import { useT, type Lang } from "@/i18n";
 import { prospectingMessages } from "@/i18n/messages/prospecting";
 import { prospectingUiMessages } from "@/i18n/messages/prospectingUi";
@@ -342,7 +346,9 @@ export function RoutePreviewMap({ start, stops, landmarks = [], encodedPolyline,
   }
   return (
     <div className={`relative h-64 w-full overflow-hidden sm:h-72 ${MAP_SURFACE_CLASS} ${className ?? ""}`}>
-      <div ref={containerRef} role="img" aria-label={alt} className="absolute inset-0" />
+      {/* Inline, not classes: maplibre-gl.css sets .maplibregl-map to position:relative and,
+          loaded after Tailwind, would collapse the map to zero height. */}
+      <div ref={containerRef} role="img" aria-label={alt} style={{ position: "absolute", inset: 0 }} />
       {ready ? null : <MapSkeleton className="pointer-events-none absolute inset-0" />}
     </div>
   );
@@ -380,6 +386,7 @@ function MapLibreRouteMap({ start, stops, landmarks, landmarkKey, encodedPolylin
 
     void import("maplibre-gl").then((maplibregl) => {
       if (cancelled || !containerRef.current) return;
+      maplibregl.setWorkerUrl(maplibreWorkerUrl);
       const visibleStops = stops.length ? stops : [start];
       const decodedPath = encodedPolyline ? decodeGooglePolyline(encodedPolyline) : stops;
       const routePoints = trimRoutePathToStops(decodedPath, visibleStops);
@@ -541,7 +548,9 @@ function MapLibreRouteMap({ start, stops, landmarks, landmarkKey, encodedPolylin
   if (unavailable) return <MapUnavailable label={alt} hint={t("mapUnavailableHint")} className={`h-64 sm:h-72 ${className ?? ""}`} />;
   return (
     <div className={`relative h-64 w-full overflow-hidden sm:h-72 ${MAP_SURFACE_CLASS} ${className ?? ""}`}>
-      <div ref={containerRef} role="img" aria-label={alt} className="absolute inset-0" />
+      {/* Inline, not classes: maplibre-gl.css sets .maplibregl-map to position:relative and,
+          loaded after Tailwind, would collapse the map to zero height. */}
+      <div ref={containerRef} role="img" aria-label={alt} style={{ position: "absolute", inset: 0 }} />
       {ready ? null : <MapSkeleton className="pointer-events-none absolute inset-0" />}
     </div>
   );

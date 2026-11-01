@@ -118,6 +118,44 @@ export const prospectingRouteReorderSchema = z.object({
     .refine((ids) => new Set(ids).size === ids.length, "Route stops must be unique."),
 });
 
+const routeStopSourceSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("candidate"), candidateId: z.number().int().positive() }),
+  z.object({ kind: z.literal("lead"), leadId: z.number().int().positive() }),
+  z.object({
+    kind: z.literal("place"),
+    place: z.object({
+      placeId: z.string().trim().min(1).max(300),
+      name: z.string().trim().min(1).max(300),
+      address: z.string().trim().max(500).default(""),
+      lat: coordinate.min(-90).max(90),
+      lng: coordinate.min(-180).max(180),
+      phone: z.string().trim().max(60).optional(),
+      website: z.string().trim().max(500).optional(),
+      industry: z.string().trim().max(120).optional(),
+    }),
+  }),
+]);
+
+/** A business put on a route by hand: from the search's leftovers, a saved lead, or a Google place. */
+export const prospectingRouteStopAddSchema = z.object({
+  source: routeStopSourceSchema,
+  /** Takes this stop's place in the order; the stop leaves the route. */
+  replaceStopId: z.number().int().positive().optional(),
+  /** Goes right after this stop. Without either, the business goes last. */
+  afterStopId: z.number().int().positive().optional(),
+}).refine((value) => value.replaceStopId === undefined || value.afterStopId === undefined, {
+  message: "Replace a stop or add after one, not both.",
+});
+
+/** Starts today's route again from the stops a past route never reached. */
+export const prospectingRouteReuseSchema = z.object({
+  routeDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  plannedStartAt: z.string().datetime(),
+});
+
+export type ProspectingRouteStopSource = z.infer<typeof routeStopSourceSchema>;
+export type ProspectingRouteStopWarning = "existing_customer" | "previously_visited";
+
 export const prospectingStopUpdateSchema = z.object({
   status: z.enum(["planned", "en_route", "checked_in", "completed", "skipped", "rescheduled"]),
   skipReason: z.string().trim().max(500).nullable().optional(),
