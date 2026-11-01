@@ -5,7 +5,7 @@ import type { Dictionary } from "../index";
 
 const en = {
   // Navigation
-  navHome: "Dashboard",
+  navHome: "Home",
   navCustomers: "Customers",
   navPieces: "My pieces",
   navShop: "Shop",
@@ -473,7 +473,7 @@ const en = {
 export const tagsMessages: Dictionary<typeof en> = {
   en,
   pt: {
-    navHome: "Painel",
+    navHome: "Início",
     navCustomers: "Clientes",
     navPieces: "Minhas peças",
     navShop: "Loja",
@@ -919,7 +919,7 @@ export const tagsMessages: Dictionary<typeof en> = {
     continueOnPhoneDirectHint: "Leia este código com o celular para abrir este link lá e toque em Gravar chip.",
   },
   es: {
-    navHome: "Panel",
+    navHome: "Inicio",
     navCustomers: "Clientes",
     navPieces: "Mis piezas",
     navShop: "Tienda",
