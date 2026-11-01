@@ -115,7 +115,7 @@ def layout(code):
             'tap_centre_y': m + t['icon_h'] / 2}
 
 
-def build(code, out_dir, size='large', nfc_mount='embedded_round', theme='white'):
+def build(code, out_dir, size='large', nfc_mount='embedded_round', theme='white', qr='panel'):
     if theme not in ('white', 'black'):
         raise ValueError('theme must be white or black')
     if nfc_mount not in ('embedded_round', 'sticker_10x20'):
@@ -126,7 +126,9 @@ def build(code, out_dir, size='large', nfc_mount='embedded_round', theme='white'
     to_tile = ig.to_tile
     panel_tile = None
     ink_comp = art['black']
-    if theme == 'black':
+    # qr='inverted' (user, 2026-11-01, every black piece from now on): the modules in white straight on the black body,
+    # no panel, the art as on the white Plate. 'panel' stays for the batches printed with it (tests/rebuild.py).
+    if theme == 'black' and qr != 'inverted':
         # The QR keeps its quiet zone on a white panel; the black body shows through as the dark modules.
         module = FACE['qr']['size'] / FACE['qr']['modules']
         border = FACE['panel_quiet_modules'] * module
@@ -170,7 +172,7 @@ def build(code, out_dir, size='large', nfc_mount='embedded_round', theme='white'
 
     want = solid_volume - (black.area + yellow.area) * INLAY - pocket.area * POCKET - back.area * BACK_ENGRAVE
     rep = {
-        'code': code, 'size': size, 'theme': theme, 'qr_style': 'normal-on-white-panel' if theme == 'black' else 'normal',
+        'code': code, 'size': size, 'theme': theme, 'qr_style': 'inverted' if theme == 'black' and qr == 'inverted' else 'normal-on-white-panel' if theme == 'black' else 'normal',
         'tile_mm': S, 'qr_url': art['qr']['url'], 'qr_modules': art['qr']['modules'],
         'qr_module_mm': art['qr']['module_mm'], 'space_above_qr_mm': round(art['space'], 2),
         'headline_width_mm': round(art['headline_w'], 2), 'nfc_centre_from_top_mm': round(art['nfc_centre_y'], 2),

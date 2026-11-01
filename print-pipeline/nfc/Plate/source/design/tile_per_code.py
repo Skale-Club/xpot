@@ -167,7 +167,7 @@ def sticker_z(theme):
     return z0, z1, round(z1 + 0.16, 2)
 
 
-def build(code, out_dir, theme='white', size='large', nfc_mount='embedded_round'):
+def build(code, out_dir, theme='white', size='large', nfc_mount='embedded_round', qr='panel'):
     if theme not in ('white', 'black'):
         raise ValueError('theme must be white or black')
     if nfc_mount not in ('embedded_round', 'sticker_10x20', 'rear_sticker_10x20', 'rear_sticker_10x20_covered'):
@@ -177,7 +177,9 @@ def build(code, out_dir, theme='white', size='large', nfc_mount='embedded_round'
     art = layout(code)
     panel = None
     ink_comp = art['black']
-    if theme == 'black':
+    # qr='inverted' (user, 2026-11-01, every black piece from now on): the modules in white straight on the black body,
+    # no panel, the art as on the white Plate. 'panel' stays for the batches printed with it (tests/rebuild.py).
+    if theme == 'black' and qr != 'inverted':
         # The black Plate uses a normal dark-on-light QR on a white panel. Small uses the visually lighter
         # 1-module border requested after reviewing the 2-module study; Large keeps the established 2 modules.
         # The black body shows through the white inlay as the dark modules. This is intentionally different from
@@ -237,7 +239,7 @@ def build(code, out_dir, theme='white', size='large', nfc_mount='embedded_round'
     want = solid_volume - (ink.area + silk.area) * INLAY - back.area * BACK_ENGRAVE
     rep = {
         'code': code, 'theme': theme, 'nfc_mount': nfc_mount,
-        'qr_style': 'normal-on-white-panel' if theme == 'black' else 'normal',
+        'qr_style': 'inverted' if theme == 'black' and qr == 'inverted' else 'normal-on-white-panel' if theme == 'black' else 'normal',
         'qr_url': art['qr']['url'], 'qr_modules': art['qr']['modules'],
         'qr_module_mm': art['qr']['module_mm'], 'space_above_qr_mm': round(art['space'], 2),
         'headline_width_mm': round(art['headline_w'], 2), 'nfc_centre_from_top_mm': round(art['nfc_centre_y'], 2),
@@ -269,7 +271,7 @@ def build(code, out_dir, theme='white', size='large', nfc_mount='embedded_round'
     rep['qr_decoded_polygons'] = igc.decode_qr_polygons(to_tile(art['qr_dark']), q, art['qr']['url'])
     sec = igc.mesh_section_polygons(ink_tm, TOP - INLAY / 2)
     qr_box = box(-q['size'] / 2 - 1, S - q['y'] - q['size'] - 1, q['size'] / 2 + 1, S - q['y'] + 1)
-    mesh_qr_dark = (panel_tile.difference(sec) if theme == 'black' else sec).intersection(qr_box)
+    mesh_qr_dark = (panel_tile.difference(sec) if panel_tile is not None else sec).intersection(qr_box)
     rep['qr_decoded_mesh'] = igc.decode_qr_polygons(mesh_qr_dark, q, art['qr']['url'])
 
     ok = (abs(tile_tm.volume - want) / want < 0.005

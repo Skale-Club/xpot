@@ -241,14 +241,14 @@ def instagram_layout(code):
             'q': r['qr'], 'headline_cap': r['headline']['cap'], 'headline_w': head_w, 'lowest_y': lowest}
 
 
-def menu_layout(code, theme, font):
-    art = menu.layout(code, theme, font, FACE_MENU_SMALL, W, SLOT_LINE)
+def menu_layout(code, theme, font, qr='panel'):
+    art = menu.layout(code, theme, font, FACE_MENU_SMALL, W, SLOT_LINE, qr=qr)
     art.update(inks=[art['ink']], q=FACE_MENU_SMALL['qr'])
     return art
 
 
-def build_refaced(face, code, theme, sticker, font):
-    art = instagram_layout(code) if face == 'instagram' else menu_layout(code, theme, font)
+def build_refaced(face, code, theme, sticker, font, qr='panel'):
+    art = instagram_layout(code) if face == 'instagram' else menu_layout(code, theme, font, qr)
     inks = [fa.to_card(g) for g in art['inks']]
     n_back, s_back = backs(code)
     back = n_back.simplify(SIMPLIFY, preserve_topology=True)
@@ -268,7 +268,7 @@ def build_refaced(face, code, theme, sticker, font):
     q = {'size': art['q']['size'], 'modules': art['q']['modules'], 'y': art['q']['y']}
     url = art['qr']['url']
     section = mesh_qr(ink_tms[0], q)
-    mesh_dark = fa.to_card(art['panel']).difference(section) if face == 'menu' and theme == 'black' else section
+    mesh_dark = fa.to_card(art['panel']).difference(section) if face == 'menu' and art['panel'] is not None else section
     rep = {'qr_url': url, 'qr_modules': art['qr']['modules'], 'qr_module_mm': art['qr']['module_mm'],
            'face_lowest_y_mm': round(art['lowest_y'], 2), 'plain_card_mm3': round(plain_volume, 1),
            'card_mm3': round(card_tm.volume, 1), 'card_expected_mm3': round(want, 1),
@@ -286,7 +286,7 @@ def build_refaced(face, code, theme, sticker, font):
     return card, [card_tm] + ink_tms, rep, vol_ok
 
 
-def build(face, code, batch, serial, out_dir, theme='white', nfc_mount='sticker_10x20', font='Inria Serif Bold'):
+def build(face, code, batch, serial, out_dir, theme='white', nfc_mount='sticker_10x20', font='Inria Serif Bold', qr='panel'):
     """Write one Small card's STLs (PARTS[face]) into out_dir. `batch` and `serial` are kept for the ledger: the back
     carries the code alone. Every Small Stand card is new (2026-10-31) and takes the 10 x 20 sticker."""
     if face not in FACES:
@@ -302,7 +302,7 @@ def build(face, code, batch, serial, out_dir, theme='white', nfc_mount='sticker_
     if face == 'google':
         card, meshes, rep, vol_ok = build_google(code, theme, sticker, out_dir)
     else:
-        card, meshes, rep, vol_ok = build_refaced(face, code, theme, sticker, font)
+        card, meshes, rep, vol_ok = build_refaced(face, code, theme, sticker, font, qr)
     rep = dict({'face': face, 'code': code, 'batch': batch, 'serial': str(serial), 'theme': theme,
                 'nfc_mount': nfc_mount, 'card_mm': [W, H, CARD_T], 'slot_line_y_mm': SLOT_LINE}, **rep)
     rep.update(sticker_pocket_mm=[google.STICKER_W, google.STICKER_H, google.STICKER_DEPTH],
