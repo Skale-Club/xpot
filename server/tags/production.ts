@@ -292,8 +292,11 @@ export async function updateModel(ref: string, patch: PrintModelPatch): Promise<
     partReorderAt: model.kind === "part" && patch.partReorderAt !== undefined ? patch.partReorderAt : model.partReorderAt,
   };
   if (serialized) {
-    // The same fields the model was created with (and canGenerateModel needs): an edit completes them, never empties one.
-    const missing = SERIALIZED_MODEL_FIELDS.filter((key) => next[key] === null || next[key] === undefined || next[key] === "");
+    // The same fields the model is created with (and canGenerateModel needs): an edit never empties one. The sales
+    // product and batch prefix were always required; product, face and colour are checked when the patch touches
+    // them, so a model saved before they were required can still be retired, restored or reordered as it is.
+    const checked = SERIALIZED_MODEL_FIELDS.filter((key) => key === "salesProductId" || key === "batchPrefix" || patch[key] !== undefined);
+    const missing = checked.filter((key) => next[key] === null || next[key] === undefined || next[key] === "");
     if (missing.length) {
       throw new TagError("A serialized model needs a product type, a face, a colour, a sales product and a batch prefix", 400,
         "print_model_incomplete", { missing: missing.join(", ") });
@@ -455,15 +458,30 @@ export async function attachBedFile(modelRef: string, versionId: string, bedLabe
   const beds = version.beds ?? [];
   const index = beds.findIndex((bed) => bed.label.toLowerCase() === bedLabel.toLowerCase());
   if (index < 0) throw new TagError("No bed with that label in this version", 404);
-  const previous = beds[index].fileRef ?? null;
   // Once a plate took the file (whatever became of that plate: printed, failed or cancelled, it can be printed again
   // with it), the file is part of what that plate printed: a new file is a new version.
-  if (previous && await fileTakenByPlate(previous)) {
-    throw new TagError("Plates already took this bed's file: make a new version for a new file", 409, "print_version_used");
-  }
+  const taken = () => new TagError("Plates already took this bed's file: make a new version for a new file", 409, "print_version_used");
+  if (beds[index].fileRef && await fileTakenByPlate(beds[index].fileRef!)) throw taken();
   const stored = await storeFile(versionId, filename, body, PRINT_FILE_CONTENT_TYPES[fileKindFor(filename)]);
-  const updated = beds.map((bed, i) => (i === index ? { ...bed, fileRef: stored.ref, fileName: stored.name, fileBytes: stored.bytes, fileSha256: stored.sha256 } : bed));
-  await db.update(printModelVersions).set({ beds: updated as Array<Record<string, unknown>> }).where(eq(printModelVersions.id, versionId));
+  // Checked again and written under the version's lock: a plate being created takes the same lock (createPartPlate),
+  // so it either copies the old file before this runs (and the old file stays) or the new file after it.
+  let previous: string | null;
+  try {
+    previous = await db.transaction(async (tx) => {
+      const [locked] = await rows<{ beds: PrintBed[] | null }>(sql`SELECT beds FROM print_model_versions WHERE id = ${versionId} FOR UPDATE`, tx);
+      const current = locked?.beds ?? [];
+      const at = current.findIndex((bed) => bed.label.toLowerCase() === bedLabel.toLowerCase());
+      if (at < 0) throw new TagError("No bed with that label in this version", 404);
+      const old = current[at].fileRef ?? null;
+      if (old && await fileTakenByPlate(old, tx)) throw taken();
+      const updated = current.map((bed, i) => (i === at ? { ...bed, fileRef: stored.ref, fileName: stored.name, fileBytes: stored.bytes, fileSha256: stored.sha256 } : bed));
+      await tx.update(printModelVersions).set({ beds: updated as Array<Record<string, unknown>> }).where(eq(printModelVersions.id, versionId));
+      return old;
+    });
+  } catch (err) {
+    await discardFiles([stored.ref], `refused print file of ${model.slug} v${version.version} bed ${bedLabel}`);
+    throw err;
+  }
   // The replaced file is dropped, like a replaced preview, unless another version's bed still points at it.
   if (previous && previous !== stored.ref && !(await fileInUse(previous))) {
     await discardFiles([previous], `print file of ${model.slug} v${version.version} bed ${bedLabel}`);
@@ -474,8 +492,8 @@ export async function attachBedFile(modelRef: string, versionId: string, bedLabe
 }
 
 /** Whether a plate took this stored print file (its copy of the bed's file). */
-async function fileTakenByPlate(ref: string): Promise<boolean> {
-  const [{ n }] = await rows<{ n: number }>(sql`SELECT count(*)::int AS n FROM print_job_files WHERE file_ref = ${ref}`);
+async function fileTakenByPlate(ref: string, executor: typeof db | Tx = db): Promise<boolean> {
+  const [{ n }] = await rows<{ n: number }>(sql`SELECT count(*)::int AS n FROM print_job_files WHERE file_ref = ${ref}`, executor);
   return Number(n) > 0;
 }
 
@@ -887,8 +905,12 @@ interface PlateContext {
 }
 
 /** A part's plate: its fixed file, ready at once when the bed has one. Returns the order id. */
-async function createPartPlate(model: PrintModelRow, version: Pick<VersionRow, "id">, bed: PrintBed, ctx: PlateContext): Promise<string> {
+async function createPartPlate(model: PrintModelRow, version: Pick<VersionRow, "id">, picked: PrintBed, ctx: PlateContext): Promise<string> {
   const { tx } = ctx.within;
+  // The bed's file as it is now, under a share lock on the version: a file being replaced at this moment
+  // (attachBedFile, which locks it for update) is either copied before the swap or the new one is taken after it.
+  const [locked] = await rows<{ beds: PrintBed[] | null }>(sql`SELECT beds FROM print_model_versions WHERE id = ${version.id} FOR SHARE`, tx);
+  const bed = (locked?.beds ?? []).find((b) => b.label === picked.label) ?? picked;
   const ready = Boolean(bed.fileRef);
   const [job] = await tx.insert(printJobs).values({
     organizationId: ctx.organizationId,

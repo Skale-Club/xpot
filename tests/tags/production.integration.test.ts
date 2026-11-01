@@ -1196,6 +1196,15 @@ describe("consistency of the piece creation", () => {
     await q("UPDATE print_models SET face = NULL WHERE slug = 'plate-large-menu-white'");
     const completed = await request(app, "PATCH", "/api/xpot/admin/print-models/plate-large-menu-white", { face: "menu" });
     expect(completed).toMatchObject({ status: 200, body: { face: "menu" } });
+
+    // A model saved before face and colour were required is still retired, restored and reordered as it is; only an
+    // edit of those fields (or emptying one) has to complete it.
+    await q("UPDATE print_models SET face = NULL, theme = NULL WHERE slug = 'plate-large-menu-white'");
+    for (const patch of [{ retired: true }, { retired: false }, { sortOrder: 5 }, { title: "Legacy plate" }]) {
+      expect((await request(app, "PATCH", "/api/xpot/admin/print-models/plate-large-menu-white", patch)).status).toBe(200);
+    }
+    expect((await request(app, "PATCH", "/api/xpot/admin/print-models/plate-large-menu-white", { theme: "" })).body.code).toBe("print_model_incomplete");
+    expect((await request(app, "PATCH", "/api/xpot/admin/print-models/plate-large-menu-white", { batchPrefix: null })).body.code).toBe("print_model_incomplete");
   });
 
   it("links an existing batch with the Print dialog's checks, for the batch's own organization", async () => {
@@ -1253,6 +1262,8 @@ describe("consistency of the piece creation", () => {
     await request(app, "POST", `/api/xpot/admin/print-jobs/${plate.id}/transition`, { action: "fail", reason: "Warped" });
     const locked = await request(app, "POST", url("third.3mf"), bytes("third"));
     expect(locked).toMatchObject({ status: 409, body: { code: "print_version_used" } });
+    // The refused upload leaves no file behind in storage.
+    expect(Array.from(store.objects.keys()).some((key) => key.endsWith("third.3mf"))).toBe(false);
     const redo = await request(app, "POST", `/api/xpot/admin/print-jobs/${plate.id}/redo`);
     expect(redo.body).toMatchObject({ status: "ready" });
     expect(redo.body.files).toEqual([expect.objectContaining({ filename: "second.3mf" })]);
