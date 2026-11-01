@@ -1,5 +1,6 @@
 // Tags › Shop: what the Xpot admin shows resellers. Xpot sells nothing itself: the Stuscle store is the sales engine
-// (docs: Wholesale), so an entry only describes a piece model or a ready-made kit and sends the reseller there.
+// (docs: Wholesale), so an entry only describes a piece model or a ready-made kit and sends the reseller there, straight
+// into the cart when it carries Stuscle SKUs (a kit must; a model usually has its one SKU).
 // Pure, no I/O: the server validates with these schemas and the app types its form from them.
 
 import { z } from "zod";
@@ -72,7 +73,95 @@ export type TagShowcaseItem = {
 
 export type TagShowcaseView = TagShowcaseItem & { url: string };
 
-/** Where an entry's button goes for the reseller holding `code`: a kit fills the cart, a model opens the wholesale store. */
-export function showcaseUrl(item: Pick<TagShowcaseItem, "kind" | "items">, storeBaseUrl: string, code: string): string {
-  return item.kind === "kit" && item.items.length ? stuscleKitUrl(storeBaseUrl, code, item.items) : wholesaleUrl(storeBaseUrl, code);
+/** Whether an entry's button puts it in the Stuscle cart: a kit always, a model once it has its SKU. */
+export function showcaseAddsToCart(item: Pick<TagShowcaseItem, "items">): boolean {
+  return item.items.length > 0;
+}
+
+/** Where an entry's button goes for the reseller holding `code`: its SKUs into the cart, or else the wholesale store. */
+export function showcaseUrl(item: Pick<TagShowcaseItem, "items">, storeBaseUrl: string, code: string): string {
+  return showcaseAddsToCart(item) ? stuscleKitUrl(storeBaseUrl, code, item.items) : wholesaleUrl(storeBaseUrl, code);
+}
+
+// The Stuscle wholesale catalogue, as the Shop shows it. Xpot reads it from Stuscle (server to server) so the Shop
+// always lists exactly what resellers can buy at wholesale, with no typing on this side. Prices are Stuscle's, for
+// display; the cart gets its price from Stuscle when the link adds the piece.
+
+export type TagShopVariant = {
+  id: string;
+  title: string | null;
+  sku: string;
+  wholesalePriceCents: number;
+  retailPriceCents: number | null;
+  /** Adds one of this variant to the reader's Stuscle cart and opens the product's wholesale page. */
+  url: string;
+};
+
+export type TagShopProduct = {
+  id: string;
+  title: string;
+  handle: string;
+  thumbnail: string | null;
+  variants: TagShopVariant[];
+};
+
+export type TagShopCatalog =
+  | { status: "ok"; currency: string; products: TagShopProduct[] }
+  /** Stuscle is not wired up here (no secret), or could not be read right now: the Shop shows only the entries. */
+  | { status: "not_configured" | "unavailable"; currency: string; products: [] };
+
+type StuscleCatalogBody = {
+  currency_code?: unknown;
+  products?: Array<{
+    id?: unknown;
+    title?: unknown;
+    handle?: unknown;
+    thumbnail?: unknown;
+    variants?: Array<{ id?: unknown; title?: unknown; sku?: unknown; wholesale_price?: unknown; retail_price?: unknown }>;
+  }>;
+};
+
+const toCents = (amount: unknown): number | null => (typeof amount === "number" && Number.isFinite(amount) ? Math.round(amount * 100) : null);
+const str = (value: unknown): string | null => (typeof value === "string" && value.trim() ? value : null);
+
+/**
+ * Stuscle's `GET /xpot/wholesale-catalog` answer → the Shop's products, each variant with the link that puts it in
+ * the cart of the reseller holding `code`. Anything malformed is dropped rather than shown wrong: a variant with no
+ * SKU the link can carry, or no wholesale price, and a product left with no variant.
+ */
+export function toShopProducts(body: unknown, storeBaseUrl: string, code: string): { currency: string; products: TagShopProduct[] } {
+  const data = (body ?? {}) as StuscleCatalogBody;
+  const currency = (str(data.currency_code) ?? "usd").toUpperCase();
+  const products: TagShopProduct[] = [];
+  for (const raw of Array.isArray(data.products) ? data.products : []) {
+    const id = str(raw?.id);
+    const title = str(raw?.title);
+    const handle = str(raw?.handle);
+    if (!id || !title || !handle) continue;
+    const variants: TagShopVariant[] = [];
+    for (const v of Array.isArray(raw.variants) ? raw.variants : []) {
+      const sku = str(v?.sku);
+      const variantId = str(v?.id);
+      const wholesale = toCents(v?.wholesale_price);
+      if (!sku || !variantId || !SKU.test(sku) || wholesale === null || wholesale <= 0) continue;
+      variants.push({
+        id: variantId,
+        title: str(v.title),
+        sku,
+        wholesalePriceCents: wholesale,
+        retailPriceCents: toCents(v.retail_price),
+        url: stuscleKitUrl(storeBaseUrl, code, [{ sku, quantity: 1 }]),
+      });
+    }
+    if (variants.length) products.push({ id, title, handle, thumbnail: str(raw.thumbnail), variants });
+  }
+  return { currency, products };
+}
+
+/** A variant's cart link for `quantity` pieces instead of one (the reseller picks how many in the Shop). */
+export function shopLinkWithQuantity(variant: Pick<TagShopVariant, "url" | "sku">, quantity: number): string {
+  const qty = Math.min(TAG_SHOWCASE_MAX_QUANTITY, Math.max(1, Math.floor(quantity) || 1));
+  const url = new URL(variant.url);
+  url.searchParams.set("items", `${variant.sku}:${qty}`);
+  return url.toString();
 }

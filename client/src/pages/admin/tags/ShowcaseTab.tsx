@@ -18,8 +18,8 @@ import { ADMIN_TAGS_KEY, STALE_MS, deleteJson, errorMessage, getJson, invalidate
 import { Loading, LoadError } from "./pieces-shared";
 
 // Manage › Shop (the Xpot admin's): the entries resellers see in Tags › Shop. Xpot sells nothing; each entry is a
-// piece model or a ready-made kit that sends the reseller to the Stuscle store. A kit lists the Stuscle SKUs and
-// quantities its link puts in the cart; the price that counts is Stuscle's.
+// piece model or a ready-made kit that sends the reseller to the Stuscle store. Its Stuscle SKUs and quantities are what
+// its link puts in the cart (a kit needs them; a model without its SKU only opens the store); the price is Stuscle's.
 
 const SHOWCASE_KEY = [ADMIN_TAGS_KEY, "showcase"] as const;
 
@@ -75,7 +75,7 @@ function toPayload(form: Form): TagShowcaseInput | null {
     description: form.description,
     includes: form.includes.split("\n").map((line) => line.trim()).filter(Boolean),
     imageUrl: form.imageUrl,
-    items: form.kind === "kit" ? items : [],
+    items,
     referencePriceCents: cents,
     sortOrder: Number.parseInt(form.sortOrder, 10) || 0,
     isPublished: form.isPublished,
@@ -99,7 +99,7 @@ function ShowcaseDialog({ item, open, onOpenChange }: { item: TagShowcaseItem | 
     },
     onError: (err) => toast({ title: t("shopCouldNotSave"), description: errorMessage(err), variant: "destructive" }),
   });
-  const itemsError = kit && payload === null ? t("shopFieldItemsInvalid") : undefined;
+  const itemsError = parseItems(form.items) === null ? t("shopFieldItemsInvalid") : undefined;
   const ready = form.title.trim().length > 0 && payload !== null && (!kit || payload.items.length > 0);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -137,19 +137,17 @@ function ShowcaseDialog({ item, open, onOpenChange }: { item: TagShowcaseItem | 
           <Field label={t("shopFieldImage")} hint={t("shopFieldImageHint")}>
             <Input type="url" inputMode="url" value={form.imageUrl} placeholder="https://" onChange={(e) => setForm({ ...form, imageUrl: e.target.value })} />
           </Field>
-          {kit && (
-            <Field label={t("shopFieldItems")} hint={t("shopFieldItemsHint")} error={itemsError} required>
-              <Textarea
-                value={form.items}
-                rows={4}
-                spellCheck={false}
-                className="font-mono"
-                placeholder="KIT-POKEMON-48-STARTER:1"
-                onChange={(e) => setForm({ ...form, items: e.target.value })}
-                data-testid="showcase-items"
-              />
-            </Field>
-          )}
+          <Field label={t("shopFieldItems")} hint={kit ? t("shopFieldItemsHint") : t("shopFieldItemsModelHint")} error={itemsError} required={kit}>
+            <Textarea
+              value={form.items}
+              rows={kit ? 4 : 2}
+              spellCheck={false}
+              className="font-mono"
+              placeholder={kit ? "KIT-POKEMON-48-STARTER:1" : "PLATE-GOOGLE-SMALL-BLACK:1"}
+              onChange={(e) => setForm({ ...form, items: e.target.value })}
+              data-testid="showcase-items"
+            />
+          </Field>
           <Field label={t("shopFieldPrice")} hint={t("shopFieldPriceHint")}>
             <Input inputMode="decimal" value={form.price} placeholder="0.00" onChange={(e) => setForm({ ...form, price: e.target.value })} />
           </Field>
@@ -227,7 +225,7 @@ export function ShowcaseTab() {
                 <span className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-white/45">
                   <Pill tone={item.kind === "kit" ? "violet" : "slate"}>{item.kind === "kit" ? t("shopKindKit") : t("shopKindModel")}</Pill>
                   <Pill tone={item.isPublished ? "green" : "muted"}>{item.isPublished ? t("shopPublished") : t("shopDraft")}</Pill>
-                  {item.kind === "kit" && <span>{t("shopSkuCount", { count: item.items.length })}</span>}
+                  {item.items.length > 0 ? <span>{t("shopSkuCount", { count: item.items.length })}</span> : <span>{t("shopNoSku")}</span>}
                   {item.referencePriceCents !== null && <span>{formatMoney(item.referencePriceCents, item.currency)}</span>}
                 </span>
               </span>

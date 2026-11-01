@@ -16,8 +16,8 @@ import { ensureWholesaleCode, storeBaseUrl } from "../wholesale/index.js";
 
 // Tags › Shop. Xpot sells nothing: the Stuscle store is the sales engine, so a showcase entry only describes a piece
 // model or a ready-made kit and sends the reseller there. The Xpot admin keeps the entries; every signed-in Tags user
-// reads the published ones, each with a link that carries their own wholesale code (a model opens the wholesale page,
-// a kit fills the cart). The price that counts is Stuscle's; `referencePriceCents` is only typed-in information.
+// reads the published ones, each with a link that carries their own wholesale code (an entry with SKUs fills the cart,
+// one without opens the wholesale page). The price that counts is Stuscle's; `referencePriceCents` is only typed-in information.
 
 function toItem(row: TagShowcaseRow): TagShowcaseItem {
   return {
@@ -60,8 +60,7 @@ function values(input: TagShowcaseInput) {
     description: input.description ?? null,
     includes: input.includes,
     imageUrl: input.imageUrl ?? null,
-    // A model has no cart: its entries are kept empty so a later switch to "kit" starts from a clean list.
-    items: input.kind === "kit" ? input.items : [],
+    items: input.items,
     referencePriceCents: input.referencePriceCents ?? null,
     sortOrder: input.sortOrder,
     isPublished: input.isPublished,

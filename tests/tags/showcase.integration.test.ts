@@ -105,6 +105,11 @@ test.skipIf(!enabled)("showcase: the admin keeps it, resellers read the publishe
     const renamed = await api("sc-admin", "PATCH", `/api/xpot/admin/tag-showcase/${id}`, { title: "Pokemon starter kit" });
     assert.equal(renamed.status, 200, renamed.text);
     assert.deepEqual([renamed.json.title, renamed.json.items, renamed.json.isPublished, renamed.json.referencePriceCents], ["Pokemon starter kit", kit.items, true, 19900]);
+    // A model that gets its SKU (in a pack quantity) goes into the cart too.
+    const packed = await api("sc-admin", "PATCH", `/api/xpot/admin/tag-showcase/${model.json.id}`, { items: [{ sku: "STAND-LARGE-BLACK", quantity: 10 }] });
+    assert.equal(packed.status, 200, packed.text);
+    const standUrl = new URL((await api("sc-ana", "GET", "/api/xpot/tags/showcase")).json[1].url);
+    assert.deepEqual([standUrl.pathname, standUrl.searchParams.get("items")], ["/wholesale/kit", "STAND-LARGE-BLACK:10"]);
     assert.equal((await api("sc-admin", "PATCH", `/api/xpot/admin/tag-showcase/${draft.json.id}`, { isPublished: true })).status, 200);
     assert.equal((await api("sc-ana", "GET", "/api/xpot/tags/showcase")).json.length, 3);
 
