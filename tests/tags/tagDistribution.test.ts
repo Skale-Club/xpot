@@ -74,8 +74,8 @@ test("resellers: who can receive a kit, and why someone cannot sell", () => {
     sellBlockers({ ...rep, modules: ["visits"], wholesaleCode: null, costPolicyConfiguredAt: null, blockedAt: "2026-10-02" }),
     ["blocked", "tags_off", "cost_rule", "wholesale_code"],
   );
-  // Managers and admins sell without a wholesale code or a cost rule, and always see Tags.
-  assert.deepEqual(sellBlockers({ ...rep, role: "manager", modules: ["visits"], wholesaleCode: null, costPolicyConfiguredAt: null }), []);
+  // Admins sell without a wholesale code or a cost rule, and always see Tags.
+  assert.deepEqual(sellBlockers({ ...rep, role: "admin", modules: ["visits"], wholesaleCode: null, costPolicyConfiguredAt: null }), []);
 });
 
 test("kits: the short code and the cost a chosen ownership needs", () => {

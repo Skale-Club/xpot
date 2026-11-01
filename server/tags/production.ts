@@ -26,6 +26,7 @@ import {
   PRINT_PREVIEW_MAX_BYTES,
   SERIALIZED_MODEL_FIELDS,
   bedPosition,
+  modelReleased,
   nextPrintBatchCode,
   pickGenerateFace,
   planPrintJobTransition,
@@ -44,6 +45,7 @@ import {
   type PrintJobPiece,
   type PrintJobStatus,
   type PrintJobTicket,
+  type PrintMaterial,
   type PrintModelDetail,
   type PrintModelInput,
   type PrintModelItem,
@@ -80,6 +82,9 @@ import { companyOrganizationId } from "../organizations/service.js";
 // Per organization (migrations/0065): a request, its plates, their batches and pieces belong to one organization:
 // the company's for Boston, or a branch that prints its own pieces. The admin sees every one; a branch's Rep Admin
 // and its bench only their own (ProductionScope). The catalog stays shared; parts and their counts stay the company's.
+// A branch prints only the models the platform released to it (organizations.released_print_models, migrations/0069;
+// null = every model): the catalog it is offered is filtered, and a request, a generate or a plate printed again for
+// any other model is refused (print_model_not_released). Each model lists the materials a partner must buy.
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -148,7 +153,8 @@ function versionItem(v: VersionRow): PrintModelVersionItem {
 interface ModelRow {
   id: string; slug: string; kind: string; title: string; description: string | null; product_type: string | null;
   face: string | null; theme: string | null; sales_product_id: number | null; batch_prefix: string | null; status: string;
-  current_version_id: string | null; part_on_hand: number; part_reorder_at: number | null; sort_order: number; created_at: Date | string; updated_at: Date | string;
+  current_version_id: string | null; part_on_hand: number; part_reorder_at: number | null; sort_order: number; materials: PrintMaterial[] | null;
+  created_at: Date | string; updated_at: Date | string;
   open_jobs: number; house_count: number; with_resellers_count: number;
 }
 
@@ -156,7 +162,7 @@ interface ModelRow {
 // scope: a branch counts its own plates and pieces).
 const modelSelect = (scope: ProductionScope) => sql`
   SELECT m.id, m.slug, m.kind, m.title, m.description, m.product_type, m.face, m.theme, m.sales_product_id, m.batch_prefix,
-    m.status, m.current_version_id, m.part_on_hand, m.part_reorder_at, m.sort_order, m.created_at, m.updated_at,
+    m.status, m.current_version_id, m.part_on_hand, m.part_reorder_at, m.sort_order, m.materials, m.created_at, m.updated_at,
     (SELECT count(*)::int FROM print_jobs j WHERE j.model_id = m.id
       AND j.status IN ('requested', 'building', 'ready', 'printing') AND ${scopeSql("j.organization_id", scope)}) AS open_jobs,
     (SELECT ${countMetricSql("house")} FROM tags t JOIN tag_batches b ON b.id = t.batch_id
@@ -180,6 +186,7 @@ function modelItem(m: ModelRow, current: PrintModelVersionItem | null): PrintMod
     batchPrefix: m.batch_prefix,
     status: m.status as PrintModelStatus,
     sortOrder: Number(m.sort_order),
+    materials: m.materials ?? [],
     currentVersion: current,
     onHand: kind === "part" ? Number(m.part_on_hand) : Number(m.house_count),
     withResellers: kind === "part" ? 0 : Number(m.with_resellers_count),
@@ -199,12 +206,43 @@ async function currentVersions(versionIds: string[]): Promise<Map<string, PrintM
 
 // ─── Models ───────────────────────────────────────────────────────────────────
 
-/** The catalog. A branch (a scope) prints serialized pieces only: parts and their counts are the company's. */
-export async function listModels(scope: ProductionScope = null): Promise<PrintModelItem[]> {
+/** The models each of these organizations may print (organizations.released_print_models): null = every model. */
+async function releasedModels(organizationIds: readonly number[]): Promise<Array<string[] | null>> {
+  if (!organizationIds.length) return [];
+  const list = await db.select({ released: organizations.releasedPrintModels }).from(organizations)
+    .where(inArray(organizations.id, [...organizationIds]));
+  return list.map((row) => row.released);
+}
+
+/** Of a scope's models, the ones released to at least one of its organizations (an admin's scope: all). */
+async function releasedWithin<T extends { slug: string }>(models: T[], scope: ProductionScope): Promise<T[]> {
+  if (scope === null) return models;
+  const released = await releasedModels(scope);
+  return models.filter((model) => released.some((list) => modelReleased(list, model.slug)));
+}
+
+async function catalogOf(scope: ProductionScope): Promise<PrintModelItem[]> {
   const where = scope === null ? sql`` : sql`WHERE m.kind = 'serialized'`;
   const list = await rows<ModelRow>(sql`${modelSelect(scope)} ${where} ORDER BY m.sort_order, m.title`);
   const versions = await currentVersions(list.map((m) => m.current_version_id).filter((id): id is string => Boolean(id)));
   return list.map((m) => modelItem(m, m.current_version_id ? versions.get(m.current_version_id) ?? null : null));
+}
+
+/**
+ * The catalog. A branch (a scope) prints serialized pieces only (parts and their counts are the company's) and only
+ * the ones the platform released to it: that is what the board, Generate and the Print dialog offer.
+ */
+export async function listModels(scope: ProductionScope = null): Promise<PrintModelItem[]> {
+  return releasedWithin(await catalogOf(scope), scope);
+}
+
+/** A non-admin may print a model only if the platform released it to the organization it prints for. */
+async function assertReleased(organizationId: number, model: Pick<PrintModelRow, "slug" | "title">, scope: ProductionScope) {
+  if (scope === null) return;
+  const [released] = await releasedModels([organizationId]);
+  if (!modelReleased(released, model.slug)) {
+    throw new TagError(`${model.title} is not released to this organization`, 403, "print_model_not_released", { model: model.title });
+  }
 }
 
 /** A model by uuid or slug. */
@@ -221,7 +259,9 @@ export async function resolveModel(ref: string): Promise<PrintModelRow> {
 
 export async function getModel(ref: string, scope: ProductionScope = null): Promise<PrintModelDetail> {
   const model = await resolveModel(ref);
-  if (scope !== null && model.kind === "part") throw new TagError("No print model with that id or slug", 404, "print_model_not_found");
+  if (scope !== null && (model.kind === "part" || !(await releasedWithin([model], scope)).length)) {
+    throw new TagError("No print model with that id or slug", 404, "print_model_not_found");
+  }
   const [row] = await rows<ModelRow>(sql`${modelSelect(scope)} WHERE m.id = ${model.id}`);
   const versions = (await rows<VersionRow>(sql`${VERSION_SELECT} WHERE v.model_id = ${model.id} ORDER BY v.version DESC`)).map(versionItem);
   const movements = scope !== null ? [] : await db
@@ -263,6 +303,7 @@ export async function createModel(input: PrintModelInput, userId: string | null,
         batchPrefix: input.kind === "serialized" ? input.batchPrefix ?? null : null,
         status: "design_needed",
         sortOrder: input.sortOrder,
+        materials: input.materials ?? [],
         createdByUserId: userId,
       }).returning();
       if (input.version) await writeVersion(tx, model, input.version, fixesBatchId, userId, source);
@@ -289,6 +330,7 @@ export async function updateModel(ref: string, patch: PrintModelPatch): Promise<
     salesProductId: serialized && patch.salesProductId !== undefined ? patch.salesProductId : model.salesProductId,
     batchPrefix: serialized && patch.batchPrefix !== undefined ? patch.batchPrefix : model.batchPrefix,
     sortOrder: patch.sortOrder ?? model.sortOrder,
+    materials: patch.materials ?? model.materials,
     partReorderAt: model.kind === "part" && patch.partReorderAt !== undefined ? patch.partReorderAt : model.partReorderAt,
   };
   if (serialized) {
@@ -1028,6 +1070,7 @@ export async function createJob(input: PrintJobCreateInput, userId: string | nul
     if (owner && inScope(owner.organizationId, scope)) organizationRef = owner.organizationId;
   }
   const organization = await targetOrganization(organizationRef, scope);
+  await assertReleased(organization.id, model, scope);
   // A part's plates feed the company's part counts (bases, tokens): a branch prints serialized pieces only.
   if (model.kind === "part" && !organization.company) {
     if (scope !== null) throw new TagError("No print model with that id or slug", 404, "print_model_not_found");
@@ -1077,7 +1120,8 @@ export async function createJob(input: PrintJobCreateInput, userId: string | nul
  * plate is marked printed). A combination the house does not make is refused, whatever the client sent.
  */
 export async function generatePieces(input: PrintGenerateInput, userId: string | null, source: JourneySource, scope: ProductionScope): Promise<PrintRequestItem> {
-  const choice = pickGenerateFace(printGenerateOptions(await listModels(scope)), input);
+  // The scope's whole catalog: a model not released to the organization is refused by createJob, with its own reason.
+  const choice = pickGenerateFace(printGenerateOptions(await catalogOf(scope)), input);
   if (!choice) {
     throw new TagError(`No ${input.theme} ${input.face} ${input.productType} can be generated: it is not in the catalog with a generator`, 409,
       "print_choice_unavailable");
@@ -1099,6 +1143,7 @@ export async function redoJob(id: string, userId: string | null, scope: Producti
   if (job.status !== "failed" && job.status !== "cancelled") throw new TagError("Only a failed or cancelled order can be printed again", 409, "print_job_state");
   const [model] = await db.select().from(printModels).where(eq(printModels.id, job.modelId)).limit(1);
   if (model.status === "retired") throw new TagError("This model is retired", 409, "print_model_retired");
+  await assertReleased(job.organizationId, model, scope);
   const codes = job.batchId
     ? planRedoCodes({
       errorCode: job.errorCode,

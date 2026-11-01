@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { storage } from "../../storage.js";
 import { salesStorage } from "../../storage-sales.js";
-import { requireXpotUser, isManagerOrAdmin, loadAccessibleLead, type XpotActor, listScope, recordFilters } from "./middleware.js";
+import { requireXpotUser, isPlatformAdmin, loadAccessibleLead, type XpotActor, listScope, recordFilters } from "./middleware.js";
 import { xpotSaleCreateSchema, xpotSalePaymentSchema, xpotSaleCancelSchema } from "#shared/xpot.js";
 import { allocateSaleLineTotals, computeSaleTotals, paymentStatusFor } from "#shared/pricing.js";
 import { syncSaleToXphere } from "./xphere-sync.js";
@@ -61,7 +61,7 @@ export function createSalesRouter() {
     const actor = (req as any).xpotActor as XpotActor;
     const sale = await salesStorage.getSale(Number(req.params.id));
     if (!sale) return res.status(404).json({ code: "sale_not_found", message: "Sale not found" });
-    if (!isManagerOrAdmin(actor) && (!(await canViewOrganizationForActor(actor, sale.sale.organizationId)) ||
+    if (!isPlatformAdmin(actor) && (!(await canViewOrganizationForActor(actor, sale.sale.organizationId)) ||
       (sale.sale.repId !== actor.rep.id && !(await canManageOrganizationForActor(actor, sale.sale.organizationId))))) {
       return res.status(403).json({ code: "access_denied", message: "Access denied" });
     }
@@ -174,7 +174,7 @@ export function createSalesRouter() {
     const actor = (req as any).xpotActor as XpotActor;
     const existing = await salesStorage.getSale(Number(req.params.id));
     if (!existing) return res.status(404).json({ code: "sale_not_found", message: "Sale not found" });
-    if (!isManagerOrAdmin(actor) && (!(await canViewOrganizationForActor(actor, existing.sale.organizationId)) ||
+    if (!isPlatformAdmin(actor) && (!(await canViewOrganizationForActor(actor, existing.sale.organizationId)) ||
       (existing.sale.repId !== actor.rep.id && !(await canManageOrganizationForActor(actor, existing.sale.organizationId))))) {
       return res.status(403).json({ code: "access_denied", message: "Access denied" });
     }
@@ -204,7 +204,7 @@ export function createSalesRouter() {
     const actor = (req as any).xpotActor as XpotActor;
     const existing = await salesStorage.getSale(Number(req.params.id));
     if (!existing) return res.status(404).json({ code: "sale_not_found", message: "Sale not found" });
-    if (!isManagerOrAdmin(actor) && (!(await canViewOrganizationForActor(actor, existing.sale.organizationId)) ||
+    if (!isPlatformAdmin(actor) && (!(await canViewOrganizationForActor(actor, existing.sale.organizationId)) ||
       (existing.sale.repId !== actor.rep.id && !(await canManageOrganizationForActor(actor, existing.sale.organizationId))))) {
       return res.status(403).json({ code: "access_denied", message: "Access denied" });
     }

@@ -30,6 +30,7 @@ import { usePlaceSearch } from "@/pages/xpot/usePlaceSearch";
 import TagScreen from "./TagScreen";
 import { APP_BASE, errorText, shortUrl, tagPath, tagsGet, tagsPost, useBanner, type BannerState } from "./lib";
 import { formatCount } from "./charts";
+import { CustomerAccess } from "./CustomerAccess";
 import { PlacePicker } from "./PlacePicker";
 import {
   Banner, BottomSheet, CARD, EYEBROW_MUTED, LinkInput, ChipMark, PieceStatusPills, ScanCounts, SheetActions, Spinner, TopBar,
@@ -507,6 +508,9 @@ export default function CustomerScreen({ leadId }: { leadId: number }) {
           </Panel>
 
           <GoogleProfile lead={lead} banner={banner} onDone={(text, ok) => show({ tone: ok ? "ok" : "error", text })} />
+
+          {/* The phones that read this customer's plates at /my; nothing while the server has the panel off. */}
+          <CustomerAccess leadId={lead.id} onDone={(text, ok) => show({ tone: ok ? "ok" : "error", text })} />
         </div>
       </div>
 

@@ -97,6 +97,7 @@ describe("People and Organizations refusals carry a translated code", () => {
     "../server/routes/xpot/resellerAccounts.ts",
     "../server/routes/xpot/organizations.ts",
     "../server/organizations/service.ts",
+    "../server/organizations/invite.ts",
     "../server/accountDeletion.ts",
   ].map((f) => join(__dirname, f));
   // new AccountError("…", 4xx, "code") and its OrganizationError / AccountDeletionError siblings.

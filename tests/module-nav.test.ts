@@ -11,14 +11,15 @@ import {
   administrationItems,
   contextOfPath,
   moduleGroups,
-  managementGroups,
-  organizationPanelGroups,
+  panelGroups,
   paletteExtras,
   platformItems,
   repScreenFor,
   visitsAdminSection,
   visitsScreen,
+  type PanelNames,
 } from "../client/src/components/xpot/moduleNav";
+import type { Profile } from "../shared/profiles";
 import { tabs } from "../client/src/pages/xpot/utils";
 
 const labels = { shell: (k: string) => k, tags: (k: string) => k, nav: (k: string) => k } as never;
@@ -26,39 +27,97 @@ const rep = { canManage: false, isAdmin: false };
 const manager = { canManage: true, isAdmin: false };
 const admin = { canManage: true, isAdmin: true };
 const hrefs = (groups: ReturnType<typeof moduleGroups>) => groups.flatMap((g) => g.items.map((i) => i.href));
-const panelNames = { home: "Home", tags: "Operations", visits: "Visits", team: "People", system: "Settings" };
+const panelNames: PanelNames = {
+  today: "Today", platform: "Platform", company: "My company", organization: "Organization", production: "Production",
+  team: "Team", stock: "Stock", kits: "Kits", purchases: "Team purchases", settings: "Settings", tagsOverview: "Tags overview", stuscleOrders: "Stuscle orders",
+};
+const both = ["visits", "tags"] as const;
+const groupsOf = (profile: Profile | null, modules: readonly ("visits" | "tags")[] = both, organizationId: number | null = 7) => panelGroups(profile, modules, labels, panelNames, organizationId);
+const labelsOf = (groups: ReturnType<typeof panelGroups>) => groups.map((g) => g.label);
+const itemHrefs = (groups: ReturnType<typeof panelGroups>, label: string) => groups.find((g) => g.label === label)?.items.map((i) => i.href);
 
-describe("dedicated management navigation", () => {
-  it("keeps personal work screens out of the panel", () => {
-    const groups = managementGroups(["visits", "tags"], admin, labels, panelNames);
-    const paths = hrefs(groups);
-    expect(paths).toContain("/admin/tags/production");
-    expect(paths).toContain("/admin/work/leads");
-    expect(paths).not.toContain("/tags");
-    expect(paths).not.toContain("/dashboard");
-    expect(paths).not.toContain("/settings");
-    expect(groups.find((group) => group.label === "Settings")?.collapsible).toBe(true);
-    expect(new Set(paths).size).toBe(paths.length);
-    expect(groups.flatMap((group) => group.items).filter((item) => item.match("/admin")).map((item) => item.href)).toEqual(["/admin"]);
+describe("one panel per profile", () => {
+  it("gives a member no panel at all", () => {
+    expect(groupsOf("member")).toEqual([]);
+    expect(groupsOf(null)).toEqual([]);
   });
-  it("keeps global tools out of a manager's panel and every panel out of a rep's navigation", () => {
-    const paths = hrefs(managementGroups(["visits", "tags"], manager, labels, panelNames));
-    expect(paths).toContain("/admin/tags/pieces");
-    for (const path of ["/admin/tags/production", "/admin/tags/provisioners", "/admin/integrations", "/admin/branding", "/admin/health"]) expect(paths).not.toContain(path);
-    expect(managementGroups(["visits", "tags"], rep, labels, panelNames)).toEqual([]);
+
+  it("gives an owner Today and the Organization group, with no Production and nothing of the platform", () => {
+    const groups = groupsOf("owner");
+    expect(labelsOf(groups)).toEqual(["", "Organization"]);
+    expect(itemHrefs(groups, "Organization")).toEqual([
+      "/organizations/7?tab=team", "/admin/tags/pieces", "/admin/tags/kits", "/organizations/7?tab=purchases",
+      "/admin/work/leads", "/admin/work/tasks", "/admin/work/sales", "/admin/tags/overview", "/organizations/7?tab=settings",
+    ]);
+    const all = hrefs(groups);
+    for (const href of ["/admin/tags/production", "/admin/tags/provisioners", "/admin/tags/journey", "/admin/tags/shop", "/admin/reps", "/admin/products", "/admin/settings", "/admin/integrations", "/admin/branding", "/admin/health"]) expect(all).not.toContain(href);
+    expect(groups.some((g) => g.adminOnly)).toBe(false);
+    expect(groups.flatMap((g) => g.items).some((i) => i.adminOnly)).toBe(false);
   });
-  it("has one place for people: People and Organizations, no Resellers destination", () => {
-    const groups = managementGroups(["visits", "tags"], admin, labels, panelNames);
-    expect(groups.find((group) => group.label === "People")?.items.map((item) => item.href)).toEqual(["/admin/reps", "/organizations"]);
-    expect(hrefs(groups)).not.toContain("/admin/tags/team");
+
+  it("gives a partner the owner's panel plus a Production group in front of it", () => {
+    const groups = groupsOf("partner");
+    expect(labelsOf(groups)).toEqual(["", "Production", "Organization"]);
+    expect(itemHrefs(groups, "Production")).toEqual(["/admin/tags/production", "/admin/tags/provisioners"]);
+    expect(itemHrefs(groups, "Organization")).toEqual(itemHrefs(groupsOf("owner"), "Organization"));
+    for (const href of ["/admin/reps", "/admin/integrations", "/admin/tags/shop", "/admin/tags/journey"]) expect(hrefs(groups)).not.toContain(href);
   });
-  it("gives organization admins their scoped team tools without global setup", () => {
-    expect(hrefs(organizationPanelGroups(["visits", "tags"], labels))).toEqual(["/organizations", "/admin/work/leads", "/admin/work/tasks", "/admin/work/sales"]);
-    expect(hrefs(organizationPanelGroups(["tags"], labels))).toEqual(["/organizations"]);
+
+  it("gives the platform two groups: Platform, collapsed, and My company", () => {
+    const groups = groupsOf("platform");
+    expect(labelsOf(groups)).toEqual(["", "Platform", "My company"]);
+    expect(itemHrefs(groups, "Platform")).toEqual([
+      "/organizations", "/admin/reps", "/admin/tags/kits?view=orders", "/admin/products", "/admin/tags/shop",
+      "/admin/integrations", "/admin/branding", "/admin/health", "/admin/settings",
+    ]);
+    expect(itemHrefs(groups, "My company")).toEqual([
+      "/admin/tags/production", "/admin/tags/pieces", "/admin/tags/kits", "/admin/tags/overview", "/admin/tags/journey", "/admin/tags/provisioners",
+      "/admin/work/leads", "/admin/work/tasks", "/admin/work/sales", "/admin/overview",
+    ]);
+    const platform = groups.find((g) => g.label === "Platform")!;
+    expect(platform.collapsible).toBe(true);
+    expect(platform.adminOnly).toBe(true);
+    // The group carries the tag, not each item.
+    expect(groups.flatMap((g) => g.items).some((i) => i.adminOnly)).toBe(false);
   });
-  it("adds Production and the bench computers for the Rep Admin of a branch that prints its own pieces", () => {
-    expect(hrefs(organizationPanelGroups(["tags"], labels, true))).toEqual(["/organizations", "/admin/tags/production", "/admin/tags/provisioners"]);
-    expect(hrefs(organizationPanelGroups(["visits"], labels, true))).toEqual(["/organizations", "/admin/work/leads", "/admin/work/tasks", "/admin/work/sales"]);
+
+  it("only the platform has Platform items; the other panels never list them", () => {
+    const platformOnly = ["/organizations", "/admin/reps", "/admin/products", "/admin/integrations", "/admin/branding", "/admin/health", "/admin/settings", "/admin/tags/shop", "/admin/tags/kits?view=orders"];
+    for (const profile of ["owner", "partner"] as const) {
+      for (const href of platformOnly) expect(hrefs(groupsOf(profile, both, 7))).not.toContain(href);
+      // The organizations list is Team's door when there is no single workspace to open; nothing else of the platform's is.
+      for (const href of platformOnly.filter((h) => h !== "/organizations")) expect(hrefs(groupsOf(profile, both, null))).not.toContain(href);
+      expect(labelsOf(groupsOf(profile))).not.toContain("Platform");
+    }
+    // Without the one organization to open, an owner reaches the organizations list as Team, and has no purchases or settings item to duplicate it.
+    expect(itemHrefs(groupsOf("owner", both, null), "Organization")).toEqual(["/organizations", "/admin/tags/pieces", "/admin/tags/kits", "/admin/work/leads", "/admin/work/tasks", "/admin/work/sales", "/admin/tags/overview"]);
+  });
+
+  it("follows the modules: no Visits items without Visits, no Tags items without Tags", () => {
+    expect(itemHrefs(groupsOf("owner", ["tags"]), "Organization")).toEqual(["/organizations/7?tab=team", "/admin/tags/pieces", "/admin/tags/kits", "/organizations/7?tab=purchases", "/admin/tags/overview", "/organizations/7?tab=settings"]);
+    expect(itemHrefs(groupsOf("owner", ["visits"]), "Organization")).toEqual(["/organizations/7?tab=team", "/admin/work/leads", "/admin/work/tasks", "/admin/work/sales", "/organizations/7?tab=settings"]);
+    expect(itemHrefs(groupsOf("partner", ["visits"]), "Production")).toBeUndefined();
+  });
+
+  it("keeps personal work screens out of every panel and lists each destination once", () => {
+    for (const profile of ["platform", "partner", "owner"] as const) {
+      const all = hrefs(groupsOf(profile));
+      for (const href of ["/tags", "/dashboard", "/settings", "/route"]) expect(all).not.toContain(href);
+      expect(new Set(all).size).toBe(all.length);
+      expect(groupsOf(profile)[0].items.map((i) => i.href)).toEqual(["/admin"]);
+    }
+  });
+
+  it("lights one item per screen: Today only on /admin, Production under its batches, Kits apart from the Stuscle orders", () => {
+    const lit = (profile: Profile, path: string) => groupsOf(profile).flatMap((g) => g.items).filter((i) => i.match(path)).map((i) => i.href);
+    expect(lit("owner", "/admin")).toEqual(["/admin"]);
+    expect(lit("partner", "/admin/tags/batches/abc")).toEqual(["/admin/tags/production"]);
+    expect(lit("platform", "/admin/tags/pieces/abc")).toEqual(["/admin/tags/pieces"]);
+    expect(lit("platform", "/admin/xphere")).toEqual(["/admin/integrations"]);
+    expect(lit("platform", "/organizations/4")).toEqual(["/organizations"]);
+    // A person's page under the workspace belongs to Team; the team's tabs are told apart by ?tab= (read from the address bar in the browser).
+    expect(lit("owner", "/organizations/7/people/3")).toEqual(["/organizations/7?tab=team"]);
+    expect(lit("owner", "/admin/work/leads/4")).toEqual(["/admin/work/leads"]);
   });
 });
 

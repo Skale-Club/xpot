@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { bigserial, pgTable, text, serial, integer, timestamp, boolean, jsonb, pgEnum, uniqueIndex, index } from "drizzle-orm/pg-core";
+import { bigserial, pgTable, text, serial, integer, timestamp, boolean, jsonb, pgEnum, uniqueIndex, index, primaryKey } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import { users } from "./auth.js";
 // Note: in the source project there was a FK to a `vcards` table (Skale Club's vCard feature).
@@ -7,6 +7,7 @@ import { users } from "./auth.js";
 
 export const salesRepRoleEnum = pgEnum("sales_rep_role", [
   "rep",
+  // Unused and without any power since migrations/0067: the enum value stays only because Postgres can't drop it.
   "manager",
   "admin",
 ]);
@@ -24,12 +25,28 @@ export const organizations = pgTable("organizations", {
   isActive: boolean("is_active").notNull().default(true),
   // A branch that prints its own pieces (Tags › Production): its Rep Admins print for it; migrations/0065.
   printsOwnPieces: boolean("prints_own_pieces").notNull().default(false),
+  // Who handles this organization's orders: 'xpot' (Stuscle, fulfilled from the company's stock) or 'own' (the partner,
+  // from their own house stock, to the organizations linked to them); migrations/0070, server/tags/distribution.ts.
+  distribution: text("distribution").$type<"xpot" | "own">().notNull().default("xpot"),
+  // The print models (slugs) it may request and print; null = every model, empty = none (migrations/0069).
+  releasedPrintModels: text("released_print_models").array(),
   createdByUserId: text("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
   slugIdx: uniqueIndex("organizations_slug_unique").on(table.slug),
   activeIdx: index("organizations_active_idx").on(table.isActive, table.name),
+}));
+
+/** The selling organizations the platform linked to a partner whose distribution is 'own' (migrations/0070). */
+export const organizationLinks = pgTable("organization_links", {
+  producerId: integer("producer_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  sellerId: integer("seller_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  createdByUserId: text("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.producerId, table.sellerId] }),
+  sellerIdx: index("organization_links_seller_idx").on(table.sellerId),
 }));
 
 export const salesLeadStatusEnum = pgEnum("sales_lead_status", [
@@ -224,6 +241,22 @@ export const salesLeadContacts = pgTable("sales_lead_contacts", {
 }, (table) => ({
   leadIdx: index("sales_lead_contacts_lead_idx").on(table.leadId),
 }));
+
+/**
+ * Phones allowed to read a business's customer panel (/my). Not users and not reps: the panel has its own session.
+ * migrations/0071_customer_accounts.sql.
+ */
+export const leadCustomerContacts = pgTable("lead_customer_contacts", {
+  leadId: integer("lead_id").references(() => salesLeads.id, { onDelete: "cascade" }).notNull(),
+  phone: text("phone").notNull(),
+  verifiedAt: timestamp("verified_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  createdByUserId: text("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.leadId, table.phone] }),
+  phoneIdx: index("lead_customer_contacts_phone_idx").on(table.phone),
+}));
+export type LeadCustomerContact = typeof leadCustomerContacts.$inferSelect;
 
 export const salesVisits = pgTable("sales_visits", {
   id: serial("id").primaryKey(),

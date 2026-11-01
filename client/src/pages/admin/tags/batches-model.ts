@@ -41,6 +41,11 @@ export function canMarkStep(step: StageStep, batchStage: string): boolean {
   return batchStage === "issued" || batchStage === "built" || batchStage === "printed";
 }
 
+/** The batches behind the "Batches awaiting pieces" count (server/tags/repository.ts queues): pieces still pending, not cancelled. */
+export function pendingBatches<B extends { status: string; pendingCount: number }>(batches: readonly B[]): B[] {
+  return batches.filter((batch) => batch.status !== "cancelled" && batch.pendingCount > 0);
+}
+
 // ─── Intake station ───────────────────────────────────────────────────────────
 
 export type ReadStatus = "added" | "duplicate" | "invalid" | "other_batch" | "closed" | "error";

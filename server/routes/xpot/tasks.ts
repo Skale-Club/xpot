@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { inManagementView, isManagerOrAdmin, requireXpotUser, viewsAsRep, type XpotActor } from "./middleware.js";
+import { inManagementView, isPlatformAdmin, requireXpotUser, viewsAsRep, type XpotActor } from "./middleware.js";
 import { createTask, getTask, listTasks, TaskServiceError, updateTask } from "../../tasks/service.js";
 import { xpotTaskCreateSchema, xpotTaskPrioritySchema, xpotTaskStatusSchema, xpotTaskUpdateSchema } from "#shared/xpot.js";
 
@@ -30,7 +30,7 @@ export function createTasksRouter() {
       // manager is off with "X-Xpot-View: rep"; a Rep Admin is on only with
       // "X-Xpot-View: manage", and listTasks keeps their "all" and "?repId=" to
       // the organizations they run.
-      const asRep = isManagerOrAdmin(actor) ? viewsAsRep(req) : !inManagementView(req);
+      const asRep = isPlatformAdmin(actor) ? viewsAsRep(req) : !inManagementView(req);
       const repId = !asRep && typeof req.query.repId === "string" ? Number(req.query.repId) : undefined;
       const leadId = typeof req.query.leadId === "string" ? Number(req.query.leadId) : undefined;
       const priority = typeof req.query.priority === "string" ? xpotTaskPrioritySchema.parse(req.query.priority) : undefined;

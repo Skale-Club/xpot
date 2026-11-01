@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Download, FileUp, History, Layers, PackageCheck, Pencil, Printer } from "lucide-react";
+import { Download, FileUp, History, Layers, PackageCheck, Pencil, Printer, ShoppingBasket } from "lucide-react";
 import { PRINT_PART_REASONS, type PrintBed, type PrintModelDetail, type PrintModelVersionItem } from "@shared/printProduction";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -16,10 +16,12 @@ import { TagPieceVisual } from "@/components/xpot/TagProductThumbnail";
 import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
+import { partnerMaterialsMessages } from "@/i18n/messages/partnerMaterials";
 import { productionMessages } from "@/i18n/messages/production";
 import { ADMIN_TAGS_KEY, STALE_MS, errorMessage, formatDate, getJson, invalidateAdminTags, sendJson } from "./api";
 import { useTagLabels } from "./labels";
 import { Loading, LoadError } from "./pieces-shared";
+import { MaterialsDialog, MaterialsNeeded } from "./production-materials";
 import { PrintDialog, RequestList } from "./production-orders";
 import { PrintPreviewCard } from "./production-preview";
 import { KindPill, ModelStatusPill, PRODUCTION_BASE, bedSummary, formatBytes, uploadFile, useProductionAccess, useThemeOptions } from "./production-shared";
@@ -33,9 +35,11 @@ type Go = (path: string) => void;
 
 export function PrintModelPage({ slug, go }: { slug: string; go: Go }) {
   const t = useT(productionMessages);
+  const pm = useT(partnerMaterialsMessages);
   const labels = useTagLabels();
   const { toast } = useToast();
   const [printing, setPrinting] = useState(false);
+  const [materials, setMaterials] = useState(false);
   const [versioning, setVersioning] = useState(false);
   // A printing branch's Rep Admin prints from here; editing the model and its versions stays the admin's.
   const { isAdmin } = useProductionAccess();
@@ -133,6 +137,16 @@ export function PrintModelPage({ slug, go }: { slug: string; go: Go }) {
             <RequestList filter="all" model={model.slug} go={go} emptyHint={t("ordersEmptyHint")} />
           </section>
 
+          {!part ? (
+            // The platform writes what the model needs; a partner reads it as "What you need".
+            isAdmin ? (
+              <SectionCard title={pm("materialsTitle")} icon={ShoppingBasket} accent="tags" actions={<Button type="button" variant="secondary" size="sm" onClick={() => setMaterials(true)} data-testid="production-materials-edit">{pm("materialsEdit")}</Button>}>
+                <p className="mb-3 text-xs text-white/45">{pm("materialsIntro")}</p>
+                {model.materials.length ? <MaterialsNeeded materials={model.materials} /> : <p className="text-sm text-white/50">{pm("materialsEmpty")}</p>}
+              </SectionCard>
+            ) : <MaterialsNeeded materials={model.materials} />
+          ) : null}
+
           {part ? (
             <SectionCard title={t("partCountTitle")} icon={PackageCheck} accent="tags" actions={<Button type="button" variant="secondary" size="sm" onClick={() => setCounting(true)}>{t("adjustCount")}</Button>}>
               {model.partMovements.length ? (
@@ -173,6 +187,7 @@ export function PrintModelPage({ slug, go }: { slug: string; go: Go }) {
       {printing && <PrintDialog model={model} onClose={() => setPrinting(false)} />}
       {versioning && <VersionDialog model={model} fix={fix} onClose={() => { setVersioning(false); setFix(null); }} />}
       {editing && <EditModelDialog model={model} onClose={() => setEditing(false)} onRetire={() => { setEditing(false); setRetiring(true); }} />}
+      {materials && <MaterialsDialog model={model} onClose={() => setMaterials(false)} />}
       {counting && <CountDialog model={model} onClose={() => setCounting(false)} />}
       <ConfirmDialog
         open={retiring}

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
+import { useSearchParams } from "wouter";
 import { ChevronRight, Plus, Printer, Shapes } from "lucide-react";
 import type { PrintModelItem } from "@shared/printProduction";
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,7 @@ import { ModelStatusPill, PRODUCTION_BASE, bedSummary, usePrintModels, useProduc
 import { BatchDetail } from "./BatchDetail";
 import { ProductionWizard } from "./production-wizard";
 import { ProductionBoard } from "./production-board";
+import { PendingBatches } from "./production-pending-batches";
 import { batchPrefixFromTitle, canPrintModel, productionPath, slugFromTitle } from "./production-workflow";
 import { ProductionIdentity } from "./production-identity";
 
@@ -44,6 +46,7 @@ export function ProductionTab({ rest, go }: { rest: string[]; go: Go }) {
   const { isAdmin } = useProductionAccess();
   // Supplier codes and pieces that already have codes: the wizard's other ways, behind a small link on the board.
   const [external, setExternal] = useState(false);
+  const [params] = useSearchParams();
   const [view, id] = rest;
   const navigate = (path: string) => go(productionPath(path));
   if (view === "models" && id) return <PrintModelPage slug={id} go={navigate} />;
@@ -69,7 +72,7 @@ export function ProductionTab({ rest, go }: { rest: string[]; go: Go }) {
         fill={false}
         accent="tags"
       />
-      {tab === "catalog" ? <CatalogView go={navigate} /> : tab === "queue" ? <QueueView go={navigate} /> : <ProductionBoard go={navigate} onOtherWays={isAdmin ? () => setExternal(true) : undefined} />}
+      {tab === "catalog" ? <CatalogView go={navigate} /> : view === "batches" && params.get("pending") === "1" ? <PendingBatches go={navigate} /> : tab === "queue" ? <QueueView go={navigate} /> : <ProductionBoard go={navigate} onOtherWays={isAdmin ? () => setExternal(true) : undefined} />}
       {external ? <ProductionWizard external onClose={() => setExternal(false)} onCreated={(batchId) => navigate(`/batches/${batchId}?tab=receive`)} /> : null}
     </div>
   );

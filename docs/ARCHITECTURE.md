@@ -138,6 +138,22 @@ server's answer counts:
   `canAccessLead` / `loadAccessibleLead` for Visits, `canWorkOnTag` /
   `canUseLead` in `shared/tagAccess.ts` for Tags.
 
+### Who sees what: four profiles
+
+`shared/profiles.ts` is the one rule, read by the server and the app (`/api/xpot/me` returns `profile`):
+
+| Profile | Who | Reach |
+|---|---|---|
+| `platform` | `users.is_admin`: the platform's owners | Every organization, and their own company's production |
+| `partner` | Owner of an organization with `prints_own_pieces` | That organization, with Production for the models released to it |
+| `owner` | Owner of an organization with a team | That organization, no production |
+| `member` | An employee, or someone selling alone | Their own pieces and customers; buys, never prints |
+
+Management APIs take the reach from `tagScopeOf(req)` (Tags) or `productionScopeOf(req)` (Production); another
+organization's record reads as not found. House stock is per organization. `tests/profiles-matrix.integration.test.ts`
+walks every `/api/xpot/admin` route and fails on one nobody classified. The plate owner's read-only panel (`/my`,
+`server/customer/`) is outside these four and behind `CUSTOMER_PANEL_ENABLED`.
+
 ## 3. The shell
 
 One layout, `client/src/components/xpot/AppLayout.tsx`, frames every signed-in

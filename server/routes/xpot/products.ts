@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { salesStorage } from "../../storage-sales.js";
-import { requireXpotUser, requireXpotManager } from "./middleware.js";
+import { requireXpotUser, requirePlatformAdmin } from "./middleware.js";
 import { xpotProductUpsertSchema, xpotPriceTiersReplaceSchema } from "#shared/xpot.js";
 
 // Catalog of what the team sells: digital services sold on the spot and
@@ -12,7 +12,7 @@ export function createProductsRouter() {
   // GET /products[?all=true] — active catalog with volume tiers attached.
   router.get("/products", requireXpotUser, async (req, res) => {
     const actor = (req as any).xpotActor;
-    const includeInactive = req.query.all === "true" && (actor.user.isAdmin || ["manager", "admin"].includes(actor.rep.role));
+    const includeInactive = req.query.all === "true" && actor.user.isAdmin;
     const products = await salesStorage.listProducts({ includeInactive });
     const tiers = await salesStorage.listTiersBatch(products.map((p) => p.id));
     const tiersByProduct = new Map<number, typeof tiers>();
@@ -32,7 +32,7 @@ export function createProductsRouter() {
     res.json({ productId: id, quantity, unitPriceCents: priced.unitPriceCents, currency: priced.product.currency });
   });
 
-  router.post("/products", requireXpotManager, async (req, res) => {
+  router.post("/products", requirePlatformAdmin, async (req, res) => {
     const input = xpotProductUpsertSchema.parse(req.body);
     const product = await salesStorage.createProduct({
       ...input,
@@ -42,7 +42,7 @@ export function createProductsRouter() {
     res.status(201).json({ ...product, tiers: [] });
   });
 
-  router.patch("/products/:id", requireXpotManager, async (req, res) => {
+  router.patch("/products/:id", requirePlatformAdmin, async (req, res) => {
     const id = Number(req.params.id);
     const input = xpotProductUpsertSchema.partial().parse(req.body);
     const patch = { ...input } as Record<string, unknown>;
@@ -54,14 +54,14 @@ export function createProductsRouter() {
   });
 
   // Soft delete — sales history keeps referencing the row.
-  router.delete("/products/:id", requireXpotManager, async (req, res) => {
+  router.delete("/products/:id", requirePlatformAdmin, async (req, res) => {
     const id = Number(req.params.id);
     const product = await salesStorage.updateProduct(id, { isActive: false });
     if (!product) return res.status(404).json({ message: "Product not found" });
     res.status(204).end();
   });
 
-  router.put("/products/:id/tiers", requireXpotManager, async (req, res) => {
+  router.put("/products/:id/tiers", requirePlatformAdmin, async (req, res) => {
     const id = Number(req.params.id);
     const product = await salesStorage.getProduct(id);
     if (!product) return res.status(404).json({ message: "Product not found" });

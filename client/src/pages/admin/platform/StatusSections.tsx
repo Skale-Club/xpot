@@ -141,7 +141,7 @@ export function SyncProblemsSection({ query }: { query: ReturnType<typeof useSyn
   const queryClient = useQueryClient();
   const [retrying, setRetrying] = useState<number | null>(null);
 
-  // The Dashboard's own retry: an Xpot admin may send any rep's record (sync.ts checks isManagerOrAdmin).
+  // The Dashboard's own retry: an Xpot admin may send any rep's record (sync.ts checks isPlatformAdmin).
   const retry = useMutation({
     mutationFn: async (problem: SyncProblem) => {
       setRetrying(problem.id);

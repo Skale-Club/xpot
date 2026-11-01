@@ -293,6 +293,9 @@ export const tagDirectWrites = pgTable("tag_direct_writes", {
 export const tagAcquisitions = pgTable("tag_acquisitions", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   repId: integer("rep_id").notNull().references(() => salesReps.id),
+  // The buyer's organization when they bought, and whose stock the order was separated from (migrations/0068).
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: "restrict" }),
+  fulfilledFromOrganizationId: integer("fulfilled_from_organization_id").references(() => organizations.id, { onDelete: "restrict" }),
   kitId: uuid("kit_id").references(() => tagKits.id, { onDelete: "set null" }),
   source: text("source").notNull(),
   externalRef: text("external_ref"),
@@ -429,6 +432,8 @@ export const printModels = pgTable("print_models", {
   // Below this count the catalog warns (migrations/0061); null: no alert.
   partReorderAt: integer("part_reorder_at"),
   sortOrder: integer("sort_order").notNull().default(0),
+  // What a partner must buy to print it (shared/printProduction.ts printMaterialSchema; migrations/0069).
+  materials: jsonb("materials").$type<Array<Record<string, unknown>>>().notNull().default(sql`'[]'::jsonb`),
   createdByUserId: text("created_by_user_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

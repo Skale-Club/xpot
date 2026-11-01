@@ -33,7 +33,7 @@ type Member = {
   displayName: string;
   email?: string | null;
   phone?: string | null;
-  platformRole: "rep" | "manager" | "admin";
+  platformRole: "rep" | "admin";
   membershipRole: "admin" | "member";
 };
 

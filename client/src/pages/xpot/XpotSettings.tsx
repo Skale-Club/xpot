@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useLocation, useSearchParams } from "wouter";
 import {
+  Building2,
   Camera,
   ChevronDown,
   ChevronRight,
@@ -18,6 +19,7 @@ import { Field, FIELD_CONTROL, Input } from "@/components/xpot/Field";
 import { FormFooter } from "@/components/xpot/FormFooter";
 import { PageHeader } from "@/components/xpot/PageHeader";
 import { CopyButton } from "@/components/xpot/CopyButton";
+import { Pill } from "@/components/xpot/StatusPill";
 import { useAvatarUpload } from "@/components/xpot/useAvatarUpload";
 import { ACCENT_SELECTED, BRAND_GRADIENT, EYEBROW, GLASS_CLASS, SURFACE_MODAL_CLASS } from "@/components/xpot/surface";
 import { CountryFlag } from "@/components/CountryFlag";
@@ -32,8 +34,12 @@ import { commonMessages } from "@/i18n/messages/common";
 import { settingsMessages } from "@/i18n/messages/settings";
 import { navIaMessages } from "@/i18n/messages/navIa";
 import { workspacesMessages } from "@/i18n/messages/workspaces";
+import { usePanelNames } from "@/components/xpot/panelNames";
 import { tagsMessages } from "@/i18n/messages/tags";
+import { addPersonMessages } from "@/i18n/messages/addPerson";
+import { runsATeam } from "@shared/organizations";
 import type { XpotMeResponse } from "./types";
+import { AddPersonForm } from "./components/AddPersonForm";
 import { AppLayout } from "@/components/xpot/AppLayout";
 import { homeForModules, useXpotModules } from "@/components/ModuleSwitch";
 import { InstallAppHeaderButton, InstallAppRow } from "@/components/xpot/InstallApp";
@@ -59,7 +65,8 @@ const COUNTRIES = [
 ];
 
 // Settings is the person's own: Profile (photo, names, contact phone, the Tags
-// wholesale code), Sign-in (the sign-in phone, read-only; the password only for
+// wholesale code), My organization (where they work and their role there; the
+// owner adds people here, so someone selling alone needs no panel for it), Sign-in (the sign-in phone, read-only; the password only for
 // an email login) and Language. Administration follows only for someone who
 // can manage: the management-mode switch, and with the mode on, their access
 // (role, modules, organizations) and the admin pages.
@@ -67,7 +74,7 @@ const COUNTRIES = [
 // On a phone it is a list like the phone's own settings (the person's card,
 // Install app, then one row per section showing where it stands), each row
 // opening its own screen. On desktop it is one page, top to bottom.
-const SETTINGS_SECTIONS = ["profile", "signin", "language", "administration"] as const;
+const SETTINGS_SECTIONS = ["profile", "organization", "signin", "language", "administration"] as const;
 type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
 
 /** `?tab=` from older links: "memberships" now lives under Administration. */
@@ -210,7 +217,9 @@ export function XpotSettings() {
   const tn = useT(navIaMessages);
   const tw = useT(workspacesMessages);
   const tt = useT(tagsMessages);
+  const tp = useT(addPersonMessages);
   const access = useViewerAccess();
+  const { panelName } = usePanelNames();
   const avatar = useAvatarUpload();
   const [initialized, setInitialized] = useState(false);
   const isDesktop = useIsDesktop();
@@ -344,7 +353,13 @@ export function XpotSettings() {
   const signInPhone = me?.user.phone ? formatPhone(me.user.phone) : null;
   // Administration: someone who can manage sees the management-mode switch; the
   // admin pages and their access details only with the mode on.
-  const canManage = access.hasAdminAccess || access.reach === "organization";
+  const canManage = !!access.reach;
+  // My organization: the one the person works in (a team before their own one-person workspace), and their role in it.
+  const myOrganizations = (me?.organizations ?? [])
+    .map((organization) => ({ organization, membership: me?.organizationMemberships?.find((item) => item.organizationId === organization.id && item.isActive && !item.blockedAt) }))
+    .filter((item) => item.membership);
+  const mine = myOrganizations.find((item) => !item.organization.personal) ?? myOrganizations[0];
+  const isOwner = mine?.membership?.role === "admin";
   // One section's content. On a phone it is the inner screen, whose header
   // already carries the title (`titled` false); on desktop the stacked page.
   const renderSection = (id: SettingsSection, titled: boolean) => {
@@ -413,6 +428,26 @@ export function XpotSettings() {
                 {t("saveProfile")}
               </Button>
             </FormFooter>
+          </Section>
+        );
+
+      case "organization":
+        if (!mine) return null;
+        return (
+          <Section key={id} id={id} title={tp("sectionTitle")} titled={titled}>
+            <div className="flex flex-wrap items-center gap-3" data-testid="settings-organization">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/[0.06] text-white/70"><Building2 className="h-5 w-5" aria-hidden="true" /></span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-white" data-testid="settings-organization-name">{mine.organization.name}</p>
+                <p className="text-xs text-white/45">{tp("yourRole")}</p>
+              </div>
+              <Pill tone="slate" data-testid="settings-organization-role">{tp(isOwner ? "roleOwner" : "roleEmployee")}</Pill>
+            </div>
+            <p className="text-sm leading-relaxed text-white/50">{tp(isOwner ? (mine.organization.personal ? "soloHint" : "ownerHint") : "employeeHint")}</p>
+            {isOwner && <AddPersonForm organizationId={mine.organization.id} hint={false} />}
+            {isOwner && runsATeam(me?.organizations) && (
+              <Button asChild variant="secondary"><Link href={`/organizations/${mine.organization.id}?tab=team`} data-testid="settings-open-team"><Building2 className="h-4 w-4" />{tp("openTeam")}</Link></Button>
+            )}
           </Section>
         );
 
@@ -487,18 +522,19 @@ export function XpotSettings() {
 
       case "administration":
         if (!canManage) return null;
-        return <Section key={id} id={id} title={tw(me?.user.isAdmin ? "superAdmin" : "management")} titled={titled}>
-          <p className="text-sm leading-relaxed text-white/50">{tw(me?.user.isAdmin ? "panelHint" : "teamHint")}</p>
-          <Button asChild variant="secondary"><Link href={access.hasAdminAccess ? "/admin" : "/organizations"} data-testid="settings-open-panel"><Shield className="h-4 w-4" />{tw("openPanel")}</Link></Button>
+        return <Section key={id} id={id} title={panelName(access.profile)} titled={titled}>
+          <p className="text-sm leading-relaxed text-white/50">{tw(access.profile === "platform" ? "platformHint" : access.profile === "partner" ? "productionHint" : "teamHint")}</p>
+          <Button asChild variant="secondary"><Link href="/admin" data-testid="settings-open-panel"><Shield className="h-4 w-4" />{tw("openPanel")}</Link></Button>
         </Section>;
     }
   };
 
   const sectionTitle: Record<SettingsSection, string> = {
     profile: t("sectionProfile"),
+    organization: tp("sectionTitle"),
     signin: tn("tabSignIn"),
     language: tc("language"),
-    administration: tw(me?.user.isAdmin ? "superAdmin" : "management"),
+    administration: panelName(access.profile),
   };
 
   // Desktop: the whole page, top to bottom.
@@ -530,6 +566,7 @@ export function XpotSettings() {
 
   // Phone: the list, like a phone's own settings. Each row says where it stands.
   const rows: Array<{ id: SettingsSection; icon: typeof Languages; value?: string }> = [
+    ...(mine ? [{ id: "organization" as const, icon: Building2, value: mine.organization.name }] : []),
     { id: "signin", icon: KeyRound, value: signInPhone ?? undefined },
     { id: "language", icon: Languages, value: LANG_LABELS[lang] },
     ...(canManage ? [{ id: "administration" as const, icon: Shield, value: tw("openPanel") }] : []),

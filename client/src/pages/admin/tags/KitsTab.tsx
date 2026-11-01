@@ -12,6 +12,7 @@ import { Pill } from "@/components/xpot/StatusPill";
 import { GLASS_CLASS } from "@/components/xpot/surface";
 import { formatMoney } from "@/lib/format";
 import { ADMIN_TAGS_KEY, STALE_MS, errorMessage, getJson, invalidateAdminTags, sendJson, withQuery } from "./api";
+import { useIsSuperAdmin } from "@/components/xpot/AdminBadge";
 import { hasTagsModule, useResellers } from "./batches-shared";
 import { Loading, LoadError, organizationFilterOptions, useOrganizations } from "./pieces-shared";
 import { useViewerAccess } from "@/lib/adminMode";
@@ -243,7 +244,10 @@ function PastHandOuts({ go, wantOpen }: { go: (path: string) => void; wantOpen: 
 export function KitsTab({ go }: { go: (path: string) => void }) {
   const t = useT(adminTagsFlowMessages);
   const url = useUrlFilters({ view: "handout", kitRep: "", org: "" });
-  const view = distributionView(url.values.view);
+  // Separating Stuscle orders is the platform's: an owner follows their team's in Team purchases.
+  const isAdmin = useIsSuperAdmin();
+  const requestedView = distributionView(url.values.view);
+  const view = requestedView === "orders" && !isAdmin ? "handout" : requestedView;
   const historyWanted = pastHandOutsOpen(url.values.view, url.values.kitRep, url.values.org);
   const orders = useAcquisitions();
   const pendingOrders = pendingOf(orders.data).length;
@@ -255,7 +259,7 @@ export function KitsTab({ go }: { go: (path: string) => void }) {
         <p className="text-sm text-white/50">{t("distributionIntro")}</p>
       </div>
       <Segmented<DistributionView>
-        items={(Object.keys(VIEW_LABELS) as DistributionView[]).map((id) => ({ id, label: t(VIEW_LABELS[id]), count: id === "orders" ? pendingOrders : undefined }))}
+        items={(Object.keys(VIEW_LABELS) as DistributionView[]).filter((id) => id !== "orders" || isAdmin).map((id) => ({ id, label: t(VIEW_LABELS[id]), count: id === "orders" ? pendingOrders : undefined }))}
         value={view}
         onChange={(next) => url.set({ view: next, ...(next !== "handout" ? { batch: null } : {}) } as never)}
         accent="tags"
@@ -268,7 +272,7 @@ export function KitsTab({ go }: { go: (path: string) => void }) {
           <PastHandOuts go={go} wantOpen={historyWanted} />
         </>
       )}
-      {view === "orders" && <AcquisitionInbox />}
+      {view === "orders" && isAdmin && <AcquisitionInbox />}
       {view === "returns" && <ReturnsStation />}
     </div>
   );

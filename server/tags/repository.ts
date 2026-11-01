@@ -68,6 +68,16 @@ export const iso = (value: Date | string | null | undefined): string | null =>
 /** A real interaction: a redirect that was not a bot. */
 export const COUNTABLE = sql`e.event_type = 'redirect' AND NOT e.is_bot`;
 
+/** Whose records a query covers: null = every organization, otherwise these only (server/tags/access.ts TagScope). */
+export type OrganizationScope = readonly number[] | null;
+
+/** `<column> IN (...)` for a scope: true for every organization, false for none. */
+export function inOrganizations(column: SQL, scope: OrganizationScope): SQL {
+  if (scope === null) return sql`true`;
+  if (!scope.length) return sql`false`;
+  return sql`${column} IN (${sql.join(scope.map((id) => sql`${id}`), sql`, `)})`;
+}
+
 // ─── Public lookups ───────────────────────────────────────────────────────────
 
 export async function findPublicTagByCode(code: string): Promise<PublicTag | null> {
@@ -641,10 +651,12 @@ export async function setTagRep(
   source: JourneySource = "admin",
   /** Stored on the stock movement (a system reason code, tagSystemReason). */
   reason: string | null = null,
+  /** Whose house stock a piece comes back to (an organization's owner takes it into theirs); default: the company's. */
+  houseOrganizationId?: number,
 ): Promise<Tag> {
   let previous: { repId: number | null; name: string } = { repId: null, name: "house" };
   let next = "house";
-  const organizationId = repId === null ? await companyOrganizationId() : await organizationIdForRep(repId);
+  const organizationId = repId === null ? houseOrganizationId ?? await companyOrganizationId() : await organizationIdForRep(repId);
   const updated = await db.transaction(async (tx) => {
     const tag = await lockTag(tx, id);
     if (tag.repId === repId) return null;
@@ -893,6 +905,7 @@ export async function deliverKit(input: KitInput, userId: string | null, source:
 
     if (input.unitCostCents !== undefined) {
       const [acquisition] = await tx.insert(tagAcquisitions).values({
+        organizationId,
         repId: input.repId,
         kitId: kit.id,
         source: "manual",
@@ -948,10 +961,11 @@ export async function deliverKit(input: KitInput, userId: string | null, source:
   return kit;
 }
 
-export async function listKits(filter: { repId?: number; kitId?: string; organizationId?: number } = {}): Promise<TagKitItem[]> {
+export async function listKits(filter: { repId?: number; kitId?: string; organizationId?: number; scope?: OrganizationScope } = {}): Promise<TagKitItem[]> {
   const conds: SQL[] = [sql`true`];
   if (filter.repId !== undefined) conds.push(sql`k.rep_id = ${filter.repId}`);
   if (filter.organizationId !== undefined) conds.push(sql`k.organization_id = ${filter.organizationId}`);
+  if (filter.scope !== undefined) conds.push(inOrganizations(sql`k.organization_id`, filter.scope));
   if (filter.kitId) conds.push(sql`k.id = ${filter.kitId}`);
   const list = await rows<{
     id: string; kit_number: number; rep_id: number; rep_name: string | null; note: string | null; created_at: Date; piece_count: number;
@@ -1021,9 +1035,9 @@ export async function listKits(filter: { repId?: number; kitId?: string; organiz
 }
 
 /** What a kit handed out (its packing list), each piece with where it is now. */
-export async function getKitItems(kitId: string): Promise<TagKitPiece[] | null> {
-  const [kit] = await db.select({ id: tagKits.id, repId: tagKits.repId }).from(tagKits).where(eq(tagKits.id, kitId)).limit(1);
-  if (!kit) return null;
+export async function getKitItems(kitId: string, scope: OrganizationScope = null): Promise<TagKitPiece[] | null> {
+  const [kit] = await db.select({ id: tagKits.id, repId: tagKits.repId, organizationId: tagKits.organizationId }).from(tagKits).where(eq(tagKits.id, kitId)).limit(1);
+  if (!kit || (scope !== null && !scope.includes(kit.organizationId))) return null;
   const list = await rows<{
     public_code: string; tag_id: string | null; serial_number: number | null; batch_code: string | null; product_type: string | null;
     face: string | null; batch_face: string | null; handed_out_at: Date; left_at: Date | null; left_reason: string | null; sold: boolean;
@@ -1087,25 +1101,39 @@ const describeCheck = (_code: string, r: CheckRow | undefined) => ({
  * Hand out, dry run: per code, can it go into a kit now and why not. With a batch and a quantity instead, the next
  * pieces "next N from batch" would take, in the same order deliverKit picks them. Nothing moves.
  */
-export async function checkHandOut(input: { codes?: string[]; batchId?: string; quantity?: number }): Promise<DistributionCheck> {
+export async function checkHandOut(
+  input: { codes?: string[]; batchId?: string; quantity?: number },
+  /** Whose house stock it comes from; another organization's house pieces read as unknown. */
+  source: OrganizationScope = null,
+  /** The platform sees where any piece is, so a piece with someone is refused by name rather than as unknown. */
+  seesHeldPieces = false,
+): Promise<DistributionCheck> {
+  const inSource = inOrganizations(sql`t.organization_id`, source);
   if (input.batchId && input.quantity) {
-    const picked = await piecesForCheck(sql`t.batch_id = ${input.batchId} AND ${stockMetricSql("handOut")}`, input.quantity);
+    const picked = await piecesForCheck(sql`t.batch_id = ${input.batchId} AND ${stockMetricSql("handOut")} AND ${inSource}`, input.quantity);
     return checkCodes(picked.map((r) => r.public_code), new Map(picked.map((r) => [r.public_code, r])), (r) => handOutBlocker(checkPiece(r)), describeCheck);
   }
   const codes = input.codes ?? [];
-  const found = codes.length ? await piecesForCheck(sql`t.public_code IN ${sqlList(Array.from(new Set(codes)))}`) : [];
+  const visible = seesHeldPieces ? sql`(${inSource} OR t.rep_id IS NOT NULL)` : inSource;
+  const found = codes.length ? await piecesForCheck(sql`t.public_code IN ${sqlList(Array.from(new Set(codes)))} AND ${visible}`) : [];
   return checkCodes(codes, new Map(found.map((r) => [r.public_code, r])), (r) => handOutBlocker(checkPiece(r)), describeCheck);
 }
 
 /** Take back, dry run: per code, can it come back to house stock now and why not. Nothing moves. */
-export async function checkTakeBack(codes: string[]): Promise<DistributionCheck> {
-  const found = codes.length ? await piecesForCheck(sql`t.public_code IN ${sqlList(Array.from(new Set(codes)))}`) : [];
+export async function checkTakeBack(codes: string[], scope: OrganizationScope = null): Promise<DistributionCheck> {
+  const found = codes.length ? await piecesForCheck(sql`t.public_code IN ${sqlList(Array.from(new Set(codes)))} AND ${inOrganizations(sql`t.organization_id`, scope)}`) : [];
   return checkCodes(codes, new Map(found.map((r) => [r.public_code, r])), (r) => takeBackBlocker(checkPiece(r)), describeCheck);
 }
 
 /** `(a, b, c)` for an IN list (never empty: callers check). */
 function sqlList(values: readonly string[]): SQL {
   return sql`(${sql.join(values.map((v) => sql`${v}`), sql`, `)})`;
+}
+
+/** The organization holding a piece, by printed code. */
+export async function getOrganizationOfCode(code: string): Promise<number | null> {
+  const [tag] = await db.select({ organizationId: tags.organizationId }).from(tags).where(eq(tags.publicCode, code)).limit(1);
+  return tag?.organizationId ?? null;
 }
 
 /** Admin: unsold pieces back from a reseller to house stock (kit returned, reseller left). */
@@ -1118,7 +1146,12 @@ export async function returnToHouse(
   codes: string[],
   userId: string | null,
   source: JourneySource = "admin",
+  /** Whose pieces may come back: another organization's codes read as unknown. */
+  scope: OrganizationScope = null,
+  /** Whose house stock they come back to; the owner of an organization takes them into its stock. Default: the company's. */
+  houseOrganizationId?: number,
 ): Promise<{ returned: number; alreadyInHouse: string[] }> {
+  const organizationId = houseOrganizationId ?? await companyOrganizationId();
   let moved: Array<{
     id: string; publicCode: string; repId: number | null; kitId: string | null; stockStatus: string;
     ownershipType: string; custodianRepId: number | null;
@@ -1130,7 +1163,7 @@ export async function returnToHouse(
         ownershipType: tags.ownershipType, custodianRepId: tags.custodianRepId, repId: tags.repId, kitId: tags.kitId,
       })
       .from(tags)
-      .where(inArray(tags.publicCode, codes))
+      .where(scope === null ? inArray(tags.publicCode, codes) : and(inArray(tags.publicCode, codes), inArray(tags.organizationId, [...scope])))
       .for("update");
     const found = new Set(picked.map((t) => t.publicCode));
     const missing = codes.filter((c) => !found.has(c));
@@ -1155,6 +1188,7 @@ export async function returnToHouse(
       await tx
         .update(tags)
         .set({
+          organizationId,
           repId: null,
           kitId: null,
           custodianRepId: null,
@@ -1852,8 +1886,8 @@ const BATCH_SELECT = sql`
     b.status, b.code_source, b.print_job_id, b.notes, b.created_at, b.created_by_user_id, b.updated_at,
     count(t.id)::int AS tag_count,
     ${countMetricSql("notReceived")} AS pending_count,
-    ${countMetricSql("house")} AS house_count,
-    ${countMetricSql("handOut")} AS hand_out_count,
+    count(t.id) FILTER (WHERE ${stockMetricSql("house")} AND t.organization_id = b.organization_id)::int AS house_count,
+    count(t.id) FILTER (WHERE ${stockMetricSql("handOut")} AND t.organization_id = b.organization_id)::int AS hand_out_count,
     ${countMetricSql("withResellers")} AS with_resellers_count,
     ${countMetricSql("sold")} AS sold_count,
     ${countMetricSql("damaged")} AS damaged_count,
@@ -1906,15 +1940,37 @@ export async function listBatches(organizationIds: readonly number[] | null = nu
 }
 
 /** What managers need to pick a batch (Give a kit, the Pieces filter): no vendor, notes or production details. */
-export async function listBatchOptions(): Promise<TagBatchOption[]> {
-  return (await listBatches()).map((b) => ({
+export async function listBatchOptions(scope: OrganizationScope = null): Promise<TagBatchOption[]> {
+  if (scope === null) {
+    return (await listBatches()).map((b) => ({
+      id: b.id,
+      batchCode: b.batchCode,
+      name: b.name,
+      productType: b.productType,
+      face: b.face,
+      houseCount: b.houseCount,
+      handOutCount: b.handOutCount,
+    }));
+  }
+  // An organization's owner picks from what it holds, whoever made the batch: counts of its own pieces only.
+  const inScope = inOrganizations(sql`t.organization_id`, scope);
+  const list = await rows<{ id: string; batch_code: string; name: string; product_type: string; face: string | null; house_count: number; hand_out_count: number }>(sql`
+    SELECT b.id, b.batch_code, b.name, b.product_type, b.face,
+      ${countMetricSql("house")} AS house_count,
+      ${countMetricSql("handOut")} AS hand_out_count
+    FROM tag_batches b
+    JOIN tags t ON t.batch_id = b.id AND ${inScope}
+    GROUP BY b.id
+    ORDER BY b.created_at DESC
+  `);
+  return list.map((b) => ({
     id: b.id,
-    batchCode: b.batchCode,
+    batchCode: b.batch_code,
     name: b.name,
-    productType: b.productType,
-    face: b.face,
-    houseCount: b.houseCount,
-    handOutCount: b.handOutCount,
+    productType: b.product_type,
+    face: resolveTagFace({ batchFace: b.face, productType: b.product_type }),
+    houseCount: Number(b.house_count),
+    handOutCount: Number(b.hand_out_count),
   }));
 }
 
@@ -1969,6 +2025,8 @@ export interface AnalyticsScope {
   productType?: string;
   /** Pieces this reseller held when scanned (a reseller only ever sees their own). */
   repId?: number;
+  /** Pieces of these organizations only. */
+  organizations?: OrganizationScope;
 }
 
 function scopeSql(scope: AnalyticsScope): SQL {
@@ -1979,6 +2037,7 @@ function scopeSql(scope: AnalyticsScope): SQL {
   if (scope.repId !== undefined) conds.push(sql`e.rep_id = ${scope.repId}`);
   if (scope.batchId) conds.push(sql`t.batch_id = ${scope.batchId}`);
   if (scope.productType) conds.push(sql`t.product_type = ${scope.productType}`);
+  if (scope.organizations !== undefined) conds.push(inOrganizations(sql`t.organization_id`, scope.organizations));
   return sql.join(conds, sql` AND `);
 }
 
@@ -2064,7 +2123,10 @@ export async function getAnalytics(scope: AnalyticsScope, from: Date, to: Date):
   };
 }
 
-export async function getOverview(now: Date = new Date(), timezoneOffsetMinutes = 0): Promise<TagOverview> {
+export async function getOverview(now: Date = new Date(), timezoneOffsetMinutes = 0, scope: OrganizationScope = null): Promise<TagOverview> {
+  const inScope = inOrganizations(sql`t.organization_id`, scope);
+  // House stock never adds up across organizations: with every organization in view it means the company's.
+  const inHouseScope = inOrganizations(sql`t.organization_id`, scope ?? [await companyOrganizationId()]);
   // Browser Date#getTimezoneOffset is minutes from local time to UTC. Shift to
   // the user's wall clock, take midnight, then shift back to the real instant.
   const localNow = new Date(now.getTime() - timezoneOffsetMinutes * 60_000);
@@ -2075,14 +2137,14 @@ export async function getOverview(now: Date = new Date(), timezoneOffsetMinutes 
   // Digital statuses count by tags.status alone, so each card matches its
   // `?status=` list; damaged is the physical stock status (`?stock=damaged`).
   const statusRows = await rows<{ status: string; count: number }>(sql`
-    SELECT status, count(*)::int AS count FROM tags GROUP BY status
+    SELECT t.status, count(*)::int AS count FROM tags t WHERE ${inScope} GROUP BY t.status
   `);
   // The stock numbers every Tags screen shares (shared/tagMetrics.ts).
   const [stockRow] = await rows<{
     house: number; with_resellers: number; damaged: number; not_received: number; sold: number; live: number;
     chip_pending: number; scanned_not_live: number; no_product: number;
   }>(sql`
-    SELECT ${countMetricSql("house")} AS house,
+    SELECT count(t.id) FILTER (WHERE ${stockMetricSql("house")} AND ${inHouseScope})::int AS house,
            ${countMetricSql("withResellers")} AS with_resellers,
            ${countMetricSql("damaged")} AS damaged,
            ${countMetricSql("notReceived")} AS not_received,
@@ -2092,12 +2154,13 @@ export async function getOverview(now: Date = new Date(), timezoneOffsetMinutes 
            ${countQueueSql("scannedNotLive", now)} AS scanned_not_live,
            ${countQueueSql("noProduct", now)} AS no_product
     FROM tags t
+    WHERE ${inScope}
   `);
   // The other two queues are not pieces: paid Stuscle orders waiting for their pieces, and batches still receiving.
   const [queueRow] = await rows<{ stuscle_orders: number; batches_not_received: number }>(sql`
-    SELECT (SELECT count(*)::int FROM tag_acquisitions a WHERE a.status = 'pending') AS stuscle_orders,
+    SELECT (SELECT count(*)::int FROM tag_acquisitions a WHERE a.status = 'pending' AND ${inOrganizations(sql`a.organization_id`, scope)}) AS stuscle_orders,
            (SELECT count(DISTINCT b.id)::int FROM tag_batches b JOIN tags t ON t.batch_id = b.id
-             WHERE b.status <> 'cancelled' AND ${stockMetricSql("notReceived")}) AS batches_not_received
+             WHERE b.status <> 'cancelled' AND ${stockMetricSql("notReceived")} AND ${inOrganizations(sql`b.organization_id`, scope)}) AS batches_not_received
   `);
   const counts: TagOverview["counts"] = { total: 0, inventory: 0, assigned: 0, active: 0, disabled: 0, retired: 0, damaged: Number(stockRow?.damaged ?? 0) };
   const stock = { house: Number(stockRow?.house ?? 0), withResellers: Number(stockRow?.with_resellers ?? 0) };
@@ -2129,7 +2192,8 @@ export async function getOverview(now: Date = new Date(), timezoneOffsetMinutes 
       count(*) FILTER (WHERE e.access_method = 'nfc')::int AS nfc30,
       count(DISTINCT (e.tag_id, e.visitor_day_key))::int AS unique30
     FROM tag_events e
-    WHERE e.occurred_at >= ${since30} AND ${COUNTABLE}
+    JOIN tags t ON t.id = e.tag_id
+    WHERE e.occurred_at >= ${since30} AND ${COUNTABLE} AND ${inScope}
   `);
 
   const recentEvents = await rows<{
@@ -2142,7 +2206,7 @@ export async function getOverview(now: Date = new Date(), timezoneOffsetMinutes 
     JOIN tags t ON t.id = e.tag_id
     LEFT JOIN tag_batches b ON b.id = t.batch_id
     LEFT JOIN sales_leads l ON l.id = e.lead_id
-    WHERE NOT e.is_bot
+    WHERE NOT e.is_bot AND ${inScope}
     ORDER BY e.occurred_at DESC
     LIMIT 15
   `);
@@ -2156,7 +2220,7 @@ export async function getOverview(now: Date = new Date(), timezoneOffsetMinutes 
     LEFT JOIN tag_batches b ON b.id = t.batch_id
     LEFT JOIN sales_leads l ON l.id = t.lead_id
     LEFT JOIN sales_reps r ON r.id = t.rep_id
-    WHERE t.status = 'active' AND t.activated_at IS NOT NULL
+    WHERE t.status = 'active' AND t.activated_at IS NOT NULL AND ${inScope}
     ORDER BY t.activated_at DESC
     LIMIT 5
   `);
@@ -2186,7 +2250,7 @@ export async function getOverview(now: Date = new Date(), timezoneOffsetMinutes 
       id: a.id, publicCode: a.public_code, productType: a.product_type, face: faceOf(a), batchCode: a.batch_code,
       leadName: a.lead_name, repName: a.rep_name, activatedAt: iso(a.activated_at)!,
     })),
-    recentChanges: await historyFor(sql`true`, 10),
+    recentChanges: await historyFor(inScope, 10),
   };
 }
 

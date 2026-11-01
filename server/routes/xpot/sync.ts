@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { storage } from "../../storage.js";
-import { requireXpotUser, ensureXpotRep, isManagerOrAdmin, listsEveryone } from "./middleware.js";
+import { requireXpotUser, ensureXpotRep, isPlatformAdmin, listsEveryone } from "./middleware.js";
 import { syncLeadToGhl, syncLeadToXphere, syncOpportunityToGhl, syncTaskToGhl, syncVisitToGhl } from "./helpers.js";
 import { syncSaleToXphere, syncTaskToXphere } from "./xphere-sync.js";
 import { salesStorage } from "../../storage-sales.js";
@@ -87,7 +87,7 @@ export function createSyncRouter() {
     switch (entityType) {
       case "sales_visit": {
         const visit = await storage.getSalesVisit(Number(entityId));
-        if (!visit || (!isManagerOrAdmin(actor!) && visit.repId !== actor!.rep.id)) {
+        if (!visit || (!isPlatformAdmin(actor!) && visit.repId !== actor!.rep.id)) {
           return res.status(403).json({ message: "Access denied" });
         }
         const result = await syncVisitToGhl(Number(entityId));
@@ -95,7 +95,7 @@ export function createSyncRouter() {
       }
       case "sales_lead": {
         const lead = await storage.getSalesLead(Number(entityId));
-        if (!lead || (!isManagerOrAdmin(actor!) && lead.ownerRepId !== actor!.rep.id)) {
+        if (!lead || (!isPlatformAdmin(actor!) && lead.ownerRepId !== actor!.rep.id)) {
           return res.status(403).json({ message: "Access denied" });
         }
         // A lead goes to Xphere when it is created and to GHL on a flush, and a
@@ -109,7 +109,7 @@ export function createSyncRouter() {
         // Sales reach the CRM through the Xphere mirror; a failure lands in
         // sales_sync_events like any other and the dashboard offers a retry.
         const sale = await salesStorage.getSale(Number(entityId));
-        if (!sale || (!isManagerOrAdmin(actor!) && sale.sale.repId !== actor!.rep.id)) {
+        if (!sale || (!isPlatformAdmin(actor!) && sale.sale.repId !== actor!.rep.id)) {
           return res.status(403).json({ message: "Access denied" });
         }
         const result = await syncSaleToXphere(Number(entityId));
@@ -117,7 +117,7 @@ export function createSyncRouter() {
       }
       case "sales_task": {
         const task = await storage.getSalesTask(Number(entityId));
-        if (!task || (!isManagerOrAdmin(actor!) && task.repId !== actor!.rep.id)) {
+        if (!task || (!isPlatformAdmin(actor!) && task.repId !== actor!.rep.id)) {
           return res.status(403).json({ message: "Access denied" });
         }
         const [ghl, xphere] = await Promise.all([syncTaskToGhl(task.id), syncTaskToXphere(task.id)]);
@@ -126,7 +126,7 @@ export function createSyncRouter() {
       case "sales_opportunity": {
         // Opportunities only go to GoHighLevel (legacy); Xphere has no opportunity push.
         const opportunity = await storage.getSalesOpportunity(Number(entityId));
-        if (!opportunity || (!isManagerOrAdmin(actor!) && opportunity.repId !== actor!.rep.id)) {
+        if (!opportunity || (!isPlatformAdmin(actor!) && opportunity.repId !== actor!.rep.id)) {
           return res.status(403).json({ message: "Access denied" });
         }
         // An opportunity needs its company in GHL first; send that too when it is missing.

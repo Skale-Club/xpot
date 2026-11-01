@@ -1,3 +1,4 @@
+import { profileOf } from "#shared/profiles.js";
 import { Router } from "express";
 import { z } from "zod";
 import { createClient } from "@supabase/supabase-js";
@@ -36,6 +37,8 @@ export function createAuthRouter() {
         // The sign-in phone (users.phone) is not the profile's contact phone (rep.phone); Settings shows both.
         user: { ...actor!.user, phone: account?.phone ?? null },
         rep: actor!.rep,
+        // Which of the four panels this person gets (shared/profiles.ts).
+        profile: profileOf({ user: actor!.user, organizations }),
         organizations,
         organizationMemberships,
         activeVisit: enrichedVisit,

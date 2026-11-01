@@ -146,7 +146,6 @@ const en = {
   // Team
   whatTeamReport: "the reseller performance",
   role_admin: "Xpot admin",
-  role_manager: "Manager",
   teamPiecesSoldHint: "Sale counted in this period",
   teamActivationsHint: "Pieces put live in this period",
   teamScansTaps: "Scans (QR + NFC)",
@@ -450,7 +449,6 @@ export const manageTagsMessages: Dictionary<typeof en> = {
 
     whatTeamReport: "o desempenho por revendedor",
     role_admin: "Admin do Xpot",
-    role_manager: "Gerente",
     teamPiecesSoldHint: "Venda contada neste período",
     teamActivationsHint: "Peças colocadas no ar neste período",
     teamScansTaps: "Leituras (QR + NFC)",
@@ -746,7 +744,6 @@ export const manageTagsMessages: Dictionary<typeof en> = {
 
     whatTeamReport: "el rendimiento por revendedor",
     role_admin: "Admin de Xpot",
-    role_manager: "Gerente",
     teamPiecesSoldHint: "Venta contada en este período",
     teamActivationsHint: "Piezas activadas en este período",
     teamScansTaps: "Lecturas (QR + NFC)",

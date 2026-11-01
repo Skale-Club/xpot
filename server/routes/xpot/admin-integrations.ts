@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { storage } from "../../storage.js";
-import { requireSuperAdmin, requireXpotManager } from "./middleware.js";
+import { requireSuperAdmin, requirePlatformAdmin } from "./middleware.js";
 import {
   INTEGRATION_PROVIDERS,
   getProviderDef,
@@ -39,7 +39,7 @@ export function createAdminIntegrationsRouter() {
   const router = Router();
   // Only the /admin paths: this router is mounted at /api/xpot, so a bare router.use would guard
   // every route mounted after it (sales, consignments, products...) and lock plain reps out.
-  router.use("/admin", requireXpotManager);
+  router.use("/admin", requirePlatformAdmin);
   // Credentials for every provider: the global admin only.
   router.use("/admin/integrations", requireSuperAdmin);
 

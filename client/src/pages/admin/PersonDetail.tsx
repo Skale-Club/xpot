@@ -81,8 +81,8 @@ export type Rep = {
 
 export const REPS_KEY = ["/api/xpot/admin/reps"];
 export const MODULE_KEYS = { visits: "moduleVisits", tags: "moduleTags" } as const satisfies Record<XpotModule, keyof typeof commonMessages.en>;
-export const ROLES = ["rep", "manager", "admin"] as const;
-export const ROLE_KEYS = { rep: "role_rep", manager: "role_manager", admin: "role_admin" } as const satisfies Record<(typeof ROLES)[number], keyof typeof settingsMessages.en>;
+export const ROLES = ["rep", "admin"] as const;
+export const ROLE_KEYS = { rep: "role_rep", admin: "role_admin" } as const satisfies Record<(typeof ROLES)[number], keyof typeof settingsMessages.en>;
 export const STATUS_TONE: Record<PeopleStatus, PillTone> = { pending: "amber", active: "green", blocked: "red", refused: "slate" };
 const SYNC_STATUS_TONE: Record<string, PillTone> = { synced: "green", pending: "slate", needs_review: "amber", failed: "red" };
 const SYNC_STATUS_KEYS: Record<string, ManageKey> = {
@@ -224,12 +224,12 @@ export function PersonDetail({ rep, onClose, onGone }: { rep: Rep; onClose?: () 
       {modules.includes("tags") && (
         <Section title={tw("sectionTags")} icon={Tag} testId="person-tags">
           <TagsTerms key={rep.id} rep={rep} />
-          {/* What the Resellers screen used to show for them (a manager's report); a sign-up has no sales yet. */}
+          {/* What the Resellers screen used to show for them (the Tags report); a sign-up has no sales yet. */}
           {status !== "pending" && <div className="mt-4 border-t border-white/[0.06] pt-4"><PersonTagsSales key={rep.id} rep={rep} /></div>}
         </Section>
       )}
 
-      {/* Xphere is set by the global admin only (the API answers 403 to managers). */}
+      {/* Xphere is set by the platform only. */}
       {isSuperAdmin && modules.includes("visits") && rep.userId && (
         <Section title={tw("sectionVisits")} icon={Webhook} testId="person-xphere">
           <XphereConnection key={rep.id} rep={rep} userId={rep.userId} />
@@ -369,7 +369,7 @@ function ActiveAccess({ rep }: { rep: Rep }) {
   // Blocking yourself would lock you out of the admin you are using.
   const { data: me } = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
   const isSelf = !!me && rep.id === me.rep.id;
-  // A manager may only act on reps (the server answers 403 for managers and admins).
+  // Only the platform acts on platform users; anyone else on reps (the server answers 403).
   const mayManage = isSuperAdmin || rep.role === "rep";
   return (
     <div className="space-y-4">
@@ -549,11 +549,11 @@ function RoleEditor({ rep }: { rep: Rep }) {
   const [confirmAdmin, setConfirmAdmin] = useState(false);
   const { data: me } = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
   const isSelf = !!me && rep.id === me.rep.id;
-  // A manager may only act on reps (the server answers 403 for managers and admins).
+  // Only the platform acts on platform users; anyone else on reps (the server answers 403).
   const canEdit = isSuperAdmin || rep.role === "rep";
   // Your own role is locked (you'd sign yourself out), and only the global admin changes roles at all.
   const roleLocked = isSelf || !isSuperAdmin;
-  const isManager = role === "manager" || role === "admin";
+  const isPlatform = role === "admin";
   const sameModules = [...modules].sort().join() === [...(rep.modules ?? XPOT_MODULES)].sort().join();
   const dirty = role !== rep.role || !sameModules;
   // The "admin" role is the global Xpot admin (storage.updateSalesRepAccountProfile): changing it signs them out.
@@ -578,7 +578,7 @@ function RoleEditor({ rep }: { rep: Rep }) {
 
   if (!canEdit) {
     const roleKey = ROLE_KEYS[rep.role as (typeof ROLES)[number]];
-    return <p className="text-sm text-white/70">{roleKey ? tse(roleKey) : rep.role} · <span className="text-xs text-white/45">{t("managersUseAllModules")}</span></p>;
+    return <p className="text-sm text-white/70">{roleKey ? tse(roleKey) : rep.role} · <span className="text-xs text-white/45">{t("platformUsesAllModules")}</span></p>;
   }
 
   return (
@@ -595,8 +595,8 @@ function RoleEditor({ rep }: { rep: Rep }) {
             </div>
           )}
         </div>
-        <Setting label={t("modules")} hint={isManager ? t("managersUseAllModules") : undefined}>
-          <ModuleChecks value={modules} onChange={setModules} disabled={isManager} />
+        <Setting label={t("modules")} hint={isPlatform ? t("platformUsesAllModules") : undefined}>
+          <ModuleChecks value={modules} onChange={setModules} disabled={isPlatform} />
         </Setting>
       </div>
       <FormFooter dirty={dirty} onCancel={dirty ? reset : undefined}>

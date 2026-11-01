@@ -18,7 +18,7 @@ import {
   managedOrganizationIds,
   organizationIdForRep,
 } from "../organizations/service.js";
-import { isManagerOrAdmin, type XpotActor } from "../routes/xpot/middleware.js";
+import { isPlatformAdmin, type XpotActor } from "../routes/xpot/middleware.js";
 import { syncTaskToGhl } from "../routes/xpot/helpers.js";
 import { syncTaskToXphere } from "../routes/xpot/xphere-sync.js";
 
@@ -101,7 +101,7 @@ async function resolveOrganization(actor: XpotActor, input: Pick<XpotTaskCreateI
 }
 
 async function canManageTask(actor: XpotActor, task: SalesTask) {
-  if (isManagerOrAdmin(actor)) return true;
+  if (isPlatformAdmin(actor)) return true;
   // Unit-test and pre-organization compatibility. Migration 0035 backfills
   // every production task before making this field mandatory.
   if (!task.organizationId) return task.repId === actor.rep.id;
@@ -145,7 +145,7 @@ function syncInBackground(taskId: number, options: UpdateOptions = {}) {
 export async function listTasks(actor: XpotActor, filters: TaskListFilters = {}): Promise<EnrichedTask[]> {
   if (typeof (db as any).select !== "function") {
     const rows = await storage.listSalesTasks({
-      repId: filters.all && isManagerOrAdmin(actor) ? filters.repId : filters.repId ?? actor.rep.id,
+      repId: filters.all && isPlatformAdmin(actor) ? filters.repId : filters.repId ?? actor.rep.id,
       leadId: filters.leadId,
       status: filters.status ?? (filters.statuses?.length === 1 ? filters.statuses[0] : undefined),
     });

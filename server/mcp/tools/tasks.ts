@@ -19,7 +19,7 @@ async function actorForCaller(caller: McpCaller) {
   if (!rep) throw new TaskServiceError("The MCP user has no Xpot representative profile.", 403);
   const denial = accessDenial(rep);
   if (denial) throw new TaskServiceError(denial.message, 403);
-  if (!repModules(rep).includes("visits") && !["manager", "admin"].includes(rep.role)) {
+  if (!repModules(rep).includes("visits") && rep.role !== "admin") {
     throw new TaskServiceError("Visits are not enabled for this Xpot account.", 403);
   }
   const [user] = await db.select().from(users).where(eq(users.id, caller.userId));

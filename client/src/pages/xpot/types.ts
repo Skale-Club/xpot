@@ -1,3 +1,4 @@
+import type { Profile } from "@shared/profiles";
 import type {
   SalesRep,
   SalesLead,
@@ -95,6 +96,8 @@ export type SalesLeadPayload = {
 };
 
 export type XpotMeResponse = {
+  /** Which of the four panels this person gets (shared/profiles.ts). */
+  profile?: Profile;
   user: { id: string; email: string; firstName?: string | null; lastName?: string | null; isAdmin: boolean; profileImageUrl?: string | null; /** The sign-in phone (E.164), not the profile's contact phone. */ phone?: string | null };
   rep: { id: number; displayName: string; email?: string; phone?: string; team?: string; role: string; avatarUrl?: string | null; isActive?: boolean; modules?: string[]; costPolicy?: "zero" | "acquisition"; costPolicyConfiguredAt?: string | null; homeAddress?: string | null; homeLat?: string | null; homeLng?: string | null; routeReturnHome?: boolean; wholesaleCode?: string | null };
   organizations?: Array<{ id: number; name: string; slug: string; isActive: boolean; /** Prints its own pieces (Tags › Production per organization). */ printsOwnPieces?: boolean; membershipRole?: "admin" | "member"; /** The automatic one-person workspace (shared/organizations.ts isPersonalOrganization). */ personal?: boolean }>;

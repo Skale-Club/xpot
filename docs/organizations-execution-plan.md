@@ -4,6 +4,9 @@
 
 Xpot supports teams of representatives working together inside isolated Organizations, with clear permissions and correctly classified physical products.
 
+> **Superseded for roles:** the Manager role is gone, and access now follows the four profiles of
+> [PROFILES_EXECUTION_PLAN.md](./PROFILES_EXECUTION_PLAN.md) (`shared/profiles.ts`). The tables below are history.
+
 ## Access model
 
 Platform roles remain:
@@ -89,6 +92,12 @@ A branch in another state or country can print its own pieces. The owners (Admin
   part counts. Per-branch part stock is a later change.
 - Boston is the company Organization (`xpot-company`): every existing row was filed under it, and an Admin's request
   without an Organization still is.
+- A branch prints only our models, and only the ones released to it (`organizations.released_print_models`, migration
+  0069; null = every model, empty = none; the owners set it in Organization › Settings or with **New partner** on the
+  Organizations list). Anything else is refused with `print_model_not_released`, and the catalog it sees lists only the
+  released ones. A branch never creates or edits models or versions. Each model carries its materials
+  (`print_models.materials`: NFC sticker, filament, supplier, buy link), shown to the branch as "What you need" before
+  it orders.
 
 ## Data invariants
 

@@ -1,10 +1,11 @@
 import { randomBytes } from "crypto";
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql, isNull } from "drizzle-orm";
 import { db } from "../db.js";
 import {
   organizationAuditLog,
   organizationMemberships,
   organizations,
+  printModels,
   salesLeads,
   salesReps,
   tagKits,
@@ -12,8 +13,10 @@ import {
   users,
 } from "#shared/schema.js";
 import {
+  COMPANY_ORGANIZATION_SLUG,
   canManageOrganization,
   canViewOrganization,
+  type Distribution,
   isPersonalOrganization,
   managesEveryOrganization,
   type OrganizationAccess,
@@ -68,6 +71,16 @@ export async function printingOrganizationIds(organizationIds: readonly number[]
 export async function printingOrganization(organizationId: number): Promise<boolean> {
   if (organizationId === await companyOrganizationId()) return true;
   return (await printingOrganizationIds([organizationId])).length > 0;
+}
+
+/** More than one active person: a real team, not somebody's one-person workspace. */
+export async function organizationHasTeam(organizationId: number): Promise<boolean> {
+  const members = await db.select({ id: organizationMemberships.id }).from(organizationMemberships).where(and(
+    eq(organizationMemberships.organizationId, organizationId),
+    eq(organizationMemberships.isActive, true),
+    isNull(organizationMemberships.blockedAt),
+  )).limit(2);
+  return members.length > 1;
 }
 
 /** New operational records follow the Rep's active Organization. */
@@ -196,6 +209,8 @@ export async function listOrganizations(actor: OrganizationActor) {
     slug: organizations.slug,
     isActive: organizations.isActive,
     printsOwnPieces: organizations.printsOwnPieces,
+    distribution: organizations.distribution,
+    releasedPrintModels: organizations.releasedPrintModels,
     createdByUserId: organizations.createdByUserId,
     createdAt: organizations.createdAt,
     updatedAt: organizations.updatedAt,
@@ -281,17 +296,51 @@ export async function createOrganization(input: { name: string; repAdminId: numb
   });
 }
 
+/**
+ * The models to release to an organization, checked against the catalog: serialized models only (a partner never
+ * prints parts), each by slug, no repeats. `null` = every model; an empty list = none.
+ */
+export async function validReleasedModels(slugs: readonly string[] | null): Promise<string[] | null> {
+  if (slugs === null) return null;
+  const unique = Array.from(new Set(slugs));
+  if (!unique.length) return [];
+  const known = await db.select({ slug: printModels.slug }).from(printModels)
+    .where(and(inArray(printModels.slug, unique), eq(printModels.kind, "serialized")));
+  const found = new Set(known.map((row) => row.slug));
+  if (unique.some((slug) => !found.has(slug))) throw new OrganizationError("One of the models is not in the catalog.", 400, "print_model_unknown");
+  return unique;
+}
+
 export async function updateOrganization(
   organizationId: number,
-  input: { name?: string; isActive?: boolean; printsOwnPieces?: boolean },
+  input: { name?: string; isActive?: boolean; printsOwnPieces?: boolean; distribution?: Distribution; releasedPrintModels?: string[] | null },
   actor: OrganizationActor,
 ) {
   if (!managesEveryOrganization(actor)) throw new OrganizationError("Only an Xpot admin or a manager can do this.", 403, "manager_required");
-  // Production is the owners' (docs/organizations-execution-plan.md): only they let a branch print its own pieces.
-  if (input.printsOwnPieces !== undefined && !actor.user.isAdmin) throw new OrganizationError("Only an Xpot admin can do this.", 403, "admin_required");
-  await assertOrganizationAccess(actor, organizationId, true);
-  const [updated] = await db.update(organizations).set({ ...input, updatedAt: new Date() })
-    .where(eq(organizations.id, organizationId)).returning();
+  // Production is the owners' (docs/organizations-execution-plan.md): only they let a branch print its own pieces,
+  // say which of our models it may print, and who handles its orders.
+  if ((input.printsOwnPieces !== undefined || input.releasedPrintModels !== undefined || input.distribution !== undefined) && !actor.user.isAdmin) {
+    throw new OrganizationError("Only an Xpot admin can do this.", 403, "admin_required");
+  }
+  const { organization } = await assertOrganizationAccess(actor, organizationId, true);
+  // Who handles a partner's orders (server/tags/distribution.ts): the company is `xpot` by definition, and `own` belongs to
+  // a partner that prints its own pieces (they are what it hands out), so switching printing off takes `own` with it.
+  const distribution = input.distribution ?? organization.distribution;
+  if (distribution === "own" && organization.slug === COMPANY_ORGANIZATION_SLUG) {
+    throw new OrganizationError("The company's orders are always handled by Xpot.", 400, "distribution_company");
+  }
+  if (distribution === "own" && !(input.printsOwnPieces ?? organization.printsOwnPieces)) {
+    throw new OrganizationError("Only a partner that prints its own pieces can handle its own distribution.", 400, "distribution_needs_production");
+  }
+  const { releasedPrintModels, ...rest } = input;
+  // A partner only does what the platform lets it: switching printing on releases no model until the platform picks them.
+  const firstRelease = input.printsOwnPieces === true && !organization.printsOwnPieces && releasedPrintModels === undefined && organization.releasedPrintModels === null;
+  const [updated] = await db.update(organizations).set({
+    ...rest,
+    ...(releasedPrintModels !== undefined ? { releasedPrintModels: await validReleasedModels(releasedPrintModels) } : {}),
+    ...(firstRelease ? { releasedPrintModels: [] } : {}),
+    updatedAt: new Date(),
+  }).where(eq(organizations.id, organizationId)).returning();
   await audit(organizationId, "organization_updated", actor, null, input);
   return updated;
 }
@@ -448,7 +497,7 @@ export async function listOrganizationCustomers(organizationId: number, actor: O
     .orderBy(desc(salesLeads.updatedAt)).limit(500);
 }
 
-async function audit(
+export async function audit(
   organizationId: number,
   action: string,
   actor: OrganizationActor,

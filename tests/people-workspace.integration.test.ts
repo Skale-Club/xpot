@@ -93,7 +93,7 @@ describe("GET /admin/team-activity", () => {
     const tagsOnly = await seedPerson("tina", { modules: ["tags"] });
     const idle = await seedPerson("ivo", { modules: ["visits"] });
     const blocked = await seedPerson("bia", { active: false, blocked: true });
-    const manager = await seedPerson("mara", { role: "manager" });
+    const otherAdmin = await seedPerson("mara", { role: "admin", isAdmin: true });
     const lead = (await one(`INSERT INTO sales_leads (organization_id, name, owner_rep_id) VALUES ($1, 'Shop', $2) RETURNING id`, [company, ana])).id;
     const visit = (repId: number, at: Date, status: string, validation = "valid") =>
       q(`INSERT INTO sales_visits (rep_id, lead_id, status, checked_in_at, checked_out_at, validation_status) VALUES ($1, $2, $3, $4, $5, $6)`,
@@ -112,18 +112,18 @@ describe("GET /admin/team-activity", () => {
     await sale(ana, 2500, daysAgo(40));
     await sale(ana, 9999, daysAgo(1), "cancelled");
     await sale(tagsOnly, 7000, daysAgo(1));
-    await sale(manager, 1200, daysAgo(2));
+    await sale(otherAdmin, 1200, daysAgo(2));
     await q(`INSERT INTO sales_tasks (organization_id, rep_id, title) VALUES ($1, $2, 'Call back'), ($1, $3, 'Tags thing')`, [company, ana, tagsOnly]);
     await q(`INSERT INTO sales_opportunities_local (lead_id, rep_id, title, value) VALUES ($1, $2, 'Deal', 300)`, [lead, ana]);
-    return { ana, tagsOnly, idle, blocked, manager };
+    return { ana, tagsOnly, idle, blocked, otherAdmin };
   }
 
   it("counts the period for living Visits people only, with a row per field rep", async () => {
-    const { ana, idle, manager } = await seedField();
+    const { ana, idle, otherAdmin } = await seedField();
     const res = await request(appFor("boss", true), "GET", "/api/xpot/admin/team-activity?days=30");
     expect(res.status).toBe(200);
     expect(res.body.metrics).toMatchObject({
-      // ana and ivo; the manager uses Visits but is not a field rep; tina is Tags-only; bia is blocked.
+      // ana and ivo; a second platform admin uses Visits but is not a field rep; tina is Tags-only; bia is blocked.
       activeReps: 2,
       visits: 3,
       finishedVisits: 2,
@@ -136,7 +136,7 @@ describe("GET /admin/team-activity", () => {
       pendingTasks: 1,
     });
     const rows = res.body.reps as any[];
-    expect(rows.map((r) => r.repId)).toEqual([ana, manager, idle]);
+    expect(rows.map((r) => r.repId)).toEqual([ana, otherAdmin, idle]);
     expect(rows[0]).toMatchObject({ displayName: "ana", visits: 3, finishedVisits: 2, locationExceptions: 2, salesCount: 1, salesTotalCents: 5000 });
     expect(new Date(rows[0].lastActivityAt).getTime()).toBeGreaterThan(daysAgo(1.1).getTime());
     expect(rows[2]).toMatchObject({ displayName: "ivo", visits: 0, salesTotalCents: 0, lastActivityAt: null });
@@ -153,10 +153,13 @@ describe("GET /admin/team-activity", () => {
     expect((await request(appFor("boss", true), "GET", "/api/xpot/admin/team-activity?days=900")).status).toBe(400);
   });
 
-  it("is for managers", async () => {
+  it("is for platform admins", async () => {
     await seedField();
-    expect((await request(appFor("mara"), "GET", "/api/xpot/admin/team-activity")).status).toBe(200);
+    expect((await request(appFor("mara", true), "GET", "/api/xpot/admin/team-activity")).status).toBe(200);
     expect((await request(appFor("ana"), "GET", "/api/xpot/admin/team-activity")).status).toBe(403);
+    // A leftover role=manager row is a plain rep: no power from the column.
+    await seedPerson("moe", { role: "manager" });
+    expect((await request(appFor("moe"), "GET", "/api/xpot/admin/team-activity")).status).toBe(403);
   });
 });
 
@@ -222,6 +225,7 @@ describe("GET /organizations personal workspaces", () => {
 describe("GET /admin/xphere/:userId", () => {
   it("shows one person's connection, masked token, and their last sync", async () => {
     await seedPerson("boss", { role: "admin", isAdmin: true });
+    // A leftover role=manager row: refused below like any plain rep.
     await seedPerson("mara", { role: "manager" });
     const ana = await seedPerson("ana");
     const lead = (await one(`INSERT INTO sales_leads (organization_id, name, owner_rep_id) VALUES ($1, 'Shop', $2) RETURNING id`, [company, ana])).id;
@@ -245,19 +249,22 @@ describe("GET /admin/xphere/:userId", () => {
 describe("POST /admin/reps profile edit", () => {
   it("keeps the person's role when the body leaves it out", async () => {
     await seedPerson("boss", { role: "admin", isAdmin: true });
-    const manager = await seedPerson("mona", { role: "manager" });
+    // A row left over from the removed Manager role: editing it without a role leaves the column as it was.
+    const leftover = await seedPerson("mona", { role: "manager" });
     const admin = await seedPerson("adam", { role: "admin", isAdmin: true });
 
     const app = appFor("boss", true);
     expect((await request(app, "POST", "/api/xpot/admin/reps", { userId: "mona", displayName: "Mona M." })).status).toBe(200);
     expect((await request(app, "POST", "/api/xpot/admin/reps", { userId: "adam", displayName: "Adam A." })).status).toBe(200);
-    expect(await one(`SELECT role, display_name FROM sales_reps WHERE id = $1`, [manager])).toEqual({ role: "manager", display_name: "Mona M." });
+    expect(await one(`SELECT role, display_name FROM sales_reps WHERE id = $1`, [leftover])).toEqual({ role: "manager", display_name: "Mona M." });
     expect(await one(`SELECT role FROM sales_reps WHERE id = $1`, [admin])).toEqual({ role: "admin" });
     expect(await one(`SELECT is_admin FROM users WHERE id = 'adam'`)).toEqual({ is_admin: true });
     // Editing your own profile without a role is not a role change.
     expect((await request(app, "POST", "/api/xpot/admin/reps", { userId: "boss", displayName: "Boss" })).status).toBe(200);
+    // Manager is no longer a role to pick.
+    expect((await request(app, "POST", "/api/xpot/admin/reps", { userId: "mona", displayName: "Mona M.", role: "manager" })).status).toBe(400);
     // An explicit role still changes it.
     expect((await request(app, "POST", "/api/xpot/admin/reps", { userId: "mona", displayName: "Mona M.", role: "rep" })).status).toBe(200);
-    expect(await one(`SELECT role FROM sales_reps WHERE id = $1`, [manager])).toEqual({ role: "rep" });
+    expect(await one(`SELECT role FROM sales_reps WHERE id = $1`, [leftover])).toEqual({ role: "rep" });
   });
 });

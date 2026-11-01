@@ -22,8 +22,8 @@ const en = {
   navSettings: "Settings",
   // Module shell: management inside each module, the account outside them
   navManage: "Manage",
-  superAdminTag: "Xpot admin",
-  superAdminHint: "Only the Xpot admin sees this",
+  superAdminTag: "Platform",
+  superAdminHint: "Only the platform sees this",
   navOrganization: "Administration",
   // The multi-tenant list (/organizations), apart from the Administration group
   navOrganizations: "Organizations",
@@ -96,8 +96,8 @@ export const shellMessages: Dictionary<typeof en> = {
 
     navSettings: "Configurações",
     navManage: "Gestão",
-    superAdminTag: "Admin do Xpot",
-    superAdminHint: "Só o admin do Xpot vê isto",
+    superAdminTag: "Plataforma",
+    superAdminHint: "Só a plataforma vê isto",
     navOrganization: "Administração",
     navOrganizations: "Organizações",
     manageTeam: "Visão geral",
@@ -163,8 +163,8 @@ export const shellMessages: Dictionary<typeof en> = {
 
     navSettings: "Ajustes",
     navManage: "Gestión",
-    superAdminTag: "Admin de Xpot",
-    superAdminHint: "Solo el admin de Xpot ve esto",
+    superAdminTag: "Plataforma",
+    superAdminHint: "Solo la plataforma ve esto",
     navOrganization: "Administración",
     navOrganizations: "Organizaciones",
     manageTeam: "Resumen",

@@ -125,9 +125,9 @@ export interface ResellerReadiness {
   costPolicyConfiguredAt?: string | Date | null;
 }
 
-/** Can this person see Tags in the field app? Managers/admins always can. */
+/** Can this person see Tags in the field app? The platform's owners always can. */
 export function resellerHasTags(rep: Pick<ResellerReadiness, "role" | "modules">): boolean {
-  return rep.role === "manager" || rep.role === "admin" || !rep.modules || rep.modules.includes("tags");
+  return rep.role === "admin" || !rep.modules || rep.modules.includes("tags");
 }
 
 /** Why a reseller cannot receive a kit now (Hand out step 1); empty when they can. */

@@ -12,7 +12,7 @@ const en = {
   visitScreen: "Visit",
 
   // Management mode
-  /** A Rep Admin in management mode: the organizations they run. */
+  /** An owner in the panel: the organizations they run. */
 
   // Command palette footer: only the shortcuts this screen supports
   shortcutsLabel: "Shortcuts",
@@ -26,7 +26,7 @@ const en = {
   photoHint: "Shown to your team and on your visits.",
   contactPhone: "Contact phone (not used to sign in)",
   signInPhone: "Sign-in phone",
-  signInPhoneHint: "To change it, ask a manager.",
+  signInPhoneHint: "To change it, ask the platform.",
   signInPhoneNone: "No sign-in phone on file",
   signInEmail: "Sign-in email",
   password: "Password",
@@ -75,7 +75,7 @@ export const navIaMessages: Dictionary<typeof en> = {
     photoHint: "La ve tu equipo y aparece en tus visitas.",
     contactPhone: "Teléfono de contacto (no sirve para iniciar sesión)",
     signInPhone: "Teléfono de acceso",
-    signInPhoneHint: "Para cambiarlo, pídeselo a un gerente.",
+    signInPhoneHint: "Para cambiarlo, pídeselo a la plataforma.",
     signInPhoneNone: "No hay teléfono de acceso registrado",
     signInEmail: "Correo de acceso",
     password: "Contraseña",

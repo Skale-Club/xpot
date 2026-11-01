@@ -3,6 +3,9 @@ import { ExternalLink, ShoppingBag } from "lucide-react";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
+import { profileOfMe } from "@/lib/adminMode";
+import type { XpotMeResponse } from "@/pages/xpot/types";
+import { can } from "@shared/profiles";
 import { tagsGet } from "./lib";
 import { Button } from "@/components/ui/button";
 import { CopyButton, EYEBROW_MUTED } from "./ui";
@@ -11,13 +14,28 @@ import { CopyButton, EYEBROW_MUTED } from "./ui";
 export function WholesaleCard() {
   const t = useT(tagsMessages);
   const tc = useT(commonMessages);
+  const { data: me } = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
+  // A partner makes its own pieces and does not buy them (shared/profiles.ts "buyPieces"); the card waits for /me.
+  const profile = profileOfMe(me);
+  const buying = !!profile && can(profile, "buyPieces");
+  // Someone in a real team buys for it: the pieces arrive in the organization, in their name.
+  const team = me?.organizations?.find((organization) => organization.isActive && !organization.personal && organization.membershipRole);
   const { data } = useQuery({
     queryKey: ["/api/xpot/wholesale"],
-    queryFn: () => tagsGet<{ code: string; url: string }>("/api/xpot/wholesale"),
+    queryFn: () => tagsGet<{ code: string | null; url: string | null; partner?: string | null }>("/api/xpot/wholesale"),
     staleTime: 5 * 60_000,
     retry: false,
+    enabled: buying,
   });
-  if (!data) return null;
+  if (!buying || !data) return null;
+  // Whose partner handles its own distribution (organizations.distribution = own) has no store: the pieces come from the partner.
+  if (data.code === null || data.url === null) {
+    return data.partner ? (
+      <section className="rounded-2xl border border-violet-400/20 bg-violet-500/[0.06] p-4 text-sm text-white/75" data-testid="wholesale-partner">
+        {t("wholesalePartner", { name: data.partner })}
+      </section>
+    ) : null;
+  }
   return (
     <section className="rounded-2xl border border-violet-400/20 bg-gradient-to-br from-violet-500/[0.10] to-fuchsia-600/[0.05] p-4 lg:flex lg:items-center lg:gap-6 lg:p-5" data-testid="wholesale-card">
       <div className="flex items-start gap-3 lg:min-w-0 lg:flex-1 lg:items-center">
@@ -27,6 +45,7 @@ export function WholesaleCard() {
         <div className="min-w-0 flex-1">
           <p className="text-base font-bold text-white">{t("wholesaleTitle")}</p>
           <p className="mt-0.5 text-sm text-white/55">{t("wholesaleText")}</p>
+          {team ? <p className="mt-1 text-xs font-medium text-violet-200" data-testid="wholesale-arrives-in">{t("shopArrivesIn", { organization: team.name })}</p> : null}
         </div>
       </div>
       {/* Phones stack the code and the button; wide screens put them on one row beside the text. */}

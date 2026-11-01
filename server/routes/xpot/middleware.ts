@@ -107,7 +107,7 @@ export const VISITS_ONLY_PATHS = [
 export async function requireVisitsModule(req: Request, res: Response, next: NextFunction) {
   try {
     const actor = await ensureXpotRep(req);
-    if (!actor || accessDenial(actor.rep) || isManagerOrAdmin(actor)) return next();
+    if (!actor || accessDenial(actor.rep) || isPlatformAdmin(actor)) return next();
     if (!repModules(actor.rep).includes("visits")) {
       return res.status(403).json({ code: "module_off", message: "Visits are not enabled for your account." });
     }
@@ -118,15 +118,16 @@ export async function requireVisitsModule(req: Request, res: Response, next: Nex
   }
 }
 
-export function isManagerOrAdmin(actor: { user: SessionUser; rep: { role: string } }): boolean {
-  return actor.user.isAdmin || actor.rep.role === "manager" || actor.rep.role === "admin";
+/** The platform's owners (users.is_admin). There is no role between them and an Organization's owner. */
+export function isPlatformAdmin(actor: { user: SessionUser }): boolean {
+  return actor.user.isAdmin;
 }
 
 /**
  * The app's admin mode is off ("X-Xpot-View: rep", client/src/lib/adminMode.ts):
  * the person wants to see Xpot as a rep does, so a manager's lists narrow to
  * their own. It only ever narrows: what someone may open or change is still
- * decided by isManagerOrAdmin.
+ * decided by isPlatformAdmin.
  */
 export function viewsAsRep(req: Request): boolean {
   return req.get("x-xpot-view") === "rep";
@@ -134,7 +135,7 @@ export function viewsAsRep(req: Request): boolean {
 
 /** Whether this request's lists span every rep: a manager or admin, unless viewing as a rep. */
 export function listsEveryone(req: Request, actor: { user: SessionUser; rep: { role: string } }): boolean {
-  return isManagerOrAdmin(actor) && !viewsAsRep(req);
+  return isPlatformAdmin(actor) && !viewsAsRep(req);
 }
 
 /**
@@ -166,7 +167,7 @@ export async function listScope(req: Request, actor: XpotActor): Promise<ListSco
   if (listsEveryone(req, actor)) return { kind: "everyone" };
   const { activeOrganizationIds, managedOrganizationIds } = await import("../../organizations/service.js");
   const active = await activeOrganizationIds(actor);
-  if (!isManagerOrAdmin(actor) && inManagementView(req)) {
+  if (!isPlatformAdmin(actor) && inManagementView(req)) {
     const managed = await managedOrganizationIds(actor);
     if (managed?.length) return { kind: "organizations", organizationIds: managed, activeOrganizationIds: active };
   }
@@ -210,35 +211,26 @@ export function visitsInOrganizations<V extends { leadId: number }>(
   return visits.filter((visit) => allowed.has(organizationOf.get(visit.leadId) ?? -1));
 }
 
-export async function requireXpotManager(req: Request, res: Response, next: NextFunction) {
+export async function requirePlatformAdmin(req: Request, res: Response, next: NextFunction) {
   try {
     const actor = await ensureXpotRep(req);
     if (!actor) {
       return res.status(401).json({ message: "Authentication required" });
     }
-    if (!actor.rep.isActive) {
-      return res.status(403).json({
-        message: "Your Xpot access is not active yet. An administrator needs to approve your account.",
-      });
+    if (!actor.user.isAdmin) {
+      return res.status(403).json({ code: "super_admin_only", message: "Admin access required" });
     }
-    if (!actor.user.isAdmin && !["manager", "admin"].includes(actor.rep.role)) {
-      return res.status(403).json({ message: "Manager access required" });
-    }
-    // A blocked or not-yet-approved manager is out like anyone else
-    // (global admins excepted, so the owner can't lock themselves out).
-    const denial = actor.user.isAdmin ? null : accessDenial(actor.rep);
-    if (denial) return res.status(403).json(denial);
     (req as any).xpotActor = actor;
     next();
   } catch (err) {
-    console.error("[requireXpotManager]", err);
+    console.error("[requirePlatformAdmin]", err);
     res.status(500).json({ message: "Internal server error" });
   }
 }
 
 /**
  * The global admin only (users.is_admin, Skale Club): production, chip writers,
- * the journey, integrations, branding, Xphere. Runs after requireXpotManager,
+ * the journey, integrations, branding, Xphere. Runs after requirePlatformAdmin,
  * which has already loaded the actor; managers get 403 like anyone else.
  */
 export function requireSuperAdmin(req: Request, res: Response, next: NextFunction) {
@@ -260,7 +252,7 @@ export async function canAccessLead(
   lead: { id?: number; ownerRepId: number | null; organizationId: number },
   options: { viaPieces?: boolean } = {},
 ): Promise<boolean> {
-  if (isManagerOrAdmin(actor)) return true;
+  if (isPlatformAdmin(actor)) return true;
   if (await ownsOrManagesLead(actor, lead)) return true;
   // The company holding one of the rep's Tags pieces is their customer too, even
   // when someone else created the lead (a manager linked the piece, or the lead

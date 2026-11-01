@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link, useLocation } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import {
   LogOut,
   MapPinned,
@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import type { XpotModule } from "@shared/modules";
 import { formatTitle } from "@shared/seo";
-import { printsForABranch, useViewerAccess } from "@/lib/adminMode";
+import { ownedOrganizationId, useViewerAccess } from "@/lib/adminMode";
 import { AdminBadge } from "./AdminBadge";
 import { rememberModule, useXpotModules } from "@/components/ModuleSwitch";
 import { MODULE_HOME, moduleEntryPath, rememberModuleRoute } from "@/lib/xpot";
@@ -34,8 +34,7 @@ import { useDesktopShortcuts } from "./useDesktopShortcuts";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { BRAND_GRADIENT, MODULE_ACCENT } from "./surface";
 import {
-  managementGroups,
-  organizationPanelGroups,
+  panelGroups,
   contextOfPath,
   moduleGroups,
   paletteExtras,
@@ -48,6 +47,7 @@ import { XpotLogo } from "./XpotLogo";
 import { InstallAppSidebarItem } from "./InstallApp";
 import { AdminModeBar, AdminModeSidebarItem } from "./AdminMode";
 import { ScreenErrorBoundary } from "./ScreenErrorBoundary";
+import { usePanelNames } from "./panelNames";
 import { UserGreeting } from "./UserGreeting";
 import { dashboardMessages } from "@/i18n/messages/dashboard";
 import { PersistentRouteProgress } from "./PersistentRouteProgress";
@@ -91,12 +91,14 @@ function useShellNav() {
   const tn = useT(navIaMessages);
   const tw = useT(workspacesMessages);
   const [location] = useLocation();
+  // The panel lights its items by a query too (?tab=, ?view=): listening to it re-renders the sidebar when only that changes.
+  useSearch();
   const modules = useXpotModules();
   const access = useViewerAccess();
+  const { panelName: nameOf, names } = usePanelNames();
   const me = access.me;
   const panel = access.adminMode;
-  const panelName = tw(me?.user.isAdmin ? "superAdmin" : "management");
-  const viewer = { canManage: access.canManage, isAdmin: access.isSuperAdmin };
+  const panelName = nameOf(access.profile);
   const labels = { shell: t, tags: tt, nav: tn };
   const context = contextOfPath(location);
   const settingsItem: NavItem = { href: "/settings", label: t("navSettings"), icon: Settings, match: starts("/settings") };
@@ -107,24 +109,22 @@ function useShellNav() {
     return listed.map((group) => ({ ...group, items: group.items.filter((item) => item.href !== "/tags/customers") }));
   };
   const groups = panel
-    ? access.hasAdminAccess
-      ? managementGroups(modules, viewer, labels, { home: tw("home"), tags: tw("tagsGroup"), visits: tw("visitsGroup"), team: tw("teamGroup"), system: tw("systemGroup") })
-      : organizationPanelGroups(modules, labels, printsForABranch(me))
+    ? panelGroups(access.profile, modules, labels, names, ownedOrganizationId(me))
     : context === "account" ? [{ label: "", items: [settingsItem] }] : module ? groupsFor(module) : [];
   const moduleLabel = (m: XpotModule) => tc(m === "visits" ? "moduleVisits" : "moduleTags");
   const order = module ? [module, ...modules.filter((m) => m !== module)] : modules;
   const pages = panel
     ? [
       ...groups.flatMap((group) => group.items.map((item) => ({ ...item, group: group.label || panelName }))),
-      ...(viewer.isAdmin ? paletteExtras("platform", labels).map((item) => ({ ...item, group: tw("systemGroup") })) : []),
+      ...(access.profile === "platform" ? paletteExtras("platform", labels).map((item) => ({ ...item, group: names.platform })) : []),
     ]
     : [
       ...order.flatMap((m) => [...groupsFor(m).flatMap((group) => group.items), ...paletteExtras(m, labels)].map((item) => ({ ...item, group: moduleLabel(m) }))),
       { ...settingsItem, group: t("navSettings") },
-      ...(access.reach ? [{ href: access.hasAdminAccess ? "/admin" : "/organizations", label: panelName, icon: ShieldCheck, match: () => false, group: tw("manageAccess") }] : []),
+      ...(access.reach ? [{ href: "/admin", label: panelName, icon: ShieldCheck, match: () => false, group: tw("manageAccess") }] : []),
     ];
   const crumb = panel ? { label: panelName, context: "account" as const } : module ? { label: moduleLabel(module), context: module as ShellContext } : null;
-  return { context, module, modules, groups, pages, moduleLabel, me, crumb, panel, panelName, panelHome: access.hasAdminAccess ? "/admin" : "/organizations", panelEntryAvailable: !!access.reach };
+  return { context, module, modules, groups, pages, moduleLabel, me, crumb, panel, panelName, panelHome: "/admin", panelEntryAvailable: !!access.reach };
 }
 type Accent = { solid: string; soft: string; strong: string; text: string };
 const MANAGEMENT_ACCENT: Accent = { solid: "#fbbf24", soft: "rgba(251,191,36,0.12)", strong: "rgba(251,191,36,0.2)", text: "text-amber-200" };

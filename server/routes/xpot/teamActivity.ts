@@ -24,7 +24,8 @@ const toIso = (value: unknown): string | null => {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 };
 
-export async function teamActivity(since: Date): Promise<TeamActivityResponse> {
+/** What the field team did since `since`; `repIds` narrows it to these people (an organization's owner sees their team). */
+export async function teamActivity(since: Date, repIds?: readonly number[]): Promise<TeamActivityResponse> {
   const [people, visits, sales, lastVisit, lastSale, inProgress, opportunities, tasks] = await Promise.all([
     db.select({
       id: salesReps.id,
@@ -34,7 +35,7 @@ export async function teamActivity(since: Date): Promise<TeamActivityResponse> {
       isActive: salesReps.isActive,
       blockedAt: salesReps.blockedAt,
       deletedAt: salesReps.deletedAt,
-    }).from(salesReps),
+    }).from(salesReps).where(repIds ? inArray(salesReps.id, repIds.length ? [...repIds] : [-1]) : undefined),
     db.select({
       repId: salesVisits.repId,
       visits: sql<number>`count(*)::int`,

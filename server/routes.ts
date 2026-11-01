@@ -1,4 +1,5 @@
 import type { Express } from "express";
+import { registerCustomerRoutes } from "./customer/routes.js";
 import { registerMcpRoutes } from "./mcp/routes.js";
 import { registerXpotRoutes } from "./routes/xpot/index.js";
 import { registerTagRoutes } from "./tags/routes.js";
@@ -7,13 +8,17 @@ import { registerWholesaleRoutes } from "./wholesale/index.js";
 export async function registerRoutes(app: Express) {
   // Tags first: public /q and /n redirects, and /api/xpot/tags* / /api/xpot/admin/tag*
   // must be matched before the Xpot routers: those mount guards on /api/xpot prefixes (requireXpotUser in
-  // every router, requireXpotManager on /admin) that would answer first with their own 401/403.
+  // every router, requirePlatformAdmin on /admin) that would answer first with their own 401/403.
   registerTagRoutes(app);
   // MCP endpoint (/mcp) and its token admin API (/api/xpot/admin/mcp-tokens):
   // same ordering reason, and /mcp must beat the SPA catch-all added in index.ts.
   registerMcpRoutes(app);
   // Same reason: /api/xpot/wholesale and its admin route sit under those prefixes.
   registerWholesaleRoutes(app);
+
+  // The customer panel (/api/my, and the sellers' /api/xpot/leads/:id/customer-contacts): off unless
+  // CUSTOMER_PANEL_ENABLED is set. Before the Xpot routers for the same reason as the Tags routes above.
+  registerCustomerRoutes(app);
 
   // Mount the Xpot API (everything under /api/xpot/*)
   registerXpotRoutes(app);

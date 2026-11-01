@@ -7,7 +7,7 @@ export type PeopleStatus = "pending" | "active" | "blocked" | "refused";
 export type PeopleFilters = {
   search: string;
   status: PeopleStatus | "all";
-  role: "rep" | "manager" | "admin" | "all";
+  role: "rep" | "admin" | "all";
   module: XpotModule | "all";
 };
 
@@ -31,7 +31,7 @@ export function personStatus(person: Pick<Person, "access" | "refused">): People
 }
 
 const STATUSES: readonly PeopleStatus[] = ["pending", "active", "blocked", "refused"];
-const ROLES = ["rep", "manager", "admin"] as const;
+const ROLES = ["rep", "admin"] as const;
 const MODULES: readonly XpotModule[] = ["visits", "tags"];
 
 /**

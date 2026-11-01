@@ -30,7 +30,7 @@ const one = async (text: string, params: unknown[] = []) => (await q(text, param
 
 afterAll(async () => pg.client?.close());
 
-const manager = { userId: "rm-manager", isAdmin: false };
+const admin = { userId: "rm-admin", isAdmin: true };
 let seq = 0;
 async function person(opts: { active?: boolean; blockedReason?: string | null } = {}) {
   seq += 1;
@@ -49,7 +49,7 @@ beforeEach(async () => {
 describe("refusing a sign-up", () => {
   it("marks it, so People lists it as refused whatever the reason says", async () => {
     const applicant = await person();
-    const refused = await accounts.refuseRep(applicant, "Lives too far", manager);
+    const refused = await accounts.refuseRep(applicant, "Lives too far", admin);
     expect(refused.refusedAt).toBeInstanceOf(Date);
     expect(refused.blockedReason).toBe("Sign-up refused: Lives too far");
     expect(await listed(applicant)).toMatchObject({ access: "blocked", refused: true });
@@ -60,14 +60,14 @@ describe("refusing a sign-up", () => {
 
   it("is cleared by unblocking, and a plain block is never a refusal", async () => {
     const applicant = await person();
-    await accounts.refuseRep(applicant, null, manager);
-    const back = await accounts.unblockRep(applicant, manager);
+    await accounts.refuseRep(applicant, null, admin);
+    const back = await accounts.unblockRep(applicant, admin);
     expect(back.refusedAt).toBeNull();
     expect(await listed(applicant)).toMatchObject({ access: "active", refused: false });
 
     // Even with a reason that looks like a refusal, a block is a block.
     const partner = await person({ active: true });
-    await accounts.blockRep(partner, "Sign-up refused", manager);
+    await accounts.blockRep(partner, "Sign-up refused", admin);
     expect(await listed(partner)).toMatchObject({ access: "blocked", refused: false });
   });
 });

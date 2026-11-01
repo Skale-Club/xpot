@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { storage, type LeadVisibility } from "../../storage.js";
 import { repModules } from "#shared/modules.js";
-import { canAccessLead, requireXpotUser, requireVisitsModule, ensureXpotRep, isManagerOrAdmin, loadAccessibleLead, listScope, listsEveryone, ownsLead, refuseNotOwner, type XpotActor } from "./middleware.js";
+import { canAccessLead, requireXpotUser, requireVisitsModule, ensureXpotRep, isPlatformAdmin, loadAccessibleLead, listScope, listsEveryone, ownsLead, refuseNotOwner, type XpotActor } from "./middleware.js";
 import { xpotLeadCreateSchema, xpotLeadUpdateSchema, xpotLeadContactCreateSchema } from "#shared/xpot.js";
 import { syncLeadToGhl, syncLeadToXphere } from "./helpers.js";
 import { salesStorage } from "../../storage-sales.js";
@@ -409,7 +409,7 @@ export function createLeadsRouter() {
     }
     // The pipeline status (prospect → lead → …) is Visits work, like POST /leads/:id/promote; a Tags-only
     // reseller may edit a customer's details but not move it through the funnel.
-    if (input.status !== undefined && !isManagerOrAdmin(actor!) && !repModules(actor!.rep).includes("visits")) {
+    if (input.status !== undefined && !isPlatformAdmin(actor!) && !repModules(actor!.rep).includes("visits")) {
       return res.status(403).json({ code: "module_off", message: "Visits are not enabled for your account." });
     }
     // Holding a piece there lets a rep edit the company's details, not take it over

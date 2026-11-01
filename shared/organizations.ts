@@ -1,4 +1,4 @@
-export type PlatformRole = "admin" | "manager" | "rep";
+export type PlatformRole = "admin" | "rep";
 export type OrganizationRole = "admin" | "member";
 
 export type OrganizationViewer = {
@@ -13,15 +13,13 @@ export type OrganizationAccess = {
   blockedAt?: Date | string | null;
 };
 
-/** The only user-facing platform roles. Rep Admin is an Organization role. */
+/** The only platform roles: the owners, and everyone else. Owner and employee are Organization roles. */
 export function platformRoleOf(viewer: OrganizationViewer): PlatformRole {
-  if (viewer.user.isAdmin) return "admin";
-  return viewer.rep.role === "manager" ? "manager" : "rep";
+  return viewer.user.isAdmin ? "admin" : "rep";
 }
 
 export function managesEveryOrganization(viewer: OrganizationViewer): boolean {
-  const role = platformRoleOf(viewer);
-  return role === "admin" || role === "manager";
+  return viewer.user.isAdmin;
 }
 
 /**
@@ -36,6 +34,14 @@ export function runsATeam(
 ): boolean {
   return (organizations ?? []).some((organization) => organization.membershipRole === "admin" && !organization.personal);
 }
+
+/**
+ * Who handles an organization's orders (organizations.distribution, migrations/0070): `xpot` is Xpot (Stuscle, fulfilled
+ * from the company's stock; the US), `own` is the partner (outside the US; their house stock, to the organizations the
+ * platform linked to them). What each one means is server/tags/distribution.ts.
+ */
+export const DISTRIBUTIONS = ["xpot", "own"] as const;
+export type Distribution = (typeof DISTRIBUTIONS)[number];
 
 /** The company organization (Boston): every piece printed before branches existed, and parts, are its. */
 export const COMPANY_ORGANIZATION_SLUG = "xpot-company";
