@@ -96,10 +96,11 @@ export function AdminTags() {
   const [location, setLocation] = useLocation();
   const tm = useT(manageMessages);
   const [tabSegment, idSegment, ...more] = location.replace(/^\/admin\/tags\/?/, "").split("/");
-  // Batches, the Journey and the NFC writers are the global admin's: managers
-  // neither see their tabs nor reach them by URL (and the API answers 403).
+  // Overview, Inventory and Distribution are every panel's (the server narrows them to the owner's or the partner's
+  // organization). The shop, the Journey and, for anyone but a partner, Production and the NFC writers are the
+  // platform's: other profiles neither see their tabs nor reach them by URL (and the API answers 403).
   const isAdmin = useIsSuperAdmin();
-  // Production and the bench computers are also a printing branch's Rep Admin's, for that branch (the server scopes them).
+  // Production and the bench computers are also a partner's (the owner of a branch that prints its own pieces), for that branch.
   const { prints } = useProductionAccess();
   const reaches = (id: TabId) => isAdmin || ((id === "production" || id === "provisioners") && prints);
   const tabs = TABS.filter((t) => !("adminOnly" in t) || reaches(t.id));

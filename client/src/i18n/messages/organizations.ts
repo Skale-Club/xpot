@@ -6,9 +6,9 @@ import type { Dictionary } from "../index";
 
 const en = {
   title: "Organizations",
-  intro: "Teams of reps that share companies, stock, kits and reporting.",
+  intro: "Teams of employees that share companies, stock, kits and reporting.",
   namePlaceholder: "Organization name",
-  chooseRepAdmin: "Choose the first org admin",
+  chooseRepAdmin: "Choose the first owner",
   createOrganization: "Create organization",
   emptyList: "No organizations available.",
   roleRepAdmin: "Owner",
@@ -25,6 +25,30 @@ const en = {
   tabKits: "Kits",
   tabCustomers: "Companies",
   tabSettings: "Settings",
+  tabPurchases: "Team purchases",
+
+  // Team purchases: what the team bought from Stuscle (read only; the owner follows, Stuscle takes the payment)
+  purchasesHint: "What your team bought. You follow the orders; the payment is made in the Stuscle store.",
+  noPurchases: "Your team has not bought pieces yet.",
+  purchaseStatus_pending: "On the way",
+  purchaseStatus_fulfilled: "Arrived",
+  purchaseStatus_cancelled: "Cancelled",
+  purchaseLine: "{count} x {sku}",
+  purchaseNoSku: "Piece",
+
+  // Overview: the team's work in the last 30 days (GET /organizations/:id/activity)
+  activityTitle: "Team activity, last 30 days",
+  activityVisits: "Visits",
+  activityFinished: "Finished visits",
+  activitySales: "Sales",
+  activityRevenue: "Sales total",
+  activityFailed: "Could not load the team activity.",
+
+  // Organizations list (platform): who produces and who sells
+  typeProducer: "Producer",
+  typeSeller: "Seller",
+  typeFilter: "Type",
+  typeAll: "All types",
 
   cardMembers: "Team members",
   cardInventory: "Inventory",
@@ -79,7 +103,7 @@ const en = {
 
   orgName: "Organization name",
   orgSaved: "Organization saved",
-  settingsReadOnly: "Only an Xpot admin or a manager can edit organization settings.",
+  settingsReadOnly: "Only the platform can edit organization settings.",
 
   // Team › one person (OrganizationPerson.tsx)
   teamHint: "Tap a person to see their companies, visits, tasks and sales.",
@@ -99,9 +123,9 @@ export const organizationsMessages: Dictionary<typeof en> = {
   en,
   pt: {
     title: "Organizações",
-    intro: "Equipes de vendedores que compartilham empresas, estoque, kits e relatórios.",
+    intro: "Equipes de funcionários que compartilham empresas, estoque, kits e relatórios.",
     namePlaceholder: "Nome da organização",
-    chooseRepAdmin: "Escolha o primeiro admin da organização",
+    chooseRepAdmin: "Escolha o primeiro dono",
     createOrganization: "Criar organização",
     emptyList: "Nenhuma organização disponível.",
     roleRepAdmin: "Dono",
@@ -118,6 +142,27 @@ export const organizationsMessages: Dictionary<typeof en> = {
     tabKits: "Kits",
     tabCustomers: "Empresas",
     tabSettings: "Configurações",
+    tabPurchases: "Compras da equipe",
+
+    purchasesHint: "O que sua equipe comprou. Você acompanha os pedidos; o pagamento é feito na loja Stuscle.",
+    noPurchases: "Sua equipe ainda não comprou peças.",
+    purchaseStatus_pending: "A caminho",
+    purchaseStatus_fulfilled: "Chegou",
+    purchaseStatus_cancelled: "Cancelado",
+    purchaseLine: "{count} x {sku}",
+    purchaseNoSku: "Peça",
+
+    activityTitle: "Atividade da equipe, últimos 30 dias",
+    activityVisits: "Visitas",
+    activityFinished: "Visitas concluídas",
+    activitySales: "Vendas",
+    activityRevenue: "Total vendido",
+    activityFailed: "Não foi possível carregar a atividade da equipe.",
+
+    typeProducer: "Produtora",
+    typeSeller: "Vendedora",
+    typeFilter: "Tipo",
+    typeAll: "Todos os tipos",
 
     cardMembers: "Membros da equipe",
     cardInventory: "Estoque",
@@ -172,7 +217,7 @@ export const organizationsMessages: Dictionary<typeof en> = {
 
     orgName: "Nome da organização",
     orgSaved: "Organização salva",
-    settingsReadOnly: "Só um admin do Xpot ou um gerente pode editar as configurações da organização.",
+    settingsReadOnly: "Só a plataforma pode editar as configurações da organização.",
 
     teamHint: "Toque numa pessoa para ver as empresas, visitas, tarefas e vendas dela.",
     openInPeople: "Abrir em Pessoas",
@@ -188,9 +233,9 @@ export const organizationsMessages: Dictionary<typeof en> = {
   },
   es: {
     title: "Organizaciones",
-    intro: "Equipos de vendedores que comparten empresas, stock, kits e informes.",
+    intro: "Equipos de empleados que comparten empresas, stock, kits e informes.",
     namePlaceholder: "Nombre de la organización",
-    chooseRepAdmin: "Elige el primer admin de la organización",
+    chooseRepAdmin: "Elige al primer dueño",
     createOrganization: "Crear organización",
     emptyList: "No hay organizaciones disponibles.",
     roleRepAdmin: "Dueño",
@@ -207,6 +252,27 @@ export const organizationsMessages: Dictionary<typeof en> = {
     tabKits: "Kits",
     tabCustomers: "Empresas",
     tabSettings: "Ajustes",
+    tabPurchases: "Compras del equipo",
+
+    purchasesHint: "Lo que compró tu equipo. Tú sigues los pedidos; el pago se hace en la tienda Stuscle.",
+    noPurchases: "Tu equipo aún no ha comprado piezas.",
+    purchaseStatus_pending: "En camino",
+    purchaseStatus_fulfilled: "Llegó",
+    purchaseStatus_cancelled: "Cancelado",
+    purchaseLine: "{count} x {sku}",
+    purchaseNoSku: "Pieza",
+
+    activityTitle: "Actividad del equipo, últimos 30 días",
+    activityVisits: "Visitas",
+    activityFinished: "Visitas terminadas",
+    activitySales: "Ventas",
+    activityRevenue: "Total vendido",
+    activityFailed: "No se pudo cargar la actividad del equipo.",
+
+    typeProducer: "Productora",
+    typeSeller: "Vendedora",
+    typeFilter: "Tipo",
+    typeAll: "Todos los tipos",
 
     cardMembers: "Miembros del equipo",
     cardInventory: "Stock",
@@ -261,7 +327,7 @@ export const organizationsMessages: Dictionary<typeof en> = {
 
     orgName: "Nombre de la organización",
     orgSaved: "Organización guardada",
-    settingsReadOnly: "Solo un admin de Xpot o un gerente puede editar los ajustes de la organización.",
+    settingsReadOnly: "Solo la plataforma puede editar los ajustes de la organización.",
 
     teamHint: "Toca una persona para ver sus empresas, visitas, tareas y ventas.",
     openInPeople: "Abrir en Personas",

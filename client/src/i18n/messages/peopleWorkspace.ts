@@ -59,7 +59,7 @@ const en = {
   addExisting: "Add an existing person",
   choosePerson: "Choose a person",
   createInPeople: "Create a person in People",
-  addExistingManagersOnly: "An Xpot admin or a manager adds people to this organization, in People or here.",
+  addExistingManagersOnly: "The platform adds people to this organization, in People or here.",
   allPeopleJoined: "Everyone is already a member.",
   showPersonal: "Show personal workspaces",
   personalHidden_one: "{count} personal workspace hidden",
@@ -70,7 +70,7 @@ const en = {
   orgActive: "Active",
   orgActiveHint: "An inactive organization keeps its members and records; it is only marked inactive.",
   orgPrintsOwnPieces: "Prints its own pieces",
-  orgPrintsOwnPiecesHint: "Its Rep Admins use Production for it: print requests, plates, batches and its own bench. Only an Xpot admin changes this.",
+  orgPrintsOwnPiecesHint: "Its owners use Production for it: print requests, plates, batches and its own bench. Only the platform changes this.",
   openRow: "Open",
 
   // Visits › Manage › Overview
@@ -159,7 +159,7 @@ export const peopleWorkspaceMessages: Dictionary<typeof en> = {
     addExisting: "Adicionar uma pessoa existente",
     choosePerson: "Escolha uma pessoa",
     createInPeople: "Criar uma pessoa em Pessoas",
-    addExistingManagersOnly: "Um admin do Xpot ou um gerente adiciona pessoas a esta organização, em Pessoas ou aqui.",
+    addExistingManagersOnly: "A plataforma adiciona pessoas a esta organização, em Pessoas ou aqui.",
     allPeopleJoined: "Todos já são membros.",
     showPersonal: "Mostrar espaços pessoais",
     personalHidden_one: "{count} espaço pessoal oculto",
@@ -170,7 +170,7 @@ export const peopleWorkspaceMessages: Dictionary<typeof en> = {
     orgActive: "Ativa",
     orgActiveHint: "Uma organização inativa mantém os membros e os registros; só fica marcada como inativa.",
     orgPrintsOwnPieces: "Imprime as próprias peças",
-    orgPrintsOwnPiecesHint: "Os Rep Admins dela usam a Produção para ela: pedidos de impressão, placas, lotes e a própria bancada. Só um admin do Xpot muda isto.",
+    orgPrintsOwnPiecesHint: "Os donos dela usam a Produção para ela: pedidos de impressão, placas, lotes e a própria bancada. Só a plataforma muda isto.",
     openRow: "Abrir",
 
     periodLabel: "Período",
@@ -254,7 +254,7 @@ export const peopleWorkspaceMessages: Dictionary<typeof en> = {
     addExisting: "Agregar una persona existente",
     choosePerson: "Elige una persona",
     createInPeople: "Crear una persona en Personas",
-    addExistingManagersOnly: "Un admin de Xpot o un gerente agrega personas a esta organización, en Personas o aquí.",
+    addExistingManagersOnly: "La plataforma agrega personas a esta organización, en Personas o aquí.",
     allPeopleJoined: "Todos ya son miembros.",
     showPersonal: "Mostrar espacios personales",
     personalHidden_one: "{count} espacio personal oculto",
@@ -265,7 +265,7 @@ export const peopleWorkspaceMessages: Dictionary<typeof en> = {
     orgActive: "Activa",
     orgActiveHint: "Una organización inactiva conserva sus miembros y registros; solo queda marcada como inactiva.",
     orgPrintsOwnPieces: "Imprime sus propias piezas",
-    orgPrintsOwnPiecesHint: "Sus Rep Admins usan Producción para ella: pedidos de impresión, placas, lotes y su propia estación. Solo un admin de Xpot cambia esto.",
+    orgPrintsOwnPiecesHint: "Sus dueños usan Producción para ella: pedidos de impresión, placas, lotes y su propia estación. Solo la plataforma cambia esto.",
     openRow: "Abrir",
 
     periodLabel: "Período",

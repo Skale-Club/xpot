@@ -43,7 +43,7 @@ const en = {
   // Access (Settings › Administration, management mode on)
   role: "Role",
   role_rep: "Rep",
-  role_admin: "Xpot admin",
+  role_admin: "Platform",
 
   saveFailed: "Failed to save",
 
@@ -89,7 +89,7 @@ export const settingsMessages: Dictionary<typeof en> = {
 
     role: "Papel",
     role_rep: "Vendedor",
-    role_admin: "Admin do Xpot",
+    role_admin: "Plataforma",
 
     saveFailed: "Não foi possível salvar",
     saveChanges: "Salvar alterações",
@@ -130,7 +130,7 @@ export const settingsMessages: Dictionary<typeof en> = {
 
     role: "Rol",
     role_rep: "Vendedor",
-    role_admin: "Admin de Xpot",
+    role_admin: "Plataforma",
 
     saveFailed: "No se pudo guardar",
     saveChanges: "Guardar cambios",

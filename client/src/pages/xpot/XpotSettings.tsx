@@ -34,6 +34,7 @@ import { commonMessages } from "@/i18n/messages/common";
 import { settingsMessages } from "@/i18n/messages/settings";
 import { navIaMessages } from "@/i18n/messages/navIa";
 import { workspacesMessages } from "@/i18n/messages/workspaces";
+import { usePanelNames } from "@/components/xpot/panelNames";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { addPersonMessages } from "@/i18n/messages/addPerson";
 import { runsATeam } from "@shared/organizations";
@@ -218,6 +219,7 @@ export function XpotSettings() {
   const tt = useT(tagsMessages);
   const tp = useT(addPersonMessages);
   const access = useViewerAccess();
+  const { panelName } = usePanelNames();
   const avatar = useAvatarUpload();
   const [initialized, setInitialized] = useState(false);
   const isDesktop = useIsDesktop();
@@ -351,7 +353,7 @@ export function XpotSettings() {
   const signInPhone = me?.user.phone ? formatPhone(me.user.phone) : null;
   // Administration: someone who can manage sees the management-mode switch; the
   // admin pages and their access details only with the mode on.
-  const canManage = access.hasAdminAccess || access.reach === "organization";
+  const canManage = !!access.reach;
   // My organization: the one the person works in (a team before their own one-person workspace), and their role in it.
   const myOrganizations = (me?.organizations ?? [])
     .map((organization) => ({ organization, membership: me?.organizationMemberships?.find((item) => item.organizationId === organization.id && item.isActive && !item.blockedAt) }))
@@ -520,9 +522,9 @@ export function XpotSettings() {
 
       case "administration":
         if (!canManage) return null;
-        return <Section key={id} id={id} title={tw(me?.user.isAdmin ? "superAdmin" : "management")} titled={titled}>
-          <p className="text-sm leading-relaxed text-white/50">{tw(me?.user.isAdmin ? "panelHint" : "teamHint")}</p>
-          <Button asChild variant="secondary"><Link href={access.hasAdminAccess ? "/admin" : "/organizations"} data-testid="settings-open-panel"><Shield className="h-4 w-4" />{tw("openPanel")}</Link></Button>
+        return <Section key={id} id={id} title={panelName(access.profile)} titled={titled}>
+          <p className="text-sm leading-relaxed text-white/50">{tw(access.profile === "platform" ? "platformHint" : access.profile === "partner" ? "productionHint" : "teamHint")}</p>
+          <Button asChild variant="secondary"><Link href="/admin" data-testid="settings-open-panel"><Shield className="h-4 w-4" />{tw("openPanel")}</Link></Button>
         </Section>;
     }
   };
@@ -532,7 +534,7 @@ export function XpotSettings() {
     organization: tp("sectionTitle"),
     signin: tn("tabSignIn"),
     language: tc("language"),
-    administration: tw(me?.user.isAdmin ? "superAdmin" : "management"),
+    administration: panelName(access.profile),
   };
 
   // Desktop: the whole page, top to bottom.

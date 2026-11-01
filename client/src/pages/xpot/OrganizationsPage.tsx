@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Building2, ChevronRight, Package, PackageOpen, Settings, ShieldCheck, UserPlus, Users } from "lucide-react";
-import { Link, useLocation, useSearchParams } from "wouter";
+import { Building2, ChevronRight, Package, PackageOpen, Settings, ShieldCheck, ShoppingBag, UserPlus, Users } from "lucide-react";
+import { Link, Redirect, useLocation, useSearchParams } from "wouter";
 import { Button } from "@/components/ui/button";
 import { AppLayout } from "@/components/xpot/AppLayout";
 import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
@@ -19,9 +19,9 @@ import { DANGER_OUTLINE, GLASS_CLASS, GLASS_SUBTLE_CLASS } from "@/components/xp
 import { Tabs } from "@/components/xpot/Tabs";
 import { apiRequest } from "@/lib/queryClient";
 import { describeApiError } from "@/lib/apiErrors";
-import { managementReach } from "@/lib/adminMode";
+import { managementReach, ownedOrganizationId } from "@/lib/adminMode";
 import { formatDate } from "@/lib/dates";
-import { formatPhone } from "@/lib/format";
+import { formatMoney, formatPhone } from "@/lib/format";
 import { useToast } from "@/hooks/use-toast";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { useT } from "@/i18n";
@@ -32,12 +32,16 @@ import { DistributionChoice, OrganizationLinks } from "./OrganizationDistributio
 import { peopleWorkspaceMessages } from "@/i18n/messages/peopleWorkspace";
 import { shellMessages } from "@/i18n/messages/shell";
 import { tagsMessages } from "@/i18n/messages/tags";
+import { workspacesMessages } from "@/i18n/messages/workspaces";
 import { repModules } from "@shared/modules";
 import { kitCode } from "@shared/tagKits";
+import { teamPeriodSince, type TeamActivityResponse } from "@shared/teamActivity";
 import type { XpotMeResponse } from "./types";
 import { AddPersonForm } from "./components/AddPersonForm";
 
-// Account › Organizations. People are created, approved and blocked only in
+// Organizations. The platform sees them all, each a Producer or a Seller (prints_own_pieces), and can filter by that.
+// An owner or a partner who runs exactly one goes straight to its workspace, which is their panel's Team, Team
+// purchases and Settings (the sidebar opens it with ?tab=). People are created, approved and blocked only in
 // People (/admin/reps); here an organization's members are existing people,
 // added and given a role. The automatic one-person workspace each new rep gets
 // (`personal`, shared/organizations.ts) is tucked away behind a toggle. The
@@ -76,6 +80,16 @@ type Member = {
 
 type Person = { id: number; displayName: string; access: "pending" | "active" | "blocked"; refused?: boolean };
 
+/** What the team bought (GET /organizations/:id/purchases): a Stuscle order with its lines, read only. */
+type Purchase = {
+  acquisition: { id: string; status: string; currency: string; purchasedAt: string };
+  repName: string | null;
+  lines: Array<{ id: string; externalSku: string | null; quantity: number; subtotalCents: number }>;
+};
+
+/** Producer: prints its own pieces (the company included). Seller: sells what it buys. */
+const isProducer = (organization: Pick<Organization, "slug" | "printsOwnPieces">) => !!organization.printsOwnPieces || organization.slug === COMPANY_ORGANIZATION_SLUG;
+
 /** What a member action does, for its confirmation and its toast. */
 type MemberAction = { member: Member; kind: "suspend" | "reactivate" | "makeAdmin" | "makeRep" | "remove" };
 
@@ -95,7 +109,14 @@ function lookup(t: (key: never) => string, key: string, fallback: string) {
 const isPlatformManager = (me: XpotMeResponse | undefined) => !!me && me.user.isAdmin;
 
 export function OrganizationsPage({ organizationId }: { organizationId?: number }) {
-  return organizationId ? <OrganizationWorkspace organizationId={organizationId} /> : <OrganizationsList />;
+  return organizationId ? <OrganizationWorkspace organizationId={organizationId} /> : <OrganizationsEntry />;
+}
+
+/** An owner or a partner with one organization has no list to choose from: their panel's organization opens. */
+function OrganizationsEntry() {
+  const { data: me } = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"] });
+  const only = ownedOrganizationId(me);
+  return only ? <Redirect to={`/organizations/${only}`} /> : <OrganizationsList />;
 }
 
 function OrganizationsList() {
@@ -110,8 +131,9 @@ function OrganizationsList() {
   const [name, setName] = useState("");
   const [repAdminId, setRepAdminId] = useState("");
   const [showPersonal, setShowPersonal] = useState(false);
+  const [type, setType] = useState<"all" | "producer" | "seller">("all");
   const personalCount = organizations.filter((o) => o.personal).length;
-  const shown = showPersonal ? organizations : organizations.filter((o) => !o.personal);
+  const shown = (showPersonal ? organizations : organizations.filter((o) => !o.personal)).filter((o) => type === "all" || (type === "producer") === isProducer(o));
   const create = useMutation({
     mutationFn: () => json<Organization>("POST", "/api/xpot/organizations", { name, repAdminId: Number(repAdminId) }),
     onSuccess: (organization) => {
@@ -139,10 +161,14 @@ function OrganizationsList() {
           </form>
         )}
 
-        {personalCount > 0 && (
+        {(personalCount > 0 || mayCreate) && (
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-xs text-white/45">{showPersonal ? "" : tw.plural("personalHidden", personalCount)}</p>
-            <FilterToggle pressed={showPersonal} onChange={setShowPersonal} label={tw("showPersonal")} testId="organizations-show-personal" />
+            <p className="text-xs text-white/45">{personalCount > 0 && !showPersonal ? tw.plural("personalHidden", personalCount) : ""}</p>
+            <div className="flex flex-wrap items-center gap-3">
+              {mayCreate && <Select value={type} onChange={(event) => setType(event.target.value as typeof type)} aria-label={t("typeFilter")} data-testid="organizations-type-filter"
+                options={[{ value: "all", label: t("typeAll") }, { value: "producer", label: t("typeProducer") }, { value: "seller", label: t("typeSeller") }]} />}
+              {personalCount > 0 && <FilterToggle pressed={showPersonal} onChange={setShowPersonal} label={tw("showPersonal")} testId="organizations-show-personal" />}
+            </div>
           </div>
         )}
 
@@ -161,6 +187,7 @@ function OrganizationsList() {
                 <div className="flex items-start justify-between gap-3">
                   <Building2 className="h-6 w-6 text-slate-200" />
                   <div className="flex flex-wrap justify-end gap-1.5">
+                    {mayCreate && <Pill tone={isProducer(organization) ? "violet" : "blue"}>{isProducer(organization) ? t("typeProducer") : t("typeSeller")}</Pill>}
                     {organization.personal && <Pill tone="slate">{tw("personalWorkspace")}</Pill>}
                     {organization.membershipRole && (
                       <Pill tone="slate">{organization.membershipRole === "admin" ? t("roleRepAdmin") : t("roleRep")}</Pill>
@@ -181,7 +208,7 @@ function OrganizationsList() {
   );
 }
 
-const WORKSPACE_TABS = ["overview", "team", "inventory", "kits", "customers", "settings"] as const;
+const WORKSPACE_TABS = ["overview", "team", "inventory", "kits", "purchases", "customers", "settings"] as const;
 type WorkspaceTab = (typeof WORKSPACE_TABS)[number];
 
 function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
@@ -191,6 +218,7 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
   const tt = useT(tagsMessages);
   const tw = useT(peopleWorkspaceMessages);
   const ts = useT(shellMessages);
+  const twp = useT(workspacesMessages);
   // The open section rides in the URL (?tab=team: a person's page links back to
   // the team it came from). Desktop shows a tab bar, Overview first. A phone has
   // no tab strip to swipe: its first screen lists the sections with their
@@ -223,6 +251,10 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
   const membership = me?.organizationMemberships?.find((item) => item.organizationId === organizationId && item.isActive && !item.blockedAt);
   const platformManager = isPlatformManager(me);
   const mayManageTeam = platformManager || membership?.role === "admin";
+  // The owner or partner of this one organization has no list above it: Back goes to their panel.
+  const [backHref, backLabel] = ownedOrganizationId(me) === organizationId ? ["/admin", twp("todayTitle")] : ["/organizations", t("backToList")];
+  // The owner follows what the team bought; an employee has no list of it (the server refuses).
+  const purchases = useQuery<Purchase[]>({ queryKey: [`${base}/purchases`], enabled: tab === "purchases" && mayManageTeam });
   // Companies open where this viewer works with them: Visits if they have it, else Tags.
   const usesVisits = !!me && repModules({ role: me.rep.role, modules: me.rep.modules }).includes("visits");
   const [pending, setPending] = useState<MemberAction | null>(null);
@@ -257,15 +289,16 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
     { id: "team", label: t("tabTeam"), icon: Users },
     { id: "inventory", label: t("tabInventory"), icon: Package },
     { id: "kits", label: t("tabKits"), icon: PackageOpen },
+    ...(mayManageTeam ? [{ id: "purchases" as const, label: t("tabPurchases"), icon: ShoppingBag }] : []),
     { id: "customers", label: t("tabCustomers"), icon: Users },
     { id: "settings", label: t("tabSettings"), icon: Settings },
-  ], [t]);
+  ], [t, mayManageTeam]);
 
   if (organization.isLoading) return <AppLayout title={t("title")}><ListSkeleton rows={4} /></AppLayout>;
   if (organization.error || !organization.data) {
     return (
       <AppLayout title={t("title")}>
-        <BackLink href="/organizations" className="mb-3">{t("backToList")}</BackLink>
+        <BackLink href={backHref} className="mb-3">{backLabel}</BackLink>
         {organization.error ? (
           <ErrorState message={describeApiError(organization.error)} onRetry={() => void organization.refetch()} />
         ) : (
@@ -292,8 +325,8 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
           <PageHeader backHref={home} backLabel={org.name} eyebrow={org.name} title={phoneSection.label} className="mb-0" />
         ) : (
           <PageHeader
-            backHref="/organizations"
-            backLabel={t("backToList")}
+            backHref={backHref}
+            backLabel={backLabel}
             title={org.name}
             description={membership?.role === "admin" ? t("roleRepAdmin") : platformManager ? t("platformManagement") : t("roleRep")}
             className="mb-0"
@@ -303,7 +336,7 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
         {isDesktop && tab && <Tabs tabs={tabs} value={tab} onChange={setTab} ariaLabel={org.name} idPrefix="organization" fill={false} accent="account" />}
         {!tab && <SectionList organization={org} tabs={tabs} onOpen={setTab} />}
 
-        {tab === "overview" && <Overview organization={org} onOpen={setTab} />}
+        {tab === "overview" && <Overview organization={org} onOpen={setTab} activityBase={mayManageTeam && usesVisits ? base : null} />}
         {tab === "team" && (
           <div className="space-y-4">
             {/* An owner adds a person by name and phone, always an employee; the platform also picks existing people and makes owners. */}
@@ -354,6 +387,7 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
             seeAll={platformManager ? { href: `/admin/tags/kits?view=kits&org=${organizationId}`, label: t("seeAllIn", { screen: ts("manageKits") }), testId: "organization-kits-all" } : undefined}
             render={(row) => <><span className="text-sm text-white"><span className="font-mono">{kitCode(row.kitNumber)}</span><span className="text-white/45"> · {formatDate(row.createdAt)}</span>{row.note ? <span className="text-white/45"> · {row.note}</span> : null}</span><span className="text-xs text-white/45">{repName(row.repId)}</span></>} />
         )}
+        {tab === "purchases" && mayManageTeam && <PurchasesList query={purchases} />}
         {tab === "customers" && (
           <RecordList query={customers} empty={t("noCustomers")} rowHref={(row) => `${managementReach(me) ? "/admin/work" : ""}${usesVisits ? `/leads/${row.id}` : `/tags/customers/${row.id}`}`}
             // Companies (Visits) has the organization filter, for platform management in management mode.
@@ -428,7 +462,7 @@ function AddExistingPerson({ organizationId, members }: { organizationId: number
   );
 }
 
-function Overview({ organization, onOpen }: { organization: Organization; onOpen: (tab: WorkspaceTab) => void }) {
+function Overview({ organization, onOpen, activityBase }: { organization: Organization; onOpen: (tab: WorkspaceTab) => void; activityBase: string | null }) {
   const t = useT(organizationsMessages);
   const cards: Array<[string, number, WorkspaceTab]> = [
     [t("cardMembers"), organization.counts?.members ?? 0, "team"],
@@ -437,12 +471,65 @@ function Overview({ organization, onOpen }: { organization: Organization; onOpen
     [t("cardCustomers"), organization.counts?.customers ?? 0, "customers"],
   ];
   return (
-    <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-      {cards.map(([label, value, tab]) => (
-        <button key={tab} type="button" onClick={() => onOpen(tab)} className="rounded-2xl text-left transition-colors hover:bg-white/[0.03]">
-          <Stat card label={label} value={value} />
-        </button>
-      ))}
+    <div className="space-y-5">
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        {cards.map(([label, value, tab]) => (
+          <button key={tab} type="button" onClick={() => onOpen(tab)} className="rounded-2xl text-left transition-colors hover:bg-white/[0.03]">
+            <Stat card label={label} value={value} />
+          </button>
+        ))}
+      </div>
+      {activityBase ? <TeamActivity base={activityBase} /> : null}
+    </div>
+  );
+}
+
+/** The team's visits and sales over the last 30 days (GET /organizations/:id/activity), the platform's Overview for one organization. */
+function TeamActivity({ base }: { base: string }) {
+  const t = useT(organizationsMessages);
+  const tw = useT(peopleWorkspaceMessages);
+  // Fixed per mount, so the query key stays put.
+  const since = useMemo(() => teamPeriodSince("30").toISOString(), []);
+  const query = useQuery<TeamActivityResponse>({ queryKey: [`${base}/activity?since=${encodeURIComponent(since)}`] });
+  if (query.isLoading) return <ListSkeleton rows={1} className="grid grid-cols-2 gap-3 xl:grid-cols-4" rowClassName="h-20 rounded-2xl" />;
+  if (query.isError || !query.data) return <ErrorState message={t("activityFailed")} onRetry={() => void query.refetch()} />;
+  const m = query.data.metrics;
+  return (
+    <section className="space-y-2" aria-label={t("activityTitle")} data-testid="organization-activity">
+      <h2 className="text-xs font-semibold uppercase tracking-wider text-white/40">{t("activityTitle")}</h2>
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <Stat card label={t("activityVisits")} value={m.visits} detail={tw("kpiVisitsDetail")} />
+        <Stat card label={t("activityFinished")} value={m.finishedVisits} detail={tw("kpiFinishedDetail")} />
+        <Stat card label={t("activitySales")} value={m.salesCount} />
+        <Stat card label={t("activityRevenue")} value={formatMoney(m.salesTotalCents, m.currency)} tone="money" />
+      </div>
+    </section>
+  );
+}
+
+/** What the team bought, newest first. Read only: the payment is Stuscle's and the owner does not approve. */
+function PurchasesList({ query }: { query: { data?: Purchase[]; isLoading: boolean; isError: boolean; error: unknown; refetch: () => unknown } }) {
+  const t = useT(organizationsMessages);
+  if (query.isLoading) return <ListSkeleton rows={3} />;
+  if (query.isError) return <ErrorState message={describeApiError(query.error)} onRetry={() => void query.refetch()} />;
+  const rows = query.data ?? [];
+  if (!rows.length) return <EmptyState compact icon={ShoppingBag} title={t("noPurchases")} hint={t("purchasesHint")} />;
+  const tone = (status: string) => (status === "fulfilled" ? "green" : status === "pending" ? "amber" : "slate");
+  return (
+    <div className="space-y-2">
+      <p className="text-xs text-white/45">{t("purchasesHint")}</p>
+      <div className={`divide-y divide-white/[0.06] overflow-hidden rounded-2xl ${GLASS_SUBTLE_CLASS}`} data-testid="organization-purchases">
+        {rows.map(({ acquisition, repName, lines }) => (
+          <div key={acquisition.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3" data-testid={`organization-purchase-${acquisition.id}`}>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-white">{repName ?? "—"}</p>
+              <p className="text-xs text-white/45">{lines.map((line) => t("purchaseLine", { count: line.quantity, sku: line.externalSku ?? t("purchaseNoSku") })).join(", ")}</p>
+            </div>
+            <span className="text-xs tabular-nums text-white/45">{formatDate(acquisition.purchasedAt)}</span>
+            <Pill tone={tone(acquisition.status)}>{lookup(t, `purchaseStatus_${acquisition.status}`, acquisition.status)}</Pill>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
