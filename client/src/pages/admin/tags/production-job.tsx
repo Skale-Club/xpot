@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { AlertTriangle, ClipboardList, Download, FileUp, Files, Hammer, MessageSquareWarning, PackageCheck, Printer, QrCode, RotateCcw } from "lucide-react";
-import { canMarkPrinted, type PrintJobDetail, type PrintJobFileItem } from "@shared/printProduction";
+import { canMarkPrinted, planRedoCodes, type PrintJobDetail, type PrintJobFileItem } from "@shared/printProduction";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
 import { SectionCard } from "@/components/xpot/DashboardKit";
@@ -27,6 +27,12 @@ type Go = (path: string) => void;
 type Step = "complete" | "fail" | "cancel" | "release";
 
 const FILE_ORDER = ["gcode_3mf", "3mf", "serial_map", "preview", "report"] as const;
+
+/** The codes the bench's QR check could not read (report.qr_failed_codes). */
+function qrFailedCodes(job: PrintJobDetail): string[] {
+  const codes = job.report.qr_failed_codes;
+  return Array.isArray(codes) ? codes.map(String) : [];
+}
 
 export function PrintJobPage({ id, go }: { id: string; go: Go }) {
   const t = useT(productionMessages);
@@ -204,6 +210,9 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
       </SectionCard>
       {job.stale ? <InlineAlert tone="warning" title={t("staleTitle")}>{t("staleBody")}</InlineAlert> : null}
       {job.status === "failed" && job.errorMessage ? <InlineAlert tone="error" title={t("failedTitle")}>{job.errorMessage}</InlineAlert> : null}
+      {job.status === "failed" && job.batchId && planRedoCodes({ errorCode: job.errorCode, anyReceived: Boolean(job.receivedCount) }) === "replace" ? (
+        <InlineAlert tone="info" title={t("qrRedoTitle")}>{t("qrRedoBody", { codes: qrFailedCodes(job).join(", ") || job.batchCode || "" })}</InlineAlert>
+      ) : null}
       {job.notes ? <p className="max-w-3xl whitespace-pre-line text-sm text-white/60">{job.notes}</p> : null}
 
       <div className="grid gap-2 sm:grid-cols-4">

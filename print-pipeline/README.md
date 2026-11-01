@@ -77,7 +77,7 @@ in `.xpot-print-now.json`: anything else in the folder is never touched.
 | `library/presets/` | the two A1 project templates the NFC recipes name |
 | `library/svg/` | the logos and the NFC mark, with their sources in `SOURCES.md` |
 | `catalog/` | `catalog.json`, the catalog loaded into Xpot (every model's v1), and `make_catalog.py`, which wrote it from the 3D repo's batch recipes |
-| `tests/` | `test_pipeline.py`, `test_print_now.py` (CI, standard library) and `rebuild.py` (on the bench: rebuild a batch and compare) |
+| `tests/` | `test_pipeline.py`, `test_print_now.py` (CI, standard library), `test_gcode_qr_check.py` (the layer-1 QR check on a sliced card from `fixtures/`; needs OpenCV, so it runs on the bench) and `rebuild.py` (on the bench: rebuild a batch and compare) |
 
 The copied geometry is unchanged except its paths (the repo root is the folder holding `bench.py`, the library is
 `library/`). The batch scripts' own `main()` entry points still point at the 3D repo's layout and are not used: the
