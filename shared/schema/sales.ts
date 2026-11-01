@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { bigserial, pgTable, text, serial, integer, timestamp, boolean, jsonb, pgEnum, uniqueIndex, index } from "drizzle-orm/pg-core";
+import { bigserial, pgTable, text, serial, integer, timestamp, boolean, jsonb, pgEnum, primaryKey, uniqueIndex, index } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import { users } from "./auth.js";
 // Note: in the source project there was a FK to a `vcards` table (Skale Club's vCard feature).
@@ -225,6 +225,22 @@ export const salesLeadContacts = pgTable("sales_lead_contacts", {
 }, (table) => ({
   leadIdx: index("sales_lead_contacts_lead_idx").on(table.leadId),
 }));
+
+/**
+ * Phones allowed to read a business's customer panel (/my). Not users and not reps: the panel has its own session.
+ * migrations/0071_customer_accounts.sql.
+ */
+export const leadCustomerContacts = pgTable("lead_customer_contacts", {
+  leadId: integer("lead_id").references(() => salesLeads.id, { onDelete: "cascade" }).notNull(),
+  phone: text("phone").notNull(),
+  verifiedAt: timestamp("verified_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  createdByUserId: text("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.leadId, table.phone] }),
+  phoneIdx: index("lead_customer_contacts_phone_idx").on(table.phone),
+}));
+export type LeadCustomerContact = typeof leadCustomerContacts.$inferSelect;
 
 export const salesVisits = pgTable("sales_visits", {
   id: serial("id").primaryKey(),
