@@ -390,6 +390,45 @@ describe("serialized print orders", () => {
     expect((await q("SELECT count(*)::int AS n FROM tag_batches"))[0].n).toBe(1);
   });
 
+  it("prints a plate that failed its QR check again with fresh codes, and retires the old ones", async () => {
+    const app = admin();
+    await createSerializedModel(app);
+    const order = await firstPlate(app, { model: "plate-large-menu-white" });
+    const bench = await pairDevice(app, "Bench PC", ["print"]);
+    const ticket = (await request(app, "POST", "/api/provisioner/print-jobs/claim", {}, bench)).body;
+    const bad = ticket.tags[0].public_code;
+    const failed = await request(app, "POST", `/api/provisioner/print-jobs/${order.id}/complete`, {
+      outcome: "failed", errorCode: "qr_check_failed", errorMessage: `a QR on layer 1 does not decode to its own code: FAIL #001 ${bad}`,
+      report: { qr_failed_codes: [bad] },
+    }, bench);
+    expect(failed.body.status).toBe("failed");
+    const shown = (await request(app, "GET", `/api/xpot/admin/print-jobs/${order.id}`)).body;
+    expect(shown).toMatchObject({ status: "failed", errorCode: "qr_check_failed", report: { qr_failed_codes: [bad] } });
+
+    const redo = await request(app, "POST", `/api/xpot/admin/print-jobs/${order.id}/redo`);
+    expect(redo.status).toBe(201);
+    expect(redo.body).toMatchObject({ status: "requested", requestId: order.requestId, plateNumber: 1, quantity: 4, pieceCount: 4, pendingCount: 4 });
+    expect(redo.body.batchId).not.toBe(order.batchId);
+    expect(redo.body.batchCode).not.toBe(order.batchCode);
+    const fresh = (await q("SELECT public_code FROM tags WHERE batch_id = $1", [redo.body.batchId])).map((r) => r.public_code);
+    expect(fresh).not.toContain(bad);
+
+    // The old codes were never printed: retired, each with its movement, and their batch cancelled.
+    const old = await q("SELECT status, stock_status FROM tags WHERE batch_id = $1", [order.batchId]);
+    expect(old).toEqual(Array(4).fill({ status: "retired", stock_status: "retired" }));
+    const moves = await q("SELECT m.from_stock_status, m.to_stock_status FROM tag_stock_movements m JOIN tags t ON t.id = m.tag_id WHERE t.batch_id = $1 AND m.movement_type = 'retire'", [order.batchId]);
+    expect(moves).toEqual(Array(4).fill({ from_stock_status: "pending", to_stock_status: "retired" }));
+    const [batch] = await q("SELECT status, print_job_id FROM tag_batches WHERE id = $1", [order.batchId]);
+    expect(batch).toEqual({ status: "cancelled", print_job_id: order.id });
+    const [entry] = await q("SELECT after_value, content, metadata FROM tag_journey_entries WHERE batch_id = $1 AND action = 'batch_status_changed'", [order.batchId]);
+    expect(entry).toMatchObject({ after_value: "cancelled", metadata: { replacedBy: redo.body.id, retired: 4, qrFailedCodes: [bad] } });
+    expect(entry.content).toContain(bad);
+
+    // Plate 1 of the request is now the new order; the failed one stays as the record of what happened.
+    const plates = await q("SELECT id, status FROM print_jobs WHERE request_id = $1 ORDER BY created_at", [order.requestId]);
+    expect(plates).toEqual([{ id: order.id, status: "failed" }, { id: redo.body.id, status: "requested" }]);
+  });
+
   it("links a batch made before the catalog, with the status it already reached", async () => {
     const app = admin();
     await createSerializedModel(app);

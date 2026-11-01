@@ -148,6 +148,24 @@ export function canMarkPrinted(status: string): boolean {
   return planPrintJobTransition(status, "printed").ok;
 }
 
+/** The bench's error code when a QR on layer 1 does not decode to its own code (print-pipeline/pipeline.py). */
+export const PRINT_ERROR_QR_CHECK = "qr_check_failed";
+
+/**
+ * What "Print again" does with a failed or cancelled serialized plate's codes:
+ * - `same`: the same batch again (same version and bed), while none of its pieces was received;
+ * - `fresh`: a new batch from the current version, once some piece was received (those codes are taken);
+ * - `replace`: the plate failed its QR check and nothing was received. The same codes would build into the same
+ *   drawing and fail again (a plate could only be cancelled), so its pending codes are retired, its batch cancelled,
+ *   and a new batch with fresh codes takes its place.
+ */
+export type PrintRedoCodes = "same" | "fresh" | "replace";
+
+export function planRedoCodes(job: { errorCode: string | null; anyReceived: boolean }): PrintRedoCodes {
+  if (job.anyReceived) return "fresh";
+  return job.errorCode === PRINT_ERROR_QR_CHECK ? "replace" : "same";
+}
+
 // ─── Batch codes ──────────────────────────────────────────────────────────────
 
 export const PRINT_BATCH_PREFIX_PATTERN = /^[A-Z][A-Z0-9]{1,11}$/;
@@ -431,6 +449,8 @@ export interface PrintJobItem {
   pieceCount: number | null;
   deviceName: string | null;
   notes: string | null;
+  /** Why a failed plate failed, as a code (`build_failed`, `qr_check_failed`, `failed` when marked by hand). */
+  errorCode: string | null;
   errorMessage: string | null;
   report: Record<string, unknown>;
   createdAt: string;

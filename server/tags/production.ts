@@ -25,6 +25,7 @@ import {
   bedPosition,
   nextPrintBatchCode,
   planPrintJobTransition,
+  planRedoCodes,
   splitIntoPlates,
   splitPrintedPieces,
   type PrintBed,
@@ -469,7 +470,7 @@ interface JobRow {
   id: string; model_id: string; model_slug: string; model_title: string; model_kind: string; version_id: string;
   version_number: number; bed_label: string; plates: number; quantity: number; status: string; batch_id: string | null;
   batch_code: string | null; piece_count: number | null; received_count: number | null; pending_count: number | null; device_name: string | null;
-  notes: string | null; error_message: string | null; report: Record<string, unknown> | null; created_at: Date | string;
+  notes: string | null; error_code: string | null; error_message: string | null; report: Record<string, unknown> | null; created_at: Date | string;
   built_at: Date | string | null; printed_at: Date | string | null; updated_at: Date | string; last_event_at: Date | string | null;
   request_id: string | null; plate_number: number; plate_count: number; request_quantity: number;
   request_created_at: Date | string; downloads: Array<{ id: string; kind: string; filename: string }> | null;
@@ -483,7 +484,7 @@ const JOB_SELECT = sql`
       ELSE (SELECT count(*)::int FROM tags t WHERE t.batch_id = j.batch_id AND t.stock_status NOT IN ('pending', 'damaged')) END AS received_count,
     CASE WHEN j.batch_id IS NULL THEN NULL
       ELSE (SELECT count(*)::int FROM tags t WHERE t.batch_id = j.batch_id AND t.stock_status = 'pending') END AS pending_count,
-    d.device_name, j.notes, j.error_message, j.report, j.created_at, j.built_at, j.printed_at, j.updated_at, j.last_event_at,
+    d.device_name, j.notes, j.error_code, j.error_message, j.report, j.created_at, j.built_at, j.printed_at, j.updated_at, j.last_event_at,
     j.request_id, COALESCE(j.plate_number, 1) AS plate_number,
     CASE WHEN j.request_id IS NULL THEN 1
       ELSE (SELECT count(DISTINCT COALESCE(j2.plate_number, 1))::int FROM print_jobs j2 WHERE j2.request_id = j.request_id) END AS plate_count,
@@ -518,6 +519,7 @@ function jobItem(j: JobRow, now = Date.now()): PrintJobItem {
     pieceCount: j.piece_count === null ? null : Number(j.piece_count),
     deviceName: j.device_name,
     notes: j.notes,
+    errorCode: j.error_code,
     errorMessage: j.error_message,
     report: j.report ?? {},
     createdAt: iso(j.created_at)!,
@@ -841,25 +843,31 @@ export async function createJob(input: PrintJobCreateInput, userId: string | nul
 }
 
 /**
- * Print a failed or cancelled plate again, in the same request and place: the same batch while none of its pieces was
- * received (the same version and bed), else a fresh batch from the current version.
+ * Print a failed or cancelled plate again, in the same request and place (planRedoCodes): the same batch while none of
+ * its pieces was received (the same version and bed), else a fresh batch from the current version. A plate that failed
+ * its QR check gets fresh codes too, its old ones retired: the same codes would only fail again.
  */
 export async function redoJob(id: string, userId: string | null, source: JourneySource = "admin"): Promise<PrintJobDetail> {
   const job = await loadJob(id);
   if (job.status !== "failed" && job.status !== "cancelled") throw new TagError("Only a failed or cancelled order can be printed again", 409, "print_job_state");
   const [model] = await db.select().from(printModels).where(eq(printModels.id, job.modelId)).limit(1);
   if (model.status === "retired") throw new TagError("This model is retired", 409, "print_model_retired");
-  const reuse = job.batchId
-    ? Number((await rows<{ n: number }>(sql`SELECT count(*)::int AS n FROM tags WHERE batch_id = ${job.batchId} AND stock_status <> 'pending'`))[0]?.n ?? 0) === 0
-    : false;
+  const codes = job.batchId
+    ? planRedoCodes({
+      errorCode: job.errorCode,
+      anyReceived: Number((await rows<{ n: number }>(sql`SELECT count(*)::int AS n FROM tags WHERE batch_id = ${job.batchId} AND stock_status <> 'pending'`))[0]?.n ?? 0) > 0,
+    })
+    : "fresh";
   const [{ plate_count: plateCount }] = await rows<{ plate_count: number }>(sql`
     SELECT count(DISTINCT COALESCE(plate_number, 1))::int AS plate_count FROM print_jobs WHERE request_id = ${job.requestId}`);
   const ctx: PlateContext = {
     requestId: job.requestId!, plateNumber: job.plateNumber ?? 1, plateCount: Number(plateCount) || 1, notes: job.notes, userId, source,
   };
-  if (model.kind === "serialized" && !reuse) {
+  if (model.kind === "serialized" && codes !== "same") {
     const version = await currentVersionOf(model);
-    return getJob(await createSerializedPlate(model, version, pickBed(version, job.bedLabel), job.quantity, ctx));
+    const next = await createSerializedPlate(model, version, pickBed(version, job.bedLabel), job.quantity, ctx);
+    if (codes === "replace") await retireUnprintedBatch(job, next, userId, source);
+    return getJob(next);
   }
   const created = await db.transaction(async (tx) => {
     const [next] = await tx.insert(printJobs).values({
@@ -887,6 +895,54 @@ export async function redoJob(id: string, userId: string | null, source: Journey
     }
   }
   return getJob(created.id);
+}
+
+/**
+ * A plate whose codes never reached a bed (it failed its QR check and nothing was received), replaced by `nextJobId`
+ * with fresh codes: its pending codes are retired (one `retire` movement each) and its batch cancelled, so they can
+ * never be printed, stocked or sold. A piece that is not pending any more is left alone.
+ */
+async function retireUnprintedBatch(job: PrintJobRow, nextJobId: string, userId: string | null, source: JourneySource) {
+  const batchId = job.batchId!;
+  const reason = "Never printed: the plate failed its QR check and was printed again with fresh codes";
+  const result = await db.transaction(async (tx) => {
+    const [batch] = await tx.select().from(tagBatches).where(eq(tagBatches.id, batchId)).for("update");
+    if (!batch || batch.status === "cancelled") return null;
+    const pending = await tx.select().from(tags).where(sql`${tags.batchId} = ${batchId} AND ${tags.stockStatus} = 'pending'`).for("update");
+    const now = new Date();
+    if (pending.length) {
+      await tx.update(tags).set({ status: "retired", stockStatus: "retired", disabledAt: now, stockUpdatedAt: now, updatedAt: now })
+        .where(inArray(tags.id, pending.map((t) => t.id)));
+      await tx.insert(tagStockMovements).values(pending.map((t) => ({
+        tagId: t.id,
+        movementType: "retire",
+        fromStockStatus: "pending",
+        toStockStatus: "retired",
+        fromOwnershipType: t.ownershipType,
+        toOwnershipType: t.ownershipType,
+        fromCustodianRepId: t.custodianRepId,
+        toCustodianRepId: t.custodianRepId,
+        actorUserId: userId,
+        referenceType: "batch",
+        referenceId: batchId,
+        reason,
+      })));
+    }
+    await tx.update(tagBatches).set({ status: "cancelled", updatedAt: now }).where(eq(tagBatches.id, batchId));
+    return { batchCode: batch.batchCode, before: batch.status, retired: pending.length };
+  });
+  if (!result) return;
+  const failed = Array.isArray(job.report?.qr_failed_codes) ? (job.report.qr_failed_codes as unknown[]).map(String) : [];
+  await recordJourney({
+    kind: "execution",
+    action: "batch_status_changed",
+    title: `Batch ${result.batchCode} cancelled: ${result.retired} codes retired, printed again with fresh codes`,
+    content: failed.length ? `${reason}. Failed the QR check: ${failed.join(", ")}.` : `${reason}.`,
+    batchId,
+    beforeValue: result.before,
+    afterValue: "cancelled",
+    metadata: { printJobId: job.id, replacedBy: nextJobId, retired: result.retired, qrFailedCodes: failed },
+  }, journeyContext(userId, source));
 }
 
 export interface TransitionInput {
