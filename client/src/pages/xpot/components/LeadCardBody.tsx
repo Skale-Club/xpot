@@ -64,7 +64,7 @@ export function LeadCardBody({
       {/* Avatar + route */}
       <div className="flex shrink-0 flex-col items-center gap-1">
         {photo ? (
-          <img src={fileSrc(photo)} alt="" className="h-14 w-14 rounded-xl object-cover" />
+          <img src={fileSrc(photo)} alt="" loading="lazy" decoding="async" className="h-14 w-14 rounded-xl object-cover" />
         ) : (
           <div className="flex h-14 w-14 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04]">
             <Building2 className="h-7 w-7 text-white/40" aria-hidden="true" />

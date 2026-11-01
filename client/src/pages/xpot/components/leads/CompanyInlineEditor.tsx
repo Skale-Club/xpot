@@ -3,7 +3,7 @@ import { Camera, Plus, Trash2 } from "lucide-react";
 import type { SalesLead } from "../../types";
 import { InlineField, validateEmail } from "../InlineField";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { fileSrc } from "@/lib/files";
+import { fileSrc, shrinkImageForUpload } from "@/lib/files";
 import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/i18n";
 import { leadsMessages } from "@/i18n/messages/leads";
@@ -121,11 +121,7 @@ export function CompanyInlineEditor({ lead }: { lead: CompanyLead }) {
   async function addPhoto(file: File) {
     setUploadingPhoto(true);
     try {
-      const reader = new FileReader();
-      const imageData = await new Promise<string>((resolve) => {
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.readAsDataURL(file);
-      });
+      const imageData = await shrinkImageForUpload(file);
       const response = await apiRequest("POST", `/api/xpot/leads/${lead.id}/photos`, { imageData });
       const result = await response.json() as { photo: string };
       setPhotos((previous) => [result.photo, ...previous]);

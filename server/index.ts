@@ -5,7 +5,7 @@ import path from "path";
 import { createApp, log } from "./app.js";
 import { pool } from "./db.js";
 import { ensureUploadBucket } from "./lib/supabase.js";
-import { injectSeoHead } from "./seo.js";
+import { injectSeoHead, landingChunkPreloads, staticCacheControl } from "./seo.js";
 import { startProspectingWorker } from "./prospecting/queue.js";
 import { startAbandonedSignupNotifier } from "./auth/telegramNotifications.js";
 
@@ -27,9 +27,18 @@ const PORT = Number(process.env.PORT) || 2110;
     // the path stable whether esbuild emits CJS or ESM.
     const clientDist = path.resolve(process.cwd(), "dist", "public");
     const clientTemplate = await fs.readFile(path.join(clientDist, "index.html"), "utf8");
+    const landingPreloads = landingChunkPreloads(JSON.parse(await fs.readFile(path.join(clientDist, ".vite", "manifest.json"), "utf8")));
     // index:false makes every document navigation pass through the SEO renderer;
     // fingerprinted assets, robots.txt, sitemap.xml and the OG image stay static.
-    app.use(express.static(clientDist, { index: false }));
+    app.use(
+      express.static(clientDist, {
+        index: false,
+        setHeaders: (res, filePath) => {
+          const cacheControl = staticCacheControl(path.relative(clientDist, filePath));
+          if (cacheControl) res.setHeader("Cache-Control", cacheControl);
+        },
+      }),
+    );
     // A typo'd or removed API path must fail as an API, not answer 200 with the app's HTML.
     app.all("/api/*", (_req, res) => {
       res.status(404).json({ message: "Not found" });
@@ -39,7 +48,7 @@ const PORT = Number(process.env.PORT) || 2110;
         .status(200)
         .set("Cache-Control", "no-cache")
         .type("html")
-        .send(injectSeoHead(clientTemplate, req.path));
+        .send(injectSeoHead(clientTemplate, req.path, landingPreloads));
     });
   } else {
     // Dynamic import so Vite (a devDependency) is never pulled into the

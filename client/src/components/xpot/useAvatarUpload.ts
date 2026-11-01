@@ -4,6 +4,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/i18n";
 import { dashboardMessages } from "@/i18n/messages/dashboard";
+import { shrinkImageForUpload } from "@/lib/files";
 
 /**
  * The profile photo upload, shared by the phone header's avatar, the desktop
@@ -31,9 +32,7 @@ export function useAvatarUpload() {
   const onChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => mutation.mutate(reader.result as string);
-    reader.readAsDataURL(file);
+    void shrinkImageForUpload(file, 512).then((imageData) => mutation.mutate(imageData));
     event.target.value = "";
   };
   return {

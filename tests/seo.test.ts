@@ -3,11 +3,12 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   formatTitle,
+  LANDING_HERO_IMAGE,
   parsePublicSeoPath,
   publicPagePath,
   renderSeoHead,
 } from "../shared/seo.js";
-import { injectSeoHead, SEO_HEAD_MARKER } from "../server/seo.js";
+import { injectSeoHead, landingChunkPreloads, SEO_HEAD_MARKER, staticCacheControl } from "../server/seo.js";
 
 describe("public SEO routes", () => {
   it("uses one minimal dot separator for every browser and SEO title", () => {
@@ -45,6 +46,49 @@ describe("public SEO routes", () => {
     expect(head).toContain("noindex, nofollow, noarchive");
     expect(head).not.toContain('rel="canonical"');
     expect(head).not.toContain("application/ld+json");
+  });
+
+  it("preloads the hero on the home pages only, matching its <img>", () => {
+    for (const pathname of ["/", "/pt", "/es"]) {
+      const head = renderSeoHead(pathname);
+      expect(head).toContain('rel="preload" as="image"');
+      expect(head).toContain(`imagesrcset="${LANDING_HERO_IMAGE.srcSet}"`);
+      expect(head).toContain(`imagesizes="${LANDING_HERO_IMAGE.sizes}"`);
+    }
+    expect(renderSeoHead("/pt/terms")).not.toContain('rel="preload"');
+    expect(renderSeoHead("/dashboard")).not.toContain('rel="preload"');
+  });
+
+  it("ships every hero variant the srcset names", () => {
+    for (const candidate of LANDING_HERO_IMAGE.srcSet.split(", ")) {
+      const url = candidate.split(" ")[0];
+      expect(fs.existsSync(path.join(process.cwd(), "client", "public", url))).toBe(true);
+    }
+  });
+
+  it("caches only what can safely stay in the browser", () => {
+    expect(staticCacheControl("assets/index-4PCt7hnq.js")).toContain("immutable");
+    expect(staticCacheControl("assets\\index-y9IlV3SI.css")).toContain("immutable");
+    expect(staticCacheControl("landing/product/visit-mobile-clean.webp")).toContain("max-age=86400");
+    expect(staticCacheControl("landing/product/visit-mobile-clean.webp")).not.toContain("immutable");
+    // The worker must reach browsers as soon as it deploys.
+    expect(staticCacheControl("sw.js")).toBeUndefined();
+    expect(staticCacheControl("robots.txt")).toBeUndefined();
+  });
+
+  it("preloads the landing chunk on the home pages, without what the entry already loads", () => {
+    const preloads = landingChunkPreloads({
+      "index.html": { file: "assets/index.js", imports: ["_vendor.js"] },
+      "_vendor.js": { file: "assets/vendor.js" },
+      "_button.js": { file: "assets/button.js", imports: ["_vendor.js"] },
+      "src/pages/xpot/XpotLandingPage.tsx": { file: "assets/landing.js", imports: ["_button.js", "_vendor.js"] },
+    });
+    expect(preloads).toContain('href="/assets/landing.js"');
+    expect(preloads).toContain('href="/assets/button.js"');
+    expect(preloads).not.toContain("vendor.js");
+    const template = `<html lang="en"><head>${SEO_HEAD_MARKER}</head></html>`;
+    expect(injectSeoHead(template, "/pt", preloads)).toContain("modulepreload");
+    expect(injectSeoHead(template, "/pt/terms", preloads)).not.toContain("modulepreload");
   });
 
   it("injects the route head into the Vite template", () => {
