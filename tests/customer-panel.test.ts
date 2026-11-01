@@ -19,7 +19,7 @@ describe("customerPanelEnabled", () => {
   });
 
   it("is off for the usual false-ish words", () => {
-    for (const value of ["0", "false", "FALSE", " off ", "no"]) expect(customerPanelEnabled({ CUSTOMER_PANEL_ENABLED: value })).toBe((false);
+    for (const value of ["0", "false", "FALSE", " off ", "no"]) expect(customerPanelEnabled({ CUSTOMER_PANEL_ENABLED: value })).toBe(false);
   });
 });
 
