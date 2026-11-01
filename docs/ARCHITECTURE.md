@@ -152,7 +152,7 @@ server's answer counts:
 Management APIs take the reach from `tagScopeOf(req)` (Tags) or `productionScopeOf(req)` (Production); another
 organization's record reads as not found. House stock is per organization. `tests/profiles-matrix.integration.test.ts`
 walks every `/api/xpot/admin` route and fails on one nobody classified. The plate owner's read-only panel (`/my`,
-`server/customer/`) is outside these four and behind `CUSTOMER_PANEL_ENABLED`.
+`server/customer/`) is outside these four; `CUSTOMER_PANEL_ENABLED=false` turns it off.
 
 ## 3. The shell
 

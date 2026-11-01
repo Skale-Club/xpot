@@ -17,7 +17,7 @@ export async function registerRoutes(app: Express) {
   registerWholesaleRoutes(app);
 
   // The customer panel (/api/my, and the sellers' /api/xpot/leads/:id/customer-contacts): off unless
-  // CUSTOMER_PANEL_ENABLED is set. Before the Xpot routers for the same reason as the Tags routes above.
+  // CUSTOMER_PANEL_ENABLED turns it off. Before the Xpot routers for the same reason as the Tags routes above.
   registerCustomerRoutes(app);
 
   // Mount the Xpot API (everything under /api/xpot/*)

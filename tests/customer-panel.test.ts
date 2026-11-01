@@ -12,16 +12,14 @@ import {
 import { cleanPlateCode, plateCodeReady, relativeTime } from "../client/src/pages/my/format";
 
 describe("customerPanelEnabled", () => {
-  it("is off unless the server says so", () => {
-    expect(customerPanelEnabled({})).toBe(false);
-    expect(customerPanelEnabled({ CUSTOMER_PANEL_ENABLED: "" })).toBe(false);
-    expect(customerPanelEnabled({ CUSTOMER_PANEL_ENABLED: "0" })).toBe(false);
-    expect(customerPanelEnabled({ CUSTOMER_PANEL_ENABLED: "false" })).toBe(false);
-    expect(customerPanelEnabled({ CUSTOMER_PANEL_ENABLED: "maybe" })).toBe(false);
+  it("is on unless the server says otherwise", () => {
+    expect(customerPanelEnabled({})).toBe(true);
+    expect(customerPanelEnabled({ CUSTOMER_PANEL_ENABLED: "" })).toBe(true);
+    expect(customerPanelEnabled({ CUSTOMER_PANEL_ENABLED: "true" })).toBe(true);
   });
 
-  it("is on for the usual true-ish words", () => {
-    for (const value of ["1", "true", "TRUE", " on ", "yes"]) expect(customerPanelEnabled({ CUSTOMER_PANEL_ENABLED: value })).toBe(true);
+  it("is off for the usual false-ish words", () => {
+    for (const value of ["0", "false", "FALSE", " off ", "no"]) expect(customerPanelEnabled({ CUSTOMER_PANEL_ENABLED: value })).toBe((false);
   });
 });
 

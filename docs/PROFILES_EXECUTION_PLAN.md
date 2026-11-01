@@ -17,7 +17,7 @@ boa parte da F5. O plano foi executado em cima dele:
 | `producer_capabilities` (jsonb) | **`released_print_models`** (`0069`): quais modelos | Foi a capacidade que a D2 pediu. Gerar serial e gravar chip vêm junto com poder imprimir |
 | Peças devolvidas: script e decisão manual antes da F4 | A `0068` move para a empresa as peças sem vendedor em espaços pessoais; equipes reais ficam com as delas | Só existem dois usuários; a devolução sempre voltou à empresa |
 | Migração `manager_retire` falha se houver Manager | Vira `rep` (`0067`) | Falhar travaria o deploy; ninguém usa o papel |
-| D7 confirmada antes da F7 | **Feita, desligada** por `CUSTOMER_PANEL_ENABLED` | D7 ainda não foi confirmada. Se a leitura estiver errada, nada foi exposto |
+| D7 confirmada antes da F7 | Feita desligada e **ligada ao ser confirmada** | O dono confirmou: o dono das plaquinhas é o cliente final. `CUSTOMER_PANEL_ENABLED=false` desliga |
 
 | Fase | Estado | Onde |
 |---|---|---|
@@ -28,7 +28,7 @@ boa parte da F5. O plano foi executado em cima dele:
 | F4 Estoque por organização | ✅ | `0068`, `inOrganizations`, `getOverview`, `deliverKit`, `returnToHouse`, `acquisitions.ts` |
 | F5 Parceiro | ✅ | #144 + `0069`, `production-materials.tsx`, `ReleasedModelsField`, `NewPartnerDialog`, `server/organizations/partners.ts` |
 | F6 Distribuição | ✅ interface e caminho `own` simples | `0070`, `server/tags/distribution.ts`, `server/organizations/links.ts`, `OrganizationDistribution` |
-| F7 Dono das plaquinhas | ✅ desligado | `0071`, `server/customer/`, `client/src/pages/my/`, `CustomerAccess` |
+| F7 Dono das plaquinhas | ✅ | `0071`, `server/customer/`, `client/src/pages/my/`, `CustomerAccess` |
 | F8 Verificação | ✅ | `tests/profiles-matrix.integration.test.ts`, `tests/tags/ownerScope.integration.test.ts`, navegador com uma conta de cada perfil |
 
 **Fica para depois**
@@ -54,7 +54,7 @@ Quatro perfis, nas palavras do dono (2026-11-01):
 | P2 | **Parceiro produtor** (fornecedores de outros lugares) | Uma organização capaz de produzir | Só a própria organização | Gerar serial, código e arquivo de impressão; imprimir. Nada do que o super admin vê |
 | P3 | **Dono de organização** (empresas que vendem na rua) | Dono de um time de vendedores | Só a própria organização, inteira | Gerir o time, o estoque e as vendas. **Não** cria plaquinha |
 | P4 | **Funcionário** (membro de uma organização) | Um vendedor | Só as próprias plaquinhas | Vender, ativar, **comprar** plaquinhas. **Não** imprime nem gera |
-| P5 | **Dono das plaquinhas** (o negócio que comprou e usa as peças; Rev. 2, **a confirmar, D7**) | O cliente final: um restaurante com três placas de avaliação | Só as próprias plaquinhas | Ver quantas tem, quantas leituras cada uma teve, para onde apontam. Só leitura |
+| P5 | **Dono das plaquinhas** (o negócio que comprou e usa as peças; Rev. 2, confirmado, D7) | O cliente final: um restaurante com três placas de avaliação | Só as próprias plaquinhas | Ver quantas tem, quantas leituras cada uma teve, para onde apontam. Só leitura |
 
 Regra transversal: **o estoque é um só e fica alinhado entre os quatro**: toda peça pertence a uma organização, e
 cada perfil enxerga a fatia que lhe cabe da mesma verdade.
@@ -122,7 +122,7 @@ Regras derivadas:
 
 | # | Decisão | Opções | Recomendação assumida | Bloqueia |
 |---|---|---|---|---|
-| **D7** | **Dono das plaquinhas** (P5): é o cliente final, o negócio que usa as placas? | (a) sim, o cliente final (lead), painel só de leitura; (b) era outra coisa | **(a)**: painel do cliente, fase F7, com entrada por código da peça + telefone (Supabase, já usado no login) e vínculo `lead ↔ user`. Só leitura: minhas plaquinhas, leituras, destino, "fale com o vendedor" | F7 |
+| **D7** | **Dono das plaquinhas** (P5): é o cliente final, o negócio que usa as placas? | (a) sim, o cliente final (lead), painel só de leitura; (b) era outra coisa | **Confirmado (a)**: painel do cliente, fase F7, com entrada por código da peça + telefone (Supabase, já usado no login) e vínculo `lead ↔ user`. Só leitura: minhas plaquinhas, leituras, destino, "fale com o vendedor" | F7 |
 
 ---
 
@@ -628,7 +628,7 @@ backfill da F5 na produção que roda todo dia.
 - [x] D4 Compra do funcionário: o dono acompanha, não aprova; pagamento na Stuscle
 - [x] D5 Vendedor sozinho: app simples, mas dono da própria organização; convida pessoas
 - [x] D6 Papéis: só dono e funcionário; segundo dono a pedido, dado pela Plataforma
-- [ ] D7 Dono das plaquinhas = cliente final com painel só de leitura?
+- [x] D7 Dono das plaquinhas = cliente final com painel só de leitura
 - [ ] Nomes de UI da §6 aprovados (Plataforma, Minha empresa, Minha organização, Produção, Dono, Vendedor, Parceiro)
 - [ ] Ordem das fases aprovada (dono primeiro, parceiro depois, cliente final em paralelo)
 - [ ] Antes da F4: lista das peças sem vendedor fora da `xpot-company`, para dizer onde estão fisicamente

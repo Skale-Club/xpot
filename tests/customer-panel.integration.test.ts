@@ -140,7 +140,7 @@ test.skipIf(!enabled)("customer panel: flag, sign-in, isolation, seller contacts
   const prev = process.env.CUSTOMER_PANEL_ENABLED;
   try {
     // ── The flag: off, every route is 404, except the question itself ───────────────────────────────
-    delete process.env.CUSTOMER_PANEL_ENABLED;
+    process.env.CUSTOMER_PANEL_ENABLED = "false";
     const anon = browser();
     assert.deepEqual((await anon.call("GET", "/api/my/enabled")).json, { enabled: false });
     for (const [method, path, body] of [
@@ -160,7 +160,7 @@ test.skipIf(!enabled)("customer panel: flag, sign-in, isolation, seller contacts
     assert.equal(sent.length, 0);
 
     // ── On ────────────────────────────────────────────────────────────────────────────────────────
-    process.env.CUSTOMER_PANEL_ENABLED = "true";
+    delete process.env.CUSTOMER_PANEL_ENABLED;
     const enabledAnswer = await anon.call("GET", "/api/my/enabled");
     assert.deepEqual(enabledAnswer.json, { enabled: true });
     assert.equal(enabledAnswer.cacheControl, "no-store");
