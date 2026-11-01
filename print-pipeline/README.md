@@ -106,6 +106,10 @@ Instagram, Venmo and any face added later each exist as Small Plate, Large Plate
 white, black, or a custom colour. Asked for one of them, make it; don't ask whether the other forms or colours are
 wanted. A missing combination is a gap to fill (the builder grows a size or theme), not a question.
 
+**Project rule: a black piece's QR is inverted** (user, 2026-11-01), Plates and Stands of every face and size: white
+modules straight on the black body, no white panel (`qr: inverted` in the version's params; the Stand's Google and
+Instagram cards always were). Versions without it keep the panel only so printed batches can be rebuilt.
+
 **Project rule: every new model uses the 10 x 20 NFC sticker** (user, 2026-10-31), Small sizes included: the
 standard 23 x 13 x 0.48 pocket (0.68 behind a black face, 1.16 behind a white one) and `consumes:
 nfc-sticker-10x20`, never the 25 mm round tag. If a builder has no sticker pocket for a size, give it one.

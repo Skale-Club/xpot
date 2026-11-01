@@ -42,6 +42,15 @@ def _check_url(report_url, tag):
         raise BuildError(f"{tag['public_code']}: the builder encoded {report_url}, the order says {tag['qr_url']}")
 
 
+def _qr(params):
+    """A black piece's QR: `qr: inverted` in the version's params is white modules straight on the body, no panel (every
+    black piece from 2026-11-01). Left out, the call is the one the printed batches were built with (tests/rebuild.py)."""
+    qr = params.get('qr')
+    if qr not in (None, 'panel', 'inverted'):
+        raise BuildError(f'qr {qr!r}: panel or inverted')
+    return {'qr': qr} if qr else {}
+
+
 def _pair(theme):
     """(body colour, art colour) of a two-colour piece."""
     return ('White', 'Black') if theme == 'white' else ('Black', 'White')
@@ -51,7 +60,7 @@ def plate_instagram(tag, index, params, out_dir):
     import tile_per_code
     theme = _theme(params, index)
     report = tile_per_code.build(tag['public_code'], str(out_dir), theme=theme, size=params.get('size', 'large'),
-                                 nfc_mount=params.get('nfc_mount', 'embedded_round'))
+                                 nfc_mount=params.get('nfc_mount', 'embedded_round'), **_qr(params))
     _check_url((report.get('qr') or {}).get('url') or report.get('qr_url'), tag)
     body, art = _pair(theme)
     return report, [(f'{body} - Plate', f'{body}_Instagram_Plate.stl', 1), (f'{art} - Art', f'{art}_Instagram_Art.stl', 2),
@@ -66,6 +75,7 @@ def plate_google(tag, index, params, out_dir):
     extra = {} if mount == 'embedded_round' else {'nfc_mount': mount}
     if theme != 'white':
         extra['theme'] = theme
+    extra.update(_qr(params))
     report = tile_per_code_google.build(tag['public_code'], str(out_dir), size=params.get('size', 'large'), **extra)
     _check_url((report.get('qr') or {}).get('url') or report.get('qr_url'), tag)
     body, art = _pair(theme)
@@ -90,7 +100,7 @@ def plate_menu(tag, index, params, out_dir):
     build_menu_batch.FONT = font
     # Both sizes take the 10 x 20 sticker pocket under Tap here.
     report = sticker.build_one(tag['public_code'], Path(out_dir), placement=params.get('placement', 'under_tap'),
-                               theme=theme, size=size)
+                               theme=theme, size=size, qr_style=_qr(params).get('qr', 'panel'))
     _check_url((report.get('qr') or {}).get('url'), tag)
     body, art = _pair(theme)
     return report, [(f'{body} - Menu Plate', f'{body}_Menu_Plate.stl', 1), (f'{art} - Menu Art', f'{art}_Menu_Art.stl', 2)]
@@ -99,7 +109,7 @@ def plate_menu(tag, index, params, out_dir):
 def plate_venmo(tag, index, params, out_dir):
     import build_venmo_plate_batch as venmo
     theme = _theme(params, index)
-    report = venmo.build_one(tag['public_code'], Path(out_dir), theme)
+    report = venmo.build_one(tag['public_code'], Path(out_dir), theme, _qr(params).get('qr', 'panel'))
     _check_url((report.get('qr') or {}).get('url'), tag)
     body_stl, ink_stl, logo_stl = venmo.stl_names(theme)
     body, ink = _pair(theme)
@@ -122,11 +132,11 @@ def _stand(module_name, face, tag, index, params, out_dir, batch):
     if size == 'small':
         import card_per_code_small
         report = card_per_code_small.build(face.lower(), tag['public_code'], batch, tag['serial_number'], str(out_dir),
-                                           theme=theme, nfc_mount=mount, font=font)
+                                           theme=theme, nfc_mount=mount, font=font, **_qr(params))
     else:
         module = __import__(module_name)
         if face == 'Menu':
-            extra = {'nfc_mount': mount, 'theme': theme, 'font': font}
+            extra = {'nfc_mount': mount, 'theme': theme, 'font': font, **_qr(params)}
         else:
             # Without nfc_mount the call is the one every printed batch was built with (tests/rebuild.py).
             extra = {} if mount == 'embedded_round' else {'nfc_mount': mount, 'theme': theme}

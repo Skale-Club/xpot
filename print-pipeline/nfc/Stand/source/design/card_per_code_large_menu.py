@@ -69,7 +69,7 @@ def title_geom(text, font, cap, max_width, cx, top):
     return geom, cap
 
 
-def layout(code, theme='white', font='Inria Serif Bold', face=FACE_MENU, width=W, slot_line=SLOT_LINE):
+def layout(code, theme='white', font='Inria Serif Bold', face=FACE_MENU, width=W, slot_line=SLOT_LINE, qr='panel'):
     """The Menu face for one code, composition coordinates: the art (one colour), the QR's dark modules and panel."""
     if font not in FONTS:
         raise ValueError('menu font %r has no layout: one of %s' % (font, ', '.join(FONTS)))
@@ -93,26 +93,27 @@ def layout(code, theme='white', font='Inria Serif Bold', face=FACE_MENU, width=W
     title, cap = title_geom(ti['text'], font, ti['cap'], ti['max_width'], cx, title_top)
     sub, sub_w = fa.text_geom(su['text'], su['cap'], cx, title_top + cap + su['gap'] + su['cap'])
     assert sub_w <= su['max_width'] and tap_w <= width - 8
-    if theme == 'black':
+    use_panel = theme == 'black' and qr != 'inverted'
+    if use_panel:
         ink = unary_union([tap, title, sub, panel.difference(dark)])
-    elif theme == 'white':
+    elif theme in ('white', 'black'):       # black with qr='inverted' (user, 2026-11-01): white modules, no panel
         ink = unary_union([tap, title, sub, dark])
     else:
         raise ValueError('theme %r: white or black' % theme)
-    lowest = max(g.bounds[3] for g in (ink, panel if theme == 'black' else dark))
+    lowest = max(g.bounds[3] for g in (ink, panel if use_panel else dark))
     assert lowest <= slot_line - 1.5, 'face reaches %.2f mm, slot line %.2f' % (lowest, slot_line)
-    return {'ink': ink.simplify(SIMPLIFY, preserve_topology=True), 'dark': dark, 'panel': panel, 'qr': info,
+    return {'ink': ink.simplify(SIMPLIFY, preserve_topology=True), 'dark': dark, 'panel': panel if use_panel else None, 'qr': info,
             'title_cap': cap, 'subtitle_w': sub_w, 'gap': space, 'lowest_y': lowest, 'font': font}
 
 
-def build(code, batch, serial, out_dir, nfc_mount='sticker_10x20', theme='white', font='Inria Serif Bold'):
+def build(code, batch, serial, out_dir, nfc_mount='sticker_10x20', theme='white', font='Inria Serif Bold', qr='panel'):
     """Write the two STLs for one card. `batch` and `serial` are accepted for the ledger; the back carries the code
     alone, as on the Instagram card. The Menu card is new (2026-10-31): it only comes with the sticker."""
     if nfc_mount != 'sticker_10x20':
         raise ValueError('the Menu Stand card only takes the 10 x 20 sticker')
     large.configure()
     code = fa.normalize_code(code)
-    art = layout(code, theme, font)
+    art = layout(code, theme, font, qr=qr)
     ink = fa.to_card(art['ink'])
     back_comp, _ = fa.serial_geom(code)
     s_back_comp, _ = fa.serial_geom(fa.SAMPLE_CODE)
@@ -132,7 +133,7 @@ def build(code, batch, serial, out_dir, nfc_mount='sticker_10x20', theme='white'
     decoded = ig.decode_qr_polygons(fa.to_card(art['dark']), q, url, H)
     section = ig.mesh_section_polygons(art_tm, TOP - INLAY / 2)
     qr_box = box(-q['size'] / 2 - 1, H - q['y'] - q['size'] - 1, q['size'] / 2 + 1, H - q['y'] + 1)
-    mesh_dark = fa.to_card(art['panel']).difference(section) if theme == 'black' else section
+    mesh_dark = fa.to_card(art['panel']).difference(section) if art['panel'] is not None else section
     decoded_mesh = ig.decode_qr_polygons(mesh_dark.intersection(qr_box), q, url, H)
 
     rep = {

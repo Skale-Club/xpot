@@ -59,7 +59,7 @@ def venmo_geom(cx, top, max_w, max_h):
     return logo.simplify(.002, preserve_topology=True)
 
 
-def artwork(code, theme):
+def artwork(code, theme, qr_style='panel'):
     """(ink, blue, dark, panel, qr, nfc_centre_from_top, space) in composition coordinates (y down)."""
     tap, _ = fa.tap_row_geom(CX, dict(icon_h=7.2, cap=4.9, gap=2.5, label='Tap here', y=MARGIN))
     group_h = BRAND_H + PAY_GAP + PAY_CAP
@@ -73,7 +73,7 @@ def artwork(code, theme):
     dark, _, qr = fa.qr_geom(dict(x=CX - QR_SIZE / 2, y=QR_TOP, size=QR_SIZE, modules=25), fa.QR_BASE + code)
     panel = tile._rounded_rect(CX - QR_SIZE / 2 - BORDER, QR_TOP - BORDER,
                                CX + QR_SIZE / 2 + BORDER, QR_TOP + QR_SIZE + BORDER, BORDER * .6)
-    qr_ink = panel.difference(dark) if theme == 'black' else dark
+    qr_ink = panel.difference(dark) if theme == 'black' and qr_style != 'inverted' else dark
     ink = unary_union([tap, pay, qr_ink]).difference(logo).simplify(.002, preserve_topology=True)
     return ink, logo, dark, panel, qr, TAP_ROW_BOTTOM + space / 2, space
 
@@ -84,8 +84,10 @@ def stl_names(theme):
     return f'{body}_Venmo_Plate.stl', f'{ink}_Venmo_Art.stl', 'Blue_Venmo_Logo.stl'
 
 
-def build_one(code, out, theme):
-    ink_c, logo_c, dark, panel, qr, nfc_top, space = artwork(code, theme)
+def build_one(code, out, theme, qr_style='panel'):
+    """qr_style 'inverted' (user, 2026-11-01, every black piece from now on): white modules straight on the black body,
+    no panel. 'panel' stays for the batches printed with it (tests/rebuild.py)."""
+    ink_c, logo_c, dark, panel, qr, nfc_top, space = artwork(code, theme, qr_style)
     ink, logo, panel_tile = tile.to_tile(ink_c), tile.to_tile(logo_c), tile.to_tile(panel)
     back_text, _ = fa.text_geom(code, 3.2, 51.5, 53.1)
     back = tile.to_tile_back(back_text.buffer(-.01, join_style='mitre').buffer(.01, join_style='mitre')
@@ -108,7 +110,7 @@ def build_one(code, out, theme):
     geom.H = SIZE
     decoded = geom.decode_qr_polygons(tile.to_tile(dark), q, qr['url'])
     section = geom.mesh_section_polygons(ink_mesh, tile.TOP - .26)
-    mesh_dark = panel_tile.difference(section) if theme == 'black' else section
+    mesh_dark = panel_tile.difference(section) if theme == 'black' and qr_style != 'inverted' else section
     decoded_mesh = geom.decode_qr_polygons(mesh_dark.intersection(box(-16.5, 7., 16.5, 40.)), q, qr['url'])
     floor = geom.mesh_section_polygons(body_mesh, (z0 + z1) / 2)
     hole_area = sum(type(p)(r).area for p in getattr(floor, 'geoms', [floor]) for r in p.interiors)
