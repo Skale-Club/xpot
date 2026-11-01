@@ -55,8 +55,10 @@ export type NavGroup = {
   items: NavItem[];
   /** The whole group is the global admin's: the "Xpot admin" tag sits on its heading, not on each item. */
   adminOnly?: boolean;
-  /** Secondary setup tools start collapsed in the management panel. */
+  /** The heading opens and closes the group in the management panel; it starts collapsed unless a screen in it is open. */
   collapsible?: boolean;
+  /** A collapsible group that starts open anywhere in the panel. */
+  defaultOpen?: boolean;
 };
 
 /** Matches a path and everything under it ("/tags" matches "/tags/pieces", not "/tagsx"). */
@@ -307,8 +309,8 @@ const ADMIN_VIEWER: Viewer = { canManage: true, isAdmin: true };
  *   owner     Today, then Organization: Team, Stock, Kits, Team purchases, Companies / Tasks / Sales (Visits), Tags
  *             overview, Settings.
  *   partner   the owner's, with a Production group (Production, the bench computers) in front.
- *   platform  Today, Platform (organizations, people, Stuscle orders, products, shop, integrations, brand, status,
- *             check-in rules) and My company (its own production, stock and kits: what a partner has, for the company).
+ *   platform  Today, My company (its own production, stock and kits: what a partner has, for the company) and Platform
+ *             (organizations, people, Stuscle orders, products, shop, integrations, brand, status, check-in rules).
  * `organizationId`: the one organization an owner or a partner runs, so Team, Purchases and Settings open its workspace.
  * The hrefs are the ones the app always had (docs/MODULES.md: URLs never change).
  */
@@ -337,7 +339,14 @@ export function panelGroups(profile: Profile | null | undefined, modules: readon
   if (profile === "platform") {
     const orders: NavItem[] = tags ? [{ href: "/admin/tags/kits?view=orders", label: names.stuscleOrders, icon: Inbox, match: (path) => starts("/admin/tags/kits")(path) && onOrders() }] : [];
     return [home, {
-      // The platform's controls start collapsed (the group opens on a screen in it); its company's daily work does not.
+      // Its company's daily work comes first and starts open.
+      label: names.company, collapsible: true, defaultOpen: true, items: [
+        ...production, ...stock, ...kits, ...overview, ...tagItem("/admin/tags/journey"), ...stations,
+        ...work,
+        ...(visits ? [{ href: "/admin/overview", label: l.shell("manageTeam"), icon: LayoutDashboard, match: starts("/admin/overview") }] : []),
+      ],
+    }, {
+      // The platform's controls start collapsed (the group opens on a screen in it).
       label: names.platform, adminOnly: true, collapsible: true, items: [
         { href: "/organizations", label: l.shell("navOrganizations"), icon: Building2, match: starts("/organizations") },
         { href: "/admin/reps", label: l.shell("orgPeople"), icon: Users, match: starts("/admin/reps") },
@@ -346,12 +355,6 @@ export function panelGroups(profile: Profile | null | undefined, modules: readon
         ...tagItem("/admin/tags/shop"),
         ...platformItems(l),
         ...(visits ? [{ href: "/admin/settings", label: l.shell("manageCheckInRules"), icon: SlidersHorizontal, match: starts("/admin/settings") }] : []),
-      ],
-    }, {
-      label: names.company, items: [
-        ...production, ...stock, ...kits, ...overview, ...tagItem("/admin/tags/journey"), ...stations,
-        ...work,
-        ...(visits ? [{ href: "/admin/overview", label: l.shell("manageTeam"), icon: LayoutDashboard, match: starts("/admin/overview") }] : []),
       ],
     }].filter((group) => group.items.length > 0);
   }

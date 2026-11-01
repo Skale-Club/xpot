@@ -63,9 +63,9 @@ describe("one panel per profile", () => {
     for (const href of ["/admin/reps", "/admin/integrations", "/admin/tags/shop", "/admin/tags/journey"]) expect(hrefs(groups)).not.toContain(href);
   });
 
-  it("gives the platform two groups: Platform, collapsed, and My company", () => {
+  it("gives the platform two collapsible groups: My company, open, then Platform, collapsed", () => {
     const groups = groupsOf("platform");
-    expect(labelsOf(groups)).toEqual(["", "Platform", "My company"]);
+    expect(labelsOf(groups)).toEqual(["", "My company", "Platform"]);
     expect(itemHrefs(groups, "Platform")).toEqual([
       "/organizations", "/admin/reps", "/admin/tags/kits?view=orders", "/admin/products", "/admin/tags/shop",
       "/admin/integrations", "/admin/branding", "/admin/health", "/admin/settings",
@@ -76,7 +76,11 @@ describe("one panel per profile", () => {
     ]);
     const platform = groups.find((g) => g.label === "Platform")!;
     expect(platform.collapsible).toBe(true);
+    expect(platform.defaultOpen).toBeUndefined();
     expect(platform.adminOnly).toBe(true);
+    const company = groups.find((g) => g.label === "My company")!;
+    expect(company.collapsible).toBe(true);
+    expect(company.defaultOpen).toBe(true);
     // The group carries the tag, not each item.
     expect(groups.flatMap((g) => g.items).some((i) => i.adminOnly)).toBe(false);
   });

@@ -309,7 +309,7 @@ function DesktopSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
       <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-2" aria-label={panel ? panelName : module ? moduleLabel(module) : t("navSettings")}>
         {groups.map((group, i) => {
           const items = group.items.map((item) => <SidebarLink key={item.href} item={item} collapsed={collapsed} active={item.match(location)} accent={accent} warningLabel={item.href === "/route" && routeMissingToday ? td("noRouteToday") : undefined} />);
-          if (group.collapsible && !collapsed) return <details key={group.label || i} open={group.items.some((item) => item.match(location))} className="group/panel space-y-1">
+          if (group.collapsible && !collapsed) return <details key={group.label || i} open={group.defaultOpen || group.items.some((item) => item.match(location))} className="group/panel space-y-1">
             <summary className="flex min-h-10 cursor-pointer list-none items-center justify-between gap-2 px-3 text-[10px] font-semibold uppercase tracking-widest text-white/40 [&::-webkit-details-marker]:hidden">{group.label}<span className="text-base transition-transform group-open/panel:rotate-90" aria-hidden="true">›</span></summary>
             {items}
           </details>;

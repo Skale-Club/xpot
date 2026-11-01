@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Loader2 } from "lucide-react";
 import { PRINT_PREVIEW_CATALOG_PATH, printModelPreviewPath, type PrintPreviewCatalog } from "@shared/printProduction";
 import { openPieceViewer } from "@/components/xpot/PieceViewer3D";
 import { useT } from "@/i18n";
@@ -10,8 +11,9 @@ import { apiRequest } from "@/lib/queryClient";
 // this). The catalog says which models have a preview and which model each batch came from; a piece alone carries
 // only its product type and face, never its colour, so the batch (or the model's own theme) is what picks white or
 // black. The picture stands still, front on, until someone drags it: a finger or the mouse turns the piece (a strip of
-// turntable frames drawn once), and a tap or click opens the rotatable view. When nothing matches, or anything fails,
-// `fallback` (the flat drawing) stays: a picture never breaks a page.
+// turntable frames drawn once), and a tap or click opens the rotatable view. While it is on the way a loader holds its
+// place, never another picture of the piece. When nothing matches, or anything fails, `fallback` (the flat drawing)
+// shows: a picture never breaks a page.
 
 export type CatalogModel = PrintPreviewCatalog["models"][number];
 
@@ -24,14 +26,14 @@ export interface PieceModelKey {
   modelSlug?: string | null;
 }
 
-function usePrintPreviewCatalog(): PrintPreviewCatalog | null {
-  const { data } = useQuery({
+function usePrintPreviewCatalog(): { catalog: PrintPreviewCatalog | null; loading: boolean } {
+  const { data, isLoading } = useQuery({
     queryKey: ["print-preview-catalog"],
     queryFn: async () => (await apiRequest("GET", PRINT_PREVIEW_CATALOG_PATH)).json() as Promise<PrintPreviewCatalog>,
     staleTime: 5 * 60_000,
     retry: false,
   });
-  return data ?? null;
+  return { catalog: data ?? null, loading: isLoading };
 }
 
 /** The model a piece is: by slug, else by its batch, else by what it is when only one model could be it. */
@@ -47,9 +49,19 @@ export function resolvePieceModel(catalog: PrintPreviewCatalog, key: PieceModelK
   return matches.length === 1 ? matches[0] : null;
 }
 
-export function usePieceModel(key: PieceModelKey): CatalogModel | null {
-  const catalog = usePrintPreviewCatalog();
-  return catalog ? resolvePieceModel(catalog, key) : null;
+/** `loading`: the catalog has not answered yet, so whether this piece has a 3D picture is still unknown. */
+export function usePieceModel(key: PieceModelKey): { model: CatalogModel | null; loading: boolean } {
+  const { catalog, loading } = usePrintPreviewCatalog();
+  return { model: catalog ? resolvePieceModel(catalog, key) : null, loading };
+}
+
+/** Holds the picture's square while its 3D is on the way, so nothing else shows before it and the row does not jump. */
+export function PieceThumbLoader({ px }: { px: number }) {
+  return (
+    <span className="flex items-center justify-center" style={{ width: px, height: px }} aria-hidden="true" data-testid="piece-thumb-loading">
+      <Loader2 className="animate-spin text-white/35" style={{ width: Math.max(14, px * 0.3), height: Math.max(14, px * 0.3) }} />
+    </span>
+  );
 }
 
 // What is drawn, by file hash: in memory for this page and in localStorage for the next visit, so a list reloads
@@ -113,32 +125,34 @@ function loadStrip(model: CatalogModel, px: number): Promise<string> {
   return job;
 }
 
-function useStrip(model: CatalogModel, px: number): string | null {
+function useStrip(model: CatalogModel, px: number): { strip: string | null; failed: boolean } {
   const key = cacheKey(model, px);
   const [strip, setStrip] = useState<string | null>(() => cachedStrip(key));
+  const [failed, setFailed] = useState(false);
   useEffect(() => {
     let live = true;
     setStrip(cachedStrip(key));
-    loadStrip(model, px).then((drawn) => live && setStrip(drawn), () => undefined);
+    setFailed(false);
+    loadStrip(model, px).then((drawn) => { if (live) setStrip(drawn); }, () => { if (live) setFailed(true); });
     return () => { live = false; };
   }, [model, px, key]);
-  return strip;
+  return { strip, failed };
 }
 
 /**
  * The piece's 3D picture. It stands still on its front; dragging it with a finger or the mouse turns it (a tap or a
  * click, with no drag, opens the rotatable view instead), and the arrow keys turn it for the keyboard. It never
- * reaches the row or link it sits in. The `fallback` shows until the picture is drawn, and stays if it cannot be.
+ * reaches the row or link it sits in. A loader shows until the picture is drawn; `fallback` only if it cannot be.
  * `still`: only the picture, on its front, for a piece inside a button whose tap does something else.
  */
 export function PieceThumb3D({ model, px, fallback, still = false }: { model: CatalogModel; px: number; fallback: ReactNode; still?: boolean }) {
   const t = useT(productionMessages);
-  const strip = useStrip(model, px);
+  const { strip, failed } = useStrip(model, px);
   const [frame, setFrame] = useState(0);
   // Where this press started and whether it has turned the piece yet: a click that ends a drag must not open the view.
   const press = useRef<{ x: number; frame: number; turned: boolean } | null>(null);
   const dragged = useRef(false);
-  if (!strip) return <>{fallback}</>;
+  if (!strip) return failed ? <>{fallback}</> : <PieceThumbLoader px={px} />;
   if (still) {
     return <span aria-hidden="true" data-testid="piece-thumb-3d" style={{ display: "block", width: px, height: px, backgroundImage: `url(${strip})`, backgroundSize: `${FRAMES * px}px ${px}px`, backgroundPosition: "0 0", backgroundRepeat: "no-repeat" }} />;
   }

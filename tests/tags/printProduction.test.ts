@@ -10,6 +10,8 @@ import {
   planPrintJobTransition,
   planRedoCodes,
   printGenerateOptions,
+  printPartFamilies,
+  printPartVariant,
   printedPartBeds,
   printJobStockSchema,
   printJobUpdateSchema,
@@ -196,6 +198,18 @@ describe("the Production page's choices", () => {
     expect(isAlwaysReadyPart(sticker)).toBe(false);
     expect(isAlwaysReadyPart({ ...base, status: "retired" })).toBe(false);
     expect(isAlwaysReadyPart(model({}))).toBe(false);
+  });
+
+  it("groups always-ready parts into one family per piece, keeping their order", () => {
+    const families = printPartFamilies([
+      { title: "Stand base · Large" },
+      { title: "Stand base · Small" },
+      { title: "Google G token · Small Stand (13.5 mm)" },
+      { title: "Solo part" },
+    ]);
+    expect(families.map((f) => [f.name, f.models.length])).toEqual([["Stand base", 2], ["Google G token", 1], ["Solo part", 1]]);
+    expect(printPartVariant("Google G token · Small Stand (13.5 mm)")).toBe("Small Stand (13.5 mm)");
+    expect(printPartVariant("Solo part")).toBe("Solo part");
   });
 });
 

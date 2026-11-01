@@ -35,7 +35,6 @@ import { manageTagsBatchesMessages } from "@/i18n/messages/manageTagsBatches";
 const PAGE = 100;
 
 const ALL_COLUMNS: readonly PieceColumn[] = ["customer", "destination", "reseller", "chip", "scans", "lastInteraction", "batch"];
-const PANE_COLUMNS: readonly PieceColumn[] = ["customer", "reseller"];
 
 /** Whether a piece is open in the pane now (the next open replaces it in history). */
 const current = () => new URLSearchParams(window.location.search).has("piece");
@@ -157,7 +156,7 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
   // The organization filter is platform management's (?org=, also the Organizations page's "See all in Inventory").
   const { canManage } = useViewerAccess();
   const { data: organizations = [] } = useOrganizations(canManage);
-  // On a computer a piece opens in the side pane (?piece=<id>, so the link is shareable); its own page,
+  // On a computer a piece opens in a pop-up over the list (?piece=<id>, so the link is shareable); its own page,
   // /admin/tags/pieces/:id, stays for phones and "Open full page". Moving between pieces and closing
   // replace history; only the first open pushes.
   const isDesktop = useIsDesktop();
@@ -232,8 +231,7 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
       <PieceTable
         pieces={tags}
         onOpen={openPiece}
-        // Beside the pane the table keeps what identifies a piece and where it is.
-        columns={paneId ? PANE_COLUMNS : ALL_COLUMNS}
+        columns={ALL_COLUMNS}
         selectedId={paneId}
         testId="admin-pieces-table"
       />
@@ -285,8 +283,9 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
       />
 
       {isDesktop ? (
-        // The pane stays mounted whatever the list shows (loading, empty, error).
+        // The pop-up stays mounted whatever the list shows (loading, empty, error).
         <MasterDetail
+          popup
           closeLabel={tc("close")}
           onClose={closePiece}
           list={list}

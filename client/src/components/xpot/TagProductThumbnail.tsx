@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Wifi } from "lucide-react";
-import { PieceThumb3D, usePieceModel } from "@/components/xpot/PieceThumb3D";
+import { PieceThumb3D, PieceThumbLoader, usePieceModel } from "@/components/xpot/PieceThumb3D";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
 import { useT } from "@/i18n";
 import { tagsMessages } from "@/i18n/messages/tags";
@@ -241,8 +241,8 @@ const VISUAL_FACE_SIZE = { sm: "md", md: "lg", lg: "lg" } as const;
 
 /**
  * The picture of a piece in lists and headers, and the one place every screen gets it from. A piece with a 3D preview
- * (Tags › Production) shows that, drawn small; any other piece, or one still loading, shows the plaque drawing when it
- * is a plaque (it already carries the printed face), otherwise the face tile alone. A fixed-width slot keeps rows
+ * (Tags › Production) shows that, drawn small, with a loader until it is ready; any other piece shows the plaque drawing
+ * when it is a plaque (it already carries the printed face), otherwise the face tile alone. A fixed-width slot keeps rows
  * aligned across all of them. Pass `batchCode` (or `modelSlug`, or `theme`) whenever the screen has it: a piece alone
  * does not say whether it is the white or the black one, and without that the flat drawing stays.
  */
@@ -266,7 +266,7 @@ export function TagPieceVisual({
   batchCode?: string | null;
   modelSlug?: string | null;
 }) {
-  const model = usePieceModel({ productType, face, theme, batchCode, modelSlug });
+  const { model, loading } = usePieceModel({ productType, face, theme, batchCode, modelSlug });
   const flat = isPlaque(productType, face) ? (
     <TagProductThumbnail productType={productType} face={face} size={size} theme={theme} />
   ) : (
@@ -274,7 +274,7 @@ export function TagPieceVisual({
   );
   return (
     <span className={`inline-flex shrink-0 items-center justify-center ${VISUAL_SLOT[size]}`} title={title}>
-      {model ? <PieceThumb3D model={model} px={VISUAL_SLOT_PX[size]} fallback={flat} still={still} /> : flat}
+      {model ? <PieceThumb3D model={model} px={VISUAL_SLOT_PX[size]} fallback={flat} still={still} /> : loading ? <PieceThumbLoader px={VISUAL_SLOT_PX[size]} /> : flat}
     </span>
   );
 }

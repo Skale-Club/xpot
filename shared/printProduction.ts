@@ -641,6 +641,31 @@ export function isAlwaysReadyPart(model: Pick<PrintModelItem, "kind" | "status" 
   return model.kind === "part" && model.status === "ready" && printedPartBeds(model).length > 0;
 }
 
+/** The versions of one always-ready piece, in the order they came. */
+export interface PrintPartFamily<T> {
+  name: string;
+  models: T[];
+}
+
+const PART_TITLE_SEPARATOR = " · ";
+
+/** "Google G token · Small Stand (13.5 mm)" is the "Small Stand (13.5 mm)" of the piece before the separator. */
+export function printPartVariant(title: string): string {
+  const at = title.indexOf(PART_TITLE_SEPARATOR);
+  return at < 0 ? title : title.slice(at + PART_TITLE_SEPARATOR.length).trim();
+}
+
+/** Always-ready parts as one entry per piece: the catalog titles them "Piece · Version". */
+export function printPartFamilies<T extends { title: string }>(parts: readonly T[]): PrintPartFamily<T>[] {
+  const families = new Map<string, T[]>();
+  for (const part of parts) {
+    const at = part.title.indexOf(PART_TITLE_SEPARATOR);
+    const name = at < 0 ? part.title : part.title.slice(0, at).trim();
+    families.set(name, [...(families.get(name) ?? []), part]);
+  }
+  return Array.from(families, ([name, models]) => ({ name, models }));
+}
+
 /** A serialized model the house can generate right now: ready, with a generator, a bed and what its batch needs. */
 export function canGenerateModel(model: PrintModelItem): boolean {
   return model.kind === "serialized" && model.status === "ready" && !!model.currentVersion?.builder &&
