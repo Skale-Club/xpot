@@ -21,11 +21,11 @@ import { Loading, LoadError } from "./pieces-shared";
 import { PrintModelPage } from "./production-model";
 import { PrintJobPage } from "./production-job";
 import { PrintDialog, RequestList } from "./production-orders";
-import { ModelStatusPill, PRODUCTION_BASE, bedSummary, usePrintModels, useProductionAccess, type JobFilter } from "./production-shared";
+import { ModelStatusPill, PRODUCTION_BASE, bedSummary, usePrintModels, useProductionAccess, useThemeOptions, type JobFilter } from "./production-shared";
 import { BatchDetail } from "./BatchDetail";
 import { ProductionWizard } from "./production-wizard";
 import { ProductionBoard } from "./production-board";
-import { batchPrefixFromTitle, productionPath, slugFromTitle } from "./production-workflow";
+import { batchPrefixFromTitle, canPrintModel, productionPath, slugFromTitle } from "./production-workflow";
 import { ProductionIdentity } from "./production-identity";
 
 // Manage › Production (the Xpot admin's, docs/PRINT_EXECUTION_PLAN.md). The first screen is the board
@@ -149,7 +149,8 @@ function ModelCard({ model, onOpen, onPrint }: { model: PrintModelItem; onOpen: 
           {t("onHand", { count: model.onHand })}
           {model.openJobs ? ` · ${t.plural("openOrders", model.openJobs)}` : ""}
         </span>
-        <Button type="button" variant="secondary" size="sm" disabled={model.status !== "ready"} onClick={onPrint} data-testid="production-print">
+        {/* The same test as the Print dialog's list: a ready model with a generator (or a part's file) to print from. */}
+        <Button type="button" variant="secondary" size="sm" disabled={!canPrintModel(model)} onClick={onPrint} data-testid="production-print">
           <Printer />
           {t("print")}
         </Button>
@@ -166,6 +167,7 @@ function NewModelDialog({ onClose, onCreated }: { onClose: () => void; onCreated
   const labels = useTagLabels();
   const { toast } = useToast();
   const { data: catalog = [] } = useTagCatalog();
+  const themeOptions = useThemeOptions();
   const [form, setForm] = useState({ kind: "serialized", title: "", slug: "", productType: "", face: "", theme: "", salesProductId: "", batchPrefix: "", description: "" });
   // The slug and the batch prefix follow the title until the person types in them (emptying one hands it back).
   const [typed, setTyped] = useState({ slug: false, batchPrefix: false });
@@ -177,7 +179,10 @@ function NewModelDialog({ onClose, onCreated }: { onClose: () => void; onCreated
   }));
   const serialized = form.kind === "serialized";
   const slug = form.slug.trim().toLowerCase();
-  const ready = form.title.trim() && SLUG.test(slug) && (!serialized || (form.productType && form.salesProductId && form.batchPrefix.trim()));
+  // A serialized model needs everything "Generate pieces" asks for (shared SERIALIZED_MODEL_FIELDS): product, face,
+  // colour, sales product and batch prefix.
+  const ready = form.title.trim() && SLUG.test(slug) &&
+    (!serialized || (form.productType && form.face && form.theme && form.salesProductId && form.batchPrefix.trim()));
   const save = useMutation({
     mutationFn: () =>
       sendJson<PrintModelItem>("POST", "/api/xpot/admin/print-models", {
@@ -185,7 +190,7 @@ function NewModelDialog({ onClose, onCreated }: { onClose: () => void; onCreated
         kind: form.kind,
         title: form.title,
         description: form.description,
-        theme: form.theme,
+        theme: form.theme || null,
         ...(serialized
           ? { productType: form.productType, face: form.face || null, salesProductId: Number(form.salesProductId), batchPrefix: form.batchPrefix }
           : {}),
@@ -216,8 +221,8 @@ function NewModelDialog({ onClose, onCreated }: { onClose: () => void; onCreated
               ]}
             />
           </Field>
-          <Field label={t("fieldTheme")} hint={t("fieldThemeHint")}>
-            <Input value={form.theme} maxLength={40} onChange={(e) => setForm({ ...form, theme: e.target.value })} />
+          <Field label={t("fieldTheme")} required={serialized}>
+            <Select value={form.theme} onChange={(e) => setForm({ ...form, theme: e.target.value })} placeholder={t("choose")} options={themeOptions} data-testid="production-model-theme" />
           </Field>
           <Field label={t("fieldTitle")} required className="sm:col-span-2">
             <Input value={form.title} maxLength={120} onChange={(e) => setTitle(e.target.value)} data-testid="production-model-title" />
@@ -230,8 +235,8 @@ function NewModelDialog({ onClose, onCreated }: { onClose: () => void; onCreated
               <Field label={t("fieldProduct")} required>
                 <Select value={form.productType} onChange={(e) => setForm({ ...form, productType: e.target.value })} placeholder={t("choose")} options={labels.productOptions} />
               </Field>
-              <Field label={t("fieldFace")}>
-                <Select value={form.face} onChange={(e) => setForm({ ...form, face: e.target.value })} placeholder={t("choose")} options={labels.faceOptions} />
+              <Field label={t("fieldFace")} required>
+                <Select value={form.face} onChange={(e) => setForm({ ...form, face: e.target.value })} placeholder={t("choose")} options={labels.faceOptions} data-testid="production-model-face" />
               </Field>
               <Field label={t("fieldSalesProduct")} required>
                 <Select value={form.salesProductId} onChange={(e) => setForm({ ...form, salesProductId: e.target.value })} placeholder={t("choose")} options={catalogOptions(catalog)} />

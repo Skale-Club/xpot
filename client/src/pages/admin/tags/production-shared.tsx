@@ -7,6 +7,7 @@ import { Pill, toneOf, type PillTone } from "@/components/xpot/StatusPill";
 import { translate, useT, type Translate } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { productionMessages } from "@/i18n/messages/production";
+import { productionBoardMessages } from "@/i18n/messages/productionBoard";
 import { serverErrorText } from "@/lib/apiErrors";
 import { AdminHttpError, ADMIN_TAGS_KEY, STALE_MS, getJson, withQuery } from "./api";
 
@@ -126,6 +127,17 @@ export async function uploadFile<T>(url: string, file: File): Promise<T> {
     throw new AdminHttpError(res.status, message, code);
   }
   return (await res.json()) as T;
+}
+
+/** The colours a model is made in (stored in lowercase, the same words "Generate pieces" groups by). */
+export const PRINT_THEMES = ["white", "black", "mixed"] as const;
+
+/** The colour picker's options; a model saved with another colour keeps it as one more choice. */
+export function useThemeOptions(current?: string | null) {
+  const b = useT(productionBoardMessages);
+  const own = current?.trim().toLowerCase();
+  const extra = own && !(PRINT_THEMES as readonly string[]).includes(own) ? [{ value: own, label: own }] : [];
+  return [...PRINT_THEMES.map((theme) => ({ value: theme, label: b(`theme_${theme}` as "theme_white") })), ...extra];
 }
 
 export function formatBytes(bytes: number): string {

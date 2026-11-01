@@ -23,7 +23,8 @@ export type PrintModelKind = (typeof PRINT_MODEL_KINDS)[number];
 export const PRINT_MODEL_STATUSES = ["design_needed", "ready", "retired"] as const;
 export type PrintModelStatus = (typeof PRINT_MODEL_STATUSES)[number];
 
-export const PRINT_VERSION_STATUSES = ["draft", "current", "superseded"] as const;
+/** `current`: the recipe new orders use (one per model); `superseded`: an older one, still linked to what it printed. */
+export const PRINT_VERSION_STATUSES = ["current", "superseded"] as const;
 export type PrintVersionStatus = (typeof PRINT_VERSION_STATUSES)[number];
 
 /** Who wrote a version: the admin panel, an AI session (MCP) or the bench app. */
@@ -122,7 +123,8 @@ const TRANSITIONS: Record<PrintJobAction, { from: readonly PrintJobStatus[]; to:
   // Also from requested: a plate printed by hand from a file made outside Xpot (or before the catalog) has no
   // file to attach. Not from building, where a bench is still at work on it.
   printed: { from: ["requested", "ready", "printing"], to: "printed" },
-  cancel: { from: ["requested", "building", "ready"], to: "cancelled" },
+  // Also from failed: a plate that will not be printed again is closed, so its request stops asking for action.
+  cancel: { from: ["requested", "building", "ready", "failed"], to: "cancelled" },
 };
 
 export type PrintJobTransition = { ok: true; status: PrintJobStatus } | { ok: false; error: string; code: string };
@@ -186,6 +188,14 @@ export function nextPrintBatchCode(prefix: string, year: number, existing: reado
 
 const optionalText = (max: number) =>
   z.preprocess((v) => (typeof v === "string" ? v.trim() || null : v), z.string().max(max).nullable().optional());
+
+/** A model's colour ("white", "black", "mixed"…): always stored and compared in lowercase. */
+const themeText = z.preprocess((v) => (typeof v === "string" ? v.trim().toLowerCase() || null : v), z.string().max(40).nullable().optional());
+
+/** The one way two colours are compared: "White" and "white" are the same colour. */
+export function sameTheme(a: string | null | undefined, b: string | null | undefined): boolean {
+  return (a ?? "").trim().toLowerCase() === (b ?? "").trim().toLowerCase();
+}
 
 export const PRINT_MODEL_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -253,6 +263,13 @@ export const printVersionInputSchema = z.object({
 });
 export type PrintVersionInput = z.infer<typeof printVersionInputSchema>;
 
+/**
+ * What a serialized model must say to be printed and generated (canGenerateModel): which product, face and colour it
+ * is, which sales product its pieces are and the prefix of its batches. Required when it is created and kept on edit.
+ */
+export const SERIALIZED_MODEL_FIELDS = ["productType", "face", "theme", "salesProductId", "batchPrefix"] as const;
+const SERIALIZED_MODEL_MESSAGE = "A serialized model needs a product type, a face, a colour, a sales product and a batch prefix";
+
 export const printModelInputSchema = z.object({
   slug: z.string().trim().toLowerCase().regex(PRINT_MODEL_SLUG_PATTERN, "Slug: lowercase words joined by dashes").max(80),
   kind: z.enum(PRINT_MODEL_KINDS),
@@ -260,7 +277,7 @@ export const printModelInputSchema = z.object({
   description: optionalText(2000),
   productType: z.enum(TAG_PRODUCT_TYPES).nullable().optional(),
   face: z.enum(TAG_FACES).nullable().optional(),
-  theme: optionalText(40),
+  theme: themeText,
   salesProductId: z.number().int().positive().nullable().optional(),
   batchPrefix: z.preprocess((v) => (typeof v === "string" ? v.trim().toUpperCase() || null : v), z.string().regex(PRINT_BATCH_PREFIX_PATTERN, "Prefix: 2-12 letters/digits, e.g. LPLATE").nullable().optional()),
   sortOrder: z.number().int().min(-1000).max(100_000).default(0),
@@ -268,9 +285,9 @@ export const printModelInputSchema = z.object({
   version: printVersionInputSchema.optional(),
 }).strict().superRefine((input, ctx) => {
   if (input.kind !== "serialized") return;
-  for (const key of ["productType", "salesProductId", "batchPrefix"] as const) {
+  for (const key of SERIALIZED_MODEL_FIELDS) {
     if (input[key] === null || input[key] === undefined) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: [key], message: "A serialized model needs a product type, a sales product and a batch prefix" });
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: [key], message: SERIALIZED_MODEL_MESSAGE });
     }
   }
 });
@@ -279,7 +296,9 @@ export type PrintModelInput = z.infer<typeof printModelInputSchema>;
 export const printModelPatchSchema = z.object({
   title: z.string().trim().min(1).max(120).optional(),
   description: optionalText(2000),
-  theme: optionalText(40),
+  theme: themeText,
+  /** Product and face: only while no plate was ordered (the batches printed from the model keep what they were). */
+  productType: z.enum(TAG_PRODUCT_TYPES).nullable().optional(),
   face: z.enum(TAG_FACES).nullable().optional(),
   salesProductId: z.number().int().positive().nullable().optional(),
   batchPrefix: z.preprocess((v) => (typeof v === "string" ? v.trim().toUpperCase() || null : v), z.string().regex(PRINT_BATCH_PREFIX_PATTERN).nullable().optional()),
@@ -464,6 +483,8 @@ export interface PrintJobItem {
   updatedAt: string;
   /** No bench event for a while on a `building` order. */
   stale: boolean;
+  /** A failed or cancelled plate already printed again: the attempt that took its place (it cannot be redone twice). */
+  redoneBy: string | null;
   /** The request this plate belongs to, its place in it ("plate 2 of 3") and how many pieces the request asked for. */
   requestId: string | null;
   plateNumber: number;
@@ -614,8 +635,10 @@ export function printGenerateOptions(models: readonly PrintModelItem[]): PrintGe
     if (!canGenerateModel(model)) continue;
     const colours = byProduct.get(model.productType!) ?? new Map<string, Map<string, PrintModelItem>>();
     byProduct.set(model.productType!, colours);
-    const faces = colours.get(model.theme!) ?? new Map<string, PrintModelItem>();
-    colours.set(model.theme!, faces);
+    // Colours group in lowercase: a model typed "White" is the same colour as "white".
+    const theme = model.theme!.trim().toLowerCase();
+    const faces = colours.get(theme) ?? new Map<string, PrintModelItem>();
+    colours.set(theme, faces);
     if (!faces.has(model.face!)) faces.set(model.face!, model);
   }
   return Array.from(byProduct.entries())
@@ -647,7 +670,7 @@ export function printGenerateOptions(models: readonly PrintModelItem[]): PrintGe
 /** "Generate N pieces of this product, colour and face": the server finds the model, so only stocked choices work. */
 export const printGenerateSchema = z.object({
   productType: z.enum(TAG_PRODUCT_TYPES),
-  theme: z.string().trim().min(1).max(40),
+  theme: z.string().trim().toLowerCase().pipe(z.string().min(1).max(40)),
   face: z.enum(TAG_FACES),
   quantity: z.number().int().positive().max(10_000),
   notes: optionalText(2000),
@@ -659,6 +682,6 @@ export type PrintGenerateInput = z.infer<typeof printGenerateSchema>;
 /** The model behind one choice of printGenerateOptions, or null when the house does not make it. */
 export function pickGenerateFace(options: readonly PrintGenerateOption[], choice: Pick<PrintGenerateInput, "productType" | "theme" | "face">): PrintGenerateFace | null {
   const colours = options.find((option) => option.productType === choice.productType)?.colours ?? [];
-  const faces = colours.find((colour) => colour.theme === choice.theme.toLowerCase())?.faces ?? [];
+  const faces = colours.find((colour) => sameTheme(colour.theme, choice.theme))?.faces ?? [];
   return faces.find((face) => face.face === choice.face) ?? null;
 }

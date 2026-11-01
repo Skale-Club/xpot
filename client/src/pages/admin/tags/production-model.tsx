@@ -22,7 +22,9 @@ import { useTagLabels } from "./labels";
 import { Loading, LoadError } from "./pieces-shared";
 import { PrintDialog, RequestList } from "./production-orders";
 import { PrintPreviewCard } from "./production-preview";
-import { KindPill, ModelStatusPill, PRODUCTION_BASE, bedSummary, formatBytes, uploadFile, useProductionAccess } from "./production-shared";
+import { KindPill, ModelStatusPill, PRODUCTION_BASE, bedSummary, formatBytes, uploadFile, useProductionAccess, useThemeOptions } from "./production-shared";
+import { canPrintModel } from "./production-workflow";
+import { catalogOptions, useTagCatalog } from "./batches-shared";
 
 // One print model: what it is, its versions (newest first, with what changed and why), the orders that printed it,
 // and for a part its count. A recipe change is always a new version; the model's own fields are only its name tags.
@@ -100,7 +102,7 @@ export function PrintModelPage({ slug, go }: { slug: string; go: Go }) {
               {model.currentVersion ? t("newVersion") : t("firstVersion")}
             </Button>
           </> : null}
-          <Button type="button" variant="brand" accent="tags" size="sm" disabled={model.status !== "ready"} onClick={() => setPrinting(true)}>
+          <Button type="button" variant="brand" accent="tags" size="sm" disabled={!canPrintModel(model)} onClick={() => setPrinting(true)}>
             <Printer />
             {t("print")}
           </Button>
@@ -352,21 +354,41 @@ function EditModelDialog({ model, onClose, onRetire }: { model: PrintModelDetail
   const t = useT(productionMessages);
   const tc = useT(commonMessages);
   const { toast } = useToast();
+  const labels = useTagLabels();
+  const { data: catalog = [] } = useTagCatalog();
+  const serialized = model.kind === "serialized";
+  const themeOptions = useThemeOptions(model.theme);
+  // The batches printed from the model keep their product and face: once a plate was ordered they stay (server: print_model_used).
+  const used = model.versions.some((version) => version.jobCount > 0);
+  const productLocked = used && !!model.productType;
+  const faceLocked = used && !!model.face;
   const [form, setForm] = useState({
     title: model.title,
-    theme: model.theme ?? "",
+    theme: model.theme?.toLowerCase() ?? "",
     description: model.description ?? "",
     sortOrder: String(model.sortOrder),
     reorderAt: model.partReorderAt === null ? "" : String(model.partReorderAt),
+    productType: model.productType ?? "",
+    face: model.face ?? "",
+    salesProductId: model.salesProductId ? String(model.salesProductId) : "",
+    batchPrefix: model.batchPrefix ?? "",
   });
+  // A serialized model keeps everything it needs to be printed and generated (shared SERIALIZED_MODEL_FIELDS).
+  const ready = form.title.trim() && (!serialized || (form.productType && form.face && form.theme && form.salesProductId && form.batchPrefix.trim()));
   const save = useMutation({
     mutationFn: () =>
       sendJson<PrintModelDetail>("PATCH", `/api/xpot/admin/print-models/${encodeURIComponent(model.slug)}`, {
         title: form.title,
-        theme: form.theme,
+        theme: form.theme || null,
         description: form.description,
         sortOrder: Number.parseInt(form.sortOrder, 10) || 0,
         ...(model.kind === "part" ? { partReorderAt: form.reorderAt.trim() === "" ? null : Math.max(0, Number.parseInt(form.reorderAt, 10) || 0) } : {}),
+        ...(serialized ? {
+          ...(productLocked ? {} : { productType: form.productType }),
+          ...(faceLocked ? {} : { face: form.face }),
+          salesProductId: Number(form.salesProductId),
+          batchPrefix: form.batchPrefix,
+        } : {}),
       }),
     onSuccess: async () => {
       await invalidateAdminTags();
@@ -386,12 +408,28 @@ function EditModelDialog({ model, onClose, onRetire }: { model: PrintModelDetail
           <Field label={t("fieldTitle")} required className="sm:col-span-2">
             <Input value={form.title} maxLength={120} onChange={(e) => setForm({ ...form, title: e.target.value })} />
           </Field>
-          <Field label={t("fieldTheme")}>
-            <Input value={form.theme} maxLength={40} onChange={(e) => setForm({ ...form, theme: e.target.value })} />
+          <Field label={t("fieldTheme")} required={serialized}>
+            <Select value={form.theme} onChange={(e) => setForm({ ...form, theme: e.target.value })} placeholder={t("choose")} options={themeOptions} />
           </Field>
           <Field label={t("fieldOrder")}>
             <Input type="number" inputMode="numeric" value={form.sortOrder} onChange={(e) => setForm({ ...form, sortOrder: e.target.value })} />
           </Field>
+          {serialized ? (
+            <>
+              <Field label={t("fieldProduct")} required hint={productLocked || faceLocked ? t("productFaceLocked") : undefined}>
+                <Select value={form.productType} disabled={productLocked} onChange={(e) => setForm({ ...form, productType: e.target.value })} placeholder={t("choose")} options={labels.productOptions} />
+              </Field>
+              <Field label={t("fieldFace")} required>
+                <Select value={form.face} disabled={faceLocked} onChange={(e) => setForm({ ...form, face: e.target.value })} placeholder={t("choose")} options={labels.faceOptions} />
+              </Field>
+              <Field label={t("fieldSalesProduct")} required>
+                <Select value={form.salesProductId} onChange={(e) => setForm({ ...form, salesProductId: e.target.value })} placeholder={t("choose")} options={catalogOptions(catalog)} />
+              </Field>
+              <Field label={t("fieldBatchPrefix")} hint={t("fieldBatchPrefixHint")} required>
+                <Input value={form.batchPrefix} maxLength={12} className="font-mono uppercase" onChange={(e) => setForm({ ...form, batchPrefix: e.target.value })} />
+              </Field>
+            </>
+          ) : null}
           {model.kind === "part" ? (
             <Field label={t("fieldReorderAt")} hint={t("fieldReorderAtHint")} className="sm:col-span-2">
               <Input type="number" inputMode="numeric" min={0} value={form.reorderAt} onChange={(e) => setForm({ ...form, reorderAt: e.target.value })} />
@@ -409,7 +447,7 @@ function EditModelDialog({ model, onClose, onRetire }: { model: PrintModelDetail
             <Button type="button" variant="ghost" onClick={onClose}>
               {tc("cancel")}
             </Button>
-            <Button type="button" variant="brand" accent="tags" disabled={!form.title.trim()} loading={save.isPending} onClick={() => save.mutate()}>
+            <Button type="button" variant="brand" accent="tags" disabled={!ready} loading={save.isPending} onClick={() => save.mutate()}>
               {tc("save")}
             </Button>
           </span>

@@ -81,14 +81,14 @@ export function registerPrintProductionTools(server: McpServer, caller: McpCalle
 
   server.tool(
     "print_model_create",
-    `Add a model to the print catalog. \`model\`: { slug (lowercase-with-dashes, e.g. plate-large-menu-white), kind (${PRINT_MODEL_KINDS.join("|")}), title, description?, productType (${TAG_PRODUCT_TYPES.join("|")}; serialized only), face (${TAG_FACES.join("|")}; serialized only), theme? (white, black, mixed…), salesProductId (serialized), batchPrefix (serialized: LPLATE, SPLATE, REV, IG…), sortOrder?, version? (its v1: ${VERSION_DOC}) }. Without a version the model is design_needed and cannot be printed yet. Project rule: a new model or version is not done until its 3D preview is attached (print-pipeline/preview.py --upload <model> --version-id <version uuid>, then print_model_get shows currentVersion.preview); parts with no builder have none.`,
+    `Add a model to the print catalog. \`model\`: { slug (lowercase-with-dashes, e.g. plate-large-menu-white), kind (${PRINT_MODEL_KINDS.join("|")}), title, description?, productType (${TAG_PRODUCT_TYPES.join("|")}; serialized: required), face (${TAG_FACES.join("|")}; serialized: required), theme (white, black, mixed…, stored in lowercase; serialized: required, optional for a part), salesProductId (serialized: required), batchPrefix (serialized: required; LPLATE, SPLATE, REV, IG…), sortOrder?, version? (its v1: ${VERSION_DOC}) }. Without a version the model is design_needed and cannot be printed yet. Project rule: a new model or version is not done until its 3D preview is attached (print-pipeline/preview.py --upload <model> --version-id <version uuid>, then print_model_get shows currentVersion.preview); parts with no builder have none.`,
     { model: objectParam },
     async ({ model }) => run("print_model_create", () => production.createModel(printModelInputSchema.parse(model), null, "mcp")),
   );
 
   server.tool(
     "print_model_update",
-    "Patch a print model: title, description, theme, face, salesProductId, batchPrefix, sortOrder, partReorderAt (a part's reorder point; below it the catalog warns), retired (true retires it; false brings it back). The recipe never changes here: a recipe change is a new version (print_model_version_create).",
+    "Patch a print model: title, description, theme, productType and face (a serialized model's, only while no plate was ordered from it), salesProductId, batchPrefix, sortOrder, partReorderAt (a part's reorder point; below it the catalog warns), retired (true retires it; false brings it back). A serialized model keeps its product type, face, theme, sales product and batch prefix: none of them can be emptied. The recipe never changes here: a recipe change is a new version (print_model_version_create).",
     { model: z.string().min(1), patch: objectParam },
     async ({ model, patch }) => run("print_model_update", () => production.updateModel(model, printModelPatchSchema.parse(patch))),
   );
@@ -142,14 +142,21 @@ export function registerPrintProductionTools(server: McpServer, caller: McpCalle
 
   server.tool(
     "print_job_update",
-    "Move a plate (print order): start (ready → printing), printed (requested|ready|printing → printed; requested is a plate printed by hand from a file made outside Xpot: a serialized plate's pieces go into house stock and the batch's journey records `printed`, a part's count goes up), fail (with reason), cancel, release (a building order whose bench died goes back to requested), complete (a requested/building order with its file attached becomes ready), redo (a failed/cancelled order is printed again: same version and bed, same batch while none of its pieces was received; a plate that failed its QR check gets fresh codes instead, its old ones retired and its batch cancelled, since the same codes would fail again), assembled (a printed batch was assembled: the parts its version consumes come off their counts), problem (`reason` says what came out wrong: an observation for the next version to fix). Only `printed` and `assembled` after the user confirmed it physically happened.",
-    { job: z.string().uuid(), action: z.enum(["start", "printed", "fail", "cancel", "release", "complete", "redo", "assembled", "problem"]), reason: z.string().max(2000).optional() },
-    async ({ job, action, reason }) =>
+    "Move a plate (print order): start (ready → printing), printed (requested|ready|printing → printed; requested is a plate printed by hand from a file made outside Xpot: a serialized plate's pieces go into house stock and the batch's journey records `printed`, a part's count goes up; `badPieces` lists the public codes that came out bad, which become damaged instead), stock (a printed plate whose pieces are still pending puts them in house stock now, `badPieces` damaged), fail (with reason), cancel (requested|building|ready, or a failed plate that will not be printed again), release (a building order whose bench died goes back to requested), complete (a requested/building order with its file attached becomes ready), redo (a failed/cancelled order is printed again, once: same version and bed, same batch while none of its pieces was received; otherwise fresh codes from the current version, the old batch's pending codes retired; a plate that failed its QR check gets fresh codes too and its batch is cancelled, since the same codes would fail again), assembled (a printed batch was assembled: the parts its version consumes come off their counts), problem (`reason` says what came out wrong: an observation for the next version to fix). Only `printed` and `assembled` after the user confirmed it physically happened.",
+    {
+      job: z.string().uuid(),
+      action: z.enum(["start", "printed", "stock", "fail", "cancel", "release", "complete", "redo", "assembled", "problem"]),
+      reason: z.string().max(2000).optional(),
+      badPieces: z.array(z.string().trim().min(1).max(40)).max(1000).optional(),
+    },
+    async ({ job, action, reason, badPieces }) =>
       run("print_job_update", () => {
+        if (badPieces?.length && action !== "printed" && action !== "stock") throw new TagError("Only printed or stock take bad pieces", 400);
         if (action === "redo") return production.redoJob(job, null, EVERY_ORGANIZATION, "mcp");
         if (action === "assembled") return production.markAssembled(job, null, EVERY_ORGANIZATION, "mcp");
         if (action === "problem") return production.recordProblem(job, printProblemSchema.parse({ text: reason ?? "" }).text, null, EVERY_ORGANIZATION, "mcp");
-        return production.transitionJob(job, { action, reason: reason ?? null, userId: null, source: "mcp" }, EVERY_ORGANIZATION);
+        if (action === "stock") return production.stockJob(job, { badPieces, userId: null, source: "mcp" }, EVERY_ORGANIZATION);
+        return production.transitionJob(job, { action, reason: reason ?? null, badPieces, userId: null, source: "mcp" }, EVERY_ORGANIZATION);
       }),
   );
 }
