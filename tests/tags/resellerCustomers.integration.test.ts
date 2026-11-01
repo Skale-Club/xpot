@@ -39,7 +39,7 @@ test.skipIf(!enabled)("reseller customers: approved reseller activates a piece, 
   const carla = await one<{ id: number }>(sql`INSERT INTO sales_reps (user_id, display_name, email, role, is_active)
     VALUES ('rc-carla', 'Carla', 'carla@rc.test', 'rep', false) RETURNING id`);
   await approveRep(carla.id, ["tags"], { userId: "rc-admin", isAdmin: true });
-  // A manager later adds her to a team as a plain member. That newer membership
+  // A platform admin later adds her to a team as a plain member. That newer membership
   // is where her new records now go.
   const team = await one<{ id: number }>(sql`INSERT INTO organizations (name, slug) VALUES ('RC Team', 'rc-team') RETURNING id`);
   await db.execute(sql`INSERT INTO organization_memberships (organization_id, rep_id, role, updated_at)

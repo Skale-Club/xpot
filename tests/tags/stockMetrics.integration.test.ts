@@ -2,7 +2,7 @@
 // state, then every admin endpoint that counts them (Overview / Kits header,
 // Batches list, a batch's detail, the Team report, a kit row, the Pieces list
 // behind a card) must give the same numbers as the shared rules
-// (shared/tagMetrics.ts). Also: kit cost rule and ownership, the managers'
+// (shared/tagMetrics.ts). Also: kit cost rule and ownership, the admins'
 // batch picker, house activation by management, Move through the stock
 // service, and batch edits that must not overwrite piece mappings.
 //
@@ -35,11 +35,11 @@ test.skipIf(!enabled)("tags: every screen counts the same stock the same way", a
   await db.execute(sql`DELETE FROM sales_reps WHERE user_id LIKE 'sm-%'`);
   await db.execute(sql`DELETE FROM users WHERE id LIKE 'sm-%'`);
   await db.execute(sql`INSERT INTO users (id, email, first_name, is_admin) VALUES
-    ('sm-admin', 'admin@sm.test', 'Admin', true), ('sm-manager', 'manager@sm.test', 'Manager', false),
+    ('sm-admin', 'admin@sm.test', 'Admin', true), ('sm-admin2', 'admin2@sm.test', 'Admin Two', true),
     ('sm-ana', 'ana@sm.test', 'Ana', false), ('sm-zed', 'zed@sm.test', 'Zed', false)`);
   const reps = await db.execute(sql`INSERT INTO sales_reps (user_id, display_name, email, role, is_active, cost_policy, cost_policy_configured_at) VALUES
     ('sm-admin', 'Admin', 'admin@sm.test', 'admin', true, 'acquisition', NOW()),
-    ('sm-manager', 'Manager', 'manager@sm.test', 'manager', true, 'acquisition', NOW()),
+    ('sm-admin2', 'Admin Two', 'admin2@sm.test', 'admin', true, 'acquisition', NOW()),
     ('sm-ana', 'Ana', 'ana@sm.test', 'rep', true, 'acquisition', NOW()),
     ('sm-zed', 'Zed', 'zed@sm.test', 'rep', true, 'zero', NOW())
     RETURNING id, user_id`);
@@ -55,7 +55,7 @@ test.skipIf(!enabled)("tags: every screen counts the same stock the same way", a
   app.use(express.json());
   app.use((req, _res, next) => {
     const userId = req.get("x-test-user");
-    (req as any).session = userId ? { userId, isAdmin: userId === "sm-admin", email: `${userId}@sm.test` } : {};
+    (req as any).session = userId ? { userId, isAdmin: userId === "sm-admin" || userId === "sm-admin2", email: `${userId}@sm.test` } : {};
     next();
   });
   registerTagRoutes(app);
@@ -88,19 +88,19 @@ test.skipIf(!enabled)("tags: every screen counts the same stock the same way", a
     const byCode = (code: string) => piecesA.find((p) => p.publicCode === code)!;
     const p = (n: number) => byCode(codesA[n - 1]);
 
-    // Managers hand out kits too: they read the batch picker, not the batches.
-    assert.equal((await api("GET", "/api/xpot/admin/tag-batches", "sm-manager")).status, 403);
-    const options = await ok("GET", "/api/xpot/admin/tag-batch-options", "sm-manager");
+    // A reseller does not read the batches; a second platform admin reads the batch picker (they hand out kits too).
+    assert.equal((await api("GET", "/api/xpot/admin/tag-batches", "sm-ana")).status, 403);
+    const options = await ok("GET", "/api/xpot/admin/tag-batch-options", "sm-admin2");
     assert.deepEqual(Object.keys(options[0]).sort(), ["batchCode", "face", "handOutCount", "houseCount", "id", "name", "productType"]);
     assert.equal(options.find((o: any) => o.id === batchA.id).handOutCount, 14);
     assert.equal(options.find((o: any) => o.id === batchB.id).handOutCount, 0);
 
     // Kit cost follows the rep's rule. Ana buys (acquisition): a cost is required and the pieces become hers.
-    assert.equal((await api("POST", "/api/xpot/admin/tag-kits", "sm-manager", { repId: repId["sm-ana"], batchId: batchA.id, quantity: 5 })).status, 400);
-    const kitAna = await ok("POST", "/api/xpot/admin/tag-kits", "sm-manager", { repId: repId["sm-ana"], batchId: batchA.id, quantity: 5, unitCostCents: 700 });
+    assert.equal((await api("POST", "/api/xpot/admin/tag-kits", "sm-admin2", { repId: repId["sm-ana"], batchId: batchA.id, quantity: 5 })).status, 400);
+    const kitAna = await ok("POST", "/api/xpot/admin/tag-kits", "sm-admin2", { repId: repId["sm-ana"], batchId: batchA.id, quantity: 5, unitCostCents: 700 });
     // Zed is on the zero rule: no cost needed; the pieces stay company stock in his custody, no acquisition.
-    const kitZed = await ok("POST", "/api/xpot/admin/tag-kits", "sm-manager", { repId: repId["sm-zed"], codes: [p(6).publicCode, p(7).publicCode] });
-    const kitZedRef = await ok("POST", "/api/xpot/admin/tag-kits", "sm-manager", { repId: repId["sm-zed"], codes: [p(8).publicCode], unitCostCents: 300 });
+    const kitZed = await ok("POST", "/api/xpot/admin/tag-kits", "sm-admin2", { repId: repId["sm-zed"], codes: [p(6).publicCode, p(7).publicCode] });
+    const kitZedRef = await ok("POST", "/api/xpot/admin/tag-kits", "sm-admin2", { repId: repId["sm-zed"], codes: [p(8).publicCode], unitCostCents: 300 });
     const ownership = async (code: string) => (await db.execute(sql`SELECT ownership_type, custodian_rep_id, rep_id FROM tags WHERE public_code = ${code}`)).rows[0] as any;
     assert.deepEqual(await ownership(p(1).publicCode), { ownership_type: "rep", custodian_rep_id: repId["sm-ana"], rep_id: repId["sm-ana"] });
     assert.deepEqual(await ownership(p(6).publicCode), { ownership_type: "company", custodian_rep_id: repId["sm-zed"], rep_id: repId["sm-zed"] });
@@ -135,7 +135,7 @@ test.skipIf(!enabled)("tags: every screen counts the same stock the same way", a
     assert.equal(count("damaged"), 1);
 
     // Overview (also the Kits header).
-    const overview = await ok("GET", "/api/xpot/admin/tags/overview", "sm-manager");
+    const overview = await ok("GET", "/api/xpot/admin/tags/overview", "sm-admin2");
     assert.deepEqual(overview.stock, { house: count("house"), withResellers: count("withResellers") });
     assert.equal(overview.counts.damaged, count("damaged"));
     assert.equal(overview.counts.active, count("live"));
@@ -145,7 +145,7 @@ test.skipIf(!enabled)("tags: every screen counts the same stock the same way", a
     }
     // The list behind each stock card reproduces its number.
     for (const metric of ["house", "withResellers", "sold", "damaged", "notReceived"] as TagStockMetric[]) {
-      assert.equal((await ok("GET", `/api/xpot/tags?metric=${metric}&limit=2000`, "sm-manager")).length, count(metric), metric);
+      assert.equal((await ok("GET", `/api/xpot/tags?metric=${metric}&limit=2000`, "sm-admin2")).length, count(metric), metric);
     }
 
     // Batches list (sums over batches) and each batch's detail, counted in TS with the same rules.
@@ -166,15 +166,15 @@ test.skipIf(!enabled)("tags: every screen counts the same stock the same way", a
     }
 
     // Team report: company stock on the no-rep row, unsold stock per rep.
-    const report = await ok("GET", "/api/xpot/admin/tags/report?range=7d", "sm-manager");
+    const report = await ok("GET", "/api/xpot/admin/tags/report?range=7d", "sm-admin2");
     assert.equal(report.unassigned.inStock, count("house"));
     assert.equal(report.reps.reduce((n: number, r: any) => n + r.inStock, 0), count("withResellers"));
     assert.equal(report.reps.find((r: any) => r.repId === repId["sm-ana"]).inStock, 4);
 
     // A kit row: unsold (p2..p5), of which returnable now (p4, p5: not set up), and sold (p1).
-    const [anaKit] = await ok("GET", `/api/xpot/admin/tag-kits?repId=${repId["sm-ana"]}`, "sm-manager");
+    const [anaKit] = await ok("GET", `/api/xpot/admin/tag-kits?repId=${repId["sm-ana"]}`, "sm-admin2");
     assert.deepEqual([anaKit.pieceCount, anaKit.unsoldCount, anaKit.returnableCount, anaKit.soldCount], [5, 4, 2, 1]);
-    const anaPieces = await ok("GET", `/api/xpot/tags?kitId=${kitAna.id}`, "sm-manager");
+    const anaPieces = await ok("GET", `/api/xpot/tags?kitId=${kitAna.id}`, "sm-admin2");
     assert.equal(countStockMetric(anaPieces, "returnable"), anaKit.returnableCount);
     assert.equal(countStockMetric(anaPieces, "sold"), anaKit.soldCount);
 
@@ -184,20 +184,20 @@ test.skipIf(!enabled)("tags: every screen counts the same stock the same way", a
       await ok("PATCH", `/api/xpot/admin/tags/${id}`, "sm-admin", { destinationType: "website", destinationUrl: "https://shop.example" });
       return ok("POST", `/api/xpot/tags/${id}/activate`, user, {});
     };
-    const managed = await setUp(p(13).id, "sm-manager");
+    const managed = await setUp(p(13).id, "sm-admin2");
     assert.equal(managed.status, "active");
     assert.equal(managed.repId, null);
     assert.equal(managed.soldAt, null);
-    // …while a manager viewing the app as a rep takes it into their own hands, as a rep would.
-    const asRep = await setUp(p(14).id, "sm-manager");
+    // …while a platform admin viewing the app as a rep takes it into their own hands, as a rep would.
+    const asRep = await setUp(p(14).id, "sm-admin2");
     assert.equal(asRep.repId, null);
-    await ok("POST", `/api/xpot/tags/${p(14).id}/disable`, "sm-manager", {});
-    const repView = await ok("POST", `/api/xpot/tags/${p(14).id}/activate`, "sm-manager", {}, { "x-xpot-view": "rep" });
-    assert.equal(repView.repId, repId["sm-manager"]);
+    await ok("POST", `/api/xpot/tags/${p(14).id}/disable`, "sm-admin2", {});
+    const repView = await ok("POST", `/api/xpot/tags/${p(14).id}/activate`, "sm-admin2", {}, { "x-xpot-view": "rep" });
+    assert.equal(repView.repId, repId["sm-admin2"]);
 
     // Move goes through the stock rules: a transfer to another rep (custodian of company stock, out of the kit, the
     // previous rep's purchase closed), a return to the house; sold and set-up pieces stay put.
-    const moved = await ok("PATCH", `/api/xpot/admin/tags/${p(5).id}/rep`, "sm-manager", { repId: repId["sm-zed"] });
+    const moved = await ok("PATCH", `/api/xpot/admin/tags/${p(5).id}/rep`, "sm-admin2", { repId: repId["sm-zed"] });
     assert.equal(moved.repId, repId["sm-zed"]);
     assert.equal(moved.kitId, null);
     assert.deepEqual(await ownership(p(5).publicCode), { ownership_type: "company", custodian_rep_id: repId["sm-zed"], rep_id: repId["sm-zed"] });
@@ -206,16 +206,16 @@ test.skipIf(!enabled)("tags: every screen counts the same stock the same way", a
     assert.deepEqual(transfer, { movement_type: "transfer", from_custodian_rep_id: repId["sm-ana"], to_custodian_rep_id: repId["sm-zed"], reference_id: kitAna.id });
     const [unit] = (await db.execute(sql`SELECT returned_at FROM tag_acquisition_units WHERE tag_id = ${p(5).id}`)).rows as any[];
     assert.ok(unit.returned_at);
-    const home = await ok("PATCH", `/api/xpot/admin/tags/${p(4).id}/rep`, "sm-manager", { repId: null });
+    const home = await ok("PATCH", `/api/xpot/admin/tags/${p(4).id}/rep`, "sm-admin2", { repId: null });
     assert.equal(home.repId, null);
     assert.deepEqual(await ownership(p(4).publicCode), { ownership_type: "company", custodian_rep_id: null, rep_id: null });
     const [returned] = (await db.execute(sql`SELECT movement_type FROM tag_stock_movements WHERE tag_id = ${p(4).id} ORDER BY created_at DESC LIMIT 1`)).rows as any[];
     assert.equal(returned.movement_type, "return");
-    assert.equal((await api("PATCH", `/api/xpot/admin/tags/${p(1).id}/rep`, "sm-manager", { repId: repId["sm-zed"] })).status, 409);
-    assert.equal((await api("PATCH", `/api/xpot/admin/tags/${p(3).id}/rep`, "sm-manager", { repId: repId["sm-zed"] })).status, 409);
+    assert.equal((await api("PATCH", `/api/xpot/admin/tags/${p(1).id}/rep`, "sm-admin2", { repId: repId["sm-zed"] })).status, 409);
+    assert.equal((await api("PATCH", `/api/xpot/admin/tags/${p(3).id}/rep`, "sm-admin2", { repId: repId["sm-zed"] })).status, 409);
 
     // A single piece outside a batch is production: admin only, and it must be sellable (a catalog product).
-    assert.equal((await api("POST", "/api/xpot/admin/tags", "sm-manager", { productType: "keychain", salesProductId: productId["SM-TAGS-B"] })).status, 403);
+    assert.equal((await api("POST", "/api/xpot/admin/tags", "sm-ana", { productType: "keychain", salesProductId: productId["SM-TAGS-B"] })).status, 403);
     assert.equal((await api("POST", "/api/xpot/admin/tags", "sm-admin", { productType: "keychain" })).status, 400);
     const single = await ok("POST", "/api/xpot/admin/tags", "sm-admin", { productType: "keychain", salesProductId: productId["SM-TAGS-B"] });
     assert.equal(single.salesProductId, productId["SM-TAGS-B"]);

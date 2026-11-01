@@ -138,8 +138,9 @@ beforeEach(async () => {
     tag_journey_entries, tag_provisioning_devices, tags, tag_batches, sales_products, sales_reps, users RESTART IDENTITY CASCADE`);
   await q("INSERT INTO users (id, email, first_name, is_admin) VALUES ('print-admin', 'print-admin@print.test', 'Admin', true)");
   await q("INSERT INTO sales_reps (user_id, display_name, email, role, is_active) VALUES ('print-admin', 'Admin', 'print-admin@print.test', 'admin', true)");
-  await q("INSERT INTO users (id, email, first_name, is_admin) VALUES ('print-manager', 'print-manager@print.test', 'Manager', false)");
-  await q("INSERT INTO sales_reps (user_id, display_name, email, role, is_active) VALUES ('print-manager', 'Manager', 'print-manager@print.test', 'manager', true)");
+  // A row left over from the removed Manager role: a plain rep, refused wherever the owners alone may go.
+  await q("INSERT INTO users (id, email, first_name, is_admin) VALUES ('print-manager', 'print-manager@print.test', 'Old Manager', false)");
+  await q("INSERT INTO sales_reps (user_id, display_name, email, role, is_active) VALUES ('print-manager', 'Old Manager', 'print-manager@print.test', 'manager', true)");
   await q("INSERT INTO sales_products (sku, name, kind, base_price_cents, is_active) VALUES ('print-plate', 'Print plate', 'physical', 3500, true)");
   await q("INSERT INTO organizations (name, slug) VALUES ('Xpot', 'xpot-company') ON CONFLICT (slug) DO NOTHING");
 });
@@ -1055,8 +1056,8 @@ describe("the Production page", () => {
     expect(unknownFace.status).toBe(400);
     expect(await q("SELECT id FROM print_requests")).toEqual([]);
     expect(await q("SELECT id FROM tags")).toEqual([]);
-    const manager = await request(appFor("print-manager"), "POST", "/api/xpot/admin/print-generate", { productType: "large_stand", theme: "white", face: "google_review", quantity: 4 });
-    expect(manager.status).toBe(403);
+    const leftoverManager = await request(appFor("print-manager"), "POST", "/api/xpot/admin/print-generate", { productType: "large_stand", theme: "white", face: "google_review", quantity: 4 });
+    expect(leftoverManager.status).toBe(403);
   });
 
   it("downloads an always-ready piece's file as often as needed, and records nothing", async () => {

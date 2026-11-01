@@ -1010,7 +1010,8 @@ export function registerTagRoutes(app: Express) {
   // Dry runs for Distribution: per code, whether it can be handed out / taken back now, and why not. Nothing moves.
   app.post("/api/xpot/admin/tag-kits/check", requireTagManager, async (req, res) => {
     try {
-      res.json(await repo.checkHandOut(kitCheckSchema.parse(req.body), tagScopeOf(req) ?? [await companyOrganizationId()]));
+      const scope = tagScopeOf(req);
+      res.json(await repo.checkHandOut(kitCheckSchema.parse(req.body), scope ?? [await companyOrganizationId()], scope === null));
     } catch (err) {
       fail(res, err, "Failed to check pieces");
     }

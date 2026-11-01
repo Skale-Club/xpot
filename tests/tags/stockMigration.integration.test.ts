@@ -15,7 +15,8 @@ describe("stock migrations on existing batches", () => {
     const db = new PGlite();
     const q = async (text: string, params: unknown[] = []) => (await db.query(text, params)).rows as any[];
     await db.exec(`CREATE TABLE "_xpot_migrations" ("name" TEXT PRIMARY KEY, "applied_at" TIMESTAMP DEFAULT NOW())`);
-    for (const file of files.filter((f) => !STOCK.some((n) => f.startsWith(n)))) await db.exec(sqlOf(file));
+    // Only what existed then: later migrations assume the stock tables.
+    for (const file of files.filter((f) => f < "0032" && !STOCK.some((n) => f.startsWith(n)))) await db.exec(sqlOf(file));
 
     const [{ id: org }] = await q(`INSERT INTO organizations (name, slug) VALUES ('Xpot', 'xpot-co') ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name RETURNING id`);
     const batch = async (code: string, n: number) => {

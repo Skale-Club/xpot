@@ -18,9 +18,12 @@ const me = (overrides: { isAdmin?: boolean; role?: string; organizations?: Array
 });
 
 describe("who has management mode", () => {
-  it("a manager or the Xpot admin: everyone", () => {
-    expect(managementReach(me({ role: "manager" }))).toBe("everyone");
+  it("the Xpot admin: everyone", () => {
     expect(managementReach(me({ isAdmin: true, role: "admin" }))).toBe("everyone");
+  });
+
+  it("a leftover role=manager row is a plain rep: no management mode", () => {
+    expect(managementReach(me({ role: "manager" }))).toBeNull();
   });
 
   it("a Rep Admin of a real team: their organization", () => {

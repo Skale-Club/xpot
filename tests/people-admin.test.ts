@@ -43,7 +43,7 @@ describe("people filters", () => {
   });
   const people = [
     person({ displayName: "Ana Souza", modules: ["tags"] }),
-    person({ displayName: "Bruno Lima", email: "bruno@x.test", loginPhone: "+5511999990000", role: "manager", modules: ["tags"] }),
+    person({ displayName: "Bruno Lima", email: "bruno@x.test", loginPhone: "+5511999990000", role: "admin", modules: ["tags"] }),
     person({ displayName: "Carla Dias", access: "pending", loginPhone: null }),
     person({ displayName: "Davi Reis", access: "blocked" }),
     person({ displayName: "Eva Melo", access: "blocked", refused: true }),
@@ -67,8 +67,8 @@ describe("people filters", () => {
     expect(names(filterPeople(people, { ...NO_PEOPLE_FILTERS, status: "refused" }))).toEqual(["Eva Melo"]);
   });
 
-  it("filters by role and by module (managers use every module)", () => {
-    expect(names(filterPeople(people, { ...NO_PEOPLE_FILTERS, role: "manager" }))).toEqual(["Bruno Lima"]);
+  it("filters by role and by module (admins use every module)", () => {
+    expect(names(filterPeople(people, { ...NO_PEOPLE_FILTERS, role: "admin" }))).toEqual(["Bruno Lima"]);
     expect(names(filterPeople(people, { ...NO_PEOPLE_FILTERS, module: "visits" }))).toEqual(["Bruno Lima", "Carla Dias", "Davi Reis", "Eva Melo"]);
   });
 
@@ -78,5 +78,7 @@ describe("people filters", () => {
       .toEqual({ search: "ana", status: "active", role: "rep", module: "visits" });
     // Anything unknown is "all", never a filter that matches nobody.
     expect(peopleFiltersFromParams({ status: "gone", role: "boss", module: "maps" })).toEqual(NO_PEOPLE_FILTERS);
+    // The Manager role is gone: an old link filtering by it shows everyone.
+    expect(peopleFiltersFromParams({ role: "manager" })).toEqual(NO_PEOPLE_FILTERS);
   });
 });
