@@ -424,3 +424,48 @@ export function samePlace(a: { lat: number; lng: number }, b: { lat: number; lng
   const dLng = (a.lng - b.lng) * metersPerDegree * Math.cos((a.lat * Math.PI) / 180);
   return Math.hypot(dLat, dLng) < 50;
 }
+
+/** Straight-line meters between two points (the picker's "how far from this stop"). */
+export function metersBetween(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
+  const rad = (value: number) => (value * Math.PI) / 180;
+  const dLat = rad(b.lat - a.lat);
+  const dLng = rad(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * 6_371_000 * Math.asin(Math.sqrt(h));
+}
+
+/**
+ * What the route's own search found and left out, nearest to `anchor` first:
+ * still free, never excluded as a conflict, and not already a stop.
+ */
+export function leftoverCandidates<T extends { id: number; status: string; exclusionReason: string | null; lat: string | null; lng: string | null }>(
+  candidates: T[],
+  routeCandidateIds: Iterable<number>,
+  anchor: { lat: number; lng: number },
+  limit: number,
+) {
+  const onRoute = new Set(routeCandidateIds);
+  return candidates
+    .filter((candidate) => candidate.status === "discovered" && !candidate.exclusionReason
+      && candidate.lat && candidate.lng && !onRoute.has(candidate.id))
+    .map((candidate) => ({ candidate, meters: metersBetween(anchor, { lat: Number(candidate.lat), lng: Number(candidate.lng) }) }))
+    .sort((a, b) => a.meters - b.meters)
+    .slice(0, limit)
+    .map(({ candidate }) => candidate);
+}
+
+/** A new order is valid only if every visit that already happened keeps its place. */
+export function keepsPastVisits(stops: Array<{ id: number; status: string }>, stopIds: number[]) {
+  return stops.every((stop, index) => isStopOpen(stop.status) || stopIds[index] === stop.id);
+}
+
+/** A stop can go after this one only if nothing already visited comes later. */
+export function canAddAfterStop(stops: Array<{ id: number; status: string }>, stopId: number) {
+  const index = stops.findIndex((stop) => stop.id === stopId);
+  return index >= 0 && stops.slice(index + 1).every((stop) => isStopOpen(stop.status));
+}
+
+/** Stops a route never reached: what "Use again today" carries over. */
+export function unvisitedStopCount(stops: Array<{ status: string }>) {
+  return stops.filter((stop) => stop.status !== "checked_in" && stop.status !== "completed").length;
+}

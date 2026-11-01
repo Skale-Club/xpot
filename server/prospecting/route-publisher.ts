@@ -10,6 +10,59 @@ import {
 import { organizationIdForRep } from "../organizations/service.js";
 import { ensureProspectingCandidateLead } from "./lead-materializer.js";
 
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+type RouteRow = typeof prospectingRoutes.$inferSelect;
+type RouteStopRow = typeof prospectingRouteStops.$inferSelect;
+
+/**
+ * Gives one stop of a published route its CRM lead and its planned visit on
+ * the agenda. Publishing does it for every stop; a stop added to a route that
+ * is already published or running gets it on its own.
+ */
+export async function materializeStopVisit(
+  tx: Tx,
+  input: { route: RouteRow; stop: RouteStopRow; repId: number; organizationId: number; scheduledAt: Date },
+) {
+  const { route, stop, repId, organizationId, scheduledAt } = input;
+  const now = new Date();
+  let leadId = stop.leadId;
+  if (!leadId && stop.candidateId) {
+    leadId = await ensureProspectingCandidateLead(tx, {
+      candidateId: stop.candidateId,
+      repId,
+      organizationId,
+      territoryName: route.name,
+    });
+  }
+  if (!leadId) throw new Error(`Route stop ${stop.id} has no business attached.`);
+
+  const [location] = await tx.select({ id: salesLeadLocations.id })
+    .from(salesLeadLocations)
+    .where(eq(salesLeadLocations.leadId, leadId))
+    .orderBy(desc(salesLeadLocations.isPrimary), asc(salesLeadLocations.id))
+    .limit(1);
+  const [visit] = await tx.insert(salesVisits).values({
+    repId,
+    leadId,
+    locationId: location?.id ?? null,
+    status: "planned",
+    scheduledAt,
+    source: "prospecting-route",
+  }).returning({ id: salesVisits.id });
+
+  if (stop.candidateId) {
+    await tx.update(prospectingCandidates).set({ leadId, status: "scheduled", updatedAt: now })
+      .where(and(eq(prospectingCandidates.id, stop.candidateId), eq(prospectingCandidates.repId, repId)));
+  }
+  await tx.update(prospectingRouteStops).set({
+    leadId,
+    visitId: visit.id,
+    estimatedArrivalAt: scheduledAt,
+    updatedAt: now,
+  }).where(eq(prospectingRouteStops.id, stop.id));
+  return { leadId, visitId: visit.id };
+}
+
 /**
  * Publishes a route exactly once and materializes every stop as a CRM lead plus
  * a planned visit. Automatic and manually-created routes share this path.
@@ -47,41 +100,7 @@ export async function publishProspectingRouteForRep(routeId: number, repId: numb
         continue;
       }
 
-      let leadId = stop.leadId;
-      if (!leadId && stop.candidateId) {
-        leadId = await ensureProspectingCandidateLead(tx, {
-          candidateId: stop.candidateId,
-          repId,
-          organizationId,
-          territoryName: route.name,
-        });
-      }
-      if (!leadId) throw new Error(`Route stop ${stop.id} has no business attached.`);
-
-      const [location] = await tx.select({ id: salesLeadLocations.id })
-        .from(salesLeadLocations)
-        .where(eq(salesLeadLocations.leadId, leadId))
-        .orderBy(desc(salesLeadLocations.isPrimary), asc(salesLeadLocations.id))
-        .limit(1);
-      const [visit] = await tx.insert(salesVisits).values({
-        repId,
-        leadId,
-        locationId: location?.id ?? null,
-        status: "planned",
-        scheduledAt,
-        source: "prospecting-route",
-      }).returning({ id: salesVisits.id });
-
-      if (stop.candidateId) {
-        await tx.update(prospectingCandidates).set({ leadId, status: "scheduled", updatedAt: now })
-          .where(and(eq(prospectingCandidates.id, stop.candidateId), eq(prospectingCandidates.repId, repId)));
-      }
-      await tx.update(prospectingRouteStops).set({
-        leadId,
-        visitId: visit.id,
-        estimatedArrivalAt: scheduledAt,
-        updatedAt: now,
-      }).where(eq(prospectingRouteStops.id, stop.id));
+      await materializeStopVisit(tx, { route, stop, repId, organizationId, scheduledAt });
     }
 
     const [published] = await tx.update(prospectingRoutes).set({

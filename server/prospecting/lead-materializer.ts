@@ -75,3 +75,61 @@ export async function ensureProspectingCandidateLead(
     .where(eq(prospectingCandidates.id, candidate.id));
   return leadId;
 }
+
+export type RouteEditPlace = {
+  placeId: string;
+  name: string;
+  address: string;
+  lat: number;
+  lng: number;
+  phone?: string;
+  website?: string;
+  industry?: string;
+};
+
+/**
+ * Turns a Google place the rep picked while editing a route into a CRM lead:
+ * the organization's lead for that place when one exists, otherwise a new one.
+ */
+export async function ensurePlaceLead(
+  tx: Tx,
+  input: { place: RouteEditPlace; repId: number; organizationId: number; territoryName: string },
+) {
+  const { place } = input;
+  await tx.execute(sql`select pg_advisory_xact_lock(${input.organizationId}, hashtext(${place.placeId}))`);
+  const [existing] = await tx.select({ id: salesLeads.id }).from(salesLeads).where(and(
+    eq(salesLeads.organizationId, input.organizationId),
+    eq(salesLeads.googlePlaceId, place.placeId),
+  )).limit(1);
+  if (existing) {
+    await tx.update(salesLeads).set({
+      status: "lead",
+      ownerRepId: input.repId,
+      updatedAt: new Date(),
+    }).where(and(eq(salesLeads.id, existing.id), eq(salesLeads.status, "prospect")));
+    return existing.id;
+  }
+
+  const [lead] = await tx.insert(salesLeads).values({
+    organizationId: input.organizationId,
+    name: place.name,
+    website: place.website || null,
+    phone: place.phone || null,
+    industry: place.industry || null,
+    source: "prospecting",
+    status: "lead",
+    ownerRepId: input.repId,
+    territoryName: input.territoryName,
+    googlePlaceId: place.placeId,
+  }).returning({ id: salesLeads.id });
+  await tx.insert(salesLeadLocations).values({
+    leadId: lead.id,
+    addressLine1: place.address || "Prospecting location",
+    country: "US",
+    lat: String(place.lat),
+    lng: String(place.lng),
+    isPrimary: true,
+    geofenceRadiusMeters: defaultGeofenceRadiusSql(),
+  });
+  return lead.id;
+}

@@ -16,7 +16,10 @@ import {
   MAX_DAILY_PROSPECTING_SESSIONS,
   prospectingJobCreateSchema,
   prospectingRouteCreateSchema,
+  type ProspectingRouteCreateInput,
   prospectingRouteReorderSchema,
+  prospectingRouteReuseSchema,
+  prospectingRouteStopAddSchema,
   prospectingRouteStatusUpdateSchema,
   prospectingStopUpdateSchema,
 } from "#shared/prospecting.js";
@@ -37,11 +40,20 @@ import {
 import { xpotPushSubscriptionSchema } from "#shared/xpot.js";
 import { pushPublicKey, savePushSubscription } from "../../push-notifications.js";
 import { retryAutomaticRoute } from "../../prospecting/auto-route.js";
-import { haversineMeters } from "../../prospecting/route-optimizer.js";
 import { openWindowsOn, secondsUntilDayEnd } from "../../prospecting/opening-hours.js";
 import { ensureProspectingCandidateLead } from "../../prospecting/lead-materializer.js";
 import { defaultGeofenceRadiusSql } from "../../lead-location.js";
 import { publishProspectingRouteForRep } from "../../prospecting/route-publisher.js";
+import {
+  addRouteStop,
+  EDITABLE_ROUTE_STATUSES,
+  isUnreached,
+  overtimeMinutes,
+  persistLocalStopOrder,
+  releaseStop,
+  RouteEditError,
+  UNREACHED_STOP_STATUSES,
+} from "../../prospecting/route-editing.js";
 
 function lifecycleScore(lead: Awaited<ReturnType<typeof storage.getSalesLead>>): { score: number; reasons: string[] } {
   if (!lead) return { score: 0, reasons: [] };
@@ -70,8 +82,6 @@ function pathId(value: string) {
   const id = Number(value);
   return Number.isSafeInteger(id) && id > 0 ? id : null;
 }
-
-const UNREACHED_STOP_STATUSES = ["planned", "en_route"] as const;
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -103,80 +113,6 @@ async function releaseUnvisitedStops(tx: Tx, routeId: number, reason: string, no
     await tx.update(prospectingCandidates).set({ status: "discovered", updatedAt: now })
       .where(and(inArray(prospectingCandidates.id, candidateIds), eq(prospectingCandidates.status, "scheduled")));
   }
-}
-
-type RouteRow = typeof prospectingRoutes.$inferSelect;
-type RouteStopRow = typeof prospectingRouteStops.$inferSelect;
-
-/** Rebuilds local timing/geometry after a drag or removal without another paid Google request. */
-async function persistLocalStopOrder(
-  tx: Tx,
-  route: RouteRow,
-  ordered: RouteStopRow[],
-  repId: number,
-  edit: "reordered" | "stop_removed",
-) {
-  const plannedStartAt = new Date(route.plannedStartAt);
-  let elapsedSeconds = 0;
-  let totalDistanceMeters = 0;
-  const recalculated = ordered.map((stop, index) => {
-    const previous = index > 0 ? ordered[index - 1] : null;
-    const distance = previous ? Math.round(haversineMeters(
-      { lat: Number(previous.lat), lng: Number(previous.lng) },
-      { lat: Number(stop.lat), lng: Number(stop.lng) },
-    )) : 0;
-    const travelDurationSeconds = distance > 0 ? Math.max(60, Math.round(distance / (30_000 / 3600))) : 0;
-    elapsedSeconds += travelDurationSeconds;
-    const estimatedArrivalAt = new Date(plannedStartAt.getTime() + elapsedSeconds * 1000);
-    elapsedSeconds += stop.serviceDurationSeconds;
-    totalDistanceMeters += distance;
-    return { stop, position: index + 1, distance, travelDurationSeconds, estimatedArrivalAt };
-  });
-  const now = new Date();
-  const optimizationMeta = { ...(route.optimizationMeta ?? {}) } as Record<string, unknown>;
-  delete optimizationMeta.encodedPolyline;
-  Object.assign(optimizationMeta, {
-    manuallyReordered: true,
-    lastManualEdit: edit,
-    distanceModel: "haversine_manual",
-    trafficAware: false,
-  });
-
-  // Move every row out of the final position range first so the route/position
-  // unique constraint cannot collide while positions are compacted.
-  const temporaryPositionBase = Math.max(...ordered.map((stop) => stop.position), ordered.length) + ordered.length + 1;
-  for (const item of recalculated) {
-    await tx.update(prospectingRouteStops).set({ position: temporaryPositionBase + item.position, updatedAt: now })
-      .where(eq(prospectingRouteStops.id, item.stop.id));
-  }
-  for (const item of recalculated) {
-    await tx.update(prospectingRouteStops).set({
-      position: item.position,
-      travelDistanceMeters: item.distance,
-      travelDurationSeconds: item.travelDurationSeconds,
-      estimatedArrivalAt: item.estimatedArrivalAt,
-      updatedAt: now,
-    }).where(eq(prospectingRouteStops.id, item.stop.id));
-    if (item.stop.visitId) {
-      await tx.update(salesVisits).set({ scheduledAt: item.estimatedArrivalAt, updatedAt: now })
-        .where(and(eq(salesVisits.id, item.stop.visitId), eq(salesVisits.repId, repId)));
-    }
-  }
-  const first = ordered[0];
-  const last = ordered[ordered.length - 1];
-  await tx.update(prospectingRoutes).set({
-    startAddress: first.address,
-    startLat: first.lat,
-    startLng: first.lng,
-    endAddress: last.address,
-    endLat: last.lat,
-    endLng: last.lng,
-    totalDistanceMeters,
-    totalDurationSeconds: elapsedSeconds,
-    plannedEndAt: new Date(plannedStartAt.getTime() + elapsedSeconds * 1000),
-    optimizationMeta,
-    updatedAt: now,
-  }).where(eq(prospectingRoutes.id, route.id));
 }
 
 export function createProspectingRouter() {
@@ -289,24 +225,26 @@ export function createProspectingRouter() {
     res.json(rows.map(({ route, stopCount, visitedStopCount }) => ({ ...route, stopCount, visitedStopCount })));
   });
 
-  router.post("/prospecting/routes", async (req, res) => {
-    const actor = (req as any).xpotActor as NonNullable<Awaited<ReturnType<typeof ensureXpotRep>>>;
-    const input = prospectingRouteCreateSchema.parse(req.body);
+  type Actor = NonNullable<Awaited<ReturnType<typeof ensureXpotRep>>>;
+  const reply = (status: number, body: unknown) => ({ status, body });
+
+  /** Builds (or returns) a rep's route for a day; shared by a new route and a reused one. */
+  async function createRoute(actor: Actor, input: ProspectingRouteCreateInput) {
     if (input.jobId !== undefined) {
       const [ownedJob] = await db.select({ id: prospectingJobs.id, status: prospectingJobs.status })
         .from(prospectingJobs).where(and(
           eq(prospectingJobs.id, input.jobId),
           eq(prospectingJobs.repId, actor.rep.id),
         )).limit(1);
-      if (!ownedJob) return res.status(404).json({ message: "Prospecting job not found" });
+      if (!ownedJob) return reply(404, { message: "Prospecting job not found" });
       if (["draft", "queued", "running"].includes(ownedJob.status)) {
-        return res.status(409).json({ message: "Wait for prospecting discovery to finish before building the route." });
+        return reply(409, { message: "Wait for prospecting discovery to finish before building the route." });
       }
     }
     // A seller can create a follow-up route after finishing the active one. The
     // bounded daily allowance protects paid discovery and optimization calls.
     if (input.rebuild && !actor.user.isAdmin) {
-      return res.status(403).json({ message: "Only the account owner can recalculate today's route." });
+      return reply(403, { message: "Only the account owner can recalculate today's route." });
     }
     const rebuild = input.rebuild && actor.user.isAdmin;
     const dailyRoutes = await db.select().from(prospectingRoutes).where(and(
@@ -318,10 +256,10 @@ export function createProspectingRouter() {
       const existingStops = await db.select().from(prospectingRouteStops)
         .where(eq(prospectingRouteStops.routeId, existingRoute.id))
         .orderBy(asc(prospectingRouteStops.position));
-      return res.status(200).json({ route: existingRoute, stops: existingStops, reused: true });
+      return reply(200, { route: existingRoute, stops: existingStops, reused: true });
     }
     if (!rebuild && dailyRoutes.length >= MAX_DAILY_PROSPECTING_SESSIONS) {
-      return res.status(429).json({ message: `You can create up to ${MAX_DAILY_PROSPECTING_SESSIONS} routes per day.` });
+      return reply(429, { message: `You can create up to ${MAX_DAILY_PROSPECTING_SESSIONS} routes per day.` });
     }
     const uniqueLeadIds = Array.from(new Set(input.leadIds));
     const leads = (await storage.listSalesLeads({ ownerRepId: actor.rep.id }))
@@ -411,7 +349,7 @@ export function createProspectingRouter() {
       if (candidate.googlePlaceId) routedPlaceIds.add(candidate.googlePlaceId);
     }
     if (!candidates.length) {
-      return res.status(400).json({ message: "None of the selected prospects has usable coordinates.", missingCoordinates });
+      return reply(400, { message: "None of the selected prospects has usable coordinates.", missingCoordinates });
     }
 
     const plannedStartAt = new Date(input.plannedStartAt);
@@ -422,7 +360,7 @@ export function createProspectingRouter() {
     try {
       organizationId = await organizationIdForRep(actor.rep.id);
     } catch (error) {
-      if (error instanceof OrganizationError) return res.status(error.status).json(refusalBody(error));
+      if (error instanceof OrganizationError) return reply(error.status, refusalBody(error));
       throw error;
     }
     // The selling day starts at visit one. Getting from the rep's current
@@ -528,19 +466,83 @@ export function createProspectingRouter() {
       });
     } catch (error) {
       if (error instanceof GoogleRouteOptimizationError) {
-        return res.status(502).json({ message: error.message });
+        return reply(502, { message: error.message });
       }
       if (error instanceof NoProspectingStopFitsError) {
-        return res.status(400).json({ message: "No selected prospect fits in the route's time budget." });
+        return reply(400, { message: "No selected prospect fits in the route's time budget." });
       }
       if (error instanceof DailyRouteLimitError) {
-        return res.status(429).json({ message: `You can create up to ${MAX_DAILY_PROSPECTING_SESSIONS} routes per day.` });
+        return reply(429, { message: `You can create up to ${MAX_DAILY_PROSPECTING_SESSIONS} routes per day.` });
       }
       throw error;
     }
-    if ("reused" in result) return res.status(200).json(result);
+    if ("reused" in result) return reply(200, result);
     const { optimized, ...payload } = result;
-    res.status(201).json({ ...payload, excluded: { missingCoordinates, budget: optimized.excludedCandidateIds } });
+    return reply(201, { ...payload, excluded: { missingCoordinates, budget: optimized.excludedCandidateIds } });
+  }
+
+  router.post("/prospecting/routes", async (req, res) => {
+    const actor = (req as any).xpotActor as NonNullable<Awaited<ReturnType<typeof ensureXpotRep>>>;
+    const input = prospectingRouteCreateSchema.parse(req.body);
+    const result = await createRoute(actor, input);
+    res.status(result.status).json(result.body);
+  });
+
+  // A route from an earlier day becomes today's route again with the stops it
+  // never reached. No new search: one optimization, and it counts toward the
+  // daily limit like any route.
+  router.post("/prospecting/routes/:id/reuse", async (req, res) => {
+    const actor = (req as any).xpotActor as NonNullable<Awaited<ReturnType<typeof ensureXpotRep>>>;
+    const routeId = pathId(req.params.id);
+    const input = prospectingRouteReuseSchema.parse(req.body);
+    const [route] = routeId ? await db.select().from(prospectingRoutes).where(and(
+      eq(prospectingRoutes.id, routeId),
+      eq(prospectingRoutes.repId, actor.rep.id),
+    )).limit(1) : [];
+    if (!route) return res.status(404).json({ message: "Route not found" });
+    if (route.routeDate >= input.routeDate) {
+      return res.status(409).json({ message: "Only a route from an earlier day can be reused." });
+    }
+    const stops = await db.select().from(prospectingRouteStops)
+      .where(eq(prospectingRouteStops.routeId, route.id))
+      .orderBy(asc(prospectingRouteStops.position));
+    const notVisited = stops.filter((stop) => !["checked_in", "completed"].includes(stop.status));
+    if (!notVisited.length) {
+      return res.status(409).json({ message: "Every stop of this route was already visited." });
+    }
+    const todayRoutes = await db.select({ status: prospectingRoutes.status }).from(prospectingRoutes).where(and(
+      eq(prospectingRoutes.repId, actor.rep.id),
+      eq(prospectingRoutes.routeDate, input.routeDate),
+    ));
+    if (todayRoutes.some((today) => (EDITABLE_ROUTE_STATUSES as readonly string[]).includes(today.status))) {
+      return res.status(409).json({ message: "Today's route already exists. Redo it to start a new one." });
+    }
+    if (todayRoutes.length >= MAX_DAILY_PROSPECTING_SESSIONS) {
+      return res.status(429).json({ message: `You can create up to ${MAX_DAILY_PROSPECTING_SESSIONS} routes per day.` });
+    }
+    // A past route left open closes first: its old planned visits leave the
+    // agenda and its businesses go back to the pool the new route draws from.
+    if ((EDITABLE_ROUTE_STATUSES as readonly string[]).includes(route.status)) {
+      await db.transaction(async (tx) => {
+        const now = new Date();
+        await releaseUnvisitedStops(tx, route.id, "route_reused", now);
+        await tx.update(prospectingRoutes).set({ status: "cancelled", updatedAt: now })
+          .where(eq(prospectingRoutes.id, route.id));
+      });
+    }
+    const shiftMinutes = Number((route.optimizationMeta as Record<string, unknown> | null)?.shiftDurationMinutes);
+    const result = await createRoute(actor, {
+      routeDate: input.routeDate,
+      plannedStartAt: input.plannedStartAt,
+      // The discovered businesses go by candidate so their opening hours still count.
+      candidateIds: notVisited.flatMap((stop) => stop.candidateId ? [stop.candidateId] : []),
+      leadIds: notVisited.flatMap((stop) => !stop.candidateId && stop.leadId ? [stop.leadId] : []),
+      maxStops: route.maxStops,
+      shiftDurationMinutes: Number.isFinite(shiftMinutes) ? Math.min(16 * 60, Math.max(30, shiftMinutes)) : 8 * 60,
+      defaultVisitMinutes: route.defaultVisitMinutes,
+      rebuild: false,
+    });
+    res.status(result.status).json(result.body);
   });
 
   router.get("/prospecting/routes/:id", async (req, res) => {
@@ -604,45 +606,27 @@ export function createProspectingRouter() {
       eq(prospectingRoutes.repId, actor.rep.id),
     )).limit(1) : [];
     if (!route) return res.status(404).json({ message: "Route not found" });
-    if (!["draft", "published"].includes(route.status)) {
-      return res.status(409).json({ message: "Only a route that has not started can be reordered." });
+    if (!(EDITABLE_ROUTE_STATUSES as readonly string[]).includes(route.status)) {
+      return res.status(409).json({ message: "A finished route can no longer be edited." });
     }
 
     const stops = await db.select().from(prospectingRouteStops)
-      .where(eq(prospectingRouteStops.routeId, route.id));
+      .where(eq(prospectingRouteStops.routeId, route.id))
+      .orderBy(asc(prospectingRouteStops.position));
     const knownIds = new Set(stops.map((stop) => stop.id));
     if (input.stopIds.length !== stops.length || input.stopIds.some((id) => !knownIds.has(id))) {
       return res.status(400).json({ message: "The new order must contain every route stop exactly once." });
     }
+    // A running route keeps what already happened where it happened; only the stops ahead move.
+    if (stops.some((stop, index) => !isUnreached(stop) && input.stopIds[index] !== stop.id)) {
+      return res.status(409).json({ message: "A visit that already happened keeps its place in the route." });
+    }
 
     const byId = new Map(stops.map((stop) => [stop.id, stop]));
     const ordered = input.stopIds.map((id) => byId.get(id)!);
-    const plannedStartAt = new Date(route.plannedStartAt);
-    let elapsedSeconds = 0;
-    let totalDistanceMeters = 0;
-    const recalculated = ordered.map((stop, index) => {
-      const previous = index > 0 ? ordered[index - 1] : null;
-      const distance = previous ? Math.round(haversineMeters(
-        { lat: Number(previous.lat), lng: Number(previous.lng) },
-        { lat: Number(stop.lat), lng: Number(stop.lng) },
-      )) : 0;
-      // Reordering is intentionally local: use a conservative city-driving estimate,
-      // never a new Google Routes request.
-      const travelDurationSeconds = distance > 0 ? Math.max(60, Math.round(distance / (30_000 / 3600))) : 0;
-      elapsedSeconds += travelDurationSeconds;
-      const estimatedArrivalAt = new Date(plannedStartAt.getTime() + elapsedSeconds * 1000);
-      elapsedSeconds += stop.serviceDurationSeconds;
-      totalDistanceMeters += distance;
-      return { stop, position: index + 1, distance, travelDurationSeconds, estimatedArrivalAt };
-    });
-    const configuredShiftMinutes = Number((route.optimizationMeta as Record<string, unknown> | null)?.shiftDurationMinutes);
-    if (Number.isFinite(configuredShiftMinutes) && configuredShiftMinutes > 0 && elapsedSeconds > configuredShiftMinutes * 60) {
-      return res.status(409).json({
-        message: `This order needs about ${Math.ceil(elapsedSeconds / 60)} minutes and no longer fits the ${configuredShiftMinutes}-minute work window.`,
-      });
-    }
-    await db.transaction((tx) => persistLocalStopOrder(tx, route, ordered, actor.rep.id, "reordered"));
-    return res.json({ reordered: true });
+    // Over the chosen hours is allowed: the rep is told how far over, not stopped.
+    const { elapsedSeconds } = await db.transaction((tx) => persistLocalStopOrder(tx, route, ordered, actor.rep.id, "reordered"));
+    return res.json({ reordered: true, overtimeMinutes: overtimeMinutes(route, elapsedSeconds) });
   });
 
   router.delete("/prospecting/routes/:routeId/stops/:stopId", async (req, res) => {
@@ -654,7 +638,7 @@ export function createProspectingRouter() {
       eq(prospectingRoutes.repId, actor.rep.id),
     )).limit(1) : [];
     if (!route) return res.status(404).json({ message: "Route not found" });
-    if (!["draft", "published", "in_progress"].includes(route.status)) {
+    if (!(EDITABLE_ROUTE_STATUSES as readonly string[]).includes(route.status)) {
       return res.status(409).json({ message: "A finished route can no longer be edited." });
     }
     const stops = await db.select().from(prospectingRouteStops)
@@ -662,7 +646,7 @@ export function createProspectingRouter() {
       .orderBy(asc(prospectingRouteStops.position));
     const stop = stops.find((item) => item.id === stopId);
     if (!stop) return res.status(404).json({ message: "Route stop not found" });
-    if (!["planned", "en_route"].includes(stop.status)) {
+    if (!isUnreached(stop)) {
       return res.status(409).json({ message: "A visit that already started cannot be removed from the route." });
     }
     if (stops.length === 1) {
@@ -670,25 +654,25 @@ export function createProspectingRouter() {
     }
 
     await db.transaction(async (tx) => {
-      const now = new Date();
-      if (stop.visitId) {
-        await tx.update(salesVisits).set({ status: "cancelled", updatedAt: now }).where(and(
-          eq(salesVisits.id, stop.visitId),
-          eq(salesVisits.repId, actor.rep.id),
-          eq(salesVisits.status, "planned"),
-        ));
-      }
-      if (stop.candidateId) {
-        await tx.update(prospectingCandidates).set({ status: "discovered", updatedAt: now }).where(and(
-          eq(prospectingCandidates.id, stop.candidateId),
-          eq(prospectingCandidates.repId, actor.rep.id),
-          eq(prospectingCandidates.status, "scheduled"),
-        ));
-      }
-      await tx.delete(prospectingRouteStops).where(eq(prospectingRouteStops.id, stop.id));
+      await releaseStop(tx, stop, actor.rep.id);
       await persistLocalStopOrder(tx, route, stops.filter((item) => item.id !== stop.id), actor.rep.id, "stop_removed");
     });
     return res.json({ removed: true });
+  });
+
+  router.post("/prospecting/routes/:id/stops", async (req, res) => {
+    const actor = (req as any).xpotActor as NonNullable<Awaited<ReturnType<typeof ensureXpotRep>>>;
+    const routeId = pathId(req.params.id);
+    if (!routeId) return res.status(404).json({ message: "Route not found" });
+    const input = prospectingRouteStopAddSchema.parse(req.body);
+    try {
+      const added = await addRouteStop({ routeId, repId: actor.rep.id, ...input });
+      return res.status(201).json(added);
+    } catch (error) {
+      if (error instanceof RouteEditError) return res.status(error.status).json({ message: error.message });
+      if (error instanceof OrganizationError) return res.status(error.status).json(refusalBody(error));
+      throw error;
+    }
   });
 
   router.post("/prospecting/routes/:id/stops/:stopId/prepare-demo", async (req, res) => {

@@ -22,6 +22,11 @@ import {
   stopStatusLabelKey,
   stopStatusTone,
   isStopOpen,
+  canAddAfterStop,
+  keepsPastVisits,
+  leftoverCandidates,
+  metersBetween,
+  unvisitedStopCount,
   eligibleCandidates,
   routeFill,
   samePlace,
@@ -330,5 +335,57 @@ describe("routeOfJob", () => {
   it("never takes a route without a job for \"no search open\"", () => {
     expect(routeOfJob(routes, null)).toBeUndefined();
     expect(routeOfJob(undefined, 7)).toBeUndefined();
+  });
+});
+
+describe("hand edits of a route", () => {
+  const candidate = (id: number, lat: string, extra: Partial<{ status: string; exclusionReason: string | null; lng: string | null }> = {}) =>
+    ({ id, status: "discovered", exclusionReason: null, lat, lng: "-71.000", ...extra });
+  const stop = { lat: 42.3, lng: -71 };
+
+  it("measures a straight-line distance in meters", () => {
+    expect(metersBetween(stop, stop)).toBe(0);
+    // One thousandth of a degree of latitude is about 111 m.
+    expect(Math.round(metersBetween(stop, { lat: 42.301, lng: -71 }))).toBe(111);
+  });
+
+  it("offers the search's leftovers nearest first, never a stop, a conflict or a used one", () => {
+    const far = candidate(1, "42.400");
+    const near = candidate(2, "42.301");
+    const onRoute = candidate(3, "42.300");
+    const conflict = candidate(4, "42.302", { exclusionReason: "existing_customer" });
+    const scheduled = candidate(5, "42.303", { status: "scheduled" });
+    const noPoint = candidate(6, "42.304", { lng: null });
+    const middle = candidate(7, "42.310");
+    expect(leftoverCandidates([far, near, onRoute, conflict, scheduled, noPoint, middle], [3], stop, 8).map((item) => item.id))
+      .toEqual([2, 7, 1]);
+    expect(leftoverCandidates([far, near, middle], [], stop, 2).map((item) => item.id)).toEqual([2, 7]);
+  });
+
+  const running = [
+    { id: 10, status: "completed" },
+    { id: 11, status: "planned" },
+    { id: 12, status: "en_route" },
+  ];
+
+  it("lets the stops ahead move but keeps every visit that already happened in place", () => {
+    expect(keepsPastVisits(running, [10, 12, 11])).toBe(true);
+    expect(keepsPastVisits(running, [11, 10, 12])).toBe(false);
+    expect(keepsPastVisits(running.map((item) => ({ ...item, status: "planned" })), [12, 11, 10])).toBe(true);
+  });
+
+  it("adds after a stop only when nothing visited comes later", () => {
+    expect(canAddAfterStop(running, 10)).toBe(true);
+    expect(canAddAfterStop(running, 12)).toBe(true);
+    const outOfOrder = [{ id: 1, status: "planned" }, { id: 2, status: "checked_in" }];
+    expect(canAddAfterStop(outOfOrder, 1)).toBe(false);
+    expect(canAddAfterStop(outOfOrder, 99)).toBe(false);
+  });
+
+  it("counts what a reused route carries over: every stop without a check-in", () => {
+    expect(unvisitedStopCount([
+      { status: "planned" }, { status: "skipped" }, { status: "en_route" },
+      { status: "checked_in" }, { status: "completed" }, { status: "rescheduled" },
+    ])).toBe(4);
   });
 });
