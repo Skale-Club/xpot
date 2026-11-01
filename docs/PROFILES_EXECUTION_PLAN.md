@@ -1,11 +1,41 @@
 # Plano de execução: quatro perfis, quatro painéis
 
-**Rev. 2** · base `24fb6ef` · 2026-11-01 · **D1 a D6 decididas pelo dono (§3); falta D7**. A Rev. 1 era a
-proposta; as tabelas abaixo já incorporam as respostas.
+**Rev. 3** · 2026-11-01 · **implementado na branch `feat/profiles`** (ver Status). As seções 1 a 9 continuam como
+foram decididas; a tabela abaixo diz o que mudou ao executar. Hoje a plataforma tem dois usuários, ambos super admins.
 
-Contexto que muda o plano: hoje a plataforma tem **dois usuários, ambos super admins** (os dois donos da empresa).
-Não há dado legado de Manager, de dono ou de membro a preservar: tudo pode ser alterado, e o objetivo é **chegar à
-produção já no modelo novo**.
+## Status (Rev. 3)
+
+O PR #144 ("a branch that prints its own pieces"), que entrou na `main` enquanto este plano era escrito, já tinha feito
+boa parte da F5. O plano foi executado em cima dele:
+
+| O plano dizia | O que foi feito | Por quê |
+|---|---|---|
+| Novo `organizations.kind` (`producer`/`seller`) | **Não existe.** `organizations.prints_own_pieces` é o "produtora" | O #144 já criou e usa esse campo; dois campos diriam a mesma coisa |
+| `requireProducer` | **`requireProductionUser`**, do #144 | Idem |
+| Migração `production_organization` | Já feita pela `0065` do #144, menos Jornada e tokens MCP | Jornada e MCP continuam do super admin (abaixo) |
+| Jornada e tokens MCP por organização | **Não feito.** Continuam só da plataforma | O parceiro tem Produção, lotes e estações por organização. Abrir MCP e Jornada a ele não é necessário até existir o primeiro parceiro |
+| `producer_capabilities` (jsonb) | **`released_print_models`** (`0069`): quais modelos | Foi a capacidade que a D2 pediu. Gerar serial e gravar chip vêm junto com poder imprimir |
+| Peças devolvidas: script e decisão manual antes da F4 | A `0068` move para a empresa as peças sem vendedor em espaços pessoais; equipes reais ficam com as delas | Só existem dois usuários; a devolução sempre voltou à empresa |
+| Migração `manager_retire` falha se houver Manager | Vira `rep` (`0067`) | Falhar travaria o deploy; ninguém usa o papel |
+| D7 confirmada antes da F7 | **Feita, desligada** por `CUSTOMER_PANEL_ENABLED` | D7 ainda não foi confirmada. Se a leitura estiver errada, nada foi exposto |
+
+| Fase | Estado | Onde |
+|---|---|---|
+| F0 Regra única, Manager fora | ✅ | `shared/profiles.ts`, `0067`, `isPlatformAdmin`, `requirePlatformAdmin` |
+| F1 Painel do dono, convite | ✅ | `requireTagManager` + `tagScopeOf`, `moduleNav.ts` `panelGroups`, `server/organizations/invite.ts`, `AddPersonForm` |
+| F2 Funcionário | ✅ | `TagsDashboard`, `ShopScreen`, `WholesaleCard` |
+| F3 Super admin em dois grupos | ✅ | `moduleNav.ts`, `AdminHome`/`home-model` |
+| F4 Estoque por organização | ✅ | `0068`, `inOrganizations`, `getOverview`, `deliverKit`, `returnToHouse`, `acquisitions.ts` |
+| F5 Parceiro | ✅ | #144 + `0069`, `production-materials.tsx`, `ReleasedModelsField`, `NewPartnerDialog`, `server/organizations/partners.ts` |
+| F6 Distribuição | ✅ interface e caminho `own` simples | `0070`, `server/tags/distribution.ts`, `server/organizations/links.ts`, `OrganizationDistribution` |
+| F7 Dono das plaquinhas | ✅ desligado | `0071`, `server/customer/`, `client/src/pages/my/`, `CustomerAccess` |
+| F8 Verificação | ✅ | `tests/profiles-matrix.integration.test.ts`, `tests/tags/ownerScope.integration.test.ts`, navegador com uma conta de cada perfil |
+
+**Fica para depois**
+- Stuscle precisa conhecer o motivo novo `own_distribution` em `/verify` (hoje trata `unknown` e `inactive`). Só importa com o primeiro parceiro `own`.
+- O caminho `own` não tem pedido nem cobrança: fica para o primeiro parceiro, com os pontos de extensão em `server/tags/distribution.ts`.
+- O parceiro que entrega um kit a uma organização vinculada não vê mais essas peças: elas passam a ser da vendedora.
+- Ramos mortos depois do fim do Manager: `requireSuperAdmin` repete `requirePlatformAdmin`; `role_change_admin_only`; `accountGroups`.
 
 Plano de readequação completa do Xpot aos quatro tipos de pessoa que usam a ferramenta, com um painel para cada
 um. Cobre regras de acesso, dados, cada tela, cada rota do servidor, o MCP, a estação de impressão e os testes.

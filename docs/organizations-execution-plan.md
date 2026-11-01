@@ -4,6 +4,9 @@
 
 Xpot supports teams of representatives working together inside isolated Organizations, with clear permissions and correctly classified physical products.
 
+> **Superseded for roles:** the Manager role is gone, and access now follows the four profiles of
+> [PROFILES_EXECUTION_PLAN.md](./PROFILES_EXECUTION_PLAN.md) (`shared/profiles.ts`). The tables below are history.
+
 ## Access model
 
 Platform roles remain:

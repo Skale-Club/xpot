@@ -187,6 +187,19 @@ describe("models released to a partner", () => {
     expect(await q("SELECT organization_id FROM print_requests")).toEqual([{ organization_id: org }]);
   });
 
+  it("releases nothing when printing is switched on: a partner only does what the platform lets it", async () => {
+    await catalog();
+    const [org] = await q("INSERT INTO organizations (name, slug) VALUES ('Studio Beta', 'studio-beta') RETURNING id");
+    const on = await request(platform(), "PATCH", `/api/xpot/organizations/${org.id}`, { printsOwnPieces: true });
+    expect(on.status).toBe(200);
+    expect(on.body.releasedPrintModels).toEqual([]);
+    // Picking models at the same time is the platform saying which, and an existing choice survives off and on.
+    await request(platform(), "PATCH", `/api/xpot/organizations/${org.id}`, { releasedPrintModels: [PLATE] });
+    await request(platform(), "PATCH", `/api/xpot/organizations/${org.id}`, { printsOwnPieces: false });
+    const back = await request(platform(), "PATCH", `/api/xpot/organizations/${org.id}`, { printsOwnPieces: true });
+    expect(back.body.releasedPrintModels).toEqual([PLATE]);
+  });
+
   it("changes the released models only for the platform, only with models of the catalog, and never a part", async () => {
     await catalog();
     await request(platform(), "POST", "/api/xpot/admin/print-models", { slug: "base-large", kind: "part", title: "Stand base · Large", version: { beds: [{ label: "x4", copies: 4 }] } });

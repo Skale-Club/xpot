@@ -2,6 +2,7 @@ import { queryClient } from "@/lib/queryClient";
 import { translate } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { serverErrorText } from "@/lib/apiErrors";
+import { viewHeaders } from "@/lib/adminMode";
 
 // Fetch helpers for the Tags admin (/api/xpot/admin/tag*). The server answers
 // errors as JSON { message, code? }; the code is worded in the admin's language.
@@ -22,7 +23,8 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
   const res = await fetch(url, {
     method,
     credentials: "include",
-    headers: body === undefined ? {} : { "Content-Type": "application/json" },
+    // The page's workspace: an organization's owner only gets their organization's lists in management mode.
+    headers: { ...viewHeaders(), ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!res.ok) {
