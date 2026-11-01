@@ -69,6 +69,8 @@ const en = {
   membersCount_other: "{count} members",
   orgActive: "Active",
   orgActiveHint: "An inactive organization keeps its members and records; it is only marked inactive.",
+  orgPrintsOwnPieces: "Prints its own pieces",
+  orgPrintsOwnPiecesHint: "Its Rep Admins use Production for it: print requests, plates, batches and its own bench. Only an Xpot admin changes this.",
   openRow: "Open",
 
   // Visits › Manage › Overview
@@ -167,6 +169,8 @@ export const peopleWorkspaceMessages: Dictionary<typeof en> = {
     membersCount_other: "{count} membros",
     orgActive: "Ativa",
     orgActiveHint: "Uma organização inativa mantém os membros e os registros; só fica marcada como inativa.",
+    orgPrintsOwnPieces: "Imprime as próprias peças",
+    orgPrintsOwnPiecesHint: "Os Rep Admins dela usam a Produção para ela: pedidos de impressão, placas, lotes e a própria bancada. Só um admin do Xpot muda isto.",
     openRow: "Abrir",
 
     periodLabel: "Período",
@@ -260,6 +264,8 @@ export const peopleWorkspaceMessages: Dictionary<typeof en> = {
     membersCount_other: "{count} miembros",
     orgActive: "Activa",
     orgActiveHint: "Una organización inactiva conserva sus miembros y registros; solo queda marcada como inactiva.",
+    orgPrintsOwnPieces: "Imprime sus propias piezas",
+    orgPrintsOwnPiecesHint: "Sus Rep Admins usan Producción para ella: pedidos de impresión, placas, lotes y su propia estación. Solo un admin de Xpot cambia esto.",
     openRow: "Abrir",
 
     periodLabel: "Período",

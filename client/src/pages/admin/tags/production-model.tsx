@@ -22,7 +22,7 @@ import { useTagLabels } from "./labels";
 import { Loading, LoadError } from "./pieces-shared";
 import { PrintDialog, RequestList } from "./production-orders";
 import { PrintPreviewCard } from "./production-preview";
-import { KindPill, ModelStatusPill, PRODUCTION_BASE, bedSummary, formatBytes, uploadFile } from "./production-shared";
+import { KindPill, ModelStatusPill, PRODUCTION_BASE, bedSummary, formatBytes, uploadFile, useProductionAccess } from "./production-shared";
 
 // One print model: what it is, its versions (newest first, with what changed and why), the orders that printed it,
 // and for a part its count. A recipe change is always a new version; the model's own fields are only its name tags.
@@ -35,16 +35,18 @@ export function PrintModelPage({ slug, go }: { slug: string; go: Go }) {
   const { toast } = useToast();
   const [printing, setPrinting] = useState(false);
   const [versioning, setVersioning] = useState(false);
+  // A printing branch's Rep Admin prints from here; editing the model and its versions stays the admin's.
+  const { isAdmin } = useProductionAccess();
   // From an order's "Record a problem": open the next version with the problem and its batch filled in.
   const [fix, setFix] = useState<{ note: string; batch: string } | null>(null);
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const note = params.get("note");
-    if (!note) return;
+    if (!note || !isAdmin) return;
     setFix({ note, batch: params.get("fix") ?? "" });
     setVersioning(true);
     window.history.replaceState(null, "", window.location.pathname);
-  }, []);
+  }, [isAdmin]);
   const [editing, setEditing] = useState(false);
   const [counting, setCounting] = useState(false);
   const [retiring, setRetiring] = useState(false);
@@ -88,14 +90,16 @@ export function PrintModelPage({ slug, go }: { slug: string; go: Go }) {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(true)}>
-            <Pencil />
-            {t("edit")}
-          </Button>
-          <Button type="button" variant="secondary" size="sm" onClick={() => setVersioning(true)} data-testid="production-new-version">
-            <History />
-            {model.currentVersion ? t("newVersion") : t("firstVersion")}
-          </Button>
+          {isAdmin ? <>
+            <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(true)}>
+              <Pencil />
+              {t("edit")}
+            </Button>
+            <Button type="button" variant="secondary" size="sm" onClick={() => setVersioning(true)} data-testid="production-new-version">
+              <History />
+              {model.currentVersion ? t("newVersion") : t("firstVersion")}
+            </Button>
+          </> : null}
           <Button type="button" variant="brand" accent="tags" size="sm" disabled={model.status !== "ready"} onClick={() => setPrinting(true)}>
             <Printer />
             {t("print")}

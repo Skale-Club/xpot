@@ -9,7 +9,7 @@ import { PageHeader } from "@/components/xpot/PageHeader";
 import { AppLayout } from "@/components/xpot/AppLayout";
 import { Select } from "@/components/xpot/Field";
 import { managementGroups, organizationPanelGroups } from "@/components/xpot/moduleNav";
-import { managementReach } from "@/lib/adminMode";
+import { managementReach, printsForABranch } from "@/lib/adminMode";
 import type { XpotMeResponse } from "@/pages/xpot/types";
 import { AdminOverview } from "./AdminOverview";
 import { AdminReps } from "./AdminReps";
@@ -50,14 +50,16 @@ export function AdminApp({ section }: { section: string }) {
   const active = SECTIONS.find((id) => id === section) ?? "home";
   if (meQuery.isLoading) return <AppLoader />;
   const organizationOnly = managementReach(me) === "organization";
-  const allowed = !!me && (me.user.isAdmin || ["admin", "manager"].includes(me.rep.role) || (active === "work" && organizationOnly));
+  // A printing branch's Rep Admin reaches Production (and the batches it opens) for that branch, nothing else of Tags.
+  const branchProduction = organizationOnly && printsForABranch(me) && /^\/admin\/tags\/(?:production|batches|provisioners)(?:\/|$)/.test(location);
+  const allowed = !!me && (me.user.isAdmin || ["admin", "manager"].includes(me.rep.role) || (active === "work" && organizationOnly) || (active === "tags" && branchProduction));
   if (!me || !allowed) {
     const exit = me ? homeForModules(modules) : "/";
     return <AppBackground><div className="mx-auto w-full max-w-md px-4 pb-20 pt-6"><PageHeader backHref={exit} backLabel={me ? tm("backToApp") : tc("goToSignIn")} title={tm("accessRestricted")} /><EmptyState tone="red" icon={ShieldAlert} title={me ? tm("noAdminPermission") : tm("signInToContinue")} action={<Button variant="secondary" onClick={() => navigate(exit)}>{me ? tm("backToApp") : tc("goToSignIn")}</Button>} /></div></AppBackground>;
   }
   const viewer = { canManage: true, isAdmin: isSuperAdmin(me) };
   const panelName = tw(viewer.isAdmin ? "superAdmin" : "management");
-  const groups = organizationOnly ? organizationPanelGroups(modules, { shell: t, tags: tt, nav: tn }) : managementGroups(modules, viewer, { shell: t, tags: tt, nav: tn }, { home: tw("home"), tags: tw("tagsGroup"), visits: tw("visitsGroup"), team: tw("teamGroup"), system: tw("systemGroup") });
+  const groups = organizationOnly ? organizationPanelGroups(modules, { shell: t, tags: tt, nav: tn }, printsForABranch(me)) : managementGroups(modules, viewer, { shell: t, tags: tt, nav: tn }, { home: tw("home"), tags: tw("tagsGroup"), visits: tw("visitsGroup"), team: tw("teamGroup"), system: tw("systemGroup") });
   const current = groups.flatMap((group) => group.items).find((item) => item.match(location));
   const title = current?.label ?? panelName;
   const restricted = SUPER_ADMIN_SECTIONS.includes(active) && !viewer.isAdmin;

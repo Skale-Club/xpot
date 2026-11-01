@@ -19,7 +19,7 @@ import { useTagLabels } from "./labels";
 import { Loading, LoadError } from "./pieces-shared";
 import { GenerateDialog } from "./production-generate";
 import { RequestList } from "./production-orders";
-import { PRODUCTION_BASE, bedSummary, minutesText, usePrintModels } from "./production-shared";
+import { PRODUCTION_BASE, bedSummary, minutesText, usePrintModels, useProductionAccess } from "./production-shared";
 
 // Tags › Production's first screen: how print production actually runs.
 //   Always ready    parts with no serial (Stand bases, G tokens): a 3D view and the fixed file to download, any time,
@@ -32,11 +32,13 @@ type Go = (path: string) => void;
 
 const Preview3D = lazy(() => import("./production-preview-3d"));
 
-export function ProductionBoard({ go, onOtherWays }: { go: Go; onOtherWays: () => void }) {
+/** `onOtherWays`: supplier codes and pieces already coded (the admin's); a printing branch has neither, nor parts. */
+export function ProductionBoard({ go, onOtherWays }: { go: Go; onOtherWays?: () => void }) {
   const t = useT(productionMessages);
   const b = useT(productionBoardMessages);
   const u = useT(unifiedProductionMessages);
   const { data, isLoading, error, refetch } = usePrintModels();
+  const { isAdmin } = useProductionAccess();
   const [generating, setGenerating] = useState<PrintGenerateOption | null>(null);
   const models = data ?? [];
   const parts = models.filter(isAlwaysReadyPart).sort((x, y) => x.sortOrder - y.sortOrder || x.title.localeCompare(y.title));
@@ -48,7 +50,7 @@ export function ProductionBoard({ go, onOtherWays }: { go: Go; onOtherWays: () =
 
   return (
     <div className="space-y-8" data-testid="production-board">
-      <section className="space-y-3" aria-labelledby="production-ready-title" data-testid="production-ready-area">
+      {isAdmin ? <section className="space-y-3" aria-labelledby="production-ready-title" data-testid="production-ready-area">
         <SectionHeading id="production-ready-title" title={b("readyTitle")} intro={b("readyIntro")} />
         {parts.length ? (
           <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
@@ -59,7 +61,7 @@ export function ProductionBoard({ go, onOtherWays }: { go: Go; onOtherWays: () =
         ) : (
           <EmptyState tone="tags" icon={Shapes} title={b("readyEmpty")} />
         )}
-      </section>
+      </section> : null}
 
       <section className="space-y-3" aria-labelledby="production-generate-title" data-testid="production-generate-area">
         <SectionHeading id="production-generate-title" title={b("generateTitle")} intro={b("generateIntro")} />
@@ -89,9 +91,11 @@ export function ProductionBoard({ go, onOtherWays }: { go: Go; onOtherWays: () =
         </p>
       </section>
 
-      <button type="button" onClick={onOtherWays} className="text-xs text-white/50 underline underline-offset-2 hover:text-white" data-testid="production-other-ways">
-        {u("otherWays")}
-      </button>
+      {onOtherWays ? (
+        <button type="button" onClick={onOtherWays} className="text-xs text-white/50 underline underline-offset-2 hover:text-white" data-testid="production-other-ways">
+          {u("otherWays")}
+        </button>
+      ) : null}
 
       {generating ? <GenerateDialog option={generating} models={bySlug} onClose={() => setGenerating(null)} /> : null}
     </div>

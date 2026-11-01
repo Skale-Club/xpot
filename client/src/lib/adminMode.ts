@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useLocation, useRouter } from "wouter";
 // Relative imports: queryClient.ts and its tests load this module without app aliases.
 import { canManage, isSuperAdmin } from "../../../shared/modules";
-import { runsATeam } from "../../../shared/organizations";
+import { productionOrganizations, runsATeam } from "../../../shared/organizations";
 import { workspaceForPath, workspaceHeaders } from "./workspace";
 import type { XpotMeResponse } from "../pages/xpot/types";
 
@@ -14,7 +14,12 @@ export function viewHeaders(): Record<string, string> {
 export type ManagementReach = "everyone" | "organization";
 export function managementReach(me: XpotMeResponse | null | undefined): ManagementReach | null {
   if (canManage(me)) return "everyone";
-  return runsATeam(me?.organizations) ? "organization" : null;
+  return runsATeam(me?.organizations) || printsForABranch(me) ? "organization" : null;
+}
+
+/** A Rep Admin of a branch that prints its own pieces: Production (for that branch) is in their panel. */
+export function printsForABranch(me: XpotMeResponse | null | undefined): boolean {
+  return productionOrganizations(me?.organizations, false).length > 0;
 }
 
 /** Remove the obsolete device preference on sign-out; it no longer controls permissions or lists. */

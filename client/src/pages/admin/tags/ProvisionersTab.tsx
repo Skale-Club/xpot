@@ -10,7 +10,9 @@ import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
 import { CopyButton } from "@/components/xpot/CopyButton";
 import { SectionCard } from "@/components/xpot/DashboardKit";
 import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
-import { Input } from "@/components/xpot/Field";
+import { Input, Select } from "@/components/xpot/Field";
+import { productionMessages } from "@/i18n/messages/production";
+import { useProductionAccess } from "./production-shared";
 import { PROVISIONER_STATUS_TONE, Pill, toneOf } from "@/components/xpot/StatusPill";
 import { GLASS_CLASS } from "@/components/xpot/surface";
 import { ADMIN_TAGS_KEY, STALE_MS, errorMessage, formatDateTime, getJson, invalidateAdminTags, sendJson } from "./api";
@@ -68,10 +70,18 @@ function PairingCode({ pairing, onClose }: { pairing: Pairing; onClose: () => vo
   );
 }
 
-/** Desktop "Xpot NFC Writer" installs: pair a computer, see when it was last seen, revoke it. */
+/**
+ * Desktop "Xpot NFC Writer" installs and print benches: pair a computer, see when it was last seen, revoke it. Each
+ * works for one organization; the admin picks it once branches print, a branch's Rep Admin pairs for the branch.
+ */
 export function ProvisionersTab(_props: { go: (path: string) => void }) {
   const t = useT(manageTagsMessages);
+  const tp = useT(productionMessages);
   const { toast } = useToast();
+  const { organizations } = useProductionAccess();
+  const [organizationId, setOrganizationId] = useState("");
+  const organization = organizations.find((o) => String(o.id) === organizationId) ?? organizations[0];
+  const organizationName = (id: number) => organizations.find((o) => o.id === id)?.name;
   const [name, setName] = useState("");
   const [pairing, setPairing] = useState<Pairing | null>(null);
   const [revoking, setRevoking] = useState<ProvisionerDeviceItem | null>(null);
@@ -85,7 +95,10 @@ export function ProvisionersTab(_props: { go: (path: string) => void }) {
 
   const create = useMutation({
     mutationFn: () =>
-      sendJson<{ pairingCode: string; device: ProvisionerDeviceItem }>("POST", "/api/xpot/admin/tag-provisioners", { deviceName: name.trim() }),
+      sendJson<{ pairingCode: string; device: ProvisionerDeviceItem }>("POST", "/api/xpot/admin/tag-provisioners", {
+        deviceName: name.trim(),
+        ...(organization ? { organizationId: organization.id } : {}),
+      }),
     onSuccess: (r) => {
       setPairing({ code: r.pairingCode, expiresAt: r.device.pairingExpiresAt, deviceName: r.device.deviceName });
       setName("");
@@ -114,6 +127,16 @@ export function ProvisionersTab(_props: { go: (path: string) => void }) {
       <SectionCard accent="tags" icon={KeyRound} title={t("pairComputer")} bodyClassName="space-y-4 p-4">
         <p className="text-xs text-white/45">{t("pairComputerHint")}</p>
         <form onSubmit={submit} className="flex flex-col gap-2 sm:flex-row">
+          {organizations.length > 1 ? (
+            <Select
+              value={organization ? String(organization.id) : ""}
+              onChange={(e) => setOrganizationId(e.target.value)}
+              aria-label={tp("organization")}
+              options={organizations.map((o) => ({ value: String(o.id), label: o.name }))}
+              className="sm:w-56"
+              data-testid="admin-tags-provisioner-organization"
+            />
+          ) : null}
           <Input
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -146,6 +169,7 @@ export function ProvisionersTab(_props: { go: (path: string) => void }) {
                     <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-white">
                       <span className="truncate">{d.deviceName}</span>
                       <DevicePill status={d.status} />
+                      {organizations.length > 1 && organizationName(d.organizationId) ? <Pill tone="slate">{organizationName(d.organizationId)}</Pill> : null}
                     </p>
                     <p className="truncate text-xs text-white/40">
                       {d.status === "pairing"

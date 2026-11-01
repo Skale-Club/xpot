@@ -1,5 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
+import { isSuperAdmin } from "@shared/modules";
+import { productionOrganizations } from "@shared/organizations";
 import type { PrintBed, PrintJobItem, PrintJobStatus, PrintModelItem, PrintModelStatus, PrintRequestItem } from "@shared/printProduction";
+import type { XpotMeResponse } from "@/pages/xpot/types";
 import { Pill, toneOf, type PillTone } from "@/components/xpot/StatusPill";
 import { translate, useT, type Translate } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
@@ -18,6 +21,18 @@ export const REQUESTS_KEY = [ADMIN_TAGS_KEY, "production", "requests"] as const;
 
 export type JobFilter = "open" | "done" | "all";
 
+/**
+ * Who this viewer prints for: the admin (every organization, the catalog too) or the Rep Admin of a branch that
+ * prints its own pieces (that branch's requests, plates and bench only). `organizations` is what the Print dialog
+ * offers and the queue filters by; `prints` false: no Production at all.
+ */
+export function useProductionAccess() {
+  const { data: me } = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
+  const isAdmin = isSuperAdmin(me);
+  const organizations = productionOrganizations(me?.organizations, isAdmin);
+  return { isAdmin, organizations, prints: organizations.length > 0 };
+}
+
 export function usePrintModels() {
   return useQuery({
     queryKey: MODELS_KEY,
@@ -26,11 +41,11 @@ export function usePrintModels() {
   });
 }
 
-/** The requests with their plates, newest first. */
-export function usePrintRequests(filter: JobFilter, model?: string) {
+/** The requests with their plates, newest first; `organization`: that organization's only. */
+export function usePrintRequests(filter: JobFilter, model?: string, organization?: number) {
   return useQuery({
-    queryKey: [...REQUESTS_KEY, filter, model ?? null],
-    queryFn: () => getJson<PrintRequestItem[]>(withQuery("/api/xpot/admin/print-requests", { status: filter, model })),
+    queryKey: [...REQUESTS_KEY, filter, model ?? null, organization ?? null],
+    queryFn: () => getJson<PrintRequestItem[]>(withQuery("/api/xpot/admin/print-requests", { status: filter, model, organization })),
     staleTime: STALE_MS,
     // The bench builds the files while the request is on screen.
     refetchInterval: 20_000,

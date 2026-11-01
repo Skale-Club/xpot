@@ -21,7 +21,7 @@ import { Loading, LoadError } from "./pieces-shared";
 import { PrintModelPage } from "./production-model";
 import { PrintJobPage } from "./production-job";
 import { PrintDialog, RequestList } from "./production-orders";
-import { ModelStatusPill, PRODUCTION_BASE, bedSummary, usePrintModels, type JobFilter } from "./production-shared";
+import { ModelStatusPill, PRODUCTION_BASE, bedSummary, usePrintModels, useProductionAccess, type JobFilter } from "./production-shared";
 import { BatchDetail } from "./BatchDetail";
 import { ProductionWizard } from "./production-wizard";
 import { ProductionBoard } from "./production-board";
@@ -32,6 +32,8 @@ import { ProductionIdentity } from "./production-identity";
 // (production-board.tsx): always-ready pieces to download, pieces to generate and the plates waiting to print. Then
 // the orders and the catalog of models. Paths: /admin/tags/production[/queue | /models[/<slug>] | /jobs/<id> |
 // /batches/<id>] (marking a plate printed puts its pieces in stock, so there is no receiving list).
+// A printing branch's Rep Admin sees the same page for that branch: generating and printing its pieces, without
+// always-ready parts, supplier batches or editing models (useProductionAccess; the server scopes every call).
 
 type Go = (path: string) => void;
 
@@ -39,6 +41,7 @@ export function ProductionTab({ rest, go }: { rest: string[]; go: Go }) {
   const t = useT(productionMessages);
   const u = useT(unifiedProductionMessages);
   const b = useT(productionBoardMessages);
+  const { isAdmin } = useProductionAccess();
   // Supplier codes and pieces that already have codes: the wizard's other ways, behind a small link on the board.
   const [external, setExternal] = useState(false);
   const [view, id] = rest;
@@ -66,7 +69,7 @@ export function ProductionTab({ rest, go }: { rest: string[]; go: Go }) {
         fill={false}
         accent="tags"
       />
-      {tab === "catalog" ? <CatalogView go={navigate} /> : tab === "queue" ? <QueueView go={navigate} /> : <ProductionBoard go={navigate} onOtherWays={() => setExternal(true)} />}
+      {tab === "catalog" ? <CatalogView go={navigate} /> : tab === "queue" ? <QueueView go={navigate} /> : <ProductionBoard go={navigate} onOtherWays={isAdmin ? () => setExternal(true) : undefined} />}
       {external ? <ProductionWizard external onClose={() => setExternal(false)} onCreated={(batchId) => navigate(`/batches/${batchId}?tab=receive`)} /> : null}
     </div>
   );
@@ -77,6 +80,7 @@ export function ProductionTab({ rest, go }: { rest: string[]; go: Go }) {
 function CatalogView({ go }: { go: Go }) {
   const t = useT(productionMessages);
   const { data, isLoading, error, refetch } = usePrintModels();
+  const { isAdmin } = useProductionAccess();
   const [creating, setCreating] = useState(false);
   const [printing, setPrinting] = useState<PrintModelItem | null>(null);
   const groups = [
@@ -89,10 +93,12 @@ function CatalogView({ go }: { go: Go }) {
     <div className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <p className="min-w-0 max-w-2xl text-sm text-white/60">{t("catalogIntro")}</p>
-        <Button type="button" variant="brand" accent="tags" size="sm" onClick={() => setCreating(true)} data-testid="production-new-model">
-          <Plus />
-          {t("newModel")}
-        </Button>
+        {isAdmin ? (
+          <Button type="button" variant="brand" accent="tags" size="sm" onClick={() => setCreating(true)} data-testid="production-new-model">
+            <Plus />
+            {t("newModel")}
+          </Button>
+        ) : null}
       </div>
 
       {error && !data ? (
@@ -258,10 +264,23 @@ function QueueView({ go }: { go: Go }) {
   const t = useT(productionMessages);
   const u = useT(unifiedProductionMessages);
   const [filter, setFilter] = useState<JobFilter>("open");
+  // The owners see every organization's requests: narrow to one when branches print too.
+  const { isAdmin, organizations } = useProductionAccess();
+  const [organization, setOrganization] = useState("");
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <p className="min-w-0 max-w-2xl text-sm text-white/60">{u("queueIntro")}</p>
+        {isAdmin && organizations.length > 1 ? (
+          <Select
+            value={organization}
+            onChange={(e) => setOrganization(e.target.value)}
+            aria-label={t("organization")}
+            options={[{ value: "", label: t("allOrganizations") }, ...organizations.map((o) => ({ value: String(o.id), label: o.name }))]}
+            className="w-auto"
+            data-testid="production-organization-filter"
+          />
+        ) : null}
         <Tabs
           tabs={[
             { id: "open", label: t("filterOpen") },
@@ -276,7 +295,7 @@ function QueueView({ go }: { go: Go }) {
           accent="tags"
         />
       </div>
-      <RequestList filter={filter} go={go} />
+      <RequestList filter={filter} organization={organization ? Number(organization) : undefined} go={go} />
     </div>
   );
 }

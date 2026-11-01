@@ -1,5 +1,5 @@
 import { randomBytes } from "crypto";
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db.js";
 import {
   organizationAuditLog,
@@ -48,6 +48,26 @@ export async function companyOrganizationId(): Promise<number> {
     .where(eq(organizations.slug, "xpot-company"));
   if (!organization) throw new OrganizationError("Company Organization is not configured.", 500);
   return organization.id;
+}
+
+/**
+ * Of these organizations (a Rep Admin's), the active ones the owners marked as printing their own pieces: where that
+ * person may use Tags › Production (server/tags/access.ts requireProductionUser).
+ */
+export async function printingOrganizationIds(organizationIds: readonly number[]): Promise<number[]> {
+  if (!organizationIds.length) return [];
+  const rows = await db.select({ id: organizations.id }).from(organizations).where(and(
+    inArray(organizations.id, [...organizationIds]),
+    eq(organizations.printsOwnPieces, true),
+    eq(organizations.isActive, true),
+  ));
+  return rows.map((row) => row.id);
+}
+
+/** Whether pieces may be printed for this organization: the company, or an active branch that prints its own. */
+export async function printingOrganization(organizationId: number): Promise<boolean> {
+  if (organizationId === await companyOrganizationId()) return true;
+  return (await printingOrganizationIds([organizationId])).length > 0;
 }
 
 /** New operational records follow the Rep's active Organization. */
@@ -175,6 +195,7 @@ export async function listOrganizations(actor: OrganizationActor) {
     name: organizations.name,
     slug: organizations.slug,
     isActive: organizations.isActive,
+    printsOwnPieces: organizations.printsOwnPieces,
     createdByUserId: organizations.createdByUserId,
     createdAt: organizations.createdAt,
     updatedAt: organizations.updatedAt,
@@ -262,10 +283,12 @@ export async function createOrganization(input: { name: string; repAdminId: numb
 
 export async function updateOrganization(
   organizationId: number,
-  input: { name?: string; isActive?: boolean },
+  input: { name?: string; isActive?: boolean; printsOwnPieces?: boolean },
   actor: OrganizationActor,
 ) {
   if (!managesEveryOrganization(actor)) throw new OrganizationError("Only an Xpot admin or a manager can do this.", 403, "manager_required");
+  // Production is the owners' (docs/organizations-execution-plan.md): only they let a branch print its own pieces.
+  if (input.printsOwnPieces !== undefined && !actor.user.isAdmin) throw new OrganizationError("Only an Xpot admin can do this.", 403, "admin_required");
   await assertOrganizationAccess(actor, organizationId, true);
   const [updated] = await db.update(organizations).set({ ...input, updatedAt: new Date() })
     .where(eq(organizations.id, organizationId)).returning();

@@ -63,12 +63,32 @@ This keeps `Admin`, `Manager`, and `Rep` as the platform roles while allowing mu
 | Capability | Admin | Manager | Rep Admin | Rep |
 | --- | --- | --- | --- | --- |
 | Platform production, integrations, and NFC writers | Yes | No | No | No |
+| Production for own branch (prints its own pieces) | Yes | No | Yes, own branch only | No |
 | Create and edit Organizations | Yes | Yes | No | No |
 | Manage any Organization's members | Yes | Yes | No | No |
 | Manage own Organization's members | Yes | Yes | Yes | No |
 | Receive and distribute Organization inventory | Yes | Yes | Yes | Assigned work only |
 | View Organization-wide customers and analytics | Yes | Yes | Yes | Permission/assignment scoped |
 | Access another Organization | Yes | Yes | No | No |
+
+## Production per branch
+
+A branch in another state or country can print its own pieces. The owners (Admin) switch an Organization to
+**Prints its own pieces** (`organizations.prints_own_pieces`, Organization › Settings, Admin only). From then on:
+
+- Its Rep Admins use Tags › Production for that branch only: ask for plates, download files, mark plates printed,
+  put pieces in stock, check QR codes on its batches, and pair or revoke its own bench (`requireProductionUser`,
+  `ProductionScope` in `server/tags/production.ts`). The catalog (models, versions, beds, 3D previews) and part counts
+  stay Admin-only.
+- A request, its plates (`print_requests`, `print_jobs`), their batches (`tag_batches`) and pieces (`tags`) carry the
+  branch's `organization_id` (migration 0065). Another branch reads them as not found; the owners see every
+  Organization, with an Organization filter on the queue and a choice in the Print dialog (default: the company).
+- A paired bench or NFC writer (`tag_provisioning_devices.organization_id`) works for one Organization: it claims,
+  uploads and mirrors into Print Now only that Organization's plates, and writes only its pieces' chips.
+- Parts (bases, tokens) are printed for the company only; assembling a branch's batch takes nothing off the company's
+  part counts. Per-branch part stock is a later change.
+- Boston is the company Organization (`xpot-company`): every existing row was filed under it, and an Admin's request
+  without an Organization still is.
 
 ## Data invariants
 

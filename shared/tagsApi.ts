@@ -251,6 +251,8 @@ export interface TagBatchItem {
   codeSource: string;
   /** The Tags › Production print order that issued it, when there is one. */
   printJobId: string | null;
+  /** Whose batch it is (its pieces start there): the company's, or a branch that prints its own. */
+  organizationId: number;
   /** Derived production stage (shared/tags.ts `batchStage`). */
   stage: string;
   /** Latest production step in the batch's journey (`sliced`, `printed`, …), or null. */
@@ -442,6 +444,8 @@ export interface ProvisionerDeviceItem {
   status: string;
   /** 'nfc' (writes chips) and/or 'print' (the bench builds print files). */
   capabilities: string[];
+  /** The organization it works for (its plates, its Print Now folder, its pieces' chips). */
+  organizationId: number;
   tokenPrefix: string | null;
   pairingExpiresAt: string | null;
   lastSeenAt: string | null;

@@ -14,6 +14,8 @@ import { organizations, salesLeads, salesProducts, salesReps, salesSaleItems, sa
 export const tagBatches = pgTable("tag_batches", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   batchCode: text("batch_code").notNull(),
+  // Whose production it is (Tags › Production per organization, migrations/0065); the company's for Boston.
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: "restrict" }),
   name: text("name").notNull(),
   productType: text("product_type").notNull(),
   salesProductId: integer("sales_product_id").references(() => salesProducts.id, { onDelete: "set null" }),
@@ -59,6 +61,8 @@ export const tagKits = pgTable("tag_kits", {
 export const tagProvisioningDevices = pgTable("tag_provisioning_devices", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   deviceName: text("device_name").notNull(),
+  // The organization this bench or NFC writer works for (migrations/0065): it only sees that organization's work.
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: "restrict" }),
   platform: text("platform"),
   appVersion: text("app_version"),
   status: text("status").notNull().default("pairing"),
@@ -456,6 +460,8 @@ export const printModelVersions = pgTable("print_model_versions", {
 // What was asked: N pieces of a model, split into plates (print_jobs) of at most one bed each (migrations/0062).
 export const printRequests = pgTable("print_requests", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  // Whose production it is (Tags › Production per organization, migrations/0065); the company's for Boston.
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: "restrict" }),
   modelId: uuid("model_id").notNull().references(() => printModels.id, { onDelete: "restrict" }),
   versionId: uuid("version_id").notNull().references(() => printModelVersions.id, { onDelete: "restrict" }),
   bedLabel: text("bed_label").notNull(),
@@ -470,6 +476,8 @@ export const printRequests = pgTable("print_requests", {
 
 export const printJobs = pgTable("print_jobs", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  // Whose production it is (Tags › Production per organization, migrations/0065); the company's for Boston.
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: "restrict" }),
   // The request this plate belongs to and its place in it (migrations/0062).
   requestId: uuid("request_id").references(() => printRequests.id, { onDelete: "set null" }),
   plateNumber: integer("plate_number"),

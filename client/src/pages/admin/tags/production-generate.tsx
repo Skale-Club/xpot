@@ -4,7 +4,7 @@ import { Check, ChevronRight, Info } from "lucide-react";
 import type { PrintGenerateFace, PrintGenerateOption, PrintModelItem, PrintRequestItem } from "@shared/printProduction";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import { Field, Input } from "@/components/xpot/Field";
+import { Field, Input, Select } from "@/components/xpot/Field";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
 import { TagPieceVisual } from "@/components/xpot/TagProductThumbnail";
 import { useToast } from "@/hooks/use-toast";
@@ -17,6 +17,7 @@ import { errorMessage, invalidateAdminTags, sendJson } from "./api";
 import { useTagLabels } from "./labels";
 import { ProductionIdentity, ProductionPlatePreview } from "./production-identity";
 import { printQuantity } from "./production-workflow";
+import { useProductionAccess } from "./production-shared";
 
 // "Generate pieces" on the Production page: the predefined questions of one product (colour → face → how many), only
 // with the colours and faces the catalog can generate. The server checks the choice again and makes the request:
@@ -43,6 +44,10 @@ export function GenerateDialog({ option, models, onClose, onGenerated }: {
   const face: PrintGenerateFace | undefined = colour?.faces.find((f) => f.face === faceKey);
   const model = face ? models.get(face.slug) : undefined;
   const [quantity, setQuantity] = useState("");
+  // Whose pieces: the company first for the owners, the branch itself for its Rep Admin (asked only when there is a choice).
+  const { organizations } = useProductionAccess();
+  const [organizationId, setOrganizationId] = useState("");
+  const organization = organizations.find((o) => String(o.id) === organizationId) ?? organizations[0];
   const [step, setStep] = useState(0);
   const heading = useRef<HTMLHeadingElement>(null);
   const headingId = useId();
@@ -57,6 +62,7 @@ export function GenerateDialog({ option, models, onClose, onGenerated }: {
   const generate = useMutation({
     mutationFn: () => sendJson<PrintRequestItem>("POST", "/api/xpot/admin/print-generate", {
       productType: option.productType, theme: colour!.theme, face: face!.face, quantity: plan.count,
+      ...(organization ? { organization: organization.id } : {}),
     }),
     onSuccess: (request) => {
       void invalidateAdminTags();
@@ -143,6 +149,16 @@ export function GenerateDialog({ option, models, onClose, onGenerated }: {
               {step === 2 && face ? (
                 <div className="space-y-4">
                   {model ? <ProductionIdentity model={model} hero /> : null}
+                  {organizations.length > 1 ? (
+                    <Field label={t("organization")} hint={t("organizationHint")}>
+                      <Select
+                        value={organization ? String(organization.id) : ""}
+                        onChange={(e) => setOrganizationId(e.target.value)}
+                        options={organizations.map((o) => ({ value: String(o.id), label: o.name }))}
+                        data-testid="production-generate-organization"
+                      />
+                    </Field>
+                  ) : null}
                   <Field label={t("fieldQuantity")} hint={b("quantityHint", { copies: face.copies, max: plan.max })}>
                     <Input
                       type="number"
@@ -173,6 +189,7 @@ export function GenerateDialog({ option, models, onClose, onGenerated }: {
                       [b("what"), `${product} · ${labels.face(face.face)} · ${themeName(colour!.theme)}`],
                       [b("pieces"), t.plural("plateSplit", plan.plates.length, { split: plan.plates.join(" + ") })],
                       [b("serials"), b.plural("newSerials", plan.pieces)],
+                      ...(organizations.length > 1 && organization ? [[t("organization"), organization.name]] : []),
                     ].map(([label, value]) => (
                       <div key={label}>
                         <dt className="text-xs text-white/45">{label}</dt>
