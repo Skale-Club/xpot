@@ -53,7 +53,7 @@ export type PhoneAuthErrorCode =
   | "rate_limited"
   | "not_verified";
 
-class PhoneAuthError extends Error {
+export class PhoneAuthError extends Error {
   constructor(
     public code: PhoneAuthErrorCode,
     public status: number,
@@ -207,7 +207,7 @@ export async function checkCode(phone: string, code: string, now = new Date()) {
   }
 }
 
-async function consumeCodes(phone: string) {
+export async function consumeCodes(phone: string) {
   await db.delete(authPhoneCodes).where(eq(authPhoneCodes.phone, phone));
 }
 
