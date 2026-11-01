@@ -252,9 +252,16 @@ def build_refaced(face, code, theme, sticker, font):
     inks = [fa.to_card(g) for g in art['inks']]
     n_back, s_back = backs(code)
     back = n_back.simplify(SIMPLIFY, preserve_topology=True)
-    card, plain_volume = plain_card(s_back, n_back, sticker)
-    card = card - prism(unary_union(inks), TOP - INLAY, TOP + 0.2) - prism(back, -0.2, BACK_ENGRAVE)
+    plain, plain_volume = plain_card(s_back, n_back, sticker)
+    faced = plain - prism(unary_union(inks), TOP - INLAY, TOP + 0.2)
+    card = faced - prism(back, -0.2, BACK_ENGRAVE)
     card_tm = ig.to_trimesh(card)
+    if ig.welded_bad_edges(card_tm):
+        # Two engraved glyphs of this code touch at one point (a non-manifold edge): part them by a hair. Only then,
+        # so every other code's mesh stays byte-identical.
+        back = back.buffer(-0.01)
+        card = faced - prism(back, -0.2, BACK_ENGRAVE)
+        card_tm = ig.to_trimesh(card)
     ink_tms = [ig.to_trimesh(prism(g, TOP - INLAY, TOP)) for g in inks]
     ink_area = sum(g.area for g in inks)
     want = plain_volume - ink_area * INLAY - back.area * BACK_ENGRAVE - sticker['pocket'].area * google.STICKER_DEPTH
