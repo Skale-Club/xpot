@@ -29,7 +29,7 @@ const XpotProspecting = lazy(() => import("./pages/xpot/XpotProspecting").then((
 const XpotTasks = lazy(() => import("./pages/xpot/XpotTasks").then((module) => ({ default: module.XpotTasks })));
 const XpotCheckIn = lazy(() => import("./pages/xpot/XpotCheckIn").then((module) => ({ default: module.XpotCheckIn })));
 const Login = lazy(() => import("./pages/Login"));
-// The customer panel: a small app of its own, nothing of the team shell (server flag CUSTOMER_PANEL_ENABLED).
+// The customer panel: a small app of its own, nothing of the team shell (server off switch CUSTOMER_PANEL_ENABLED).
 const MyApp = lazy(() => import("./pages/my/MyApp"));
 const LegalPage = lazy(() => import("./pages/legal/LegalPage").then((module) => ({ default: module.LegalPage })));
 const AdminApp = lazy(() => import("./pages/admin/AdminApp").then((module) => ({ default: module.AdminApp })));

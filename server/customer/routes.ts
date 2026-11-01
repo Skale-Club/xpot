@@ -24,7 +24,7 @@ import { actorOf, requireTagUser } from "../tags/access.js";
 import { normalizeIpKey, rateLimit } from "../tags/rateLimit.js";
 import * as repo from "./repository.js";
 
-// The customer panel's API (docs/PROFILES_EXECUTION_PLAN.md, F7). Read only, off unless CUSTOMER_PANEL_ENABLED is set
+// The customer panel's API (docs/PROFILES_EXECUTION_PLAN.md, F7). Read only, off when CUSTOMER_PANEL_ENABLED says so
 // (every route then answers 404, as if it did not exist).
 //
 //   /api/my/*                                        the business that uses the plates, signed in by a phone

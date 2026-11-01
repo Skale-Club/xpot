@@ -1,14 +1,14 @@
 // The customer panel (/my): the business that uses the plates reads how many it has and how they are doing.
-// Pure rules and wire types shared by the server and the small app at /my. Read only, and behind a server-side flag.
+// Pure rules and wire types shared by the server and the small app at /my. Read only, with a server-side off switch.
 //
 // Who is who: a customer is a phone, not a user. Its session never carries a userId, so no Xpot API (which all start
 // from userId) ever accepts it, and it never becomes a rep or an access request.
 
 export const CUSTOMER_PANEL_PATH = "/my";
 
-/** Server-side switch (env CUSTOMER_PANEL_ENABLED). Off unless set to a true-ish value. */
+/** Server-side switch: on, unless env CUSTOMER_PANEL_ENABLED turns it off (0, false, off or no). */
 export function customerPanelEnabled(env: Record<string, string | undefined> = typeof process === "undefined" ? {} : process.env): boolean {
-  return /^(1|true|on|yes)$/i.test((env.CUSTOMER_PANEL_ENABLED ?? "").trim());
+  return !/^(0|false|off|no)$/i.test((env.CUSTOMER_PANEL_ENABLED ?? "").trim());
 }
 
 /** A signed-in customer stays in for 30 days (the same length as the app's session), then types a new code. */
