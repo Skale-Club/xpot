@@ -9,6 +9,7 @@ Disallow: /visits
 Disallow: /sales
 Disallow: /settings
 Disallow: /tags
+Disallow: /my
 Disallow: /login
 Disallow: /oauth
 Disallow: /mcp
