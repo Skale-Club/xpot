@@ -22,6 +22,18 @@ export const PROSPECTING_SHIFT_MINUTES = [120, 240, 360, 480, 600, 720] as const
  */
 export const PROSPECTING_DAY_END_HOUR = 22;
 
+/** The calendar date (YYYY-MM-DD) at `at` in an IANA zone; null for an unknown zone. */
+export function localDateIn(timeZone: string, at = new Date()) {
+  try {
+    const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
+      timeZone, year: "numeric", month: "2-digit", day: "2-digit",
+    }).formatToParts(at).map((part) => [part.type, part.value]));
+    return `${parts.year}-${parts.month}-${parts.day}`;
+  } catch {
+    return null;
+  }
+}
+
 /** Minutes left between `now` and the day's end, in the clock `now` is read in. */
 export function minutesUntilProspectingDayEnd(now: Date) {
   const end = new Date(now);
@@ -36,6 +48,27 @@ export function minutesUntilProspectingDayEnd(now: Date) {
  * workload.
  */
 export const MAX_DAILY_PROSPECTING_SESSIONS = 3;
+
+/** The most stops one route holds, whichever path builds it. */
+export const ROUTE_MAX_STOPS = 60;
+
+/**
+ * How many of the day's route sessions a rep has used. A session is a route,
+ * or a search that has not become a route yet (still running, failed or
+ * cancelled: the paid search already happened). Accepting a search, building
+ * its route and reusing a past route all count with this one rule, so a
+ * search is never accepted only to fail later on "daily limit reached".
+ */
+export function dailySessionCount(input: {
+  jobs: Array<{ id: number }>;
+  routes: Array<{ jobId: number | null }>;
+  excludeJobId?: number;
+}) {
+  const routedJobIds = new Set(input.routes.flatMap((route) => route.jobId === null ? [] : [route.jobId]));
+  const searchesWithoutRoute = input.jobs.filter((job) => job.id !== input.excludeJobId && !routedJobIds.has(job.id));
+  const routes = input.routes.filter((route) => input.excludeJobId === undefined || route.jobId !== input.excludeJobId);
+  return routes.length + searchesWithoutRoute.length;
+}
 
 export function targetStopsForShift(shiftDurationMinutes: number) {
   return Math.ceil(shiftDurationMinutes / TODAY_PROSPECTING_POLICY.defaultVisitMinutes);
@@ -58,9 +91,11 @@ export function approximateCandidateCenter(candidates: Array<{ status: string; l
 
 export const prospectingJobCreateSchema = z.object({
   location: z.string().trim().min(2).max(500),
-  // Supplied by the browser so "today" follows the rep's local calendar even
-  // when the worker or database runs in another timezone.
-  routeDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  // Supplied by the caller so "today" follows the rep's local calendar even
+  // when the worker or database runs in another timezone. Required: every
+  // daily guard (one active route, one search at a time, the daily limit)
+  // is keyed on it.
+  routeDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   locations: z.array(
     z.string().trim().min(4).max(500).regex(/,\s*[a-z]{2}(?:,|$)/i, "Each city must include a state code."),
   ).min(1).max(5).transform((locations) => locations.filter((location, index) =>
@@ -90,17 +125,14 @@ export const prospectingRouteCreateSchema = z.object({
   name: z.string().trim().min(1).max(160).optional(),
   routeDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   plannedStartAt: z.string().datetime(),
-  // Legacy callers may still send a navigation origin. New selling routes do
-  // not: their time window and saved geometry start at the first visit.
-  start: z.object({
-    address: z.string().trim().max(500).optional(),
-    lat: coordinate.min(-90).max(90),
-    lng: coordinate.min(-180).max(180),
-  }).optional(),
+  // The rep's IANA zone: the 10 PM end of a same-day route when no discovered
+  // business carries its own zone (a route of saved leads only). A navigation
+  // origin is not accepted: a selling route's clock starts at visit one.
+  timeZone: z.string().trim().min(1).max(64).optional(),
   leadIds: z.array(z.number().int().positive()).max(100).default([]),
   candidateIds: z.array(z.number().int().positive()).max(200).default([]),
   jobId: z.number().int().positive().optional(),
-  maxStops: z.number().int().min(1).max(60).default(60),
+  maxStops: z.number().int().min(1).max(ROUTE_MAX_STOPS).default(ROUTE_MAX_STOPS),
   shiftDurationMinutes: z.number().int().min(30).max(16 * 60).default(8 * 60),
   defaultVisitMinutes: z.number().int().min(5).max(180).default(20),
   /** Replace the current route with a new optimization. Reserved for the platform owner. */
@@ -114,7 +146,7 @@ export const prospectingRouteStatusUpdateSchema = z.object({
 });
 
 export const prospectingRouteReorderSchema = z.object({
-  stopIds: z.array(z.number().int().positive()).min(1).max(60)
+  stopIds: z.array(z.number().int().positive()).min(1).max(ROUTE_MAX_STOPS)
     .refine((ids) => new Set(ids).size === ids.length, "Route stops must be unique."),
 });
 
@@ -151,6 +183,7 @@ export const prospectingRouteStopAddSchema = z.object({
 export const prospectingRouteReuseSchema = z.object({
   routeDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   plannedStartAt: z.string().datetime(),
+  timeZone: z.string().trim().min(1).max(64).optional(),
 });
 
 export type ProspectingRouteStopSource = z.infer<typeof routeStopSourceSchema>;

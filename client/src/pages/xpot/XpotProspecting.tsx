@@ -67,6 +67,7 @@ import { placeTypeLabel } from "@/lib/placeTypes";
 import {
   MAX_DAILY_PROSPECTING_SESSIONS,
   PROSPECTING_DAY_END_HOUR,
+  dailySessionCount,
   PROSPECTING_SHIFT_MINUTES,
   minutesUntilProspectingDayEnd,
   type ProspectingRouteStopSource,
@@ -84,6 +85,7 @@ type ProspectingJob = {
   defaultVisitMinutes: number;
   expansionState: { currentArea?: string; wave?: number };
   errorMessage: string | null;
+  filters?: { routeDate?: string };
   createdAt: string;
 };
 
@@ -334,7 +336,14 @@ export function XpotProspecting() {
   // or a finished one still building its route counts as being prepared.
   const pendingTodayJob = todayJobs.find((job) => ["draft", "queued", "running"].includes(job.status)
     || (job.status === "completed" && ["pending", "building"].includes(job.routePlanningStatus)));
-  const dailyRouteLimitReached = todayJobs.length >= MAX_DAILY_PROSPECTING_SESSIONS;
+  // The server's rule (dailySessionCount): each route of the day, plus each search with no route yet.
+  // Today's searches are matched by the day they were started for.
+  const todayRouteJobs = useMemo(() => (jobsQuery.data ?? []).filter((job) => (job.filters?.routeDate ?? localDateKey(new Date(job.createdAt))) === today), [jobsQuery.data, today]);
+  const dailyRoutesUsed = dailySessionCount({ jobs: todayRouteJobs, routes: todayRoutes });
+  const dailyRouteLimitReached = dailyRoutesUsed >= MAX_DAILY_PROSPECTING_SESSIONS;
+  const dailyLimitNote = dailyRouteLimitReached
+    ? t("dailyRouteLimit", { count: MAX_DAILY_PROSPECTING_SESSIONS })
+    : dailyRoutesUsed > 0 ? t("dailyRoutesUsed", { used: dailyRoutesUsed, count: MAX_DAILY_PROSPECTING_SESSIONS }) : null;
   const requestedJobId = useMemo(() => {
     const jobId = Number(routeParams.get("jobId"));
     return Number.isSafeInteger(jobId) && jobId > 0 ? jobId : null;
@@ -610,6 +619,8 @@ export function XpotProspecting() {
     mutationFn: async (routeId: number) => (await apiRequest("POST", `/api/xpot/prospecting/routes/${routeId}/reuse`, {
       routeDate: today,
       plannedStartAt: new Date().toISOString(),
+      // Ends the day by 10 PM here even when the stops are saved leads with no zone of their own.
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     })).json() as Promise<RouteDetails>,
     onSuccess: async (data) => {
       await Promise.all([
@@ -668,7 +679,7 @@ export function XpotProspecting() {
   const canReorderRoute = canEditRoute;
   const unvisitedStopCount = routeDetails ? countUnvisitedStops(routeDetails.stops) : 0;
   const canOfferReuse = routeDetails ? routeDetails.route.routeDate < today && unvisitedStopCount > 0 : false;
-  const reuseBlocked = Boolean(activeTodayRoute) || dailyRouteLimitReached || todayRoutes.length >= MAX_DAILY_PROSPECTING_SESSIONS;
+  const reuseBlocked = Boolean(activeTodayRoute) || Boolean(pendingTodayJob) || dailyRouteLimitReached;
   // One count of found places everywhere on the card: the ones the route can use.
   const eligibleCandidates = useMemo(() => eligibleOf(details?.candidates ?? []), [details?.candidates]);
   const canShowCandidates = details?.job.status === "completed";
@@ -1018,7 +1029,7 @@ export function XpotProspecting() {
                   <PencilLine />
                 </Button>
               </div>
-              {dailyRouteLimitReached ? <p className="mt-2 text-xs leading-5 text-white/50">{t("dailyRouteLimit", { count: MAX_DAILY_PROSPECTING_SESSIONS })}</p> : null}
+              {dailyLimitNote ? <p className="mt-2 text-xs leading-5 text-white/50">{dailyLimitNote}</p> : null}
             </section>
           ) : (
             <section className="flex w-full pb-1">
@@ -1035,6 +1046,9 @@ export function XpotProspecting() {
                     : dailyRouteLimitReached
                       ? t("dailyRouteLimit", { count: MAX_DAILY_PROSPECTING_SESSIONS })
                       : todayCompleted ? t("todayRouteCompleted") : t("todayOnlyHint")}</span>
+                  {!pendingTodayJob && !dailyRouteLimitReached && dailyLimitNote
+                    ? <span className="mt-1 block text-xs leading-5 text-white/60">{dailyLimitNote}</span>
+                    : null}
                 </span>
                 <ChevronRight className="shrink-0 text-white/90" />
               </Button>

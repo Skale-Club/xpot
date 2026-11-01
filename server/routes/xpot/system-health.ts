@@ -57,9 +57,12 @@ export function createSystemHealthRouter() {
       .from(prospectingJobs).where(eq(prospectingJobs.id, id)).limit(1);
     if (!job) return res.status(404).json({ message: "Prospecting job not found" });
     const retried = await retryAutomaticRoute(job.id, job.repId);
-    if (!retried) return res.status(409).json({ code: "route_not_retryable", message: "This route is not ready to retry." });
+    if (retried.outcome === "expired") {
+      return res.status(409).json({ code: "route_retry_expired", message: "This search is from an earlier day; its route can no longer be built." });
+    }
+    if (retried.outcome !== "retried") return res.status(409).json({ code: "route_not_retryable", message: "This route is not ready to retry." });
     void tickProspectingQueueSafely();
-    res.status(202).json({ jobId: retried.id, routePlanningStatus: retried.routePlanningStatus });
+    res.status(202).json({ jobId: retried.job.id, routePlanningStatus: retried.job.routePlanningStatus });
   });
 
   // A search that is stuck (running, waiting, or finished with no route): stop

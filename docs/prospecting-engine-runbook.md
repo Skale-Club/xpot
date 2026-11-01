@@ -15,6 +15,7 @@ PROSPECTING_ENGINE_CF_CLIENT_SECRET=<Cloudflare Access service-token secret>
 PROSPECTING_ENGINE_MAX_TIME_SECONDS=1800
 PROSPECTING_ENGINE_DEPTH=10
 PROSPECTING_ENGINE_POLL_MS=15000
+PROSPECTING_DEFAULT_TIME_ZONE=America/New_York   optional; the MCP tool's "today" when the caller names no day
 GOOGLE_ROUTE_OPTIMIZATION_PROJECT_ID=skaleclub
 GOOGLE_ROUTE_OPTIMIZATION_CREDENTIALS_FILE=/run/secrets/google-route-optimizer.json
 VITE_GOOGLE_MAPS_API_KEY=<referrer-restricted browser key>
@@ -48,8 +49,10 @@ together if the token is replaced.
 ## Deployment behavior
 
 The Docker entrypoint runs `dist/migrate.cjs` before starting the server. Migration
-`0032_prospecting_routes.sql` and `0033_google_daily_route_optimization.sql` are transactional and
-tracked by `_xpot_migrations`. The latter enforces one route optimization per rep/day. The server starts
+The route migrations (`0032` onward) are transactional and tracked by `_xpot_migrations`. Since
+`0048_multiple_daily_routes.sql` the database allows one active route per rep and day, and the
+application allows up to three routes a day (see "Google route optimization" in the architecture
+document). The server starts
 the queue worker after Express begins listening. One PostgreSQL advisory lock plus a partial unique
 index permits only one `starting` or `running` physical extraction across all Xpot accounts.
 
@@ -134,7 +137,10 @@ the OAuth connection, so jobs are created for that user's representative profile
 should request only the `xpot:prospecting` scope; this does not expose the Tags Journey tools:
 
 - `prospecting_create_today`: accepts `location`, 1-5 `sectors`, an optional `shiftHours`
-  (2/4/6/8/10/12, default 8), and an optional idempotency key;
+  (2/4/6/8/10/12, default 8), an optional idempotency key, and the rep's day as `routeDate`
+  (YYYY-MM-DD) or the rep's IANA `timeZone`. Without either, the day is today in
+  `PROSPECTING_DEFAULT_TIME_ZONE` (default `America/New_York`). The app's daily rules apply: one
+  active route, one search being prepared at a time, up to three routes a day;
 - `prospecting_job_get`: reads a specific job or the newest job for that account.
 
 Example arguments for a small smoke run:
@@ -144,6 +150,7 @@ Example arguments for a small smoke run:
   "location": "Framingham, MA",
   "sectors": ["barber shop"],
   "shiftHours": 8,
+  "timeZone": "America/New_York",
   "idempotencyKey": "today:2026-10-12:framingham:barber-shop"
 }
 ```

@@ -19,7 +19,7 @@ vi.mock("../server/db.js", async () => {
 });
 
 const { db } = await import("../server/db.js");
-const { markProspectingVisitCheckedIn, markProspectingVisitFinished } = await import("../server/prospecting/visit-sync.js");
+const { markStopOfVisitCheckedIn, markStopOfVisitFinished } = await import("../server/prospecting/visit-sync.js");
 const { retryFailedProspectingRuns } = await import("../server/prospecting/queue.js");
 const { sql } = await import("drizzle-orm");
 
@@ -72,11 +72,11 @@ test("a planned visit drives its linked prospecting route through completion", a
   `)).rows as Array<{ visit_id: number; route_id: number; candidate_id: number; job_id: number; run_id: number; rep_id: number }>;
   const linked = rows[0];
 
-  await markProspectingVisitCheckedIn(linked.visit_id);
+  await db.transaction((tx) => markStopOfVisitCheckedIn(tx, linked.visit_id));
   expect((await db.execute(sql`SELECT status FROM prospecting_route_stops WHERE visit_id = ${linked.visit_id}`)).rows[0]).toEqual({ status: "checked_in" });
   expect((await db.execute(sql`SELECT status FROM prospecting_routes WHERE id = ${linked.route_id}`)).rows[0]).toEqual({ status: "in_progress" });
 
-  await markProspectingVisitFinished(linked.visit_id, false);
+  await db.transaction((tx) => markStopOfVisitFinished(tx, linked.visit_id, false));
   expect((await db.execute(sql`SELECT status FROM prospecting_route_stops WHERE visit_id = ${linked.visit_id}`)).rows[0]).toEqual({ status: "completed" });
   expect((await db.execute(sql`SELECT status FROM prospecting_routes WHERE id = ${linked.route_id}`)).rows[0]).toEqual({ status: "completed" });
   expect((await db.execute(sql`SELECT status FROM prospecting_candidates WHERE id = ${linked.candidate_id}`)).rows[0]).toEqual({ status: "visited" });

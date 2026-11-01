@@ -1,6 +1,7 @@
 # Revisão do sistema de criação de rotas
 
-> **Retrato de 2026-11-01, base `023156d`.** Revisão estática do caminho que vai da busca
+> **Retrato de 2026-11-01, base `023156d`.** Os 24 achados foram corrigidos no mesmo dia; o
+> que mudou em cada um está na seção 4. Revisão estática do caminho que vai da busca
 > de prospecção até a rota publicada e executada, com os três achados mais graves
 > reproduzidos sobre o banco de teste (PGlite) dos testes de integração. O estado de cada
 > achado passa a viver no [`BACKLOG.md`](./BACKLOG.md). Para o desenho do sistema, veja
@@ -97,7 +98,7 @@ comportamento errado visível ou inconsistência entre caminhos; **Baixo** = lim
 | ROT-15 | `createRoute` carrega **todos** os leads do vendedor (`storage.listSalesLeads({ ownerRepId })`) para ficar com os poucos selecionados. | `prospecting.ts:274-275` |
 | ROT-16 | `missingCoordinates` em `optimizationMeta` guarda id de candidato **negativo** no caminho manual e **positivo** no automático. | `prospecting.ts:332` vs `auto-route.ts:218` |
 | ROT-17 | Rota só de leads (sem candidato com fuso) não ganha o teto das 22 h: `secondsUntilDayEnd` recebe `undefined`. | `prospecting.ts:366-367` |
-| ROT-18 | `prospectingRouteCreateSchema.start` é aceito e ignorado em silêncio; `maxStops` da rota automática é 60 fixo enquanto `targetStops` é calculado e não usado. | `shared/prospecting.ts:95-99`, `auto-route.ts:255` |
+| ROT-18 | `prospectingRouteCreateSchema.start` é aceito e ignorado em silêncio; o teto de 60 paradas está repetido como literal em vários lugares. (*Correção desta revisão:* o texto original dizia que `targetStops` não era usado; ele é, pela expansão de área em `queue.ts`.) | `shared/prospecting.ts:95-99`, `auto-route.ts:255` |
 | ROT-19 | Checagem de idempotência duplicada: o router faz a mesma consulta que o serviço faz logo em seguida. | `prospecting.ts:143-149`, `service.ts:110-116` |
 | ROT-20 | `GET /routes/:id` busca os leads das paradas por `ownerRepId`; uma parada adicionada por `kind: "lead"` de outro vendedor da organização volta sem telefone e site. | `prospecting.ts:587` |
 | ROT-21 | O worker segura o advisory lock `(rep, dia)` durante a chamada ao Google (até 45 s); "Buscar oportunidades" do mesmo vendedor espera esse tempo para responder. | `auto-route.ts:243`, `service.ts:135` |
@@ -125,3 +126,38 @@ comportamento errado visível ou inconsistência entre caminhos; **Baixo** = lim
 Para cada item acima há como escrever o teste de reprodução no harness de
 `tests/prospecting-routes.integration.test.ts`; os três reproduzidos nesta revisão foram
 exatamente assim.
+
+---
+
+## 4. Estado (2026-11-01)
+
+Todos corrigidos. Cada comportamento observável tem um teste de regressão com o código do
+achado no nome (`tests/prospecting-routes.integration.test.ts`, `tests/prospecting-routes.test.ts`);
+os 12 testes novos de integração falham no código anterior e passam no atual.
+
+| # | O que mudou |
+|---|---|
+| ROT-01 | `routeDate` é obrigatório em toda busca. A ferramenta MCP aceita `routeDate` ou `timeZone`; sem nenhum, usa o dia em `PROSPECTING_DEFAULT_TIME_ZONE` (padrão `America/New_York`). |
+| ROT-02 | O reaproveitamento fecha a rota antiga dentro da transação da nova otimização (`createRoute(…, { replacesRouteId })`). Falhou, nada muda. |
+| ROT-03 | Uma só re-cronometragem, `retimeRouteStops`: parada alcançada e sua visita ficam como estão; as paradas à frente partem da saída da última alcançada e nunca ficam no passado. Visitas só são reagendadas se ainda `planned`. |
+| ROT-04 | Todos os caminhos de rota recusam enquanto há busca do dia em preparo. O worker não marca `ready` um job cuja rota do dia é outra: falha com "Another route is already active today". |
+| ROT-05 | Uma regra só, `dailySessionCount` (rotas do dia + buscas do dia sem rota), na aceitação da busca, na montagem automática, na manual e no reaproveitamento, e também no cliente. |
+| ROT-06 | Tentar a rota de novo numa busca de outro dia responde 409 explicando; a recuperação legada também só toca jobs recentes. |
+| ROT-07 | Recalcular só substitui a rota **ativa**; rota concluída do dia fica no histórico. |
+| ROT-08 | Rota manual ou reaproveitada só tem `jobId` quando foi pedida para um job. |
+| ROT-09 | O `PATCH` da parada segue as regras do fluxo de visita: pular solta visita e empresa, a última parada fecha a rota, parada encerrada não muda, concluir com visita pendente é recusado. |
+| ROT-10 | `server/prospecting/visit-sync.ts` é a única sincronização parada↔visita, usada pelo check-in, checkout e `PATCH`. |
+| ROT-11 | Reordenar, remover e adicionar travam a linha da rota (`lockEditableRoute`). |
+| ROT-12 | Arquitetura e runbook descrevem o limite atual, a regra de contagem, o recálculo e a re-cronometragem. |
+| ROT-13 | `prepare-demo` usa `ensureProspectingCandidateLead`; `prepare-check-in` usa `materializeStopVisit` com a parada travada. |
+| ROT-14 | `repairPublishedAutomaticRouteFirstLeg` removida: nenhum caminho gera mais esse formato, e o filtro `route_date >= hoje` já não alcançava rota antiga. |
+| ROT-15 | `createRoute` consulta só os leads pedidos. |
+| ROT-16 | `missingCoordinates` usa id negativo para candidato nos dois caminhos. |
+| ROT-17 | Criação e reaproveitamento aceitam `timeZone`; o cliente manda o do aparelho. |
+| ROT-18 | `start` saiu do contrato (o Zod descarta o campo de clientes antigos); `ROUTE_MAX_STOPS` compartilhado. |
+| ROT-19 | A checagem de idempotência ficou só no serviço. |
+| ROT-20 | O detalhe da rota busca os leads das paradas pelo id, de quem quer que seja na organização. |
+| ROT-21 | A aceitação da busca e a montagem manual usam `pg_try_advisory_xact_lock` e respondem 409 na hora em vez de esperar a otimização. |
+| ROT-22 | A tela da Rota mostra "N de 3 rotas usadas hoje", dizendo que rota cancelada e busca que falhou contam. |
+| ROT-23 | Listas limitadas a 100 buscas e 200 rotas, até a paginação de PRF-02. |
+| ROT-24 | Um lead selecionado e o mesmo Google Place achado na busca viram uma parada só. |

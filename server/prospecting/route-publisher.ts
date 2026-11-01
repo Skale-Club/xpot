@@ -21,12 +21,20 @@ type RouteStopRow = typeof prospectingRouteStops.$inferSelect;
  */
 export async function materializeStopVisit(
   tx: Tx,
-  input: { route: RouteRow; stop: RouteStopRow; repId: number; organizationId: number; scheduledAt: Date },
+  input: {
+    route: RouteRow;
+    stop: RouteStopRow;
+    repId: number;
+    /** Needed only when the stop has no lead yet and one has to be found or created. */
+    organizationId: number | null;
+    scheduledAt: Date;
+  },
 ) {
   const { route, stop, repId, organizationId, scheduledAt } = input;
   const now = new Date();
   let leadId = stop.leadId;
   if (!leadId && stop.candidateId) {
+    if (organizationId === null) throw new Error(`Route stop ${stop.id} needs an organization to create its lead.`);
     leadId = await ensureProspectingCandidateLead(tx, {
       candidateId: stop.candidateId,
       repId,

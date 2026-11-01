@@ -17,7 +17,8 @@ import { materializeStopVisit } from "./route-publisher.js";
 /**
  * Hand edits of a route the rep is planning or running: reorder, remove, add
  * and replace stops. None of them calls Google again; timing comes from the
- * same local driving estimate (30 km/h in a straight line).
+ * same local driving estimate (30 km/h in a straight line) the extra stops of
+ * a running route use (route-execution.ts).
  */
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -35,60 +36,88 @@ export class RouteEditError extends Error {
   }
 }
 
-/** Rebuilds local timing/geometry after a hand edit without another paid Google request. */
-export async function persistLocalStopOrder(
-  tx: Tx,
-  route: RouteRow,
-  ordered: RouteStopRow[],
-  repId: number,
-  edit: "reordered" | "stop_removed" | "stop_added" | "stop_replaced",
-) {
-  const plannedStartAt = new Date(route.plannedStartAt);
-  let elapsedSeconds = 0;
+const LOCAL_METERS_PER_SECOND = 30_000 / 3600;
+export const localTravelSeconds = (meters: number) => (meters > 0 ? Math.max(60, Math.round(meters / LOCAL_METERS_PER_SECOND)) : 0);
+const point = (stop: { lat: string; lng: string }) => ({ lat: Number(stop.lat), lng: Number(stop.lng) });
+
+/** When the rep leaves a stop that already happened. */
+function departureOf(stop: RouteStopRow, fallback: number) {
+  if (stop.completedAt && ["completed", "skipped"].includes(stop.status)) return new Date(stop.completedAt).getTime();
+  const arrival = stop.estimatedArrivalAt ? new Date(stop.estimatedArrivalAt).getTime() : fallback;
+  return arrival + stop.serviceDurationSeconds * 1000;
+}
+
+export type RouteEdit = "reordered" | "stop_removed" | "stop_added" | "stop_replaced" | "ad_hoc_stop";
+
+/**
+ * Puts the stops in `ordered` order and re-times them without another paid
+ * Google request. What already happened is left as it happened: a reached
+ * stop keeps its times, and its finished visit keeps its schedule. The stops
+ * still ahead are timed from when the rep leaves the last reached one, and
+ * never in the past while the route runs. Before anything is reached the
+ * clock starts at the route's planned start, as when it was built.
+ *
+ * Returns the route's work time (drives plus visits), which the chosen shift
+ * is measured against.
+ */
+export async function retimeRouteStops(tx: Tx, route: RouteRow, ordered: RouteStopRow[], repId: number, edit: RouteEdit, now = new Date()) {
+  let cursor = new Date(route.plannedStartAt).getTime();
+  let previous: { lat: number; lng: number } | null = null;
+  // The rep is on the road once any stop was reached, even out of order.
+  const running = ordered.some((stop) => !isUnreached(stop));
+  let workSeconds = 0;
   let totalDistanceMeters = 0;
-  const recalculated = ordered.map((stop, index) => {
-    const previous = index > 0 ? ordered[index - 1] : null;
-    const distance = previous ? Math.round(haversineMeters(
-      { lat: Number(previous.lat), lng: Number(previous.lng) },
-      { lat: Number(stop.lat), lng: Number(stop.lng) },
-    )) : 0;
-    const travelDurationSeconds = distance > 0 ? Math.max(60, Math.round(distance / (30_000 / 3600))) : 0;
-    elapsedSeconds += travelDurationSeconds;
-    const estimatedArrivalAt = new Date(plannedStartAt.getTime() + elapsedSeconds * 1000);
-    elapsedSeconds += stop.serviceDurationSeconds;
+  const timed = ordered.map((stop, index) => {
+    if (!isUnreached(stop)) {
+      cursor = departureOf(stop, cursor);
+      previous = point(stop);
+      workSeconds += stop.travelDurationSeconds + stop.serviceDurationSeconds;
+      totalDistanceMeters += stop.travelDistanceMeters;
+      return { stop, position: index + 1, timing: null };
+    }
+    if (running) cursor = Math.max(cursor, now.getTime());
+    const distance = previous ? Math.round(haversineMeters(previous, point(stop))) : 0;
+    const travelDurationSeconds = localTravelSeconds(distance);
+    const estimatedArrivalAt = new Date(cursor + travelDurationSeconds * 1000);
+    cursor = estimatedArrivalAt.getTime() + stop.serviceDurationSeconds * 1000;
+    previous = point(stop);
+    workSeconds += travelDurationSeconds + stop.serviceDurationSeconds;
     totalDistanceMeters += distance;
-    return { stop, position: index + 1, distance, travelDurationSeconds, estimatedArrivalAt };
-  });
-  const now = new Date();
-  const optimizationMeta = { ...(route.optimizationMeta ?? {}) } as Record<string, unknown>;
-  delete optimizationMeta.encodedPolyline;
-  Object.assign(optimizationMeta, {
-    manuallyReordered: true,
-    lastManualEdit: edit,
-    distanceModel: "haversine_manual",
-    trafficAware: false,
+    return { stop, position: index + 1, timing: { distance, travelDurationSeconds, estimatedArrivalAt } };
   });
 
+  const updatedAt = now;
   // Move every row out of the final position range first so the route/position
   // unique constraint cannot collide while positions are compacted.
   const temporaryPositionBase = Math.max(...ordered.map((stop) => stop.position), ordered.length) + ordered.length + 1;
-  for (const item of recalculated) {
-    await tx.update(prospectingRouteStops).set({ position: temporaryPositionBase + item.position, updatedAt: now })
+  for (const item of timed) {
+    await tx.update(prospectingRouteStops).set({ position: temporaryPositionBase + item.position, updatedAt })
       .where(eq(prospectingRouteStops.id, item.stop.id));
   }
-  for (const item of recalculated) {
+  for (const item of timed) {
     await tx.update(prospectingRouteStops).set({
       position: item.position,
-      travelDistanceMeters: item.distance,
-      travelDurationSeconds: item.travelDurationSeconds,
-      estimatedArrivalAt: item.estimatedArrivalAt,
-      updatedAt: now,
+      ...(item.timing ? {
+        travelDistanceMeters: item.timing.distance,
+        travelDurationSeconds: item.timing.travelDurationSeconds,
+        estimatedArrivalAt: item.timing.estimatedArrivalAt,
+      } : {}),
+      updatedAt,
     }).where(eq(prospectingRouteStops.id, item.stop.id));
-    if (item.stop.visitId) {
-      await tx.update(salesVisits).set({ scheduledAt: item.estimatedArrivalAt, updatedAt: now })
-        .where(and(eq(salesVisits.id, item.stop.visitId), eq(salesVisits.repId, repId)));
+    if (item.timing && item.stop.visitId) {
+      await tx.update(salesVisits).set({ scheduledAt: item.timing.estimatedArrivalAt, updatedAt })
+        .where(and(eq(salesVisits.id, item.stop.visitId), eq(salesVisits.repId, repId), eq(salesVisits.status, "planned")));
     }
   }
+
+  const optimizationMeta = { ...(route.optimizationMeta ?? {}) } as Record<string, unknown>;
+  // The stored Google road line no longer matches the stops.
+  delete optimizationMeta.encodedPolyline;
+  Object.assign(optimizationMeta, {
+    ...(edit === "ad_hoc_stop" ? {} : { manuallyReordered: true, lastManualEdit: edit }),
+    distanceModel: "haversine_manual",
+    trafficAware: false,
+  });
   const first = ordered[0];
   const last = ordered[ordered.length - 1];
   await tx.update(prospectingRoutes).set({
@@ -99,22 +128,68 @@ export async function persistLocalStopOrder(
     endLat: last.lat,
     endLng: last.lng,
     totalDistanceMeters,
-    totalDurationSeconds: elapsedSeconds,
-    plannedEndAt: new Date(plannedStartAt.getTime() + elapsedSeconds * 1000),
+    totalDurationSeconds: workSeconds,
+    plannedEndAt: new Date(cursor),
     optimizationMeta,
-    updatedAt: now,
+    updatedAt,
   }).where(eq(prospectingRoutes.id, route.id));
-  return { elapsedSeconds };
+  return { workSeconds };
 }
 
 /**
- * Minutes an edited route runs past the work window the rep chose. Hand edits
- * may go over it; the rep is told, not stopped.
+ * Minutes an edited route's work runs past the shift the rep chose. Hand
+ * edits may go over it; the rep is told, not stopped.
  */
-export function overtimeMinutes(route: RouteRow, elapsedSeconds: number) {
+export function overtimeMinutes(route: RouteRow, workSeconds: number) {
   const shiftMinutes = Number((route.optimizationMeta as Record<string, unknown> | null)?.shiftDurationMinutes);
   if (!Number.isFinite(shiftMinutes) || shiftMinutes <= 0) return 0;
-  return Math.max(0, Math.ceil(elapsedSeconds / 60 - shiftMinutes));
+  return Math.max(0, Math.ceil(workSeconds / 60 - shiftMinutes));
+}
+
+/** The rep's editable route and its stops, locked for the length of the edit. */
+async function lockEditableRoute(tx: Tx, routeId: number, repId: number) {
+  const [route] = await tx.select().from(prospectingRoutes).where(and(
+    eq(prospectingRoutes.id, routeId),
+    eq(prospectingRoutes.repId, repId),
+  )).limit(1).for("update");
+  if (!route) throw new RouteEditError("Route not found", 404);
+  if (!(EDITABLE_ROUTE_STATUSES as readonly string[]).includes(route.status)) {
+    throw new RouteEditError("A finished route can no longer be edited.", 409);
+  }
+  const stops = await tx.select().from(prospectingRouteStops)
+    .where(eq(prospectingRouteStops.routeId, route.id))
+    .orderBy(asc(prospectingRouteStops.position));
+  return { route, stops };
+}
+
+/** New order for the stops; what already happened keeps its place. */
+export async function reorderRouteStops(input: { routeId: number; repId: number; stopIds: number[] }) {
+  return db.transaction(async (tx) => {
+    const { route, stops } = await lockEditableRoute(tx, input.routeId, input.repId);
+    const knownIds = new Set(stops.map((stop) => stop.id));
+    if (input.stopIds.length !== stops.length || input.stopIds.some((id) => !knownIds.has(id))) {
+      throw new RouteEditError("The new order must contain every route stop exactly once.", 400);
+    }
+    if (stops.some((stop, index) => !isUnreached(stop) && input.stopIds[index] !== stop.id)) {
+      throw new RouteEditError("A visit that already happened keeps its place in the route.", 409);
+    }
+    const byId = new Map(stops.map((stop) => [stop.id, stop]));
+    const { workSeconds } = await retimeRouteStops(tx, route, input.stopIds.map((id) => byId.get(id)!), input.repId, "reordered");
+    return { overtimeMinutes: overtimeMinutes(route, workSeconds) };
+  });
+}
+
+/** Takes a stop nobody reached off the route. */
+export async function removeRouteStop(input: { routeId: number; repId: number; stopId: number }) {
+  return db.transaction(async (tx) => {
+    const { route, stops } = await lockEditableRoute(tx, input.routeId, input.repId);
+    const stop = stops.find((item) => item.id === input.stopId);
+    if (!stop) throw new RouteEditError("Route stop not found", 404);
+    if (!isUnreached(stop)) throw new RouteEditError("A visit that already started cannot be removed from the route.", 409);
+    if (stops.length === 1) throw new RouteEditError("A route must keep at least one stop.", 409);
+    await releaseStop(tx, stop, input.repId);
+    await retimeRouteStops(tx, route, stops.filter((item) => item.id !== stop.id), input.repId, "stop_removed");
+  });
 }
 
 /** A stop leaving the route: its planned visit leaves the agenda and a discovered business goes back to the pool. */
@@ -231,17 +306,7 @@ export async function addRouteStop(input: {
   const { repId } = input;
   const organizationId = await organizationIdForRep(repId);
   return db.transaction(async (tx) => {
-    const [route] = await tx.select().from(prospectingRoutes).where(and(
-      eq(prospectingRoutes.id, input.routeId),
-      eq(prospectingRoutes.repId, repId),
-    )).limit(1).for("update");
-    if (!route) throw new RouteEditError("Route not found", 404);
-    if (!(EDITABLE_ROUTE_STATUSES as readonly string[]).includes(route.status)) {
-      throw new RouteEditError("A finished route can no longer be edited.", 409);
-    }
-    const stops = await tx.select().from(prospectingRouteStops)
-      .where(eq(prospectingRouteStops.routeId, route.id))
-      .orderBy(asc(prospectingRouteStops.position));
+    const { route, stops } = await lockEditableRoute(tx, input.routeId, repId);
 
     const replaced = input.replaceStopId === undefined ? null : stops.find((stop) => stop.id === input.replaceStopId);
     if (replaced === undefined) throw new RouteEditError("Route stop not found", 404);
@@ -286,10 +351,12 @@ export async function addRouteStop(input: {
       score: business.score,
       scoreReasons: business.scoreReasons,
       serviceDurationSeconds: route.defaultVisitMinutes * 60,
+      // Timed with the rest of the route right below; until then it sits where the route starts.
+      estimatedArrivalAt: route.plannedStartAt,
     }).returning();
     const ordered = [...kept];
     ordered.splice(index, 0, inserted);
-    const { elapsedSeconds } = await persistLocalStopOrder(tx, route, ordered, repId, replaced ? "stop_replaced" : "stop_added");
+    const { workSeconds } = await retimeRouteStops(tx, route, ordered, repId, replaced ? "stop_replaced" : "stop_added");
 
     if (route.status !== "draft") {
       const [timed] = await tx.select().from(prospectingRouteStops).where(eq(prospectingRouteStops.id, inserted.id)).limit(1);
@@ -301,6 +368,6 @@ export async function addRouteStop(input: {
         scheduledAt: timed.estimatedArrivalAt ? new Date(timed.estimatedArrivalAt) : new Date(),
       });
     }
-    return { stopId: inserted.id, warnings, overtimeMinutes: overtimeMinutes(route, elapsedSeconds) };
+    return { stopId: inserted.id, warnings, overtimeMinutes: overtimeMinutes(route, workSeconds) };
   });
 }
