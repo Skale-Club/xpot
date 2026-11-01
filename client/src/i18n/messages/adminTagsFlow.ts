@@ -47,7 +47,7 @@ const en = {
   reasonNotInStockTakeBack: "Not in stock (damaged, lost or internal use)",
 
   // Distribution
-  distributionTitle: "Distribution",
+  distributionTitle: "Hand out",
   distributionIntro: "Pieces from company stock to resellers, and back. Every hand-over is a kit with its own code and packing list.",
   viewHandOut: "Hand out",
   viewOrders: "Wholesale orders",
@@ -258,7 +258,7 @@ export const adminTagsFlowMessages: Dictionary<typeof en> = {
     reasonSetUpTakeBack: "Configurada: remova o cliente antes",
     reasonNotInStockTakeBack: "Fora do estoque (estragada, perdida ou uso interno)",
 
-    distributionTitle: "Distribuição",
+    distributionTitle: "Entregar peças",
     distributionIntro: "Peças do estoque da empresa para os revendedores, e de volta. Cada entrega é um kit com código e lista de separação.",
     viewHandOut: "Entregar",
     viewOrders: "Pedidos de atacado",
@@ -459,7 +459,7 @@ export const adminTagsFlowMessages: Dictionary<typeof en> = {
     reasonSetUpTakeBack: "Configurada: quita el cliente primero",
     reasonNotInStockTakeBack: "Fuera del stock (dañada, perdida o uso interno)",
 
-    distributionTitle: "Distribución",
+    distributionTitle: "Entregar piezas",
     distributionIntro: "Piezas del stock de la empresa a los revendedores, y de vuelta. Cada entrega es un kit con su código y su lista de empaque.",
     viewHandOut: "Entregar",
     viewOrders: "Pedidos mayoristas",
