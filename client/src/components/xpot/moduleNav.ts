@@ -7,6 +7,7 @@ import {
   FileText,
   HeartPulse,
   History,
+  Inbox,
   LayoutDashboard,
   ListTodo,
   MapPin,
@@ -18,6 +19,7 @@ import {
   Printer,
   Plug,
   Route,
+  Settings,
   ShieldCheck,
   ShoppingBag,
   SlidersHorizontal,
@@ -25,6 +27,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { XpotModule } from "@shared/modules";
+import { can, type Profile } from "@shared/profiles";
 import { parseSalesPath } from "../../pages/xpot/salesPath";
 
 // Where every screen lives. The app is two modules, Visits (field sales) and
@@ -272,48 +275,102 @@ export function accountGroups(viewer: Viewer, l: Labels): NavGroup[] {
   ];
 }
 
-/** A panel lists management destinations only; the personal application's navigation stays outside it. */
-export function managementGroups(modules: readonly XpotModule[], viewer: Viewer, l: Labels, names: {
-  home: string; tags: string; visits: string; team: string; system: string;
-}): NavGroup[] {
-  if (!viewer.canManage) return [];
-  const groups: NavGroup[] = [{ label: "", items: [{ href: "/admin", label: names.home, icon: LayoutDashboard, match: (path) => path === "/admin" }] }];
-  const tags = modules.includes("tags") ? moduleGroups("tags", viewer, l).slice(1).flatMap((group) => group.items) : [];
-  const visits = modules.includes("visits") ? moduleGroups("visits", viewer, l).slice(1).flatMap((group) => group.items) : [];
-  const operations = ["/admin/tags/production", "/admin/tags/pieces", "/admin/tags/kits", "/admin/tags/overview"];
-  if (tags.length) groups.push({ label: names.tags, items: operations.flatMap((href) => tags.filter((item) => item.href === href)) });
-  if (modules.includes("visits")) groups.push({ label: names.visits, collapsible: viewer.isAdmin, items: [
+/** The words only the panels have: the group headings and the organization's own screens (i18n/messages/workspaces.ts). */
+export type PanelNames = {
+  /** The panel's first item, "Today". */
+  today: string;
+  /** Group headings: the platform's controls, its own company, an organization, a partner's production. */
+  platform: string;
+  company: string;
+  organization: string;
+  production: string;
+  /** Items. */
+  team: string;
+  stock: string;
+  kits: string;
+  purchases: string;
+  settings: string;
+  tagsOverview: string;
+  stuscleOrders: string;
+};
+
+/** The `?name=` of the page in the address bar: a path match cannot see it. Null outside a browser. */
+function searchParam(name: string): string | null {
+  if (typeof window === "undefined") return null;
+  try { return new URLSearchParams(window.location.search).get(name); } catch { return null; }
+}
+
+const ADMIN_VIEWER: Viewer = { canManage: true, isAdmin: true };
+
+/**
+ * One panel per profile (shared/profiles.ts, docs/PROFILES_EXECUTION_PLAN.md section 6); a member has none.
+ *   owner     Today, then Organization: Team, Stock, Kits, Team purchases, Companies / Tasks / Sales (Visits), Tags
+ *             overview, Settings.
+ *   partner   the owner's, with a Production group (Production, the bench computers) in front.
+ *   platform  Today, Platform (organizations, people, Stuscle orders, products, shop, integrations, brand, status,
+ *             check-in rules) and My company (its own production, stock and kits: what a partner has, for the company).
+ * `organizationId`: the one organization an owner or a partner runs, so Team, Purchases and Settings open its workspace.
+ * The hrefs are the ones the app always had (docs/MODULES.md: URLs never change).
+ */
+export function panelGroups(profile: Profile | null | undefined, modules: readonly XpotModule[], l: Labels, names: PanelNames, organizationId: number | null = null): NavGroup[] {
+  if (!profile || !can(profile, "useManagementPanel")) return [];
+  const visits = modules.includes("visits");
+  const tags = modules.includes("tags");
+  const tagItems = tags ? moduleGroups("tags", ADMIN_VIEWER, l).slice(1).flatMap((group) => group.items) : [];
+  // The group carries the Platform tag where it needs one, so the items lose the one the Tags module puts on each.
+  const tagItem = (href: string, label?: string): NavItem[] => tagItems.filter((item) => item.href === href).map((item) => ({ ...item, label: label ?? item.label, adminOnly: false }));
+  const home: NavGroup = { label: "", items: [{ href: "/admin", label: names.today, icon: LayoutDashboard, match: (path) => path === "/admin" }] };
+  const work: NavItem[] = visits ? [
     { href: "/admin/work/leads", label: l.shell("tabLeads"), icon: Building2, match: starts("/admin/work/leads") },
     { href: "/admin/work/tasks", label: l.shell("tabTasks"), icon: ListTodo, match: starts("/admin/work/tasks") },
     { href: "/admin/work/sales", label: l.shell("tabSales"), icon: DollarSign, match: starts("/admin/work/sales") },
-    ...visits.filter((item) => item.href === "/admin/overview").map((item) => ({ ...item, match: starts(item.href) })),
-  ] });
-  groups.push({ label: names.team, collapsible: viewer.isAdmin, items: administrationItems(l) });
-  groups.push({ label: names.system, collapsible: true, items: [
-    ...visits.filter((item) => item.href !== "/admin/overview"),
-    ...tags.filter((item) => !operations.includes(item.href)),
-    ...(viewer.isAdmin ? platformItems(l) : []),
-  ] });
-  return groups.filter((group) => group.items.length > 0);
-}
+  ] : [];
+  // A piece's life in the order it happens: made, in stock, handed out, then how it is checked.
+  const production = tagItem("/admin/tags/production");
+  const stations = tagItem("/admin/tags/provisioners");
+  const stock = tagItem("/admin/tags/pieces", names.stock);
+  const overview = tagItem("/admin/tags/overview", names.tagsOverview);
+  // Stuscle's orders are a view of Distribution (?view=orders): only one of the two items is lit.
+  const onOrders = () => searchParam("view") === "orders";
+  const kits = tagItem("/admin/tags/kits", names.kits).map((item) => ({ ...item, match: (path: string) => item.match(path) && !onOrders() }));
 
-/**
- * Organization Rep Admins keep their team tools, without global admin destinations. `prints`: they run a branch that
- * prints its own pieces (shared/organizations.ts productionOrganizations), so Production is theirs too, for it.
- */
-export function organizationPanelGroups(modules: readonly XpotModule[], l: Labels, prints = false): NavGroup[] {
-  return [{ label: l.shell("navOrganization"), items: [
-    ...administrationItems(l).filter((item) => item.href === "/organizations"),
-    ...(modules.includes("visits") ? [
-      { href: "/admin/work/leads", label: l.shell("tabLeads"), icon: Building2, match: starts("/admin/work/leads") },
-      { href: "/admin/work/tasks", label: l.shell("tabTasks"), icon: ListTodo, match: starts("/admin/work/tasks") },
-      { href: "/admin/work/sales", label: l.shell("tabSales"), icon: DollarSign, match: starts("/admin/work/sales") },
-    ] : []),
-    ...(prints && modules.includes("tags") ? [
-      { href: "/admin/tags/production", label: l.shell("manageProduction"), icon: Printer, match: (p: string) => starts("/admin/tags/production")(p) || starts("/admin/tags/batches")(p) },
-      { href: "/admin/tags/provisioners", label: l.shell("manageWriters"), icon: ShieldCheck, match: starts("/admin/tags/provisioners") },
-    ] : []),
-  ] }];
+  if (profile === "platform") {
+    const orders: NavItem[] = tags ? [{ href: "/admin/tags/kits?view=orders", label: names.stuscleOrders, icon: Inbox, match: (path) => starts("/admin/tags/kits")(path) && onOrders() }] : [];
+    return [home, {
+      // The platform's controls start collapsed (the group opens on a screen in it); its company's daily work does not.
+      label: names.platform, adminOnly: true, collapsible: true, items: [
+        { href: "/organizations", label: l.shell("navOrganizations"), icon: Building2, match: starts("/organizations") },
+        { href: "/admin/reps", label: l.shell("orgPeople"), icon: Users, match: starts("/admin/reps") },
+        ...orders,
+        ...(visits ? [{ href: "/admin/products", label: l.shell("manageProducts"), icon: Boxes, match: starts("/admin/products") }] : []),
+        ...tagItem("/admin/tags/shop"),
+        ...platformItems(l),
+        ...(visits ? [{ href: "/admin/settings", label: l.shell("manageCheckInRules"), icon: SlidersHorizontal, match: starts("/admin/settings") }] : []),
+      ],
+    }, {
+      label: names.company, items: [
+        ...production, ...stock, ...kits, ...overview, ...tagItem("/admin/tags/journey"), ...stations,
+        ...work,
+        ...(visits ? [{ href: "/admin/overview", label: l.shell("manageTeam"), icon: LayoutDashboard, match: starts("/admin/overview") }] : []),
+      ],
+    }].filter((group) => group.items.length > 0);
+  }
+
+  // Team, purchases and settings are tabs of the organization's workspace (/organizations/<id>?tab=); the path alone cannot tell them apart.
+  const workspaceItem = (tab: string, label: string, icon: LucideIcon, ...tabs: Array<string | null>): NavItem => organizationId
+    ? { href: `/organizations/${organizationId}?tab=${tab}`, label, icon, match: (path) => (/^\/organizations\/\d+\/?$/.test(path) && tabs.includes(searchParam("tab"))) || (tab === "team" && /^\/organizations\/\d+\/people\//.test(path)) }
+    : { href: "/organizations", label, icon, match: starts("/organizations") };
+  const organization: NavGroup = { label: names.organization, items: [
+    workspaceItem("team", names.team, Users, null, "overview", "team"),
+    ...stock, ...kits,
+    // Without one workspace to open (someone who runs several), the organizations list is the one door.
+    ...(organizationId && tags && can(profile, "viewTeamPurchases") ? [workspaceItem("purchases", names.purchases, ShoppingBag, "purchases")] : []),
+    ...work, ...overview,
+    ...(organizationId ? [workspaceItem("settings", names.settings, Settings, "settings")] : []),
+  ] };
+  // A partner's production comes first: it is what the panel is for.
+  const printing: NavGroup = { label: names.production, items: [...production, ...stations] };
+  return [home, ...(profile === "partner" ? [printing] : []), organization].filter((group) => group.items.length > 0);
 }
 
 /** Screens the palette offers that no sidebar lists: the visit, a plain chip, the landing page editor. */

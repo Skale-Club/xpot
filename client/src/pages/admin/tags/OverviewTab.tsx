@@ -259,11 +259,14 @@ export function OverviewQueue({ queue, go }: { queue: TagPieceQueue; go: Go }) {
   );
 }
 
-/** The Overview payload; the panel home reads the same cache for its "Today" rows. */
-export function useTagOverview() {
+/**
+ * The Overview payload; the panel home reads the same cache for its "Today" rows. `organizationId`: that organization's
+ * numbers only (the platform narrowing to its own company); an owner's or a partner's are already their organization's.
+ */
+export function useTagOverview(organizationId?: number) {
   return useQuery<TagOverview>({
-    queryKey: [ADMIN_TAGS_KEY, "overview"],
-    queryFn: () => getJson(`/api/xpot/admin/tags/overview?timezoneOffset=${new Date().getTimezoneOffset()}`),
+    queryKey: organizationId ? [ADMIN_TAGS_KEY, "overview", { organizationId }] : [ADMIN_TAGS_KEY, "overview"],
+    queryFn: () => getJson(`/api/xpot/admin/tags/overview?timezoneOffset=${new Date().getTimezoneOffset()}${organizationId ? `&organizationId=${organizationId}` : ""}`),
     staleTime: STALE_MS,
   });
 }
