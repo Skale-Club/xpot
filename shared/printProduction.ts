@@ -554,3 +554,111 @@ export function bedPosition(bed: Pick<PrintBed, "positions" | "copies"> | null, 
   if (!bed?.positions?.length || !serialNumber) return null;
   return bed.positions[(serialNumber - 1) % bed.copies] ?? null;
 }
+
+// ─── The Production page: always-ready pieces and pieces to generate ─────────────────────────────────────────────
+
+/** A part's bed that only counts what was bought (a sticker, a washer): nothing to print. */
+export const PRINT_BOUGHT_BED = "bought";
+
+/** The beds of a part that come off the printer, in the version's order. */
+export function printedPartBeds(model: Pick<PrintModelItem, "kind" | "currentVersion">): PrintBed[] {
+  if (model.kind !== "part") return [];
+  return (model.currentVersion?.beds ?? []).filter((bed) => bed.label.toLowerCase() !== PRINT_BOUGHT_BED);
+}
+
+/**
+ * Always-ready pieces: parts with no serial (a Stand base, a G token) that are printed from a fixed file at any
+ * time, as often as needed. Downloading one records nothing. Bought parts (stickers, washers) are not on the page.
+ */
+export function isAlwaysReadyPart(model: Pick<PrintModelItem, "kind" | "status" | "currentVersion">): boolean {
+  return model.kind === "part" && model.status === "ready" && printedPartBeds(model).length > 0;
+}
+
+/** A serialized model the house can generate right now: ready, with a generator, a bed and what its batch needs. */
+export function canGenerateModel(model: PrintModelItem): boolean {
+  return model.kind === "serialized" && model.status === "ready" && !!model.currentVersion?.builder &&
+    (model.currentVersion.beds?.length ?? 0) > 0 && !!model.productType && !!model.face && !!model.theme &&
+    !!model.salesProductId && !!model.batchPrefix;
+}
+
+export interface PrintGenerateFace {
+  face: string;
+  modelId: string;
+  slug: string;
+  title: string;
+  /** Pieces on one printer plate of the model's first bed. */
+  copies: number;
+  bedLabel: string;
+  hasPreview: boolean;
+}
+
+export interface PrintGenerateOption {
+  productType: string;
+  colours: Array<{ theme: string; faces: PrintGenerateFace[] }>;
+}
+
+const THEME_ORDER = ["white", "black"];
+const rank = (list: readonly string[], value: string) => {
+  const index = list.indexOf(value);
+  return index < 0 ? list.length : index;
+};
+
+/**
+ * The questions of "generate pieces", from the catalog: per product (Large Stand, Small Plate…) the colours that
+ * have at least one generable face, and per colour the faces. Only what the house can actually make shows up; a
+ * product × colour × face with two ready models takes the first by the catalog's order.
+ */
+export function printGenerateOptions(models: readonly PrintModelItem[]): PrintGenerateOption[] {
+  const byProduct = new Map<string, Map<string, Map<string, PrintModelItem>>>();
+  for (const model of [...models].sort((a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title))) {
+    if (!canGenerateModel(model)) continue;
+    const colours = byProduct.get(model.productType!) ?? new Map<string, Map<string, PrintModelItem>>();
+    byProduct.set(model.productType!, colours);
+    const faces = colours.get(model.theme!) ?? new Map<string, PrintModelItem>();
+    colours.set(model.theme!, faces);
+    if (!faces.has(model.face!)) faces.set(model.face!, model);
+  }
+  return Array.from(byProduct.entries())
+    .sort(([a], [b]) => rank(TAG_PRODUCT_TYPES, a) - rank(TAG_PRODUCT_TYPES, b))
+    .map(([productType, colours]) => ({
+      productType,
+      colours: Array.from(colours.entries())
+        .sort(([a], [b]) => rank(THEME_ORDER, a) - rank(THEME_ORDER, b) || a.localeCompare(b))
+        .map(([theme, faces]) => ({
+          theme,
+          faces: Array.from(faces.values())
+            .sort((a, b) => rank(TAG_FACES, a.face!) - rank(TAG_FACES, b.face!))
+            .map((model) => {
+              const bed = model.currentVersion!.beds[0];
+              return {
+                face: model.face!,
+                modelId: model.id,
+                slug: model.slug,
+                title: model.title,
+                copies: bed.copies,
+                bedLabel: bed.label,
+                hasPreview: !!model.currentVersion!.preview,
+              };
+            }),
+        })),
+    }));
+}
+
+/** "Generate N pieces of this product, colour and face": the server finds the model, so only stocked choices work. */
+export const printGenerateSchema = z.object({
+  productType: z.enum(TAG_PRODUCT_TYPES),
+  theme: z.string().trim().min(1).max(40),
+  face: z.enum(TAG_FACES),
+  quantity: z.number().int().positive().max(10_000),
+  notes: optionalText(2000),
+  /** Whose pieces (as printJobCreateSchema's `organization`): omitted, the company's or the branch's own. */
+  organization: z.union([z.string().trim().min(1).max(80), z.number().int().positive()]).optional(),
+}).strict();
+export type PrintGenerateInput = z.infer<typeof printGenerateSchema>;
+
+/** The model behind one choice of printGenerateOptions, or null when the house does not make it. */
+export function pickGenerateFace(options: readonly PrintGenerateOption[], choice: Pick<PrintGenerateInput, "productType" | "theme" | "face">): PrintGenerateFace | null {
+  const colours = options.find((option) => option.productType === choice.productType)?.colours ?? [];
+  const faces = colours.find((colour) => colour.theme === choice.theme.toLowerCase())?.faces ?? [];
+  return faces.find((face) => face.face === choice.face) ?? null;
+}

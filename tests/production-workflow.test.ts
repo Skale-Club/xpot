@@ -44,12 +44,18 @@ describe("unified production", () => {
     for (const raw of ["", "0", "-1", "1.5", "NaN", "10001"]) expect(printQuantity(raw, 4, true).valid).toBe(false);
     expect(printQuantity("5", 4, false)).toMatchObject({ valid: true, plates: [4, 4], pieces: 8 });
   });
-  it("treats a request as open only until every plate is printed", () => {
-    const request = (...statuses: string[]) => ({ open: false, plates: statuses.map((status) => ({ status })) }) as unknown as PrintRequestItem;
-    expect(productionNeedsAction(request("printed"))).toBe(false);
-    expect(productionNeedsAction(request("printed", "failed", "cancelled"))).toBe(false);
-    for (const status of ["requested", "building", "ready", "printing"]) expect(productionNeedsAction(request("printed", status))).toBe(true);
-    expect(productionNeedsAction({ ...request("printed"), open: true })).toBe(true);
+  it("treats a request as open until the last attempt of every plate is printed or cancelled", () => {
+    const request = (...plates: Array<[number, string]>) => ({
+      open: false,
+      plates: plates.map(([plateNumber, status], i) => ({ plateNumber, status, createdAt: `2026-10-31T10:0${i}:00Z` })),
+    }) as unknown as PrintRequestItem;
+    expect(productionNeedsAction(request([1, "printed"]))).toBe(false);
+    expect(productionNeedsAction(request([1, "failed"], [1, "printed"], [2, "cancelled"]))).toBe(false);
+    // A failed plate not printed again still has its pieces pending.
+    expect(productionNeedsAction(request([1, "printed"], [2, "failed"]))).toBe(true);
+    expect(productionNeedsAction(request([1, "failed"], [1, "failed"]))).toBe(true);
+    for (const status of ["requested", "building", "ready", "printing"]) expect(productionNeedsAction(request([1, "printed"], [2, status]))).toBe(true);
+    expect(productionNeedsAction({ ...request([1, "printed"]), open: true })).toBe(true);
   });
   it("offers to stock a printed plate only while its pieces are still pending", () => {
     expect(pendingPieces({ status: "printed", batchId: "b", pendingCount: 4 })).toBe(4);

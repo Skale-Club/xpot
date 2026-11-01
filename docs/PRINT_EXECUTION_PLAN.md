@@ -604,3 +604,20 @@ Print Now/
 
 `print_job_create { model, quantity }` cria o pedido e devolve as placas; `print_requests_list` mostra os pedidos e o que falta
 imprimir; `print_job_update printed` marca uma placa impressa, sempre depois de o dono confirmar.
+
+## 16. A tela de Produção como a produção acontece (2026-10-31)
+
+A primeira tela de Tags › Produção (`production-board.tsx`) tem três áreas; Pedidos e Modelos ficam nas abas ao lado.
+
+- **Sempre prontas:** peças sem serial (bases, tokens G), com a vista 3D e um botão de baixar por mesa. Baixar não grava
+  nada (`GET /api/xpot/admin/print-models/:ref/print-file?bed=`); a peça é impressa quantas vezes for preciso. Peças
+  compradas (mesa `bought`: adesivo, tag, arruela) não aparecem.
+- **Peças para gerar:** um cartão por produto (Stand e Plate, Large e Small). O toque abre as perguntas cor → face →
+  quantidade, só com o que o catálogo gera (`printGenerateOptions`). `POST /api/xpot/admin/print-generate` confere a
+  escolha de novo (`print_choice_unavailable`) e cria o pedido como `createJob`: cada mesa com seu lote de seriais novos,
+  pendentes no estoque até a mesa ser marcada impressa.
+- **Esperando impressão:** as mesas não impressas, com os arquivos e **Marcar impressa**. Uma mesa que falhou continua na
+  lista enquanto a última tentativa dela não for impressa ou cancelada (as peças continuam pendentes).
+- A vista 3D de uma peça sem código sai do próprio arquivo fixo: `print-pipeline/preview.py --part <arquivo.3mf> out.glb
+  [--upright] [--upload <slug>]` (uma peça, nas cores dos slots do AMS).
+- O assistente antigo fica em "Outras formas de produzir" (códigos para fornecedor, peças que já têm código).

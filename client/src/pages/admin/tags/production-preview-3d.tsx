@@ -11,7 +11,12 @@ import { Button } from "@/components/ui/button";
 
 export type PreviewState = "loading" | "ready" | "failed" | "no-webgl";
 
-export default function Preview3D({ url, resetLabel, onState }: { url: string; resetLabel: string; onState: (state: PreviewState) => void }) {
+export default function Preview3D({ url, resetLabel, onState }: {
+  url: string;
+  /** The "back to the start" button; without a label (a small card's thumbnail) there is none. */
+  resetLabel?: string;
+  onState: (state: PreviewState) => void;
+}) {
   const host = useRef<HTMLDivElement>(null);
   const reset = useRef<() => void>(() => {});
   const [ready, setReady] = useState(false);
@@ -118,7 +123,7 @@ export default function Preview3D({ url, resetLabel, onState }: { url: string; r
   return (
     <div className="relative h-full w-full">
       <div ref={host} className="h-full w-full cursor-grab active:cursor-grabbing" data-testid="production-preview-canvas" />
-      {ready ? (
+      {ready && resetLabel ? (
         <Button type="button" variant="ghost" size="sm" className="absolute bottom-2 right-2 bg-black/40 backdrop-blur" onClick={() => reset.current()}>
           <RotateCcw />
           {resetLabel}

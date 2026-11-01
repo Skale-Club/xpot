@@ -172,15 +172,20 @@ async function copy(prod: pg.Client, local: pg.Client) {
   await local.query("BEGIN");
   try {
     const { rows: productionUsers } = await prod.query(`select ${userColumns.map((column) => `"${column}"`).join(",")} from "users"`);
-    const { rows: localUsers } = await local.query(`select "id", lower("email") email from "users"`);
+    const { rows: localUsers } = await local.query(`select "id", lower("email") email, "phone" from "users"`);
     const localIds = new Set(localUsers.map((row) => String(row.id)));
     const localByEmail = new Map(localUsers.filter((row) => row.email).map((row) => [String(row.email), String(row.id)]));
+    // Phone sign-in users have no email: a local login on the same phone is the same person.
+    const localByPhone = new Map(localUsers.filter((row) => row.phone).map((row) => [String(row.phone), String(row.id)]));
     const userIdMap = new Map<string, string>();
     const updateColumns = userColumns.filter((column) => column !== "id");
     for (const user of productionUsers) {
       const productionId = String(user.id);
       const email = typeof user.email === "string" ? user.email.toLowerCase() : null;
-      const localId = localIds.has(productionId) ? productionId : (email ? localByEmail.get(email) : undefined);
+      const phone = typeof user.phone === "string" && user.phone ? user.phone : null;
+      const localId = localIds.has(productionId)
+        ? productionId
+        : (email ? localByEmail.get(email) : undefined) ?? (phone ? localByPhone.get(phone) : undefined);
       if (localId) {
         await local.query(
           `UPDATE "users" SET ${updateColumns.map((column, index) => `"${column}"=$${index + 1}`).join(",")} WHERE "id"=$${updateColumns.length + 1}`,
@@ -195,6 +200,7 @@ async function copy(prod: pg.Client, local: pg.Client) {
       );
       localIds.add(productionId);
       if (email) localByEmail.set(email, productionId);
+      if (phone) localByPhone.set(phone, productionId);
       userIdMap.set(productionId, productionId);
     }
 

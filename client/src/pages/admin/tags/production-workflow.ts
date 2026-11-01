@@ -39,9 +39,19 @@ export function printQuantity(raw: string, copies: number, serialized: boolean) 
 
 const OPEN_STATUSES: readonly string[] = ["requested", "building", "ready", "printing"];
 
-/** A request is open until every plate is printed (marking a plate printed also puts its pieces in stock). */
+/**
+ * A request needs action until the last attempt of each plate is printed or cancelled (marking a plate printed also
+ * puts its pieces in stock). A failed plate does too: its pieces are still pending until it is printed again or
+ * cancelled. A plate printed again keeps its failed attempt in the list, which no longer counts.
+ */
 export function productionNeedsAction(request: Pick<PrintRequestItem, "open" | "plates">): boolean {
-  return request.open || request.plates.some((plate) => OPEN_STATUSES.includes(plate.status));
+  if (request.open) return true;
+  const latest = new Map<number, Pick<PrintJobItem, "status" | "createdAt">>();
+  for (const plate of request.plates) {
+    const seen = latest.get(plate.plateNumber);
+    if (!seen || plate.createdAt >= seen.createdAt) latest.set(plate.plateNumber, plate);
+  }
+  return Array.from(latest.values()).some((plate) => OPEN_STATUSES.includes(plate.status) || plate.status === "failed");
 }
 
 /** The next operation, independent of which screen opened the order: 0 prepare, 1 print, 2 done. */

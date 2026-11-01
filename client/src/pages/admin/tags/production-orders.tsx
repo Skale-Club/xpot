@@ -26,7 +26,8 @@ export function PrintDialog({ model, onClose, onOrdered }: { model: PrintModelIt
 }
 export function RequestList({ filter, model, organization, go, emptyHint }: { filter: JobFilter; model?: string; organization?: number; go: Go; emptyHint?: string }) {
   const t = useT(productionMessages);
-  const { data, isLoading, error, refetch } = usePrintRequests(filter, model, organization);
+  // Every request, sorted here: a failed plate's request needs action although the server no longer counts it open.
+  const { data, isLoading, error, refetch } = usePrintRequests("all", model, organization);
   // Whose request it is, once more than one organization prints (a branch only ever sees its own).
   const { organizations } = useProductionAccess();
   const showOrganization = organizations.length > 1;

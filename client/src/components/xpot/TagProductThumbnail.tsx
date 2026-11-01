@@ -254,11 +254,14 @@ export function TagPieceVisual({
   theme,
   batchCode,
   modelSlug,
+  still = false,
 }: {
   productType: string;
   face: string | null | undefined;
   size?: keyof typeof SIZES;
   title?: string;
+  /** A picture only (no turning, no tap to open): for a piece inside a button that does something else. */
+  still?: boolean;
   theme?: string | null;
   batchCode?: string | null;
   modelSlug?: string | null;
@@ -271,7 +274,7 @@ export function TagPieceVisual({
   );
   return (
     <span className={`inline-flex shrink-0 items-center justify-center ${VISUAL_SLOT[size]}`} title={title}>
-      {model ? <PieceThumb3D model={model} px={VISUAL_SLOT_PX[size]} fallback={flat} /> : flat}
+      {model ? <PieceThumb3D model={model} px={VISUAL_SLOT_PX[size]} fallback={flat} still={still} /> : flat}
     </span>
   );
 }

@@ -6,6 +6,7 @@ import {
   PRINT_FILE_MAX_BYTES,
   PRINT_JOB_STATUSES,
   PRINT_PREVIEW_CONTENT_TYPE,
+  printGenerateSchema,
   printJobCreateSchema,
   printJobStockSchema,
   printJobUpdateSchema,
@@ -76,6 +77,8 @@ function narrowed(scope: production.ProductionScope, organization: number | unde
   if (organization === undefined) return scope;
   return scope === null || scope.includes(organization) ? [organization] : [];
 }
+
+const partFileQuery = z.object({ bed: z.string().trim().min(1).max(40).optional() }).strict();
 
 const claimSchema = z.object({ jobId: z.string().uuid().nullable().optional() }).strict();
 
@@ -176,6 +179,17 @@ export function registerProductionRoutes(app: Express, deps: { device: readonly 
     }
   });
 
+  // An always-ready piece (a part's fixed file on its current version): ?bed= picks the bed, else the first with a
+  // file. Nothing is recorded; the piece is printed by hand whenever it is needed.
+  app.get(`${models}/:ref/print-file`, requireTagAdmin, async (req, res) => {
+    try {
+      const { bed } = partFileQuery.parse(req.query);
+      await redirectToSigned(res, await production.partFileRef(req.params.ref, bed ?? null));
+    } catch (err) {
+      fail(res, err, "Failed to open the print file");
+    }
+  });
+
   // A version's 3D preview (a .glb of one sample piece): replaced at any time; streamed by the server, so the
   // viewer loads it from this origin.
   app.post(`${models}/:ref/versions/:versionId/preview`, requireTagAdmin, rawFile, async (req, res) => {
@@ -250,6 +264,16 @@ export function registerProductionRoutes(app: Express, deps: { device: readonly 
       res.status(201).json(await production.createJob(printJobCreateSchema.parse(req.body), userIdOf(req), "admin", productionScopeOf(req)));
     } catch (err) {
       fail(res, err, "Failed to create the print order");
+    }
+  });
+
+  // Generate pieces from the Production page's questions: product, colour, face and how many. The answer is the
+  // request with its plates, like POST print-jobs (a branch's Rep Admin generates its own branch's pieces).
+  app.post("/api/xpot/admin/print-generate", requireProductionUser, async (req, res) => {
+    try {
+      res.status(201).json(await production.generatePieces(printGenerateSchema.parse(req.body), userIdOf(req), "admin", productionScopeOf(req)));
+    } catch (err) {
+      fail(res, err, "Failed to generate the pieces");
     }
   });
 
