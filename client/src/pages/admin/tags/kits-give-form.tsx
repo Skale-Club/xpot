@@ -21,7 +21,7 @@ import { manageTagsMessages } from "@/i18n/messages/manageTags";
 import { manageTagsBatchesMessages } from "@/i18n/messages/manageTagsBatches";
 import { adminTagsFlowMessages } from "@/i18n/messages/adminTagsFlow";
 import { errorMessage, invalidateAdminTags, sendJson } from "./api";
-import { ResellerSelect, useResellers, type Reseller } from "./batches-shared";
+import { ResellerSelect, useHandOutRecipients, useResellers, type Reseller } from "./batches-shared";
 import { useBatchOptions } from "./pieces-shared";
 import { PackingListDialog } from "./kits-list";
 import { useTagLabels } from "./labels";
@@ -118,7 +118,9 @@ export function HandOutFlow() {
   const tb = useT(manageTagsBatchesMessages);
   const tm = useT(manageTagsMessages);
   const labels = useTagLabels();
-  const { data: reps = [] } = useResellers();
+  const { data: ownReps = [] } = useResellers();
+  const { data: linkedReps = [] } = useHandOutRecipients();
+  const reps = useMemo(() => [...ownReps, ...linkedReps], [ownReps, linkedReps]);
   const { data: batches = [] } = useBatchOptions();
   const url = useUrlFilters({ batch: "" });
   const [repId, setRepId] = useState<number | null>(null);
@@ -212,7 +214,7 @@ export function HandOutFlow() {
     <div className="space-y-3" data-testid="admin-tags-hand-out">
       <Step n={1} title={t("stepReseller")} done={!!rep} testId="handout-step-reseller">
         <Field label={tm("colReseller")}>
-          <ResellerSelect value={repId} onChange={setRepId} />
+          <ResellerSelect value={repId} onChange={setRepId} extra={linkedReps} />
         </Field>
         {rep ? <ResellerCard rep={rep} /> : null}
       </Step>

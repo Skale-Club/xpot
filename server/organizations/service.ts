@@ -12,8 +12,10 @@ import {
   users,
 } from "#shared/schema.js";
 import {
+  COMPANY_ORGANIZATION_SLUG,
   canManageOrganization,
   canViewOrganization,
+  type Distribution,
   isPersonalOrganization,
   managesEveryOrganization,
   type OrganizationAccess,
@@ -206,6 +208,7 @@ export async function listOrganizations(actor: OrganizationActor) {
     slug: organizations.slug,
     isActive: organizations.isActive,
     printsOwnPieces: organizations.printsOwnPieces,
+    distribution: organizations.distribution,
     createdByUserId: organizations.createdByUserId,
     createdAt: organizations.createdAt,
     updatedAt: organizations.updatedAt,
@@ -293,13 +296,23 @@ export async function createOrganization(input: { name: string; repAdminId: numb
 
 export async function updateOrganization(
   organizationId: number,
-  input: { name?: string; isActive?: boolean; printsOwnPieces?: boolean },
+  input: { name?: string; isActive?: boolean; printsOwnPieces?: boolean; distribution?: Distribution },
   actor: OrganizationActor,
 ) {
   if (!managesEveryOrganization(actor)) throw new OrganizationError("Only an Xpot admin or a manager can do this.", 403, "manager_required");
   // Production is the owners' (docs/organizations-execution-plan.md): only they let a branch print its own pieces.
   if (input.printsOwnPieces !== undefined && !actor.user.isAdmin) throw new OrganizationError("Only an Xpot admin can do this.", 403, "admin_required");
-  await assertOrganizationAccess(actor, organizationId, true);
+  if (input.distribution !== undefined && !actor.user.isAdmin) throw new OrganizationError("Only an Xpot admin can do this.", 403, "admin_required");
+  const { organization } = await assertOrganizationAccess(actor, organizationId, true);
+  // Who handles a partner's orders (server/tags/distribution.ts): the company is `xpot` by definition, and `own` belongs to
+  // a partner that prints its own pieces (they are what it hands out), so switching printing off takes `own` with it.
+  const distribution = input.distribution ?? organization.distribution;
+  if (distribution === "own" && organization.slug === COMPANY_ORGANIZATION_SLUG) {
+    throw new OrganizationError("The company's orders are always handled by Xpot.", 400, "distribution_company");
+  }
+  if (distribution === "own" && !(input.printsOwnPieces ?? organization.printsOwnPieces)) {
+    throw new OrganizationError("Only a partner that prints its own pieces can handle its own distribution.", 400, "distribution_needs_production");
+  }
   const [updated] = await db.update(organizations).set({ ...input, updatedAt: new Date() })
     .where(eq(organizations.id, organizationId)).returning();
   await audit(organizationId, "organization_updated", actor, null, input);

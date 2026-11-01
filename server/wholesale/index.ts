@@ -11,6 +11,8 @@ import { repModules } from "#shared/modules.js";
 import { stuscleWholesaleOrderSchema } from "#shared/tagSales.js";
 import { recordStuscleOrder } from "../tags/acquisitions.js";
 import { TagSaleError } from "../tags/sales.js";
+import { ordersReachXpot } from "../tags/distribution.js";
+import { distributionForRep } from "../organizations/links.js";
 
 // Wholesale prices live in the Stuscle store; Xpot decides who gets them.
 // Every approved rep has a personal code. Stuscle asks Xpot whether a code is
@@ -55,7 +57,8 @@ export async function assignWholesaleCode(repId: number, opts: { onlyIfMissing?:
 
 export type WholesaleVerdict =
   | { valid: true; reseller: { id: number; name: string } }
-  | { valid: false; reason: "unknown" | "inactive" };
+  // `own_distribution`: the buyer's partner handles its own orders (organizations.distribution), so the store is not theirs.
+  | { valid: false; reason: "unknown" | "inactive" | "own_distribution" };
 
 /** Whether a code may buy at wholesale right now. */
 export async function verifyWholesaleCode(input: string): Promise<WholesaleVerdict> {
@@ -67,6 +70,8 @@ export async function verifyWholesaleCode(input: string): Promise<WholesaleVerdi
   // The code buys Tags kits: a rep whose Tags module was switched off keeps the code row but may not use
   // it. "inactive" is the reason Stuscle already handles; a new one could break its side.
   if (!repModules(rep).includes("tags")) return { valid: false, reason: "inactive" };
+  // Orders of people whose partner distributes on its own are not Stuscle's to take, nor ours to fulfil (server/tags/distribution.ts).
+  if (!ordersReachXpot((await distributionForRep(rep.id)).path)) return { valid: false, reason: "own_distribution" };
   return { valid: true, reseller: { id: rep.id, name: rep.displayName } };
 }
 
@@ -130,6 +135,9 @@ export function registerWholesaleRoutes(app: Express) {
       if (!isPlatformAdmin(actor) && !repModules(actor.rep).includes("tags")) {
         return res.status(403).json({ message: "Tags are not enabled for your account." });
       }
+      // People whose partner handles its own distribution have no store link: their pieces come from the partner.
+      const distribution = await distributionForRep(actor.rep.id);
+      if (!ordersReachXpot(distribution.path)) return res.json({ code: null, url: null, partner: distribution.partner?.name ?? null });
       const code = await ensureWholesaleCode(actor.rep.id);
       res.json({ code: formatWholesaleCode(code), url: wholesaleUrl(storeBaseUrl(), code) });
     } catch (err) {

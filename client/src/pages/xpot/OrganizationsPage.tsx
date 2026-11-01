@@ -27,7 +27,8 @@ import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { organizationsMessages } from "@/i18n/messages/organizations";
-import { COMPANY_ORGANIZATION_SLUG } from "@shared/organizations";
+import { COMPANY_ORGANIZATION_SLUG, type Distribution } from "@shared/organizations";
+import { DistributionChoice, OrganizationLinks } from "./OrganizationDistribution";
 import { peopleWorkspaceMessages } from "@/i18n/messages/peopleWorkspace";
 import { shellMessages } from "@/i18n/messages/shell";
 import { tagsMessages } from "@/i18n/messages/tags";
@@ -53,6 +54,8 @@ type Organization = {
   slug: string;
   isActive: boolean;
   printsOwnPieces?: boolean;
+  /** Who handles its orders: Xpot (Stuscle) or the partner (migrations/0070). */
+  distribution?: Distribution;
   membershipRole?: "admin" | "member";
   memberCount?: number;
   personal?: boolean;
@@ -358,7 +361,7 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
             seeAll={platformManager && usesVisits ? { href: `/admin/work/leads?org=${organizationId}`, label: t("seeAllIn", { screen: ts("tabLeads") }), testId: "organization-customers-all" } : undefined}
             render={(row) => <><span className="text-sm font-medium text-white">{row.name}</span><span className="text-xs text-white/45">{lookup(t, `customer_${row.status}`, String(row.status ?? ""))} · {repName(row.ownerRepId)}</span></>} />
         )}
-        {tab === "settings" && <OrganizationSettings key={`${org.name}|${org.isActive}|${org.printsOwnPieces}`} organization={org} mayEdit={platformManager} owner={!!me?.user.isAdmin} />}
+        {tab === "settings" && <OrganizationSettings key={`${org.name}|${org.isActive}|${org.printsOwnPieces}|${org.distribution}`} organization={org} mayEdit={platformManager} owner={!!me?.user.isAdmin} />}
       </div>
 
       <ConfirmDialog
@@ -528,13 +531,18 @@ function OrganizationSettings({ organization, mayEdit, owner }: { organization: 
   const [name, setName] = useState(organization.name);
   const [isActive, setIsActive] = useState(organization.isActive);
   const [prints, setPrints] = useState(!!organization.printsOwnPieces);
+  const [distribution, setDistribution] = useState<Distribution>(organization.distribution ?? "xpot");
+  // The partner handling its own orders hands out the pieces it prints: without printing it is Xpot's again.
+  const savedDistribution = organization.distribution ?? "xpot";
+  const nextDistribution: Distribution = prints ? distribution : "xpot";
   const company = organization.slug === COMPANY_ORGANIZATION_SLUG;
-  const dirty = name.trim() !== organization.name || isActive !== organization.isActive || prints !== !!organization.printsOwnPieces;
+  const dirty = name.trim() !== organization.name || isActive !== organization.isActive || prints !== !!organization.printsOwnPieces || nextDistribution !== savedDistribution;
   const save = useMutation({
     mutationFn: () => json<Organization>("PATCH", `/api/xpot/organizations/${organization.id}`, {
       ...(name.trim() !== organization.name ? { name: name.trim() } : {}),
       ...(isActive !== organization.isActive ? { isActive } : {}),
       ...(prints !== !!organization.printsOwnPieces ? { printsOwnPieces: prints } : {}),
+      ...(nextDistribution !== savedDistribution ? { distribution: nextDistribution } : {}),
     }),
     onSuccess: () => {
       toast({ title: t("orgSaved"), variant: "success" });
@@ -553,8 +561,10 @@ function OrganizationSettings({ organization, mayEdit, owner }: { organization: 
       {!company && (owner || organization.printsOwnPieces) ? (
         <SwitchRow checked={prints} onCheckedChange={setPrints} label={tw("orgPrintsOwnPieces")} hint={tw("orgPrintsOwnPiecesHint")} disabled={!owner} testId="organization-prints-own-pieces" />
       ) : null}
+      {!company && prints ? <DistributionChoice value={distribution} onChange={setDistribution} disabled={!owner} /> : null}
+      {!company && owner && savedDistribution === "own" && prints ? <OrganizationLinks organizationId={organization.id} /> : null}
       {mayEdit && (
-        <FormFooter dirty={dirty} onCancel={dirty ? () => { setName(organization.name); setIsActive(organization.isActive); setPrints(!!organization.printsOwnPieces); } : undefined}>
+        <FormFooter dirty={dirty} onCancel={dirty ? () => { setName(organization.name); setIsActive(organization.isActive); setPrints(!!organization.printsOwnPieces); setDistribution(savedDistribution); } : undefined}>
           <Button variant="brand" onClick={() => save.mutate()} disabled={!dirty || !name.trim()} loading={save.isPending}>{tc("save")}</Button>
         </FormFooter>
       )}

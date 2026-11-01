@@ -13,11 +13,19 @@ export function WholesaleCard() {
   const tc = useT(commonMessages);
   const { data } = useQuery({
     queryKey: ["/api/xpot/wholesale"],
-    queryFn: () => tagsGet<{ code: string; url: string }>("/api/xpot/wholesale"),
+    queryFn: () => tagsGet<{ code: string | null; url: string | null; partner?: string | null }>("/api/xpot/wholesale"),
     staleTime: 5 * 60_000,
     retry: false,
   });
   if (!data) return null;
+  // Whose partner handles its own distribution (organizations.distribution = own) has no store: the pieces come from the partner.
+  if (data.code === null || data.url === null) {
+    return data.partner ? (
+      <section className="rounded-2xl border border-violet-400/20 bg-violet-500/[0.06] p-4 text-sm text-white/75" data-testid="wholesale-partner">
+        {t("wholesalePartner", { name: data.partner })}
+      </section>
+    ) : null;
+  }
   return (
     <section className="rounded-2xl border border-violet-400/20 bg-gradient-to-br from-violet-500/[0.10] to-fuchsia-600/[0.05] p-4 lg:flex lg:items-center lg:gap-6 lg:p-5" data-testid="wholesale-card">
       <div className="flex items-start gap-3 lg:min-w-0 lg:flex-1 lg:items-center">
