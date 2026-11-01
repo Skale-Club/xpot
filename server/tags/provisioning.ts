@@ -2,6 +2,7 @@ import crypto from "crypto";
 import { and, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { db } from "../db.js";
 import {
+  tagBatches,
   tagEvents,
   tagProvisioningDevices,
   tagProvisioningEvents,
@@ -30,6 +31,19 @@ import type {
 } from "#shared/tagsApi.js";
 import { TagError } from "./repository.js";
 import { recordJourney } from "./journey.js";
+import { companyOrganizationId } from "../organizations/service.js";
+
+/**
+ * Whose chips a writer writes: the organization that made the piece (its batch's, the company's without one), not
+ * where the piece is now. A kit moves a piece to a rep's organization; the company's writer still writes its chip.
+ */
+async function makerOrganizationId(tx: DbOrTx, tag: { batchId: string | null }): Promise<number> {
+  if (tag.batchId) {
+    const [batch] = await tx.select({ organizationId: tagBatches.organizationId }).from(tagBatches).where(eq(tagBatches.id, tag.batchId));
+    if (batch) return batch.organizationId;
+  }
+  return companyOrganizationId();
+}
 
 // Server side of the desktop NFC provisioner. Xpot owns every decision:
 // which URL a chip must hold, whether a write counts as verified, and which
@@ -233,8 +247,8 @@ export async function createJob(tagId: string, userId: string | null, baseUrl: s
         .from(tagProvisioningDevices)
         .where(eq(tagProvisioningDevices.id, targetDeviceId));
       if (device?.status !== "active") throw new TagError("That provisioner is not paired or was revoked", 409);
-      // A writer only takes its own organization's pieces (claimNextJob): one of another would never be written.
-      if (device.organizationId !== tag.organizationId) throw new TagError("That provisioner works for another organization", 409, "provisioner_other_organization");
+      // A writer only takes the pieces its organization made (claimNextJob): one of another would never be written.
+      if (device.organizationId !== await makerOrganizationId(tx, tag)) throw new TagError("That provisioner works for another organization", 409, "provisioner_other_organization");
     }
     const previous = await tx
       .update(tagProvisioningJobs)
@@ -301,11 +315,12 @@ async function toClaimed(tx: DbOrTx, job: TagProvisioningJob): Promise<ClaimedJo
 /**
  * Device: the job to work on next. A job this device already holds comes back
  * first (app restarted mid-job); otherwise the oldest pending job addressed to
- * this device or to any device, for a piece of the device's own organization.
+ * this device or to any device, for a piece the device's organization made.
  * SKIP LOCKED keeps two devices from racing.
  */
 export async function claimNextJob(device: { id: string; organizationId: number }): Promise<ClaimedJob | null> {
   const deviceId = device.id;
+  const companyId = await companyOrganizationId();
   await expireStaleJobs();
   return db.transaction(async (tx) => {
     const [held] = await tx
@@ -325,7 +340,8 @@ export async function claimNextJob(device: { id: string; organizationId: number 
       .where(and(
         eq(tagProvisioningJobs.status, "pending"),
         or(isNull(tagProvisioningJobs.targetDeviceId), eq(tagProvisioningJobs.targetDeviceId, deviceId)),
-        sql`${tagProvisioningJobs.tagId} IN (SELECT t.id FROM tags t WHERE t.organization_id = ${device.organizationId})`,
+        sql`${tagProvisioningJobs.tagId} IN (SELECT t.id FROM tags t LEFT JOIN tag_batches b ON b.id = t.batch_id
+          WHERE COALESCE(b.organization_id, ${companyId}) = ${device.organizationId})`,
       ))
       .orderBy(tagProvisioningJobs.createdAt)
       .limit(1)

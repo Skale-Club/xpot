@@ -906,6 +906,12 @@ describe("production per organization", () => {
     const pointed = await request(admin(), "POST", `/api/xpot/admin/tags/${bostonPiece.id}/provisioning-jobs`, { deviceId: nyDevices[0].id });
     expect(pointed.status).toBe(409);
     expect(pointed.body.code).toBe("provisioner_other_organization");
+    // Handed out in a kit, a Boston piece moves to the rep's organization: Boston's writer still writes its chip.
+    await q("UPDATE tags SET organization_id = $1 WHERE id = $2", [ids.miami, bostonPiece.id]);
+    const bostonWriter = await pairDevice(admin(), "Boston writer");
+    const claimed = await request(admin(), "POST", "/api/provisioner/jobs/claim", {}, bostonWriter);
+    expect(claimed.status).toBe(200);
+    expect(claimed.body.tagId).toBe(bostonPiece.id);
   });
 
   it("lets only the admin switch a branch to printing its own pieces", async () => {
