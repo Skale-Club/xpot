@@ -7,6 +7,7 @@ import { tagSystemReason } from "#shared/tagReasons.js";
 import { TagError } from "./errors.js";
 import { journeyContext, recordJourney } from "./journey.js";
 import { receivedCountOf, setTagRep } from "./repository.js";
+import { organizationHasTeam } from "../organizations/service.js";
 
 // Custody from the phone (docs/TAG_CUSTODY_EXECUTION_PLAN.md, phase 1):
 // receive a piece that was printed but never received, into the house's stock
@@ -106,5 +107,7 @@ export async function returnPieceToHouse(id: string, actor: TagActor): Promise<T
   if (!tag) throw new TagError("Tag not found", 404, "tag_not_found");
   if (pieceAccess(actor, tag) !== "full") throw new TagError("This piece is not in your kit.", 403, "tag_not_yours");
   if (tag.repId === null) throw new TagError("This piece is already in house stock", 409, "tag_already_house");
-  return setTagRep(id, null, actor.userId, "field", tagSystemReason("returned_field"));
+  // On a team the piece stays with the organization (its owner hands it out again); someone selling alone returns it to the company.
+  const house = actor.managedOrganizationIds?.includes(tag.organizationId) || await organizationHasTeam(tag.organizationId) ? tag.organizationId : undefined;
+  return setTagRep(id, null, actor.userId, "field", tagSystemReason("returned_field"), house);
 }

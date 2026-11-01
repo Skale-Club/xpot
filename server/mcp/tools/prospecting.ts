@@ -30,7 +30,7 @@ async function repForCaller(caller: McpCaller) {
   if (!rep) throw new ProspectingServiceError("The MCP user has no Xpot representative profile.", 403);
   const denial = accessDenial(rep);
   if (denial) throw new ProspectingServiceError(denial.message, 403);
-  if (!repModules(rep).includes("visits") && !["manager", "admin"].includes(rep.role)) {
+  if (!repModules(rep).includes("visits") && rep.role !== "admin") {
     throw new ProspectingServiceError("Visits are not enabled for this Xpot account.", 403);
   }
   return rep;

@@ -4,7 +4,7 @@ import { and, desc, eq, ilike, lt, or, sql, type SQL } from "drizzle-orm";
 import { db } from "../../db.js";
 import { prospectingJobs, prospectingRuns, salesReps, systemEvents, type SystemEvent } from "#shared/schema.js";
 import type { SystemEventDetail, SystemEventRow } from "#shared/system-health.js";
-import { getCurrentSessionUser, requireSuperAdmin, requireXpotManager } from "./middleware.js";
+import { getCurrentSessionUser, requireSuperAdmin, requirePlatformAdmin } from "./middleware.js";
 import { systemHealthSnapshot, toRecentRun } from "../../observability/health.js";
 import { recordSystemEvent } from "../../observability/events.js";
 import { listSyncProblems } from "../../observability/syncProblems.js";
@@ -36,8 +36,8 @@ const clientErrorSchema = z.object({
 /** Admin › System health: the app's own errors and whether the prospecting pipeline is moving. */
 export function createSystemHealthRouter() {
   const router = Router();
-  router.use("/admin/system-health", requireXpotManager, requireSuperAdmin);
-  router.use("/admin/system-events", requireXpotManager, requireSuperAdmin);
+  router.use("/admin/system-health", requirePlatformAdmin, requireSuperAdmin);
+  router.use("/admin/system-events", requirePlatformAdmin, requireSuperAdmin);
 
   router.get("/admin/system-health", async (_req, res) => {
     res.set("Cache-Control", "no-store").json(await systemHealthSnapshot());

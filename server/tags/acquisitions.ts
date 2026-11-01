@@ -1,7 +1,7 @@
 import { createHash } from "crypto";
 import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "../db.js";
-import { organizationIdForRep } from "../organizations/service.js";
+import { companyOrganizationId, organizationIdForRep } from "../organizations/service.js";
 import {
   salesProducts,
   salesReps,
@@ -36,6 +36,8 @@ async function acquisitionView(id: string) {
 
 export async function recordStuscleOrder(input: StuscleWholesaleOrderInput, repId: number) {
   const hash = payloadHash(input);
+  // The buyer's organization when they bought: its owner follows the order (they don't approve it; payment is Stuscle's).
+  const organizationId = await organizationIdForRep(repId);
   const acquisitionId = await db.transaction(async (tx) => {
     const [existing] = await tx
       .select()
@@ -65,6 +67,7 @@ export async function recordStuscleOrder(input: StuscleWholesaleOrderInput, repI
 
     const [acquisition] = await tx.insert(tagAcquisitions).values({
       repId,
+      organizationId,
       source: "stuscle",
       externalRef: input.externalOrderId,
       externalPayloadHash: hash,
@@ -106,6 +109,7 @@ async function lockFulfillmentTags(tx: Tx, rawCodes: string[]) {
       ownershipType: tags.ownershipType,
       custodianRepId: tags.custodianRepId,
       repId: tags.repId,
+      organizationId: tags.organizationId,
       batchId: tags.batchId,
       ownProductId: tags.salesProductId,
       batchProductId: tagBatches.salesProductId,
@@ -115,7 +119,9 @@ async function lockFulfillmentTags(tx: Tx, rawCodes: string[]) {
     .where(inArray(tags.publicCode, normalized))
     .for("update");
   if (rows.length !== normalized.length) throw new TagSaleError("One or more pieces were not found", 404, "tag_not_found");
-  const unavailable = rows.filter((tag) => tag.status !== "inventory" || tag.stockStatus !== "available" || tag.repId !== null);
+  // Orders are fulfilled from the company's stock: another organization's house pieces are not ours to hand over.
+  const companyId = await companyOrganizationId();
+  const unavailable = rows.filter((tag) => tag.status !== "inventory" || tag.stockStatus !== "available" || tag.repId !== null || tag.organizationId !== companyId);
   if (unavailable.length) throw new TagSaleError(`Not in house stock: ${unavailable.map((tag) => tag.publicCode).join(", ")}`, 409, "tag_not_house_stock", { codes: unavailable.map((tag) => tag.publicCode).join(", ") });
   return rows;
 }
@@ -181,13 +187,16 @@ export async function fulfillAcquisition(acquisitionId: string, codes: string[],
       matches.forEach((tag) => remaining.delete(tag.id));
     }
     if (remaining.size) throw new TagSaleError("Some selected pieces do not match any acquisition line", 409, "acquisition_product_mismatch");
-    await tx.update(tagAcquisitions).set({ status: "fulfilled", kitId: kit.id, updatedAt: new Date() }).where(eq(tagAcquisitions.id, acquisition.id));
+    await tx.update(tagAcquisitions).set({ status: "fulfilled", kitId: kit.id, fulfilledFromOrganizationId: await companyOrganizationId(), updatedAt: new Date() }).where(eq(tagAcquisitions.id, acquisition.id));
   });
   return acquisitionView(acquisitionId);
 }
 
-export async function listAcquisitions(repId?: number) {
-  const conditions = repId ? eq(tagAcquisitions.repId, repId) : undefined;
+export async function listAcquisitions(filter: { repId?: number; organizationIds?: readonly number[] | null } = {}) {
+  const conditions = and(
+    filter.repId ? eq(tagAcquisitions.repId, filter.repId) : undefined,
+    filter.organizationIds ? inArray(tagAcquisitions.organizationId, [...filter.organizationIds]) : undefined,
+  );
   const acquisitions = await db.select().from(tagAcquisitions).where(conditions).orderBy(desc(tagAcquisitions.purchasedAt));
   if (!acquisitions.length) return [];
   const lines = await db.select().from(tagAcquisitionLines).where(inArray(tagAcquisitionLines.acquisitionId, acquisitions.map((item) => item.id)));

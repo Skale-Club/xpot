@@ -293,6 +293,9 @@ export const tagDirectWrites = pgTable("tag_direct_writes", {
 export const tagAcquisitions = pgTable("tag_acquisitions", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   repId: integer("rep_id").notNull().references(() => salesReps.id),
+  // The buyer's organization when they bought, and whose stock the order was separated from (migrations/0068).
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: "restrict" }),
+  fulfilledFromOrganizationId: integer("fulfilled_from_organization_id").references(() => organizations.id, { onDelete: "restrict" }),
   kitId: uuid("kit_id").references(() => tagKits.id, { onDelete: "set null" }),
   source: text("source").notNull(),
   externalRef: text("external_ref"),

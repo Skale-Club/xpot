@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { storage } from "../../storage.js";
-import { requireXpotUser, ensureXpotRep, isManagerOrAdmin, listsEveryone, canAccessLead, loadAccessibleLead, type XpotActor } from "./middleware.js";
+import { requireXpotUser, ensureXpotRep, isPlatformAdmin, listsEveryone, canAccessLead, loadAccessibleLead, type XpotActor } from "./middleware.js";
 import { syncOpportunityToGhl } from "./helpers.js";
 import { xpotOpportunityCreateSchema, xpotOpportunityUpdateSchema } from "#shared/xpot.js";
 import { getGHLPipelines } from "../../integrations/ghl.js";
@@ -54,7 +54,7 @@ export function createOpportunitiesRouter() {
       if (!visit || visit.leadId !== lead.id) {
         return res.status(400).json({ code: "visit_mismatch", message: "Visit does not belong to this lead" });
       }
-      if (!isManagerOrAdmin(actor!) && visit.repId !== actor!.rep.id) {
+      if (!isPlatformAdmin(actor!) && visit.repId !== actor!.rep.id) {
         return res.status(403).json({ code: "access_denied", message: "Access denied" });
       }
     }
@@ -103,7 +103,7 @@ export function createOpportunitiesRouter() {
     if (!existing) {
       return res.status(404).json({ message: "Opportunity not found" });
     }
-    if (!isManagerOrAdmin(actor!) && existing.repId !== actor!.rep.id) {
+    if (!isPlatformAdmin(actor!) && existing.repId !== actor!.rep.id) {
       return res.status(403).json({ message: "Access denied" });
     }
 

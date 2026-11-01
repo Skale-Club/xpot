@@ -64,7 +64,7 @@ type Member = {
   displayName: string;
   email?: string | null;
   phone?: string | null;
-  platformRole: "rep" | "manager" | "admin";
+  platformRole: "rep" | "admin";
   membershipRole: "admin" | "member";
   isActive: boolean;
   blockedAt?: string | null;
@@ -88,7 +88,7 @@ function lookup(t: (key: never) => string, key: string, fallback: string) {
   return text === key ? fallback : text;
 }
 
-const isPlatformManager = (me: XpotMeResponse | undefined) => !!me && (me.user.isAdmin || me.rep.role === "manager");
+const isPlatformManager = (me: XpotMeResponse | undefined) => !!me && me.user.isAdmin;
 
 export function OrganizationsPage({ organizationId }: { organizationId?: number }) {
   return organizationId ? <OrganizationWorkspace organizationId={organizationId} /> : <OrganizationsList />;

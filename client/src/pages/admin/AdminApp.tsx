@@ -52,7 +52,7 @@ export function AdminApp({ section }: { section: string }) {
   const organizationOnly = managementReach(me) === "organization";
   // A printing branch's Rep Admin reaches Production (and the batches it opens) for that branch, nothing else of Tags.
   const branchProduction = organizationOnly && printsForABranch(me) && /^\/admin\/tags\/(?:production|batches|provisioners)(?:\/|$)/.test(location);
-  const allowed = !!me && (me.user.isAdmin || ["admin", "manager"].includes(me.rep.role) || (active === "work" && organizationOnly) || (active === "tags" && branchProduction));
+  const allowed = !!me && (me.user.isAdmin || (active === "work" && organizationOnly) || (active === "tags" && branchProduction));
   if (!me || !allowed) {
     const exit = me ? homeForModules(modules) : "/";
     return <AppBackground><div className="mx-auto w-full max-w-md px-4 pb-20 pt-6"><PageHeader backHref={exit} backLabel={me ? tm("backToApp") : tc("goToSignIn")} title={tm("accessRestricted")} /><EmptyState tone="red" icon={ShieldAlert} title={me ? tm("noAdminPermission") : tm("signInToContinue")} action={<Button variant="secondary" onClick={() => navigate(exit)}>{me ? tm("backToApp") : tc("goToSignIn")}</Button>} /></div></AppBackground>;

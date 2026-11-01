@@ -32,7 +32,7 @@ export const resellerAccountSchema = z.object({
   phone: phoneField,
   countryCode: countryCodeField,
   team: z.string().trim().max(60).optional().nullable(),
-  role: z.enum(["rep", "manager", "admin"]).default("rep"),
+  role: z.enum(["rep", "admin"]).default("rep"),
   modules: z.array(z.enum(XPOT_MODULES)).min(1).default([...XPOT_MODULES]),
   costPolicy: z.enum(["zero", "acquisition"]).default("acquisition"),
 }).strict();
@@ -71,8 +71,6 @@ export async function createResellerAccount(
   options: { createOrganization?: boolean } = {},
 ): Promise<SalesRep> {
   if (input.role === "admin" && !actor.isAdmin) throw new AccountError("Only an Xpot admin can create another Xpot admin.", 403, "admin_create_admin_only");
-  // As with editing a role (POST /admin/reps): a manager hands out plain rep access only.
-  if (input.role === "manager" && !actor.isAdmin) throw new AccountError("Only an Xpot admin can create a manager.", 403, "manager_create_admin_only");
   const phone = parsePhone(input.phone, input.countryCode);
   await assertPhoneFree(phone);
   const { firstName, lastName } = splitName(input.displayName);

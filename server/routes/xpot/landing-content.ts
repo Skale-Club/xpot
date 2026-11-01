@@ -6,7 +6,7 @@ import {
   type LandingContentResponse,
 } from "#shared/landingContent.js";
 import { storage } from "../../storage.js";
-import { requireSuperAdmin, requireXpotManager } from "./middleware.js";
+import { requireSuperAdmin, requirePlatformAdmin } from "./middleware.js";
 import { sendValidationError } from "../../lib/validation.js";
 
 function present(locale: (typeof LANDING_LOCALES)[number], row: Awaited<ReturnType<typeof storage.getLandingPageContent>>): LandingContentResponse {
@@ -36,7 +36,7 @@ export function createLandingContentPublicRouter() {
 /** Global-admin publishing API. Managers cannot read drafts or overwrite copy. */
 export function createLandingContentAdminRouter() {
   const router = Router();
-  router.use("/admin/landing-content", requireXpotManager, requireSuperAdmin);
+  router.use("/admin/landing-content", requirePlatformAdmin, requireSuperAdmin);
 
   router.get("/admin/landing-content", async (_req, res) => {
     const rows = await storage.listLandingPageContents();

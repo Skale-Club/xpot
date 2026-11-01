@@ -1,5 +1,5 @@
 import { randomBytes } from "crypto";
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql, isNull } from "drizzle-orm";
 import { db } from "../db.js";
 import {
   organizationAuditLog,
@@ -68,6 +68,16 @@ export async function printingOrganizationIds(organizationIds: readonly number[]
 export async function printingOrganization(organizationId: number): Promise<boolean> {
   if (organizationId === await companyOrganizationId()) return true;
   return (await printingOrganizationIds([organizationId])).length > 0;
+}
+
+/** More than one active person: a real team, not somebody's one-person workspace. */
+export async function organizationHasTeam(organizationId: number): Promise<boolean> {
+  const members = await db.select({ id: organizationMemberships.id }).from(organizationMemberships).where(and(
+    eq(organizationMemberships.organizationId, organizationId),
+    eq(organizationMemberships.isActive, true),
+    isNull(organizationMemberships.blockedAt),
+  )).limit(2);
+  return members.length > 1;
 }
 
 /** New operational records follow the Rep's active Organization. */

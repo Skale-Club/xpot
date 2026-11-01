@@ -1,13 +1,13 @@
 import type { NextFunction, Request, Response } from "express";
 import type { TagActor } from "#shared/tagAccess.js";
 import { repModules } from "#shared/modules.js";
-import { accessDenial, ensureXpotRep, isManagerOrAdmin, viewsAsRep } from "../routes/xpot/middleware.js";
+import { accessDenial, ensureXpotRep, isPlatformAdmin, viewsAsRep } from "../routes/xpot/middleware.js";
 import { membershipsForRep, printingOrganizationIds } from "../organizations/service.js";
 import type { ProductionScope } from "./production.js";
 
 // Who is acting on the Tags API. Built from Xpot's own rep identity, read from
 // the database on every request, so switching a reseller off takes effect at
-// once. Unlike requireXpotManager, managers must also be active here.
+// once. Unlike requirePlatformAdmin, managers must also be active here.
 
 export type { TagActor };
 
@@ -22,7 +22,7 @@ async function loadActor(req: Request, res: Response): Promise<(TagActor & { isA
     res.status(403).json(denial);
     return null;
   }
-  const isManager = isManagerOrAdmin(found);
+  const isManager = isPlatformAdmin(found);
   if (!isManager && !repModules(found.rep).includes("tags")) {
     res.status(403).json({ message: "Tags are not enabled for your account." });
     return null;
@@ -62,13 +62,21 @@ export async function requireTagUser(req: Request, res: Response, next: NextFunc
   }
 }
 
-/** Active manager or admin. */
+/**
+ * Whose pieces a management request may touch: null = every organization (the platform's owners), otherwise the
+ * organizations this person owns. After requireTagManager, as `tagScopeOf(req)`.
+ */
+export type TagScope = readonly number[] | null;
+
+/** Tags management: the platform's owners, or the owner of an organization, for that organization only. */
 export async function requireTagManager(req: Request, res: Response, next: NextFunction) {
   try {
     const actor = await loadActor(req, res);
     if (!actor) return;
-    if (!actor.isManager) return res.status(403).json({ message: "Manager access required" });
-    (req as Request & { tagActor?: TagActor }).tagActor = asActor(actor);
+    const scope: TagScope = actor.isManager ? null : actor.managedOrganizationIds ?? [];
+    if (scope && !scope.length) return res.status(403).json({ message: "Manager access required" });
+    (req as Request & { tagActor?: TagActor; tagScope?: TagScope }).tagActor = asActor(actor);
+    (req as Request & { tagScope?: TagScope }).tagScope = scope;
     next();
   } catch (err) {
     console.error("[tags] requireTagManager", err);
@@ -118,6 +126,12 @@ export async function requireProductionUser(req: Request, res: Response, next: N
 export function productionScopeOf(req: Request): ProductionScope {
   const scope = (req as Request & { productionScope?: ProductionScope }).productionScope;
   if (scope === undefined) throw new Error("requireProductionUser must run before productionScopeOf");
+  return scope;
+}
+
+export function tagScopeOf(req: Request): TagScope {
+  const scope = (req as Request & { tagScope?: TagScope }).tagScope;
+  if (scope === undefined) throw new Error("requireTagManager must run before tagScopeOf");
   return scope;
 }
 

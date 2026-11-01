@@ -1,4 +1,4 @@
-export type PlatformRole = "admin" | "manager" | "rep";
+export type PlatformRole = "admin" | "rep";
 export type OrganizationRole = "admin" | "member";
 
 export type OrganizationViewer = {
@@ -13,15 +13,13 @@ export type OrganizationAccess = {
   blockedAt?: Date | string | null;
 };
 
-/** The only user-facing platform roles. Rep Admin is an Organization role. */
+/** The only platform roles: the owners, and everyone else. Owner and employee are Organization roles. */
 export function platformRoleOf(viewer: OrganizationViewer): PlatformRole {
-  if (viewer.user.isAdmin) return "admin";
-  return viewer.rep.role === "manager" ? "manager" : "rep";
+  return viewer.user.isAdmin ? "admin" : "rep";
 }
 
 export function managesEveryOrganization(viewer: OrganizationViewer): boolean {
-  const role = platformRoleOf(viewer);
-  return role === "admin" || role === "manager";
+  return viewer.user.isAdmin;
 }
 
 /**

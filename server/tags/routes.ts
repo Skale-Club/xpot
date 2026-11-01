@@ -28,8 +28,8 @@ import {
 import type { TagProvisioningDevice } from "#shared/schema.js";
 import { storage } from "../storage.js";
 import { resolveGoogleApiKey } from "../routes/xpot/google.js";
-import { actorOf, productionScopeOf, requireProductionUser, requireTagAdmin, requireTagManager, requireTagUser } from "./access.js";
-import { viewsAsRep } from "../routes/xpot/middleware.js";
+import { actorOf, productionScopeOf, requireProductionUser, requireTagAdmin, requireTagManager, requireTagUser, tagScopeOf, type TagScope } from "./access.js";
+import { inManagementView, viewsAsRep } from "../routes/xpot/middleware.js";
 import { registerJourneyRoutes } from "./journeyRoutes.js";
 import { createTagRedirectHandler, type PublicTag } from "./publicHandler.js";
 import { buildBatchZip, qrPng, qrSvg } from "./qrAssets.js";
@@ -49,7 +49,7 @@ import { registerShowcaseRoutes } from "./showcase.js";
 import { registerShopCatalogRoutes } from "./shopCatalog.js";
 import { registerProductionRoutes } from "./productionRoutes.js";
 import { salesStorage } from "../storage-sales.js";
-import { companyOrganizationId, printingOrganization } from "../organizations/service.js";
+import { companyOrganizationId, organizationIdForRep, printingOrganization } from "../organizations/service.js";
 
 // Xpot Tags HTTP API. Four audiences:
 //   /q/:code, /n/:code           — public redirects printed/programmed on pieces
@@ -356,7 +356,7 @@ async function configureUrlFor(req: Request, tag: PublicTag): Promise<string | u
   const rep = await storage.getSalesRepByUserId(userId);
   if (!rep?.isActive) return undefined;
   const sess = req.session as { isAdmin?: boolean } | undefined;
-  const isManager = !!sess?.isAdmin || rep.role === "manager" || rep.role === "admin";
+  const isManager = !!sess?.isAdmin;
   if (!canWorkOnTag({ userId, repId: rep.id, isManager }, tag)) return undefined;
   return `${TAGS_APP_PATH}/t/${encodeURIComponent(tag.publicCode)}`;
 }
@@ -481,14 +481,22 @@ export function registerTagRoutes(app: Express) {
       // A reseller's list is their own pieces, whatever filter they send. A manager gets
       // every piece (the admin screens), unless asking for their own: a piece is theirs
       // once it is in their kit or they activated it, not because they can reach it.
-      // Tags have no organization scope: like listScope's `everyone` (routes/xpot/middleware.ts),
-      // only a manager or admin in management mode gets every piece, and ?organizationId= narrows that alone.
+      // As in listScope (routes/xpot/middleware.ts): the platform's owners in management mode get every piece, and
+      // ?organizationId= narrows that; an organization's owner in management mode gets the organizations they run.
       const { mine, organizationId, ...rest } = filters;
+      const managed = actor.managedOrganizationIds ?? [];
+      if (!mine && !actor.isManager && inManagementView(req) && managed.length) {
+        const organizationIds = organizationId !== undefined && managed.includes(organizationId) ? [organizationId] : managed;
+        return res.json(await repo.listTags({ ...rest, organizationIds }));
+      }
       const own = mine || !actor.inManagement;
       // A reseller's pieces in the Organizations they are still active in, as GET /:id
       // allows (canWorkOnTag): leaving one takes its pieces off the list too.
       const organizationIds = actor.isManager ? undefined : actor.organizationIds ?? [];
-      res.json(await repo.listTags(own ? { ...rest, repId: actor.repId, house: undefined, organizationIds } : { ...rest, organizationId }));
+      if (own) return res.json(await repo.listTags({ ...rest, repId: actor.repId, house: undefined, organizationIds }));
+      // House stock never adds up across organizations: unnarrowed, it means the company's.
+      const housePieces = rest.house || rest.metric === "house" || rest.metric === "handOut";
+      res.json(await repo.listTags({ ...rest, organizationId: organizationId ?? (housePieces ? await companyOrganizationId() : undefined) }));
     } catch (err) {
       fail(res, err, "Failed to load tags");
     }
@@ -748,15 +756,37 @@ export function registerTagRoutes(app: Express) {
 
   const adminBase = "/api/xpot/admin/tags";
 
+  /** The scope of a management request, narrowed to one organization if it asks for one it may see. */
+  const narrowedScope = (req: Request, organizationId?: number): TagScope => {
+    const scope = tagScopeOf(req);
+    if (organizationId === undefined) return scope;
+    return scope === null || scope.includes(organizationId) ? [organizationId] : scope;
+  };
+
+  /** Another organization's piece reads as not found. After requireTagManager, on `:id` routes. */
+  const pieceInScope = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const scope = tagScopeOf(req);
+      if (scope === null) return next();
+      const parsed = z.string().uuid().safeParse(req.params.id);
+      const tag = parsed.success ? await repo.getTagRow(parsed.data) : null;
+      if (!tag || !scope.includes(tag.organizationId)) return res.status(404).json({ message: "Tag not found" });
+      next();
+    } catch (err) {
+      fail(res, err, "Failed to verify access");
+    }
+  };
+
   // Journey and plans: admins only (see journeyRoutes.ts).
   registerJourneyRoutes(app);
 
   app.get(`${adminBase}/overview`, requireTagManager, async (req, res) => {
     try {
-      const { timezoneOffset } = z.object({
+      const { timezoneOffset, organizationId } = z.object({
         timezoneOffset: z.coerce.number().int().min(-840).max(840).default(0),
+        organizationId: z.coerce.number().int().positive().optional(),
       }).parse(req.query);
-      res.json(await repo.getOverview(new Date(), timezoneOffset));
+      res.json(await repo.getOverview(new Date(), timezoneOffset, narrowedScope(req, organizationId)));
     } catch (err) {
       fail(res, err, "Failed to load overview");
     }
@@ -767,7 +797,7 @@ export function registerTagRoutes(app: Express) {
     try {
       const q = analyticsQuerySchema.parse(req.query);
       const { from, to } = analyticsWindow(q);
-      res.json(await repo.getAnalytics({ leadId: q.leadId, batchId: q.batchId, repId: q.repId, productType: q.productType }, from, to));
+      res.json(await repo.getAnalytics({ leadId: q.leadId, batchId: q.batchId, repId: q.repId, productType: q.productType, organizations: tagScopeOf(req) }, from, to));
     } catch (err) {
       fail(res, err, "Failed to load analytics");
     }
@@ -777,7 +807,7 @@ export function registerTagRoutes(app: Express) {
   app.get(`${adminBase}/report`, requireTagManager, async (req, res) => {
     try {
       const { from, to } = analyticsWindow(analyticsQuerySchema.parse(req.query));
-      res.json(await getTeamReport(from, to));
+      res.json(await getTeamReport(from, to, tagScopeOf(req)));
     } catch (err) {
       fail(res, err, "Failed to load report");
     }
@@ -793,7 +823,7 @@ export function registerTagRoutes(app: Express) {
     }
   });
 
-  app.patch(`${adminBase}/:id`, requireTagManager, async (req, res) => {
+  app.patch(`${adminBase}/:id`, requireTagManager, pieceInScope, async (req, res) => {
     const id = idParam(req, res);
     if (!id) return;
     try {
@@ -804,7 +834,7 @@ export function registerTagRoutes(app: Express) {
     }
   });
 
-  app.post(`${adminBase}/:id/internal-use`, requireTagManager, async (req, res) => {
+  app.post(`${adminBase}/:id/internal-use`, requireTagManager, pieceInScope, async (req, res) => {
     const id = idParam(req, res);
     if (!id) return;
     try {
@@ -816,7 +846,7 @@ export function registerTagRoutes(app: Express) {
     }
   });
 
-  app.post(`${adminBase}/:id/return-to-stock`, requireTagManager, async (req, res) => {
+  app.post(`${adminBase}/:id/return-to-stock`, requireTagManager, pieceInScope, async (req, res) => {
     const id = idParam(req, res);
     if (!id) return;
     try {
@@ -828,7 +858,7 @@ export function registerTagRoutes(app: Express) {
     }
   });
 
-  app.post(`${adminBase}/:id/damage`, requireTagManager, async (req, res) => {
+  app.post(`${adminBase}/:id/damage`, requireTagManager, pieceInScope, async (req, res) => {
     const id = idParam(req, res);
     if (!id) return;
     try {
@@ -840,7 +870,7 @@ export function registerTagRoutes(app: Express) {
     }
   });
 
-  app.post(`${adminBase}/:id/assign`, requireTagManager, async (req, res) => {
+  app.post(`${adminBase}/:id/assign`, requireTagManager, pieceInScope, async (req, res) => {
     const id = idParam(req, res);
     if (!id) return;
     try {
@@ -849,6 +879,12 @@ export function registerTagRoutes(app: Express) {
         .strict()
         .refine((v) => !!v.leadId !== !!v.leadName, "Send either leadId or leadName")
         .parse(req.body);
+      const scope = tagScopeOf(req);
+      if (scope !== null && target.leadId) {
+        // An organization's owner links its pieces to its own customers.
+        const lead = await storage.getSalesLead(target.leadId);
+        if (!lead || !scope.includes(lead.organizationId)) return res.status(404).json({ code: "lead_not_found", message: "Customer not found" });
+      }
       await repo.assignTag(id, { leadId: target.leadId, leadName: target.leadName ?? undefined }, userIdOf(req), actorOf(req).repId);
       res.json(await repo.getTagDetail(id, tagBaseUrl(), actorOf(req)));
     } catch (err) {
@@ -857,7 +893,7 @@ export function registerTagRoutes(app: Express) {
   });
 
   for (const action of ["unassign", "retire", "restore"] as const) {
-    app.post(`${adminBase}/:id/${action}`, requireTagManager, async (req, res) => {
+    app.post(`${adminBase}/:id/${action}`, requireTagManager, pieceInScope, async (req, res) => {
       const id = idParam(req, res);
       if (!id) return;
       try {
@@ -871,19 +907,26 @@ export function registerTagRoutes(app: Express) {
   }
 
   // Move an unsold, unconfigured piece to another reseller or back to the house (a stock transfer or return).
-  app.patch(`${adminBase}/:id/rep`, requireTagManager, async (req, res) => {
+  app.patch(`${adminBase}/:id/rep`, requireTagManager, pieceInScope, async (req, res) => {
     const id = idParam(req, res);
     if (!id) return;
     try {
       const { repId } = z.object({ repId: z.number().int().positive().nullable() }).strict().parse(req.body);
-      await repo.setTagRep(id, repId, userIdOf(req));
+      const scope = tagScopeOf(req);
+      if (scope !== null) {
+        // An organization's owner moves pieces inside it: to one of its people, or back to its own house stock.
+        if (repId !== null && !scope.includes(await organizationIdForRep(repId))) return res.status(403).json({ code: "organization_member_inactive", message: "This person is not active in this organization." });
+        await repo.setTagRep(id, repId, userIdOf(req), "admin", null, (await repo.getTagRow(id))!.organizationId);
+      } else {
+        await repo.setTagRep(id, repId, userIdOf(req));
+      }
       res.json(await repo.getTagDetail(id, tagBaseUrl(), actorOf(req)));
     } catch (err) {
       fail(res, err, "Failed to change reseller");
     }
   });
 
-  app.get(`${adminBase}/:id/analytics`, requireTagManager, async (req, res) => {
+  app.get(`${adminBase}/:id/analytics`, requireTagManager, pieceInScope, async (req, res) => {
     const id = idParam(req, res);
     if (!id) return;
     try {
@@ -896,7 +939,7 @@ export function registerTagRoutes(app: Express) {
 
   // QR image for one tag (always the QR URL; NFC chips are programmed, not printed).
   for (const format of ["svg", "png"] as const) {
-    app.get(`${adminBase}/:id/qr.${format}`, requireTagManager, async (req, res) => {
+    app.get(`${adminBase}/:id/qr.${format}`, requireTagManager, pieceInScope, async (req, res) => {
       const id = idParam(req, res);
       if (!id) return;
       try {
@@ -921,7 +964,9 @@ export function registerTagRoutes(app: Express) {
         organizationId: z.coerce.number().int().positive().optional(),
       }).parse(req.query);
       // The organization filter is platform management's; viewing as a rep it is ignored, as on the pieces list.
-      res.json(await repo.listKits({ repId, organizationId: actorOf(req).inManagement ? organizationId : undefined }));
+      // An organization's owner only ever gets the kits of the organizations they run.
+      const scope = tagScopeOf(req);
+      res.json(await repo.listKits(scope !== null ? { repId, scope } : { repId, organizationId: actorOf(req).inManagement ? organizationId : undefined }));
     } catch (err) {
       fail(res, err, "Failed to load kits");
     }
@@ -932,6 +977,10 @@ export function registerTagRoutes(app: Express) {
       const input = kitSchema.parse(req.body);
       const rep = await storage.getSalesRep(input.repId);
       if (!rep) return res.status(404).json({ message: "Reseller not found" });
+      // Hand-outs come from the giver's house stock: the company's, or an organization's owner's own, to their own people.
+      const scope = tagScopeOf(req);
+      const targetOrganization = await organizationIdForRep(input.repId);
+      if (scope !== null && !scope.includes(targetOrganization)) return res.status(403).json({ code: "organization_member_inactive", message: "This person is not active in this organization." });
       const policy = rep.costPolicy === "zero" ? "zero" : "acquisition";
       // Acquisition rule: the rep buys the pieces. Zero-cost rule: company stock in the rep's custody (consignment),
       // even when a reference cost is recorded. The person handing out may pick the other ownership for one kit; a
@@ -940,7 +989,7 @@ export function registerTagRoutes(app: Express) {
       if (kitCostRequired(policy, ownershipType) && input.unitCostCents === undefined) {
         return res.status(400).json({ code: "tag_cost_required", message: "Unit acquisition cost is required for this partner" });
       }
-      res.status(201).json(await repo.deliverKit({ ...input, ownershipType }, userIdOf(req)));
+      res.status(201).json(await repo.deliverKit({ ...input, ownershipType, organizationId: targetOrganization, sourceOrganizationId: scope !== null ? targetOrganization : await companyOrganizationId() }, userIdOf(req)));
     } catch (err) {
       fail(res, err, "Failed to deliver kit");
     }
@@ -949,7 +998,10 @@ export function registerTagRoutes(app: Express) {
   app.post("/api/xpot/admin/tag-kits/return", requireTagManager, async (req, res) => {
     try {
       const { codes } = z.object({ codes: codeList }).strict().parse(req.body);
-      res.json(await repo.returnToHouse(codes, userIdOf(req)));
+      const scope = tagScopeOf(req);
+      // Back into the receiver's house stock: the company's, or (an owner running one organization, or the pieces' own) theirs.
+      const house = scope === null ? undefined : scope.length === 1 ? scope[0] : (await repo.getOrganizationOfCode(codes[0]));
+      res.json(await repo.returnToHouse(codes, userIdOf(req), "admin", scope, house ?? undefined));
     } catch (err) {
       fail(res, err, "Failed to return pieces");
     }
@@ -958,7 +1010,7 @@ export function registerTagRoutes(app: Express) {
   // Dry runs for Distribution: per code, whether it can be handed out / taken back now, and why not. Nothing moves.
   app.post("/api/xpot/admin/tag-kits/check", requireTagManager, async (req, res) => {
     try {
-      res.json(await repo.checkHandOut(kitCheckSchema.parse(req.body)));
+      res.json(await repo.checkHandOut(kitCheckSchema.parse(req.body), tagScopeOf(req) ?? [await companyOrganizationId()]));
     } catch (err) {
       fail(res, err, "Failed to check pieces");
     }
@@ -967,7 +1019,7 @@ export function registerTagRoutes(app: Express) {
   app.post("/api/xpot/admin/tag-kits/return/check", requireTagManager, async (req, res) => {
     try {
       const { codes } = z.object({ codes: codeList }).strict().parse(req.body);
-      res.json(await repo.checkTakeBack(codes));
+      res.json(await repo.checkTakeBack(codes, tagScopeOf(req)));
     } catch (err) {
       fail(res, err, "Failed to check pieces");
     }
@@ -978,7 +1030,7 @@ export function registerTagRoutes(app: Express) {
     const id = idParam(req, res);
     if (!id) return;
     try {
-      const items = await repo.getKitItems(id);
+      const items = await repo.getKitItems(id, tagScopeOf(req));
       if (!items) return res.status(404).json({ message: "Kit not found" });
       res.json(items);
     } catch (err) {
@@ -989,13 +1041,14 @@ export function registerTagRoutes(app: Express) {
   app.get("/api/xpot/admin/tag-acquisitions", requireTagManager, async (req, res) => {
     try {
       const { repId } = z.object({ repId: z.coerce.number().int().positive().optional() }).parse(req.query);
-      res.json(await listAcquisitions(repId));
+      res.json(await listAcquisitions({ repId, organizationIds: tagScopeOf(req) }));
     } catch (err) {
       fail(res, err, "Failed to load acquisitions");
     }
   });
 
-  app.post("/api/xpot/admin/tag-acquisitions/:id/fulfill", requireTagManager, async (req, res) => {
+  // Separating an order is the platform's: it comes out of the company's stock.
+  app.post("/api/xpot/admin/tag-acquisitions/:id/fulfill", requireTagAdmin, async (req, res) => {
     const id = z.string().uuid().safeParse(req.params.id);
     if (!id.success) return res.status(404).json({ message: "Acquisition not found" });
     try {
@@ -1009,9 +1062,9 @@ export function registerTagRoutes(app: Express) {
 
   // Batches to pick from (Give a kit › From a batch, the Pieces filter). Managers hand out kits too, so they get
   // this read-only list; the batches themselves (production, intake, editing) stay admin-only.
-  app.get("/api/xpot/admin/tag-batch-options", requireTagManager, async (_req, res) => {
+  app.get("/api/xpot/admin/tag-batch-options", requireTagManager, async (req, res) => {
     try {
-      res.json(await repo.listBatchOptions());
+      res.json(await repo.listBatchOptions(tagScopeOf(req)));
     } catch (err) {
       fail(res, err, "Failed to load batches");
     }

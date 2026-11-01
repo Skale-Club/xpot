@@ -6,7 +6,7 @@ import { db } from "../db.js";
 import { salesReps } from "#shared/schema.js";
 import { formatWholesaleCode, generateWholesaleCode, normalizeWholesaleCode, wholesaleUrl } from "#shared/wholesale.js";
 import { normalizeIpKey, rateLimit } from "../tags/rateLimit.js";
-import { accessDenial, ensureXpotRep, isManagerOrAdmin, requireXpotManager } from "../routes/xpot/middleware.js";
+import { accessDenial, ensureXpotRep, isPlatformAdmin, requirePlatformAdmin } from "../routes/xpot/middleware.js";
 import { repModules } from "#shared/modules.js";
 import { stuscleWholesaleOrderSchema } from "#shared/tagSales.js";
 import { recordStuscleOrder } from "../tags/acquisitions.js";
@@ -127,7 +127,7 @@ export function registerWholesaleRoutes(app: Express) {
       const denial = accessDenial(actor.rep);
       if (denial) return res.status(403).json(denial);
       // The code buys Tags kits at wholesale: only for reps who sell Tags (managers always do).
-      if (!isManagerOrAdmin(actor) && !repModules(actor.rep).includes("tags")) {
+      if (!isPlatformAdmin(actor) && !repModules(actor.rep).includes("tags")) {
         return res.status(403).json({ message: "Tags are not enabled for your account." });
       }
       const code = await ensureWholesaleCode(actor.rep.id);
@@ -139,7 +139,7 @@ export function registerWholesaleRoutes(app: Express) {
   });
 
   // Admin: issue a new code (the old one stops working), e.g. when one leaked.
-  app.post("/api/xpot/admin/reps/:id/wholesale-code", requireXpotManager, async (req: Request, res: Response) => {
+  app.post("/api/xpot/admin/reps/:id/wholesale-code", requirePlatformAdmin, async (req: Request, res: Response) => {
     const repId = Number(req.params.id);
     if (!Number.isInteger(repId) || repId <= 0) return res.status(400).json({ message: "Invalid rep id" });
     try {

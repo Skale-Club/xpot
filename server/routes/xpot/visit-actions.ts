@@ -5,7 +5,7 @@ import { db } from "../../db.js";
 import { storage } from "../../storage.js";
 import { salesStorage } from "../../storage-sales.js";
 import { getLLMClient } from "../../lib/ai.js";
-import { requireXpotUser, isManagerOrAdmin, type XpotActor } from "./middleware.js";
+import { requireXpotUser, isPlatformAdmin, type XpotActor } from "./middleware.js";
 import { syncInterestToXphere } from "./xphere-sync.js";
 import { createTask } from "../../tasks/service.js";
 import {
@@ -46,7 +46,7 @@ export function createVisitActionsRouter() {
       res.status(404).json({ code: "visit_not_found", message: "Visit not found" });
       return null;
     }
-    if (!isManagerOrAdmin(actor) && visit.repId !== actor.rep.id) {
+    if (!isPlatformAdmin(actor) && visit.repId !== actor.rep.id) {
       res.status(403).json({ code: "access_denied", message: "Access denied" });
       return null;
     }

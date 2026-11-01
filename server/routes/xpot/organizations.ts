@@ -5,7 +5,7 @@ import { managesEveryOrganization } from "#shared/organizations.js";
 import { XPOT_MODULES } from "#shared/modules.js";
 import { requireXpotUser, type XpotActor } from "./middleware.js";
 import { AccountError, createResellerAccount, resellerAccountSchema } from "./resellerAccounts.js";
-import {
+import { companyOrganizationId,
   OrganizationError,
   addOrganizationMember,
   assertOrganizationAccess,
@@ -23,6 +23,8 @@ import {
   type OrganizationActor,
 } from "../../organizations/service.js";
 import { deliverKit, TagError, tagErrorBody } from "../../tags/repository.js";
+import { listAcquisitions } from "../../tags/acquisitions.js";
+import { teamActivity, teamActivitySince } from "./teamActivity.js";
 import { kitCostRequired, kitOwnership } from "#shared/tagKits.js";
 import { storage } from "../../storage.js";
 
@@ -178,9 +180,26 @@ export function createOrganizationsRouter() {
       ...input,
       ownershipType: kitOwnership(policy),
       organizationId,
-      sourceOrganizationId: managesEveryOrganization(actor) ? undefined : organizationId,
+      // The platform hands out the company's stock; an organization's owner, the organization's.
+      sourceOrganizationId: managesEveryOrganization(actor) ? await companyOrganizationId() : organizationId,
     }, actor.user.userId);
   }, 201));
+  // The team's visits and sales in a period (the platform's Overview, for one organization).
+  router.get("/organizations/:organizationId/activity", route(async (req) => {
+    const organizationId = id.parse(req.params.organizationId);
+    const actor = actorOf(req);
+    await assertOrganizationAccess(actor, organizationId, true);
+    const since = teamActivitySince(req.query);
+    if (!since) throw new OrganizationError("Choose a period of up to 400 days.", 400, "activity_period");
+    const members = await listOrganizationMembers(organizationId, actor);
+    return teamActivity(since, members.map((member) => member.repId));
+  }));
+  // What the team bought: the owner follows the orders, they don't approve them (the payment is Stuscle's).
+  router.get("/organizations/:organizationId/purchases", route(async (req) => {
+    const organizationId = id.parse(req.params.organizationId);
+    await assertOrganizationAccess(actorOf(req), organizationId, true);
+    return listAcquisitions({ organizationIds: [organizationId] });
+  }));
   router.get("/organizations/:organizationId/customers", route((req) =>
     listOrganizationCustomers(id.parse(req.params.organizationId), actorOf(req))));
 

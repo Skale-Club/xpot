@@ -7,6 +7,7 @@ import { users } from "./auth.js";
 
 export const salesRepRoleEnum = pgEnum("sales_rep_role", [
   "rep",
+  // Unused and without any power since migrations/0067: the enum value stays only because Postgres can't drop it.
   "manager",
   "admin",
 ]);

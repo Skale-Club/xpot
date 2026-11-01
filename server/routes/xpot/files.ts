@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { storage } from "../../storage.js";
-import { requireXpotUser, isManagerOrAdmin, canAccessLead, type XpotActor } from "./middleware.js";
+import { requireXpotUser, isPlatformAdmin, canAccessLead, type XpotActor } from "./middleware.js";
 import { parseRef, resolveFileUrl, SIGNED_URL_TTL_SECONDS } from "../../lib/files.js";
 
 // GET /files?ref=<stored reference> — the only way to read a private photo or
@@ -33,7 +33,7 @@ export function createFilesRouter() {
       const visitId = await storage.findVisitIdByAudio(ref);
       const visit = visitId ? await storage.getSalesVisit(visitId) : undefined;
       if (!visit) return res.status(404).json({ message: "File not found" });
-      if (visit.repId !== actor.rep.id && !isManagerOrAdmin(actor)) {
+      if (visit.repId !== actor.rep.id && !isPlatformAdmin(actor)) {
         return res.status(403).json({ message: "Access denied" });
       }
     } else {

@@ -81,8 +81,8 @@ export type Rep = {
 
 export const REPS_KEY = ["/api/xpot/admin/reps"];
 export const MODULE_KEYS = { visits: "moduleVisits", tags: "moduleTags" } as const satisfies Record<XpotModule, keyof typeof commonMessages.en>;
-export const ROLES = ["rep", "manager", "admin"] as const;
-export const ROLE_KEYS = { rep: "role_rep", manager: "role_manager", admin: "role_admin" } as const satisfies Record<(typeof ROLES)[number], keyof typeof settingsMessages.en>;
+export const ROLES = ["rep", "admin"] as const;
+export const ROLE_KEYS = { rep: "role_rep", admin: "role_admin" } as const satisfies Record<(typeof ROLES)[number], keyof typeof settingsMessages.en>;
 export const STATUS_TONE: Record<PeopleStatus, PillTone> = { pending: "amber", active: "green", blocked: "red", refused: "slate" };
 const SYNC_STATUS_TONE: Record<string, PillTone> = { synced: "green", pending: "slate", needs_review: "amber", failed: "red" };
 const SYNC_STATUS_KEYS: Record<string, ManageKey> = {
@@ -553,7 +553,7 @@ function RoleEditor({ rep }: { rep: Rep }) {
   const canEdit = isSuperAdmin || rep.role === "rep";
   // Your own role is locked (you'd sign yourself out), and only the global admin changes roles at all.
   const roleLocked = isSelf || !isSuperAdmin;
-  const isManager = role === "manager" || role === "admin";
+  const isManager = role === "admin";
   const sameModules = [...modules].sort().join() === [...(rep.modules ?? XPOT_MODULES)].sort().join();
   const dirty = role !== rep.role || !sameModules;
   // The "admin" role is the global Xpot admin (storage.updateSalesRepAccountProfile): changing it signs them out.

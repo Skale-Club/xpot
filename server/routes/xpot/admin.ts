@@ -5,7 +5,7 @@ import { isFinishedVisitStatus } from "#shared/visit-status.js";
 import { repModules } from "#shared/modules.js";
 import { refusalBody, sendValidationError } from "../../lib/validation.js";
 import { genInboundKey, presentXphere, XPHERE_DEFAULT_URL, xphereConfigSchema } from "./xphere.js";
-import { requireSuperAdmin, requireXpotManager } from "./middleware.js";
+import { requireSuperAdmin, requirePlatformAdmin } from "./middleware.js";
 import {
   AccountError,
   approveRep,
@@ -29,7 +29,7 @@ export function createAdminRouter() {
   const router = Router();
   // Only the /admin paths: this router is mounted at /api/xpot, so a bare router.use would guard
   // every route mounted after it (sales, consignments, products...) and lock plain reps out.
-  router.use("/admin", requireXpotManager);
+  router.use("/admin", requirePlatformAdmin);
 
   router.get("/admin/overview", async (_req, res) => {
     const [reps, leads, visits, opportunities, tasks, syncEvents] = await Promise.all([
@@ -108,7 +108,7 @@ export function createAdminRouter() {
       phone: z.string().optional().nullable(),
       team: z.string().optional().nullable(),
       // Omitted: the person keeps their role (a default of "rep" silently demoted managers and admins).
-      role: z.enum(["rep", "manager", "admin"]).optional(),
+      role: z.enum(["rep", "admin"]).optional(),
       vcardId: z.number().int().positive().optional().nullable(),
       ghlUserId: z.string().optional().nullable(),
       modules: z.array(z.enum(["visits", "tags"])).min(1).optional(),

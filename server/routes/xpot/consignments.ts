@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { storage } from "../../storage.js";
 import { salesStorage, ConsignmentUnitsLeftError } from "../../storage-sales.js";
-import { requireXpotUser, isManagerOrAdmin, loadAccessibleLead, type XpotActor, listScope, recordFilters } from "./middleware.js";
+import { requireXpotUser, isPlatformAdmin, loadAccessibleLead, type XpotActor, listScope, recordFilters } from "./middleware.js";
 import { canManageOrganizationForActor, canViewOrganizationForActor } from "../../organizations/service.js";
 import {
   xpotConsignmentDepositSchema,
@@ -30,7 +30,7 @@ export function createConsignmentsRouter() {
     // Either of the first two only while still active there: leaving or being
     // suspended from the organization ends it, as it does for its sales.
     const organizationId = row.consignment.organizationId;
-    if (!isManagerOrAdmin(actor) && (!(await canViewOrganizationForActor(actor, organizationId)) ||
+    if (!isPlatformAdmin(actor) && (!(await canViewOrganizationForActor(actor, organizationId)) ||
       (row.consignment.repId !== actor.rep.id && !(await canManageOrganizationForActor(actor, organizationId))))) {
       res.status(403).json({ code: "access_denied", message: "Access denied" });
       return null;

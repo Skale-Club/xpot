@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { TagRepReportRow, TagTeamReport } from "#shared/tagsApi.js";
 import { resolveTagFace } from "#shared/tagFace.js";
-import { COUNTABLE, iso, rows } from "./repository.js";
+import { COUNTABLE, inOrganizations, iso, rows, type OrganizationScope } from "./repository.js";
 import { stockMetricSql } from "./metrics.js";
 
 /**
@@ -12,7 +12,9 @@ import { stockMetricSql } from "./metrics.js";
  * hands, company stock on the no-reseller row (shared/tagMetrics.ts);
  * scans count against the reseller who held the piece when it was scanned.
  */
-export async function getTeamReport(from: Date, to: Date): Promise<TagTeamReport> {
+export async function getTeamReport(from: Date, to: Date, scope: OrganizationScope = null): Promise<TagTeamReport> {
+  const inScope = inOrganizations(sql`t.organization_id`, scope);
+  const piecesInScope = sql`(SELECT t.id FROM tags t WHERE ${inScope})`;
   const [sales, activations, scans, people, topTags] = await Promise.all([
     rows<{ rep_id: number | null; sold: number; in_stock: number; active_now: number; total: number; customers: number; last_sale_at: Date | null }>(sql`
       SELECT t.rep_id,
@@ -28,12 +30,13 @@ export async function getTeamReport(from: Date, to: Date): Promise<TagTeamReport
         WHERE st.tag_id = t.id AND st.status = 'active'
         ORDER BY st.sold_at DESC LIMIT 1
       ) sold ON true
+      WHERE ${inScope}
       GROUP BY t.rep_id
     `),
     rows<{ rep_id: number; activations: number }>(sql`
       SELECT t.activated_by_rep_id AS rep_id, count(*)::int AS activations
       FROM tags t
-      WHERE t.activated_by_rep_id IS NOT NULL AND t.activated_at >= ${from} AND t.activated_at < ${to}
+      WHERE t.activated_by_rep_id IS NOT NULL AND t.activated_at >= ${from} AND t.activated_at < ${to} AND ${inScope}
       GROUP BY t.activated_by_rep_id
     `),
     rows<{ rep_id: number | null; qr: number; nfc: number; approx_unique: number }>(sql`
@@ -42,15 +45,15 @@ export async function getTeamReport(from: Date, to: Date): Promise<TagTeamReport
         count(*) FILTER (WHERE e.access_method = 'nfc')::int AS nfc,
         count(DISTINCT (e.tag_id, e.visitor_day_key))::int AS approx_unique
       FROM tag_events e
-      WHERE e.occurred_at >= ${from} AND e.occurred_at < ${to} AND ${COUNTABLE}
+      WHERE e.occurred_at >= ${from} AND e.occurred_at < ${to} AND ${COUNTABLE} AND e.tag_id IN ${piecesInScope}
       GROUP BY e.rep_id
     `),
     rows<{ id: number; display_name: string; email: string | null; role: string; is_active: boolean }>(sql`
       SELECT r.id, r.display_name, r.email, r.role::text AS role, r.is_active
       FROM sales_reps r
-      WHERE r.id IN (SELECT rep_id FROM tags WHERE rep_id IS NOT NULL)
-         OR r.id IN (SELECT activated_by_rep_id FROM tags WHERE activated_by_rep_id IS NOT NULL)
-         OR r.id IN (SELECT rep_id FROM tag_kits)
+      WHERE r.id IN (SELECT t.rep_id FROM tags t WHERE t.rep_id IS NOT NULL AND ${inScope})
+         OR r.id IN (SELECT t.activated_by_rep_id FROM tags t WHERE t.activated_by_rep_id IS NOT NULL AND ${inScope})
+         OR r.id IN (SELECT k.rep_id FROM tag_kits k WHERE ${inOrganizations(sql`k.organization_id`, scope)})
     `),
     rows<{ id: string; public_code: string; label: string | null; product_type: string; face: string | null; batch_face: string | null; batch_code: string | null; lead_name: string | null; rep_name: string | null; qr: number; nfc: number }>(sql`
       SELECT t.id, t.public_code, t.label, t.product_type, t.face, b.face AS batch_face, b.batch_code, l.name AS lead_name, r.display_name AS rep_name,
@@ -61,7 +64,7 @@ export async function getTeamReport(from: Date, to: Date): Promise<TagTeamReport
       LEFT JOIN sales_leads l ON l.id = t.lead_id
       LEFT JOIN sales_reps r ON r.id = t.rep_id
       LEFT JOIN tag_batches b ON b.id = t.batch_id
-      WHERE e.occurred_at >= ${from} AND e.occurred_at < ${to} AND ${COUNTABLE}
+      WHERE e.occurred_at >= ${from} AND e.occurred_at < ${to} AND ${COUNTABLE} AND ${inScope}
       GROUP BY t.id, b.face, b.batch_code, l.name, r.display_name
       ORDER BY count(*) DESC
       LIMIT 10
