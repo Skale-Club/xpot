@@ -1,6 +1,7 @@
-import type { TagAction } from "@shared/tags";
+import { planTransition, type TagAction } from "@shared/tags";
+import type { PieceCustodyActions } from "@shared/tagCustody";
 import type { TagDailyPoint, TagHistoryEntry, TagJourneyEntryItem, TagPieceSale, TagStockMovementItem } from "@shared/tagsApi";
-import { CHIP_STATUS_TONE, PIECE_STATUS_TONE, STOCK_STATUS_TONE, toneOf, type PillTone } from "@/components/xpot/StatusPill";
+import { CHIP_STATUS_TONE, PIECE_STATUS_TONE, SOLD_TONE, STOCK_STATUS_TONE, toneOf, type PillTone } from "@/components/xpot/StatusPill";
 
 // The one piece screen (components/piece), the pure part: what the header says
 // about a piece, which sections a viewer gets, where each action goes, and the
@@ -31,6 +32,75 @@ export function pieceStatusChips(tag: { status: string; stockStatus: string; nfc
     { dimension: "stock", value: tag.stockStatus, tone: tag.stockStatus === "sold" ? "slate" : toneOf(STOCK_STATUS_TONE, tag.stockStatus) },
     { dimension: "chip", value: tag.nfcStatus, tone: toneOf(CHIP_STATUS_TONE, tag.nfcStatus, "amber") },
   ];
+}
+
+// ─── One situation ────────────────────────────────────────────────────────────
+
+/** What the header says in one pill: the answer to "is it ready?", not the three stored states. */
+export type PieceSituationKey =
+  | "damaged" | "lost" | "retired" | "sold" | "pending"
+  | "live" | "paused" | "readyNoChip" | "readyOffline" | "inStock" | "other";
+
+/** The one thing to do next. `openPrint` carries its link; the rest run what the sections already do. */
+export type PieceActionKind = "openPrint" | "receive" | "viewPerformance" | "reactivate" | "writeChip" | "goLive" | "configure";
+export interface PieceMainAction {
+  kind: PieceActionKind;
+  /** Only for `openPrint`: the batch page of the piece. */
+  href?: string;
+}
+
+export interface PieceSituation {
+  key: PieceSituationKey;
+  tone: PillTone;
+  action: PieceMainAction | null;
+}
+
+type SituationTag = {
+  status: string;
+  stockStatus: string;
+  nfcStatus: string;
+  saleId: number | null;
+  leadId: number | null;
+  destinationUrl: string | null;
+  destinationType: string | null;
+  batchId: string | null;
+  custody?: Pick<PieceCustodyActions, "receive"> | null;
+};
+
+/**
+ * The piece in one status and one main action. First rule that matches wins. An action the business
+ * rules refuse (a blocked activation, a receive with a blocker) is left out, never shown disabled.
+ */
+export function pieceSituation(tag: SituationTag, viewer: PieceViewer): PieceSituation {
+  const none = (key: PieceSituationKey, tone: PillTone): PieceSituation => ({ key, tone, action: null });
+  const act = (key: PieceSituationKey, tone: PillTone, action: PieceMainAction | null): PieceSituation => ({ key, tone, action });
+  const { status, stockStatus } = tag;
+
+  if (stockStatus === "damaged") return none("damaged", "red");
+  if (stockStatus === "lost") return none("lost", "red");
+  if (status === "retired" || stockStatus === "retired") return none("retired", "muted");
+  if (pieceIsSold(tag)) return none("sold", SOLD_TONE);
+
+  if (stockStatus === "pending") {
+    const receive = tag.custody?.receive;
+    const canReceive = !!receive && receive.blocker === null;
+    // Management prints (the production screens are for the global admin); everyone else receives.
+    if (viewer.canManage && viewer.isAdmin && tag.batchId) {
+      return act("pending", "amber", { kind: "openPrint", href: `/admin/tags/batches/${encodeURIComponent(tag.batchId)}` });
+    }
+    return act("pending", "amber", canReceive ? { kind: "receive" } : null);
+  }
+
+  if (status === "active") return act("live", "green", { kind: "viewPerformance" });
+  const canActivate = planTransition(tag, "activate").ok;
+  if (status === "disabled") return act("paused", "amber", canActivate ? { kind: "reactivate" } : null);
+  if (status === "assigned") {
+    // The same test as chipNeedsWriting (shared/tagApp.ts): not written yet, or the write failed.
+    if (tag.nfcStatus === "not_programmed" || tag.nfcStatus === "failed") return act("readyNoChip", "amber", { kind: "writeChip" });
+    return act("readyOffline", "sky", canActivate ? { kind: "goLive" } : null);
+  }
+  if (status === "inventory" && stockStatus === "available") return act("inStock", "slate", { kind: "configure" });
+  return none("other", "slate");
 }
 
 /** Sold = a recorded financial sale (an active sales_sale_tags row), never going live. */

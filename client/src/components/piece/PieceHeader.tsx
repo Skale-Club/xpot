@@ -9,11 +9,13 @@ import { tagsMessages } from "@/i18n/messages/tags";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
 import { manageTagsPiecesMessages } from "@/i18n/messages/manageTagsPieces";
 import { pieceScreenMessages } from "@/i18n/messages/pieceScreen";
-import { pieceIsSold, pieceLocation, pieceStatusChips, type PieceDimension } from "./pieceView";
+import { usePiece } from "./PieceContext";
+import { pieceIsSold, pieceLocation, pieceSituation, pieceStatusChips, type PieceDimension } from "./pieceView";
 
 // The piece's header, the same on the reseller screen and the admin page: what
-// it is (model and face), its three states as labelled chips (Digital, Physical
-// stock, Chip), the Sold pill when a sale is recorded, where it is and whose it is.
+// it is (model and face), one status pill (pieceSituation), where it is and
+// whose it is. The three stored states as labelled chips (Digital, Physical
+// stock, Chip, and Sold) live in "More details" (PieceStatusChips).
 
 /** A stored value in the language in use; an unknown one shows as stored. */
 function useStatusLabel() {
@@ -46,6 +48,21 @@ export function PieceStatusChips({ tag, className = "" }: { tag: Pick<TagDetail,
         </span>
       ))}
       {pieceIsSold(tag) ? <span data-testid="piece-sold-pill"><Pill tone={SOLD_TONE}>{tt("soldBadge")}</Pill></span> : null}
+    </div>
+  );
+}
+
+/** The one status of the piece, derived from its three states (pieceSituation). Needs the piece screen's context. */
+export function PieceSituationPill({ className = "" }: { className?: string }) {
+  const { tag, viewer } = usePiece();
+  const tp = useT(pieceScreenMessages);
+  const label = useStatusLabel();
+  const situation = pieceSituation(tag, viewer);
+  // An unlisted situation shows the stored status in words.
+  const text = situation.key === "other" ? label("digital", tag.status) : tp(`situation_${situation.key}` as "situation_live");
+  return (
+    <div className={className} data-testid="piece-situation" data-situation={situation.key}>
+      <Pill tone={situation.tone}>{text}</Pill>
     </div>
   );
 }
@@ -96,7 +113,7 @@ export function PieceModelLine({ tag, extra }: { tag: TagDetail; extra?: ReactNo
   );
 }
 
-/** The admin page's heading: picture, code, model, the three chips and the facts; `actions` on the right. */
+/** The admin page's heading: picture, code, model, the status pill and the facts; `actions` on the right. */
 export function PieceHeader({ tag, actions }: { tag: TagDetail; actions?: ReactNode }) {
   const tt = useT(tagsMessages);
   return (
@@ -106,7 +123,7 @@ export function PieceHeader({ tag, actions }: { tag: TagDetail; actions?: ReactN
         <div className="min-w-0 flex-1 space-y-2">
           <h2 className={CODE_HEADING} data-testid="admin-piece-code">{tag.publicCode}</h2>
           <PieceModelLine tag={tag} />
-          <PieceStatusChips tag={tag} />
+          <PieceSituationPill />
           <PieceFacts tag={tag} />
         </div>
       </div>
