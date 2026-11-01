@@ -129,8 +129,9 @@ function useStrip(model: CatalogModel, px: number): string | null {
  * The piece's 3D picture. It stands still on its front; dragging it with a finger or the mouse turns it (a tap or a
  * click, with no drag, opens the rotatable view instead), and the arrow keys turn it for the keyboard. It never
  * reaches the row or link it sits in. The `fallback` shows until the picture is drawn, and stays if it cannot be.
+ * `still`: only the picture, on its front, for a piece inside a button whose tap does something else.
  */
-export function PieceThumb3D({ model, px, fallback }: { model: CatalogModel; px: number; fallback: ReactNode }) {
+export function PieceThumb3D({ model, px, fallback, still = false }: { model: CatalogModel; px: number; fallback: ReactNode; still?: boolean }) {
   const t = useT(productionMessages);
   const strip = useStrip(model, px);
   const [frame, setFrame] = useState(0);
@@ -138,6 +139,9 @@ export function PieceThumb3D({ model, px, fallback }: { model: CatalogModel; px:
   const press = useRef<{ x: number; frame: number; turned: boolean } | null>(null);
   const dragged = useRef(false);
   if (!strip) return <>{fallback}</>;
+  if (still) {
+    return <span aria-hidden="true" data-testid="piece-thumb-3d" style={{ display: "block", width: px, height: px, backgroundImage: `url(${strip})`, backgroundSize: `${FRAMES * px}px ${px}px`, backgroundPosition: "0 0", backgroundRepeat: "no-repeat" }} />;
+  }
 
   const wrap = (n: number) => ((n % FRAMES) + FRAMES) % FRAMES;
   const open = () => openPieceViewer({ slug: model.slug, title: model.title, sha256: model.sha256 });

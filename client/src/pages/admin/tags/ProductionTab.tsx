@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { productionMessages } from "@/i18n/messages/production";
+import { productionBoardMessages } from "@/i18n/messages/productionBoard";
 import { unifiedProductionMessages } from "@/i18n/messages/unifiedProduction";
 import { errorMessage, invalidateAdminTags, sendJson } from "./api";
 import { catalogOptions, useTagCatalog } from "./batches-shared";
@@ -23,45 +24,50 @@ import { PrintDialog, RequestList } from "./production-orders";
 import { ModelStatusPill, PRODUCTION_BASE, bedSummary, usePrintModels, type JobFilter } from "./production-shared";
 import { BatchDetail } from "./BatchDetail";
 import { ProductionWizard } from "./production-wizard";
+import { ProductionBoard } from "./production-board";
 import { batchPrefixFromTitle, productionPath, slugFromTitle } from "./production-workflow";
 import { ProductionIdentity } from "./production-identity";
 
-// Manage › Production (the Xpot admin's, docs/PRINT_EXECUTION_PLAN.md): the catalog of what the house prints and
-// the queue of print orders. Paths: /admin/tags/production[/queue | /models/<slug> | /jobs/<id> | /batches/<id>];
-// /batches with no id is the queue (marking a plate printed puts its pieces in stock, so there is no receiving list).
+// Manage › Production (the Xpot admin's, docs/PRINT_EXECUTION_PLAN.md). The first screen is the board
+// (production-board.tsx): always-ready pieces to download, pieces to generate and the plates waiting to print. Then
+// the orders and the catalog of models. Paths: /admin/tags/production[/queue | /models[/<slug>] | /jobs/<id> |
+// /batches/<id>] (marking a plate printed puts its pieces in stock, so there is no receiving list).
 
 type Go = (path: string) => void;
 
 export function ProductionTab({ rest, go }: { rest: string[]; go: Go }) {
   const t = useT(productionMessages);
   const u = useT(unifiedProductionMessages);
-  const [creating, setCreating] = useState(false);
+  const b = useT(productionBoardMessages);
+  // Supplier codes and pieces that already have codes: the wizard's other ways, behind a small link on the board.
+  const [external, setExternal] = useState(false);
   const [view, id] = rest;
   const navigate = (path: string) => go(productionPath(path));
   if (view === "models" && id) return <PrintModelPage slug={id} go={navigate} />;
   if (view === "jobs" && id) return <PrintJobPage id={id} go={navigate} />;
   if (view === "batches" && id) return <BatchDetail id={id} go={navigate} />;
-  const tab = view === "models" ? "catalog" : "queue";
+  const tab = view === "models" ? "catalog" : view === "queue" || view === "batches" ? "queue" : "board";
   return (
     <div className="space-y-4" data-testid="admin-production">
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div><h1 className="text-2xl font-semibold tracking-tight text-white">{u("title")}</h1><p className="mt-1 max-w-2xl text-sm text-white/50">{u("intro")}</p></div>
-        <Button variant="brand" accent="tags" onClick={() => setCreating(true)} data-testid="production-new"><Plus className="h-4 w-4" />{u("newProduction")}</Button>
+      <header className="min-w-0">
+        <h1 className="text-2xl font-semibold tracking-tight text-white">{u("title")}</h1>
+        <p className="mt-1 max-w-2xl text-sm text-white/50">{b("intro")}</p>
       </header>
       <Tabs
         tabs={[
+          { id: "board", label: b("produce"), testId: "production-tab-board" },
           { id: "queue", label: u("requests"), testId: "production-tab-queue" },
           { id: "catalog", label: u("models"), testId: "production-tab-catalog" },
         ]}
         value={tab}
-        onChange={(next) => navigate(next === "catalog" ? `${PRODUCTION_BASE}/models` : `${PRODUCTION_BASE}/queue`)}
+        onChange={(next) => navigate(next === "catalog" ? `${PRODUCTION_BASE}/models` : next === "queue" ? `${PRODUCTION_BASE}/queue` : PRODUCTION_BASE)}
         ariaLabel={t("productionNav")}
         idPrefix="production"
         fill={false}
         accent="tags"
       />
-      {tab === "catalog" ? <CatalogView go={navigate} /> : <QueueView go={navigate} />}
-      {creating ? <ProductionWizard onClose={() => setCreating(false)} onOrdered={(request) => navigate(request.plates.length === 1 ? `${PRODUCTION_BASE}/jobs/${request.plates[0].id}` : `${PRODUCTION_BASE}/queue`)} onCreated={(batchId) => navigate(`/batches/${batchId}?tab=receive`)} /> : null}
+      {tab === "catalog" ? <CatalogView go={navigate} /> : tab === "queue" ? <QueueView go={navigate} /> : <ProductionBoard go={navigate} onOtherWays={() => setExternal(true)} />}
+      {external ? <ProductionWizard external onClose={() => setExternal(false)} onCreated={(batchId) => navigate(`/batches/${batchId}?tab=receive`)} /> : null}
     </div>
   );
 }

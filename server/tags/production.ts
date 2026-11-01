@@ -15,6 +15,7 @@ import {
   type PrintModelRow,
 } from "#shared/schema.js";
 import {
+  PRINT_BOUGHT_BED,
   PRINT_FILE_CONTENT_TYPES,
   PRINT_FILE_MAX_BYTES,
   PRINT_JOB_STALE_MS,
@@ -24,12 +25,15 @@ import {
   PRINT_PREVIEW_MAX_BYTES,
   bedPosition,
   nextPrintBatchCode,
+  pickGenerateFace,
   planPrintJobTransition,
   planRedoCodes,
+  printGenerateOptions,
   splitIntoPlates,
   splitPrintedPieces,
   type PrintBed,
   type PrintFileKind,
+  type PrintGenerateInput,
   type PrintJobAction,
   type PrintJobCreateInput,
   type PrintJobDetail,
@@ -395,6 +399,20 @@ export async function bedFileRef(modelRef: string, versionId: string, bedLabel: 
   const [version] = await rows<VersionRow>(sql`${VERSION_SELECT} WHERE v.id = ${versionId} AND v.model_id = ${model.id}`);
   const bed = version?.beds?.find((b) => b.label.toLowerCase() === bedLabel.toLowerCase());
   if (!bed?.fileRef) throw new TagError("This bed has no print file", 404);
+  return bed.fileRef;
+}
+
+/**
+ * An always-ready piece's print file (a part's fixed file on its current version): the named bed, or the first one
+ * that has a file. Nothing is recorded: the piece is printed by hand as often as needed.
+ */
+export async function partFileRef(modelRef: string, bedLabel?: string | null): Promise<string> {
+  const model = await resolveModel(modelRef);
+  if (model.kind !== "part") throw new TagError("Only a part has a ready print file; a serialized model is generated per order", 400, "print_bed_file_serialized");
+  const version = await currentVersionOf(model);
+  const beds = (version.beds ?? []).filter((b) => b.label.toLowerCase() !== PRINT_BOUGHT_BED);
+  const bed = bedLabel ? beds.find((b) => b.label.toLowerCase() === bedLabel.toLowerCase()) : beds.find((b) => b.fileRef);
+  if (!bed?.fileRef) throw new TagError("This piece has no print file yet", 404, "print_bed_file_missing");
   return bed.fileRef;
 }
 
@@ -840,6 +858,20 @@ export async function createJob(input: PrintJobCreateInput, userId: string | nul
   }
   console.log(`[production] request ${request.id} for ${model.slug} v${version.version}: ${quantity} pieces on ${plates.length} plate(s) [${plates.join(", ")}] (user ${userId ?? "?"})`);
   return getRequest(request.id);
+}
+
+/**
+ * "Generate N pieces" from the Production page's questions (product → colour → face → quantity): the stocked model
+ * for that choice, then the same request as createJob (each plate its own batch with fresh serials, pending until the
+ * plate is marked printed). A combination the house does not make is refused, whatever the client sent.
+ */
+export async function generatePieces(input: PrintGenerateInput, userId: string | null, source: JourneySource = "admin"): Promise<PrintRequestItem> {
+  const choice = pickGenerateFace(printGenerateOptions(await listModels()), input);
+  if (!choice) {
+    throw new TagError(`No ${input.theme} ${input.face} ${input.productType} can be generated: it is not in the catalog with a generator`, 409,
+      "print_choice_unavailable");
+  }
+  return createJob({ model: choice.modelId, bed: choice.bedLabel, quantity: input.quantity, notes: input.notes ?? null }, userId, source);
 }
 
 /**

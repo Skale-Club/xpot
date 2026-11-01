@@ -1,6 +1,7 @@
 """The 3D preview of a catalog version: one sample piece as a coloured GLB that Xpot shows in Tags > Production.
 
     python preview.py <version.json> <out.glb> [--code A7K3P9X2] [--upload <model-slug> [--version-id <uuid>]]
+    python preview.py --part <fixed-file.3mf> <out.glb> [--upright] [--upload <part-slug> [--version-id <uuid>]]
 
 --upload sends the GLB to Xpot as that model's preview (the version in the JSON, or --version-id): POST
 <XPOT_URL>/mcp/print-preview/<model> with the MCP token in XPOT_MCP_TOKEN (Tags > Settings > MCP tokens);
@@ -11,6 +12,8 @@ params, recipe. The builder makes one piece with the sample code (never a client
 be a live piece), exactly as the bench would, and each part takes the colour of its AMS slot from the recipe's
 filament_colour. The separate parts are put where they go, so the preview looks like the finished piece: the flat G
 token in the Google Plate's pocket; a Stand's card in its base's slot (Large or Small), with its G on the Google one.
+
+--part makes a part's preview (a Stand base, a G token: no builder) from one piece of its fixed print file.
 
 Frame of the GLB: metres (glTF), x right, y up, the face toward +z, centred on the piece; what the viewer expects.
 """
@@ -137,6 +140,77 @@ def build_preview(version: dict, out: Path, code: str = SAMPLE_CODE) -> dict:
     if builder.startswith('stand.'):
         meshes = stand_assembly(meshes, builder.split('.', 1)[1], params.get('size', 'large'))
 
+    return _write_glb(meshes, out, code)
+
+
+NS_3MF = {'m': 'http://schemas.microsoft.com/3dmanufacturing/core/2015/02',
+          'p': 'http://schemas.microsoft.com/3dmanufacturing/production/2015/06'}
+
+
+def _affine(transform: str | None):
+    """A 3MF transform (twelve numbers, column by column of a 4x3) as a 4x4 matrix."""
+    import numpy as np
+    matrix = np.eye(4)
+    if transform:
+        v = [float(x) for x in transform.split()]
+        matrix[:3, :3] = np.array(v[:9]).reshape(3, 3).T
+        matrix[:3, 3] = v[9:12]
+    return matrix
+
+
+def _mesh_of(root, object_id: str) -> trimesh.Trimesh:
+    import numpy as np
+    obj = root.find(f".//m:object[@id='{object_id}']", NS_3MF)
+    mesh = obj.find('m:mesh', NS_3MF)
+    vertices = np.array([[float(v.get(k)) for k in 'xyz'] for v in mesh.find('m:vertices', NS_3MF)])
+    faces = np.array([[int(t.get(k)) for k in ('v1', 'v2', 'v3')] for t in mesh.find('m:triangles', NS_3MF)])
+    return trimesh.Trimesh(vertices, faces, process=True)
+
+
+def part_meshes(project: Path) -> list[tuple[trimesh.Trimesh, str, str]]:
+    """One piece of a part's fixed print file (a Bambu Studio .3mf of N copies): the first object on the plate, each
+    of its parts in the colour of its AMS slot (project_settings' filament_colour), in the print's frame (z up)."""
+    import xml.etree.ElementTree as ET
+    import zipfile
+    with zipfile.ZipFile(project) as z:
+        settings = ET.fromstring(z.read('Metadata/model_settings.config'))
+        colours = json.loads(z.read('Metadata/project_settings.config')).get('filament_colour') or []
+        model = ET.fromstring(z.read('3D/3dmodel.model'))
+        first = settings.find('object')
+        extruder = {'object': first.find("metadata[@key='extruder']")}
+        names = {p.get('id'): (p.find("metadata[@key='name']"), p.find("metadata[@key='extruder']")) for p in first.findall('part')}
+        default_slot = int(extruder['object'].get('value')) if extruder['object'] is not None else 1
+        colour = lambda slot: colours[slot - 1] if 1 <= slot <= len(colours) else '#999999'
+        obj = model.find(f".//m:object[@id='{first.get('id')}']", NS_3MF)
+        meshes: list[tuple[trimesh.Trimesh, str, str]] = []
+        components = obj.find('m:components', NS_3MF)
+        if components is None:
+            meshes.append((_mesh_of(model, first.get('id')), first.find("metadata[@key='name']").get('value'), colour(default_slot)))
+            return meshes
+        sub_models: dict[str, ET.Element] = {}
+        for component in components:
+            path = (component.get(f"{{{NS_3MF['p']}}}path") or '/3D/3dmodel.model').lstrip('/')
+            if path not in sub_models:
+                sub_models[path] = model if path == '3D/3dmodel.model' else ET.fromstring(z.read(path))
+            mesh = _mesh_of(sub_models[path], component.get('objectid'))
+            mesh.apply_transform(_affine(component.get('transform')))
+            name, slot = names.get(component.get('objectid'), (None, None))
+            label = name.get('value') if name is not None else f'part {component.get("objectid")}'
+            meshes.append((mesh, label, colour(int(slot.get('value')) if slot is not None else default_slot)))
+    return meshes
+
+
+def build_part_preview(project: Path, out: Path, upright: bool = False) -> dict:
+    """The preview of a part (a Stand base, a G token): one piece of its fixed .3mf. A flat piece stays as printed,
+    face toward the viewer; `upright` stands a tall one (a base) the way it is used."""
+    meshes = part_meshes(project)
+    if upright:
+        for mesh, _, _ in meshes:
+            mesh.apply_transform(_rotation_x(-90))
+    return _write_glb(meshes, out, None)
+
+
+def _write_glb(meshes: list[tuple[trimesh.Trimesh, str, str]], out: Path, code: str | None) -> dict:
     centre = trimesh.util.concatenate([m for m, _, _ in meshes]).bounds.mean(axis=0)
     scene = trimesh.Scene()
     for i, (mesh, label, hex_colour) in enumerate(meshes):
@@ -178,12 +252,22 @@ def upload(glb: Path, model: str, version_id: str | None = None) -> dict:
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument('version', help='the version JSON (print_model_get output, or its currentVersion)')
+    ap.add_argument('version', nargs='?', help='the version JSON (print_model_get output, or its currentVersion)')
     ap.add_argument('out', help='the .glb to write')
+    ap.add_argument('--part', metavar='FILE_3MF', help="a part's fixed print file instead of a version: one piece of it")
+    ap.add_argument('--upright', action='store_true', help='with --part: stand the piece up (a base), else face to the viewer')
     ap.add_argument('--code', default=SAMPLE_CODE)
     ap.add_argument('--upload', metavar='MODEL', help='send it to Xpot as this model\'s preview')
     ap.add_argument('--version-id', help='with --upload: this version instead of the current one')
     args = ap.parse_args()
+    if args.part:
+        result = build_part_preview(Path(args.part), Path(args.out), args.upright)
+        if args.upload:
+            result['uploaded'] = upload(Path(args.out), args.upload, args.version_id)
+        print(json.dumps(result, indent=1))
+        return
+    if not args.version:
+        ap.error('the version JSON, or --part <file.3mf>')
     data = json.loads(Path(args.version).read_text(encoding='utf-8'))
     version = data.get('currentVersion') or data
     result = build_preview(version, Path(args.out), args.code)
