@@ -1,3 +1,4 @@
+import "./instrument.js";
 import "dotenv/config";
 import express from "express";
 import fs from "fs/promises";

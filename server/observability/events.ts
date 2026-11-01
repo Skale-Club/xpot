@@ -1,4 +1,5 @@
 import { createHash } from "crypto";
+import * as Sentry from "@sentry/node";
 import { lt } from "drizzle-orm";
 import { db } from "../db.js";
 import { systemEvents, type SystemEventLevel, type SystemEventSource } from "#shared/schema.js";
@@ -7,7 +8,8 @@ import { systemEvents, type SystemEventLevel, type SystemEventSource } from "#sh
  * The app's own error log, read by Admin › System health. Every place that used
  * to only console.error a failure nobody would see (the prospecting worker, the
  * engine, route building, push, unhandled API errors, the browser) also writes
- * here. Recording never throws: observability must not take down what it watches.
+ * here, and Sentry (xpot-backend) gets a copy. Recording never throws:
+ * observability must not take down what it watches.
  */
 
 const RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
@@ -72,6 +74,19 @@ export function takeRepeat(fingerprint: string, now = Date.now()): { write: bool
   return { write: true, suppressed: seen?.suppressed ?? 0 };
 }
 
+/** The browser's crashes reach Sentry on their own (xpot-frontend); a no-op without SENTRY_DSN. */
+export function forwardToSentry(input: SystemEventInput, level: SystemEventLevel, message: string) {
+  if (input.source === "client") return;
+  const scope = {
+    level: level === "error" ? ("error" as const) : ("warning" as const),
+    tags: { source: input.source },
+    extra: input.context,
+    ...(input.repId ? { user: { id: String(input.repId) } } : {}),
+  };
+  if (input.error === undefined) Sentry.captureMessage(message, scope);
+  else Sentry.captureException(input.error, scope);
+}
+
 export async function recordSystemEvent(input: SystemEventInput): Promise<void> {
   const level = input.level ?? "error";
   const described = input.error === undefined ? null : describeError(input.error);
@@ -82,6 +97,7 @@ export async function recordSystemEvent(input: SystemEventInput): Promise<void> 
   const fingerprint = fingerprintOf(input.source, message);
   const repeat = takeRepeat(fingerprint);
   if (!repeat.write) return;
+  forwardToSentry(input, level, message);
   const detail = input.message && described ? `${described.message}\n${described.detail ?? ""}` : described?.detail ?? null;
   try {
     await db.insert(systemEvents).values({
