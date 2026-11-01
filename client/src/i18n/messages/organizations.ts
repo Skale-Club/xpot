@@ -21,7 +21,7 @@ const en = {
   platformManagement: "Platform management",
   tabOverview: "Overview",
   tabTeam: "Team",
-  tabInventory: "Inventory",
+  tabInventory: "Stock",
   tabKits: "Kits",
   tabCustomers: "Companies",
   tabSettings: "Settings",
@@ -51,7 +51,7 @@ const en = {
   typeAll: "All types",
 
   cardMembers: "Team members",
-  cardInventory: "Inventory",
+  cardInventory: "Stock",
   cardKits: "Kits",
   cardCustomers: "Companies",
 
