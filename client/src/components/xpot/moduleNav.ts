@@ -32,10 +32,10 @@ import { parseSalesPath } from "../../pages/xpot/salesPath";
 
 // Where every screen lives. The app is two modules, Visits (field sales) and
 // Tags (QR/NFC pieces), plus the account pages outside both. Each module carries
-// its own screens and, for managers, its own "Manage" group, so the management of
+// its own screens and, for the panels, its own "Manage" group, so the management of
 // Tags sits inside Tags instead of in an "Admin" next to it. The account is the
-// person's Settings, the managers' Administration (People, Organizations) and
-// the Xpot admin's Platform. The sidebar, the phone tab bars, the command
+// person's Settings, the platform's Administration (People, Organizations) and
+// the platform's own screens. The sidebar, the phone tab bars, the command
 // palette, the top bar and the admin screens all read this one map, so a screen
 // has one name everywhere (docs/MODULES.md).
 
@@ -76,7 +76,7 @@ export function contextOfPath(path: string): ShellContext {
 }
 
 /**
- * Where an account page sits: personal Settings, the managers' Administration
+ * Where an account page sits: personal Settings, the platform's Administration
  * (People, Organizations) or the Xpot admin's Platform. Null outside the account.
  */
 export function accountSection(path: string): "settings" | "administration" | "platform" | null {
@@ -166,7 +166,7 @@ type ShellKey =
   | "orgSystemHealth";
 
 export type Viewer = {
-  /** Manager or admin, in management mode: sees each module's Manage group and Administration. */
+  /** In the panel: sees each module's Manage group and Administration. */
   canManage: boolean;
   /** The global admin (isSuperAdmin): sees the items marked adminOnly, and Platform. */
   isAdmin: boolean;
@@ -177,7 +177,7 @@ function visibleTo(viewer: Pick<Viewer, "isAdmin">, items: NavItem[]): NavItem[]
   return viewer.isAdmin ? items : items.filter((i) => !i.adminOnly);
 }
 
-/** The screens of one module: what its people use, then (for managers) its Manage group. */
+/** The screens of one module: what its people use, then (in the panel) its Manage group. */
 export function moduleGroups(module: XpotModule, viewer: Viewer, l: Labels): NavGroup[] {
   if (module === "visits") {
     const screen = (id: VisitsScreen) => (path: string) => visitsScreen(path) === id;
@@ -243,7 +243,7 @@ export function moduleGroups(module: XpotModule, viewer: Viewer, l: Labels): Nav
   ];
 }
 
-/** Administration, for managers in management mode: the people and the organizations. */
+/** Administration, the platform's: the people and the organizations. */
 export function administrationItems(l: Labels): NavItem[] {
   return [
     { href: "/admin/reps", label: l.shell("orgPeople"), icon: Users, match: starts("/admin/reps") },
@@ -266,7 +266,7 @@ export function platformItems(l: Labels): NavItem[] {
   ];
 }
 
-/** The account's groups after Settings: Administration for managers, Platform for the Xpot admin. */
+/** The account's groups after Settings: Administration and Platform, both the platform's. */
 export function accountGroups(viewer: Viewer, l: Labels): NavGroup[] {
   if (!viewer.canManage) return [];
   return [

@@ -99,8 +99,9 @@ export function TagsDashboard() {
   const t = useT(tagsMessages);
   const tc = useT(commonMessages);
   const [, navigate] = useLocation();
-  // Management mode: the server answers with every rep's pieces (routes.ts, listActor).
-  const fleet = useViewerAccess().canManage;
+  // In a panel's work view (platform, partner, owner; never a member) the server answers with the whole fleet it
+  // covers: everyone's for the platform, the organization's for the rest (routes.ts, listActor).
+  const fleet = useViewerAccess().adminMode;
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["/api/xpot/tags/dashboard"],
     queryFn: () => tagsGet<TagDashboard>("/api/xpot/tags/dashboard?days=30"),

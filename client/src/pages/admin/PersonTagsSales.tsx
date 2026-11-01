@@ -14,7 +14,7 @@ import { Loading, LoadError } from "./tags/pieces-shared";
 import { RangePicker, rangeParams, type AnalyticsRange } from "./tags/pieces-analytics";
 import type { Rep } from "./PersonDetail";
 
-/** Why this person cannot sell Tags pieces yet (a manager or admin only lacks a block or the module). Empty for a sign-up still waiting. */
+/** Why this person cannot sell Tags pieces yet (a platform user only lacks a block or the module). Empty for a sign-up still waiting. */
 export function personSellBlockers(rep: Rep) {
   return rep.access === "pending" ? [] : sellBlockers(rep);
 }
@@ -35,7 +35,7 @@ export function SellBlockerPills({ rep, testId }: { rep: Rep; testId?: string })
 
 /**
  * What the Resellers table used to show for one person: sales, activations, stock in hand and scans in a
- * window. Same endpoint and query key as the report (GET /admin/tags/report, a manager's), filtered to the
+ * window. Same endpoint and query key as the report (GET /admin/tags/report), filtered to the
  * person; a reseller with no pieces yet is not in the report, so their numbers are zeros.
  */
 export function PersonTagsSales({ rep }: { rep: Rep }) {

@@ -15,6 +15,9 @@ import { Select } from "@/components/xpot/Field";
 import { ListSkeleton } from "@/components/xpot/ListSkeleton";
 import { Pill } from "@/components/xpot/StatusPill";
 import { formatMoney } from "@/lib/format";
+import { profileOfMe } from "@/lib/adminMode";
+import { can } from "@shared/profiles";
+import type { XpotMeResponse } from "@/pages/xpot/types";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
@@ -223,16 +226,23 @@ function ShopCarousel({ count, children }: { count: number; children: ReactNode 
 export default function ShopScreen() {
   const t = useT(tagsMessages);
   const tc = useT(commonMessages);
+  const { data: me } = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
+  // A partner makes its own pieces: no buying for it (shared/profiles.ts, "buyPieces"). Until /me loads, the shop stays.
+  const profile = profileOfMe(me);
+  const buying = !profile || can(profile, "buyPieces");
   const catalog = useQuery({
     queryKey: ["/api/xpot/tags/shop-catalog"],
     queryFn: () => tagsGet<TagShopCatalog>("/api/xpot/tags/shop-catalog"),
     staleTime: 60_000,
+    enabled: buying,
   });
   const entries = useQuery({
     queryKey: ["/api/xpot/tags/showcase"],
     queryFn: () => tagsGet<TagShowcaseView[]>("/api/xpot/tags/showcase"),
     staleTime: 60_000,
+    enabled: buying,
   });
+  if (!buying) return <div className="space-y-5" data-testid="tags-shop"><EmptyState tone="tags" icon={ShoppingBag} title={t("shopProducerTitle")} hint={t("shopProducerHint")} /></div>;
   const products = catalog.data?.products ?? [];
   const kits = entries.data ?? [];
   const count = products.length + kits.length;
@@ -242,8 +252,7 @@ export default function ShopScreen() {
     <div className="space-y-5" data-testid="tags-shop">
       <p className="text-sm text-white/60">
         {t("shopIntro")}
-        <span className="block text-xs text-white/35">{t("shopOpensStore")}</span>
-      </p>
+        <span className="block text-xs text-white/35">{t("shopOpensStore")}</span>      </p>
 
       {failed && !count ? (
         <ErrorState
