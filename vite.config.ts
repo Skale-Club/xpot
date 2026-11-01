@@ -1,9 +1,24 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { sentryVitePlugin } from "@sentry/vite-plugin";
 import path from "path";
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    // Readable browser stacks in Sentry; the maps are uploaded, never served.
+    ...(process.env.SENTRY_AUTH_TOKEN
+      ? [
+          sentryVitePlugin({
+            org: "skale-club",
+            project: "xpot-frontend",
+            authToken: process.env.SENTRY_AUTH_TOKEN,
+            release: { name: process.env.VITE_RELEASE || undefined },
+            sourcemaps: { filesToDeleteAfterUpload: ["dist/public/assets/*.js.map"] },
+          }),
+        ]
+      : []),
+  ],
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "client", "src"),

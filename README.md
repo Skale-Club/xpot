@@ -615,7 +615,8 @@ comment on each, plus the client's optional `VITE_GOOGLE_MAPS_API_KEY` (see
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | no | Web push (background route notifications) |
 | `PROSPECTING_ENGINE_URL`, `PROSPECTING_ENGINE_CF_CLIENT_ID`, `PROSPECTING_ENGINE_CF_CLIENT_SECRET`, `PROSPECTING_ENGINE_MAX_TIME_SECONDS`, `PROSPECTING_ENGINE_DEPTH`, `PROSPECTING_ENGINE_POLL_MS` | no | The prospecting engine (see `docs/prospecting-engine-runbook.md`); unset, route planning says it is not configured |
 | `GOOGLE_ROUTE_OPTIMIZATION_PROJECT_ID`, `GOOGLE_ROUTE_OPTIMIZATION_CREDENTIALS_FILE` or `GOOGLE_ROUTE_OPTIMIZATION_CREDENTIALS_JSON` | no | Google Route Optimization for the daily route; unset, Xpot orders the stops itself |
-| `SOURCE_COMMIT` | no | Set by Coolify; reported by `/api/version` |
+| `SOURCE_COMMIT` | no | Set by Coolify; reported by `/api/version` and names the Sentry release |
+| `SENTRY_DSN` | no | Sends the server's recorded errors to Sentry's `xpot-backend`; unset, nothing is sent |
 | `MIGRATIONS_DIR` | no | Where the migration runner looks (default `./migrations`) |
 
 The voice providers (Groq first, OpenAI Whisper as its fallback, each only when
@@ -650,10 +651,12 @@ physical pieces must answer instantly, which rules out cold serverless starts.
 Coolify app settings:
 - Build pack: Dockerfile. Port: `8888`. Health check: `/api/health` (also in the Dockerfile).
 - Turn on "Include Source Commit in Build" so `/api/version` reports the commit.
-- Runtime environment variables: see "Environment variables". No build-time
-  variables are needed: the one the client can read, `VITE_GOOGLE_MAPS_API_KEY`
-  (in `.env.example`), is not passed by the Dockerfile, and without it the
-  route map is drawn with MapLibre instead of Google Maps.
+- Runtime environment variables: see "Environment variables". Build-time
+  variables are all optional: `VITE_SENTRY_DSN` (browser errors go to Sentry's
+  `xpot-frontend`) and `SENTRY_AUTH_TOKEN` (uploads source maps). The other one
+  the client can read, `VITE_GOOGLE_MAPS_API_KEY` (in `.env.example`), is not
+  passed by the Dockerfile, and without it the route map is drawn with MapLibre
+  instead of Google Maps.
 
 Migrations run on **every container start**: the Dockerfile's `CMD` is
 `node dist/migrate.cjs && exec node dist/index.cjs`. The runner applies pending

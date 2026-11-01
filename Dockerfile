@@ -18,8 +18,13 @@ RUN npm ci
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-# esbuild -> dist/index.cjs, vite build -> dist/public. No build-time env needed.
-RUN npm run build
+# esbuild -> dist/index.cjs, vite build -> dist/public. All three are optional:
+# Vite inlines the browser's DSN, the token uploads source maps to Sentry, and
+# Coolify's SOURCE_COMMIT names the release. Only the runner stage ships.
+ARG VITE_SENTRY_DSN
+ARG SENTRY_AUTH_TOKEN
+ARG SOURCE_COMMIT
+RUN VITE_RELEASE="$SOURCE_COMMIT" npm run build
 
 FROM base AS runner
 ENV NODE_ENV=production

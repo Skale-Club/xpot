@@ -1,4 +1,7 @@
-// Sends the browser's crashes to Admin › System health (POST /api/xpot/client-errors).
+import * as Sentry from "@sentry/react";
+
+// Sends the browser's crashes to Admin › System health (POST /api/xpot/client-errors)
+// and to Sentry (xpot-frontend, errors only, when the build has VITE_SENTRY_DSN).
 // Best effort and quiet: a report that fails is dropped, the same error is sent
 // once per page load, and the server throttles a looping page.
 
@@ -17,6 +20,10 @@ export function reportClientError(error: unknown, kind: Kind, componentStack?: s
   const key = `${kind}:${message}`;
   if (sent.has(key) || sent.size >= MAX_PER_PAGE) return;
   sent.add(key);
+  // Window errors reach Sentry through its own handlers; a caught render error only from here.
+  if (kind === "render") {
+    Sentry.captureException(err, { contexts: { react: { componentStack: componentStack ?? "" } } });
+  }
   try {
     void fetch("/api/xpot/client-errors", {
       method: "POST",
@@ -38,6 +45,12 @@ export function reportClientError(error: unknown, kind: Kind, componentStack?: s
 }
 
 export function installGlobalErrorReporting() {
+  Sentry.init({
+    dsn: import.meta.env.VITE_SENTRY_DSN,
+    enabled: import.meta.env.PROD && !!import.meta.env.VITE_SENTRY_DSN,
+    release: import.meta.env.VITE_RELEASE || undefined,
+    ignoreErrors: IGNORED,
+  });
   window.addEventListener("error", (event) => reportClientError(event.error ?? event.message, "error"));
   window.addEventListener("unhandledrejection", (event) => reportClientError(event.reason, "unhandledrejection"));
 }
