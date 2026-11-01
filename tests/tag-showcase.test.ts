@@ -2,7 +2,7 @@
 // the links are the contract with Stuscle: the reseller's own wholesale code, and for a kit the SKUs to put in the
 // cart (never a price).
 import { describe, expect, it } from "vitest";
-import { showcaseUrl, tagShowcaseInputSchema, tagShowcasePatchSchema } from "../shared/tagShowcase";
+import { showcaseAddsToCart, showcaseUrl, tagShowcaseInputSchema, tagShowcasePatchSchema } from "../shared/tagShowcase";
 import { stuscleKitUrl, wholesaleUrl } from "../shared/wholesale";
 
 const CODE = "XPABCD1234";
@@ -22,13 +22,16 @@ describe("stuscleKitUrl", () => {
 });
 
 describe("showcaseUrl", () => {
-  it("sends a model to the wholesale page and a kit to its cart link", () => {
-    expect(showcaseUrl({ kind: "model", items: [] }, BASE, CODE)).toBe(wholesaleUrl(BASE, CODE));
-    const kit = { kind: "kit" as const, items: [{ sku: "KIT-SOCCER-24-STARTER", quantity: 1 }] };
+  it("puts an entry's SKUs in the cart, a kit's and a model's alike", () => {
+    const kit = { items: [{ sku: "KIT-SOCCER-24-STARTER", quantity: 1 }] };
     expect(showcaseUrl(kit, BASE, CODE)).toBe(stuscleKitUrl(BASE, CODE, kit.items));
+    const model = { items: [{ sku: "PLATE-GOOGLE-SMALL-BLACK", quantity: 1 }] };
+    expect(showcaseUrl(model, BASE, CODE)).toBe(stuscleKitUrl(BASE, CODE, model.items));
+    expect(showcaseAddsToCart(model)).toBe(true);
   });
-  it("falls back to the wholesale page for a kit that lost its SKUs", () => {
-    expect(showcaseUrl({ kind: "kit", items: [] }, BASE, CODE)).toBe(wholesaleUrl(BASE, CODE));
+  it("opens the wholesale page for an entry with no SKU", () => {
+    expect(showcaseUrl({ items: [] }, BASE, CODE)).toBe(wholesaleUrl(BASE, CODE));
+    expect(showcaseAddsToCart({ items: [] })).toBe(false);
   });
 });
 
@@ -46,8 +49,9 @@ describe("tagShowcaseInputSchema", () => {
   it("refuses a bad quantity", () => {
     for (const quantity of [0, -1, 1.5, 10_001]) expect(tagShowcaseInputSchema.safeParse({ ...kit, items: [{ sku: "A", quantity }] }).success).toBe(false);
   });
-  it("lets a model have no SKUs and requires an https picture", () => {
+  it("lets a model have no SKU or its one SKU, and requires an https picture", () => {
     expect(tagShowcaseInputSchema.safeParse({ kind: "model", title: "Large stand" }).success).toBe(true);
+    expect(tagShowcaseInputSchema.safeParse({ kind: "model", title: "Large stand", items: [{ sku: "STAND-LARGE-BLACK", quantity: 1 }] }).success).toBe(true);
     expect(tagShowcaseInputSchema.safeParse({ kind: "model", title: "Large stand", imageUrl: "http://x.test/a.png" }).success).toBe(false);
     expect(tagShowcaseInputSchema.safeParse({ kind: "model", title: "Large stand", imageUrl: "https://x.test/a.png" }).success).toBe(true);
     expect(tagShowcaseInputSchema.safeParse({ kind: "model", title: "Large stand", imageUrl: "" }).success).toBe(true);
