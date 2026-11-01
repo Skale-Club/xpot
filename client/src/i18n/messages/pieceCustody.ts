@@ -7,8 +7,8 @@ import type { Dictionary } from "../index";
 const en = {
   // Receive
   receiveTitle: "Not in stock yet",
-  receiveHint: "Testing the chip doesn't move it. Receive it when it goes into stock.",
-  receiveHintRep: "Receive it to set it up or sell it. Testing the chip doesn't move it.",
+  receiveHint: "Receive it when it goes into stock.",
+  receiveHintRep: "Receive it to set it up or sell it.",
   receiveHouse: "Put in company stock",
   receiveMe: "Keep with me",
   received_house: "Put in company stock",
@@ -17,7 +17,6 @@ const en = {
   receiveBlocked_no_batch: "This piece has no batch to be received into.",
   receiveBlocked_other_organization: "This piece belongs to another organization.",
   receiveBlocked_not_pending: "This piece is already in stock.",
-  pendingReceiveFirst: "Receive this piece into stock first (above).",
   // Hand back
   returnToHouse: "Hand back to the company",
   returnTitle: "Hand this piece back to the company?",
@@ -48,8 +47,8 @@ export const pieceCustodyMessages: Dictionary<typeof en> = {
   en,
   pt: {
     receiveTitle: "Ainda fora do estoque",
-    receiveHint: "Testar o chip não muda nada. Receba quando ela entrar no estoque.",
-    receiveHintRep: "Receba para configurar ou vender. Testar o chip não muda nada.",
+    receiveHint: "Receba quando ela entrar no estoque.",
+    receiveHintRep: "Receba para configurar ou vender.",
     receiveHouse: "Colocar no estoque da empresa",
     receiveMe: "Ficar comigo",
     received_house: "Colocada no estoque da empresa",
@@ -58,7 +57,6 @@ export const pieceCustodyMessages: Dictionary<typeof en> = {
     receiveBlocked_no_batch: "Esta peça não tem lote para ser recebida.",
     receiveBlocked_other_organization: "Esta peça é de outra organização.",
     receiveBlocked_not_pending: "Esta peça já está no estoque.",
-    pendingReceiveFirst: "Receba esta peça no estoque primeiro (acima).",
     returnToHouse: "Devolver à empresa",
     returnTitle: "Devolver esta peça à empresa?",
     returnBody: "Ela sai do seu estoque e volta para o estoque da empresa. Use para uma peça recebida por engano ou só testada.",
@@ -83,8 +81,8 @@ export const pieceCustodyMessages: Dictionary<typeof en> = {
   },
   es: {
     receiveTitle: "Aún fuera del stock",
-    receiveHint: "Probar el chip no la mueve. Recíbela cuando entre al stock.",
-    receiveHintRep: "Recíbela para configurarla o venderla. Probar el chip no la mueve.",
+    receiveHint: "Recíbela cuando entre al stock.",
+    receiveHintRep: "Recíbela para configurarla o venderla.",
     receiveHouse: "Poner en el stock de la empresa",
     receiveMe: "Quedármela",
     received_house: "Puesta en el stock de la empresa",
@@ -93,7 +91,6 @@ export const pieceCustodyMessages: Dictionary<typeof en> = {
     receiveBlocked_no_batch: "Esta pieza no tiene lote para ser recibida.",
     receiveBlocked_other_organization: "Esta pieza es de otra organización.",
     receiveBlocked_not_pending: "Esta pieza ya está en el stock.",
-    pendingReceiveFirst: "Recibe esta pieza en el stock primero (arriba).",
     returnToHouse: "Devolver a la empresa",
     returnTitle: "¿Devolver esta pieza a la empresa?",
     returnBody: "Sale de tu stock y vuelve al stock de la empresa. Úsalo para una pieza recibida por error o solo probada.",

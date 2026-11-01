@@ -12,7 +12,7 @@ import EraseSheet from "@/pages/tags/EraseSheet";
 import { canLockChip, nfcMode } from "@/pages/tags/webNfc";
 import { tagPath } from "@/pages/tags/lib";
 import { CARD, CHIP_TONE, CopyButton, EYEBROW_MUTED, Pill, Spinner, StepList } from "@/pages/tags/ui";
-import { usePiece, usePieceWrite } from "./PieceContext";
+import { usePiece, usePieceWrite, type PieceCommandsRef } from "./PieceContext";
 
 // The NFC chip, for every role: written right here on an Android phone; on an
 // iPhone the link goes into NFC Tools and a tap that reads the chip confirms it
@@ -20,9 +20,11 @@ import { usePiece, usePieceWrite } from "./PieceContext";
 // phone (a QR). The global admin also gets the desktop writer (`desktopWriter`).
 // Locking makes the chip read-only for good, and its sheet says so before the tap.
 
-export function ChipSection({ desktopWriter }: {
+export function ChipSection({ desktopWriter, commands }: {
   /** The admin's desktop NFC writer card (pages/admin/tags), under the phone controls. */
   desktopWriter?: ReactNode;
+  /** The body's main action button starts the write from here (PieceCommands). */
+  commands?: PieceCommandsRef;
 }) {
   const { tag, viewer } = usePiece();
   const t = useT(tagsMessages);
@@ -48,6 +50,11 @@ export function ChipSection({ desktopWriter }: {
   const canLock = !locked && !retired && (manualFlow ? chipConfirmed : nfc === "web" && canLockChip() && !chipMissing);
   // Erasing a written chip (testing the piece, or starting over) needs a phone; a locked chip can't be erased.
   const canErase = !locked && !retired && nfc !== "none" && tag.nfcStatus !== "not_programmed";
+
+  useEffect(() => {
+    // On an iPhone the steps are already shown until the chip is confirmed; the button opens them again.
+    if (commands) commands.current.writeChip = () => (manualFlow ? setManualOpen(true) : setWriteOpen(true));
+  });
 
   // "Continue on the phone" (…?write=1) opens the write straight away.
   useEffect(() => {
