@@ -65,6 +65,19 @@ class BedRecipeTest(unittest.TestCase):
         self.assertEqual(safe_name('LPLATE-2026-007 - Plate Large - Menu: "White"/v2'), 'LPLATE-2026-007 - Plate Large - Menu Whitev2')
 
 
+class QrCheckFailureTest(unittest.TestCase):
+    def test_the_failing_codes_are_read_from_the_check_output(self):
+        from pipeline import QR_FAIL_RE, BuildFailed, QrCheckFailed
+        out = ('FAIL  REV-2026-007 #001 MNK82N0J                 no QR decoded\n'
+               'OK    REV-2026-007 #002 A7K3P9X2                 T1 HTTPS://XPOT.PLACE/Q/A7K3P9X2\n'
+               'FAIL  LPLATE-2026-0123 Plate Large Google #004 Z9XC3V5B  T1 HTTPS://XPOT.PLACE/Q/H4QW2R7T\n'
+               '2 of 4 checked objects decoded to their own code\n')
+        self.assertEqual([m.group(1) for m in QR_FAIL_RE.finditer(out)], ['MNK82N0J', 'Z9XC3V5B'])
+        err = QrCheckFailed('a QR on layer 1 ...', ['MNK82N0J'])
+        self.assertIsInstance(err, BuildFailed)
+        self.assertEqual((err.code, BuildFailed('x').code), ('qr_check_failed', 'build_failed'))
+
+
 class BuilderTest(unittest.TestCase):
     def test_a_piece_whose_qr_is_not_the_order_s_code_fails(self):
         from builders import BuildError, _check_url

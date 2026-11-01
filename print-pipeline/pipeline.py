@@ -32,11 +32,25 @@ ROOT = Path(__file__).resolve().parent
 SCRIPTS = ROOT / 'library' / 'scripts'
 BUILD_3MF = SCRIPTS / 'build-3mf-from-fusion.py'
 DEFAULT_STUDIO = r'C:\Program Files\Bambu Studio\bambu-studio.exe'
+QR_FAIL_RE = re.compile(r'^FAIL\s+.*?([0-9A-HJKMNP-TV-Z]{8,10})\s{2,}', re.M)
 PAUSE_RE = re.compile(r'pause\s*:\s*M400 U1 .*?layer z ([\d.]+); first Bridge on that layer at line \d+, after the pause')
 
 
 class BuildFailed(Exception):
     """The order cannot become a print file; the message says why, for the order's error."""
+
+    code = 'build_failed'
+
+
+class QrCheckFailed(BuildFailed):
+    """A QR on layer 1 did not decode to its own code. The same codes would fail the same way: Xpot's Print again
+    gives such a plate fresh codes (server/tags/production.ts redoJob). `codes` are the ones that failed."""
+
+    code = 'qr_check_failed'
+
+    def __init__(self, message, codes):
+        super().__init__(message)
+        self.codes = codes
 
 
 def studio_path() -> str:
@@ -107,7 +121,8 @@ def slice_and_check(three_mf: Path, work: Path, face_up: bool, expect_pause: boo
     qr = subprocess.run(qr_cmd, capture_output=True, text=True)
     qr_line = (qr.stdout.strip().splitlines() or [''])[-1]
     if qr.returncode:
-        raise BuildFailed(f'a QR on layer 1 does not decode to its own code: {qr.stdout.strip()[-600:]}')
+        failed = [m.group(1) for m in QR_FAIL_RE.finditer(qr.stdout)]
+        raise QrCheckFailed(f'a QR on layer 1 does not decode to its own code: {qr.stdout.strip()[-600:]}', failed)
     verify = subprocess.run([sys.executable, str(SCRIPTS / 'gcode-verify.py'), str(outdir)], capture_output=True, text=True)
     pause = PAUSE_RE.search(verify.stdout)
     if expect_pause and not pause:

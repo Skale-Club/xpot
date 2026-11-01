@@ -183,10 +183,10 @@ def upload(creds, job_id, path):
     return item
 
 
-def complete(creds, job_id, outcome, report=None, message=None):
+def complete(creds, job_id, outcome, report=None, message=None, code='build_failed'):
     body = {'outcome': outcome, 'report': report or {}}
     if outcome == 'failed':
-        body.update(errorCode='build_failed', errorMessage=(message or 'build failed')[:1000])
+        body.update(errorCode=code, errorMessage=(message or 'build failed')[:1000])
     _, done = request(creds['server'], 'POST', f'/api/provisioner/print-jobs/{job_id}/complete', creds['token'], body)
     return done
 
@@ -205,7 +205,9 @@ def build_ticket(creds, ticket, out=None, do_slice=True):
     try:
         report = build_order(ticket, out, do_slice=do_slice)
     except BuildFailed as err:
-        done = complete(creds, job_id, 'failed', message=str(err))
+        # A QR-check failure names its codes: Xpot gives that plate fresh ones when it is printed again.
+        report = {'qr_failed_codes': err.codes} if getattr(err, 'codes', None) else None
+        done = complete(creds, job_id, 'failed', report, message=str(err), code=err.code)
         print(f'  failed: {err}\nOrder {done["id"]} is {done["status"]}.')
         return False
     except Exception as err:  # a bug or a missing tool: the order says so instead of staying stuck in `building`

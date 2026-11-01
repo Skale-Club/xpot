@@ -72,6 +72,31 @@ def rasterise(segs, box, mirror, px_per_mm=12, line_mm=0.42, margin_px=100):
     return cv2.flip(img, 1) if mirror else img
 
 
+def decoders():
+    """The (detector, quarter turns) tries, cheapest first. OpenCV's classic detector misses some exact rasters: the
+    Large Google Stand card of MNK82N0J in a 90-degree slot (2026-10-31) is module-for-module right (0 of 625 differ)
+    yet decodes only once the drawing is turned, and other codes miss at other scales. The ArUco-based detector reads
+    every card of those plates; the turns are a last resort. A decode is the payload past Reed-Solomon, so trying
+    more only finds a QR that is there."""
+    classic = cv2.QRCodeDetector()
+    tries = [(classic, 0)]
+    if hasattr(cv2, 'QRCodeDetectorAruco'):
+        tries.append((cv2.QRCodeDetectorAruco(), 0))
+    tries += [(classic, k) for k in (1, 2, 3)]
+    return tries
+
+
+def decode(images, tries):
+    """(tool, text) of the first try that decodes any tool's drawing, else None. Every tool gets each try before the
+    next, dearer one: the old single try still answers first."""
+    for det, turns in tries:
+        for tool, img in images:
+            text = det.detectAndDecode(np.ascontiguousarray(np.rot90(img, turns)) if turns else img)[0]
+            if text:
+                return tool, text
+    return None
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('outdir')
@@ -84,7 +109,7 @@ def main():
     if not objects:
         sys.exit('no objects in result.json')
     segs = layer_one_segments(os.path.join(a.outdir, 'plate_1.gcode'))
-    det = cv2.QRCodeDetector()
+    tries = decoders()
     ignore = re.compile(a.ignore_object_regex, re.I) if a.ignore_object_regex else None
     failures = 0
     checked = 0
@@ -96,12 +121,7 @@ def main():
         b = o['bbox'] if 'bbox' in o else o
         box = (b['x'], b['y'], b['x'] + b['width'], b['y'] + b['depth'])
         want = CODE_AT_END.search(o['name'])
-        found = None
-        for tool in sorted(segs):
-            text = det.detectAndDecode(rasterise(segs[tool], box, not a.face_up))[0]
-            if text:
-                found = (tool, text)
-                break
+        found = decode([(tool, rasterise(segs[tool], box, not a.face_up)) for tool in sorted(segs)], tries)
         ok = bool(want and found and found[1].upper().endswith('/Q/' + want.group(1)))
         failures += 0 if ok else 1
         print('%s  %-40s  %s' % ('OK  ' if ok else 'FAIL', o['name'],

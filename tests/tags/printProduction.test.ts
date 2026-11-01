@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   bedPosition,
   canMarkPrinted,
+  PRINT_ERROR_QR_CHECK,
   nextPrintBatchCode,
   planPrintJobTransition,
+  planRedoCodes,
   printJobStockSchema,
   printJobUpdateSchema,
   printModelInputSchema,
@@ -38,6 +40,20 @@ describe("print order state machine", () => {
   it("lets a plate printed by hand without a file be marked printed, but not one a bench is building", () => {
     expect(["requested", "building", "ready", "printing", "printed", "failed", "cancelled"].filter(canMarkPrinted))
       .toEqual(["requested", "ready", "printing"]);
+  });
+});
+
+describe("printing a plate again", () => {
+  it("keeps its codes unless some were received or its QR check failed", () => {
+    expect(planRedoCodes({ errorCode: "build_failed", anyReceived: false })).toBe("same");
+    expect(planRedoCodes({ errorCode: null, anyReceived: false })).toBe("same");
+    expect(planRedoCodes({ errorCode: "failed", anyReceived: true })).toBe("fresh");
+  });
+  it("gives a plate that failed its QR check fresh codes, since the same ones would fail again", () => {
+    expect(PRINT_ERROR_QR_CHECK).toBe("qr_check_failed");
+    expect(planRedoCodes({ errorCode: PRINT_ERROR_QR_CHECK, anyReceived: false })).toBe("replace");
+    // a received piece's code is taken: a fresh batch, and the received pieces are not retired
+    expect(planRedoCodes({ errorCode: PRINT_ERROR_QR_CHECK, anyReceived: true })).toBe("fresh");
   });
 });
 
