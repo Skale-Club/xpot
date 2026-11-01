@@ -10,8 +10,8 @@ import { EmptyState } from "@/components/xpot/EmptyState";
 import { ADMIN_TAGS_KEY, STALE_MS, getJson } from "./tags/api";
 import { useTagOverview } from "./tags/OverviewTab";
 import { usePrintRequests } from "./tags/production-shared";
-import { Loading } from "./tags/pieces-shared";
-import { todayRows, type TodayRow } from "./home-model";
+import { Loading, LoadError } from "./tags/pieces-shared";
+import { todayFailure, todayRows, type TodayRow } from "./home-model";
 
 /** Pending Stuscle wholesale orders: the same cache KitsTab fills ([ADMIN_TAGS_KEY, "acquisitions"]). */
 function usePendingOrders() {
@@ -22,7 +22,7 @@ function usePendingOrders() {
   });
 }
 
-type Today = { rows: TodayRow[]; loading: boolean };
+type Today = { rows: TodayRow[]; loading: boolean; error: unknown; retry: () => void };
 
 /** Super admin: print plates, wholesale orders and every Tags queue (the print and order endpoints are theirs alone). */
 function useSuperToday(): Today {
@@ -32,23 +32,27 @@ function useSuperToday(): Today {
   return {
     loading: overview.isLoading || requests.isLoading || orders.isLoading,
     rows: todayRows({ isSuperAdmin: true, requests: requests.data, queues: overview.data?.queues, pendingOrders: orders.data?.filter((item) => item.acquisition.status === "pending").length }),
+    error: overview.error ?? requests.error ?? orders.error,
+    retry: () => { void overview.refetch(); void requests.refetch(); void orders.refetch(); },
   };
 }
 
 /** A manager: only the Tags queues they can open. A viewer without Tags access gets a 403 there, which is just no rows. */
 function useManagerToday(): Today {
   const overview = useTagOverview();
-  return { loading: overview.isLoading, rows: todayRows({ isSuperAdmin: false, queues: overview.data?.queues }) };
+  return { loading: overview.isLoading, rows: todayRows({ isSuperAdmin: false, queues: overview.data?.queues }), error: todayFailure(overview.error), retry: () => void overview.refetch() };
 }
 
 /** "Today": what waits for the owner, one row per thing with a count and the list behind it. Rows at zero are hidden. */
-function TodayList({ rows, loading }: Today) {
+function TodayList({ rows, loading, error, retry }: Today) {
   const t = useT(workspacesMessages);
   const tf = useT(adminTagsFlowMessages);
   const words = (word: TodayRow["label"]) => (word.dict === "home" ? t(word.key) : tf(word.key));
   if (loading) return <Loading rows={3} />;
-  if (!rows.length) return <EmptyState compact dense tone="tags" icon={CheckCircle2} title={t("todayNothing")} hint={t("todayNothingHint")} />;
-  return <ul className="divide-y divide-white/[0.06] overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02]" data-testid="today-list">
+  // A list that failed to load is never "Nothing waiting": say so, and keep whatever did load.
+  const failure = error ? <LoadError compact what={t("todayWhat")} error={error} onRetry={retry} /> : null;
+  if (!rows.length) return failure ?? <EmptyState compact dense tone="tags" icon={CheckCircle2} title={t("todayNothing")} hint={t("todayNothingHint")} />;
+  return <div className="space-y-3">{failure}<ul className="divide-y divide-white/[0.06] overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02]" data-testid="today-list">
     {rows.map((row) => <li key={row.id}>
       <Link href={row.href} className="group flex items-center gap-4 px-4 py-3.5 transition-colors hover:bg-white/[0.04]" data-testid={`today-${row.id}`}>
         <span className="w-12 shrink-0 text-right text-2xl font-semibold tabular-nums text-amber-200">{row.count}</span>
@@ -56,7 +60,7 @@ function TodayList({ rows, loading }: Today) {
         <ArrowRight className="h-4 w-4 shrink-0 text-white/35 transition-transform group-hover:translate-x-1" aria-hidden="true" />
       </Link>
     </li>)}
-  </ul>;
+  </ul></div>;
 }
 
 function SuperToday() { return <TodayList {...useSuperToday()} />; }

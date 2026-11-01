@@ -9,6 +9,7 @@ import { activityFeed, needsActionQueues, pieceQueueCard } from "../client/src/p
 import {
   canMarkStep,
   intakeKey,
+  pendingBatches,
   readCode,
   readErrorStatus,
   splitReads,
@@ -161,5 +162,17 @@ describe("Distribution", () => {
     expect(en[reasonKey("takeBack", "not_with_reseller")!]).toMatch(/not with a reseller/i);
     expect(en[reasonKey("handOut", "with_reseller")!]).toContain("{name}");
     expect(reasonKey("handOut", "something_new")).toBe("reasonUnknown");
+  });
+});
+
+describe("pendingBatches", () => {
+  it("keeps the batches the count counts: pieces pending, not cancelled", () => {
+    const batches = [
+      { id: "waiting", status: "open", pendingCount: 3 },
+      { id: "closed-waiting", status: "closed", pendingCount: 1 },
+      { id: "received", status: "open", pendingCount: 0 },
+      { id: "cancelled", status: "cancelled", pendingCount: 5 },
+    ];
+    expect(pendingBatches(batches).map((b) => b.id)).toEqual(["waiting", "closed-waiting"]);
   });
 });

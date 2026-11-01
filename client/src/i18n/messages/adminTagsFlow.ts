@@ -127,6 +127,8 @@ const en = {
   queueStuscleOrdersHint: "Paid, waiting for their pieces to be separated",
   queueBatchesNotReceived: "Batches awaiting pieces",
   queueBatchesNotReceivedHint: "Batches with pieces not received yet",
+  whatPendingBatches: "the batches awaiting pieces",
+  pendingBatchPieces: "{pending} of {total} pieces not received",
   queueChipPending: "Chips to write",
   queueChipPendingHint: "Set-up pieces whose chip isn't written and checked",
   queueScannedNotLive: "Scanned, not live",
@@ -135,7 +137,17 @@ const en = {
   queueNoProductHint: "Pieces that can't be sold until they get a catalog product",
   queueEmpty: "Nothing here: this queue is clear.",
   backToOverview: "Overview",
-  thePieces: "the pieces",
+  thePieces: "the pieces",
+
+
+
+
+
+
+
+
+
+
   localDay: "Your local day",
   scansFootnote: "Scans count real visits only: bots and repeated hits are left out.",
   analyticsTitle: "Scans by piece",
@@ -322,6 +334,8 @@ export const adminTagsFlowMessages: Dictionary<typeof en> = {
     queueStuscleOrdersHint: "Pagos, esperando a separação das peças",
     queueBatchesNotReceived: "Lotes esperando peças",
     queueBatchesNotReceivedHint: "Lotes com peças ainda não recebidas",
+    whatPendingBatches: "os lotes esperando peças",
+    pendingBatchPieces: "{pending} de {total} peças não recebidas",
     queueChipPending: "Chips para gravar",
     queueChipPendingHint: "Peças configuradas com o chip não gravado e conferido",
     queueScannedNotLive: "Lidas, fora do ar",
@@ -330,7 +344,17 @@ export const adminTagsFlowMessages: Dictionary<typeof en> = {
     queueNoProductHint: "Peças que não podem ser vendidas até ter um produto do catálogo",
     queueEmpty: "Nada aqui: esta fila está limpa.",
     backToOverview: "Visão geral",
-    thePieces: "as peças",
+    thePieces: "as peças",
+
+
+
+
+
+
+
+
+
+
     localDay: "Seu dia local",
     scansFootnote: "As leituras contam só visitas reais: robôs e repetições ficam de fora.",
     analyticsTitle: "Leituras por peça",
@@ -511,6 +535,8 @@ export const adminTagsFlowMessages: Dictionary<typeof en> = {
     queueStuscleOrdersHint: "Pagados, esperando que se separen sus piezas",
     queueBatchesNotReceived: "Lotes esperando piezas",
     queueBatchesNotReceivedHint: "Lotes con piezas aún no recibidas",
+    whatPendingBatches: "los lotes esperando piezas",
+    pendingBatchPieces: "{pending} de {total} piezas sin recibir",
     queueChipPending: "Chips por grabar",
     queueChipPendingHint: "Piezas configuradas cuyo chip no está grabado y verificado",
     queueScannedNotLive: "Leídas, sin activar",
@@ -519,7 +545,17 @@ export const adminTagsFlowMessages: Dictionary<typeof en> = {
     queueNoProductHint: "Piezas que no se pueden vender hasta tener un producto del catálogo",
     queueEmpty: "Nada aquí: esta cola está al día.",
     backToOverview: "Resumen",
-    thePieces: "las piezas",
+    thePieces: "las piezas",
+
+
+
+
+
+
+
+
+
+
     localDay: "Tu día local",
     scansFootnote: "Las lecturas cuentan solo visitas reales: se excluyen bots y repeticiones.",
     analyticsTitle: "Lecturas por pieza",

@@ -44,6 +44,11 @@ export interface TodayInput {
   pendingOrders?: number;
 }
 
+/** A manager's failed load worth reporting: a viewer without Tags access gets a 403, which is just no rows. */
+export function todayFailure(error: unknown): unknown {
+  return (error as { status?: number } | null)?.status === 403 ? null : error;
+}
+
 /** What needs the owner, in the order they are worked: print, fill orders, then the Tags queues. Zero rows are dropped. */
 export function todayRows({ isSuperAdmin, requests, queues, pendingOrders }: TodayInput): TodayRow[] {
   const plates = plateCounts(requests);

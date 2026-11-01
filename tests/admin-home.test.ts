@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 import type { PrintRequestItem } from "../shared/printProduction";
 import type { TagQueueCounts } from "../shared/tagQueues";
-import { plateCounts, todayRows } from "../client/src/pages/admin/home-model";
+import { plateCounts, todayFailure, todayRows } from "../client/src/pages/admin/home-model";
 
 const plate = (status: string) => ({ status }) as PrintRequestItem["plates"][number];
 const request = (...statuses: string[]) => ({ plates: statuses.map(plate) }) as PrintRequestItem;
@@ -49,5 +49,14 @@ describe("todayRows", () => {
 
   it("shows nothing for a viewer whose overview did not load", () => {
     expect(todayRows({ isSuperAdmin: false })).toEqual([]);
+  });
+});
+
+describe("todayFailure", () => {
+  it("treats a 403 as no rows and reports any other failure", () => {
+    const serverError = Object.assign(new Error("boom"), { status: 500 });
+    expect(todayFailure(Object.assign(new Error("no"), { status: 403 }))).toBeNull();
+    expect(todayFailure(serverError)).toBe(serverError);
+    expect(todayFailure(null)).toBeNull();
   });
 });
