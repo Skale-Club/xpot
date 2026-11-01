@@ -344,6 +344,35 @@ Cada fase é um PR que vai para produção sozinho.
 | Lote de fabricação | batch | lote | lote | |
 | Entrega a revendedor | kit | kit | kit | |
 
+### Glossário de simplicidade (2026-11-01)
+
+Vale por cima da tabela acima, em toda a interface. Só texto: código, banco e URLs não mudam. Motivos e evidências em
+`docs/SIMPLICITY_AUDIT.md`.
+
+| Conceito | EN | PT | ES | Substitui |
+|---|---|---|---|---|
+| Estoque de quem é dono das peças | Company stock | Estoque da empresa | Stock de la empresa | House stock, The house |
+| Peça com quem clicou | With me | Comigo | Conmigo | My stock |
+| Mesa que vai à impressora | Print job | Impressão | Impresión | Plate, quando não é o produto |
+| PC que gera os arquivos | Print computer | Computador da impressora | Ordenador de la impresora | Bench |
+| Tela de estoque | Stock | Estoque | Stock | Inventory |
+| Tela de entrega | Hand out | Entregar peças | Entregar piezas | Distribution, Kits |
+| Pedidos da Stuscle | Wholesale orders | Pedidos de atacado | Pedidos mayoristas | Stuscle orders |
+| Resultado da equipe | Team results | Resultado da equipe | Resultados del equipo | Overview (Visits) |
+| Resultado das peças | Pieces results | Resultado das peças | Resultados de piezas | Overview (Tags), Tags overview |
+| Início de Tags | Home | Início | Inicio | Dashboard (Tags) |
+| Histórico de produção | History | Histórico | Historial | Production log |
+| Gravadores | Chip writers | Gravadores de chip | Grabadores de chip | NFC writers |
+| Peça sem entrada | Not in stock yet | Ainda fora do estoque | Aún fuera del stock | Not received |
+| Peça sem cliente | No customer yet | Sem cliente | Sin cliente | Not set up |
+| Configurada | Ready, not live | Pronta, fora do ar | Lista, sin activar | Set up, not live |
+| Vendida | Sold | Vendida | Vendida | With the customer |
+| Desativada | Deactivated | Desativada | Desactivada | Retired |
+| Empresas em trabalho | In progress | Em andamento | En curso | Filtro Leads |
+| Área do dono | My company | Minha empresa | Mi empresa | My organization, My workspace |
+
+"Plate" e "Stand" ficam só para os produtos. "Kit" fica só no nome do pacote (K-0001). "Workspace" não aparece na interface.
+
 ---
 
 ## 6. Decisões em aberto
