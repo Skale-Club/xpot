@@ -125,6 +125,8 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
   const takesFiles = !["printed", "cancelled"].includes(job.status);
   const assembledAt = (job.report as { assembledAt?: string }).assembledAt ?? null;
   const canAssemble = Boolean(job.batchId) && job.status === "printed" && job.consumes.length > 0 && !assembledAt;
+  // A failed or cancelled plate is printed again once: after that, its new attempt is where the work goes on.
+  const canRedo = (job.status === "failed" || job.status === "cancelled") && !job.redoneBy;
   const confirmText: Record<Step, { title: string; body: string; label: string; reason?: "required" | "optional" }> = {
     complete: { title: t("confirmCompleteTitle"), body: t("confirmCompleteBody"), label: t("markReady") },
     fail: { title: t("confirmFailTitle"), body: t("confirmFailBody"), label: t("markFailed"), reason: "required" },
@@ -153,7 +155,8 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
           {job.status === "building" ? (
             <Button type="button" variant="ghost" size="sm" onClick={() => setConfirming("release")}>{t("release")}</Button>
           ) : null}
-          {["requested", "building", "ready"].includes(job.status) ? (
+          {/* A failed plate that will not be printed again is closed with Cancel, so its request stops asking for action. */}
+          {["requested", "building", "ready"].includes(job.status) || (job.status === "failed" && !job.redoneBy) ? (
             <Button type="button" variant="ghost" size="sm" onClick={() => setConfirming("cancel")}>{t("cancelOrder")}</Button>
           ) : null}
           {["requested", "building", "ready", "printing"].includes(job.status) ? (
@@ -180,7 +183,7 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
               {t("markAssembled")}
             </Button>
           ) : null}
-          {job.status === "failed" || job.status === "cancelled" ? (
+          {canRedo ? (
             <Button type="button" variant="brand" accent="tags" size="sm" loading={redo.isPending} onClick={() => redo.mutate()}>
               <RotateCcw />
               {t("redo")}
@@ -196,7 +199,8 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2 text-xs text-white/55"><JobStatusPill status={job.status} />{showPlateNumber(job) ? <span>{t("plateOf", { number: job.plateNumber, total: job.plateCount })}</span> : null}<span>{t.plural("pieceCount", job.quantity)}</span>{job.batchCode ? <span className="font-mono">{job.batchCode}</span> : null}</div>
           <p className="text-sm leading-relaxed text-white/65">{job.status === "failed" || job.status === "cancelled" ? t(`jobStatus_${job.status}` as never) : journeyStep === 2 ? (pending ? t.plural("pendingPiecesBody", pending) : tw("receivedHint")) : journeyStep === 1 ? tw("printingHint") : t(job.builder ? "requestedBodyBench" : "requestedBodyHand")}</p>
-          {job.status === "failed" || job.status === "cancelled" ? <Button variant="brand" accent="tags" loading={redo.isPending} onClick={() => redo.mutate()}><RotateCcw />{t("redo")}</Button> : null}
+          {canRedo ? <Button variant="brand" accent="tags" loading={redo.isPending} onClick={() => redo.mutate()}><RotateCcw />{t("redo")}</Button> : null}
+          {job.redoneBy ? <p className="text-sm text-white/65" data-testid="production-redone">{t("redoneAlready")}{" "}<button type="button" className="underline underline-offset-2 hover:text-white" onClick={() => go(`${PRODUCTION_BASE}/jobs/${job.redoneBy}`)}>{t("openRedo")}</button></p> : null}
           {journeyStep === 1 ? <div className="flex flex-wrap gap-2">
             {download ? <Button asChild variant="secondary"><a href={`/api/xpot/admin/print-files/${download.id}`} target="_blank" rel="noopener noreferrer" data-testid="production-primary-download"><Download />{tw("downloadPrint")}</a></Button> : null}
             <Button variant="brand" accent="tags" onClick={() => setMarking(true)} data-testid="production-mark-printed"><Printer />{t("markPrinted")}</Button>

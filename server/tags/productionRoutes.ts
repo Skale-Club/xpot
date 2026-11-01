@@ -207,7 +207,7 @@ export function registerProductionRoutes(app: Express, deps: { device: readonly 
     const versionId = uuidParam(req.params.versionId, res);
     if (!versionId) return;
     try {
-      const { body, sha256 } = await production.versionPreview(req.params.ref, versionId);
+      const { body, sha256 } = await production.versionPreview(req.params.ref, versionId, productionScopeOf(req));
       res.set({ "Content-Type": PRINT_PREVIEW_CONTENT_TYPE, "Cache-Control": "private, max-age=3600", ETag: `"${sha256}"` });
       if (req.headers["if-none-match"] === `"${sha256}"`) return res.status(304).end();
       res.send(Buffer.from(body.buffer, body.byteOffset, body.byteLength));

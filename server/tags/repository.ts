@@ -620,9 +620,9 @@ export async function createSingleTag(
   return tag;
 }
 
-async function findExistingCodes(codes: string[]): Promise<Set<string>> {
+async function findExistingCodes(codes: string[], executor: typeof db | Tx = db): Promise<Set<string>> {
   if (codes.length === 0) return new Set();
-  const found = await db.select({ code: tags.publicCode }).from(tags).where(inArray(tags.publicCode, codes));
+  const found = await executor.select({ code: tags.publicCode }).from(tags).where(inArray(tags.publicCode, codes));
   return new Set(found.map((r) => r.code));
 }
 
@@ -1253,8 +1253,19 @@ export interface BatchInput {
 /** Runs inside the transaction that issues the codes, with the new batch (Tags › Production links its print order). */
 export type BatchCreatedHook = (tx: Tx, batch: typeof tagBatches.$inferSelect) => Promise<void>;
 
-export async function createBatch(input: BatchInput, userId: string | null, source: JourneySource = "admin", onIssued?: BatchCreatedHook) {
-  if (input.quantity || input.publicCodes?.length) return createIssuedBatch(input, userId, source, onIssued);
+/**
+ * Issuing a batch inside a caller's transaction (Tags › Production makes every plate of a request in one): the batch
+ * goes in under a savepoint of `tx` (a taken code retries without aborting the caller), and the journey entry, which
+ * needs the batch committed, is handed to `afterCommit` for the caller to run once its transaction is done.
+ */
+export interface BatchInTransaction {
+  tx: Tx;
+  afterCommit: Array<() => Promise<void>>;
+}
+
+export async function createBatch(input: BatchInput, userId: string | null, source: JourneySource = "admin", onIssued?: BatchCreatedHook, within?: BatchInTransaction) {
+  if (input.quantity || input.publicCodes?.length) return createIssuedBatch(input, userId, source, onIssued, within);
+  if (within) throw new Error("createBatch: only an issued batch can be made inside a caller's transaction");
   const batchCode = input.batchCode?.trim() || (await nextBatchCode(input.productType));
   const organizationId = input.organizationId ?? await companyOrganizationId();
   try {
@@ -1287,19 +1298,21 @@ export async function createBatch(input: BatchInput, userId: string | null, sour
   }
 }
 
-async function createIssuedBatch(input: BatchInput, userId: string | null, source: JourneySource, onIssued?: BatchCreatedHook) {
+async function createIssuedBatch(input: BatchInput, userId: string | null, source: JourneySource, onIssued?: BatchCreatedHook, within?: BatchInTransaction) {
+  const executor = within?.tx ?? db;
   const batchCode = input.batchCode?.trim() || (await nextBatchCode(input.productType));
   const organizationId = input.organizationId ?? await companyOrganizationId();
   const pinned = Boolean(input.publicCodes?.length);
   const quantity = input.publicCodes?.length ?? input.quantity!;
+  const lookup = (list: string[]) => findExistingCodes(list, executor);
   for (let attempt = 1; ; attempt++) {
-    const codes = input.publicCodes ?? (await generateUniqueCodes(quantity, findExistingCodes));
+    const codes = input.publicCodes ?? (await generateUniqueCodes(quantity, lookup));
     if (pinned) {
-      const existing = await findExistingCodes(codes);
+      const existing = await lookup(codes);
       if (existing.size > 0) throw new TagError(`Public codes already exist: ${Array.from(existing).sort().join(", ")}`, 409);
     }
     try {
-      const batch = await db.transaction(async (tx) => {
+      const batch = await executor.transaction(async (tx) => {
         const now = new Date();
         const [batch] = await tx.insert(tagBatches).values({
           organizationId,
@@ -1348,7 +1361,7 @@ async function createIssuedBatch(input: BatchInput, userId: string | null, sourc
         return batch;
       });
       console.log(`[tags] batch ${batch.batchCode} created with ${quantity} ${pinned ? "pinned" : "issued"} codes (user ${userId ?? "?"})`);
-      await recordJourney({
+      const journey = () => recordJourney({
         kind: "execution",
         action: "batch_created",
         title: `Batch ${batch.batchCode} created: ${quantity} × ${JOURNEY_PRODUCT_LABELS[input.productType] ?? input.productType}`,
@@ -1357,6 +1370,8 @@ async function createIssuedBatch(input: BatchInput, userId: string | null, sourc
         afterValue: batch.status,
         metadata: { quantity, codeSource: "issued", pinned, productType: input.productType, face: batch.face, vendor: batch.vendor },
       }, journeyContext(userId, source));
+      if (within) within.afterCommit.push(journey);
+      else await journey();
       return batch;
     } catch (err) {
       const pg = pgError(err);

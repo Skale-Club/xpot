@@ -105,7 +105,7 @@ em `shared/printProduction.ts`.
 | Coluna | Tipo | Nota |
 |---|---|---|
 | `id`, `model_id`, `version` (int) | | único por (`model_id`, `version`) |
-| `status` | `draft` \| `current` \| `superseded` | uma `current` por modelo; uma versão usada por uma ordem nunca volta a `draft` |
+| `status` | `current` \| `superseded` | uma `current` por modelo; a anterior vira `superseded` e continua ligada ao que imprimiu (`draft` saiu na migração 0066: nunca foi gravado) |
 | `builder` | text, nulo em `part` | o id do builder no pipeline (`plate.menu`, `plate.instagram`, `plate.google`, `plate.venmo`, `stand.google`, `stand.instagram`) |
 | `params` | jsonb | o que o builder recebe além do código: `{"size":"large","theme":"white","pocket_z0":1.16,"font":"Inria Serif"}` |
 | `recipe` | jsonb | a sobreposição de `settings` do `build.json` (paredes, shells, infill, sequência da primeira camada, pausa). O pipeline aplica sobre a receita-base do builder |
@@ -362,7 +362,7 @@ Depois da carga, `PRINT NOW/` está vazio e cada lote de hoje responde "qual arq
 arquivos no R2, contador de parts); rotas admin; MCP da seção 8; tela Produção (Catálogo e Fila) com download e marcar impresso;
 `bench.py attach`; `scripts/seed-print-models.ts`; carga dos modelos, versões e ordens retroativas da seção 10; testes de integração
 (`tests/tags/production.integration.test.ts`: criar ordem cria lote `issued` com N `pending`; ordem de part nasce `ready`; marcar
-impresso soma o contador; a ordem fecha quando o lote é todo recebido; uma versão usada não volta a `draft`; arquivo só com
+impresso soma o contador; a ordem fecha quando o lote é todo recebido; uma versão usada nunca é editada; arquivo só com
 `requireTagAdmin`).
 **Aceite:** `PRINT NOW/` vazio; os 15 lotes têm ordem, versão e (onde construído) arquivo baixável; o Claude registra uma versão
 pelo MCP e o catálogo a mostra; a Menu branca v2 (paredes) existe como versão com changelog, ainda sem build.
