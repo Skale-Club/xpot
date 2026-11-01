@@ -22,6 +22,9 @@ import type { McpCaller } from "../server.js";
 // next version, with its changelog); files go up through the bench (`bench.py attach`), never through MCP. A version's
 // 3D preview goes up with `print-pipeline/preview.py --upload` (raw bytes to POST /mcp/print-preview, same token).
 
+// The journey scope is the admin's production side: every organization (a branch's Rep Admin works in the app).
+const EVERY_ORGANIZATION: production.ProductionScope = null;
+
 const objectParam = z.preprocess((v) => {
   if (typeof v === "string") {
     try {
@@ -100,16 +103,16 @@ export function registerPrintProductionTools(server: McpServer, caller: McpCalle
 
   server.tool(
     "print_requests_list",
-    "The print requests, newest first, each with its plates (requestId, plateNumber of plateCount, pieces, batch, status, files to download). status: open (some plate still to build or print, the default), done, all; model? (slug) to narrow it.",
+    "The print requests, newest first, each with its plates (requestId, plateNumber of plateCount, pieces, batch, status, files to download) and whose they are (organizationId, organizationName: the company's, or a branch that prints its own). status: open (some plate still to build or print, the default), done, all; model? (slug) to narrow it.",
     { status: z.enum(["open", "done", "all"]).optional(), model: z.string().min(1).optional() },
-    async ({ status, model }) => run("print_requests_list", () => production.listRequests(status ?? "open", model ?? null)),
+    async ({ status, model }) => run("print_requests_list", () => production.listRequests(status ?? "open", model ?? null, EVERY_ORGANIZATION)),
   );
 
   server.tool(
     "print_jobs_list",
     `The plates (print orders) one by one, newest first. status: open (requested|building|ready|printing, the default), done (printed|failed|cancelled), all, or one of ${PRINT_JOB_STATUSES.join("|")}; model? (slug) to narrow it.`,
     { status: z.enum(["open", "done", "all", ...PRINT_JOB_STATUSES]).optional(), model: z.string().min(1).optional() },
-    async ({ status, model }) => run("print_jobs_list", () => production.listJobs(status ?? "open", model ?? null)),
+    async ({ status, model }) => run("print_jobs_list", () => production.listJobs(status ?? "open", model ?? null, EVERY_ORGANIZATION)),
   );
 
   server.tool(
@@ -118,10 +121,10 @@ export function registerPrintProductionTools(server: McpServer, caller: McpCalle
     { job: z.string().uuid() },
     async ({ job }) =>
       run("print_job_get", async () => {
-        const detail = await production.getJob(job);
+        const detail = await production.getJob(job, EVERY_ORGANIZATION);
         const files = await Promise.all(detail.files.map(async (file) => {
           try {
-            return { ...file, url: await production.signedFileUrl((await production.getJobFile(file.id)).fileRef) };
+            return { ...file, url: await production.signedFileUrl((await production.getJobFile(file.id, EVERY_ORGANIZATION)).fileRef) };
           } catch {
             return { ...file, url: null };
           }
@@ -132,9 +135,9 @@ export function registerPrintProductionTools(server: McpServer, caller: McpCalle
 
   server.tool(
     "print_job_create",
-    "Ask for a print: \"a plate of 6 of stand X\", \"print plate Y\". `order`: { model (slug or uuid), quantity? (pieces; split into plates of the bed's copies, the last one partial: 10 on a 4-up bed = 4 + 4 + 2; default one full bed), bed? (label; default the first), plates? (whole beds instead of a quantity), notes?, existingBatch? (batch code: link a batch made before the catalog instead of issuing codes) }. Returns the request with its plates. Each serialized plate issues its own batch (fresh codes; its pieces go into house stock when the plate is marked printed) and waits for the bench to build its files; a part's plates are its fixed file (whole beds, ready at once when the bed has one). Nothing is sent to the printer: the admin downloads each plate, prints it and marks it printed (print_job_update printed).",
+    "Ask for a print: \"a plate of 6 of stand X\", \"print plate Y\". `order`: { model (slug or uuid), quantity? (pieces; split into plates of the bed's copies, the last one partial: 10 on a 4-up bed = 4 + 4 + 2; default one full bed), bed? (label; default the first), plates? (whole beds instead of a quantity), notes?, existingBatch? (batch code: link a batch made before the catalog instead of issuing codes), organization? (slug: a branch that prints its own pieces; default the company, xpot-company) }. Returns the request with its plates. Each serialized plate issues its own batch (fresh codes; its pieces go into house stock when the plate is marked printed) and waits for the bench to build its files; a part's plates are its fixed file (whole beds, ready at once when the bed has one). Nothing is sent to the printer: the admin downloads each plate, prints it and marks it printed (print_job_update printed).",
     { order: objectParam },
-    async ({ order }) => run("print_job_create", () => production.createJob(printJobCreateSchema.parse(order), null, "mcp")),
+    async ({ order }) => run("print_job_create", () => production.createJob(printJobCreateSchema.parse(order), null, "mcp", EVERY_ORGANIZATION)),
   );
 
   server.tool(
@@ -143,10 +146,10 @@ export function registerPrintProductionTools(server: McpServer, caller: McpCalle
     { job: z.string().uuid(), action: z.enum(["start", "printed", "fail", "cancel", "release", "complete", "redo", "assembled", "problem"]), reason: z.string().max(2000).optional() },
     async ({ job, action, reason }) =>
       run("print_job_update", () => {
-        if (action === "redo") return production.redoJob(job, null, "mcp");
-        if (action === "assembled") return production.markAssembled(job, null, "mcp");
-        if (action === "problem") return production.recordProblem(job, printProblemSchema.parse({ text: reason ?? "" }).text, null, "mcp");
-        return production.transitionJob(job, { action, reason: reason ?? null, userId: null, source: "mcp" });
+        if (action === "redo") return production.redoJob(job, null, EVERY_ORGANIZATION, "mcp");
+        if (action === "assembled") return production.markAssembled(job, null, EVERY_ORGANIZATION, "mcp");
+        if (action === "problem") return production.recordProblem(job, printProblemSchema.parse({ text: reason ?? "" }).text, null, EVERY_ORGANIZATION, "mcp");
+        return production.transitionJob(job, { action, reason: reason ?? null, userId: null, source: "mcp" }, EVERY_ORGANIZATION);
       }),
   );
 }

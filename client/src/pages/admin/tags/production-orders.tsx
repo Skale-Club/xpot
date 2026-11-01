@@ -9,7 +9,8 @@ import { useT } from "@/i18n";
 import { productionMessages } from "@/i18n/messages/production";
 import { formatDate } from "./api";
 import { Loading, LoadError } from "./pieces-shared";
-import { JobStatusPill, PRODUCTION_BASE, plateDownloads, usePrintModels, usePrintRequests, type JobFilter } from "./production-shared";
+import { Pill } from "@/components/xpot/StatusPill";
+import { JobStatusPill, PRODUCTION_BASE, plateDownloads, usePrintModels, usePrintRequests, useProductionAccess, type JobFilter } from "./production-shared";
 import { ProductionIdentity } from "./production-identity";
 import { PrintedDialog } from "./production-printed-dialog";
 
@@ -23,9 +24,12 @@ type Go = (path: string) => void;
 export function PrintDialog({ model, onClose, onOrdered }: { model: PrintModelItem; onClose: () => void; onOrdered?: (request: PrintRequestItem) => void }) {
   return <ProductionWizard initialModel={model} onClose={onClose} onOrdered={onOrdered} />;
 }
-export function RequestList({ filter, model, go, emptyHint }: { filter: JobFilter; model?: string; go: Go; emptyHint?: string }) {
+export function RequestList({ filter, model, organization, go, emptyHint }: { filter: JobFilter; model?: string; organization?: number; go: Go; emptyHint?: string }) {
   const t = useT(productionMessages);
-  const { data, isLoading, error, refetch } = usePrintRequests(filter, model);
+  const { data, isLoading, error, refetch } = usePrintRequests(filter, model, organization);
+  // Whose request it is, once more than one organization prints (a branch only ever sees its own).
+  const { organizations } = useProductionAccess();
+  const showOrganization = organizations.length > 1;
   const { data: models = [] } = usePrintModels();
   const modelById = new Map(models.map((item) => [item.id, item]));
   const requests = data?.filter((request) => filter === "all" || productionNeedsAction(request) === (filter === "open"));
@@ -43,6 +47,7 @@ export function RequestList({ filter, model, go, emptyHint }: { filter: JobFilte
                 <ProductionIdentity model={modelById.get(request.modelId) ?? { title: request.modelTitle }} />
               </button>
               <span className="flex flex-wrap items-center gap-1.5 text-xs text-white/45">
+                {showOrganization ? <Pill tone="slate">{request.organizationName}</Pill> : null}
                 <span>v{request.version} · {request.bedLabel}</span>
                 <span>{t.plural("requestAsked", request.quantity)}</span>
                 <span>{formatDate(request.createdAt)}</span>

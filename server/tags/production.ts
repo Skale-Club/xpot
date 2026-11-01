@@ -2,6 +2,7 @@ import crypto from "crypto";
 import { eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db.js";
 import {
+  organizations,
   printJobFiles,
   printJobs,
   printModelVersions,
@@ -60,6 +61,7 @@ import { TagError, pgError } from "./errors.js";
 import { createJourneyEntry, journeyContext, recordJourney, resolveBatchId } from "./journey.js";
 import { countMetricSql } from "./metrics.js";
 import { createBatch, getBatchProduction, iso, rows, type Tx } from "./repository.js";
+import { companyOrganizationId } from "../organizations/service.js";
 
 // Tags › Production (docs/PRINT_EXECUTION_PLAN.md): the catalog of what the house prints (models), the frozen
 // recipes (versions), the print requests ("N pieces of this model") and their plates (print orders) with their files.
@@ -69,8 +71,25 @@ import { createBatch, getBatchProduction, iso, rows, type Tx } from "./repositor
 // Printing is by hand: the admin downloads a plate, prints it in Bambu Studio and marks it printed. Everything here
 // is the global admin's, plus the paired bench app (a provisioner device with the 'print' capability), which builds
 // the plates' files and mirrors them into its Print Now folder.
+// Per organization (migrations/0065): a request, its plates, their batches and pieces belong to one organization:
+// the company's for Boston, or a branch that prints its own pieces. The admin sees every one; a branch's Rep Admin
+// and its bench only their own (ProductionScope). The catalog stays shared; parts and their counts stay the company's.
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Whose production a call may touch (server/tags/access.ts requireProductionUser): null = every organization (an
+ * admin), else these organizations only (a branch's Rep Admin, or a bench: its own). Out of scope reads as not found.
+ */
+export type ProductionScope = readonly number[] | null;
+
+function scopeSql(column: string, scope: ProductionScope) {
+  if (scope === null) return sql`TRUE`;
+  if (!scope.length) return sql`FALSE`;
+  return sql`${sql.raw(column)} IN (${sql.join(scope.map((id) => sql`${id}`), sql`, `)})`;
+}
+
+const inScope = (organizationId: number, scope: ProductionScope) => scope === null || scope.includes(organizationId);
 
 // ─── Rows → items ─────────────────────────────────────────────────────────────
 
@@ -127,16 +146,17 @@ interface ModelRow {
   open_jobs: number; house_count: number; with_resellers_count: number;
 }
 
-// A serialized model's stock: the pieces of the batches its orders issued, counted like the rest of Tags.
-const MODEL_SELECT = sql`
+// A serialized model's stock: the pieces of the batches its orders issued, counted like the rest of Tags (within the
+// scope: a branch counts its own plates and pieces).
+const modelSelect = (scope: ProductionScope) => sql`
   SELECT m.id, m.slug, m.kind, m.title, m.description, m.product_type, m.face, m.theme, m.sales_product_id, m.batch_prefix,
     m.status, m.current_version_id, m.part_on_hand, m.part_reorder_at, m.sort_order, m.created_at, m.updated_at,
     (SELECT count(*)::int FROM print_jobs j WHERE j.model_id = m.id
-      AND j.status IN ('requested', 'building', 'ready', 'printing')) AS open_jobs,
+      AND j.status IN ('requested', 'building', 'ready', 'printing') AND ${scopeSql("j.organization_id", scope)}) AS open_jobs,
     (SELECT ${countMetricSql("house")} FROM tags t JOIN tag_batches b ON b.id = t.batch_id
-      JOIN print_jobs j ON j.id = b.print_job_id WHERE j.model_id = m.id) AS house_count,
+      JOIN print_jobs j ON j.id = b.print_job_id WHERE j.model_id = m.id AND ${scopeSql("j.organization_id", scope)}) AS house_count,
     (SELECT ${countMetricSql("withResellers")} FROM tags t JOIN tag_batches b ON b.id = t.batch_id
-      JOIN print_jobs j ON j.id = b.print_job_id WHERE j.model_id = m.id) AS with_resellers_count
+      JOIN print_jobs j ON j.id = b.print_job_id WHERE j.model_id = m.id AND ${scopeSql("j.organization_id", scope)}) AS with_resellers_count
   FROM print_models m`;
 
 function modelItem(m: ModelRow, current: PrintModelVersionItem | null): PrintModelItem {
@@ -173,8 +193,10 @@ async function currentVersions(versionIds: string[]): Promise<Map<string, PrintM
 
 // ─── Models ───────────────────────────────────────────────────────────────────
 
-export async function listModels(): Promise<PrintModelItem[]> {
-  const list = await rows<ModelRow>(sql`${MODEL_SELECT} ORDER BY m.sort_order, m.title`);
+/** The catalog. A branch (a scope) prints serialized pieces only: parts and their counts are the company's. */
+export async function listModels(scope: ProductionScope = null): Promise<PrintModelItem[]> {
+  const where = scope === null ? sql`` : sql`WHERE m.kind = 'serialized'`;
+  const list = await rows<ModelRow>(sql`${modelSelect(scope)} ${where} ORDER BY m.sort_order, m.title`);
   const versions = await currentVersions(list.map((m) => m.current_version_id).filter((id): id is string => Boolean(id)));
   return list.map((m) => modelItem(m, m.current_version_id ? versions.get(m.current_version_id) ?? null : null));
 }
@@ -191,11 +213,12 @@ export async function resolveModel(ref: string): Promise<PrintModelRow> {
   return model;
 }
 
-export async function getModel(ref: string): Promise<PrintModelDetail> {
+export async function getModel(ref: string, scope: ProductionScope = null): Promise<PrintModelDetail> {
   const model = await resolveModel(ref);
-  const [row] = await rows<ModelRow>(sql`${MODEL_SELECT} WHERE m.id = ${model.id}`);
+  if (scope !== null && model.kind === "part") throw new TagError("No print model with that id or slug", 404, "print_model_not_found");
+  const [row] = await rows<ModelRow>(sql`${modelSelect(scope)} WHERE m.id = ${model.id}`);
   const versions = (await rows<VersionRow>(sql`${VERSION_SELECT} WHERE v.model_id = ${model.id} ORDER BY v.version DESC`)).map(versionItem);
-  const movements = await db
+  const movements = scope !== null ? [] : await db
     .select()
     .from(printPartMovements)
     .where(eq(printPartMovements.modelId, model.id))
@@ -361,11 +384,13 @@ export async function signedFileUrl(ref: string): Promise<string> {
   return url;
 }
 
-export async function getJobFile(fileId: string) {
+export async function getJobFile(fileId: string, scope: ProductionScope) {
   if (!UUID.test(fileId)) throw new TagError("File not found", 404);
-  const [file] = await db.select().from(printJobFiles).where(eq(printJobFiles.id, fileId)).limit(1);
-  if (!file) throw new TagError("File not found", 404);
-  return file;
+  const [found] = await db.select({ file: printJobFiles, organizationId: printJobs.organizationId }).from(printJobFiles)
+    .innerJoin(printJobs, eq(printJobs.id, printJobFiles.jobId))
+    .where(eq(printJobFiles.id, fileId)).limit(1);
+  if (!found || !inScope(found.organizationId, scope)) throw new TagError("File not found", 404);
+  return found.file;
 }
 
 /** A part's fixed print file, on one bed of a version no order has used yet. */
@@ -473,6 +498,7 @@ interface JobRow {
   built_at: Date | string | null; printed_at: Date | string | null; updated_at: Date | string; last_event_at: Date | string | null;
   request_id: string | null; plate_number: number; plate_count: number; request_quantity: number;
   request_created_at: Date | string; downloads: Array<{ id: string; kind: string; filename: string }> | null;
+  organization_id: number; organization_name: string;
 }
 
 const JOB_SELECT = sql`
@@ -489,8 +515,10 @@ const JOB_SELECT = sql`
       ELSE (SELECT count(DISTINCT COALESCE(j2.plate_number, 1))::int FROM print_jobs j2 WHERE j2.request_id = j.request_id) END AS plate_count,
     COALESCE(r.quantity, j.quantity) AS request_quantity, COALESCE(r.created_at, j.created_at) AS request_created_at,
     (SELECT json_agg(json_build_object('id', f.id, 'kind', f.kind, 'filename', f.filename) ORDER BY f.created_at DESC)
-      FROM print_job_files f WHERE f.job_id = j.id AND f.kind IN ('3mf', 'gcode_3mf')) AS downloads
+      FROM print_job_files f WHERE f.job_id = j.id AND f.kind IN ('3mf', 'gcode_3mf')) AS downloads,
+    j.organization_id, o.name AS organization_name
   FROM print_jobs j
+  JOIN organizations o ON o.id = j.organization_id
   JOIN print_models m ON m.id = j.model_id
   JOIN print_model_versions v ON v.id = j.version_id
   LEFT JOIN print_requests r ON r.id = j.request_id
@@ -530,13 +558,15 @@ function jobItem(j: JobRow, now = Date.now()): PrintJobItem {
     plateCount: Number(j.plate_count),
     requestQuantity: Number(j.request_quantity),
     downloads: (j.downloads ?? []).map((f) => ({ id: f.id, kind: f.kind as PrintFileKind, filename: f.filename })),
+    organizationId: Number(j.organization_id),
+    organizationName: j.organization_name,
   };
 }
 
 export type JobListFilter = "open" | "done" | "all" | PrintJobStatus;
 
-export async function listJobs(filter: JobListFilter = "open", modelRef?: string | null): Promise<PrintJobItem[]> {
-  const conds = [];
+export async function listJobs(filter: JobListFilter, modelRef: string | null, scope: ProductionScope): Promise<PrintJobItem[]> {
+  const conds = [scopeSql("j.organization_id", scope)];
   if (filter === "open") conds.push(sql`j.status IN ('requested', 'building', 'ready', 'printing')`);
   else if (filter === "done") conds.push(sql`j.status IN ('printed', 'failed', 'cancelled')`);
   else if (filter !== "all") conds.push(sql`j.status = ${filter}`);
@@ -550,6 +580,7 @@ export async function listJobs(filter: JobListFilter = "open", modelRef?: string
 interface RequestRow {
   id: string; model_id: string; model_slug: string; model_title: string; model_kind: string; version_number: number;
   bed_label: string; quantity: number; notes: string | null; created_at: Date | string; open: boolean;
+  organization_id: number; organization_name: string;
 }
 
 // A plate is open until it is printed: marking it printed also puts its pieces in stock, so nothing is left to do.
@@ -559,8 +590,10 @@ const OPEN_PLATE = sql`j.status IN ('requested', 'building', 'ready', 'printing'
 const REQUEST_SELECT = sql`
   SELECT r.id, r.model_id, m.slug AS model_slug, m.title AS model_title, m.kind AS model_kind, v.version AS version_number,
     r.bed_label, r.quantity, r.notes, r.created_at,
-    EXISTS (SELECT 1 FROM print_jobs j WHERE j.request_id = r.id AND ${OPEN_PLATE}) AS open
+    EXISTS (SELECT 1 FROM print_jobs j WHERE j.request_id = r.id AND ${OPEN_PLATE}) AS open,
+    r.organization_id, o.name AS organization_name
   FROM print_requests r
+  JOIN organizations o ON o.id = r.organization_id
   JOIN print_models m ON m.id = r.model_id
   JOIN print_model_versions v ON v.id = r.version_id`;
 
@@ -581,12 +614,14 @@ async function withPlates(list: RequestRow[]): Promise<PrintRequestItem[]> {
     createdAt: iso(r.created_at)!,
     open: Boolean(r.open),
     plates: plates.filter((p) => p.requestId === r.id),
+    organizationId: Number(r.organization_id),
+    organizationName: r.organization_name,
   }));
 }
 
 /** The requests, newest first, each with its plates: open (some plate still to build or print), done, or all. */
-export async function listRequests(filter: "open" | "done" | "all" = "open", modelRef?: string | null): Promise<PrintRequestItem[]> {
-  const conds = [];
+export async function listRequests(filter: "open" | "done" | "all", modelRef: string | null, scope: ProductionScope): Promise<PrintRequestItem[]> {
+  const conds = [scopeSql("r.organization_id", scope)];
   if (filter === "open") conds.push(sql`EXISTS (SELECT 1 FROM print_jobs j WHERE j.request_id = r.id AND ${OPEN_PLATE})`);
   else if (filter === "done") conds.push(sql`NOT EXISTS (SELECT 1 FROM print_jobs j WHERE j.request_id = r.id AND ${OPEN_PLATE})`);
   if (modelRef) conds.push(sql`r.model_id = ${(await resolveModel(modelRef)).id}`);
@@ -594,17 +629,17 @@ export async function listRequests(filter: "open" | "done" | "all" = "open", mod
   return withPlates(await rows<RequestRow>(sql`${REQUEST_SELECT} ${where} ORDER BY r.created_at DESC LIMIT 100`));
 }
 
-export async function getRequest(id: string): Promise<PrintRequestItem> {
+export async function getRequest(id: string, scope: ProductionScope): Promise<PrintRequestItem> {
   if (!UUID.test(id)) throw new TagError("Print request not found", 404, "print_request_not_found");
-  const [request] = await withPlates(await rows<RequestRow>(sql`${REQUEST_SELECT} WHERE r.id = ${id}`));
+  const [request] = await withPlates(await rows<RequestRow>(sql`${REQUEST_SELECT} WHERE r.id = ${id} AND ${scopeSql("r.organization_id", scope)}`));
   if (!request) throw new TagError("Print request not found", 404, "print_request_not_found");
   return request;
 }
 
-async function loadJob(id: string): Promise<PrintJobRow> {
+async function loadJob(id: string, scope: ProductionScope): Promise<PrintJobRow> {
   if (!UUID.test(id)) throw new TagError("Print order not found", 404, "print_job_not_found");
   const [job] = await db.select().from(printJobs).where(eq(printJobs.id, id)).limit(1);
-  if (!job) throw new TagError("Print order not found", 404, "print_job_not_found");
+  if (!job || !inScope(job.organizationId, scope)) throw new TagError("Print order not found", 404, "print_job_not_found");
   return job;
 }
 
@@ -630,8 +665,8 @@ function tagBaseUrl(): string {
   return (process.env.TAG_PUBLIC_BASE_URL?.trim() || TAG_DEFAULT_PUBLIC_BASE_URL).replace(/\/+$/, "");
 }
 
-export async function getJob(id: string): Promise<PrintJobDetail> {
-  const job = await loadJob(id);
+export async function getJob(id: string, scope: ProductionScope): Promise<PrintJobDetail> {
+  const job = await loadJob(id, scope);
   const [row] = await rows<JobRow>(sql`${JOB_SELECT} WHERE j.id = ${job.id}`);
   const [version] = await rows<VersionRow>(sql`${VERSION_SELECT} WHERE v.id = ${job.versionId}`);
   const bed = version?.beds?.find((b) => b.label === job.bedLabel) ?? null;
@@ -673,10 +708,10 @@ async function existingCodes(prefix: string, year: number): Promise<string[]> {
 }
 
 /** The order behind a batch made before the catalog existed: its status follows what the batch already went through. */
-async function linkExistingBatch(model: PrintModelRow, version: VersionRow, bed: PrintBed, input: PrintJobCreateInput, userId: string | null, source: JourneySource) {
+async function linkExistingBatch(model: PrintModelRow, version: VersionRow, bed: PrintBed, input: PrintJobCreateInput, organizationId: number, userId: string | null, source: JourneySource) {
   const batchId = await resolveBatchId(input.existingBatch!);
   const batch = (await getBatchProduction(batchId))?.batch;
-  if (!batch) throw new TagError("Batch not found", 404, "batch_not_found");
+  if (!batch || batch.organizationId !== organizationId) throw new TagError("Batch not found", 404, "batch_not_found");
   if (batch.status === "cancelled") throw new TagError("A cancelled batch cannot be linked", 409);
   if (batch.productType !== model.productType) {
     throw new TagError(`Batch ${batch.batchCode} is a ${batch.productType}, this model prints ${model.productType}`, 409, "print_batch_product_mismatch");
@@ -695,9 +730,10 @@ async function linkExistingBatch(model: PrintModelRow, version: VersionRow, bed:
   const notes = input.notes ?? `Linked to ${batch.batchCode}, made before the catalog`;
   return db.transaction(async (tx) => {
     const [request] = await tx.insert(printRequests).values({
-      modelId: model.id, versionId: version.id, bedLabel: bed.label, quantity: batch.tagCount, notes, source, requestedByUserId: userId,
+      organizationId, modelId: model.id, versionId: version.id, bedLabel: bed.label, quantity: batch.tagCount, notes, source, requestedByUserId: userId,
     }).returning({ id: printRequests.id });
     const [job] = await tx.insert(printJobs).values({
+      organizationId,
       requestId: request.id,
       plateNumber: 1,
       modelId: model.id,
@@ -717,6 +753,7 @@ async function linkExistingBatch(model: PrintModelRow, version: VersionRow, bed:
 }
 
 interface PlateContext {
+  organizationId: number;
   requestId: string;
   plateNumber: number;
   plateCount: number;
@@ -730,6 +767,7 @@ async function createPartPlate(model: PrintModelRow, version: VersionRow, bed: P
   const ready = Boolean(bed.fileRef);
   return db.transaction(async (tx) => {
     const [job] = await tx.insert(printJobs).values({
+      organizationId: ctx.organizationId,
       requestId: ctx.requestId,
       plateNumber: ctx.plateNumber,
       modelId: model.id,
@@ -777,8 +815,10 @@ async function createSerializedPlate(model: PrintModelRow, version: VersionRow, 
         vendor: "Skale Club",
         notes: ctx.notes,
         quantity,
+        organizationId: ctx.organizationId,
       }, ctx.userId, ctx.source, async (tx: Tx, batch) => {
         const [job] = await tx.insert(printJobs).values({
+          organizationId: ctx.organizationId,
           requestId: ctx.requestId,
           plateNumber: ctx.plateNumber,
           modelId: model.id,
@@ -803,20 +843,50 @@ async function createSerializedPlate(model: PrintModelRow, version: VersionRow, 
 }
 
 /**
+ * Whose pieces a new request makes: `ref` (slug or id), else the company for an admin, else the branch itself for a
+ * branch's Rep Admin. Only the company or an active branch that prints its own pieces, and only within the scope.
+ */
+async function targetOrganization(ref: string | number | undefined, scope: ProductionScope): Promise<{ id: number; company: boolean }> {
+  const companyId = await companyOrganizationId();
+  if (ref === undefined) {
+    if (scope === null) return { id: companyId, company: true };
+    if (scope.length === 1) return { id: scope[0], company: scope[0] === companyId };
+    throw new TagError("Choose which organization these pieces are for", 400, "print_organization_required");
+  }
+  const byId = typeof ref === "number" || /^\d+$/.test(ref);
+  const [organization] = await db.select({ id: organizations.id, isActive: organizations.isActive, printsOwnPieces: organizations.printsOwnPieces })
+    .from(organizations)
+    .where(byId ? eq(organizations.id, Number(ref)) : eq(organizations.slug, String(ref).toLowerCase()))
+    .limit(1);
+  if (!organization || !inScope(organization.id, scope)) throw new TagError("Organization not found", 404, "organization_not_found");
+  const company = organization.id === companyId;
+  if (!company && (!organization.isActive || !organization.printsOwnPieces)) {
+    throw new TagError("This organization does not print its own pieces", 409, "print_organization_not_printing");
+  }
+  return { id: organization.id, company };
+}
+
+/**
  * A print request: `quantity` pieces (or whole `plates`) of a model's current version, split into plates of at most
  * one bed each, the last one partial (10 on a 4-up bed: 4 + 4 + 2). Each serialized plate issues its own batch; a
  * part's plates are its fixed file, so its count rounds up to whole beds. `existingBatch` links a batch made before
  * the catalog instead, as a request of one plate.
  */
-export async function createJob(input: PrintJobCreateInput, userId: string | null, source: JourneySource = "admin"): Promise<PrintRequestItem> {
+export async function createJob(input: PrintJobCreateInput, userId: string | null, source: JourneySource, scope: ProductionScope): Promise<PrintRequestItem> {
   const model = await resolveModel(input.model);
+  const organization = await targetOrganization(input.organization, scope);
+  // A part's plates feed the company's part counts (bases, tokens): a branch prints serialized pieces only.
+  if (model.kind === "part" && !organization.company) {
+    if (scope !== null) throw new TagError("No print model with that id or slug", 404, "print_model_not_found");
+    throw new TagError("Parts are printed for the company only", 409, "print_part_company_only");
+  }
   const version = await currentVersionOf(model);
   const bed = pickBed(version, input.bed);
 
   if (input.existingBatch) {
     if (model.kind === "part") throw new TagError("A part has no batch", 400);
-    const job = await linkExistingBatch(model, version, bed, input, userId, source);
-    return getRequest(job.requestId!);
+    const job = await linkExistingBatch(model, version, bed, input, organization.id, userId, source);
+    return getRequest(job.requestId!, scope);
   }
   if (model.kind === "serialized" && (!model.batchPrefix || !model.productType || !model.salesProductId)) {
     throw new TagError("This model needs a product, a sales product and a batch prefix before printing", 409, "print_model_incomplete");
@@ -829,23 +899,25 @@ export async function createJob(input: PrintJobCreateInput, userId: string | nul
   }
   const notes = input.notes ?? null;
   const [request] = await db.insert(printRequests).values({
-    modelId: model.id, versionId: version.id, bedLabel: bed.label, quantity, notes, source, requestedByUserId: userId,
+    organizationId: organization.id, modelId: model.id, versionId: version.id, bedLabel: bed.label, quantity, notes, source, requestedByUserId: userId,
   }).returning({ id: printRequests.id });
   for (let index = 0; index < plates.length; index++) {
-    const ctx: PlateContext = { requestId: request.id, plateNumber: index + 1, plateCount: plates.length, notes, userId, source };
+    const ctx: PlateContext = {
+      organizationId: organization.id, requestId: request.id, plateNumber: index + 1, plateCount: plates.length, notes, userId, source,
+    };
     if (model.kind === "part") await createPartPlate(model, version, bed, ctx);
     else await createSerializedPlate(model, version, bed, plates[index], ctx);
   }
-  console.log(`[production] request ${request.id} for ${model.slug} v${version.version}: ${quantity} pieces on ${plates.length} plate(s) [${plates.join(", ")}] (user ${userId ?? "?"})`);
-  return getRequest(request.id);
+  console.log(`[production] request ${request.id} for ${model.slug} v${version.version}: ${quantity} pieces on ${plates.length} plate(s) [${plates.join(", ")}] for organization ${organization.id} (user ${userId ?? "?"})`);
+  return getRequest(request.id, scope);
 }
 
 /**
  * Print a failed or cancelled plate again, in the same request and place: the same batch while none of its pieces was
  * received (the same version and bed), else a fresh batch from the current version.
  */
-export async function redoJob(id: string, userId: string | null, source: JourneySource = "admin"): Promise<PrintJobDetail> {
-  const job = await loadJob(id);
+export async function redoJob(id: string, userId: string | null, scope: ProductionScope, source: JourneySource = "admin"): Promise<PrintJobDetail> {
+  const job = await loadJob(id, scope);
   if (job.status !== "failed" && job.status !== "cancelled") throw new TagError("Only a failed or cancelled order can be printed again", 409, "print_job_state");
   const [model] = await db.select().from(printModels).where(eq(printModels.id, job.modelId)).limit(1);
   if (model.status === "retired") throw new TagError("This model is retired", 409, "print_model_retired");
@@ -855,14 +927,15 @@ export async function redoJob(id: string, userId: string | null, source: Journey
   const [{ plate_count: plateCount }] = await rows<{ plate_count: number }>(sql`
     SELECT count(DISTINCT COALESCE(plate_number, 1))::int AS plate_count FROM print_jobs WHERE request_id = ${job.requestId}`);
   const ctx: PlateContext = {
-    requestId: job.requestId!, plateNumber: job.plateNumber ?? 1, plateCount: Number(plateCount) || 1, notes: job.notes, userId, source,
+    organizationId: job.organizationId, requestId: job.requestId!, plateNumber: job.plateNumber ?? 1, plateCount: Number(plateCount) || 1, notes: job.notes, userId, source,
   };
   if (model.kind === "serialized" && !reuse) {
     const version = await currentVersionOf(model);
-    return getJob(await createSerializedPlate(model, version, pickBed(version, job.bedLabel), job.quantity, ctx));
+    return getJob(await createSerializedPlate(model, version, pickBed(version, job.bedLabel), job.quantity, ctx), scope);
   }
   const created = await db.transaction(async (tx) => {
     const [next] = await tx.insert(printJobs).values({
+      organizationId: job.organizationId,
       requestId: job.requestId,
       plateNumber: job.plateNumber,
       modelId: job.modelId,
@@ -886,7 +959,7 @@ export async function redoJob(id: string, userId: string | null, source: Journey
       await db.update(printJobs).set({ status: "ready", builtAt: new Date() }).where(eq(printJobs.id, created.id));
     }
   }
-  return getJob(created.id);
+  return getJob(created.id, scope);
 }
 
 export interface TransitionInput {
@@ -1001,8 +1074,8 @@ async function recordStocked(batchId: string, result: StockedPieces, userId: str
  * same transaction (the `badPieces` come out damaged instead), or adds a part's pieces to its count; `complete`
  * needs a print file, `fail` keeps the reason.
  */
-export async function transitionJob(id: string, input: TransitionInput): Promise<PrintJobDetail> {
-  const job = await loadJob(id);
+export async function transitionJob(id: string, input: TransitionInput, scope: ProductionScope): Promise<PrintJobDetail> {
+  const job = await loadJob(id, scope);
   const plan = planPrintJobTransition(job.status, input.action);
   if (!plan.ok) throw new TagError(plan.error, 409, plan.code);
   const now = new Date();
@@ -1048,7 +1121,7 @@ export async function transitionJob(id: string, input: TransitionInput): Promise
     }, journeyContext(input.userId, input.source));
   }
   if (stocked && job.batchId) await recordStocked(job.batchId, stocked, input.userId, input.source ?? "admin");
-  return getJob(job.id);
+  return getJob(job.id, scope);
 }
 
 /**
@@ -1056,19 +1129,19 @@ export async function transitionJob(id: string, input: TransitionInput): Promise
  * them in stock the same way (and `badPieces` come out damaged). Only a printed plate with a batch; repeating it
  * when nothing is pending changes nothing.
  */
-export async function stockJob(id: string, input: { badPieces?: readonly string[]; userId: string | null; source?: JourneySource }): Promise<PrintJobDetail> {
-  const job = await loadJob(id);
+export async function stockJob(id: string, input: { badPieces?: readonly string[]; userId: string | null; source?: JourneySource }, scope: ProductionScope): Promise<PrintJobDetail> {
+  const job = await loadJob(id, scope);
   if (job.status !== "printed" || !job.batchId) {
     throw new TagError("Only a printed plate with codes can put its pieces in stock", 409, "print_job_state");
   }
   const batchId = job.batchId;
   const stocked = await db.transaction((tx) => stockPrintedPieces(tx, batchId, input.badPieces ?? [], input.userId));
   await recordStocked(batchId, stocked, input.userId, input.source ?? "admin");
-  return getJob(job.id);
+  return getJob(job.id, scope);
 }
 
-export async function attachJobFile(id: string, kind: PrintFileKind, filename: string, body: Uint8Array, opts: { deviceId?: string | null } = {}): Promise<PrintJobFileItem> {
-  const job = await loadJob(id);
+export async function attachJobFile(id: string, kind: PrintFileKind, filename: string, body: Uint8Array, scope: ProductionScope, opts: { deviceId?: string | null } = {}): Promise<PrintJobFileItem> {
+  const job = await loadJob(id, scope);
   if (opts.deviceId !== undefined && (job.deviceId !== opts.deviceId || job.status !== "building")) {
     throw new TagError("This bench is not building that order", 409, "print_job_not_claimed");
   }
@@ -1104,9 +1177,14 @@ export async function adjustPart(modelRef: string, delta: number, reason: PrintP
 
 // ─── The bench (paired device with the 'print' capability) ───────────────────
 
+/** The paired bench calling: its id and the organization it works for (a bench sees that organization's plates only). */
+export interface BenchDevice { id: string; organizationId: number }
+
+const benchScope = (device: BenchDevice): ProductionScope => [device.organizationId];
+
 /** What `bench.py build` needs for one order. */
-export async function jobTicket(id: string): Promise<PrintJobTicket> {
-  const job = await loadJob(id);
+export async function jobTicket(id: string, scope: ProductionScope): Promise<PrintJobTicket> {
+  const job = await loadJob(id, scope);
   const [model] = await db.select().from(printModels).where(eq(printModels.id, job.modelId)).limit(1);
   const [version] = await rows<VersionRow>(sql`${VERSION_SELECT} WHERE v.id = ${job.versionId}`);
   const bed = version.beds?.find((b) => b.label === job.bedLabel);
@@ -1137,35 +1215,37 @@ export async function jobTicket(id: string): Promise<PrintJobTicket> {
  * The bench takes an order: a given one (`bench.py attach`, building by hand), or the oldest requested order whose
  * version has a builder (the bench building on its own). Null when there is nothing to do.
  */
-export async function claimJob(deviceId: string, jobId?: string | null): Promise<PrintJobTicket | null> {
+export async function claimJob(device: BenchDevice, jobId?: string | null): Promise<PrintJobTicket | null> {
   const now = new Date();
+  const deviceId = device.id;
+  const scope = benchScope(device);
   if (jobId) {
-    const job = await loadJob(jobId);
-    if (job.status === "building" && job.deviceId === deviceId) return jobTicket(job.id);
+    const job = await loadJob(jobId, scope);
+    if (job.status === "building" && job.deviceId === deviceId) return jobTicket(job.id, scope);
     const plan = planPrintJobTransition(job.status, "claim");
     if (!plan.ok) throw new TagError(plan.error, 409, plan.code);
     const claimed = await db.update(printJobs).set({ status: "building", deviceId, claimedAt: now, lastEventAt: now, updatedAt: now })
       .where(sql`${printJobs.id} = ${job.id} AND ${printJobs.status} = 'requested'`).returning({ id: printJobs.id });
     if (!claimed.length) throw new TagError("Another bench took this order", 409, "print_job_state");
-    return jobTicket(job.id);
+    return jobTicket(job.id, scope);
   }
   const [claimed] = await rows<{ id: string }>(sql`
     UPDATE print_jobs SET status = 'building', device_id = ${deviceId}, claimed_at = ${now}, last_event_at = ${now}, updated_at = ${now}
     WHERE id = (
       SELECT j.id FROM print_jobs j JOIN print_model_versions v ON v.id = j.version_id
-      WHERE j.status = 'requested' AND v.builder IS NOT NULL
+      WHERE j.status = 'requested' AND v.builder IS NOT NULL AND j.organization_id = ${device.organizationId}
       ORDER BY j.created_at
       FOR UPDATE OF j SKIP LOCKED
       LIMIT 1
     ) AND status = 'requested'
     RETURNING id`);
-  return claimed ? jobTicket(claimed.id) : null;
+  return claimed ? jobTicket(claimed.id, scope) : null;
 }
 
 /** The bench reports progress: keeps the order from looking stuck, and the last messages for the queue. */
-export async function recordBenchEvent(deviceId: string, jobId: string, type: string, detail: Record<string, unknown> | null) {
-  const job = await loadJob(jobId);
-  if (job.deviceId !== deviceId || job.status !== "building") throw new TagError("This bench is not building that order", 409, "print_job_not_claimed");
+export async function recordBenchEvent(device: BenchDevice, jobId: string, type: string, detail: Record<string, unknown> | null) {
+  const job = await loadJob(jobId, benchScope(device));
+  if (job.deviceId !== device.id || job.status !== "building") throw new TagError("This bench is not building that order", 409, "print_job_not_claimed");
   const log = Array.isArray(job.report?.log) ? (job.report.log as unknown[]) : [];
   const entry = { at: new Date().toISOString(), type, ...(detail ? { detail } : {}) };
   await db.update(printJobs).set({
@@ -1183,9 +1263,10 @@ export interface BenchCompleteInput {
 }
 
 /** The bench is done: the file is attached and checked (`ready`, with the slice numbers), or the build failed. */
-export async function completeFromBench(deviceId: string, jobId: string, input: BenchCompleteInput): Promise<PrintJobDetail> {
-  const job = await loadJob(jobId);
-  if (job.deviceId !== deviceId || job.status !== "building") throw new TagError("This bench is not building that order", 409, "print_job_not_claimed");
+export async function completeFromBench(device: BenchDevice, jobId: string, input: BenchCompleteInput): Promise<PrintJobDetail> {
+  const scope = benchScope(device);
+  const job = await loadJob(jobId, scope);
+  if (job.deviceId !== device.id || job.status !== "building") throw new TagError("This bench is not building that order", 409, "print_job_not_claimed");
   const report = { ...(job.report ?? {}), ...(input.report ?? {}) };
   await db.update(printJobs).set({ report }).where(eq(printJobs.id, job.id));
   if (input.outcome === "failed") {
@@ -1195,9 +1276,9 @@ export async function completeFromBench(deviceId: string, jobId: string, input: 
       errorMessage: input.errorMessage ?? null,
       updatedAt: new Date(),
     }).where(eq(printJobs.id, job.id));
-    return getJob(job.id);
+    return getJob(job.id, scope);
   }
-  const detail = await transitionJob(job.id, { action: "complete", userId: null, source: "system" });
+  const detail = await transitionJob(job.id, { action: "complete", userId: null, source: "system" }, scope);
   if (job.batchId) {
     const [batch] = await db.select({ batchCode: tagBatches.batchCode }).from(tagBatches).where(eq(tagBatches.id, job.batchId)).limit(1);
     const numbers = Object.fromEntries(Object.entries(report).filter(([key]) => ["minutes", "swaps", "grams", "qr_check", "file", "slicer"].includes(key)));
@@ -1220,10 +1301,11 @@ export async function completeFromBench(deviceId: string, jobId: string, input: 
  * printed in the last PRINT_NOW_PRINTED_DAYS days, each with its project and sliced file (latest of each kind) behind
  * a short-lived signed link. Anything else leaves the folder.
  */
-export async function printNowPlates(): Promise<PrintNowPlate[]> {
+export async function printNowPlates(device: BenchDevice): Promise<PrintNowPlate[]> {
   const since = new Date(Date.now() - PRINT_NOW_PRINTED_DAYS * 24 * 60 * 60_000);
   const list = await rows<JobRow>(sql`${JOB_SELECT}
-    WHERE j.status IN ('ready', 'printing') OR (j.status = 'printed' AND j.printed_at >= ${since})
+    WHERE j.organization_id = ${device.organizationId}
+      AND (j.status IN ('ready', 'printing') OR (j.status = 'printed' AND j.printed_at >= ${since}))
     ORDER BY COALESCE(r.created_at, j.created_at), j.plate_number`);
   if (!list.length) return [];
   const ids = sql.join(list.map((j) => sql`${j.id}`), sql`, `);
@@ -1260,8 +1342,8 @@ export async function printNowPlates(): Promise<PrintNowPlate[]> {
  * "This print came out wrong": an observation on the batch's (or the model's) journey, with the order and version, so
  * the next version can say what it fixes. Making that version is a separate step (the model page opens it prefilled).
  */
-export async function recordProblem(id: string, text: string, userId: string | null, source: JourneySource = "admin") {
-  const job = await getJob(id);
+export async function recordProblem(id: string, text: string, userId: string | null, scope: ProductionScope, source: JourneySource = "admin") {
+  const job = await getJob(id, scope);
   return createJourneyEntry({
     kind: "observation",
     action: "print_problem",
@@ -1273,8 +1355,8 @@ export async function recordProblem(id: string, text: string, userId: string | n
 }
 
 /** The batch is assembled: the journey says so, and the parts its version consumes come off their counts. */
-export async function markAssembled(id: string, userId: string | null, source: JourneySource = "admin"): Promise<PrintJobDetail> {
-  const job = await loadJob(id);
+export async function markAssembled(id: string, userId: string | null, scope: ProductionScope, source: JourneySource = "admin"): Promise<PrintJobDetail> {
+  const job = await loadJob(id, scope);
   if (!job.batchId) throw new TagError("Only a print order of pieces with codes is assembled", 400, "print_assemble_part");
   if (job.status !== "printed") throw new TagError("Mark the order printed before assembling it", 409, "print_assemble_not_printed");
   if ((job.report as { assembledAt?: string } | null)?.assembledAt) throw new TagError("This order is already assembled", 409, "print_assemble_done");
@@ -1288,15 +1370,18 @@ export async function markAssembled(id: string, userId: string | null, source: J
   }, journeyContext(userId, source));
   await db.update(printJobs).set({ report: { ...(job.report ?? {}), assembledAt: new Date().toISOString() }, updatedAt: new Date() })
     .where(eq(printJobs.id, job.id));
-  return getJob(job.id);
+  return getJob(job.id, scope);
 }
 
 /**
  * Called whenever an `assembled` step is written for a batch (from the order, the journey panel or MCP): its order's
  * version says which parts one piece takes; each comes off its count once per batch. A count may go below zero —
- * that is a recount to do, shown in the catalog, not a reason to refuse the step.
+ * that is a recount to do, shown in the catalog, not a reason to refuse the step. The counts are the company's: a
+ * branch's batch takes nothing off them.
  */
 export async function consumeForAssembly(batchId: string, userId: string | null): Promise<number> {
+  const [owner] = await db.select({ organizationId: tagBatches.organizationId }).from(tagBatches).where(eq(tagBatches.id, batchId)).limit(1);
+  if (!owner || owner.organizationId !== await companyOrganizationId()) return 0;
   const [done] = await rows<{ n: number }>(sql`
     SELECT count(*)::int AS n FROM print_part_movements WHERE batch_id = ${batchId} AND reason = 'assembled'`);
   if (Number(done?.n ?? 0) > 0) return 0;

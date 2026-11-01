@@ -37,6 +37,30 @@ export function runsATeam(
   return (organizations ?? []).some((organization) => organization.membershipRole === "admin" && !organization.personal);
 }
 
+/** The company organization (Boston): every piece printed before branches existed, and parts, are its. */
+export const COMPANY_ORGANIZATION_SLUG = "xpot-company";
+
+type ProductionCandidate = {
+  slug: string;
+  isActive: boolean;
+  printsOwnPieces?: boolean | null;
+  membershipRole?: OrganizationRole | null;
+};
+
+/**
+ * Who Tags › Production prints for, as the server decides it (server/tags/access.ts requireProductionUser): for the
+ * global admin the company and every active branch that prints its own pieces; for anyone else the branches like
+ * that they are a Rep Admin of. The company comes first. Empty: no access to Production. `organizations` is
+ * /api/xpot/me's list (every organization for an admin, their own for anyone else).
+ */
+export function productionOrganizations<T extends ProductionCandidate>(organizations: readonly T[] | null | undefined, isAdmin: boolean): T[] {
+  const printing = (organization: T) => organization.isActive && !!organization.printsOwnPieces;
+  const list = (organizations ?? []).filter((organization) => isAdmin
+    ? organization.slug === COMPANY_ORGANIZATION_SLUG || printing(organization)
+    : organization.membershipRole === "admin" && printing(organization));
+  return [...list].sort((a, b) => Number(b.slug === COMPANY_ORGANIZATION_SLUG) - Number(a.slug === COMPANY_ORGANIZATION_SLUG));
+}
+
 export function activeOrganizationAccess(
   memberships: readonly OrganizationAccess[],
   organizationId: number,

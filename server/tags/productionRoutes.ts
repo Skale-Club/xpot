@@ -16,14 +16,17 @@ import {
   printVersionInputSchema,
   type PrintFileKind,
 } from "#shared/printProduction.js";
-import { requireTagAdmin, requireTagUser } from "./access.js";
+import { productionScopeOf, requireProductionUser, requireTagAdmin, requireTagUser } from "./access.js";
 import { TagError } from "./errors.js";
 import * as production from "./production.js";
+import { companyOrganizationId } from "../organizations/service.js";
 
 // Tags › Production HTTP API (docs/PRINT_EXECUTION_PLAN.md). Two audiences:
-//   /api/xpot/admin/print-*        — the global admin (catalog, versions, requests and their plates, files)
+//   /api/xpot/admin/print-*        — the global admin (catalog, versions, requests and their plates, files), and the
+//                                    Rep Admin of a branch that prints its own pieces, for that branch's requests,
+//                                    plates and files only (requireProductionUser; the catalog stays the admin's)
 //   /api/provisioner/print-*       — a paired bench app (device token with the 'print' capability): builds the
-//                                    plates' files and mirrors them into its Print Now folder (nothing goes to the
+//                                    plates' files of its own organization and mirrors them into its Print Now folder (nothing goes to the
 //                                    printer from here: the admin prints by hand and marks the plate printed)
 // File uploads are the raw bytes (application/octet-stream) with ?kind=&filename=, up to 64 MB; downloads redirect to
 // a short-lived signed URL. Registered from routes.ts, which owns the device middleware.
@@ -53,15 +56,26 @@ function requirePrintDevice(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
+// `organization`: only that organization's (an admin's filter; a branch already sees only its own).
+const organizationFilter = z.coerce.number().int().positive().optional();
+
 const jobListQuery = z.object({
   status: z.enum(["open", "done", "all", ...PRINT_JOB_STATUSES]).default("open"),
   model: z.string().trim().min(1).max(80).optional(),
+  organization: organizationFilter,
 }).strict();
 
 const requestListQuery = z.object({
   status: z.enum(["open", "done", "all"]).default("open"),
   model: z.string().trim().min(1).max(80).optional(),
+  organization: organizationFilter,
 }).strict();
+
+/** The caller's scope, narrowed to one organization when the list asks for it (out of scope: nothing). */
+function narrowed(scope: production.ProductionScope, organization: number | undefined): production.ProductionScope {
+  if (organization === undefined) return scope;
+  return scope === null || scope.includes(organization) ? [organization] : [];
+}
 
 const claimSchema = z.object({ jobId: z.string().uuid().nullable().optional() }).strict();
 
@@ -100,9 +114,9 @@ export function registerProductionRoutes(app: Express, deps: { device: readonly 
 
   // ─── Catalog ────────────────────────────────────────────────────────────────
 
-  app.get(models, requireTagAdmin, async (_req, res) => {
+  app.get(models, requireProductionUser, async (req, res) => {
     try {
-      res.json(await production.listModels());
+      res.json(await production.listModels(productionScopeOf(req)));
     } catch (err) {
       fail(res, err, "Failed to load the print catalog");
     }
@@ -116,9 +130,9 @@ export function registerProductionRoutes(app: Express, deps: { device: readonly 
     }
   });
 
-  app.get(`${models}/:ref`, requireTagAdmin, async (req, res) => {
+  app.get(`${models}/:ref`, requireProductionUser, async (req, res) => {
     try {
-      res.json(await production.getModel(req.params.ref));
+      res.json(await production.getModel(req.params.ref, productionScopeOf(req)));
     } catch (err) {
       fail(res, err, "Failed to load the print model");
     }
@@ -175,7 +189,7 @@ export function registerProductionRoutes(app: Express, deps: { device: readonly 
     }
   });
 
-  app.get(`${models}/:ref/versions/:versionId/preview`, requireTagAdmin, async (req, res) => {
+  app.get(`${models}/:ref/versions/:versionId/preview`, requireProductionUser, async (req, res) => {
     const versionId = uuidParam(req.params.versionId, res);
     if (!versionId) return;
     try {
@@ -221,59 +235,59 @@ export function registerProductionRoutes(app: Express, deps: { device: readonly 
 
   // ─── Queue ──────────────────────────────────────────────────────────────────
 
-  app.get(jobs, requireTagAdmin, async (req, res) => {
+  app.get(jobs, requireProductionUser, async (req, res) => {
     try {
-      const { status, model } = jobListQuery.parse(req.query);
-      res.json(await production.listJobs(status, model ?? null));
+      const { status, model, organization } = jobListQuery.parse(req.query);
+      res.json(await production.listJobs(status, model ?? null, narrowed(productionScopeOf(req), organization)));
     } catch (err) {
       fail(res, err, "Failed to load the print queue");
     }
   });
 
   // A request: N pieces of a model, split into plates (the answer is the request with its plates).
-  app.post(jobs, requireTagAdmin, async (req, res) => {
+  app.post(jobs, requireProductionUser, async (req, res) => {
     try {
-      res.status(201).json(await production.createJob(printJobCreateSchema.parse(req.body), userIdOf(req), "admin"));
+      res.status(201).json(await production.createJob(printJobCreateSchema.parse(req.body), userIdOf(req), "admin", productionScopeOf(req)));
     } catch (err) {
       fail(res, err, "Failed to create the print order");
     }
   });
 
-  app.get(requests, requireTagAdmin, async (req, res) => {
+  app.get(requests, requireProductionUser, async (req, res) => {
     try {
-      const { status, model } = requestListQuery.parse(req.query);
-      res.json(await production.listRequests(status, model ?? null));
+      const { status, model, organization } = requestListQuery.parse(req.query);
+      res.json(await production.listRequests(status, model ?? null, narrowed(productionScopeOf(req), organization)));
     } catch (err) {
       fail(res, err, "Failed to load the print requests");
     }
   });
 
-  app.get(`${requests}/:id`, requireTagAdmin, async (req, res) => {
+  app.get(`${requests}/:id`, requireProductionUser, async (req, res) => {
     const id = uuidParam(req.params.id, res);
     if (!id) return;
     try {
-      res.json(await production.getRequest(id));
+      res.json(await production.getRequest(id, productionScopeOf(req)));
     } catch (err) {
       fail(res, err, "Failed to load the print request");
     }
   });
 
-  app.get(`${jobs}/:id`, requireTagAdmin, async (req, res) => {
+  app.get(`${jobs}/:id`, requireProductionUser, async (req, res) => {
     const id = uuidParam(req.params.id, res);
     if (!id) return;
     try {
-      res.json(await production.getJob(id));
+      res.json(await production.getJob(id, productionScopeOf(req)));
     } catch (err) {
       fail(res, err, "Failed to load the print order");
     }
   });
 
-  app.post(`${jobs}/:id/transition`, requireTagAdmin, async (req, res) => {
+  app.post(`${jobs}/:id/transition`, requireProductionUser, async (req, res) => {
     const id = uuidParam(req.params.id, res);
     if (!id) return;
     try {
       const { action, reason, badPieces } = printJobUpdateSchema.parse(req.body);
-      res.json(await production.transitionJob(id, { action, reason: reason ?? null, badPieces, userId: userIdOf(req), source: "admin" }));
+      res.json(await production.transitionJob(id, { action, reason: reason ?? null, badPieces, userId: userIdOf(req), source: "admin" }, productionScopeOf(req)));
     } catch (err) {
       fail(res, err, "Failed to update the print order");
     }
@@ -281,66 +295,66 @@ export function registerProductionRoutes(app: Express, deps: { device: readonly 
 
   // A plate printed before marking printed stocked its pieces: put the pending ones in house stock now (the listed
   // bad pieces become damaged). The same code path as the `printed` transition.
-  app.post(`${jobs}/:id/stock`, requireTagAdmin, async (req, res) => {
+  app.post(`${jobs}/:id/stock`, requireProductionUser, async (req, res) => {
     const id = uuidParam(req.params.id, res);
     if (!id) return;
     try {
       const { badPieces } = printJobStockSchema.parse(req.body ?? {});
-      res.json(await production.stockJob(id, { badPieces, userId: userIdOf(req), source: "admin" }));
+      res.json(await production.stockJob(id, { badPieces, userId: userIdOf(req), source: "admin" }, productionScopeOf(req)));
     } catch (err) {
       fail(res, err, "Failed to put the pieces in stock");
     }
   });
 
-  app.post(`${jobs}/:id/redo`, requireTagAdmin, async (req, res) => {
+  app.post(`${jobs}/:id/redo`, requireProductionUser, async (req, res) => {
     const id = uuidParam(req.params.id, res);
     if (!id) return;
     try {
-      res.status(201).json(await production.redoJob(id, userIdOf(req)));
+      res.status(201).json(await production.redoJob(id, userIdOf(req), productionScopeOf(req)));
     } catch (err) {
       fail(res, err, "Failed to print the order again");
     }
   });
 
-  app.post(`${jobs}/:id/files`, requireTagAdmin, rawFile, async (req, res) => {
+  app.post(`${jobs}/:id/files`, requireProductionUser, rawFile, async (req, res) => {
     const id = uuidParam(req.params.id, res);
     if (!id) return;
     try {
       const { kind, filename } = uploadQuery.parse(req.query);
       const resolved: PrintFileKind = kind ?? production.fileKindFor(filename);
-      res.status(201).json(await production.attachJobFile(id, resolved, filename, uploadBody(req)));
+      res.status(201).json(await production.attachJobFile(id, resolved, filename, uploadBody(req), productionScopeOf(req)));
     } catch (err) {
       fail(res, err, "Failed to upload the print file");
     }
   });
 
   // Something came out wrong: an observation on the journey, for the next version to fix.
-  app.post(`${jobs}/:id/problem`, requireTagAdmin, async (req, res) => {
+  app.post(`${jobs}/:id/problem`, requireProductionUser, async (req, res) => {
     const id = uuidParam(req.params.id, res);
     if (!id) return;
     try {
       const { text } = printProblemSchema.parse(req.body);
-      res.status(201).json(await production.recordProblem(id, text, userIdOf(req)));
+      res.status(201).json(await production.recordProblem(id, text, userIdOf(req), productionScopeOf(req)));
     } catch (err) {
       fail(res, err, "Failed to record the problem");
     }
   });
 
-  app.post(`${jobs}/:id/assembled`, requireTagAdmin, async (req, res) => {
+  app.post(`${jobs}/:id/assembled`, requireProductionUser, async (req, res) => {
     const id = uuidParam(req.params.id, res);
     if (!id) return;
     try {
-      res.json(await production.markAssembled(id, userIdOf(req)));
+      res.json(await production.markAssembled(id, userIdOf(req), productionScopeOf(req)));
     } catch (err) {
       fail(res, err, "Failed to mark the order assembled");
     }
   });
 
-  app.get("/api/xpot/admin/print-files/:id", requireTagAdmin, async (req, res) => {
+  app.get("/api/xpot/admin/print-files/:id", requireProductionUser, async (req, res) => {
     const id = uuidParam(req.params.id, res);
     if (!id) return;
     try {
-      await redirectToSigned(res, (await production.getJobFile(id)).fileRef);
+      await redirectToSigned(res, (await production.getJobFile(id, productionScopeOf(req))).fileRef);
     } catch (err) {
       fail(res, err, "Failed to open the print file");
     }
@@ -349,13 +363,13 @@ export function registerProductionRoutes(app: Express, deps: { device: readonly 
   // ─── The bench (device token, 'print' capability) ───────────────────────────
 
   const bench = [...deps.device, requirePrintDevice] as const;
-  const deviceId = (req: Request) => req.provisionerDevice!.id;
+  const device = (req: Request): production.BenchDevice => ({ id: req.provisionerDevice!.id, organizationId: req.provisionerDevice!.organizationId });
 
   // The given order (`bench.py attach`) or the oldest buildable one; 204 when there is nothing to do.
   app.post("/api/provisioner/print-jobs/claim", ...bench, async (req, res) => {
     try {
       const { jobId } = claimSchema.parse(req.body ?? {});
-      const ticket = await production.claimJob(deviceId(req), jobId ?? null);
+      const ticket = await production.claimJob(device(req), jobId ?? null);
       if (!ticket) return res.status(204).end();
       res.json(ticket);
     } catch (err) {
@@ -368,7 +382,7 @@ export function registerProductionRoutes(app: Express, deps: { device: readonly 
     if (!id) return;
     try {
       const { type, detail } = benchEventSchema.parse(req.body);
-      await production.recordBenchEvent(deviceId(req), id, type, detail ?? null);
+      await production.recordBenchEvent(device(req), id, type, detail ?? null);
       res.json({ ok: true });
     } catch (err) {
       fail(res, err, "Failed to record the event");
@@ -380,7 +394,8 @@ export function registerProductionRoutes(app: Express, deps: { device: readonly 
     if (!id) return;
     try {
       const { kind, filename } = uploadQuery.parse(req.query);
-      res.status(201).json(await production.attachJobFile(id, kind ?? production.fileKindFor(filename), filename, uploadBody(req), { deviceId: deviceId(req) }));
+      const bench = device(req);
+      res.status(201).json(await production.attachJobFile(id, kind ?? production.fileKindFor(filename), filename, uploadBody(req), [bench.organizationId], { deviceId: bench.id }));
     } catch (err) {
       fail(res, err, "Failed to upload the print file");
     }
@@ -395,11 +410,15 @@ export function registerProductionRoutes(app: Express, deps: { device: readonly 
     }
   });
 
-  // A part's fixed print file, uploaded from the bench (the same rule as the admin route: only while unused).
+  // A part's fixed print file, uploaded from the bench (the same rule as the admin route: only while unused). The
+  // catalog is the company's: only its own bench changes it.
   app.post("/api/provisioner/print-models/:ref/versions/:versionId/beds/:label/file", ...bench, rawFile, async (req, res) => {
     const versionId = uuidParam(req.params.versionId, res);
     if (!versionId) return;
     try {
+      if (device(req).organizationId !== await companyOrganizationId()) {
+        return res.status(403).json({ message: "Only the company's bench changes the catalog" });
+      }
       const { filename } = uploadQuery.parse(req.query);
       res.status(201).json(await production.attachBedFile(req.params.ref, versionId, req.params.label, filename, uploadBody(req), null));
     } catch (err) {
@@ -408,10 +427,10 @@ export function registerProductionRoutes(app: Express, deps: { device: readonly 
   });
 
   // What the bench's Print Now folder should hold: plates to print and recently printed, with signed file links.
-  app.get("/api/provisioner/print-now", ...bench, async (_req, res) => {
+  app.get("/api/provisioner/print-now", ...bench, async (req, res) => {
     try {
       res.set("Cache-Control", "no-store");
-      res.json(await production.printNowPlates());
+      res.json(await production.printNowPlates(device(req)));
     } catch (err) {
       fail(res, err, "Failed to list the plates to print");
     }
@@ -422,7 +441,7 @@ export function registerProductionRoutes(app: Express, deps: { device: readonly 
     if (!id) return;
     try {
       const body = benchCompleteSchema.parse(req.body);
-      const job = await production.completeFromBench(deviceId(req), id, body);
+      const job = await production.completeFromBench(device(req), id, body);
       res.json({ id: job.id, status: job.status, errorMessage: job.errorMessage });
     } catch (err) {
       fail(res, err, "Failed to complete the print order");

@@ -52,6 +52,7 @@ function toDeviceItem(d: TagProvisioningDevice): ProvisionerDeviceItem {
     appVersion: d.appVersion,
     status: d.status,
     capabilities: d.capabilities ?? ["nfc"],
+    organizationId: d.organizationId,
     tokenPrefix: d.tokenPrefix,
     pairingExpiresAt: d.status === "pairing" ? iso(d.pairingExpiresAt) : null,
     lastSeenAt: iso(d.lastSeenAt),
@@ -61,12 +62,16 @@ function toDeviceItem(d: TagProvisioningDevice): ProvisionerDeviceItem {
   };
 }
 
-/** Admin step 1: a one-time code the operator types into the desktop app. */
-export async function createPairing(deviceName: string, userId: string | null) {
+/**
+ * Admin step 1: a one-time code the operator types into the desktop app. The device works for `organizationId`
+ * only (the company's, or a branch printing its own): its plates, its Print Now folder, its pieces' chips.
+ */
+export async function createPairing(deviceName: string, userId: string | null, organizationId: number) {
   const code = encodePairingCode(crypto.randomBytes(8));
   const [device] = await db
     .insert(tagProvisioningDevices)
     .values({
+      organizationId,
       deviceName,
       status: "pairing",
       pairingCodeHash: sha256(code),
@@ -138,8 +143,11 @@ export async function touchDevice(device: TagProvisioningDevice, appVersion: str
     .where(eq(tagProvisioningDevices.id, device.id));
 }
 
-export async function listDevices(): Promise<ProvisionerDeviceItem[]> {
-  const rows = await db.select().from(tagProvisioningDevices).orderBy(desc(tagProvisioningDevices.createdAt));
+/** Every device, or (`organizationIds`) those of these organizations only. */
+export async function listDevices(organizationIds: readonly number[] | null = null): Promise<ProvisionerDeviceItem[]> {
+  const rows = await db.select().from(tagProvisioningDevices)
+    .where(organizationIds === null ? undefined : organizationIds.length ? inArray(tagProvisioningDevices.organizationId, [...organizationIds]) : sql`FALSE`)
+    .orderBy(desc(tagProvisioningDevices.createdAt));
   // Unredeemed codes past their expiry are noise; hide them.
   return rows
     .filter((d) => d.status !== "pairing" || (d.pairingExpiresAt && d.pairingExpiresAt.getTime() > Date.now()))
@@ -147,12 +155,15 @@ export async function listDevices(): Promise<ProvisionerDeviceItem[]> {
 }
 
 /** Revocation is immediate: the token stops working and open jobs are cancelled. */
-export async function revokeDevice(id: string, userId: string | null) {
+export async function revokeDevice(id: string, userId: string | null, organizationIds: readonly number[] | null = null) {
   return db.transaction(async (tx) => {
     const [device] = await tx
       .update(tagProvisioningDevices)
       .set({ status: "revoked", revokedAt: new Date(), tokenHash: null, pairingCodeHash: null })
-      .where(eq(tagProvisioningDevices.id, id))
+      .where(and(
+        eq(tagProvisioningDevices.id, id),
+        organizationIds === null ? undefined : organizationIds.length ? inArray(tagProvisioningDevices.organizationId, [...organizationIds]) : sql`FALSE`,
+      ))
       .returning();
     if (!device) throw new TagError("Device not found", 404);
     const cancelled = await tx
@@ -218,10 +229,12 @@ export async function createJob(tagId: string, userId: string | null, baseUrl: s
     if (tag.nfcProvisioningStatus === "locked") throw new TagError("This chip is locked and cannot be rewritten", 409, "chip_locked");
     if (targetDeviceId) {
       const [device] = await tx
-        .select({ status: tagProvisioningDevices.status })
+        .select({ status: tagProvisioningDevices.status, organizationId: tagProvisioningDevices.organizationId })
         .from(tagProvisioningDevices)
         .where(eq(tagProvisioningDevices.id, targetDeviceId));
       if (device?.status !== "active") throw new TagError("That provisioner is not paired or was revoked", 409);
+      // A writer only takes its own organization's pieces (claimNextJob): one of another would never be written.
+      if (device.organizationId !== tag.organizationId) throw new TagError("That provisioner works for another organization", 409, "provisioner_other_organization");
     }
     const previous = await tx
       .update(tagProvisioningJobs)
@@ -288,9 +301,11 @@ async function toClaimed(tx: DbOrTx, job: TagProvisioningJob): Promise<ClaimedJo
 /**
  * Device: the job to work on next. A job this device already holds comes back
  * first (app restarted mid-job); otherwise the oldest pending job addressed to
- * this device or to any device. SKIP LOCKED keeps two devices from racing.
+ * this device or to any device, for a piece of the device's own organization.
+ * SKIP LOCKED keeps two devices from racing.
  */
-export async function claimNextJob(deviceId: string): Promise<ClaimedJob | null> {
+export async function claimNextJob(device: { id: string; organizationId: number }): Promise<ClaimedJob | null> {
+  const deviceId = device.id;
   await expireStaleJobs();
   return db.transaction(async (tx) => {
     const [held] = await tx
@@ -310,6 +325,7 @@ export async function claimNextJob(deviceId: string): Promise<ClaimedJob | null>
       .where(and(
         eq(tagProvisioningJobs.status, "pending"),
         or(isNull(tagProvisioningJobs.targetDeviceId), eq(tagProvisioningJobs.targetDeviceId, deviceId)),
+        sql`${tagProvisioningJobs.tagId} IN (SELECT t.id FROM tags t WHERE t.organization_id = ${device.organizationId})`,
       ))
       .orderBy(tagProvisioningJobs.createdAt)
       .limit(1)

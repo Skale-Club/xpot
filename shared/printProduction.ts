@@ -288,6 +288,11 @@ export const printJobCreateSchema = z.object({
    * The order's status follows the batch: received/printed → printed, built → ready if a file is attached later.
    */
   existingBatch: optionalText(80),
+  /**
+   * Whose pieces these are (organization slug or id): the request, its plates, batches and pieces are filed under it.
+   * Omitted: the company ('xpot-company') for an admin, the branch itself for a branch's Rep Admin.
+   */
+  organization: z.union([z.string().trim().min(1).max(80), z.number().int().positive()]).optional(),
 }).strict();
 export type PrintJobCreateInput = z.infer<typeof printJobCreateSchema>;
 
@@ -446,6 +451,9 @@ export interface PrintJobItem {
   requestQuantity: number;
   /** The print files to download: the Bambu Studio project (.3mf) and the sliced, checked file (.gcode.3mf). */
   downloads: Array<{ id: string; kind: PrintFileKind; filename: string }>;
+  /** Whose production this plate is (its batch and pieces belong to it). */
+  organizationId: number;
+  organizationName: string;
 }
 
 /** What was asked, with its plates (a redone plate shows next to the one it replaces). */
@@ -464,6 +472,9 @@ export interface PrintRequestItem {
   /** Some plate still to build or print. */
   open: boolean;
   plates: PrintJobItem[];
+  /** Whose production the request is. */
+  organizationId: number;
+  organizationName: string;
 }
 
 export interface PrintJobPiece {

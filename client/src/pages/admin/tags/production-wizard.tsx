@@ -17,7 +17,7 @@ import { ProductionIdentity, ProductionPlatePreview } from "./production-identit
 import { errorMessage, invalidateAdminTags, sendJson } from "./api";
 import { catalogOptions, useTagCatalog } from "./batches-shared";
 import { useTagLabels } from "./labels";
-import { bedSummary, usePrintModels } from "./production-shared";
+import { bedSummary, usePrintModels, useProductionAccess } from "./production-shared";
 import { canPrintModel, printableBeds, printQuantity, type ExistingProductionBatch } from "./production-workflow";
 
 const EMPTY_FORM = {
@@ -43,6 +43,9 @@ export function ProductionWizard({ onClose, onCreated, onOrdered, onCloseAutoFoc
   const labels = useTagLabels();
   const { data: catalog = [], isLoading: catalogLoading, error: catalogError, refetch: reloadCatalog } = useTagCatalog();
   const modelsQuery = usePrintModels();
+  // Whose pieces these are: the company first; a part is always the company's (its counts are).
+  const access = useProductionAccess();
+  const [organizationId, setOrganizationId] = useState("");
   const [form, setForm] = useState({ ...EMPTY_FORM, quantity: String(initialModel?.currentVersion?.beds[0]?.copies ?? 4) });
   const [modelId, setModelId] = useState(initialModel?.id ?? "");
   const models = (modelsQuery.data ?? (initialModel ? [initialModel] : [])).filter((m) => canPrintModel(m, existingBatch));
@@ -65,6 +68,8 @@ export function ProductionWizard({ onClose, onCreated, onOrdered, onCloseAutoFoc
   const productReady = printing ? !!model && !!bed : form.name.trim().length > 0 && catalog.some((p) => p.id === Number(form.salesProductId));
   const ready = productReady && quantityOk;
   const stepNames = [tw("stepProduct"), printing ? u("quantityStep") : tw("stepCodes"), tw("stepReview")];
+  const organizationChoices = model?.kind === "serialized" && !existingBatch ? access.organizations : [];
+  const organization = organizationChoices.find((o) => String(o.id) === organizationId) ?? organizationChoices[0];
   const create = useMutation({
     mutationFn: () => sendJson<{ id: string; batchCode: string; quantity: number; codeSource: string }>("POST", "/api/xpot/admin/tag-batches", {
       name: form.name.trim(), batchCode: form.batchCode.trim() || undefined, productType: form.productType,
@@ -83,6 +88,7 @@ export function ProductionWizard({ onClose, onCreated, onOrdered, onCloseAutoFoc
     mutationFn: () => sendJson<PrintRequestItem>("POST", "/api/xpot/admin/print-jobs", {
       model: model!.id, bed: bed!.label, quantity: printPlan.count, notes: form.notes.trim() || null,
       ...(existingBatch ? { existingBatch: existingBatch.id } : {}),
+      ...(organization ? { organization: organization.id } : {}),
     }),
     onSuccess: (request) => {
       void invalidateAdminTags();
@@ -135,7 +141,7 @@ export function ProductionWizard({ onClose, onCreated, onOrdered, onCloseAutoFoc
                 {model ? <><ProductionIdentity model={model} hero /><p className="text-xs leading-relaxed text-white/45">{u("automaticCodes")}</p></> : null}
               </>}
             </div> : null}
-            {step === 0 && printing && !initialModel && !existingBatch && !otherWays ? <button type="button" onClick={() => setOtherWays(true)} className="text-xs text-white/50 underline underline-offset-2 hover:text-white" data-testid="production-other-ways">{u("otherWays")}</button> : null}
+            {step === 0 && printing && !initialModel && !existingBatch && !otherWays && access.isAdmin ? <button type="button" onClick={() => setOtherWays(true)} className="text-xs text-white/50 underline underline-offset-2 hover:text-white" data-testid="production-other-ways">{u("otherWays")}</button> : null}
             {step === 0 && !printing ? <div className="space-y-4">
               <Field label={t("fieldNameRequired")}><Input value={form.name} onChange={(e) => set({ name: e.target.value })} required maxLength={120} placeholder={t("namePlaceholder")} autoFocus /></Field>
               <div className="grid gap-3 sm:grid-cols-2">
@@ -150,6 +156,7 @@ export function ProductionWizard({ onClose, onCreated, onOrdered, onCloseAutoFoc
             {step === 1 ? <fieldset aria-label={tw("codeSetup")} className="space-y-4" data-testid="admin-tags-new-batch-codes">
               {printing ? <>
                 {model ? <ProductionIdentity model={model} hero /> : null}
+                {organizationChoices.length > 1 ? <Field label={tp("organization")} hint={tp("organizationHint")}><Select value={organization ? String(organization.id) : ""} onChange={(e) => setOrganizationId(e.target.value)} options={organizationChoices.map((o) => ({ value: String(o.id), label: o.name }))} data-testid="production-print-organization" /></Field> : null}
                 {beds.length > 1 ? <Field label={tp("fieldBed")}><Select value={bed?.label ?? ""} onChange={(e) => { setBedLabel(e.target.value); }} options={beds.map((b) => ({ value: b.label, label: bedSummary(b, tp) }))} data-testid="production-print-bed" /></Field> : null}
                 <Field label={tp("fieldQuantity")} hint={tp(model?.kind === "serialized" ? "fieldQuantityHint" : "fieldQuantityHintPart", { copies: bed?.copies ?? 1, max: printPlan.max })}><Input type="number" inputMode="numeric" required min={1} max={printPlan.max} step={1} value={existingBatch ? existingBatch.tagCount : form.quantity} disabled={!!existingBatch} onChange={(e) => set({ quantity: e.target.value })} data-testid="production-print-quantity" /></Field>
                 {printPlan.valid ? <p className="rounded-xl border border-violet-400/20 bg-violet-500/[0.06] p-3 text-sm text-white/75" data-testid="production-print-summary">{tp.plural("plateSplit", printPlan.plates.length, { split: printPlan.plates.join(" + ") })}{model?.kind === "part" ? ` · ${tp.plural("willPrint", printPlan.pieces)}` : ""}</p> : null}
@@ -164,6 +171,7 @@ export function ProductionWizard({ onClose, onCreated, onOrdered, onCloseAutoFoc
                 {(printing ? [
                   [tp("fieldQuantity"), String(printPlan.pieces)],
                   [tp("fieldBed"), bed?.label],
+                  ...(organizationChoices.length > 1 && organization ? [[tp("organization"), organization.name]] : []),
                   [u("output"), model?.kind === "part" ? bed?.fileName ?? ".3mf" : ".3mf + .gcode.3mf"],
                   ...(existingBatch ? [[u("existingCodes"), existingBatch.batchCode]] : []),
                 ] : [

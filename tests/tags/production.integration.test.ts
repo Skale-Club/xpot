@@ -694,3 +694,240 @@ describe("parts", () => {
     expect((await request(app, "GET", "/api/provisioner/print-models/base-large", undefined, nfcOnly)).status).toBe(403);
   });
 });
+
+// Production per organization (migrations/0065, docs/organizations-execution-plan.md): a branch that prints its own
+// pieces files its requests, plates, batches and pieces under itself; its Rep Admin and its bench see only its own,
+// the admin (the owners) sees every one, and Boston (the company) keeps working as before.
+describe("production per organization", () => {
+  interface Branches { ny: number; miami: number; team: number; company: number }
+
+  async function branches(): Promise<Branches> {
+    const org = async (name: string, slug: string, prints: boolean) => (await q(
+      `INSERT INTO organizations (name, slug, prints_own_pieces) VALUES ($1, $2, $3)
+       ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name, prints_own_pieces = EXCLUDED.prints_own_pieces, is_active = true RETURNING id`,
+      [name, slug, prints],
+    ))[0].id as number;
+    const ids = {
+      ny: await org("Xpot New York", "xpot-ny", true),
+      miami: await org("Xpot Miami", "xpot-miami", true),
+      team: await org("Sales team", "sales-team", false),
+      company: (await q("SELECT id FROM organizations WHERE slug = 'xpot-company'"))[0].id as number,
+    };
+    const person = async (userId: string, organizationId: number, role: "admin" | "member") => {
+      await q("INSERT INTO users (id, email, first_name, is_admin) VALUES ($1, $2, $1, false)", [userId, `${userId}@print.test`]);
+      const [rep] = await q("INSERT INTO sales_reps (user_id, display_name, email, role, is_active) VALUES ($1, $1, $2, 'rep', true) RETURNING id", [userId, `${userId}@print.test`]);
+      await q("INSERT INTO organization_memberships (organization_id, rep_id, role) VALUES ($1, $2, $3)", [organizationId, rep.id, role]);
+    };
+    await person("ny-admin", ids.ny, "admin");
+    await person("ny-member", ids.ny, "member");
+    await person("miami-admin", ids.miami, "admin");
+    await person("team-admin", ids.team, "admin");
+    return ids;
+  }
+
+  const orgOf = async (table: string, id: string) => (await q(`SELECT organization_id FROM ${table} WHERE id = $1`, [id]))[0].organization_id as number;
+
+  it("lets in only the admin and the Rep Admin of a branch that prints its own pieces", async () => {
+    await branches();
+    await createSerializedModel(admin());
+    for (const outsider of ["ny-member", "team-admin", "print-manager"]) {
+      expect((await request(appFor(outsider), "GET", "/api/xpot/admin/print-requests")).status).toBe(403);
+      expect((await request(appFor(outsider), "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white" })).status).toBe(403);
+    }
+    expect((await request(appFor("ny-admin"), "GET", "/api/xpot/admin/print-requests")).status).toBe(200);
+    // The catalog itself stays the owners'.
+    expect((await request(appFor("ny-admin"), "POST", "/api/xpot/admin/print-models", { slug: "x", kind: "part", title: "X" })).status).toBe(403);
+    expect((await request(appFor("ny-admin"), "PATCH", "/api/xpot/admin/print-models/plate-large-menu-white", { title: "Mine" })).status).toBe(403);
+  });
+
+  it("files a branch's request, plates, batch and pieces under the branch, and Boston's under the company", async () => {
+    const ids = await branches();
+    await createSerializedModel(admin());
+
+    const ny = await request(appFor("ny-admin"), "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white", quantity: 6 });
+    expect(ny.status).toBe(201);
+    expect(ny.body).toMatchObject({ organizationId: ids.ny, organizationName: "Xpot New York" });
+    expect(ny.body.plates.map((p: any) => [p.quantity, p.organizationId])).toEqual([[4, ids.ny], [2, ids.ny]]);
+    expect(await orgOf("print_requests", ny.body.id)).toBe(ids.ny);
+    for (const plate of ny.body.plates) {
+      expect(await orgOf("print_jobs", plate.id)).toBe(ids.ny);
+      expect(await orgOf("tag_batches", plate.batchId)).toBe(ids.ny);
+    }
+    const nyPieces = await q("SELECT DISTINCT organization_id FROM tags WHERE batch_id = ANY($1::uuid[])", [ny.body.plates.map((p: any) => p.batchId)]);
+    expect(nyPieces).toEqual([{ organization_id: ids.ny }]);
+
+    // Boston unchanged: an admin's request without an organization is the company's.
+    const boston = await request(admin(), "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white" });
+    expect(boston.body.organizationId).toBe(ids.company);
+    expect(await orgOf("tag_batches", boston.body.plates[0].batchId)).toBe(ids.company);
+    // The admin may print for a branch that prints its own pieces, and for no other organization.
+    const forMiami = await request(admin(), "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white", organization: "xpot-miami" });
+    expect(forMiami.body.organizationId).toBe(ids.miami);
+    const forTeam = await request(admin(), "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white", organization: "sales-team" });
+    expect(forTeam.status).toBe(409);
+    expect(forTeam.body.code).toBe("print_organization_not_printing");
+  });
+
+  it("keeps a branch's production away from every other branch, whatever the URL", async () => {
+    const ids = await branches();
+    await createSerializedModel(admin());
+    const nyApp = appFor("ny-admin");
+    const miami = appFor("miami-admin");
+    const nyRequest = (await request(nyApp, "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white" })).body;
+    const plate = nyRequest.plates[0];
+    const file = await request(nyApp, "POST", `/api/xpot/admin/print-jobs/${plate.id}/files?filename=plate.gcode.3mf`, bytes("gcode"));
+    expect(file.status).toBe(201);
+
+    expect((await request(miami, "GET", "/api/xpot/admin/print-requests?status=all")).body).toEqual([]);
+    expect((await request(miami, "GET", `/api/xpot/admin/print-requests?status=all&organization=${ids.ny}`)).body).toEqual([]);
+    expect((await request(miami, "GET", "/api/xpot/admin/print-jobs?status=all")).body).toEqual([]);
+    expect((await request(miami, "GET", `/api/xpot/admin/print-requests/${nyRequest.id}`)).status).toBe(404);
+    expect((await request(miami, "GET", `/api/xpot/admin/print-jobs/${plate.id}`)).status).toBe(404);
+    const attempts: Array<[string, string, unknown]> = [
+      ["POST", `/api/xpot/admin/print-jobs/${plate.id}/transition`, { action: "cancel" }],
+      ["POST", `/api/xpot/admin/print-jobs/${plate.id}/stock`, {}],
+      ["POST", `/api/xpot/admin/print-jobs/${plate.id}/redo`, undefined],
+      ["POST", `/api/xpot/admin/print-jobs/${plate.id}/problem`, { text: "Not mine to say" }],
+      ["POST", `/api/xpot/admin/print-jobs/${plate.id}/assembled`, undefined],
+      ["POST", `/api/xpot/admin/print-jobs/${plate.id}/files?filename=x.3mf`, bytes("x")],
+      ["GET", `/api/xpot/admin/print-files/${file.body.id}`, undefined],
+      ["GET", `/api/xpot/admin/tag-batches/${plate.batchId}`, undefined],
+      ["GET", `/api/xpot/admin/tag-batches/${plate.batchId}/export.csv`, undefined],
+      ["GET", `/api/xpot/admin/tag-batches/${plate.batchId}/qr-assets.zip`, undefined],
+      ["POST", `/api/xpot/admin/tag-batches/${plate.batchId}/scan`, { value: "ABCDEFGH" }],
+    ];
+    for (const [method, path, body] of attempts) {
+      expect([method, path, (await request(miami, method, path, body)).status]).toEqual([method, path, 404]);
+    }
+    expect((await request(miami, "GET", "/api/xpot/admin/tag-batches")).body).toEqual([]);
+    // Asking to print for another branch reads as an organization that is not there.
+    const intoNy = await request(miami, "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white", organization: "xpot-ny" });
+    expect(intoNy.status).toBe(404);
+    expect(await orgOf("print_jobs", plate.id)).toBe(ids.ny);
+    expect((await request(nyApp, "GET", `/api/xpot/admin/print-jobs/${plate.id}`)).body.status).toBe("requested");
+
+    // The owners see every organization and can narrow to one.
+    await request(admin(), "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white" });
+    const all = (await request(admin(), "GET", "/api/xpot/admin/print-requests?status=all")).body;
+    expect(all.map((r: any) => r.organizationId).sort()).toEqual([ids.company, ids.ny].sort());
+    const onlyNy = (await request(admin(), "GET", `/api/xpot/admin/print-requests?status=all&organization=${ids.ny}`)).body;
+    expect(onlyNy.map((r: any) => r.id)).toEqual([nyRequest.id]);
+    expect((await request(admin(), "GET", `/api/xpot/admin/print-jobs/${plate.id}`)).status).toBe(200);
+    expect((await request(admin(), "GET", `/api/xpot/admin/tag-batches/${plate.batchId}`)).status).toBe(200);
+  });
+
+  it("lets a branch print, mark printed and stock its own pieces, in its own inventory", async () => {
+    const ids = await branches();
+    await createSerializedModel(admin());
+    const nyApp = appFor("ny-admin");
+    const plate = (await request(nyApp, "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white" })).body.plates[0];
+    await request(nyApp, "POST", `/api/xpot/admin/print-jobs/${plate.id}/files?filename=plate.gcode.3mf`, bytes("gcode"));
+    expect((await request(nyApp, "POST", `/api/xpot/admin/print-jobs/${plate.id}/transition`, { action: "complete" })).status).toBe(200);
+    const printed = await request(nyApp, "POST", `/api/xpot/admin/print-jobs/${plate.id}/transition`, { action: "printed" });
+    expect(printed.status).toBe(200);
+    expect(printed.body.pieces.map((p: any) => p.stockStatus)).toEqual(["available", "available", "available", "available"]);
+    expect(await q("SELECT DISTINCT organization_id, stock_status FROM tags WHERE batch_id = $1", [plate.batchId]))
+      .toEqual([{ organization_id: ids.ny, stock_status: "available" }]);
+    // Its batch page and the model's counts are its own.
+    expect((await request(nyApp, "GET", `/api/xpot/admin/tag-batches/${plate.batchId}`)).body.organizationId).toBe(ids.ny);
+    const count = async (userId: string) =>
+      (await request(appFor(userId), "GET", "/api/xpot/admin/print-models")).body.find((m: any) => m.slug === "plate-large-menu-white").onHand;
+    expect(await count("ny-admin")).toBe(4);
+    expect(await count("miami-admin")).toBe(0);
+    expect(await count("print-admin")).toBe(4);
+  });
+
+  it("keeps parts and their counts the company's", async () => {
+    await branches();
+    const app = admin();
+    await request(app, "POST", "/api/xpot/admin/print-models", { slug: "base-large", kind: "part", title: "Stand base · Large", version: { beds: [{ label: "x4", copies: 4 }] } });
+    await request(app, "POST", "/api/xpot/admin/print-models", {
+      slug: "stand-large-google-white", kind: "serialized", title: "Stand Large · Google · White", productType: "large_stand",
+      face: "google_review", theme: "white", salesProductId: await salesProductId(), batchPrefix: "TSTAND",
+      version: { builder: "stand.google", beds: [bedX4], consumes: [{ part: "base-large", perPiece: 1 }] },
+    });
+    await request(app, "POST", "/api/xpot/admin/print-models/base-large/part-count", { delta: 10, reason: "printed" });
+    const nyApp = appFor("ny-admin");
+    expect((await request(nyApp, "GET", "/api/xpot/admin/print-models")).body.map((m: any) => m.slug)).toEqual(["stand-large-google-white"]);
+    expect((await request(nyApp, "GET", "/api/xpot/admin/print-models/base-large")).status).toBe(404);
+    expect((await request(nyApp, "POST", "/api/xpot/admin/print-jobs", { model: "base-large" })).status).toBe(404);
+    expect((await request(nyApp, "POST", "/api/xpot/admin/print-models/base-large/part-count", { delta: 1, reason: "printed" })).status).toBe(403);
+    const forNy = await request(app, "POST", "/api/xpot/admin/print-jobs", { model: "base-large", organization: "xpot-ny" });
+    expect(forNy.status).toBe(409);
+    expect(forNy.body.code).toBe("print_part_company_only");
+
+    // Assembling a branch's batch takes nothing off the company's bases.
+    const plate = (await request(nyApp, "POST", "/api/xpot/admin/print-jobs", { model: "stand-large-google-white" })).body.plates[0];
+    await request(nyApp, "POST", `/api/xpot/admin/print-jobs/${plate.id}/files?filename=s.gcode.3mf`, bytes("gcode"));
+    await request(nyApp, "POST", `/api/xpot/admin/print-jobs/${plate.id}/transition`, { action: "complete" });
+    await request(nyApp, "POST", `/api/xpot/admin/print-jobs/${plate.id}/transition`, { action: "printed" });
+    expect((await request(nyApp, "POST", `/api/xpot/admin/print-jobs/${plate.id}/assembled`)).status).toBe(200);
+    expect((await request(app, "GET", "/api/xpot/admin/print-models/base-large")).body.onHand).toBe(10);
+  });
+
+  it("gives a branch's bench only its branch's plates, and a branch's writer only its pieces' chips", async () => {
+    const ids = await branches();
+    await createSerializedModel(admin());
+    const boston = (await request(admin(), "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white" })).body.plates[0];
+    const nyApp = appFor("ny-admin");
+    const nyPlate = (await request(nyApp, "POST", "/api/xpot/admin/print-jobs", { model: "plate-large-menu-white" })).body.plates[0];
+
+    // The branch's Rep Admin pairs its own bench, which works for the branch.
+    const nyBench = await pairDevice(nyApp, "NY bench", ["print", "nfc"]);
+    const nyDevices = (await request(nyApp, "GET", "/api/xpot/admin/tag-provisioners")).body;
+    expect(nyDevices.map((d: any) => [d.deviceName, d.organizationId])).toEqual([["NY bench", ids.ny]]);
+    expect((await request(appFor("miami-admin"), "GET", "/api/xpot/admin/tag-provisioners")).body).toEqual([]);
+    expect((await request(appFor("miami-admin"), "POST", `/api/xpot/admin/tag-provisioners/${nyDevices[0].id}/revoke`)).status).toBe(404);
+    expect((await request(appFor("miami-admin"), "POST", "/api/xpot/admin/tag-provisioners", { deviceName: "Sneaky", organizationId: ids.ny })).status).toBe(404);
+
+    // Boston's plate is older, yet the NY bench takes the NY one, and cannot take Boston's by id.
+    const ticket = await request(nyApp, "POST", "/api/provisioner/print-jobs/claim", {}, nyBench);
+    expect(ticket.body.job.id).toBe(nyPlate.id);
+    expect((await request(nyApp, "POST", "/api/provisioner/print-jobs/claim", {}, nyBench)).status).toBe(204);
+    expect((await request(nyApp, "POST", "/api/provisioner/print-jobs/claim", { jobId: boston.id }, nyBench)).status).toBe(404);
+    const bostonBench = await pairDevice(admin(), "Boston bench", ["print"]);
+    expect((await request(admin(), "POST", "/api/provisioner/print-jobs/claim", {}, bostonBench)).body.job.id).toBe(boston.id);
+
+    await request(nyApp, "POST", `/api/provisioner/print-jobs/${nyPlate.id}/files?filename=ny.gcode.3mf`, bytes("ny"), nyBench);
+    await request(nyApp, "POST", `/api/provisioner/print-jobs/${nyPlate.id}/complete`, { outcome: "ready" }, nyBench);
+    await request(admin(), "POST", `/api/provisioner/print-jobs/${boston.id}/files?filename=boston.gcode.3mf`, bytes("bos"), bostonBench);
+    await request(admin(), "POST", `/api/provisioner/print-jobs/${boston.id}/complete`, { outcome: "ready" }, bostonBench);
+    expect((await request(nyApp, "GET", "/api/provisioner/print-now", undefined, nyBench)).body.map((p: any) => p.id)).toEqual([nyPlate.id]);
+    expect((await request(admin(), "GET", "/api/provisioner/print-now", undefined, bostonBench)).body.map((p: any) => p.id)).toEqual([boston.id]);
+    // The catalog's fixed files are the company's: a branch bench does not upload them.
+    const model = (await request(admin(), "GET", "/api/xpot/admin/print-models/plate-large-menu-white")).body;
+    const bedFile = `/api/provisioner/print-models/plate-large-menu-white/versions/${model.currentVersion.id}/beds/x4/file?filename=x.3mf`;
+    expect((await request(nyApp, "POST", bedFile, bytes("x"), nyBench)).status).toBe(403);
+
+    // A chip of a Boston piece is not for the NY writer.
+    const [bostonPiece] = await q("SELECT id FROM tags WHERE batch_id = $1 ORDER BY serial_number LIMIT 1", [boston.batchId]);
+    expect((await request(admin(), "POST", `/api/xpot/admin/tags/${bostonPiece.id}/provisioning-jobs`, {})).status).toBe(201);
+    expect((await request(nyApp, "POST", "/api/provisioner/jobs/claim", {}, nyBench)).status).toBe(204);
+    const pointed = await request(admin(), "POST", `/api/xpot/admin/tags/${bostonPiece.id}/provisioning-jobs`, { deviceId: nyDevices[0].id });
+    expect(pointed.status).toBe(409);
+    expect(pointed.body.code).toBe("provisioner_other_organization");
+  });
+
+  it("lets only the admin switch a branch to printing its own pieces", async () => {
+    const ids = await branches();
+    const { createOrganizationsRouter } = await import("../../server/routes/xpot/organizations.js");
+    const orgApp = (userId: string) => {
+      const app = express();
+      app.use(express.json());
+      app.use((req, _res, next) => {
+        (req as any).session = { userId, email: `${userId}@print.test`, isAdmin: userId === "print-admin" };
+        next();
+      });
+      app.use("/api/xpot", createOrganizationsRouter());
+      return app;
+    };
+    const path = `/api/xpot/organizations/${ids.team}`;
+    expect((await request(orgApp("print-manager"), "PATCH", path, { printsOwnPieces: true })).status).toBe(403);
+    expect((await request(orgApp("team-admin"), "PATCH", path, { printsOwnPieces: true })).status).toBe(403);
+    expect((await request(appFor("team-admin"), "GET", "/api/xpot/admin/print-requests")).status).toBe(403);
+    const on = await request(orgApp("print-admin"), "PATCH", path, { printsOwnPieces: true });
+    expect(on.status).toBe(200);
+    expect(on.body.printsOwnPieces).toBe(true);
+    expect((await request(appFor("team-admin"), "GET", "/api/xpot/admin/print-requests")).status).toBe(200);
+  });
+});

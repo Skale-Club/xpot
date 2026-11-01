@@ -27,6 +27,7 @@ import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { organizationsMessages } from "@/i18n/messages/organizations";
+import { COMPANY_ORGANIZATION_SLUG } from "@shared/organizations";
 import { peopleWorkspaceMessages } from "@/i18n/messages/peopleWorkspace";
 import { shellMessages } from "@/i18n/messages/shell";
 import { tagsMessages } from "@/i18n/messages/tags";
@@ -51,6 +52,7 @@ type Organization = {
   name: string;
   slug: string;
   isActive: boolean;
+  printsOwnPieces?: boolean;
   membershipRole?: "admin" | "member";
   memberCount?: number;
   personal?: boolean;
@@ -356,7 +358,7 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
             seeAll={platformManager && usesVisits ? { href: `/admin/work/leads?org=${organizationId}`, label: t("seeAllIn", { screen: ts("tabLeads") }), testId: "organization-customers-all" } : undefined}
             render={(row) => <><span className="text-sm font-medium text-white">{row.name}</span><span className="text-xs text-white/45">{lookup(t, `customer_${row.status}`, String(row.status ?? ""))} · {repName(row.ownerRepId)}</span></>} />
         )}
-        {tab === "settings" && <OrganizationSettings key={`${org.name}|${org.isActive}`} organization={org} mayEdit={platformManager} />}
+        {tab === "settings" && <OrganizationSettings key={`${org.name}|${org.isActive}|${org.printsOwnPieces}`} organization={org} mayEdit={platformManager} owner={!!me?.user.isAdmin} />}
       </div>
 
       <ConfirmDialog
@@ -516,7 +518,8 @@ function RecordList({ query, empty, render, rowHref, seeAll }: {
   );
 }
 
-function OrganizationSettings({ organization, mayEdit }: { organization: Organization; mayEdit: boolean }) {
+/** `owner`: the Xpot admin, the only one who lets a branch print its own pieces (Tags › Production). */
+function OrganizationSettings({ organization, mayEdit, owner }: { organization: Organization; mayEdit: boolean; owner: boolean }) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const t = useT(organizationsMessages);
@@ -524,16 +527,20 @@ function OrganizationSettings({ organization, mayEdit }: { organization: Organiz
   const tc = useT(commonMessages);
   const [name, setName] = useState(organization.name);
   const [isActive, setIsActive] = useState(organization.isActive);
-  const dirty = name.trim() !== organization.name || isActive !== organization.isActive;
+  const [prints, setPrints] = useState(!!organization.printsOwnPieces);
+  const company = organization.slug === COMPANY_ORGANIZATION_SLUG;
+  const dirty = name.trim() !== organization.name || isActive !== organization.isActive || prints !== !!organization.printsOwnPieces;
   const save = useMutation({
     mutationFn: () => json<Organization>("PATCH", `/api/xpot/organizations/${organization.id}`, {
       ...(name.trim() !== organization.name ? { name: name.trim() } : {}),
       ...(isActive !== organization.isActive ? { isActive } : {}),
+      ...(prints !== !!organization.printsOwnPieces ? { printsOwnPieces: prints } : {}),
     }),
     onSuccess: () => {
       toast({ title: t("orgSaved"), variant: "success" });
       void qc.invalidateQueries({ queryKey: [`/api/xpot/organizations/${organization.id}`] });
       void qc.invalidateQueries({ queryKey: ["/api/xpot/organizations"] });
+      void qc.invalidateQueries({ queryKey: ["/api/xpot/me"] });
     },
     onError: (error) => toast({ title: t("couldNotSave"), description: describeApiError(error), variant: "destructive" }),
   });
@@ -543,8 +550,11 @@ function OrganizationSettings({ organization, mayEdit }: { organization: Organiz
         <Input value={name} onChange={(event) => setName(event.target.value)} disabled={!mayEdit} />
       </Field>
       <SwitchRow checked={isActive} onCheckedChange={setIsActive} label={tw("orgActive")} hint={tw("orgActiveHint")} disabled={!mayEdit} testId="organization-active" />
+      {!company && (owner || organization.printsOwnPieces) ? (
+        <SwitchRow checked={prints} onCheckedChange={setPrints} label={tw("orgPrintsOwnPieces")} hint={tw("orgPrintsOwnPiecesHint")} disabled={!owner} testId="organization-prints-own-pieces" />
+      ) : null}
       {mayEdit && (
-        <FormFooter dirty={dirty} onCancel={dirty ? () => { setName(organization.name); setIsActive(organization.isActive); } : undefined}>
+        <FormFooter dirty={dirty} onCancel={dirty ? () => { setName(organization.name); setIsActive(organization.isActive); setPrints(!!organization.printsOwnPieces); } : undefined}>
           <Button variant="brand" onClick={() => save.mutate()} disabled={!dirty || !name.trim()} loading={save.isPending}>{tc("save")}</Button>
         </FormFooter>
       )}

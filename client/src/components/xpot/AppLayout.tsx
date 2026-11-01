@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import type { XpotModule } from "@shared/modules";
 import { formatTitle } from "@shared/seo";
-import { useViewerAccess } from "@/lib/adminMode";
+import { printsForABranch, useViewerAccess } from "@/lib/adminMode";
 import { AdminBadge } from "./AdminBadge";
 import { rememberModule, useXpotModules } from "@/components/ModuleSwitch";
 import { MODULE_HOME, moduleEntryPath, rememberModuleRoute } from "@/lib/xpot";
@@ -109,7 +109,7 @@ function useShellNav() {
   const groups = panel
     ? access.hasAdminAccess
       ? managementGroups(modules, viewer, labels, { home: tw("home"), tags: tw("tagsGroup"), visits: tw("visitsGroup"), team: tw("teamGroup"), system: tw("systemGroup") })
-      : organizationPanelGroups(modules, labels)
+      : organizationPanelGroups(modules, labels, printsForABranch(me))
     : context === "account" ? [{ label: "", items: [settingsItem] }] : module ? groupsFor(module) : [];
   const moduleLabel = (m: XpotModule) => tc(m === "visits" ? "moduleVisits" : "moduleTags");
   const order = module ? [module, ...modules.filter((m) => m !== module)] : modules;

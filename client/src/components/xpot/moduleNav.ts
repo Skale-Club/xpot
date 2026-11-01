@@ -297,14 +297,21 @@ export function managementGroups(modules: readonly XpotModule[], viewer: Viewer,
   return groups.filter((group) => group.items.length > 0);
 }
 
-/** Organization Rep Admins keep their team tools, without global admin destinations. */
-export function organizationPanelGroups(modules: readonly XpotModule[], l: Labels): NavGroup[] {
+/**
+ * Organization Rep Admins keep their team tools, without global admin destinations. `prints`: they run a branch that
+ * prints its own pieces (shared/organizations.ts productionOrganizations), so Production is theirs too, for it.
+ */
+export function organizationPanelGroups(modules: readonly XpotModule[], l: Labels, prints = false): NavGroup[] {
   return [{ label: l.shell("navOrganization"), items: [
     ...administrationItems(l).filter((item) => item.href === "/organizations"),
     ...(modules.includes("visits") ? [
       { href: "/admin/work/leads", label: l.shell("tabLeads"), icon: Building2, match: starts("/admin/work/leads") },
       { href: "/admin/work/tasks", label: l.shell("tabTasks"), icon: ListTodo, match: starts("/admin/work/tasks") },
       { href: "/admin/work/sales", label: l.shell("tabSales"), icon: DollarSign, match: starts("/admin/work/sales") },
+    ] : []),
+    ...(prints && modules.includes("tags") ? [
+      { href: "/admin/tags/production", label: l.shell("manageProduction"), icon: Printer, match: (p: string) => starts("/admin/tags/production")(p) || starts("/admin/tags/batches")(p) },
+      { href: "/admin/tags/provisioners", label: l.shell("manageWriters"), icon: ShieldCheck, match: starts("/admin/tags/provisioners") },
     ] : []),
   ] }];
 }

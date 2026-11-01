@@ -83,6 +83,7 @@ export function createOrganizationsRouter() {
     const input = z.object({
       name: z.string().trim().min(2).max(120).optional(),
       isActive: z.boolean().optional(),
+      printsOwnPieces: z.boolean().optional(),
     }).strict().refine((value) => Object.keys(value).length > 0, "No changes supplied").parse(req.body);
     return updateOrganization(id.parse(req.params.organizationId), input, actorOf(req));
   }));

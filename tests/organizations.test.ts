@@ -5,6 +5,7 @@ import {
   canViewOrganization,
   managesEveryOrganization,
   platformRoleOf,
+  productionOrganizations,
   type OrganizationAccess,
 } from "../shared/organizations.js";
 
@@ -61,5 +62,24 @@ describe("Organization migration", () => {
     for (const table of ["sales_leads", "tag_kits", "tags"]) {
       expect(sql).toMatch(new RegExp(`UPDATE "${table}"[\\s\\S]*ALTER TABLE "${table}" ALTER COLUMN "organization_id" SET NOT NULL`));
     }
+  });
+});
+
+describe("productionOrganizations", () => {
+  const list = [
+    { id: 4, slug: "xpot-ny", isActive: true, printsOwnPieces: true, membershipRole: "admin" as const },
+    { id: 5, slug: "sales-team", isActive: true, printsOwnPieces: false, membershipRole: "admin" as const },
+    { id: 6, slug: "xpot-miami", isActive: true, printsOwnPieces: true, membershipRole: "member" as const },
+    { id: 7, slug: "xpot-old", isActive: false, printsOwnPieces: true, membershipRole: "admin" as const },
+    { id: 1, slug: "xpot-company", isActive: true, printsOwnPieces: false },
+  ];
+
+  it("gives the admin the company first, then every active branch that prints its own pieces", () => {
+    expect(productionOrganizations(list, true).map((o) => o.id)).toEqual([1, 4, 6]);
+  });
+
+  it("gives anyone else only the printing branches they are a Rep Admin of", () => {
+    expect(productionOrganizations(list, false).map((o) => o.id)).toEqual([4]);
+    expect(productionOrganizations(undefined, false)).toEqual([]);
   });
 });

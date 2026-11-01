@@ -31,6 +31,7 @@ import { manageTagsBatchesMessages } from "@/i18n/messages/manageTagsBatches";
 import { adminTagsFlowMessages } from "@/i18n/messages/adminTagsFlow";
 import { unifiedProductionMessages } from "@/i18n/messages/unifiedProduction";
 import { ProductionWizard } from "./production-wizard";
+import { useProductionAccess } from "./production-shared";
 import { ProductionIdentity } from "./production-identity";
 
 interface BatchDetailData {
@@ -245,6 +246,9 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
   const u = useT(unifiedProductionMessages);
   const labels = useTagLabels();
   const { toast } = useToast();
+  // A printing branch's Rep Admin checks its own batches here (summary, files, QR check); handing out, closing and
+  // editing a batch stay the admin's.
+  const { isAdmin } = useProductionAccess();
   const { data: batch, isLoading, error, refetch } = useQuery<BatchDetailData>({
     queryKey: [ADMIN_TAGS_KEY, "batch", id],
     queryFn: () => getJson(`/api/xpot/admin/tag-batches/${encodeURIComponent(id)}`),
@@ -330,15 +334,17 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
           {!editing && (
             <div className="flex flex-wrap gap-2">
               {canPrepare ? <Button type="button" variant="brand" accent="tags" onClick={() => setPreparing(true)} data-testid="batch-prepare-print"><Printer className="h-4 w-4" />{u("requestFiles")}</Button> : null}
-              {handOut > 0 ? <Button type="button" variant="secondary" onClick={() => go(handOutHref(batch.id))} data-testid="batch-hand-out"><PackagePlus className="h-4 w-4" />{tf("handOutAction")}</Button> : null}
-              <Button type="button" variant="secondary" onClick={() => setStateDialog(true)} data-testid="admin-batch-state">
-                {batch.status === "open" ? <LockKeyhole className="h-4 w-4" /> : <RotateCcw className="h-4 w-4" />}
-                {batch.status === "open" ? t("closeBatch") : t("reopenBatch")}
-              </Button>
-              <Button type="button" variant="secondary" onClick={() => setEditing(true)}>
-                <Pencil className="h-4 w-4" />
-                {t("edit")}
-              </Button>
+              {isAdmin ? <>
+                {handOut > 0 ? <Button type="button" variant="secondary" onClick={() => go(handOutHref(batch.id))} data-testid="batch-hand-out"><PackagePlus className="h-4 w-4" />{tf("handOutAction")}</Button> : null}
+                <Button type="button" variant="secondary" onClick={() => setStateDialog(true)} data-testid="admin-batch-state">
+                  {batch.status === "open" ? <LockKeyhole className="h-4 w-4" /> : <RotateCcw className="h-4 w-4" />}
+                  {batch.status === "open" ? t("closeBatch") : t("reopenBatch")}
+                </Button>
+                <Button type="button" variant="secondary" onClick={() => setEditing(true)}>
+                  <Pencil className="h-4 w-4" />
+                  {t("edit")}
+                </Button>
+              </> : null}
             </div>
           )}
         </div>
@@ -395,7 +401,7 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
             <Stat card label={t("nfcVerified")} value={chipsVerified} detail={t("chipsShare", { percent: formatShare(chipsVerified, total) })} />
           </div>
           {/* Inventory reads ?batch=<id> (PiecesTab PIECE_FILTERS): the piece list lives there, not here. */}
-          <Button type="button" variant="secondary" onClick={() => go(`/pieces?batch=${encodeURIComponent(batch.id)}`)} data-testid="batch-see-pieces"><Layers className="h-4 w-4" />{tf("seePiecesInInventory")}</Button>
+          {isAdmin ? <Button type="button" variant="secondary" onClick={() => go(`/pieces?batch=${encodeURIComponent(batch.id)}`)} data-testid="batch-see-pieces"><Layers className="h-4 w-4" />{tf("seePiecesInInventory")}</Button> : null}
         </div>
       )}
 
@@ -414,7 +420,7 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
         </div>
       )}
 
-      {tab === "receive" && <><ProductionIdentity model={{ title: batch.name, productType: batch.productType, face, batchCode: batch.batchCode }} hero /><BatchReceiveStation batch={batch} onRequestClose={() => setStateDialog(true)} /></>}
+      {tab === "receive" && <><ProductionIdentity model={{ title: batch.name, productType: batch.productType, face, batchCode: batch.batchCode }} hero /><BatchReceiveStation batch={batch} onRequestClose={isAdmin ? () => setStateDialog(true) : undefined} /></>}
     </div>
   );
 }

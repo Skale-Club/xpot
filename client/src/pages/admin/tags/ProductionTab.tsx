@@ -20,7 +20,7 @@ import { Loading, LoadError } from "./pieces-shared";
 import { PrintModelPage } from "./production-model";
 import { PrintJobPage } from "./production-job";
 import { PrintDialog, RequestList } from "./production-orders";
-import { ModelStatusPill, PRODUCTION_BASE, bedSummary, usePrintModels, type JobFilter } from "./production-shared";
+import { ModelStatusPill, PRODUCTION_BASE, bedSummary, usePrintModels, useProductionAccess, type JobFilter } from "./production-shared";
 import { BatchDetail } from "./BatchDetail";
 import { ProductionWizard } from "./production-wizard";
 import { batchPrefixFromTitle, productionPath, slugFromTitle } from "./production-workflow";
@@ -29,6 +29,8 @@ import { ProductionIdentity } from "./production-identity";
 // Manage › Production (the Xpot admin's, docs/PRINT_EXECUTION_PLAN.md): the catalog of what the house prints and
 // the queue of print orders. Paths: /admin/tags/production[/queue | /models/<slug> | /jobs/<id> | /batches/<id>];
 // /batches with no id is the queue (marking a plate printed puts its pieces in stock, so there is no receiving list).
+// A printing branch's Rep Admin sees the same page for that branch: the queue and printing from the catalog, without
+// making or editing models (useProductionAccess; the server scopes every call).
 
 type Go = (path: string) => void;
 
@@ -36,6 +38,7 @@ export function ProductionTab({ rest, go }: { rest: string[]; go: Go }) {
   const t = useT(productionMessages);
   const u = useT(unifiedProductionMessages);
   const [creating, setCreating] = useState(false);
+  const { isAdmin } = useProductionAccess();
   const [view, id] = rest;
   const navigate = (path: string) => go(productionPath(path));
   if (view === "models" && id) return <PrintModelPage slug={id} go={navigate} />;
@@ -46,7 +49,7 @@ export function ProductionTab({ rest, go }: { rest: string[]; go: Go }) {
     <div className="space-y-4" data-testid="admin-production">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div><h1 className="text-2xl font-semibold tracking-tight text-white">{u("title")}</h1><p className="mt-1 max-w-2xl text-sm text-white/50">{u("intro")}</p></div>
-        <Button variant="brand" accent="tags" onClick={() => setCreating(true)} data-testid="production-new"><Plus className="h-4 w-4" />{u("newProduction")}</Button>
+        {isAdmin ? <Button variant="brand" accent="tags" onClick={() => setCreating(true)} data-testid="production-new"><Plus className="h-4 w-4" />{u("newProduction")}</Button> : null}
       </header>
       <Tabs
         tabs={[
@@ -71,6 +74,7 @@ export function ProductionTab({ rest, go }: { rest: string[]; go: Go }) {
 function CatalogView({ go }: { go: Go }) {
   const t = useT(productionMessages);
   const { data, isLoading, error, refetch } = usePrintModels();
+  const { isAdmin } = useProductionAccess();
   const [creating, setCreating] = useState(false);
   const [printing, setPrinting] = useState<PrintModelItem | null>(null);
   const groups = [
@@ -83,10 +87,12 @@ function CatalogView({ go }: { go: Go }) {
     <div className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <p className="min-w-0 max-w-2xl text-sm text-white/60">{t("catalogIntro")}</p>
-        <Button type="button" variant="brand" accent="tags" size="sm" onClick={() => setCreating(true)} data-testid="production-new-model">
-          <Plus />
-          {t("newModel")}
-        </Button>
+        {isAdmin ? (
+          <Button type="button" variant="brand" accent="tags" size="sm" onClick={() => setCreating(true)} data-testid="production-new-model">
+            <Plus />
+            {t("newModel")}
+          </Button>
+        ) : null}
       </div>
 
       {error && !data ? (
@@ -252,10 +258,23 @@ function QueueView({ go }: { go: Go }) {
   const t = useT(productionMessages);
   const u = useT(unifiedProductionMessages);
   const [filter, setFilter] = useState<JobFilter>("open");
+  // The owners see every organization's requests: narrow to one when branches print too.
+  const { isAdmin, organizations } = useProductionAccess();
+  const [organization, setOrganization] = useState("");
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <p className="min-w-0 max-w-2xl text-sm text-white/60">{u("queueIntro")}</p>
+        {isAdmin && organizations.length > 1 ? (
+          <Select
+            value={organization}
+            onChange={(e) => setOrganization(e.target.value)}
+            aria-label={t("organization")}
+            options={[{ value: "", label: t("allOrganizations") }, ...organizations.map((o) => ({ value: String(o.id), label: o.name }))]}
+            className="w-auto"
+            data-testid="production-organization-filter"
+          />
+        ) : null}
         <Tabs
           tabs={[
             { id: "open", label: t("filterOpen") },
@@ -270,7 +289,7 @@ function QueueView({ go }: { go: Go }) {
           accent="tags"
         />
       </div>
-      <RequestList filter={filter} go={go} />
+      <RequestList filter={filter} organization={organization ? Number(organization) : undefined} go={go} />
     </div>
   );
 }

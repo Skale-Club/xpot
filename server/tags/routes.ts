@@ -28,7 +28,7 @@ import {
 import type { TagProvisioningDevice } from "#shared/schema.js";
 import { storage } from "../storage.js";
 import { resolveGoogleApiKey } from "../routes/xpot/google.js";
-import { actorOf, requireTagAdmin, requireTagManager, requireTagUser } from "./access.js";
+import { actorOf, productionScopeOf, requireProductionUser, requireTagAdmin, requireTagManager, requireTagUser } from "./access.js";
 import { viewsAsRep } from "../routes/xpot/middleware.js";
 import { registerJourneyRoutes } from "./journeyRoutes.js";
 import { createTagRedirectHandler, type PublicTag } from "./publicHandler.js";
@@ -48,6 +48,7 @@ import { fulfillAcquisition, listAcquisitions } from "./acquisitions.js";
 import { registerShowcaseRoutes } from "./showcase.js";
 import { registerProductionRoutes } from "./productionRoutes.js";
 import { salesStorage } from "../storage-sales.js";
+import { companyOrganizationId, printingOrganization } from "../organizations/service.js";
 
 // Xpot Tags HTTP API. Four audiences:
 //   /q/:code, /n/:code           — public redirects printed/programmed on pieces
@@ -1014,10 +1015,21 @@ export function registerTagRoutes(app: Express) {
     }
   });
 
-  // Manufacturing batches.
-  app.get("/api/xpot/admin/tag-batches", requireTagAdmin, async (_req, res) => {
+  // Manufacturing batches. A printing branch's Rep Admin reads its own batches and checks their QR codes (the scan
+  // station); making, closing, reopening and editing batches stay the admin's.
+  const batchInScope = async (req: Request, res: Response, id: string) => {
+    const batch = await repo.getBatch(id);
+    const scope = productionScopeOf(req);
+    if (!batch || (scope !== null && !scope.includes(batch.organizationId))) {
+      res.status(404).json({ message: "Batch not found" });
+      return null;
+    }
+    return batch;
+  };
+
+  app.get("/api/xpot/admin/tag-batches", requireProductionUser, async (req, res) => {
     try {
-      res.json(await repo.listBatches());
+      res.json(await repo.listBatches(productionScopeOf(req)));
     } catch (err) {
       fail(res, err, "Failed to load batches");
     }
@@ -1031,10 +1043,11 @@ export function registerTagRoutes(app: Express) {
     }
   });
 
-  app.post("/api/xpot/admin/tag-batches/:id/scan", requireTagAdmin, async (req, res) => {
+  app.post("/api/xpot/admin/tag-batches/:id/scan", requireProductionUser, async (req, res) => {
     const id = idParam(req, res);
     if (!id) return;
     try {
+      if (!(await batchInScope(req, res, id))) return;
       const input = batchScanSchema.parse(req.body);
       const result = await repo.scanTagIntoBatch(id, input.value, input.idempotencyKey ?? null, userIdOf(req));
       res.status(result.alreadyRegistered ? 200 : 201).json(result);
@@ -1046,12 +1059,13 @@ export function registerTagRoutes(app: Express) {
   // Undo a read the intake station just made: the piece goes back to "not received" and stays registered to the batch
   // (stock movements are append-only, so a received piece is never deleted). Refused once anything else happened to
   // it (server/tags/repository.ts undoBatchIntake).
-  app.delete("/api/xpot/admin/tag-batches/:id/tags/:tagId", requireTagAdmin, async (req, res) => {
+  app.delete("/api/xpot/admin/tag-batches/:id/tags/:tagId", requireProductionUser, async (req, res) => {
     const id = idParam(req, res);
     if (!id) return;
     const tagId = z.string().uuid().safeParse(req.params.tagId);
     if (!tagId.success) return res.status(404).json({ message: "Tag not found" });
     try {
+      if (!(await batchInScope(req, res, id))) return;
       res.json(await repo.undoBatchIntake(id, tagId.data, userIdOf(req)));
     } catch (err) {
       fail(res, err, "Failed to undo the read");
@@ -1079,12 +1093,12 @@ export function registerTagRoutes(app: Express) {
     }
   });
 
-  app.get("/api/xpot/admin/tag-batches/:id", requireTagAdmin, async (req, res) => {
+  app.get("/api/xpot/admin/tag-batches/:id", requireProductionUser, async (req, res) => {
     const id = idParam(req, res);
     if (!id) return;
     try {
-      const batch = await repo.getBatch(id);
-      if (!batch) return res.status(404).json({ message: "Batch not found" });
+      const batch = await batchInScope(req, res, id);
+      if (!batch) return;
       res.json({ ...batch, tags: await repo.listTags({ batchId: id, limit: 2000 }) });
     } catch (err) {
       fail(res, err, "Failed to load batch");
@@ -1101,12 +1115,12 @@ export function registerTagRoutes(app: Express) {
     }
   });
 
-  app.get("/api/xpot/admin/tag-batches/:id/export.csv", requireTagAdmin, async (req, res) => {
+  app.get("/api/xpot/admin/tag-batches/:id/export.csv", requireProductionUser, async (req, res) => {
     const id = idParam(req, res);
     if (!id) return;
     try {
-      const batch = await repo.getBatch(id);
-      if (!batch) return res.status(404).json({ message: "Batch not found" });
+      const batch = await batchInScope(req, res, id);
+      if (!batch) return;
       const csv = buildManufacturingCsv(batch, await repo.getBatchTagsForExport(id), tagBaseUrl(), "svg");
       res.attachment(`${fileSafe(batch.batchCode)}.csv`);
       res.type("text/csv").send(csv);
@@ -1115,12 +1129,12 @@ export function registerTagRoutes(app: Express) {
     }
   });
 
-  app.get("/api/xpot/admin/tag-batches/:id/qr-assets.zip", requireTagAdmin, async (req, res) => {
+  app.get("/api/xpot/admin/tag-batches/:id/qr-assets.zip", requireProductionUser, async (req, res) => {
     const id = idParam(req, res);
     if (!id) return;
     try {
-      const batch = await repo.getBatch(id);
-      if (!batch) return res.status(404).json({ message: "Batch not found" });
+      const batch = await batchInScope(req, res, id);
+      if (!batch) return;
       const zip = await buildBatchZip({
         batch,
         tags: await repo.getBatchTagsForExport(id),
@@ -1134,29 +1148,40 @@ export function registerTagRoutes(app: Express) {
     }
   });
 
-  // Desktop NFC provisioners (admin side).
-  app.get("/api/xpot/admin/tag-provisioners", requireTagAdmin, async (_req, res) => {
+  // Desktop NFC provisioners and print benches (admin side). A printing branch's Rep Admin pairs and revokes its own
+  // bench; each device works for one organization (the company's unless the admin says otherwise).
+  app.get("/api/xpot/admin/tag-provisioners", requireProductionUser, async (req, res) => {
     try {
-      res.json(await provisioning.listDevices());
+      res.json(await provisioning.listDevices(productionScopeOf(req)));
     } catch (err) {
       fail(res, err, "Failed to load provisioners");
     }
   });
 
-  app.post("/api/xpot/admin/tag-provisioners", requireTagAdmin, async (req, res) => {
+  app.post("/api/xpot/admin/tag-provisioners", requireProductionUser, async (req, res) => {
     try {
-      const { deviceName } = z.object({ deviceName: z.string().trim().min(1, "Name the computer").max(80) }).strict().parse(req.body);
-      res.status(201).json(await provisioning.createPairing(deviceName, userIdOf(req)));
+      const { deviceName, organizationId } = z.object({
+        deviceName: z.string().trim().min(1, "Name the computer").max(80),
+        organizationId: z.number().int().positive().optional(),
+      }).strict().parse(req.body);
+      const scope = productionScopeOf(req);
+      const target = organizationId ?? (scope === null ? await companyOrganizationId() : scope.length === 1 ? scope[0] : null);
+      if (target === null) return res.status(400).json({ message: "Choose which organization this computer works for", code: "print_organization_required" });
+      if (scope !== null && !scope.includes(target)) return res.status(404).json({ message: "Organization not found", code: "organization_not_found" });
+      if (scope === null && !(await printingOrganization(target))) {
+        return res.status(409).json({ message: "This organization does not print its own pieces", code: "print_organization_not_printing" });
+      }
+      res.status(201).json(await provisioning.createPairing(deviceName, userIdOf(req), target));
     } catch (err) {
       fail(res, err, "Failed to create pairing code");
     }
   });
 
-  app.post("/api/xpot/admin/tag-provisioners/:id/revoke", requireTagAdmin, async (req, res) => {
+  app.post("/api/xpot/admin/tag-provisioners/:id/revoke", requireProductionUser, async (req, res) => {
     const id = idParam(req, res);
     if (!id) return;
     try {
-      res.json(await provisioning.revokeDevice(id, userIdOf(req)));
+      res.json(await provisioning.revokeDevice(id, userIdOf(req), productionScopeOf(req)));
     } catch (err) {
       fail(res, err, "Failed to revoke provisioner");
     }
@@ -1225,7 +1250,7 @@ export function registerTagRoutes(app: Express) {
   // Next job for this device, or 204 when there is nothing to do.
   app.post("/api/provisioner/jobs/claim", ...device, async (req, res) => {
     try {
-      const job = await provisioning.claimNextJob(req.provisionerDevice!.id);
+      const job = await provisioning.claimNextJob(req.provisionerDevice!);
       if (!job) return res.status(204).end();
       res.json(job);
     } catch (err) {

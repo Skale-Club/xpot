@@ -56,6 +56,10 @@ describe("dedicated management navigation", () => {
     expect(hrefs(organizationPanelGroups(["visits", "tags"], labels))).toEqual(["/organizations", "/admin/work/leads", "/admin/work/tasks", "/admin/work/sales"]);
     expect(hrefs(organizationPanelGroups(["tags"], labels))).toEqual(["/organizations"]);
   });
+  it("adds Production and the bench computers for the Rep Admin of a branch that prints its own pieces", () => {
+    expect(hrefs(organizationPanelGroups(["tags"], labels, true))).toEqual(["/organizations", "/admin/tags/production", "/admin/tags/provisioners"]);
+    expect(hrefs(organizationPanelGroups(["visits"], labels, true))).toEqual(["/organizations", "/admin/work/leads", "/admin/work/tasks", "/admin/work/sales"]);
+  });
 });
 
 describe("contextOfPath", () => {

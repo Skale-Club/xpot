@@ -2,7 +2,8 @@ import type { NextFunction, Request, Response } from "express";
 import type { TagActor } from "#shared/tagAccess.js";
 import { repModules } from "#shared/modules.js";
 import { accessDenial, ensureXpotRep, isManagerOrAdmin, viewsAsRep } from "../routes/xpot/middleware.js";
-import { membershipsForRep } from "../organizations/service.js";
+import { membershipsForRep, printingOrganizationIds } from "../organizations/service.js";
+import type { ProductionScope } from "./production.js";
 
 // Who is acting on the Tags API. Built from Xpot's own rep identity, read from
 // the database on every request, so switching a reseller off takes effect at
@@ -91,6 +92,33 @@ export async function requireTagAdmin(req: Request, res: Response, next: NextFun
     console.error("[tags] requireTagAdmin", err);
     res.status(500).json({ message: "Failed to verify access" });
   }
+}
+
+/**
+ * Tags › Production: the global admin (every organization), or the Rep Admin of a branch the owners marked as
+ * printing its own pieces (organizations.prints_own_pieces), for that branch only. The scope is then
+ * `productionScopeOf(req)`; the catalog itself, previews, part counts and NFC writers stay requireTagAdmin.
+ */
+export async function requireProductionUser(req: Request, res: Response, next: NextFunction) {
+  try {
+    const actor = await loadActor(req, res);
+    if (!actor) return;
+    const scope: ProductionScope = actor.isAdmin ? null : await printingOrganizationIds(actor.managedOrganizationIds ?? []);
+    if (scope && !scope.length) return res.status(403).json({ message: "Admin access required" });
+    (req as Request & { tagActor?: TagActor; productionScope?: ProductionScope }).tagActor = asActor(actor);
+    (req as Request & { productionScope?: ProductionScope }).productionScope = scope;
+    next();
+  } catch (err) {
+    console.error("[tags] requireProductionUser", err);
+    res.status(500).json({ message: "Failed to verify access" });
+  }
+}
+
+/** The organizations a production request may touch: null = every one (an admin). After requireProductionUser. */
+export function productionScopeOf(req: Request): ProductionScope {
+  const scope = (req as Request & { productionScope?: ProductionScope }).productionScope;
+  if (scope === undefined) throw new Error("requireProductionUser must run before productionScopeOf");
+  return scope;
 }
 
 export function actorOf(req: Request): TagActor {

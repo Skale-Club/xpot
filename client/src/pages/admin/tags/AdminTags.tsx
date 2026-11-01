@@ -18,6 +18,7 @@ import { ProductionTab } from "./ProductionTab";
 import { ProvisionersTab } from "./ProvisionersTab";
 import { JourneyTab } from "./JourneyTab";
 import { useIsSuperAdmin } from "@/components/xpot/AdminBadge";
+import { useProductionAccess } from "./production-shared";
 import { useT } from "@/i18n";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
 import { manageMessages } from "@/i18n/messages/manage";
@@ -98,24 +99,27 @@ export function AdminTags() {
   // Batches, the Journey and the NFC writers are the global admin's: managers
   // neither see their tabs nor reach them by URL (and the API answers 403).
   const isAdmin = useIsSuperAdmin();
-  const tabs = TABS.filter((t) => isAdmin || !("adminOnly" in t));
-  const tab: TabId = tabSegment === "batches" && isAdmin ? "production" : tabs.find((t) => t.id === tabSegment)?.id ?? "overview";
+  // Production and the bench computers are also a printing branch's Rep Admin's, for that branch (the server scopes them).
+  const { prints } = useProductionAccess();
+  const reaches = (id: TabId) => isAdmin || ((id === "production" || id === "provisioners") && prints);
+  const tabs = TABS.filter((t) => !("adminOnly" in t) || reaches(t.id));
+  const tab: TabId = tabSegment === "batches" && reaches("production") ? "production" : tabs.find((t) => t.id === tabSegment)?.id ?? "overview";
   // The per-reseller report moved into People › person (Tags sales); old links still land there.
   if (tabSegment === "team") return <Redirect to="/admin/reps" />;
   const id = idSegment ? decodeURIComponent(idSegment) : null;
   const go = (path: string) => setLocation(`${ADMIN_TAGS_BASE}${productionPath(path)}`);
   const requested = TABS.find((item) => item.id === tabSegment);
-  if (!isAdmin && ((requested && "adminOnly" in requested) || tabSegment === "batches")) return <EmptyState tone="red" icon={ShieldAlert} title={tm("accessRestricted")} hint={tm("noAdminPermission")} />;
+  if ((requested && "adminOnly" in requested && !reaches(requested.id)) || (tabSegment === "batches" && !reaches("production"))) return <EmptyState tone="red" icon={ShieldAlert} title={tm("accessRestricted")} hint={tm("noAdminPermission")} />;
 
   return (
     <div className="space-y-5">
       {tab === "overview" && (isTagPieceQueue(id) ? <OverviewQueue queue={id} go={go} /> : <OverviewTab go={go} />)}
       {tab === "pieces" && (id ? <PieceDetail id={id} go={go} /> : <PiecesTab go={go} />)}
       {tab === "kits" && <KitsTab go={go} />}
-      {tab === "production" && isAdmin && <ProductionTab rest={(tabSegment === "batches" ? ["batches", idSegment ?? "", ...more] : [idSegment ?? "", ...more]).map(decodeURIComponent)} go={go} />}
+      {tab === "production" && reaches("production") && <ProductionTab rest={(tabSegment === "batches" ? ["batches", idSegment ?? "", ...more] : [idSegment ?? "", ...more]).map(decodeURIComponent)} go={go} />}
       {tab === "journey" && isAdmin && <JourneyTab />}
       {tab === "shop" && isAdmin && <ShowcaseTab />}
-      {tab === "provisioners" && isAdmin && <ProvisionersTab go={go} />}
+      {tab === "provisioners" && reaches("provisioners") && <ProvisionersTab go={go} />}
     </div>
   );
 }
