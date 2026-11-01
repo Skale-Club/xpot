@@ -89,17 +89,19 @@ describe("Organizations API authorization", () => {
     expect(membership).toEqual({ role: "admin", is_active: true });
   });
 
-  it("Admin and Manager can create Organizations with an initial Rep Admin", async () => {
+  it("only the platform admin can create Organizations with an initial Rep Admin", async () => {
     await seedRep("admin", "admin", true);
-    const managerId = await seedRep("manager", "manager");
+    const leftoverManagerId = await seedRep("manager", "manager");
     const repId = await seedRep("rep-a");
 
     const createdByAdmin = await request(appFor("admin", true), "POST", "/api/xpot/organizations", { name: "North Team", repAdminId: repId });
     expect(createdByAdmin.status).toBe(201);
     expect((await q(`SELECT role FROM organization_memberships WHERE organization_id = $1 AND rep_id = $2`, [createdByAdmin.body.id, repId]))[0]).toEqual({ role: "admin" });
 
-    const createdByManager = await request(appFor("manager"), "POST", "/api/xpot/organizations", { name: "South Team", repAdminId: managerId });
-    expect(createdByManager.status).toBe(201);
+    // A leftover role=manager row is a plain rep: it cannot create one, even for itself.
+    const createdByManager = await request(appFor("manager"), "POST", "/api/xpot/organizations", { name: "South Team", repAdminId: leftoverManagerId });
+    expect(createdByManager.status).toBe(403);
+    expect(await q(`SELECT id FROM organizations WHERE name = 'South Team'`)).toEqual([]);
   });
 
   it("Rep Admin manages members only in their own Organization", async () => {
@@ -113,7 +115,7 @@ describe("Organizations API authorization", () => {
     const [otherLead] = await q(`INSERT INTO sales_leads (organization_id, name, owner_rep_id) VALUES ($1, 'Other customer', $2) RETURNING id`, [other, outsiderId]);
 
     const app = appFor("rep-admin");
-    // People join through platform management (People, or Organizations for a manager), not a Rep Admin.
+    // People join through platform management (People, or Organizations for a platform admin), not a Rep Admin.
     expect((await request(app, "POST", `/api/xpot/organizations/${own}/members`, { repId: outsiderId, membershipRole: "member" })).status).toBe(403);
     expect((await request(app, "POST", `/api/xpot/organizations/${own}/members`, { repId: outsiderId, membershipRole: "admin" })).status).toBe(403);
     await addMembership(own, memberId, "member");

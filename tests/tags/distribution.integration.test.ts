@@ -32,11 +32,11 @@ test.skipIf(!enabled)("tags: distribution dry runs, kit history, intake undo and
   await db.execute(sql`DELETE FROM sales_reps WHERE user_id LIKE 'dx-%'`);
   await db.execute(sql`DELETE FROM users WHERE id LIKE 'dx-%'`);
   await db.execute(sql`INSERT INTO users (id, email, first_name, is_admin) VALUES
-    ('dx-admin', 'admin@dx.test', 'Admin', true), ('dx-manager', 'manager@dx.test', 'Manager', false),
+    ('dx-admin', 'admin@dx.test', 'Admin', true), ('dx-admin2', 'admin2@dx.test', 'Admin Two', true),
     ('dx-ana', 'ana@dx.test', 'Ana', false), ('dx-zed', 'zed@dx.test', 'Zed', false)`);
   const reps = await db.execute(sql`INSERT INTO sales_reps (user_id, display_name, email, role, is_active, cost_policy, cost_policy_configured_at) VALUES
     ('dx-admin', 'Admin', 'admin@dx.test', 'admin', true, 'acquisition', NOW()),
-    ('dx-manager', 'Manager', 'manager@dx.test', 'manager', true, 'acquisition', NOW()),
+    ('dx-admin2', 'Admin Two', 'admin2@dx.test', 'admin', true, 'acquisition', NOW()),
     ('dx-ana', 'Ana', 'ana@dx.test', 'rep', true, 'acquisition', NOW()),
     ('dx-zed', 'Zed', 'zed@dx.test', 'rep', true, 'zero', NOW())
     RETURNING id, user_id`);
@@ -51,7 +51,7 @@ test.skipIf(!enabled)("tags: distribution dry runs, kit history, intake undo and
   app.use(express.json());
   app.use((req, _res, next) => {
     const userId = req.get("x-test-user");
-    (req as any).session = userId ? { userId, isAdmin: userId === "dx-admin", email: `${userId}@dx.test` } : {};
+    (req as any).session = userId ? { userId, isAdmin: userId === "dx-admin" || userId === "dx-admin2", email: `${userId}@dx.test` } : {};
     next();
   });
   registerTagRoutes(app);
@@ -88,9 +88,9 @@ test.skipIf(!enabled)("tags: distribution dry runs, kit history, intake undo and
     await ok("POST", `/api/xpot/admin/tags/${p(2).id}/assign`, "dx-admin", { leadName: "Dist Deli" });
     await ok("POST", `/api/xpot/admin/tags/${p(3).id}/damage`, "dx-admin", { reason: "cracked" });
 
-    // ── Hand out dry run: one answer per code, in the order typed. Managers can run it. ──
+    // ── Hand out dry run: one answer per code, in the order typed. A second platform admin can run it too. ──
     const pending = issuedPieces[0].publicCode;
-    const check = await ok("POST", "/api/xpot/admin/tag-kits/check", "dx-manager", {
+    const check = await ok("POST", "/api/xpot/admin/tag-kits/check", "dx-admin2", {
       codes: [p(1).publicCode, p(1).publicCode, "ZZZZZZZZ", pending, p(2).publicCode, p(3).publicCode],
     });
     assert.deepEqual(check.items.map((i: any) => [i.code, i.ok, i.reason]), [
@@ -104,50 +104,50 @@ test.skipIf(!enabled)("tags: distribution dry runs, kit history, intake undo and
     assert.equal(check.okCount, 1);
     assert.equal(check.items[0].batchCode, scanned.batchCode);
     // "Next N from batch": the pieces a kit would take, in serial order, skipping what cannot go.
-    const next = await ok("POST", "/api/xpot/admin/tag-kits/check", "dx-manager", { batchId: scanned.id, quantity: 3 });
+    const next = await ok("POST", "/api/xpot/admin/tag-kits/check", "dx-admin2", { batchId: scanned.id, quantity: 3 });
     assert.deepEqual(next.items.map((i: any) => i.code), [p(1).publicCode, p(4).publicCode, p(5).publicCode]);
     assert.equal(next.okCount, 3);
     // Nothing moved.
-    assert.equal((await ok("GET", `/api/xpot/tags?metric=handOut&limit=100`, "dx-manager")).length, 6);
+    assert.equal((await ok("GET", `/api/xpot/tags?metric=handOut&limit=100`, "dx-admin2")).length, 6);
 
     // ── Ownership: Zed is on the zero rule (consignment by default); a purchase needs a cost. ──
-    const purchaseNoCost = await api("POST", "/api/xpot/admin/tag-kits", "dx-manager", { repId: repId["dx-zed"], codes: [p(4).publicCode], ownershipType: "rep" });
+    const purchaseNoCost = await api("POST", "/api/xpot/admin/tag-kits", "dx-admin2", { repId: repId["dx-zed"], codes: [p(4).publicCode], ownershipType: "rep" });
     assert.equal(purchaseNoCost.status, 400);
     assert.equal(purchaseNoCost.json.code, "tag_cost_required");
-    const kit = await ok("POST", "/api/xpot/admin/tag-kits", "dx-manager", { repId: repId["dx-zed"], codes: [p(4).publicCode, p(5).publicCode, p(6).publicCode] });
+    const kit = await ok("POST", "/api/xpot/admin/tag-kits", "dx-admin2", { repId: repId["dx-zed"], codes: [p(4).publicCode, p(5).publicCode, p(6).publicCode] });
     assert.match(kit.kitCode, /^K-\d{4}$/);
     assert.equal(kit.ownershipType, "company");
     assert.deepEqual([kit.handedOutCount, kit.returnedCount, kit.movedCount, kit.stillWithCount], [3, 0, 0, 3]);
-    const bought = await ok("POST", "/api/xpot/admin/tag-kits", "dx-manager", { repId: repId["dx-zed"], codes: [p(7).publicCode], ownershipType: "rep", unitCostCents: 450 });
+    const bought = await ok("POST", "/api/xpot/admin/tag-kits", "dx-admin2", { repId: repId["dx-zed"], codes: [p(7).publicCode], ownershipType: "rep", unitCostCents: 450 });
     assert.equal(bought.ownershipType, "rep");
     assert.equal(bought.kitNumber, kit.kitNumber + 1);
     // Handing out a piece already with someone is refused, with the same reason as the dry run.
-    const again = await ok("POST", "/api/xpot/admin/tag-kits/check", "dx-manager", { codes: [p(4).publicCode] });
+    const again = await ok("POST", "/api/xpot/admin/tag-kits/check", "dx-admin2", { codes: [p(4).publicCode] });
     assert.deepEqual([again.items[0].reason, again.items[0].repName, again.items[0].kitCode], ["with_reseller", "Zed", kit.kitCode]);
-    assert.equal((await api("POST", "/api/xpot/admin/tag-kits", "dx-manager", { repId: repId["dx-ana"], codes: [p(4).publicCode], unitCostCents: 1 })).status, 409);
+    assert.equal((await api("POST", "/api/xpot/admin/tag-kits", "dx-admin2", { repId: repId["dx-ana"], codes: [p(4).publicCode], unitCostCents: 1 })).status, 409);
 
     // ── Take back dry run. p5 gets a customer in Zed's hands. ──
     await ok("POST", `/api/xpot/admin/tags/${p(5).id}/assign`, "dx-admin", { leadName: "Zed Cafe" });
-    const back = await ok("POST", "/api/xpot/admin/tag-kits/return/check", "dx-manager", {
+    const back = await ok("POST", "/api/xpot/admin/tag-kits/return/check", "dx-admin2", {
       codes: [p(4).publicCode, p(1).publicCode, p(5).publicCode, "YYYYYYYY"],
     });
     assert.deepEqual(back.items.map((i: any) => [i.ok, i.reason]), [[true, null], [false, "not_with_reseller"], [false, "set_up"], [false, "unknown"]]);
-    await ok("POST", "/api/xpot/admin/tag-kits/return", "dx-manager", { codes: [p(4).publicCode] });
+    await ok("POST", "/api/xpot/admin/tag-kits/return", "dx-admin2", { codes: [p(4).publicCode] });
     // p6 moves to Ana.
-    await ok("PATCH", `/api/xpot/admin/tags/${p(6).id}/rep`, "dx-manager", { repId: repId["dx-ana"] });
+    await ok("PATCH", `/api/xpot/admin/tags/${p(6).id}/rep`, "dx-admin2", { repId: repId["dx-ana"] });
 
     // ── The kit keeps what it handed out: 3 = 1 returned + 1 moved + 1 still with Zed. ──
-    const [row] = (await ok("GET", `/api/xpot/admin/tag-kits?repId=${repId["dx-zed"]}`, "dx-manager")).filter((k: any) => k.id === kit.id);
+    const [row] = (await ok("GET", `/api/xpot/admin/tag-kits?repId=${repId["dx-zed"]}`, "dx-admin2")).filter((k: any) => k.id === kit.id);
     assert.deepEqual([row.handedOutCount, row.returnedCount, row.movedCount, row.stillWithCount, row.pieceCount], [3, 1, 1, 1, 1]);
-    const items = await ok("GET", `/api/xpot/admin/tag-kits/${kit.id}/items`, "dx-manager");
+    const items = await ok("GET", `/api/xpot/admin/tag-kits/${kit.id}/items`, "dx-admin2");
     assert.deepEqual(items.map((i: any) => [i.code, i.state]), [
       [p(4).publicCode, "returned"], [p(5).publicCode, "in_kit"], [p(6).publicCode, "moved"],
     ]);
     // Handed out again, the piece's first kit still lists it as returned.
-    await ok("POST", "/api/xpot/admin/tag-kits", "dx-manager", { repId: repId["dx-ana"], codes: [p(4).publicCode], unitCostCents: 500 });
-    const itemsAfter = await ok("GET", `/api/xpot/admin/tag-kits/${kit.id}/items`, "dx-manager");
+    await ok("POST", "/api/xpot/admin/tag-kits", "dx-admin2", { repId: repId["dx-ana"], codes: [p(4).publicCode], unitCostCents: 500 });
+    const itemsAfter = await ok("GET", `/api/xpot/admin/tag-kits/${kit.id}/items`, "dx-admin2");
     assert.equal(itemsAfter.find((i: any) => i.code === p(4).publicCode).state, "returned");
-    assert.equal((await api("GET", `/api/xpot/admin/tag-kits/00000000-0000-0000-0000-000000000000/items`, "dx-manager")).status, 404);
+    assert.equal((await api("GET", `/api/xpot/admin/tag-kits/00000000-0000-0000-0000-000000000000/items`, "dx-admin2")).status, 404);
 
     // ── Intake undo. An issued code goes back to "not received"; the same read can then be made again. ──
     const scanUrl = `/api/xpot/admin/tag-batches/${issued.id}/scan`;
@@ -155,7 +155,7 @@ test.skipIf(!enabled)("tags: distribution dry runs, kit history, intake undo and
     const first = await api("POST", scanUrl, "dx-admin", { value: issuedPieces[1].publicCode, idempotencyKey: key });
     assert.equal(first.status, 201);
     assert.equal((await api("POST", scanUrl, "dx-admin", { value: issuedPieces[1].publicCode, idempotencyKey: key })).json.alreadyRegistered, true);
-    assert.equal((await api("DELETE", `/api/xpot/admin/tag-batches/${issued.id}/tags/${first.json.tag.id}`, "dx-manager")).status, 403);
+    assert.equal((await api("DELETE", `/api/xpot/admin/tag-batches/${issued.id}/tags/${first.json.tag.id}`, "dx-ana")).status, 403);
     const undone = await ok("DELETE", `/api/xpot/admin/tag-batches/${issued.id}/tags/${first.json.tag.id}`, "dx-admin");
     assert.deepEqual([undone.receivedCount, undone.batchCount], [0, 3]);
     const stock = (await db.execute(sql`SELECT stock_status, registered_at FROM tags WHERE id = ${first.json.tag.id}`)).rows[0] as any;
@@ -191,10 +191,10 @@ test.skipIf(!enabled)("tags: distribution dry runs, kit history, intake undo and
     await db.execute(sql`INSERT INTO tag_acquisitions (rep_id, source, external_ref, status) VALUES (${repId["dx-ana"]}, 'stuscle', 'dx-order-1', 'pending')`);
     await db.execute(sql`UPDATE tag_batches SET sales_product_id = NULL WHERE id = ${issued.id}`);
     await db.execute(sql`UPDATE tags SET sales_product_id = NULL WHERE batch_id = ${issued.id}`);
-    const overview = await ok("GET", "/api/xpot/admin/tags/overview", "dx-manager");
+    const overview = await ok("GET", "/api/xpot/admin/tags/overview", "dx-admin2");
     const all = await ok("GET", "/api/xpot/tags?limit=2000", "dx-admin");
     for (const metric of ["notReceived", "house", "withResellers", "sold", "live"] as const) {
-      assert.equal(overview.funnel[metric], (await ok("GET", `/api/xpot/tags?metric=${metric}&limit=2000`, "dx-manager")).length, metric);
+      assert.equal(overview.funnel[metric], (await ok("GET", `/api/xpot/tags?metric=${metric}&limit=2000`, "dx-admin2")).length, metric);
     }
     assert.equal(overview.funnel.notReceived, 2);
     assert.deepEqual(
@@ -202,12 +202,12 @@ test.skipIf(!enabled)("tags: distribution dry runs, kit history, intake undo and
       [1, 1, 2, 1, 3],
     );
     for (const queue of ["chipPending", "scannedNotLive", "noProduct"] as const) {
-      const list = await ok("GET", `/api/xpot/tags?queue=${queue}&limit=2000`, "dx-manager");
+      const list = await ok("GET", `/api/xpot/tags?queue=${queue}&limit=2000`, "dx-admin2");
       assert.equal(list.length, overview.queues[queue], queue);
     }
-    assert.deepEqual((await ok("GET", "/api/xpot/tags?queue=scannedNotLive", "dx-manager")).map((t: any) => t.publicCode), [p(1).publicCode]);
+    assert.deepEqual((await ok("GET", "/api/xpot/tags?queue=scannedNotLive", "dx-admin2")).map((t: any) => t.publicCode), [p(1).publicCode]);
     assert.equal(all.length, 12);
-    assert.equal((await api("GET", "/api/xpot/tags?queue=nope", "dx-manager")).status, 400);
+    assert.equal((await api("GET", "/api/xpot/tags?queue=nope", "dx-admin2")).status, 400);
   } finally {
     server.close();
     await pool.end();

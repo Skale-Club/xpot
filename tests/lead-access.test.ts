@@ -32,9 +32,14 @@ describe("leadAccess", () => {
     expect(leadAccess(rep(5, [{ organizationId: 1, role: "member", isActive: false }]), { ownerRepId: 5, organizationId: 1 }).records).toBe(false);
   });
 
-  it("gives managers and admins everything, whatever the organization", () => {
-    expect(leadAccess({ ...rep(9), rep: { id: 9, role: "manager" } }, { ownerRepId: 5, organizationId: 1 })).toEqual({ owner: true, records: true });
+  it("gives the platform admin everything, whatever the organization", () => {
     expect(leadAccess({ ...rep(9), user: { isAdmin: true } }, { ownerRepId: 5, organizationId: 1 })).toEqual({ owner: true, records: true });
+    expect(leadAccess({ ...rep(9), rep: { id: 9, role: "admin" }, user: { isAdmin: true } }, { ownerRepId: 5, organizationId: 1 })).toEqual({ owner: true, records: true });
+  });
+
+  it("gives a leftover role=manager row nothing beyond a plain rep's", () => {
+    expect(leadAccess({ ...rep(9), rep: { id: 9, role: "manager" } }, { ownerRepId: 5, organizationId: 1 })).toEqual({ owner: false, records: false });
+    expect(leadAccess({ ...rep(9), rep: { id: 9, role: "manager" } }, { ownerRepId: 5, organizationId: null })).toEqual({ owner: false, records: false });
   });
 
   it("falls back to ownership for a company without an organization", () => {

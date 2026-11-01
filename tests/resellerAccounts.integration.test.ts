@@ -20,11 +20,12 @@ test.skipIf(!enabled)("reseller access: create, approve, block, unblock, phone",
   };
   await clean();
   const admin = { userId: "ra-admin", isAdmin: true };
-  const manager = { userId: "ra-manager", isAdmin: false };
+  // Anyone who is not a platform admin: the routes already refuse them (requirePlatformAdmin); the rules below hold on their own.
+  const notAdmin = { userId: "ra-rep", isAdmin: false };
 
   try {
     const input = accounts.resellerAccountSchema.parse({ displayName: "João Silva", phone: "(555) 011-0001", modules: ["tags"] });
-    const rep = await accounts.createResellerAccount(input, manager);
+    const rep = await accounts.createResellerAccount(input, admin);
     assert.equal(rep.isActive, true);
     assert.deepEqual(rep.modules, ["tags"]);
     assert.equal(rep.phone, "+15550110001");
@@ -42,12 +43,11 @@ test.skipIf(!enabled)("reseller access: create, approve, block, unblock, phone",
     await assert.rejects(accounts.createResellerAccount({ ...input, phone: "+1 555 011 0001" }, admin), (err: any) => err.status === 409);
     // Not a phone.
     await assert.rejects(accounts.createResellerAccount({ ...input, phone: "12345" }, admin), (err: any) => err.status === 400);
-    // Managers can't mint admins.
+    // Only an admin mints admins (security review A05).
     const adminInput = accounts.resellerAccountSchema.parse({ displayName: "Boss", phone: "5550110002", role: "admin" });
-    await assert.rejects(accounts.createResellerAccount(adminInput, manager), (err: any) => err.status === 403);
-    // Nor other managers (security review A05).
-    const managerInput = accounts.resellerAccountSchema.parse({ displayName: "Mgr", phone: "5550110009", role: "manager" });
-    await assert.rejects(accounts.createResellerAccount(managerInput, manager), (err: any) => err.code === "manager_create_admin_only");
+    await assert.rejects(accounts.createResellerAccount(adminInput, notAdmin), (err: any) => err.code === "admin_create_admin_only");
+    // There is no manager role to create any more.
+    assert.throws(() => accounts.resellerAccountSchema.parse({ displayName: "Mgr", phone: "5550110009", role: "manager" }));
     assert.equal((await db.execute(sql`SELECT 1 FROM users WHERE phone = '+15550110009'`)).rows.length, 0);
     const boss = await accounts.createResellerAccount(adminInput, admin);
 
@@ -57,13 +57,13 @@ test.skipIf(!enabled)("reseller access: create, approve, block, unblock, phone",
     let list = await accounts.listRepsWithAccess();
     assert.equal(list.find((r) => r.id === pending.id)?.access, "pending");
     assert.equal(list.find((r) => r.id === pending.id)?.loginPhone, "+15550110003");
-    const approved = await accounts.approveRep(pending.id, ["tags"], manager);
+    const approved = await accounts.approveRep(pending.id, ["tags"], admin);
     assert.equal(approved.isActive, true);
     assert.deepEqual(approved.modules, ["tags"]);
 
     // Blocking ends the rep's sessions right away.
     await db.execute(sql`INSERT INTO sessions (sid, sess, expire) VALUES ('ra-sess-1', ${JSON.stringify({ userId: pendingUser.id })}::jsonb, now() + interval '1 day')`);
-    const blocked = await accounts.blockRep(pending.id, "Partnership ended", manager);
+    const blocked = await accounts.blockRep(pending.id, "Partnership ended", admin);
     assert.equal(blocked.isActive, false);
     assert.ok(blocked.blockedAt);
     assert.equal(blocked.blockedReason, "Partnership ended");
@@ -72,8 +72,8 @@ test.skipIf(!enabled)("reseller access: create, approve, block, unblock, phone",
     list = await accounts.listRepsWithAccess();
     assert.equal(list.find((r) => r.id === pending.id)?.access, "blocked");
     // A blocked rep is unblocked, not approved.
-    await assert.rejects(accounts.approveRep(pending.id, undefined, manager), (err: any) => err.status === 409);
-    const back = await accounts.unblockRep(pending.id, manager);
+    await assert.rejects(accounts.approveRep(pending.id, undefined, admin), (err: any) => err.status === 409);
+    const back = await accounts.unblockRep(pending.id, admin);
     assert.equal(back.isActive, true);
     assert.equal(back.blockedAt, null);
     // A plain block is not a refusal.
@@ -82,7 +82,7 @@ test.skipIf(!enabled)("reseller access: create, approve, block, unblock, phone",
     // Refusing a sign-up blocks it too, but People lists it as refused.
     const [refusedUser] = (await db.execute(sql`INSERT INTO users (phone, first_name) VALUES ('+15550110077', 'Rui') RETURNING id`)).rows as any[];
     const applicant = await storage.upsertSalesRep({ userId: refusedUser.id, displayName: "Rui", phone: "+15550110077", isActive: false });
-    const refused = await accounts.refuseRep(applicant.id, "No car", manager);
+    const refused = await accounts.refuseRep(applicant.id, "No car", admin);
     assert.ok(refused.blockedAt);
     assert.equal(refused.blockedReason, "Sign-up refused: No car");
     // Marked explicitly (refused_at); a plain block left it empty.
@@ -92,18 +92,18 @@ test.skipIf(!enabled)("reseller access: create, approve, block, unblock, phone",
     assert.equal(list.find((r) => r.id === applicant.id)?.access, "blocked");
     assert.equal(list.find((r) => r.id === applicant.id)?.refused, true);
     // Only someone still waiting can be refused.
-    await assert.rejects(accounts.refuseRep(pending.id, null, manager), (err: any) => err.status === 409);
+    await assert.rejects(accounts.refuseRep(pending.id, null, admin), (err: any) => err.status === 409);
 
-    // Managers can't touch admins; nobody can block themselves.
-    await assert.rejects(accounts.blockRep(boss.id, null, manager), (err: any) => err.status === 403);
+    // Only an admin touches admins; nobody can block themselves.
+    await assert.rejects(accounts.blockRep(boss.id, null, notAdmin), (err: any) => err.status === 403);
     await assert.rejects(accounts.blockRep(boss.id, null, { userId: boss.userId, isAdmin: true }), (err: any) => err.status === 400);
 
     // New phone for a rep: login and profile both move; a taken number is refused.
-    const moved = await accounts.changeRepPhone(rep.id, { phone: "555 011 0009" }, manager);
+    const moved = await accounts.changeRepPhone(rep.id, { phone: "555 011 0009" }, admin);
     assert.equal(moved.phone, "+15550110009");
     const [movedUser] = (await db.execute(sql`SELECT phone FROM users WHERE id = ${rep.userId}`)).rows as any[];
     assert.equal(movedUser.phone, "+15550110009");
-    await assert.rejects(accounts.changeRepPhone(rep.id, { phone: "+15550110003" }, manager), (err: any) => err.status === 409);
+    await assert.rejects(accounts.changeRepPhone(rep.id, { phone: "+15550110003" }, admin), (err: any) => err.status === 409);
   } finally {
     await clean();
     await pool.end();

@@ -62,7 +62,8 @@ const { setFileStoresForTests } = await import("../server/lib/files.js");
 
 const REP_A = { id: 1, userId: "user-a", displayName: "Rep A", role: "rep", isActive: true };
 const REP_B = { id: 2, userId: "user-b", displayName: "Rep B", role: "rep", isActive: true };
-const MANAGER = { id: 3, userId: "user-m", displayName: "Manager", role: "manager", isActive: true };
+// A row left over from the removed Manager role: a plain rep, which the files route must treat as one.
+const OLD_MANAGER = { id: 3, userId: "user-m", displayName: "Old Manager", role: "manager", isActive: true };
 
 const PHOTO_A = "r2:photos/1/lead_10_1.jpg";
 const LEGACY_PHOTO = "https://x.supabase.co/storage/v1/object/public/uploads/photos/1/lead_10_0.jpg";
@@ -120,7 +121,7 @@ let pub: MemoryStore;
 
 beforeEach(() => {
   vi.clearAllMocks();
-  store.reps = new Map([[1, { ...REP_A }], [2, { ...REP_B }], [3, { ...MANAGER }]]);
+  store.reps = new Map([[1, { ...REP_A }], [2, { ...REP_B }], [3, { ...OLD_MANAGER }]]);
   store.leads = new Map([
     [10, { id: 10, name: "A's lead", ownerRepId: 1, status: "lead", photos: [PHOTO_A, LEGACY_PHOTO] }],
     [20, { id: 20, name: "B's lead", ownerRepId: 2, status: "lead", photos: [] }],
@@ -148,16 +149,18 @@ describe("GET /files — signed URLs only for people who can see the lead or vis
     expect(res.location).toBeNull();
   });
 
-  it("lets a manager and a platform admin through", async () => {
-    expect((await request(appFor("user-m"), "GET", fileUrl(PHOTO_A))).status).toBe(302);
+  it("lets a platform admin through, but not a leftover role=manager row", async () => {
     expect((await request(appFor("user-b", true), "GET", fileUrl(PHOTO_A))).status).toBe(302);
+    expect((await request(appFor("user-m", true), "GET", fileUrl(PHOTO_A))).status).toBe(302);
+    expect((await request(appFor("user-m"), "GET", fileUrl(PHOTO_A))).status).toBe(403);
   });
 
-  it("serves a voice note to the visit's rep and managers, not to other reps", async () => {
+  it("serves a voice note to the visit's rep and platform admins, not to other reps", async () => {
     const own = await request(appFor("user-a"), "GET", fileUrl(AUDIO_A));
     expect(own.status).toBe(302);
     expect(own.location).toBe("https://signed.example/r2/audio/1/visit_50_1.webm?expires=300");
-    expect((await request(appFor("user-m"), "GET", fileUrl(AUDIO_A))).status).toBe(302);
+    expect((await request(appFor("user-m", true), "GET", fileUrl(AUDIO_A))).status).toBe(302);
+    expect((await request(appFor("user-m"), "GET", fileUrl(AUDIO_A))).status).toBe(403);
     expect((await request(appFor("user-b"), "GET", fileUrl(AUDIO_A))).status).toBe(403);
   });
 

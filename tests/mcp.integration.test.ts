@@ -31,10 +31,11 @@ test.skipIf(!enabled)("mcp: token via admin API, tools over Streamable HTTP, rev
   await db.execute(sql`DELETE FROM sales_reps WHERE user_id LIKE 'jm-%'`);
   await db.execute(sql`DELETE FROM users WHERE id LIKE 'jm-%'`);
   await db.execute(sql`INSERT INTO users (id, email, first_name, is_admin) VALUES
-    ('jm-admin', 'admin@jm.test', 'Admin', true), ('jm-mgr', 'mgr@jm.test', 'Manager', false)`);
+    ('jm-admin', 'admin@jm.test', 'Admin', true), ('jm-mgr', 'mgr@jm.test', 'Old Manager', false)`);
   await db.execute(sql`INSERT INTO sales_reps (user_id, display_name, email, role, is_active) VALUES
     ('jm-admin', 'Admin', 'admin@jm.test', 'admin', true),
-    ('jm-mgr', 'Manager', 'mgr@jm.test', 'manager', true)`);
+    -- A row left over from the removed Manager role: a plain rep, refused the admin-only token routes below.
+    ('jm-mgr', 'Old Manager', 'mgr@jm.test', 'manager', true)`);
   const product = await db.execute(sql`INSERT INTO sales_products (sku, name, kind, base_price_cents, is_active)
     VALUES ('IT-MCP-KEYCHAIN', 'MCP keychain', 'physical', 2500, true)
     ON CONFLICT (sku) DO UPDATE SET name = EXCLUDED.name

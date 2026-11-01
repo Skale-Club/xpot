@@ -1,5 +1,5 @@
 // The visits history filtered by seller (BACKLOG UXR-21): GET /visits?repId=
-// narrows the list to one person in management mode: anyone's for a manager
+// narrows the list to one person in management mode: anyone's for the platform admin
 // (the history's "Seller" filter, People's "Their visits"), a teammate's visits
 // at their organization's companies for a Rep Admin (Organizations › a person).
 // Anyone else keeps their own visits whatever the parameter says.
@@ -32,11 +32,12 @@ const one = async (text: string, params: unknown[] = []) => (await q(text, param
 
 afterAll(async () => pg.client?.close());
 
+// vf-boss is the platform admin (users.is_admin); everyone else is signed in as themselves.
 async function list(userId: string, query = "", headers: Record<string, string> = {}) {
   const server = express();
   server.use(express.json());
   server.use((req, _res, next) => {
-    (req as any).session = { userId, email: `${userId}@x.test`, firstName: userId, isAdmin: false };
+    (req as any).session = { userId, email: `${userId}@x.test`, firstName: userId, isAdmin: userId === "vf-boss" };
     next();
   });
   server.use("/api/xpot", createVisitsRouter());
@@ -60,8 +61,8 @@ let ana: number;
 let bia: number;
 
 beforeAll(async () => {
-  await q(`INSERT INTO users (id, phone, first_name) VALUES ('vf-boss', '+15550000401', 'Bo'), ('vf-ana', '+15550000402', 'Ana'), ('vf-bia', '+15550000403', 'Bia')`);
-  await q(`INSERT INTO sales_reps (user_id, display_name, role, is_active) VALUES ('vf-boss', 'Bo Boss', 'manager', true)`);
+  await q(`INSERT INTO users (id, phone, first_name) VALUES ('vf-boss', '+15550000401', 'Bo'), ('vf-ana', '+15550000402', 'Ana'), ('vf-bia', '+15550000403', 'Bia'), ('vf-old', '+15550000404', 'Old')`);
+  await q(`INSERT INTO sales_reps (user_id, display_name, role, is_active) VALUES ('vf-boss', 'Bo Boss', 'admin', true), ('vf-old', 'Old Manager', 'manager', true)`);
   ana = (await one(`INSERT INTO sales_reps (user_id, display_name, role, is_active) VALUES ('vf-ana', 'Ana Rep', 'rep', true) RETURNING id`)).id;
   bia = (await one(`INSERT INTO sales_reps (user_id, display_name, role, is_active) VALUES ('vf-bia', 'Bia Rep', 'rep', true) RETURNING id`)).id;
   const organizationId = (await one(`INSERT INTO organizations (name, slug) VALUES ('Filter Team', 'filter-team') RETURNING id`)).id;
@@ -72,7 +73,7 @@ beforeAll(async () => {
 });
 
 describe("GET /visits?repId=", () => {
-  it("narrows a manager's list to one seller in management mode", async () => {
+  it("narrows the platform admin's list to one seller in management mode", async () => {
     expect((await list("vf-boss")).reps).toEqual([ana, ana, bia]);
     expect((await list("vf-boss", `?repId=${ana}`)).reps).toEqual([ana, ana]);
     expect((await list("vf-boss", `?repId=${bia}`)).reps).toEqual([bia]);
@@ -84,7 +85,7 @@ describe("GET /visits?repId=", () => {
   });
 
   it("is not honoured outside management mode, nor for a rep", async () => {
-    // The app's management mode sends "manage"; a manager's list stays everyone's.
+    // The app's management mode sends "manage"; the platform admin's list stays everyone's.
     expect((await list("vf-boss", `?repId=${ana}`, { "X-Xpot-View": "manage" })).reps).toEqual([ana, ana]);
     // A Rep Admin in management mode keeps their own visits; asking for a
     // teammate (Organizations › a person) gets that teammate's visits at
@@ -92,9 +93,12 @@ describe("GET /visits?repId=", () => {
     // covers one outside it).
     expect((await list("vf-bia", "", { "X-Xpot-View": "manage" })).reps).toEqual([bia]);
     expect((await list("vf-bia", `?repId=${ana}`, { "X-Xpot-View": "manage" })).reps).toEqual([ana, ana]);
-    // Viewing as a rep, the manager sees their own visits (none) whatever the filter.
+    // Viewing as a rep, the platform admin sees their own visits (none) whatever the filter.
     expect((await list("vf-boss", `?repId=${ana}`, { "X-Xpot-View": "rep" })).reps).toEqual([]);
     // A rep cannot read someone else's history through it.
     expect((await list("vf-bia", `?repId=${ana}`)).reps).toEqual([bia]);
+    // A leftover role=manager row is a rep too: their own visits (none), whatever the filter or the mode.
+    expect((await list("vf-old", `?repId=${ana}`)).reps).toEqual([]);
+    expect((await list("vf-old", `?repId=${ana}`, { "X-Xpot-View": "manage" })).reps).toEqual([]);
   });
 });

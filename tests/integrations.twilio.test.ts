@@ -26,7 +26,7 @@ vi.mock("../server/storage.js", () => ({
   },
 }));
 vi.mock("../server/routes/xpot/middleware.js", () => ({
-  requireXpotManager: (_req: any, _res: any, next: any) => next(),
+  requirePlatformAdmin: (_req: any, _res: any, next: any) => next(),
   requireSuperAdmin: (_req: any, _res: any, next: any) => next(),
 }));
 // Keeping the last test result is covered by platform-status.integration.test.ts.

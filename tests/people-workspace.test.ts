@@ -45,13 +45,15 @@ describe("teamPeriodSince", () => {
 describe("inTeamTable", () => {
   const person = (over: Record<string, unknown> = {}) =>
     ({ id: 1, role: "rep", modules: ["visits"], isActive: true, blockedAt: null, deletedAt: null, ...over }) as Parameters<typeof inTeamTable>[0];
-  it("lists every active field rep with Visits, and managers only when they did something", () => {
+  it("lists every active field rep with Visits, and admins only when they did something", () => {
     expect(inTeamTable(person(), false)).toBe(true);
     expect(inTeamTable(person({ modules: ["tags"] }), true)).toBe(false);
     expect(inTeamTable(person({ isActive: false }), true)).toBe(false);
     expect(inTeamTable(person({ blockedAt: new Date() }), true)).toBe(false);
     expect(inTeamTable(person({ deletedAt: new Date() }), true)).toBe(false);
-    expect(inTeamTable(person({ role: "manager", modules: ["tags"] }), false)).toBe(false);
-    expect(inTeamTable(person({ role: "manager", modules: ["tags"] }), true)).toBe(true);
+    expect(inTeamTable(person({ role: "admin", modules: ["tags"] }), false)).toBe(false);
+    expect(inTeamTable(person({ role: "admin", modules: ["tags"] }), true)).toBe(true);
+    // A leftover role=manager row is a Tags-only rep here: not a field rep, whatever it did.
+    expect(inTeamTable(person({ role: "manager", modules: ["tags"] }), true)).toBe(false);
   });
 });

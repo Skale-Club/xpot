@@ -78,7 +78,7 @@ export function hasTagsModule(rep: Reseller): boolean {
 export function useResellers() {
   return useQuery<Reseller[]>({
     queryKey: [ADMIN_TAGS_KEY, "resellers"],
-    queryFn: () => getJson("/api/xpot/admin/reps"),
+    queryFn: () => getJson("/api/xpot/admin/tag-people"),
     staleTime: STALE_MS,
   });
 }

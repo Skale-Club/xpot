@@ -1,7 +1,7 @@
-import { eq, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db.js";
-import { authAccessRequests, salesReps, users, type SalesRep } from "#shared/schema.js";
+import { authAccessRequests, organizationMemberships, salesReps, users, type SalesRep } from "#shared/schema.js";
 import { XPOT_MODULES } from "#shared/modules.js";
 import { normalizePhone } from "#shared/phone.js";
 import { storage } from "../../storage.js";
@@ -182,6 +182,29 @@ export async function changeRepPhone(repId: number, input: z.infer<typeof phoneC
 export type RepAccess = "active" | "pending" | "blocked";
 
 /** Reps for Admin → Reps, with the phone they sign in with and where they stand. */
+/**
+ * Who Tags management can hand pieces to and filter by: everyone for the platform; for an organization's owner, the
+ * active people of the organizations they run (never their sign-in phone or application). The code is only a yes or no
+ * for them: what counts is whether the person can buy, and it is the person's own key to the store.
+ */
+export async function listTagPeople(organizationIds: readonly number[] | null) {
+  const pick = <R extends { id: number; displayName: string; email: string | null; team: string | null; role: string; isActive: boolean; modules: string[] | null; costPolicy: string; costPolicyConfiguredAt: Date | null; blockedAt: Date | null }>(rep: R, wholesaleCode: string | null) => ({
+    id: rep.id, displayName: rep.displayName, email: rep.email, team: rep.team, role: rep.role, isActive: rep.isActive, modules: rep.modules,
+    costPolicy: rep.costPolicy, costPolicyConfiguredAt: rep.costPolicyConfiguredAt, blockedAt: rep.blockedAt, wholesaleCode,
+  });
+  if (organizationIds === null) return (await listRepsWithAccess()).map((rep) => pick(rep, rep.wholesaleCode));
+  if (!organizationIds.length) return [];
+  const list = await db.selectDistinct({ rep: salesReps }).from(salesReps)
+    .innerJoin(organizationMemberships, eq(organizationMemberships.repId, salesReps.id))
+    .where(and(
+      inArray(organizationMemberships.organizationId, [...organizationIds]),
+      eq(organizationMemberships.isActive, true),
+      isNull(organizationMemberships.blockedAt),
+      isNull(salesReps.deletedAt),
+    ));
+  return list.map(({ rep }) => pick(rep, rep.wholesaleCode ? "set" : null)).sort((a, b) => a.displayName.localeCompare(b.displayName));
+}
+
 export async function listRepsWithAccess() {
   const list = await db
     .select({ rep: salesReps, loginPhone: users.phone, application: authAccessRequests })

@@ -32,11 +32,11 @@ test.skipIf(!enabled)("tags: piece screen analytics, activity and sale cancel", 
   await db.execute(sql`DELETE FROM sales_reps WHERE user_id LIKE 'ps-%'`);
   await db.execute(sql`DELETE FROM users WHERE id LIKE 'ps-%'`);
   await db.execute(sql`INSERT INTO users (id, email, first_name, is_admin) VALUES
-    ('ps-admin', 'admin@ps.test', 'Admin', true), ('ps-manager', 'manager@ps.test', 'Manager', false),
+    ('ps-admin', 'admin@ps.test', 'Admin', true), ('ps-admin2', 'admin2@ps.test', 'Admin Two', true),
     ('ps-ana', 'ana@ps.test', 'Ana', false), ('ps-zed', 'zed@ps.test', 'Zed', false)`);
   const reps = await db.execute(sql`INSERT INTO sales_reps (user_id, display_name, email, role, is_active, cost_policy, cost_policy_configured_at) VALUES
     ('ps-admin', 'Admin', 'admin@ps.test', 'admin', true, 'acquisition', NOW()),
-    ('ps-manager', 'Manager', 'manager@ps.test', 'manager', true, 'acquisition', NOW()),
+    ('ps-admin2', 'Admin Two', 'admin2@ps.test', 'admin', true, 'acquisition', NOW()),
     ('ps-ana', 'Ana', 'ana@ps.test', 'rep', true, 'acquisition', NOW()),
     ('ps-zed', 'Zed', 'zed@ps.test', 'rep', true, 'zero', NOW())
     RETURNING id, user_id`);
@@ -51,7 +51,7 @@ test.skipIf(!enabled)("tags: piece screen analytics, activity and sale cancel", 
   app.use(express.json());
   app.use((req, _res, next) => {
     const userId = req.get("x-test-user");
-    (req as any).session = userId ? { userId, isAdmin: userId === "ps-admin", email: `${userId}@ps.test` } : {};
+    (req as any).session = userId ? { userId, isAdmin: userId === "ps-admin" || userId === "ps-admin2", email: `${userId}@ps.test` } : {};
     next();
   });
   registerTagRoutes(app);
@@ -81,7 +81,7 @@ test.skipIf(!enabled)("tags: piece screen analytics, activity and sale cancel", 
     const pieces = (await ok("GET", `/api/xpot/admin/tag-batches/${batch.id}`, "ps-admin")).tags as Array<{ id: string; publicCode: string }>;
     const piece = pieces.find((p) => p.publicCode === "P0000001")!;
     // Ana buys it in a kit (acquisition: the piece becomes hers), sets it up and sells it.
-    await ok("POST", "/api/xpot/admin/tag-kits", "ps-manager", { repId: repId["ps-ana"], codes: [piece.publicCode], unitCostCents: 700 });
+    await ok("POST", "/api/xpot/admin/tag-kits", "ps-admin2", { repId: repId["ps-ana"], codes: [piece.publicCode], unitCostCents: 700 });
     const live = await ok("POST", `/api/xpot/tags/${piece.id}/quick-activate`, "ps-ana", { destinationUrl: REVIEW, destinationType: "google_review", leadName: "Piece Cafe" });
     await db.execute(sql`INSERT INTO tag_events (tag_id, access_method, event_type, occurred_at, visitor_day_key, is_bot)
       VALUES (${piece.id}, 'qr', 'redirect', NOW() - interval '2 days', 'v1', false), (${piece.id}, 'nfc', 'redirect', NOW() - interval '1 day', 'v2', false)`);
@@ -92,14 +92,14 @@ test.skipIf(!enabled)("tags: piece screen analytics, activity and sale cancel", 
     // Performance: the reseller reads the same analytics as the admin, by range.
     const analytics = await ok("GET", `/api/xpot/tags/${piece.id}/analytics?range=7d`, "ps-ana");
     assert.deepEqual([analytics.totals.qr, analytics.totals.nfc, analytics.topTags.length], [1, 1, 0]);
-    const adminAnalytics = await ok("GET", `/api/xpot/admin/tags/${piece.id}/analytics?range=7d`, "ps-manager");
+    const adminAnalytics = await ok("GET", `/api/xpot/admin/tags/${piece.id}/analytics?range=7d`, "ps-admin2");
     assert.deepEqual(analytics.totals, adminAnalytics.totals);
     assert.equal((await ok("GET", `/api/xpot/tags/${piece.id}/analytics?range=today`, "ps-ana")).totals.interactions, 0);
     // Someone else's piece stays out of reach.
     assert.equal((await api("GET", `/api/xpot/tags/${piece.id}/analytics`, "ps-zed")).status, 403);
     assert.equal((await api("GET", `/api/xpot/tags/${piece.id}/activity`, "ps-zed")).status, 403);
 
-    // Activity: the reseller gets the sale, not the stock movements; management gets both.
+    // Activity: the reseller gets the sale, not the stock movements; platform admins get both.
     const repActivity = await ok("GET", `/api/xpot/tags/${piece.id}/activity`, "ps-ana");
     assert.equal(repActivity.movements, null);
     assert.equal(repActivity.sales.length, 1);
@@ -107,33 +107,33 @@ test.skipIf(!enabled)("tags: piece screen analytics, activity and sale cancel", 
       { saleId: repActivity.sales[0].saleId, status: repActivity.sales[0].status, priceCents: repActivity.sales[0].priceCents, sellerName: repActivity.sales[0].sellerName },
       { saleId: sale.sale.id, status: "active", priceCents: 2500, sellerName: "Ana" },
     );
-    const managed = await ok("GET", `/api/xpot/tags/${piece.id}/activity`, "ps-manager");
+    const managed = await ok("GET", `/api/xpot/tags/${piece.id}/activity`, "ps-admin2");
     const types = managed.movements.map((m: any) => m.movementType);
     assert.equal(types[0], "sale");
     assert.ok(types.includes("transfer"), types.join());
     assert.ok(managed.movements.some((m: any) => m.movementType === "sale" && m.referenceId === String(sale.sale.id)));
-    // A manager viewing as a rep (admin mode off) gets the rep's answer.
-    assert.equal((await ok("GET", `/api/xpot/tags/${piece.id}/activity`, "ps-manager", undefined, { "x-xpot-view": "rep" })).movements, null);
+    // A platform admin viewing as a rep (admin mode off) gets the rep's answer.
+    assert.equal((await ok("GET", `/api/xpot/tags/${piece.id}/activity`, "ps-admin2", undefined, { "x-xpot-view": "rep" })).movements, null);
 
     // Cancelling the sale gives the piece back: in stock with Ana, her own again, sellable.
-    const cancelled = await ok("POST", `/api/xpot/sales/${sale.sale.id}/cancel`, "ps-manager", { reason: "Customer returned it" });
+    const cancelled = await ok("POST", `/api/xpot/sales/${sale.sale.id}/cancel`, "ps-admin2", { reason: "Customer returned it" });
     assert.equal(cancelled.sale.status, "cancelled");
     const after = await ok("GET", `/api/xpot/tags/${piece.id}`, "ps-ana");
     assert.deepEqual(
       { saleId: after.saleId, soldAt: after.soldAt, stockStatus: after.stockStatus, ownershipType: after.ownershipType, custodianRepId: after.custodianRepId, repId: after.repId, leadId: after.leadId },
       { saleId: null, soldAt: null, stockStatus: "available", ownershipType: "rep", custodianRepId: repId["ps-ana"], repId: repId["ps-ana"], leadId: live.leadId },
     );
-    const afterActivity = await ok("GET", `/api/xpot/tags/${piece.id}/activity`, "ps-manager");
+    const afterActivity = await ok("GET", `/api/xpot/tags/${piece.id}/activity`, "ps-admin2");
     assert.equal(afterActivity.sales[0].status, "cancelled");
     assert.equal(afterActivity.sales[0].cancelReason, "Customer returned it");
     assert.ok(afterActivity.sales[0].endedAt);
     const restore = afterActivity.movements.find((m: any) => m.movementType === "restore");
     assert.deepEqual(
       { from: restore.fromStockStatus, to: restore.toStockStatus, toOwnership: restore.toOwnershipType, ref: restore.referenceId, actor: restore.actorEmail },
-      { from: "sold", to: "available", toOwnership: "rep", ref: String(sale.sale.id), actor: "manager@ps.test" },
+      { from: "sold", to: "available", toOwnership: "rep", ref: String(sale.sale.id), actor: "admin2@ps.test" },
     );
     // Cancelling again changes nothing.
-    await ok("POST", `/api/xpot/sales/${sale.sale.id}/cancel`, "ps-manager", {});
+    await ok("POST", `/api/xpot/sales/${sale.sale.id}/cancel`, "ps-admin2", {});
     assert.equal((await db.execute(sql`SELECT count(*)::int AS n FROM tag_stock_movements WHERE tag_id = ${piece.id} AND movement_type = 'restore'`)).rows[0].n, 1);
 
     // It can be sold again, to the same customer.

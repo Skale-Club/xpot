@@ -40,11 +40,12 @@ test.skipIf(!enabled)("journey: trail, stories, plans, append-only, admin-only A
   await db.execute(sql`DELETE FROM sales_reps WHERE user_id LIKE 'jt-%'`);
   await db.execute(sql`DELETE FROM users WHERE id LIKE 'jt-%'`);
   await db.execute(sql`INSERT INTO users (id, email, first_name, is_admin) VALUES
-    ('jt-admin', 'admin@jt.test', 'Admin', true), ('jt-mgr', 'mgr@jt.test', 'Manager', false),
+    ('jt-admin', 'admin@jt.test', 'Admin', true), ('jt-mgr', 'mgr@jt.test', 'Old Manager', false),
     ('jt-ana', 'ana@jt.test', 'Ana', false), ('jt-bruno', 'bruno@jt.test', 'Bruno', false)`);
   const seeded = await db.execute(sql`INSERT INTO sales_reps (user_id, display_name, email, role, is_active) VALUES
     ('jt-admin', 'Admin', 'admin@jt.test', 'admin', true),
-    ('jt-mgr', 'Manager', 'mgr@jt.test', 'manager', true),
+    -- A row left over from the removed Manager role: a plain rep, refused like one below.
+    ('jt-mgr', 'Old Manager', 'mgr@jt.test', 'manager', true),
     ('jt-ana', 'Ana', 'ana@jt.test', 'rep', true),
     ('jt-bruno', 'Bruno', 'bruno@jt.test', 'rep', true)
     RETURNING id, user_id`);
@@ -84,14 +85,14 @@ test.skipIf(!enabled)("journey: trail, stories, plans, append-only, admin-only A
   try {
     // ── Access: the journey is for admins only ───────────────────────────────
     assert.equal((await api("GET", "/api/xpot/admin/tag-journey", null)).status, 401);
-    const asManager = await api("GET", "/api/xpot/admin/tag-journey", "jt-mgr");
-    assert.equal(asManager.status, 403);
-    assert.equal(asManager.json.message, "Admin access required");
+    const asLeftoverManager = await api("GET", "/api/xpot/admin/tag-journey", "jt-mgr");
+    assert.equal(asLeftoverManager.status, 403);
+    assert.equal(asLeftoverManager.json.message, "Admin access required");
     assert.equal((await api("GET", "/api/xpot/admin/tag-journey", "jt-ana")).status, 403);
     assert.equal((await api("POST", "/api/xpot/admin/tag-journey", "jt-mgr", { kind: "insight", title: "x" })).status, 403);
     assert.equal((await api("GET", "/api/xpot/admin/tag-plans", "jt-mgr")).status, 403);
     assert.equal((await api("PATCH", "/api/xpot/admin/tag-plans/00000000-0000-4000-8000-000000000000", "jt-mgr", { status: "done" })).status, 403);
-    // Batches, like the journey, are the global admin's (users.is_admin): a manager gets 403.
+    // Batches, like the journey, are the global admin's (users.is_admin): a leftover manager row gets 403.
     assert.equal((await api("GET", "/api/xpot/admin/tag-batches", "jt-mgr")).status, 403);
     assert.equal((await api("GET", "/api/xpot/admin/tag-journey", "jt-admin")).status, 200);
 
