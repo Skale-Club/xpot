@@ -165,7 +165,10 @@ const { ensureXpotRep, requireVisitsModule, VISITS_ONLY_PATHS } = await import("
 
 const REP_A = { id: 1, userId: "user-a", displayName: "Rep A", role: "rep", isActive: true };
 const REP_B = { id: 2, userId: "user-b", displayName: "Rep B", role: "rep", isActive: true };
-const MANAGER = { id: 3, userId: "user-m", displayName: "Manager", role: "manager", isActive: true };
+// The platform admin: the rep row of a users.is_admin account. Its session says so (appFor(..., true)); the row alone grants nothing.
+const ADMIN = { id: 3, userId: "user-m", displayName: "Admin", role: "admin", isActive: true };
+// A row left over from the removed Manager role. The role has no power any more: this is a plain rep.
+const LEFTOVER_MANAGER = { id: 5, userId: "user-old-m", displayName: "Old Manager", role: "manager", isActive: true };
 
 /** Mount a router behind a fake session for the given user. */
 function appFor(router: express.Router, userId: string, isAdmin = false) {
@@ -203,7 +206,7 @@ function request(app: express.Express, method: string, path: string, body?: unkn
 }
 
 beforeEach(() => {
-  store.reps = new Map([[1, { ...REP_A }], [2, { ...REP_B }], [3, { ...MANAGER }]]);
+  store.reps = new Map([[1, { ...REP_A }], [2, { ...REP_B }], [3, { ...ADMIN }]]);
   store.leads = new Map([
     [10, { id: 10, name: "A's lead", ownerRepId: 1, status: "lead" }],
     [20, { id: 20, name: "B's lead", ownerRepId: 2, status: "prospect" }],
@@ -265,8 +268,8 @@ describe("SEG-02 — a rep cannot edit another rep's task", () => {
     expect(storage.updateSalesTask).toHaveBeenCalledWith(100, expect.objectContaining({ status: "completed" }));
   });
 
-  it("lets a manager edit any task", async () => {
-    const res = await request(appFor(router, "user-m"), "PATCH", "/tasks/100", { status: "completed" });
+  it("lets a platform admin edit any task", async () => {
+    const res = await request(appFor(router, "user-m", true), "PATCH", "/tasks/100", { status: "completed" });
     expect(res.status).toBe(200);
   });
 
@@ -363,12 +366,16 @@ describe("A02 — a profile cannot point its avatar at someone else's file", () 
   });
 });
 
-describe("A05 — a manager creates plain reps only", () => {
-  const manager = { userId: "user-m", isAdmin: false };
-  it.each(["manager", "admin"] as const)("refuses a new %s before touching the database", async (role) => {
-    const input = resellerAccountSchema.parse({ displayName: "New", phone: "5550110009", role });
+describe("A05 — only a platform admin creates another admin", () => {
+  const notAdmin = { userId: "user-a", isAdmin: false };
+  it("refuses a new admin before touching the database", async () => {
+    const input = resellerAccountSchema.parse({ displayName: "New", phone: "5550110009", role: "admin" });
     // db is an empty double here: reaching an insert would fail with a TypeError, not a 403.
-    await expect(createResellerAccount(input, manager)).rejects.toMatchObject({ status: 403 });
+    await expect(createResellerAccount(input, notAdmin)).rejects.toMatchObject({ status: 403 });
+  });
+
+  it("no longer knows a manager role to create", () => {
+    expect(() => resellerAccountSchema.parse({ displayName: "New", phone: "5550110009", role: "manager" })).toThrow();
   });
 });
 
@@ -405,8 +412,8 @@ describe("SEG-06 — lead detail is scoped to the caller", () => {
     expect(storage.listSalesTasks).toHaveBeenCalledWith(expect.objectContaining({ repId: 1 }));
   });
 
-  it("a manager sees everything on the lead", async () => {
-    const res = await request(appFor(router, "user-m"), "GET", "/leads/10");
+  it("a platform admin sees everything on the lead", async () => {
+    const res = await request(appFor(router, "user-m", true), "GET", "/leads/10");
     expect(res.status).toBe(200);
     expect(storage.listSalesOpportunities).toHaveBeenCalledWith(expect.objectContaining({ repId: undefined }));
   });
@@ -511,14 +518,14 @@ describe("SEG-05 — check-in is refused on another rep's lead", () => {
 
 // ─── SEG-07 ──────────────────────────────────────────────────────────────────
 
-describe("SEG-07 — a manager cannot escalate through the reps endpoint", () => {
+describe("SEG-07 — only a platform admin edits people through the reps endpoint", () => {
   // POST /admin/reps edits an existing rep. Creating access and turning it on
   // or off go through the reseller-account routes (approve / block), covered
   // by resellerAccounts.integration.test.ts.
   const router = createAdminRouter();
 
-  it("refuses a promotion when the caller is only a manager", async () => {
-    const res = await request(appFor(router, "user-m"), "POST", "/admin/reps", {
+  it("refuses a promotion when the caller is not a platform admin", async () => {
+    const res = await request(appFor(router, "user-a"), "POST", "/admin/reps", {
       userId: "user-a", displayName: "Rep A", role: "admin",
     });
     expect(res.status).toBe(403);
@@ -526,25 +533,25 @@ describe("SEG-07 — a manager cannot escalate through the reps endpoint", () =>
     expect(store.upserts).toHaveLength(0);
   });
 
-  it("refuses to edit a manager when the caller is only a manager", async () => {
-    const res = await request(appFor(router, "user-m"), "POST", "/admin/reps", {
-      userId: "user-m", displayName: "Manager", role: "rep",
+  it("refuses to edit an admin when the caller is not a platform admin", async () => {
+    const res = await request(appFor(router, "user-a"), "POST", "/admin/reps", {
+      userId: "user-m", displayName: "Admin", role: "rep",
     });
     expect(res.status).toBe(403);
-    expect(store.reps.get(3).role).toBe("manager");
+    expect(store.reps.get(3).role).toBe("admin");
   });
 
   it("does not create a rep for an unknown user", async () => {
-    const res = await request(appFor(router, "user-m"), "POST", "/admin/reps", {
+    const res = await request(appFor(router, "user-m", true), "POST", "/admin/reps", {
       userId: "someone-new", displayName: "New",
     });
     expect(res.status).toBe(404);
     expect(store.upserts).toHaveLength(0);
   });
 
-  it("lets a manager edit a plain rep without touching their access", async () => {
+  it("lets a platform admin edit a plain rep without touching their access", async () => {
     store.reps.set(4, { id: 4, userId: "user-new", displayName: "New", role: "rep", isActive: false });
-    const res = await request(appFor(router, "user-m"), "POST", "/admin/reps", {
+    const res = await request(appFor(router, "user-m", true), "POST", "/admin/reps", {
       userId: "user-new", displayName: "Renamed", isActive: true,
     });
     expect(res.status).toBe(200);
@@ -553,32 +560,79 @@ describe("SEG-07 — a manager cannot escalate through the reps endpoint", () =>
 
   it("refuses a change to your own role, even for the platform admin", async () => {
     const res = await request(appFor(router, "user-m", true), "POST", "/admin/reps", {
-      userId: "user-m", displayName: "Manager", role: "rep",
+      userId: "user-m", displayName: "Admin", role: "rep",
     });
     expect(res.status).toBe(400);
     expect(res.body.message).toMatch(/own role/);
-    expect(store.reps.get(3).role).toBe("manager");
+    expect(store.reps.get(3).role).toBe("admin");
     // Saving your own profile with the same role still works.
     const same = await request(appFor(router, "user-m", true), "POST", "/admin/reps", {
-      userId: "user-m", displayName: "Manager M", role: "manager",
+      userId: "user-m", displayName: "Admin M", role: "admin",
     });
     expect(same.status).toBe(200);
   });
 
   it("lets a platform admin change someone else's role", async () => {
     const res = await request(appFor(router, "user-m", true), "POST", "/admin/reps", {
-      userId: "user-a", displayName: "Rep A", role: "manager",
+      userId: "user-a", displayName: "Rep A", role: "admin",
     });
     expect(res.status).toBe(200);
-    expect(store.reps.get(1).role).toBe("manager");
+    expect(store.reps.get(1).role).toBe("admin");
+  });
+
+  it("does not offer a manager role any more", async () => {
+    const res = await request(appFor(router, "user-m", true), "POST", "/admin/reps", {
+      userId: "user-a", displayName: "Rep A", role: "manager",
+    });
+    expect(res.status).toBe(400);
+    expect(store.reps.get(1).role).toBe("rep");
+  });
+});
+
+// ─── The removed Manager role ────────────────────────────────────────────────
+
+describe("A leftover role=manager row is a plain rep", () => {
+  beforeEach(() => {
+    store.reps.set(5, { ...LEFTOVER_MANAGER });
+  });
+
+  it("cannot edit another rep's task", async () => {
+    storage.updateSalesTask.mockClear();
+    const res = await request(appFor(createTasksRouter(), "user-old-m"), "PATCH", "/tasks/100", { status: "completed" });
+    expect(res.status).toBe(403);
+    expect(storage.updateSalesTask).not.toHaveBeenCalled();
+  });
+
+  it("is scoped to their own tasks and deals, ?all=true or not", async () => {
+    await request(appFor(createTasksRouter(), "user-old-m"), "GET", "/tasks?all=true");
+    expect(storage.listSalesTasks).toHaveBeenLastCalledWith(expect.objectContaining({ repId: 5 }));
+    await request(appFor(createOpportunitiesRouter(), "user-old-m"), "GET", "/opportunities?all=true");
+    expect(storage.listSalesOpportunities).toHaveBeenLastCalledWith(expect.objectContaining({ repId: 5 }));
+  });
+
+  it("cannot open someone else's lead", async () => {
+    const res = await request(appFor(createLeadsRouter(), "user-old-m"), "GET", "/leads/20/contacts");
+    expect(res.status).toBe(403);
+  });
+
+  it("is refused at the admin routes", async () => {
+    const router = createAdminRouter();
+    const overview = await request(appFor(router, "user-old-m"), "GET", "/admin/overview");
+    expect(overview.status).toBe(403);
+    expect(overview.body.code).toBe("super_admin_only");
+    const edit = await request(appFor(router, "user-old-m"), "POST", "/admin/reps", {
+      userId: "user-a", displayName: "Rep A", role: "admin",
+    });
+    expect(edit.status).toBe(403);
+    expect(store.reps.get(1).role).toBe("rep");
   });
 });
 
 // ─── SEG-08 ──────────────────────────────────────────────────────────────────
 
 describe("SEG-08 — one rule for who sees everything", () => {
-  it("a role=manager rep sees all tasks with ?all=true, like they do for leads", async () => {
-    const res = await request(appFor(createTasksRouter(), "user-m"), "GET", "/tasks?all=true");
+  it("a platform admin sees all tasks with ?all=true, like they do for leads", async () => {
+    const res = await request(appFor(createTasksRouter(), "user-m", true), "GET", "/tasks?all=true");
     expect(res.status).toBe(200);
     expect(storage.listSalesTasks).toHaveBeenCalledWith(expect.objectContaining({ repId: undefined }));
   });
@@ -590,7 +644,7 @@ describe("SEG-08 — one rule for who sees everything", () => {
   });
 
   it("the same rule governs opportunities", async () => {
-    await request(appFor(createOpportunitiesRouter(), "user-m"), "GET", "/opportunities?all=true");
+    await request(appFor(createOpportunitiesRouter(), "user-m", true), "GET", "/opportunities?all=true");
     expect(storage.listSalesOpportunities).toHaveBeenCalledWith(expect.objectContaining({ repId: undefined }));
   });
 });
@@ -625,9 +679,16 @@ describe("MOD-01 — Visits APIs refuse a Tags-only reseller", () => {
     expect((await request(gated("user-a"), "GET", "/tasks")).status).toBe(200);
   });
 
-  it("a manager keeps every module whatever the column says", async () => {
-    store.reps.set(3, { ...MANAGER, modules: ["tags"] });
-    expect((await request(gated("user-m"), "GET", "/tasks")).status).toBe(200);
+  it("a platform admin keeps every module whatever the column says", async () => {
+    store.reps.set(3, { ...ADMIN, modules: ["tags"] });
+    expect((await request(gated("user-m", true), "GET", "/tasks")).status).toBe(200);
+  });
+
+  it("a leftover manager row has no such privilege: the column rules", async () => {
+    store.reps.set(5, { ...LEFTOVER_MANAGER, modules: ["tags"] });
+    const res = await request(gated("user-old-m"), "GET", "/tasks");
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe("module_off");
   });
 
   it("leaves leads out: Tags picks and creates its customers there", () => {

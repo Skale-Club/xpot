@@ -1,8 +1,8 @@
 // The organization filter of Inventory and Distribution › Kits (UXR-22):
 // GET /api/xpot/tags?organizationId= and GET /api/xpot/admin/tag-kits?organizationId=
-// narrow the lists for platform management (Xpot admin, manager) in management
+// narrow the lists for platform management (the Xpot admins) in management
 // mode, and are ignored for anyone else: a reseller's list stays their own
-// pieces, and a manager viewing as a rep gets their own list, unfiltered.
+// pieces, and an admin viewing as a rep gets their own list, unfiltered.
 //
 // Skipped unless TAGS_INTEGRATION=1 and DATABASE_URL points at a disposable,
 // migrated database. It TRUNCATEs the tag tables and replaces the of-* users
@@ -30,11 +30,11 @@ test.skipIf(!enabled)("organization filter: Inventory and Kits narrow for manage
   await clean();
 
   await db.execute(sql`INSERT INTO users (id, email, first_name, is_admin) VALUES
-    ('of-admin', 'admin@of.test', 'Admin', true), ('of-manager', 'manager@of.test', 'Manager', false),
+    ('of-admin', 'admin@of.test', 'Admin', true), ('of-admin2', 'admin2@of.test', 'Admin Two', true),
     ('of-ana', 'ana@of.test', 'Ana', false), ('of-zed', 'zed@of.test', 'Zed', false)`);
   const reps = await db.execute(sql`INSERT INTO sales_reps (user_id, display_name, email, role, is_active, cost_policy, cost_policy_configured_at) VALUES
     ('of-admin', 'OF Admin', 'admin@of.test', 'admin', true, 'zero', now()),
-    ('of-manager', 'OF Manager', 'manager@of.test', 'manager', true, 'zero', now()),
+    ('of-admin2', 'OF Admin Two', 'admin2@of.test', 'admin', true, 'zero', now()),
     ('of-ana', 'OF Ana', 'ana@of.test', 'rep', true, 'zero', now()),
     ('of-zed', 'OF Zed', 'zed@of.test', 'rep', true, 'zero', now())
     RETURNING id, user_id`);
@@ -46,7 +46,7 @@ test.skipIf(!enabled)("organization filter: Inventory and Kits narrow for manage
   app.use(express.json());
   app.use((req, _res, next) => {
     const userId = req.get("x-test-user");
-    (req as any).session = userId ? { userId, isAdmin: userId === "of-admin", email: `${userId}@of.test` } : {};
+    (req as any).session = userId ? { userId, isAdmin: userId === "of-admin" || userId === "of-admin2", email: `${userId}@of.test` } : {};
     next();
   });
   registerTagRoutes(app);
@@ -86,8 +86,8 @@ test.skipIf(!enabled)("organization filter: Inventory and Kits narrow for manage
     await db.execute(sql`UPDATE tag_kits SET organization_id = ${orgA.id} WHERE rep_id = ${repId["of-ana"]}`);
     await db.execute(sql`UPDATE tag_kits SET organization_id = ${orgB.id} WHERE rep_id = ${repId["of-zed"]}`);
 
-    // Management: the admin and a manager get one organization's pieces and kits.
-    for (const user of ["of-admin", "of-manager"]) {
+    // Management: the platform admins get one organization's pieces and kits.
+    for (const user of ["of-admin", "of-admin2"]) {
       const north = await api("GET", `/api/xpot/tags?organizationId=${orgA.id}`, user);
       assert.equal(north.status, 200, north.text);
       assert.deepEqual(codesOf(north.json), [codes[0], codes[1]], user);
@@ -115,18 +115,19 @@ test.skipIf(!enabled)("organization filter: Inventory and Kits narrow for manage
     const anaSouth = await api("GET", `/api/xpot/tags?organizationId=${orgB.id}`, "of-ana");
     assert.equal(anaSouth.status, 200, anaSouth.text);
     assert.deepEqual(codesOf(anaSouth.json), [codes[0], codes[1]]);
-    // A Rep Admin in management mode: Tags lists do not widen for them (listScope), so still their own.
+    // An organization's owner in management mode: their organization, whatever they ask for (tests/tags/ownerScope).
     await db.execute(sql`UPDATE organization_memberships SET role = 'admin' WHERE organization_id = ${orgA.id} AND rep_id = ${repId["of-ana"]}`);
     const anaManaging = await api("GET", `/api/xpot/tags?organizationId=${orgB.id}`, "of-ana", undefined, { "x-xpot-view": "manage" });
     assert.deepEqual(codesOf(anaManaging.json), [codes[0], codes[1]]);
-    // Kits stay management's.
-    assert.equal((await api("GET", `/api/xpot/admin/tag-kits?organizationId=${orgA.id}`, "of-ana")).status, 403);
+    const anaKits = await api("GET", `/api/xpot/admin/tag-kits?organizationId=${orgB.id}`, "of-ana");
+    assert.equal(anaKits.status, 200, anaKits.text);
+    assert.deepEqual(anaKits.json.map((k: { repId: number }) => k.repId), [repId["of-ana"]]);
 
-    // A manager viewing as a rep: their own (empty) list; the kits filter is ignored.
+    // A platform admin viewing as a rep: their own (empty) list; the kits filter is ignored.
     const asRep = { "x-xpot-view": "rep" };
-    const managerAsRep = await api("GET", `/api/xpot/tags?organizationId=${orgA.id}`, "of-manager", undefined, asRep);
-    assert.deepEqual(managerAsRep.json, []);
-    const kitsAsRep = await api("GET", `/api/xpot/admin/tag-kits?organizationId=${orgA.id}`, "of-manager", undefined, asRep);
+    const adminAsRep = await api("GET", `/api/xpot/tags?organizationId=${orgA.id}`, "of-admin2", undefined, asRep);
+    assert.deepEqual(adminAsRep.json, []);
+    const kitsAsRep = await api("GET", `/api/xpot/admin/tag-kits?organizationId=${orgA.id}`, "of-admin2", undefined, asRep);
     assert.equal(kitsAsRep.json.length, 2);
 
     // Junk is refused, not ignored.

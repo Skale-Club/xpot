@@ -1101,14 +1101,21 @@ const describeCheck = (_code: string, r: CheckRow | undefined) => ({
  * Hand out, dry run: per code, can it go into a kit now and why not. With a batch and a quantity instead, the next
  * pieces "next N from batch" would take, in the same order deliverKit picks them. Nothing moves.
  */
-export async function checkHandOut(input: { codes?: string[]; batchId?: string; quantity?: number }, source: OrganizationScope = null): Promise<DistributionCheck> {
+export async function checkHandOut(
+  input: { codes?: string[]; batchId?: string; quantity?: number },
+  /** Whose house stock it comes from; another organization's house pieces read as unknown. */
+  source: OrganizationScope = null,
+  /** The platform sees where any piece is, so a piece with someone is refused by name rather than as unknown. */
+  seesHeldPieces = false,
+): Promise<DistributionCheck> {
   const inSource = inOrganizations(sql`t.organization_id`, source);
   if (input.batchId && input.quantity) {
     const picked = await piecesForCheck(sql`t.batch_id = ${input.batchId} AND ${stockMetricSql("handOut")} AND ${inSource}`, input.quantity);
     return checkCodes(picked.map((r) => r.public_code), new Map(picked.map((r) => [r.public_code, r])), (r) => handOutBlocker(checkPiece(r)), describeCheck);
   }
   const codes = input.codes ?? [];
-  const found = codes.length ? await piecesForCheck(sql`t.public_code IN ${sqlList(Array.from(new Set(codes)))} AND ${inSource}`) : [];
+  const visible = seesHeldPieces ? sql`(${inSource} OR t.rep_id IS NOT NULL)` : inSource;
+  const found = codes.length ? await piecesForCheck(sql`t.public_code IN ${sqlList(Array.from(new Set(codes)))} AND ${visible}`) : [];
   return checkCodes(codes, new Map(found.map((r) => [r.public_code, r])), (r) => handOutBlocker(checkPiece(r)), describeCheck);
 }
 

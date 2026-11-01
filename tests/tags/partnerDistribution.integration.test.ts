@@ -139,14 +139,18 @@ test.skipIf(!enabled)("partner distribution: own hands kits to linked organizati
     // A leftover link on a partner that stays with Xpot (it can't be made through the API).
     await db.execute(sql`INSERT INTO organization_links (producer_id, seller_id) VALUES (${usa}, ${usaSeller})`);
 
-    // ── Who a partner may hand kits to. ──
-    const recipients = (user: string) => api("GET", "/api/xpot/admin/tag-kits/recipients", user);
-    const mine = await recipients("pd-own-owner");
+    // ── Who a partner may hand kits to: GET /api/xpot/admin/tag-people adds the linked organizations' people, labelled. ──
+    const people = (user: string) => api("GET", "/api/xpot/admin/tag-people", user);
+    const recipients = async (user: string) => {
+      const res = await people(user); return { status: res.status, json: Array.isArray(res.json) ? res.json.filter((p: any) => p.organizationName) : [] }; };
+    const mine = await people("pd-own-owner");
     assert.equal(mine.status, 200, mine.text);
-    assert.deepEqual(mine.json.map((p: any) => [p.id, p.organizationName]), [[rep["pd-linked-buyer"], "PD Linked"]]);
+    assert.deepEqual(mine.json.map((p: any) => [p.id, p.organizationName ?? null]).sort(), [
+      [rep["pd-linked-buyer"], "PD Linked"], [rep["pd-own-member"], null], [rep["pd-own-owner"], null],
+    ].sort(), "their own people, then the linked organization's, labelled");
     assert.deepEqual((await recipients("pd-usa-owner")).json, [], "a partner on xpot has none");
     assert.deepEqual((await recipients("pd-unlinked-owner")).json, []);
-    assert.deepEqual((await recipients("pd-admin")).json, []);
+    assert.deepEqual((await recipients("pd-admin")).json, [], "the platform sees everyone, unlabelled");
     assert.equal((await recipients("pd-linked-buyer")).status, 403);
 
     // ── Handing out. The partner's owner → a person of a linked organization, from their own house stock. ──

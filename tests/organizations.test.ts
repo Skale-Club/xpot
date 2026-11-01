@@ -10,7 +10,8 @@ import {
 } from "../shared/organizations.js";
 
 const admin = { user: { isAdmin: true }, rep: { id: 1, role: "admin" } };
-const manager = { user: { isAdmin: false }, rep: { id: 2, role: "manager" } };
+// A row left over from the removed Manager role: nothing checks it any more.
+const leftoverManager = { user: { isAdmin: false }, rep: { id: 2, role: "manager" } };
 const rep = { user: { isAdmin: false }, rep: { id: 3, role: "rep" } };
 const memberships: OrganizationAccess[] = [
   { organizationId: 10, role: "admin", isActive: true },
@@ -20,18 +21,23 @@ const memberships: OrganizationAccess[] = [
 ];
 
 describe("Organization role separation", () => {
-  it("exposes only Admin, Manager, and Rep as platform roles", () => {
+  it("exposes only Admin and Rep as platform roles", () => {
     expect(platformRoleOf(admin)).toBe("admin");
-    expect(platformRoleOf(manager)).toBe("manager");
     expect(platformRoleOf(rep)).toBe("rep");
+    // The role comes from users.is_admin, not from the sales_reps.role column.
+    expect(platformRoleOf(leftoverManager)).toBe("rep");
   });
 
-  it("lets Admin and Manager operate across Organizations", () => {
-    for (const viewer of [admin, manager]) {
-      expect(managesEveryOrganization(viewer)).toBe(true);
-      expect(canManageOrganization(viewer, [], 999)).toBe(true);
-      expect(canViewOrganization(viewer, [], 999)).toBe(true);
-    }
+  it("lets the platform admin operate across Organizations", () => {
+    expect(managesEveryOrganization(admin)).toBe(true);
+    expect(canManageOrganization(admin, [], 999)).toBe(true);
+    expect(canViewOrganization(admin, [], 999)).toBe(true);
+  });
+
+  it("gives a leftover role=manager row no reach beyond a rep's", () => {
+    expect(managesEveryOrganization(leftoverManager)).toBe(false);
+    expect(canManageOrganization(leftoverManager, [], 999)).toBe(false);
+    expect(canViewOrganization(leftoverManager, [], 999)).toBe(false);
   });
 
   it("lets a Rep Admin manage only their own active Organization", () => {

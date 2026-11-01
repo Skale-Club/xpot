@@ -24,6 +24,8 @@ UPDATE "tag_acquisitions"
 SET "fulfilled_from_organization_id" = "xpot_company_organization_id"()
 WHERE "status" = 'fulfilled' AND "fulfilled_from_organization_id" IS NULL;
 
+-- As in 0065: SQL written before this keeps filing under the company; the app itself always says whose a row is.
+ALTER TABLE "tag_acquisitions" ALTER COLUMN "organization_id" SET DEFAULT "xpot_company_organization_id"();
 ALTER TABLE "tag_acquisitions" ALTER COLUMN "organization_id" SET NOT NULL;
 
 DO $$ BEGIN

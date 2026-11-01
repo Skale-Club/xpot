@@ -62,8 +62,8 @@ export function OrganizationLinks({ organizationId }: { organizationId: number }
     onSuccess: () => {
       setPick("");
       void qc.invalidateQueries({ queryKey: [base] });
-      // Hand-outs read the linked people from here.
-      void qc.invalidateQueries({ queryKey: ["/api/xpot/admin/tag-kits/recipients"] });
+      // The hand-out form lists the linked people (/api/xpot/admin/tag-people).
+      void qc.invalidateQueries({ queryKey: ["admin-tags"] });
     },
     onError: (error) => toast({ title: t("linksFailed"), description: describeApiError(error), variant: "destructive" }),
   });

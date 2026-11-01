@@ -61,7 +61,7 @@ test.skipIf(!enabled)("showcase: the admin keeps it, resellers read the publishe
     assert.equal(empty.status, 200, empty.text);
     assert.deepEqual(empty.json, []);
 
-    // Only the Xpot admin keeps the entries: a manager and a reseller are refused.
+    // Only the Xpot admin keeps the entries: a leftover role=manager row (sc-boss, a plain rep now) and a reseller are refused.
     const kit = { kind: "kit", title: "Starter kit", description: "Everything to start", includes: ["Stand", "48 keychains"], items: [{ sku: "KIT-POKEMON-48-STARTER", quantity: 1 }], referencePriceCents: 19900, isPublished: true, sortOrder: 1 };
     for (const who of ["sc-boss", "sc-ana"]) {
       assert.equal((await api(who, "POST", "/api/xpot/admin/tag-showcase", kit)).status, 403, who);

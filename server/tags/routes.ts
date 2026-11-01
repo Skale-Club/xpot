@@ -30,6 +30,7 @@ import { storage } from "../storage.js";
 import { resolveGoogleApiKey } from "../routes/xpot/google.js";
 import { actorOf, productionScopeOf, requireProductionUser, requireTagAdmin, requireTagManager, requireTagUser, tagScopeOf, type TagScope } from "./access.js";
 import { inManagementView, viewsAsRep } from "../routes/xpot/middleware.js";
+import { listTagPeople } from "../routes/xpot/resellerAccounts.js";
 import { registerJourneyRoutes } from "./journeyRoutes.js";
 import { createTagRedirectHandler, type PublicTag } from "./publicHandler.js";
 import { buildBatchZip, qrPng, qrSvg } from "./qrAssets.js";
@@ -50,7 +51,7 @@ import { registerShopCatalogRoutes } from "./shopCatalog.js";
 import { registerProductionRoutes } from "./productionRoutes.js";
 import { salesStorage } from "../storage-sales.js";
 import { companyOrganizationId, organizationIdForRep, printingOrganization } from "../organizations/service.js";
-import { handOutProducers, handOutRecipients } from "../organizations/links.js";
+import { handOutProducers } from "../organizations/links.js";
 import { handOutSource } from "./distribution.js";
 
 // Xpot Tags HTTP API. Four audiences:
@@ -958,6 +959,15 @@ export function registerTagRoutes(app: Express) {
     });
   }
 
+  // The people these screens hand pieces to and filter by, within the viewer's reach.
+  app.get("/api/xpot/admin/tag-people", requireTagManager, async (req, res) => {
+    try {
+      res.json(await listTagPeople(tagScopeOf(req)));
+    } catch (err) {
+      fail(res, err, "Failed to load people");
+    }
+  });
+
   // Kits: pieces handed to a reseller.
   app.get("/api/xpot/admin/tag-kits", requireTagManager, async (req, res) => {
     try {
@@ -971,17 +981,6 @@ export function registerTagRoutes(app: Express) {
       res.json(await repo.listKits(scope !== null ? { repId, scope } : { repId, organizationId: actorOf(req).inManagement ? organizationId : undefined }));
     } catch (err) {
       fail(res, err, "Failed to load kits");
-    }
-  });
-
-  // Besides their own people, who the signed-in owner may hand a kit to: the people of the organizations linked to a
-  // partner of theirs that handles its own distribution, labelled with the organization (server/tags/distribution.ts).
-  app.get("/api/xpot/admin/tag-kits/recipients", requireTagManager, async (req, res) => {
-    try {
-      const scope = tagScopeOf(req);
-      res.json(scope === null ? [] : await handOutRecipients(scope));
-    } catch (err) {
-      fail(res, err, "Failed to load who can receive kits");
     }
   });
 
@@ -1030,7 +1029,8 @@ export function registerTagRoutes(app: Express) {
   // Dry runs for Distribution: per code, whether it can be handed out / taken back now, and why not. Nothing moves.
   app.post("/api/xpot/admin/tag-kits/check", requireTagManager, async (req, res) => {
     try {
-      res.json(await repo.checkHandOut(kitCheckSchema.parse(req.body), tagScopeOf(req) ?? [await companyOrganizationId()]));
+      const scope = tagScopeOf(req);
+      res.json(await repo.checkHandOut(kitCheckSchema.parse(req.body), scope ?? [await companyOrganizationId()], scope === null));
     } catch (err) {
       fail(res, err, "Failed to check pieces");
     }

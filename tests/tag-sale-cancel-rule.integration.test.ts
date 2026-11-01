@@ -1,6 +1,7 @@
 // Who cancels a Tags sale (BACKLOG UXR-31, decided): the seller who recorded
 // it cancels their own, when they have the Visits module (POST /sales/:id/cancel
-// sits under it); a manager cancels any. Another seller of the same team cannot.
+// sits under it); the platform admin cancels any. Another seller of the same team cannot,
+// and neither can a leftover role=manager row (the Manager role is gone).
 // Against the real migrations (PGlite).
 
 import { readdirSync, readFileSync } from "fs";
@@ -32,11 +33,11 @@ const one = async (text: string, params: unknown[] = []) => (await q(text, param
 
 afterAll(async () => pg.client?.close());
 
-async function cancel(userId: string, saleId: number) {
+async function cancel(userId: string, saleId: number, isAdmin = false) {
   const server = express();
   server.use(express.json());
   server.use((req, _res, next) => {
-    (req as any).session = { userId, email: `${userId}@x.test`, firstName: userId, isAdmin: false };
+    (req as any).session = { userId, email: `${userId}@x.test`, firstName: userId, isAdmin };
     next();
   });
   server.use(VISITS_ONLY_PATHS.map((path) => `/api/xpot${path}`), requireVisitsModule);
@@ -73,14 +74,15 @@ beforeAll(async () => {
     ["ts-vera", "rep", "{visits,tags}"],
     ["ts-owen", "rep", "{visits,tags}"],
     ["ts-carla", "rep", "{tags}"],
-    ["ts-boss", "manager", "{visits,tags}"],
+    ["ts-boss", "admin", "{visits,tags}"],
+    ["ts-old", "manager", "{visits,tags}"],
   ];
   for (const [index, [userId, role, modules]] of people.entries()) {
     await q(`INSERT INTO users (id, phone, first_name) VALUES ($1, $2, $1)`, [userId, `+155590000${index}`]);
     reps[userId] = (await one(`INSERT INTO sales_reps (user_id, display_name, role, is_active, modules) VALUES ($1, $1, $2, true, $3) RETURNING id`, [userId, role, modules])).id;
   }
   organizationId = (await one(`INSERT INTO organizations (name, slug) VALUES ('Sale Team', 'sale-team') RETURNING id`)).id;
-  for (const userId of ["ts-vera", "ts-owen", "ts-carla"]) {
+  for (const userId of ["ts-vera", "ts-owen", "ts-carla", "ts-old"]) {
     await q(`INSERT INTO organization_memberships (organization_id, rep_id, role) VALUES ($1, $2, 'member')`, [organizationId, reps[userId]]);
   }
   leadId = (await one(`INSERT INTO sales_leads (organization_id, name, owner_rep_id, status) VALUES ($1, 'Corner Barber', $2, 'customer') RETURNING id`, [organizationId, reps["ts-vera"]])).id;
@@ -108,9 +110,15 @@ describe("cancelling a Tags sale", () => {
     expect(await statusOf(saleId)).toBe("completed");
   });
 
-  it("is allowed to a manager for anyone's sale", async () => {
+  it("is allowed to the platform admin for anyone's sale", async () => {
     const saleId = await tagsSale("ts-owen");
-    expect((await cancel("ts-boss", saleId)).status).toBe(200);
+    expect((await cancel("ts-boss", saleId, true)).status).toBe(200);
     expect(await statusOf(saleId)).toBe("cancelled");
+  });
+
+  it("is refused to a leftover role=manager row, like any other seller of the team", async () => {
+    const saleId = await tagsSale("ts-owen");
+    expect((await cancel("ts-old", saleId)).status).toBe(403);
+    expect(await statusOf(saleId)).toBe("completed");
   });
 });

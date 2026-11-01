@@ -47,7 +47,7 @@ export interface Reseller {
   costPolicyConfiguredAt?: string | null;
   blockedAt?: string | null;
   wholesaleCode?: string | null;
-  /** Only on the people of a linked organization (useHandOutRecipients): where they sell. */
+  /** Only on the people of a linked organization (a partner handling its own distribution hands kits to them): where they sell. */
   organizationName?: string;
 }
 
@@ -80,21 +80,8 @@ export function hasTagsModule(rep: Reseller): boolean {
 export function useResellers() {
   return useQuery<Reseller[]>({
     queryKey: [ADMIN_TAGS_KEY, "resellers"],
-    queryFn: () => getJson("/api/xpot/admin/reps"),
+    queryFn: () => getJson("/api/xpot/admin/tag-people"),
     staleTime: STALE_MS,
-  });
-}
-
-/**
- * People besides the giver's own that a partner handling its own distribution may hand kits to: the active people of
- * the organizations linked to it (server/organizations/links.ts). Empty for everyone else.
- */
-export function useHandOutRecipients() {
-  return useQuery<Reseller[]>({
-    queryKey: ["/api/xpot/admin/tag-kits/recipients"],
-    queryFn: () => getJson("/api/xpot/admin/tag-kits/recipients"),
-    staleTime: STALE_MS,
-    retry: false,
   });
 }
 
@@ -117,20 +104,17 @@ export function ResellerSelect({
   onChange,
   includeAll = false,
   includeInactive = false,
-  extra = [],
   id,
 }: {
   value: number | null;
   onChange: (id: number | null) => void;
   includeAll?: boolean;
   includeInactive?: boolean;
-  /** More people to pick, labelled with their organization (a partner's linked organizations). */
-  extra?: readonly Reseller[];
   id?: string;
 }) {
   const t = useT(manageTagsMessages);
   const { data: reps = [], isLoading } = useResellers();
-  const list = [...reps, ...extra].filter((r) => includeInactive || r.isActive || r.id === value);
+  const list = reps.filter((r) => includeInactive || r.isActive || r.id === value);
   return (
     <Select
       id={id}

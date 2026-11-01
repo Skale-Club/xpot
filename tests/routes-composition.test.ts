@@ -1,7 +1,7 @@
 // The Xpot API is many routers mounted on the same /api/xpot prefix, in order.
 // A guard a router installs with a bare `router.use(...)` therefore runs for every
 // request that reaches that router, including the ones meant for routers mounted
-// after it. That is how a manager-only guard on the admin router once returned
+// after it. That is how an admin-only guard on the admin router once returned
 // 403 to plain reps on Sales, Consignments, Products and Visit actions: each
 // router passed its own tests, mounted alone. This file mounts the real
 // composition (registerXpotRoutes) and checks who reaches what.
@@ -13,7 +13,8 @@ import { describe, expect, it, vi } from "vitest";
 const REPS = new Map<string, any>([
   ["rep", { id: 1, userId: "rep", displayName: "Rep", role: "rep", isActive: true, modules: ["visits", "tags"] }],
   ["tags-only", { id: 2, userId: "tags-only", displayName: "Reseller", role: "rep", isActive: true, modules: ["tags"] }],
-  ["manager", { id: 3, userId: "manager", displayName: "Manager", role: "manager", isActive: true, modules: ["visits"] }],
+  // A row left over from the removed Manager role: a plain rep, with no power from the column.
+  ["old-manager", { id: 3, userId: "old-manager", displayName: "Old Manager", role: "manager", isActive: true, modules: ["visits"] }],
   // A platform admin (session isAdmin) whose rep row only lists Tags: admins get every module anyway.
   ["platform-admin", { id: 4, userId: "platform-admin", displayName: "Admin", role: "rep", isActive: true, modules: ["tags"] }],
 ]);
@@ -87,25 +88,28 @@ describe("the composed /api/xpot routers", () => {
     const app = appFor("rep");
     for (const path of REP_PATHS) {
       const res = await get(app, path);
-      expect(res.message, path).not.toBe("Manager access required");
+      expect(res.message, path).not.toBe("Admin access required");
       // The visit-actions route answers 403 "Access denied" for a visit that is not the rep's own (the
-      // empty storage owns nothing): that is ownership working, not the manager guard.
+      // empty storage owns nothing): that is ownership working, not the admin guard.
       if (!path.includes("/actions")) expect([401, 403], `${path} answered ${res.status} ${res.message}`).not.toContain(res.status);
     }
   });
 
-  it("the admin paths stay manager-only", async () => {
+  it("the admin paths stay platform-admin-only", async () => {
     for (const path of ["/api/xpot/admin/overview"]) {
       expect((await get(appFor("rep"), path)).status, path).toBe(403);
-      expect((await get(appFor("manager"), path)).status, path).not.toBe(403);
+      // A leftover role=manager row is a plain rep: refused like one.
+      const leftover = await get(appFor("old-manager"), path);
+      expect([leftover.status, leftover.code], path).toEqual([403, "super_admin_only"]);
+      expect((await get(appFor("platform-admin"), path)).status, path).not.toBe(403);
     }
   });
 
   it("integrations, branding, landing content and Xphere are the global admin's alone", async () => {
     for (const path of ["/api/xpot/admin/integrations", "/api/xpot/admin/branding", "/api/xpot/admin/landing-content", "/api/xpot/admin/xphere"]) {
       expect((await get(appFor("rep"), path)).status, path).toBe(403);
-      const manager = await get(appFor("manager"), path);
-      expect([manager.status, manager.code], path).toEqual([403, "super_admin_only"]);
+      const leftover = await get(appFor("old-manager"), path);
+      expect([leftover.status, leftover.code], path).toEqual([403, "super_admin_only"]);
       expect((await get(appFor("platform-admin"), path)).status, path).not.toBe(403);
     }
   });
@@ -122,7 +126,7 @@ describe("the composed /api/xpot routers", () => {
   });
 
   it("a Tags-only reseller is refused the Visits-only APIs, by the module gate", async () => {
-    // module_off, not just 403: a misplaced manager guard also answers 403, and that is the bug #32 fixed.
+    // module_off, not just 403: a misplaced admin guard also answers 403, and that is the bug #32 fixed.
     for (const path of ["/api/xpot/sales", "/api/xpot/visits", "/api/xpot/dashboard", "/api/xpot/consignments", "/api/xpot/products"]) {
       const res = await get(appFor("tags-only"), path);
       expect([res.status, res.code], path).toEqual([403, "module_off"]);
@@ -146,8 +150,8 @@ describe("the composed /api/xpot routers", () => {
   it("deleting an account is the global admin's alone", async () => {
     const del = (user: string, body: unknown = {}) => get(appFor(user), "/api/xpot/admin/reps/1", { method: "DELETE", body: JSON.stringify(body) });
     expect((await del("rep")).status).toBe(403);
-    const manager = await del("manager", { confirm: "DELETE" });
-    expect([manager.status, manager.code]).toEqual([403, "super_admin_only"]);
+    const leftover = await del("old-manager", { confirm: "DELETE" });
+    expect([leftover.status, leftover.code]).toEqual([403, "super_admin_only"]);
     // Past the guards, the body's confirmation is still required.
     const admin = await del("platform-admin");
     expect(admin.status).toBe(400);
@@ -168,7 +172,7 @@ describe("the composed /api/xpot routers", () => {
     expect(res.status).toBe(413);
   });
 
-  it("an anonymous caller gets 401, not a manager refusal", async () => {
+  it("an anonymous caller gets 401, not an admin refusal", async () => {
     expect((await get(appFor(null), "/api/xpot/sales")).status).toBe(401);
   });
 });
