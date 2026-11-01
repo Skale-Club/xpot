@@ -120,6 +120,12 @@ test.skipIf(!enabled)("an owner manages their organization's pieces and stock, a
     assert.equal(report.status, 200, report.text);
     assert.ok(report.json.reps.every((r: { repId: number }) => r.repId !== repId["os-zed"]), "no other organization's people in the report");
 
+    const people = await api("GET", "/api/xpot/admin/tag-people", "os-ana");
+    assert.deepEqual(people.json.map((p: { displayName: string }) => p.displayName), ["OS Ana", "OS Bia"], "their own people");
+    assert.ok(people.json.every((p: { wholesaleCode: string | null; loginPhone?: string }) => p.loginPhone === undefined && (p.wholesaleCode === null || p.wholesaleCode === "set")));
+    assert.equal((await api("GET", "/api/xpot/admin/tag-people", "os-bia")).status, 403);
+    assert.ok((await api("GET", "/api/xpot/admin/tag-people", "os-admin")).json.length >= 5, "the platform sees everyone");
+
     // ── Another organization's piece reads as not found ──
     const list = (await api("GET", "/api/xpot/tags", "os-zed", undefined, manage)).json as Array<{ id: string; publicCode: string }>;
     const zedPiece = list.find((t) => t.publicCode === z1)!;

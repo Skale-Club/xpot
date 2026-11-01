@@ -34,7 +34,7 @@ export function useReps() {
   return useQuery<RepOption[]>({
     queryKey: [ADMIN_TAGS_KEY, "pickers", "reps"],
     queryFn: async () => {
-      const reps = await getJson<RepOption[]>("/api/xpot/admin/reps");
+      const reps = await getJson<RepOption[]>("/api/xpot/admin/tag-people");
       return reps
         .map((r) => ({ id: r.id, displayName: r.displayName, role: r.role, isActive: r.isActive }))
         .sort((a, b) => a.displayName.localeCompare(b.displayName));

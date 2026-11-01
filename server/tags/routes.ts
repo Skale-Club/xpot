@@ -30,6 +30,7 @@ import { storage } from "../storage.js";
 import { resolveGoogleApiKey } from "../routes/xpot/google.js";
 import { actorOf, productionScopeOf, requireProductionUser, requireTagAdmin, requireTagManager, requireTagUser, tagScopeOf, type TagScope } from "./access.js";
 import { inManagementView, viewsAsRep } from "../routes/xpot/middleware.js";
+import { listTagPeople } from "../routes/xpot/resellerAccounts.js";
 import { registerJourneyRoutes } from "./journeyRoutes.js";
 import { createTagRedirectHandler, type PublicTag } from "./publicHandler.js";
 import { buildBatchZip, qrPng, qrSvg } from "./qrAssets.js";
@@ -955,6 +956,15 @@ export function registerTagRoutes(app: Express) {
       }
     });
   }
+
+  // The people these screens hand pieces to and filter by, within the viewer's reach.
+  app.get("/api/xpot/admin/tag-people", requireTagManager, async (req, res) => {
+    try {
+      res.json(await listTagPeople(tagScopeOf(req)));
+    } catch (err) {
+      fail(res, err, "Failed to load people");
+    }
+  });
 
   // Kits: pieces handed to a reseller.
   app.get("/api/xpot/admin/tag-kits", requireTagManager, async (req, res) => {
