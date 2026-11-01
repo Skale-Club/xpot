@@ -413,6 +413,15 @@ valid for 5 minutes. A key that no lead or visit holds is never signed.
      copies, which is what actually closes the old links. Re-runnable.
      Locally, against a database you can reach: `npm run files:migrate -- <flags>`.
 
+Lead photos used to go up at the phone's full size; new ones are shrunk in the
+browser. For the ones already stored, in the same container:
+  1. `node dist/shrink-photos.cjs` (dry run: downloads and measures, writes nothing).
+  2. `node dist/shrink-photos.cjs --apply` (writes a smaller copy beside each
+     original, points the row at it).
+  3. Check the photos in the app, then `node dist/shrink-photos.cjs --delete-old`:
+     deletes the replaced originals, for good. Re-runnable.
+     Locally: `npm run files:shrink -- <flag>`.
+
 ## Deleting an account
 
 Administration › People › a blocked person › Access › **Delete account**

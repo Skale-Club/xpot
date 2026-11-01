@@ -132,7 +132,7 @@ export function LeadsTable({
         return (
           <div className="flex items-center gap-3">
             {photo ? (
-              <img src={fileSrc(photo)} alt="" className="h-9 w-9 shrink-0 rounded-lg object-cover" />
+              <img src={fileSrc(photo)} alt="" loading="lazy" decoding="async" className="h-9 w-9 shrink-0 rounded-lg object-cover" />
             ) : (
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04]">
                 <Building2 className="h-4 w-4 text-white/40" aria-hidden="true" />

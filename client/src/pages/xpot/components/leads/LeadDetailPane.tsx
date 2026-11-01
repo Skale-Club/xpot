@@ -26,7 +26,7 @@ import { LeadPiecesPanel } from "./LeadPiecesPanel";
 import { CompanyTaskButton } from "./CompanyTaskButton";
 import type { EnrichedSalesVisit, FullSalesLead } from "../../types";
 import { ModuleBadge } from "@/components/xpot/ModuleBadge";
-import { fileSrc } from "@/lib/files";
+import { fileSrc, shrinkImageForUpload } from "@/lib/files";
 import { formatCents, formatVisitWhen } from "../../utils";
 import { companyStage } from "../../visitRules";
 import { useLeadAccess } from "../../leadAccess";
@@ -60,11 +60,8 @@ function CompanyCoverPhoto({ lead }: { lead: FullSalesLead }) {
     const previous = preview;
     setUploading(true);
     try {
-      const reader = new FileReader();
-      const imageData = await new Promise<string>((resolve, reject) => {
-        reader.onload = () => resolve(String(reader.result));
-        reader.onerror = () => reject(reader.error ?? new Error(tu("photoReadFailed")));
-        reader.readAsDataURL(file);
+      const imageData = await shrinkImageForUpload(file).catch(() => {
+        throw new Error(tu("photoReadFailed"));
       });
       setPreview(imageData);
       const response = await apiRequest("POST", `/api/xpot/leads/${lead.id}/photos`, { imageData });

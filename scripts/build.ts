@@ -6,6 +6,7 @@
 //     migrate.cjs      — migration runner (the Docker image runs it before the server)
 //     migrate-files.cjs — one-time move of photos/voice notes to private storage,
 //                        run by hand in the container (README → Files)
+//     shrink-photos.cjs — shrinks the lead photos already stored, same way
 //     public/          — Vite-built static client (served by server in production)
 
 import { build as esbuild } from "esbuild";
@@ -39,6 +40,18 @@ async function buildFilesMigrate() {
     target: "node20",
     format: "cjs",
     outfile: resolve(ROOT, "dist/migrate-files.cjs"),
+    packages: "external",
+    logLevel: "info",
+  });
+
+  console.log("→ Building lead photo shrinker (esbuild) ...");
+  await esbuild({
+    entryPoints: [resolve(ROOT, "scripts/shrink-lead-photos.ts")],
+    bundle: true,
+    platform: "node",
+    target: "node20",
+    format: "cjs",
+    outfile: resolve(ROOT, "dist/shrink-photos.cjs"),
     packages: "external",
     logLevel: "info",
   });
@@ -81,7 +94,7 @@ async function main() {
   await buildMigrate();
   await buildFilesMigrate();
   buildClient();
-  console.log("\n✓ Build complete: dist/index.cjs + dist/migrate.cjs + dist/migrate-files.cjs + dist/public/");
+  console.log("\n✓ Build complete: dist/index.cjs + dist/migrate.cjs + dist/migrate-files.cjs + dist/shrink-photos.cjs + dist/public/");
 }
 
 main().catch((err) => {

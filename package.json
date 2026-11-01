@@ -18,6 +18,7 @@
     "migrate": "tsx scripts/migrate.ts",
     "db:pull": "tsx scripts/db-pull.ts",
     "files:migrate": "tsx scripts/migrate-private-files.ts",
+    "files:shrink": "tsx scripts/shrink-lead-photos.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "seo:og": "tsx scripts/generate-og-image.ts"

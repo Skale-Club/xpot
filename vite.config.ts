@@ -14,6 +14,8 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    // Read by the server to preload the home page's lazy chunk (server/seo.ts).
+    manifest: true,
     rollupOptions: {
       output: {
         manualChunks(id: string) {

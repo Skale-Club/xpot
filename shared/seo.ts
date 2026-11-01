@@ -1,5 +1,15 @@
 export const SEO_ORIGIN = "https://xpot.place";
 export const SEO_OG_IMAGE = `${SEO_ORIGIN}/og-image.png`;
+/**
+ * The home hero, shared by its <img> and the preload in the served HTML, which must match
+ * or the browser downloads it twice. It is 16:9 cropped to fill its box, so `sizes` is the
+ * width the crop needs for the box's height, not the width of the box.
+ */
+export const LANDING_HERO_IMAGE = {
+  src: "/xpot-hero-field-sales-v2-960.webp",
+  srcSet: "/xpot-hero-field-sales-v2-960.webp 960w, /xpot-hero-field-sales-v2-1280.webp 1280w, /xpot-hero-field-sales-v2.webp 1672w",
+  sizes: "(min-width: 1024px) 930px, 134vw",
+} as const;
 export const TITLE_SEPARATOR = " · ";
 
 /** One title convention for browser tabs, SEO and social metadata. */
@@ -226,6 +236,10 @@ export function renderSeoHead(pathname: string): string {
 
   return [
     `<title>${escapeHtml(seo.title)}</title>`,
+    // The hero only appears once the lazy landing chunk runs; this starts it with the HTML.
+    route.page === "home"
+      ? `<link rel="preload" as="image" href="${LANDING_HERO_IMAGE.src}" imagesrcset="${LANDING_HERO_IMAGE.srcSet}" imagesizes="${LANDING_HERO_IMAGE.sizes}" fetchpriority="high" />`
+      : "",
     meta("description", seo.description),
     meta("robots", "index, follow, max-image-preview:large"),
     `<link rel="canonical" href="${escapeHtml(seo.canonical)}" />`,

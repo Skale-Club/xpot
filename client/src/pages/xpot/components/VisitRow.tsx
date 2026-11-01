@@ -147,7 +147,7 @@ export function VisitSummaryPage({ visit, onBack, onDelete }: { visit: VisitLike
       <header className="flex flex-col gap-4 border-b border-white/[0.07] pb-5 lg:flex-row lg:items-center">
         <div className="flex min-w-0 flex-1 items-center gap-3 sm:gap-4">
           {photo ? (
-            <img src={fileSrc(photo)} alt="" className="h-12 w-12 shrink-0 rounded-xl object-cover" />
+            <img src={fileSrc(photo)} alt="" loading="lazy" decoding="async" className="h-12 w-12 shrink-0 rounded-xl object-cover" />
           ) : (
             <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-white/40">
               <Building2 className="h-5 w-5" aria-hidden="true" />

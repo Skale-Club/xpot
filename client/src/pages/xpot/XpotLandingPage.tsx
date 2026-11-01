@@ -37,7 +37,7 @@ import { interpolate, translate, useT } from "@/i18n";
 import { landingMessages } from "@/i18n/messages/landing";
 import { defaultLandingContent } from "@/lib/landingContent";
 import type { LandingContentResponse, LandingPageContent } from "@shared/landingContent";
-import { publicPagePath } from "@shared/seo";
+import { LANDING_HERO_IMAGE, publicPagePath } from "@shared/seo";
 import { usePublicSeo } from "@/lib/seo";
 
 type LandingT = ReturnType<typeof useT<typeof landingMessages.en>>;
@@ -120,12 +120,15 @@ function FieldSalesHero({ t }: { t: LandingT }) {
       <div className="relative aspect-[4/3] overflow-hidden rounded-[30px] border border-white/10 bg-[#0b1020] shadow-[0_30px_80px_rgba(0,0,0,0.55)] lg:h-full lg:aspect-auto">
         <GradientTopLine className="inset-x-10" />
         <img
-          src="/xpot-hero-field-sales-v2.webp"
+          src={LANDING_HERO_IMAGE.src}
+          srcSet={LANDING_HERO_IMAGE.srcSet}
+          sizes={LANDING_HERO_IMAGE.sizes}
           alt={t("heroImageAlt")}
           width={1672}
           height={941}
           loading="eager"
-          decoding="async"
+          // Lowercase on purpose: React 18 does not know the camelCase prop.
+          {...{ fetchpriority: "high" }}
           className="h-full w-full object-cover object-[75%_center]"
         />
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#05070f]/85 via-transparent to-[#05070f]/10" />
@@ -430,7 +433,7 @@ export function XpotLandingPage() {
 
             <motion.div
               className="lg:col-span-6 lg:h-full"
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 1, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.15 }}
             >
@@ -451,8 +454,8 @@ export function XpotLandingPage() {
                       <img
                         src={imageUrl}
                         alt=""
-                        width={1200}
-                        height={900}
+                        width={800}
+                        height={600}
                         loading="lazy"
                         decoding="async"
                         className="h-full w-full object-cover transition-transform duration-500 hover:scale-[1.02]"
@@ -509,9 +512,9 @@ export function XpotLandingPage() {
                       <img
                         src={screenshot}
                         alt={productPhoto ? title : `${title} — mobile screen with demo data`}
-                        width={productPhoto ? 1280 : 800}
-                        height={productPhoto ? 960 : 1280}
-                        loading="eager"
+                        width={productPhoto ? 960 : 520}
+                        height={productPhoto ? 720 : 832}
+                        loading="lazy"
                         decoding="async"
                         className={`absolute inset-0 h-full w-full ${imageClass}`}
                       />
@@ -568,8 +571,8 @@ export function XpotLandingPage() {
               <img
                 src="/landing/cta-route-map-v2.webp"
                 alt=""
-                width={2172}
-                height={724}
+                width={1600}
+                height={533}
                 loading="lazy"
                 decoding="async"
                 className="xpot-cta-search-map pointer-events-none absolute inset-0 h-full w-full object-cover opacity-20 brightness-95 contrast-90 saturate-50"
