@@ -22,6 +22,7 @@ import { companyOrganizationId,
   updateOrganizationMember,
   type OrganizationActor,
 } from "../../organizations/service.js";
+import { invitePerson, invitePersonSchema } from "../../organizations/invite.js";
 import { deliverKit, TagError, tagErrorBody } from "../../tags/repository.js";
 import { listAcquisitions } from "../../tags/acquisitions.js";
 import { teamActivity, teamActivitySince } from "./teamActivity.js";
@@ -53,14 +54,22 @@ function route(handler: (req: any) => Promise<unknown>, status = 200) {
   };
 }
 
+/** Making someone an owner is the platform's: a company asks, the platform grants it. */
+function assertMayGrantOwner(actor: OrganizationActor, role: unknown) {
+  if (role === "admin" && !managesEveryOrganization(actor)) {
+    throw new OrganizationError("Only the platform can make someone an owner of an organization.", 403, "owner_grant_platform_only");
+  }
+}
+
 async function assertRepAdminMayChange(actor: OrganizationActor, organizationId: number, repId: number, nextRole?: "admin" | "member") {
+  assertMayGrantOwner(actor, nextRole);
   if (managesEveryOrganization(actor)) return;
   if (actor.rep.id === repId) throw new OrganizationError("You can't change your own organization access.", 400, "organization_own_access");
-  if (nextRole === "admin") throw new OrganizationError("Only an Xpot admin or a manager can make someone org admin.", 403, "organization_admin_assign");
   const members = await listOrganizationMembers(organizationId, actor);
   const target = members.find((member) => member.repId === repId);
+  // An owner manages the employees; changing another owner is the platform's.
   if (target?.membershipRole === "admin") {
-    throw new OrganizationError("Only an Xpot admin or a manager can change an org admin.", 403, "organization_admin_change");
+    throw new OrganizationError("Only the platform can change an owner of the organization.", 403, "organization_admin_change");
   }
 }
 
@@ -101,13 +110,14 @@ export function createOrganizationsRouter() {
       repId: z.number().int().positive(),
       membershipRole: membershipRole.default("member"),
     }).strict().safeParse(req.body);
-    // Only platform management adds people (the Organizations screen offers it
-    // to them alone). A Rep Admin could otherwise pull anyone on the platform,
-    // by id, into their Organization: the newest membership is where that
-    // person's new companies and pieces land (organizationIdForRep), so the
-    // Rep Admin would then see and manage them.
+    assertMayGrantOwner(actor, req.body?.membershipRole);
+    // Adding someone by their id is the platform's. An owner could otherwise
+    // pull anyone on the platform into their Organization: the newest
+    // membership is where that person's new companies and pieces land
+    // (organizationIdForRep), so the owner would then see and manage them. An
+    // owner adds people by their phone (POST /people), who must be free to join.
     if (!managesEveryOrganization(actor)) {
-      throw new OrganizationError("An Xpot admin or a manager adds people to an organization.", 403, "organization_add_people");
+      throw new OrganizationError("Only the platform adds people by id. Add a person by their phone.", 403, "organization_add_people");
     }
     if (existing.success) {
       return addOrganizationMember(organizationId, existing.data.repId, existing.data.membershipRole, actor);
@@ -128,6 +138,10 @@ export function createOrganizationsRouter() {
     );
     return addOrganizationMember(organizationId, rep.id, role, actor);
   }, 201));
+
+  // An owner (or the platform) adds a person by name and phone: an employee, with an account made when the phone has none.
+  router.post("/organizations/:organizationId/people", route((req) =>
+    invitePerson(id.parse(req.params.organizationId), invitePersonSchema.parse(req.body), actorOf(req)), 201));
 
   router.patch("/organizations/:organizationId/members/:repId", route(async (req) => {
     const organizationId = id.parse(req.params.organizationId);

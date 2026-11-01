@@ -458,7 +458,7 @@ export async function listOrganizationCustomers(organizationId: number, actor: O
     .orderBy(desc(salesLeads.updatedAt)).limit(500);
 }
 
-async function audit(
+export async function audit(
   organizationId: number,
   action: string,
   actor: OrganizationActor,

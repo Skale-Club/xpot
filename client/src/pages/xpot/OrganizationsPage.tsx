@@ -34,6 +34,7 @@ import { tagsMessages } from "@/i18n/messages/tags";
 import { repModules } from "@shared/modules";
 import { kitCode } from "@shared/tagKits";
 import type { XpotMeResponse } from "./types";
+import { AddPersonForm } from "./components/AddPersonForm";
 
 // Account › Organizations. People are created, approved and blocked only in
 // People (/admin/reps); here an organization's members are existing people,
@@ -302,11 +303,9 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
         {tab === "overview" && <Overview organization={org} onOpen={setTab} />}
         {tab === "team" && (
           <div className="space-y-4">
-            {platformManager ? (
-              <AddExistingPerson organizationId={organizationId} members={members.data ?? []} />
-            ) : mayManageTeam ? (
-              <p className="text-xs text-white/45">{tw("addExistingManagersOnly")}</p>
-            ) : null}
+            {/* An owner adds a person by name and phone, always an employee; the platform also picks existing people and makes owners. */}
+            {mayManageTeam && <AddPersonForm organizationId={organizationId} />}
+            {platformManager && <AddExistingPerson organizationId={organizationId} members={members.data ?? []} />}
             {mayManageTeam && <p className="text-sm text-white/55">{t("teamHint")}</p>}
             {members.isLoading ? <ListSkeleton rows={3} /> : members.isError ? (
               <ErrorState message={describeApiError(members.error)} onRetry={() => void members.refetch()} />
