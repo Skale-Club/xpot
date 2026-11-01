@@ -1,12 +1,6 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "./db.js";
-import {
-  prospectingCandidates,
-  prospectingRoutes,
-  prospectingRouteStops,
-  salesLeads,
-  salesVisits,
-} from "#shared/schema.js";
+import { salesLeads, salesVisits } from "#shared/schema.js";
 import type { SalesVisitStatus } from "#shared/schema/sales.js";
 import {
   attachAdHocStop,
@@ -15,8 +9,7 @@ import {
   markBusinessVisited,
   plannedVisitOfStop,
 } from "./prospecting/route-execution.js";
-
-const OPEN_STOP_STATUSES = ["planned", "en_route", "checked_in"] as const;
+import { markStopOfVisitCheckedIn, markStopOfVisitFinished } from "./prospecting/visit-sync.js";
 
 type StartValues = {
   locationId?: number;
@@ -79,17 +72,7 @@ export async function startVisitTransaction(input: {
       updatedAt: new Date(),
     }).where(eq(salesLeads.id, input.leadId));
 
-    const [linked] = await tx.select({
-      stopId: prospectingRouteStops.id,
-      routeId: prospectingRouteStops.routeId,
-    }).from(prospectingRouteStops).where(eq(prospectingRouteStops.visitId, visit.id)).limit(1);
-    if (linked) {
-      const now = new Date();
-      await tx.update(prospectingRouteStops).set({ status: "checked_in", updatedAt: now })
-        .where(eq(prospectingRouteStops.id, linked.stopId));
-      await tx.update(prospectingRoutes).set({ status: "in_progress", startedAt: now, updatedAt: now })
-        .where(and(eq(prospectingRoutes.id, linked.routeId), eq(prospectingRoutes.status, "published")));
-    }
+    await markStopOfVisitCheckedIn(tx, visit.id);
     return visit;
   });
 }
@@ -121,33 +104,7 @@ export async function finishVisitTransaction(input: {
     }
     if (input.status !== "cancelled") await markBusinessVisited(tx, visit.repId, input.leadId);
 
-    const [linked] = await tx.select({
-      stopId: prospectingRouteStops.id,
-      routeId: prospectingRouteStops.routeId,
-      candidateId: prospectingRouteStops.candidateId,
-    }).from(prospectingRouteStops).where(eq(prospectingRouteStops.visitId, input.visitId)).limit(1);
-    if (linked) {
-      const cancelled = input.status === "cancelled";
-      const now = new Date();
-      await tx.update(prospectingRouteStops).set({
-        status: cancelled ? "skipped" : "completed",
-        skipReason: cancelled ? "visit_cancelled" : null,
-        completedAt: now,
-        updatedAt: now,
-      }).where(eq(prospectingRouteStops.id, linked.stopId));
-      if (!cancelled && linked.candidateId) {
-        await tx.update(prospectingCandidates).set({ status: "visited", updatedAt: now })
-          .where(eq(prospectingCandidates.id, linked.candidateId));
-      }
-      const [openStop] = await tx.select({ id: prospectingRouteStops.id }).from(prospectingRouteStops).where(and(
-        eq(prospectingRouteStops.routeId, linked.routeId),
-        inArray(prospectingRouteStops.status, [...OPEN_STOP_STATUSES]),
-      )).limit(1);
-      if (!openStop) {
-        await tx.update(prospectingRoutes).set({ status: "completed", completedAt: now, updatedAt: now })
-          .where(and(eq(prospectingRoutes.id, linked.routeId), inArray(prospectingRoutes.status, ["published", "in_progress"])));
-      }
-    }
+    const linked = await markStopOfVisitFinished(tx, input.visitId, input.status === "cancelled");
     // The route the visit was a stop of: check-out goes back to it for the next stop.
     return { ...visit, routeId: linked?.routeId ?? null };
   });

@@ -131,8 +131,7 @@ test("a legacy ready job with a draft route is recovered and published automatic
   expect((await one(`SELECT count(*)::int AS count FROM sales_visits WHERE source = 'prospecting-route'`)).count).toBe(2);
 });
 
-// The automation only picks up routes dated today or later (UTC). A fixed date
-// here passed on the day it was written and failed every day after.
+// The seeded jobs carry no route date, so their automatic route is dated by UTC.
 const todayUtc = () => new Date().toISOString().slice(0, 10);
 
 const routeBody = () => ({
@@ -140,33 +139,6 @@ const routeBody = () => ({
   plannedStartAt: "2026-10-13T13:00:00.000Z",
   leadIds: [seed.leadId],
   candidateIds: [seed.linked, seed.placeA, seed.placeB, seed.visited],
-});
-
-test("a published legacy automatic route removes the origin drive from its work window", async () => {
-  const created = await request("POST", "/api/xpot/prospecting/routes", {
-    ...routeBody(),
-    jobId: seed.jobId,
-    routeDate: todayUtc(),
-  });
-  const routeId = created.body.route.id;
-  expect((await request("PATCH", `/api/xpot/prospecting/routes/${routeId}/status`, { status: "published" })).status).toBe(200);
-  await q(`UPDATE prospecting_jobs SET route_planning_status = 'ready' WHERE id = $1`, [seed.jobId]);
-  const firstBefore = await one(`SELECT id, estimated_arrival_at FROM prospecting_route_stops WHERE route_id = $1 ORDER BY position LIMIT 1`, [routeId]);
-  await q(`UPDATE prospecting_route_stops
-    SET estimated_arrival_at = estimated_arrival_at + interval '60 minutes'
-    WHERE route_id = $1`, [routeId]);
-  await q(`UPDATE prospecting_route_stops SET travel_duration_seconds = 3600, travel_distance_meters = 50000 WHERE id = $1`, [firstBefore.id]);
-  await q(`UPDATE prospecting_routes SET total_duration_seconds = total_duration_seconds + 3600, total_distance_meters = total_distance_meters + 50000 WHERE id = $1`, [routeId]);
-  await q(`UPDATE prospecting_jobs SET route_planning_status = 'failed' WHERE id <> $1`, [seed.jobId]);
-
-  const { processNextAutomaticRoute } = await import("../server/prospecting/auto-route.js");
-  const rebuilt = await processNextAutomaticRoute();
-  expect(rebuilt?.route).toMatchObject({ status: "published", jobId: seed.jobId });
-  expect(rebuilt?.route.id).not.toBe(routeId);
-  expect((await one(`SELECT count(*)::int AS count FROM prospecting_routes WHERE id = $1`, [routeId])).count).toBe(0);
-  const firstRebuilt = await one(`SELECT travel_duration_seconds, travel_distance_meters FROM prospecting_route_stops WHERE route_id = $1 ORDER BY position LIMIT 1`, [rebuilt?.route.id]);
-  expect(firstRebuilt.travel_duration_seconds).toBe(0);
-  expect(firstRebuilt.travel_distance_meters).toBe(0);
 });
 
 test("the routes list says how many stops each route has and how many got a check-in", async () => {
@@ -561,4 +533,201 @@ test("a past route becomes today's route with the stops it never reached", async
 
   const again = await request("POST", `/api/xpot/prospecting/routes/${routeId}/reuse`, nextDay);
   expect(again).toMatchObject({ status: 409, body: { message: "Today's route already exists. Redo it to start a new one." } });
+});
+
+// ---- Route creation review (docs/AUDITORIA_ROTAS.md) ----
+
+const { createProspectingJobForRep } = await import("../server/prospecting/service.js");
+const { processNextAutomaticRoute } = await import("../server/prospecting/auto-route.js");
+const { mcpRouteDate } = await import("../server/mcp/tools/prospecting.js");
+
+const searchInput = (routeDate: string) => ({
+  location: "Framingham, MA",
+  routeDate,
+  searches: [{ niche: "barbershop", query: "barber shop" }],
+  filters: {},
+  shiftDurationMinutes: 480,
+});
+
+/** The engine is "configured" only for the guards; every case here is refused before anything is sent. */
+async function withEngine<T>(body: () => Promise<T>) {
+  process.env.PROSPECTING_ENGINE_URL = "http://127.0.0.1:9";
+  try {
+    return await body();
+  } finally {
+    delete process.env.PROSPECTING_ENGINE_URL;
+  }
+}
+
+test("ROT-01: the MCP tool always names the rep's day, so the daily guards apply to it", async () => {
+  expect(mcpRouteDate({ routeDate: "2026-10-13" })).toBe("2026-10-13");
+  // 01:30 UTC is still the evening before in Massachusetts.
+  expect(mcpRouteDate({}, new Date("2026-10-14T01:30:00Z"))).toBe("2026-10-13");
+  expect(mcpRouteDate({ timeZone: "Asia/Tokyo" }, new Date("2026-10-14T01:30:00Z"))).toBe("2026-10-14");
+  expect(() => mcpRouteDate({ timeZone: "Mars/Olympus" })).toThrow(/Unknown time zone/);
+
+  const route = await publishedRoute();
+  expect(route.routeId).toEqual(expect.any(Number));
+  await withEngine(async () => {
+    await expect(createProspectingJobForRep(seed.repId, searchInput("2026-10-13") as any)).rejects.toMatchObject({ status: 409 });
+  });
+});
+
+test("ROT-05: a search is refused up front when the day's routes already used the allowance", async () => {
+  for (const status of ["completed", "cancelled", "completed"]) {
+    await q(`INSERT INTO prospecting_routes (rep_id, name, route_date, status, planned_start_at, start_lat, start_lng)
+      VALUES ($1, 'Done', '2026-10-13', $2, now(), '42.3', '-71.5')`, [seed.repId, status]);
+  }
+  await withEngine(async () => {
+    await expect(createProspectingJobForRep(seed.repId, searchInput("2026-10-13") as any)).rejects.toMatchObject({ status: 429 });
+  });
+  expect((await one(`SELECT count(*)::int AS count FROM prospecting_jobs WHERE filters->>'routeDate' = '2026-10-13'`)).count).toBe(0);
+});
+
+test("ROT-02: a reuse whose optimization fails leaves the past route as it was", async () => {
+  const { routeId } = await publishedRoute();
+  await q(`UPDATE prospecting_candidates SET lat = NULL, lng = NULL`);
+  await q(`UPDATE sales_lead_locations SET lat = NULL, lng = NULL`);
+
+  const reused = await request("POST", `/api/xpot/prospecting/routes/${routeId}/reuse`, { routeDate: "2026-10-14", plannedStartAt: "2026-10-14T13:00:00.000Z" });
+  expect(reused.status).toBe(400);
+  expect((await one(`SELECT status FROM prospecting_routes WHERE id = $1`, [routeId])).status).toBe("published");
+  expect((await q(`SELECT status FROM sales_visits WHERE source = 'prospecting-route'`)).map((visit) => visit.status))
+    .toEqual(["planned", "planned"]);
+  expect((await one(`SELECT count(*)::int AS count FROM prospecting_routes`)).count).toBe(1);
+});
+
+test("ROT-03: an edit on a running route keeps what happened and never schedules the stops ahead in the past", async () => {
+  const { routeId } = await publishedRoute();
+  await addStop(routeId, { source: { kind: "candidate", candidateId: seed.unselected } });
+  const stops = (await routeStops(routeId)).stops as any[];
+  await q(`UPDATE prospecting_routes SET status = 'in_progress', planned_start_at = now() - interval '6 hours', started_at = now() - interval '6 hours' WHERE id = $1`, [routeId]);
+  await q(`UPDATE prospecting_route_stops SET status = 'completed', completed_at = now() - interval '5 hours', estimated_arrival_at = now() - interval '6 hours' WHERE id = $1`, [stops[0].id]);
+  await q(`UPDATE sales_visits SET status = 'completed', scheduled_at = now() - interval '6 hours' WHERE id = $1`, [stops[0].visitId]);
+  const before = await one(`SELECT scheduled_at FROM sales_visits WHERE id = $1`, [stops[0].visitId]);
+  const reachedBefore = await one(`SELECT estimated_arrival_at FROM prospecting_route_stops WHERE id = $1`, [stops[0].id]);
+
+  const startedAt = Date.now();
+  const reordered = await request("PATCH", `/api/xpot/prospecting/routes/${routeId}/stops/order`, { stopIds: [stops[0].id, stops[2].id, stops[1].id] });
+  expect(reordered.status).toBe(200);
+
+  expect((await one(`SELECT scheduled_at FROM sales_visits WHERE id = $1`, [stops[0].visitId])).scheduled_at).toEqual(before.scheduled_at);
+  expect((await one(`SELECT estimated_arrival_at FROM prospecting_route_stops WHERE id = $1`, [stops[0].id])).estimated_arrival_at)
+    .toEqual(reachedBefore.estimated_arrival_at);
+  const ahead = await q(`SELECT s.estimated_arrival_at, v.scheduled_at FROM prospecting_route_stops s JOIN sales_visits v ON v.id = s.visit_id
+    WHERE s.route_id = $1 AND s.status = 'planned' ORDER BY s.position`, [routeId]);
+  expect(ahead).toHaveLength(2);
+  for (const stop of ahead) {
+    expect(new Date(stop.estimated_arrival_at).getTime()).toBeGreaterThanOrEqual(startedAt - 1000);
+    expect(new Date(stop.scheduled_at).getTime()).toBe(new Date(stop.estimated_arrival_at).getTime());
+  }
+
+  // Out of order: the last stop was visited first, and the first one is still ahead.
+  await q(`UPDATE prospecting_route_stops SET status = 'planned', completed_at = NULL WHERE id = $1`, [stops[0].id]);
+  const order = (await routeStops(routeId)).stops.map((stop: any) => stop.id);
+  await q(`UPDATE prospecting_route_stops SET status = 'completed', completed_at = now() - interval '1 hour' WHERE id = $1`, [order[2]]);
+  expect((await request("PATCH", `/api/xpot/prospecting/routes/${routeId}/stops/order`, { stopIds: [order[1], order[0], order[2]] })).status).toBe(200);
+  const unreached = await q(`SELECT estimated_arrival_at FROM prospecting_route_stops WHERE route_id = $1 AND status = 'planned'`, [routeId]);
+  expect(unreached.every((stop) => new Date(stop.estimated_arrival_at).getTime() >= startedAt - 1000)).toBe(true);
+});
+
+test("ROT-04: a reuse waits for today's search, and a search never ends up silently inside another route", async () => {
+  const { routeId } = await publishedRoute();
+  await q(`INSERT INTO prospecting_jobs (rep_id, status, location, filters) VALUES ($1, 'running', 'Natick, MA', '{"routeDate":"2026-10-14"}')`, [seed.repId]);
+  const reused = await request("POST", `/api/xpot/prospecting/routes/${routeId}/reuse`, { routeDate: "2026-10-14", plannedStartAt: "2026-10-14T13:00:00.000Z" });
+  expect(reused).toMatchObject({ status: 409, body: { message: "Your current route is still being prepared." } });
+  expect((await one(`SELECT status FROM prospecting_routes WHERE id = $1`, [routeId])).status).toBe("published");
+
+  // A route of the day that is not this search's own: the search's route fails visibly instead.
+  await q(`UPDATE prospecting_routes SET route_date = $1 WHERE id = $2`, [todayUtc(), routeId]);
+  await q(`UPDATE prospecting_jobs SET route_planning_status = 'failed' WHERE id <> $1`, [seed.jobId]);
+  expect(await processNextAutomaticRoute()).toBeNull();
+  const job = await one(`SELECT route_planning_status, route_error_message FROM prospecting_jobs WHERE id = $1`, [seed.jobId]);
+  expect(job.route_planning_status).toBe("failed");
+  expect(job.route_error_message).toMatch(/Another route is already active today/);
+});
+
+test("ROT-06: the route of a search from an earlier day cannot be retried into a dead end", async () => {
+  await q(`UPDATE prospecting_jobs SET route_planning_status = 'failed', created_at = now() - interval '3 days', completed_at = now() - interval '3 days' WHERE id = $1`, [seed.jobId]);
+  const old = await request("POST", `/api/xpot/prospecting/jobs/${seed.jobId}/route/retry`, {});
+  expect(old.status).toBe(409);
+  expect(old.body.message).toMatch(/earlier day/);
+  expect((await one(`SELECT route_planning_status FROM prospecting_jobs WHERE id = $1`, [seed.jobId])).route_planning_status).toBe("failed");
+});
+
+test("ROT-07: recalculating with no active route keeps the day's finished route in the history", async () => {
+  const created = await request("POST", "/api/xpot/prospecting/routes", routeBody());
+  await q(`UPDATE prospecting_routes SET status = 'completed' WHERE id = $1`, [created.body.route.id]);
+  const rebuilt = await request("POST", "/api/xpot/prospecting/routes", { ...routeBody(), rebuild: true }, { admin: true });
+  expect(rebuilt.status).toBe(201);
+  expect((await one(`SELECT status FROM prospecting_routes WHERE id = $1`, [created.body.route.id])).status).toBe("completed");
+});
+
+test("ROT-08: a reused route belongs to no search, so no search's pipeline publishes it", async () => {
+  const { routeId } = await publishedRoute();
+  await q(`UPDATE prospecting_jobs SET route_planning_status = 'ready'`);
+  const reused = await request("POST", `/api/xpot/prospecting/routes/${routeId}/reuse`, { routeDate: "2026-10-14", plannedStartAt: "2026-10-14T13:00:00.000Z" });
+  expect(reused.status).toBe(201);
+  expect(reused.body.route).toMatchObject({ status: "draft", jobId: null });
+  await processNextAutomaticRoute();
+  expect((await one(`SELECT status FROM prospecting_routes WHERE id = $1`, [reused.body.route.id])).status).toBe("draft");
+  expect((await q(`SELECT DISTINCT route_planning_status FROM prospecting_jobs`)).map((job) => job.route_planning_status)).toEqual(["ready"]);
+});
+
+test("ROT-09: a stop skipped by hand releases its visit and business, and the last one closes the route", async () => {
+  const { routeId, stops } = await publishedRoute();
+  const all = (await routeStops(routeId)).stops as any[];
+  const knownBarber = all.find((stop) => stop.name === "Known Barber");
+  const completeEarly = await request("PATCH", `/api/xpot/prospecting/routes/${routeId}/stops/${knownBarber.id}`, { status: "completed" });
+  expect(completeEarly).toMatchObject({ status: 409, body: { message: "Finish the visit with its checkout to complete this stop." } });
+
+  for (const stop of all) {
+    const skipped = await request("PATCH", `/api/xpot/prospecting/routes/${routeId}/stops/${stop.id}`, { status: "skipped", skipReason: "closed" });
+    expect(skipped.status).toBe(200);
+  }
+  expect((await q(`SELECT status FROM sales_visits WHERE source = 'prospecting-route'`)).map((visit) => visit.status))
+    .toEqual(["cancelled", "cancelled"]);
+  expect((await one(`SELECT status FROM prospecting_candidates WHERE id = $1`, [seed.placeA])).status).toBe("discovered");
+  expect((await one(`SELECT status FROM prospecting_routes WHERE id = $1`, [routeId])).status).toBe("completed");
+  const again = await request("PATCH", `/api/xpot/prospecting/routes/${routeId}/stops/${stops[0].id}`, { status: "planned" });
+  expect(again.status).toBe(409);
+});
+
+test("ROT-13: preparing a stop reuses the organization's lead for that place instead of failing", async () => {
+  const created = await request("POST", "/api/xpot/prospecting/routes", routeBody());
+  const stop = created.body.stops.find((item: any) => item.name === "New Barber");
+  // A teammate owns the business already; the stop and its candidate never got linked.
+  await q(`INSERT INTO users (id, phone, first_name) VALUES ('teammate', '+15550000125', 'Mate')`);
+  const mate = (await one(`INSERT INTO sales_reps (user_id, display_name, role, is_active) VALUES ('teammate', 'Mate', 'rep', true) RETURNING id`)).id;
+  await q(`UPDATE sales_leads SET owner_rep_id = $1, status = 'active' WHERE id = $2`, [mate, stop.leadId]);
+  await q(`UPDATE prospecting_route_stops SET lead_id = NULL WHERE id = $1`, [stop.id]);
+  await q(`UPDATE prospecting_candidates SET lead_id = NULL WHERE id = $1`, [seed.placeA]);
+
+  const demo = await request("POST", `/api/xpot/prospecting/routes/${created.body.route.id}/stops/${stop.id}/prepare-demo`, {});
+  expect(demo).toMatchObject({ status: 201, body: { leadId: stop.leadId, placeId: "place-new" } });
+  await q(`UPDATE prospecting_route_stops SET lead_id = NULL WHERE id = $1`, [stop.id]);
+  await q(`UPDATE prospecting_candidates SET lead_id = NULL WHERE id = $1`, [seed.placeA]);
+  const checkIn = await request("POST", `/api/xpot/prospecting/routes/${created.body.route.id}/stops/${stop.id}/prepare-check-in`, {});
+  expect(checkIn).toMatchObject({ status: 201, body: { leadId: stop.leadId } });
+  expect((await one(`SELECT count(*)::int AS count FROM sales_leads WHERE google_place_id = 'place-new'`)).count).toBe(1);
+});
+
+test("ROT-17: a route of saved leads only still ends by 10 PM in the rep's zone", async () => {
+  // 9:50 PM in Massachusetts: a 20-minute visit no longer fits before 10 PM.
+  const late = { routeDate: "2026-10-12", plannedStartAt: "2026-10-13T01:50:00.000Z", leadIds: [seed.leadId] };
+  const refused = await request("POST", "/api/xpot/prospecting/routes", { ...late, timeZone: "America/New_York" });
+  expect(refused).toMatchObject({ status: 400, body: { message: "No selected prospect fits in the route's time budget." } });
+  expect((await request("POST", "/api/xpot/prospecting/routes", late)).status).toBe(201);
+});
+
+test("ROT-24: a saved lead and the same Google place found by a search become one stop", async () => {
+  await q(`UPDATE prospecting_candidates SET lead_id = NULL WHERE id = $1`, [seed.linked]);
+  const created = await request("POST", "/api/xpot/prospecting/routes", {
+    routeDate: "2026-10-13",
+    plannedStartAt: "2026-10-13T13:00:00.000Z",
+    leadIds: [seed.leadId],
+    candidateIds: [seed.linked],
+  });
+  expect(created.status).toBe(201);
+  expect(created.body.stops.map((stop: any) => stop.name)).toEqual(["Known Barber"]);
 });

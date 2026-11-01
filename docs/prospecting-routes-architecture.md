@@ -138,11 +138,29 @@ Visits started outside the route screen still land on the route
   business behind the stop. It starts that stop's planned visit, or links the new visit to the stop,
   so there is no duplicate visit and the route still closes on its own.
 - **An opportunity off the plan while a route is running** becomes an extra stop (`origin =
-  ad_hoc`, shown as "Extra") right after the last reached stop. The stops still ahead are re-timed
-  from it with the local travel model, and their planned visits move with them. No paid
-  optimization is spent.
+  ad_hoc`, shown as "Extra") right after the last reached stop.
 - **Checking out any visit marks the business visited** in every discovery list of that rep (same
   lead or same Google place), so a place visited in person is never routed again.
+
+A stop follows its visit in one place, `server/prospecting/visit-sync.ts`: check-in, checkout,
+cancellation and a stop status recorded by hand all go through it. A skipped stop releases its
+planned visit and its business; the last open stop closes the route. A stop already finished
+cannot be changed by hand, and completing a stop by hand is refused while its visit is still to
+happen (its checkout completes it).
+
+### Timing after an edit
+
+Hand edits (reorder, remove, add, replace) and extra stops are re-timed by one function,
+`retimeRouteStops` (`server/prospecting/route-editing.ts`), with a local estimate (30 km/h in a
+straight line) and no new paid optimization:
+
+- a stop already reached keeps its times, and its visit keeps its schedule;
+- the stops ahead are timed from when the rep leaves the last reached stop, and never in the past
+  while the route runs; before anything is reached the clock starts at the route's planned start;
+- the route's work time (drives plus visits) is measured against the chosen shift. An edit may go
+  over it: the rep is told by how many minutes, not stopped.
+
+Reorder, remove and add lock the route row, so two edits at once are applied one after the other.
 
 A route builds each business at most once: a discovered place linked to a selected CRM lead, or
 the same Google Place found by another job, becomes a single stop, and already visited candidates
@@ -162,11 +180,16 @@ a linked visit must belong to the stop's business.
 | POST | `/api/xpot/prospecting/jobs/:id/refresh` | Advance the queue/poller and return current details |
 | POST | `/api/xpot/prospecting/jobs/:id/retry` | Explicitly requeue this job's failed physical searches |
 | POST | `/api/xpot/prospecting/jobs/:id/cancel` | Cancel the rep's own search (running, waiting, or finished with a route not built); Status has the same for the Xpot admin at `/api/xpot/admin/system-health/jobs/:id/cancel` |
+| POST | `/api/xpot/prospecting/jobs/:id/route/retry` | Build a recent search's route again after it failed; a search from an earlier day answers 409 |
 | POST | `/api/xpot/prospecting/routes` | Build a draft from a job, candidate ids and/or owned lead ids |
+| POST | `/api/xpot/prospecting/routes/:id/reuse` | Make a past route today's draft with the stops it never reached |
+| PATCH | `/api/xpot/prospecting/routes/:id/stops/order` | Reorder the stops ahead; what already happened keeps its place |
+| POST | `/api/xpot/prospecting/routes/:id/stops` | Add a business after a stop, in place of one, or at the end |
+| DELETE | `/api/xpot/prospecting/routes/:routeId/stops/:stopId` | Take an unreached stop off the route |
 | GET | `/api/xpot/prospecting/routes` | List owned routes |
 | GET | `/api/xpot/prospecting/routes/:id` | Return a route with ordered stops |
 | PATCH | `/api/xpot/prospecting/routes/:id/status` | Publish, start, complete or cancel a route |
-| PATCH | `/api/xpot/prospecting/routes/:routeId/stops/:stopId` | Record stop execution and optional visit link |
+| PATCH | `/api/xpot/prospecting/routes/:routeId/stops/:stopId` | Record stop execution by hand, with the same effects as the visit workflow |
 
 ## Google route optimization
 
@@ -178,16 +201,32 @@ traffic, visit order, return travel, and the encoded road polyline come back in
 one response. The old deterministic Haversine optimizer remains available only
 for local environments where Google is not configured.
 
-Xpot persists the response before presenting it. A unique database index on
-`(rep_id, route_date)` and an API reuse check enforce **one optimization per
-seller per day**. Browser refreshes, retries, a second scrape, and route publish
-actions reuse that row and cannot generate a second Google optimization. The
-one exception is the platform owner (super admin, with admin mode on): they can
-recalculate today's route to test and evaluate it. The replaced route releases its
-unreached stops (`route_rebuilt`: planned visits cancelled, candidates back to
-`discovered`) and is deleted before the new optimization is stored. Any other
-`rebuild` request is refused with 403. The web map renders the stored encoded polyline with a referrer-restricted Maps
-JavaScript key; it does not call Directions or optimize the route again.
+Xpot persists the response before presenting it. Every paid step of a rep's day (accepting a
+search, optimizing a route) runs under one PostgreSQL advisory lock on `(rep, route_date)`, and
+the partial unique index `prospecting_routes_rep_date_active_unique` (migration `0048`) allows
+only one **active** route (`draft`, `published`, `in_progress`) per rep and day. Browser refreshes,
+retries, a second search and publish actions reuse the active route and never pay for a second
+optimization while it is open.
+
+A rep may build another route after finishing or cancelling the current one, up to
+`MAX_DAILY_PROSPECTING_SESSIONS` (3) a day. The allowance is counted the same way on every path
+(`dailySessionCount`, `shared/prospecting.ts`): each route of the day, plus each search of the
+day that has no route (still running, failed or cancelled). A search is refused up front when the
+allowance is used, so it never runs on the engine only to fail later on the limit. A cancelled
+route still counts; the Route screen says how many of the day's routes were used.
+
+Every route path also refuses while a search of the same day is still being prepared, so a
+search always ends with its own route: a reused route cannot take the day while a search runs,
+and a finished search that finds another active route fails visibly ("Another route is already
+active today") instead of being marked ready with no route.
+
+The platform owner (super admin, with admin mode on) can recalculate today's **active** route to
+test and evaluate it. The replaced route releases its unreached stops (`route_rebuilt`: planned
+visits cancelled, candidates back to `discovered`) and is deleted before the new optimization is
+stored. A finished route of the day is never touched. Any other `rebuild` request is refused with
+403. The web map renders the stored encoded polyline with a referrer-restricted Maps JavaScript
+key; it does not call Directions or optimize the route again. A hand edit drops the stored line,
+which no longer matches the stops.
 
 Required deployment variables:
 
@@ -206,6 +245,9 @@ All endpoints are rep-scoped and protected by the Visits module gate. Managers d
 access to another customer's queue or route through these endpoints.
 
 ## Where the day starts and ends
+
+A same-day route ends by 10 PM local time. The zone is the one the discovered businesses carry;
+a route of saved leads only uses the rep's own zone, which the app sends with the request.
 
 The route starts wherever the rep is when it is built (GPS, or the centre of the
 results when GPS is unavailable). It ends at the last visit, unless the rep turned

@@ -3,7 +3,6 @@ import { db } from "../db.js";
 import {
   prospectingCandidates,
   prospectingJobs,
-  prospectingRoutes,
   prospectingRuns,
 } from "#shared/schema.js";
 import {
@@ -15,6 +14,7 @@ import {
 import { isEngineConfigured } from "./google-maps-engine.js";
 import { tickProspectingQueueSafely } from "./queue.js";
 import { median } from "./job-status.js";
+import { lockRepDay, repDay } from "./daily-sessions.js";
 
 export class ProspectingServiceError extends Error {
   constructor(message: string, readonly status: number) {
@@ -129,34 +129,21 @@ export async function createProspectingJobForRep(repId: number, input: Prospecti
   const routeDate = input.routeDate;
 
   const job = await db.transaction(async (tx) => {
-    if (routeDate) {
-      // Serialize the limit check with automatic route creation. This makes the
-      // rule hold even across double-clicks, multiple tabs and queue workers.
-      await tx.execute(sql`select pg_advisory_xact_lock(${repId}, hashtext(${routeDate}))`);
-      const [dailyRoutes, dailyJobs] = await Promise.all([
-        tx.select({ status: prospectingRoutes.status }).from(prospectingRoutes).where(and(
-          eq(prospectingRoutes.repId, repId),
-          eq(prospectingRoutes.routeDate, routeDate),
-        )),
-        tx.select({
-          id: prospectingJobs.id,
-          status: prospectingJobs.status,
-          routePlanningStatus: prospectingJobs.routePlanningStatus,
-        }).from(prospectingJobs).where(and(
-          eq(prospectingJobs.repId, repId),
-          sql`${prospectingJobs.filters}->>'routeDate' = ${routeDate}`,
-        )),
-      ]);
-      if (dailyRoutes.some((route) => ["draft", "published", "in_progress"].includes(route.status))) {
-        throw new ProspectingServiceError("Finish your current route before creating another one.", 409);
-      }
-      if (dailyJobs.some((existing) => ["draft", "queued", "running"].includes(existing.status)
-        || ["pending", "building"].includes(existing.routePlanningStatus))) {
-        throw new ProspectingServiceError("Your current route is still being prepared.", 409);
-      }
-      if (dailyJobs.length >= MAX_DAILY_PROSPECTING_SESSIONS) {
-        throw new ProspectingServiceError(`You can create up to ${MAX_DAILY_PROSPECTING_SESSIONS} routes per day.`, 429);
-      }
+    // Serialized with route building for the same day, so the rules hold across
+    // double-clicks, several tabs and the queue worker. When the lock is held,
+    // today's route is being optimized right now: say so instead of waiting.
+    if (!(await lockRepDay(tx, repId, routeDate, { wait: false }))) {
+      throw new ProspectingServiceError("Your current route is still being prepared.", 409);
+    }
+    const day = await repDay(tx, repId, routeDate);
+    if (day.activeRoute) {
+      throw new ProspectingServiceError("Finish your current route before creating another one.", 409);
+    }
+    if (day.preparingJobs.length) {
+      throw new ProspectingServiceError("Your current route is still being prepared.", 409);
+    }
+    if (day.limitReached()) {
+      throw new ProspectingServiceError(`You can create up to ${MAX_DAILY_PROSPECTING_SESSIONS} routes per day.`, 429);
     }
     const [created] = await tx.insert(prospectingJobs).values({
       repId,
@@ -168,7 +155,7 @@ export async function createProspectingJobForRep(repId: number, input: Prospecti
       defaultVisitMinutes: TODAY_PROSPECTING_POLICY.defaultVisitMinutes,
       autoExpand: TODAY_PROSPECTING_POLICY.autoExpand,
       maxExpansionKm: TODAY_PROSPECTING_POLICY.maxExpansionKm,
-      filters: { ...input.filters, locations, ...(routeDate ? { routeDate } : {}) },
+      filters: { ...input.filters, locations, routeDate },
       hypothesis: input.hypothesis ?? null,
       idempotencyKey: input.idempotencyKey ?? null,
       status: "queued",

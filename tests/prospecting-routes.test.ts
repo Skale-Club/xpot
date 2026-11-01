@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { approximateCandidateCenter, prospectingJobCreateSchema, prospectingRouteCreateSchema, targetStopsForShift, TODAY_PROSPECTING_POLICY } from "../shared/prospecting.js";
+import { approximateCandidateCenter, dailySessionCount, prospectingJobCreateSchema, prospectingRouteCreateSchema, targetStopsForShift, TODAY_PROSPECTING_POLICY } from "../shared/prospecting.js";
 import { haversineMeters, optimizeRouteHeuristic } from "../server/prospecting/route-optimizer.js";
 import { buildGoogleOptimizeToursRequest, parseGoogleOptimizeToursResponse } from "../server/prospecting/google-route-optimizer.js";
 import { buildEngineInput, businessWebsite, depthForMaxResults, firstEmail, mapEngineStatus, parseEngineResults } from "../server/prospecting/google-maps-engine.js";
@@ -22,6 +22,7 @@ describe("prospecting contracts", () => {
   it("accepts several classified searches under one territory", () => {
     const value = prospectingJobCreateSchema.parse({
       location: "Marlborough, Massachusetts",
+      routeDate: "2026-10-13",
       searches: [
         { niche: "barbershop", query: "barber shop" },
         { niche: "hair_salon", query: "hair salon" },
@@ -39,6 +40,7 @@ describe("prospecting contracts", () => {
     const value = prospectingJobCreateSchema.parse({
       location: "New York, NY",
       locations: ["New York, NY", "Newark, NJ", "Boston, MA"],
+      routeDate: "2026-10-13",
       searches: [{ niche: "hair_salon", query: "Hair salon" }],
     });
     expect(value.locations).toEqual(["New York, NY", "Newark, NJ", "Boston, MA"]);
@@ -47,14 +49,33 @@ describe("prospecting contracts", () => {
   it("rejects multi-city entries without a state", () => {
     expect(() => prospectingJobCreateSchema.parse({
       location: "New York",
+      routeDate: "2026-10-13",
       locations: ["New York"],
       searches: [{ niche: "hair_salon", query: "Hair salon" }],
     })).toThrow();
   });
 
+  it("requires the rep's day on every search", () => {
+    expect(() => prospectingJobCreateSchema.parse({
+      location: "Marlborough, MA",
+      searches: [{ niche: "barbershop", query: "barbershop" }],
+    })).toThrow();
+  });
+
+  it("counts a day's routes and the searches that have no route yet as one allowance", () => {
+    const jobs = [{ id: 1 }, { id: 2 }, { id: 3 }];
+    // Job 1 became route A; job 2 failed (no route); route B was reused from an earlier day.
+    const routes = [{ jobId: 1 }, { jobId: null }];
+    expect(dailySessionCount({ jobs, routes })).toBe(4);
+    // While job 3's own route is built, job 3 is not counted against itself.
+    expect(dailySessionCount({ jobs, routes, excludeJobId: 3 })).toBe(3);
+    expect(dailySessionCount({ jobs: [], routes: [] })).toBe(0);
+  });
+
   it("collapses repeated sectors into one search", () => {
     const value = prospectingJobCreateSchema.parse({
       location: "Marlborough, MA",
+      routeDate: "2026-10-13",
       searches: [
         { niche: "hair_salon", query: "Hair salon" },
         { niche: "barbershop", query: "barbershop" },

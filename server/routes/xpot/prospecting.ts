@@ -14,6 +14,7 @@ import {
 } from "#shared/schema.js";
 import {
   MAX_DAILY_PROSPECTING_SESSIONS,
+  ROUTE_MAX_STOPS,
   prospectingJobCreateSchema,
   prospectingRouteCreateSchema,
   type ProspectingRouteCreateInput,
@@ -42,18 +43,17 @@ import { pushPublicKey, savePushSubscription } from "../../push-notifications.js
 import { retryAutomaticRoute } from "../../prospecting/auto-route.js";
 import { openWindowsOn, secondsUntilDayEnd } from "../../prospecting/opening-hours.js";
 import { ensureProspectingCandidateLead } from "../../prospecting/lead-materializer.js";
-import { defaultGeofenceRadiusSql } from "../../lead-location.js";
-import { publishProspectingRouteForRep } from "../../prospecting/route-publisher.js";
+import { materializeStopVisit, publishProspectingRouteForRep } from "../../prospecting/route-publisher.js";
 import {
   addRouteStop,
   EDITABLE_ROUTE_STATUSES,
-  isUnreached,
-  overtimeMinutes,
-  persistLocalStopOrder,
-  releaseStop,
+  removeRouteStop,
+  reorderRouteStops,
   RouteEditError,
   UNREACHED_STOP_STATUSES,
 } from "../../prospecting/route-editing.js";
+import { isActiveRoute, lockRepDay, repDay } from "../../prospecting/daily-sessions.js";
+import { checkInStop, finishStop } from "../../prospecting/visit-sync.js";
 
 function lifecycleScore(lead: Awaited<ReturnType<typeof storage.getSalesLead>>): { score: number; reasons: string[] } {
   if (!lead) return { score: 0, reasons: [] };
@@ -76,6 +76,12 @@ function lifecycleScore(lead: Awaited<ReturnType<typeof storage.getSalesLead>>):
 
 class NoProspectingStopFitsError extends Error {}
 class DailyRouteLimitError extends Error {}
+/** Today's route is being prepared right now (a search or another optimization holds the day). */
+class RouteBeingPreparedError extends Error {}
+
+/** Lists are bounded until they get real paging (BACKLOG PRF-02). */
+const JOB_LIST_LIMIT = 100;
+const ROUTE_LIST_LIMIT = 200;
 
 /** A path id that is not a positive integer can't match a row; answer 404, not a SQL error. */
 function pathId(value: string) {
@@ -133,20 +139,13 @@ export function createProspectingRouter() {
     const actor = (req as any).xpotActor as NonNullable<Awaited<ReturnType<typeof ensureXpotRep>>>;
     res.json(await db.select().from(prospectingJobs)
       .where(eq(prospectingJobs.repId, actor.rep.id))
-      .orderBy(desc(prospectingJobs.createdAt)));
+      .orderBy(desc(prospectingJobs.createdAt))
+      .limit(JOB_LIST_LIMIT));
   });
 
   router.post("/prospecting/jobs", async (req, res) => {
     const actor = (req as any).xpotActor as NonNullable<Awaited<ReturnType<typeof ensureXpotRep>>>;
     const input = prospectingJobCreateSchema.parse(req.body);
-
-    if (input.idempotencyKey) {
-      const [existing] = await db.select().from(prospectingJobs).where(and(
-        eq(prospectingJobs.repId, actor.rep.id),
-        eq(prospectingJobs.idempotencyKey, input.idempotencyKey),
-      )).limit(1);
-      if (existing) return res.status(200).json(await prospectingJobDetails(existing.id, actor.rep.id));
-    }
     try {
       const result = await createProspectingJobForRep(actor.rep.id, input);
       return res.status(result.reused ? 200 : 202).json(result.details);
@@ -205,9 +204,12 @@ export function createProspectingRouter() {
     const actor = (req as any).xpotActor as NonNullable<Awaited<ReturnType<typeof ensureXpotRep>>>;
     const jobId = pathId(req.params.id);
     const retried = jobId ? await retryAutomaticRoute(jobId, actor.rep.id) : null;
-    if (!retried) return res.status(409).json({ message: "This route is not ready to retry." });
+    if (retried?.outcome === "expired") {
+      return res.status(409).json({ message: "This search is from an earlier day. Start a new search, or reuse its route if it has one." });
+    }
+    if (retried?.outcome !== "retried") return res.status(409).json({ message: "This route is not ready to retry." });
     void tickProspectingQueueSafely();
-    return res.status(202).json(await prospectingJobDetails(retried.id, actor.rep.id));
+    return res.status(202).json(await prospectingJobDetails(retried.job.id, actor.rep.id));
   });
 
   router.get("/prospecting/routes", async (req, res) => {
@@ -221,15 +223,21 @@ export function createProspectingRouter() {
       visitedStopCount: sql<number>`(select count(*)::int from prospecting_route_stops s where s.route_id = "prospecting_routes"."id" and s.status in ('checked_in', 'completed'))`,
     }).from(prospectingRoutes)
       .where(eq(prospectingRoutes.repId, actor.rep.id))
-      .orderBy(desc(prospectingRoutes.routeDate), desc(prospectingRoutes.createdAt));
+      .orderBy(desc(prospectingRoutes.routeDate), desc(prospectingRoutes.createdAt))
+      .limit(ROUTE_LIST_LIMIT);
     res.json(rows.map(({ route, stopCount, visitedStopCount }) => ({ ...route, stopCount, visitedStopCount })));
   });
 
   type Actor = NonNullable<Awaited<ReturnType<typeof ensureXpotRep>>>;
   const reply = (status: number, body: unknown) => ({ status, body });
 
-  /** Builds (or returns) a rep's route for a day; shared by a new route and a reused one. */
-  async function createRoute(actor: Actor, input: ProspectingRouteCreateInput) {
+  /**
+   * Builds (or returns) a rep's route for a day; shared by a new route and a
+   * reused one. `replacesRouteId` is the past route a reuse takes over: it is
+   * closed inside the same transaction as the new optimization, so a failed
+   * optimization leaves it exactly as it was.
+   */
+  async function createRoute(actor: Actor, input: ProspectingRouteCreateInput, options: { replacesRouteId?: number } = {}) {
     if (input.jobId !== undefined) {
       const [ownedJob] = await db.select({ id: prospectingJobs.id, status: prospectingJobs.status })
         .from(prospectingJobs).where(and(
@@ -247,29 +255,27 @@ export function createProspectingRouter() {
       return reply(403, { message: "Only the account owner can recalculate today's route." });
     }
     const rebuild = input.rebuild && actor.user.isAdmin;
-    const dailyRoutes = await db.select().from(prospectingRoutes).where(and(
-      eq(prospectingRoutes.repId, actor.rep.id),
-      eq(prospectingRoutes.routeDate, input.routeDate),
-    )).orderBy(desc(prospectingRoutes.createdAt));
-    const existingRoute = dailyRoutes.find((route) => ["draft", "published", "in_progress"].includes(route.status));
+    const existingRoute = (await repDay(db, actor.rep.id, input.routeDate)).activeRoute;
     if (existingRoute && !rebuild) {
       const existingStops = await db.select().from(prospectingRouteStops)
         .where(eq(prospectingRouteStops.routeId, existingRoute.id))
         .orderBy(asc(prospectingRouteStops.position));
       return reply(200, { route: existingRoute, stops: existingStops, reused: true });
     }
-    if (!rebuild && dailyRoutes.length >= MAX_DAILY_PROSPECTING_SESSIONS) {
-      return reply(429, { message: `You can create up to ${MAX_DAILY_PROSPECTING_SESSIONS} routes per day.` });
-    }
+    // Only the selected leads are loaded, never the rep's whole lead list.
     const uniqueLeadIds = Array.from(new Set(input.leadIds));
-    const leads = (await storage.listSalesLeads({ ownerRepId: actor.rep.id }))
-      .filter((lead) => uniqueLeadIds.includes(lead.id) && !["customer", "inactive"].includes(lead.status));
+    const leads = uniqueLeadIds.length ? await db.select().from(salesLeads).where(and(
+      inArray(salesLeads.id, uniqueLeadIds),
+      eq(salesLeads.ownerRepId, actor.rep.id),
+      notInArray(salesLeads.status, ["customer", "inactive"]),
+    )) : [];
     const locations = await storage.listSalesLeadLocationsBatch(leads.map((lead) => lead.id));
     const locationByLead = new Map<number, (typeof locations)[number]>();
     for (const location of locations) {
       if (location.isPrimary || !locationByLead.has(location.leadId)) locationByLead.set(location.leadId, location);
     }
 
+    // Leads go by their own id, discovered businesses by the negative of theirs.
     const missingCoordinates: number[] = [];
     const candidates: RouteCandidate[] = [];
     for (const lead of leads) {
@@ -320,9 +326,12 @@ export function createProspectingRouter() {
         )).orderBy(desc(prospectingCandidates.score), asc(prospectingCandidates.id))
       : [];
     // One business, one stop: a discovered place linked to a selected CRM lead,
-    // or found again by another job, would otherwise be visited twice.
+    // the same Google place as a selected lead, or found again by another job,
+    // would otherwise be visited twice.
     const routedLeadIds = new Set(candidates.map((candidate) => candidate.leadId));
-    const routedPlaceIds = new Set<string>();
+    const routedPlaceIds = new Set(leads.flatMap((lead) => lead.googlePlaceId && candidates.some((candidate) => candidate.leadId === lead.id)
+      ? [lead.googlePlaceId]
+      : []));
     for (const candidate of discovered) {
       if (candidate.leadId && routedLeadIds.has(candidate.leadId)) continue;
       if (candidate.googlePlaceId && routedPlaceIds.has(candidate.googlePlaceId)) continue;
@@ -353,8 +362,10 @@ export function createProspectingRouter() {
     }
 
     const plannedStartAt = new Date(input.plannedStartAt);
-    // Same-day routes end by 10 PM where the businesses are.
-    const dayLeftSeconds = secondsUntilDayEnd(discovered.find((candidate) => candidate.timeZone)?.timeZone, plannedStartAt);
+    // Same-day routes end by 10 PM where the businesses are; a route of saved
+    // leads only (no business carries a zone) uses the rep's own zone.
+    const routeTimeZone = discovered.map((candidate) => candidate.timeZone).find(Boolean) ?? input.timeZone;
+    const dayLeftSeconds = secondsUntilDayEnd(routeTimeZone, plannedStartAt);
     const shiftDurationSeconds = Math.min(input.shiftDurationMinutes * 60, dayLeftSeconds ?? Infinity);
     let organizationId: number;
     try {
@@ -368,27 +379,38 @@ export function createProspectingRouter() {
     let result;
     try {
       result = await db.transaction(async (tx) => {
-        // The database lock covers the external request. Without it, two
+        // The day's lock covers the external request. Without it, two
         // simultaneous clicks could both be billed before the unique insert.
-        await tx.execute(sql`select pg_advisory_xact_lock(${actor.rep.id}, hashtext(${input.routeDate}))`);
-        const lockedRoutes = await tx.select().from(prospectingRoutes).where(and(
-          eq(prospectingRoutes.repId, actor.rep.id),
-          eq(prospectingRoutes.routeDate, input.routeDate),
-        )).orderBy(desc(prospectingRoutes.createdAt));
-        const lockedActive = lockedRoutes.find((route) => ["draft", "published", "in_progress"].includes(route.status));
-        const lockedExisting = lockedActive ?? lockedRoutes[0];
-        if (lockedExisting && rebuild) {
-          // The old route's unreached visits leave the agenda and its businesses
-          // return to the pool before the new optimization takes the day.
-          await releaseUnvisitedStops(tx, lockedExisting.id, "route_rebuilt", new Date());
-          await tx.delete(prospectingRoutes).where(eq(prospectingRoutes.id, lockedExisting.id));
-        } else if (lockedActive) {
+        // When it is held, the day's route is being prepared right now.
+        if (!(await lockRepDay(tx, actor.rep.id, input.routeDate, { wait: false }))) throw new RouteBeingPreparedError();
+        const day = await repDay(tx, actor.rep.id, input.routeDate);
+        if (day.activeRoute && rebuild) {
+          // Only an active route is replaced. Its unreached visits leave the
+          // agenda and its businesses return to the pool before the new
+          // optimization takes the day; a finished route stays in the history.
+          await releaseUnvisitedStops(tx, day.activeRoute.id, "route_rebuilt", new Date());
+          await tx.delete(prospectingRoutes).where(eq(prospectingRoutes.id, day.activeRoute.id));
+        } else if (day.activeRoute) {
           const existingStops = await tx.select().from(prospectingRouteStops)
-            .where(eq(prospectingRouteStops.routeId, lockedActive.id))
+            .where(eq(prospectingRouteStops.routeId, day.activeRoute.id))
             .orderBy(asc(prospectingRouteStops.position));
-          return { route: lockedActive, stops: existingStops, reused: true as const };
-        } else if (lockedRoutes.length >= MAX_DAILY_PROSPECTING_SESSIONS) {
-          throw new DailyRouteLimitError();
+          return { route: day.activeRoute, stops: existingStops, reused: true as const };
+        } else if (!rebuild) {
+          // A search of the day still running would end up with no route of its own.
+          if (day.preparingJobs.some((job) => job.id !== input.jobId)) throw new RouteBeingPreparedError();
+          if (day.limitReached(input.jobId)) throw new DailyRouteLimitError();
+        }
+        if (options.replacesRouteId !== undefined) {
+          const [replaced] = await tx.select().from(prospectingRoutes).where(and(
+            eq(prospectingRoutes.id, options.replacesRouteId),
+            eq(prospectingRoutes.repId, actor.rep.id),
+          )).limit(1).for("update");
+          if (replaced && isActiveRoute(replaced)) {
+            const now = new Date();
+            await releaseUnvisitedStops(tx, replaced.id, "route_reused", now);
+            await tx.update(prospectingRoutes).set({ status: "cancelled", updatedAt: now })
+              .where(eq(prospectingRoutes.id, replaced.id));
+          }
         }
 
         const optimized = await optimizeRouteWithGoogle({
@@ -402,7 +424,10 @@ export function createProspectingRouter() {
 
         const [route] = await tx.insert(prospectingRoutes).values({
           repId: actor.rep.id,
-          jobId: input.jobId ?? discovered[0]?.jobId ?? null,
+          // Only a route built for a search belongs to it. A route of hand-picked
+          // or reused businesses has none, so the search's automatic pipeline
+          // never mistakes it for its own.
+          jobId: input.jobId ?? null,
           name: input.name ?? `Route — ${input.routeDate}`,
           routeDate: input.routeDate,
           plannedStartAt,
@@ -474,6 +499,9 @@ export function createProspectingRouter() {
       if (error instanceof DailyRouteLimitError) {
         return reply(429, { message: `You can create up to ${MAX_DAILY_PROSPECTING_SESSIONS} routes per day.` });
       }
+      if (error instanceof RouteBeingPreparedError) {
+        return reply(409, { message: "Your current route is still being prepared." });
+      }
       throw error;
     }
     if ("reused" in result) return reply(200, result);
@@ -510,30 +538,24 @@ export function createProspectingRouter() {
     if (!notVisited.length) {
       return res.status(409).json({ message: "Every stop of this route was already visited." });
     }
-    const todayRoutes = await db.select({ status: prospectingRoutes.status }).from(prospectingRoutes).where(and(
-      eq(prospectingRoutes.repId, actor.rep.id),
-      eq(prospectingRoutes.routeDate, input.routeDate),
-    ));
-    if (todayRoutes.some((today) => (EDITABLE_ROUTE_STATUSES as readonly string[]).includes(today.status))) {
+    const today = await repDay(db, actor.rep.id, input.routeDate);
+    if (today.activeRoute) {
       return res.status(409).json({ message: "Today's route already exists. Redo it to start a new one." });
     }
-    if (todayRoutes.length >= MAX_DAILY_PROSPECTING_SESSIONS) {
+    if (today.preparingJobs.length) {
+      return res.status(409).json({ message: "Your current route is still being prepared." });
+    }
+    if (today.limitReached()) {
       return res.status(429).json({ message: `You can create up to ${MAX_DAILY_PROSPECTING_SESSIONS} routes per day.` });
     }
-    // A past route left open closes first: its old planned visits leave the
-    // agenda and its businesses go back to the pool the new route draws from.
-    if ((EDITABLE_ROUTE_STATUSES as readonly string[]).includes(route.status)) {
-      await db.transaction(async (tx) => {
-        const now = new Date();
-        await releaseUnvisitedStops(tx, route.id, "route_reused", now);
-        await tx.update(prospectingRoutes).set({ status: "cancelled", updatedAt: now })
-          .where(eq(prospectingRoutes.id, route.id));
-      });
-    }
     const shiftMinutes = Number((route.optimizationMeta as Record<string, unknown> | null)?.shiftDurationMinutes);
+    // A past route left open closes inside the new route's transaction (its old
+    // planned visits leave the agenda, its businesses go back to the pool the
+    // new route draws from), so a failed optimization keeps it as it was.
     const result = await createRoute(actor, {
       routeDate: input.routeDate,
       plannedStartAt: input.plannedStartAt,
+      timeZone: input.timeZone,
       // The discovered businesses go by candidate so their opening hours still count.
       candidateIds: notVisited.flatMap((stop) => stop.candidateId ? [stop.candidateId] : []),
       leadIds: notVisited.flatMap((stop) => !stop.candidateId && stop.leadId ? [stop.leadId] : []),
@@ -541,7 +563,7 @@ export function createProspectingRouter() {
       shiftDurationMinutes: Number.isFinite(shiftMinutes) ? Math.min(16 * 60, Math.max(30, shiftMinutes)) : 8 * 60,
       defaultVisitMinutes: route.defaultVisitMinutes,
       rebuild: false,
-    });
+    }, { replacesRouteId: route.id });
     res.status(result.status).json(result.body);
   });
 
@@ -574,10 +596,8 @@ export function createProspectingRouter() {
       googlePlaceId: salesLeads.googlePlaceId,
       phone: salesLeads.phone,
       website: salesLeads.website,
-    }).from(salesLeads).where(and(
-      eq(salesLeads.ownerRepId, actor.rep.id),
-      inArray(salesLeads.id, leadIds),
-    )) : [];
+    // The leads of the rep's own stops, whoever in the organization owns them.
+    }).from(salesLeads).where(inArray(salesLeads.id, leadIds)) : [];
     const candidateById = new Map(candidates.map((candidate) => [candidate.id, candidate]));
     const leadById = new Map(leads.map((lead) => [lead.id, lead]));
     res.json({
@@ -601,63 +621,30 @@ export function createProspectingRouter() {
     const actor = (req as any).xpotActor as NonNullable<Awaited<ReturnType<typeof ensureXpotRep>>>;
     const routeId = pathId(req.params.id);
     const input = prospectingRouteReorderSchema.parse(req.body);
-    const [route] = routeId ? await db.select().from(prospectingRoutes).where(and(
-      eq(prospectingRoutes.id, routeId),
-      eq(prospectingRoutes.repId, actor.rep.id),
-    )).limit(1) : [];
-    if (!route) return res.status(404).json({ message: "Route not found" });
-    if (!(EDITABLE_ROUTE_STATUSES as readonly string[]).includes(route.status)) {
-      return res.status(409).json({ message: "A finished route can no longer be edited." });
+    if (!routeId) return res.status(404).json({ message: "Route not found" });
+    try {
+      // Over the chosen hours is allowed: the rep is told how far over, not stopped.
+      const { overtimeMinutes } = await reorderRouteStops({ routeId, repId: actor.rep.id, stopIds: input.stopIds });
+      return res.json({ reordered: true, overtimeMinutes });
+    } catch (error) {
+      if (error instanceof RouteEditError) return res.status(error.status).json({ message: error.message });
+      throw error;
     }
-
-    const stops = await db.select().from(prospectingRouteStops)
-      .where(eq(prospectingRouteStops.routeId, route.id))
-      .orderBy(asc(prospectingRouteStops.position));
-    const knownIds = new Set(stops.map((stop) => stop.id));
-    if (input.stopIds.length !== stops.length || input.stopIds.some((id) => !knownIds.has(id))) {
-      return res.status(400).json({ message: "The new order must contain every route stop exactly once." });
-    }
-    // A running route keeps what already happened where it happened; only the stops ahead move.
-    if (stops.some((stop, index) => !isUnreached(stop) && input.stopIds[index] !== stop.id)) {
-      return res.status(409).json({ message: "A visit that already happened keeps its place in the route." });
-    }
-
-    const byId = new Map(stops.map((stop) => [stop.id, stop]));
-    const ordered = input.stopIds.map((id) => byId.get(id)!);
-    // Over the chosen hours is allowed: the rep is told how far over, not stopped.
-    const { elapsedSeconds } = await db.transaction((tx) => persistLocalStopOrder(tx, route, ordered, actor.rep.id, "reordered"));
-    return res.json({ reordered: true, overtimeMinutes: overtimeMinutes(route, elapsedSeconds) });
   });
 
   router.delete("/prospecting/routes/:routeId/stops/:stopId", async (req, res) => {
     const actor = (req as any).xpotActor as NonNullable<Awaited<ReturnType<typeof ensureXpotRep>>>;
     const routeId = pathId(req.params.routeId);
     const stopId = pathId(req.params.stopId);
-    const [route] = routeId ? await db.select().from(prospectingRoutes).where(and(
-      eq(prospectingRoutes.id, routeId),
-      eq(prospectingRoutes.repId, actor.rep.id),
-    )).limit(1) : [];
-    if (!route) return res.status(404).json({ message: "Route not found" });
-    if (!(EDITABLE_ROUTE_STATUSES as readonly string[]).includes(route.status)) {
-      return res.status(409).json({ message: "A finished route can no longer be edited." });
+    if (!routeId) return res.status(404).json({ message: "Route not found" });
+    if (!stopId) return res.status(404).json({ message: "Route stop not found" });
+    try {
+      await removeRouteStop({ routeId, repId: actor.rep.id, stopId });
+      return res.json({ removed: true });
+    } catch (error) {
+      if (error instanceof RouteEditError) return res.status(error.status).json({ message: error.message });
+      throw error;
     }
-    const stops = await db.select().from(prospectingRouteStops)
-      .where(eq(prospectingRouteStops.routeId, route.id))
-      .orderBy(asc(prospectingRouteStops.position));
-    const stop = stops.find((item) => item.id === stopId);
-    if (!stop) return res.status(404).json({ message: "Route stop not found" });
-    if (!isUnreached(stop)) {
-      return res.status(409).json({ message: "A visit that already started cannot be removed from the route." });
-    }
-    if (stops.length === 1) {
-      return res.status(409).json({ message: "A route must keep at least one stop." });
-    }
-
-    await db.transaction(async (tx) => {
-      await releaseStop(tx, stop, actor.rep.id);
-      await persistLocalStopOrder(tx, route, stops.filter((item) => item.id !== stop.id), actor.rep.id, "stop_removed");
-    });
-    return res.json({ removed: true });
   });
 
   router.post("/prospecting/routes/:id/stops", async (req, res) => {
@@ -675,189 +662,105 @@ export function createProspectingRouter() {
     }
   });
 
-  router.post("/prospecting/routes/:id/stops/:stopId/prepare-demo", async (req, res) => {
-    const actor = (req as any).xpotActor as NonNullable<Awaited<ReturnType<typeof ensureXpotRep>>>;
-    const routeId = pathId(req.params.id);
-    const stopId = pathId(req.params.stopId);
+  /** The rep's route stop with the discovered business behind it, if any. */
+  async function routeStopWithCandidate(actor: Actor, routeIdParam: string, stopIdParam: string) {
+    const routeId = pathId(routeIdParam);
+    const stopId = pathId(stopIdParam);
     const [route] = routeId ? await db.select().from(prospectingRoutes).where(and(
       eq(prospectingRoutes.id, routeId),
       eq(prospectingRoutes.repId, actor.rep.id),
     )).limit(1) : [];
-    if (!route || !stopId) return res.status(404).json({ message: "Route stop not found" });
+    if (!route || !stopId) return null;
     const [stop] = await db.select().from(prospectingRouteStops).where(and(
       eq(prospectingRouteStops.id, stopId),
       eq(prospectingRouteStops.routeId, route.id),
     )).limit(1);
-    if (!stop) return res.status(404).json({ message: "Route stop not found" });
+    if (!stop) return null;
     const [candidate] = stop.candidateId ? await db.select().from(prospectingCandidates).where(and(
       eq(prospectingCandidates.id, stop.candidateId),
       eq(prospectingCandidates.repId, actor.rep.id),
     )).limit(1) : [undefined];
-    let leadId = stop.leadId ?? candidate?.leadId ?? null;
-    const [existingLead] = leadId ? await db.select({ googlePlaceId: salesLeads.googlePlaceId }).from(salesLeads).where(and(
-      eq(salesLeads.id, leadId),
-      eq(salesLeads.ownerRepId, actor.rep.id),
-    )).limit(1) : [undefined];
-    let organizationId: number | null = null;
-    if (!leadId) {
-      try {
-        organizationId = await organizationIdForRep(actor.rep.id);
-      } catch (error) {
-        if (error instanceof OrganizationError) return res.status(error.status).json(refusalBody(error));
-        throw error;
-      }
-    }
-    const prepared = await db.transaction(async (tx) => {
-      if (!leadId && candidate?.googlePlaceId) {
-        const [existing] = await tx.select({ id: salesLeads.id }).from(salesLeads).where(and(
-          eq(salesLeads.ownerRepId, actor.rep.id),
-          eq(salesLeads.googlePlaceId, candidate.googlePlaceId),
-        )).limit(1);
-        leadId = existing?.id ?? null;
-      }
-      if (!leadId && candidate) {
-        const [lead] = await tx.insert(salesLeads).values({
-          organizationId: organizationId!, name: candidate.name, website: candidate.website,
-          phone: candidate.phone, email: candidate.email, industry: candidate.industry,
-          source: "prospecting", status: "lead", ownerRepId: actor.rep.id,
-          territoryName: route.name, googlePlaceId: candidate.googlePlaceId,
-        }).returning({ id: salesLeads.id });
-        leadId = lead.id;
-        await tx.insert(salesLeadLocations).values({
-          leadId, addressLine1: candidate.address || "Prospecting location", city: candidate.city,
-          state: candidate.state, postalCode: candidate.postalCode, country: candidate.country || "US",
-          lat: candidate.lat, lng: candidate.lng, isPrimary: true,
-          geofenceRadiusMeters: defaultGeofenceRadiusSql(),
+    return { route, stop, candidate: candidate ?? null };
+  }
+
+  /** The organization a new lead goes into, only asked for when the stop has no lead yet. */
+  async function organizationForNewLead(actor: Actor, knownLeadId: number | null) {
+    return knownLeadId ? null : organizationIdForRep(actor.rep.id);
+  }
+
+  // The plaque demo and the company page need the stop's business as a CRM
+  // lead, with no visit. The lead is found or created the one way every route
+  // path uses (ensureProspectingCandidateLead: one lead per Google place in the
+  // organization, safe under concurrent taps).
+  router.post("/prospecting/routes/:id/stops/:stopId/prepare-demo", async (req, res) => {
+    const actor = (req as any).xpotActor as NonNullable<Awaited<ReturnType<typeof ensureXpotRep>>>;
+    const found = await routeStopWithCandidate(actor, req.params.id, req.params.stopId);
+    if (!found) return res.status(404).json({ message: "Route stop not found" });
+    const { route, stop, candidate } = found;
+    const knownLeadId = stop.leadId ?? candidate?.leadId ?? null;
+    if (!knownLeadId && !candidate) return res.status(409).json({ message: "This stop has no business attached." });
+    try {
+      const organizationId = await organizationForNewLead(actor, knownLeadId);
+      const leadId = await db.transaction(async (tx) => {
+        const resolved = knownLeadId ?? await ensureProspectingCandidateLead(tx, {
+          candidateId: candidate!.id,
+          repId: actor.rep.id,
+          organizationId: organizationId!,
+          territoryName: route.name,
         });
-      }
-      if (!leadId) throw new Error("Route stop has no lead");
-      if (candidate) {
-        await tx.update(prospectingCandidates).set({ leadId, updatedAt: new Date() })
-          .where(eq(prospectingCandidates.id, candidate.id));
-      }
-      await tx.update(prospectingRouteStops).set({ leadId, updatedAt: new Date() })
-        .where(eq(prospectingRouteStops.id, stop.id));
-      return { leadId, name: stop.name, placeId: candidate?.googlePlaceId ?? existingLead?.googlePlaceId ?? null };
-    });
-    return res.status(201).json(prepared);
+        if (candidate && !candidate.leadId) {
+          await tx.update(prospectingCandidates).set({ leadId: resolved, updatedAt: new Date() })
+            .where(eq(prospectingCandidates.id, candidate.id));
+        }
+        await tx.update(prospectingRouteStops).set({ leadId: resolved, updatedAt: new Date() })
+          .where(eq(prospectingRouteStops.id, stop.id));
+        return resolved;
+      });
+      const [lead] = await db.select({ googlePlaceId: salesLeads.googlePlaceId }).from(salesLeads)
+        .where(eq(salesLeads.id, leadId)).limit(1);
+      return res.status(201).json({ leadId, name: stop.name, placeId: candidate?.googlePlaceId ?? lead?.googlePlaceId ?? null });
+    } catch (error) {
+      if (error instanceof OrganizationError) return res.status(error.status).json(refusalBody(error));
+      throw error;
+    }
   });
 
+  // A stop checked in straight from the route gets its planned visit (once),
+  // the same way publishing gives one to every stop.
   router.post("/prospecting/routes/:id/stops/:stopId/prepare-check-in", async (req, res) => {
     const actor = (req as any).xpotActor as NonNullable<Awaited<ReturnType<typeof ensureXpotRep>>>;
-    const routeId = pathId(req.params.id);
-    const stopId = pathId(req.params.stopId);
-    const [route] = routeId ? await db.select().from(prospectingRoutes).where(and(
-      eq(prospectingRoutes.id, routeId),
-      eq(prospectingRoutes.repId, actor.rep.id),
-    )).limit(1) : [];
-    if (!route || !stopId) return res.status(404).json({ message: "Route stop not found" });
-
-    const [stop] = await db.select().from(prospectingRouteStops).where(and(
-      eq(prospectingRouteStops.id, stopId),
-      eq(prospectingRouteStops.routeId, route.id),
-    )).limit(1);
-    if (!stop || !["planned", "en_route"].includes(stop.status)) {
-      return res.status(409).json({ message: "This stop is not available for check-in" });
+    const found = await routeStopWithCandidate(actor, req.params.id, req.params.stopId);
+    if (!found) return res.status(404).json({ message: "Route stop not found" });
+    const { route, candidate } = found;
+    const knownLeadId = found.stop.leadId ?? candidate?.leadId ?? null;
+    if (!knownLeadId && !candidate) return res.status(409).json({ message: "This stop cannot be prepared for check-in" });
+    try {
+      const organizationId = await organizationForNewLead(actor, knownLeadId);
+      const prepared = await db.transaction(async (tx) => {
+        // Locked so a double tap prepares one visit, not two.
+        const [stop] = await tx.select().from(prospectingRouteStops)
+          .where(eq(prospectingRouteStops.id, found.stop.id)).limit(1).for("update");
+        if (!stop || !(UNREACHED_STOP_STATUSES as readonly string[]).includes(stop.status)) return { refused: true as const };
+        if (stop.visitId) {
+          const [visit] = await tx.select({ id: salesVisits.id, leadId: salesVisits.leadId, status: salesVisits.status })
+            .from(salesVisits).where(and(eq(salesVisits.id, stop.visitId), eq(salesVisits.repId, actor.rep.id))).limit(1);
+          if (visit?.status === "planned") return { created: false as const, leadId: visit.leadId, visitId: visit.id };
+        }
+        const visit = await materializeStopVisit(tx, {
+          route,
+          stop: { ...stop, leadId: stop.leadId ?? knownLeadId },
+          repId: actor.rep.id,
+          organizationId,
+          scheduledAt: stop.estimatedArrivalAt ? new Date(stop.estimatedArrivalAt) : new Date(),
+        });
+        return { created: true as const, ...visit };
+      });
+      if ("refused" in prepared) return res.status(409).json({ message: "This stop is not available for check-in" });
+      return res.status(prepared.created ? 201 : 200).json({ leadId: prepared.leadId, visitId: prepared.visitId });
+    } catch (error) {
+      if (error instanceof OrganizationError) return res.status(error.status).json(refusalBody(error));
+      throw error;
     }
-
-    if (stop.visitId) {
-      const [visit] = await db.select().from(salesVisits).where(and(
-        eq(salesVisits.id, stop.visitId),
-        eq(salesVisits.repId, actor.rep.id),
-      )).limit(1);
-      if (visit && visit.status === "planned") {
-        return res.json({ leadId: visit.leadId, visitId: visit.id });
-      }
-    }
-
-    const [candidate] = stop.candidateId
-      ? await db.select().from(prospectingCandidates).where(and(
-          eq(prospectingCandidates.id, stop.candidateId),
-          eq(prospectingCandidates.repId, actor.rep.id),
-        )).limit(1)
-      : [undefined];
-    let organizationId: number | null = null;
-    if (!stop.leadId && !candidate?.leadId) {
-      if (!candidate) return res.status(409).json({ message: "This stop cannot be prepared for check-in" });
-      try {
-        organizationId = await organizationIdForRep(actor.rep.id);
-      } catch (error) {
-        if (error instanceof OrganizationError) return res.status(error.status).json(refusalBody(error));
-        throw error;
-      }
-    }
-
-    const prepared = await db.transaction(async (tx) => {
-      let leadId = stop.leadId ?? candidate?.leadId ?? null;
-      let locationId: number | null = null;
-
-      if (!leadId && candidate?.googlePlaceId) {
-        const [existing] = await tx.select({ id: salesLeads.id }).from(salesLeads).where(and(
-          eq(salesLeads.ownerRepId, actor.rep.id),
-          eq(salesLeads.googlePlaceId, candidate.googlePlaceId),
-        )).limit(1);
-        leadId = existing?.id ?? null;
-      }
-
-      if (!leadId && candidate) {
-        const [lead] = await tx.insert(salesLeads).values({
-          organizationId: organizationId!,
-          name: candidate.name,
-          website: candidate.website,
-          phone: candidate.phone,
-          email: candidate.email,
-          industry: candidate.industry,
-          source: "prospecting",
-          status: "lead",
-          ownerRepId: actor.rep.id,
-          territoryName: route.name,
-          googlePlaceId: candidate.googlePlaceId,
-        }).returning({ id: salesLeads.id });
-        leadId = lead.id;
-        const [location] = await tx.insert(salesLeadLocations).values({
-          leadId,
-          addressLine1: candidate.address || "Prospecting location",
-          city: candidate.city,
-          state: candidate.state,
-          postalCode: candidate.postalCode,
-          country: candidate.country || "US",
-          lat: candidate.lat,
-          lng: candidate.lng,
-          isPrimary: true,
-          geofenceRadiusMeters: defaultGeofenceRadiusSql(),
-        }).returning({ id: salesLeadLocations.id });
-        locationId = location.id;
-      }
-
-      if (!leadId) throw new Error("Route stop has no lead");
-      if (!locationId) {
-        const [location] = await tx.select({ id: salesLeadLocations.id })
-          .from(salesLeadLocations)
-          .where(eq(salesLeadLocations.leadId, leadId))
-          .orderBy(desc(salesLeadLocations.isPrimary), asc(salesLeadLocations.id))
-          .limit(1);
-        locationId = location?.id ?? null;
-      }
-
-      const [visit] = await tx.insert(salesVisits).values({
-        repId: actor.rep.id,
-        leadId,
-        locationId,
-        status: "planned",
-        scheduledAt: stop.estimatedArrivalAt,
-        source: "prospecting-route",
-      }).returning({ id: salesVisits.id });
-
-      if (candidate) {
-        await tx.update(prospectingCandidates).set({ leadId, status: "scheduled", updatedAt: new Date() })
-          .where(eq(prospectingCandidates.id, candidate.id));
-      }
-      await tx.update(prospectingRouteStops).set({ leadId, visitId: visit.id, updatedAt: new Date() })
-        .where(eq(prospectingRouteStops.id, stop.id));
-      return { leadId, visitId: visit.id };
-    });
-
-    res.status(201).json(prepared);
   });
 
   router.patch("/prospecting/routes/:id/status", async (req, res) => {
@@ -907,47 +810,73 @@ export function createProspectingRouter() {
     res.json(updated);
   });
 
+  // A stop status recorded by hand. It follows the same rules as the visit
+  // workflow (visit-sync.ts): a skipped stop releases its planned visit and its
+  // business, a finished last stop closes the route, and a stop already
+  // finished stays finished.
   router.patch("/prospecting/routes/:routeId/stops/:stopId", async (req, res) => {
     const actor = (req as any).xpotActor as NonNullable<Awaited<ReturnType<typeof ensureXpotRep>>>;
     const input = prospectingStopUpdateSchema.parse(req.body);
     const routeId = pathId(req.params.routeId);
     const stopId = pathId(req.params.stopId);
-    const [route] = routeId ? await db.select().from(prospectingRoutes).where(and(
-      eq(prospectingRoutes.id, routeId),
-      eq(prospectingRoutes.repId, actor.rep.id),
-    )).limit(1) : [];
-    if (!route) return res.status(404).json({ message: "Route not found" });
-    const [stop] = stopId ? await db.select().from(prospectingRouteStops).where(and(
-      eq(prospectingRouteStops.id, stopId),
-      eq(prospectingRouteStops.routeId, route.id),
-    )).limit(1) : [];
-    if (!stop) return res.status(404).json({ message: "Route stop not found" });
-    if (!["published", "in_progress"].includes(route.status)) {
-      return res.status(409).json({ message: "Only a published route in progress can record stop execution." });
-    }
+    if (!routeId) return res.status(404).json({ message: "Route not found" });
+    if (!stopId) return res.status(404).json({ message: "Route stop not found" });
     if (input.status === "skipped" && !input.skipReason) {
       return res.status(400).json({ message: "A skip reason is required." });
     }
-    if (input.visitId) {
-      const [visit] = await db.select({ id: salesVisits.id, leadId: salesVisits.leadId })
-        .from(salesVisits)
-        .where(and(
-          eq(salesVisits.id, input.visitId),
-          eq(salesVisits.repId, actor.rep.id),
-        )).limit(1);
-      if (!visit) return res.status(400).json({ message: "Visit does not belong to this representative." });
-      if (stop.leadId && visit.leadId !== stop.leadId) {
-        return res.status(400).json({ message: "Visit belongs to a different business than this stop." });
+    const outcome = await db.transaction(async (tx) => {
+      const [route] = await tx.select().from(prospectingRoutes).where(and(
+        eq(prospectingRoutes.id, routeId),
+        eq(prospectingRoutes.repId, actor.rep.id),
+      )).limit(1).for("update");
+      if (!route) return reply(404, { message: "Route not found" });
+      const [stop] = await tx.select().from(prospectingRouteStops).where(and(
+        eq(prospectingRouteStops.id, stopId),
+        eq(prospectingRouteStops.routeId, route.id),
+      )).limit(1).for("update");
+      if (!stop) return reply(404, { message: "Route stop not found" });
+      if (!["published", "in_progress"].includes(route.status)) {
+        return reply(409, { message: "Only a published route in progress can record stop execution." });
       }
-    }
-    const [updated] = await db.update(prospectingRouteStops).set({
-      status: input.status,
-      skipReason: input.status === "skipped" ? input.skipReason ?? null : null,
-      visitId: input.visitId === undefined ? stop.visitId : input.visitId,
-      completedAt: ["completed", "skipped"].includes(input.status) ? new Date() : null,
-      updatedAt: new Date(),
-    }).where(eq(prospectingRouteStops.id, stop.id)).returning();
-    res.json(updated);
+      if (["completed", "skipped", "rescheduled"].includes(stop.status)) {
+        return reply(409, { message: "This stop is already finished." });
+      }
+      const visitId = input.visitId === undefined ? stop.visitId : input.visitId;
+      const [visit] = visitId ? await tx.select({ id: salesVisits.id, leadId: salesVisits.leadId, status: salesVisits.status })
+        .from(salesVisits)
+        .where(and(eq(salesVisits.id, visitId), eq(salesVisits.repId, actor.rep.id))).limit(1) : [];
+      if (visitId && !visit) return reply(400, { message: "Visit does not belong to this representative." });
+      if (visit && stop.leadId && visit.leadId !== stop.leadId) {
+        return reply(400, { message: "Visit belongs to a different business than this stop." });
+      }
+      // A visit still to happen (or happening) is finished with its checkout, which completes the stop.
+      if (input.status === "completed" && visit && ["planned", "in_progress"].includes(visit.status)) {
+        return reply(409, { message: "Finish the visit with its checkout to complete this stop." });
+      }
+
+      const now = new Date();
+      if (visitId !== stop.visitId) {
+        await tx.update(prospectingRouteStops).set({ visitId, updatedAt: now }).where(eq(prospectingRouteStops.id, stop.id));
+      }
+      const current = { id: stop.id, routeId: route.id, candidateId: stop.candidateId, visitId };
+      if (input.status === "checked_in") {
+        await checkInStop(tx, current, now);
+      } else if (input.status === "completed") {
+        await finishStop(tx, current, { visited: true }, now);
+      } else if (input.status === "skipped" || input.status === "rescheduled") {
+        await finishStop(tx, current, {
+          visited: false,
+          status: input.status,
+          skipReason: input.status === "skipped" ? input.skipReason! : input.skipReason ?? null,
+        }, now);
+      } else {
+        await tx.update(prospectingRouteStops).set({ status: input.status, completedAt: null, updatedAt: now })
+          .where(eq(prospectingRouteStops.id, stop.id));
+      }
+      const [updated] = await tx.select().from(prospectingRouteStops).where(eq(prospectingRouteStops.id, stop.id)).limit(1);
+      return reply(200, updated);
+    });
+    res.status(outcome.status).json(outcome.body);
   });
 
   return router;

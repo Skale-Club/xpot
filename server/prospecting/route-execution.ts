@@ -9,6 +9,7 @@ import {
   salesVisits,
 } from "#shared/schema.js";
 import { haversineMeters } from "./route-optimizer.js";
+import { localTravelSeconds, retimeRouteStops, UNREACHED_STOP_STATUSES } from "./route-editing.js";
 
 /**
  * How a visit started outside the route screen still lands on the route.
@@ -21,12 +22,6 @@ import { haversineMeters } from "./route-optimizer.js";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type Visit = typeof salesVisits.$inferSelect;
-
-const UNREACHED_STOP_STATUSES = ["planned", "en_route"] as const;
-// The same conservative urban speed the manual reorder uses (30 km/h).
-const LOCAL_METERS_PER_SECOND = 30_000 / 3600;
-
-const travelSeconds = (meters: number) => (meters > 0 ? Math.max(60, Math.round(meters / LOCAL_METERS_PER_SECOND)) : 0);
 
 /**
  * The open route stop for this business, if any: matched by its lead, or by
@@ -131,75 +126,38 @@ export async function attachAdHocStop(tx: Tx, visit: Visit, now = new Date()) {
     .where(eq(prospectingRouteStops.routeId, route.id))
     .orderBy(asc(prospectingRouteStops.position));
   const reached = stops.filter((stop) => !(UNREACHED_STOP_STATUSES as readonly string[]).includes(stop.status));
-  const position = (reached.length ? Math.max(...reached.map((stop) => stop.position)) : 0) + 1;
-  const previous = reached.length ? reached[reached.length - 1] : null;
-
-  // Open a gap at that position. Positions are unique per route, so the rows
-  // move out of range first and then back one place down.
-  const shift = Math.max(...stops.map((stop) => stop.position), 0) + 1;
-  await tx.update(prospectingRouteStops).set({ position: sql`${prospectingRouteStops.position} + ${shift}` })
-    .where(and(eq(prospectingRouteStops.routeId, route.id), gte(prospectingRouteStops.position, position)));
-  await tx.update(prospectingRouteStops).set({ position: sql`${prospectingRouteStops.position} - ${shift - 1}` })
-    .where(and(eq(prospectingRouteStops.routeId, route.id), gte(prospectingRouteStops.position, position + shift)));
+  const lastReachedPosition = reached.length ? Math.max(...reached.map((stop) => stop.position)) : 0;
+  const previous = reached.find((stop) => stop.position === lastReachedPosition) ?? null;
 
   const here = { lat: Number(lat), lng: Number(lng) };
   const distance = previous ? Math.round(haversineMeters({ lat: Number(previous.lat), lng: Number(previous.lng) }, here)) : 0;
-  const arrivedAt = visit.checkedInAt ?? now;
-  const serviceSeconds = route.defaultVisitMinutes * 60;
   const [extra] = await tx.insert(prospectingRouteStops).values({
     routeId: route.id,
     leadId: visit.leadId,
     visitId: visit.id,
-    position,
+    // Parked past the end; the re-time below puts it right after the last reached stop.
+    position: Math.max(0, ...stops.map((stop) => stop.position)) + 1,
+    // The rep is at the business now (the check-in that created this stop).
+    status: "checked_in",
     origin: "ad_hoc",
     name: lead.name,
     address: location ? [location.addressLine1, location.city, location.state].filter(Boolean).join(", ") : null,
     lat: String(lat),
     lng: String(lng),
-    serviceDurationSeconds: serviceSeconds,
+    serviceDurationSeconds: route.defaultVisitMinutes * 60,
     travelDistanceMeters: distance,
-    travelDurationSeconds: travelSeconds(distance),
-    estimatedArrivalAt: arrivedAt,
+    travelDurationSeconds: localTravelSeconds(distance),
+    estimatedArrivalAt: visit.checkedInAt ?? now,
   }).returning();
 
-  await retimeStopsAhead(tx, route.id, extra, new Date(arrivedAt.getTime() + serviceSeconds * 1000));
+  // The stops still ahead move behind it, timed from when the rep leaves it.
+  const ordered = [
+    ...stops.filter((stop) => stop.position <= lastReachedPosition),
+    extra,
+    ...stops.filter((stop) => stop.position > lastReachedPosition),
+  ];
+  await retimeRouteStops(tx, route, ordered, visit.repId, "ad_hoc_stop", now);
   return extra;
-}
-
-/** Re-times every unreached stop after `from`, starting when the rep leaves it. */
-async function retimeStopsAhead(
-  tx: Tx,
-  routeId: number,
-  from: { position: number; lat: string; lng: string },
-  leavesAt: Date,
-) {
-  const ahead = await tx.select().from(prospectingRouteStops).where(and(
-    eq(prospectingRouteStops.routeId, routeId),
-    inArray(prospectingRouteStops.status, [...UNREACHED_STOP_STATUSES]),
-  )).orderBy(asc(prospectingRouteStops.position));
-  const now = new Date();
-  let cursor = leavesAt.getTime();
-  let previous = { lat: Number(from.lat), lng: Number(from.lng) };
-  for (const stop of ahead.filter((item) => item.position > from.position)) {
-    const point = { lat: Number(stop.lat), lng: Number(stop.lng) };
-    const distance = Math.round(haversineMeters(previous, point));
-    const drive = travelSeconds(distance);
-    const estimatedArrivalAt = new Date(cursor + drive * 1000);
-    await tx.update(prospectingRouteStops).set({
-      travelDistanceMeters: distance,
-      travelDurationSeconds: drive,
-      estimatedArrivalAt,
-      updatedAt: now,
-    }).where(eq(prospectingRouteStops.id, stop.id));
-    if (stop.visitId) {
-      await tx.update(salesVisits).set({ scheduledAt: estimatedArrivalAt, updatedAt: now })
-        .where(and(eq(salesVisits.id, stop.visitId), eq(salesVisits.status, "planned")));
-    }
-    cursor = estimatedArrivalAt.getTime() + stop.serviceDurationSeconds * 1000;
-    previous = point;
-  }
-  await tx.update(prospectingRoutes).set({ plannedEndAt: new Date(cursor), updatedAt: now })
-    .where(eq(prospectingRoutes.id, routeId));
 }
 
 /**

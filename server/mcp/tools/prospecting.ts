@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { repModules } from "#shared/modules.js";
-import { prospectingJobCreateSchema } from "#shared/prospecting.js";
+import { localDateIn, prospectingJobCreateSchema } from "#shared/prospecting.js";
 import { storage } from "../../storage.js";
 import { accessDenial } from "../../routes/xpot/middleware.js";
 import {
@@ -47,6 +47,19 @@ function compactDetails(details: NonNullable<Awaited<ReturnType<typeof prospecti
   };
 }
 
+/**
+ * The rep's "today". An MCP client has no browser clock, so it names the day
+ * or the zone; without either, the deployment's zone decides (Xpot's reps work
+ * in the US Eastern time zone unless PROSPECTING_DEFAULT_TIME_ZONE says otherwise).
+ */
+export function mcpRouteDate(input: { routeDate?: string; timeZone?: string }, now = new Date()) {
+  if (input.routeDate) return input.routeDate;
+  const zone = input.timeZone || process.env.PROSPECTING_DEFAULT_TIME_ZONE?.trim() || "America/New_York";
+  const date = localDateIn(zone, now);
+  if (!date) throw new ProspectingServiceError(`Unknown time zone: ${zone}.`, 400);
+  return date;
+}
+
 function errorMessage(error: unknown) {
   if (error instanceof ProspectingServiceError) return error.message;
   if (error instanceof z.ZodError) {
@@ -74,17 +87,25 @@ export function registerProspectingTools(server: McpServer, caller: McpCaller) {
 
   server.tool(
     "prospecting_create_today",
-    "Start one cold-prospecting discovery job in the Xpot account that authorized this MCP connection. `location` is the city/territory, `sectors` contains 1-5 business types, and `shiftHours` is 2, 4, 6, 8, 10, or 12 (default 8). Xpot removes conflicts and may expand into a nearby area if the city is too small. Returns the persisted job and physical engine runs. Use an idempotencyKey when retrying the same request.",
+    "Start one cold-prospecting discovery job in the Xpot account that authorized this MCP connection. `location` is the city/territory, `sectors` contains 1-5 business types, and `shiftHours` is 2, 4, 6, 8, 10, or 12 (default 8). Xpot removes conflicts and may expand into a nearby area if the city is too small. The route is for the rep's today: pass `routeDate` (YYYY-MM-DD) or the rep's IANA `timeZone`; without either, today in America/New_York (or PROSPECTING_DEFAULT_TIME_ZONE). The same daily rules as the app apply: one active route, one search at a time, up to 3 routes a day. Returns the persisted job and physical engine runs. Use an idempotencyKey when retrying the same request.",
     {
       location: z.string().trim().min(2).max(500),
       sectors: z.array(z.string().trim().min(2).max(120)).min(1).max(5),
       shiftHours: z.union([z.literal(2), z.literal(4), z.literal(6), z.literal(8), z.literal(10), z.literal(12)]).default(8),
       idempotencyKey: z.string().trim().min(8).max(200).optional(),
+      routeDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      timeZone: z.string().trim().min(1).max(64).optional(),
     },
-    async ({ location, sectors, shiftHours, idempotencyKey }) => run("prospecting_create_today", async () => {
+    async ({ location, sectors, shiftHours, idempotencyKey, routeDate, timeZone }) => run("prospecting_create_today", async () => {
       const rep = await repForCaller(caller);
       const searches = sectors.map((query) => ({ query, niche: nicheForSector(query) }));
-      const input = prospectingJobCreateSchema.parse({ location, searches, shiftDurationMinutes: shiftHours * 60, idempotencyKey });
+      const input = prospectingJobCreateSchema.parse({
+        location,
+        searches,
+        shiftDurationMinutes: shiftHours * 60,
+        idempotencyKey,
+        routeDate: mcpRouteDate({ routeDate, timeZone }),
+      });
       const result = await createProspectingJobForRep(rep.id, input);
       if (!result.details) throw new ProspectingServiceError("The prospecting job could not be loaded after creation.", 500);
       return { ...compactDetails(result.details), reused: result.reused };
