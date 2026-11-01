@@ -733,3 +733,100 @@ describe("parts", () => {
     expect((await request(app, "GET", "/api/provisioner/print-models/base-large", undefined, nfcOnly)).status).toBe(403);
   });
 });
+
+describe("the Production page", () => {
+  async function createModel(app: express.Express, slug: string, theme: string, face: string, builder: string | null) {
+    const created = await request(app, "POST", "/api/xpot/admin/print-models", {
+      slug,
+      kind: "serialized",
+      title: slug,
+      productType: "large_stand",
+      face,
+      theme,
+      salesProductId: await salesProductId(),
+      batchPrefix: "TREV",
+      ...(builder ? { version: { builder, params: { size: "large", theme }, recipe: {}, beds: [bedX4] } } : {}),
+    });
+    expect(created.status).toBe(201);
+  }
+
+  it("generates a stocked stand by colour and face: fresh serials per plate, pending until the plate is printed", async () => {
+    const app = admin();
+    await createModel(app, "stand-large-google-white", "white", "google_review", "stand.google");
+    await createModel(app, "stand-large-instagram-black", "black", "instagram", "stand.instagram");
+    await createModel(app, "stand-large-venmo-black", "black", "venmo", null);
+
+    const made = await request(app, "POST", "/api/xpot/admin/print-generate", { productType: "large_stand", theme: "White", face: "google_review", quantity: 6 });
+    expect(made.status).toBe(201);
+    expect(made.body).toMatchObject({ modelSlug: "stand-large-google-white", quantity: 6, open: true });
+    expect(made.body.plates.map((p: any) => [p.quantity, p.status, p.batchCode])).toEqual([
+      [4, "requested", `TREV-${year}-001`],
+      [2, "requested", `TREV-${year}-002`],
+    ]);
+    const pieces = await q("SELECT public_code, stock_status FROM tags");
+    expect(pieces).toHaveLength(6);
+    expect(new Set(pieces.map((p) => p.public_code)).size).toBe(6);
+    expect(pieces.every((p) => p.stock_status === "pending")).toBe(true);
+
+    const [first, second] = made.body.plates;
+    expect((await request(app, "POST", `/api/xpot/admin/print-jobs/${first.id}/transition`, { action: "printed" })).status).toBe(200);
+    const byBatch = await q("SELECT batch_id, stock_status, count(*)::int AS n FROM tags GROUP BY batch_id, stock_status ORDER BY n DESC");
+    expect(byBatch).toEqual([
+      { batch_id: first.batchId, stock_status: "available", n: 4 },
+      { batch_id: second.batchId, stock_status: "pending", n: 2 },
+    ]);
+    const open = (await request(app, "GET", "/api/xpot/admin/print-requests?status=open")).body;
+    expect(open.map((r: any) => r.plates.map((p: any) => p.status))).toEqual([["printed", "requested"]]);
+  });
+
+  it("refuses a colour or face the house does not make, and anything outside the known values", async () => {
+    const app = admin();
+    await createModel(app, "stand-large-google-white", "white", "google_review", "stand.google");
+    await createModel(app, "stand-large-venmo-black", "black", "venmo", null);
+    const notDrawn = await request(app, "POST", "/api/xpot/admin/print-generate", { productType: "large_stand", theme: "black", face: "venmo", quantity: 4 });
+    expect(notDrawn.status).toBe(409);
+    expect(notDrawn.body.code).toBe("print_choice_unavailable");
+    const otherProduct = await request(app, "POST", "/api/xpot/admin/print-generate", { productType: "small_plate", theme: "white", face: "google_review", quantity: 4 });
+    expect(otherProduct.body.code).toBe("print_choice_unavailable");
+    const unknownFace = await request(app, "POST", "/api/xpot/admin/print-generate", { productType: "large_stand", theme: "white", face: "myspace", quantity: 4 });
+    expect(unknownFace.status).toBe(400);
+    expect(await q("SELECT id FROM print_requests")).toEqual([]);
+    expect(await q("SELECT id FROM tags")).toEqual([]);
+    const manager = await request(appFor("print-manager"), "POST", "/api/xpot/admin/print-generate", { productType: "large_stand", theme: "white", face: "google_review", quantity: 4 });
+    expect(manager.status).toBe(403);
+  });
+
+  it("downloads an always-ready piece's file as often as needed, and records nothing", async () => {
+    const app = admin();
+    const created = await request(app, "POST", "/api/xpot/admin/print-models", {
+      slug: "base-large",
+      kind: "part",
+      title: "Stand base · Large",
+      version: { beds: [{ label: "x4", copies: 4 }, { label: "x6 full plate", copies: 6 }] },
+    });
+    expect(created.status).toBe(201);
+    const missing = await request(app, "GET", "/api/xpot/admin/print-models/base-large/print-file");
+    expect(missing.status).toBe(404);
+    expect(missing.body.code).toBe("print_bed_file_missing");
+
+    const versionId = created.body.currentVersion.id;
+    const label = encodeURIComponent("x6 full plate");
+    expect((await request(app, "POST", `/api/xpot/admin/print-models/base-large/versions/${versionId}/beds/${label}/file?filename=bases-x6.3mf`, bytes("bases"))).status).toBe(201);
+
+    for (let i = 0; i < 3; i++) {
+      const download = await request(app, "GET", "/api/xpot/admin/print-models/base-large/print-file");
+      expect(download.status).toBe(302);
+      expect(download.headers.get("location")).toBeTruthy();
+    }
+    expect((await request(app, "GET", `/api/xpot/admin/print-models/base-large/print-file?bed=${label}`)).status).toBe(302);
+    expect((await request(app, "GET", "/api/xpot/admin/print-models/base-large/print-file?bed=x4")).body.code).toBe("print_bed_file_missing");
+    expect(await q("SELECT id FROM print_requests")).toEqual([]);
+    expect(await q("SELECT id FROM print_jobs")).toEqual([]);
+    expect((await q("SELECT part_on_hand FROM print_models WHERE slug = 'base-large'"))[0].part_on_hand).toBe(0);
+
+    await createSerializedModel(app);
+    const serialized = await request(app, "GET", "/api/xpot/admin/print-models/plate-large-menu-white/print-file");
+    expect(serialized.status).toBe(400);
+    expect((await request(appFor("print-manager"), "GET", "/api/xpot/admin/print-models/base-large/print-file")).status).toBe(403);
+  });
+});

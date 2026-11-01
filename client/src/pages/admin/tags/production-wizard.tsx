@@ -26,13 +26,15 @@ const EMPTY_FORM = {
   codes: "print" as "print" | "issued" | "scanned", quantity: "4",
 };
 
-export function ProductionWizard({ onClose, onCreated, onOrdered, onCloseAutoFocus, initialModel, existingBatch }: {
+export function ProductionWizard({ onClose, onCreated, onOrdered, onCloseAutoFocus, initialModel, existingBatch, external = false }: {
   onClose: () => void;
   onCreated?: (id: string) => void;
   onOrdered?: (request: PrintRequestItem) => void;
   onCloseAutoFocus?: (event: Event) => void;
   initialModel?: PrintModelItem;
   existingBatch?: ExistingProductionBatch;
+  /** Open on the ways that do not print here (supplier codes, pieces with codes): printing has the Production board. */
+  external?: boolean;
 }) {
   const { toast } = useToast();
   const t = useT(manageTagsBatchesMessages);
@@ -43,7 +45,7 @@ export function ProductionWizard({ onClose, onCreated, onOrdered, onCloseAutoFoc
   const labels = useTagLabels();
   const { data: catalog = [], isLoading: catalogLoading, error: catalogError, refetch: reloadCatalog } = useTagCatalog();
   const modelsQuery = usePrintModels();
-  const [form, setForm] = useState({ ...EMPTY_FORM, quantity: String(initialModel?.currentVersion?.beds[0]?.copies ?? 4) });
+  const [form, setForm] = useState({ ...EMPTY_FORM, ...(external ? { codes: "issued" as const } : {}), quantity: String(initialModel?.currentVersion?.beds[0]?.copies ?? 4) });
   const [modelId, setModelId] = useState(initialModel?.id ?? "");
   const models = (modelsQuery.data ?? (initialModel ? [initialModel] : [])).filter((m) => canPrintModel(m, existingBatch));
   const model = models.find((m) => m.id === modelId);
@@ -52,7 +54,7 @@ export function ProductionWizard({ onClose, onCreated, onOrdered, onCloseAutoFoc
   const bed = beds.find((b) => b.label === bedLabel) ?? beds[0];
   const [step, setStep] = useState(0);
   // Printing is the way in; supplier orders and existing codes sit behind a small link.
-  const [otherWays, setOtherWays] = useState(false);
+  const [otherWays, setOtherWays] = useState(external);
   const stepHeading = useRef<HTMLHeadingElement>(null);
   const stepHeadingId = useId();
   useEffect(() => { stepHeading.current?.focus(); }, [step]);

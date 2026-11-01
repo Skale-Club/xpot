@@ -25,7 +25,8 @@ export function PrintDialog({ model, onClose, onOrdered }: { model: PrintModelIt
 }
 export function RequestList({ filter, model, go, emptyHint }: { filter: JobFilter; model?: string; go: Go; emptyHint?: string }) {
   const t = useT(productionMessages);
-  const { data, isLoading, error, refetch } = usePrintRequests(filter, model);
+  // Every request, sorted here: a failed plate's request needs action although the server no longer counts it open.
+  const { data, isLoading, error, refetch } = usePrintRequests("all", model);
   const { data: models = [] } = usePrintModels();
   const modelById = new Map(models.map((item) => [item.id, item]));
   const requests = data?.filter((request) => filter === "all" || productionNeedsAction(request) === (filter === "open"));

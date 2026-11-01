@@ -3,14 +3,21 @@ import {
   bedPosition,
   canMarkPrinted,
   PRINT_ERROR_QR_CHECK,
+  isAlwaysReadyPart,
   nextPrintBatchCode,
+  pickGenerateFace,
   planPrintJobTransition,
   planRedoCodes,
+  printGenerateOptions,
+  printedPartBeds,
   printJobStockSchema,
   printJobUpdateSchema,
   printModelInputSchema,
   printVersionInputSchema,
   splitPrintedPieces,
+  type PrintBed,
+  type PrintModelItem,
+  type PrintModelVersionItem,
 } from "../../shared/printProduction";
 
 describe("print batch codes", () => {
@@ -122,5 +129,57 @@ describe("marking a plate printed", () => {
     expect(splitPrintedPieces(pieces, ["aaaa-0003"]).bad).toEqual(["AAAA0003"]);
     expect(splitPrintedPieces(pieces, ["AAAA0004"])).toEqual({ good: ["AAAA0001", "AAAA0002", "AAAA0003"], bad: [], unknown: [] });
     expect(splitPrintedPieces(pieces, ["ZZZZ9999", "AAAA0001"])).toEqual({ good: ["AAAA0002", "AAAA0003"], bad: ["AAAA0001"], unknown: ["ZZZZ9999"] });
+  });
+});
+
+describe("the Production page's choices", () => {
+  const version = (builder: string | null, beds: PrintBed[], preview = false): PrintModelVersionItem => ({
+    id: "v", modelId: "m", version: 1, status: "current", builder, params: {}, recipe: {}, beds,
+    consumes: [], changelog: null, fixesBatchId: null, fixesBatchCode: null, source: "mcp", createdAt: "", jobCount: 0,
+    preview: preview ? { fileName: "p.glb", bytes: 1, sha256: "a", uploadedAt: "" } : null,
+  });
+  const model = (over: Partial<PrintModelItem> & { builder?: string | null; preview?: boolean }): PrintModelItem => {
+    const { builder = "stand.google", preview = false, ...rest } = over;
+    return {
+      id: rest.slug ?? "m", slug: "m", kind: "serialized", title: "M", description: null, productType: "large_stand", face: "google_review",
+      theme: "white", salesProductId: 7, batchPrefix: "REV", status: "ready", sortOrder: 0, onHand: 0, withResellers: 0, openJobs: 0,
+      partReorderAt: null, lowStock: false, createdAt: "", updatedAt: "",
+      currentVersion: version(builder, [{ label: "x4", copies: 4 }], preview),
+      ...rest,
+    };
+  };
+
+  it("offers per product the colours and faces that have a generator, white before black", () => {
+    const options = printGenerateOptions([
+      model({ slug: "plate-small-google-white", productType: "small_plate", builder: "plate.google" }),
+      model({ slug: "stand-large-instagram-black", theme: "black", face: "instagram", preview: true }),
+      model({ slug: "stand-large-google-black", theme: "black" }),
+      model({ slug: "stand-large-menu-white", face: "menu" }),
+      model({ slug: "stand-large-google-white" }),
+      model({ slug: "stand-large-venmo-white", face: "venmo", builder: null }),
+      model({ slug: "stand-large-tiktok-white", face: "tiktok", status: "design_needed" }),
+      model({ slug: "stand-large-retired", face: "facebook", status: "retired" }),
+      model({ slug: "base-large", kind: "part", productType: null, face: null, theme: null }),
+    ]);
+    expect(options.map((o) => o.productType)).toEqual(["large_stand", "small_plate"]);
+    expect(options[0].colours.map((c) => [c.theme, c.faces.map((f) => f.slug)])).toEqual([
+      ["white", ["stand-large-google-white", "stand-large-menu-white"]],
+      ["black", ["stand-large-google-black", "stand-large-instagram-black"]],
+    ]);
+    expect(options[0].colours[1].faces[1]).toMatchObject({ face: "instagram", copies: 4, bedLabel: "x4", hasPreview: true });
+    expect(pickGenerateFace(options, { productType: "large_stand", theme: "Black", face: "instagram" })?.slug).toBe("stand-large-instagram-black");
+    expect(pickGenerateFace(options, { productType: "large_stand", theme: "white", face: "venmo" })).toBeNull();
+  });
+
+  it("shows the parts that come off the printer as always ready, not the bought ones", () => {
+    const part = (slug: string, beds: PrintBed[]) =>
+      model({ slug, kind: "part", productType: null, face: null, theme: null, currentVersion: version(null, beds) });
+    const base = part("base-large", [{ label: "x4", copies: 4 }, { label: "x6 full plate", copies: 6 }]);
+    const sticker = part("nfc-sticker-10x20", [{ label: "bought", copies: 1 }]);
+    expect(isAlwaysReadyPart(base)).toBe(true);
+    expect(printedPartBeds(base).map((b) => b.label)).toEqual(["x4", "x6 full plate"]);
+    expect(isAlwaysReadyPart(sticker)).toBe(false);
+    expect(isAlwaysReadyPart({ ...base, status: "retired" })).toBe(false);
+    expect(isAlwaysReadyPart(model({}))).toBe(false);
   });
 });
