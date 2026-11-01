@@ -199,6 +199,38 @@ export function sameTheme(a: string | null | undefined, b: string | null | undef
 
 export const PRINT_MODEL_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
+/** What a model needs besides our print files, so a partner buys the right thing ("What you need"). */
+export const PRINT_MATERIAL_KINDS = ["nfc_sticker", "filament", "other"] as const;
+export type PrintMaterialKind = (typeof PRINT_MATERIAL_KINDS)[number];
+
+/** A buy link is a web address a person opens: http(s) only, never a script or file link. */
+const webUrl = z.preprocess(
+  (v) => (typeof v === "string" ? v.trim() || null : v),
+  z.string().max(500).refine((value) => {
+    try {
+      const { protocol } = new URL(value);
+      return protocol === "https:" || protocol === "http:";
+    } catch {
+      return false;
+    }
+  }, "A web address starting with https://").nullable().optional(),
+);
+
+export const printMaterialSchema = z.object({
+  kind: z.enum(PRINT_MATERIAL_KINDS),
+  name: z.string().trim().min(1, "Name the material").max(120),
+  /** Size or colour: "10 x 20 mm", "White PLA". */
+  spec: optionalText(120),
+  /** Where to buy it. The platform names it; nothing is guessed. */
+  supplier: optionalText(120),
+  url: webUrl,
+  note: optionalText(500),
+}).strict();
+export type PrintMaterial = z.infer<typeof printMaterialSchema>;
+
+export const PRINT_MATERIALS_MAX = 20;
+export const printMaterialsSchema = z.array(printMaterialSchema).max(PRINT_MATERIALS_MAX);
+
 export const printBedSchema = z.object({
   /** How the admin picks it: "x4", "x6 full plate". Unique within a version. */
   label: z.string().trim().min(1).max(40),
@@ -281,6 +313,8 @@ export const printModelInputSchema = z.object({
   salesProductId: z.number().int().positive().nullable().optional(),
   batchPrefix: z.preprocess((v) => (typeof v === "string" ? v.trim().toUpperCase() || null : v), z.string().regex(PRINT_BATCH_PREFIX_PATTERN, "Prefix: 2-12 letters/digits, e.g. LPLATE").nullable().optional()),
   sortOrder: z.number().int().min(-1000).max(100_000).default(0),
+  /** What the model needs besides our files (platform only). */
+  materials: printMaterialsSchema.optional(),
   /** Optional: the model arrives with its v1 and is `ready` at once. */
   version: printVersionInputSchema.optional(),
 }).strict().superRefine((input, ctx) => {
@@ -303,6 +337,8 @@ export const printModelPatchSchema = z.object({
   salesProductId: z.number().int().positive().nullable().optional(),
   batchPrefix: z.preprocess((v) => (typeof v === "string" ? v.trim().toUpperCase() || null : v), z.string().regex(PRINT_BATCH_PREFIX_PATTERN).nullable().optional()),
   sortOrder: z.number().int().min(-1000).max(100_000).optional(),
+  /** The whole list, replaced (platform only): the sticker, the filament, where to buy them. */
+  materials: printMaterialsSchema.optional(),
   /** A part's reorder point: below it the catalog warns. Null: no alert. */
   partReorderAt: z.number().int().min(0).max(100_000).nullable().optional(),
   /** Only `retired` ⇄ back: `ready`/`design_needed` follow from having a current version. */
@@ -425,6 +461,8 @@ export interface PrintModelItem {
   batchPrefix: string | null;
   status: PrintModelStatus;
   sortOrder: number;
+  /** What a partner needs to buy to print it (migrations/0069). */
+  materials: PrintMaterial[];
   currentVersion: PrintModelVersionItem | null;
   /** Serialized: pieces of this model's batches in house stock / with resellers. Part: the counter. */
   onHand: number;
@@ -578,6 +616,14 @@ export function bedPosition(bed: Pick<PrintBed, "positions" | "copies"> | null, 
 
 // ─── The Production page: always-ready pieces and pieces to generate ─────────────────────────────────────────────
 
+/**
+ * Whether an organization may request, generate and print a model (organizations.released_print_models): `null` is
+ * every model (the company, and any organization nobody restricted); a list is exactly those models, by slug.
+ */
+export function modelReleased(released: readonly string[] | null | undefined, slug: string): boolean {
+  return released == null || released.includes(slug);
+}
+
 /** A part's bed that only counts what was bought (a sticker, a washer): nothing to print. */
 export const PRINT_BOUGHT_BED = "bought";
 
@@ -611,6 +657,8 @@ export interface PrintGenerateFace {
   copies: number;
   bedLabel: string;
   hasPreview: boolean;
+  /** What the model needs to be bought ("What you need"). */
+  materials: PrintMaterial[];
 }
 
 export interface PrintGenerateOption {
@@ -661,6 +709,7 @@ export function printGenerateOptions(models: readonly PrintModelItem[]): PrintGe
                 copies: bed.copies,
                 bedLabel: bed.label,
                 hasPreview: !!model.currentVersion!.preview,
+                materials: model.materials ?? [],
               };
             }),
         })),

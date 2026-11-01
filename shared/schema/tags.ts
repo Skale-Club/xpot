@@ -432,6 +432,8 @@ export const printModels = pgTable("print_models", {
   // Below this count the catalog warns (migrations/0061); null: no alert.
   partReorderAt: integer("part_reorder_at"),
   sortOrder: integer("sort_order").notNull().default(0),
+  // What a partner must buy to print it (shared/printProduction.ts printMaterialSchema; migrations/0069).
+  materials: jsonb("materials").$type<Array<Record<string, unknown>>>().notNull().default(sql`'[]'::jsonb`),
   createdByUserId: text("created_by_user_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

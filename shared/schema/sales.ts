@@ -25,6 +25,8 @@ export const organizations = pgTable("organizations", {
   isActive: boolean("is_active").notNull().default(true),
   // A branch that prints its own pieces (Tags › Production): its Rep Admins print for it; migrations/0065.
   printsOwnPieces: boolean("prints_own_pieces").notNull().default(false),
+  // The print models (slugs) it may request and print; null = every model, empty = none (migrations/0069).
+  releasedPrintModels: text("released_print_models").array(),
   createdByUserId: text("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

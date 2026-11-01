@@ -5,6 +5,7 @@ import {
   organizationAuditLog,
   organizationMemberships,
   organizations,
+  printModels,
   salesLeads,
   salesReps,
   tagKits,
@@ -206,6 +207,7 @@ export async function listOrganizations(actor: OrganizationActor) {
     slug: organizations.slug,
     isActive: organizations.isActive,
     printsOwnPieces: organizations.printsOwnPieces,
+    releasedPrintModels: organizations.releasedPrintModels,
     createdByUserId: organizations.createdByUserId,
     createdAt: organizations.createdAt,
     updatedAt: organizations.updatedAt,
@@ -291,17 +293,39 @@ export async function createOrganization(input: { name: string; repAdminId: numb
   });
 }
 
+/**
+ * The models to release to an organization, checked against the catalog: serialized models only (a partner never
+ * prints parts), each by slug, no repeats. `null` = every model; an empty list = none.
+ */
+export async function validReleasedModels(slugs: readonly string[] | null): Promise<string[] | null> {
+  if (slugs === null) return null;
+  const unique = Array.from(new Set(slugs));
+  if (!unique.length) return [];
+  const known = await db.select({ slug: printModels.slug }).from(printModels)
+    .where(and(inArray(printModels.slug, unique), eq(printModels.kind, "serialized")));
+  const found = new Set(known.map((row) => row.slug));
+  if (unique.some((slug) => !found.has(slug))) throw new OrganizationError("One of the models is not in the catalog.", 400, "print_model_unknown");
+  return unique;
+}
+
 export async function updateOrganization(
   organizationId: number,
-  input: { name?: string; isActive?: boolean; printsOwnPieces?: boolean },
+  input: { name?: string; isActive?: boolean; printsOwnPieces?: boolean; releasedPrintModels?: string[] | null },
   actor: OrganizationActor,
 ) {
   if (!managesEveryOrganization(actor)) throw new OrganizationError("Only an Xpot admin or a manager can do this.", 403, "manager_required");
-  // Production is the owners' (docs/organizations-execution-plan.md): only they let a branch print its own pieces.
-  if (input.printsOwnPieces !== undefined && !actor.user.isAdmin) throw new OrganizationError("Only an Xpot admin can do this.", 403, "admin_required");
+  // Production is the owners' (docs/organizations-execution-plan.md): only they let a branch print its own pieces,
+  // and say which of our models it may print.
+  if ((input.printsOwnPieces !== undefined || input.releasedPrintModels !== undefined) && !actor.user.isAdmin) {
+    throw new OrganizationError("Only an Xpot admin can do this.", 403, "admin_required");
+  }
   await assertOrganizationAccess(actor, organizationId, true);
-  const [updated] = await db.update(organizations).set({ ...input, updatedAt: new Date() })
-    .where(eq(organizations.id, organizationId)).returning();
+  const { releasedPrintModels, ...rest } = input;
+  const [updated] = await db.update(organizations).set({
+    ...rest,
+    ...(releasedPrintModels !== undefined ? { releasedPrintModels: await validReleasedModels(releasedPrintModels) } : {}),
+    updatedAt: new Date(),
+  }).where(eq(organizations.id, organizationId)).returning();
   await audit(organizationId, "organization_updated", actor, null, input);
   return updated;
 }

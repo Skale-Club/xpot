@@ -36,6 +36,12 @@ const objectParam = z.preprocess((v) => {
   return v;
 }, z.record(z.unknown()));
 
+/** A model's materials are the platform's to write in the app: MCP reads them (print_model_get), never sets them. */
+function withoutMaterials(input: Record<string, unknown>): Record<string, unknown> {
+  if ("materials" in input) throw new z.ZodError([{ code: "custom", path: ["materials"], message: "Materials are edited in the app, not through MCP" }]);
+  return input;
+}
+
 const text = (value: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(value, null, 2) }] });
 const failure = (message: string) => ({ isError: true as const, content: [{ type: "text" as const, text: message }] });
 
@@ -67,7 +73,7 @@ export function registerPrintProductionTools(server: McpServer, caller: McpCalle
 
   server.tool(
     "print_models_list",
-    "The print catalog (Tags › Production): every model with its kind (serialized = pieces with Xpot codes; part = a base or token with no code), status (design_needed = in the catalog, not drawn yet; ready; retired), current version (builder, params, recipe, beds), stock on hand and open orders.",
+    "The print catalog (Tags › Production): every model with its kind (serialized = pieces with Xpot codes; part = a base or token with no code), status (design_needed = in the catalog, not drawn yet; ready; retired), current version (builder, params, recipe, beds), stock on hand, open orders and the materials a partner needs to buy (materials: NFC sticker, filament, supplier; read-only here, the platform edits them in the app).",
     {},
     async () => run("print_models_list", () => production.listModels()),
   );
@@ -83,14 +89,14 @@ export function registerPrintProductionTools(server: McpServer, caller: McpCalle
     "print_model_create",
     `Add a model to the print catalog. \`model\`: { slug (lowercase-with-dashes, e.g. plate-large-menu-white), kind (${PRINT_MODEL_KINDS.join("|")}), title, description?, productType (${TAG_PRODUCT_TYPES.join("|")}; serialized: required), face (${TAG_FACES.join("|")}; serialized: required), theme (white, black, mixed…, stored in lowercase; serialized: required, optional for a part), salesProductId (serialized: required), batchPrefix (serialized: required; LPLATE, SPLATE, REV, IG…), sortOrder?, version? (its v1: ${VERSION_DOC}) }. Without a version the model is design_needed and cannot be printed yet. Project rule: a new model or version is not done until its 3D preview is attached (print-pipeline/preview.py --upload <model> --version-id <version uuid>, then print_model_get shows currentVersion.preview); parts with no builder have none.`,
     { model: objectParam },
-    async ({ model }) => run("print_model_create", () => production.createModel(printModelInputSchema.parse(model), null, "mcp")),
+    async ({ model }) => run("print_model_create", () => production.createModel(printModelInputSchema.parse(withoutMaterials(model)), null, "mcp")),
   );
 
   server.tool(
     "print_model_update",
     "Patch a print model: title, description, theme, productType and face (a serialized model's, only while no plate was ordered from it), salesProductId, batchPrefix, sortOrder, partReorderAt (a part's reorder point; below it the catalog warns), retired (true retires it; false brings it back). A serialized model keeps its product type, face, theme, sales product and batch prefix: none of them can be emptied. The recipe never changes here: a recipe change is a new version (print_model_version_create).",
     { model: z.string().min(1), patch: objectParam },
-    async ({ model, patch }) => run("print_model_update", () => production.updateModel(model, printModelPatchSchema.parse(patch))),
+    async ({ model, patch }) => run("print_model_update", () => production.updateModel(model, printModelPatchSchema.parse(withoutMaterials(patch)))),
   );
 
   server.tool(
