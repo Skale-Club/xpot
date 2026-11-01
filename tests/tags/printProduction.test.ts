@@ -4,6 +4,7 @@ import {
   canMarkPrinted,
   PRINT_ERROR_QR_CHECK,
   isAlwaysReadyPart,
+  modelReleased,
   nextPrintBatchCode,
   pickGenerateFace,
   planPrintJobTransition,
@@ -12,7 +13,10 @@ import {
   printedPartBeds,
   printJobStockSchema,
   printJobUpdateSchema,
+  printMaterialSchema,
+  printMaterialsSchema,
   printModelInputSchema,
+  printModelPatchSchema,
   printVersionInputSchema,
   splitPrintedPieces,
   type PrintBed,
@@ -148,7 +152,7 @@ describe("the Production page's choices", () => {
     const { builder = "stand.google", preview = false, ...rest } = over;
     return {
       id: rest.slug ?? "m", slug: "m", kind: "serialized", title: "M", description: null, productType: "large_stand", face: "google_review",
-      theme: "white", salesProductId: 7, batchPrefix: "REV", status: "ready", sortOrder: 0, onHand: 0, withResellers: 0, openJobs: 0,
+      theme: "white", salesProductId: 7, batchPrefix: "REV", status: "ready", sortOrder: 0, onHand: 0, withResellers: 0, openJobs: 0, materials: [],
       partReorderAt: null, lowStock: false, createdAt: "", updatedAt: "",
       currentVersion: version(builder, [{ label: "x4", copies: 4 }], preview),
       ...rest,
@@ -192,5 +196,50 @@ describe("the Production page's choices", () => {
     expect(isAlwaysReadyPart(sticker)).toBe(false);
     expect(isAlwaysReadyPart({ ...base, status: "retired" })).toBe(false);
     expect(isAlwaysReadyPart(model({}))).toBe(false);
+  });
+});
+
+describe("a model's materials", () => {
+  it("takes a sticker, a filament or something else, each with a name and optional spec, supplier, buy link and note", () => {
+    const sticker = { kind: "nfc_sticker", name: " NFC sticker ", spec: "10 x 20 mm", supplier: " LeadSeals ", url: "https://example.com/sticker", note: "" };
+    expect(printMaterialSchema.parse(sticker)).toEqual({ kind: "nfc_sticker", name: "NFC sticker", spec: "10 x 20 mm", supplier: "LeadSeals", url: "https://example.com/sticker", note: null });
+    expect(printMaterialSchema.parse({ kind: "filament", name: "PLA" })).toEqual({ kind: "filament", name: "PLA" });
+    expect(printMaterialSchema.parse({ kind: "other", name: "Glue", url: "  " }).url).toBeNull();
+    expect(printMaterialsSchema.parse([sticker, { kind: "other", name: "Glue" }])).toHaveLength(2);
+    expect(printMaterialsSchema.parse([])).toEqual([]);
+  });
+
+  it("refuses an unknown kind, an empty name, a link that is not http(s), and anything extra", () => {
+    for (const bad of [
+      { kind: "wood", name: "Oak" },
+      { kind: "other" },
+      { kind: "other", name: "   " },
+      { kind: "other", name: "Glue", url: "javascript:alert(1)" },
+      { kind: "other", name: "Glue", url: "ftp://example.com/glue" },
+      { kind: "other", name: "Glue", url: "example.com/glue" },
+      { kind: "other", name: "Glue", price: 3 },
+      { kind: "other", name: "x".repeat(121) },
+    ]) {
+      expect(printMaterialSchema.safeParse(bad).success, JSON.stringify(bad)).toBe(false);
+    }
+    expect(printMaterialsSchema.safeParse(Array.from({ length: 21 }, () => ({ kind: "other", name: "Glue" }))).success).toBe(false);
+  });
+
+  it("rides on the model's input and patch, as the whole list", () => {
+    const materials = [{ kind: "nfc_sticker", name: "NFC sticker" }];
+    expect(printModelInputSchema.parse({ slug: "base-large", kind: "part", title: "Base", materials }).materials).toEqual(materials);
+    expect(printModelPatchSchema.parse({ materials }).materials).toEqual(materials);
+    expect(printModelPatchSchema.parse({ materials: [] }).materials).toEqual([]);
+    expect(printModelPatchSchema.safeParse({ materials: [{ kind: "wood", name: "Oak" }] }).success).toBe(false);
+  });
+});
+
+describe("models released to an organization", () => {
+  it("is every model when nothing was restricted, exactly the listed ones otherwise, none for an empty list", () => {
+    expect(modelReleased(null, "plate-large-menu-white")).toBe(true);
+    expect(modelReleased(undefined, "plate-large-menu-white")).toBe(true);
+    expect(modelReleased(["plate-large-menu-white"], "plate-large-menu-white")).toBe(true);
+    expect(modelReleased(["plate-large-menu-white"], "stand-large-google-white")).toBe(false);
+    expect(modelReleased([], "plate-large-menu-white")).toBe(false);
   });
 });

@@ -24,6 +24,8 @@ import { companyOrganizationId,
   type OrganizationActor,
 } from "../../organizations/service.js";
 import { invitePerson, invitePersonSchema } from "../../organizations/invite.js";
+import { createPartner, partnerInputSchema } from "../../organizations/partners.js";
+import { PRINT_MODEL_SLUG_PATTERN } from "#shared/printProduction.js";
 import { deliverKit, TagError, tagErrorBody } from "../../tags/repository.js";
 import { listAcquisitions } from "../../tags/acquisitions.js";
 import { teamActivity, teamActivitySince } from "./teamActivity.js";
@@ -88,6 +90,10 @@ export function createOrganizationsRouter() {
     return createOrganization(input, actorOf(req));
   }, 201));
 
+  // A new partner in one step: their account, the organization that prints its own pieces, and the models released.
+  router.post("/organizations/partners", route((req) =>
+    createPartner(partnerInputSchema.parse(req.body), actorOf(req)), 201));
+
   router.get("/organizations/:organizationId", route((req) =>
     getOrganizationWorkspace(id.parse(req.params.organizationId), actorOf(req))));
 
@@ -97,6 +103,8 @@ export function createOrganizationsRouter() {
       isActive: z.boolean().optional(),
       printsOwnPieces: z.boolean().optional(),
       distribution: z.enum(DISTRIBUTIONS).optional(),
+      // The models it may print (slugs); null = every model, [] = none. The platform's owners only.
+      releasedPrintModels: z.array(z.string().regex(PRINT_MODEL_SLUG_PATTERN)).max(200).nullable().optional(),
     }).strict().refine((value) => Object.keys(value).length > 0, "No changes supplied").parse(req.body);
     return updateOrganization(id.parse(req.params.organizationId), input, actorOf(req));
   }));

@@ -28,6 +28,8 @@ export const organizations = pgTable("organizations", {
   // Who handles this organization's orders: 'xpot' (Stuscle, fulfilled from the company's stock) or 'own' (the partner,
   // from their own house stock, to the organizations linked to them); migrations/0070, server/tags/distribution.ts.
   distribution: text("distribution").$type<"xpot" | "own">().notNull().default("xpot"),
+  // The print models (slugs) it may request and print; null = every model, empty = none (migrations/0069).
+  releasedPrintModels: text("released_print_models").array(),
   createdByUserId: text("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

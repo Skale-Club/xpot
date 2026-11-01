@@ -16,6 +16,7 @@ import { productionBoardMessages } from "@/i18n/messages/productionBoard";
 import { errorMessage, invalidateAdminTags, sendJson } from "./api";
 import { useTagLabels } from "./labels";
 import { ProductionIdentity, ProductionPlatePreview } from "./production-identity";
+import { MaterialsNeeded } from "./production-materials";
 import { printQuantity } from "./production-workflow";
 import { useProductionAccess } from "./production-shared";
 
@@ -149,6 +150,7 @@ export function GenerateDialog({ option, models, onClose, onGenerated }: {
               {step === 2 && face ? (
                 <div className="space-y-4">
                   {model ? <ProductionIdentity model={model} hero /> : null}
+                  <MaterialsNeeded materials={face.materials} />
                   {organizations.length > 1 ? (
                     <Field label={t("organization")} hint={t("organizationHint")}>
                       <Select
@@ -184,6 +186,7 @@ export function GenerateDialog({ option, models, onClose, onGenerated }: {
               {step === 3 && face ? (
                 <div className="space-y-4">
                   {model ? <ProductionIdentity model={model} hero /> : null}
+                  <MaterialsNeeded materials={face.materials} />
                   <dl className="grid grid-cols-1 gap-4 rounded-xl border border-white/10 bg-white/[0.02] p-4 text-sm sm:grid-cols-2">
                     {[
                       [b("what"), `${product} · ${labels.face(face.face)} · ${themeName(colour!.theme)}`],
