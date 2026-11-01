@@ -34,6 +34,8 @@ import { tagsMessages } from "@/i18n/messages/tags";
 import { repModules } from "@shared/modules";
 import { kitCode } from "@shared/tagKits";
 import type { XpotMeResponse } from "./types";
+import { NewPartnerDialog } from "./components/NewPartnerDialog";
+import { ReleasedModelsField } from "./components/ReleasedModelsField";
 
 // Account › Organizations. People are created, approved and blocked only in
 // People (/admin/reps); here an organization's members are existing people,
@@ -53,6 +55,8 @@ type Organization = {
   slug: string;
   isActive: boolean;
   printsOwnPieces?: boolean;
+  /** The models it may print (slugs); null = every model (migrations/0069). */
+  releasedPrintModels?: string[] | null;
   membershipRole?: "admin" | "member";
   memberCount?: number;
   personal?: boolean;
@@ -119,7 +123,7 @@ function OrganizationsList() {
   return (
     <AppLayout title={t("title")} size="wide">
       <div className="space-y-6">
-        <PageHeader backHref={mayCreate ? "/admin" : undefined} title={t("title")} description={t("intro")} className="mb-0" />
+        <PageHeader backHref={mayCreate ? "/admin" : undefined} title={t("title")} description={t("intro")} className="mb-0" actions={mayCreate ? <NewPartnerDialog /> : undefined} />
 
         {mayCreate && (
           <form
@@ -358,7 +362,7 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
             seeAll={platformManager && usesVisits ? { href: `/admin/work/leads?org=${organizationId}`, label: t("seeAllIn", { screen: ts("tabLeads") }), testId: "organization-customers-all" } : undefined}
             render={(row) => <><span className="text-sm font-medium text-white">{row.name}</span><span className="text-xs text-white/45">{lookup(t, `customer_${row.status}`, String(row.status ?? ""))} · {repName(row.ownerRepId)}</span></>} />
         )}
-        {tab === "settings" && <OrganizationSettings key={`${org.name}|${org.isActive}|${org.printsOwnPieces}`} organization={org} mayEdit={platformManager} owner={!!me?.user.isAdmin} />}
+        {tab === "settings" && <OrganizationSettings key={`${org.name}|${org.isActive}|${org.printsOwnPieces}|${org.releasedPrintModels?.join(",") ?? "*"}`} organization={org} mayEdit={platformManager} owner={!!me?.user.isAdmin} />}
       </div>
 
       <ConfirmDialog
@@ -528,13 +532,16 @@ function OrganizationSettings({ organization, mayEdit, owner }: { organization: 
   const [name, setName] = useState(organization.name);
   const [isActive, setIsActive] = useState(organization.isActive);
   const [prints, setPrints] = useState(!!organization.printsOwnPieces);
+  const [released, setReleased] = useState<string[] | null>(organization.releasedPrintModels ?? null);
   const company = organization.slug === COMPANY_ORGANIZATION_SLUG;
-  const dirty = name.trim() !== organization.name || isActive !== organization.isActive || prints !== !!organization.printsOwnPieces;
+  const releasedChanged = JSON.stringify(released) !== JSON.stringify(organization.releasedPrintModels ?? null);
+  const dirty = name.trim() !== organization.name || isActive !== organization.isActive || prints !== !!organization.printsOwnPieces || (prints && releasedChanged);
   const save = useMutation({
     mutationFn: () => json<Organization>("PATCH", `/api/xpot/organizations/${organization.id}`, {
       ...(name.trim() !== organization.name ? { name: name.trim() } : {}),
       ...(isActive !== organization.isActive ? { isActive } : {}),
       ...(prints !== !!organization.printsOwnPieces ? { printsOwnPieces: prints } : {}),
+      ...(prints && releasedChanged ? { releasedPrintModels: released } : {}),
     }),
     onSuccess: () => {
       toast({ title: t("orgSaved"), variant: "success" });
@@ -553,8 +560,9 @@ function OrganizationSettings({ organization, mayEdit, owner }: { organization: 
       {!company && (owner || organization.printsOwnPieces) ? (
         <SwitchRow checked={prints} onCheckedChange={setPrints} label={tw("orgPrintsOwnPieces")} hint={tw("orgPrintsOwnPiecesHint")} disabled={!owner} testId="organization-prints-own-pieces" />
       ) : null}
+      {!company && prints && (owner || organization.printsOwnPieces) ? <ReleasedModelsField value={released} onChange={setReleased} disabled={!owner} /> : null}
       {mayEdit && (
-        <FormFooter dirty={dirty} onCancel={dirty ? () => { setName(organization.name); setIsActive(organization.isActive); setPrints(!!organization.printsOwnPieces); } : undefined}>
+        <FormFooter dirty={dirty} onCancel={dirty ? () => { setName(organization.name); setIsActive(organization.isActive); setPrints(!!organization.printsOwnPieces); setReleased(organization.releasedPrintModels ?? null); } : undefined}>
           <Button variant="brand" onClick={() => save.mutate()} disabled={!dirty || !name.trim()} loading={save.isPending}>{tc("save")}</Button>
         </FormFooter>
       )}

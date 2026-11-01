@@ -14,6 +14,7 @@ import { batchWorkspaceMessages } from "@/i18n/messages/batchWorkspace";
 import { productionMessages } from "@/i18n/messages/production";
 import { unifiedProductionMessages } from "@/i18n/messages/unifiedProduction";
 import { ProductionIdentity, ProductionPlatePreview } from "./production-identity";
+import { MaterialsNeeded } from "./production-materials";
 import { errorMessage, invalidateAdminTags, sendJson } from "./api";
 import { catalogOptions, useTagCatalog } from "./batches-shared";
 import { useTagLabels } from "./labels";
@@ -158,6 +159,7 @@ export function ProductionWizard({ onClose, onCreated, onOrdered, onCloseAutoFoc
             {step === 1 ? <fieldset aria-label={tw("codeSetup")} className="space-y-4" data-testid="admin-tags-new-batch-codes">
               {printing ? <>
                 {model ? <ProductionIdentity model={model} hero /> : null}
+                {model ? <MaterialsNeeded materials={model.materials} /> : null}
                 {organizationChoices.length > 1 ? <Field label={tp("organization")} hint={tp("organizationHint")}><Select value={organization ? String(organization.id) : ""} onChange={(e) => setOrganizationId(e.target.value)} options={organizationChoices.map((o) => ({ value: String(o.id), label: o.name }))} data-testid="production-print-organization" /></Field> : null}
                 {beds.length > 1 ? <Field label={tp("fieldBed")}><Select value={bed?.label ?? ""} onChange={(e) => { setBedLabel(e.target.value); }} options={beds.map((b) => ({ value: b.label, label: bedSummary(b, tp) }))} data-testid="production-print-bed" /></Field> : null}
                 <Field label={tp("fieldQuantity")} hint={tp(model?.kind === "serialized" ? "fieldQuantityHint" : "fieldQuantityHintPart", { copies: bed?.copies ?? 1, max: printPlan.max })}><Input type="number" inputMode="numeric" required min={1} max={printPlan.max} step={1} value={existingBatch ? existingBatch.tagCount : form.quantity} disabled={!!existingBatch} onChange={(e) => set({ quantity: e.target.value })} data-testid="production-print-quantity" /></Field>
