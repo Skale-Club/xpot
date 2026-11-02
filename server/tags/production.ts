@@ -70,6 +70,7 @@ import { createJourneyEntry, journeyContext, recordJourney, resolveBatchId } fro
 import { countMetricSql } from "./metrics.js";
 import { createBatch, getBatchProduction, iso, rows, type BatchInTransaction, type Tx } from "./repository.js";
 import { companyOrganizationId } from "../organizations/service.js";
+import type { TagActor } from '#shared/tagAccess.js';
 
 // Tags › Production (docs/PRINT_EXECUTION_PLAN.md): the catalog of what the house prints (models), the frozen
 // recipes (versions), the print requests ("N pieces of this model") and their plates (print orders) with their files.
@@ -222,7 +223,8 @@ async function releasedWithin<T extends { slug: string }>(models: T[], scope: Pr
 }
 
 async function catalogOf(scope: ProductionScope): Promise<PrintModelItem[]> {
-  const where = scope === null ? sql`` : sql`WHERE m.kind = 'serialized'`;
+  const where = scope === null ? sql`` : sql`WHERE m.kind = 'serialized' AND (m.customer_order_line_id IS NULL OR EXISTS
+    (SELECT 1 FROM customer_order_lines private_line WHERE private_line.id=m.customer_order_line_id AND ${scopeSql('private_line.producer_organization_id',scope)}))`;
   const list = await rows<ModelRow>(sql`${modelSelect(scope)} ${where} ORDER BY m.sort_order, m.title`);
   const versions = await currentVersions(list.map((m) => m.current_version_id).filter((id): id is string => Boolean(id)));
   return list.map((m) => modelItem(m, m.current_version_id ? versions.get(m.current_version_id) ?? null : null));
@@ -237,7 +239,12 @@ export async function listModels(scope: ProductionScope = null): Promise<PrintMo
 }
 
 /** A non-admin may print a model only if the platform released it to the organization it prints for. */
-async function assertReleased(organizationId: number, model: Pick<PrintModelRow, "slug" | "title">, scope: ProductionScope) {
+async function assertReleased(organizationId: number, model: Pick<PrintModelRow, "slug" | "title" | "customerOrderLineId">, scope: ProductionScope) {
+  if (model.customerOrderLineId && scope !== null) {
+    const [privateLine] = await rows<{ producer_organization_id:number }>(sql`SELECT producer_organization_id FROM customer_order_lines WHERE id=${model.customerOrderLineId}`);
+    if (!privateLine || privateLine.producer_organization_id!==organizationId || !scope.includes(organizationId)) throw new TagError('Model not found',404,'print_model_not_found');
+      return; // An explicit customer assignment releases this dedicated design to its producer only.
+  }
   if (scope === null) return;
   const [released] = await releasedModels([organizationId]);
   if (!modelReleased(released, model.slug)) {
@@ -259,6 +266,7 @@ export async function resolveModel(ref: string): Promise<PrintModelRow> {
 
 export async function getModel(ref: string, scope: ProductionScope = null): Promise<PrintModelDetail> {
   const model = await resolveModel(ref);
+  if (model.customerOrderLineId && scope !== null) await assertReleased((await rows<{producer_organization_id:number}>(sql`SELECT producer_organization_id FROM customer_order_lines WHERE id=${model.customerOrderLineId}`))[0]?.producer_organization_id??0,model,scope);
   if (scope !== null && (model.kind === "part" || !(await releasedWithin([model], scope)).length)) {
     throw new TagError("No print model with that id or slug", 404, "print_model_not_found");
   }
@@ -291,7 +299,12 @@ export async function createModel(input: PrintModelInput, userId: string | null,
   const fixesBatchId = input.version ? await checkVersion(input.kind, input.version) : null;
   try {
     const id = await db.transaction(async (tx) => {
+      if(input.customerOrderLineId){
+        const [line]=await rows<{custom:string;status:string;product_type:string;face:string;sales_product_id:number}>(sql`SELECT l.custom,o.status,l.product_type,l.face,l.sales_product_id FROM customer_order_lines l JOIN customer_orders o ON o.id=l.order_id WHERE l.id=${input.customerOrderLineId} FOR SHARE OF l`,tx);
+        if(!line||line.custom!=='custom'||line.status!=='open'||input.kind!=='serialized'||input.productType!==line.product_type||input.face!==line.face||input.salesProductId!==line.sales_product_id)throw new TagError('Invalid customer design assignment',409,'order_piece_design');
+      }
       const [model] = await tx.insert(printModels).values({
+        customerOrderLineId:input.customerOrderLineId,
         slug: input.slug,
         kind: input.kind,
         title: input.title,
@@ -597,6 +610,7 @@ export async function attachVersionPreview(modelRef: string, versionId: string, 
 export async function versionPreview(modelRef: string, versionId: string, scope: ProductionScope = null): Promise<{ body: Uint8Array; sha256: string }> {
   if (!UUID.test(versionId)) throw new TagError("Version not found", 404);
   const model = await resolveModel(modelRef);
+  if (model.customerOrderLineId && scope !== null) await assertReleased((await rows<{producer_organization_id:number}>(sql`SELECT producer_organization_id FROM customer_order_lines WHERE id=${model.customerOrderLineId}`))[0]?.producer_organization_id??0,model,scope);
   // As getModel: a branch prints serialized pieces only, so parts (and their previews) are not there for it.
   if (scope !== null && model.kind === "part") throw new TagError("No print model with that id or slug", 404, "print_model_not_found");
   const [version] = await rows<VersionRow>(sql`${VERSION_SELECT} WHERE v.id = ${versionId} AND v.model_id = ${model.id}`);
@@ -610,12 +624,20 @@ export async function versionPreview(modelRef: string, versionId: string, scope:
 }
 
 /** The models that have a 3D preview and the batches printed from them: what the piece pictures look up (any rep). */
-export async function previewCatalog(): Promise<PrintPreviewCatalog> {
-  const models = await rows<{ id: string; slug: string; title: string; product_type: string | null; face: string | null; theme: string | null; sha256: string }>(sql`
-    SELECT m.id, m.slug, m.title, m.product_type, m.face, m.theme, v.preview->>'sha256' AS sha256
+function privatePreviewRule(actor?: TagActor) {
+  if(actor?.isManager)return sql`TRUE`;
+  const managed=actor?.managedOrganizationIds??[];
+  const organizations=actor?.organizationIds??[];
+  return sql`(m.customer_order_line_id IS NULL OR EXISTS(SELECT 1 FROM customer_order_lines pl JOIN customer_orders po ON po.id=pl.order_id
+    WHERE pl.id=m.customer_order_line_id AND (${actor && organizations.length ? sql`po.rep_id=${actor.repId} AND po.organization_id IN (${sql.join(organizations.map(i=>sql`${i}`),sql`,`)})` : sql`FALSE`}
+    OR ${managed.length?sql`(po.organization_id IN (${sql.join(managed.map(i=>sql`${i}`),sql`,`)}) OR pl.producer_organization_id IN (${sql.join(managed.map(i=>sql`${i}`),sql`,`)}))`:sql`FALSE`})))`;
+}
+export async function previewCatalog(actor?: TagActor): Promise<PrintPreviewCatalog> {
+  const models = await rows<{ id: string; slug: string; title: string; product_type: string | null; face: string | null; theme: string | null; sha256: string;private:boolean }>(sql`
+    SELECT m.id, m.slug, m.title, m.product_type, m.face, m.theme, v.preview->>'sha256' AS sha256,m.customer_order_line_id IS NOT NULL AS private
     FROM print_models m
     JOIN print_model_versions v ON v.id = m.current_version_id
-    WHERE m.kind = 'serialized' AND v.preview->>'fileRef' IS NOT NULL
+    WHERE m.kind = 'serialized' AND v.preview->>'fileRef' IS NOT NULL AND ${privatePreviewRule(actor)}
     ORDER BY m.sort_order, m.title`);
   if (!models.length) return { models: [], batches: {} };
   const batches = await rows<{ batch_code: string; slug: string }>(sql`
@@ -625,14 +647,15 @@ export async function previewCatalog(): Promise<PrintPreviewCatalog> {
     JOIN print_models m ON m.id = j.model_id
     WHERE m.id IN (${sql.join(models.map((m) => sql`${m.id}::uuid`), sql`, `)})`);
   return {
-    models: models.map((m) => ({ slug: m.slug, title: m.title, productType: m.product_type, face: m.face, theme: m.theme, sha256: m.sha256 })),
+    models: models.map((m) => ({ slug: m.slug, title: m.title, productType: m.product_type, face: m.face, theme: m.theme, sha256: m.sha256,...(m.private?{private:true}:{}) })),
     batches: Object.fromEntries(batches.map((b) => [b.batch_code, b.slug])),
   };
 }
 
 /** A model's current version's preview, for the server to stream (see versionPreview). */
-export async function currentPreview(modelRef: string): Promise<{ body: Uint8Array; sha256: string }> {
+export async function currentPreview(modelRef: string, actor?: TagActor): Promise<{ body: Uint8Array; sha256: string }> {
   const model = await resolveModel(modelRef);
+  if(model.customerOrderLineId && !(await rows(sql`SELECT 1 FROM print_models m WHERE m.id=${model.id} AND ${privatePreviewRule(actor)}`)).length)throw new TagError('Model not found',404,'print_model_not_found');
   if (!model.currentVersionId) throw new TagError("This model has no 3D preview", 404, "print_preview_missing");
   return versionPreview(model.id, model.currentVersionId);
 }
@@ -772,10 +795,10 @@ const REQUEST_SELECT = sql`
   JOIN print_models m ON m.id = r.model_id
   JOIN print_model_versions v ON v.id = r.version_id`;
 
-async function withPlates(list: RequestRow[]): Promise<PrintRequestItem[]> {
+async function withPlates(list: RequestRow[], executor: typeof db | Tx = db): Promise<PrintRequestItem[]> {
   if (!list.length) return [];
   const ids = sql.join(list.map((r) => sql`${r.id}`), sql`, `);
-  const plates = (await rows<JobRow>(sql`${JOB_SELECT} WHERE j.request_id IN (${ids}) ORDER BY j.plate_number, j.created_at`)).map((j) => jobItem(j));
+  const plates = (await rows<JobRow>(sql`${JOB_SELECT} WHERE j.request_id IN (${ids}) ORDER BY j.plate_number, j.created_at`, executor)).map((j) => jobItem(j));
   return list.map((r) => ({
     id: r.id,
     modelId: r.model_id,
@@ -804,9 +827,9 @@ export async function listRequests(filter: "open" | "done" | "all", modelRef: st
   return withPlates(await rows<RequestRow>(sql`${REQUEST_SELECT} ${where} ORDER BY r.created_at DESC LIMIT 100`));
 }
 
-export async function getRequest(id: string, scope: ProductionScope): Promise<PrintRequestItem> {
+export async function getRequest(id: string, scope: ProductionScope, executor: typeof db | Tx = db): Promise<PrintRequestItem> {
   if (!UUID.test(id)) throw new TagError("Print request not found", 404, "print_request_not_found");
-  const [request] = await withPlates(await rows<RequestRow>(sql`${REQUEST_SELECT} WHERE r.id = ${id} AND ${scopeSql("r.organization_id", scope)}`));
+  const [request] = await withPlates(await rows<RequestRow>(sql`${REQUEST_SELECT} WHERE r.id = ${id} AND ${scopeSql("r.organization_id", scope)}`, executor), executor);
   if (!request) throw new TagError("Print request not found", 404, "print_request_not_found");
   return request;
 }
@@ -1081,8 +1104,9 @@ async function targetOrganization(ref: string | number | undefined, scope: Produ
  * instead, as a request of one plate, for the batch's own organization unless another is named. `replaces` (set by
  * reprintDamaged only) is the printed plate this request makes again: it is locked and checked inside the transaction.
  */
-export async function createJob(input: PrintJobCreateInput, userId: string | null, source: JourneySource, scope: ProductionScope, replaces: PrintJobRow | null = null): Promise<PrintRequestItem> {
+export async function createJob(input: PrintJobCreateInput, userId: string | null, source: JourneySource, scope: ProductionScope, replaces: PrintJobRow | null = null, orderContext?: { lineId: string; within: BatchInTransaction }): Promise<PrintRequestItem> {
   const model = await resolveModel(input.model);
+  if(model.customerOrderLineId && !orderContext && !replaces)throw new TagError('Create this print from its customer order',409,'order_private_model');
   let organizationRef = input.organization;
   if (input.existingBatch && organizationRef === undefined && model.kind === "serialized") {
     const [owner] = await db.select({ organizationId: tagBatches.organizationId }).from(tagBatches)
@@ -1114,8 +1138,18 @@ export async function createJob(input: PrintJobCreateInput, userId: string | nul
       "print_too_many_plates", { max: PRINT_MAX_PLATES * bed.copies });
   }
   const notes = input.notes ?? null;
-  const afterCommit: Array<() => Promise<void>> = [];
-  const requestId = await db.transaction(async (tx) => {
+  const afterCommit: Array<() => Promise<void>> = orderContext?.within.afterCommit ?? [];
+  const write = async (tx: Tx) => {
+    const orderLineId=orderContext?.lineId??(replaces?.requestId?(await tx.select({lineId:printRequests.customerOrderLineId}).from(printRequests).where(eq(printRequests.id,replaces.requestId)))[0]?.lineId:null);
+    if(orderLineId){
+      const [line]=await rows<{status:string;model_id:string;version_id:string;producer_organization_id:number;missing:number}>(sql`
+        SELECT o.status,l.model_id,l.version_id,l.producer_organization_id,
+        l.quantity-l.cancelled_quantity-(SELECT count(*) FROM customer_order_pieces p WHERE p.line_id=l.id AND p.state IN ('allocated','delivered'))-
+        (SELECT count(*) FROM tags t JOIN tag_batches b ON b.id=t.batch_id JOIN print_jobs j ON j.id=b.print_job_id JOIN print_requests r ON r.id=j.request_id
+          WHERE r.customer_order_line_id=l.id AND t.stock_status='pending' AND j.status NOT IN ('failed','cancelled')) AS missing
+        FROM customer_order_lines l JOIN customer_orders o ON o.id=l.order_id WHERE l.id=${orderLineId} FOR UPDATE OF l`,tx);
+      if(!line||line.status!=='open'||line.model_id!==model.id||line.version_id!==version.id||line.producer_organization_id!==organization.id||quantity>Number(line.missing))throw new TagError('Review the customer order before printing',409,'order_design_changed');
+    }
     if (replaces) {
       // Two clicks at once both wait on this lock; the second finds the first one's request and is refused.
       await tx.select({ id: printJobs.id }).from(printJobs).where(eq(printJobs.id, replaces.id)).for("update");
@@ -1127,6 +1161,7 @@ export async function createJob(input: PrintJobCreateInput, userId: string | nul
     const [request] = await tx.insert(printRequests).values({
       organizationId: organization.id, modelId: model.id, versionId: version.id, bedLabel: bed.label, quantity, notes, source, requestedByUserId: userId,
       replacesJobId: replaces?.id ?? null,
+      customerOrderLineId: orderLineId,
     }).returning({ id: printRequests.id });
     for (let index = 0; index < plates.length; index++) {
       const ctx: PlateContext = {
@@ -1137,10 +1172,11 @@ export async function createJob(input: PrintJobCreateInput, userId: string | nul
       else await createSerializedPlate(model, version, bed, plates[index], ctx);
     }
     return request.id;
-  });
-  await runAfterCommit(afterCommit);
+  };
+  const requestId = orderContext ? await write(orderContext.within.tx) : await db.transaction(write);
+  if (!orderContext) await runAfterCommit(afterCommit);
   console.log(`[production] request ${requestId} for ${model.slug} v${version.version}: ${quantity} pieces on ${plates.length} plate(s) [${plates.join(", ")}] for organization ${organization.id} (user ${userId ?? "?"})`);
-  return getRequest(requestId, scope);
+  return getRequest(requestId, scope, orderContext?.within.tx ?? db);
 }
 
 /**
@@ -1203,6 +1239,10 @@ export async function redoJob(id: string, userId: string | null, scope: Producti
     : [{ plate_count: 1 }];
   const afterCommit: Array<() => Promise<void>> = [];
   const nextId = await db.transaction(async (tx) => {
+    if(job.requestId){
+      const [orderLine]=await rows<{status:string;model_id:string;version_id:string}>(sql`SELECT o.status,l.model_id,l.version_id FROM print_requests r JOIN customer_order_lines l ON l.id=r.customer_order_line_id JOIN customer_orders o ON o.id=l.order_id WHERE r.id=${job.requestId} FOR UPDATE OF l`,tx);
+      if(orderLine&&(orderLine.status!=='open'||orderLine.model_id!==job.modelId||orderLine.version_id!==job.versionId))throw new TagError('Review the customer order before printing again',409,'order_design_changed');
+    }
     const [locked] = await tx.select({ status: printJobs.status }).from(printJobs).where(eq(printJobs.id, job.id)).for("update");
     if (!locked || (locked.status !== "failed" && locked.status !== "cancelled")) {
       throw new TagError("The order changed meanwhile; reload it", 409, "print_job_state");

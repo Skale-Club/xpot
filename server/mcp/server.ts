@@ -5,6 +5,7 @@ import { registerTagJourneyTools } from "./tools/tagJourney.js";
 import { registerPrintProductionTools } from "./tools/printProduction.js";
 import { registerProspectingTools } from "./tools/prospecting.js";
 import { registerTaskTools } from "./tools/tasks.js";
+import { registerCustomerOrderTools } from './tools/customerOrders.js';
 
 /** What a request was authorised with, for the call log. */
 export interface McpCaller {
@@ -28,6 +29,7 @@ function buildMcpServer(caller: McpCaller): McpServer {
   }
   if (caller.scopes.includes("xpot:prospecting")) registerProspectingTools(server, caller);
   if (caller.scopes.includes("xpot:tasks")) registerTaskTools(server, caller);
+  if (caller.scopes.includes('xpot:orders')) registerCustomerOrderTools(server, caller);
   return server;
 }
 

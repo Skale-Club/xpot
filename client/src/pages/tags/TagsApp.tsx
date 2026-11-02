@@ -4,11 +4,13 @@ import { useQuery } from "@tanstack/react-query";
 import { rememberModule, useXpotModules } from "@/components/ModuleSwitch";
 import { useT } from "@/i18n";
 import { tagsMessages } from "@/i18n/messages/tags";
+import { customerOrdersMessages } from '@/i18n/messages/customerOrders';
 import type { XpotMeResponse } from "@/pages/xpot/types";
 import DirectScreen from "./DirectScreen";
 import CustomersScreen from "./CustomersScreen";
 import CustomerScreen from "./CustomerScreen";
 import HomeScreen from "./HomeScreen";
+import CustomerOrders from './CustomerOrders';
 import PiecesScreen from "./PiecesScreen";
 import ShopScreen from "./ShopScreen";
 import TagsResults from "./TagsResults";
@@ -25,6 +27,7 @@ import { SessionGate } from "@/components/xpot/SessionGate";
 /** The Tags module: read, sell and write QR/NFC pieces. Mounted at /tags/*. */
 export function TagsApp() {
   const t = useT(tagsMessages);
+  const ordersT=useT(customerOrdersMessages);
   const [location] = useLocation();
   const meQuery = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
   const modules = useXpotModules();
@@ -54,13 +57,15 @@ export function TagsApp() {
 
   return (
     <AppLayout
-      title={pieceCode ?? (location.startsWith(`${APP_BASE}/direct`) ? t("navDirect") : location.startsWith(`${APP_BASE}/results`) ? t("resultsTitle") : t(currentNav.key))}
+      title={pieceCode ?? (location.startsWith(`${APP_BASE}/orders`)?ordersT('title'):location.startsWith(`${APP_BASE}/direct`) ? t("navDirect") : location.startsWith(`${APP_BASE}/results`) ? t("resultsTitle") : t(currentNav.key))}
       wide={wide}
       mobileColumnClassName={MODULE_COLUMN}
       phoneBar={!phoneBarHidden(location)}
       mobileNav={<TagsTabBar />}
     >
       <Switch>
+        <Route path={`${APP_BASE}/orders/:id`}>{params=><CustomerOrders id={params.id}/>}</Route>
+        <Route path={`${APP_BASE}/orders`}>{()=><CustomerOrders/>}</Route>
         <Route path={`${APP_BASE}/t/:code`}>
           {(params) =>
             // On desktop a piece opens beside the pieces table.

@@ -22,15 +22,16 @@ export interface StockMetricRule {
   sold?: boolean;
   /** Has a customer (tags.lead_id) or none. */
   customer?: boolean;
+  allocated?: boolean;
 }
 
 export const TAG_STOCK_METRICS = {
   /** Company (house) stock: physically in stock, no rep, not retired, unsold, and no customer yet. A piece set up for a customer is theirs. */
-  house: { holder: "house", stockStatus: "available", notRetired: true, sold: false, customer: false },
+  house: { holder: "house", stockStatus: "available", notRetired: true, sold: false, customer: false, allocated: false },
   /** Held by the company, in stock and unsold, but already set up for a customer: no longer company stock. house + withCustomer is what house used to be. */
   withCustomer: { holder: "house", stockStatus: "available", notRetired: true, sold: false, customer: true },
   /** In reps' hands and unsold: physically in stock with a rep, not retired, no financial sale. */
-  withResellers: { holder: "rep", stockStatus: "available", notRetired: true, sold: false },
+  withResellers: { holder: "rep", stockStatus: "available", notRetired: true, sold: false, allocated: false },
   /** A recorded financial sale. */
   sold: { sold: true },
   /** Live: QR and NFC redirect. */
@@ -39,9 +40,9 @@ export const TAG_STOCK_METRICS = {
   notReceived: { stockStatus: "pending" },
   damaged: { stockStatus: "damaged" },
   /** House stock that can go into a kit now: in stock, no rep, not set up for a customer, unsold. */
-  handOut: { holder: "house", stockStatus: "available", status: "inventory", sold: false },
+  handOut: { holder: "house", stockStatus: "available", status: "inventory", sold: false, allocated: false },
   /** With a rep and returnable to house stock now: in stock, not set up for a customer, unsold. */
-  returnable: { holder: "rep", stockStatus: "available", status: "inventory", sold: false },
+  returnable: { holder: "rep", stockStatus: "available", status: "inventory", sold: false, allocated: false },
 } as const satisfies Record<string, StockMetricRule>;
 
 export type TagStockMetric = keyof typeof TAG_STOCK_METRICS;
@@ -55,6 +56,7 @@ export interface StockMetricPiece {
   saleId: number | null;
   /** The customer (TagListItem.leadId). */
   leadId: number | null;
+  customerOrderLineId?: string | null;
 }
 
 export function matchesStockRule(piece: StockMetricPiece, rule: StockMetricRule): boolean {
@@ -65,6 +67,7 @@ export function matchesStockRule(piece: StockMetricPiece, rule: StockMetricRule)
   if (rule.notRetired && piece.status === "retired") return false;
   if (rule.sold !== undefined && (piece.saleId !== null) !== rule.sold) return false;
   if (rule.customer !== undefined && (piece.leadId !== null) !== rule.customer) return false;
+  if (rule.allocated !== undefined && Boolean(piece.customerOrderLineId) !== rule.allocated) return false;
   return true;
 }
 

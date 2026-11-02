@@ -7,6 +7,7 @@ import type { LeadTagSummary } from "@shared/tagsApi";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/i18n";
+import { OrdersPanel } from '@/pages/tags/CustomerOrders';
 import { leadsMessages } from "@/i18n/messages/leads";
 import { visitsMessages } from "@/i18n/messages/visits";
 import { visitsUiMessages } from "@/i18n/messages/visitsUi";
@@ -207,6 +208,7 @@ export function LeadDetailPane({ lead, pieces, visits, onClose, backLabel, onDel
           </Link>
         ) : null}
       </header>
+      <OrdersPanel leadId={lead.id}/>
 
       {/* Sold and the visits are in the cards below; the shelf and the pieces are what to check on the way in. */}
       {/* Two zeros say nothing; with stock or pieces here the numbers are worth the room. */}

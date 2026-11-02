@@ -4,6 +4,8 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/i18n";
 import { pieceScreenMessages } from "@/i18n/messages/pieceScreen";
+import { customerOrdersMessages } from '@/i18n/messages/customerOrders';
+import { Link } from 'wouter';
 import { ActivitySection } from "./ActivitySection";
 import { ChipSection } from "./ChipSection";
 import { CustodyCard } from "./CustodyCard";
@@ -33,6 +35,7 @@ function ActionIcon({ kind }: { kind: keyof typeof ACTION_ICON }) {
 export function PieceBody({ layout, desktopWriter }: { layout: "stack" | "columns"; desktopWriter?: ReactNode }) {
   const { tag, viewer } = usePiece();
   const tp = useT(pieceScreenMessages);
+  const ordersT=useT(customerOrdersMessages);
   const [, navigate] = useLocation();
   // Sections fill these on render; the main button calls them (PieceCommands).
   const commands = useRef<PieceCommands>({});
@@ -45,9 +48,9 @@ export function PieceBody({ layout, desktopWriter }: { layout: "stack" | "column
   const receiveIsMain = action?.kind === "receive";
 
   const sections = new Set(pieceSections(viewer));
-  const customer = sections.has("customer") ? <CustomerDestinationSection commands={commands} /> : null;
+  const customer = !tag.customerOrderLineId && sections.has("customer") ? <CustomerDestinationSection commands={commands} /> : null;
   const chip = sections.has("chip") ? <div ref={chipRef}><ChipSection desktopWriter={desktopWriter} commands={commands} /></div> : null;
-  const sale = sections.has("sale") ? <SaleSection /> : null;
+  const sale = !tag.customerOrderLineId && sections.has("sale") ? <SaleSection /> : null;
   const performance = sections.has("performance") ? <div ref={performanceRef}><PerformanceSection /></div> : null;
   const management = sections.has("management") ? <ManagementSection /> : null;
   const activity = sections.has("activity") ? <ActivitySection /> : null;
@@ -74,7 +77,7 @@ export function PieceBody({ layout, desktopWriter }: { layout: "stack" | "column
   };
 
   // The receive panel is its own main action (it asks where to receive into); the other kinds are one button.
-  const main = receiveIsMain ? (
+  const main = tag.customerOrderId ? <Link href={`/tags/orders/${tag.customerOrderId}`} className="mb-4 block rounded-xl border border-violet-400/25 bg-violet-400/10 p-4 text-sm font-semibold text-violet-200">{ordersT('ready')} · {ordersT('title')} →</Link> : receiveIsMain ? (
     <CustodyCard />
   ) : action ? (
     // A piece that works needs nothing next: seeing how it does is one option among the others, not the brand button.

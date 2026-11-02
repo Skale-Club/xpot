@@ -7,6 +7,7 @@ import { validateChipContent } from "@shared/chipContent";
 import { guessDestinationType, normalizeUrlInput } from "@shared/tagApp";
 import { stockBlock } from "@shared/tags";
 import { useT } from "@/i18n";
+import { OrdersPanel } from './CustomerOrders';
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { leadsMessages } from "@/i18n/messages/leads";
@@ -326,6 +327,7 @@ export default function CustomerScreen({ leadId }: { leadId: number }) {
         <KpiTile accent="violet" icon={ScanLine} value={formatCount(scans30, t.locale)} label={t("customersScans30")} />
       </div>
       <Banner banner={banner} />
+      <OrdersPanel leadId={leadId}/>
 
       <div className="mt-4 grid grid-cols-[minmax(0,1fr)] items-start gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
         <MasterDetail

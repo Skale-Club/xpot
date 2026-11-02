@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { TagListItem } from "@shared/tagsApi";
 import { computeSaleTotals, resolveUnitPriceCents } from "@shared/pricing";
 import { saleCostPreview, saleCustomerConflict, suggestSaleCustomer } from "@shared/tagSales";
+import { useShowProfit } from '@/pages/xpot/hooks/useShowProfit';
 import { canManage, isSuperAdmin } from "@shared/modules";
 import type { ProductWithTiers } from "@/pages/xpot/hooks/useSalesModule";
 import { NO_PAYMENT_CHOSEN, PaymentChoice, type PaymentChoiceState } from "@/pages/xpot/components/sales/PaymentChoice";
@@ -95,7 +96,7 @@ export default function TagSaleDialog({
     staleTime: 5 * 60_000,
   });
   // One sale per piece, opened from that piece (like activating it).
-  const available = useMemo(() => pieces.filter((piece) => !piece.saleId && piece.status !== "retired" && piece.stockStatus === "available"), [pieces]);
+  const available = useMemo(() => pieces.filter((piece) => !piece.customerOrderLineId && !piece.saleId && piece.status !== "retired" && piece.stockStatus === "available"), [pieces]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [lead, setLead] = useState<LeadChoice>(null);
   const [prices, setPrices] = useState<PriceState>({});
@@ -162,7 +163,7 @@ export default function TagSaleDialog({
   // Selling in someone else's name: their cost rule applies, and the server checks it (its answer shows here).
   const forOther = sellerRepId !== undefined && !!me && sellerRepId !== me.rep.id;
   const missingCost = !forOther && me?.rep.costPolicy === "acquisition"
-    ? selectedPieces.filter((piece) => piece.acquisitionCostCents == null).length
+    ? selectedPieces.filter((piece) => !(piece.hasAcquisitionCost ?? piece.acquisitionCostCents != null)).length
     : 0;
   const unconfiguredPolicy = me && !forOther ? !me.rep.costPolicyConfiguredAt : false;
   const catalogUnavailable = selectedPieces.length > 0 && (
@@ -173,6 +174,7 @@ export default function TagSaleDialog({
   // In the holder's name the holder's cost rule applies, which the pieces do not
   // carry: no cost or profit preview then, only whose cost the server will use.
   const costPreview = previewOf(selectedPieces);
+  const showProfit = useShowProfit();
   const lineInputs = groups.map((group) => {
     const preview = previewOf(group.tags);
     return {
@@ -329,14 +331,14 @@ export default function TagSaleDialog({
             <div className="flex items-center justify-between text-xs text-white/45"><span>{ts("subtotal")}</span><Money cents={totals.subtotalCents} /></div>
             <Field label={ts("discount")}><MoneyInput valueCents={discountCents} onChangeCents={(value) => { setDiscountCents(value); attempt.current = null; }} /></Field>
             <div className="flex items-center justify-between border-t border-white/10 pt-2.5"><span className="font-semibold text-white">{ts("total")}</span><Money cents={totals.totalCents} className="text-lg font-bold text-emerald-300" /></div>
-            {costPreview.kind === "own" ? (
+            {showProfit && costPreview.kind === "own" ? (
               <>
                 <div className="flex items-center justify-between text-xs text-white/45"><span>{t("saleCost")}</span><Money cents={totals.costCents} className={MONEY_CHART.cost.text} /></div>
                 <div className="flex items-center justify-between text-xs text-white/45"><span>{t("saleGrossProfit")}</span><Money cents={totals.profitCents} className="font-semibold text-white" /></div>
               </>
             ) : (
               <p className="text-xs text-white/45" data-testid="sale-seller-cost-note">
-                {costPreview.sellerName ? t("saleSellerCostNote", { name: costPreview.sellerName }) : t("saleSellerCostNoteUnnamed")}
+                {costPreview.kind === 'seller' && costPreview.sellerName ? t("saleSellerCostNote", { name: costPreview.sellerName }) : t("saleSellerCostNoteUnnamed")}
               </p>
             )}
           </div>

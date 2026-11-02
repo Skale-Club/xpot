@@ -152,6 +152,10 @@ test("the reseller's To do counts what is waiting, from the pieces they hold", (
   assert.deepEqual(resellerTodo(rows), { finish: 1, noCustomer: 2, paused: 1 });
   assert.deepEqual(resellerTodo([]), { finish: 0, noCustomer: 0, paused: 0 });
   assert.deepEqual(resellerTodo([rows[3]]), { finish: 0, noCustomer: 0, paused: 0 });
+  const allocated=rows.map(row=>({...row,customerOrderLineId:'order-line'}));
+  assert.deepEqual(resellerTodo(allocated),{finish:0,noCustomer:0,paused:0});
+  assert.equal(matchesPieceFilters(allocated[0],parsePieceFilters({status:'setup'})),false);
+  assert.equal(matchesPieceFilters(allocated[0],parsePieceFilters({status:'all'})),true);
 });
 
 test("chip filter: set-up pieces whose chip still needs writing, as the dashboard counts them", () => {

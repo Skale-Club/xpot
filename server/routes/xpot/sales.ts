@@ -8,6 +8,9 @@ import { allocateSaleLineTotals, chosenPaymentStatus, computeSaleTotals, PAYMENT
 import { syncSaleToXphere } from "./xphere-sync.js";
 import { cancelSale } from "../../tags/sales.js";
 import { canManageOrganizationForActor, canViewOrganizationForActor } from "../../organizations/service.js";
+import { db } from '../../db.js';
+import { customerOrderDeliveries } from '#shared/schema.js';
+import { eq } from 'drizzle-orm';
 
 // Direct sales: what the rep closes on the spot (a website, a marketing plan,
 // a handful of keychains sold outright). Consignment settlements also land
@@ -184,6 +187,8 @@ export function createSalesRouter() {
       return res.status(400).json({ code: "sale_cancelled", message: "Sale is cancelled" });
     }
     const input = xpotSalePaymentSchema.parse(req.body);
+    const [orderDelivery] = await db.select().from(customerOrderDeliveries).where(eq(customerOrderDeliveries.saleId, existing.sale.id));
+    if (orderDelivery) return res.status(409).json({code:'order_payment_required', message:'Record this payment in the customer order.', orderId:orderDelivery.orderId});
     const total = existing.sale.totalCents;
     const paidCents = input.paymentStatus === "paid"
       ? total
@@ -213,6 +218,8 @@ export function createSalesRouter() {
     if (existing.sale.kind === "consignment_settlement") {
       return res.status(400).json({ code: "settlement_sale_not_cancellable", message: "Settlement sales cannot be cancelled. Record a stock adjustment on the consignment instead." });
     }
+      const [orderDelivery]=await db.select().from(customerOrderDeliveries).where(eq(customerOrderDeliveries.saleId,existing.sale.id));
+      if(orderDelivery)return res.status(409).json({code:'order_delivery_cancel',message:'Reverse this delivery in the customer order after confirming the physical return.',orderId:orderDelivery.orderId});
     const { reason } = xpotSaleCancelSchema.parse(req.body ?? {});
     // Pieces can sit on any sale (sold from Tags, or linked to a Visits sale
     // later); they go back to stock in the same transaction. Cancelling again

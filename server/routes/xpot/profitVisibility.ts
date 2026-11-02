@@ -10,6 +10,7 @@ import { accessDenial, ensureXpotRep, type XpotActor } from "./middleware.js";
 /** Every field of these APIs that carries a cost or a profit. */
 const PROFIT_KEYS: ReadonlySet<string> = new Set([
   "costCents",
+  "acquisitionCostCents",
   "unitCostCents",
   "costBasisCents",
   "profitCents",

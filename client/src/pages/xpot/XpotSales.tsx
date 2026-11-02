@@ -26,6 +26,8 @@ import { SalesList, ConsignmentsList } from "./components/sales/SalesLists";
 import type { EnrichedSalesOpportunity } from "./types";
 import { useT } from "@/i18n";
 import { salesMessages } from "@/i18n/messages/sales";
+import { customerOrdersMessages } from '@/i18n/messages/customerOrders';
+import { useXpotModules } from '@/components/ModuleSwitch';
 import { Button } from "@/components/ui/button";
 import { DotsLoader } from "@/components/ui/spinner";
 import { FIELD_CONTROL, Input, Select } from "@/components/xpot/Field";
@@ -224,6 +226,8 @@ const DEAL_STATUSES = ["open", "won", "lost"] as const;
 /** One deal opened for editing: its value, stage and whether it was won or lost. */
 function DealDialog({ deal, pipelines, onClose }: { deal: EnrichedSalesOpportunity | null; pipelines: GHLPipeline[]; onClose: () => void }) {
   const t = useT(salesMessages);
+  const ordersT=useT(customerOrdersMessages),[,navigate]=useLocation();
+  const tagsEnabled=useXpotModules().includes('tags');
   const { toast } = useToast();
   const { invalidateXpotData } = useXpotShared();
   const [title, setTitle] = useState("");
@@ -274,6 +278,7 @@ function DealDialog({ deal, pipelines, onClose }: { deal: EnrichedSalesOpportuni
         <Button type="button" variant="brand" className="w-full" disabled={!title.trim() || !valueOk} loading={save.isPending} onClick={() => save.mutate()}>
           {t("saveDeal")}
         </Button>
+        {deal?.status==='won'&&tagsEnabled&&<Button variant="secondary" className="w-full" onClick={()=>navigate(`/tags/orders/new?leadId=${deal.leadId}&opportunityId=${deal.id}&name=${encodeURIComponent(deal.lead?.name??'')}`)}>{ordersT('newOrder')}</Button>}
         {!title.trim() ? <p className="text-xs text-white/45">{t("dealNeedsTitle")}</p> : !valueOk ? <p className="text-xs text-white/45">{t("dealNeedsNumber")}</p> : null}
       </div>
     </SheetDialog>

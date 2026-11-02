@@ -115,7 +115,7 @@ export function dictionariesOf(modules: Record<string, Record<string, unknown>>)
     Object.entries(mod)
       .filter(([name, value]) => name.endsWith("Messages") && value && typeof value === "object" && "en" in value)
       .map(([name, value]) => ({
-        file: path.split("/").pop()!,
+        file: path.replaceAll('\\','/').split("/").pop()!,
         name,
         keys: Object.keys((value as { en: Record<string, string> }).en),
       })),

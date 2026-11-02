@@ -1,0 +1,27 @@
+✔ normalizeServerUrl: https only, except localhost; keeps just the origin (1.5805ms)
+✔ sends protocol header, app version and bearer token; 204 claim = no job (56.8896ms)
+✔ pair body matches the server's strict pairSchema (2.6888ms)
+✔ complete trims free text to the server limits instead of losing the result (0.8119ms)
+✔ errors surface the server's { message } and status (0.8122ms)
+✔ URI record uses the https:// prefix code and short-record header (1.8381ms)
+✔ TLV wrapping and parsing, skipping NULL and Lock Control TLVs (0.4462ms)
+✔ tag info: NTAG213/215 sizes, unformatted and read-only tags (1.0998ms)
+✔ write → read back returns exactly the URL; rewrites replace older longer URLs (1.0448ms)
+✔ lifting the tag mid-write leaves it empty, never a truncated URL (0.4485ms)
+✔ read-only and too-small tags are refused before writing (0.4127ms)
+✔ app protocol version matches Xpot's PROVISIONER_PROTOCOL_VERSION (37.2142ms)
+✔ pair → claim → place tag → program → server-verified → remove → next job (122.7203ms)
+✔ a bad write is reported and the server marks it failed (67.563ms)
+✔ lifting the tag mid-write fails the job as tag_removed (66.1197ms)
+✔ problems found before writing keep the job open (57.4385ms)
+✔ two readers block programming (50.1764ms)
+✔ revoked token → unpaired and credentials wiped; protocol mismatch → update required (61.2927ms)
+✔ operator can give up on a piece (36.0885ms)
+ℹ tests 19
+ℹ suites 0
+ℹ pass 19
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1764.2418

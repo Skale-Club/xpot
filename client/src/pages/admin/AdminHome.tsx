@@ -3,6 +3,7 @@ import { useQueries, useQuery } from "@tanstack/react-query";
 import { ArrowRight, CheckCircle2 } from "lucide-react";
 import { COMPANY_ORGANIZATION_SLUG } from "@shared/organizations";
 import { useT } from "@/i18n";
+import { OrdersPanel } from '@/pages/tags/CustomerOrders';
 import { workspacesMessages } from "@/i18n/messages/workspaces";
 import { adminTagsFlowMessages } from "@/i18n/messages/adminTagsFlow";
 import { EmptyState } from "@/components/xpot/EmptyState";
@@ -109,6 +110,7 @@ export function AdminHome() {
   // The screen's title is the top bar's (and the phone's, in the frame): here only what the list is. The sidebar reaches the rest.
   return <div className="space-y-6" data-testid="management-home">
     <p className="max-w-2xl text-sm leading-relaxed text-white/50">{t("todayIntro")}</p>
+    <OrdersPanel all/>
     {profile === "platform" ? <PlatformToday me={me} /> : profile === "partner" ? <PartnerToday /> : profile === "owner" ? <OwnerToday me={me} /> : null}
   </div>;
 }

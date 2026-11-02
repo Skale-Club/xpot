@@ -17,7 +17,7 @@ import {
   printVersionInputSchema,
   type PrintFileKind,
 } from "#shared/printProduction.js";
-import { productionScopeOf, requireProductionUser, requireTagAdmin, requireTagUser } from "./access.js";
+import { actorOf, productionScopeOf, requireProductionUser, requireTagAdmin, requireTagUser } from "./access.js";
 import { TagError } from "./errors.js";
 import * as production from "./production.js";
 import { companyOrganizationId } from "../organizations/service.js";
@@ -218,10 +218,10 @@ export function registerProductionRoutes(app: Express, deps: { device: readonly 
 
   // The same previews for every signed-in rep, because the piece pictures (lists, headers, customer screens) show them:
   // the catalog says which model a piece is and the GLB is streamed by the server like the admin one above.
-  app.get(PRINT_PREVIEW_CATALOG_PATH, requireTagUser, async (_req, res) => {
+  app.get(PRINT_PREVIEW_CATALOG_PATH, requireTagUser, async (req, res) => {
     try {
       res.set("Cache-Control", "private, max-age=60");
-      res.json(await production.previewCatalog());
+      res.json(await production.previewCatalog(actorOf(req)));
     } catch (err) {
       fail(res, err, "Failed to load the 3D previews");
     }
@@ -229,7 +229,7 @@ export function registerProductionRoutes(app: Express, deps: { device: readonly 
 
   app.get(`${PRINT_PREVIEW_CATALOG_PATH}/:ref/glb`, requireTagUser, async (req, res) => {
     try {
-      const { body, sha256 } = await production.currentPreview(req.params.ref);
+      const { body, sha256 } = await production.currentPreview(req.params.ref, actorOf(req));
       res.set({ "Content-Type": PRINT_PREVIEW_CONTENT_TYPE, "Cache-Control": "private, max-age=3600", ETag: `"${sha256}"` });
       if (req.headers["if-none-match"] === `"${sha256}"`) return res.status(304).end();
       res.send(Buffer.from(body.buffer, body.byteOffset, body.byteLength));

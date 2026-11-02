@@ -17,6 +17,13 @@ const catalog: PrintPreviewCatalog = {
 };
 
 describe("resolvePieceModel", () => {
+  it('never substitutes private customer artwork for an unrecognized model or a generic product',()=>{
+    const privateOnly={models:[{slug:'private-restaurant',title:'Private',productType:'large_plate',face:'menu',theme:null,sha256:'test',private:true}],batches:{'PRIVATE-1':'private-restaurant'}};
+    expect(resolvePieceModel(privateOnly,{productType:'large_plate',face:'menu',modelSlug:'public-without-preview'})).toBeNull();
+    expect(resolvePieceModel(privateOnly,{productType:'large_plate',face:'menu'})).toBeNull();
+    expect(resolvePieceModel(privateOnly,{productType:'large_plate',face:'menu',modelSlug:'private-restaurant'})?.slug).toBe('private-restaurant');
+    expect(resolvePieceModel(privateOnly,{productType:'large_plate',face:'menu',batchCode:'PRIVATE-1'})?.slug).toBe('private-restaurant');
+  });
   it("tells white from black by the batch the piece came from", () => {
     expect(resolvePieceModel(catalog, { productType: "large_stand", face: "google_review", batchCode: "REV-2026-006" })?.slug).toBe("stand-large-google-black");
     expect(resolvePieceModel(catalog, { productType: "large_stand", face: "google_review", batchCode: "REV-2026-003" })?.slug).toBe("stand-large-google-white");

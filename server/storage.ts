@@ -940,6 +940,7 @@ async function leadDeletionCountsIn(executor: typeof db | Tx, leadIds: number[])
       (SELECT count(*)::int FROM sales_sales x WHERE x.lead_id = l.id) AS sales,
       (SELECT count(*)::int FROM sales_consignments x WHERE x.lead_id = l.id) AS consignments,
       (SELECT count(*)::int FROM tags x WHERE x.lead_id = l.id) AS pieces,
+      (SELECT count(*)::int FROM customer_orders x WHERE x.lead_id = l.id) AS orders,
       (SELECT count(*)::int FROM sales_visits x WHERE x.lead_id = l.id) AS visits,
       (SELECT count(*)::int FROM sales_tasks x WHERE x.lead_id = l.id
         OR x.visit_id IN (SELECT v.id FROM sales_visits v WHERE v.lead_id = l.id)
@@ -948,7 +949,7 @@ async function leadDeletionCountsIn(executor: typeof db | Tx, leadIds: number[])
     FROM sales_leads l WHERE l.id IN (${ids})
   `);
   for (const row of found.rows as Array<Record<string, number>>) {
-    counts.set(Number(row.id), { sales: Number(row.sales), consignments: Number(row.consignments), pieces: Number(row.pieces), visits: Number(row.visits), tasks: Number(row.tasks), deals: Number(row.deals) });
+    counts.set(Number(row.id), { orders: Number(row.orders), sales: Number(row.sales), consignments: Number(row.consignments), pieces: Number(row.pieces), visits: Number(row.visits), tasks: Number(row.tasks), deals: Number(row.deals) });
   }
   return counts;
 }

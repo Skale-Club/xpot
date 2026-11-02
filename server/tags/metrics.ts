@@ -18,6 +18,7 @@ export function stockRuleSql(rule: StockMetricRule, alias = "t"): SQL {
     conds.push(rule.sold ? sale : sql`NOT ${sale}`);
   }
   if (rule.customer !== undefined) conds.push(rule.customer ? sql`${t}.lead_id IS NOT NULL` : sql`${t}.lead_id IS NULL`);
+  if (rule.allocated !== undefined) conds.push(rule.allocated ? sql`${t}.customer_order_line_id IS NOT NULL` : sql`${t}.customer_order_line_id IS NULL`);
   return conds.length ? sql`(${sql.join(conds, sql` AND `)})` : sql`true`;
 }
 

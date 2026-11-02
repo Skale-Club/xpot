@@ -54,7 +54,7 @@ export type FileRef =
  * Keys are always kind/repId/file, or print/<order or model uuid>/file for Tags › Production's print files
  * (served only by the admin route, server/tags/production.ts) — nothing else is ever signed or deleted.
  */
-const KEY_PATTERN = /^(?:(audio|photos)\/\d+|print\/[0-9a-f-]{36})\/[A-Za-z0-9._-]+$/;
+const KEY_PATTERN = /^(?:(audio|photos)\/\d+|(?:print|orders)\/[0-9a-f-]{36})\/[A-Za-z0-9._-]+$/;
 
 export function isValidKey(key: string): boolean {
   return KEY_PATTERN.test(key);

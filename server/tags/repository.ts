@@ -135,6 +135,8 @@ export interface TagListFilters {
 }
 
 type TagRow = {
+  customer_order_line_id?: string | null;
+  customer_order_id?: string | null;
   id: string;
   public_code: string;
   serial_number: number | null;
@@ -180,6 +182,9 @@ const faceOf = (r: { face: string | null; batch_face: string | null; product_typ
 
 function toListItem(r: TagRow): TagListItem {
   return {
+    customerOrderLineId: r.customer_order_line_id ?? null,
+    customerOrderId: r.customer_order_id ?? null,
+    hasAcquisitionCost: r.acquisition_cost_cents != null,
     id: r.id,
     publicCode: r.public_code,
     serialNumber: r.serial_number,
@@ -224,6 +229,7 @@ function toListItem(r: TagRow): TagListItem {
 function tagListQuery(where: SQL, limit: number, offset = 0, opts: { inventoryScan?: boolean } = {}): SQL {
   return sql`
     SELECT t.id, t.public_code, t.serial_number, t.product_type, COALESCE(t.sales_product_id, b.sales_product_id) AS sales_product_id,
+           t.customer_order_line_id, (SELECT order_id FROM customer_order_lines WHERE id=t.customer_order_line_id) AS customer_order_id,
            t.face, b.face AS batch_face, t.status, t.stock_status, t.ownership_type, t.custodian_rep_id,
            t.internal_use_note, t.nfc_provisioning_status, t.label,
            t.destination_type, t.destination_url, t.lead_id, l.name AS lead_name, t.rep_id, r.display_name AS rep_name,
@@ -842,10 +848,10 @@ export interface KitInput {
  * (inventory, no reseller) can go into a kit; anything else is refused with
  * the offending codes, and nothing is moved.
  */
-export async function deliverKit(input: KitInput, userId: string | null, source: JourneySource = "admin"): Promise<TagKitItem> {
+export async function deliverKit(input: KitInput, userId: string | null, source: JourneySource = "admin", within?: BatchInTransaction): Promise<TagKitItem> {
   let delivered: Array<{ publicCode: string; batchId: string | null }> = [];
   const organizationId = input.organizationId ?? await organizationIdForRep(input.repId);
-  const kitId = await db.transaction(async (tx) => {
+  const write = async (tx: Tx) => {
     let picked: Array<{
       id: string; organizationId: number; publicCode: string; status: string; stockStatus: string;
       ownershipType: string; custodianRepId: number | null; repId: number | null; batchId: string | null;
@@ -888,6 +894,7 @@ export async function deliverKit(input: KitInput, userId: string | null, source:
           eq(tags.status, "inventory"),
           eq(tags.stockStatus, "available"),
           isNull(tags.repId),
+          isNull(tags.customerOrderLineId),
           sql`NOT EXISTS (SELECT 1 FROM sales_sale_tags st WHERE st.tag_id = ${tags.id} AND st.status = 'active')`,
           ...(input.sourceOrganizationId !== undefined ? [eq(tags.organizationId, input.sourceOrganizationId)] : []),
         ))
@@ -942,6 +949,7 @@ export async function deliverKit(input: KitInput, userId: string | null, source:
         kitId: kit.id,
         source: "manual",
         status: "fulfilled",
+        fulfilledFromOrganizationId: input.sourceOrganizationId ?? null,
         createdByUserId: userId,
       }).returning();
       const productRows = await tx
@@ -974,7 +982,13 @@ export async function deliverKit(input: KitInput, userId: string | null, source:
     console.log(`[tags] kit ${kit.id}: ${picked.length} pieces → rep ${input.repId} (user ${userId ?? "?"})`);
     delivered = picked.map((t) => ({ publicCode: t.publicCode, batchId: t.batchId }));
     return kit.id;
-  });
+  };
+  const kitId = within ? await write(within.tx) : await db.transaction(write);
+  if (within) {
+    within.afterCommit.push(async () => { await recordJourney({kind:'execution',action:'kit_delivered',title:`Kit of ${delivered.length} pieces delivered`,kitId,repId:input.repId,metadata:{codes:delivered.map(t=>t.publicCode)}},journeyContext(userId,source)); });
+    const [kit] = await listKits({ kitId }, within.tx);
+    return kit;
+  }
   const [kit] = await listKits({ kitId });
   // One entry for the whole hand-over. It carries the codes it moved, so each
   // piece's own story includes it even after the piece leaves the kit.
@@ -993,7 +1007,7 @@ export async function deliverKit(input: KitInput, userId: string | null, source:
   return kit;
 }
 
-export async function listKits(filter: { repId?: number; kitId?: string; organizationId?: number; scope?: OrganizationScope } = {}): Promise<TagKitItem[]> {
+export async function listKits(filter: { repId?: number; kitId?: string; organizationId?: number; scope?: OrganizationScope } = {}, executor: typeof db | Tx = db): Promise<TagKitItem[]> {
   const conds: SQL[] = [sql`true`];
   if (filter.repId !== undefined) conds.push(sql`k.rep_id = ${filter.repId}`);
   if (filter.organizationId !== undefined) conds.push(sql`k.organization_id = ${filter.organizationId}`);
@@ -1039,7 +1053,7 @@ export async function listKits(filter: { repId?: number; kitId?: string; organiz
     WHERE ${sql.join(conds, sql` AND `)}
     GROUP BY k.id, k.organization_id, k.source_organization_id, r.display_name, acq.source, acq.unit_cost_cents, items.handed_out, items.returned, items.moved, own.to_ownership_type
     ORDER BY k.created_at DESC
-  `);
+  `, executor);
   // Where "Take back unsold" sends this kit's pieces, for the person asking (a kit's pieces sit in the receiver's organization).
   const companyId = await companyOrganizationId();
   const destinations = list.map((k) => takeBackDestination({
@@ -1107,6 +1121,7 @@ export async function getKitItems(kitId: string, scope: OrganizationScope = null
 // ─── Distribution dry runs (Hand out, Take back) ──────────────────────────────
 
 type CheckRow = {
+  customer_order_line_id?: string | null;
   id: string; public_code: string; status: string; stock_status: string; rep_id: number | null; rep_name: string | null;
   serial_number: number | null; batch_code: string | null; product_type: string; kit_number: number | null; sold: boolean;
   organization_id: number; kit_source_organization_id: number | null; ownership_type: string;
@@ -1115,7 +1130,7 @@ type CheckRow = {
 async function piecesForCheck(where: SQL, limit?: number): Promise<CheckRow[]> {
   return rows<CheckRow>(sql`
     SELECT t.id, t.public_code, t.status, t.stock_status, t.rep_id, r.display_name AS rep_name, t.serial_number, b.batch_code,
-           t.product_type, k.kit_number, t.organization_id, k.source_organization_id AS kit_source_organization_id, t.ownership_type,
+           t.product_type, k.kit_number, t.organization_id, k.source_organization_id AS kit_source_organization_id, t.ownership_type,t.customer_order_line_id,
            EXISTS (SELECT 1 FROM sales_sale_tags st WHERE st.tag_id = t.id AND st.status = 'active') AS sold
     FROM tags t
     LEFT JOIN sales_reps r ON r.id = t.rep_id
@@ -1127,7 +1142,7 @@ async function piecesForCheck(where: SQL, limit?: number): Promise<CheckRow[]> {
   `);
 }
 
-const checkPiece = (r: CheckRow): DistributionPiece => ({ status: r.status, stockStatus: r.stock_status, repId: r.rep_id, sold: !!r.sold });
+const checkPiece = (r: CheckRow): DistributionPiece => ({ customerOrderLineId:r.customer_order_line_id, status: r.status, stockStatus: r.stock_status, repId: r.rep_id, sold: !!r.sold });
 const describeCheck = (_code: string, r: CheckRow | undefined) => ({
   tagId: r?.id ?? null,
   batchCode: r?.batch_code ?? null,

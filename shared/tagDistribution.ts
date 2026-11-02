@@ -42,6 +42,7 @@ export type TakeBackBlocker = (typeof TAKE_BACK_BLOCKERS)[number];
 
 /** What the rules need from a piece. `sold`: an active sales_sale_tags row. */
 export interface DistributionPiece {
+  customerOrderLineId?: string | null;
   status: string;
   stockStatus: string;
   repId: number | null;
@@ -50,6 +51,7 @@ export interface DistributionPiece {
 
 /** Null when the piece can go into a kit (shared/tagMetrics.ts `handOut`). */
 export function handOutBlocker(piece: DistributionPiece): HandOutBlocker | null {
+  if (piece.customerOrderLineId) return 'not_in_stock';
   if (piece.sold) return "sold";
   if (piece.repId !== null) return "with_reseller";
   if (piece.stockStatus === "pending") return "not_received";
@@ -63,6 +65,7 @@ export function handOutBlocker(piece: DistributionPiece): HandOutBlocker | null 
 
 /** Null when the piece can come back from its reseller (shared/tagMetrics.ts `returnable`). */
 export function takeBackBlocker(piece: DistributionPiece): TakeBackBlocker | null {
+  if (piece.customerOrderLineId) return 'not_in_stock';
   if (piece.sold) return "sold";
   if (piece.repId === null) return "not_with_reseller";
   if (piece.status === "retired") return "not_in_stock";

@@ -45,10 +45,11 @@ function CopyField({ label, value }: { label: string; value: string }) {
 }
 
 /** What an app or token may do, in the same words as the intro. */
-const SCOPE_KEYS: Record<string, "scope_journey" | "scope_prospecting" | "scope_tasks"> = {
+const SCOPE_KEYS: Record<string, "scope_journey" | "scope_prospecting" | "scope_tasks" | "scope_orders"> = {
   "xpot:journey": "scope_journey",
   "xpot:prospecting": "scope_prospecting",
   "xpot:tasks": "scope_tasks",
+  'xpot:orders':'scope_orders',
 };
 
 function Scopes({ scopes }: { scopes: readonly string[] }) {
