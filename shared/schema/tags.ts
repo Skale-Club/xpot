@@ -187,6 +187,8 @@ export const tagShowcaseItems = pgTable("tag_showcase_items", {
   description: text("description"),
   /** What is in the box: a list of short lines. */
   includes: jsonb("includes").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  /** The same three texts in other languages (shared/tagShowcase.ts); a language with nothing typed uses the main ones. migrations/0072. */
+  translations: jsonb("translations").$type<Partial<Record<"pt" | "es", { title?: string; description?: string; includes?: string[] }>>>().notNull().default(sql`'{}'::jsonb`),
   imageUrl: text("image_url"),
   /** A kit's Stuscle SKUs and quantities (what the link puts in the cart). */
   items: jsonb("items").$type<Array<{ sku: string; quantity: number }>>().notNull().default(sql`'[]'::jsonb`),

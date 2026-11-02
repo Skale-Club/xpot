@@ -241,8 +241,9 @@ export default function ShopScreen() {
     enabled: buying && storeKnown && !partner,
   });
   const entries = useQuery({
-    queryKey: ["/api/xpot/tags/showcase"],
-    queryFn: () => tagsGet<TagShowcaseView[]>("/api/xpot/tags/showcase"),
+    // The entries' words come in the reader's language where the admin wrote them (shared/tagShowcase.ts showcaseInLanguage).
+    queryKey: ["/api/xpot/tags/showcase", t.lang],
+    queryFn: () => tagsGet<TagShowcaseView[]>(`/api/xpot/tags/showcase?lang=${t.lang}`),
     staleTime: 60_000,
     enabled: buying && storeKnown && !partner,
   });

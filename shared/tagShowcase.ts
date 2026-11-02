@@ -9,6 +9,10 @@ import { stuscleKitUrl, wholesaleUrl } from "./wholesale.js";
 export const TAG_SHOWCASE_KINDS = ["model", "kit"] as const;
 export type TagShowcaseKind = (typeof TAG_SHOWCASE_KINDS)[number];
 
+/** The languages an entry can be written in besides its main one (English). */
+export const TAG_SHOWCASE_LANGS = ["pt", "es"] as const;
+export type TagShowcaseLang = (typeof TAG_SHOWCASE_LANGS)[number];
+
 export const TAG_SHOWCASE_MAX_ITEMS = 20;
 export const TAG_SHOWCASE_MAX_QUANTITY = 10_000;
 
@@ -25,6 +29,13 @@ const lineSchema = z.object({
   quantity: z.number().int().positive().max(TAG_SHOWCASE_MAX_QUANTITY),
 }).strict();
 
+/** An entry's words in one other language: any of the three, the rest falls back to the main text. */
+const translationSchema = z.object({
+  title: z.preprocess((v) => (typeof v === "string" ? v.trim() || undefined : v), z.string().max(120).optional()),
+  description: z.preprocess((v) => (typeof v === "string" ? v.trim() || undefined : v), z.string().max(1000).optional()),
+  includes: z.array(z.string().trim().min(1).max(160)).max(TAG_SHOWCASE_MAX_ITEMS).optional(),
+}).strict();
+
 export const tagShowcaseInputSchema = z.object({
   kind: z.enum(TAG_SHOWCASE_KINDS),
   title: z.string().trim().min(1, "Give it a title").max(120),
@@ -35,6 +46,7 @@ export const tagShowcaseInputSchema = z.object({
     z.string().url("The picture must be a web address").max(1000).refine((u) => /^https:\/\//i.test(u), "Use an https address").nullable().optional(),
   ),
   items: z.array(lineSchema).max(TAG_SHOWCASE_MAX_ITEMS).default([]),
+  translations: z.object({ pt: translationSchema.optional(), es: translationSchema.optional() }).strict().default({}),
   referencePriceCents: z.number().int().nonnegative().max(100_000_000).nullable().optional(),
   sortOrder: z.number().int().min(-1000).max(100_000).default(0),
   isPublished: z.boolean().default(false),
@@ -53,6 +65,7 @@ export const tagShowcaseInputSchema = z.object({
 export const tagShowcasePatchSchema = tagShowcaseInputSchema.innerType().partial().strict();
 
 export type TagShowcaseInput = z.infer<typeof tagShowcaseInputSchema>;
+export type TagShowcaseTranslations = TagShowcaseInput["translations"];
 
 /** A showcase entry as the app reads it. `url` is where its button goes, with the reader's own wholesale code. */
 export type TagShowcaseItem = {
@@ -63,6 +76,7 @@ export type TagShowcaseItem = {
   includes: string[];
   imageUrl: string | null;
   items: TagShowcaseLine[];
+  translations: TagShowcaseTranslations;
   referencePriceCents: number | null;
   currency: string;
   sortOrder: number;
@@ -72,6 +86,21 @@ export type TagShowcaseItem = {
 };
 
 export type TagShowcaseView = TagShowcaseItem & { url: string };
+
+/**
+ * The entry as a reader of `lang` should see it: each of title, description and "what's inside" in their language
+ * when the admin typed it, the main (English) text otherwise. English and any other language read the main text.
+ */
+export function showcaseInLanguage<T extends Pick<TagShowcaseItem, "title" | "description" | "includes" | "translations">>(item: T, lang: string | null | undefined): T {
+  const words = lang === "pt" || lang === "es" ? item.translations?.[lang] : undefined;
+  if (!words) return item;
+  return {
+    ...item,
+    title: words.title || item.title,
+    description: words.description || item.description,
+    includes: words.includes && words.includes.length > 0 ? words.includes : item.includes,
+  };
+}
 
 /** Whether an entry's button puts it in the Stuscle cart: a kit always, a model once it has its SKU. */
 export function showcaseAddsToCart(item: Pick<TagShowcaseItem, "items">): boolean {
