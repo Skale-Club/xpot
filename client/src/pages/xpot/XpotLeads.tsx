@@ -1,11 +1,12 @@
 import { useCallback, useMemo, useState } from "react";
-import { useRoute } from "wouter";
+import { useRoute, useRouter } from "wouter";
 import {
   Plus,
   Search,
   Trash2,
   LogIn,
   Building2,
+  Navigation,
   Nfc,
   MoreVertical,
   CalendarDays,
@@ -14,7 +15,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { LeadTagSummary } from "@shared/tagsApi";
 import { useXpotModules } from "@/components/ModuleSwitch";
-import { LeadCardBody } from "./components/LeadCardBody";
+import { LeadCardBody, buildRouteUrl } from "./components/LeadCardBody";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
 import { useXpotQueries } from "./hooks/useXpotQueries";
@@ -29,7 +30,7 @@ import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { BottomSheet } from "@/pages/tags/ui";
 import { leadPiecesPath } from "@/pages/tags/lib";
 import { useViewerAccess } from "@/lib/adminMode";
-import { LeadRowFacts, LeadsTable } from "./components/leads/LeadsTable";
+import { CheckInAction, LeadRowFacts, LeadsTable } from "./components/leads/LeadsTable";
 import { LeadDetailPane } from "./components/leads/LeadDetailPane";
 import { CreateLeadDialog } from "./components/CreateLeadDialog";
 import { useT } from "@/i18n";
@@ -72,8 +73,11 @@ function LeadPiecesChip({ lead, summary, onOpen }: { lead: FullSalesLead; summar
   );
 }
 
-function LeadCard({ lead, onOpen, onMore, pieces, onOpenPieces, lastVisit, worked, followUp }: {
+function LeadCard({ lead, onOpen, onMore, pieces, onOpenPieces, lastVisit, worked, followUp, activeVisitLeadId, onCheckIn, onBackToVisit }: {
   lead: FullSalesLead;
+  activeVisitLeadId: number | null;
+  onCheckIn: (lead: FullSalesLead) => void;
+  onBackToVisit: () => void;
   lastVisit: Date | null;
   worked: boolean;
   followUp: boolean;
@@ -84,6 +88,7 @@ function LeadCard({ lead, onOpen, onMore, pieces, onOpenPieces, lastVisit, worke
   onMore: () => void;
 }) {
   const t = useT(leadsMessages);
+  const routeUrl = buildRouteUrl(lead.locations?.[0]);
   return (
     <div
       role="button"
@@ -94,6 +99,7 @@ function LeadCard({ lead, onOpen, onMore, pieces, onOpenPieces, lastVisit, worke
     >
       <LeadCardBody
         lead={lead}
+        compact
         subtitle={
           <div className="space-y-1.5">
             <LeadRowFacts lead={lead} lastVisit={lastVisit} worked={worked} followUp={followUp} />
@@ -115,6 +121,15 @@ function LeadCard({ lead, onOpen, onMore, pieces, onOpenPieces, lastVisit, worke
           </Button>
         }
       />
+      {/* What the rep does on the street: go there, then start the visit. */}
+      <div className="mt-3 flex items-center gap-2 border-t border-white/[0.06] pt-3" onClick={(e) => e.stopPropagation()}>
+        <CheckInAction lead={lead} activeVisitLeadId={activeVisitLeadId} onCheckIn={onCheckIn} onBackToVisit={onBackToVisit} />
+        {routeUrl ? (
+          <Button asChild variant="secondary" size="sm">
+            <a href={routeUrl} target="_blank" rel="noopener noreferrer"><Navigation aria-hidden="true" />{t("directions")}</a>
+          </Button>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -183,6 +198,11 @@ export function XpotLeads() {
   const t = useT(leadsMessages);
   const tc = useT(commonMessages);
   const { setLocation, me } = useXpotQueries();
+  // The panel is for looking at the portfolio, My work is for working it: the first tab is named for that.
+  const inPanel = useRouter().base.startsWith("/admin");
+  const activeVisitLeadId = me?.activeVisit?.leadId ?? null;
+  const checkIn = (lead: FullSalesLead) => setLocation(`/route/check-in?leadId=${lead.id}`);
+  const backToVisit = () => setLocation("/route/check-in");
   // A rep who only holds a piece at a company may not delete it (the server refuses).
   const canDelete = useCallback((lead: FullSalesLead) => leadAccess(me, lead).owner, [me]);
   const { toast } = useToast();
@@ -277,11 +297,13 @@ export function XpotLeads() {
     (leadId: number) => visitsByLead.get(leadId)?.find((visit) => isFinishedVisitStatus(visit.status))?.status ?? null,
     [visitsByLead],
   );
+  // The company's own last visit (anyone's) when it has one: the visits loaded here may be only the viewer's.
+  const lastVisitAtOf = useMemo(() => new Map(allLeads.map((lead) => [lead.id, lead.lastVisitAt] as const)), [allLeads]);
   const lastVisitFor = useCallback((leadId: number) => {
     const v = visitsByLead.get(leadId)?.[0];
-    const when = v?.checkedInAt ?? v?.createdAt;
+    const when = lastVisitAtOf.get(leadId) ?? v?.checkedInAt ?? v?.createdAt;
     return when ? new Date(when) : null;
-  }, [visitsByLead]);
+  }, [visitsByLead, lastVisitAtOf]);
 
   const selectedLead = routeId !== null && leadDetailQuery.data
     ? {
@@ -499,7 +521,9 @@ export function XpotLeads() {
                   worked={!toVisitTab}
                   isFollowUp={isFollowUp}
                   onSell={setSalesLead}
-                  onCheckIn={(lead) => setLocation(`/route/check-in?leadId=${lead.id}`)}
+                  onCheckIn={checkIn}
+                  activeVisitLeadId={activeVisitLeadId}
+                  onBackToVisit={backToVisit}
                   onDelete={setLeadPendingDelete}
                   canDelete={canDelete}
                 />
@@ -515,6 +539,9 @@ export function XpotLeads() {
                   lead={lead}
                   onOpen={() => openLead(lead)}
                   onMore={() => setActionLead(lead)}
+                  activeVisitLeadId={activeVisitLeadId}
+                  onCheckIn={checkIn}
+                  onBackToVisit={backToVisit}
                   lastVisit={lastVisitFor(lead.id)}
                   worked={!toVisitTab}
                   followUp={isFollowUp(lead)}

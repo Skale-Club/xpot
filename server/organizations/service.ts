@@ -12,6 +12,7 @@ import {
   tags,
   users,
 } from "#shared/schema.js";
+import { countsTowardTeam } from "#shared/teamActivity.js";
 import {
   COMPANY_ORGANIZATION_SLUG,
   canManageOrganization,
@@ -163,6 +164,32 @@ export async function managedOrganizationIds(actor: OrganizationActor): Promise<
   return memberships
     .filter((membership) => membership.role === "admin" && membership.isActive && !membership.blockedAt)
     .map((membership) => membership.organizationId);
+}
+
+/**
+ * The field team of these organizations: rep id → the first of the organizations they are active in. Only living
+ * accounts that use Visits (countsTowardTeam). Team results and the visits history of a Rep Admin both start from it,
+ * so the numbers and the list behind them are one set.
+ */
+export async function teamMembers(organizationIds: readonly number[]): Promise<Map<number, number>> {
+  if (!organizationIds.length) return new Map();
+  const rows = await db
+    .select({
+      repId: organizationMemberships.repId,
+      organizationId: organizationMemberships.organizationId,
+      modules: salesReps.modules,
+      role: salesReps.role,
+      isActive: salesReps.isActive,
+      blockedAt: salesReps.blockedAt,
+      deletedAt: salesReps.deletedAt,
+    })
+    .from(organizationMemberships)
+    .innerJoin(salesReps, eq(salesReps.id, organizationMemberships.repId))
+    .where(and(inArray(organizationMemberships.organizationId, [...organizationIds]), eq(organizationMemberships.isActive, true), isNull(organizationMemberships.blockedAt)))
+    .orderBy(asc(organizationMemberships.organizationId));
+  const members = new Map<number, number>();
+  for (const row of rows) if (countsTowardTeam(row) && !members.has(row.repId)) members.set(row.repId, row.organizationId);
+  return members;
 }
 
 export async function canManageOrganizationForActor(actor: OrganizationActor, organizationId: number): Promise<boolean> {

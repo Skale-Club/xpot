@@ -10,11 +10,10 @@ import { formatCents } from "../../utils";
 import {
   useProducts,
   useSalesMutations,
-  usePaymentOptions,
-  type PaymentMethod,
-  type PaymentStatus,
   type ProductWithTiers,
 } from "../../hooks/useSalesModule";
+import { settlePayment } from "./settleCount";
+import { NO_PAYMENT_CHOSEN, PaymentChoice, type PaymentChoiceState } from "./PaymentChoice";
 import {
   Field, GhostButton, Money, MoneyInput, QtyInput, Select, SheetDialog,
 } from "./ui";
@@ -70,16 +69,14 @@ export function SaleDialog({
 }) {
   const t = useT(salesModuleMessages);
   const tc = useT(commonMessages);
-  const { statusOptions, methodOptions } = usePaymentOptions();
   const productsQuery = useProducts({ enabled: open });
   const showProfit = useShowProfit();
   const { createSale } = useSalesMutations();
 
   const [lines, setLines] = useState<Line[]>([newLine()]);
   const [discountCents, setDiscountCents] = useState(0);
-  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>("paid");
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">("cash");
-  const [paidCents, setPaidCents] = useState(0);
+  // Nothing is paid until the rep says so: a sale never records money that did not arrive.
+  const [pay, setPay] = useState<PaymentChoiceState>(NO_PAYMENT_CHOSEN);
   const [notes, setNotes] = useState("");
 
   const products = productsQuery.data ?? [];
@@ -121,16 +118,18 @@ export function SaleDialog({
     lineSeq = 0;
     setLines([newLine()]);
     setDiscountCents(0);
-    setPaymentStatus("paid");
-    setPaymentMethod("cash");
-    setPaidCents(0);
+    setPay(NO_PAYMENT_CHOSEN);
     setNotes("");
   }
 
   const incomplete = lines.some((l) => !l.productId && !l.description.trim());
-  const canSubmit = lines.length > 0 && !incomplete && totals.subtotalCents >= 0;
+  // A free sale has nothing to pay; any other waits for "they paid" (and how) or "they'll pay later".
+  const free = totals.totalCents === 0;
+  const payment = free ? { paymentStatus: "paid" as const, paymentMethod: null, paidCents: undefined } : settlePayment(pay.choice, pay.method, pay.partialCents, totals.totalCents);
+  const canSubmit = lines.length > 0 && !incomplete && totals.subtotalCents >= 0 && payment !== null;
 
   async function submit() {
+    if (!payment) return;
     await createSale.mutateAsync({
       leadId,
       visitId: visitId ?? null,
@@ -141,9 +140,9 @@ export function SaleDialog({
         unitPriceCents: l.unitPriceCents,
       })),
       discountCents: discountCents || undefined,
-      paymentStatus,
-      paymentMethod: paymentMethod || null,
-      paidCents: paymentStatus === "partial" ? paidCents : undefined,
+      paymentStatus: payment.paymentStatus,
+      paymentMethod: payment.paymentMethod,
+      paidCents: payment.paidCents,
       notes: notes.trim() || null,
     });
     reset();
@@ -236,28 +235,7 @@ export function SaleDialog({
         </div>
 
         {/* Payment */}
-        <div className="grid grid-cols-2 gap-2">
-          <Field label={t("payment")}>
-            <Select
-              value={paymentStatus}
-              onChange={(v) => setPaymentStatus(v as PaymentStatus)}
-              options={statusOptions}
-            />
-          </Field>
-          <Field label={t("method")}>
-            <Select
-              value={paymentMethod}
-              onChange={(v) => setPaymentMethod(v as PaymentMethod)}
-              placeholder="—"
-              options={methodOptions}
-            />
-          </Field>
-        </div>
-        {paymentStatus === "partial" && (
-          <Field label={t("amountReceived")}>
-            <MoneyInput valueCents={paidCents} onChangeCents={setPaidCents} />
-          </Field>
-        )}
+        {free ? null : <PaymentChoice value={pay} onChange={setPay} amountCents={totals.totalCents} currency="USD" />}
 
         <Field label={t("notes")}>
           <Textarea

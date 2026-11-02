@@ -58,6 +58,8 @@ const en = {
   deleteVisit: "Delete visit",
   deleteVisitTitle: "Delete visit?",
   deleteVisitDesc: "This will permanently delete this visit record and cannot be undone.",
+  deleteVisitSales_one: "The sale ({amount}) stays in Sales but is no longer linked to a visit.",
+  deleteVisitSales_other: "The {count} sales ({amount}) stay in Sales but are no longer linked to a visit.",
   delete: "Delete",
 
   // Toasts
@@ -153,6 +155,8 @@ export const visitsMessages: Dictionary<typeof en> = {
     deleteVisit: "Excluir visita",
     deleteVisitTitle: "Excluir visita?",
     deleteVisitDesc: "Esta visita será excluída para sempre. Não dá para desfazer.",
+    deleteVisitSales_one: "A venda ({amount}) fica em Vendas, mas deixa de estar ligada a uma visita.",
+    deleteVisitSales_other: "As {count} vendas ({amount}) ficam em Vendas, mas deixam de estar ligadas a uma visita.",
     delete: "Excluir",
 
     photoAdded: "Foto adicionada",
@@ -244,6 +248,8 @@ export const visitsMessages: Dictionary<typeof en> = {
     deleteVisit: "Eliminar visita",
     deleteVisitTitle: "¿Eliminar visita?",
     deleteVisitDesc: "Esta visita se borrará para siempre. No se puede deshacer.",
+    deleteVisitSales_one: "La venta ({amount}) queda en Ventas, pero ya no se liga a una visita.",
+    deleteVisitSales_other: "Las {count} ventas ({amount}) quedan en Ventas, pero ya no se ligan a una visita.",
     delete: "Eliminar",
 
     photoAdded: "Foto agregada",

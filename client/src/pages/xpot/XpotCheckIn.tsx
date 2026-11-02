@@ -55,7 +55,8 @@ import { LiveMap } from "./components/LiveMap";
 import { StatusPicker } from "./components/VisitStatus";
 import type { VisitStatus } from "./components/VisitStatus";
 import type { FullSalesLead, GoogleBusinessProfile, SalesLead } from "./types";
-import { LeadSalesPanel } from "./components/sales/LeadSalesPanel";
+import { VisitSaleActions } from "./components/sales/VisitSaleActions";
+import { VisitAction } from "./components/VisitAction";
 import { VisitActionsPanel } from "./components/sales/VisitActions";
 import { EYEBROW, GLASS_RAISED, GLASS_CLASS } from "@/components/xpot/surface";
 import { PlaceLeadSearch } from "./components/PlaceLeadSearch";
@@ -132,38 +133,6 @@ function BriefMetric({ label, value, google }: { label: string; value: string; g
       </div>
       <div className="mt-0.5 text-[10px] font-semibold uppercase leading-tight tracking-[0.08em] text-white/40">{label}</div>
     </div>
-  );
-}
-
-function VisitAction({ icon: Icon, title, hint, onClick, tone = "indigo", testId }: {
-  icon: LucideIcon;
-  title: string;
-  hint: string;
-  onClick: () => void;
-  /** emerald = money (selling), violet = the Tags module, indigo = everything else. */
-  tone?: "indigo" | "violet" | "emerald";
-  testId?: string;
-}) {
-  const palette = tone === "violet"
-    ? "border-violet-400/20 bg-violet-400/[0.07] text-violet-300"
-    : tone === "emerald"
-      ? "border-emerald-400/20 bg-emerald-400/[0.07] text-emerald-300"
-      : "border-blue-400/20 bg-blue-400/[0.07] text-blue-300";
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`flex min-h-[66px] min-w-0 items-center gap-2.5 rounded-2xl border p-3 text-left transition-transform active:scale-[0.98] ${palette}`}
-      data-testid={testId}
-    >
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/[0.07]">
-        <Icon className="h-[18px] w-[18px]" aria-hidden="true" />
-      </span>
-      <span className="min-w-0">
-        <strong className="block truncate text-sm font-bold text-white">{title}</strong>
-        <span className="mt-0.5 hidden truncate text-[10px] text-white/40 sm:block">{hint}</span>
-      </span>
-    </button>
   );
 }
 
@@ -385,7 +354,8 @@ export function XpotCheckIn() {
 
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [editLeadOpen, setEditLeadOpen] = useState(false);
-  const [checkoutStatus, setCheckoutStatus] = useState<VisitStatus>("completed");
+  // No result is marked until the rep picks one: a default would file a closed door as a conversation.
+  const [checkoutStatus, setCheckoutStatus] = useState<VisitStatus | null>(null);
   const [createLeadDialogOpen, setCreateLeadDialogOpen] = useState(false);
   const [activeVisitPanel, setActiveVisitPanel] = useState<"sales" | "note" | "checkout" | "cancel" | null>(null);
   // A sale recorded during the visit makes "Sale made" the result it starts with at check-out.
@@ -505,7 +475,12 @@ export function XpotCheckIn() {
         {/* Actions are one tap away, while the visit brief remains fully visible. */}
         <div className="relative grid grid-cols-2 gap-2">
           {activeVisit.lead && (
-            <VisitAction icon={DollarSign} title={t("visitSales")} hint={t("visitSalesHint")} tone="emerald" onClick={() => setActiveVisitPanel("sales")} />
+            <VisitSaleActions
+              lead={activeVisit.lead}
+              visitId={activeVisit.id}
+              saleOpen={activeVisitPanel === "sales"}
+              onSaleOpenChange={(open) => setActiveVisitPanel(open ? "sales" : null)}
+            />
           )}
           <VisitAction icon={Mic2} title={t("visitNote")} hint={t("visitNoteHint")} onClick={() => setActiveVisitPanel("note")} />
           {canSellTags && activeVisit.lead && (
@@ -528,7 +503,7 @@ export function XpotCheckIn() {
           type="button"
           variant="brand"
           size="lg"
-          onClick={() => { setCheckoutStatus((current) => defaultCheckoutStatus(current, visitHasSale) as VisitStatus); setActiveVisitPanel("checkout"); }}
+          onClick={() => { setCheckoutStatus((current) => defaultCheckoutStatus(current, visitHasSale) as VisitStatus | null); setActiveVisitPanel("checkout"); }}
           className="relative min-h-12 w-full text-base font-bold"
           data-testid="button-finish-visit"
         >
@@ -566,15 +541,6 @@ export function XpotCheckIn() {
         onConfirm={() => cancelVisitMutation.mutate(undefined, { onSettled: () => setActiveVisitPanel(null) })}
       />
 
-      {activeVisit.lead && (
-        <Dialog open={activeVisitPanel === "sales"} onOpenChange={(open) => !open && setActiveVisitPanel(null)}>
-          <DialogContent className="max-w-md">
-            <DialogHeader className="pr-8"><DialogTitle className="text-base">{t("visitSales")}</DialogTitle></DialogHeader>
-            <LeadSalesPanel leadId={activeVisit.lead.id} leadName={activeVisit.lead.name} lead={activeVisit.lead} visitId={activeVisit.id} compact />
-          </DialogContent>
-        </Dialog>
-      )}
-
       <Dialog open={activeVisitPanel === "note"} onOpenChange={(open) => !open && setActiveVisitPanel(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader className="pr-8"><DialogTitle className="text-base">{t("visitNote")}</DialogTitle></DialogHeader>
@@ -587,19 +553,24 @@ export function XpotCheckIn() {
       <Dialog open={activeVisitPanel === "checkout"} onOpenChange={(open) => !open && setActiveVisitPanel(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader className="pr-8"><DialogTitle className="text-base">{t("finishVisit")}</DialogTitle></DialogHeader>
-          <StatusPicker value={checkoutStatus} onChange={(next) => {
+          <StatusPicker value={checkoutStatus ?? ""} onChange={(next) => {
             setCheckoutStatus(next);
             // "Sale made" with nothing sold on this visit: the sale is asked for now, not left as a result with no sale behind it (VIS-24).
             if (next === "sale_made" && !visitHasSale) setActiveVisitPanel("sales");
           }} />
-          <ConfirmSlider
-            label={uploadAudioMutation.isPending ? t("uploadInProgress") : t("slideToCheckOut")}
-            helperText=""
-            loading={checkOutMutation.isPending || uploadAudioMutation.isPending}
-            disabled={uploadAudioMutation.isPending || cancelVisitMutation.isPending}
-            onConfirm={() => checkOutMutation.mutate({ status: checkoutStatus })}
-            mode="check-out"
-          />
+          {/* The slider appears with the first choice: one more tap, and the result is always one the rep gave. */}
+          {checkoutStatus ? (
+            <ConfirmSlider
+              label={uploadAudioMutation.isPending ? t("uploadInProgress") : t("slideToCheckOut")}
+              helperText=""
+              loading={checkOutMutation.isPending || uploadAudioMutation.isPending}
+              disabled={uploadAudioMutation.isPending || cancelVisitMutation.isPending}
+              onConfirm={() => checkOutMutation.mutate({ status: checkoutStatus })}
+              mode="check-out"
+            />
+          ) : (
+            <p className="text-center text-xs text-white/45" data-testid="checkout-choose-result">{t("chooseResultFirst")}</p>
+          )}
         </DialogContent>
       </Dialog>
 

@@ -123,8 +123,8 @@ describe("GET /admin/team-activity", () => {
     const res = await request(appFor("boss", true), "GET", "/api/xpot/admin/team-activity?days=30");
     expect(res.status).toBe(200);
     expect(res.body.metrics).toMatchObject({
-      // ana and ivo; a second platform admin uses Visits but is not a field rep; tina is Tags-only; bia is blocked.
-      activeReps: 2,
+      // Who visited in the period: ana. ivo sat it out (a row, no count), mara did sales only, tina is Tags-only, bia is blocked.
+      activeReps: 1,
       visits: 3,
       finishedVisits: 2,
       locationExceptions: 2,

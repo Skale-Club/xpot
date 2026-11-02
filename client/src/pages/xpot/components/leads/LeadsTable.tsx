@@ -46,6 +46,9 @@ export function LeadRowFacts({ lead, lastVisit, showLastVisit = true, worked, fo
 export type LeadRowActions = {
   onSell: (lead: FullSalesLead) => void;
   onCheckIn: (lead: FullSalesLead) => void;
+  /** The company of the visit in progress, if any: that row says "Back to visit" and no other row offers a check-in. */
+  activeVisitLeadId?: number | null;
+  onBackToVisit?: () => void;
   onDelete: (lead: FullSalesLead) => void;
   /** Whether the viewer may delete this company (leadAccess owner); Delete is left out when not. */
   canDelete?: (lead: FullSalesLead) => boolean;
@@ -67,8 +70,8 @@ function RowAction({ title, onClick, children, className = "" }: { title: string
   );
 }
 
-/** The row's less used actions: sell and delete, behind one menu so a delete is never next to Check in. */
-function RowMenu({ label, items }: { label: string; items: Array<{ key: string; label: string; icon: typeof Trash2; run: () => void; danger?: boolean }> }) {
+/** The row's less used actions behind one menu, so a delete or a take-back is never next to the main action. */
+export function RowMenu({ label, items }: { label: string; items: Array<{ key: string; label: string; icon: typeof Trash2; run: () => void; danger?: boolean }> }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="relative" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false); }}>
@@ -94,6 +97,29 @@ function RowMenu({ label, items }: { label: string; items: Array<{ key: string; 
   );
 }
 
+/**
+ * The company's door into a visit. A visit can't start while another is open (the server answers 409), so the company
+ * of the open visit says "Back to visit" and the others offer nothing.
+ */
+export function CheckInAction({
+  lead, activeVisitLeadId, onCheckIn, onBackToVisit, variant = "brand",
+}: { lead: FullSalesLead; activeVisitLeadId: number | null; onCheckIn: (lead: FullSalesLead) => void; onBackToVisit?: () => void; variant?: "brand" | "secondary" }) {
+  const t = useT(leadsMessages);
+  if (activeVisitLeadId === lead.id && onBackToVisit) {
+    return (
+      <Button type="button" variant={variant} size="sm" onClick={(e) => { e.stopPropagation(); onBackToVisit(); }} data-testid={`lead-${lead.id}-back-to-visit`}>
+        <LogIn aria-hidden="true" /> {t("backToVisit")}
+      </Button>
+    );
+  }
+  if (activeVisitLeadId !== null) return null;
+  return (
+    <Button type="button" variant={variant} size="sm" onClick={(e) => { e.stopPropagation(); onCheckIn(lead); }} data-testid={`lead-${lead.id}-check-in`}>
+      <LogIn aria-hidden="true" /> {t("checkIn")}
+    </Button>
+  );
+}
+
 /** Desktop list of visited leads, sortable, one row per company (the kit's CompactDataTable). */
 export function LeadsTable({
   leads,
@@ -105,6 +131,8 @@ export function LeadsTable({
   isFollowUp,
   onSell,
   onCheckIn,
+  activeVisitLeadId = null,
+  onBackToVisit,
   onDelete,
   canDelete,
 }: {
@@ -241,9 +269,7 @@ export function LeadsTable({
       cellClassName: "whitespace-nowrap !px-2 !py-1.5",
       render: (lead) => (
         <div className="flex items-center justify-end gap-1">
-          <Button type="button" variant="secondary" size="sm" onClick={(e) => { e.stopPropagation(); onCheckIn(lead); }} data-testid={`lead-${lead.id}-check-in`}>
-            <LogIn aria-hidden="true" /> {t("checkIn")}
-          </Button>
+          <CheckInAction lead={lead} activeVisitLeadId={activeVisitLeadId} onCheckIn={onCheckIn} onBackToVisit={onBackToVisit} variant="secondary" />
           <RowMenu
             label={t("moreActions")}
             items={[

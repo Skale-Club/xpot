@@ -7,20 +7,20 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { PackagePlus, Handshake, Undo2, SlidersHorizontal, AlertTriangle } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { computeSettlement } from "#shared/pricing.js";
 import { formatCents } from "../../utils";
 import {
   useProducts,
   useSalesMutations,
-  usePaymentOptions,
   type ConsignmentWithRefs,
-  type PaymentMethod,
-  type PaymentStatus,
 } from "../../hooks/useSalesModule";
+import { useShowProfit } from "../../hooks/useShowProfit";
 import {
   CountInput, Field, Money, MoneyInput, PrimaryButton, QtyInput, Select, SheetDialog, inputCls, inputStyle,
 } from "./ui";
-import { settleCountState } from "./settleCount";
+import { overCountDelta, settleCountState, settlePayment, takeBackState } from "./settleCount";
+import { NO_PAYMENT_CHOSEN, PaymentChoice, type PaymentChoiceState } from "./PaymentChoice";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { salesModuleMessages } from "@/i18n/messages/salesModule";
@@ -162,36 +162,40 @@ export function DepositDialog({
 // ─── Settle ──────────────────────────────────────────────────────────────────
 
 export function SettleDialog({
-  open, onOpenChange, row, visitId, onDone,
+  open, onOpenChange, row, visitId, onDone, onCorrectStock,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   row: ConsignmentWithRefs | null;
   visitId?: number | null;
   onDone?: () => void;
+  /** Over-count: the owner of this dialog opens the correction with the difference filled in. */
+  onCorrectStock?: (row: ConsignmentWithRefs, delta: number) => void;
 }) {
   const t = useT(salesModuleMessages);
-  const { statusOptions, methodOptions } = usePaymentOptions();
+  const tc = useT(commonMessages);
+  const showProfit = useShowProfit();
   const { settle } = useSalesMutations();
-  const productsQuery = useProducts({ enabled: open });
+  // What a product costs is for whoever sees profit; a seller's dialog never asks for it.
+  const productsQuery = useProducts({ enabled: open && showProfit });
 
   const onHand = row?.consignment.quantityOnHand ?? 0;
   // Starts empty: an untouched dialog must not bill everything on record as sold.
   const [counted, setCounted] = useState<number | null>(null);
   const [restock, setRestock] = useState(0);
-  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>("paid");
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">("cash");
-  const [paidCents, setPaidCents] = useState(0);
+  // Nothing is paid until the rep says so, and cash is never picked for them.
+  const [pay, setPay] = useState<PaymentChoiceState>(NO_PAYMENT_CHOSEN);
   const [notes, setNotes] = useState("");
 
   useEffect(() => {
-    if (open) { setCounted(null); setRestock(0); setPaymentStatus("paid"); setPaidCents(0); setNotes(""); }
+    if (open) { setCounted(null); setRestock(0); setPay(NO_PAYMENT_CHOSEN); setNotes(""); }
   }, [open, row?.consignment.id]);
 
   const unitCostCents = useMemo(() => {
+    if (!showProfit) return 0;
     const product = productsQuery.data?.find((p) => p.id === row?.consignment.productId);
     return product?.costCents ?? 0;
-  }, [productsQuery.data, row?.consignment.productId]);
+  }, [showProfit, productsQuery.data, row?.consignment.productId]);
 
   // The same function the server settles with — the preview cannot drift.
   const result = useMemo(() => computeSettlement({
@@ -205,16 +209,19 @@ export function SettleDialog({
   if (!row) return null;
   const currency = row.consignment.currency;
   const countState = settleCountState(onHand, counted);
+  const billing = countState === "ready" && result.soldQuantity > 0;
+  const payment = settlePayment(pay.choice, pay.method, pay.partialCents, result.amountCents);
+  const canSave = countState === "ready" && (result.soldQuantity === 0 || payment !== null);
 
   async function submit() {
-    if (counted === null) return;
+    if (counted === null || !canSave) return;
     await settle.mutateAsync({
       consignmentId: row!.consignment.id,
       countedRemaining: counted,
       restockQuantity: restock || undefined,
-      paymentStatus: result.soldQuantity > 0 ? paymentStatus : undefined,
-      paymentMethod: paymentMethod || null,
-      paidCents: paymentStatus === "partial" ? paidCents : undefined,
+      paymentStatus: billing ? payment!.paymentStatus : undefined,
+      paymentMethod: billing ? payment!.paymentMethod : null,
+      paidCents: billing ? payment!.paidCents : undefined,
       visitId: visitId ?? null,
       notes: notes.trim() || null,
     });
@@ -222,8 +229,10 @@ export function SettleDialog({
     onDone?.();
   }
 
+  // The shop is what the rep is standing in; the product comes second.
+  const shop = row.lead?.name ?? row.product?.name ?? t("stockFallback");
   return (
-    <SheetDialog open={open} onOpenChange={onOpenChange} title={t("settleTitle", { product: row.product?.name ?? t("stockFallback") })}>
+    <SheetDialog open={open} onOpenChange={onOpenChange} title={shop} description={t("settleTitle", { product: row.product?.name ?? t("stockFallback") })}>
       <div className="space-y-4">
         <div className="flex items-center justify-between rounded-xl px-3.5 py-3 border border-white/[0.09] bg-white/[0.04]">
           <div>
@@ -244,25 +253,34 @@ export function SettleDialog({
 
         {countState === "empty" ? (
           <p className="rounded-xl border border-white/[0.09] bg-white/[0.04] px-3 py-2.5 text-xs text-white/55" data-testid="settle-count-first">{t("countFirst")}</p>
-        ) : countState === "over" ? (
-          <div className="flex items-start gap-2 rounded-xl px-3 py-2.5 text-xs text-red-300 border border-red-400/25 bg-red-500/[0.08]">
-            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-            <span>{t("overCount", { count: onHand })}</span>
+        ) : countState === "over" && counted !== null ? (
+          <div className="space-y-2.5 rounded-xl px-3 py-2.5 text-xs text-red-300 border border-red-400/25 bg-red-500/[0.08]" data-testid="settle-over-count">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>{t("overCount", { count: onHand })}</span>
+            </div>
+            {onCorrectStock ? (
+              <Button type="button" size="sm" variant="secondary" onClick={() => onCorrectStock(row, overCountDelta(onHand, counted))}>
+                <SlidersHorizontal aria-hidden="true" /> {t("correctStock")}
+              </Button>
+            ) : null}
           </div>
         ) : (
           <div className="rounded-2xl p-3.5 space-y-2 border border-emerald-400/20 bg-emerald-500/[0.07]">
             <div className="flex items-center justify-between text-xs text-white/50">
-              <span>{t("soldSinceLastVisit")}</span>
+              <span>{t("soldSinceLastCount")}</span>
               <span className="tabular-nums font-semibold text-white">{result.soldQuantity}</span>
             </div>
             <div className="flex items-center justify-between border-t border-white/10 pt-2">
               <span className="text-sm font-semibold text-white">{t("theyOwe")}</span>
               <Money cents={result.amountCents} currency={currency} className="text-2xl font-bold text-emerald-300" />
             </div>
-            <div className="flex items-center justify-between text-[11px] text-white/35">
-              <span>{t("youKeep")}</span>
-              <span className="tabular-nums">{formatCents(result.profitCents, currency)}</span>
-            </div>
+            {showProfit ? (
+              <div className="flex items-center justify-between text-[11px] text-white/35">
+                <span>{t("youKeep")}</span>
+                <span className="tabular-nums">{formatCents(result.profitCents, currency)}</span>
+              </div>
+            ) : null}
           </div>
         )}
 
@@ -277,25 +295,7 @@ export function SettleDialog({
           </p>
         )}
 
-        {countState === "ready" && result.soldQuantity > 0 && (
-          <>
-            <div className="grid grid-cols-2 gap-2">
-              <Field label={t("payment")}>
-                <Select value={paymentStatus} onChange={(v) => setPaymentStatus(v as PaymentStatus)}
-                  options={statusOptions} />
-              </Field>
-              <Field label={t("method")}>
-                <Select value={paymentMethod} onChange={(v) => setPaymentMethod(v as PaymentMethod)}
-                  placeholder="—" options={methodOptions} />
-              </Field>
-            </div>
-            {paymentStatus === "partial" && (
-              <Field label={t("amountReceived")}>
-                <MoneyInput valueCents={paidCents} onChangeCents={setPaidCents} />
-              </Field>
-            )}
-          </>
-        )}
+        {billing && <PaymentChoice value={pay} onChange={setPay} amountCents={result.amountCents} currency={currency} />}
 
         <Field label={t("notes")}>
           <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={t("optional")}
@@ -303,11 +303,9 @@ export function SettleDialog({
         </Field>
 
         {countState === "ready" ? (
-          <PrimaryButton tone="emerald" onClick={submit} loading={settle.isPending}>
+          <PrimaryButton tone="emerald" onClick={submit} loading={settle.isPending} disabled={!canSave}>
             <Handshake className="h-4 w-4" />
-            {result.soldQuantity > 0
-              ? t("settleAmount", { amount: formatCents(result.amountCents, currency) })
-              : t("settleNothingSold")}
+            {result.soldQuantity > 0 ? tc("save") : t("settleNothingSold")}
           </PrimaryButton>
         ) : null}
       </div>
@@ -326,37 +324,43 @@ export function ReturnDialog({
   const t = useT(salesModuleMessages);
   const { returnStock } = useSalesMutations();
   const onHand = row?.consignment.quantityOnHand ?? 0;
-  const [quantity, setQuantity] = useState(0);
-  const [close, setClose] = useState(false);
+  // Starts empty: one tap must not pick up everything on record and end the agreement.
+  const [quantity, setQuantity] = useState<number | null>(null);
+  const [close, setClose] = useState(true);
   const [notes, setNotes] = useState("");
 
-  useEffect(() => { if (open) { setQuantity(onHand); setClose(true); setNotes(""); } }, [open, onHand]);
+  useEffect(() => { if (open) { setQuantity(null); setClose(true); setNotes(""); } }, [open, onHand]);
   if (!row) return null;
+  const state = takeBackState(onHand, quantity);
 
   return (
-    <SheetDialog open={open} onOpenChange={onOpenChange} title={t("takeBackTitle", { product: row.product?.name ?? t("stockFallback") })}>
+    <SheetDialog open={open} onOpenChange={onOpenChange} title={row.lead?.name ?? row.product?.name ?? t("stockFallback")}
+      description={t("takeBackTitle", { product: row.product?.name ?? t("stockFallback") })}>
       <div className="space-y-4">
-        <p className="text-xs text-white/45">{t("takeBackIntro", { count: onHand })}</p>
-        <Field label={t("unitsTakenBack")}>
-          <QtyInput value={quantity} onChange={setQuantity} min={1} max={onHand} autoFocus />
+        <Field label={t("unitsTakenBack")} hint={t.plural("units", onHand)}>
+          <CountInput value={quantity} onChange={(n) => setQuantity(n === null ? null : Math.min(n, onHand))} autoFocus />
         </Field>
-        <label className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 cursor-pointer border border-white/[0.09] bg-white/[0.04]">
-          <input type="checkbox" checked={close} onChange={(e) => setClose(e.target.checked)} className="h-4 w-4 accent-blue-500" />
-          <span className="text-xs text-white/70">{t("closeThisConsignment")}</span>
-        </label>
+        <p className="rounded-xl border border-white/[0.09] bg-white/[0.04] px-3 py-2.5 text-xs text-white/55" data-testid="take-back-warning">{t("takeBackWarning")}</p>
+        {state === "all" && (
+          <label className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 cursor-pointer border border-white/[0.09] bg-white/[0.04]">
+            <input type="checkbox" checked={close} onChange={(e) => setClose(e.target.checked)} className="h-4 w-4 accent-blue-500" />
+            <span className="text-xs text-white/70">{t("closeThisConsignment")}</span>
+          </label>
+        )}
         <Field label={t("reason")}>
           <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={t("optional")}
             className={inputCls} style={inputStyle} />
         </Field>
-        <PrimaryButton tone="amber" loading={returnStock.isPending} disabled={quantity < 1 || quantity > onHand}
+        <PrimaryButton tone="amber" loading={returnStock.isPending} disabled={state === "empty" || state === "over"}
           onClick={async () => {
+            if (quantity === null) return;
             await returnStock.mutateAsync({
               consignmentId: row.consignment.id, quantity,
-              close: close && quantity >= onHand, visitId: visitId ?? null, notes: notes.trim() || null,
+              close: state === "all" && close, visitId: visitId ?? null, notes: notes.trim() || null,
             });
             onOpenChange(false); onDone?.();
           }}>
-          <Undo2 className="h-4 w-4" /> {t("takeBackN", { count: quantity })}
+          <Undo2 className="h-4 w-4" /> {t("takeBackN", { count: quantity ?? 0 })}
         </PrimaryButton>
       </div>
     </SheetDialog>
@@ -364,24 +368,27 @@ export function ReturnDialog({
 }
 
 export function AdjustDialog({
-  open, onOpenChange, row, visitId, onDone,
+  open, onOpenChange, row, visitId, onDone, initialDelta = 0,
 }: {
   open: boolean; onOpenChange: (o: boolean) => void; row: ConsignmentWithRefs | null;
   visitId?: number | null; onDone?: () => void;
+  /** Opens with this change filled in (the over-count's difference). */
+  initialDelta?: number;
 }) {
   const t = useT(salesModuleMessages);
   const { adjust } = useSalesMutations();
   const onHand = row?.consignment.quantityOnHand ?? 0;
-  const [delta, setDelta] = useState(0);
+  const [delta, setDelta] = useState(initialDelta);
   const [notes, setNotes] = useState("");
 
-  useEffect(() => { if (open) { setDelta(0); setNotes(""); } }, [open]);
+  useEffect(() => { if (open) { setDelta(initialDelta); setNotes(""); } }, [open, initialDelta]);
   if (!row) return null;
 
   const after = onHand + delta;
 
   return (
-    <SheetDialog open={open} onOpenChange={onOpenChange} title={row.product?.name ? t("correctStockTitle", { product: row.product.name }) : t("correctStock")}>
+    <SheetDialog open={open} onOpenChange={onOpenChange} title={row.lead?.name ?? row.product?.name ?? t("correctStock")}
+      description={row.product?.name ? t("correctStockTitle", { product: row.product.name }) : t("correctStock")}>
       <div className="space-y-4">
         <p className="text-xs text-white/45">{t("correctIntro")}</p>
         <div className="flex items-center justify-between rounded-xl px-3.5 py-3 border border-white/[0.09] bg-white/[0.04]">

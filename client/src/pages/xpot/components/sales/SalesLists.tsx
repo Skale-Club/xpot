@@ -15,6 +15,7 @@ import { EYEBROW, GLASS_CLASS } from "@/components/xpot/surface";
 import { salesMessages } from "@/i18n/messages/sales";
 import { formatCents } from "../../utils";
 import { useLeads } from "../../hooks/useLeads";
+import { useShowProfit } from "../../hooks/useShowProfit";
 import {
   useConsignments, useConsignmentDetail, useSalesMutations,
   usePaymentOptions, type ConsignmentWithRefs, type PaymentMethod, type PaymentStatus, type SaleWithItems,
@@ -245,6 +246,7 @@ function SaleDetailBody({ row, onDone }: { row: SaleWithItems; onDone: () => voi
   const t = useT(salesModuleMessages);
   const { statusOptions, methodOptions } = usePaymentOptions();
   const { cancelSale, updatePayment } = useSalesMutations();
+  const showProfit = useShowProfit();
   const [editing, setEditing] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>("paid");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">("");
@@ -279,7 +281,7 @@ function SaleDetailBody({ row, onDone }: { row: SaleWithItems; onDone: () => voi
           open={confirmCancel}
           onOpenChange={setConfirmCancel}
           title={t("cancelSaleTitle")}
-          description={t("cancelSaleDesc")}
+          description={showProfit ? t("cancelSaleDesc") : t("cancelSaleDescMember")}
           confirmLabel={t("cancelSale")}
           cancelLabel={t("keepSale")}
           destructive
@@ -345,6 +347,7 @@ export function ConsignmentsList({ selectedId = null, onSelect }: {
     if (linkedStatus === "closed" && status === "active") filters.set({ state: "closed" });
   }, [linkedStatus]);
   const [settleRow, setSettleRow] = useState<ConsignmentWithRefs | null>(null);
+  const [correct, setCorrect] = useState<{ row: ConsignmentWithRefs; delta: number } | null>(null);
   const [returnRow, setReturnRow] = useState<ConsignmentWithRefs | null>(null);
   const [detailId, setDetailId] = useState<number | null>(null);
   // On a phone the id in the link opens the same sheet as a tap.
@@ -403,6 +406,7 @@ export function ConsignmentsList({ selectedId = null, onSelect }: {
 
       {isDesktop && (rows.length > 0 || selectedId != null) && (
         <MasterDetail
+          bareWhenEmpty
           closeLabel={tc("close")}
           onClose={() => onSelect!(null)}
           list={rows.length === 0 ? (
@@ -460,7 +464,9 @@ export function ConsignmentsList({ selectedId = null, onSelect }: {
           leadId={depositTarget.id} leadName={depositTarget.name}
           existing={rows.filter((r) => r.consignment.leadId === depositTarget.id)} />
       )}
-      <SettleDialog open={Boolean(settleRow)} onOpenChange={(o) => !o && setSettleRow(null)} row={settleRow} />
+      <SettleDialog open={Boolean(settleRow)} onOpenChange={(o) => !o && setSettleRow(null)} row={settleRow}
+        onCorrectStock={(row, delta) => { setSettleRow(null); setCorrect({ row, delta }); }} />
+      <AdjustDialog open={Boolean(correct)} onOpenChange={(o) => !o && setCorrect(null)} row={correct?.row ?? null} initialDelta={correct?.delta} onDone={() => query.refetch()} />
       <ReturnDialog open={Boolean(returnRow)} onOpenChange={(o) => !o && setReturnRow(null)} row={returnRow} />
       <ConsignmentDetailDialog id={sheetId} onClose={closeSheet} />
     </div>

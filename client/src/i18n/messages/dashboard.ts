@@ -54,6 +54,7 @@ const en = {
 
   // Sales block (profit, stock on consignment, overdue settlements)
   salesKeptMonth: "Profit this month",
+  salesSoldMonth: "Sold this month",
   salesBilled: "{amount} billed",
   salesOnStreet: "On consignment",
   salesOverdueTap_one: "{count} settlement overdue. Tap to see it",
@@ -74,8 +75,8 @@ const en = {
   needsAttention: "Needs attention",
   overdueTasksTitle_one: "{count} overdue task",
   overdueTasksTitle_other: "{count} overdue tasks",
-  settlementsDueTitle_one: "{count} shop to count and bill",
-  settlementsDueTitle_other: "{count} shops to count and bill",
+  settlementsDueTitle_one: "{count} company to count and bill",
+  settlementsDueTitle_other: "{count} companies to count and bill",
   openDealsLink_one: "{count} open deal",
   openDealsLink_other: "{count} open deals",
   attentionClear: "Everything is on track",
@@ -145,6 +146,7 @@ export const dashboardMessages: Dictionary<typeof en> = {
     tagsTitle: "Suas peças",
 
     salesKeptMonth: "Lucro do mês",
+    salesSoldMonth: "Vendido no mês",
     salesBilled: "{amount} faturado",
     salesOnStreet: "Em consignação",
     salesOverdueTap_one: "{count} acerto em atraso. Toque para ver",
@@ -165,8 +167,8 @@ export const dashboardMessages: Dictionary<typeof en> = {
     needsAttention: "Precisa de atenção",
     overdueTasksTitle_one: "{count} tarefa atrasada",
     overdueTasksTitle_other: "{count} tarefas atrasadas",
-    settlementsDueTitle_one: "{count} loja para contar e cobrar",
-    settlementsDueTitle_other: "{count} lojas para contar e cobrar",
+    settlementsDueTitle_one: "{count} empresa para contar e cobrar",
+    settlementsDueTitle_other: "{count} empresas para contar e cobrar",
     openDealsLink_one: "{count} negócio aberto",
     openDealsLink_other: "{count} negócios abertos",
     attentionClear: "Tudo está em dia",
@@ -233,6 +235,7 @@ export const dashboardMessages: Dictionary<typeof en> = {
     tagsTitle: "Tus piezas",
 
     salesKeptMonth: "Ganancia del mes",
+    salesSoldMonth: "Vendido en el mes",
     salesBilled: "{amount} facturado",
     salesOnStreet: "En consignación",
     salesOverdueTap_one: "{count} liquidación atrasada. Toca para verla",

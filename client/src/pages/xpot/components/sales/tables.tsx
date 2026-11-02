@@ -9,7 +9,9 @@ import { ConsignmentDuePill, SaleStatusPills } from "./cards";
 import { Money } from "./ui";
 import { Button } from "@/components/ui/button";
 import { CompactDataTable, type CompactDataColumn } from "@/components/xpot/CompactDataTable";
+import { RowMenu } from "../leads/LeadsTable";
 import { useT } from "@/i18n";
+import { leadsMessages } from "@/i18n/messages/leads";
 import { salesMessages } from "@/i18n/messages/sales";
 import { salesModuleMessages } from "@/i18n/messages/salesModule";
 
@@ -93,6 +95,7 @@ export function ConsignmentsTable({ rows, selectedId, onSelect, onSettle, onRest
 }) {
   const t = useT(salesModuleMessages);
   const ts = useT(salesMessages);
+  const tl = useT(leadsMessages);
   const columns: CompactDataColumn<ConsignmentWithRefs>[] = [
     {
       key: "shop",
@@ -101,8 +104,9 @@ export function ConsignmentsTable({ rows, selectedId, onSelect, onSettle, onRest
       cellClassName: "max-w-0",
       render: (row) => (
         <>
-          <div className="truncate font-semibold text-white">{row.lead?.name ?? ts("leadNumber", { id: row.consignment.leadId })}</div>
-          <div className="truncate text-[11px] text-white/40">
+          {/* Which company this is, is what identifies the row: two lines before any cut. */}
+          <div className="line-clamp-2 font-semibold text-white">{row.lead?.name ?? ts("leadNumber", { id: row.consignment.leadId })}</div>
+          <div className="line-clamp-2 text-[11px] text-white/40">
             {row.product?.name ?? t("productFallback")} · {t("pricePerUnit", { price: formatCents(row.consignment.unitPriceCents, row.consignment.currency) })}
           </div>
         </>
@@ -140,15 +144,15 @@ export function ConsignmentsTable({ rows, selectedId, onSelect, onSettle, onRest
               <Handshake aria-hidden="true" /> {t("actionSettle")}
             </Button>
           )}
-          {onRestock && (
-            <Button type="button" variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onRestock(row); }}>
-              <ArrowDownLeft aria-hidden="true" /> {t("actionRestock")}
-            </Button>
-          )}
-          {onReturn && (
-            <Button type="button" variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onReturn(row); }}>
-              <Undo2 aria-hidden="true" /> {t("actionTakeBack")}
-            </Button>
+          {/* Leaving more and taking back are less common, and one of them ends the agreement: behind a menu. */}
+          {(onRestock || onReturn) && (
+            <RowMenu
+              label={tl("moreActions")}
+              items={[
+                ...(onRestock ? [{ key: "restock", label: t("actionRestock"), icon: ArrowDownLeft, run: () => onRestock(row) }] : []),
+                ...(onReturn ? [{ key: "return", label: t("actionTakeBack"), icon: Undo2, run: () => onReturn(row) }] : []),
+              ]}
+            />
           )}
         </div>
       ),

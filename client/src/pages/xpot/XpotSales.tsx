@@ -34,6 +34,7 @@ import { ListSkeleton } from "@/components/xpot/ListSkeleton";
 import { PageHeader } from "@/components/xpot/PageHeader";
 import { RetryButton } from "@/components/xpot/RetryButton";
 import { Segmented } from "@/components/xpot/Segmented";
+import { Pill } from "@/components/xpot/StatusPill";
 import { GLASS_CLASS, SURFACE_MODAL_CLASS } from "@/components/xpot/surface";
 
 const SYNC_STATUS_KEYS: Record<string, "sync_pending" | "sync_synced" | "sync_failed" | "sync_needs_review"> = {
@@ -212,7 +213,7 @@ export function XpotSales() {
       {tab === "overview" && <SalesOverview onGoToConsignments={() => setTab("consignments")} onNewSale={() => navigate(`${salesPath("sales")}?new=1`)} />}
       {tab === "sales" && <SalesList selectedId={id} onSelect={select("sales")} />}
       {tab === "consignments" && <ConsignmentsList selectedId={id} onSelect={select("consignments")} />}
-      {tab === "pipeline" && <DealsTab pipelines={pipelinesQuery.data?.pipelines ?? []} pipelinesLoading={pipelinesQuery.isLoading} connected={!pipelinesQuery.data?._reason} />}
+      {tab === "pipeline" && <DealsTab selectedId={id} onSelect={select("pipeline")} pipelines={pipelinesQuery.data?.pipelines ?? []} pipelinesLoading={pipelinesQuery.isLoading} connected={!pipelinesQuery.data?._reason} />}
     </div>
   );
 }
@@ -280,17 +281,34 @@ function DealDialog({ deal, pipelines, onClose }: { deal: EnrichedSalesOpportuni
 
 // Open deals: what a company might still buy, with its value. They live in Xpot; with GoHighLevel connected
 // they also sync there, which is only worth saying when it fails.
-function DealsTab({ pipelines, pipelinesLoading, connected }: { pipelines: GHLPipeline[]; pipelinesLoading: boolean; connected: boolean }) {
+function DealsTab({ pipelines, pipelinesLoading, connected, selectedId, onSelect }: {
+  pipelines: GHLPipeline[]; pipelinesLoading: boolean; connected: boolean;
+  /** The deal in the address (/sales/pipeline/12): its dialog is open. */
+  selectedId: number | null; onSelect: (id: number | null) => void;
+}) {
   const t = useT(salesMessages);
   const { leadsQuery } = useLeads();
   const { opportunitiesQuery, opportunityForm, setOpportunityForm, createOpportunityMutation } = useSales();
   const [oppExpanded, setOppExpanded] = useState(false);
-  const [editing, setEditing] = useState<EnrichedSalesOpportunity | null>(null);
+  // The list opens on what is still to win; won and lost deals are one chip away, with their status on the card.
+  const [show, setShow] = useState<(typeof DEAL_STATUSES)[number]>("open");
+  const everyDeal = opportunitiesQuery.data ?? [];
+  const statusOf = (opp: EnrichedSalesOpportunity) => (opp.status === "won" || opp.status === "lost" ? opp.status : "open");
+  const deals = everyDeal.filter((opp) => statusOf(opp) === show);
+  const editing = selectedId == null ? null : everyDeal.find((opp) => opp.id === selectedId) ?? null;
 
   return (
     <div className="grid min-w-0 gap-4">
+      <Segmented
+        ariaLabel={t("dealStatus")}
+        className="w-full lg:max-w-md"
+        itemClassName="min-h-10 px-1"
+        value={show}
+        onChange={setShow}
+        items={DEAL_STATUSES.map((status) => ({ id: status, label: t(`dealStatus_${status}`), count: everyDeal.filter((opp) => statusOf(opp) === status).length }))}
+      />
       <SectionCard
-        title={<span className="flex items-center">{t("deals")}<span className="ml-1.5 rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] tabular-nums text-white/45">{opportunitiesQuery.data?.length ?? 0}</span></span>}
+        title={<span className="flex items-center">{show === "open" ? t("openDeals") : t("deals")}<span className="ml-1.5 rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] tabular-nums text-white/45">{deals.length}</span></span>}
         icon={TrendingUp}
         bodyClassName="space-y-3 p-4"
         actions={(
@@ -355,16 +373,16 @@ function DealsTab({ pipelines, pipelinesLoading, connected }: { pipelines: GHLPi
           <EmptyState compact dense tone="red" icon={TrendingUp} title={t("listLoadFailed")}>
             <RetryButton onRetry={() => void opportunitiesQuery.refetch()} busy={opportunitiesQuery.isFetching} />
           </EmptyState>
-        ) : opportunitiesQuery.data?.length ? (
+        ) : deals.length ? (
           <div className="space-y-2">
-            {opportunitiesQuery.data.map((opp: EnrichedSalesOpportunity) => {
+            {deals.map((opp: EnrichedSalesOpportunity) => {
               // Stage names only when they can be told in words; the stored keys are internal.
               const pipeline = pipelines.find((p) => p.id === opp.pipelineKey);
               const stageName = pipeline?.stages?.find((s) => s.id === opp.stageKey)?.name;
               const where = [pipeline?.name, stageName].filter(Boolean).join(" · ");
               const syncLabel = connected && SYNC_STATUS_KEYS[opp.syncStatus] && opp.syncStatus !== "synced" ? t(SYNC_STATUS_KEYS[opp.syncStatus]) : null;
               return (
-                <button key={opp.id} type="button" onClick={() => setEditing(opp)} className={`block w-full rounded-2xl p-4 text-left transition-colors hover:bg-white/[0.06] ${GLASS_CLASS}`} data-testid={`deal-${opp.id}`}>
+                <button key={opp.id} type="button" onClick={() => onSelect(opp.id)} className={`block w-full rounded-2xl p-4 text-left transition-colors hover:bg-white/[0.06] ${GLASS_CLASS}`} data-testid={`deal-${opp.id}`}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-semibold text-white">{opp.title}</div>
@@ -372,8 +390,9 @@ function DealsTab({ pipelines, pipelinesLoading, connected }: { pipelines: GHLPi
                       {where ? <div className="mt-1 truncate text-[11px] text-white/40">{where}</div> : null}
                     </div>
                     <div className="shrink-0 text-right">
-                      {/* Same money format as every sale: two decimals in the opportunity's currency. */}
-                      <div className="text-base font-bold tabular-nums text-emerald-300">{formatCents(Math.round((opp.value || 0) * 100), opp.currency)}</div>
+                      {/* Same money format as every sale: two decimals in the opportunity's currency. Green is for what can still be won. */}
+                      <div className={`text-base font-bold tabular-nums ${statusOf(opp) === "open" ? "text-emerald-300" : statusOf(opp) === "won" ? "text-white" : "text-white/35"}`}>{formatCents(Math.round((opp.value || 0) * 100), opp.currency)}</div>
+                      {statusOf(opp) === "won" ? <Pill tone="green" className="mt-1">{t("dealStatus_won")}</Pill> : statusOf(opp) === "lost" ? <Pill tone="slate" className="mt-1">{t("dealStatus_lost")}</Pill> : null}
                       {syncLabel ? <div className="mt-0.5 text-[11px] text-amber-300">{syncLabel}</div> : null}
                     </div>
                   </div>
@@ -382,11 +401,11 @@ function DealsTab({ pipelines, pipelinesLoading, connected }: { pipelines: GHLPi
             })}
           </div>
         ) : !oppExpanded ? (
-          <EmptyState compact dense icon={TrendingUp} title={t("noOpps")} cardStyle={SECTION_EMPTY} />
+          <EmptyState compact dense icon={TrendingUp} title={everyDeal.length === 0 ? t("noOpps") : t("noDealsOfStatus")} cardStyle={SECTION_EMPTY} />
         ) : null}
       </SectionCard>
 
-      <DealDialog deal={editing} pipelines={pipelines} onClose={() => setEditing(null)} />
+      <DealDialog deal={editing} pipelines={pipelines} onClose={() => onSelect(null)} />
     </div>
   );
 }

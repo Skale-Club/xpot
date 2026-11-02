@@ -61,6 +61,8 @@ export type TeamActivityRow = {
   salesCount: number;
   salesTotalCents: number;
   lastActivityAt: string | null;
+  /** An owner's or a partner's copy only: the organization they run that this person is on, to open them inside it. */
+  organizationId?: number | null;
 };
 
 export type TeamActivityResponse = {

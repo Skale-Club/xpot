@@ -8,6 +8,8 @@ import { MONEY_CHART } from "./moneyPalette";
 import type { ConsignmentWithRefs, PaymentMethod, PaymentStatus, SaleWithItems } from "../../hooks/useSalesModule";
 import { Money } from "./ui";
 import { Button } from "@/components/ui/button";
+import { RowMenu } from "../leads/LeadsTable";
+import { leadsMessages } from "@/i18n/messages/leads";
 import { CONSIGNMENT_STATUS_TONE, PAYMENT_STATUS_TONE, Pill, SALE_STATUS_TONE, toneOf, type PillTone } from "@/components/xpot/StatusPill";
 import { EmptyState } from "@/components/xpot/EmptyState";
 import { InlineAlert } from "@/components/xpot/InlineAlert";
@@ -107,6 +109,7 @@ export function ConsignmentCard({
 }) {
   const t = useT(salesModuleMessages);
   const ts = useT(salesMessages);
+  const tl = useT(leadsMessages);
   const c = row.consignment;
   const { closed, overdue } = consignmentDue(c);
 
@@ -157,15 +160,15 @@ export function ConsignmentCard({
               <Handshake aria-hidden="true" /> {t("actionSettle")}
             </Button>
           )}
-          {onRestock && (
-            <Button type="button" variant="secondary" className="min-h-10" onClick={onRestock}>
-              <ArrowDownLeft aria-hidden="true" /> {t("actionRestock")}
-            </Button>
-          )}
-          {onReturn && (
-            <Button type="button" variant="secondary" className="min-h-10" onClick={onReturn}>
-              <Undo2 aria-hidden="true" /> {t("actionTakeBack")}
-            </Button>
+          {/* Leaving more and taking back are less common, and one of them ends the agreement: behind a menu. */}
+          {(onRestock || onReturn) && (
+            <RowMenu
+              label={tl("moreActions")}
+              items={[
+                ...(onRestock ? [{ key: "restock", label: t("actionRestock"), icon: ArrowDownLeft, run: onRestock }] : []),
+                ...(onReturn ? [{ key: "return", label: t("actionTakeBack"), icon: Undo2, run: onReturn }] : []),
+              ]}
+            />
           )}
         </div>
       )}

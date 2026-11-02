@@ -71,6 +71,14 @@ beforeAll(async () => {
     const lead = (await one(`INSERT INTO sales_leads (organization_id, name, owner_rep_id, status) VALUES ($1, $2, $3, 'lead') RETURNING id`, [person === "outsider" ? teamB : teamA, `${person} shop`, reps[person]])).id;
     await q(`INSERT INTO sales_visits (lead_id, rep_id, status, checked_in_at, checked_out_at) VALUES ($1, $2, 'completed', now(), now())`, [lead, reps[person]]);
   }
+  // Mate also visited a company of Team B, and has tasks: one not started, one under way, one done. The owner's tiles
+  // count what the screens behind them list (visits at Team A's companies, open tasks of Team A), not Team B's.
+  const outsiderShop = (await one(`SELECT id FROM sales_leads WHERE name = 'outsider shop'`)).id;
+  await q(`INSERT INTO sales_visits (lead_id, rep_id, status, checked_in_at, checked_out_at) VALUES ($1, $2, 'completed', now(), now())`, [outsiderShop, reps.mate]);
+  await q(
+    `INSERT INTO sales_tasks (organization_id, rep_id, type, title, status) VALUES ($1, $2, 'call', 'a', 'pending'), ($1, $2, 'call', 'b', 'in_progress'), ($1, $2, 'call', 'c', 'completed'), ($3, $4, 'call', 'd', 'pending')`,
+    [teamA, reps.mate, teamB, reps.outsider],
+  );
 });
 
 const names = (body: any) => (body.reps as Array<{ displayName: string }>).map((row) => row.displayName).sort();
@@ -97,4 +105,25 @@ test("a plain member of a team is refused", async () => {
 
 test("a period is required to be valid", async () => {
   expect((await request("owner", "/api/xpot/team-results?days=9999")).status).toBe(400);
+});
+
+test("an owner's numbers are the ones the lists behind them show", async () => {
+  const { metrics, reps } = (await request("owner", SINCE)).body;
+  // Mate's visit to Team B's company is not the owner's to count or to open; the open tasks are the ones the Tasks
+  // list opens (not started and under way), of Team A only.
+  expect(metrics.visits).toBe(1);
+  expect(metrics.pendingTasks).toBe(2);
+  // Who visited: mate, not the owner who sat the week out.
+  expect(metrics.activeReps).toBe(1);
+  // Each row knows the organization it opens the person in.
+  const teamA = (await one(`SELECT id FROM organizations WHERE slug = 'team-a'`)).id;
+  expect(reps.map((row: any) => row.organizationId)).toEqual([teamA, teamA]);
+});
+
+test("the platform counts who visited, whatever their role, and every open task", async () => {
+  const { metrics } = (await request("boss", SINCE)).body;
+  // boss, mate and outsider visited; the owner did not.
+  expect(metrics.activeReps).toBe(3);
+  expect(metrics.pendingTasks).toBe(3);
+  expect(metrics.visits).toBe(4);
 });

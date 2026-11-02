@@ -295,11 +295,13 @@ export function VisitSummaryPage({ visit, onBack, onDelete }: { visit: VisitLike
 }
 
 /** Confirms and deletes a visit. */
-export function VisitDeleteConfirm({ visitId, open, onOpenChange, onDeleted }: {
+export function VisitDeleteConfirm({ visitId, open, onOpenChange, onDeleted, sales }: {
   visitId: number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onDeleted?: () => void;
+  /** What the visit sold: deleting it unlinks those sales from the visit (they stay in Sales), and the dialog says so. */
+  sales?: { transactions: number; totalCents: number } | null;
 }) {
   const { toast } = useToast();
   const t = useT(visitsMessages);
@@ -325,7 +327,9 @@ export function VisitDeleteConfirm({ visitId, open, onOpenChange, onDeleted }: {
       onOpenChange={onOpenChange}
       tone="danger"
       title={t("deleteVisitTitle")}
-      description={t("deleteVisitDesc")}
+      description={sales && sales.transactions > 0
+        ? `${t("deleteVisitDesc")} ${t.plural("deleteVisitSales", sales.transactions, { amount: formatCents(sales.totalCents) })}`
+        : t("deleteVisitDesc")}
       confirmLabel={t("delete")}
       cancelLabel={tc("cancel")}
       onConfirm={handleDelete}

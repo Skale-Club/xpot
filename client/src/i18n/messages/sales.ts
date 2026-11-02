@@ -32,6 +32,8 @@ const en = {
   // Toasts
   oppCreated: "Deal added",
   deals: "Deals",
+  openDeals: "Open deals",
+  noDealsOfStatus: "No deals here.",
   dealSaved: "Deal updated",
   dealSaveFailed: "Could not update the deal",
   dealStatus: "Where it stands",
@@ -78,6 +80,8 @@ export const salesMessages: Dictionary<typeof en> = {
 
     oppCreated: "Negócio adicionado",
     deals: "Negócios",
+    openDeals: "Negócios abertos",
+    noDealsOfStatus: "Nenhum negócio aqui.",
     dealSaved: "Negócio atualizado",
     dealSaveFailed: "Não foi possível atualizar o negócio",
     dealStatus: "Situação",
@@ -121,6 +125,8 @@ export const salesMessages: Dictionary<typeof en> = {
 
     oppCreated: "Negocio añadido",
     deals: "Negocios",
+    openDeals: "Negocios abiertos",
+    noDealsOfStatus: "Ningún negocio aquí.",
     dealSaved: "Negocio actualizado",
     dealSaveFailed: "No se pudo actualizar el negocio",
     dealStatus: "Situación",
