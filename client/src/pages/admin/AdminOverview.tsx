@@ -13,15 +13,18 @@ import { useUrlFilters } from "@/hooks/use-url-filters";
 import { useT } from "@/i18n";
 import { manageMessages } from "@/i18n/messages/manage";
 import { peopleWorkspaceMessages } from "@/i18n/messages/peopleWorkspace";
-import { TEAM_PERIODS, teamPeriodSince, type TeamActivityResponse, type TeamActivityRow, type TeamPeriod } from "@shared/teamActivity";
+import { TEAM_PERIODS, teamPeriodSince, teamVisitsHref, type TeamActivityResponse, type TeamActivityRow, type TeamPeriod } from "@shared/teamActivity";
 
 // Visits › Manage › Overview: what the field team did in a period (today, or
 // the last 7, 30 or 90 days), each number opening the list behind it, and one
 // row per rep that opens them in People. Only people with Visits count; Tags
 // has its own report (Tags › Manage › Reps). Sync problems live in Status.
 
+const HISTORY = "/admin/work/dashboard/history";
+
 /**
- * The lists the tiles open. Visits history only filters by day; Sales overview takes the same periods (1 is today).
+ * The lists the tiles open, each one showing the same number as its tile: the visits history takes the period and which
+ * of its visits (?period=&show=), Sales overview the same periods (1 is today), and the pipeline lists the team's deals.
  * People live in /admin/reps only for the platform: an owner or a partner opens their team, in the organization they run
  * (or the list of them, for someone who runs several).
  */
@@ -29,7 +32,9 @@ function links(period: TeamPeriod, platform: boolean, organizationId: number | n
   const range = period === "today" ? "1" : period;
   return {
     reps: platform ? "/admin/reps?status=active&module=visits" : organizationId ? `/organizations/${organizationId}?tab=team` : "/organizations",
-    visits: period === "today" ? "/admin/work/dashboard/history?view=day" : "/admin/work/dashboard/history",
+    visits: teamVisitsHref(HISTORY, period),
+    finished: teamVisitsHref(HISTORY, period, "finished"),
+    away: teamVisitsHref(HISTORY, period, "away"),
     inProgress: "/admin/work/dashboard/history?view=day&status=in_progress",
     sales: `/admin/work/sales?range=${range}`,
     pipeline: "/admin/work/sales/pipeline",
@@ -118,14 +123,14 @@ export function AdminOverview() {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <KpiTile icon={Users} label={t("metricActiveReps")} value={m.activeReps} onClick={() => navigate(to.reps)} />
         <KpiTile icon={CalendarCheck} label={tw("kpiVisits")} value={m.visits} detail={tw("kpiVisitsDetail")} onClick={() => navigate(to.visits)} />
-        <KpiTile icon={Check} label={t("metricCompletedVisits")} value={m.finishedVisits} detail={tw("kpiFinishedDetail")} onClick={() => navigate(to.visits)} />
+        <KpiTile icon={Check} label={t("metricCompletedVisits")} value={m.finishedVisits} detail={tw("kpiFinishedDetail")} onClick={() => navigate(to.finished)} />
         <KpiTile
           icon={MapPinOff}
           accent={m.locationExceptions > 0 ? "amber" : "blue"}
           label={tw("kpiExceptions")}
           value={m.locationExceptions}
           detail={tw("kpiExceptionsDetail")}
-          onClick={() => navigate(to.visits)}
+          onClick={() => navigate(to.away)}
         />
         <KpiTile
           icon={DollarSign}

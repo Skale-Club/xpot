@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { z } from "zod";
 import { storage } from "../../storage.js";
-import { requireXpotUser, ensureXpotRep, isPlatformAdmin, listsEveryone, canAccessLead, loadAccessibleLead, type XpotActor } from "./middleware.js";
+import { requireXpotUser, ensureXpotRep, isPlatformAdmin, listsEveryone, listScope, visitsInOrganizations, canAccessLead, loadAccessibleLead, type XpotActor } from "./middleware.js";
+import { teamMembers } from "../../organizations/service.js";
 import { syncOpportunityToGhl } from "./helpers.js";
 import { xpotOpportunityCreateSchema, xpotOpportunityUpdateSchema } from "#shared/xpot.js";
 import { getGHLPipelines } from "../../integrations/ghl.js";
@@ -26,14 +27,22 @@ export function createOpportunitiesRouter() {
     const status = typeof req.query.status === "string"
       ? z.enum(["open", "won", "lost", "archived"]).parse(req.query.status)
       : undefined;
-    const opportunities = await storage.listSalesOpportunities({
+    // A Rep Admin in management mode gets the team's deals, the list Team results counts: deals by the organizations'
+    // members on the organizations' companies (like their visits history). Their own are "My work".
+    const scope = await listScope(req, actor as XpotActor);
+    const wholeTeam = scope.kind === "organizations";
+    let opportunities = await storage.listSalesOpportunities({
       // SEG-08: same "who sees everything" rule as leads/visits/tasks.
-      repId: listsEveryone(req, actor!) && req.query.all === "true" ? undefined : actor!.rep.id,
+      repId: wholeTeam || (listsEveryone(req, actor!) && req.query.all === "true") ? undefined : actor!.rep.id,
       status,
     });
 
     // One query for every lead instead of one per opportunity.
     const leads = await storage.getSalesLeadsByIds(Array.from(new Set(opportunities.map((item) => item.leadId))));
+    if (scope.kind === "organizations") {
+      const members = await teamMembers(scope.organizationIds);
+      opportunities = visitsInOrganizations(opportunities, leads, scope.organizationIds).filter((item) => item.repId != null && members.has(item.repId));
+    }
     // A deal filed on a company the caller can no longer open (or one linked
     // before the create route checked it) keeps its row but not the company.
     const allowed = await Promise.all(leads.map((lead) => canAccessLead(actor as XpotActor, lead)));
