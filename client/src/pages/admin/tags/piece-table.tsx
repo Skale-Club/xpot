@@ -130,13 +130,13 @@ export function PieceTable({
     organization: {
       key: "organization",
       label: tm("colCompany"),
-      cellClassName: "max-w-[130px] truncate text-white/70",
+      cellClassName: "max-w-[96px] truncate text-white/70",
       render: (p) => p.organizationName ?? none,
     },
     customer: {
       key: "customer",
       label: tm("colCustomer"),
-      cellClassName: "max-w-[200px]",
+      cellClassName: "max-w-[160px]",
       render: (p) => (
         <span className="block min-w-0">
           <span className="block truncate text-white/80">{p.leadName ?? (noCustomerText(p) ? <span className="text-white/40">{noCustomerText(p)}</span> : none)}</span>
@@ -147,7 +147,7 @@ export function PieceTable({
     reseller: {
       key: "reseller",
       label: tm("colWith"),
-      cellClassName: "max-w-[140px] truncate text-white/70",
+      cellClassName: "max-w-[108px] truncate text-white/70",
       render: (p) => heldBy(p) ?? none,
     },
     chip: {
@@ -262,6 +262,7 @@ export function PieceTable({
         selectedKey={selectedId}
         isRowSelected={selection ? (p) => selection.selected.has(p.publicCode) : undefined}
         stickyHeadTop={headTop}
+        dense={tableColumns.length >= 7}
       />
 
       {pageSize ? <ListPager shown={paged.shown} total={paged.total} hasMore={paged.hasMore} onMore={paged.showMore} pageSize={pageSize} auto={false} /> : null}
