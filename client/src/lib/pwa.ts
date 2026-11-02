@@ -27,6 +27,24 @@ export function getHttpStatus(error: unknown): number | null {
   return match ? Number(match[1]) : null;
 }
 
+/**
+ * Why /api/xpot/me did not answer, in the words the person needs:
+ * `signed-out` (401: no session, or it expired), `pending` and `blocked` (a 403
+ * with the server's `code`: the sign-up is waiting for approval, or access was
+ * turned off), `unreachable` (no signal, a timeout, a server error or a 403
+ * that is not the server's: nothing says the account is wrong, so the way
+ * forward is to try again).
+ */
+export type SessionProblem = "signed-out" | "pending" | "blocked" | "unreachable";
+
+export function sessionProblem(error: unknown): SessionProblem {
+  const status = getHttpStatus(error);
+  if (status === 401) return "signed-out";
+  const code = (error as { code?: unknown } | null)?.code;
+  if (status === 403 && (code === "pending" || code === "blocked")) return code;
+  return "unreachable";
+}
+
 export type RootView = "landing" | "loading" | "workspace";
 
 export function resolveRootView(input: {

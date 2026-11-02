@@ -19,7 +19,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { queryClient } from "@/lib/queryClient";
-import { consumePostLoginRedirect, getXpotHomePath, rememberPostLoginRedirect } from "@/lib/xpot";
+import { consumePostLoginRedirect, getXpotHomePath, rememberPostLoginRedirect, signInRequested } from "@/lib/xpot";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -257,9 +257,11 @@ export function XpotLandingPage() {
   }, [setLocation]);
 
   useEffect(() => {
-    // ?next= comes from /oauth/authorize when there is no session: keep it
-    // across the sign-in and open the dialog straight away.
-    if (rememberPostLoginRedirect()) {
+    // ?next= comes from /oauth/authorize or an expired session: keep it across
+    // the sign-in and open the dialog straight away. ?signin=1 (/login, "Go to
+    // sign-in") opens it with nowhere in particular to return to.
+    const hasNext = rememberPostLoginRedirect();
+    if (hasNext || signInRequested(window.location.search)) {
       window.history.replaceState(null, "", window.location.pathname);
       setIsLoginOpen(true);
     }

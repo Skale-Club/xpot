@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AppLoader } from "@/components/ui/spinner";
+import { SessionGate } from "@/components/xpot/SessionGate";
 import { Field, FIELD_CONTROL, Input } from "@/components/xpot/Field";
 import { FormFooter } from "@/components/xpot/FormFooter";
 import { PageHeader } from "@/components/xpot/PageHeader";
@@ -323,6 +324,8 @@ export function XpotSettings() {
   };
 
   if (meQuery.isLoading) return <AppLoader />;
+  // A failed /api/xpot/me must not mount the layout below: its children ask for /me again, which restarts the loader above, forever.
+  if (!me) return <SessionGate error={meQuery.error} />;
 
   const profileDirty = !!me && (
     displayName !== me.rep.displayName ||

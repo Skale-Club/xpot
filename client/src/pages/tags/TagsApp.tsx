@@ -39,7 +39,7 @@ export function TagsApp() {
     rememberModuleRoute("tags", `${location.split("?")[0]}${search}`);
   }, [allowed, location]);
 
-  if (!meQuery.data) return <SessionGate failed={meQuery.isError} />;
+  if (!meQuery.data) return <SessionGate error={meQuery.error} />;
 
   // Tags switched off for this rep: back to Visits (the server refuses the API anyway).
   if (!allowed) return <Redirect to={MODULE_HOME.visits} />;

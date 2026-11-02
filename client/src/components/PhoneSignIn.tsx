@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, Check, Clock3, MessageCircle, Phone, ShieldOff } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Phone } from "lucide-react";
+import { AccessNotice } from "@/components/AccessNotice";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "@/components/ui/loader";
 import { FIELD_CONTROL } from "@/components/xpot/Field";
@@ -265,33 +266,16 @@ export function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<u
   );
 
   if (step === "pending" || step === "blocked") {
-    const pending = step === "pending";
-    const link = whatsappLink(step);
-    const Icon = pending ? Clock3 : ShieldOff;
     return (
-      <div className="space-y-4 text-center" data-testid={`signin-${step}`}>
-        <div className={`mx-auto flex h-14 w-14 items-center justify-center rounded-2xl ${pending ? "bg-amber-400/10 text-amber-300" : "bg-red-500/10 text-red-300"}`}>
-          <Icon className="h-7 w-7" />
-        </div>
-        <div>
-          <p className="text-lg font-bold text-white">{pending ? t("pendingTitle") : t("blockedTitle")}</p>
-          <p className="mt-1 text-sm text-white/60">{pending ? t("pendingText") : t("blockedText")}</p>
-        </div>
-        {link && (
-          <div className="space-y-2">
-            {pending ? <p className="text-sm text-white/50">{t("pendingQuestion")}</p> : null}
-            <Button asChild variant="secondary" size="lg" className="w-full">
-              <a href={link} target="_blank" rel="noopener noreferrer" data-testid="signin-whatsapp">
-                <MessageCircle className="text-emerald-300" />
-                {t("contactWhatsapp")}
-              </a>
-            </Button>
-          </div>
-        )}
-        <button type="button" onClick={restart} className="min-h-10 text-sm text-white/50 hover:text-white">
-          {t("backToStart")}
-        </button>
-      </div>
+      <AccessNotice
+        kind={step}
+        whatsappHref={whatsappLink(step)}
+        action={
+          <button type="button" onClick={restart} className="min-h-10 text-sm text-white/50 hover:text-white">
+            {t("backToStart")}
+          </button>
+        }
+      />
     );
   }
 

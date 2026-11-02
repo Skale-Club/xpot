@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { AppBackground } from "@/components/xpot/AppBackground";
 import { EmptyState } from "@/components/xpot/EmptyState";
 import { PageHeader } from "@/components/xpot/PageHeader";
+import { SessionGate } from "@/components/xpot/SessionGate";
 import { AppLayout } from "@/components/xpot/AppLayout";
 import { Select } from "@/components/xpot/Field";
 import { panelGroups } from "@/components/xpot/moduleNav";
@@ -24,7 +25,6 @@ import { AdminHome } from "./AdminHome";
 import { AdminWork } from "./AdminWork";
 import { can } from "@shared/profiles";
 import { useT } from "@/i18n";
-import { commonMessages } from "@/i18n/messages/common";
 import { shellMessages } from "@/i18n/messages/shell";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { navIaMessages } from "@/i18n/messages/navIa";
@@ -43,7 +43,6 @@ export function AdminApp({ section }: { section: string }) {
   const meQuery = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
   const t = useT(shellMessages);
   const tt = useT(tagsMessages);
-  const tc = useT(commonMessages);
   const tm = useT(manageMessages);
   const tn = useT(navIaMessages);
   const tw = useT(workspacesMessages);
@@ -52,11 +51,13 @@ export function AdminApp({ section }: { section: string }) {
   const me = meQuery.data;
   const active = SECTIONS.find((id) => id === section) ?? "home";
   if (meQuery.isLoading) return <AppLoader />;
+  // No session, a sign-up under review or no signal: the gate says which (it is not "access restricted").
+  if (!me) return <SessionGate error={meQuery.error} />;
   const profile = profileOfMe(me);
   const allowed = !!profile && can(profile, "useManagementPanel") && (profile === "platform" || ORGANIZATION_SECTIONS.includes(active));
-  if (!me || !allowed) {
-    const exit = me ? homeForModules(modules) : "/";
-    return <AppBackground><div className="mx-auto w-full max-w-md px-4 pb-20 pt-6"><PageHeader backHref={exit} backLabel={me ? tm("backToApp") : tc("goToSignIn")} title={tm("accessRestricted")} /><EmptyState tone="red" icon={ShieldAlert} title={me ? tm("noAdminPermission") : tm("signInToContinue")} action={<Button variant="secondary" onClick={() => navigate(exit)}>{me ? tm("backToApp") : tc("goToSignIn")}</Button>} /></div></AppBackground>;
+  if (!allowed) {
+    // Someone who only took a wrong turn: nothing is broken, so nothing red and one way back.
+    return <AppBackground><div className="mx-auto w-full max-w-md px-4 pb-20 pt-24"><EmptyState icon={ShieldAlert} title={tm("noAdminPermission")} action={<Button variant="secondary" onClick={() => navigate(homeForModules(modules))}>{tm("backToApp")}</Button>} /></div></AppBackground>;
   }
   const panelName = nameOf(profile);
   const groups = panelGroups(profile, modules, { shell: t, tags: tt, nav: tn }, names, ownedOrganizationId(me));

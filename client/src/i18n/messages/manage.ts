@@ -9,9 +9,8 @@ import type { Dictionary } from "../index";
 const en = {
   // Access gate
   accessRestricted: "Access restricted",
-  noAdminPermission: "You don't have access to management.",
-  signInToContinue: "Sign in to continue.",
-  backToApp: "Back to app",
+  noAdminPermission: "This area is for company managers.",
+  backToApp: "Back to Xpot",
 
   // Shared
   error: "Error",
@@ -232,9 +231,8 @@ export const manageMessages: Dictionary<typeof en> = {
   en,
   pt: {
     accessRestricted: "Acesso restrito",
-    noAdminPermission: "Você não tem acesso à gestão.",
-    signInToContinue: "Entre para continuar.",
-    backToApp: "Voltar ao app",
+    noAdminPermission: "Esta área é para quem gerencia a empresa.",
+    backToApp: "Voltar ao Xpot",
 
     error: "Erro",
     errorSaving: "Erro ao salvar",
@@ -443,9 +441,8 @@ export const manageMessages: Dictionary<typeof en> = {
   },
   es: {
     accessRestricted: "Acceso restringido",
-    noAdminPermission: "No tienes acceso a la gestión.",
-    signInToContinue: "Inicia sesión para continuar.",
-    backToApp: "Volver a la app",
+    noAdminPermission: "Esta área es para quienes gestionan la empresa.",
+    backToApp: "Volver a Xpot",
 
     error: "Error",
     errorSaving: "Error al guardar",
