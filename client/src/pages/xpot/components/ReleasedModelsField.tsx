@@ -57,7 +57,8 @@ export function ReleasedModelsField({ value, onChange, disabled = false }: {
           </div>
         ) : null}
       </div>
-      <p className="text-xs text-white/40">{m("releasedHint")}</p>
+      {/* With no restriction yet, the line above already says everything is allowed: the rule only applies once models are ticked. */}
+      {value === null ? null : <p className="text-xs text-white/40">{m("releasedHint")}</p>}
       {isLoading ? <ListSkeleton rows={3} rowClassName="h-11 rounded-lg" /> : error && !data ? <p role="alert" className="text-xs text-red-300">{m("releasedError")}</p> : !models.length ? <p className="text-xs text-white/50">{m("releasedEmpty")}</p> : (
         <>
           {models.length > 8 ? (

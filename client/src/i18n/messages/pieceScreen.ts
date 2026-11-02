@@ -62,10 +62,9 @@ const en = {
   takeBack: "Take back",
   takeBackTitle: "Take {code} back to company stock?",
   moreActions: "More actions",
-  moreActionsTitle: "More actions on {code}",
+  moreActionsTitle: "More actions",
   reversible: "Can be undone",
   irreversible: "Cannot be undone",
-  damageHouseOnly: "Only an unassigned piece in company stock can be marked damaged. Take it back first.",
 
   // Activity
   activityTitle: "Activity",
@@ -197,10 +196,9 @@ export const pieceScreenMessages: Dictionary<typeof en> = {
     takeBack: "Receber de volta",
     takeBackTitle: "Receber {code} de volta no estoque da empresa?",
     moreActions: "Mais ações",
-    moreActionsTitle: "Mais ações em {code}",
+    moreActionsTitle: "Mais ações",
     reversible: "Dá para desfazer",
     irreversible: "Não dá para desfazer",
-    damageHouseOnly: "Só uma peça sem cliente no estoque da empresa pode ser marcada como estragada. Recolha-a antes.",
 
     activityTitle: "Atividade",
     activityEmpty: "Nada registrado ainda.",
@@ -326,10 +324,9 @@ export const pieceScreenMessages: Dictionary<typeof en> = {
     takeBack: "Recoger",
     takeBackTitle: "¿Recoger {code} al stock de la empresa?",
     moreActions: "Más acciones",
-    moreActionsTitle: "Más acciones en {code}",
+    moreActionsTitle: "Más acciones",
     reversible: "Se puede deshacer",
     irreversible: "No se puede deshacer",
-    damageHouseOnly: "Solo una pieza sin cliente en el stock de la empresa se puede marcar como dañada. Devuélvela a la empresa primero.",
 
     activityTitle: "Actividad",
     activityEmpty: "Nada registrado aún.",

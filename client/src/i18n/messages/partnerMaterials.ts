@@ -35,8 +35,8 @@ const en = {
   couldNotSaveMaterials: "Could not save the materials",
 
   releasedTitle: "Models it may print",
-  releasedHint: "It requests, generates and prints only these models. Nothing else shows up on its Production page.",
-  releasedUnrestricted: "Not restricted yet: it can print every model. Choose the ones to release.",
+  releasedHint: "Only the ticked models. Nothing else shows up on its Production page.",
+  releasedUnrestricted: "All models allowed. Untick the ones to hold back.",
   releasedNone: "No model released: it has nothing to print yet.",
   releasedCount_one: "{count} model released",
   releasedCount_other: "{count} models released",
@@ -99,8 +99,8 @@ export const partnerMaterialsMessages: Dictionary<typeof en> = {
     couldNotSaveMaterials: "Não foi possível salvar os materiais",
 
     releasedTitle: "Modelos que pode imprimir",
-    releasedHint: "Ela pede, gera e imprime só estes modelos. Nada mais aparece na página de Produção dela.",
-    releasedUnrestricted: "Ainda sem restrição: pode imprimir todos os modelos. Escolha os que serão liberados.",
+    releasedHint: "Só os modelos marcados. Nada mais aparece na página de Produção dela.",
+    releasedUnrestricted: "Todos os modelos liberados. Desmarque os que quer segurar.",
     releasedNone: "Nenhum modelo liberado: ainda não há nada para imprimir.",
     releasedCount_one: "{count} modelo liberado",
     releasedCount_other: "{count} modelos liberados",
@@ -160,8 +160,8 @@ export const partnerMaterialsMessages: Dictionary<typeof en> = {
     couldNotSaveMaterials: "No se pudieron guardar los materiales",
 
     releasedTitle: "Modelos que puede imprimir",
-    releasedHint: "Solicita, genera e imprime solo estos modelos. Nada más aparece en su página de Producción.",
-    releasedUnrestricted: "Aún sin restricción: puede imprimir todos los modelos. Elige los que se liberan.",
+    releasedHint: "Solo los modelos marcados. Nada más aparece en su página de Producción.",
+    releasedUnrestricted: "Todos los modelos liberados. Desmarca los que quieres retener.",
     releasedNone: "Ningún modelo liberado: todavía no tiene nada para imprimir.",
     releasedCount_one: "{count} modelo liberado",
     releasedCount_other: "{count} modelos liberados",
