@@ -4,10 +4,11 @@ import { Building2, Check, ChevronDown, Contact, ExternalLink, Link2, Mail, Penc
 import { defaultUtmEnabled, planTransition, stockBlock, TAG_DESTINATION_TYPES, type TagDestinationType } from "@shared/tags";
 import { contentKindOf, contentSummary, validateChipContent, type ChipContentKind } from "@shared/chipContent";
 import { destinationNotPrinted } from "@shared/tagFace";
-import { chipNeedsWriting, guessDestinationType, normalizeUrlInput } from "@shared/tagApp";
+import { chipNeedsWriting, guessDestinationType, normalizeUrlInput, socialAccountOf } from "@shared/tagApp";
 import { buildReviewUrl } from "@shared/reviewLink";
 import type { FullSalesLead, XpotMeResponse } from "@/pages/xpot/types";
 import { Button } from "@/components/ui/button";
+import { SocialAccountIcon } from "@/components/piece/DestinationLabel";
 import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
 import { Field, Input } from "@/components/xpot/Field";
 import { InlineAlert } from "@/components/xpot/InlineAlert";
@@ -37,7 +38,6 @@ const isDestinationType = (value: string | null): value is TagDestinationType =>
 
 const KIND_ICON = { url: Link2, email: Mail, phone: Phone, vcard: Contact } as const;
 
-/** Lifecycle confirms: title, description and button are manageTagsPieces action_<action>_*. */
 /** The small pencil that edits the value beside it (the destination, the customer): a 40px target. */
 function EditPencil({ label, onClick, testId }: { label: string; onClick: () => void; testId: string }) {
   return (
@@ -47,6 +47,7 @@ function EditPencil({ label, onClick, testId }: { label: string; onClick: () => 
   );
 }
 
+/** Lifecycle confirms: title, description and button are manageTagsPieces action_<action>_*. */
 type ConfirmAction = Extract<PieceAction, "activate" | "disable" | "unassign">;
 
 export function CustomerDestinationSection({ commands }: {
@@ -278,7 +279,9 @@ export function CustomerDestinationSection({ commands }: {
   const destKind = contentKindOf(dest);
   const KindIcon = KIND_ICON[destKind];
   const destDisplay = !dest ? null : destKind === "url" ? shortUrl(dest) : contentSummary(dest);
-  const destType = destKind === "url"
+  // A social account shows as its icon and name; the address (and what opens and copies) is still the stored link.
+  const account = destKind === "url" ? socialAccountOf(dest) : null;
+  const destType = account ? "" : destKind === "url"
     ? (isDestinationType(tag.destinationType) ? t(`dest_${tag.destinationType}`) : tag.destinationType)
     : t(`contentKind_${destKind}`);
 
@@ -310,16 +313,18 @@ export function CustomerDestinationSection({ commands }: {
 
       {dest ? (
         <>
-        <div className="mt-2 flex items-center gap-3">
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-violet-500/20 text-violet-200">
-            <KindIcon className="h-5 w-5" />
-          </span>
+        <div className="mt-2 flex items-center gap-2">
+          {account ? <SocialAccountIcon network={account.network} size="md" /> : (
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-violet-500/20 text-violet-200">
+              <KindIcon className="h-5 w-5" />
+            </span>
+          )}
           <div className="min-w-0 flex-1">
             {destKind === "vcard" ? (
               <p className="truncate text-lg font-bold text-white">{destDisplay}</p>
             ) : (
-              <a href={dest} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-lg font-bold text-white underline-offset-2 hover:underline active:underline" data-testid="link-destination">
-                <span className="line-clamp-2 min-w-0 break-all">{destDisplay}</span>
+              <a href={dest} target="_blank" rel="noopener noreferrer" className={`flex min-w-0 items-center gap-1.5 font-bold text-white underline-offset-2 hover:underline active:underline ${account ? "text-base" : "text-lg"}`} data-testid="link-destination">
+                <span className="line-clamp-2 min-w-0 break-all" data-testid="destination-name">{account ? account.label : destDisplay}</span>
                 <ExternalLink className="h-4 w-4 shrink-0 text-violet-300" />
               </a>
             )}
@@ -357,12 +362,12 @@ export function CustomerDestinationSection({ commands }: {
             </Button>
           )}
           {tag.leadId ? (
+      {tag.leadId && tag.saleId !== null ? <p className="mt-2 text-xs text-white/40" data-testid="admin-piece-clear-customer-sold">{tm("clearCustomerSold")}</p> : null}
             <div className="flex min-w-0 flex-1 items-center gap-1">
               <span className="min-w-0 break-words text-sm font-semibold text-white/85" data-testid="text-tag-lead">{tag.leadName ?? tm("customerNumber", { id: tag.leadId })}</span>
               {canChangeCustomer && <EditPencil label={t("changeCustomerShort")} onClick={() => openEditor(true)} testId="button-change-customer" />}
             </div>
           ) : null}
-      {tag.leadId && tag.saleId !== null ? <p className="mt-2 text-xs text-white/40" data-testid="admin-piece-clear-customer-sold">{tm("clearCustomerSold")}</p> : null}
         </div>
       )}
       {tag.leadId && !retired ? (
