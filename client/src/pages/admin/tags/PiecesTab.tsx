@@ -295,7 +295,7 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
   if (!isDesktop && paneId) return <PieceDetail id={paneId} go={go} />;
 
   // Platform management sees every company's pieces, so it reads whose each is. In company stock every row says "Company stock": no column.
-  const columns = COLUMNS.filter((c) => !(c === "reseller" && where === "house"));
+  const columns = COLUMNS.filter((c) => !(c === "reseller" && (where === "house" || where === "withCustomer")));
   // Someone who runs several organizations (or the platform with "All organizations") sees whose piece each is.
   if (spansOrganizations && !filters.org && orgOptions.length > 1) columns.unshift("organization");
 

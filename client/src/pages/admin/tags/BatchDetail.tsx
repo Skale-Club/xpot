@@ -291,11 +291,12 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
   const house = countStockMetric(pieces, "house");
   const handOut = countStockMetric(pieces, "handOut");
   const withResellers = countStockMetric(pieces, "withResellers");
+  const withCustomer = countStockMetric(pieces, "withCustomer");
   const sold = countStockMetric(pieces, "sold");
   const damaged = countStockMetric(pieces, "damaged");
   // What is left over (internal use, reserved, lost, deactivated): a card for it, so the cards add up to the batch.
   const notReceived = countStockMetric(pieces, "notReceived");
-  const other = Math.max(0, total - notReceived - damaged - house - withResellers - sold);
+  const other = Math.max(0, total - notReceived - damaged - house - withCustomer - withResellers - sold);
   const live = countStockMetric(pieces, "live");
   const chipsVerified = pieces.filter((p) => p.nfcStatus === "verified" || p.nfcStatus === "locked").length;
   const exportBase = `/api/xpot/admin/tag-batches/${encodeURIComponent(batch.id)}`;
@@ -430,6 +431,7 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <Stat card label={tf("statReceived")} value={`${good}/${batch.tagCount}`} detail={receivedDetail} />
             <Stat card label={t("houseStock")} value={house} detail={total ? t.plural("houseShare", total, { percent: formatShare(house, total) }) : undefined} />
+            {withCustomer > 0 ? <Stat card label={t("withCustomer")} value={withCustomer} detail={t("withCustomerHint")} /> : null}
             <Stat card label={t("withResellers")} value={withResellers} detail={t("withResellersKitHint")} />
             <Stat card label={t("sold")} value={sold} detail={live ? t.plural("liveCount", live) : undefined} />
             {damaged > 0 ? <Stat card label={t("damaged")} value={damaged} /> : null}

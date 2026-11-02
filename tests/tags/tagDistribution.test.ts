@@ -32,7 +32,7 @@ test("hand out: only unsold, received, unset house pieces; the first reason wins
 
 test("hand out agrees with the shared handOut stock number", () => {
   const all = [piece(), piece({ repId: 2 }), piece({ status: "active" }), piece({ stockStatus: "pending" }), piece({ sold: true })];
-  const asMetric = all.map((p) => ({ repId: p.repId, status: p.status, stockStatus: p.stockStatus, saleId: p.sold ? 1 : null }));
+  const asMetric = all.map((p) => ({ repId: p.repId, status: p.status, stockStatus: p.stockStatus, saleId: p.sold ? 1 : null, leadId: null }));
   assert.equal(all.filter((p) => handOutBlocker(p) === null).length, countStockMetric(asMetric, "handOut"));
 });
 
@@ -44,7 +44,7 @@ test("take back: only unsold, unset pieces in a reseller's hands", () => {
   assert.equal(takeBackBlocker(piece({ repId: 3, stockStatus: "damaged" })), "not_in_stock");
   assert.equal(takeBackBlocker(piece({ repId: 3, status: "retired" })), "not_in_stock");
   const all = [piece({ repId: 3 }), piece(), piece({ repId: 3, status: "assigned" }), piece({ repId: 3, sold: true })];
-  const asMetric = all.map((p) => ({ repId: p.repId, status: p.status, stockStatus: p.stockStatus, saleId: p.sold ? 1 : null }));
+  const asMetric = all.map((p) => ({ repId: p.repId, status: p.status, stockStatus: p.stockStatus, saleId: p.sold ? 1 : null, leadId: null }));
   assert.equal(all.filter((p) => takeBackBlocker(p) === null).length, countStockMetric(asMetric, "returnable"));
 });
 

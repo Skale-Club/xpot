@@ -44,6 +44,7 @@ export function useTagLabels() {
     const where = (value: Where | PlaceId): string => {
       switch (value) {
         case "house": return t("stockFilter_house");
+        case "withCustomer": return t("stockFilter_customer");
         case "withResellers": return t("stockFilter_reps");
         case "sold": return stock("sold");
         case "live": return status("active");

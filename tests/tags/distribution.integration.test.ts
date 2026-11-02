@@ -193,7 +193,7 @@ test.skipIf(!enabled)("tags: distribution dry runs, kit history, intake undo and
     await db.execute(sql`UPDATE tags SET sales_product_id = NULL WHERE batch_id = ${issued.id}`);
     const overview = await ok("GET", "/api/xpot/admin/tags/overview", "dx-admin2");
     const all = await ok("GET", "/api/xpot/tags?limit=2000", "dx-admin");
-    for (const metric of ["notReceived", "house", "withResellers", "sold", "live"] as const) {
+    for (const metric of ["notReceived", "house", "withCustomer", "withResellers", "sold", "live"] as const) {
       assert.equal(overview.funnel[metric], (await ok("GET", `/api/xpot/tags?metric=${metric}&limit=2000`, "dx-admin2")).length, metric);
     }
     assert.equal(overview.funnel.notReceived, 2);

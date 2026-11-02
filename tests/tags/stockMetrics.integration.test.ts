@@ -17,7 +17,7 @@ import { test } from "vitest";
 import assert from "node:assert/strict";
 import express from "express";
 import type { AddressInfo } from "net";
-import { countStockMetric, type TagStockMetric } from "../../shared/tagMetrics.js";
+import { countStockMetric, matchesStockMetric, type TagStockMetric } from "../../shared/tagMetrics.js";
 
 const enabled = process.env.TAGS_INTEGRATION === "1";
 const REVIEW = "https://search.google.com/local/writereview?placeid=ChIJN1t_tDeuEmsRUsoyG83frY4";
@@ -124,10 +124,12 @@ test.skipIf(!enabled)("tags: every screen counts the same stock the same way", a
     await ok("POST", `/api/xpot/admin/tags/${p(11).id}/internal-use`, "sm-admin", { purpose: "demo" });
     await ok("POST", `/api/xpot/admin/tags/${p(12).id}/retire`, "sm-admin", { reason: "lost" });
 
-    // Expected, by the rules: house p9 p13 p14 (+p11? no: internal use is not stock) = 3; with reps unsold p2..p5 p6 p7 p8 = 7.
+    // Expected, by the rules: house p13 p14 = 2 (p9 is set up for a customer: with a customer; p11 is internal use, not stock);
+    // with reps unsold p2..p5 p6 p7 p8 = 7.
     const all = await ok("GET", "/api/xpot/tags?limit=2000", "sm-admin");
     const count = (metric: TagStockMetric) => countStockMetric(all, metric);
-    assert.equal(count("house"), 3);
+    assert.equal(count("house"), 2);
+    assert.equal(count("withCustomer"), 1);
     assert.equal(count("withResellers"), 7);
     assert.equal(count("sold"), 1);
     assert.equal(count("live"), 2);
@@ -137,6 +139,10 @@ test.skipIf(!enabled)("tags: every screen counts the same stock the same way", a
     // Overview (also the Kits header).
     const overview = await ok("GET", "/api/xpot/admin/tags/overview", "sm-admin2");
     assert.deepEqual(overview.stock, { house: count("house"), withResellers: count("withResellers") });
+    // The place chips add up: house + with a customer is what house alone used to count, and a customer-held piece is not in the first.
+    assert.equal(overview.funnel.withCustomer, count("withCustomer"));
+    assert.equal(overview.funnel.house + overview.funnel.withCustomer, all.filter((t: any) => t.repId === null && t.stockStatus === "available" && t.status !== "retired" && t.saleId === null).length);
+    assert.equal(all.filter((t: any) => matchesStockMetric(t, "house") && t.leadId !== null).length, 0);
     assert.equal(overview.counts.damaged, count("damaged"));
     assert.equal(overview.counts.active, count("live"));
     // Every lifecycle card counts by digital status alone, as its ?status= list does.
@@ -144,7 +150,7 @@ test.skipIf(!enabled)("tags: every screen counts the same stock the same way", a
       assert.equal(overview.counts[status], all.filter((t: any) => t.status === status).length, status);
     }
     // The list behind each stock card reproduces its number.
-    for (const metric of ["house", "withResellers", "sold", "damaged", "notReceived"] as TagStockMetric[]) {
+    for (const metric of ["house", "withCustomer", "withResellers", "sold", "damaged", "notReceived"] as TagStockMetric[]) {
       assert.equal((await ok("GET", `/api/xpot/tags?metric=${metric}&limit=2000`, "sm-admin2")).length, count(metric), metric);
     }
 

@@ -115,8 +115,8 @@ export function PieceTable({
   const allOn = selectableCodes.length > 0 && selectableCodes.every((c) => selection?.selected.has(c));
   const none = <span className="text-white/30">—</span>;
   // "Company stock" is the same set the "In company stock" chip counts (shared/tagMetrics.ts house): not reserved, for internal
-  // use, sold, lost or already at its customer. Those say what they are in the Status column.
-  const heldBy = (p: TagListItem): string | null => p.repName ?? (pieceHasLocation(p) && matchesStockMetric(p, "house") && !p.leadName ? tp("houseStock") : null);
+  // use, sold, lost or already set up for a customer. Those say what they are in the Status column.
+  const heldBy = (p: TagListItem): string | null => p.repName ?? (pieceHasLocation(p) && matchesStockMetric(p, "house") ? tp("houseStock") : null);
   // With a Customer column beside it, "No customer yet" goes there in quiet text: a Status pill repeated on every shelf row hides the rows that differ.
   const chipSaidByStatus = (p: TagListItem) => ((k) => k === "chipToWrite" || k === "chipFailed")(pieceStatus(p).key);
   const noCustomerInColumn = has("customer");
