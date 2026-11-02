@@ -122,7 +122,7 @@ async function lockFulfillmentTags(tx: Tx, rawCodes: string[]) {
   // Orders are fulfilled from the company's stock: another organization's house pieces are not ours to hand over.
   const companyId = await companyOrganizationId();
   const unavailable = rows.filter((tag) => tag.status !== "inventory" || tag.stockStatus !== "available" || tag.repId !== null || tag.organizationId !== companyId);
-  if (unavailable.length) throw new TagSaleError(`Not in house stock: ${unavailable.map((tag) => tag.publicCode).join(", ")}`, 409, "tag_not_house_stock", { codes: unavailable.map((tag) => tag.publicCode).join(", ") });
+  if (unavailable.length) throw new TagSaleError(`Not in company stock: ${unavailable.map((tag) => tag.publicCode).join(", ")}`, 409, "tag_not_house_stock", { codes: unavailable.map((tag) => tag.publicCode).join(", ") });
   return rows;
 }
 

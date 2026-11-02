@@ -255,7 +255,7 @@ test.skipIf(!enabled)("journey: trail, stories, plans, append-only, admin-only A
     assert.equal(ret.json.returned, 1);
     const returns = (await story(`kitId=${kitId}`)).filter((e) => e.action === "returned_to_house");
     assert.equal(returns.length, 1);
-    assert.equal(returns[0].title, "1 piece returned to house stock by Ana");
+    assert.equal(returns[0].title, "1 piece returned to company stock by Ana");
     assert.equal(returns[0].repId, repId["jt-ana"]);
     assert.deepEqual(returns[0].metadata, { codes: [a3.publicCode], count: 1 });
     assert.equal(returns[0].batchId, null, "a batch id would make it batch-wide for every piece");

@@ -85,7 +85,7 @@ export async function receivePiece(id: string, into: ReceiveTarget, actor: TagAc
     await recordJourney({
       kind: "execution",
       action: "piece_received_in_field",
-      title: `Piece ${result.tag.publicCode} received into ${into === "me" ? "a reseller's" : "house"} stock from the phone (${receivedCount}/${batchCount})`,
+      title: `Piece ${result.tag.publicCode} received into ${into === "me" ? "a reseller's" : "company"} stock from the phone (${receivedCount}/${batchCount})`,
       batchId: result.tag.batchId,
       tagId: result.tag.id,
       repId: result.tag.repId,
@@ -106,7 +106,7 @@ export async function returnPieceToHouse(id: string, actor: TagActor): Promise<T
   const [tag] = await db.select().from(tags).where(eq(tags.id, id)).limit(1);
   if (!tag) throw new TagError("Tag not found", 404, "tag_not_found");
   if (pieceAccess(actor, tag) !== "full") throw new TagError("This piece is not in your kit.", 403, "tag_not_yours");
-  if (tag.repId === null) throw new TagError("This piece is already in house stock", 409, "tag_already_house");
+  if (tag.repId === null) throw new TagError("This piece is already in company stock", 409, "tag_already_house");
   // On a team the piece stays with the organization (its owner hands it out again); someone selling alone returns it to the company.
   const house = actor.managedOrganizationIds?.includes(tag.organizationId) || await organizationHasTeam(tag.organizationId) ? tag.organizationId : undefined;
   return setTagRep(id, null, actor.userId, "field", tagSystemReason("returned_field"), house);
