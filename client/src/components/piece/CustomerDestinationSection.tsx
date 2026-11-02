@@ -6,7 +6,7 @@ import { contentKindOf, contentSummary, validateChipContent, type ChipContentKin
 import { destinationNotPrinted } from "@shared/tagFace";
 import { chipNeedsWriting, guessDestinationType, normalizeUrlInput } from "@shared/tagApp";
 import { buildReviewUrl } from "@shared/reviewLink";
-import type { FullSalesLead } from "@/pages/xpot/types";
+import type { FullSalesLead, XpotMeResponse } from "@/pages/xpot/types";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
 import { Field, Input } from "@/components/xpot/Field";
@@ -22,6 +22,7 @@ import LeadPicker, { leadPayload, type LeadChoice } from "@/pages/tags/LeadPicke
 import { GenerateReviewButton, ReviewLinkAssist } from "@/pages/tags/ReviewLinkSheet";
 import { ContentEditor, type ContentState } from "@/pages/tags/ContentEditor";
 import { errorText, getSellTo, haptic, shortUrl } from "@/pages/tags/lib";
+import { suggestedCustomer } from "@/pages/tags/suggestedCustomer";
 import { BottomSheet, CARD_ACCENT, CopyButton, EYEBROW, FieldLabel, INPUT_ACCENT, LinkInput, SheetActions } from "@/pages/tags/ui";
 import { usePiece, usePieceWrite, type PieceCommandsRef } from "./PieceContext";
 import { pieceActionUrl, pieceSituation, type PieceAction } from "./pieceView";
@@ -52,6 +53,7 @@ export function CustomerDestinationSection({ commands }: {
   const write = usePieceWrite();
   const manage = viewer.surface === "admin";
   const { data: leads } = useQuery<FullSalesLead[]>({ queryKey: ["/api/xpot/leads"], staleTime: 60_000 });
+  const { data: me } = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
 
   // The editor (a pop-up), seeded from the piece each time it opens.
   const [editing, setEditing] = useState(false);
@@ -93,6 +95,9 @@ export function CustomerDestinationSection({ commands }: {
     setLead(null);
     // Another company: the old one's link must not carry over to the new one.
     seed(changeCustomer);
+    // A piece with no customer offers the one being visited right now (the X takes it off), so nobody types the name of where they stand.
+    const offered = !manage && !tag.leadId && !changeCustomer ? suggestedCustomer({ sellTo: getSellTo(), visitLead: me?.activeVisit?.lead }) : null;
+    if (offered) setLead(offered);
     setEditing(true);
   };
 
@@ -415,7 +420,7 @@ export function CustomerDestinationSection({ commands }: {
           )}
           {blockedByLive && <InlineAlert tone="warning">{tm("disableBeforeMove")}</InlineAlert>}
           {/* Only where a review link makes sense: a Google review piece, or a customer matched to their Google place. */}
-          {(needsLead ? lead : tag.leadId) && leadPlaceName && (leadPlace || tag.face === "google_review") && (
+          {kind === "url" && (needsLead ? lead : tag.leadId) && leadPlaceName && (leadPlace || tag.face === "google_review") && (
             <GenerateReviewButton
               name={leadPlaceName}
               placeId={leadPlace}

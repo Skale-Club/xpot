@@ -255,7 +255,8 @@ export default function CustomerScreen({ leadId }: { leadId: number }) {
         <EmptyState compact tone="tags" icon={Package} title={t("customerNoPieces")} cardStyle={{}} />
       ) : (
         <ul className="divide-y divide-white/[0.05]">
-          <li className={`flex items-center gap-3 px-4 py-2 ${EYEBROW_MUTED}`}>
+          {/* Column titles only where there are columns (sm up); on a phone the row is just the select-all box, when there is more than one piece. */}
+          <li className={`items-center gap-3 px-4 py-2 ${EYEBROW_MUTED} ${pickable ? "flex" : "hidden sm:flex"}`}>
             {pickable && (
               <input
                 type="checkbox"
@@ -265,7 +266,10 @@ export default function CustomerScreen({ leadId }: { leadId: number }) {
                 className="h-4 w-4 accent-violet-500"
               />
             )}
-            <span className="flex-1">{t("colCode")}</span>
+            <span className="flex-1">
+              <span className="sm:hidden">{t("customerSelectAll")}</span>
+              <span className="hidden sm:inline">{t("colCode")}</span>
+            </span>
             <span className="hidden w-48 md:block">{t("colLink")}</span>
             <span className="hidden w-24 sm:block">{t("colStatus")}</span>
             <span className="hidden w-24 text-right sm:block">{t("colScans")}</span>

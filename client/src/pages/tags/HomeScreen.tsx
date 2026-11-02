@@ -174,6 +174,8 @@ export default function HomeScreen() {
         submitCode();
       }}
     >
+      {/* The same name as the phone's button, so the screen is one thing on every device. */}
+      {isComputer && <h2 className="mb-3 text-lg font-bold tracking-tight text-white">{t("readPiece")}</h2>}
       <label htmlFor="tag-code" className="mb-1.5 block text-xs font-semibold text-white/60">
         {isComputer ? t("typeCode") : t("orTypeCode")}
       </label>
@@ -330,7 +332,7 @@ export default function HomeScreen() {
           className="mt-4 min-h-10 w-full text-center text-sm text-white/50 underline underline-offset-2 hover:text-white/80"
           data-testid="link-write-direct"
         >
-          {t("navDirect")}
+          {t("directLink")}
         </button>
         <Button type="button" variant="ghost" size="lg" onClick={() => setSheet(null)} className="mt-1 w-full">
           {tc("cancel")}

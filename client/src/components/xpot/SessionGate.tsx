@@ -10,7 +10,7 @@ import { shellMessages } from "@/i18n/messages/shell";
 import { queryClient } from "@/lib/queryClient";
 import { signOut } from "@/lib/signOut";
 import { sessionProblem } from "@/lib/pwa";
-import { signInPath } from "@/lib/xpot";
+import { signInPath, wasSignedIn } from "@/lib/xpot";
 
 /**
  * What a module shows before /api/xpot/me answers, and instead of the module
@@ -30,7 +30,7 @@ export function SessionGate({ error }: { error?: unknown }) {
 
   useEffect(() => {
     if (problem !== "signed-out") return;
-    navigate(signInPath(`${window.location.pathname}${window.location.search}`), { replace: true });
+    navigate(signInPath(`${window.location.pathname}${window.location.search}`, { ended: wasSignedIn() }), { replace: true });
   }, [problem, navigate]);
 
   const whatsapp = config?.supportWhatsapp ? `https://wa.me/${config.supportWhatsapp.replace(/\D/g, "")}` : null;

@@ -19,7 +19,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { queryClient } from "@/lib/queryClient";
-import { consumePostLoginRedirect, getXpotHomePath, rememberPostLoginRedirect, signInRequested } from "@/lib/xpot";
+import { consumePostLoginRedirect, getXpotHomePath, rememberPostLoginRedirect, sessionEndedRequested, signInRequested } from "@/lib/xpot";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -226,10 +226,15 @@ export function XpotLandingPage() {
   usePublicSeo("home");
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [error, setError] = useState("");
+  // The dialog opened because a session ended (?ended=1 with a page to return to): it says so, not "create your account".
+  const [sessionEnded, setSessionEnded] = useState(false);
 
   const handleDialogChange = (open: boolean) => {
     setIsLoginOpen(open);
-    if (!open) setError("");
+    if (!open) {
+      setError("");
+      setSessionEnded(false);
+    }
   };
 
   const { data: me } = useQuery<any>({
@@ -262,6 +267,7 @@ export function XpotLandingPage() {
     // sign-in") opens it with nowhere in particular to return to.
     const hasNext = rememberPostLoginRedirect();
     if (hasNext || signInRequested(window.location.search)) {
+      setSessionEnded(hasNext && sessionEndedRequested(window.location.search));
       window.history.replaceState(null, "", window.location.pathname);
       setIsLoginOpen(true);
     }
@@ -381,9 +387,9 @@ export function XpotLandingPage() {
                       <div className="flex items-center justify-center">
                         <XpotLogo className="h-9 w-auto -translate-y-1.5" />
                       </div>
-                      <DialogTitle className="sr-only">{content.account.welcomeTitle}</DialogTitle>
-                      <DialogDescription className="mx-auto mt-4 max-w-sm text-center text-sm leading-6 text-white/55">
-                        {content.account.welcomeSub}
+                      <DialogTitle className="sr-only">{sessionEnded ? content.account.signIn : content.account.welcomeTitle}</DialogTitle>
+                      <DialogDescription className="mx-auto mt-4 max-w-sm text-center text-sm leading-6 text-white/55" data-testid={sessionEnded ? "session-ended" : undefined}>
+                        {sessionEnded ? t("sessionEnded") : content.account.welcomeSub}
                       </DialogDescription>
                     </DialogHeader>
 

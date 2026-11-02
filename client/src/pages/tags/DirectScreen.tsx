@@ -145,7 +145,7 @@ export default function DirectScreen() {
               <FieldLabel>{t("customerOptional")}</FieldLabel>
               <LeadPicker value={lead} onChange={setLead} />
               {/* A direct write has no printed face to go by: offer it only for a customer matched to their Google place. */}
-              {lead?.placeId && (
+              {kind === "url" && lead?.placeId && (
                 <GenerateReviewButton
                   name={lead.name}
                   placeId={lead.placeId}
@@ -193,6 +193,8 @@ export default function DirectScreen() {
                 {t("showQr")}
               </Button>
             </SheetActions>
+            {/* Two buttons look dead when nothing says what they wait for. */}
+            {!ready && <p className="text-center text-xs text-white/50" data-testid="direct-needs">{t(`directNeed_${kind}` as "directNeed_url")}</p>}
           </section>
         </div>
 

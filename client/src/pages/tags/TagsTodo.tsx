@@ -7,6 +7,8 @@ import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { ErrorState } from "@/components/xpot/EmptyState";
+import { useViewerAccess } from "@/lib/adminMode";
+import { FirstSteps } from "./FirstSteps";
 import { APP_BASE, errorText, myPiecesQuery } from "./lib";
 import { CARD, EYEBROW_MUTED } from "./ui";
 
@@ -38,6 +40,7 @@ export function TagsTodo() {
   const tc = useT(commonMessages);
   const [, navigate] = useLocation();
   const { data, error, refetch } = useQuery(myPiecesQuery());
+  const { reach } = useViewerAccess();
   const todo = data ? resellerTodo(data) : null;
   const pending = todo ? todo.finish + todo.noCustomer + todo.paused : 0;
 
@@ -64,8 +67,8 @@ export function TagsTodo() {
           )}
         </section>
       ) : data ? (
-        // Nothing in hand yet (a new reseller): say so once, and there are no results to see.
-        <p className="px-1 text-sm text-white/50" data-testid="todo-empty">{t("todoEmpty")}</p>
+        // Nothing in hand yet (a new reseller): what to do first, and there are no results to see. Whoever manages hands pieces out from Stock.
+        reach ? null : <FirstSteps />
       ) : null}
       {data && data.length > 0 && (
         <button

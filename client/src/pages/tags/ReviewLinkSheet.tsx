@@ -203,11 +203,14 @@ export function GenerateReviewButton({
 
   return (
     <>
-      {/* A plain secondary action; the stars are Google's rating colour, not a warning. */}
-      <Button type="button" variant="secondary" size="lg" onClick={generate} className="mt-2 w-full" data-testid="button-generate-review">
-        <Star className="fill-amber-400 text-amber-400" />
-        <span className="min-w-0 truncate">{t("reviewGenerateFor", { name })}</span>
-      </Button>
+      {/* A plain secondary action with its own line of help: what it does is not in its name. */}
+      <div className="mt-2">
+        <Button type="button" variant="secondary" size="lg" onClick={generate} className="w-full" data-testid="button-generate-review">
+          <Star className="text-white/60" />
+          <span className="min-w-0 truncate">{t("reviewUseLink")}</span>
+        </Button>
+        <p className="mt-1.5 text-xs text-white/50" data-testid="review-generate-hint">{t(placeId ? "reviewUseHintKnown" : "reviewUseHintSearch", { name })}</p>
+      </div>
       {shown && (
         <div className="mt-2" data-testid="review-generated">
           <InlineAlert tone="success" title={t("reviewGenerated")}>

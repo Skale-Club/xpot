@@ -150,10 +150,13 @@ export function ageOf(at: number): { key: "justNow" | "minutesAgo" | "hoursAgo" 
 
 export class HttpError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  /** The server's stable `code` for the error, when it sends one. */
+  code: string | null;
+  constructor(status: number, message: string, code: string | null = null) {
     super(message);
     this.name = "HttpError";
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -167,17 +170,20 @@ async function call<T>(method: "GET" | "POST", url: string, body?: unknown, extr
   });
   if (res.status === 401) {
     // Session gone: sign in again and come back to this page.
-    window.location.assign(signInPath(`${window.location.pathname}${window.location.search}`));
+    window.location.assign(signInPath(`${window.location.pathname}${window.location.search}`, { ended: true }));
     throw new HttpError(401, "Authentication required");
   }
   if (!res.ok) {
     let message = res.statusText;
+    let code: string | null = null;
     try {
-      message = serverErrorText(await res.json(), message);
+      const body = await res.json();
+      message = serverErrorText(body, message);
+      code = typeof body?.code === "string" ? body.code : null;
     } catch {
       // Not JSON: keep the status text.
     }
-    throw new HttpError(res.status, message);
+    throw new HttpError(res.status, message, code);
   }
   return (await res.json()) as T;
 }
@@ -221,7 +227,8 @@ export async function lookupTag(code: string): Promise<LookupResult> {
     return { ok: true, ...found };
   } catch (err) {
     if (err instanceof HttpError && err.status === 404) return { ok: false, reason: "not_found" };
-    if (err instanceof HttpError && err.status === 403 && /kit/i.test(err.message)) return { ok: false, reason: "not_yours" };
+    // By the server's code: its sentence is translated, so the words ("kit") are only the English fallback.
+    if (err instanceof HttpError && err.status === 403 && (err.code === "tag_not_yours" || /kit/i.test(err.message))) return { ok: false, reason: "not_yours" };
     throw err;
   }
 }
