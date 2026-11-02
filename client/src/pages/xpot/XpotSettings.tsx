@@ -44,6 +44,7 @@ import { AddPersonForm } from "./components/AddPersonForm";
 import { AppLayout } from "@/components/xpot/AppLayout";
 import { homeForModules, useXpotModules } from "@/components/ModuleSwitch";
 import { InstallAppHeaderButton, InstallAppRow } from "@/components/xpot/InstallApp";
+import { useWholesale } from "@/pages/tags/WholesaleCard";
 
 const COUNTRIES = [
   { code: "BR", dial: "+55", name: "Brazil" },
@@ -232,6 +233,9 @@ export function XpotSettings() {
 
   const meQuery = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
   const me = meQuery.data;
+  // A code to order at wholesale means nothing to someone whose partner distributes its own pieces (no store): hide it then.
+  const wholesale = useWholesale(!!me?.rep.wholesaleCode);
+  const storeless = !!wholesale.data && wholesale.data.code === null;
   useEffect(() => {
     if (meQuery.isLoading) return;
     if (!isDesktop) {
@@ -393,7 +397,7 @@ export function XpotSettings() {
               <input {...avatar.inputProps} />
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-white">{tn("photo")}</p>
-                <p className="text-xs text-white/45">{tn("photoHint")}</p>
+                <p className="text-xs text-white/45">{tn(modules.includes("visits") ? "photoHint" : "photoHintTeam")}</p>
                 <Button type="button" variant="secondary" size="sm" className="mt-2" onClick={avatar.pick} loading={avatar.pending}>
                   <Camera />
                   {avatar.label}
@@ -416,7 +420,7 @@ export function XpotSettings() {
                 </Field>
               </div>
             </div>
-            {me?.rep.wholesaleCode && (
+            {me?.rep.wholesaleCode && !storeless && (
               <div>
                 <p className={EYEBROW}>{tt("wholesaleCode")}</p>
                 <div className="mt-1.5 flex items-center gap-2">

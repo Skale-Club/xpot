@@ -15,20 +15,19 @@ test("pickTagPageLang: follows the scanner's phone language, English otherwise",
 test("renderTagPage: localized copy, escaped values, Xpot brand", () => {
   const html = renderTagPage("inventory", { code: "A7K3P9X2", configureUrl: "/tags/t/A7K3P9X2", lang: "pt" });
   assert.match(html, /<html lang="pt-BR">/);
-  assert.match(html, /Este Xpot está pronto para ganhar vida\./);
-  assert.match(html, /Ativar esta peça/);
-  assert.match(html, /Peça Xpot autêntica/);
+  assert.match(html, /Esta peça ainda não foi configurada\./);
+  assert.match(html, /Configurar esta peça/);
   assert.match(html, /class="brand"/);
-  assert.match(html, /Conhecer o Xpot/);
-  assert.match(renderTagPage("assigned", { lang: "pt" }), /experiência está quase pronta/);
-  assert.match(renderTagPage("not_found", { lang: "es" }), /No encontramos este Xpot\./);
+  assert.match(html, /O que é o Xpot\?/);
+  assert.match(renderTagPage("assigned", { lang: "pt" }), /estará pronta em breve/);
+  assert.match(renderTagPage("not_found", { lang: "es" }), /No encontramos este código\./);
   assert.match(renderTagPage("inventory", { code: "<b>" }), /&lt;b&gt;/);
 });
 
 test("renderTagPage: public inventory page is useful without exposing configuration", () => {
   const html = renderTagPage("inventory", { code: "A7K3P9X2", lang: "en" });
-  assert.match(html, /Discover Xpot/);
-  assert.match(html, /QR \+ NFC are ready/);
-  assert.doesNotMatch(html, /Activate this piece/);
+  assert.match(html, /What&#39;s Xpot\?/);
+  assert.doesNotMatch(html, /QR \+ NFC are ready|verified|Authentic/);
+  assert.doesNotMatch(html, /Set up this piece/);
   assert.doesNotMatch(html, /\/tags\/t\/A7K3P9X2/);
 });

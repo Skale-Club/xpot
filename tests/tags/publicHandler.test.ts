@@ -125,7 +125,7 @@ test("unknown and malformed codes get a safe 404 page", async () => {
       const res = await get(`${base}${path}`);
       assert.equal(res.status, 404, path);
       assert.equal(res.headers.get("cache-control"), "no-store");
-      assert.match(await res.text(), /We could not find this Xpot/);
+      assert.match(await res.text(), /We couldn&#39;t find this code/);
     }
     await settle();
     assert.equal(events.length, 0);
@@ -138,9 +138,11 @@ test("inventory tag shows the activation page, never a destination", async () =>
     const res = await get(`${base}/q/A7K3P9X2`);
     assert.equal(res.status, 200);
     const html = await res.text();
-    assert.match(html, /ready to come alive/);
-    assert.match(html, /Discover Xpot/);
-    assert.doesNotMatch(html, /Activate this piece/);
+    assert.match(html, /This piece isn&#39;t set up yet/);
+    assert.match(html, /What&#39;s Xpot\?/);
+    assert.doesNotMatch(html, /Set up this piece/);
+    // It claims nothing it cannot know about the piece.
+    assert.doesNotMatch(html, /verified|QR \+ NFC|Authentic|One physical link/);
     await settle();
     assert.equal(events[0].eventType, "inventory_scan");
   });
@@ -151,7 +153,7 @@ test("admins scanning an unassigned tag get a configure shortcut", async () => {
   await withServer({ tags, configureUrlFor: async () => "/tags/t/A7K3P9X2" }, async ({ base }) => {
     const html = await (await get(`${base}/q/A7K3P9X2`)).text();
     assert.match(html, /href="\/tags\/t\/A7K3P9X2"/);
-    assert.match(html, /Activate this piece/);
+    assert.match(html, /Set up this piece/);
   });
 });
 
@@ -160,7 +162,7 @@ test("assigned tag has reassuring setup-in-progress copy", async () => {
   await withServer({ tags }, async ({ base }) => {
     const res = await get(`${base}/q/A7K3P9X2`);
     assert.equal(res.status, 200);
-    assert.match(await res.text(), /experience is almost ready/);
+    assert.match(await res.text(), /This piece will be ready soon/);
   });
 });
 
@@ -171,12 +173,25 @@ test("disabled and retired tags show a generic unavailable page with no customer
       const res = await get(`${base}/q/A7K3P9X2`);
       assert.equal(res.status, 410);
       const html = await res.text();
-      assert.match(html, /not available/);
-      assert.doesNotMatch(html, /johns-barber|disabled|retired/i);
+      assert.match(html, /This piece isn&#39;t available/);
+      // Paused and deactivated read the same, and neither promises it will come back.
+      assert.doesNotMatch(html, /johns-barber|disabled|retired|temporar/i);
       await settle();
       assert.equal(events[0].eventType, "disabled_scan");
     });
   }
+});
+
+test("someone who may work on a paused piece gets the way into the app; a stranger does not", async () => {
+  const tags = new Map([["A7K3P9X2", makeTag({ status: "disabled" })]]);
+  await withServer({ tags, configureUrlFor: async () => "/tags/t/A7K3P9X2" }, async ({ base }) => {
+    const html = await (await get(`${base}/q/A7K3P9X2`)).text();
+    assert.match(html, /Set up this piece/);
+  });
+  await withServer({ tags }, async ({ base }) => {
+    const html = await (await get(`${base}/q/A7K3P9X2`)).text();
+    assert.doesNotMatch(html, /Set up this piece/);
+  });
 });
 
 test("an active tag with a bad stored destination never redirects", async () => {
