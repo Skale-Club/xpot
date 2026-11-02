@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/xpot/EmptyState";
 import { Field, Input, Select } from "@/components/xpot/Field";
 import { ADMIN_TAGS_KEY, errorMessage, getJson, invalidateAdminTags, sendJson, STALE_MS, withQuery } from "./api";
-import { Loading, LoadError, organizationFilterOptions, useBatchOptions, useLeads, useOrganizations, useReps } from "./pieces-shared";
+import { Loading, LoadError, organizationFilterOptions, uniqueOptions, useBatchOptions, useLeads, useOrganizations, useReps } from "./pieces-shared";
 import { useViewerAccess } from "@/lib/adminMode";
 import { catalogOptions, useTagCatalog } from "./batches-shared";
 import { PieceTable, type PieceColumn } from "./piece-table";
@@ -247,12 +247,12 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
     if (moreActive > 0) setMoreOpen(true);
   }, [moreActive]);
 
-  const repOptions = [{ value: "house", label: tm("noReseller") }, ...reps.map((r) => ({ value: String(r.id), label: labels.repOption(r) }))];
+  const repOptions = uniqueOptions([{ value: "house", label: tm("noReseller") }, ...reps.map((r) => ({ value: String(r.id), label: labels.repOption(r) }))]);
   // A rep/lead/batch in the URL that isn't in the pickers (e.g. still loading) still shows as selected.
   if (filters.rep && !repOptions.some((o) => o.value === filters.rep)) repOptions.push({ value: filters.rep, label: tm("resellerNumber", { id: filters.rep }) });
-  const leadOptions = leads.map((l) => ({ value: String(l.id), label: l.name }));
+  const leadOptions = uniqueOptions(leads.map((l) => ({ value: String(l.id), label: l.name })));
   if (filters.lead && !leadOptions.some((o) => o.value === filters.lead)) leadOptions.push({ value: filters.lead, label: tm("customerNumber", { id: filters.lead }) });
-  const batchOptions = batches.map((b) => ({ value: b.id, label: b.batchCode }));
+  const batchOptions = uniqueOptions(batches.map((b) => ({ value: b.id, label: b.batchCode })));
   if (filters.batch && !batchOptions.some((o) => o.value === filters.batch)) batchOptions.push({ value: filters.batch, label: tm("selectedBatch") });
   // An old ?status= / ?stock= value with no bucket of its own (e.g. "Set up, not live") still shows as chosen.
   const whereOptions = [...labels.whereOptions];

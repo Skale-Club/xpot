@@ -35,7 +35,7 @@ import { commonMessages } from "@/i18n/messages/common";
 import { workspacesMessages } from "@/i18n/messages/workspaces";
 import { ADMIN_TAGS_KEY, formatShare, getJson, STALE_MS, withQuery } from "./api";
 import { formatDate } from "@/lib/format";
-import { Loading, LoadError, organizationFilterOptions, useBatchOptions, useLeads, useOrganizations, useReps } from "./pieces-shared";
+import { Loading, LoadError, organizationFilterOptions, uniqueOptions, useBatchOptions, useLeads, useOrganizations, useReps } from "./pieces-shared";
 import { PieceDetail } from "./PieceDetail";
 import { useTagLabels } from "./labels";
 import { PieceTable } from "./piece-table";
@@ -76,9 +76,9 @@ function FleetAnalytics({ go }: { go: Go }) {
           controls={
             <>
               <FilterSelect value={product} onChange={(next) => filters.set({ product: next })} placeholder={t("allProducts")} options={labels.productOptions} icon={Package} />
-              <FilterSelect value={rep} onChange={(next) => filters.set({ rep: next })} placeholder={t("allResellers")} options={reps.map((r) => ({ value: String(r.id), label: labels.repOption(r) }))} icon={Users} />
-              <FilterSelect value={lead} onChange={(next) => filters.set({ lead: next })} placeholder={t("allCustomers")} options={leads.map((l) => ({ value: String(l.id), label: l.name }))} icon={Building2} />
-              <FilterSelect value={batch} onChange={(next) => filters.set({ batch: next })} placeholder={t("allBatches")} options={batches.map((b) => ({ value: b.id, label: b.batchCode }))} icon={Layers} />
+              <FilterSelect value={rep} onChange={(next) => filters.set({ rep: next })} placeholder={t("allResellers")} options={uniqueOptions(reps.map((r) => ({ value: String(r.id), label: labels.repOption(r) })))} icon={Users} />
+              <FilterSelect value={lead} onChange={(next) => filters.set({ lead: next })} placeholder={t("allCustomers")} options={uniqueOptions(leads.map((l) => ({ value: String(l.id), label: l.name })))} icon={Building2} />
+              <FilterSelect value={batch} onChange={(next) => filters.set({ batch: next })} placeholder={t("allBatches")} options={uniqueOptions(batches.map((b) => ({ value: b.id, label: b.batchCode })))} icon={Layers} />
             </>
           }
           summary={{ active: filters.activeCount() > 0, onClear: () => filters.reset() }}

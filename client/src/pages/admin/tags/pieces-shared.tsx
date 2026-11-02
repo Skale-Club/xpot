@@ -70,6 +70,12 @@ export function useOrganizations(enabled = true) {
   return useQuery<OrganizationOption[]>({ queryKey: ["/api/xpot/organizations"], staleTime: STALE_MS, enabled });
 }
 
+/** A picker's options without repeats: the same person or customer listed once however many organizations list them. */
+export function uniqueOptions<T extends { value: string }>(options: readonly T[]): T[] {
+  const seen = new Set<string>();
+  return options.filter((o) => (seen.has(o.value) ? false : (seen.add(o.value), true)));
+}
+
 /**
  * The organization filter's options: the real organizations, not the reps' personal workspaces (the Organizations
  * list hides those too), plus the one in the URL whatever it is (an Organizations tab can link to a personal one).
