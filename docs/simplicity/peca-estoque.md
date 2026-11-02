@@ -85,6 +85,7 @@ Problema: "Set up this piece" termina em y=628, no meio das abas "Link, Email, P
 Mudança: renderizar `BottomSheet` em portal no `document.body`. Assim ele usa a tela inteira, como já acontece na página cheia (`piece-page-set-up-editor` está correta). Remover o comentário "Sheets are not portals" e a abertura forçada do "More details" que existe só por causa disso.
 Arquivos: client/src/pages/tags/ui.tsx:583 (`fixed` sem portal), client/src/components/xpot/MasterDetail.tsx:96 (`-translate-x-1/2 -translate-y-1/2` no popup: a transformação faz o `fixed` do filho se medir pelo popup, não pela tela), client/src/components/piece/PieceBody.tsx:41-46.
 Risco: nenhuma regra. Testar foco e tecla Esc com dois níveis abertos.
+Status: feito. BottomSheet é um portal no body; Set up e Write chip abrem inteiros no popup (vistos no computador). Removida a abertura forçada de More details.
 
 ### PE-2 [S1] Peça vendida que não funciona parece igual à que funciona
 Telas: platform/en-desktop/piece-popup-soldNotLive, piece-popup-soldLive; owner/en-phone/tags-piece-sold-not-live; platform/en-phone/tags-piece-soldNotLive.
@@ -303,6 +304,7 @@ Problema: título "Stock", select "Stock" e, já na peça, "‹ Stock", além da
 Mudança: na peça, saem o select e a busca por código, e fica uma só seta de voltar. Na lista, o select "Stock" sai (o menu já leva a ele) e a busca por código entra na busca da página (PE-43). "Where is it" e "All products" vão para "More filters" no celular, já que os chips cobrem o primeiro.
 Arquivos: client/src/pages/admin/tags/AdminTags.tsx, client/src/pages/admin/tags/PieceDetail.tsx:35-36, client/src/pages/admin/tags/PiecesTab.tsx:244-280.
 Risco: o select é a navegação de "Tags" no celular. Só pode sair se outra navegação cobrir. Recomendo deixá-lo apenas nas telas raiz.
+Status: feito (frame) | pendente (peça). O select Stock saiu do celular (a barra inferior e o título bastam) e o título é um só; falta o PieceDetail (F2): a seta voltar dupla e a busca por código dentro da peça.
 
 ### PE-53 [S2] Dono e parceiro leem "Hand back to the company" na peça de outra pessoa, e não têm gestão
 Telas: owner/en-phone/piece-popup-brightside-kit; partner/en-phone/piece-popup-harbor-kit; comparar com platform/en-desktop/piece-page-kitUnconfigured.
