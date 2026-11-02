@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { useSearchParams } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Building2, Layers, MapPin, Network, Nfc, Package, Plus, ScanLine, SlidersHorizontal, Users } from "lucide-react";
+import { Building2, Layers, MapPin, Network, Nfc, Package, Plus, SlidersHorizontal, Users } from "lucide-react";
 import { FilterBar, FilterChips, FilterSearch, FilterSelect, FilterToggle } from "@/components/xpot/filters";
 import { useUrlFilters } from "@/hooks/use-url-filters";
 import { ListPager, useOffsetPages } from "@/components/xpot/pagination";
@@ -34,15 +34,11 @@ import { manageTagsBatchesMessages } from "@/i18n/messages/manageTagsBatches";
 /** Pieces per server page; the next page loads as you reach the end. */
 const PAGE = 100;
 
-const ALL_COLUMNS: readonly PieceColumn[] = ["customer", "destination", "reseller", "chip", "scans", "lastInteraction", "batch"];
+// Batch is in the piece and in the batch filter; the stock list keeps what a person asks of a piece: whose, with whom, chip, scans.
+const ALL_COLUMNS: readonly PieceColumn[] = ["customer", "reseller", "chip", "scans"];
 
 /** Whether a piece is open in the pane now (the next open replaces it in history). */
 const current = () => new URLSearchParams(window.location.search).has("piece");
-
-const METHOD_KEYS = [
-  { value: "qr", key: "methodQr" },
-  { value: "nfc", key: "methodNfc" },
-] as const;
 
 /**
  * Filters live in the URL (?where=house&product=…) so Overview links and the back button keep them. `where` is the one
@@ -50,16 +46,26 @@ const METHOD_KEYS = [
  */
 const PIECE_FILTERS = { where: "", status: "", stock: "", product: "", rep: "", lead: "", batch: "", method: "", search: "", org: "" };
 type Filters = Record<keyof typeof PIECE_FILTERS, string>;
-/** The filters behind "More filters". */
-const MORE_FILTERS = ["rep", "lead", "batch", "method", "org"] as const;
+/** The filters behind "More filters" (`method` has no control any more; an old ?method= link still filters). */
+const MORE_FILTERS = ["org", "rep", "lead", "batch"] as const;
+/** Everything that narrows the list besides the status: a chip count is a whole-stock number, so it hides under any of these. */
+const NARROWING = ["product", "rep", "lead", "batch", "method", "search", "org"] as const;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const posInt = (v: string | undefined) => (v && /^\d+$/.test(v) && Number(v) > 0 ? v : undefined);
+
+/**
+ * The stock list leaves out the pieces not in stock yet until someone asks for them (the "Not in stock yet" chip, a
+ * status, or a search or batch, which find any piece). They are most of a new system's rows and nobody's shelf.
+ */
+export const hidesNotInStock = (f: Pick<Filters, "where" | "status" | "stock" | "search" | "batch">): boolean =>
+  !f.where && !f.status && !f.stock && !f.search.trim() && !f.batch;
 
 /** Translate the URL filters into the list endpoint's query (listQuerySchema), dropping junk. */
 function listUrl(f: Filters, limit: number, offset: number): string {
   return withQuery("/api/xpot/tags", {
     ...whereQuery(f),
+    hidePending: hidesNotInStock(f) ? "1" : undefined,
     productType: f.product && (TAG_PRODUCT_TYPES as readonly string[]).includes(f.product) ? f.product : undefined,
     house: f.rep === "house" ? "1" : undefined,
     repId: f.rep !== "house" ? posInt(f.rep) : undefined,
@@ -193,7 +199,24 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
   });
   const hasFilters = urlFilters.activeCount() > 0;
   const where = whereSelection(filters);
-  const chipCount = (id: WhereChip) => (filters.org ? undefined : overview?.funnel[id]);
+  // A chip counts the whole stock: under another filter it would say one thing while the list shows another.
+  const narrowed = urlFilters.activeCount([...NARROWING]) > 0;
+  const chipCount = (id: WhereChip) => (narrowed ? undefined : overview?.funnel[id]);
+  const hidingPending = hidesNotInStock(filters);
+  // How many pieces the list holds: counted by the server when nothing narrows it, else what has loaded (unknown while more are coming).
+  const total = !pieces.hasMore ? tags.length : !narrowed && overview ? (hidingPending ? overview.counts.total - overview.funnel.notReceived : where === "" ? overview.counts.total : undefined) : undefined;
+  const stickyRef = useRef<HTMLDivElement>(null);
+  const [stickyHeight, setStickyHeight] = useState(0);
+  useLayoutEffect(() => {
+    const el = stickyRef.current;
+    if (!el) return;
+    // Below the top bar, which is fixed from lg up (h-16).
+    const measure = () => setStickyHeight(el.offsetHeight + (window.matchMedia("(min-width: 1024px)").matches ? 64 : 0));
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
   // "More filters" opens by itself whenever one of them narrows the list (a link, the back button), so it never hides one.
   const moreActive = urlFilters.activeCount([...MORE_FILTERS]);
   const [moreOpen, setMoreOpen] = useState(moreActive > 0);
@@ -201,7 +224,7 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
     if (moreActive > 0) setMoreOpen(true);
   }, [moreActive]);
 
-  const repOptions = [{ value: "house", label: tm("houseStockNoReseller") }, ...reps.map((r) => ({ value: String(r.id), label: labels.repOption(r) }))];
+  const repOptions = [{ value: "house", label: tm("noReseller") }, ...reps.map((r) => ({ value: String(r.id), label: labels.repOption(r) }))];
   // A rep/lead/batch in the URL that isn't in the pickers (e.g. still loading) still shows as selected.
   if (filters.rep && !repOptions.some((o) => o.value === filters.rep)) repOptions.push({ value: filters.rep, label: tm("resellerNumber", { id: filters.rep }) });
   const leadOptions = leads.map((l) => ({ value: String(l.id), label: l.name }));
@@ -214,7 +237,6 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
     const [kind, raw] = where.split(":");
     whereOptions.push({ value: where, label: kind === "status" ? labels.status(raw) : labels.stock(raw) });
   }
-  const methodOptions = METHOD_KEYS.map((m) => ({ value: m.value, label: tm(m.key) }));
   const orgOptions = organizationFilterOptions(organizations, filters.org, (id) => tg("organizationNumber", { id }));
 
   // A phone has no pane: a shared ?piece= link shows the piece's page.
@@ -225,7 +247,12 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
   ) : error ? (
     <LoadError what={tm("whatPieces")} error={error} onRetry={() => void refetch()} />
   ) : tags.length === 0 ? (
-    <EmptyState tone="tags" icon={Nfc} title={hasFilters ? tm("noMatch") : tm("noPiecesYet")} />
+    <EmptyState
+      tone="tags"
+      icon={Nfc}
+      title={!hasFilters ? tm("noPiecesYet") : WHERE_CHIPS.some((id) => id === where) && !narrowed ? tm(`emptyWhere_${where}` as "emptyWhere_house") : tm("noMatch")}
+      action={hasFilters ? <Button type="button" variant="secondary" onClick={() => urlFilters.reset()} data-testid="admin-pieces-see-all">{tm("seeAllPieces")}</Button> : undefined}
+    />
   ) : (
     <>
       <PieceTable
@@ -234,6 +261,7 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
         columns={ALL_COLUMNS}
         selectedId={paneId}
         testId="admin-pieces-table"
+        headTop={isDesktop ? stickyHeight : undefined}
       />
       <ListPager shown={tags.length} hasMore={pieces.hasMore} onMore={pieces.loadMore} loading={pieces.loadingMore} pageSize={PAGE} />
     </>
@@ -241,13 +269,18 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
 
   return (
     <div className="space-y-4" data-testid="admin-tags-pieces">
-      <FilterChips<WhereChip | "">
-        ariaLabel={tg("stockSummary")}
-        accent="tags"
-        value={WHERE_CHIPS.find((id) => id === where) ?? ""}
-        onChange={(id) => set({ where: id === where ? "" : id, status: "", stock: "" })}
-        items={WHERE_CHIPS.map((id) => ({ id, label: labels.where(id), count: chipCount(id), testId: `admin-pieces-chip-${id}` }))}
-      />
+      {/* On a computer the chips and the filters stay in view while the list scrolls. */}
+      <div ref={stickyRef} className="space-y-3 md:sticky md:top-0 md:z-20 md:-mx-1 md:bg-[#05080f]/90 md:px-1 md:pb-3 md:pt-1 md:backdrop-blur-md lg:top-16" data-testid="admin-pieces-sticky">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <FilterChips<WhereChip | "">
+          ariaLabel={tg("stockSummary")}
+          accent="tags"
+          value={WHERE_CHIPS.find((id) => id === where) ?? ""}
+          onChange={(id) => set({ where: id === where ? "" : id, status: "", stock: "" })}
+          items={WHERE_CHIPS.map((id) => ({ id, label: labels.where(id), count: chipCount(id), testId: `admin-pieces-chip-${id}` }))}
+        />
+        {total !== undefined && !isLoading && !error ? <span className="text-sm tabular-nums text-white/55" data-testid="admin-pieces-total">{tm.plural("totalPieces", total)}</span> : null}
+      </div>
       <FilterBar
         testId="admin-pieces-filters"
         search={<FilterSearch value={filters.search} onChange={(search) => set({ search })} placeholder={tm("searchPlaceholder")} debounceMs={350} testId="admin-pieces-search" />}
@@ -269,18 +302,18 @@ export function PiecesTab({ go }: { go: (path: string) => void }) {
         secondary={
           moreOpen ? (
             <div className="flex flex-wrap items-center gap-2" data-testid="admin-pieces-more-filters">
-              <FilterSelect value={filters.rep} onChange={(rep) => set({ rep })} placeholder={tg("allResellers")} options={repOptions} icon={Users} testId="admin-pieces-rep" />
-              <FilterSelect value={filters.lead} onChange={(lead) => set({ lead })} placeholder={tm("allCustomers")} options={leadOptions} icon={Building2} />
-              <FilterSelect value={filters.batch} onChange={(batch) => set({ batch })} placeholder={tm("allBatches")} options={batchOptions} icon={Layers} />
-              <FilterSelect value={filters.method} onChange={(method) => set({ method })} placeholder={tm("anyMethod")} options={methodOptions} icon={ScanLine} />
               {canManage ? (
                 <FilterSelect value={filters.org} onChange={(org) => set({ org })} placeholder={tg("allOrganizations")} options={orgOptions} icon={Network} testId="admin-pieces-org" />
               ) : null}
+              <FilterSelect value={filters.rep} onChange={(rep) => set({ rep })} placeholder={tg("allResellers")} options={repOptions} icon={Users} testId="admin-pieces-rep" />
+              <FilterSelect value={filters.lead} onChange={(lead) => set({ lead })} placeholder={tm("allCustomers")} options={leadOptions} icon={Building2} />
+              <FilterSelect value={filters.batch} onChange={(batch) => set({ batch })} placeholder={tm("allBatches")} options={batchOptions} icon={Layers} />
             </div>
           ) : undefined
         }
         summary={{ shown: pieces.hasMore ? undefined : tags.length, active: hasFilters, onClear: () => urlFilters.reset() }}
       />
+      </div>
 
       {isDesktop ? (
         // The pop-up stays mounted whatever the list shows (loading, empty, error).
