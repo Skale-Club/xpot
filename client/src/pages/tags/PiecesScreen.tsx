@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { useViewerAccess } from "@/lib/adminMode";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { Building2, ChevronRight, Nfc, Package, ScanLine, Shapes, SlidersHorizontal } from "lucide-react";
+import { Building2, ChevronRight, Nfc, Package, Pause, ScanLine, Shapes, SlidersHorizontal } from "lucide-react";
 import { matchesPieceFilters, parsePieceFilters, type PieceSaleFilter, type PieceStatusFilter } from "@shared/tagApp";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { MasterDetail } from "@/components/xpot/MasterDetail";
@@ -20,17 +20,17 @@ import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
-import { APP_BASE, errorText, shortUrl, tagPath, tagsGet } from "./lib";
+import { APP_BASE, errorText, MY_PIECES_LIMIT, myPiecesQuery, shortUrl, tagPath } from "./lib";
 import { countMorePieceFilters, morePiecesOpen } from "./piecesFilters";
 import { CARD, ChipMark, PieceStatusPills, ScanCounts, TopBar } from "./ui";
-import { WholesaleCard } from "./WholesaleCard";
 
 // Two separate axes: where the piece is in its life, and whether a sale was recorded.
-const STATUS_CHIPS: ReadonlyArray<{ id: PieceStatusFilter; key: "filterAll" | "filterSetup" | "filterActive" | "filterOff" }> = [
+// Paused is the rare one: it waits behind "More filters" so the four that matter fit a phone's row.
+const STATUS_CHIPS: ReadonlyArray<{ id: PieceStatusFilter; key: "filterAll" | "filterFinish" | "filterSetup" | "filterActive" }> = [
   { id: "all", key: "filterAll" },
+  { id: "finish", key: "filterFinish" },
   { id: "setup", key: "filterSetup" },
   { id: "active", key: "filterActive" },
-  { id: "off", key: "filterOff" },
 ];
 const SALE_CHIPS: ReadonlyArray<{ id: PieceSaleFilter; key: "filterAll" | "filterSold" | "filterUnsold" }> = [
   { id: "all", key: "filterAll" },
@@ -41,9 +41,6 @@ const SALE_CHIPS: ReadonlyArray<{ id: PieceSaleFilter; key: "filterAll" | "filte
 type ScanFilter = "all" | "with" | "without";
 
 const CHIP_ROW_LABEL = "w-14 shrink-0 text-[10px] font-semibold uppercase tracking-widest text-white/35 lg:w-auto";
-
-/** The list endpoint's ceiling: everything a reseller holds fits under it. */
-const LIST_LIMIT = 2000;
 
 /** The reseller's own pieces: kit stock, live and switched off. */
 export default function PiecesScreen({ selectedCode = null }: { selectedCode?: string | null }) {
@@ -71,15 +68,8 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
   const leadFilter = Number.isInteger(leadId) && leadId > 0 ? { id: leadId, name: filters.values.name } : null;
 
   const { data, isLoading, error, refetch } = useQuery({
-    // Every status at once (filtered here): "Not set up" spans two of them.
-    queryKey: ["tags", "list", null, leadFilter?.id ?? null],
-    queryFn: () => {
-      // "My pieces": the viewer's own, even for an admin who can reach every piece.
-      const params = new URLSearchParams({ mine: "1", limit: String(LIST_LIMIT) });
-      if (leadFilter) params.set("leadId", String(leadFilter.id));
-      return tagsGet<TagListItem[]>(`/api/xpot/tags?${params}`);
-    },
-    staleTime: 15_000,
+    // Every status at once, filtered here; the viewer's own, even for an admin who can reach every piece.
+    ...myPiecesQuery(leadFilter?.id ?? null),
     // Keep the table while a new filter loads, so the open piece stays put.
     placeholderData: (previous) => previous,
   });
@@ -170,7 +160,7 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
               ) : null}
               <div className="flex min-w-0 flex-1 flex-col gap-2 lg:flex-row lg:items-center lg:gap-4">
                 <div className="flex min-w-0 items-center gap-2">
-                  <span className={CHIP_ROW_LABEL} aria-hidden="true">{t("filterStatusGroup")}</span>
+                  <span className={`${CHIP_ROW_LABEL} hidden lg:block`} aria-hidden="true">{t("filterStatusGroup")}</span>
                   <div className="min-w-0 flex-1">
                     <FilterChips
                       items={STATUS_CHIPS.map((f) => ({ id: f.id, label: t(f.key), testId: `filter-${f.id}` }))}
@@ -185,6 +175,13 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
             </div>
             {moreOpen ? (
               <div className="flex flex-col gap-2.5 lg:flex-row lg:flex-wrap lg:items-center" data-testid="pieces-more-filters">
+                <FilterToggle
+                  pressed={pieceFilters.status === "off"}
+                  onChange={(on) => filters.set({ status: on ? "off" : "all" })}
+                  icon={Pause}
+                  label={t("filterOff")}
+                  testId="filter-paused"
+                />
                 <div className="flex min-w-0 items-center gap-2">
                   <span className={CHIP_ROW_LABEL} aria-hidden="true">{t("filterSaleGroup")}</span>
                   <div className="min-w-0 flex-1">
@@ -244,7 +241,7 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
         }}
       />
 
-      {(data?.length ?? 0) >= LIST_LIMIT ? <p className="mt-2 px-1 text-xs text-white/40">{t("piecesListCapped", { limit: LIST_LIMIT })}</p> : null}
+      {(data?.length ?? 0) >= MY_PIECES_LIMIT ? <p className="mt-2 px-1 text-xs text-white/40">{t("piecesListCapped", { limit: MY_PIECES_LIMIT })}</p> : null}
 
       <div className="mt-4">
         {isDesktop ? (
@@ -277,6 +274,7 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
                   onClick={() => openPiece(tag.publicCode)}
                   className="flex min-h-[88px] w-full items-center gap-3 px-4 py-3 text-left active:bg-white/10"
                 >
+                  {/* Three floors: the customer on a row of its own, then the code and badges, then the state. */}
                   <span className="min-w-0 flex-1">
                     <TagPieceMention
                       publicCode={tag.publicCode}
@@ -284,19 +282,14 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
                       face={tag.face}
                       batchCode={tag.batchCode}
                       customer={tag.leadName}
+                      details={tag.label}
                       className="w-full"
                     />
-                    {(tag.label || tag.destinationUrl) && (
-                      <span className="mt-1 block truncate pl-12 text-xs text-white/35">
-                        {[tag.label, tag.destinationUrl && shortUrl(tag.destinationUrl)].filter(Boolean).join(" · ")}
-                      </span>
-                    )}
-                    {/* The pills have their own line under the name, so the customer's name keeps the whole row. */}
-                    <span className="mt-1.5 flex flex-wrap items-center gap-1.5 pl-12">
+                    <span className="mt-2 flex flex-wrap items-center gap-1 pl-12">
                       <PieceStatusPills tag={tag} />
                       <ChipMark tag={tag} />
                       {/* All-time scans, live or not: a switched-off piece keeps what it had. The same counts as the desktop table. */}
-                      {tag.qrInteractions + tag.nfcInteractions > 0 && <ScanCounts qr={tag.qrInteractions} nfc={tag.nfcInteractions} />}
+                      {tag.qrInteractions + tag.nfcInteractions > 0 && <ScanCounts qr={tag.qrInteractions} nfc={tag.nfcInteractions} align="left" />}
                     </span>
                   </span>
                   <ChevronRight className="h-4 w-4 shrink-0 text-white/25" />
@@ -309,9 +302,6 @@ export default function PiecesScreen({ selectedCode = null }: { selectedCode?: s
         )}
       </div>
 
-      <div className="mt-6">
-        <WholesaleCard />
-      </div>
     </>
   );
 }
@@ -373,7 +363,7 @@ function PiecesTable({ items, selectedCode, onSelect, onCustomer }: {
                       <span className="truncate group-hover:underline">{tag.leadName}</span>
                     </button>
                   ) : (
-                    <span className="text-white/30">—</span>
+                    <span className="text-white/35" aria-label={t("noCustomer")}>—</span>
                   )}
                   {tag.label && <div className="mt-0.5 truncate text-xs text-white/35">{tag.label}</div>}
                 </td>

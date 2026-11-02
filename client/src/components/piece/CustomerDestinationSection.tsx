@@ -3,7 +3,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Building2, Check, Contact, ExternalLink, Link2, Mail, Pencil, Phone, Power, Settings2, Unlink, UserRound } from "lucide-react";
 import { defaultUtmEnabled, planTransition, stockBlock, TAG_DESTINATION_TYPES, type TagDestinationType } from "@shared/tags";
 import { contentKindOf, contentSummary, validateChipContent, type ChipContentKind } from "@shared/chipContent";
-import { guessDestinationType, normalizeUrlInput } from "@shared/tagApp";
+import { destinationNotPrinted } from "@shared/tagFace";
+import { chipNeedsWriting, guessDestinationType, normalizeUrlInput } from "@shared/tagApp";
 import { buildReviewUrl } from "@shared/reviewLink";
 import type { FullSalesLead } from "@/pages/xpot/types";
 import { Button } from "@/components/ui/button";
@@ -11,7 +12,7 @@ import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
 import { Field, Input } from "@/components/xpot/Field";
 import { InlineAlert } from "@/components/xpot/InlineAlert";
 import { SwitchRow } from "@/components/xpot/SwitchRow";
-import { apiRequest } from "@/lib/queryClient";
+import { ApiError, apiRequest } from "@/lib/queryClient";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
@@ -128,6 +129,18 @@ export function CustomerDestinationSection({ commands }: {
   const destinationType = value ? (kind === "url" ? guessDestinationType(value) : kind) : null;
   const utm = utmTouched ? utmEnabled : destinationType && destinationType !== tag.destinationType ? defaultUtmEnabled(destinationType) : utmEnabled;
 
+  // The link in the form, or the saved one, against what is printed on the piece: a warning, never a block.
+  const wrongKind = (url: string | null) => {
+    const opens = destinationNotPrinted(tag.face, url);
+    return opens && tag.face ? t("printedForOther", { printed: t(`face_${tag.face}` as "face_none"), opens: t(`dest_${opens}` as "dest_website") }) : null;
+  };
+
+  // A disabled Save says what is missing, in the order the form asks for it.
+  const saveBlocker = saving || blockedByLive ? null
+    : needsLead && !lead ? t("chooseCustomer")
+    : !value ? (kind !== "url" ? content.error : link.trim() ? t("invalidLink") : t("saveNeedsLink"))
+    : null;
+
   const save = async () => {
     if (!value || !destinationType) return notify({ tone: "error", text: kind === "url" ? t("invalidLink") : content.error ?? t("invalidLink") });
     if (needsLead && !lead) return notify({ tone: "error", text: t("chooseCustomer") });
@@ -154,11 +167,19 @@ export function CustomerDestinationSection({ commands }: {
           ...(needsLead ? leadPayload(lead) : {}),
         });
         haptic([40, 30, 40]);
-        notify({ tone: "ok", text: t("savedLive") });
+        // The chip is part of putting a piece on the air: a tap opens nothing until it is written.
+        notify({ tone: "ok", text: chipNeedsWriting({ status: "active", nfcStatus: tag.nfcStatus }) ? t("savedLiveWriteChip") : t("savedLive") });
       }
       if (lead && !lead.leadId) void qc.invalidateQueries({ queryKey: ["/api/xpot/leads"] });
       closeEditor();
     } catch (err) {
+      // Another device put this piece live while this form was open: do not keep the half-typed form over a
+      // piece that is no longer the one it was opened for; show the piece as it is now, and say so.
+      if (err instanceof ApiError && err.code === "tag_pause_before_move") {
+        closeEditor();
+        refresh();
+        return notify({ tone: "error", text: t("pieceChangedElsewhere") });
+      }
       notify({ tone: "error", text: errorText(err, tc("requestFailed")) });
       // A customer may have been saved before the destination failed.
       refresh();
@@ -288,6 +309,7 @@ export function CustomerDestinationSection({ commands }: {
       ) : null}
 
       {dest ? (
+        <>
         <div className="mt-2 flex items-center gap-3">
           <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-violet-500/20 text-violet-200">
             <KindIcon className="h-5 w-5" />
@@ -305,6 +327,8 @@ export function CustomerDestinationSection({ commands }: {
           </div>
           {destKind !== "vcard" && <CopyButton text={dest} label={t("copyLink")} />}
         </div>
+        {wrongKind(dest) ? <div className="mt-2" data-testid="printed-for-other-saved"><InlineAlert tone="warning">{wrongKind(dest)}</InlineAlert></div> : null}
+        </>
       ) : (
         <>
           <p className="mt-2 text-lg font-bold text-white/55">{t("notYetWritten")}</p>
@@ -406,6 +430,7 @@ export function CustomerDestinationSection({ commands }: {
               <div>
                 <FieldLabel>{t("linkField")}</FieldLabel>
                 <LinkInput value={link} onChange={setLink} face={tag.face} placeholder={t("linkPlaceholder")} onPasteFailed={() => notify({ tone: "error", text: tc("pasteFailed") })} />
+                {kind === "url" && wrongKind(value) ? <div className="mt-2" data-testid="printed-for-other"><InlineAlert tone="warning">{wrongKind(value)}</InlineAlert></div> : null}
                 <ReviewLinkAssist
                   link={link}
                   onPick={(place) => {
@@ -440,6 +465,7 @@ export function CustomerDestinationSection({ commands }: {
             <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder={tm("changeReasonPlaceholder")} aria-label={tm("changeReasonPlaceholder")} maxLength={300} className={INPUT_ACCENT} />
           )}
           <SheetActions>
+            {saveBlocker && <p className="text-center text-xs text-white/55" data-testid="save-blocker">{saveBlocker}</p>}
             <Button
               type="button"
               variant="brand"

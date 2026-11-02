@@ -2,7 +2,7 @@
 // its batch's, then a product with one obvious print; anything else is unknown.
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { isTagFace, resolveTagFace, tagFaceLabel, TAG_FACES } from "../../shared/tagFace.js";
+import { destinationNotPrinted, isTagFace, resolveTagFace, tagFaceLabel, TAG_FACES } from "../../shared/tagFace.js";
 
 process.env.DATABASE_URL ||= "postgresql://test:test@127.0.0.1:1/test";
 const { batchCreateSchema } = await import("../../server/tags/routes.js");
@@ -40,4 +40,21 @@ test("a batch accepts a face and rejects an unknown one", () => {
   assert.equal(batchCreateSchema.parse({ ...base, face: "instagram" }).face, "instagram");
   assert.equal(batchCreateSchema.parse(base).face, undefined);
   assert.throws(() => batchCreateSchema.parse({ ...base, face: "myspace" }));
+});
+test("a link that is not what is printed on the piece is told apart, and only warns", () => {
+  const google = "https://search.google.com/local/writereview?placeid=ChIJabc";
+  // Printed for Instagram, opens a Google review.
+  assert.equal(destinationNotPrinted("instagram", google), "google_review");
+  assert.equal(destinationNotPrinted("instagram", "https://instagram.com/lab"), null);
+  assert.equal(destinationNotPrinted("instagram", "https://www.facebook.com/lab"), "social");
+  assert.equal(destinationNotPrinted("google_review", google), null);
+  assert.equal(destinationNotPrinted("google_review", "https://shop.example.com"), "website");
+  assert.equal(destinationNotPrinted("phone", "tel:+16175551182"), null);
+  assert.equal(destinationNotPrinted("email", "https://example.com"), "website");
+  // Nothing to compare, or a face that takes any link.
+  assert.equal(destinationNotPrinted(null, google), null);
+  assert.equal(destinationNotPrinted("instagram", null), null);
+  assert.equal(destinationNotPrinted("website", google), null);
+  assert.equal(destinationNotPrinted("custom", google), null);
+  assert.equal(destinationNotPrinted("menu", google), null);
 });

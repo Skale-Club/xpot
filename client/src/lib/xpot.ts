@@ -28,6 +28,14 @@ export function isModuleRoute(module: XpotModule, route: string): boolean {
   return ["/dashboard", "/route", "/leads", "/tasks", "/sales"].some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 
+/** The first segments of the Visits screens (and the older addresses that still redirect to them). */
+const VISITS_PATHS = ["/dashboard", "/route", "/leads", "/tasks", "/sales", "/visits", "/check-in", "/prospecting"];
+
+/** True for an address a Visits screen answers; any other path outside the modules is a wrong address. */
+export function isVisitsPath(pathname: string): boolean {
+  return VISITS_PATHS.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+}
+
 /** Remember the exact screen and query within a module for this browser session. */
 export function rememberModuleRoute(module: XpotModule, route: string): void {
   if (typeof window === "undefined" || !isModuleRoute(module, route)) return;
@@ -88,6 +96,21 @@ const POST_LOGIN_KEY = "xpot_post_login_redirect";
 /** Same-origin absolute paths only: never another origin, never a scheme. */
 function isSafeInternalPath(value: string | null): value is string {
   return !!value && value.startsWith("/") && !value.startsWith("//") && !value.startsWith("/\\");
+}
+
+/**
+ * The landing with its sign-in dialog already open, and `next` (a path of this
+ * app) to return to afterwards. What "Go to sign-in", /login and an expired
+ * session all lead to, so none of them drops the person on the marketing page
+ * to find the button.
+ */
+export function signInPath(next?: string | null): string {
+  return isSafeInternalPath(next ?? null) ? `/?signin=1&next=${encodeURIComponent(next as string)}` : "/?signin=1";
+}
+
+/** True when the landing was asked to open its sign-in dialog (?signin=1). */
+export function signInRequested(search: string): boolean {
+  return new URLSearchParams(search).has("signin");
 }
 
 /** Moves ?next= into sessionStorage. True when a target is now pending. */

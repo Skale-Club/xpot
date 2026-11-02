@@ -113,6 +113,13 @@ test.skipIf(!enabled)("showcase: the admin keeps it, resellers read the publishe
     assert.equal((await api("sc-admin", "PATCH", `/api/xpot/admin/tag-showcase/${draft.json.id}`, { isPublished: true })).status, 200);
     assert.equal((await api("sc-ana", "GET", "/api/xpot/tags/showcase")).json.length, 3);
 
+    // Words in another language reach the reader of that language, field by field; everyone else reads the main text.
+    const worded = await api("sc-admin", "PATCH", `/api/xpot/admin/tag-showcase/${id}`, { translations: { pt: { title: "Kit inicial Pokemon" } } });
+    assert.equal(worded.status, 200, worded.text);
+    const inPt = (await api("sc-ana", "GET", "/api/xpot/tags/showcase?lang=pt")).json.find((item: any) => item.id === id);
+    const inEn = (await api("sc-ana", "GET", "/api/xpot/tags/showcase")).json.find((item: any) => item.id === id);
+    assert.deepEqual([inPt.title, inPt.description, inEn.title], ["Kit inicial Pokemon", inEn.description, "Pokemon starter kit"]);
+
     // Unpublishing hides it from resellers; deleting removes it; an unknown id is a 404.
     assert.equal((await api("sc-admin", "PATCH", `/api/xpot/admin/tag-showcase/${id}`, { isPublished: false })).status, 200);
     assert.deepEqual((await api("sc-ana", "GET", "/api/xpot/tags/showcase")).json.map((item: any) => item.title), ["Large stand", "Not ready"]);

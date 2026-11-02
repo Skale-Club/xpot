@@ -6,6 +6,7 @@ import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
 import QrScanner from "./QrScanner";
 import { TagsDashboard } from "./TagsDashboard";
+import { TagsTodo } from "./TagsTodo";
 import {
   APP_BASE,
   classify,
@@ -32,6 +33,8 @@ import {
 } from "./ui";
 import { mapNfcError, nfcMode, scanOnce } from "./webNfc";
 import { useIsComputer, useIsDesktop } from "@/hooks/use-is-desktop";
+import { useViewerAccess } from "@/lib/adminMode";
+import { TAG_CODE_LENGTH } from "@shared/tags";
 
 // "read" is the chooser behind the single Read button: QR, chip or typed code.
 type Sheet = { kind: "read" } | { kind: "empty" } | { kind: "nfc" } | null;
@@ -65,6 +68,7 @@ export default function HomeScreen() {
   const isDesktop = useIsDesktop();
   // A tablet at desktop width still has a camera and maybe NFC.
   const isComputer = useIsComputer();
+  const fleet = useViewerAccess().adminMode;
 
   const openCode = useCallback(
     async (tagCode: string) => {
@@ -139,6 +143,14 @@ export default function HomeScreen() {
     }
   };
 
+  // On a phone a code is whole at its 8th character: open the piece then, without a tap on the arrow.
+  useEffect(() => {
+    if (isDesktop || sheet?.kind !== "read") return;
+    const typed = classify(code);
+    if (typed.kind === "xpot" && code.replace(/[s-]/g, "").length === TAG_CODE_LENGTH) void openCode(typed.code);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code]);
+
   const submitCode = () => {
     if (isDesktop) {
       const raw = code.trim();
@@ -196,6 +208,8 @@ export default function HomeScreen() {
         </Button>
       </div>
       {isDesktop && <p className="mt-2 text-xs text-white/35">{t("scannerHint")}</p>}
+      {/* The arrow stays off until the code is whole; say what a whole one is. */}
+      {!isDesktop && code.trim().length > 0 && code.trim().length < 8 && <p className="mt-2 text-xs text-white/50" data-testid="code-hint">{t("invalidCode")}</p>}
     </form>
   );
 
@@ -246,8 +260,8 @@ export default function HomeScreen() {
 
       {isComputer && codeForm}
 
-      {/* Real activity: scans over time, recent scans, top pieces and customers. */}
-      <TagsDashboard />
+      {/* A reseller: what is waiting for them, and the results one link away. A manager in a panel's work view: the whole fleet's numbers. */}
+      {fleet ? <TagsDashboard /> : <TagsTodo />}
 
       {qrOpen && (
         <QrScanner
@@ -306,7 +320,19 @@ export default function HomeScreen() {
           )}
         </div>
         <div className="mt-5 border-t border-white/10 pt-4">{codeForm}</div>
-        <Button type="button" variant="ghost" size="lg" onClick={() => setSheet(null)} className="mt-4 w-full">
+        {/* Rare, so a link and not a tile: the way in to a chip that holds the customer's own link. */}
+        <button
+          type="button"
+          onClick={() => {
+            setSheet(null);
+            navigate(directPath());
+          }}
+          className="mt-4 min-h-10 w-full text-center text-sm text-white/50 underline underline-offset-2 hover:text-white/80"
+          data-testid="link-write-direct"
+        >
+          {t("navDirect")}
+        </button>
+        <Button type="button" variant="ghost" size="lg" onClick={() => setSheet(null)} className="mt-1 w-full">
           {tc("cancel")}
         </Button>
       </BottomSheet>

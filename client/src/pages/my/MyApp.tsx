@@ -47,7 +47,7 @@ function SignedIn({ onSignedOut }: { onSignedOut: () => void }) {
           </Link>
         )}
         <div className="min-w-0 flex-1">
-          {onList ? <h1 className="text-[26px] font-extrabold leading-tight tracking-tight text-white">{t("platesTitle")}</h1> : <XpotLogo className="h-6 w-auto" decorative />}
+          {onList ? <h1 className="text-[26px] font-extrabold leading-tight tracking-tight text-white">{t("platesTitle")}</h1> : null}
         </div>
         <button type="button" onClick={() => void signOut()} className="flex min-h-11 items-center gap-1.5 rounded-xl px-3 text-sm text-white/55 hover:text-white" data-testid="my-sign-out">
           <LogOut className="h-4 w-4" aria-hidden="true" />

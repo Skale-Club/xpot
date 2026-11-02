@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Building2, ExternalLink, Link2, Package, Plus, Radio, ScanLine, Star, Unlink } from "lucide-react";
+import { Building2, ChevronDown, Link2, Package, Plus, Radio, ScanLine } from "lucide-react";
 import type { LeadTagSummary, TagListItem } from "@shared/tagsApi";
 import { validateChipContent } from "@shared/chipContent";
 import { guessDestinationType, normalizeUrlInput } from "@shared/tagApp";
@@ -14,26 +14,25 @@ import { apiRequest } from "@/lib/queryClient";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { MasterDetail } from "@/components/xpot/MasterDetail";
 import { Button } from "@/components/ui/button";
-import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
 import { KpiTile } from "@/components/xpot/DashboardKit";
 import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
 import { ListSkeleton } from "@/components/xpot/ListSkeleton";
 import { ACCENT_SELECTED } from "@/components/xpot/surface";
-import { GoogleLogo } from "@/components/ui/google-logo";
 import { TagPieceMention } from "@/components/xpot/TagProductThumbnail";
 import { InlineField, validateEmail } from "@/pages/xpot/components/InlineField";
 import { InlineStateSelect } from "@/components/StateSelect";
 import { useXpotModules } from "@/components/ModuleSwitch";
 import { LeadContacts } from "@/pages/xpot/components/leads/LeadContacts";
-import type { FullSalesLead, GoogleBusinessProfile, SalesLead, SalesLeadContact, SalesLeadLocation } from "@/pages/xpot/types";
-import { usePlaceSearch } from "@/pages/xpot/usePlaceSearch";
+import type { FullSalesLead, SalesLead, SalesLeadContact, SalesLeadLocation } from "@/pages/xpot/types";
+import { formatPhone } from "@/lib/format";
 import TagScreen from "./TagScreen";
-import { APP_BASE, errorText, shortUrl, tagPath, tagsGet, tagsPost, useBanner, type BannerState } from "./lib";
+import { APP_BASE, errorText, myPiecesQuery, shortUrl, tagPath, tagsPost, useBanner } from "./lib";
 import { formatCount } from "./charts";
 import { CustomerAccess } from "./CustomerAccess";
-import { PlacePicker } from "./PlacePicker";
+import { GoogleProfile } from "./CustomerGoogle";
+import { Panel } from "./CustomerPanel";
 import {
-  Banner, BottomSheet, CARD, EYEBROW_MUTED, LinkInput, ChipMark, PieceStatusPills, ScanCounts, SheetActions, Spinner, TopBar,
+  Banner, BottomSheet, CARD, EYEBROW_MUTED, LinkInput, ChipMark, PieceStatusPills, ScanCounts, SheetActions, TopBar,
 } from "./ui";
 
 // One customer of the reseller: the company (its details, contacts and Google
@@ -56,123 +55,6 @@ function usualLink(pieces: TagListItem[]): string {
   return Array.from(counts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "";
 }
 
-function Panel({ title, right, children }: { title: ReactNode; right?: ReactNode; children: ReactNode }) {
-  return (
-    <section className={`${CARD} p-4`}>
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <h2 className={EYEBROW_MUTED}>{title}</h2>
-        {right}
-      </div>
-      {children}
-    </section>
-  );
-}
-
-/** The company's Google Business Profile: live rating when linked, a search to link it when not. */
-function GoogleProfile({ lead, onDone, banner }: { lead: FullSalesLead; onDone: (text: string, ok: boolean) => void; banner: BannerState }) {
-  const t = useT(tagsMessages);
-  const tc = useT(commonMessages);
-  const qc = useQueryClient();
-  const [picking, setPicking] = useState(false);
-  const [search, setSearch] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [connected, setConnected] = useState(Boolean(lead.googlePlaceId));
-  const profile = useQuery<GoogleBusinessProfile>({
-    queryKey: ["/api/xpot/leads", lead.id, "google-profile"],
-    enabled: connected,
-    staleTime: 5 * 60_000,
-  });
-  const results = usePlaceSearch(search, picking, {});
-
-  useEffect(() => {
-    setConnected(Boolean(lead.googlePlaceId));
-  }, [lead.googlePlaceId]);
-
-  const savePlace = async (placeId: string | null) => {
-    setBusy(true);
-    try {
-      const response = await apiRequest("POST", `/api/xpot/leads/${lead.id}/google-profile`, { placeId });
-      const data = await response.json() as { profile: GoogleBusinessProfile };
-      setConnected(Boolean(placeId));
-      qc.setQueryData(["/api/xpot/leads", lead.id, "google-profile"], data.profile);
-      await qc.invalidateQueries({ queryKey: ["/api/xpot/leads"] });
-      await qc.invalidateQueries({ queryKey: ["/api/xpot/leads", lead.id, "google-profile"] });
-      setPicking(false);
-      setSearch("");
-      onDone(placeId ? t("customerGoogleSaved") : t("customerGoogleRemoved"), true);
-    } catch (err) {
-      onDone(errorText(err, tc("requestFailed")), false);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const p = profile.data;
-  return (
-    <Panel
-      title={<span className="flex items-center gap-1.5"><GoogleLogo className="h-3.5 w-3.5" />{t("customerGoogle")}</span>}
-      right={connected ? (
-        <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => void savePlace(null)} className="text-white/45 hover:text-red-300">
-          {t("customerGoogleUnlink")}
-        </Button>
-      ) : null}
-    >
-      {connected ? (
-        profile.isLoading ? (
-          <div className="flex justify-center py-3 text-white/40"><Spinner /></div>
-        ) : (
-          <div className="space-y-2">
-            {p?.rating != null && (
-              <div className="flex items-center gap-2">
-                <Star className="h-5 w-5 fill-amber-400 text-amber-400" />
-                <strong className="text-2xl font-extrabold tabular-nums text-white">{p.rating.toFixed(1)}</strong>
-                {p.reviewCount != null && <span className="text-sm text-white/45">{t.plural("customerGoogleReviews", p.reviewCount)}</span>}
-              </div>
-            )}
-            {p?.openNow != null && (
-              <p className={`text-xs font-semibold ${p.openNow ? "text-emerald-300" : "text-white/40"}`}>
-                {p.openNow ? t("customerGoogleOpen") : t("customerGoogleClosed")}
-              </p>
-            )}
-            {p?.mapsUrl && (
-              <a href={p.mapsUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-sm font-semibold text-violet-300 hover:text-violet-200">
-                {t("customerGoogleMaps")} <ExternalLink className="h-3.5 w-3.5" />
-              </a>
-            )}
-          </div>
-        )
-      ) : (
-        <>
-          <p className="text-sm text-white/45">{t("customerGoogleNone")}</p>
-          <Button type="button" variant="secondary" size="sm" className="mt-3" onClick={() => { setSearch(lead.name); setPicking(true); }}>
-            <GoogleLogo className="h-4 w-4" />
-            {t("customerGoogleLink")}
-          </Button>
-        </>
-      )}
-
-      <BottomSheet open={picking} onClose={() => setPicking(false)} title={t("customerGoogleLink")} banner={banner}>
-        {/* The same business picker as the review-link search. */}
-        <PlacePicker
-          query={search}
-          onQuery={setSearch}
-          placeholder={t("customerGoogleSearch")}
-          autoFocus
-          inputTestId="input-google-search"
-          loading={results.isFetching}
-          places={results.data ? results.data.results.map((place) => ({ ...place, key: place.placeId })) : null}
-          emptyText={search.trim().length >= 2 && !results.isFetching ? t("customerGoogleNoResults") : undefined}
-          disabled={busy}
-          onPick={(place) => void savePlace(place.placeId)}
-        />
-        <Button type="button" variant="ghost" size="lg" onClick={() => setPicking(false)} className="mt-4 w-full">
-          {tc("cancel")}
-        </Button>
-      </BottomSheet>
-    </Panel>
-  );
-}
-
 export default function CustomerScreen({ leadId }: { leadId: number }) {
   const t = useT(tagsMessages);
   const tc = useT(commonMessages);
@@ -191,12 +73,8 @@ export default function CustomerScreen({ leadId }: { leadId: number }) {
     [leadQuery.data],
   );
   // Every piece the person holds: this customer's, and the free ones that can be linked to it.
-  const piecesQuery = useQuery({
-    // The same key and request as My pieces (PiecesScreen): whichever screen fills the cache, it holds every piece.
-    queryKey: ["tags", "list", null, null],
-    queryFn: () => tagsGet<TagListItem[]>("/api/xpot/tags?mine=1&limit=2000"),
-    staleTime: 15_000,
-  });
+  // The same key and request as My pieces (PiecesScreen): whichever screen fills the cache, it holds every piece.
+  const piecesQuery = useQuery(myPiecesQuery());
   const pieces = useMemo(() => (piecesQuery.data ?? []).filter((p) => p.leadId === leadId), [piecesQuery.data, leadId]);
   const freePieces = useMemo(() => (piecesQuery.data ?? []).filter(isFreePiece), [piecesQuery.data]);
   const live = useMemo(() => pieces.filter((p) => p.status === "active").length, [pieces]);
@@ -210,9 +88,9 @@ export default function CustomerScreen({ leadId }: { leadId: number }) {
   const [linkPieceId, setLinkPieceId] = useState<string>("");
   const [changing, setChanging] = useState(false);
   const [link, setLink] = useState("");
-  const [unlinking, setUnlinking] = useState<TagListItem | null>(null);
-  const [unlinkError, setUnlinkError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // The company's own details are a form: open on a computer, one tap away on a phone.
+  const [detailsOpen, setDetailsOpen] = useState(isDesktop);
 
   const refresh = () => Promise.all([
     qc.invalidateQueries({ queryKey: ["tags"] }),
@@ -314,20 +192,6 @@ export default function CustomerScreen({ leadId }: { leadId: number }) {
       : { tone: "ok", text: t("customerChangeLinkDone") });
   };
 
-  // ConfirmDialog closes when this resolves and keeps the error up when it throws.
-  const unlink = async () => {
-    if (!unlinking) return;
-    setUnlinkError(null);
-    try {
-      await tagsPost(`/api/xpot/tags/${unlinking.id}/unassign`, {});
-      await refresh();
-      show({ tone: "ok", text: t("customerUnlinked") });
-    } catch (err) {
-      setUnlinkError(errorText(err, tc("requestFailed")));
-      throw err;
-    }
-  };
-
   if (leadQuery.isLoading || piecesQuery.isLoading) {
     return (
       <>
@@ -358,6 +222,9 @@ export default function CustomerScreen({ leadId }: { leadId: number }) {
   const address = [location?.addressLine1, location?.city, location?.state].filter(Boolean).join(", ");
   const subtitle = [lead.industry, [location?.city, location?.state].filter(Boolean).join(", ")].filter(Boolean).join(" · ");
   const allSelected = pieces.length > 0 && selected.size === pieces.length;
+  // One piece has nothing to choose among; with several, the button says how far it reaches before anything is changed.
+  const pickable = pieces.length > 1;
+  const changeLabel = !pickable ? t("customerChangeLink") : selected.size ? t("customerChangeSelected", { count: selected.size }) : t("customerChangeAll", { count: pieces.length });
 
   const piecesPanel = (
     <section className={`${CARD} overflow-hidden`} data-testid="customer-pieces">
@@ -366,7 +233,7 @@ export default function CustomerScreen({ leadId }: { leadId: number }) {
         <div className="flex flex-wrap gap-1.5">
           <Button type="button" variant="secondary" size="sm" disabled={!pieces.length} onClick={() => { setLink(usualLink(targets)); setChanging(true); }} data-testid="customer-change-link">
             <Link2 />
-            {t("customerChangeLink")}{selected.size ? ` (${formatCount(selected.size, t.locale)})` : ""}
+            {changeLabel}
           </Button>
           <Button
             type="button"
@@ -389,18 +256,19 @@ export default function CustomerScreen({ leadId }: { leadId: number }) {
       ) : (
         <ul className="divide-y divide-white/[0.05]">
           <li className={`flex items-center gap-3 px-4 py-2 ${EYEBROW_MUTED}`}>
-            <input
-              type="checkbox"
-              checked={allSelected}
-              onChange={() => setSelected(allSelected ? new Set() : new Set(pieces.map((p) => p.id)))}
-              aria-label={t("customerSelectAll")}
-              className="h-4 w-4 accent-violet-500"
-            />
+            {pickable && (
+              <input
+                type="checkbox"
+                checked={allSelected}
+                onChange={() => setSelected(allSelected ? new Set() : new Set(pieces.map((p) => p.id)))}
+                aria-label={t("customerSelectAll")}
+                className="h-4 w-4 accent-violet-500"
+              />
+            )}
             <span className="flex-1">{t("colCode")}</span>
             <span className="hidden w-48 md:block">{t("colLink")}</span>
-            <span className="w-24">{t("colStatus")}</span>
+            <span className="hidden w-24 sm:block">{t("colStatus")}</span>
             <span className="hidden w-24 text-right sm:block">{t("colScans")}</span>
-            <span className="w-10" />
           </li>
           {pieces.map((p) => (
             <li
@@ -409,38 +277,32 @@ export default function CustomerScreen({ leadId }: { leadId: number }) {
               onClick={() => openPiece(p.publicCode)}
               data-testid={`customer-piece-${p.publicCode}`}
             >
-              <input
-                type="checkbox"
-                checked={selected.has(p.id)}
-                onClick={(e) => e.stopPropagation()}
-                onChange={() => toggle(p.id)}
-                aria-label={t("customerSelectPiece", { code: p.publicCode })}
-                className="h-4 w-4 shrink-0 accent-violet-500"
-              />
-              <TagPieceMention publicCode={p.publicCode} productType={p.productType} face={p.face} batchCode={p.batchCode} details={p.label ?? undefined} className="min-w-0 flex-1" />
+              {pickable && (
+                <input
+                  type="checkbox"
+                  checked={selected.has(p.id)}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={() => toggle(p.id)}
+                  aria-label={t("customerSelectPiece", { code: p.publicCode })}
+                  className="h-4 w-4 shrink-0 accent-violet-500"
+                />
+              )}
+              <span className="min-w-0 flex-1">
+                <TagPieceMention publicCode={p.publicCode} productType={p.productType} face={p.face} batchCode={p.batchCode} details={p.label ?? undefined} className="w-full" />
+                {/* A phone has no room for a status column: the state sits under the code. */}
+                <span className="mt-1.5 flex flex-wrap items-center gap-1 pl-12 sm:hidden">
+                  <PieceStatusPills tag={p} />
+                  <ChipMark tag={p} />
+                </span>
+              </span>
               <span className="hidden w-48 truncate text-xs text-white/45 md:block">{p.destinationUrl ? shortUrl(p.destinationUrl) : "—"}</span>
-              <span className="flex w-24 flex-wrap items-center gap-1">
+              <span className="hidden w-24 flex-wrap items-center gap-1 sm:flex">
                 <PieceStatusPills tag={p} />
                 <ChipMark tag={p} />
               </span>
               <span className="hidden w-24 text-right sm:block">
                 <ScanCounts qr={p.qrInteractions} nfc={p.nfcInteractions} />
               </span>
-              {/* A sold piece keeps its customer until the sale is cancelled (the server refuses; the piece screen hides it too). */}
-              {p.saleId !== null ? (
-                <span className="w-10 shrink-0" aria-hidden="true" />
-              ) : (
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); setUnlinkError(null); setUnlinking(p); }}
-                  aria-label={t("customerUnlink")}
-                  title={t("customerUnlink")}
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white/35 hover:bg-white/[0.08] hover:text-red-300"
-                  data-testid={`customer-unlink-${p.publicCode}`}
-                >
-                  <Unlink className="h-4 w-4" />
-                </button>
-              )}
             </li>
           ))}
         </ul>
@@ -471,16 +333,35 @@ export default function CustomerScreen({ leadId }: { leadId: number }) {
         />
 
         <div className="space-y-4">
-          <Panel title={t("customerCompany")}>
+          <Panel
+            title={t("customerDetails")}
+            collapsed={!detailsOpen}
+            right={
+              <button
+                type="button"
+                onClick={() => setDetailsOpen((open) => !open)}
+                aria-expanded={detailsOpen}
+                aria-label={t("customerDetails")}
+                className="flex h-9 w-9 items-center justify-center rounded-lg text-white/45 active:bg-white/10 lg:hidden"
+                data-testid="customer-details-toggle"
+              >
+                <ChevronDown className={`h-4 w-4 transition-transform ${detailsOpen ? "rotate-180" : ""}`} />
+              </button>
+            }
+          >
             {/* Click any line to edit it; Enter or leaving the field saves, Escape cancels. */}
-            <div className="grid grid-cols-2 gap-x-4" data-testid="customer-company">
+            <div className={`grid grid-cols-2 gap-x-4 ${detailsOpen ? "" : "hidden lg:grid"}`} data-testid="customer-company">
               <div className="col-span-2">
                 <InlineField label={t("customerName")} value={lead.name} onSave={(v) => void saveLead("name", v)} validate={(v) => (v.trim() ? null : t("customerNameRequired"))} />
               </div>
               <InlineField label={tl("fieldIndustry")} value={lead.industry ?? ""} onSave={(v) => void saveLead("industry", v)} />
-              <InlineField label={tl("fieldPhone")} value={lead.phone ?? ""} onSave={(v) => void saveLead("phone", v)} linkable={!!lead.phone} linkHref={lead.phone ? `tel:${lead.phone}` : undefined} />
-              <InlineField label={tl("fieldEmail")} value={lead.email ?? ""} onSave={(v) => void saveLead("email", v)} linkable={!!lead.email} linkHref={lead.email ? `mailto:${lead.email}` : undefined} validate={validateEmail} />
-              <InlineField label={tl("fieldWebsite")} value={lead.website ?? ""} onSave={(v) => void saveLead("website", v)} linkable={!!lead.website} />
+              <InlineField label={tl("fieldPhone")} value={lead.phone ?? ""} display={formatPhone} onSave={(v) => void saveLead("phone", v)} linkable={!!lead.phone} linkHref={lead.phone ? `tel:${lead.phone}` : undefined} />
+              <div className="col-span-2">
+                <InlineField label={tl("fieldEmail")} value={lead.email ?? ""} onSave={(v) => void saveLead("email", v)} linkable={!!lead.email} linkHref={lead.email ? `mailto:${lead.email}` : undefined} validate={validateEmail} />
+              </div>
+              <div className="col-span-2">
+                <InlineField label={tl("fieldWebsite")} value={lead.website ?? ""} onSave={(v) => void saveLead("website", v)} linkable={!!lead.website} />
+              </div>
               <div className="col-span-2 my-2 h-px bg-white/[0.06]" />
               {canEditAddress ? (
                 <>
@@ -566,17 +447,6 @@ export default function CustomerScreen({ leadId }: { leadId: number }) {
         </div>
       </BottomSheet>
 
-      <ConfirmDialog
-        open={unlinking != null}
-        onOpenChange={(open) => { if (!open) setUnlinking(null); }}
-        tone="danger"
-        title={unlinking ? t("customerUnlinkTitle", { code: unlinking.publicCode }) : ""}
-        description={t("customerUnlinkHint")}
-        confirmLabel={t("customerUnlink")}
-        error={unlinkError}
-        testId="customer-unlink-confirm"
-        onConfirm={() => unlink()}
-      />
     </section>
   );
 }

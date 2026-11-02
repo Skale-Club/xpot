@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { Building2, ChevronRight, Package, Radio, ScanLine } from "lucide-react";
+import { Building2, ChevronRight } from "lucide-react";
 import type { LeadTagSummary } from "@shared/tagsApi";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
@@ -10,12 +10,12 @@ import { CompactDataTable, type CompactDataColumn } from "@/components/xpot/Comp
 import { FilterBar, FilterSearch } from "@/components/xpot/filters";
 import { useUrlFilters } from "@/hooks/use-url-filters";
 import { ListPager, usePagedList } from "@/components/xpot/pagination";
-import { KpiTile } from "@/components/xpot/DashboardKit";
 import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
 import { ListSkeleton } from "@/components/xpot/ListSkeleton";
 import { GLASS_SUBTLE_CLASS } from "@/components/xpot/surface";
 import type { FullSalesLead } from "@/pages/xpot/types";
-import { APP_BASE, errorText } from "./lib";
+import { resellerTodo } from "@shared/tagApp";
+import { APP_BASE, errorText, myPiecesQuery } from "./lib";
 import { formatCount } from "./charts";
 import { TopBar } from "./ui";
 
@@ -23,7 +23,12 @@ type Customer = LeadTagSummary & {
   name: string;
   detail: string | null;
   searchText: string;
+  /** Pieces of this customer not ready to hand over (a link to set, a chip to write). */
+  toFinish: number;
 };
+
+/** A search box only earns its place once the list is long enough to need one. */
+const SEARCH_FROM = 8;
 
 /** Customers who own at least one of the signed-in reseller's Tags pieces. */
 export default function CustomersScreen() {
@@ -34,9 +39,15 @@ export default function CustomersScreen() {
   const search = filters.values.q;
   const leadsQuery = useQuery<FullSalesLead[]>({ queryKey: ["/api/xpot/leads"], staleTime: 60_000 });
   const summariesQuery = useQuery<LeadTagSummary[]>({ queryKey: ["/api/xpot/tags/by-lead"], staleTime: 15_000 });
+  // The pieces themselves, to say which customer has something left to do (the same list as My pieces).
+  const piecesQuery = useQuery(myPiecesQuery());
 
   const customers = useMemo<Customer[]>(() => {
     const leads = new Map((leadsQuery.data ?? []).map((lead) => [lead.id, lead]));
+    const toFinish = new Map<number, number>();
+    for (const piece of piecesQuery.data ?? []) {
+      if (piece.leadId && resellerTodo([piece]).finish) toFinish.set(piece.leadId, (toFinish.get(piece.leadId) ?? 0) + 1);
+    }
     return (summariesQuery.data ?? [])
       .filter((summary) => summary.pieces > 0)
       .map((summary) => {
@@ -49,19 +60,16 @@ export default function CustomersScreen() {
           ...summary,
           name,
           detail,
+          toFinish: toFinish.get(summary.leadId) ?? 0,
           searchText: [name, place, lead?.industry, lead?.phone].filter(Boolean).join(" ").toLocaleLowerCase(),
         };
       })
       .sort((a, b) => b.scansLast30 - a.scansLast30 || b.pieces - a.pieces || a.name.localeCompare(b.name));
-  }, [leadsQuery.data, summariesQuery.data, t]);
+  }, [leadsQuery.data, summariesQuery.data, piecesQuery.data, t]);
 
   const query = search.trim().toLocaleLowerCase();
   const filtered = useMemo(() => (query ? customers.filter((customer) => customer.searchText.includes(query)) : customers), [customers, query]);
   const paged = usePagedList(filtered, { resetKey: query });
-  const totals = useMemo(
-    () => customers.reduce((sum, customer) => ({ pieces: sum.pieces + customer.pieces, live: sum.live + customer.live, scans: sum.scans + customer.scansLast30 }), { pieces: 0, live: 0, scans: 0 }),
-    [customers],
-  );
   const fmt = (n: number) => formatCount(n, t.locale);
   const loading = (leadsQuery.isLoading && !leadsQuery.data) || (summariesQuery.isLoading && !summariesQuery.data);
   const error = leadsQuery.error || summariesQuery.error;
@@ -79,6 +87,7 @@ export default function CustomersScreen() {
           <span className="min-w-0">
             <strong className="block truncate text-sm font-semibold text-white/90">{customer.name}</strong>
             <span className="mt-0.5 block truncate text-[11px] text-white/35">{customer.detail || t.plural("pieces", customer.pieces)}</span>
+            {customer.toFinish > 0 && <span className="mt-0.5 block truncate text-[11px] font-semibold text-amber-300/90">{t.plural("customerToFinish", customer.toFinish)}</span>}
           </span>
         </div>
       ),
@@ -97,11 +106,14 @@ export default function CustomersScreen() {
       width: 120,
       headerClassName: "text-center",
       cellClassName: "text-center",
-      render: (customer) => (
+      // None live reads as nothing: a green dot beside 0 looked like good news.
+      render: (customer) => customer.live > 0 ? (
         <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-400/[0.08] px-2 py-1 text-xs font-semibold tabular-nums text-emerald-300/85">
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" aria-hidden="true" />
           {fmt(customer.live)}
         </span>
+      ) : (
+        <span className="text-xs font-semibold tabular-nums text-white/35">0</span>
       ),
     },
     {
@@ -125,7 +137,7 @@ export default function CustomersScreen() {
   return (
     <section data-testid="tags-customers-screen">
       <div className="lg:hidden">
-        <TopBar title={t("customersTitle")} eyebrow={!loading ? t.plural("customersCount", customers.length) : undefined} />
+        <TopBar title={t("customersTitle")} />
       </div>
 
       {loading ? (
@@ -140,19 +152,13 @@ export default function CustomersScreen() {
         />
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
-            <KpiTile accent="violet" icon={Building2} value={fmt(customers.length)} label={t("customersTitle")} />
-            <KpiTile accent="violet" icon={Package} value={fmt(totals.pieces)} label={t("customersPieces")} />
-            <KpiTile accent="violet" icon={Radio} value={fmt(totals.live)} label={t("customersLive")} />
-            <KpiTile accent="violet" icon={ScanLine} value={fmt(totals.scans)} label={t("customersScans30")} />
-          </div>
-
-          <FilterBar
-            className="mt-4"
-            testId="customers-filters"
-            search={<FilterSearch value={search} onChange={(q) => filters.set({ q })} placeholder={t("customersSearch")} testId="input-customer-search" />}
-            summary={{ shown: filtered.length, total: customers.length, active: Boolean(query), onClear: () => filters.reset() }}
-          />
+          {(customers.length >= SEARCH_FROM || query) && (
+            <FilterBar
+              testId="customers-filters"
+              search={<FilterSearch value={search} onChange={(q) => filters.set({ q })} placeholder={t("customersSearch")} testId="input-customer-search" />}
+              summary={{ shown: filtered.length, total: customers.length, active: Boolean(query), onClear: () => filters.reset() }}
+            />
+          )}
 
           {filtered.length ? (
             <div className="mt-4">
@@ -184,6 +190,7 @@ export default function CustomersScreen() {
                       <span className="mt-1 block truncate text-[11px] text-white/38">
                         {t.plural("pieces", customer.pieces)} · {fmt(customer.live)} {t("customersLive").toLocaleLowerCase(t.locale)} · {fmt(customer.scansLast30)} {t("customersScans30").toLocaleLowerCase(t.locale)}
                       </span>
+                      {customer.toFinish > 0 && <span className="mt-0.5 block truncate text-[11px] font-semibold text-amber-300/90">{t.plural("customerToFinish", customer.toFinish)}</span>}
                     </span>
                     <ChevronRight className="h-4 w-4 shrink-0 text-white/20 transition-transform group-active:translate-x-0.5" aria-hidden="true" />
                   </button>

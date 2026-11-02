@@ -1,6 +1,6 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
-import { chipNeedsWriting, classifyScan, decidePhoneWrite, matchesPieceFilters, parsePieceFilters, guessDestinationType, formatPhoneMask, normalizeUrlInput, socialHandleOf, socialNetworkOf, socialUrl } from "../../shared/tagApp.js";
+import { chipNeedsWriting, classifyScan, decidePhoneWrite, matchesPieceFilters, parsePieceFilters, resellerTodo, guessDestinationType, formatPhoneMask, normalizeUrlInput, socialHandleOf, socialNetworkOf, socialUrl } from "../../shared/tagApp.js";
 
 test("classifyScan: Xpot tag links, in either access method", () => {
   assert.deepEqual(classifyScan("https://xpot.place/n/A7K3P9X2"), { kind: "xpot", code: "A7K3P9X2", method: "nfc" });
@@ -115,7 +115,9 @@ test("My pieces filters: status and sale are separate axes", () => {
     [live, liveSold, kit, linked, off].filter((tag) => matchesPieceFilters(tag, parsePieceFilters(values)));
 
   assert.deepEqual(pick({}), [live, liveSold, kit, linked, off]);
-  assert.deepEqual(pick({ status: "setup" }), [kit, linked]);
+  // "No customer yet" is the kit alone; a piece with its customer chosen is "to finish".
+  assert.deepEqual(pick({ status: "setup" }), [kit]);
+  assert.deepEqual(pick({ status: "finish" }), [linked]);
   assert.deepEqual(pick({ status: "active" }), [live, liveSold]);
   assert.deepEqual(pick({ status: "off" }), [off]);
   // "Not sold" includes live pieces given out without a recorded sale.
@@ -125,6 +127,31 @@ test("My pieces filters: status and sale are separate axes", () => {
   assert.deepEqual(pick({ status: "stock" }), [live, kit, linked]);
   assert.deepEqual(pick({ status: "sold" }), [liveSold, off]);
   assert.deepEqual(parsePieceFilters({ status: "bogus", sale: "bogus", chip: "x" }), { status: "all", sale: "all", chip: "all" });
+});
+
+test("To finish: a customer chosen but not live, or a chip to write; never a live piece with its chip done", () => {
+  const rows = [
+    { status: "inventory", saleId: null, nfcStatus: "not_programmed" },
+    { status: "assigned", saleId: null, nfcStatus: "verified" },
+    { status: "active", saleId: null, nfcStatus: "not_programmed" },
+    { status: "active", saleId: 1, nfcStatus: "verified" },
+    { status: "disabled", saleId: null, nfcStatus: "failed" },
+  ];
+  const finish = parsePieceFilters({ status: "finish" });
+  assert.deepEqual(rows.map((r) => matchesPieceFilters(r, finish)), [false, true, true, false, false]);
+});
+
+test("the reseller's To do counts what is waiting, from the pieces they hold", () => {
+  const rows = [
+    { status: "inventory", saleId: null, nfcStatus: "not_programmed" },
+    { status: "inventory", saleId: null, nfcStatus: "not_programmed" },
+    { status: "assigned", saleId: null, nfcStatus: "failed" },
+    { status: "active", saleId: 4, nfcStatus: "verified" },
+    { status: "disabled", saleId: null, nfcStatus: "verified" },
+  ];
+  assert.deepEqual(resellerTodo(rows), { finish: 1, noCustomer: 2, paused: 1 });
+  assert.deepEqual(resellerTodo([]), { finish: 0, noCustomer: 0, paused: 0 });
+  assert.deepEqual(resellerTodo([rows[3]]), { finish: 0, noCustomer: 0, paused: 0 });
 });
 
 test("chip filter: set-up pieces whose chip still needs writing, as the dashboard counts them", () => {

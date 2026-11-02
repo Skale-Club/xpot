@@ -184,8 +184,14 @@ export function createTagRedirectHandler(method: TagAccessMethod, deps: PublicTa
       return;
     }
 
-    // disabled / retired (or any unknown status): generic, no reason exposed.
-    res.status(410).type("html").send(renderTagPage("unavailable", { lang }));
+    // disabled / retired (or any unknown status): generic, no reason exposed. Someone who may work on it can still open it in the app.
+    let configureUrl: string | undefined;
+    try {
+      configureUrl = await deps.configureUrlFor(req, tag);
+    } catch {
+      configureUrl = undefined;
+    }
+    res.status(410).type("html").send(renderTagPage("unavailable", { code: tag.publicCode, configureUrl, lang }));
     await record(deps, req, tag, method, "disabled_scan");
   };
 }

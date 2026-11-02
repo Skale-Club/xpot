@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AppLoader } from "@/components/ui/spinner";
+import { SessionGate } from "@/components/xpot/SessionGate";
 import { Field, FIELD_CONTROL, Input } from "@/components/xpot/Field";
 import { FormFooter } from "@/components/xpot/FormFooter";
 import { PageHeader } from "@/components/xpot/PageHeader";
@@ -43,6 +44,7 @@ import { AddPersonForm } from "./components/AddPersonForm";
 import { AppLayout } from "@/components/xpot/AppLayout";
 import { homeForModules, useXpotModules } from "@/components/ModuleSwitch";
 import { InstallAppHeaderButton, InstallAppRow } from "@/components/xpot/InstallApp";
+import { useWholesale } from "@/pages/tags/WholesaleCard";
 
 const COUNTRIES = [
   { code: "BR", dial: "+55", name: "Brazil" },
@@ -122,11 +124,12 @@ function CountryPhoneInput({
   const t = useT(settingsMessages);
   const parsed = parsePhone(value);
   const active = COUNTRIES.find((c) => c.dial === parsed.dial) ?? COUNTRIES[1];
-  const [local, setLocal] = useState(parsed.local);
+  // Shown masked even when saved bare ("6175550106" reads (617) 555-0106), as the sign-in phone below it does.
+  const [local, setLocal] = useState(maskLocal(parsed.dial, parsed.local));
 
   useEffect(() => {
     const { dial, local: l } = parsePhone(value);
-    setLocal(l);
+    setLocal(maskLocal(dial, l));
     const found = COUNTRIES.find((c) => c.dial === dial) ?? COUNTRIES[1];
     if (found.code !== active.code) {
       // country changed externally
@@ -230,6 +233,9 @@ export function XpotSettings() {
 
   const meQuery = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
   const me = meQuery.data;
+  // A code to order at wholesale means nothing to someone whose partner distributes its own pieces (no store): hide it then.
+  const wholesale = useWholesale(!!me?.rep.wholesaleCode);
+  const storeless = !!wholesale.data && wholesale.data.code === null;
   useEffect(() => {
     if (meQuery.isLoading) return;
     if (!isDesktop) {
@@ -322,6 +328,8 @@ export function XpotSettings() {
   };
 
   if (meQuery.isLoading) return <AppLoader />;
+  // A failed /api/xpot/me must not mount the layout below: its children ask for /me again, which restarts the loader above, forever.
+  if (!me) return <SessionGate error={meQuery.error} />;
 
   const profileDirty = !!me && (
     displayName !== me.rep.displayName ||
@@ -389,7 +397,7 @@ export function XpotSettings() {
               <input {...avatar.inputProps} />
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-white">{tn("photo")}</p>
-                <p className="text-xs text-white/45">{tn("photoHint")}</p>
+                <p className="text-xs text-white/45">{tn(modules.includes("visits") ? "photoHint" : "photoHintTeam")}</p>
                 <Button type="button" variant="secondary" size="sm" className="mt-2" onClick={avatar.pick} loading={avatar.pending}>
                   <Camera />
                   {avatar.label}
@@ -412,7 +420,7 @@ export function XpotSettings() {
                 </Field>
               </div>
             </div>
-            {me?.rep.wholesaleCode && (
+            {me?.rep.wholesaleCode && !storeless && (
               <div>
                 <p className={EYEBROW}>{tt("wholesaleCode")}</p>
                 <div className="mt-1.5 flex items-center gap-2">

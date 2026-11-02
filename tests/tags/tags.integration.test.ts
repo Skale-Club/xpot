@@ -230,6 +230,8 @@ test.skipIf(!enabled)("tags: kits, reseller isolation, sales, scans, report, pro
     // Ana's home numbers.
     const populatedDash = (await api("GET", "/api/xpot/tags/dashboard?days=30", "it-ana")).json;
     assert.deepEqual([populatedDash.inStock, populatedDash.active, populatedDash.soldInPeriod, populatedDash.scans], [1, 2, 2, { qr: 2, nfc: 2 }]);
+    // The chip alert counts set-up and live pieces whose chip is empty; its live part is what is already failing in the customer's hands.
+    assert.deepEqual([populatedDash.chipsMissing, populatedDash.chipsMissingLive], [1, 1]);
     assert.deepEqual(
       (({ publicCode, productType, face, batchCode }) => ({ publicCode, productType, face, batchCode }))(populatedDash.topPieces[0]),
       { publicCode: a1.publicCode, productType: "keychain", face: "instagram", batchCode: batch.json.batchCode },

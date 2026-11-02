@@ -6,6 +6,7 @@ import { tagShowcaseItems, type TagShowcaseRow } from "#shared/schema.js";
 import {
   tagShowcaseInputSchema,
   tagShowcasePatchSchema,
+  showcaseInLanguage,
   showcaseUrl,
   type TagShowcaseInput,
   type TagShowcaseItem,
@@ -28,6 +29,7 @@ function toItem(row: TagShowcaseRow): TagShowcaseItem {
     includes: row.includes ?? [],
     imageUrl: row.imageUrl,
     items: row.items ?? [],
+    translations: row.translations ?? {},
     referencePriceCents: row.referencePriceCents,
     currency: row.currency,
     sortOrder: row.sortOrder,
@@ -45,12 +47,12 @@ export async function listShowcase(opts: { publishedOnly: boolean }): Promise<Ta
   return rows.map(toItem);
 }
 
-export async function listShowcaseForRep(repId: number): Promise<TagShowcaseView[]> {
+export async function listShowcaseForRep(repId: number, lang?: string | null): Promise<TagShowcaseView[]> {
   const items = await listShowcase({ publishedOnly: true });
   if (!items.length) return [];
   const code = await ensureWholesaleCode(repId);
   const base = storeBaseUrl();
-  return items.map((item) => ({ ...item, url: showcaseUrl(item, base, code) }));
+  return items.map((item) => ({ ...showcaseInLanguage(item, lang), url: showcaseUrl(item, base, code) }));
 }
 
 function values(input: TagShowcaseInput) {
@@ -61,6 +63,7 @@ function values(input: TagShowcaseInput) {
     includes: input.includes,
     imageUrl: input.imageUrl ?? null,
     items: input.items,
+    translations: input.translations,
     referencePriceCents: input.referencePriceCents ?? null,
     sortOrder: input.sortOrder,
     isPublished: input.isPublished,
@@ -94,6 +97,7 @@ function toInput(item: TagShowcaseItem): TagShowcaseInput {
     includes: item.includes,
     imageUrl: item.imageUrl,
     items: item.items,
+    translations: item.translations,
     referencePriceCents: item.referencePriceCents,
     sortOrder: item.sortOrder,
     isPublished: item.isPublished,
@@ -120,7 +124,8 @@ export function registerShowcaseRoutes(app: Express) {
   app.get("/api/xpot/tags/showcase", requireTagUser, async (req, res) => {
     try {
       res.set("Cache-Control", "no-store");
-      res.json(await listShowcaseForRep(actorOf(req).repId));
+      // ?lang= is the reader's language in the app (pt, es); anything else reads the main text.
+      res.json(await listShowcaseForRep(actorOf(req).repId, typeof req.query.lang === "string" ? req.query.lang : null));
     } catch (err) {
       fail(res, err, "Failed to load the shop");
     }

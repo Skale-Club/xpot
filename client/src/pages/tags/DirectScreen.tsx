@@ -17,7 +17,7 @@ import { ContentEditor, type ContentState } from "./ContentEditor";
 import { ContentQr } from "./ContentQr";
 import LockSheet from "./LockSheet";
 import WriteSheet, { type WriteResult } from "./WriteSheet";
-import { ageOf, errorText, pushRecent, shortUrl, tagsGet, tagsPost, useBanner, directPath } from "./lib";
+import { ageOf, APP_BASE, errorText, pushRecent, shortUrl, tagsGet, tagsPost, useBanner, directPath } from "./lib";
 import { Banner, CARD, CHIP_TONE, CopyButton, EYEBROW_MUTED, FieldLabel, ICON_BLOCK_DIRECT, INPUT_ACCENT, LinkInput, Pill, SheetActions, TopBar } from "./ui";
 
 const WRITES_KEY = ["/api/xpot/tag-direct-writes"];
@@ -110,7 +110,7 @@ export default function DirectScreen() {
     <>
       {/* The desktop top bar already names the screen. */}
       <div className="lg:hidden">
-        <TopBar title={t("directTitle")} eyebrow={t("directEyebrow")} identity="direct" />
+        <TopBar title={t("directTitle")} back={APP_BASE} identity="direct" />
       </div>
       <Banner banner={banner} />
 

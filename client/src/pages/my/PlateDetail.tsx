@@ -1,6 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "wouter";
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
-import { CalendarDays, ExternalLink, Package, ScanLine } from "lucide-react";
+import { ArrowLeft, CalendarDays, ExternalLink, Package, ScanLine } from "lucide-react";
+import { CUSTOMER_PANEL_PATH } from "@shared/customerPanel";
+import { guessDestinationType } from "@shared/tagApp";
+import { Button } from "@/components/ui/button";
 import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
 import { KpiTile } from "@/components/xpot/DashboardKit";
 import { ListSkeleton } from "@/components/xpot/ListSkeleton";
@@ -8,8 +12,10 @@ import { Pill, PIECE_STATUS_TONE } from "@/components/xpot/StatusPill";
 import { TagFaceIcon } from "@/components/xpot/TagFaceIcon";
 import { useT } from "@/i18n";
 import { myPlatesMessages } from "@/i18n/messages/myPlates";
+import { tagsMessages } from "@/i18n/messages/tags";
+import { EdgeTick } from "@/pages/tags/ChartTick";
 import {
-  CHART_TICK, CHART_TICK_DAY, chartTickInterval, chartTooltip, formatChartDay, formatCount, NFC_COLOR, QR_COLOR,
+  CHART_TICK_DAY, chartTickInterval, chartTooltip, formatChartDay, formatCount, NFC_COLOR, QR_COLOR,
 } from "@/pages/tags/charts";
 import { CARD, EYEBROW_MUTED } from "@/pages/tags/ui";
 import { MY_KEYS, MyApiError, myApi } from "./api";
@@ -20,18 +26,33 @@ import { TalkToSeller } from "./TalkToSeller";
 /** One plate: its scans per day, how people reached it (QR or tap), and where it opens. Read only. */
 export function PlateDetail({ code }: { code: string }) {
   const t = useT(myPlatesMessages);
+  const tt = useT(tagsMessages);
   const words = usePlateWords();
   const plate = useQuery({ queryKey: MY_KEYS.piece(code), queryFn: () => myApi.piece(code), staleTime: 30_000 });
 
   if (plate.isLoading) return <ListSkeleton rows={3} />;
   if (plate.error instanceof MyApiError && plate.error.status === 404) {
-    return <EmptyState tone="tags" icon={Package} title={t("plateNotFound")} />;
+    return (
+      <EmptyState
+        tone="tags"
+        icon={Package}
+        title={t("plateNotFound")}
+        action={
+          <Button asChild variant="secondary">
+            <Link href={CUSTOMER_PANEL_PATH}><ArrowLeft />{t("backToPlates")}</Link>
+          </Button>
+        }
+      />
+    );
   }
   if (!plate.data) return <ErrorState message={t("loadFailed")} onRetry={() => void plate.refetch()} retryLabel={t("retry")} />;
 
   const p = plate.data;
   const total = p.qr30 + p.nfc30;
   const link = p.destinationUrl && /^https?:\/\//i.test(p.destinationUrl) ? p.destinationUrl : null;
+  // The owner reads where a plate opens, not an address: its kind and its site; the whole link sits behind "Open this link".
+  const kind = link ? guessDestinationType(link) : null;
+  const host = link ? new URL(link).hostname.replace(/^www\./, "") : null;
 
   return (
     <div className="space-y-4" data-testid="my-plate">
@@ -66,8 +87,7 @@ export function PlateDetail({ code }: { code: string }) {
                     axisLine={false}
                     tickLine={false}
                     interval={chartTickInterval(p.daily.length)}
-                    tick={CHART_TICK}
-                    tickFormatter={(day: string) => formatChartDay(day, t.locale, CHART_TICK_DAY)}
+                    tick={<EdgeTick format={(day: string) => formatChartDay(day, t.locale, CHART_TICK_DAY)} />}
                   />
                   <Tooltip {...chartTooltip(t.locale)} />
                   <Bar dataKey="qr" name={t("howQr")} stackId="s" fill={QR_COLOR} />
@@ -93,7 +113,10 @@ export function PlateDetail({ code }: { code: string }) {
       <section className={`${CARD} p-4`}>
         <h2 className={EYEBROW_MUTED}>{t("opensTitle")}</h2>
         {p.destinationUrl ? (
-          <p className="mt-2 break-all text-sm text-white/80">{p.destinationUrl}</p>
+          <p className="mt-2 text-sm text-white/80" data-testid="my-plate-opens">
+            {kind && <span className="block font-semibold text-white">{tt(`dest_${kind}` as "dest_website")}</span>}
+            <span className="block break-all text-white/55">{host ?? p.destinationUrl}</span>
+          </p>
         ) : (
           <p className="mt-2 text-sm text-white/45">{t("opensNothing")}</p>
         )}
@@ -102,7 +125,6 @@ export function PlateDetail({ code }: { code: string }) {
             {t("openLink")} <ExternalLink className="h-3.5 w-3.5" />
           </a>
         )}
-        <p className="mt-3 text-xs text-white/35">{words.product(p)}</p>
       </section>
 
       <TalkToSeller businessName={p.businessName} />

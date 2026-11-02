@@ -11,6 +11,7 @@ import CustomerScreen from "./CustomerScreen";
 import HomeScreen from "./HomeScreen";
 import PiecesScreen from "./PiecesScreen";
 import ShopScreen from "./ShopScreen";
+import TagsResults from "./TagsResults";
 import TagScreen from "./TagScreen";
 import { APP_BASE, tagPath } from "./lib";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
@@ -38,7 +39,7 @@ export function TagsApp() {
     rememberModuleRoute("tags", `${location.split("?")[0]}${search}`);
   }, [allowed, location]);
 
-  if (!meQuery.data) return <SessionGate failed={meQuery.isError} />;
+  if (!meQuery.data) return <SessionGate error={meQuery.error} />;
 
   // Tags switched off for this rep: back to Visits (the server refuses the API anyway).
   if (!allowed) return <Redirect to={MODULE_HOME.visits} />;
@@ -53,7 +54,7 @@ export function TagsApp() {
 
   return (
     <AppLayout
-      title={pieceCode ?? (location.startsWith(`${APP_BASE}/direct`) ? t("navDirect") : t(currentNav.key))}
+      title={pieceCode ?? (location.startsWith(`${APP_BASE}/direct`) ? t("navDirect") : location.startsWith(`${APP_BASE}/results`) ? t("resultsTitle") : t(currentNav.key))}
       wide={wide}
       mobileColumnClassName={MODULE_COLUMN}
       phoneBar={!phoneBarHidden(location)}
@@ -80,6 +81,7 @@ export function TagsApp() {
         </Route>
         <Route path={`${APP_BASE}/shop`} component={ShopScreen} />
         <Route path={`${APP_BASE}/direct`} component={DirectScreen} />
+        <Route path={`${APP_BASE}/results`} component={TagsResults} />
         <Route path={APP_BASE} component={HomeScreen} />
         <Route>
           <Redirect to={APP_BASE} />

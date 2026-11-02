@@ -66,6 +66,7 @@ Nota de 0 a 10: quanto uma pessoa sem treino usa a tela de primeira.
 ## S1
 
 ### RCP-1 [S1] Loader infinito em `/settings` para quem não tem acesso
+Status: feito. `XpotSettings` e `AdminApp` não montam mais o layout sem sessão; o `SessionGate` não pede `/api/xpot/me` em laço (1 chamada em vez de 1949 em 4 s, contada no navegador).
 Telas: pending/en-desktop/pending-settings, pending/en-phone/pending-settings
 Problema: a pessoa vê três pontinhos azuis numa tela preta, para sempre, sem texto nem botão. É a única porta sem saída do app.
 Causa provável (não reproduzi: `localhost:2110` respondeu 404 quando testei; a lógica foi conferida no fonte do `query-core`):
@@ -78,6 +79,7 @@ Arquivos: client/src/pages/xpot/XpotSettings.tsx:325, client/src/pages/tags/Tags
 Risco: nenhum de negócio. Confirmar no navegador contando as chamadas a `/api/xpot/me`.
 
 ### RCP-2 [S1] A pessoa pendente recebe 4 respostas diferentes e nenhuma diz "em análise"
+Status: feito. `SessionGate` lê o `code` do 403 (`pending`/`blocked`) e mostra "Seu cadastro está em análise" com WhatsApp e Sair, em Tags, Visits, Settings e Admin; o cartão é o mesmo do `PhoneSignIn` (`AccessNotice`).
 Telas: pending/en-phone/pending-tags, pending-settings, pending-admin, pending-dashboard, pending-landing, e as mesmas em desktop
 Problema:
 - `/tags` diz "Failed to load session".
@@ -97,6 +99,7 @@ Arquivos: client/src/components/xpot/SessionGate.tsx:10, client/src/App.tsx:76, 
 Risco: nenhum de negócio. O `ApiError` precisa expor o `code` do 403.
 
 ### RCP-3 [S1] "Failed to load session" serve para tudo, inclusive sinal fraco na rua
+Status: feito. 401 abre a entrada e volta à página; 403 com código mostra a análise; rede e 5xx dizem "Não conseguimos falar com o Xpot" com "Tentar de novo" (clique testado).
 Telas: pending/en-phone/pending-tags, pending/en-desktop/pending-tags. A queda de rede não foi capturada: visto só no código.
 Problema: `TagsApp` mostra esse texto para qualquer erro de `/me`. Sessão expirada, rede caída e servidor fora dão a mesma tela e o mesmo botão.
 - "Session" não significa nada para o revendedor.
@@ -113,6 +116,7 @@ Arquivos: client/src/components/xpot/SessionGate.tsx:15, client/src/pages/tags/T
 Risco: nenhum.
 
 ### RCP-4 [S1] O alerta vermelho do início afirma algo falso sobre a peça
+Status: feito. Título e corpo trocados nas 3 línguas; âmbar quando a peça ainda não está no ar, vermelho só com peça no ar sem chip (`chipsMissingLive` no servidor, coberto no teste de integração).
 Telas: reseller/en-phone/tags-home, reseller/en-desktop/tags-home, reseller/pt-desktop/tags-home, comparadas com reseller/en-phone/tags-piece-configured-no-chip e public/en-phone/piece-configured-not-live
 Problema: "1 piece with its NFC chip not written. The QR code already works, but a phone tapped on this piece opens nothing."
 A peça é a CA03GDEQ, com status "Ready, not live". Quem escaneia o QR dela hoje vê "This experience is almost ready", ou seja, o QR não funciona. O revendedor pode entregar a peça confiando no alerta e o cliente recebe uma tela de "quase pronto".
@@ -126,6 +130,7 @@ Arquivos: client/src/i18n/messages/tags.ts:257,712,1158, client/src/pages/tags/T
 Risco: nenhum no texto. A separação de cor é opcional e vale fazer junto.
 
 ### RCP-5 [S1] A loja manda comprar de quem não fornece o revendedor
+Status: feito. Com o parceiro distribuindo, Shop mostra "Suas peças vêm de {nome}. Para pedir mais, fale com eles." e não busca o catálogo; o código de atacado sai do perfil; ponto duplo corrigido. Sem botão de contato: o servidor não manda o telefone do parceiro.
 Telas: reseller/en-phone/tags-shop, reseller/en-desktop/tags-shop, reseller/pt-desktop/tags-shop, reseller/en-desktop/settings-profile, reseller/en-phone/settings-organization
 Problema: o topo diz "What Skale Club sells. You order and pay in the Stuscle store, at your wholesale price." Logo abaixo dos produtos: "Your pieces come from Harbor Print Co.." (com ponto duplo).
 - O mesmo revendedor vê três empresas sem explicação: Skale Club (loja), Harbor Print (peças), Lindgren (Settings).
@@ -142,6 +147,7 @@ Arquivos: client/src/pages/tags/ShopScreen.tsx:232,253, client/src/pages/tags/Wh
 Risco: regra de negócio; depende do dono. Recomendo: revendedor de parceiro com distribuição própria não compra da Skale Club por este app. O "Skale Club" fixo já está no plano (SIMPLICITY_AUDIT item 2b).
 
 ### RCP-6 [S1] Peça desativada para sempre aparece como "Temporarily offline"
+Status: feito. Pausada e desativada leem "Esta peça não está disponível. Pergunte no local onde você a encontrou."
 Telas: public/en-phone/piece-retired, public/en-desktop/piece-retired, comparadas com piece-paused (idênticas)
 Problema: pausada e desativada mostram a mesma página: "Temporarily offline. The piece itself is still recognized". Para a peça desativada, "temporarily" é falso e o cliente fica esperando. "Still recognized" não diz nada a quem escaneou.
 O servidor esconde o motivo de propósito (comentário em `publicHandler.ts`), então a saída é um texto neutro que sirva aos dois casos.
@@ -153,6 +159,7 @@ Arquivos: server/tags/publicPages.ts:50,88
 Risco: nenhum. Mantém a regra de não expor o motivo.
 
 ### RCP-7 [S1] A página pública garante "QR + NFC are ready" sem saber se é verdade
+Status: feito. Saíram "verified", "QR + NFC are ready", o eyebrow "Authentic" e o slogan.
 Telas: public/en-phone/piece-not-received, public/en-phone/piece-in-stock-not-live, public/en-desktop dos mesmos; comparadas com reseller/en-phone/tags-pieces (ícone vermelho de chip nas peças sem cliente)
 Problema: "The piece is verified and connected." e "QR + NFC are ready" aparecem em toda peça `inventory`. Isso inclui peça ainda não recebida (lote só pedido) e peça cujo chip nunca foi gravado. O próprio app marca essas peças como chip pendente, então a página contradiz o app.
 Mudança: remover as frases sobre verificação e sobre QR/NFC; a nova redação está em RCP-24.
@@ -160,6 +167,7 @@ Arquivos: server/tags/publicPages.ts:30-37 (e as cópias pt/es)
 Risco: nenhum.
 
 ### RCP-8 [S1] Quem tem direito sobre os dados não tem como falar com o Xpot
+Status: pendente (dono). Falta o contato real de privacidade e a revisão jurídica; não inventei endereço nem texto.
 Telas: public/en-desktop/privacy, public/en-phone/privacy, public/en-desktop/privacy-pt, public/en-desktop/terms, public/en-phone/terms, public/en-desktop/terms-es
 Problema: a seção 1 diz "You can reach us through the contact at the end of this page". A seção 8 diz "People at businesses recorded in Xpot can make the same requests. Contact us". O fim da página diz só "Use the support contact shown in the app when you sign in."
 O contato é circular. Quem não tem conta (dono de negócio cadastrado, pessoa que escaneou) não tem como exercer o direito que a página promete, em LGPD, GDPR ou CCPA. O mesmo cartão está em Terms.
@@ -189,6 +197,7 @@ Risco: o `ShellHeader` é compartilhado com Visitas. Recomendo decidir uma vez p
 Status: feito. No celular, telas de aba têm uma barra de 48px (título e menu do avatar); dentro de uma peça, cliente, empresa ou visita não há barra, só voltar e título. Sem saudação, emoji, data nem logo; offline vira uma faixa. Vale para Visits também.
 
 ### RCP-10 [S2] O início é um relatório, e não diz o que fazer
+Status: feito. Home do revendedor: "Read a piece" + bloco "A fazer" (peças para terminar, sem cliente, pausadas) com a mesma contagem da lista aberta, e "Ver resultados" para `/tags/results` (gráfico, peças e clientes mais lidos). Saíram KPIs, "Recent scans" e "Phones used". A visão de gestão mantém o painel.
 Telas: reseller/en-phone/tags-home, reseller/en-desktop/tags-home, reseller/pt-desktop/tags-home, reseller/en-phone/visits-blocked-dashboard
 Problema: depois de "Read a piece" vêm 4 KPIs, gráfico, "Recent scans", "Most scanned pieces", "Customers with the most scans" e "Phones used". São 1605 px no celular. Nos dados do Kevin, as 3 listas mostram a mesma Malden Hardware. As 2 peças sem cliente não aparecem em lugar nenhum. O próprio plano diz que o trabalho desta tela é "Ler uma peça e configurar para o cliente" (SIMPLICITY_AUDIT, linha 185).
 Mudança: no perfil revendedor, fora da visão de gestão (`fleet`):
@@ -205,6 +214,7 @@ Arquivos: client/src/pages/tags/HomeScreen.tsx:250, client/src/pages/tags/TagsDa
 Risco: depende do dono. O plano adiou isso "depois de ver uso real" (item 7). Recomendo fazer já: as 3 listas repetidas se resolvem sozinhas. A visão de gestão continua com o painel.
 
 ### RCP-11 [S2] "Phones used" lista Windows e macOS
+Status: feito. Sai do revendedor; na gestão virou "Devices / Aparelhos / Dispositivos".
 Telas: reseller/en-phone/tags-home, reseller/en-desktop/tags-home, reseller/pt-desktop/tags-home
 Problema: o título diz "Phones used" e as linhas dizem iOS 11, Android 5, Windows 4, macOS 2. Além do erro, ninguém na rua decide nada com isso. "Est. visitors: 22", ao lado de "22 scans", também não acrescenta nada.
 Mudança: sai do revendedor (RCP-10). Se ficar na gestão: "Devices / Aparelhos / Dispositivos". Sai "Est. visitors" do revendedor.
@@ -250,6 +260,7 @@ Arquivos: client/src/i18n/messages/pieceScreen.ts:113-115, client/src/i18n/messa
 Risco: a tela de peça é compartilhada com a gestão, onde "In stock" faz sentido. Trocar só para o revendedor.
 
 ### RCP-15 [S2] O filtro não tem a opção de que ele mais precisa
+Status: feito, menos um detalhe. Chips "All / To finish / No customer yet / Live"; Paused foi para "More filters" (que abre sozinho com ele ativo); "To finish" conta como a Home. Não fiz busca e "More filters" na mesma linha em listas pequenas (precisaria de uma variante do `FilterBar`, compartilhado).
 Telas: reseller/en-phone/tags-pieces, reseller/en-desktop/tags-pieces, reseller/en-desktop/tags-pieces-search
 Problema: os chips são All, No customer yet, Live, Paused. A CA03GDEQ, única que pede ação, não cai em nenhum além de All. No celular, "Paused" fica cortado em "Paus" e "More filters" ocupa uma linha inteira para 4 peças.
 Mudança: chips "All / To finish / No customer yet / Live" (pt: "Todas / Para terminar / Sem cliente / No ar"; es: "Todas / Por terminar / Sin cliente / Activas"). "To finish" = com cliente e fora do ar, ou chip pendente. "Paused" vai para "More filters". Nas telas com até 10 peças, busca e "More filters" na mesma linha.
@@ -257,6 +268,7 @@ Arquivos: client/src/pages/tags/PiecesScreen.tsx:27,165
 Risco: nenhum.
 
 ### RCP-16 [S2] Na lista do celular, o nome do cliente some e a pílula cobre o tamanho
+Status: feito. No celular a linha tem 3 andares: cliente inteiro, código com selos, estados; o destino saiu.
 Telas: reseller/en-phone/tags-pieces
 Problema: "Lowell ..." é tudo o que resta de Lowell Street Laundromat, e "instagram...." é tudo do destino. A pílula "Chip not written" encosta e cobre o selo "L". O cliente é justamente o que ele procura nessa lista.
 Mudança: no celular, linha em 3 andares: cliente em largura total; código + selos; pílulas. O destino sai da linha no celular.
@@ -264,6 +276,7 @@ Arquivos: client/src/pages/tags/PiecesScreen.tsx:280-288
 Risco: nenhum.
 
 ### RCP-17 [S2] "Change destination" sem nada selecionado muda todas as peças do cliente
+Status: feito. 1 peça: sem checkbox e "Change destination"; várias: "Change all (3)" ou "Change selected (2)"; o ícone de remover cliente saiu da linha (fica na peça).
 Telas: reseller/en-phone/tags-customer-27, tags-customer-30, reseller/en-desktop/tags-customer-27, tags-customer-30, reseller/pt-desktop/tags-customer-27
 Problema: o botão aparece igual com ou sem seleção e não diz o alcance. O código aplica a todas quando nada está marcado. Um revendedor que quer trocar um link pode trocar os de todas as peças de um cliente. O título da folha seguinte traz a quantidade, mas a folha não foi capturada.
 Além disso, a linha tem checkbox mesmo com uma só peça, e um ícone de corrente quebrada sem rótulo que remove o cliente.
@@ -290,6 +303,7 @@ Arquivos: client/src/components/piece/PieceBody.tsx, client/src/components/piece
 Risco: a tela é compartilhada com a gestão. Pode coincidir com a área da peça de outro auditor; alinhar antes de mexer.
 
 ### RCP-19 [S2] "Write a plain chip" não diz o que é
+Status: feito. "Write a chip without Xpot", explicação nova, "Recent chips without Xpot", "Write without Xpot instead"; eyebrow removido.
 Telas: reseller/en-phone/tags-direct, reseller/en-desktop/tags-direct, reseller/es-desktop/tags-direct, reseller/en-desktop/command-palette
 Problema: "plain chip" é jargão, e EN diverge de PT/ES ("Gravar chip sem o Xpot"), que estão certos. "THE CUSTOMER'S OWN CONTENT" é outra expressão que não ajuda. "No analytics" é termo técnico. O aviso não diz a consequência em palavras simples.
 Mudança:
@@ -341,6 +355,7 @@ Risco: confirmar com o dono se "ficam no seu nome" é a regra.
 Status: feito. My company / Minha empresa / Mi empresa, e o novo texto do vínculo (confirmar com o dono se ficam no seu nome é a regra).
 
 ### RCP-23 [S2] Cliente, empresa, negócio: três palavras para a mesma coisa; "Chapa" e "placa" para a mesma peça
+Status: feito. "Customer" no lugar de "Company" nas telas de Tags (coluna, busca, filtro, nome sem cliente); Plate é "Placa" em pt e es (o Sign pt virou "Letreiro"). O tamanho por extenso na tela da peça é da F2.
 Telas: reseller/en-desktop/tags-customers, tags-pieces, tags-customer-27, reseller/en-phone/tags-direct, settings-organization, reseller/pt-desktop/tags-home, tags-customer-27, reseller/es-desktop/tags-piece-configured-no-chip, reseller/en-desktop/organizations
 Problema:
 - O menu diz "Customers". A tabela diz "COMPANY". A busca diz "Search code, company or label". O formulário diz "Search companies". O acesso diz "this business's plates".
@@ -353,6 +368,7 @@ Arquivos: client/src/i18n/messages/tags.ts:610,1056, client/src/pages/tags/Piece
 Risco: Tags e Visitas compartilham a empresa (Leads). A decisão D6 manteve Leads/Clientes em Visitas. Mudar só nas telas de Tags.
 
 ### RCP-24 [S2] A página pública fala de "experience" e empurra todo mundo para vender Xpot
+Status: feito. Cartão diz o que aconteceu e o que fazer, nos 4 estados, nas 3 línguas; o botão colorido só aparece com link de configuração (e agora também para peça pausada ou desativada); "What's Xpot?" é um link discreto no rodapé.
 Telas: public/en-phone/piece-in-stock-not-live, piece-not-received, piece-configured-not-live, piece-paused, piece-retired, piece-unknown-code, e public/en-desktop dos mesmos
 Problema: quem escaneia é um cliente no balcão, querendo deixar uma avaliação.
 - Ele lê "This Xpot is ready to come alive.", "This experience is almost ready.", "Setup in progress" (ninguém está configurando nada agora), "The physical link is verified". "A Xpot" não significa nada para ele.
@@ -372,6 +388,7 @@ Arquivos: server/tags/publicPages.ts:28-145,204-235
 Risco: `Discover Xpot` é divulgação e pode ser desejado pelo dono. Recomendo o link discreto: quem escaneou não é o público da landing.
 
 ### RCP-25 [S2] Não existe tela de entrada: `/login` e "Go to sign-in" caem na landing sem abrir nada
+Status: feito. `/login`, "Go to sign-in" e sessão vencida abrem a landing com o diálogo aberto e lembram o `next` (só caminho interno; testado com 3 casos).
 Telas: public/en-desktop/login, login-with-next, public/en-phone/login, pending/en-phone/pending-tags, pending-admin
 Problema: `/login` redireciona para `/` sem abrir o diálogo, e `?next=/tags/pieces` se perde em `cleanUrl()`. "Go to sign-in" faz o mesmo: o botão promete uma coisa e entrega a página de marketing. A pessoa precisa achar "Sign in" sozinha.
 Mudança: `/login` sem callback em andamento abre a landing com o diálogo aberto e guarda o `next`. "Go to sign-in" faz o mesmo. Usar o mecanismo que a landing já tem (`rememberPostLoginRedirect`, `setIsLoginOpen`).
@@ -379,6 +396,7 @@ Arquivos: client/src/pages/Login.tsx:50,62-76,140, client/src/pages/xpot/XpotLan
 Risco: o redirect só pode aceitar caminho interno. O diálogo de entrada não foi capturado (ver lacunas).
 
 ### RCP-26 [S2] `/my`: número sem o que está sendo contado
+Status: feito. "Scans this week" / "Scans in 30 days" (pt e es).
 Telas: customer/en-phone/my-plate-detail, customer/en-desktop/my-plate-detail, customer/en-phone/my-plates, customer/en-desktop/my-plates
 Problema: "57 THIS WEEK" e "156 30 DAYS". 57 o quê? Quem não conhece o produto não sabe, e o ícone não ajuda. A lista tem "57 scans this week" logo abaixo, então lá o número é repetido, não explicado.
 Mudança: `kpiWeek`, `kpiMonth`:
@@ -390,6 +408,7 @@ Arquivos: client/src/i18n/messages/myPlates.ts:39,40,123,124,201,202
 Risco: nenhum.
 
 ### RCP-27 [S2] A política de privacidade não cobre o dono da plaquinha
+Status: pendente (dono). Texto jurídico; não escrevi. Conferir o que `/my` guarda de fato antes.
 Telas: public/en-desktop/privacy, public/en-phone/privacy, public/en-desktop/privacy-pt, comparadas com customer/en-phone/my-plates e reseller/en-phone/tags-customer-27
 Problema: a abertura descreve quem usa o app como "sales reps, managers and admins". O `/my` tem outro público: o dono do negócio, que entra com telefone e SMS, e cujo telefone é acrescentado pelo revendedor. Não há seção para esse caso.
 Mudança: acrescentar "business owners who read their pieces" na abertura e, em "What we collect", um item:
@@ -402,6 +421,7 @@ Risco: pede revisão jurídica. Conferir o que o `/my` guarda de fato.
 ## S3
 
 ### RCP-28 [S3] Customers: 4 KPIs acima de uma lista que já diz tudo
+Status: feito. Saíram eyebrow e KPIs; busca só com 8 clientes ou mais; a linha avisa "1 piece to finish".
 Telas: reseller/en-phone/tags-customers, reseller/en-desktop/tags-customers
 Problema: "2 CUSTOMERS WITH PIECES" (eyebrow), título, KPIs 2, 2, 1, 22 em 230 px, e a lista de 2 linhas que repete os mesmos números. No celular, a lista só começa em y≈535. Busca em cartão próprio para 2 clientes.
 Mudança: saem eyebrow e KPIs. A busca só aparece com 8 clientes ou mais. Na linha, um aviso quando há o que fazer ("1 piece to finish"), no lugar de "0 live".
@@ -409,6 +429,7 @@ Arquivos: client/src/pages/tags/CustomersScreen.tsx:128,144-147,153
 Risco: nenhum no revendedor. O dono usa outra tela.
 
 ### RCP-29 [S3] "Plate owner access": bloco longo, nome interno, campo cortado
+Status: feito. Título e dica novos, país e número na linha 1 e "Allow" na 2 no celular, país padrão pelo telefone da empresa.
 Telas: reseller/en-phone/tags-customer-27, tags-customer-30, reseller/en-desktop dos mesmos, reseller/pt-desktop/tags-customer-27
 Problema: "Plate owner access" e 4 linhas de texto para explicar uma coisa simples. "Phone numb" é o que sobra do placeholder no celular, e "Allow" fica apertado. Em PT, o país veio +55 para um cliente dos EUA porque segue o idioma do aparelho.
 Mudança:
@@ -423,6 +444,7 @@ Arquivos: client/src/i18n/messages/myPlates.ts:69,70,150,151,228,229, client/src
 Risco: nenhum.
 
 ### RCP-30 [S3] Dados da empresa: telefone cru, e-mail partido, nome repetido
+Status: feito. Dados dobrados no celular ("Customer details"), telefone formatado, e-mail em linha inteira. O campo nome continua dentro dos dados.
 Telas: reseller/en-phone/tags-customer-27, tags-customer-30, reseller/en-desktop dos mesmos
 Problema: "+16175551182" e, mais abaixo no mesmo cartão, "+1 (617) 555-1182". E-mail quebrado no meio da palavra: "hello@maldenh / ardware.com", e "hello@lowellstre / etlaundromat.co / m" no desktop. "Customer name" repete o título da tela.
 Mudança: exibir o telefone com `formatPhone`. E-mail em linha inteira, sem o botão ao lado. No celular, cartão recolhido por padrão com "Company details". O nome some enquanto não está em edição.
@@ -430,6 +452,7 @@ Arquivos: client/src/pages/tags/CustomerScreen.tsx:481,482
 Risco: nenhum.
 
 ### RCP-31 [S3] Cartão do Google vazio, com "Unlink" a um toque
+Status: feito. Erro do Google com "Try again"; "Unlink" pede confirmação.
 Telas: reseller/en-phone/tags-customer-27, tags-customer-30, reseller/en-desktop dos mesmos, reseller/pt-desktop/tags-customer-27
 Problema: o cartão mostra só o título e "Unlink". O vazio pode ser o Google fora no laboratório, mas o código não trata erro: se a consulta falha, não aparece nada. "Unlink" age sem confirmar.
 Mudança: se a consulta falhar: "Couldn't load the Google profile. Try again." com botão. "Unlink" pede confirmação.
@@ -437,6 +460,7 @@ Arquivos: client/src/pages/tags/CustomerScreen.tsx:116,121-143
 Risco: nenhum.
 
 ### RCP-32 [S3] Texto da loja cheio de sistema e repetido em cada cartão
+Status: feito. Uma frase no topo, sem nota por cartão, "About $50.00", só o selo "Ready-made kit", título no celular.
 Telas: reseller/en-phone/tags-shop, reseller/en-desktop/tags-shop, reseller/pt-desktop/tags-shop
 Problema: "Piece model", "Reference price $50.00", "The price that counts is the one in Stuscle." em cada cartão. O texto do topo explica "Add to cart", mas 2 dos 3 cartões dizem "See it in the store". No celular a tela não tem título, ao contrário das outras abas. Vale para quem compra de fato pela loja; ver RCP-5.
 Mudança:
@@ -448,6 +472,7 @@ Arquivos: client/src/i18n/messages/tags.ts:437-443,455 (e pt/es), client/src/pag
 Risco: "o preço que vale é o da Stuscle" pode ter razão comercial. "About" cobre o mesmo sentido.
 
 ### RCP-33 [S3] "Your pieces come from…" em My pieces, toda vez
+Status: feito. Faixa saiu de My pieces.
 Telas: reseller/en-phone/tags-pieces, reseller/en-desktop/tags-pieces, tags-pieces-search
 Problema: uma faixa de largura total em todo acesso à lista, sem ação nenhuma.
 Mudança: sai de My pieces. Fica só em Shop (RCP-5) e em "More details" da peça.
@@ -455,6 +480,7 @@ Arquivos: client/src/pages/tags/PiecesScreen.tsx:305
 Risco: nenhum.
 
 ### RCP-34 [S3] Perfil pede e mostra o que o revendedor não usa
+Status: feito em parte. Dica da foto sem "visits" para quem só tem Tags e telefone de contato formatado. Pendente: "Display name" em "More" e o menu do módulo em Settings (F1).
 Telas: reseller/en-desktop/settings-profile, settings-signin, settings-language, settings-organization, settings-administration
 Problema:
 - "Shown to your team and on your visits." para quem não tem Visitas.
@@ -470,6 +496,7 @@ Arquivos: client/src/i18n/messages/navIa.ts:26, client/src/pages/xpot/XpotSettin
 Risco: nenhum.
 
 ### RCP-35 [S3] Vermelho para quem só entrou no lugar errado
+Status: feito. Tom neutro, sem seta, "This area is for company managers." / "Back to Xpot".
 Telas: reseller/en-phone/restricted-admin-home, reseller/en-desktop/restricted-admin-home, restricted-admin-stock
 Problema: cartão vermelho com escudo, "Access restricted", "You don't have access to management". Nada está quebrado, e "management" é palavra interna. Seta e botão fazem a mesma coisa.
 Mudança: tom neutro, sem a seta.
@@ -480,6 +507,7 @@ Arquivos: client/src/pages/admin/AdminApp.tsx:59, client/src/i18n/messages/manag
 Risco: nenhum.
 
 ### RCP-36 [S3] Código não encontrado, sem próximo passo
+Status: feito. "Piece not found" com o que conferir e "Read another piece".
 Telas: reseller/en-desktop/tags-piece-unknown
 Problema: título "ZZZZZZZZ", depois "No piece with code ZZZZZZZZ." Repete o código e para aí.
 Mudança: título "Piece not found / Peça não encontrada / Pieza no encontrada". Corpo:
@@ -491,6 +519,7 @@ Arquivos: client/src/i18n/messages/tags.ts:94,560,1006
 Risco: a mensagem não pode revelar se a peça existe para outra pessoa. Este texto não revela.
 
 ### RCP-37 [S3] `/my`: falta o nome do negócio, e "plate" para um Stand
+Status: feito. Nome do negócio sempre sob o título; sem KPIs com 1 plaquinha. "Plates" ficou, como recomendado.
 Telas: customer/en-phone/my-plates, customer/en-desktop/my-plates
 Problema:
 - O nome do negócio só aparece com 2 negócios ou mais, então o dono não confirma que está vendo o dele.
@@ -504,6 +533,7 @@ Arquivos: client/src/pages/my/Plates.tsx:70-72,81, client/src/i18n/messages/myPl
 Risco: depende do dono. O plano cita `/my` como referência de tom por usar "plates". Recomendo manter "plates" até haver muitos Stands em uso, e só resolver o nome do negócio agora.
 
 ### RCP-38 [S3] `/my`: URL crua e "Large Stand" solto
+Status: feito. Mostra o tipo do destino e o site; o link inteiro fica em "Open this link"; "Large Stand" saiu.
 Telas: customer/en-phone/my-plate-detail, customer/en-desktop/my-plate-detail
 Problema: "https://search.google.com/local/writereview?placeid=ChIJlabReview" em duas linhas para um dono de negócio, partida no meio. "Large Stand" sozinho no fim do cartão repete o título.
 Mudança: mostrar o nome do destino ("Google Review") e o domínio; o link inteiro só atrás de "Open this link". Sai "Large Stand".
@@ -511,6 +541,7 @@ Arquivos: client/src/pages/my/PlateDetail.tsx:94-103
 Risco: nenhum.
 
 ### RCP-39 [S3] `/my`: placa não encontrada sem botão
+Status: feito. Botão "Back to my plates".
 Telas: customer/en-desktop/my-plate-unknown
 Problema: "We couldn't find that plate." e só a seta pequena no alto.
 Mudança: botão "Back to my plates / Voltar às minhas placas / Volver a mis placas".
@@ -518,6 +549,7 @@ Arquivos: client/src/pages/my/PlateDetail.tsx:28, client/src/i18n/messages/myPla
 Risco: nenhum.
 
 ### RCP-40 [S3] Página inexistente vira landing sem aviso
+Status: feito. Endereço desconhecido diz "We couldn't find this page." com "Go to the home page"; as rotas de Visits são listadas em `isVisitsPath` (teste).
 Telas: public/en-desktop/unknown-page
 Problema: `/this-page-does-not-exist` cai em "Sell on your schedule", sem dizer que o endereço está errado. Quem clicou num link antigo acha que foi enganado. A causa é que toda rota desconhecida entra no `VisitsGate`, que redireciona em 401.
 Mudança: rota desconhecida sem sessão mostra:
@@ -528,6 +560,7 @@ Arquivos: client/src/App.tsx:76,240-242
 Risco: é preciso listar as rotas de Visitas válidas para distinguir.
 
 ### RCP-41 [S3] Landing no celular: 6884 px e prints ilegíveis
+Status: feito. No celular não há prints dos cartões 1 a 3; o mock do telefone deixa "Sale · 6 review stands" quebrar em vez de cortar.
 Telas: public/en-phone/landing, landing-pt, landing-es, pending/en-phone/pending-landing
 Problema: os 4 cartões de "One app…" espremem um print do app em cerca de 130 px de largura. No de cima, o texto da tela é ilegível. No mock do telefone, "Sale · 6 re…" está cortado e "Visit in progress" quebra em duas linhas ao lado de "At the door · 38 m". A primeira dobra funciona bem: título, "Create an account", "See how it works", e a foto cortada convida a rolar.
 Mudança: no celular, print acima do texto em largura total, ou nenhum print. Recomendo tirar os prints dos cartões 1 a 3 no celular: fica mais curto e a lista de itens já explica. Aumentar a coluna de "Sale · 6 review stands".
@@ -535,6 +568,7 @@ Arquivos: client/src/pages/xpot/XpotLandingPage.tsx
 Risco: nenhum.
 
 ### RCP-42 [S3] Landing em PT e ES com prints em inglês
+Status: feito sem prints novos. Em pt e es os prints em inglês não aparecem; ficaram os textos e a foto dos stands. Gerar prints traduzidos fica para quem tiver os dados de demonstração.
 Telas: public/en-desktop/landing-pt, landing-es, public/en-phone/landing-pt, landing-es
 Problema: toda a página está traduzida, mas os prints mostram "Tuesday, October 20", "Use this route", "Open route in Google Maps", "SLIDE TO CHECK IN", "Overview". Quem lê português vê um produto em inglês.
 Mudança: capturar os 3 prints em PT e ES e servir por idioma, ou trocá-los por mock em HTML como o do cartão "Your selling day".
@@ -542,6 +576,7 @@ Arquivos: client/src/pages/xpot/XpotLandingPage.tsx
 Risco: nenhum.
 
 ### RCP-43 [S3] Figura da peça com Instagram apontando para Google Review, sem aviso
+Status: feito. Aviso (sem bloquear) no editor e na peça: "Esta peça está impressa para Instagram, mas este link abre Google Review"; regra em `destinationNotPrinted` com teste.
 Telas: reseller/en-phone/tags-piece-live, tags-pieces, tags-home, reseller/en-desktop/tags-customer-27
 Problema: T339MPEV mostra a figura do Instagram, e o destino é "Google Review". Se a peça impressa diz "Follow on Instagram", quem escaneia cai em outro lugar. Pode ser só combinação do seed; o app não diz nada de qualquer forma.
 Mudança: em `LinkInput` e na peça, quando o tipo do destino divergir do que está impresso:
@@ -553,6 +588,7 @@ Arquivos: client/src/pages/tags/CustomerScreen.tsx:539, client/src/components/pi
 Risco: confirmar a origem do dado. Se o seed for o único caso, a prioridade cai.
 
 ### RCP-44 [S3] "Write a plain chip" não tem entrada no celular
+Status: feito. Link "Write a chip without Xpot" na folha "Read a piece" e seta de voltar na tela.
 Telas: reseller/en-phone/tags-direct, reseller/en-desktop/command-palette, reseller/en-desktop/tags-home
 Problema: o comentário em `TagsTabBar.tsx:12` e em `moduleNav.ts:215` diz "reached from the dashboard", mas o início não tem o link. No desktop, só pela busca. No celular, só depois de ler um chip vazio, e a tela não tem voltar: a aba acesa é Home.
 Mudança: link discreto no fim da folha "Read a piece": "Write a chip without Xpot". Seta de voltar na tela.
@@ -562,6 +598,7 @@ Risco: a folha não foi capturada; a posição veio do código.
 ## S4
 
 ### RCP-45 [S4] Rótulo de KPI cortado
+Status: feito. O rótulo do `KpiTile` quebra em 2 linhas.
 Telas: reseller/en-phone/tags-customer-27, tags-customer-30
 Problema: "SCANS (30 DA…".
 Mudança: no `KpiTile`, deixar o rótulo quebrar em 2 linhas em vez de cortar. Encurtar para "Scans 30d" não serve, porque fica obscuro.
@@ -569,6 +606,7 @@ Arquivos: client/src/components/xpot/DashboardKit.tsx (KpiTile), client/src/page
 Risco: nenhum.
 
 ### RCP-46 [S4] Primeira data do gráfico cortada e legenda quebrada
+Status: feito. `EdgeTick` mantém o primeiro e o último rótulo dentro do gráfico; "Est. visitors" saiu do revendedor.
 Telas: reseller/en-phone/tags-home, customer/en-phone/my-plate-detail, customer/en-desktop/my-plate-detail, reseller/pt-desktop/tags-home
 Problema: "ct 3" em vez de "Oct 3" no celular e no `/my`. Em PT, o início de "3 de out." também é cortado, até no desktop. A legenda quebra em "· Est. / visitors: 22".
 Mudança: `XAxis` com `padding` à esquerda, ou primeiro rótulo alinhado à esquerda. A legenda sem "Est. visitors" (RCP-11) cabe numa linha.
@@ -576,6 +614,7 @@ Arquivos: client/src/pages/tags/charts.ts:40,46, client/src/pages/tags/TagsDashb
 Risco: nenhum.
 
 ### RCP-47 [S4] Cor contraria o sentido
+Status: feito. Zero clientes no ar em cinza sem bolinha; `chip_programmed` = "Written, not checked" (pt e es também).
 Telas: reseller/en-desktop/tags-customers, reseller/en-phone/tags-direct, reseller/en-desktop/tags-direct, reseller/es-desktop/tags-direct
 Problema: "● 0" em verde na coluna Live: zero peças no ar com cara de tudo certo. "Chip written" em âmbar, cor de pendência, com um texto que soa como concluído. O âmbar existe porque o chip foi gravado e ainda não conferido, mas o texto não diz isso.
 Mudança: zero em cinza, sem bolinha. Manter o âmbar e trocar o texto de `chip_programmed`: "Written, not checked / Gravado, sem conferir / Grabado, sin verificar".
@@ -583,6 +622,7 @@ Arquivos: client/src/pages/tags/CustomersScreen.tsx, client/src/pages/tags/Direc
 Risco: `chip_programmed` aparece em outras telas; o novo texto vale para todas.
 
 ### RCP-48 [S4] Título público com letras encostando; slogan contradiz a página
+Status: feito. Espaçamento de letras -0,02em e sem slogan.
 Telas: public/en-desktop/piece-configured-not-live, piece-paused, piece-unknown-code, public/en-phone dos mesmos
 Problema: o título em fonte de sistema com espaçamento muito negativo faz as letras se tocarem ("experience", "ready"). "One physical link. Always the right destination." aparece embaixo de "This experience is unavailable" e "We could not find this Xpot", com contraste muito baixo.
 Mudança: letter-spacing de no máximo -0,02em. O slogan só na página do QR que funciona, ou em nenhuma.
@@ -590,6 +630,7 @@ Arquivos: server/tags/publicPages.ts (PAGE_STYLE e `promise`)
 Risco: nenhum.
 
 ### RCP-49 [S4] Título e logo somem e aparecem sem regra
+Status: feito. Shop e Results têm título no celular; `/my` sem logo nas duas telas.
 Telas: reseller/en-phone/tags-shop comparada com tags-customers e tags-pieces; customer/en-phone/my-plates comparada com my-plate-detail
 Problema: Shop não tem título no celular, Customers e My pieces têm. No `/my`, a lista não tem logo e o detalhe tem.
 Mudança: Shop ganha `TopBar`. No `/my`, logo em nenhuma das duas, ou em ambas. Recomendo nenhuma: o usuário já sabe onde está.

@@ -22,14 +22,15 @@ import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { errorText, tagsGet } from "./lib";
-import { CARD, EYEBROW_MUTED } from "./ui";
-import { WholesaleCard } from "./WholesaleCard";
+import { CARD, EYEBROW_MUTED, TopBar } from "./ui";
+import { partnerLine, useWholesale, WholesaleCard } from "./WholesaleCard";
 
 // Tags › Shop: a showcase of what Skale Club sells, as a carousel. The pieces a reseller already has live in My pieces,
 // not here. First the Stuscle wholesale catalogue, read from Stuscle (the same products and prices as its /wholesale
 // page), then the ready-made kits the Xpot admin keeps (Manage › Shop). Xpot sells nothing itself: Add to cart opens
 // the Stuscle store with the reader's own wholesale code and the piece already in the cart, on the product's wholesale
-// page. The price that counts is Stuscle's.
+// page. The price that counts is Stuscle's. A reseller whose partner handles its own distribution does not buy here
+// at all: the screen says whose pieces they are and to ask them (no catalogue, no price, no code).
 
 const CARD_WIDTH = "w-[82%] shrink-0 snap-start sm:w-[300px]";
 
@@ -141,7 +142,7 @@ function ShopCard({ item }: { item: TagShowcaseView }) {
       <div className="flex flex-1 flex-col gap-3 p-4">
         <div className="flex items-start justify-between gap-2">
           <h2 className="min-w-0 text-base font-bold leading-snug text-white">{item.title}</h2>
-          <Pill tone={kit ? "violet" : "slate"} className="shrink-0">{kit ? t("shopKit") : t("shopModel")}</Pill>
+          {kit && <Pill tone="violet" className="shrink-0">{t("shopKit")}</Pill>}
         </div>
         {item.description && <p className="text-sm text-white/60">{item.description}</p>}
         {item.includes.length > 0 && (
@@ -161,7 +162,6 @@ function ShopCard({ item }: { item: TagShowcaseView }) {
           {item.referencePriceCents !== null && (
             <p className="text-sm text-white/70">
               <span className="font-semibold text-white">{t("shopReferencePrice", { price: formatMoney(item.referencePriceCents, item.currency) })}</span>
-              <span className="block text-xs text-white/40">{t("shopPriceNote")}</span>
             </p>
           )}
           <Button asChild variant="brand" accent="tags" size="lg" className="w-full">
@@ -230,19 +230,33 @@ export default function ShopScreen() {
   // A partner makes its own pieces: no buying for it (shared/profiles.ts, "buyPieces"). Until /me loads, the shop stays.
   const profile = profileOfMe(me);
   const buying = !profile || can(profile, "buyPieces");
+  // Whose partner distributes its own pieces has no store to buy from: ask first, so the catalogue is never fetched or shown for them.
+  const wholesale = useWholesale(buying);
+  const partner = wholesale.data && wholesale.data.code === null && wholesale.data.url === null ? wholesale.data.partner ?? null : null;
+  const storeKnown = !buying || wholesale.isFetched;
   const catalog = useQuery({
     queryKey: ["/api/xpot/tags/shop-catalog"],
     queryFn: () => tagsGet<TagShopCatalog>("/api/xpot/tags/shop-catalog"),
     staleTime: 60_000,
-    enabled: buying,
+    enabled: buying && storeKnown && !partner,
   });
   const entries = useQuery({
-    queryKey: ["/api/xpot/tags/showcase"],
-    queryFn: () => tagsGet<TagShowcaseView[]>("/api/xpot/tags/showcase"),
+    // The entries' words come in the reader's language where the admin wrote them (shared/tagShowcase.ts showcaseInLanguage).
+    queryKey: ["/api/xpot/tags/showcase", t.lang],
+    queryFn: () => tagsGet<TagShowcaseView[]>(`/api/xpot/tags/showcase?lang=${t.lang}`),
     staleTime: 60_000,
-    enabled: buying,
+    enabled: buying && storeKnown && !partner,
   });
   if (!buying) return <div className="space-y-5" data-testid="tags-shop"><EmptyState tone="tags" icon={ShoppingBag} title={t("shopProducerTitle")} hint={t("shopProducerHint")} /></div>;
+  if (partner) {
+    return (
+      <div className="space-y-5" data-testid="tags-shop">
+        <div className="lg:hidden"><TopBar title={t("navShop")} /></div>
+        <EmptyState tone="tags" icon={ShoppingBag} title={<span data-testid="wholesale-partner">{partnerLine(t("wholesalePartner", { name: partner }))}</span>} />
+      </div>
+    );
+  }
+  if (!storeKnown) return <div className="space-y-5" data-testid="tags-shop"><div className="lg:hidden"><TopBar title={t("navShop")} /></div><ListSkeleton rows={3} /></div>;
   const products = catalog.data?.products ?? [];
   const kits = entries.data ?? [];
   const count = products.length + kits.length;
@@ -250,9 +264,8 @@ export default function ShopScreen() {
 
   return (
     <div className="space-y-5" data-testid="tags-shop">
-      <p className="text-sm text-white/60">
-        {t("shopIntro")}
-        <span className="block text-xs text-white/35">{t("shopOpensStore")}</span>      </p>
+      <div className="lg:hidden"><TopBar title={t("navShop")} /></div>
+      <p className="text-sm text-white/60">{t("shopIntro")}</p>
 
       {failed && !count ? (
         <ErrorState

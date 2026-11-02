@@ -147,7 +147,8 @@ export default function TagScreen({ code, onClose }: {
           <EmptyState
             tone="tags"
             icon={ScanLine}
-            title={<span data-testid="text-tag-error">{data?.kind === "not_yours" ? t("notYours") : t("notFound", { code })}</span>}
+            title={<span data-testid="text-tag-error">{data?.kind === "not_yours" ? t("notYours") : t("pieceNotFoundTitle")}</span>}
+            hint={data?.kind === "not_yours" ? undefined : t("pieceNotFoundHint")}
             action={readAnother}
           />
         )}

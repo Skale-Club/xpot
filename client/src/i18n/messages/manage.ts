@@ -12,7 +12,7 @@ const en = {
   noAdminPermission: "Only the platform can open this screen.",
   ownersOnly: "This area is for company owners.",
   signInToContinue: "Sign in to continue.",
-  backToApp: "Back to app",
+  backToApp: "Back to Xpot",
 
   // Shared
   error: "Error",
@@ -238,7 +238,7 @@ export const manageMessages: Dictionary<typeof en> = {
     noAdminPermission: "Só a plataforma abre esta tela.",
     ownersOnly: "Esta área é para donos de empresa.",
     signInToContinue: "Entre para continuar.",
-    backToApp: "Voltar ao app",
+    backToApp: "Voltar ao Xpot",
 
     error: "Erro",
     errorSaving: "Erro ao salvar",
@@ -452,7 +452,7 @@ export const manageMessages: Dictionary<typeof en> = {
     noAdminPermission: "Solo la plataforma abre esta pantalla.",
     ownersOnly: "Esta área es para dueños de empresa.",
     signInToContinue: "Inicia sesión para continuar.",
-    backToApp: "Volver a la app",
+    backToApp: "Volver a Xpot",
 
     error: "Error",
     errorSaving: "Error al guardar",

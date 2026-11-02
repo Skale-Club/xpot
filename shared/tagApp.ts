@@ -236,8 +236,11 @@ export function chipNeedsWriting(tag: { status: string; nfcStatus: string }): bo
   return (tag.status === "assigned" || tag.status === "active") && (tag.nfcStatus === "not_programmed" || tag.nfcStatus === "failed");
 }
 
-/** Where the piece is in its life. "setup": not live yet (in the kit, or linked without a link). */
-export const PIECE_STATUS_FILTERS = ["all", "setup", "active", "off"] as const;
+/**
+ * Where the piece is in its life. "finish": not ready to hand over (a customer chosen but not live, or a chip to
+ * write). "setup": no customer yet (still in the kit). "active": live. "off": paused.
+ */
+export const PIECE_STATUS_FILTERS = ["all", "finish", "setup", "active", "off"] as const;
 export type PieceStatusFilter = (typeof PIECE_STATUS_FILTERS)[number];
 /** Whether a financial sale was recorded; independent of the status. */
 export const PIECE_SALE_FILTERS = ["all", "sold", "unsold"] as const;
@@ -265,11 +268,18 @@ export function matchesPieceFilters(
   tag: { status: string; saleId: number | null; nfcStatus: string },
   filters: PieceFilters,
 ): boolean {
-  if (filters.status === "setup" && tag.status !== "inventory" && tag.status !== "assigned") return false;
+  if (filters.status === "finish" && tag.status !== "assigned" && !chipNeedsWriting(tag)) return false;
+  if (filters.status === "setup" && tag.status !== "inventory") return false;
   if (filters.status === "active" && tag.status !== "active") return false;
   if (filters.status === "off" && tag.status !== "disabled") return false;
   if (filters.sale === "sold" && !tag.saleId) return false;
   if (filters.sale === "unsold" && tag.saleId) return false;
   if (filters.chip === "missing" && !chipNeedsWriting(tag)) return false;
   return true;
+}
+
+/** What is waiting for a reseller, one number per kind, from the pieces they hold (the Home "To do" block). */
+export function resellerTodo(pieces: ReadonlyArray<{ status: string; saleId: number | null; nfcStatus: string }>): { finish: number; noCustomer: number; paused: number } {
+  const count = (status: PieceStatusFilter) => pieces.filter((piece) => matchesPieceFilters(piece, { status, sale: "all", chip: "all" })).length;
+  return { finish: count("finish"), noCustomer: count("setup"), paused: count("off") };
 }

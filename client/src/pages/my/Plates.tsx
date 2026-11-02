@@ -63,15 +63,23 @@ export function Plates() {
   const { totals } = pieces.data;
   // A customer with several businesses sees each one's plates under its name.
   const groups = pieces.data.pieces.reduce<Map<string, CustomerPiece[]>>((map, p) => map.set(p.businessName, [...(map.get(p.businessName) ?? []), p]), new Map());
+  // One plate says everything in its own row: the totals above it would only repeat its numbers.
+  const showTotals = totals.pieces > 1;
 
   return (
     <div className="space-y-4" data-testid="my-plates">
-      <div className="grid grid-cols-3 gap-2">
-        <KpiTile accent="violet" icon={Package} value={formatCount(totals.pieces, t.locale)} label={t("kpiPlates")} />
-        <KpiTile accent="violet" icon={Radio} value={formatCount(totals.live, t.locale)} label={t("kpiLive")} />
-        <KpiTile accent="violet" icon={ScanLine} value={formatCount(totals.scans7, t.locale)} label={t("kpiWeek")} />
-      </div>
-      <p className="px-1 text-sm text-white/50">{t.plural("scansMonth", totals.scans30)}</p>
+      {/* Whose plates these are, always: it is how the owner knows this is their business. */}
+      {groups.size === 1 && <p className="-mt-2 px-1 text-sm text-white/55" data-testid="my-business">{Array.from(groups.keys())[0]}</p>}
+      {showTotals && (
+        <>
+          <div className="grid grid-cols-3 gap-2">
+            <KpiTile accent="violet" icon={Package} value={formatCount(totals.pieces, t.locale)} label={t("kpiPlates")} />
+            <KpiTile accent="violet" icon={Radio} value={formatCount(totals.live, t.locale)} label={t("kpiLive")} />
+            <KpiTile accent="violet" icon={ScanLine} value={formatCount(totals.scans7, t.locale)} label={t("kpiWeek")} />
+          </div>
+          <p className="px-1 text-sm text-white/50">{t.plural("scansMonth", totals.scans30)}</p>
+        </>
+      )}
 
       {totals.pieces === 0 ? (
         <EmptyState tone="tags" icon={Package} title={t("noPlates")} hint={t("noPlatesHint")} />

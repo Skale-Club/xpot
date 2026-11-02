@@ -259,6 +259,7 @@ Arquivos: pages/admin/tags/production-identity.tsx:34
 Risco: nenhum.
 
 ### ID-07 [S2] Loja do revendedor com conteúdo só em inglês
+Status: feito. Migração 0072 (aditiva: coluna `translations jsonb`, padrão `{}`), o Shop pede a língua do leitor, cada campo cai no texto principal, e Manage > Shop ganhou "Other languages" (pt e es). Decisão do dono ainda vale: quais línguas de fato.
 Telas: reseller/pt-desktop/tags-shop, reseller/es-desktop/tags-shop
 Problema: a tela está em português, mas o cartão diz "A flat plate that opens the restaurant's menu.", "The counter stand customers tap to leave a Google review…", "QR printed on the face", "Starter kit · 10 plates". O texto vem do laboratório, mas o cadastro só tem um campo por entrada, então qualquer texto real ficaria num idioma só. É a tela em que o revendedor decide comprar.
 Mudança: campos opcionais por idioma em título, descrição e itens, com fallback para o idioma principal.
@@ -297,6 +298,7 @@ Risco: nenhum.
 Status: feito
 
 ### ID-14 [S2] Dica do telefone de acesso diz coisas diferentes por idioma
+Status: feito. "Only the Xpot team can change it." nas 3 línguas. O link para a linha em People para o admin não foi feito.
 Telas: platform/en-desktop/settings-signin, reseller/pt-desktop/settings-profile, reseller/es-desktop/settings-profile, platform/pt-desktop/settings-profile
 Problema: en "To change it, ask the platform.", es "pídeselo a la plataforma", pt "peça a um gestor". Só o admin da plataforma pode trocar, então o pt manda a pessoa ao lugar errado. "The platform" não quer dizer nada para ela. Marcus, que é o próprio admin, também recebe a frase.
 Mudança: en "Only the Xpot team can change it.", pt "Só a equipe do Xpot pode trocar.", es "Solo el equipo de Xpot puede cambiarlo." Para o admin, um link para a própria linha em People.

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { AppBackground } from "@/components/xpot/AppBackground";
 import { EmptyState } from "@/components/xpot/EmptyState";
 import { PageHeader } from "@/components/xpot/PageHeader";
+import { SessionGate } from "@/components/xpot/SessionGate";
 import { AppLayout } from "@/components/xpot/AppLayout";
 import { panelGroups } from "@/components/xpot/moduleNav";
 import { usePanelNames } from "@/components/xpot/panelNames";
@@ -23,7 +24,6 @@ import { AdminHome } from "./AdminHome";
 import { AdminWork } from "./AdminWork";
 import { can } from "@shared/profiles";
 import { useT } from "@/i18n";
-import { commonMessages } from "@/i18n/messages/common";
 import { shellMessages } from "@/i18n/messages/shell";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { navIaMessages } from "@/i18n/messages/navIa";
@@ -46,7 +46,6 @@ export function AdminApp({ section }: { section: string }) {
   const meQuery = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
   const t = useT(shellMessages);
   const tt = useT(tagsMessages);
-  const tc = useT(commonMessages);
   const tm = useT(manageMessages);
   const tn = useT(navIaMessages);
   const tw = useT(workspacesMessages);
@@ -55,12 +54,14 @@ export function AdminApp({ section }: { section: string }) {
   const me = meQuery.data;
   const active = SECTIONS.find((id) => id === section) ?? "home";
   if (meQuery.isLoading) return <AppLoader />;
+  // No session, a sign-up under review or no signal: the gate says which (it is not "access restricted").
+  if (!me) return <SessionGate error={meQuery.error} />;
   const profile = profileOfMe(me);
   const hasPanel = !!profile && can(profile, "useManagementPanel");
   const allowed = hasPanel && (profile === "platform" || ORGANIZATION_SECTIONS.includes(active));
   if (!me || !hasPanel) {
     const exit = me ? homeForModules(modules) : "/";
-    return <AppBackground><div className="mx-auto w-full max-w-md px-4 pb-20 pt-6"><PageHeader backHref={exit} backLabel={me ? tm("backToApp") : tc("goToSignIn")} title={tm("accessRestricted")} /><EmptyState tone="red" icon={ShieldAlert} title={me ? tm("ownersOnly") : tm("signInToContinue")} action={<Button variant="secondary" onClick={() => navigate(exit)}>{me ? tm("backToApp") : tc("goToSignIn")}</Button>} /></div></AppBackground>;
+    return <AppBackground><div className="mx-auto w-full max-w-md px-4 pb-20 pt-6"><PageHeader backHref={exit} backLabel={me ? tm("backToApp") : tc("goToSignIn")} title={tm("accessRestricted")} /><EmptyState icon={ShieldAlert} title={me ? tm("ownersOnly") : tm("signInToContinue")} action={<Button variant="secondary" onClick={() => navigate(exit)}>{me ? tm("backToApp") : tc("goToSignIn")}</Button>} /></div></AppBackground>;
   }
   const panelName = nameOf(profile);
   const groups = panelGroups(profile, modules, { shell: t, tags: tt, nav: tn }, names, ownedOrganizationId(me));
@@ -71,7 +72,7 @@ export function AdminApp({ section }: { section: string }) {
   const lookupBox = lookupAllowed && !/^\/admin\/tags\/pieces\/?$/.test(location);
   // A screen the person's panel does not have: said inside the panel, with the way back to Today.
   if (!allowed) return <AppLayout title={panelName} size="wide" mobileMaxWidth="max-w-5xl" mobileColumnClassName="pb-10 pt-5">
-    <EmptyState tone="red" icon={ShieldAlert} title={tm("accessRestricted")} hint={tm("noAdminPermission")} action={<Button variant="secondary" onClick={() => navigate("/admin")}>{tw("todayTitle")}</Button>} />
+    <EmptyState icon={ShieldAlert} title={tm("accessRestricted")} hint={tm("noAdminPermission")} action={<Button variant="secondary" onClick={() => navigate("/admin")}>{tw("todayTitle")}</Button>} />
   </AppLayout>;
   return <AppLayout title={title} size="wide" mobileMaxWidth="max-w-5xl" mobileColumnClassName="pb-10 pt-5"
     topBarActions={lookupBox ? <CodeLookup onFound={(id) => navigate(`/admin/tags/pieces/${id}`)} /> : undefined}

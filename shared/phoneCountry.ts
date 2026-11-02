@@ -54,3 +54,12 @@ export function countryIsoFromHeaders(headers: Record<string, string | string[] 
   }
   return null;
 }
+/** The picker's dial codes, longest first so "351" is not read as "3". */
+const PICKER_DIAL_CODES = ["351", "55", "52", "57", "34", "1"] as const;
+
+/** The dial code of a number in international form ("+16175551182" is "1"), or null when it is not one the picker offers. */
+export function dialCodeOf(phone: string | null | undefined): string | null {
+  const text = (phone ?? "").trim();
+  const digits = text.startsWith("+") ? text.replace(/\D/g, "") : "";
+  return PICKER_DIAL_CODES.find((code) => digits.startsWith(code)) ?? null;
+}

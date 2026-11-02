@@ -239,7 +239,7 @@ export function KpiTile({
       ) : (
         <div className="mt-3 truncate text-xl font-extrabold leading-none tracking-tight text-white tabular-nums lg:text-2xl">{value}</div>
       )}
-      <div className="mt-1.5 truncate text-[9px] font-bold uppercase tracking-[0.12em] text-white/35 lg:text-[10px]">{label}</div>
+      <div className="mt-1.5 break-words text-[9px] font-bold uppercase leading-snug tracking-[0.12em] text-white/35 lg:text-[10px]">{label}</div>
       {detail ? <div className="mt-1 hidden truncate text-[11px] text-white/30 lg:block">{detail}</div> : null}
     </Root>
   );

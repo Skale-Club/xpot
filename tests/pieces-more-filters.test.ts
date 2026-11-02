@@ -9,6 +9,11 @@ describe("countMorePieceFilters", () => {
     expect(countMorePieceFilters({ status: "active", q: "abc", lead: "4", sale: "all", chip: "", scan: "all" })).toBe(0);
   });
 
+  it("counts Paused, a status that waits behind them (the four chips in view are the ones that matter)", () => {
+    expect(countMorePieceFilters({ status: "off" })).toBe(1);
+    expect(countMorePieceFilters({ status: "finish" })).toBe(0);
+  });
+
   it("counts a ?chip=missing link", () => {
     expect(countMorePieceFilters({ chip: "missing" })).toBe(1);
   });
