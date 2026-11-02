@@ -21,8 +21,9 @@ import { catalogOptions, useTagCatalog } from "@/pages/admin/tags/batches-shared
 import { useTagLabels } from "@/pages/admin/tags/labels";
 import { errorText } from "@/pages/tags/lib";
 import { BottomSheet, CARD } from "@/pages/tags/ui";
+import { PieceStatusChips } from "./PieceHeader";
 import { usePiece, usePieceWrite } from "./PieceContext";
-import { kitShort, pieceActionUrl, pieceCrossLink, type PieceAction } from "./pieceView";
+import { kitShort, pieceActionUrl, pieceCrossLink, pieceHasLocation, pieceIsSold, type PieceAction } from "./pieceView";
 
 // Management (managers and admins): custody (batch, kit, holder, ownership,
 // acquisition cost), Transfer / Take back through the stock rules
@@ -56,6 +57,10 @@ export function ManagementSection() {
   const cross = pieceCrossLink(viewer, tag);
   const qrBase = `/api/xpot/admin/tags/${tag.id}`;
   const holder = tag.repId !== null ? tag.repName ?? tm("resellerNumber", { id: tag.repId }) : tm("houseStock");
+  // "With" only for a piece somebody has in stock; a sold piece says who sold it; a lost or not yet received one, nothing.
+  const holderRow = pieceHasLocation(tag)
+    ? { label: tp("rowHolder"), value: holder }
+    : pieceIsSold(tag) && tag.repId !== null ? { label: tp("rowSoldBy"), value: holder } : null;
   const kit = kitShort(tag.kitId, tag.kitCode);
 
   return (
@@ -87,7 +92,7 @@ export function ManagementSection() {
           ) : "—"}
         />
         <Row label={tp("rowKit")} value={kit ? <span className="font-mono">{tp("locationKit", { id: kit })}</span> : tp("noKit")} />
-        <Row label={tp("rowHolder")} value={holder} testId="piece-holder" />
+        {holderRow ? <Row label={holderRow.label} value={holderRow.value} testId="piece-holder" /> : null}
         <Row label={tp("rowOwnership")} value={tp(`ownership_${tag.ownershipType}` as "ownership_company")} />
         <Row label={tp("rowCost")} value={tag.acquisitionCostCents != null ? formatCents(tag.acquisitionCostCents) : tp("noCost")} />
         {tag.internalUseNote ? <Row label={tp("rowInternalUse")} value={tag.internalUseNote} /> : null}
@@ -124,6 +129,7 @@ export function ManagementSection() {
           {tm("technicalDetails")}
         </summary>
         <div className="mt-3 space-y-3">
+          <PieceStatusChips tag={tag} />
           <div>
             <CopyRow label={tm("qrUrlLabel")} value={tag.qrUrl} />
             <p className="mt-1 text-xs text-white/40">{tm("qrUrlHint")}</p>
@@ -181,6 +187,8 @@ function TransferField() {
     tag.kitId ? tm("moveLeavesKit") : null,
   ].filter(Boolean).join(" ");
   const verb = toHouse ? tp("takeBack") : tm("move");
+  // A piece nobody has in stock (not here yet, sold, lost, deactivated) cannot be moved, and says why only where it is not obvious.
+  if (!pieceHasLocation(tag)) return null;
 
   const submit = async () => {
     setMoveError(null);
@@ -195,16 +203,22 @@ function TransferField() {
 
   return (
     <div className="space-y-1.5 border-t border-white/10 pt-4">
-      <label htmlFor={`piece-holder-${tag.id}`} className={EYEBROW}>{tg("colReseller")}</label>
-      <div className="flex gap-2">
-        <div className="min-w-0 flex-1">
-          <Select id={`piece-holder-${tag.id}`} value={choice} onChange={(e) => setChoice(e.target.value || HOUSE)} options={options} data-testid="admin-piece-rep" />
-        </div>
-        <Button type="button" variant="secondary" className="shrink-0" disabled={!!blocker || choice === current} onClick={() => setConfirming(true)} data-testid="admin-piece-rep-move">
-          {toHouse ? <Undo2 className="h-3.5 w-3.5" /> : <Truck className="h-3.5 w-3.5" />}{verb}
-        </Button>
-      </div>
-      {blocker ? <p className="text-xs text-white/40" data-testid="admin-piece-move-blocked">{blocker}</p> : null}
+      {blocker ? (
+        // No control for what cannot be done: the one sentence that says why.
+        <p className="text-sm text-white/55" data-testid="admin-piece-move-blocked">{blocker}</p>
+      ) : (
+        <>
+          <label htmlFor={`piece-holder-${tag.id}`} className={EYEBROW}>{tg("colReseller")}</label>
+          <div className="flex gap-2">
+            <div className="min-w-0 flex-1">
+              <Select id={`piece-holder-${tag.id}`} value={choice} onChange={(e) => setChoice(e.target.value || HOUSE)} options={options} data-testid="admin-piece-rep" />
+            </div>
+            <Button type="button" variant="secondary" className="shrink-0" disabled={choice === current} onClick={() => setConfirming(true)} data-testid="admin-piece-rep-move">
+              {toHouse ? <Undo2 className="h-3.5 w-3.5" /> : <Truck className="h-3.5 w-3.5" />}{verb}
+            </Button>
+          </div>
+        </>
+      )}
       {error ? <p className="text-xs text-red-300">{tm("resellersFailed")}</p> : null}
       <ConfirmDialog
         accent="tags"

@@ -11,7 +11,6 @@ import { CustodyCard } from "./CustodyCard";
 import { CustomerDestinationSection } from "./CustomerDestinationSection";
 import { ManagementSection } from "./ManagementSection";
 import { PerformanceSection } from "./PerformanceSection";
-import { PieceStatusChips } from "./PieceHeader";
 import { usePiece, type PieceCommands } from "./PieceContext";
 import { SaleSection } from "./SaleSection";
 import { pieceSections, pieceSituation, type PieceMainAction } from "./pieceView";
@@ -24,6 +23,7 @@ import { pieceSections, pieceSituation, type PieceMainAction } from "./pieceView
 // `columns`: the admin page on a computer, the working sections on the left,
 // Management on the right, Performance and Activity across the bottom.
 
+const HINT_KEY = { waitingPrint: "hintWaitingPrint", askManager: "hintAskManager", printFailed: "hintPrintFailed", printCancelled: "hintPrintCancelled" } as const;
 const ACTION_ICON = { openPrint: Printer, viewPerformance: BarChart3, reactivate: Power, goLive: Power, writeChip: Nfc, configure: Settings2 } as const;
 
 function ActionIcon({ kind }: { kind: keyof typeof ACTION_ICON }) {
@@ -87,7 +87,7 @@ export function PieceBody({ layout, desktopWriter }: { layout: "stack" | "column
       {tp(`action${action.kind[0].toUpperCase()}${action.kind.slice(1)}` as "actionGoLive")}
     </Button>
   ) : null;
-  const hint = situation.hint ? <p className="text-sm text-white/55" data-testid="piece-hint">{tp(situation.hint === "waitingPrint" ? "hintWaitingPrint" : "hintAskManager")}</p> : null;
+  const hint = situation.hint ? <p className="text-sm text-white/55" data-testid="piece-hint">{tp(HINT_KEY[situation.hint])}</p> : null;
 
   if (layout === "stack") {
     const customerOutside = !!tag.leadId || action?.kind === "configure";
@@ -107,7 +107,6 @@ export function PieceBody({ layout, desktopWriter }: { layout: "stack" | "column
             <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" aria-hidden="true" />
           </summary>
           <div className="min-w-0 space-y-3 p-3 pt-0">
-            <PieceStatusChips tag={tag} />
             {receiveIsMain ? null : <CustodyCard />}
             {customerOutside ? null : customer}
             {chip}
@@ -126,7 +125,6 @@ export function PieceBody({ layout, desktopWriter }: { layout: "stack" | "column
       {hint}
       <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,380px)]">
         <div className="min-w-0 space-y-4">
-          <PieceStatusChips tag={tag} />
           {receiveIsMain ? null : <CustodyCard />}
           {customer}
           {chip}

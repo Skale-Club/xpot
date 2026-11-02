@@ -33,6 +33,7 @@ type MovementRow = {
   reference_id: string | null;
   reason: string | null;
   actor_email: string | null;
+  actor_name: string | null;
   created_at: Date;
 };
 
@@ -68,11 +69,12 @@ export async function getPieceActivity(tagId: string, { withMovements }: { withM
   const movementRows = await rows<MovementRow>(sql`
     SELECT m.id, m.movement_type, m.from_stock_status, m.to_stock_status, m.from_ownership_type, m.to_ownership_type,
            fr.display_name AS from_custodian_name, tr.display_name AS to_custodian_name,
-           m.reference_type, m.reference_id, m.reason, u.email AS actor_email, m.created_at
+           m.reference_type, m.reference_id, m.reason, u.email AS actor_email, ar.display_name AS actor_name, m.created_at
     FROM tag_stock_movements m
     LEFT JOIN sales_reps fr ON fr.id = m.from_custodian_rep_id
     LEFT JOIN sales_reps tr ON tr.id = m.to_custodian_rep_id
     LEFT JOIN users u ON u.id = m.actor_user_id
+    LEFT JOIN sales_reps ar ON ar.user_id = m.actor_user_id
     WHERE m.tag_id = ${tagId}
     ORDER BY m.created_at DESC, m.id DESC
     LIMIT 200
@@ -90,6 +92,7 @@ export async function getPieceActivity(tagId: string, { withMovements }: { withM
     referenceId: r.reference_id,
     reason: r.reason,
     actorEmail: r.actor_email,
+    actorName: r.actor_name,
     createdAt: iso(r.created_at)!,
   }));
   return { sales, movements };

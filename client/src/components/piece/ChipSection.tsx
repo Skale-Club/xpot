@@ -11,14 +11,21 @@ import LockSheet from "@/pages/tags/LockSheet";
 import EraseSheet from "@/pages/tags/EraseSheet";
 import { canLockChip, nfcMode } from "@/pages/tags/webNfc";
 import { tagPath } from "@/pages/tags/lib";
-import { CARD, CHIP_TONE, CopyButton, EYEBROW_MUTED, Pill, Spinner, StepList } from "@/pages/tags/ui";
+import { CARD, CopyButton, EYEBROW_MUTED, Pill, Spinner, StepList } from "@/pages/tags/ui";
 import { usePiece, usePieceWrite, type PieceCommandsRef } from "./PieceContext";
+import { pieceChipState, type PieceChipState } from "./pieceStatus";
+import { pieceSituation } from "./pieceView";
 
 // The NFC chip, for every role: written right here on an Android phone; on an
 // iPhone the link goes into NFC Tools and a tap that reads the chip confirms it
 // (the host screen polls for that); on a computer the write continues on the
 // phone (a QR). The global admin also gets the desktop writer (`desktopWriter`).
 // Locking makes the chip read-only for good, and its sheet says so before the tap.
+// A piece that is lost, not in stock yet, damaged or deactivated has nothing to write: it only says what the chip holds.
+// The chip is the one brand button only when it is the piece's next step (pieceSituation); the red is a write that failed.
+
+/** The chip's colour here: red only for a failed write, amber for what asks for a step, quiet where no chip is asked for yet. */
+const CHIP_PILL_TONE: Record<PieceChipState, "slate" | "amber" | "red" | "green"> = { none: "slate", needsWriting: "amber", failed: "red", untested: "amber", fine: "green" };
 
 export function ChipSection({ desktopWriter, commands }: {
   /** The admin's desktop NFC writer card (pages/admin/tags), under the phone controls. */
@@ -39,17 +46,23 @@ export function ChipSection({ desktopWriter, commands }: {
   const [lockOpen, setLockOpen] = useState(false);
   const [eraseOpen, setEraseOpen] = useState(false);
   // iPhone: the NFC Tools steps, shown by themselves until the chip is confirmed, then on "Rewrite".
-  const [manualOpen, setManualOpen] = useState(false);
+  // Closed until "Write chip" is tapped (or the write was continued from a computer): a piece nobody is writing shows no steps.
+  const [manualOpen, setManualOpen] = useState(() => new URLSearchParams(window.location.search).get("write") === "1");
 
   const locked = tag.nfcStatus === "locked";
   const chipMissing = tag.nfcStatus === "not_programmed" || tag.nfcStatus === "failed";
   const chipConfirmed = tag.nfcStatus === "verified";
   const retired = tag.status === "retired" || tag.stockStatus === "damaged";
+  // Nothing to write on a piece that is gone or not here yet.
+  const idle = retired || tag.stockStatus === "lost" || tag.stockStatus === "pending";
+  const chipState = pieceChipState(tag);
+  const chipIsNextStep = pieceSituation(tag, viewer).action?.kind === "writeChip";
+  const pillTone = chipState === "none" && (tag.nfcStatus === "verified" || tag.nfcStatus === "locked") ? "green" : CHIP_PILL_TONE[chipState];
   // Another phone locks only a chip a tap confirmed (lock a wrong chip and it is lost);
   // a computer cannot lock, so it gets no padlock.
-  const canLock = !locked && !retired && (manualFlow ? chipConfirmed : nfc === "web" && canLockChip() && !chipMissing);
+  const canLock = !locked && !idle && (manualFlow ? chipConfirmed : nfc === "web" && canLockChip() && !chipMissing);
   // Erasing a written chip (testing the piece, or starting over) needs a phone; a locked chip can't be erased.
-  const canErase = !locked && !retired && nfc !== "none" && tag.nfcStatus !== "not_programmed";
+  const canErase = !locked && !idle && nfc !== "none" && tag.nfcStatus !== "not_programmed";
 
   useEffect(() => {
     // On an iPhone the steps are already shown until the chip is confirmed; the button opens them again.
@@ -63,7 +76,7 @@ export function ChipSection({ desktopWriter, commands }: {
     params.delete("write");
     const rest = params.toString();
     window.history.replaceState(null, "", `${window.location.pathname}${rest ? `?${rest}` : ""}`);
-    // On an iPhone the steps are already at the top of the section.
+    // On an iPhone the steps are already open (see manualOpen).
     if (!manualFlow) setWriteOpen(true);
   }, [tag.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -76,7 +89,7 @@ export function ChipSection({ desktopWriter, commands }: {
       <div className="flex items-center justify-between gap-2">
         <p className={EYEBROW_MUTED}>{t("chipTitle")}</p>
         <div className="flex items-center gap-1">
-          <Pill tone={CHIP_TONE[tag.nfcStatus] ?? "amber"}>{t(`chip_${tag.nfcStatus}` as "chip_verified")}</Pill>
+          <Pill tone={pillTone}>{t(`chip_${tag.nfcStatus}` as "chip_verified")}</Pill>
           {canLock && (
             // Neutral: locking is optional; the green "Chip locked" pill is what it leads to.
             <button
@@ -97,7 +110,7 @@ export function ChipSection({ desktopWriter, commands }: {
           <Lock className="h-4 w-4 shrink-0 text-emerald-300" />
           {t("lockedHint")}
         </p>
-      ) : retired ? null : manualFlow && (!chipConfirmed || manualOpen) ? (
+      ) : idle ? null : manualFlow && manualOpen ? (
         <div className="mt-3 space-y-3" data-testid="chip-manual">
           <div className={`${CARD} p-3`}>
             <p className={EYEBROW_MUTED}>{t("writeUrl")}</p>
@@ -130,7 +143,7 @@ export function ChipSection({ desktopWriter, commands }: {
         <>
           <Button
             type="button"
-            variant={chipMissing ? "brand" : "secondary"}
+            variant={chipIsNextStep ? "brand" : "secondary"}
             accent="tags"
             size="lg"
             onClick={() => (manualFlow ? setManualOpen(true) : setWriteOpen(true))}
@@ -149,7 +162,7 @@ export function ChipSection({ desktopWriter, commands }: {
         </>
       )}
 
-      {desktopWriter && viewer.isAdmin ? <div className="mt-4">{desktopWriter}</div> : null}
+      {desktopWriter && viewer.isAdmin && !idle ? <div className="mt-4">{desktopWriter}</div> : null}
 
       <LockSheet
         open={lockOpen}

@@ -249,42 +249,45 @@ export function CustomerDestinationSection({ commands }: {
       {bare ? null : (<>
       <div className="flex items-center justify-between gap-2">
         <p className={EYEBROW}>{t("setupTitle")}</p>
-        {dest && !retired && (
-          <Button type="button" variant="outline" size="sm" onClick={() => openEditor(false)} data-testid="button-change-destination">
-            <Pencil />
-            {t("changeDestination")}
-          </Button>
-        )}
+        <div className="flex items-center gap-1">
+          {tag.leadId && !retired ? (
+            <button
+              type="button"
+              onClick={() => {
+                setNewName(tag.leadName ?? "");
+                setRenameOpen(true);
+              }}
+              aria-label={t("renameCustomer")}
+              title={t("renameCustomer")}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white/45 hover:bg-white/10 hover:text-white active:bg-white/10"
+              data-testid="button-edit-customer"
+            >
+              <Pencil className="h-4 w-4" />
+            </button>
+          ) : null}
+          {dest && !retired && (
+            <Button type="button" variant="outline" size="sm" onClick={() => openEditor(false)} data-testid="button-change-destination">
+              <Pencil />
+              {t("changeDestination")}
+            </Button>
+          )}
+        </div>
       </div>
 
       {tag.leadId ? (
-        <div className="mt-2 flex items-center gap-1">
-          <Building2 className="h-4 w-4 shrink-0 text-white/40" />
-          <p className="ml-1 min-w-0 flex-1 truncate text-sm font-semibold text-white/80" data-testid="text-tag-lead">
-            {tag.leadName ?? tm("customerNumber", { id: tag.leadId })}
-          </p>
-          {!retired && (
-            <>
-              <button
-                type="button"
-                onClick={() => {
-                  setNewName(tag.leadName ?? "");
-                  setRenameOpen(true);
-                }}
-                aria-label={t("renameCustomer")}
-                title={t("renameCustomer")}
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white/45 hover:bg-white/10 hover:text-white active:bg-white/10"
-                data-testid="button-edit-customer"
-              >
-                <Pencil className="h-4 w-4" />
-              </button>
+        // The customer's name is in the header above; this row is only the one change that can be made to it. A sold
+        // piece keeps its customer until the sale is cancelled (the sentence below says so).
+        <>
+          <span className="sr-only" data-testid="text-tag-lead">{tag.leadName ?? tm("customerNumber", { id: tag.leadId })}</span>
+          {!retired && tag.saleId === null ? (
+            <div className="mt-2 flex justify-end">
               <Button type="button" variant="ghost" size="sm" onClick={() => openEditor(true)} className="min-h-10" data-testid="button-change-customer">
                 <UserRound />
                 {t("changeCustomerShort")}
               </Button>
-            </>
-          )}
-        </div>
+            </div>
+          ) : null}
+        </>
       ) : dest ? (
         // Set up without a customer (made before the picker was required): Change customer links one.
         <p className="mt-2 flex items-center gap-2 text-sm text-white/45" data-testid="text-tag-lead">
@@ -317,7 +320,7 @@ export function CustomerDestinationSection({ commands }: {
           {/* A piece not in stock yet says so in the header: no warning here, and no button that cannot work. */}
           {stock && stock !== "pending" && (
             <div className="mt-2" data-testid="text-stock-blocked">
-              <InlineAlert tone="warning">{t(`stockBlocked_${stock}`)}</InlineAlert>
+              <InlineAlert tone="warning">{t(`stockBlocked_${stock}`)}{viewer.canManage ? "" : ` ${t("stockBlockedAsk")}`}</InlineAlert>
             </div>
           )}
           {!retired && !stock && mainAction !== "configure" && (
@@ -341,7 +344,7 @@ export function CustomerDestinationSection({ commands }: {
           {canClearCustomer && tag.saleId === null && (
             <Button
               type="button"
-              variant="secondary"
+              variant="ghost"
               onClick={() => {
                 setActionError(null);
                 setConfirm("unassign");
@@ -416,7 +419,8 @@ export function CustomerDestinationSection({ commands }: {
             <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder={t("labelPlaceholder")} maxLength={120} className={INPUT_ACCENT} />
           </Field>
           {manage && kind === "url" && (
-            <div className="space-y-2">
+            <details className="group space-y-2" data-testid="destination-technical">
+              <summary className="flex min-h-10 cursor-pointer list-none items-center text-sm font-semibold text-white/60 hover:text-white">{tm("technicalDetails")}</summary>
               <SwitchRow
                 checked={utm}
                 onCheckedChange={(v) => {
@@ -429,7 +433,7 @@ export function CustomerDestinationSection({ commands }: {
               {utm && (
                 <Input value={utmCampaign} onChange={(e) => setUtmCampaign(e.target.value)} placeholder={tm("utmCampaignPlaceholder")} aria-label={tm("utmCampaignPlaceholder")} maxLength={80} className={INPUT_ACCENT} />
               )}
-            </div>
+            </details>
           )}
           {manage && tag.destinationUrl && (
             <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder={tm("changeReasonPlaceholder")} aria-label={tm("changeReasonPlaceholder")} maxLength={300} className={INPUT_ACCENT} />
