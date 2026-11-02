@@ -5,7 +5,7 @@
 
 import { useState, type ReactNode } from "react";
 import { Minus, Plus } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { FIELD_CONTROL, Select as KitSelect } from "@/components/xpot/Field";
 import { Pill, type PillTone } from "@/components/xpot/StatusPill";
@@ -205,13 +205,14 @@ export function Chip({ children, tone = "neutral" }: { children: ReactNode; tone
 
 /** A dialog on the kit's modal shell (ui/dialog), wider with `wide`. */
 export function SheetDialog({
-  open, onOpenChange, title, children, wide,
-}: { open: boolean; onOpenChange: (o: boolean) => void; title: string; children: ReactNode; wide?: boolean }) {
+  open, onOpenChange, title, description, children, wide,
+}: { open: boolean; onOpenChange: (o: boolean) => void; title: string; description?: string; children: ReactNode; wide?: boolean }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className={wide ? "max-w-2xl" : "max-w-md"}>
-        <DialogHeader className="pr-8">
+        <DialogHeader className="pr-10">
           <DialogTitle className="text-base">{title}</DialogTitle>
+          {description ? <DialogDescription className="text-xs">{description}</DialogDescription> : null}
         </DialogHeader>
         {children}
       </DialogContent>

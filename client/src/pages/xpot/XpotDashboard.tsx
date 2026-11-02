@@ -17,6 +17,7 @@ import { EmptyState } from "@/components/xpot/EmptyState";
 import { PageHeader } from "@/components/xpot/PageHeader";
 import { DANGER_SURFACE, EYEBROW } from "@/components/xpot/surface";
 import { useSalesSummary } from "./hooks/useSalesModule";
+import { useShowProfit } from "./hooks/useShowProfit";
 import { useT } from "@/i18n";
 import { dashboardMessages } from "@/i18n/messages/dashboard";
 import { pieceScreenMessages } from "@/i18n/messages/pieceScreen";
@@ -83,6 +84,8 @@ function DashboardOverview() {
   const tu = useT(visitsUiMessages);
   const metrics = dashboardQuery.data?.metrics;
   const { failedEvents, retryMutation } = useSyncStatus();
+  // A seller sells and collects: profit is the owner's number, so a seller's day shows what was sold.
+  const showProfit = useShowProfit();
   const [periodDays, setPeriodDays] = useState(7);
   const [activityMetric, setActivityMetric] = useState<ActivityMetric>("visits");
   // The Dashboard is the person's own day (its visits and tasks are theirs in
@@ -138,7 +141,7 @@ function DashboardOverview() {
   const activityOptions = [
     { value: "visits" as const, label: t("activityVisits"), swatchClassName: ACTIVITY_TONES.visits.swatch },
     { value: "revenue" as const, label: t("activityRevenue"), swatchClassName: ACTIVITY_TONES.revenue.swatch },
-    { value: "profit" as const, label: t("activityProfit"), swatchClassName: ACTIVITY_TONES.profit.swatch },
+    ...(showProfit ? [{ value: "profit" as const, label: t("activityProfit"), swatchClassName: ACTIVITY_TONES.profit.swatch }] : []),
     { value: "sales" as const, label: t("activitySales"), swatchClassName: ACTIVITY_TONES.sales.swatch },
   ];
   const activityLabel = activityOptions.find((option) => option.value === activityMetric)?.label ?? t("activityVisits");
@@ -149,7 +152,7 @@ function DashboardOverview() {
       value: activityMetric === "revenue"
         ? day.revenueCents / 100
         : activityMetric === "profit"
-          ? day.profitCents / 100
+          ? (day.profitCents ?? 0) / 100
           : day.salesCount,
     }));
   const chartDaily = activityDaily.slice(-periodDays);
@@ -279,13 +282,15 @@ function DashboardOverview() {
         >
           <div className="flex items-center justify-between">
             <div>
-              <div className={EYEBROW}>{t("salesKeptMonth")}</div>
+              <div className={EYEBROW}>{showProfit ? t("salesKeptMonth") : t("salesSoldMonth")}</div>
               <div className="mt-0.5 text-2xl font-bold tabular-nums text-emerald-300">
-                {formatCents(salesSummary.data.profit.monthToDateCents)}
+                {formatCents(showProfit ? salesSummary.data.profit?.monthToDateCents ?? 0 : salesSummary.data.revenue.monthToDateCents)}
               </div>
-              <div className="text-[11px] text-white/35">
-                {t("salesBilled", { amount: formatCents(salesSummary.data.revenue.monthToDateCents) })}
-              </div>
+              {showProfit ? (
+                <div className="text-[11px] text-white/35">
+                  {t("salesBilled", { amount: formatCents(salesSummary.data.revenue.monthToDateCents) })}
+                </div>
+              ) : null}
             </div>
             <div className="text-right">
               <div className={EYEBROW}>{t("salesOnStreet")}</div>
@@ -522,7 +527,7 @@ function DashboardOverview() {
       <KpiTile label={t("metricVisitsToday")} value={metrics?.visitsToday ?? 0} icon={MapPinned} accent="blue" detail={t.plural("metricVisitsRemaining", metrics?.remainingVisitsToday ?? 0)} loading={dashboardQuery.isLoading} onClick={() => setLocation("/route")} />
       <KpiTile label={t("metricCompletedToday")} value={metrics?.completedVisitsToday ?? 0} icon={Check} accent="blue" detail={t.plural("metricVisitsCompleted", metrics?.completedVisitsToday ?? 0)} loading={dashboardQuery.isLoading} onClick={() => setLocation("/dashboard/history?view=day")} />
       <KpiTile label={t("metricTasksToday")} value={metrics?.tasksToday ?? 0} icon={ListTodo} accent="amber" detail={t.plural("metricTasksOverdue", metrics?.overdueTasks ?? 0)} loading={dashboardQuery.isLoading} onClick={() => setLocation("/tasks")} />
-      <KpiTile label={t("metricSalesToday")} value={salesSummary.data ? formatCents(salesSummary.data.revenue.todayCents) : "—"} icon={DollarSign} accent="emerald" detail={salesSummary.data ? t("metricSalesProfit", { amount: formatCents(salesSummary.data.profit.todayCents) }) : undefined} loading={salesSummary.isLoading} onClick={() => setLocation("/sales")} />
+      <KpiTile label={t("metricSalesToday")} value={salesSummary.data ? formatCents(salesSummary.data.revenue.todayCents) : "—"} icon={DollarSign} accent="emerald" detail={salesSummary.data && showProfit ? t("metricSalesProfit", { amount: formatCents(salesSummary.data.profit?.todayCents ?? 0) }) : undefined} loading={salesSummary.isLoading} onClick={() => setLocation("/sales")} />
     </div>
   );
 

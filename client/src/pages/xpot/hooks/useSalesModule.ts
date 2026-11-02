@@ -22,7 +22,9 @@ import type {
 export type ProductWithTiers = SalesProduct & { tiers: SalesProductPriceTier[] };
 export type LeadRef = { id: number; name: string };
 export type ProductRef = Pick<SalesProduct, "id" | "name" | "sku" | "kind" | "unitLabel" | "currency">;
-export type SalePieceRef = { tagId: string; publicCode: string; saleItemId: number; costBasisCents: number; status: string };
+// What a product costs and what a sale leaves over reach the app only for whoever owns the business (the server drops
+// them for a member, server/routes/xpot/profitVisibility.ts), so every such field is optional here.
+export type SalePieceRef = { tagId: string; publicCode: string; saleItemId: number; costBasisCents?: number; status: string };
 export type SaleWithItems = { sale: SalesSale; items: SalesSaleItem[]; lead: LeadRef | null; pieces: SalePieceRef[] };
 export type ConsignmentWithRefs = { consignment: SalesConsignment; product: ProductRef | null; lead: LeadRef | null };
 export type ConsignmentDetail = ConsignmentWithRefs & { movements: SalesConsignmentMovement[] };
@@ -30,18 +32,18 @@ export type ConsignmentDetail = ConsignmentWithRefs & { movements: SalesConsignm
 export type SalesSummary = {
   period: { days: number; from: string; to: string };
   revenue: { todayCents: number; periodCents: number; monthToDateCents: number };
-  profit: { todayCents: number; periodCents: number; monthToDateCents: number };
-  financial: { grossCents: number; discountCents: number; netCents: number; costCents: number; grossProfitCents: number };
+  profit?: { todayCents: number; periodCents: number; monthToDateCents: number };
+  financial: { grossCents: number; discountCents: number; netCents: number; costCents?: number; grossProfitCents?: number };
   sales: { periodCount: number; unitsSold: number; directCents: number; settlementCents: number };
   unpaid: { count: number; cents: number };
-  byProduct: { productId: number | null; name: string; quantity: number; revenueCents: number; profitCents: number }[];
-  daily: { date: string; revenueCents: number; profitCents: number; salesCount: number }[];
+  byProduct: { productId: number | null; name: string; quantity: number; revenueCents: number; profitCents?: number }[];
+  daily: { date: string; revenueCents: number; profitCents?: number; salesCount: number }[];
   consignment: { activeCount: number; unitsOnHand: number; valueOnHandCents: number; dueCount: number; dueSoonCount: number };
 };
 
 export type LeadSalesSnapshot = {
   lifetimeCents: number;
-  lifetimeProfitCents: number;
+  lifetimeProfitCents?: number;
   salesCount: number;
   lastSaleAt: string | null;
   activeConsignments: ConsignmentWithRefs[];
@@ -175,6 +177,8 @@ export function useSalesMutations() {
       queryClient.invalidateQueries({ queryKey: ["/api/xpot/consignments"] }),
       queryClient.invalidateQueries({ queryKey: ["/api/xpot/leads"] }),
       queryClient.invalidateQueries({ queryKey: ["/api/xpot/dashboard"] }),
+      // A visit carries what it sold (visitSales), which "Finish visit" reads to start as "Sale made".
+      queryClient.invalidateQueries({ queryKey: ["/api/xpot/visits"] }),
     ]);
   };
 
