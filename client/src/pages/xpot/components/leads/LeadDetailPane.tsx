@@ -191,7 +191,12 @@ export function LeadDetailPane({ lead, pieces, visits, onClose, backLabel, onDel
             <Button type="button" variant="brand" onClick={() => navigate("/route/check-in")} className="min-h-11" data-testid="lead-back-to-visit">
               <MapPinCheck aria-hidden="true" />{t("backToVisit")}
             </Button>
-          ) : openElsewhere ? null : (
+          ) : openElsewhere ? (
+            // Check-in is blocked while another visit is open: the way to the open one is right here, with the note below.
+            <Button type="button" variant="secondary" onClick={() => navigate("/route/check-in")} className="min-h-11" data-testid="lead-open-other-visit">
+              <MapPinCheck aria-hidden="true" />{t("backToVisit")}
+            </Button>
+          ) : (
             <Button type="button" variant="brand" onClick={() => navigate(`/route/check-in?leadId=${lead.id}`)} className="min-h-11" data-testid="lead-check-in">
               <MapPinCheck aria-hidden="true" />{t("checkIn")}
             </Button>
