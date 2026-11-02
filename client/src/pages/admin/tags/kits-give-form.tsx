@@ -219,10 +219,11 @@ export function HandOutFlow() {
       <Step n={2} title={t("stepOwnership")} done={!!rep && cost.ok} disabled={!rep} testId="handout-step-ownership">
         <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label={t("stepOwnership")}>
           {(["company", "rep"] as const).map((value) => (
-            <label
+            <div
               key={value}
-              className={`cursor-pointer rounded-xl border p-3 transition-colors ${ownership === value ? "border-violet-400/40 bg-violet-500/[0.1]" : "border-white/10 hover:bg-white/[0.03]"}`}
+              className={`rounded-xl border p-3 transition-colors ${ownership === value ? "border-violet-400/40 bg-violet-500/[0.1]" : "border-white/10 hover:bg-white/[0.03]"}`}
             >
+            <label className="block cursor-pointer">
               <span className="flex items-center gap-2 text-sm font-semibold text-white">
                 <input type="radio" name="ownership" value={value} checked={ownership === value} onChange={() => setOwnershipChoice(value)} className="h-4 w-4 accent-violet-500" />
                 {value === "company" ? <Building2 className="h-4 w-4 text-white/50" /> : <ShoppingBag className="h-4 w-4 text-white/50" />}
@@ -230,15 +231,14 @@ export function HandOutFlow() {
                 {value === kitOwnership(policy) ? <span className="text-xs font-normal text-white/40">{t("ownershipDefault", { name: repName })}</span> : null}
               </span>
               <span className="mt-1 block text-xs text-white/45">
-                {value === "company" ? (kitCostRequired(policy, "company") ? t("ownershipCompanyNeedsPrice", { name: repName }) : t("ownershipCompanyHint")) : t("ownershipRepHint")}
+                {value === "company" ? (kitCostRequired(policy, "company") ? t("ownershipCompanyNeedsPrice", { name: repName }) : t("ownershipCompanyHint")) : t("ownershipRepHint", { name: repName })}
               </span>
             </label>
-          ))}
-        </div>
-        {costRequired ? (
+            {/* The price belongs to the option it is for: it opens inside the one chosen. */}
+            {ownership === value && costRequired ? (
           <Field
-            className="mt-3 sm:max-w-xs"
-            label={`${t("pricePerPiece")} (${KIT_COST_CURRENCY})`}
+            className="mt-3"
+            label={`${t("pricePerPiece", { name: repName })} (${KIT_COST_CURRENCY})`}
             error={!cost.ok && cost.reason === "invalid" ? tb("unitCostInvalid") : needPrice ? t("costMissing") : undefined}
           >
             <Input
@@ -255,7 +255,10 @@ export function HandOutFlow() {
               data-testid="input-kit-unit-cost"
             />
           </Field>
-        ) : null}
+            ) : null}
+            </div>
+          ))}
+        </div>
       </Step>
 
       <Step n={3} title={t("stepPieces")} done={okCodes.length > 0} disabled={!rep} testId="handout-step-pieces">
