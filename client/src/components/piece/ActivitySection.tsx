@@ -23,6 +23,9 @@ import { useReasonText } from "./reasonText";
 // movements (management) and the production log (the global admin). The admin
 // still records journey entries and plans in the production log, folded below.
 
+/** The production log keeps every note; the timeline carries only the life of the piece itself. */
+const TIMELINE_ACTIONS = new Set(["tag_created", "tag_assigned", "tag_activated"]);
+
 const ICON: Record<PieceTimelineEvent["kind"], typeof History> = {
   destination: Link2,
   sale: DollarSign,
@@ -42,7 +45,7 @@ export function ActivitySection() {
       history: tag.history,
       sales: activity.data?.sales ?? null,
       movements: activity.data?.movements ?? null,
-      journey: viewer.isAdmin ? journey.data?.entries ?? null : null,
+      journey: viewer.isAdmin ? (journey.data?.entries ?? []).filter((entry) => TIMELINE_ACTIONS.has(entry.action ?? "")) : null,
     }),
     [tag.history, activity.data, journey.data, viewer.isAdmin],
   );
@@ -74,6 +77,12 @@ export function ActivitySection() {
       ) : null}
     </SectionCard>
   );
+}
+
+/** "Tag 1XZNPN1V assigned to Fenway Fitness Club" (what the server wrote) as "Linked to Fenway Fitness Club". */
+function linkedTitle(title: string, tp: (key: "evLinked", vars: { name: string }) => string): string {
+  const name = /assigned to (.+)$/.exec(title)?.[1];
+  return name ? tp("evLinked", { name }) : title;
 }
 
 function TimelineRow({ event }: { event: PieceTimelineEvent }) {
@@ -118,7 +127,7 @@ function TimelineRow({ event }: { event: PieceTimelineEvent }) {
     }
     case "journey":
       // The server writes these titles in English and with the word "tag": say what happened from the action, in the app's words.
-      title = event.entry.action === "tag_activated" ? tp("evPutLive") : event.entry.action === "tag_created" ? tp("evCreated") : event.entry.title;
+      title = event.entry.action === "tag_activated" ? tp("evPutLive") : event.entry.action === "tag_created" ? tp("evCreated") : event.entry.action === "tag_assigned" ? linkedTitle(event.entry.title, tp) : event.entry.title;
       who = event.entry.actorName ?? event.entry.actorEmail;
       detail = event.entry.content;
       break;
