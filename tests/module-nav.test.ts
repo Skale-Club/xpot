@@ -20,6 +20,9 @@ import {
   type PanelNames,
 } from "../client/src/components/xpot/moduleNav";
 import type { Profile } from "../shared/profiles";
+import { shellMessages } from "../client/src/i18n/messages/shell";
+import { tagsMessages } from "../client/src/i18n/messages/tags";
+import { workspacesMessages } from "../client/src/i18n/messages/workspaces";
 import { tabs } from "../client/src/pages/xpot/utils";
 
 const labels = { shell: (k: string) => k, tags: (k: string) => k, nav: (k: string) => k } as never;
@@ -29,7 +32,7 @@ const admin = { canManage: true, isAdmin: true };
 const hrefs = (groups: ReturnType<typeof moduleGroups>) => groups.flatMap((g) => g.items.map((i) => i.href));
 const panelNames: PanelNames = {
   today: "Today", platform: "Platform", company: "My company", organization: "Organization", production: "Production",
-  team: "Team", stock: "Stock", kits: "Kits", purchases: "Team purchases", settings: "Settings", tagsOverview: "Tags overview", stuscleOrders: "Stuscle orders",
+  team: "Team", stock: "Stock", kits: "Hand out", purchases: "Team purchases", settings: "Settings", tagsOverview: "Pieces results",
 };
 const both = ["visits", "tags"] as const;
 const groupsOf = (profile: Profile | null, modules: readonly ("visits" | "tags")[] = both, organizationId: number | null = 7) => panelGroups(profile, modules, labels, panelNames, organizationId);
@@ -67,7 +70,7 @@ describe("one panel per profile", () => {
     const groups = groupsOf("platform");
     expect(labelsOf(groups)).toEqual(["", "My company", "Platform"]);
     expect(itemHrefs(groups, "Platform")).toEqual([
-      "/organizations", "/admin/reps", "/admin/tags/kits?view=orders", "/admin/products", "/admin/tags/shop",
+      "/organizations", "/admin/reps", "/admin/products", "/admin/tags/shop",
       "/admin/integrations", "/admin/branding", "/admin/health", "/admin/settings",
     ]);
     expect(itemHrefs(groups, "My company")).toEqual([
@@ -86,7 +89,7 @@ describe("one panel per profile", () => {
   });
 
   it("only the platform has Platform items; the other panels never list them", () => {
-    const platformOnly = ["/organizations", "/admin/reps", "/admin/products", "/admin/integrations", "/admin/branding", "/admin/health", "/admin/settings", "/admin/tags/shop", "/admin/tags/kits?view=orders"];
+    const platformOnly = ["/organizations", "/admin/reps", "/admin/products", "/admin/integrations", "/admin/branding", "/admin/health", "/admin/settings", "/admin/tags/shop"];
     for (const profile of ["owner", "partner"] as const) {
       for (const href of platformOnly) expect(hrefs(groupsOf(profile, both, 7))).not.toContain(href);
       // The organizations list is Team's door when there is no single workspace to open; nothing else of the platform's is.
@@ -112,17 +115,53 @@ describe("one panel per profile", () => {
     }
   });
 
-  it("lights one item per screen: Today only on /admin, Production under its batches, Kits apart from the Stuscle orders", () => {
+  it("lights one item per screen: Today only on /admin, Production under its batches, Hand out also on the Stuscle orders tab", () => {
     const lit = (profile: Profile, path: string) => groupsOf(profile).flatMap((g) => g.items).filter((i) => i.match(path)).map((i) => i.href);
     expect(lit("owner", "/admin")).toEqual(["/admin"]);
     expect(lit("partner", "/admin/tags/batches/abc")).toEqual(["/admin/tags/production"]);
     expect(lit("platform", "/admin/tags/pieces/abc")).toEqual(["/admin/tags/pieces"]);
+    // The Stuscle orders tab is Hand out's own: no second item for it, and Hand out stays lit there.
+    expect(lit("platform", "/admin/tags/kits")).toEqual(["/admin/tags/kits"]);
+    expect(lit("owner", "/admin/tags/kits")).toEqual(["/admin/tags/kits"]);
     expect(lit("platform", "/admin/xphere")).toEqual(["/admin/integrations"]);
     expect(lit("platform", "/organizations/4")).toEqual(["/organizations"]);
     // A person's page under the workspace belongs to Team; the team's tabs are told apart by ?tab= (read from the address bar in the browser).
     expect(lit("owner", "/organizations/7/people/3")).toEqual(["/organizations/7?tab=team"]);
     expect(lit("owner", "/admin/work/leads/4")).toEqual(["/admin/work/leads"]);
   });
+});
+
+describe("one name per screen", () => {
+  // The real words, in every language: a name that repeats in one panel is two doors that look like one.
+  for (const lang of ["en", "pt", "es"] as const) {
+    const shell = shellMessages[lang] as Record<string, string>;
+    const tagsText = tagsMessages[lang] as Record<string, string>;
+    const ws = workspacesMessages[lang] as Record<string, string>;
+    const real = {
+      shell: (k: string) => shell[k] ?? k,
+      tags: (k: string) => tagsText[k] ?? k,
+      nav: (k: string) => k,
+    } as never;
+    const names: PanelNames = {
+      today: ws.todayTitle, platform: ws.panelPlatform, company: ws.panelCompany, organization: ws.organizationGroup, production: ws.panelProduction,
+      team: ws.panelTeam, stock: ws.panelStock, kits: ws.panelKits, purchases: ws.panelPurchases, settings: ws.panelSettings, tagsOverview: ws.panelTagsOverview,
+    };
+    for (const profile of ["platform", "partner", "owner"] as const) {
+      it(`${profile} (${lang}): no label repeats in the panel`, () => {
+        const labels = panelGroups(profile, both, real, names, 7).flatMap((g) => g.items.map((i) => i.label));
+        expect(labels.filter((label, i) => labels.indexOf(label) !== i)).toEqual([]);
+        expect(labels.every(Boolean)).toBe(true);
+      });
+    }
+    it(`${lang}: a screen has the same name in the panel and in the Tags module`, () => {
+      const tagsManage = moduleGroups("tags", admin, real)[1].items;
+      const byHref = new Map(tagsManage.map((i) => [i.href, i.label]));
+      const panel = panelGroups("platform", both, real, names, 7).flatMap((g) => g.items);
+      for (const href of ["/admin/tags/production", "/admin/tags/pieces", "/admin/tags/kits", "/admin/tags/overview", "/admin/tags/journey", "/admin/tags/provisioners"]) {
+        expect(panel.find((i) => i.href === href)?.label).toBe(byHref.get(href));
+      }
+    });
+  }
 });
 
 describe("contextOfPath", () => {

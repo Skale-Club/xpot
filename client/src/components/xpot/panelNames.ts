@@ -22,7 +22,6 @@ export function usePanelNames() {
     purchases: t("panelPurchases"),
     settings: t("panelSettings"),
     tagsOverview: t("panelTagsOverview"),
-    stuscleOrders: t("panelStuscleOrders"),
   };
   return { panelName, names };
 }

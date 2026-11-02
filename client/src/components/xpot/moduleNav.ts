@@ -7,7 +7,6 @@ import {
   FileText,
   HeartPulse,
   History,
-  Inbox,
   LayoutDashboard,
   ListTodo,
   MapPin,
@@ -293,7 +292,6 @@ export type PanelNames = {
   purchases: string;
   settings: string;
   tagsOverview: string;
-  stuscleOrders: string;
 };
 
 /** The `?name=` of the page in the address bar: a path match cannot see it. Null outside a browser. */
@@ -310,7 +308,7 @@ const ADMIN_VIEWER: Viewer = { canManage: true, isAdmin: true };
  *             overview, Settings.
  *   partner   the owner's, with a Production group (Production, the bench computers) in front.
  *   platform  Today, My company (its own production, stock and kits: what a partner has, for the company) and Platform
- *             (organizations, people, Stuscle orders, products, shop, integrations, brand, status, check-in rules).
+ *             (organizations, people, products, shop, integrations, brand, status, check-in rules).
  * `organizationId`: the one organization an owner or a partner runs, so Team, Purchases and Settings open its workspace.
  * The hrefs are the ones the app always had (docs/MODULES.md: URLs never change).
  */
@@ -332,12 +330,10 @@ export function panelGroups(profile: Profile | null | undefined, modules: readon
   const stations = tagItem("/admin/tags/provisioners");
   const stock = tagItem("/admin/tags/pieces", names.stock);
   const overview = tagItem("/admin/tags/overview", names.tagsOverview);
-  // Stuscle's orders are a view of Distribution (?view=orders): only one of the two items is lit.
-  const onOrders = () => searchParam("view") === "orders";
-  const kits = tagItem("/admin/tags/kits", names.kits).map((item) => ({ ...item, match: (path: string) => item.match(path) && !onOrders() }));
+  // Stuscle's orders are a tab of Hand out (?view=orders, the admin's), so Hand out stays lit there.
+  const kits = tagItem("/admin/tags/kits", names.kits);
 
   if (profile === "platform") {
-    const orders: NavItem[] = tags ? [{ href: "/admin/tags/kits?view=orders", label: names.stuscleOrders, icon: Inbox, match: (path) => starts("/admin/tags/kits")(path) && onOrders() }] : [];
     return [home, {
       // Its company's daily work comes first and starts open.
       label: names.company, collapsible: true, defaultOpen: true, items: [
@@ -350,7 +346,6 @@ export function panelGroups(profile: Profile | null | undefined, modules: readon
       label: names.platform, adminOnly: true, collapsible: true, items: [
         { href: "/organizations", label: l.shell("navOrganizations"), icon: Building2, match: starts("/organizations") },
         { href: "/admin/reps", label: l.shell("orgPeople"), icon: Users, match: starts("/admin/reps") },
-        ...orders,
         ...(visits ? [{ href: "/admin/products", label: l.shell("manageProducts"), icon: Boxes, match: starts("/admin/products") }] : []),
         ...tagItem("/admin/tags/shop"),
         ...platformItems(l),
