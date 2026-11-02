@@ -87,13 +87,13 @@ export function ReturnsStation() {
         testId="returns-code-list"
       />
       {/* Above the phone's tab bar (components/xpot/MobileTabBar.tsx), at the bottom on desktop. */}
-      <div className="sticky bottom-[calc(env(safe-area-inset-bottom)+96px)] z-10 -mx-1 flex justify-end bg-gradient-to-t from-background via-background/90 to-transparent px-1 pb-1 pt-4 lg:bottom-0">
-
-        <Button type="button" variant="brand" accent="tags" disabled={!okCodes.length || !checked || ret.isPending} onClick={() => setConfirm(true)} data-testid="returns-take-back">
+      {/* The button is there when there is something to take back; a disabled one with a warning is not. */}
+      {okCodes.length ? <div className="sticky bottom-[calc(env(safe-area-inset-bottom)+96px)] z-10 -mx-1 flex justify-end bg-gradient-to-t from-background via-background/90 to-transparent px-1 pb-1 pt-4 lg:bottom-0 lg:bg-none">
+        <Button type="button" variant="brand" accent="tags" disabled={!checked || ret.isPending} onClick={() => setConfirm(true)} data-testid="returns-take-back">
           <Undo2 className="h-4 w-4" />
-          {okCodes.length ? t.plural("takeBackN", okCodes.length) : t("takeBackNone")}
+          {t.plural("takeBackN", okCodes.length)}
         </Button>
-      </div>
+      </div> : null}
       <ConfirmDialog
         accent="tags"
         open={confirm}
