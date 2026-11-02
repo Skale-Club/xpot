@@ -1,6 +1,7 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 import { viewHeaders } from "./adminMode";
 import { parseFieldErrors, serverErrorText, type FieldError } from "./apiErrors";
+import { rememberSignedIn } from "./xpot";
 
 /**
  * A failed API call. `message` is what the server said (its `{ message }`), ready
@@ -132,4 +133,10 @@ export const queryClient = new QueryClient({
       retry: false,
     },
   },
+});
+
+// /api/xpot/me answering (fetched, or set by a sign-in) means this browser has a session: if it is gone later, the
+// sign-in dialog says it ended instead of greeting a returning person like a new one.
+queryClient.getQueryCache().subscribe((event) => {
+  if (event.type === "updated" && event.action.type === "success" && event.query.queryKey[0] === "/api/xpot/me") rememberSignedIn();
 });

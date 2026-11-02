@@ -170,7 +170,7 @@ async function call<T>(method: "GET" | "POST", url: string, body?: unknown, extr
   });
   if (res.status === 401) {
     // Session gone: sign in again and come back to this page.
-    window.location.assign(signInPath(`${window.location.pathname}${window.location.search}`));
+    window.location.assign(signInPath(`${window.location.pathname}${window.location.search}`, { ended: true }));
     throw new HttpError(401, "Authentication required");
   }
   if (!res.ok) {

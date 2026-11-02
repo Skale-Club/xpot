@@ -1,7 +1,7 @@
 // What the session gate shows when /api/xpot/me does not answer, and where "sign in" and unknown addresses go.
 import { describe, expect, it } from "vitest";
 import { sessionProblem } from "../client/src/lib/pwa.js";
-import { isVisitsPath, signInPath, signInRequested } from "../client/src/lib/xpot.js";
+import { isVisitsPath, sessionEndedRequested, signInPath, signInRequested } from "../client/src/lib/xpot.js";
 
 const apiError = (status: number, code?: string) => Object.assign(new Error("x"), { status, code: code ?? null });
 
@@ -27,6 +27,13 @@ describe("signInPath", () => {
   it("never returns to another site", () => {
     expect(signInPath("https://evil.example/x")).toBe("/?signin=1");
     expect(signInPath("//evil.example")).toBe("/?signin=1");
+  });
+  it("says when the session ended, only with a page to go back to", () => {
+    const ended = signInPath("/tags/pieces/ABCD1234", { ended: true });
+    expect(ended).toBe("/?signin=1&next=%2Ftags%2Fpieces%2FABCD1234&ended=1");
+    expect(sessionEndedRequested(new URL(ended, "https://x.test").search)).toBe(true);
+    expect(sessionEndedRequested(new URL(signInPath("/tags"), "https://x.test").search)).toBe(false);
+    expect(signInPath("//evil.example", { ended: true })).toBe("/?signin=1");
   });
   it("is what the landing recognises", () => {
     expect(signInRequested("?signin=1")).toBe(true);
