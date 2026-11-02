@@ -125,11 +125,12 @@ function CountryPhoneInput({
   const t = useT(settingsMessages);
   const parsed = parsePhone(value);
   const active = COUNTRIES.find((c) => c.dial === parsed.dial) ?? COUNTRIES[1];
-  const [local, setLocal] = useState(parsed.local);
+  // Shown masked even when saved bare ("6175550106" reads (617) 555-0106), as the sign-in phone below it does.
+  const [local, setLocal] = useState(maskLocal(parsed.dial, parsed.local));
 
   useEffect(() => {
     const { dial, local: l } = parsePhone(value);
-    setLocal(l);
+    setLocal(maskLocal(dial, l));
     const found = COUNTRIES.find((c) => c.dial === dial) ?? COUNTRIES[1];
     if (found.code !== active.code) {
       // country changed externally

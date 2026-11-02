@@ -108,6 +108,7 @@ Arquivos: `client/src/pages/admin/tags/production-generate.tsx` (onSuccess), `pr
 Risco: nenhum.
 
 ### FLX-9 [S2] Colocar uma placa no ar leva 8 passos e o chip some do fluxo
+Status: feito. Código abre a peça no 8º caractere (celular), Enter na empresa usa o nome digitado (sem "Create company"), "Salvo. A peça está no ar. Agora grave o chip" e o botão principal da peça no ar com chip vazio é "Write chip" (regra em `pieceSituation`, com teste). De 8 passos para 6, medidos em fluxo.
 Telas: reseller/en-phone/Read a piece > Set up > pagina da peca (`p4-02` a `p4-08`)
 Problema: caminho do dia a dia: Read a piece (1), digitar codigo (2), seta (3), Set up (4), digitar empresa (5), "Create company" (6, sem tocar nele o Save fica desabilitado sem motivo), colar link (7), Save and go live (8). Mais de 3 passos para algo diario. Pior: o resultado "Saved. The piece is live." e o botao grande "See performance" (peca com 0 leituras) nao dizem que o chip NFC esta "Not written"; quem encosta o celular na placa nao abre nada. O aviso "1 piece with its NFC chip not written" so existe na home. Dentro da peca, o passo a passo do NFC Tools fica em "More details". "Skip verifying" e "Lock chip" existem so no Android com Web NFC.
 Mudanca: (a) "Read a piece" na home aceitar colar/escanear e ir direto a peca (ja faz), mas depois de "Save and go live" mostrar no topo da peca um cartao primario: en "Now write the chip, so tapping the plate works" + botao "Write chip" (Android) ou "Copy link for NFC Tools" (iPhone/desktop); "See performance" vira secundario enquanto 0 leituras. (b) Digitar nome ja existente/novo: aceitar Enter no campo da empresa para criar sem exigir o toque em "Create company".
@@ -115,6 +116,7 @@ Arquivos: `client/src/pages/tags/TagScreen.tsx`, `client/src/components/piece/Ch
 Risco: nenhum.
 
 ### FLX-10 [S2] Botoes principais desabilitados sem dizer o motivo
+Status: feito para Tags: "Save and go live" e "Save new destination" dizem o que falta; "Read a piece" diz como é um código. "Save company" e "Save task" são de Visits (F6).
 Telas: reseller/en-phone/Set up this piece (`p4-05`), Change destination com `javascript:alert(1)` (`p4-12-bad-url`), rep-both/en-phone/Add company, New task (`p6-26-task-empty`), Read a piece com "abc" (`p9-04-short-code`)
 Problema: "Save and go live" fica apagado com a empresa digitada mas nao criada; "Save new destination" apagado com link invalido; "Save company" e "Save task" apagados sem nome/titulo; o botao de abrir fica apagado com codigo curto. Nenhum diz o que falta. Em contraste, o "Create organization" usa o aviso nativo e a "Read a piece" com URL colada diz "Codes have 8 letters and numbers, e.g. A7K3P9X2." (bom).
 Mudanca: sob cada botao desabilitado uma linha de ajuda que muda com o estado. Ex.: en "Tap \"Create company\" to use this name." / "That link isn't valid. Start with https://" / "Give the task a title." pt "Toque em \"Create company\" para usar este nome." etc. (3 idiomas em `tags.ts`/`visits.ts`).
@@ -157,6 +159,7 @@ Arquivos: `client/src/pages/xpot/components/VoiceRecorder.tsx`, `client/src/i18n
 Risco: requer rota de nota por texto (a nota salva ja tem o campo `summary`).
 
 ### FLX-16 [S2] Duas abas: o dialogo muda sozinho e mantem o texto digitado
+Status: feito. O erro `tag_pause_before_move` fecha o formulário, relê a peça e avisa "Esta peça acabou de ser configurada em outro aparelho" (sem o nome do cliente).
 Telas: reseller/en-phone Set up this piece em duas abas (`p9-02-tabA-conflict`)
 Problema: na aba B coloquei a peca no ar para "Other Tab Bistro". Na aba A, ainda com "Set up this piece" aberto e "@twintab" digitado, toquei Save: erro 409 `tag_pause_before_move` e o dialogo virou "Change destination" para "Other Tab Bistro" com a mensagem "Pause the piece before giving it to another customer." e "@twintab" ainda no campo. A pessoa nunca escolheu "outro cliente"; se tocar "Save new destination" grava @twintab no cliente da outra aba.
 Mudanca: no 409 fechar o dialogo, recarregar a peca e avisar: en "This piece was just set up for Other Tab Bistro on another device. Review it before changing." / pt "Esta peca acabou de ser configurada para Other Tab Bistro em outro aparelho. Confira antes de mudar." / es "Esta pieza se acaba de configurar para Other Tab Bistro en otro dispositivo. Revisala antes de cambiar."
