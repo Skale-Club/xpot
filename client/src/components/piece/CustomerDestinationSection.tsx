@@ -38,6 +38,15 @@ const isDestinationType = (value: string | null): value is TagDestinationType =>
 const KIND_ICON = { url: Link2, email: Mail, phone: Phone, vcard: Contact } as const;
 
 /** Lifecycle confirms: title, description and button are manageTagsPieces action_<action>_*. */
+/** The small pencil that edits the value beside it (the destination, the customer): a 40px target. */
+function EditPencil({ label, onClick, testId }: { label: string; onClick: () => void; testId: string }) {
+  return (
+    <button type="button" onClick={onClick} aria-label={label} title={label} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white/55 hover:bg-white/10 hover:text-white active:bg-white/10" data-testid={testId}>
+      <Pencil className="h-4 w-4" />
+    </button>
+  );
+}
+
 type ConfirmAction = Extract<PieceAction, "activate" | "disable" | "unassign">;
 
 export function CustomerDestinationSection({ commands }: {
@@ -291,10 +300,7 @@ export function CustomerDestinationSection({ commands }: {
         </div>
       </div>
 
-      {tag.leadId ? (
-        // The customer's name is in the header above; the changes that can be made to it are with the other actions below.
-        <span className="sr-only" data-testid="text-tag-lead">{tag.leadName ?? tm("customerNumber", { id: tag.leadId })}</span>
-      ) : dest ? (
+      {tag.leadId ? null : dest ? (
         // Set up without a customer (made before the picker was required): Change customer links one.
         <p className="mt-2 flex items-center gap-2 text-sm text-white/45" data-testid="text-tag-lead">
           <Building2 className="h-4 w-4 shrink-0 text-white/30" />
@@ -342,21 +348,21 @@ export function CustomerDestinationSection({ commands }: {
       )}
 
       {/* Live or not, and the customer: the same verbs on both screens. */}
-      {(showToggle || canChangeCustomer || (tag.leadId && tag.saleId !== null)) && (
-        <div className="mt-3 flex flex-col gap-2 border-t border-white/[0.08] pt-3 sm:flex-row sm:flex-wrap">
+      {(showToggle || tag.leadId) && (
+        <div className="mt-3 flex items-center gap-2 border-t border-white/[0.08] pt-3">
           {showToggle && (
-            <Button type="button" variant="secondary" onClick={() => void toggle()} loading={toggling} disabled={toggling} className="w-full sm:w-auto" data-testid="button-toggle">
+            <Button type="button" variant="secondary" onClick={() => void toggle()} loading={toggling} disabled={toggling} className="shrink-0" data-testid="button-toggle">
               <Power className={`!size-4 ${live ? "text-red-400" : "text-emerald-400"}`} />
               {live ? t("switchOff") : paused ? t("switchOn") : tm("action_activate_confirm")}
             </Button>
           )}
-          {canChangeCustomer && (
-            <Button type="button" variant="ghost" onClick={() => openEditor(true)} className="min-w-0 sm:flex-none" data-testid="button-change-customer">
-              <UserRound className="!size-4" />
-              {t("changeCustomerShort")}
-            </Button>
-          )}
-          {tag.leadId && tag.saleId !== null && <p className="text-xs text-white/40 sm:self-center" data-testid="admin-piece-clear-customer-sold">{tm("clearCustomerSold")}</p>}
+          {tag.leadId ? (
+            <div className="flex min-w-0 flex-1 items-center gap-1">
+              <span className="min-w-0 break-words text-sm font-semibold text-white/85" data-testid="text-tag-lead">{tag.leadName ?? tm("customerNumber", { id: tag.leadId })}</span>
+              {canChangeCustomer && <EditPencil label={t("changeCustomerShort")} onClick={() => openEditor(true)} testId="button-change-customer" />}
+            </div>
+          ) : null}
+      {tag.leadId && tag.saleId !== null ? <p className="mt-2 text-xs text-white/40" data-testid="admin-piece-clear-customer-sold">{tm("clearCustomerSold")}</p> : null}
         </div>
       )}
       {tag.leadId && !retired ? (

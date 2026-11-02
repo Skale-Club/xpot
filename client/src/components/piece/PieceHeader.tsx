@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Building2, MapPin } from "lucide-react";
+import { MapPin } from "lucide-react";
 import type { TagDetail } from "@shared/tagsApi";
 import { CODE_HEADING, TagModelChips, TagPieceVisual, tagPlaqueSpec } from "@/components/xpot/TagProductThumbnail";
 import { Pill, SOLD_TONE } from "@/components/xpot/StatusPill";
@@ -114,7 +114,7 @@ export function PieceFacts({ tag, className = "" }: { tag: TagDetail; className?
     : line.kind === "company" ? tpieces("houseStock")
     : line.kind === "you" ? tp("locationYou")
     : <>{tp(line.kind === "with" ? "locationWith" : "locationReseller", { name: named })}{kit}</>;
-  if (!where && !tag.leadName) return null;
+  if (!where) return null;
   return (
     <dl className={`grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2 gap-y-1 text-sm ${className}`} data-testid="piece-facts">
       {where ? (
@@ -124,15 +124,6 @@ export function PieceFacts({ tag, className = "" }: { tag: TagDetail; className?
             <span className="sr-only">{tp("locationLabel")}</span>
           </dt>
           <dd className="min-w-0 break-words text-white/75" data-testid="piece-location">{where}</dd>
-        </>
-      ) : null}
-      {tag.leadName ? (
-        <>
-          <dt className="flex h-5 items-center" title={tp("customerLabel")}>
-            <Building2 className="h-4 w-4 text-white/40" aria-hidden="true" />
-            <span className="sr-only">{tp("customerLabel")}</span>
-          </dt>
-          <dd className="min-w-0 break-words font-semibold text-white/85" data-testid="piece-customer">{tag.leadName}</dd>
         </>
       ) : null}
     </dl>
