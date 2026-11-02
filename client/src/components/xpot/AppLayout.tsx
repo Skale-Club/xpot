@@ -322,7 +322,7 @@ function DesktopSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
       </div>
 
       <div className="space-y-2 px-3 pb-3">
-        <AreaSwitch collapsed={collapsed} module={module} />
+        <AreaSwitch collapsed={collapsed} narrow module={module} />
         {!panel ? <SidebarModuleSwitch collapsed={collapsed} module={module} modules={modules} label={moduleLabel} /> : null}
         {module === "visits" && !panel ? <PersistentRouteProgress collapsed={collapsed} className={collapsed ? "mt-2" : "mt-2.5"} /> : null}
       </div>

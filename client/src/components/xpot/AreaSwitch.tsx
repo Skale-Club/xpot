@@ -36,7 +36,8 @@ export function clearPanelRoute(): void {
   try { window.sessionStorage.removeItem(PANEL_ROUTE_KEY); } catch { /* Nothing to clear. */ }
 }
 
-export function AreaSwitch({ collapsed = false, module = null, className = "" }: { collapsed?: boolean; module?: XpotModule | null; className?: string }) {
+/** `narrow`: the sidebar's 208px: the names alone, in two lines when they need them, with no icon; collapsed it is the icons alone. */
+export function AreaSwitch({ collapsed = false, narrow = false, module = null, className = "" }: { collapsed?: boolean; narrow?: boolean; module?: XpotModule | null; className?: string }) {
   const tw = useT(workspacesMessages);
   const [, navigate] = useLocation();
   const modules = useXpotModules();
@@ -73,12 +74,12 @@ export function AreaSwitch({ collapsed = false, module = null, className = "" }:
           aria-selected={active}
           title={collapsed ? label : undefined}
           onClick={() => go(id)}
-          className={`relative flex h-9 min-w-0 flex-1 touch-manipulation items-center justify-center gap-2 rounded-xl px-2 text-sm font-semibold transition-colors ${active ? "text-white" : "text-white/45 hover:text-white/80"}`}
+          className={`relative flex min-w-0 flex-1 touch-manipulation items-center justify-center gap-2 rounded-xl px-2 font-semibold transition-colors ${narrow && !collapsed ? "min-h-10 text-[13px] leading-tight" : "h-10 text-sm"} ${active ? "text-white" : "text-white/45 hover:text-white/80"}`}
           data-testid={`area-${id}`}
         >
           {active ? <span className="absolute inset-0 rounded-xl" style={{ background: accent.strong }} /> : null}
-          <Icon className={`relative h-4 w-4 shrink-0 ${active ? accent.text : ""}`} aria-hidden="true" />
-          {!collapsed ? <span className="relative truncate">{label}</span> : null}
+          {!collapsed ? null : <Icon className={`relative h-4 w-4 shrink-0 ${active ? accent.text : ""}`} aria-hidden="true" />}
+          {!collapsed ? <span className={`relative ${narrow ? "text-center" : "truncate"}`}>{label}</span> : null}
         </button>
       ))}
     </div>

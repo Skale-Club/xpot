@@ -29,6 +29,7 @@ export function PanelTabBar({ groups, profile }: { groups: NavGroup[]; profile: 
       <MobileTabBar
         module="tags"
         accent={{ solid: "#fbbf24", text: "text-amber-200" }}
+        wrapLabels
         tabs={items}
         activeId={open ? MORE : lit?.href ?? (more.length ? MORE : "")}
         onSelect={(id) => (id === MORE ? setOpen(true) : navigateGuarded(id, navigate))}
