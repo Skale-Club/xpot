@@ -153,18 +153,20 @@ export function TaskForm({
  * "New task" in a dialog, saved here: the company page (company fixed) and
  * Sales › Pipeline (company picked, linked to the visit in progress).
  */
-export function NewTaskDialog({ open, onOpenChange, company, leads, visitId }: {
+export function NewTaskDialog({ open, onOpenChange, company, leads, visitId, title }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   company?: { id: number; name: string };
   leads?: ReadonlyArray<{ id: number; name: string }>;
   visitId?: number | null;
+  /** What the task starts as (the visit's next step). */
+  title?: string;
 }) {
   const t = useT(tasksMessages);
   const { toast } = useToast();
   const [form, setForm] = useState<TaskFormValues>(EMPTY_TASK);
   useEffect(() => {
-    if (open) setForm({ ...EMPTY_TASK, leadId: company ? String(company.id) : "" });
+    if (open) setForm({ ...EMPTY_TASK, title: title ?? "", leadId: company ? String(company.id) : "" });
   }, [open, company?.id]);
   const save = useMutation({
     mutationFn: async () => (await apiRequest("POST", "/api/xpot/tasks", taskBody(form, { visitId }))).json(),

@@ -2,7 +2,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Building2, ChevronRight, Package, PackageOpen, Plus, Settings, ShieldCheck, ShoppingBag, UserPlus, Users } from "lucide-react";
 import { Link, Redirect, useLocation, useSearchParams } from "wouter";
-import { PieceStatusPill } from "@/components/piece/PieceStatusPill";
+import { PieceStatusPill, usePieceStatusLabel } from "@/components/piece/PieceStatusPill";
 import { Button } from "@/components/ui/button";
 import { AppLayout } from "@/components/xpot/AppLayout";
 import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
@@ -39,6 +39,7 @@ import { teamPeriodSince, type TeamActivityResponse } from "@shared/teamActivity
 import type { XpotMeResponse } from "./types";
 import { AddPersonForm } from "./components/AddPersonForm";
 import { NewPartnerDialog } from "./components/NewPartnerDialog";
+import { MemberMenu } from "./components/MemberMenu";
 
 // Organizations. The platform sees them all, each a Producer or a Seller (prints_own_pieces), and can filter by that.
 // An owner or a partner who runs exactly one goes straight to its workspace, which is their panel's Team, Team
@@ -110,6 +111,13 @@ function lookup(t: (key: never) => string, key: string, fallback: string) {
 }
 
 const isPlatformManager = (me: XpotMeResponse | undefined) => !!me && me.user.isAdmin;
+
+/** "Live 3 · Ready, not live 3 · No customer yet 7": how many pieces are in each status, the biggest first. */
+function statusSummary(rows: any[], label: (piece: any) => string): string {
+  const counts = new Map<string, number>();
+  for (const row of rows) counts.set(label(row), (counts.get(label(row)) ?? 0) + 1);
+  return Array.from(counts).sort((a, b) => b[1] - a[1]).map(([name, count]) => `${name} ${count}`).join(" · ");
+}
 
 export function OrganizationsPage({ organizationId }: { organizationId?: number }) {
   return organizationId ? <OrganizationWorkspace organizationId={organizationId} /> : <OrganizationsEntry />;
@@ -232,6 +240,7 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
   const twp = useT(workspacesMessages);
   const tc = useT(commonMessages);
   const ta = useT(addPersonMessages);
+  const statusLabel = usePieceStatusLabel();
   // The open section rides in the URL (?tab=team: a person's page links back to
   // the team it came from). Desktop shows a tab bar, Overview first. A phone has
   // no tab strip to swipe: its first screen lists the sections with their
@@ -240,7 +249,12 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
   const [, navigate] = useLocation();
   const [params, setParams] = useSearchParams();
   const urlTab = WORKSPACE_TABS.find((id) => id === params.get("tab")) ?? null;
-  const tab: WorkspaceTab | null = urlTab ?? (isDesktop ? "overview" : null);
+  const { data: me } = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"] });
+  const platformManager = isPlatformManager(me);
+  // The owner or partner of this one organization has the sidebar for Team, Team purchases, Stock, Hand out and Companies:
+  // here they get the team, with no tab strip that says the same things again (AD-06, NAV-28).
+  const ownPanel = !platformManager && ownedOrganizationId(me) === organizationId;
+  const tab: WorkspaceTab | null = urlTab ?? (ownPanel ? "team" : isDesktop ? "overview" : null);
   const home = `/organizations/${organizationId}`;
   const setTab = (next: WorkspaceTab) => {
     if (!isDesktop) {
@@ -254,7 +268,6 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
       return updated;
     }, { replace: true });
   };
-  const { data: me } = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"] });
   const base = `/api/xpot/organizations/${organizationId}`;
   const organization = useQuery<Organization>({ queryKey: [base] });
   const members = useQuery<Member[]>({ queryKey: [`${base}/members`] });
@@ -262,7 +275,6 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
   const kits = useQuery<any[]>({ queryKey: [`${base}/kits`], enabled: tab === "kits" });
   const customers = useQuery<any[]>({ queryKey: [`${base}/customers`], enabled: tab === "customers" });
   const membership = me?.organizationMemberships?.find((item) => item.organizationId === organizationId && item.isActive && !item.blockedAt);
-  const platformManager = isPlatformManager(me);
   const mayManageTeam = platformManager || membership?.role === "admin";
   // The owner or partner of this one organization has no list above it: Back goes to their panel.
   const [backHref, backLabel] = ownedOrganizationId(me) === organizationId ? ["/admin", twp("todayTitle")] : ["/organizations", t("backToList")];
@@ -298,15 +310,19 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
     },
   });
 
+  // Settings are only worth a tab to whoever can change them, or where there is a summary to read (a partner that prints).
+  const hasSettings = platformManager || !!organization.data?.printsOwnPieces;
   const tabs = useMemo<Array<{ id: WorkspaceTab; label: string; icon: typeof Users }>>(() => [
-    { id: "overview", label: t("tabOverview"), icon: Building2 },
+    ...(ownPanel ? [] : [{ id: "overview" as const, label: t("tabOverview"), icon: Building2 }]),
     { id: "team", label: t("tabTeam"), icon: Users },
-    { id: "inventory", label: t("tabInventory"), icon: Package },
-    { id: "kits", label: t("tabKits"), icon: PackageOpen },
+    ...(ownPanel ? [] : [
+      { id: "inventory" as const, label: t("tabInventory"), icon: Package },
+      { id: "kits" as const, label: t("tabKits"), icon: PackageOpen },
+    ]),
     ...(mayManageTeam ? [{ id: "purchases" as const, label: t("tabPurchases"), icon: ShoppingBag }] : []),
-    { id: "customers", label: t("tabCustomers"), icon: Users },
-    { id: "settings", label: t("tabSettings"), icon: Settings },
-  ], [t, mayManageTeam]);
+    ...(ownPanel ? [] : [{ id: "customers" as const, label: t("tabCustomers"), icon: Building2 }]),
+    ...(hasSettings && !ownPanel ? [{ id: "settings" as const, label: t("tabSettings"), icon: Settings }] : []),
+  ], [t, mayManageTeam, ownPanel, hasSettings]);
 
   if (organization.isLoading) return <AppLayout title={t("title")}><ListSkeleton rows={4} /></AppLayout>;
   if (organization.error || !organization.data) {
@@ -323,7 +339,9 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
   }
   const org = organization.data;
   // A phone inside one section: its header names the section, Back returns to the list.
-  const phoneSection = !isDesktop && tab ? tabs.find((item) => item.id === tab) : undefined;
+  const phoneSection = !isDesktop && tab && !ownPanel ? tabs.find((item) => item.id === tab) : undefined;
+  // Their own panel names the screen the sidebar opened (Team, Team purchases, Company details), under the company's name.
+  const ownTitle = tab === "purchases" ? t("tabPurchases") : tab === "settings" ? t("companyDetails") : t("tabTeam");
   const confirmCopy = pending ? {
     suspend: { title: t("suspendTitle", { name: pending.member.displayName }), body: t("suspendBody"), label: t("suspend"), danger: true },
     reactivate: { title: t("reactivateTitle", { name: pending.member.displayName }), body: t("reactivateBody"), label: t("reactivate"), danger: false },
@@ -341,13 +359,14 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
           <PageHeader
             backHref={backHref}
             backLabel={backLabel}
-            title={org.name}
-            description={membership?.role === "admin" ? t("roleRepAdmin") : platformManager ? t("platformManagement") : t("roleRep")}
+            eyebrow={ownPanel ? org.name : undefined}
+            title={ownPanel ? ownTitle : org.name}
+            description={ownPanel ? undefined : membership?.role === "admin" ? t("roleYouOwner") : platformManager ? undefined : t("roleYouEmployee")}
             className="mb-0"
           />
         )}
 
-        {isDesktop && tab && <Tabs tabs={tabs} value={tab} onChange={setTab} ariaLabel={org.name} idPrefix="organization" fill={false} accent="account" />}
+        {isDesktop && tab && !ownPanel && <Tabs tabs={tabs} value={tab} onChange={setTab} ariaLabel={org.name} idPrefix="organization" fill={false} accent="account" />}
         {!tab && <SectionList organization={org} tabs={tabs} onOpen={setTab} />}
 
         {tab === "overview" && <Overview organization={org} onOpen={setTab} activityBase={mayManageTeam && usesVisits ? base : null} />}
@@ -362,6 +381,12 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
             )}
             {mayManageTeam && adding && <AddPersonForm organizationId={organizationId} />}
             {platformManager && adding && <AddExistingPerson organizationId={organizationId} members={members.data ?? []} />}
+            {ownPanel && hasSettings ? (
+              <button type="button" onClick={() => setTab("settings")} className="inline-flex min-h-11 items-center gap-1 text-sm font-medium text-blue-300 hover:text-blue-200" data-testid="organization-company-details">
+                {t("companyDetails")}
+                <ChevronRight className="h-4 w-4" aria-hidden="true" />
+              </button>
+            ) : null}
             {members.isLoading ? <ListSkeleton rows={3} /> : members.isError ? (
               <ErrorState message={describeApiError(members.error)} onRetry={() => void members.refetch()} />
             ) : (
@@ -386,11 +411,11 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
                       {member.membershipRole === "admin" && <ShieldCheck className="h-3 w-3" aria-hidden="true" />}{member.membershipRole === "admin" ? t("roleRepAdmin") : t("roleRep")}
                     </Pill>
                     <Pill tone={suspended ? "red" : "green"}>{suspended ? t("memberSuspended") : t("memberActive")}</Pill>
-                    {canChange && <>
-                      <Button variant="secondary" size="sm" onClick={() => setPending({ member, kind: member.blockedAt ? "reactivate" : "suspend" })}>{member.blockedAt ? t("reactivate") : t("suspend")}</Button>
-                      {platformManager && <Button variant="secondary" size="sm" onClick={() => setPending({ member, kind: member.membershipRole === "admin" ? "makeRep" : "makeAdmin" })}>{member.membershipRole === "admin" ? t("makeRep") : t("makeRepAdmin")}</Button>}
-                      <Button variant="outline" size="sm" className={DANGER_OUTLINE} onClick={() => setPending({ member, kind: "remove" })}>{t("remove")}</Button>
-                    </>}
+                    {canChange && <MemberMenu label={t("memberActions")} testId={`member-menu-${member.repId}`} items={[
+                      { key: member.blockedAt ? "reactivate" : "suspend", label: member.blockedAt ? t("reactivate") : t("suspend"), hint: member.blockedAt ? undefined : t("suspendHint"), onSelect: () => setPending({ member, kind: member.blockedAt ? "reactivate" : "suspend" }) },
+                      ...(platformManager ? [{ key: "role", label: member.membershipRole === "admin" ? t("makeRep") : t("makeRepAdmin"), onSelect: () => setPending({ member, kind: member.membershipRole === "admin" ? "makeRep" as const : "makeAdmin" as const }) }] : []),
+                      { key: "remove", label: t("remove"), hint: t("removeHint"), danger: true, onSelect: () => setPending({ member, kind: "remove" }) },
+                    ]} />}
                   </div>
                 );
               })}
@@ -401,12 +426,13 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
         {tab === "inventory" && (
           <RecordList query={inventory} empty={t("noPieces")} rowHref={(row) => (platformManager ? `/admin/tags/pieces/${row.id}` : `${managementReach(me) ? "/admin/work" : ""}/tags/pieces/${encodeURIComponent(row.publicCode)}`)}
             seeAll={platformManager ? { href: `/admin/tags/pieces?org=${organizationId}`, label: t("seeAllIn", { screen: ts("managePieces") }), testId: "organization-inventory-all" } : undefined}
+            summary={(rows) => <p className="text-sm text-white/60" data-testid="organization-inventory-summary">{statusSummary(rows, statusLabel)}</p>}
             render={(row) => <><span className="font-mono text-sm text-white">{row.publicCode}</span><span className="flex items-center gap-2 text-xs text-white/45">{lookup(tt, `product_${row.productType}`, String(row.productType ?? ""))}<PieceStatusPill piece={row} /></span></>} />
         )}
         {tab === "kits" && (
           <RecordList query={kits} empty={t("noKits")} rowHref={(row) => (platformManager ? `/admin/tags/kits?view=kits&org=${organizationId}${row.repId ? `&kitRep=${row.repId}` : ""}` : `${managementReach(me) ? "/admin/work" : ""}/tags/pieces`)}
             seeAll={platformManager ? { href: `/admin/tags/kits?view=kits&org=${organizationId}`, label: t("seeAllIn", { screen: ts("manageKits") }), testId: "organization-kits-all" } : undefined}
-            render={(row) => <><span className="text-sm text-white"><span className="font-mono">{kitCode(row.kitNumber)}</span><span className="text-white/45"> · {formatDate(row.createdAt)}</span>{row.note ? <span className="text-white/45"> · {row.note}</span> : null}</span><span className="text-xs text-white/45">{repName(row.repId)}</span></>} />
+            render={(row) => <><span className="text-sm text-white"><span className="font-mono">{kitCode(row.kitNumber)}</span><span className="text-white/45"> · {t.plural("kitPieces", row.pieceCount ?? 0)} · {formatDate(row.createdAt)}</span>{row.note ? <span className="text-white/45"> · {row.note}</span> : null}</span><span className="text-xs text-white/45">{repName(row.repId)}</span></>} />
         )}
         {tab === "purchases" && mayManageTeam && <PurchasesList query={purchases} />}
         {tab === "customers" && (
@@ -495,8 +521,9 @@ function Overview({ organization, onOpen, activityBase }: { organization: Organi
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         {cards.map(([label, value, tab]) => (
-          <button key={tab} type="button" onClick={() => onOpen(tab)} className="rounded-2xl text-left transition-colors hover:bg-white/[0.03]">
+          <button key={tab} type="button" onClick={() => onOpen(tab)} className="relative rounded-2xl text-left transition-colors hover:bg-white/[0.03]">
             <Stat card label={label} value={value} />
+            <ChevronRight className="pointer-events-none absolute right-3 top-3 h-4 w-4 text-white/30" aria-hidden="true" />
           </button>
         ))}
       </div>
@@ -522,7 +549,7 @@ function TeamActivity({ base }: { base: string }) {
         <Stat card label={t("activityVisits")} value={m.visits} detail={tw("kpiVisitsDetail")} />
         <Stat card label={t("activityFinished")} value={m.finishedVisits} detail={tw("kpiFinishedDetail")} />
         <Stat card label={t("activitySales")} value={m.salesCount} />
-        <Stat card label={t("activityRevenue")} value={formatMoney(m.salesTotalCents, m.currency)} tone="money" />
+        <Stat card label={t("activityRevenue")} value={formatMoney(m.salesTotalCents, m.currency)} tone={m.salesTotalCents > 0 ? "money" : undefined} />
       </div>
     </section>
   );
@@ -593,14 +620,20 @@ function SectionList({ organization, tabs, onOpen }: {
  * The organization's records, by name, each opening on its own screen. `seeAll` (platform management) links to the
  * full list filtered to this organization, with its search, filters and actions.
  */
-function RecordList({ query, empty, render, rowHref, seeAll }: {
+const RECORDS_SHOWN = 10;
+
+function RecordList({ query, empty, render, rowHref, seeAll, summary }: {
   query: { data?: any[]; isLoading: boolean; isError: boolean; error: unknown; refetch: () => unknown };
   empty: string;
   render: (row: any) => ReactNode;
   rowHref: (row: any) => string;
   seeAll?: { href: string; label: string; testId?: string };
+  /** A line above the list: what it holds, counted (Stock by status). */
+  summary?: (rows: any[]) => ReactNode;
 }) {
   const tw = useT(peopleWorkspaceMessages);
+  const t = useT(organizationsMessages);
+  const [showAll, setShowAll] = useState(false);
   const link = seeAll ? (
     <div className="flex justify-end">
       <Link href={seeAll.href} className="inline-flex min-h-11 items-center gap-1 text-sm font-medium text-blue-300 hover:text-blue-200" data-testid={seeAll.testId}>
@@ -613,17 +646,20 @@ function RecordList({ query, empty, render, rowHref, seeAll }: {
   if (query.isError) return <ErrorState message={describeApiError(query.error)} onRetry={() => void query.refetch()} />;
   const rows = query.data ?? [];
   if (!rows.length) return <div className="space-y-2">{link}<EmptyState compact icon={Package} title={empty} /></div>;
+  const visible = showAll ? rows : rows.slice(0, RECORDS_SHOWN);
   return (
     <div className="space-y-2">
       {link}
+      {summary ? summary(rows) : null}
       <div className={`divide-y divide-white/[0.06] overflow-hidden rounded-2xl ${GLASS_SUBTLE_CLASS}`}>
-        {rows.map((row) => (
+        {visible.map((row) => (
           <Link key={row.id} href={rowHref(row)} className="flex min-h-11 items-center gap-3 px-4 py-3 transition-colors hover:bg-white/[0.04] focus-visible:!-outline-offset-2">
             <span className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-x-3 gap-y-1">{render(row)}</span>
             <ChevronRight className="h-4 w-4 shrink-0 text-white/25" aria-label={tw("openRow")} />
           </Link>
         ))}
       </div>
+      {rows.length > visible.length ? <Button type="button" variant="ghost" className="w-full" onClick={() => setShowAll(true)} data-testid="records-see-all">{t("seeAllRows", { count: rows.length })}</Button> : null}
     </div>
   );
 }

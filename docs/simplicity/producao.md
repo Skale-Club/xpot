@@ -174,7 +174,7 @@ Problema: o rodapé avisa "The print computer generates the files. While it is o
 Mudança: trocar o rodapé por uma linha no topo da lista, com a mesma lógica de "stale": "Bench PC is on · printer idle" / "Bench PC está ligado · impressora parada" / "Bench PC está encendido · impresora libre", ou em âmbar "Bench PC has been off since 11:12. Files will wait." / "Bench PC está desligado desde 11:12. Os arquivos vão esperar." / "Bench PC está apagado desde las 11:12. Los archivos esperarán." Com vários computadores, uma linha por computador. Sem computador pareado: "No print computer paired." com link para Chip writers.
 Arquivos: pages/admin/tags/production-board.tsx:100-103; i18n/messages/productionBoard.ts:28; pages/admin/tags/ProvisionersTab.tsx:181
 Risco: confirmar que `printerStatus` chega à API de quem produz; o texto "printer idle" depende disso. Sem isso, usar só ligado/desligado.
-Status: feito em parte (linha por computador, ligado ou desligado e visto por último, no topo de To print; "printer idle" pendente: o estado da impressora não chega à API de quem produz)
+Status: feito em parte. Linha por computador, ligado ou desligado e visto por último, no topo de To print. "Printer idle" pendente: o estado da impressora não chega à API de quem produz.
 
 ### PROD-17 [S2] "Preparing files / Print / Completed" parecem botões e não dizem nada a mais
 Telas: platform/en-desktop/production-job-ready, production-job-printing, production-job-requested; platform/en-phone/production-job-ready, production-job-printing; partner/en-phone/production-job-harborReady
@@ -206,7 +206,7 @@ Problema: o quadro diz sobre a base "No serial and nothing recorded: download th
 Mudança: um caminho só. Recomendo: quadro e modelo mostram download, e ao lado "I printed these" / "Imprimi estas" / "Imprimí estas", que pergunta a quantidade e soma na contagem. Sai o `Print` que cria pedido em peça sem código. Texto da seção: "No serial needed. Download the file and add what you printed to the count." / "Não precisa de serial. Baixe o arquivo e some à contagem o que imprimiu." / "No necesita serial. Descarga el archivo y suma al conteo lo que imprimiste."
 Arquivos: pages/admin/tags/production-board.tsx:73-87; pages/admin/tags/production-model.tsx:109; i18n/messages/productionBoard.ts:10
 Risco: regra de negócio, decisão do dono. Sem mudar a regra, ao menos corrigir a frase: tirar "nothing recorded".
-Status: pendente em parte (a frase foi corrigida: baixar não muda a contagem; a regra "I printed these" é decisão do dono)
+Status: feito em parte. Decidido sem o dono: o modelo sem serial (só a plataforma) ganhou "I printed these" (Imprimi estas) ao lado de Print, que soma à contagem com o motivo "printed"; a frase do quadro diz o mesmo. Não removi o `Print` que cria pedido: ele alimenta a fila e os números de impressão, e tirá-lo muda o fluxo da produção; fica pendente.
 
 ### PROD-21 [S2] Print apagado sem dizer por quê; comprado aparece como Ready
 Telas: platform/en-desktop/production-models, production-model-nfc-sticker-10x20, production-model-plate-large-venmo-white, production-model-plate-large-venmo-mixed; platform/en-phone, mesmas telas; partner/en-desktop/production-model-plate-large-venmo-white
@@ -278,7 +278,7 @@ Problema: "Made by print-pipeline/preview.py, then uploaded here (.glb).", `Uplo
 Mudança: sai `previewEmptyHint`. Sem 3D, parceiro não vê o card; plataforma vê só "No 3D view yet" e `Upload`. `builder` e `panel` saem da linha da versão. Para parceiro, a lista de versões mostra só a versão em uso, sem nota; a nota fica para a plataforma. Reescrever as descrições do catálogo como frase para quem imprime.
 Arquivos: pages/admin/tags/production-preview.tsx:42-58; pages/admin/tags/production-model.tsx:130, :229; i18n/messages/production.ts:255
 Risco: confirmar se o parceiro pode de fato enviar `.glb` no servidor; a captura mostra o botão para ele. Recomendo bloquear.
-Status: feito em parte (parceiro não vê builder, painel, notas nem receita; a descrição de modelos do catálogo, dado, continua pendente)
+Status: feito em parte. O parceiro não vê builder, painel, notas nem receita. A descrição dos modelos do catálogo é dado do banco, não código: reescrever é feito no catálogo (Production > modelo > Edit), não nesta rodada.
 
 ### PROD-30 [S2] Cabeçalho do modelo corta a cor, que é o que diferencia
 Telas: platform/en-phone/production-model-plate-large-menu-white, production-model-plate-large-venmo-white, production-model-stand-large-google-white, production-model-plate-small-instagram-black; partner/en-phone/production-model-plate-small-instagram-black
@@ -310,7 +310,7 @@ Problema: quem recebe está com as peças na mão. No celular, o campo aparece e
 Mudança: na aba Receive sai o cartão de produto; no celular o cabeçalho recolhe para código e contagem. `Use camera` em primário no celular. Placeholder "Scan or type the code" / "Leia ou digite o código" / "Escanea o escribe el código". Ícone com rótulo "Full screen" / "Tela cheia" / "Pantalla completa". `Close batch` só no rodapé desta aba.
 Arquivos: pages/admin/tags/BatchDetail.tsx:426; pages/admin/tags/batch-receive.tsx:168-231
 Risco: nenhum.
-Status: feito em parte (sem cartão do produto, placeholder curto, tela cheia com rótulo, Close batch só no rodapé; "Use camera" como principal no celular e cabeçalho recolhido pendentes)
+Status: feito. No celular "Use camera" é o botão principal, em largura total, acima do campo; a introdução fica escondida no celular; sem cartão do produto, placeholder curto, tela cheia com rótulo e Close batch só no rodapé. Visto no celular (en, pt, es).
 
 ### PROD-34 [S2] Lote de impressão com "Open for scanning" e "Close batch"
 Telas: platform/en-desktop/batch-print-printedA-1, batch-print-printing, batch-harbor-printed; partner/en-desktop/batch-harbor-printed; partner/en-phone/batch-harbor-printed
@@ -326,7 +326,7 @@ Problema: REV-2026-002: selo `In stock`, `COMPANY STOCK 0`, e 0 + 2 + 1 = 3 de 4
 Mudança: o selo de etapa em lote de impressão vira "All received" / "Tudo recebido" / "Todo recibido". Card novo "Other" / "Outras" / "Otras" quando houver, com a soma fechando no total. "Live" sai de Sold e vira card próprio, ou dica "1 live, not sold". Sai o texto de Damaged.
 Arquivos: pages/admin/tags/BatchDetail.tsx:275-281, :398-405; shared/tagMetrics.ts:26-42; i18n/messages/manageTagsBatches.ts:14, :71-72
 Risco: "Other" precisa somar uso interno, reservada, perdida e desativada. Validar contra `TAG_STOCK_METRICS`.
-Status: feito em parte (selo vem da impressão, Damaged só se maior que zero, "1 live, not sold"; o cartão "Other" pendente)
+Status: feito. Selo vem da impressão, Damaged só se maior que zero, "1 live, not sold", e um cartão "Other" (Outras) junta uso interno, reservadas, perdidas e desativadas, para os cartões fecharem com o total do lote.
 
 ### PROD-36 [S2] Peça pendente não diz em que pé está a impressão
 Telas: platform/en-phone/piece-popup-pendingFailed, piece-popup-pendingCancelled, piece-popup-pendingPrinting, piece-popup-pendingBuilding, piece-popup-pendingOldPrint; platform/en-desktop/piece-popup-pendingFailed
@@ -334,7 +334,7 @@ Problema: a peça cuja impressão está na impressora mostra `Waiting to print`.
 Mudança: selo pelo status da impressão: "Print failed" / "Impressão falhou" / "Impresión falló", "Print cancelled", "On the printer", "Waiting for the file", "Ready to print". Botão: "Open print job". Dica de falha: "It will not exist until it is printed again." / "Ela só vai existir quando for impressa de novo." / "Solo existirá cuando se imprima de nuevo." Sem impressão: `stockBlocked` diz "It goes into stock when its print job is marked printed." `Held by` fica vazio enquanto pendente.
 Arquivos: components/piece/pieceView.ts:105-116; components/piece/PieceBody.tsx:90; i18n/messages/pieceScreen.ts:109, :116; i18n/messages/tags.ts:130
 Risco: `stockBlocked_pending` também serve a lote de fornecedor, onde "scan" é correto. Separar pelas duas origens.
-Status: pendente (components/piece é da frente F2)
+Status: feito. A peça pendente diz "Print failed" / "Print cancelled" / "Waiting to print", o botão é "Open print job" (Abrir a impressão) e a dica da falha diz que a peça só existe quando for impressa de novo. Visto no popup.
 
 ### PROD-37 [S2] Chip writers lista o computador da impressora sem dizer que ele imprime
 Telas: platform/en-desktop/chip-writers; platform/en-phone/chip-writers; partner/en-desktop/chip-writers; partner/en-phone/chip-writers
@@ -374,7 +374,7 @@ Problema: a mesma pessoa aparece como `Jessica Alvarez (app)` e `jessica.alvarez
 Mudança: sempre o nome. "Piece 0XBAXB57". Item de plano: etiqueta "Plan" / "Plano" / "Plan", sem rodapé repetido. `AI (MCP)` vira "AI assistant" / "Assistente de IA" / "Asistente de IA". `Approve` vira "Approve this note" / "Aprovar esta nota" / "Aprobar esta nota".
 Arquivos: pages/admin/tags/JourneyTab.tsx; pages/admin/tags/JourneyPanel.tsx; pages/admin/tags/journey-shared.tsx; títulos gravados pelo servidor em server/tags
 Risco: títulos antigos já gravados com "Tag" ficam até serem traduzidos na leitura.
-Status: feito em parte (nome em vez de e-mail, "Piece", "AI assistant", "Approve this note"; a etiqueta "Decision" dos itens de plano pendente)
+Status: feito em parte. Nome em vez de e-mail, "Piece", "AI assistant", "Approve this note", e a etiqueta dos itens de plano é "Plan" (Plano). Pendente: o rodapé que repete o nome do plano.
 
 ### PROD-42 [S2] Histórico sem foco e sem fim, com Plans inalcançável no celular
 Telas: platform/en-desktop/history; platform/en-phone/history
@@ -504,7 +504,7 @@ Problema: quem está com a peça impressa na mão, em Produção, é quem mais p
 Mudança: a barra aparece em todas as telas de Tags com acesso, e não em acesso negado. No celular, ícone que abre o campo. Título ou seletor: só um.
 Arquivos: pages/admin/tags/AdminTags.tsx:75; pages/admin/tags/ProductionTab.tsx:56-62; pages/admin/AdminApp.tsx:59
 Risco: nenhum.
-Status: pendente (a barra de código é da moldura, AdminApp/AdminTags, frente F1)
+Status: feito. "Code or scanned link" aparece em todas as telas de Tags a que a pessoa tem acesso, inclusive Production e os lotes (menos Hand out e Take back, que têm o campo deles, e menos Stock e a página da peça, que têm a busca), e não aparece em página de acesso negado.
 
 ### PROD-58 [S3] Acesso negado: palavra que ninguém usa e nenhuma saída
 Telas: partner/en-desktop/restricted-shop; owner/en-desktop/restricted-production, restricted-shop; owner-multi/en-desktop/restricted-production, restricted-shop
@@ -552,7 +552,7 @@ Problema: "What resellers see in Tags › Shop. Xpot sells nothing: every button
 Mudança: frase: "What resellers see in their shop. Buttons open the Stuscle store." / "O que os revendedores veem na loja. Os botões abrem a loja Stuscle." / "Lo que ven los revendedores en su tienda. Los botones abren la tienda Stuscle." Linha: "Opens the store" ou "Goes to the cart (1 item)". Preço com "Wholesale: $50.00". No celular, nome em 2 linhas, ações em menu.
 Arquivos: i18n/messages/manageTags.ts:20, :37, :52; pages/admin/tags/ShowcaseTab.tsx:197, :224-235
 Risco: confirmar que o preço é de atacado antes de escrever "Wholesale". Plural exige `t.plural`.
-Status: feito em parte (frase, linhas e preço como "Reference price", nome em até duas linhas; ações em menu pendentes)
+Status: feito. Frase, linhas e preço como "Reference price", nome em até duas linhas e as ações num menu "⋯" com Edit e Delete (texto, em vez de dois ícones). Visto no celular.
 
 ### PROD-64 [S3] Nova entrada da vitrine: Save fora da tela e campos sem explicação
 Telas: platform/en-desktop/shop-setup-new-entry; platform/en-phone/shop-setup-new-entry
@@ -568,7 +568,7 @@ Problema: seis passos de NFC Tools, `Send to writer`, "Waiting for the chip to b
 Mudança: `Not written` em cinza enquanto a peça está pendente. Bloco de chip recolhido com o título "Write chip". Falha ou cancelada: sem bloco. Venda e desempenho somem enquanto pendente. "Waiting for the chip to be read..." só depois de começar a gravar.
 Arquivos: components/piece/PieceBody.tsx; components/piece/pieceView.ts:105-116
 Risco: o caminho "gravar antes de imprimir" depende deste bloco; conferir com PROD-19.
-Status: pendente (components/piece é da frente F2)
+Status: feito. Conferido nas telas: a peça pendente (impressão falhou, cancelada ou na impressora) mostra só o chip como "Chip not written" cinza e, sem venda nem desempenho, o bloco de passos do NFC só abre depois de "Write chip".
 
 ## S4: acabamento
 

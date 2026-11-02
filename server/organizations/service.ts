@@ -1,5 +1,5 @@
 import { randomBytes } from "crypto";
-import { and, asc, desc, eq, inArray, sql, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, getTableColumns, inArray, sql, isNull } from "drizzle-orm";
 import { db } from "../db.js";
 import {
   organizationAuditLog,
@@ -481,7 +481,8 @@ export async function listOrganizationInventory(organizationId: number, actor: O
 export async function listOrganizationKits(organizationId: number, actor: OrganizationActor) {
   const { memberships } = await assertOrganizationAccess(actor, organizationId);
   const organizationWide = canManageOrganization(actor, memberships, organizationId);
-  return db.select().from(tagKits).where(organizationWide
+  // pieceCount: what the kit held when it went out (the rows stay when a piece comes back), so a list can say how many.
+  return db.select({ ...getTableColumns(tagKits), pieceCount: sql<number>`(SELECT count(*)::int FROM tag_kit_items i WHERE i.kit_id = ${tagKits.id})` }).from(tagKits).where(organizationWide
     ? eq(tagKits.organizationId, organizationId)
     : and(eq(tagKits.organizationId, organizationId), eq(tagKits.repId, actor.rep.id)))
     .orderBy(desc(tagKits.createdAt)).limit(200);

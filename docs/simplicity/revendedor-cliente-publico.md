@@ -245,6 +245,7 @@ Mudança: com o portador igual a quem está vendo:
 - "Kit K-…" vai para "More details".
 Arquivos: client/src/components/piece/PieceHeader.tsx:79-92, client/src/i18n/messages/pieceScreen.ts:19, client/src/i18n/messages/tags.ts:67
 Risco: regra de custódia. "With you" conta consignação. Peça com o Kevin e peça no cliente seguem separadas no estoque; muda só o que ele lê. O KPI sai junto em RCP-10.
+Status: feito. Quem segura a peça lê "With you"; com cliente a linha some e fica só o cliente; o kit só aparece para quem gerencia. Visto no celular (peça no ar e peça no kit).
 
 ### RCP-14 [S2] O mesmo estado tem nomes diferentes na lista e na peça
 Telas: reseller/en-phone/tags-pieces comparada com tags-piece-in-kit e tags-piece-configured-no-chip; reseller/en-desktop/tags-pieces
@@ -258,6 +259,7 @@ Mudança: a peça usa a mesma palavra da lista, que é a do glossário.
 - No desktop, coluna COMPANY vazia com "—" quando não há cliente.
 Arquivos: client/src/i18n/messages/pieceScreen.ts:113-115, client/src/i18n/messages/tags.ts:121, client/src/components/piece/PieceHeader.tsx
 Risco: a tela de peça é compartilhada com a gestão, onde "In stock" faz sentido. Trocar só para o revendedor.
+Status: feito. A peça e a lista dizem o mesmo ("No customer yet", "Ready, not live" + "Chip not written"); no computador o cliente vazio é "—".
 
 ### RCP-15 [S2] O filtro não tem a opção de que ele mais precisa
 Status: feito, menos um detalhe. Chips "All / To finish / No customer yet / Live"; Paused foi para "More filters" (que abre sozinho com ele ativo); "To finish" conta como a Home. Não fiz busca e "More filters" na mesma linha em listas pequenas (precisaria de uma variante do `FilterBar`, compartilhado).
@@ -301,6 +303,7 @@ Mudança:
 - A peça sem cliente (Set up) e a sem chip (Write chip) continuam como estão: lá o destaque está certo.
 Arquivos: client/src/components/piece/PieceBody.tsx, client/src/components/piece/PieceHeader.tsx
 Risco: a tela é compartilhada com a gestão. Pode coincidir com a área da peça de outro auditor; alinhar antes de mexer.
+Status: feito. A peça no ar abre com o cliente uma vez só, o link de destino à vista, "See performance" como botão secundário e "Change customer" como único botão do cliente (o lápis foi para "More about the customer").
 
 ### RCP-19 [S2] "Write a plain chip" não diz o que é
 Status: feito. "Write a chip without Xpot", explicação nova, "Recent chips without Xpot", "Write without Xpot instead"; eyebrow removido.
@@ -480,7 +483,7 @@ Arquivos: client/src/pages/tags/PiecesScreen.tsx:305
 Risco: nenhum.
 
 ### RCP-34 [S3] Perfil pede e mostra o que o revendedor não usa
-Status: feito em parte. Dica da foto sem "visits" para quem só tem Tags e telefone de contato formatado. Pendente: "Display name" em "More" e o menu do módulo em Settings (F1).
+Status: feito. Dica da foto sem "visits" para quem só tem Tags, telefone de contato formatado, "Display name" recolhido em "More" e o menu do módulo continua visível em Settings.
 Telas: reseller/en-desktop/settings-profile, settings-signin, settings-language, settings-organization, settings-administration
 Problema:
 - "Shown to your team and on your visits." para quem não tem Visitas.

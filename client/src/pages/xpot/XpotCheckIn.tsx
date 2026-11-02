@@ -587,7 +587,11 @@ export function XpotCheckIn() {
       <Dialog open={activeVisitPanel === "checkout"} onOpenChange={(open) => !open && setActiveVisitPanel(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader className="pr-8"><DialogTitle className="text-base">{t("finishVisit")}</DialogTitle></DialogHeader>
-          <StatusPicker value={checkoutStatus} onChange={setCheckoutStatus} />
+          <StatusPicker value={checkoutStatus} onChange={(next) => {
+            setCheckoutStatus(next);
+            // "Sale made" with nothing sold on this visit: the sale is asked for now, not left as a result with no sale behind it (VIS-24).
+            if (next === "sale_made" && !visitHasSale) setActiveVisitPanel("sales");
+          }} />
           <ConfirmSlider
             label={uploadAudioMutation.isPending ? t("uploadInProgress") : t("slideToCheckOut")}
             helperText=""

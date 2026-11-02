@@ -24,6 +24,7 @@ import { VisitActionsPanel } from "./sales/VisitActions";
 import { Link, useLocation } from "wouter";
 import { fileSrc } from "@/lib/files";
 import { CompanyInlineEditor } from "./leads/CompanyInlineEditor";
+import { NewTaskDialog } from "./leads/TaskForm";
 
 export type VisitLike = {
   id: number;
@@ -130,6 +131,7 @@ export function VisitSummaryPage({ visit, onBack, onDelete }: { visit: VisitLike
   const lead = visit.lead as (SalesLead & { locations?: { addressLine1?: string | null; city?: string | null; state?: string | null }[]; photos?: string[] | null }) | undefined;
   const photo = lead?.photos?.[0];
   const hasSale = (visit.visitSales?.transactions ?? 0) > 0;
+  const [taskOpen, setTaskOpen] = useState(false);
   const open = isOpenVisit(visit);
   const visitAt = visit.checkedInAt ?? visit.scheduledAt;
   const visitDate = visitAt
@@ -241,7 +243,10 @@ export function VisitSummaryPage({ visit, onBack, onDelete }: { visit: VisitLike
               {(visit.note.outcome || visit.note.nextStep) ? (
                 <dl className={`${visit.note.summary ? "mt-6" : ""} grid gap-5 sm:grid-cols-2`}>
                   {visit.note.outcome ? <div><dt className={EYEBROW}>{t("outcome")}</dt><dd className="mt-1.5 text-sm leading-6 text-white/65">{visit.note.outcome}</dd></div> : null}
-                  {visit.note.nextStep ? <div><dt className={EYEBROW}>{t("nextStep")}</dt><dd className="mt-1.5 text-sm leading-6 text-white/65">{visit.note.nextStep}</dd></div> : null}
+                  {visit.note.nextStep ? <div><dt className={EYEBROW}>{t("nextStep")}</dt><dd className="mt-1.5 text-sm leading-6 text-white/65">{visit.note.nextStep}</dd>
+                    <Button type="button" variant="secondary" size="sm" className="mt-2" onClick={() => setTaskOpen(true)} data-testid="visit-create-task">{t("createTask")}</Button>
+                    <NewTaskDialog open={taskOpen} onOpenChange={setTaskOpen} company={{ id: visit.leadId, name: lead?.name ?? "" }} visitId={visit.id} title={visit.note.nextStep} />
+                  </div> : null}
                 </dl>
               ) : null}
             </DetailSection>

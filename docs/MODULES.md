@@ -370,6 +370,10 @@ Vale por cima da tabela acima, em toda a interface. Só texto: código, banco e 
 | Desativada | Deactivated | Desativada | Desactivada | Retired |
 | Empresas em trabalho | In progress | Em andamento | En curso | Filtro Leads |
 | Área do dono | My company | Minha empresa | Mi empresa | My organization, My workspace |
+| Área do dono de várias empresas | My companies | Minhas empresas | Mis empresas | Team (lista), Organizations |
+| Empresa que já conversou, ainda não cliente | In talks | Em negociação | En negociación | Lead (filtro e status) |
+| Aba de negócios abertos de uma empresa | Deals | Negócios | Negocios | Pipeline |
+| Computador da impressora (ES) | Print computer | Computador da impressora | Computadora de la impresora | Em espanhol é sempre "computadora", nunca "ordenador" nem "PC"; em pt, "computador" |
 
 "Plate" e "Stand" ficam só para os produtos. "Kit" fica só no nome do pacote (K-0001). "Workspace" não aparece na interface.
 

@@ -19,7 +19,6 @@ import { SessionGate } from "@/components/xpot/SessionGate";
 import { Field, FIELD_CONTROL, Input } from "@/components/xpot/Field";
 import { FormFooter } from "@/components/xpot/FormFooter";
 import { PageHeader } from "@/components/xpot/PageHeader";
-import { CopyButton } from "@/components/xpot/CopyButton";
 import { Pill } from "@/components/xpot/StatusPill";
 import { useAvatarUpload } from "@/components/xpot/useAvatarUpload";
 import { ACCENT_SELECTED, BRAND_GRADIENT, EYEBROW, GLASS_CLASS, SURFACE_MODAL_CLASS } from "@/components/xpot/surface";
@@ -36,7 +35,6 @@ import { settingsMessages } from "@/i18n/messages/settings";
 import { navIaMessages } from "@/i18n/messages/navIa";
 import { shellMessages } from "@/i18n/messages/shell";
 import { SignOutConfirm } from "@/components/xpot/AccountMenu";
-import { tagsMessages } from "@/i18n/messages/tags";
 import { addPersonMessages } from "@/i18n/messages/addPerson";
 import { runsATeam } from "@shared/organizations";
 import type { XpotMeResponse } from "./types";
@@ -44,7 +42,6 @@ import { AddPersonForm } from "./components/AddPersonForm";
 import { AppLayout } from "@/components/xpot/AppLayout";
 import { homeForModules, useXpotModules } from "@/components/ModuleSwitch";
 import { InstallAppHeaderButton, InstallAppRow } from "@/components/xpot/InstallApp";
-import { useWholesale } from "@/pages/tags/WholesaleCard";
 
 const COUNTRIES = [
   { code: "BR", dial: "+55", name: "Brazil" },
@@ -66,8 +63,8 @@ const COUNTRIES = [
   { code: "CN", dial: "+86", name: "China" },
 ];
 
-// Settings is the person's own: Profile (photo, names, contact phone, the Tags
-// wholesale code), My company (where they work and their role there; someone
+// Settings is the person's own: Profile (photo, names, contact phone; the Tags
+// wholesale code is in My pieces), My company (where they work and their role there; someone
 // selling alone adds the first colleague here), Sign-in (the sign-in phone as
 // text; the password only for an email login) and Language. The panel is not
 // here: "My company" in the area switch is its door. Sign out is the last row
@@ -218,7 +215,6 @@ export function XpotSettings() {
   const tc = useT(commonMessages);
   const tn = useT(navIaMessages);
   const ts = useT(shellMessages);
-  const tt = useT(tagsMessages);
   const tp = useT(addPersonMessages);
   const access = useViewerAccess();
   const [signingOut, setSigningOut] = useState(false);
@@ -233,9 +229,6 @@ export function XpotSettings() {
 
   const meQuery = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
   const me = meQuery.data;
-  // A code to order at wholesale means nothing to someone whose partner distributes its own pieces (no store): hide it then.
-  const wholesale = useWholesale(!!me?.rep.wholesaleCode);
-  const storeless = !!wholesale.data && wholesale.data.code === null;
   useEffect(() => {
     if (meQuery.isLoading) return;
     if (!isDesktop) {
@@ -247,6 +240,12 @@ export function XpotSettings() {
   }, [linkedSection, meQuery.isLoading, isDesktop]);
 
   const [displayName, setDisplayName] = useState("");
+  // The name shown to the team is the first and last name, unless it was written differently (it then stays as written).
+  const followName = (first: string, last: string) => {
+    const joined = [first, last].map((part) => part.trim()).filter(Boolean).join(" ");
+    const derived = [firstName, lastName].map((part) => part.trim()).filter(Boolean).join(" ");
+    if (joined && (!displayName.trim() || displayName === derived)) setDisplayName(joined);
+  };
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
@@ -405,30 +404,30 @@ export function XpotSettings() {
               </div>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
+              {/* One name, not three: the name shown to the team follows the first and last name until it is set by hand below. */}
               <Field label={t("firstName")}>
-                <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder={t("firstNamePlaceholder")} />
+                <Input value={firstName} onChange={(e) => { setFirstName(e.target.value); followName(e.target.value, lastName); }} placeholder={t("firstNamePlaceholder")} />
               </Field>
               <Field label={t("lastName")}>
-                <Input value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder={t("lastNamePlaceholder")} />
-              </Field>
-              <Field label={t("displayName")}>
-                <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder={t("displayNamePlaceholder")} />
+                <Input value={lastName} onChange={(e) => { setLastName(e.target.value); followName(firstName, e.target.value); }} placeholder={t("lastNamePlaceholder")} />
               </Field>
               <div className="sm:col-span-2">
                 <Field label={tn("contactPhone")}>
                   <CountryPhoneInput value={phone} onChange={setPhone} />
                 </Field>
               </div>
-            </div>
-            {me?.rep.wholesaleCode && !storeless && (
-              <div>
-                <p className={EYEBROW}>{tt("wholesaleCode")}</p>
-                <div className="mt-1.5 flex items-center gap-2">
-                  <span className="font-mono text-base font-bold tracking-[0.12em] text-white" data-testid="settings-wholesale-code">{me.rep.wholesaleCode}</span>
-                  <CopyButton value={me.rep.wholesaleCode} iconOnly />
+              <details className="group sm:col-span-2" data-testid="settings-more-name">
+                <summary className="flex min-h-10 cursor-pointer list-none items-center gap-1.5 text-sm font-medium text-white/55 hover:text-white [&::-webkit-details-marker]:hidden">
+                  {tn("moreProfile")}
+                  <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" aria-hidden="true" />
+                </summary>
+                <div className="pt-2">
+                  <Field label={t("displayName")}>
+                    <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder={t("displayNamePlaceholder")} />
+                  </Field>
                 </div>
-              </div>
-            )}
+              </details>
+            </div>
             <FormFooter dirty={profileDirty} onCancel={profileDirty ? resetProfile : undefined}>
               <Button variant="brand" onClick={handleSaveProfile} disabled={!profileDirty || !displayName.trim()} loading={isSaving}>
                 <Save />

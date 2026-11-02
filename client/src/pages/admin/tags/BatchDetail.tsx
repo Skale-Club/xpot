@@ -283,6 +283,9 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
   const withResellers = countStockMetric(pieces, "withResellers");
   const sold = countStockMetric(pieces, "sold");
   const damaged = countStockMetric(pieces, "damaged");
+  // What is left over (internal use, reserved, lost, deactivated): a card for it, so the cards add up to the batch.
+  const notReceived = countStockMetric(pieces, "notReceived");
+  const other = Math.max(0, total - notReceived - damaged - house - withResellers - sold);
   const live = countStockMetric(pieces, "live");
   const chipsVerified = pieces.filter((p) => p.nfcStatus === "verified" || p.nfcStatus === "locked").length;
   const exportBase = `/api/xpot/admin/tag-batches/${encodeURIComponent(batch.id)}`;
@@ -417,6 +420,7 @@ export function BatchDetail({ id, go }: { id: string; go: (path: string) => void
             <Stat card label={t("withResellers")} value={withResellers} detail={t("withResellersKitHint")} />
             <Stat card label={t("sold")} value={sold} detail={live ? t.plural("liveCount", live) : undefined} />
             {damaged > 0 ? <Stat card label={t("damaged")} value={damaged} /> : null}
+            {other > 0 ? <Stat card label={t("otherPieces")} value={other} detail={t("otherPiecesHint")} /> : null}
             {chipsVerified > 0 ? <Stat card label={t("nfcVerified")} value={chipsVerified} detail={t("chipsShare", { percent: formatShare(chipsVerified, total) })} /> : null}
           </div>
           {/* Inventory reads ?batch=<id> (PiecesTab PIECE_FILTERS): the piece list lives there, not here. */}

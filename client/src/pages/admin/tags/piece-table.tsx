@@ -137,7 +137,7 @@ export function PieceTable({
     },
     reseller: {
       key: "reseller",
-      label: tm("colReseller"),
+      label: tm("colWith"),
       cellClassName: "max-w-[190px] truncate text-white/70",
       render: (p) => heldBy(p) ?? none,
     },

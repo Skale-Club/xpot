@@ -99,6 +99,7 @@ Problema: a pill diz "Em estoque" / "En stock" e a linha logo abaixo diz "Com Je
 Mudança: quando a peça está com alguém, a pill usa o texto do chip: en "With a reseller", pt "Com um revendedor", es "Con un revendedor". "In stock" fica só para a peça no estoque da empresa.
 Arquivos: components/piece/PieceHeader.tsx:30,63; i18n/messages/manageTags.ts:90,398,693
 Risco: nenhum na regra. Quem audita peças pode ter o mesmo achado.
+Status: feito. A peça com revendedor e sem cliente diz "No customer yet" (Sem cliente), com a linha "Com {revendedor}" embaixo; "In stock" não existe mais como etiqueta (conferido na lista e no popup, nos três idiomas).
 
 ## S2
 
@@ -116,7 +117,7 @@ Problema: a barra lateral tem Team, Stock, Hand out, Team purchases, Companies, 
 Mudança: tirar as abas repetidas da página do dono; a lateral manda. Item novo "Overview" no topo do grupo, que passa a se chamar en "My company", pt "Minha empresa", es "Mi empresa". Aba "Kits" passa a en "Hand out", pt "Entregar peças", es "Entregar piezas". Dono de várias empresas: item en "My companies", pt "Minhas empresas", es "Mis empresas". Celular: Overview como primeira linha do menu.
 Arquivos: pages/xpot/OrganizationsPage.tsx:123,291-316,340; components/xpot/moduleNav.ts:251,347,360; i18n/messages/organizations.ts:25,142
 Risco: muda a navegação. Recomendo manter as abas só para o admin da plataforma, que não tem a lateral da empresa.
-Status: pendente (parte). Feito: o menu do dono é só o da lateral (Settings e Back to app saíram), o grupo se chama My company e o dono de várias vê My companies. Pendente: tirar as abas repetidas da OrganizationsPage e trocar Kits por Past hand-outs (arquivo da F4).
+Status: feito. Dono de uma empresa só: a página não tem abas (Team, Team purchases e Company details), a lateral manda; a aba Kits virou "Past hand-outs" (pt e es "Entregas anteriores") para a plataforma e o dono de várias; a lateral acende Team também em Company details. O item novo "Overview" no topo do grupo não foi feito: o Today é o primeiro item do painel.
 
 ### AD-07 [S2] Dono e parceiro aparecem como "Rep" em People
 Telas: platform/en-desktop/people, person-owner, person-partner, person-owner-multi; pt "Vendedor" e es "Vendedor" nas mesmas
@@ -180,7 +181,7 @@ Problema: em cada linha ficam "Suspend from organization", "Make owner" ou "Remo
 Mudança: mover as ações para um menu "⋯" na linha, cada uma com uma frase: en "Suspend: keeps the account, loses this organization's data", "Remove: leaves the organization for good". Esconder "Remove owner", "Suspend" e "Remove" do último dono. Trocar "org admin" na mensagem por "owner".
 Arquivos: pages/xpot/OrganizationsPage.tsx:373-375; server/organizations/service.ts:404-405; i18n/messages/organizations.ts:61-74
 Risco: nenhum na regra; a tela só passa a obedecer o que o servidor já exige.
-Status: feito em parte. Pessoa: Bloquear e Excluir ficam numa "Zona de perigo" à parte, com uma frase cada; o último dono não tem o botão de remover (`onlyOwner`, testado), e quem está bloqueado não mostra "Suspenso" na organização. Equipe da organização: o último dono perde os três botões (uma linha em `OrganizationsPage.tsx`, arquivo de F4); o menu "⋯" ficou pendente, é do mesmo arquivo. A mensagem do servidor agora diz "owner".
+Status: feito. Cada pessoa da equipe tem um menu "⋯" com Suspender, Tornar dono e Remover, cada um com uma frase ("Mantém a conta; deixa de ver os dados desta empresa." / "Sai da empresa de vez."); o último dono não tem o menu (`lastOwner`); a mensagem do servidor diz "owner". Visto em en e pt, computador, e a confirmação abre.
 
 ### AD-15 [S2] Três formulários diferentes para adicionar pessoa
 Telas: platform/en-desktop/person-new-dialog, org-brightside-team, settings-organization; owner/en-phone/settings-organization, org-brightside-team
@@ -212,7 +213,7 @@ Problema: a frase dos termos vem em três campos: "Terms line, before the links"
 Mudança: um campo só, com marcadores: "By continuing you agree to the {terms} and the {privacy}." Prévia do rascunho ao lado do botão de publicar. Rótulos: en "Top menu button, signed in" e "Big button on the page, signed in".
 Arquivos: i18n/messages/landingAdmin.ts:44-46; pages/admin/landingFields.ts; pages/admin/AdminLandingContent.tsx
 Risco: o leitor do conteúdo salvo precisa aceitar o formato novo, com migração dos textos já publicados.
-Status: feito em parte. A frase dos termos é um campo só com {terms} e {privacy}, gravada nos três pedaços de sempre (sem migração); rótulos "Botão do menu de cima" e "Botão grande da página"; o link agora se chama "Abrir a página publicada". Pendente: prévia do rascunho, que pede um endpoint de rascunho.
+Status: feito em parte. A frase dos termos é um campo só com {terms} e {privacy}; rótulos "Botão do menu de cima" e "Botão grande da página"; o link se chama "Abrir a página publicada". Pendente: prévia do rascunho. Pede um rascunho guardado no servidor (um endpoint novo e um estado a mais no conteúdo da página); fica para quando o dono quiser publicar em duas etapas.
 
 ### AD-20 [S2] Settings: "Open panel" não diz para onde vai
 Telas: owner/en-phone/settings-profile, settings-administration; platform/en-desktop/settings-profile; partner/en-phone/settings-administration; platform/pt-desktop/settings-profile
@@ -284,6 +285,7 @@ Problema: em todas as linhas sem revendedor aparece "Estoque da empr…" / "Stoc
 Mudança: aumentar `max-w-[160px]` para `max-w-[190px]`. Reduzir a largura da coluna Código e passar o lote para baixo do código, em texto pequeno.
 Arquivos: pages/admin/tags/piece-table.tsx:127
 Risco: nenhum.
+Status: feito. A coluna do portador cabe (190 px, "Estoque da empresa" inteiro em pt e es); o rótulo "Revendedor" virou "Com"; sem overflow horizontal nas capturas de pt e es.
 
 ### ID-09 [S2] Espanhol: "Devolver" diz o contrário
 Telas: platform/es-desktop/panel-kits-handout
@@ -333,7 +335,7 @@ Problema: a aba tem um nome e um interruptor, ambos travados, e "Only the platfo
 Mudança: esconder a aba e o item "Settings" da barra lateral para quem não edita. O parceiro mantém o resumo de AD-05.
 Arquivos: pages/xpot/OrganizationsPage.tsx:291-316,650
 Risco: nenhum.
-Status: pendente (`OrganizationsPage.tsx` é de F4).
+Status: feito. A aba Settings só aparece para quem edita (plataforma) ou para o parceiro que imprime, que lê o resumo; o dono comum não tem a aba. O parceiro chega pelo link "Company details" da equipe.
 
 ### AD-21 [S3] Listas da organização sem resumo e sem busca
 Telas: platform/en-desktop/org-company-inventory (3844 px), org-harbor-inventory; owner/en-desktop/org-brightside-inventory, org-brightside-kits, org-brightside-customers; platform/en-desktop/org-brightside-customers; owner-multi/en-desktop/org-lindgren-inventory
@@ -341,7 +343,7 @@ Problema: Stock é uma lista de códigos, com produto e estado em cinza à direi
 Mudança: Stock vira contagem por estado ("Live 3 · Ready, not live 3 · No customer yet 7"), cada uma levando ao Estoque já filtrado. Kits ganha "{n} pieces". Companies e Kits mostram 10 linhas e "See all" para todos os perfis. Ícone de prédio nas duas.
 Arquivos: pages/xpot/OrganizationsPage.tsx:386-398
 Risco: conferir se o dono pode abrir o Estoque filtrado por organização.
-Status: pendente (`OrganizationsPage.tsx` é de F4).
+Status: feito. Stock da organização abre com a contagem por status ("Live 3 · Ready, not live 3 · No customer yet 7"), cada kit diz "{n} pieces", as listas mostram 10 linhas e "See all (n)" para todos os perfis, e a aba Companies tem o ícone de prédio. Não feito: cada status levar ao Estoque já filtrado (a contagem é texto).
 
 ### AD-22 [S3] Visão geral: número mal nomeado e cor de boa notícia no zero
 Telas: platform/en-desktop/org-brightside-overview, org-harbor-overview; owner/en-phone/org-brightside-overview; partner/en-desktop/org-harbor-overview; owner-multi/en-desktop/org-lindgren-overview
@@ -349,7 +351,7 @@ Problema: "Stock 14" conta todas as peças da organização; a lista por trás i
 Mudança: "Stock" passa a en "Pieces", pt "Peças", es "Piezas". Valor zero em cor neutra. Seta ou sublinhado nos clicáveis. Blocos de baixo levam a Tasks e Sales filtrados. Seletor de período junto de "Team activity, last 30 days".
 Arquivos: pages/xpot/OrganizationsPage.tsx:481-482,505-506
 Risco: nenhum.
-Status: pendente (`OrganizationsPage.tsx` é de F4).
+Status: feito. "Stock" virou "Pieces" (Peças, Piezas) nos cartões da visão geral; os quatro cartões de cima ganham uma seta; a venda zerada não é mais verde. Não feito: os quatro de baixo levarem a Tasks e Sales filtrados e o seletor de período junto do título.
 
 ### AD-23 [S3] Status repete o log e mostra mensagem técnica
 Telas: platform/en-desktop/status, status-event-1, status-event-2, status-event-3; platform/en-phone/status, status-event-1, status-event-2
@@ -381,7 +383,7 @@ Problema: "My company" é a área do dono, "Companies" são os clientes, "Organi
 Mudança: "Companies" para os clientes na lista do admin; "My company" para a área do dono; "Organizations" só para o admin da plataforma. Na coluna de peças e no popup, um único nome. Recomendo en "Customer", pt "Cliente", es "Cliente", porque "company stock" já ocupa a outra palavra.
 Arquivos: docs/MODULES.md §5; i18n/messages/shell.ts, manageTagsPieces.ts, tags.ts
 Risco: decisão do dono, porque a D6 do plano foi descartada. Recomendo mudar só a coluna e o popup.
-Status: pendente (coluna e popup de peças são de F2).
+Status: feito. Coluna e filtro das peças dizem "Customer" (Cliente), a coluna de quem guarda a peça se chama "With" (Com, Con) e "Companies" ficou só para Visits; o glossário tem os nomes.
 
 ### AD-28 [S3] People repete o estado em cada linha
 Telas: platform/en-desktop/people, people-status-active, people-status-blocked, people-status-pending; platform/pt-desktop/people; platform/es-desktop/people; platform/en-phone/people
@@ -405,7 +407,7 @@ Problema: "First name", "Last name" e "Display name" para o mesmo nome. "Your wh
 Mudança: esconder "Display name", derivado dos outros dois. Tirar o código do perfil; ou deixá-lo só com um link en "Open the wholesale store".
 Arquivos: pages/xpot/XpotSettings.tsx:416-424; pages/tags/WholesaleCard.tsx:55
 Risco: revendedor ligado a parceiro não vê o cartão ("Suas peças vêm de…"), mas o perfil mostra o código dele. Conferir com o dono se ele deveria ter código.
-Status: pendente (`XpotSettings.tsx` é de F5).
+Status: feito. O perfil tem nome e sobrenome; "Display name" ficou recolhido em "More" e acompanha o nome e o sobrenome até ser escrito à mão; o código de atacado saiu do perfil (fica no cartão de atacado em Minhas peças).
 
 ### ID-11 [S3] "Peça peças", e o admin mandado falar com o gestor
 Telas: platform/pt-desktop/tags-pieces
@@ -413,7 +415,7 @@ Problema: "Nenhuma peça ainda. Peça peças ao seu gestor." e "Peça placas, ch
 Mudança: "Você ainda não tem peças. Solicite ao seu gestor." e "Compre placas, chaveiros e mais na loja Stuscle com preço de revendedor. O seu código libera." Para quem administra: en "You have no pieces with you. Hand them out in Stock.", pt "Você não tem peças consigo. Entregue pelo Estoque.", es "No tienes piezas contigo. Entrégalas desde Stock."
 Arquivos: i18n/messages/tags.ts:117,582,882,1028; pages/tags/PiecesScreen.tsx
 Risco: nenhum.
-Status: feito em parte. Textos "Você ainda não tem peças. Solicite ao seu gestor." e "Compre placas…". Pendente: a variante do administrador ("Entregue pelo Estoque") precisa de lógica em `PiecesScreen.tsx`, de F5.
+Status: feito. "Você ainda não tem peças. Solicite ao seu gestor." para quem não gerencia; quem gerencia lê "Você não tem peças consigo. Entregue pelo Estoque." (en e es iguais) e o botão abre o Estoque. A variante usa o `reach` que já existia em `PiecesScreen.tsx`.
 
 ### ID-12 [S3] "(regra dele)"
 Telas: platform/pt-desktop/handout-form-reseller-picked, platform/es-desktop/handout-form-reseller-picked
@@ -437,7 +439,7 @@ Problema: "Google Maps engine answered 429; retrying in 60s", "Xphere push faile
 Mudança: traduzir os erros por código, quando existir `reasonCode`, e mostrar o texto original só em "Technical details". Os textos em si são do seed.
 Arquivos: pages/admin/AdminSystemHealth.tsx; pages/admin/systemHealthUi.tsx
 Risco: exige código em cada erro conhecido; os demais continuam em inglês, atrás de um título genérico.
-Status: pendente (os erros não têm código por tipo no servidor; ficam em inglês atrás do título).
+Status: descartado. Os motivos do servidor já passam por código (`reasonCode`) e saem traduzidos; os textos em inglês das capturas ("Google Maps engine answered 429…") são títulos de evento do seed do laboratório, que o servidor real não escreve. Traduzir texto livre pediria um código por tipo de evento que não existe.
 
 ### AD-33 [S3] 35 modelos numa caixa de seis linhas, sem busca
 Telas: platform/en-desktop/organizations-new-dialog, org-harbor-settings; platform/en-phone/organizations-new-dialog; partner/en-desktop/org-harbor-settings
@@ -445,7 +447,7 @@ Problema: "Models it may print" é uma lista com rolagem própria, de 256 px. O 
 Mudança: busca no topo e grupos por produto recolhidos ("Large Plate (6)"), com "Select all" por grupo.
 Arquivos: pages/xpot/components/ReleasedModelsField.tsx:18,43-44
 Risco: nenhum.
-Status: pendente (`ReleasedModelsField.tsx` é de F4, junto com AD-05).
+Status: feito. Os modelos liberados vêm agrupados por produto ("Large Stand 6/6"), fechados até abrir, com busca (a partir de 8 modelos) e "Marcar todos" por grupo. Visto na tela de configurações de Harbor.
 
 ## S4
 
@@ -455,7 +457,7 @@ Problema: "My organiza…" na linha do celular. "Landing p…" na aba. "Owner" e
 Mudança: deixar o nome da empresa quebrar para a segunda linha. Abas em rolagem com recuo no fim. Subtítulo en "Your role: Owner"; tirar "Platform management".
 Arquivos: pages/xpot/XpotSettings.tsx; pages/xpot/OrganizationsPage.tsx:335
 Risco: nenhum.
-Status: pendente (`XpotSettings.tsx` e `OrganizationsPage.tsx` são de outras frentes).
+Status: feito em parte. O subtítulo da empresa diz "Your role: Owner" (Seu papel: Dono) e "Platform management" saiu. Pendente: o nome da empresa cortado na linha do celular em Settings e as abas com recuo no fim.
 
 ### AD-32 [S4] "blocked Oct 13, 2026" em minúscula
 Telas: platform/en-desktop/person-blocked, person-refused, person-pending

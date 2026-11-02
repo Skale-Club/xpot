@@ -232,6 +232,8 @@ export interface TagOverview {
     productType: string;
     face: string | null;
     batchCode: string | null;
+    /** The customer the piece is set up for now, so a row names the business, not only the code. */
+    leadName: string | null;
   }>;
 }
 

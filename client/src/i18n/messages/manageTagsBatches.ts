@@ -11,6 +11,8 @@ const en = {
   sold: "Sold",
   nfcVerified: "NFC verified",
   damaged: "Damaged",
+  otherPieces: "Other",
+  otherPiecesHint: "Internal use, reserved, lost or deactivated",
   fieldName: "Name",
   fieldProduct: "Product",
   fieldCatalogProduct: "Sales catalog product",
@@ -111,7 +113,6 @@ const en = {
   inHouseCount: "{count} in company stock",
   fieldPieces: "Pieces",
   upTo: "Up to {count}",
-  fieldCodes: "Codes",
   atMostCodes: "At most {max} codes per kit.",
 
   // Kits list and returns
@@ -160,6 +161,8 @@ export const manageTagsBatchesMessages: Dictionary<typeof en> = {
     sold: "Vendidas",
     nfcVerified: "NFC verificado",
     damaged: "Estragadas",
+    otherPieces: "Outras",
+    otherPiecesHint: "Uso interno, reservadas, perdidas ou desativadas",
     fieldName: "Nome",
     fieldProduct: "Produto",
     fieldCatalogProduct: "Produto do catálogo de vendas",
@@ -260,7 +263,6 @@ export const manageTagsBatchesMessages: Dictionary<typeof en> = {
     inHouseCount: "{count} no estoque da empresa",
     fieldPieces: "Peças",
     upTo: "Até {count}",
-    fieldCodes: "Códigos",
     atMostCodes: "No máximo {max} códigos por kit.",
 
     // Kits list and returns
@@ -306,6 +308,8 @@ export const manageTagsBatchesMessages: Dictionary<typeof en> = {
     sold: "Vendidas",
     nfcVerified: "NFC verificado",
     damaged: "Dañadas",
+    otherPieces: "Otras",
+    otherPiecesHint: "Uso interno, reservadas, perdidas o desactivadas",
     fieldName: "Nombre",
     fieldProduct: "Producto",
     fieldCatalogProduct: "Producto del catálogo de ventas",
@@ -406,7 +410,6 @@ export const manageTagsBatchesMessages: Dictionary<typeof en> = {
     inHouseCount: "{count} en el stock de la empresa",
     fieldPieces: "Piezas",
     upTo: "Hasta {count}",
-    fieldCodes: "Códigos",
     atMostCodes: "Como máximo {max} códigos por kit.",
 
     // Kits list and returns

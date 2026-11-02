@@ -384,6 +384,7 @@ export function PrintJobPage({ id, go }: { id: string; go: Go }) {
           title={confirmText[confirming].title}
           description={confirmText[confirming].body}
           confirmLabel={confirmText[confirming].label}
+          cancelLabel={confirming === "cancel" ? t("keepOrder") : undefined}
           tone={confirming === "fail" || confirming === "cancel" ? "danger" : "default"}
           reason={confirmText[confirming].reason}
           reasonLabel={t("fieldReason")}

@@ -326,11 +326,26 @@ export function FilterChips<T extends string>({
   accent?: ModuleAccent;
 }) {
   const chosen = FILTER_CHIP_ON[accent];
+  // On a phone the row scrolls sideways: a fade on the edge that still has chips says so (VIS-23, VIS-25).
+  const rowRef = useRef<HTMLDivElement>(null);
+  const [more, setMore] = useState(false);
+  useEffect(() => {
+    const el = rowRef.current;
+    if (!el) return;
+    const measure = () => setMore(el.scrollWidth - el.clientWidth - el.scrollLeft > 4);
+    measure();
+    el.addEventListener("scroll", measure, { passive: true });
+    window.addEventListener("resize", measure);
+    return () => { el.removeEventListener("scroll", measure); window.removeEventListener("resize", measure); };
+  }, [items.length]);
   return (
+    <div className="relative min-w-0 max-w-full">
     <div
+      ref={rowRef}
       role="group"
       aria-label={ariaLabel}
-      className="-mx-0.5 flex gap-1.5 overflow-x-auto px-0.5 pb-0.5 [scrollbar-width:none] lg:flex-wrap lg:overflow-visible [&::-webkit-scrollbar]:hidden"
+      data-more={more || undefined}
+      className={`-mx-0.5 flex gap-1.5 overflow-x-auto px-0.5 pb-0.5 [scrollbar-width:none] lg:flex-wrap lg:overflow-visible [&::-webkit-scrollbar]:hidden ${more ? "[mask-image:linear-gradient(to_right,black_calc(100%-2.5rem),transparent)] lg:[mask-image:none]" : ""}`}
     >
       {items.map((item) => {
         const on = item.id === value;
@@ -355,6 +370,7 @@ export function FilterChips<T extends string>({
           </button>
         );
       })}
+    </div>
     </div>
   );
 }

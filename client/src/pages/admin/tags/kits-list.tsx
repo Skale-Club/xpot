@@ -261,7 +261,7 @@ function KitRow({ kit, go }: { kit: TagKitItem; go: (path: string) => void }) {
                 <Pill tone="slate" className="font-medium">{kit.ownershipType === "rep" ? tf("kitBought") : tf("ownershipCompany")}</Pill>
               ) : null}
             </p>
-            <p className="truncate text-xs text-white/40">
+            <p className="break-words text-xs text-white/40">
               {formatDateTime(kit.createdAt)}
               {kit.acquisitionSource === "stuscle" ? ` · ${tf("sourceStuscle")}` : ""}
               {kit.unitCostCents !== null ? ` · ${tf("costEach", { cost: formatMoney(kit.unitCostCents, KIT_COST_CURRENCY) })}` : ""}
@@ -270,10 +270,11 @@ function KitRow({ kit, go }: { kit: TagKitItem; go: (path: string) => void }) {
             <KitCounts kit={kit} />
           </div>
         </button>
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+        {/* The words stay on the buttons: two icons said nothing, and one of them takes pieces back. */}
+        <div className="flex w-full shrink-0 flex-wrap items-center gap-2 pl-7 sm:w-auto sm:justify-end sm:pl-0">
           <Button type="button" variant="secondary" size="sm" className="min-h-10" onClick={() => setPacking(true)} title={t("packingListTitle")} aria-label={t("packingListTitle")} data-testid="kit-packing-open">
             <ClipboardList className="h-4 w-4" />
-            <span className="hidden sm:inline">{t("packingList")}</span>
+            {t("packingList")}
           </Button>
           <Button
             type="button"
@@ -286,7 +287,7 @@ function KitRow({ kit, go }: { kit: TagKitItem; go: (path: string) => void }) {
             title={blockedBySetup ? t("returnBlockedSetUp") : kit.returnableCount === 0 ? t("nothingToReturnDesc") : t("returnUnsoldTitle", { stock })}
           >
             <Undo2 className="h-4 w-4" />
-            <span className="hidden sm:inline">{t("returnUnsold")}</span>
+            {t("returnUnsold")}
           </Button>
         </div>
       </div>

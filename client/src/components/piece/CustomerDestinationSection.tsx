@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Building2, Check, Contact, ExternalLink, Link2, Mail, Pencil, Phone, Power, Settings2, Unlink, UserRound } from "lucide-react";
+import { Building2, Check, ChevronDown, Contact, ExternalLink, Link2, Mail, Pencil, Phone, Power, Settings2, Unlink, UserRound } from "lucide-react";
 import { defaultUtmEnabled, planTransition, stockBlock, TAG_DESTINATION_TYPES, type TagDestinationType } from "@shared/tags";
 import { contentKindOf, contentSummary, validateChipContent, type ChipContentKind } from "@shared/chipContent";
 import { destinationNotPrinted } from "@shared/tagFace";
@@ -16,6 +16,7 @@ import { ApiError, apiRequest } from "@/lib/queryClient";
 import { useT } from "@/i18n";
 import { commonMessages } from "@/i18n/messages/common";
 import { tagsMessages } from "@/i18n/messages/tags";
+import { pieceScreenMessages } from "@/i18n/messages/pieceScreen";
 import { manageTagsPiecesMessages } from "@/i18n/messages/manageTagsPieces";
 import LeadPicker, { leadPayload, type LeadChoice } from "@/pages/tags/LeadPicker";
 import { GenerateReviewButton, ReviewLinkAssist } from "@/pages/tags/ReviewLinkSheet";
@@ -46,6 +47,7 @@ export function CustomerDestinationSection({ commands }: {
   const t = useT(tagsMessages);
   const tc = useT(commonMessages);
   const tm = useT(manageTagsPiecesMessages);
+  const tp = useT(pieceScreenMessages);
   const qc = useQueryClient();
   const write = usePieceWrite();
   const manage = viewer.surface === "admin";
@@ -119,6 +121,8 @@ export function CustomerDestinationSection({ commands }: {
   const paused = tag.status === "disabled";
   const retired = tag.status === "retired" || tag.stockStatus === "damaged";
   const stock = stockBlock(tag.stockStatus);
+  // Reserved and internal-use stock is held back: the piece screen offers no set-up for it, so neither does this card.
+  const HELD_STOCK = ["reserved", "internal_use"];
   // The server refuses moving a live piece to another customer (pause it first).
   const blockedByLive = live && changingCustomer && !!tag.leadId;
 
@@ -273,21 +277,6 @@ export function CustomerDestinationSection({ commands }: {
       <div className="flex items-center justify-between gap-2">
         <p className={EYEBROW}>{t("setupTitle")}</p>
         <div className="flex items-center gap-1">
-          {tag.leadId && !retired ? (
-            <button
-              type="button"
-              onClick={() => {
-                setNewName(tag.leadName ?? "");
-                setRenameOpen(true);
-              }}
-              aria-label={t("renameCustomer")}
-              title={t("renameCustomer")}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white/45 hover:bg-white/10 hover:text-white active:bg-white/10"
-              data-testid="button-edit-customer"
-            >
-              <Pencil className="h-4 w-4" />
-            </button>
-          ) : null}
           {dest && !retired && (
             <Button type="button" variant="outline" size="sm" onClick={() => openEditor(false)} data-testid="button-change-destination">
               <Pencil />
@@ -338,7 +327,7 @@ export function CustomerDestinationSection({ commands }: {
               <InlineAlert tone="warning">{t(`stockBlocked_${stock}`)}{viewer.canManage ? "" : ` ${t("stockBlockedAsk")}`}</InlineAlert>
             </div>
           )}
-          {!retired && !stock && mainAction !== "configure" && (
+          {!retired && !stock && mainAction !== "configure" && !HELD_STOCK.includes(tag.stockStatus) && (
             <Button type="button" variant="brand" accent="tags" size="lg" onClick={() => openEditor(false)} className="mt-3 w-full" data-testid="button-setup-piece">
               <Settings2 className="!size-5" />
               {t("configurePiece")}
@@ -348,7 +337,7 @@ export function CustomerDestinationSection({ commands }: {
       )}
 
       {/* Live or not, and the customer: the same verbs on both screens. */}
-      {(showToggle || canClearCustomer || canChangeCustomer || (tag.leadId && tag.saleId !== null)) && (
+      {(showToggle || canChangeCustomer || (tag.leadId && tag.saleId !== null)) && (
         <div className="mt-3 flex flex-col gap-2 border-t border-white/[0.08] pt-3 sm:flex-row sm:flex-wrap">
           {showToggle && (
             <Button type="button" variant="secondary" onClick={() => void toggle()} loading={toggling} disabled={toggling} className="w-full sm:w-auto" data-testid="button-toggle">
@@ -356,34 +345,51 @@ export function CustomerDestinationSection({ commands }: {
               {live ? t("switchOff") : paused ? t("switchOn") : tm("action_activate_confirm")}
             </Button>
           )}
-          {(canChangeCustomer || (canClearCustomer && tag.saleId === null)) && (
-            <div className="flex gap-1">
-              {canChangeCustomer && (
-                <Button type="button" variant="ghost" onClick={() => openEditor(true)} className="min-w-0 flex-1 sm:flex-none" data-testid="button-change-customer">
-                  <UserRound className="!size-4" />
-                  {t("changeCustomerShort")}
-                </Button>
-              )}
-              {canClearCustomer && tag.saleId === null && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={() => {
-                    setActionError(null);
-                    setConfirm("unassign");
-                  }}
-                  className="min-w-0 flex-1 sm:flex-none"
-                  data-testid="button-unlink-piece"
-                >
-                  <Unlink className="!size-4 text-red-400" />
-                  {t("unlinkFromCustomer")}
-                </Button>
-              )}
-            </div>
+          {canChangeCustomer && (
+            <Button type="button" variant="ghost" onClick={() => openEditor(true)} className="min-w-0 sm:flex-none" data-testid="button-change-customer">
+              <UserRound className="!size-4" />
+              {t("changeCustomerShort")}
+            </Button>
           )}
           {tag.leadId && tag.saleId !== null && <p className="text-xs text-white/40 sm:self-center" data-testid="admin-piece-clear-customer-sold">{tm("clearCustomerSold")}</p>}
         </div>
       )}
+      {tag.leadId && !retired ? (
+        <details className="group mt-2 text-sm" data-testid="customer-more-details">
+          <summary className="flex min-h-9 cursor-pointer list-none items-center gap-1.5 text-white/50 hover:text-white [&::-webkit-details-marker]:hidden">
+            {tp("moreCustomer")}
+            <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" aria-hidden="true" />
+          </summary>
+          <div className="flex flex-col gap-1 pt-1 sm:flex-row sm:flex-wrap">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                setNewName(tag.leadName ?? "");
+                setRenameOpen(true);
+              }}
+              data-testid="button-edit-customer"
+            >
+              <Pencil className="!size-4" />
+              {t("renameCustomer")}
+            </Button>
+            {canClearCustomer && tag.saleId === null && (
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setActionError(null);
+                  setConfirm("unassign");
+                }}
+                data-testid="button-unlink-piece"
+              >
+                <Unlink className="!size-4 text-red-400" />
+                {t("unlinkFromCustomer")}
+              </Button>
+            )}
+          </div>
+        </details>
+      ) : null}
       {live && <p className="mt-2 text-xs text-emerald-400/90">{tm("liveExplain")}</p>}
       {!live && !retired && tag.status !== "inventory" && !activatePlan.ok && tag.status !== "disabled" ? (
         <p className="mt-2 text-xs text-white/40">{tm(!tag.leadId ? "activateNeedsCustomer" : !tag.destinationUrl ? "activateNeedsUrl" : "activateNeedsType")}</p>

@@ -113,12 +113,15 @@ export function AnalyticsPanel({
   range,
   showTopTags = false,
   onOpenTag,
+  onOpenNotLive,
 }: {
   scopeUrl: string;
   scope?: Record<string, string | number | undefined>;
   range: AnalyticsRange;
   showTopTags?: boolean;
   onOpenTag?: (id: string) => void;
+  /** Where the scans of a piece that was not live are listed: the note about them links there. */
+  onOpenNotLive?: () => void;
 }) {
   const tm = useT(manageTagsPiecesMessages);
   const tt = useT(tagsMessages);
@@ -171,7 +174,12 @@ export function AnalyticsPanel({
         <p className="mt-2 text-xs text-white/40">
           {tm("interactionExplain")}
           {totals.botHits > 0 ? ` ${tm.plural("botHits", totals.botHits)}` : ""}
-          {totals.inactiveScans > 0 ? ` ${tm.plural("inactiveScans", totals.inactiveScans)}` : ""}
+          {totals.inactiveScans > 0 ? (
+            <>
+              {" "}
+              {onOpenNotLive ? <button type="button" onClick={onOpenNotLive} className="underline underline-offset-2 hover:text-white/70" data-testid="analytics-not-live">{tm.plural("inactiveScans", totals.inactiveScans)}</button> : tm.plural("inactiveScans", totals.inactiveScans)}
+            </>
+          ) : null}
         </p>
         {/* The devices are one line, as on a piece: not a card of three rows and a lot of empty. */}
         {data.devices.length > 0 ? (

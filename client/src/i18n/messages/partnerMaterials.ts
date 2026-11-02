@@ -42,6 +42,9 @@ const en = {
   releasedCount_other: "{count} models released",
   releasedAll: "Select all",
   releasedClear: "Clear",
+  releasedSearch: "Search a model",
+  releasedNoMatch: "No model matches.",
+  releasedOtherGroup: "Other",
   releasedEmpty: "No model in the catalog yet.",
   releasedError: "Could not load the catalog.",
 
@@ -103,6 +106,9 @@ export const partnerMaterialsMessages: Dictionary<typeof en> = {
     releasedCount_other: "{count} modelos liberados",
     releasedAll: "Marcar todos",
     releasedClear: "Limpar",
+    releasedSearch: "Buscar um modelo",
+    releasedNoMatch: "Nenhum modelo encontrado.",
+    releasedOtherGroup: "Outros",
     releasedEmpty: "Ainda não há modelo no catálogo.",
     releasedError: "Não foi possível carregar o catálogo.",
 
@@ -161,6 +167,9 @@ export const partnerMaterialsMessages: Dictionary<typeof en> = {
     releasedCount_other: "{count} modelos liberados",
     releasedAll: "Marcar todos",
     releasedClear: "Limpiar",
+    releasedSearch: "Buscar un modelo",
+    releasedNoMatch: "Ningún modelo coincide.",
+    releasedOtherGroup: "Otros",
     releasedEmpty: "Aún no hay modelos en el catálogo.",
     releasedError: "No se pudo cargar el catálogo.",
 

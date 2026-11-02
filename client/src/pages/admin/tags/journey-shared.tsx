@@ -112,9 +112,10 @@ export function useJourneyLabels() {
 
 // Tones: the kit's maps (components/xpot/StatusPill.tsx), so "active" is one colour for entries and plans.
 
-export function KindBadge({ kind }: { kind: string }) {
+/** A plan written to the log (an experiment, a task) is a "Plan", not a "Decision": that is its kind in the log, not what it is to read. */
+export function KindBadge({ kind, action }: { kind: string; action?: string | null }) {
   const labels = useJourneyLabels();
-  return <Pill tone={toneOf(JOURNEY_KIND_TONE, kind)}>{labels.kind(kind)}</Pill>;
+  return <Pill tone={toneOf(JOURNEY_KIND_TONE, kind)}>{labels.kind(action?.startsWith("plan_") ? "plan" : kind)}</Pill>;
 }
 
 export function EntryStatusBadge({ status }: { status: string }) {

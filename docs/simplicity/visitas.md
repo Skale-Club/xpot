@@ -123,7 +123,7 @@ Arquivos: client/src/pages/xpot/XpotProspecting.tsx:660, 911-912, 997, 1078, 151
 Risco: nenhum. Conferir como `routeDisplayName` se comporta em rota real, sem nome dado à mão.
 
 ### VIS-5 [S2] A parada atual não volta à visita, e a parada feita não abre a visita
-Status: feito para parada em visita ("Back to visit") e feita ("See visit"). "Visit anyway" para parada pulada: pendente, o servidor recusa mudar parada pulada (`prospecting.ts:841`) e isso é regra de rota, que esta frente não mexe.
+Status: feito para parada em visita ("Back to visit") e feita ("See visit"). "Visit anyway" para parada pulada: pendente, o servidor recusa mudar parada pulada (`prospecting.ts:841`) e isso é regra de rota.
 Telas: rep/p+d/visits-route-job, rep/p+d/visits-route-in_progress-1, rep/p+d/visits-route-completed-3
 Problema: Blue Harbor está "In visit", em azul, e o único botão é navegar até lá, onde ele já está. Paradas "Done" também só têm navegar, embora `stop.visitId` exista. A janela da parada também não tem essas saídas (`:1904-1908`).
 Mudança: por estado. `checked_in`: botão com texto "Back to visit" / "Voltar à visita" / "Volver a la visita", leva a `/route/check-in`. `completed`: "See visit" / "Ver visita" / "Ver visita", leva ao detalhe; navegar sai. `skipped`: navegar sai e entra "Visit anyway" / "Visitar mesmo assim" / "Visitar igualmente", se o servidor permitir.
@@ -171,7 +171,7 @@ Arquivos: client/src/pages/xpot/visitRules.ts:53-65; client/src/pages/xpot/compo
 Risco: nenhum.
 
 ### VIS-12 [S2] A tela de histórico se chama como o módulo, e o celular não tem aba para ela
-Status: pendente (F1): item, título e migalha estão em `moduleNav.ts` e no dicionário `shell`, arquivos da F1 no plano.
+Status: feito. History / Histórico / Historial no item, no título da tela e na migalha; a tela da visita se chama Current visit e não acende item algum; no celular o histórico e a visita não acendem aba.
 Telas: rep/p+d/visits-history, rep/p+d/visits-history-*, rep/d/visits-checkin-empty, rep/d/visits-checkin-new, plat/p/visits-history
 Problema: módulo "Visits", item "Visits", título "Visits", migalha só "Visits". No celular a barra inferior não tem essa tela e destaca "Dashboard" enquanto ele lê o histórico. Na tela de check-in a migalha é "Visits › Visit" e o item ativo é o histórico, que não é onde ele está.
 Mudança: o item e o título viram "History" / "Histórico" / "Historial" (a Rev. 2 de `docs/MODULES.md` já decidiu por isso, D1; a tela em inglês não acompanhou, e pt e es precisam ser conferidos). Migalha da tela de check-in: "Visits › Check-in". Nela nenhum item fica ativo, ou fica Route. No celular, sem destaque falso: o histórico fica sob Route, com o botão de voltar.
@@ -232,7 +232,7 @@ Arquivos: client/src/pages/xpot/components/sales/SalesOverview.tsx:193 e a séri
 Risco: causa provável, não confirmada em execução. Testar com data de mudança de horário.
 
 ### VIS-18 [S2] Team results e Sales discordam no mesmo período
-Status: parcial. Feito: "Checked in away" com o subtítulo novo, sem "Sync problems". Pendente: a linha "+ $149 de revendedores" (precisa de um total novo no servidor).
+Status: parcial. Feito: "Checked in away" com o subtítulo novo, sem "Sync problems". Pendente: a linha "+ $149 de revendedores": precisa de um total novo no servidor (vendas de revendedores só de Tags, fora da lista de Team results).
 Telas: plat/d/panel-team-results ("$3,483.00", "8 sales"), plat/d/panel-work-sales ("$3,632.00", "9"), plat/p/ as mesmas
 Problema: mesmo dono, mesmos 30 dias, duas somas. A diferença de $149 bate com a venda da revendedora em Malden Hardware (conferi no seed e na lista do painel, não na consulta do servidor): fora de Team results, dentro de Sales. Team results avisa "Tags-only resellers are left out", mas Sales não diz nada. Também "7 active reps" com 8 linhas (Daniela com 0), "Location exceptions: outside the business area, or let through" e "Sync problems → Status".
 Mudança: linha abaixo do quadro em Team results: "+ $149.00 from resellers, not listed here" / "+ $149,00 de revendedores, fora desta lista" / "+ $149,00 de revendedores, fuera de esta lista". "Location exceptions" → "Checked in away" / "Check-in fora do local" / "Check-in fuera del lugar", subtítulo "outside the company's area or without a location". "Sync problems → Status" sai: fica em Plataforma.
@@ -248,7 +248,7 @@ Arquivos: client/src/pages/xpot/XpotTasks.tsx; client/src/i18n/messages/tasks.ts
 Risco: o MCP do Xpot usa `tasks_start`. Manter o estado no banco; só some o botão.
 
 ### VIS-24 [S2] "Visited" é resultado sem sentido, e "Sale made" não pede a venda
-Status: parcial. Feito: "Talked", "Closed or no one there", "Come back". Pendente: abrir a janela de venda ao escolher "Sale made" sem venda ligada, que o próprio achado pede para confirmar com o dono por ser mudança de fluxo.
+Status: feito. "Talked", "Closed or no one there" (o botão aceita duas linhas), "Come back". Decidido sem o dono, seguindo a recomendação: ao escolher "Sale made" numa visita sem venda, a janela de venda abre na hora (visto no celular); com venda registrada o resultado já vem marcado.
 Telas: rep/p+d/visits-history-sale_made, plat/p+d/visits-history-completed, plat/p+d/visits-history-no_answer, owner/p+d/visits-history-no_answer
 Problema: toda visita foi visitada, então "Visited" não informa nada, e o filtro lista "Visited 3" junto de "Not interested". "No answer" também é o nome para "Closed when we arrived". Marcar "Sale made" não registra venda: no seletor nada pede valor, e a tela pode dizer "Sale made" e "Sales $0.00 · 0 transactions". (O caso da captura vem do seed; a possibilidade é do app.)
 Mudança: "Visited" → "Talked" / "Conversamos" / "Conversamos". "No answer" → "Closed or no one there" / "Fechado ou sem ninguém" / "Cerrado o sin nadie". "Sale made" sem venda ligada abre a janela de venda ao ser escolhido; com venda registrada na visita, vem marcado sozinho.
@@ -264,7 +264,7 @@ Arquivos: client/src/pages/admin/AdminApp.tsx:59; client/src/i18n/messages/manag
 Risco: depende do dono. Liberar exige filtrar `teamActivity` por organização.
 
 ### VIS-29 [S2] O painel do parceiro se chama "Production" e guarda Companies e Sales
-Status: pendente (F1): faixa e migalha vêm de `moduleNav.ts` e do dicionário `shell`.
+Status: feito. O painel do parceiro é My company; o grupo e o item Production continuam dentro.
 Telas: partner/p+d/panel-work-leads, partner/p+d/panel-work-sales, partner/p+d/panel-work-tasks, partner/p+d/visits-dashboard
 Problema: faixa "Production", migalha "Production › Companies", grupo "Production" e item "Production". Quatro vezes a mesma palavra para algo que inclui vendas. O dono vê "My company" no mesmo lugar.
 Mudança: faixa e migalha usam "My company" / "Minha empresa" / "Mi empresa", como o glossário. O grupo e o item "Production" continuam dentro.
@@ -296,7 +296,7 @@ Arquivos: client/src/i18n/messages/salesModule.ts:179, 183; client/src/pages/xpo
 Risco: nenhum.
 
 ### VIS-21 [S3] Dashboard: dois atalhos iguais e "Needs attention" com o que não é problema
-Status: parcial. Feito: "View route" saiu, botão "Check in at {name}", eyebrows saíram, "2 shops to count and bill", "Nothing scheduled for today", botão "Build today's route". Pendente (F1): o ponto âmbar em Route, em `moduleNav.ts`.
+Status: feito. "View route" saiu, botão "Check in at {name}", eyebrows saíram, "2 shops to count and bill", "Nothing scheduled for today", botão "Build today's route"; o ponto âmbar em Route saiu.
 Telas: rep/p+d/visits-dashboard, owner/p+d/visits-dashboard, partner/p+d/visits-dashboard, plat/p+d/visits-dashboard
 Problema: "View route" e o cartão inteiro levam ao mesmo lugar. "OVERDUE / Overdue tasks" e "ON CONSIGNMENT / Settlements overdue" repetem o título em eyebrow. "2 consignments need review" não diz o que fazer. Sem tarefas, "Nothing else scheduled for today" tem "else" sem nada antes. O ponto âmbar em Route, sem explicação, aparece só no desktop e até sem rota (partner). Sem rota, "No route created" não oferece botão.
 Mudança: "View route" sai. O cartão ganha, quando há rota aberta, o botão "Check in at {name}" / "Fazer check-in em {name}" / "Hacer check-in en {name}". Eyebrows saem. "Settlements overdue" → "2 shops to count and bill" / "2 lojas para contar e cobrar" / "2 tiendas para contar y cobrar". "Nothing else" → "Nothing scheduled for today" / "Nada marcado para hoje" / "Nada previsto para hoy". O ponto sai. Sem rota: botão "Build today's route", texto que já existe.
@@ -320,7 +320,7 @@ Arquivos: client/src/pages/xpot/components/VisitsTable.tsx; client/src/pages/xpo
 Risco: nenhum.
 
 ### VIS-25 [S3] Lista de empresas: chips escondidos, lixeira em toda linha, ícones sem nome
-Status: parcial. Feito: no computador "Check in" com texto e "$" e lixeira num menu de 3 pontos, "Delete company", "Check in" primeiro na folha do celular. Pendente: "Date" como ícone e a sombra de rolagem dos chips (`filters.tsx` é compartilhado).
+Status: feito em parte. No computador "Check in" com texto e "$" e lixeira num menu de 3 pontos; "Check in" primeiro na folha do celular; os chips que rolam ganham um esmaecido na ponta que ainda tem chips. Pendente: "Date" como ícone ao lado do "+".
 Telas: rep/p+d/visits-leads, plat/p+d/visits-leads, owner/p+d/visits-leads, plat/d/panel-work-leads, partner/p/visits-leads
 Problema: no celular "Customers" e "Prospects" ficam fora da tela, sem indicação de rolagem. "Date" ocupa uma linha inteira, e o selo vermelho de follow-up quebra o layout dos cartões. No desktop cada linha tem $, seta entrando e lixeira sem texto, 34 vezes no painel. A lixeira ao lado do check-in é convite ao erro. O cartão tem endereço, telefone, site e ramo antes do que importa.
 Mudança: chips em 2 linhas no celular ou com sombra indicando rolagem. "Date" vai para ícone ao lado do +. Desktop: "Check in" com texto; "$" e lixeira no menu de 3 pontos. Cartão: nome, selo, follow-up, "Last visit".
@@ -336,7 +336,7 @@ Arquivos: client/src/i18n/messages/leads.ts:16, 26-27; client/src/pages/xpot/Xpo
 Risco: nenhum.
 
 ### VIS-27 [S3] Empresa no celular: 11 campos antes de vender
-Status: parcial. Feito: ordem no celular (vender, peças, visitas, contatos, detalhes recolhido), telefone no topo, tiles "Sold" e "Recent visits" saíram, "Delete company". Pendente: o texto no chip do Google.
+Status: feito. Ordem no celular (vender, peças, visitas, contatos, detalhes recolhido), telefone no topo, tiles "Sold" e "Recent visits" saíram, "Delete company" e o chip do Google diz "Google profile" (Perfil Google, Perfil de Google).
 Telas: rep/p/visits-lead-*, plat/p/visits-lead-active, -customer, -prospect, owner/p/visits-lead-*
 Problema: a ordem é quadros, Details (11 campos), Contacts, Sales and consignment, Recent visits, o que põe "New sale" em cerca de 1.800px. "Sold" e "Sold here" repetem o mesmo valor. "Recent visits 3" é um quadro que repete a lista. As linhas de "Recent visits" não abrem. "COMPANY PROFILE" é rótulo sem uso. O chip Google + corrente não tem nome. "Delete" não diz o quê.
 Mudança: ordem no celular: botões (VIS-9b), Sales and consignment, Recent visits, Contacts, Details recolhido com telefone e endereço visíveis. Quadros "Sold" e "Recent visits" saem; ficam "On shelf" e "Pieces". Linha da visita abre a visita. "Delete" → "Delete company" / "Excluir empresa" / "Eliminar empresa". Chip Google ganha o texto "Google profile" / "Perfil Google" / "Perfil de Google".
@@ -344,7 +344,7 @@ Arquivos: client/src/pages/xpot/components/leads/LeadDetailPane.tsx; client/src/
 Risco: nenhum.
 
 ### VIS-30 [S3] Catálogo: promessa que a própria lista desmente e formulário técnico
-Status: parcial. Feito: título "Products" e subtítulo, código fora da lista, ícones com texto no computador, "Price to the shop", sem "they pay", placeholder, "volume price", serviço digital sem custo nem margem. Pendente: rodapé fixo do diálogo e o menu com texto no celular.
+Status: feito. Título "Products" e subtítulo, código fora da lista, "Price to the shop", sem "they pay", "volume price", serviço digital sem custo nem margem; o diálogo tem rodapé fixo com o botão de salvar sempre à vista e, no celular, a linha tem um menu com texto (Volume pricing, Edit, Archive). Visto no celular.
 Telas: plat/p+d/products, plat/p+d/products-new-dialog
 Problema: "Tags pieces are managed in Tags" acima de "Large Stand", "Small Plate", com o código `stand-large`. Título "Catalog", menu e migalha "Products". Três ícones sem nome em cada linha (camadas, lápis, arquivo). "1 tier", "company margin $3.80", "resale ≈ $10.00". No formulário: "Price (B2B)", "they pay", placeholder "3d_print, website…", "Cost to make" também em serviço digital. O diálogo corta em "Can be left on consignment", sem sinal de que continua e sem botão salvar à vista.
 Mudança: título "Products" / "Produtos" / "Productos"; subtítulo "What reps can sell during a visit." / "O que o vendedor pode vender na visita." / "Lo que el vendedor puede vender en la visita." Códigos só na edição. Ícones com tooltip e, no celular, menu com texto. "Price (B2B)" → "Price to the shop" / "Preço para a loja" / "Precio a la tienda"; "they pay" sai. Placeholder: "Signs, websites..." / "Placas, sites..." / "Placas, sitios web...". "Cost to make" some em tipo digital. Rodapé do diálogo fixo com o botão de salvar. "tier" → "volume price" / "preço por quantidade" / "precio por cantidad".
@@ -352,7 +352,7 @@ Arquivos: client/src/pages/admin/AdminProducts.tsx:182, 288; client/src/i18n/mes
 Risco: esconder custo em digital muda o cálculo de margem: confirmar com o dono. Recomendo custo 0 implícito.
 
 ### VIS-32 [S3] Painel com quatro títulos iguais antes do conteúdo
-Status: parcial. Feito em Sales e Tasks (sem cabeçalho dentro do painel; fora dele, só o título). Pendente (F1): "Platform" repetido na moldura do painel.
+Status: parcial. Feito em Sales e Tasks (sem cabeçalho dentro do painel; fora dele, só o título). Pendente: "Platform" repetido na faixa, na lateral e na migalha do painel.
 Telas: plat/p/panel-work-tasks, plat/p/panel-work-sales, plat/p/panel-work-leads, owner/p/panel-work-*, partner/p/panel-work-*; plat/d/check-in-rules
 Problema: "Tasks" (título), "Tasks" (seletor), "EXECUTION", "Tasks" (título da tela). Em Sales: "Sales", "Sales", "REVENUE OPERATIONS", "Sales center". Em Plataforma, "Platform" na faixa, na barra lateral, na migalha e no grupo.
 Mudança: dentro do painel, a tela não desenha seu cabeçalho: seta + seletor bastam. "Sales center" e o eyebrow saem também fora do painel (VIS-16). No topo da Plataforma fica só a faixa com "Back to my app".
@@ -360,7 +360,7 @@ Arquivos: client/src/pages/admin/AdminWork.tsx; client/src/pages/xpot/XpotSales.
 Risco: nenhum.
 
 ### VIS-33 [S3] Cabeçalho do celular come um terço da tela
-Status: pendente (F1): `AppLayout.tsx` e o cabeçalho do celular.
+Status: feito. A moldura do celular é uma barra de uma linha (visita aberta, seletor Visits/Tags e avatar) e a saudação só aparece no Dashboard. Conferido nas capturas do celular.
 Telas: rep/p/todas as telas de Visitas, plat/p/todas, partner/p/todas
 Problema: faixa da visita ou do painel (60px), avatar com "GOOD EVENING / Jessica 👋 / Sunday, November 1" (90px), Visits/Tags (60px) e Ready (75px): 300px de 844 antes de qualquer conteúdo, em toda tela. Na tela de rota, a primeira parada útil fica ainda mais longe.
 Mudança: saudação só no Dashboard. Nas demais, barra de uma linha com avatar pequeno e o seletor Visits/Tags. Configurações e sair vão para Settings. Com VIS-1 somam cerca de 160px recuperados.
@@ -376,7 +376,7 @@ Arquivos: client/src/pages/xpot/XpotProspecting.tsx:344-346, 1032, 1079; client/
 Risco: nenhum.
 
 ### VIS-35 [S3] Detalhe da visita repete a empresa e oferece gravar visita antiga
-Status: parcial. Feito: bloco "Company" saiu (telefone no topo), eyebrow duplicado saiu, gravador recolhido em "Add voice note" (com a nota digitada), quadro de vendas só com venda. Pendente: "Create task" ao lado de "Next step".
+Status: feito. Bloco "Company" saiu, eyebrow duplicado saiu, gravador recolhido em "Add voice note", quadro de vendas só com venda e "Create task" ao lado de "Next step" abre a janela de tarefa com o próximo passo como título e a empresa e a visita já ligadas (visto no computador).
 Telas: rep/p+d/visits-history-completed, -follow_up, plat/p+d/visits-history-*, owner/p+d/visits-history-*
 Problema: "VISIT SUMMARY" duas vezes, no topo e na seção. Bloco "Company" com 11 campos, "Add social network" e "Add photo", igual à tela da empresa, que está a um botão ("Open company"). "Record what happened / Tap to record voice notes" em visita de semanas atrás, com "Tap" no desktop. "Next step: Send the proposal" é texto morto: não vira tarefa. "Sales $0.00 · 0 transactions · 0 pieces" aparece sempre, até sem venda. "Delete visit" sem contexto.
 Mudança: tirar o bloco "Company" (fica telefone e endereço no topo). Gravador recolhido: "Add voice note" / "Adicionar nota de voz" / "Añadir nota de voz". Quadro de vendas só com venda. Ao lado de "Next step": "Create task" / "Criar tarefa" / "Crear tarea". O primeiro eyebrow sai.

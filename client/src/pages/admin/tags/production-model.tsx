@@ -55,7 +55,8 @@ export function PrintModelPage({ slug, go }: { slug: string; go: Go }) {
     window.history.replaceState(null, "", window.location.pathname);
   }, [isAdmin]);
   const [editing, setEditing] = useState(false);
-  const [counting, setCounting] = useState(false);
+  // Open: "adjustment" for a bought part, "printed" from "I printed these".
+  const [counting, setCounting] = useState<false | "adjustment" | "printed">(false);
   const [retiring, setRetiring] = useState(false);
   const { data: model, isLoading, error, refetch } = useQuery({
     queryKey: [ADMIN_TAGS_KEY, "production", "model", slug],
@@ -117,9 +118,12 @@ export function PrintModelPage({ slug, go }: { slug: string; go: Go }) {
               </Button>
             ) : null}
             {bought ? (
-              <Button type="button" variant="brand" accent="tags" size="sm" onClick={() => setCounting(true)}>{t("adjustCount")}</Button>
+              <Button type="button" variant="brand" accent="tags" size="sm" onClick={() => setCounting("adjustment")}>{t("adjustCount")}</Button>
             ) : null}
           </> : null}
+          {isAdmin && part && !bought && !retired ? (
+            <Button type="button" variant="secondary" size="sm" onClick={() => setCounting("printed")} data-testid="production-printed-these">{t("printedThese")}</Button>
+          ) : null}
           {printable ? (
             <Button type="button" variant="brand" accent="tags" size="sm" onClick={() => setPrinting(true)}>
               <Printer />
@@ -158,7 +162,7 @@ export function PrintModelPage({ slug, go }: { slug: string; go: Go }) {
 
         <div className="min-w-0 space-y-5 lg:order-1">
           {part ? (
-            <SectionCard title={t("partCountTitle")} icon={PackageCheck} accent="tags" actions={isAdmin ? <Button type="button" variant={bought ? "brand" : "secondary"} accent={bought ? "tags" : undefined} size="sm" onClick={() => setCounting(true)}>{t("adjustCount")}</Button> : null}>
+            <SectionCard title={t("partCountTitle")} icon={PackageCheck} accent="tags" actions={isAdmin ? <Button type="button" variant={bought ? "brand" : "secondary"} accent={bought ? "tags" : undefined} size="sm" onClick={() => setCounting("adjustment")}>{t("adjustCount")}</Button> : null}>
               {model.partMovements.length ? (
                 <ul className="divide-y divide-white/[0.06] text-sm">
                   {model.partMovements.map((m) => (
@@ -213,7 +217,7 @@ export function PrintModelPage({ slug, go }: { slug: string; go: Go }) {
       {versioning && <VersionDialog model={model} fix={fix} onClose={() => { setVersioning(false); setFix(null); }} />}
       {editing && <EditModelDialog model={model} onClose={() => setEditing(false)} onRetire={() => { setEditing(false); setRetiring(true); }} />}
       {materials && <MaterialsDialog model={model} onClose={() => setMaterials(false)} />}
-      {counting && <CountDialog model={model} onClose={() => setCounting(false)} />}
+      {counting && <CountDialog model={model} reason={counting} onClose={() => setCounting(false)} />}
       <ConfirmDialog
         open={retiring}
         onOpenChange={setRetiring}
@@ -497,11 +501,11 @@ function EditModelDialog({ model, onClose, onRetire }: { model: PrintModelDetail
   );
 }
 
-function CountDialog({ model, onClose }: { model: PrintModelDetail; onClose: () => void }) {
+function CountDialog({ model, reason, onClose }: { model: PrintModelDetail; reason: "adjustment" | "printed"; onClose: () => void }) {
   const t = useT(productionMessages);
   const tc = useT(commonMessages);
   const { toast } = useToast();
-  const [form, setForm] = useState({ delta: "", reason: "adjustment", note: "" });
+  const [form, setForm] = useState<{ delta: string; reason: string; note: string }>({ delta: "", reason, note: "" });
   const delta = Number.parseInt(form.delta, 10);
   const valid = Number.isInteger(delta) && delta !== 0 && model.onHand + delta >= 0;
   const save = useMutation({
@@ -522,7 +526,7 @@ function CountDialog({ model, onClose }: { model: PrintModelDetail; onClose: () 
         </DialogHeader>
         <div className="space-y-3">
           <Field label={t("fieldDelta")} hint={t("fieldDeltaHint")} error={form.delta && !valid ? t("fieldDeltaInvalid") : undefined}>
-            <Input inputMode="numeric" value={form.delta} placeholder="-2" onChange={(e) => setForm({ ...form, delta: e.target.value })} />
+            <Input inputMode="numeric" value={form.delta} placeholder={reason === "printed" ? "4" : "-2"} onChange={(e) => setForm({ ...form, delta: e.target.value })} />
           </Field>
           <Field label={t("fieldReason")}>
             <Select value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} options={PRINT_PART_REASONS.map((reason) => ({ value: reason, label: t(`partReason_${reason}` as never) }))} />

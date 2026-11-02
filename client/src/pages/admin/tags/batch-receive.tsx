@@ -11,6 +11,7 @@ import { adminTagsFlowMessages } from "@/i18n/messages/adminTagsFlow";
 import { AdminHttpError, deleteJson, errorMessage, formatTime, invalidateAdminTags, sendJson } from "./api";
 import { intakeKey, readCode, readErrorStatus, STATION_READS, type ReadStatus } from "./batches-model";
 import { CameraButton, CodeEntry, ContinuousCamera, feedback } from "./scan-station";
+import { useIsDesktop } from "@/hooks/use-is-desktop";
 
 interface ScanResult {
   tag: { id: string; publicCode: string };
@@ -70,6 +71,7 @@ export interface ReceiveBatch {
  */
 export function BatchReceiveStation({ batch, onRequestClose }: { batch: ReceiveBatch; onRequestClose?: () => void }) {
   const t = useT(adminTagsFlowMessages);
+  const isDesktop = useIsDesktop();
   const tb = useT(manageTagsBatchesMessages);
   const { toast } = useToast();
   const [reads, setReads] = useState<Read[]>([]);
@@ -179,7 +181,7 @@ export function BatchReceiveStation({ batch, onRequestClose }: { batch: ReceiveB
               <ScanLine className={`h-4 w-4 ${MODULE_ACCENT.tags.text}`} />
               {t("receiveTitle", { code: batch.batchCode })}
             </p>
-            <p className="mt-1 text-xs text-white/45">{issued ? tb("receiveIntro") : tb("addPiecesIntro")}</p>
+            <p className="mt-1 hidden text-xs text-white/45 sm:block">{issued ? tb("receiveIntro") : tb("addPiecesIntro")}</p>
           </div>
           <span className="flex items-center gap-2">
             <span className="rounded-full bg-violet-400/10 px-3 py-1 text-sm font-semibold tabular-nums text-violet-200" data-testid="intake-progress">
@@ -197,7 +199,8 @@ export function BatchReceiveStation({ batch, onRequestClose }: { batch: ReceiveB
           <div className="min-w-0 flex-1 basis-64">
             <CodeEntry onReads={enqueue} placeholder={tb("scanPlaceholder")} testId="admin-tags-batch-scan-input" />
           </div>
-          <CameraButton on={camera} onToggle={() => setCamera((v) => !v)} />
+          {/* On a phone the camera is the way to read: first, full width, in colour. */}
+          <CameraButton on={camera} onToggle={() => setCamera((v) => !v)} primary={!isDesktop} className="order-first w-full sm:order-none sm:w-auto" />
         </div>
         {camera ? <ContinuousCamera onRead={(text) => enqueue([text])} onClose={() => setCamera(false)} /> : null}
 

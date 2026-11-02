@@ -6,7 +6,7 @@ import type { Dictionary } from "../index";
 const en = {
   produce: "Produce",
   readyTitle: "Always ready",
-  readyIntro: "No serial needed. Downloading does not change the count: to count what you print, open the piece and use Print.",
+  readyIntro: "No serial needed. Download the file and, in the piece, add what you printed to the count.",
   readyEmpty: "No always-ready pieces in the catalog yet.",
   noFile: "No print file yet",
   addFile: "Add it on the model page",
@@ -61,7 +61,7 @@ export const productionBoardMessages: Dictionary<typeof en> = {
   pt: {
     produce: "Produzir",
     readyTitle: "Sempre prontas",
-    readyIntro: "Não precisa de serial. Baixar não muda a contagem: para contar o que imprimiu, abra a peça e use Imprimir.",
+    readyIntro: "Não precisa de serial. Baixe o arquivo e, na peça, some à contagem o que imprimiu.",
     readyEmpty: "Ainda não há peças sempre prontas no catálogo.",
     noFile: "Ainda sem arquivo de impressão",
     addFile: "Adicione na página do modelo",
@@ -113,7 +113,7 @@ export const productionBoardMessages: Dictionary<typeof en> = {
   es: {
     produce: "Producir",
     readyTitle: "Siempre listas",
-    readyIntro: "No necesita serial. Descargar no cambia el conteo: para contar lo que imprimiste, abre la pieza y usa Imprimir.",
+    readyIntro: "No necesita serial. Descarga el archivo y, en la pieza, suma al conteo lo que imprimiste.",
     readyEmpty: "Todavía no hay piezas siempre listas en el catálogo.",
     noFile: "Todavía sin archivo de impresión",
     addFile: "Añádelo en la página del modelo",
