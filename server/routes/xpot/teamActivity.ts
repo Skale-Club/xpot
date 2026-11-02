@@ -4,7 +4,7 @@
 // Visits, finished visits, location exceptions and sales are counted in the
 // period; visits in progress, open opportunities and pending tasks are "now".
 
-import { and, eq, gte, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, isNotNull, sql, type AnyColumn } from "drizzle-orm";
 import { db } from "../../db.js";
 import { salesOpportunitiesLocal, salesReps, salesSales, salesTasks, salesVisits } from "#shared/schema.js";
 import { VISIT_OUTCOME_STATUSES } from "#shared/visit-status.js";
@@ -24,8 +24,14 @@ const toIso = (value: unknown): string | null => {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 };
 
-/** What the field team did since `since`; `repIds` narrows it to these people (an organization's owner sees their team). */
-export async function teamActivity(since: Date, repIds?: readonly number[]): Promise<TeamActivityResponse> {
+/**
+ * What the field team did since `since`. `repIds` narrows it to these people. `organizationId` counts the work done on
+ * that organization's companies instead, by whoever did it: the numbers follow the company visited or sold to, not the
+ * team the person belongs to, so an owner of two organizations (or a rep serving another's companies) never gets the
+ * other's totals, and the total matches the people's own pages.
+ */
+export async function teamActivity(since: Date, repIds?: readonly number[], organizationId?: number): Promise<TeamActivityResponse> {
+  const ofOrganization = (leadId: AnyColumn) => (organizationId === undefined ? undefined : sql`${leadId} IN (SELECT id FROM sales_leads WHERE organization_id = ${organizationId})`);
   const [people, visits, sales, lastVisit, lastSale, inProgress, opportunities, tasks] = await Promise.all([
     db.select({
       id: salesReps.id,
@@ -41,30 +47,30 @@ export async function teamActivity(since: Date, repIds?: readonly number[]): Pro
       visits: sql<number>`count(*)::int`,
       finished: sql<number>`(count(*) filter (where ${inArray(salesVisits.status, [...VISIT_OUTCOME_STATUSES])}))::int`,
       exceptions: sql<number>`(count(*) filter (where ${inArray(salesVisits.validationStatus, [...LOCATION_EXCEPTION_STATUSES])}))::int`,
-    }).from(salesVisits).where(gte(salesVisits.checkedInAt, since)).groupBy(salesVisits.repId),
+    }).from(salesVisits).where(and(gte(salesVisits.checkedInAt, since), ofOrganization(salesVisits.leadId))).groupBy(salesVisits.repId),
     db.select({
       repId: salesSales.repId,
       count: sql<number>`count(*)::int`,
       totalCents: sql<number>`coalesce(sum(${salesSales.totalCents}), 0)::int`,
       currency: sql<string>`max(${salesSales.currency})`,
-    }).from(salesSales).where(and(eq(salesSales.status, "completed"), gte(salesSales.soldAt, since))).groupBy(salesSales.repId),
+    }).from(salesSales).where(and(eq(salesSales.status, "completed"), gte(salesSales.soldAt, since), ofOrganization(salesSales.leadId))).groupBy(salesSales.repId),
     db.select({
       repId: salesVisits.repId,
       at: sql<Date | string | null>`max(greatest(${salesVisits.checkedInAt}, ${salesVisits.checkedOutAt}))`,
-    }).from(salesVisits).where(isNotNull(salesVisits.checkedInAt)).groupBy(salesVisits.repId),
+    }).from(salesVisits).where(and(isNotNull(salesVisits.checkedInAt), ofOrganization(salesVisits.leadId))).groupBy(salesVisits.repId),
     db.select({
       repId: salesSales.repId,
       at: sql<Date | string | null>`max(${salesSales.soldAt})`,
-    }).from(salesSales).where(eq(salesSales.status, "completed")).groupBy(salesSales.repId),
+    }).from(salesSales).where(and(eq(salesSales.status, "completed"), ofOrganization(salesSales.leadId))).groupBy(salesSales.repId),
     db.select({ repId: salesVisits.repId, n: sql<number>`count(*)::int` })
-      .from(salesVisits).where(eq(salesVisits.status, "in_progress")).groupBy(salesVisits.repId),
+      .from(salesVisits).where(and(eq(salesVisits.status, "in_progress"), ofOrganization(salesVisits.leadId))).groupBy(salesVisits.repId),
     db.select({
       repId: salesOpportunitiesLocal.repId,
       n: sql<number>`count(*)::int`,
       value: sql<number>`coalesce(sum(${salesOpportunitiesLocal.value}), 0)::float`,
-    }).from(salesOpportunitiesLocal).where(eq(salesOpportunitiesLocal.status, "open")).groupBy(salesOpportunitiesLocal.repId),
+    }).from(salesOpportunitiesLocal).where(and(eq(salesOpportunitiesLocal.status, "open"), ofOrganization(salesOpportunitiesLocal.leadId))).groupBy(salesOpportunitiesLocal.repId),
     db.select({ repId: salesTasks.repId, n: sql<number>`count(*)::int` })
-      .from(salesTasks).where(eq(salesTasks.status, "pending")).groupBy(salesTasks.repId),
+      .from(salesTasks).where(and(eq(salesTasks.status, "pending"), organizationId === undefined ? undefined : eq(salesTasks.organizationId, organizationId))).groupBy(salesTasks.repId),
   ]);
 
   const byRep = <T extends { repId: number | null }>(rows: T[]) => new Map(rows.map((row) => [row.repId, row]));
@@ -78,10 +84,13 @@ export async function teamActivity(since: Date, repIds?: readonly number[]): Pro
   for (const person of people) {
     const v = visitsBy.get(person.id);
     const s = salesBy.get(person.id);
-    // Living people with Visits count toward the totals, whether or not they get a row.
-    if (!countsTowardTeam(person)) continue;
+    // Living people with Visits count toward the totals, whether or not they get a row. An organization's own numbers
+    // count every living account that worked its companies (a reseller's sale of one is a sale of the organization),
+    // and only those who did something get a row (the Team tab lists the rest).
+    const worked = Boolean(v || s);
+    if (organizationId === undefined ? !countsTowardTeam(person) : !(!person.deletedAt && person.isActive && !person.blockedAt && worked)) continue;
     counted.add(person.id);
-    if (!inTeamTable(person, Boolean(v || s))) continue;
+    if (organizationId === undefined ? !inTeamTable(person, worked) : false) continue;
     const times = [lastVisitBy.get(person.id)?.at, lastSaleBy.get(person.id)?.at].map(toIso).filter((t): t is string => !!t).sort();
     rows.push({
       repId: person.id,

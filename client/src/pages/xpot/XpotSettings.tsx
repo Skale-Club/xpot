@@ -360,6 +360,9 @@ export function XpotSettings() {
     .filter((item) => item.membership);
   const mine = myOrganizations.find((item) => !item.organization.personal) ?? myOrganizations[0];
   const isOwner = mine?.membership?.role === "admin";
+  // Someone in several teams (an owner of two organizations) sees every one with their role in it, not just the first.
+  const teams = myOrganizations.filter((item) => !item.organization.personal);
+  const several = teams.length > 1;
   // One section's content. On a phone it is the inner screen, whose header
   // already carries the title (`titled` false); on desktop the stacked page.
   const renderSection = (id: SettingsSection, titled: boolean) => {
@@ -435,17 +438,22 @@ export function XpotSettings() {
         if (!mine) return null;
         return (
           <Section key={id} id={id} title={tp("sectionTitle")} titled={titled}>
-            <div className="flex flex-wrap items-center gap-3" data-testid="settings-organization">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/[0.06] text-white/70"><Building2 className="h-5 w-5" aria-hidden="true" /></span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-white" data-testid="settings-organization-name">{mine.organization.name}</p>
-                <p className="text-xs text-white/45">{tp("yourRole")}</p>
+            {(several ? teams : [mine]).map(({ organization, membership }) => (
+              <div key={organization.id} className="flex flex-wrap items-center gap-3" data-testid="settings-organization">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/[0.06] text-white/70"><Building2 className="h-5 w-5" aria-hidden="true" /></span>
+                <div className="min-w-[9rem] flex-1">
+                  <p className="truncate text-sm font-semibold text-white" data-testid="settings-organization-name">{organization.name}</p>
+                  <p className="text-xs text-white/45">{tp("yourRole")}</p>
+                </div>
+                <Pill tone="slate" data-testid="settings-organization-role">{tp(membership?.role === "admin" ? "roleOwner" : "roleEmployee")}</Pill>
+                {several && membership?.role === "admin" ? (
+                  <Button asChild variant="secondary" size="sm"><Link href={`/organizations/${organization.id}?tab=team`} data-testid="settings-open-team">{tp("openTeam")}</Link></Button>
+                ) : null}
               </div>
-              <Pill tone="slate" data-testid="settings-organization-role">{tp(isOwner ? "roleOwner" : "roleEmployee")}</Pill>
-            </div>
-            <p className="text-sm leading-relaxed text-white/50">{tp(isOwner ? (mine.organization.personal ? "soloHint" : "ownerHint") : "employeeHint")}</p>
-            {isOwner && <AddPersonForm organizationId={mine.organization.id} hint={false} />}
-            {isOwner && runsATeam(me?.organizations) && (
+            ))}
+            {!several && <p className="text-sm leading-relaxed text-white/50">{tp(isOwner ? (mine.organization.personal ? "soloHint" : "ownerHint") : "employeeHint")}</p>}
+            {!several && isOwner && <AddPersonForm organizationId={mine.organization.id} hint={false} />}
+            {!several && isOwner && runsATeam(me?.organizations) && (
               <Button asChild variant="secondary"><Link href={`/organizations/${mine.organization.id}?tab=team`} data-testid="settings-open-team"><Building2 className="h-4 w-4" />{tp("openTeam")}</Link></Button>
             )}
           </Section>
@@ -566,7 +574,7 @@ export function XpotSettings() {
 
   // Phone: the list, like a phone's own settings. Each row says where it stands.
   const rows: Array<{ id: SettingsSection; icon: typeof Languages; value?: string }> = [
-    ...(mine ? [{ id: "organization" as const, icon: Building2, value: mine.organization.name }] : []),
+    ...(mine ? [{ id: "organization" as const, icon: Building2, value: several ? tp.plural("companiesCount", teams.length) : mine.organization.name }] : []),
     { id: "signin", icon: KeyRound, value: signInPhone ?? undefined },
     { id: "language", icon: Languages, value: LANG_LABELS[lang] },
     ...(canManage ? [{ id: "administration" as const, icon: Shield, value: tw("openPanel") }] : []),

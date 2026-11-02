@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Building2, ChevronRight, Package, PackageOpen, Settings, ShieldCheck, ShoppingBag, UserPlus, Users } from "lucide-react";
+import { Building2, ChevronRight, Package, PackageOpen, Plus, Settings, ShieldCheck, ShoppingBag, UserPlus, Users } from "lucide-react";
 import { Link, Redirect, useLocation, useSearchParams } from "wouter";
 import { Button } from "@/components/ui/button";
 import { AppLayout } from "@/components/xpot/AppLayout";
@@ -8,13 +8,11 @@ import { ConfirmDialog } from "@/components/xpot/ConfirmDialog";
 import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
 import { Field, Input, Select } from "@/components/xpot/Field";
 import { FilterToggle } from "@/components/xpot/filters";
-import { FormFooter } from "@/components/xpot/FormFooter";
 import { InlineAlert } from "@/components/xpot/InlineAlert";
 import { ListSkeleton } from "@/components/xpot/ListSkeleton";
 import { BackLink, PageHeader } from "@/components/xpot/PageHeader";
 import { Stat } from "@/components/xpot/Stat";
 import { Pill } from "@/components/xpot/StatusPill";
-import { SwitchRow } from "@/components/xpot/SwitchRow";
 import { DANGER_OUTLINE, GLASS_CLASS, GLASS_SUBTLE_CLASS } from "@/components/xpot/surface";
 import { Tabs } from "@/components/xpot/Tabs";
 import { apiRequest } from "@/lib/queryClient";
@@ -25,10 +23,11 @@ import { formatMoney, formatPhone } from "@/lib/format";
 import { useToast } from "@/hooks/use-toast";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { useT } from "@/i18n";
+import { addPersonMessages } from "@/i18n/messages/addPerson";
 import { commonMessages } from "@/i18n/messages/common";
 import { organizationsMessages } from "@/i18n/messages/organizations";
 import { COMPANY_ORGANIZATION_SLUG, type Distribution } from "@shared/organizations";
-import { DistributionChoice, OrganizationLinks } from "./OrganizationDistribution";
+import { OrganizationSettings } from "./OrganizationSettings";
 import { peopleWorkspaceMessages } from "@/i18n/messages/peopleWorkspace";
 import { shellMessages } from "@/i18n/messages/shell";
 import { tagsMessages } from "@/i18n/messages/tags";
@@ -39,7 +38,6 @@ import { teamPeriodSince, type TeamActivityResponse } from "@shared/teamActivity
 import type { XpotMeResponse } from "./types";
 import { AddPersonForm } from "./components/AddPersonForm";
 import { NewPartnerDialog } from "./components/NewPartnerDialog";
-import { ReleasedModelsField } from "./components/ReleasedModelsField";
 
 // Organizations. The platform sees them all, each a Producer or a Seller (prints_own_pieces), and can filter by that.
 // An owner or a partner who runs exactly one goes straight to its workspace, which is their panel's Team, Team
@@ -88,7 +86,7 @@ type Person = { id: number; displayName: string; access: "pending" | "active" | 
 type Purchase = {
   acquisition: { id: string; status: string; currency: string; purchasedAt: string };
   repName: string | null;
-  lines: Array<{ id: string; externalSku: string | null; quantity: number; subtotalCents: number }>;
+  lines: Array<{ id: string; productName: string | null; quantity: number; subtotalCents: number }>;
 };
 
 /** Producer: prints its own pieces (the company included). Seller: sells what it buys. */
@@ -134,6 +132,7 @@ function OrganizationsList() {
   const { data: reps = [] } = useQuery<Person[]>({ queryKey: ["/api/xpot/admin/reps"], enabled: mayCreate });
   const [name, setName] = useState("");
   const [repAdminId, setRepAdminId] = useState("");
+  const [creating, setCreating] = useState(false);
   const [showPersonal, setShowPersonal] = useState(false);
   const [type, setType] = useState<"all" | "producer" | "seller">("all");
   const personalCount = organizations.filter((o) => o.personal).length;
@@ -149,9 +148,16 @@ function OrganizationsList() {
   return (
     <AppLayout title={t("title")} size="wide">
       <div className="space-y-6">
-        <PageHeader backHref={mayCreate ? "/admin" : undefined} title={t("title")} description={t("intro")} className="mb-0" actions={mayCreate ? <NewPartnerDialog /> : undefined} />
+        <PageHeader backHref={mayCreate ? "/admin" : undefined} title={t("title")} description={t("intro")} className="mb-0" />
 
         {mayCreate && (
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="secondary" size="sm" onClick={() => setCreating((open) => !open)} aria-expanded={creating} data-testid="new-organization-open"><Plus />{t("newOrganization")}</Button>
+            <NewPartnerDialog />
+          </div>
+        )}
+
+        {mayCreate && creating && (
           <form
             className={`grid gap-3 rounded-2xl ${GLASS_CLASS} p-4 md:grid-cols-[1fr_1fr_auto]`}
             onSubmit={(event) => { event.preventDefault(); create.mutate(); }}
@@ -223,6 +229,8 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
   const tw = useT(peopleWorkspaceMessages);
   const ts = useT(shellMessages);
   const twp = useT(workspacesMessages);
+  const tc = useT(commonMessages);
+  const ta = useT(addPersonMessages);
   // The open section rides in the URL (?tab=team: a person's page links back to
   // the team it came from). Desktop shows a tab bar, Overview first. A phone has
   // no tab strip to swipe: its first screen lists the sections with their
@@ -262,6 +270,7 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
   // Companies open where this viewer works with them: Visits if they have it, else Tags.
   const usesVisits = !!me && repModules({ role: me.rep.role, modules: me.rep.modules }).includes("visits");
   const [pending, setPending] = useState<MemberAction | null>(null);
+  const [adding, setAdding] = useState(false);
   // Kits and companies name their rep, not "Rep #12".
   const repNames = useMemo(() => new Map((members.data ?? []).map((m) => [m.repId, m.displayName])), [members.data]);
   const repName = (repId: number | null | undefined) => (repId ? repNames.get(repId) ?? "—" : t("unassigned"));
@@ -343,10 +352,15 @@ function OrganizationWorkspace({ organizationId }: { organizationId: number }) {
         {tab === "overview" && <Overview organization={org} onOpen={setTab} activityBase={mayManageTeam && usesVisits ? base : null} />}
         {tab === "team" && (
           <div className="space-y-4">
-            {/* An owner adds a person by name and phone, always an employee; the platform also picks existing people and makes owners. */}
-            {mayManageTeam && <AddPersonForm organizationId={organizationId} />}
-            {platformManager && <AddExistingPerson organizationId={organizationId} members={members.data ?? []} />}
-            {mayManageTeam && <p className="text-sm text-white/55">{t("teamHint")}</p>}
+            {/* The team comes first. An owner adds a person by name and phone, always an employee; the platform also picks existing people and makes owners. */}
+            {mayManageTeam && (
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="min-w-0 flex-1 basis-56 text-sm text-white/55">{t("teamHint")}</p>
+                <Button type="button" variant="secondary" size="sm" onClick={() => setAdding((open) => !open)} aria-expanded={adding} data-testid="team-add-open"><UserPlus />{adding ? tc("close") : ta("title")}</Button>
+              </div>
+            )}
+            {mayManageTeam && adding && <AddPersonForm organizationId={organizationId} />}
+            {platformManager && adding && <AddExistingPerson organizationId={organizationId} members={members.data ?? []} />}
             {members.isLoading ? <ListSkeleton rows={3} /> : members.isError ? (
               <ErrorState message={describeApiError(members.error)} onRetry={() => void members.refetch()} />
             ) : (
@@ -517,8 +531,8 @@ function PurchasesList({ query }: { query: { data?: Purchase[]; isLoading: boole
   if (query.isLoading) return <ListSkeleton rows={3} />;
   if (query.isError) return <ErrorState message={describeApiError(query.error)} onRetry={() => void query.refetch()} />;
   const rows = query.data ?? [];
-  if (!rows.length) return <EmptyState compact icon={ShoppingBag} title={t("noPurchases")} hint={t("purchasesHint")} />;
-  const tone = (status: string) => (status === "fulfilled" ? "green" : status === "pending" ? "amber" : "slate");
+  if (!rows.length) return <EmptyState compact icon={ShoppingBag} title={t("noPurchases")} />;
+  const tone = (status: string) => (status === "fulfilled" ? "green" : "slate");
   return (
     <div className="space-y-2">
       <p className="text-xs text-white/45">{t("purchasesHint")}</p>
@@ -527,9 +541,9 @@ function PurchasesList({ query }: { query: { data?: Purchase[]; isLoading: boole
           <div key={acquisition.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3" data-testid={`organization-purchase-${acquisition.id}`}>
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium text-white">{repName ?? "—"}</p>
-              <p className="text-xs text-white/45">{lines.map((line) => t("purchaseLine", { count: line.quantity, sku: line.externalSku ?? t("purchaseNoSku") })).join(", ")}</p>
+              <p className="text-xs text-white/45">{lines.map((line) => (line.productName ? t("purchaseLine", { count: line.quantity, name: line.productName }) : t.plural("purchaseNoName", line.quantity))).join(", ")}</p>
             </div>
-            <span className="text-xs tabular-nums text-white/45">{formatDate(acquisition.purchasedAt)}</span>
+            <span className="text-xs tabular-nums text-white/45">{formatMoney(lines.reduce((sum, line) => sum + line.subtotalCents, 0), acquisition.currency)} · {formatDate(acquisition.purchasedAt)}</span>
             <Pill tone={tone(acquisition.status)}>{lookup(t, `purchaseStatus_${acquisition.status}`, acquisition.status)}</Pill>
           </div>
         ))}
@@ -607,61 +621,6 @@ function RecordList({ query, empty, render, rowHref, seeAll }: {
           </Link>
         ))}
       </div>
-    </div>
-  );
-}
-
-/** `owner`: the Xpot admin, the only one who lets a branch print its own pieces (Tags › Production). */
-function OrganizationSettings({ organization, mayEdit, owner }: { organization: Organization; mayEdit: boolean; owner: boolean }) {
-  const qc = useQueryClient();
-  const { toast } = useToast();
-  const t = useT(organizationsMessages);
-  const tw = useT(peopleWorkspaceMessages);
-  const tc = useT(commonMessages);
-  const [name, setName] = useState(organization.name);
-  const [isActive, setIsActive] = useState(organization.isActive);
-  const [prints, setPrints] = useState(!!organization.printsOwnPieces);
-  const [distribution, setDistribution] = useState<Distribution>(organization.distribution ?? "xpot");
-  const [released, setReleased] = useState<string[] | null>(organization.releasedPrintModels ?? null);
-  // The partner handling its own orders hands out the pieces it prints: without printing it is Xpot's again.
-  const savedDistribution = organization.distribution ?? "xpot";
-  const nextDistribution: Distribution = prints ? distribution : "xpot";
-  const company = organization.slug === COMPANY_ORGANIZATION_SLUG;
-  const releasedChanged = JSON.stringify(released) !== JSON.stringify(organization.releasedPrintModels ?? null);
-  const dirty = name.trim() !== organization.name || isActive !== organization.isActive || prints !== !!organization.printsOwnPieces || nextDistribution !== savedDistribution || (prints && releasedChanged);
-  const save = useMutation({
-    mutationFn: () => json<Organization>("PATCH", `/api/xpot/organizations/${organization.id}`, {
-      ...(name.trim() !== organization.name ? { name: name.trim() } : {}),
-      ...(isActive !== organization.isActive ? { isActive } : {}),
-      ...(prints !== !!organization.printsOwnPieces ? { printsOwnPieces: prints } : {}),
-      ...(nextDistribution !== savedDistribution ? { distribution: nextDistribution } : {}),
-      ...(prints && releasedChanged ? { releasedPrintModels: released } : {}),
-    }),
-    onSuccess: () => {
-      toast({ title: t("orgSaved"), variant: "success" });
-      void qc.invalidateQueries({ queryKey: [`/api/xpot/organizations/${organization.id}`] });
-      void qc.invalidateQueries({ queryKey: ["/api/xpot/organizations"] });
-      void qc.invalidateQueries({ queryKey: ["/api/xpot/me"] });
-    },
-    onError: (error) => toast({ title: t("couldNotSave"), description: describeApiError(error), variant: "destructive" }),
-  });
-  return (
-    <div className={`max-w-xl space-y-4 rounded-2xl ${GLASS_CLASS} p-5`}>
-      <Field label={t("orgName")} hint={!mayEdit ? t("settingsReadOnly") : undefined}>
-        <Input value={name} onChange={(event) => setName(event.target.value)} disabled={!mayEdit} />
-      </Field>
-      <SwitchRow checked={isActive} onCheckedChange={setIsActive} label={tw("orgActive")} hint={tw("orgActiveHint")} disabled={!mayEdit} testId="organization-active" />
-      {!company && (owner || organization.printsOwnPieces) ? (
-        <SwitchRow checked={prints} onCheckedChange={setPrints} label={tw("orgPrintsOwnPieces")} hint={tw("orgPrintsOwnPiecesHint")} disabled={!owner} testId="organization-prints-own-pieces" />
-      ) : null}
-      {!company && prints && (owner || organization.printsOwnPieces) ? <ReleasedModelsField value={released} onChange={setReleased} disabled={!owner} /> : null}
-      {!company && prints ? <DistributionChoice value={distribution} onChange={setDistribution} disabled={!owner} /> : null}
-      {!company && owner && savedDistribution === "own" && prints ? <OrganizationLinks organizationId={organization.id} /> : null}
-      {mayEdit && (
-        <FormFooter dirty={dirty} onCancel={dirty ? () => { setName(organization.name); setIsActive(organization.isActive); setPrints(!!organization.printsOwnPieces); setReleased(organization.releasedPrintModels ?? null); setDistribution(savedDistribution); } : undefined}>
-          <Button variant="brand" onClick={() => save.mutate()} disabled={!dirty || !name.trim()} loading={save.isPending}>{tc("save")}</Button>
-        </FormFooter>
-      )}
     </div>
   );
 }

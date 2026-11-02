@@ -207,8 +207,14 @@ export async function listTagPeople(organizationIds: readonly number[] | null) {
     ));
   const own = list.map(({ rep }) => pick(rep, rep.wholesaleCode ? "set" : null));
   const seen = new Set(own.map((rep) => rep.id));
-  const linked = (await handOutRecipients(organizationIds)).filter((person) => !seen.has(person.id))
-    .map(({ organizationId, ...person }) => ({ ...pick(person, null), organizationName: person.organizationName }));
+  // Someone in two linked organizations is one person to hand to: listed once, naming both.
+  const byId = new Map<number, (Awaited<ReturnType<typeof handOutRecipients>>)[number]>();
+  for (const person of await handOutRecipients(organizationIds)) {
+    if (seen.has(person.id)) continue;
+    const first = byId.get(person.id);
+    byId.set(person.id, first ? { ...first, organizationName: [first.organizationName, person.organizationName].filter(Boolean).sort().join(", ") } : person);
+  }
+  const linked = Array.from(byId.values()).map(({ organizationId, ...person }) => ({ ...pick(person, null), organizationName: person.organizationName }));
   return [...own, ...linked].sort((a, b) => a.displayName.localeCompare(b.displayName));
 }
 
