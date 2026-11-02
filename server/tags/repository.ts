@@ -346,8 +346,12 @@ export async function getTagDetail(id: string, baseUrl: string, actor?: TagActor
   const [item] = (await rows<TagRow>(tagListQuery(sql`t.id = ${id}`, 1))).map(toListItem);
   const history = await historyFor(sql`h.tag_id = ${id}`, 100);
   const custody = actor ? await custodyFor(actor, tag, item.saleId !== null) : undefined;
+  const [batch] = tag.batchId
+    ? await db.select({ printJobId: tagBatches.printJobId }).from(tagBatches).where(eq(tagBatches.id, tag.batchId)).limit(1)
+    : [];
   return {
     ...item,
+    printJobId: batch?.printJobId ?? null,
     utmEnabled: tag.utmEnabled,
     utmCampaign: tag.utmCampaign,
     metadata: tag.metadata ?? null,

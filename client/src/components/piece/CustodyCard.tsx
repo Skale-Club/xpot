@@ -10,6 +10,7 @@ import { pieceCustodyMessages } from "@/i18n/messages/pieceCustody";
 import { errorText } from "@/pages/tags/lib";
 import { CARD, CARD_ACCENT, EYEBROW_MUTED } from "@/pages/tags/ui";
 import { usePiece, usePieceWrite } from "./PieceContext";
+import { showsReceive } from "./pieceView";
 
 // Who holds the piece, from the piece screen (docs/TAG_CUSTODY_EXECUTION_PLAN.md):
 // receive a printed piece into stock, and hand one back to the house. The
@@ -88,7 +89,8 @@ export function CustodyCard() {
   const custody = tag.custody;
   if (!custody) return null;
 
-  const receive = custody.receive;
+  // A piece the house printed is not received here for whoever produces it (showsReceive); Hand back stays.
+  const receive = showsReceive(tag, viewer) ? custody.receive : undefined;
   // Management hands pieces back from its own Transfer field (Management section).
   const canReturn = !viewer.canManage && custody.returnToHouse !== null && custody.returnToHouse.blocker === null;
   if (!receive && !canReturn) return null;

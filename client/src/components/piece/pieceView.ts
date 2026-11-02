@@ -45,7 +45,7 @@ export type PieceSituationKey =
 export type PieceActionKind = "openPrint" | "receive" | "viewPerformance" | "reactivate" | "writeChip" | "goLive" | "configure";
 export interface PieceMainAction {
   kind: PieceActionKind;
-  /** Only for `openPrint`: the batch page of the piece. */
+  /** Only for `openPrint`: the print order of the piece (Production › jobs). */
   href?: string;
 }
 
@@ -64,8 +64,25 @@ type SituationTag = {
   destinationUrl: string | null;
   destinationType: string | null;
   batchId: string | null;
+  /** The print order of the piece's batch; set when the house printed it (TagDetail.printJobId). */
+  printJobId?: string | null;
   custody?: Pick<PieceCustodyActions, "receive"> | null;
 };
+
+/** Whoever reaches Production (the global admin, or a partner that prints its own pieces) with management on. */
+function viewerPrints(viewer: PieceViewer): boolean {
+  return viewer.canManage && (viewer.isAdmin || viewer.producesPrints === true);
+}
+
+/**
+ * Whether the piece screen offers Receive. A piece the house printed enters stock when its print is
+ * marked done, so whoever produces gets the print order instead; Receive stays for a supplier's lot
+ * and for everyone who does not produce (a reseller still may). Screen only: the server's rule
+ * (shared/tagCustody.ts) is unchanged. Hand back is not part of this.
+ */
+export function showsReceive(tag: { printJobId?: string | null }, viewer: PieceViewer): boolean {
+  return !(viewerPrints(viewer) && !!tag.printJobId);
+}
 
 /**
  * The piece in one status and one main action. First rule that matches wins. An action the business
@@ -84,9 +101,10 @@ export function pieceSituation(tag: SituationTag, viewer: PieceViewer): PieceSit
   if (stockStatus === "pending") {
     const receive = tag.custody?.receive;
     const canReceive = !!receive && receive.blocker === null;
-    // Management prints (the production screens are for the global admin); everyone else receives.
-    if (viewer.canManage && viewer.isAdmin && tag.batchId) {
-      return act("pending", "amber", { kind: "openPrint", href: `/admin/tags/batches/${encodeURIComponent(tag.batchId)}` });
+    // Whoever produces opens the print of a house-printed piece; a supplier's lot (no print) and
+    // everyone who does not produce receive.
+    if (!showsReceive(tag, viewer) && tag.printJobId) {
+      return act("pending", "amber", { kind: "openPrint", href: `/admin/tags/production/jobs/${encodeURIComponent(tag.printJobId)}` });
     }
     return act("pending", "amber", canReceive ? { kind: "receive" } : null);
   }
@@ -137,6 +155,8 @@ export interface PieceViewer {
   isAdmin: boolean;
   /** May open the Visits screens (the sale's page in Sales). */
   hasVisits: boolean;
+  /** Reaches Production (a partner that prints its own pieces; the global admin is isAdmin). */
+  producesPrints?: boolean;
   /** The viewer's own rep id, to recognise their own sale. */
   repId?: number | null;
 }
