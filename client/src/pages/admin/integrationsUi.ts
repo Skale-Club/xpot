@@ -37,7 +37,17 @@ export type XphereRow = {
   access: "active" | "pending" | "blocked";
   deleted: boolean;
   usesVisits: boolean;
+  /** The latest record sent to Xphere (or that failed to be), for a connected person. */
+  lastSync: { status: string; at: string | null; error: string | null } | null;
 };
+
+export type XphereState = "connected" | "paused" | "notConnected";
+
+/** Where a person's link to Xphere stands: switched on with a token, a token saved but switched off, or nothing yet. */
+export function xphereState(row: Pick<XphereRow, "apiKeySet" | "isEnabled">): XphereState {
+  if (!row.apiKeySet) return "notConnected";
+  return row.isEnabled ? "connected" : "paused";
+}
 
 /**
  * Who the Xphere tab lists: by default only people who can use it now (active,

@@ -246,6 +246,59 @@ describe("GET /admin/xphere/:userId", () => {
   });
 });
 
+describe("People: where each person works, and what the server would refuse", () => {
+  it("lists each person's organizations with their role, a personal workspace left out", async () => {
+    await seedPerson("boss", { role: "admin", isAdmin: true });
+    const ana = await seedPerson("ana");
+    const bob = await seedPerson("bob");
+    const loner = await seedPerson("lena");
+    await ensureOrganizationForRep(ana);
+    const north = (await one(`INSERT INTO organizations (name, slug) VALUES ('North', 'north') RETURNING id`)).id;
+    const south = (await one(`INSERT INTO organizations (name, slug, is_active) VALUES ('South', 'south', false) RETURNING id`)).id;
+    await q(`INSERT INTO organization_memberships (organization_id, rep_id, role) VALUES ($1, $2, 'admin'), ($1, $3, 'member'), ($4, $3, 'member')`, [north, ana, bob, south]);
+
+    const res = await request(appFor("boss", true), "GET", "/api/xpot/admin/reps");
+    expect(res.status).toBe(200);
+    const teams = (id: number) => res.body.find((rep: any) => rep.id === id).teams;
+    expect(teams(ana)).toEqual([{ id: north, name: "North", role: "admin" }]);
+    // An inactive organization is not where they work now.
+    expect(teams(bob)).toEqual([{ id: north, name: "North", role: "member" }]);
+    expect(teams(loner)).toEqual([]);
+  });
+
+  it("marks the only owner of an organization: the server refuses to remove or suspend them", async () => {
+    await seedPerson("boss", { role: "admin", isAdmin: true });
+    const sole = await seedPerson("sole");
+    const first = await seedPerson("first");
+    const second = await seedPerson("second");
+    const solo = (await one(`INSERT INTO organizations (name, slug) VALUES ('Solo', 'solo') RETURNING id`)).id;
+    const duo = (await one(`INSERT INTO organizations (name, slug) VALUES ('Duo', 'duo') RETURNING id`)).id;
+    await q(`INSERT INTO organization_memberships (organization_id, rep_id, role) VALUES ($1, $2, 'admin'), ($3, $4, 'admin'), ($3, $5, 'admin')`, [solo, sole, duo, first, second]);
+
+    const app = appFor("boss", true);
+    expect((await request(app, "GET", `/api/xpot/admin/reps/${sole}/organizations`)).body.map((m: any) => [m.name, m.onlyOwner])).toEqual([["Solo", true]]);
+    expect((await request(app, "GET", `/api/xpot/admin/reps/${first}/organizations`)).body.map((m: any) => [m.name, m.onlyOwner])).toEqual([["Duo", false]]);
+    // The button is hidden because the server says no.
+    const refused = await request(app, "DELETE", `/api/xpot/organizations/${solo}/members/${sole}`);
+    expect(refused.status).toBe(409);
+  });
+
+  it("lists Xphere with the last sync of those who have a token, and nothing for the rest", async () => {
+    await seedPerson("boss", { role: "admin", isAdmin: true });
+    const ana = await seedPerson("ana");
+    const bob = await seedPerson("bob");
+    const lead = (await one(`INSERT INTO sales_leads (organization_id, name, owner_rep_id) VALUES ($1, 'Shop', $2) RETURNING id`, [company, ana])).id;
+    await q(`INSERT INTO xphere_integrations (user_id, inbound_api_key, api_key, is_enabled) VALUES ('ana', 'xpot_abc123', 'xph_secret', true)`);
+    await q(`INSERT INTO sales_sync_events (entity_type, entity_id, status, last_attempt_at) VALUES ('sales_lead', $1, 'synced', now())`, [String(lead)]);
+
+    const res = await request(appFor("boss", true), "GET", "/api/xpot/admin/xphere");
+    expect(res.status).toBe(200);
+    const row = (id: number) => res.body.find((item: any) => item.repId === id);
+    expect(row(ana)).toMatchObject({ apiKeySet: true, isEnabled: true, lastSync: { status: "synced" } });
+    expect(row(bob)).toMatchObject({ apiKeySet: false, lastSync: null });
+  });
+});
+
 describe("POST /admin/reps profile edit", () => {
   it("keeps the person's role when the body leaves it out", async () => {
     await seedPerson("boss", { role: "admin", isAdmin: true });
