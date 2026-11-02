@@ -1,4 +1,5 @@
 import type { Profile } from "@shared/profiles";
+import type { LeadDeletionCounts } from "@shared/leadDeletion";
 import type {
   SalesRep,
   SalesLead,
@@ -28,6 +29,8 @@ export type {
 export type FullSalesLead = SalesLead & {
   locations: SalesLeadLocation[];
   contacts: SalesLeadContact[];
+  /** What keeps the company from being deleted and what goes with it (shared/leadDeletion.ts); sent by the list and the detail. */
+  deletion?: LeadDeletionCounts;
   openOpportunities?: number;
   salesLifetimeCents?: number;
   unitsOnShelf?: number;

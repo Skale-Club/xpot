@@ -58,6 +58,7 @@ import {
   type InsertLandingPageContentRow,
 } from "#shared/schema.js";
 import type { LandingLocale } from "#shared/landingContent.js";
+import { EMPTY_LEAD_DELETION, leadDeletionBlockedMessage, leadDeletionVerdict, type LeadDeletionCounts } from "#shared/leadDeletion.js";
 import { defaultGeofenceRadiusSql } from "./lead-location.js";
 
 // ─── Recent-visits joined shape (used by /api/xpot/admin/recent-visits) ──────
@@ -144,7 +145,9 @@ export interface IStorage {
   getSalesLeadByXphereRef(ref: string): Promise<SalesLead | undefined>;
   createSalesLead(input: InsertSalesLead): Promise<SalesLead>;
   updateSalesLead(id: number, input: Partial<InsertSalesLead>): Promise<SalesLead | undefined>;
-  /** Returns the file references (photos, voice notes) the deleted rows held, for discardFiles. */
+  /** What hangs off each company (shared/leadDeletion.ts): the sales, consignments and pieces that keep it, and what goes with it. */
+  leadDeletionCounts(leadIds: number[]): Promise<Map<number, LeadDeletionCounts>>;
+  /** Returns the file references (photos, voice notes) the deleted rows held, for discardFiles. Throws LeadDeleteBlockedError, deleting nothing, when a sale, consignment or piece keeps the company. */
   deleteSalesLead(id: number): Promise<string[]>;
   /** The lead whose photos include this file reference. */
   findLeadIdByPhoto(ref: string): Promise<number | undefined>;
@@ -523,8 +526,18 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
+  async leadDeletionCounts(leadIds: number[]): Promise<Map<number, LeadDeletionCounts>> {
+    return leadDeletionCountsIn(db, leadIds);
+  }
+
   async deleteSalesLead(id: number): Promise<string[]> {
-    return db.transaction((tx) => deleteLeadRows(tx, id));
+    return db.transaction(async (tx) => {
+      // Checked in the transaction, before any row goes: the database refuses a sale or consignment on its own, but a
+      // piece would only lose its customer (tags.lead_id is set null).
+      const counts = (await leadDeletionCountsIn(tx, [id])).get(id) ?? EMPTY_LEAD_DELETION;
+      if (!leadDeletionVerdict(counts).canDelete) throw new LeadDeleteBlockedError(counts);
+      return deleteLeadRows(tx, id);
+    });
   }
 
   async findLeadIdByPhoto(ref: string): Promise<number | undefined> {
@@ -908,6 +921,37 @@ export class DatabaseStorage implements IStorage {
 export const storage = new DatabaseStorage();
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/** A company that holds a sale, a consignment or a piece is kept (DELETE /api/xpot/leads/:id answers 409 with the counts). */
+export class LeadDeleteBlockedError extends Error {
+  constructor(public counts: LeadDeletionCounts) {
+    super(leadDeletionBlockedMessage(counts));
+    this.name = "LeadDeleteBlockedError";
+  }
+}
+
+/** Counts per company, as deleteLeadRows would remove them: the tasks are those on the company, its visits or its deals. */
+async function leadDeletionCountsIn(executor: typeof db | Tx, leadIds: number[]): Promise<Map<number, LeadDeletionCounts>> {
+  const counts = new Map<number, LeadDeletionCounts>();
+  if (!leadIds.length) return counts;
+  const ids = sql.join(leadIds.map((id) => sql`${id}`), sql`, `);
+  const found = await executor.execute(sql`
+    SELECT l.id,
+      (SELECT count(*)::int FROM sales_sales x WHERE x.lead_id = l.id) AS sales,
+      (SELECT count(*)::int FROM sales_consignments x WHERE x.lead_id = l.id) AS consignments,
+      (SELECT count(*)::int FROM tags x WHERE x.lead_id = l.id) AS pieces,
+      (SELECT count(*)::int FROM sales_visits x WHERE x.lead_id = l.id) AS visits,
+      (SELECT count(*)::int FROM sales_tasks x WHERE x.lead_id = l.id
+        OR x.visit_id IN (SELECT v.id FROM sales_visits v WHERE v.lead_id = l.id)
+        OR x.opportunity_id IN (SELECT o.id FROM sales_opportunities_local o WHERE o.lead_id = l.id)) AS tasks,
+      (SELECT count(*)::int FROM sales_opportunities_local x WHERE x.lead_id = l.id) AS deals
+    FROM sales_leads l WHERE l.id IN (${ids})
+  `);
+  for (const row of found.rows as Array<Record<string, number>>) {
+    counts.set(Number(row.id), { sales: Number(row.sales), consignments: Number(row.consignments), pieces: Number(row.pieces), visits: Number(row.visits), tasks: Number(row.tasks), deals: Number(row.deals) });
+  }
+  return counts;
+}
 
 /**
  * Delete a lead and everything hanging off it, inside the caller's

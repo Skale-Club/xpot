@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { storage, type LeadVisibility } from "../../storage.js";
+import { storage, LeadDeleteBlockedError, type LeadVisibility } from "../../storage.js";
 import { repModules } from "#shared/modules.js";
 import { canAccessLead, requireXpotUser, requireVisitsModule, ensureXpotRep, isPlatformAdmin, loadAccessibleLead, listScope, listsEveryone, ownsLead, refuseNotOwner, type XpotActor } from "./middleware.js";
 import { xpotLeadCreateSchema, xpotLeadUpdateSchema, xpotLeadContactCreateSchema } from "#shared/xpot.js";
@@ -66,12 +66,13 @@ export function createLeadsRouter() {
     if (!leads.length) return res.json([]);
 
     const leadIds = leads.map((l) => l.id);
-    const [allLocations, allContacts, openOpportunitiesMap, salesByLead, followUps] = await Promise.all([
+    const [allLocations, allContacts, openOpportunitiesMap, salesByLead, followUps, deletionByLead] = await Promise.all([
       storage.listSalesLeadLocationsBatch(leadIds),
       storage.listSalesLeadContactsBatch(leadIds),
       storage.countOpenOpportunitiesByLeadIds(leadIds),
       salesStorage.leadSalesBatch(leadIds),
       storage.openFollowUpsByLeadIds(leadIds, taskRepId),
+      storage.leadDeletionCounts(leadIds),
     ]);
 
     const locationsByLead = new Map<number, typeof allLocations>();
@@ -97,6 +98,8 @@ export function createLeadsRouter() {
       // by a voice follow-up and is cleared at every check-in.
       openFollowUp: followUps.has(lead.id),
       openFollowUpDueAt: followUps.get(lead.id) ?? null,
+      // What keeps the company from being deleted, and what goes with it (shared/leadDeletion.ts).
+      deletion: deletionByLead.get(lead.id),
     }));
 
     res.json(enriched);
@@ -375,16 +378,18 @@ export function createLeadsRouter() {
     // memory. A manager sharing a lead with a rep exposed both pipelines.
     const seesAll = listsEveryone(req, actor!) || await canManageOrganizationForActor(actor!, lead.organizationId);
     const scope = seesAll ? undefined : actor!.rep.id;
-    const [locations, contacts, visits, opportunities, tasks] = await Promise.all([
+    const [locations, contacts, visits, opportunities, tasks, deletion] = await Promise.all([
       storage.listSalesLeadLocations(leadId),
       storage.listSalesLeadContacts(leadId),
       storage.listSalesVisits({ leadId, repId: scope }),
       storage.listSalesOpportunities({ leadId, repId: scope }),
       storage.listSalesTasks({ leadId, repId: scope }),
+      storage.leadDeletionCounts([leadId]),
     ]);
 
     res.json({
       lead,
+      deletion: deletion.get(leadId),
       locations,
       contacts,
       visits: visits.slice(0, 10),
@@ -520,7 +525,16 @@ export function createLeadsRouter() {
     // Holding a piece there lets a rep see and edit a company, not delete someone else's lead.
     if (!(await ownsLead(actor!, lead))) return refuseNotOwner(res);
 
-    const files = await storage.deleteSalesLead(leadId);
+    let files: string[];
+    try {
+      files = await storage.deleteSalesLead(leadId);
+    } catch (err) {
+      // A sale, a consignment or a piece keeps the company: nothing was deleted (the app already hides Delete for it).
+      if (err instanceof LeadDeleteBlockedError) {
+        return res.status(409).json({ code: "lead_delete_blocked", message: err.message, counts: err.counts, requestId: req.get("x-request-id") ?? null });
+      }
+      throw err;
+    }
     res.status(204).end();
     // Best-effort, after the rows are gone: a storage error is logged, not surfaced.
     void discardFiles(files, `lead #${leadId} deleted`);
