@@ -457,7 +457,7 @@ export const adminTagsFlowMessages: Dictionary<typeof en> = {
     viewOrders: "Pedidos mayoristas",
     pastHandOuts: "Entregas anteriores",
     showAllHandOuts: "Ver todas ({count})",
-    viewReturns: "Devolver",
+    viewReturns: "Recoger",
 
     stepReseller: "Revendedor",
     stepOwnership: "Propiedad y costo",

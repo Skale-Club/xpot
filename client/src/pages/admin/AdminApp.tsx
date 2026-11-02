@@ -7,7 +7,6 @@ import { AppBackground } from "@/components/xpot/AppBackground";
 import { EmptyState } from "@/components/xpot/EmptyState";
 import { PageHeader } from "@/components/xpot/PageHeader";
 import { AppLayout } from "@/components/xpot/AppLayout";
-import { Select } from "@/components/xpot/Field";
 import { panelGroups } from "@/components/xpot/moduleNav";
 import { usePanelNames } from "@/components/xpot/panelNames";
 import { ownedOrganizationId, profileOfMe } from "@/lib/adminMode";
@@ -31,13 +30,17 @@ import { navIaMessages } from "@/i18n/messages/navIa";
 import { manageMessages } from "@/i18n/messages/manage";
 import { workspacesMessages } from "@/i18n/messages/workspaces";
 import { useXpotModules, homeForModules } from "@/components/ModuleSwitch";
-import { navigateGuarded } from "@/hooks/useUnsavedChangesGuard";
 
 const SECTIONS = ["home", "work", "overview", "tags", "products", "integrations", "branding", "landing", "xphere", "reps", "settings", "health"] as const;
 /** What an owner's or a partner's panel reaches; the rest of /admin is the platform's. (Tags narrows itself by tab: AdminTags.) */
 const ORGANIZATION_SECTIONS = ["home", "work", "tags"];
+/** Hand out and Take back have their own code field; a second one above them would open the piece and lose the list (NAV-32). */
+const NO_CODE_LOOKUP = /^\/admin\/tags\/(?:production|batches|kits)(?:\/|$)/;
 
-/** A dedicated panel shell, one per profile (shared/profiles.ts): no personal module switch or user tab bar. A member has no panel. */
+/**
+ * The panel's frame, one per profile (shared/profiles.ts): the area switch, the sidebar (a bottom bar on the phone) and
+ * the screen's own title, once. A member has no panel.
+ */
 export function AdminApp({ section }: { section: string }) {
   const [location, navigate] = useLocation();
   const meQuery = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
@@ -53,23 +56,25 @@ export function AdminApp({ section }: { section: string }) {
   const active = SECTIONS.find((id) => id === section) ?? "home";
   if (meQuery.isLoading) return <AppLoader />;
   const profile = profileOfMe(me);
-  const allowed = !!profile && can(profile, "useManagementPanel") && (profile === "platform" || ORGANIZATION_SECTIONS.includes(active));
-  if (!me || !allowed) {
+  const hasPanel = !!profile && can(profile, "useManagementPanel");
+  const allowed = hasPanel && (profile === "platform" || ORGANIZATION_SECTIONS.includes(active));
+  if (!me || !hasPanel) {
     const exit = me ? homeForModules(modules) : "/";
-    return <AppBackground><div className="mx-auto w-full max-w-md px-4 pb-20 pt-6"><PageHeader backHref={exit} backLabel={me ? tm("backToApp") : tc("goToSignIn")} title={tm("accessRestricted")} /><EmptyState tone="red" icon={ShieldAlert} title={me ? tm("noAdminPermission") : tm("signInToContinue")} action={<Button variant="secondary" onClick={() => navigate(exit)}>{me ? tm("backToApp") : tc("goToSignIn")}</Button>} /></div></AppBackground>;
+    return <AppBackground><div className="mx-auto w-full max-w-md px-4 pb-20 pt-6"><PageHeader backHref={exit} backLabel={me ? tm("backToApp") : tc("goToSignIn")} title={tm("accessRestricted")} /><EmptyState tone="red" icon={ShieldAlert} title={me ? tm("ownersOnly") : tm("signInToContinue")} action={<Button variant="secondary" onClick={() => navigate(exit)}>{me ? tm("backToApp") : tc("goToSignIn")}</Button>} /></div></AppBackground>;
   }
   const panelName = nameOf(profile);
   const groups = panelGroups(profile, modules, { shell: t, tags: tt, nav: tn }, names, ownedOrganizationId(me));
   const current = groups.flatMap((group) => group.items).find((item) => item.match(location));
   const title = current?.label ?? panelName;
-  const lookupAllowed = active === "tags" && !/^\/admin\/tags\/(?:production|batches)(?:\/|$)/.test(location);
+  const lookupAllowed = active === "tags" && !NO_CODE_LOOKUP.test(location);
+  // A screen the person's panel does not have: said inside the panel, with the way back to Today.
+  if (!allowed) return <AppLayout title={panelName} size="wide" mobileMaxWidth="max-w-5xl" mobileColumnClassName="pb-10 pt-5">
+    <EmptyState tone="red" icon={ShieldAlert} title={tm("accessRestricted")} hint={tm("noAdminPermission")} action={<Button variant="secondary" onClick={() => navigate("/admin")}>{tw("todayTitle")}</Button>} />
+  </AppLayout>;
   return <AppLayout title={title} size="wide" mobileMaxWidth="max-w-5xl" mobileColumnClassName="pb-10 pt-5"
     topBarActions={lookupAllowed ? <CodeLookup onFound={(id) => navigate(`/admin/tags/pieces/${id}`)} /> : undefined}
-    mobileHeader={<div className="mb-5 space-y-3">{active !== "home" && !(active === "tags" && !lookupAllowed) ? <PageHeader backHref="/admin" backLabel={tw("todayTitle")} title={title} /> : null}
-      <Select aria-label={tw("chooseSection")} value={current?.href ?? ""} onChange={(event) => navigateGuarded(event.target.value, navigate)} data-testid="management-mobile-nav">
-        {!current ? <option value="">{tw("chooseSection")}</option> : null}
-        {groups.map((group, index) => <optgroup key={group.label || index} label={group.label || panelName}>{group.items.map((item) => <option key={item.href} value={item.href}>{item.label}</option>)}</optgroup>)}
-      </Select>
+    mobileHeader={<div className="mb-5 space-y-3">
+      {/^\/admin\/tags\/(?:production|batches)(?:\/|$)/.test(location) ? null : <h1 className="truncate text-xl font-bold tracking-tight text-white" data-testid="panel-phone-title">{title}</h1>}
       {lookupAllowed ? <CodeLookup fill onFound={(id) => navigate(`/admin/tags/pieces/${id}`)} /> : null}
     </div>}>
     {active === "home" && <AdminHome />}

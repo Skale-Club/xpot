@@ -16,8 +16,8 @@ export function orderMobileTabs(tabs: MobileTab[], module: XpotModule): MobileTa
  * Docked edge to edge like Xtimator's: equal-width tabs, 10px labels that
  * truncate instead of spilling, and a short accent bar under the active tab.
  */
-export function MobileTabBar({ tabs, activeId, onSelect, module }: { tabs: MobileTab[]; activeId: string; onSelect: (id: string) => void; module: XpotModule }) {
-  const accent = MODULE_ACCENT[module];
+export function MobileTabBar({ tabs, activeId, onSelect, module, accent: accentOverride }: { tabs: MobileTab[]; activeId: string; onSelect: (id: string) => void; module: XpotModule; /** The panel's amber, instead of the module's colour. */ accent?: { solid: string; text: string } }) {
+  const accent = accentOverride ?? MODULE_ACCENT[module];
   const orderedTabs = orderMobileTabs(tabs, module);
   return (
     // Hidden while the keyboard is up (index.css), so it never covers the field being typed in.

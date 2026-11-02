@@ -9,7 +9,8 @@ import type { Dictionary } from "../index";
 const en = {
   // Access gate
   accessRestricted: "Access restricted",
-  noAdminPermission: "You don't have access to management.",
+  noAdminPermission: "Only the platform can open this screen.",
+  ownersOnly: "This area is for company owners.",
   signInToContinue: "Sign in to continue.",
   backToApp: "Back to app",
 
@@ -232,7 +233,8 @@ export const manageMessages: Dictionary<typeof en> = {
   en,
   pt: {
     accessRestricted: "Acesso restrito",
-    noAdminPermission: "Você não tem acesso à gestão.",
+    noAdminPermission: "Só a plataforma abre esta tela.",
+    ownersOnly: "Esta área é para donos de empresa.",
     signInToContinue: "Entre para continuar.",
     backToApp: "Voltar ao app",
 
@@ -443,7 +445,8 @@ export const manageMessages: Dictionary<typeof en> = {
   },
   es: {
     accessRestricted: "Acceso restringido",
-    noAdminPermission: "No tienes acceso a la gestión.",
+    noAdminPermission: "Solo la plataforma abre esta pantalla.",
+    ownersOnly: "Esta área es para dueños de empresa.",
     signInToContinue: "Inicia sesión para continuar.",
     backToApp: "Volver a la app",
 

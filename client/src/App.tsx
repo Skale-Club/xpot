@@ -5,15 +5,13 @@ import { useXpotQueries } from "./pages/xpot/hooks/useXpotQueries";
 import { useVisits } from "./pages/xpot/hooks/useVisits";
 import { GeoProvider } from "./pages/xpot/hooks/GeoProvider";
 import { Loader2 } from "@/components/ui/loader";
-import { ModuleSwitch, rememberModule, useXpotModules } from "@/components/ModuleSwitch";
+import { rememberModule, useXpotModules } from "@/components/ModuleSwitch";
 import { useT } from "@/i18n";
-import { commonMessages } from "@/i18n/messages/common";
 import { shellMessages } from "@/i18n/messages/shell";
 import { PieceViewerHost } from "@/components/xpot/PieceViewer3D";
-import { ShellHeader } from "@/components/xpot/ShellHeader";
 import { AppLayout, MODULE_COLUMN } from "@/components/xpot/AppLayout";
 import { VisitsTabBar } from "@/components/xpot/VisitsTabBar";
-import { visitsScreen, type VisitsScreen } from "@/components/xpot/moduleNav";
+import { phoneBarHidden, visitsScreen, type VisitsScreen } from "@/components/xpot/moduleNav";
 import { navIaMessages } from "@/i18n/messages/navIa";
 import { SessionGate } from "@/components/xpot/SessionGate";
 import { getHttpStatus, isStandaloneDisplay, resolveRootView } from "@/lib/pwa";
@@ -84,9 +82,8 @@ function VisitsGate() {
 }
 
 function XpotAppShell() {
-  const { me, xpotMeQuery, isOnline, activeTab, pathname } = useXpotQueries();
+  const { me, xpotMeQuery, activeTab, pathname } = useXpotQueries();
   const [, setLocation] = useLocation();
-  const t = useT(commonMessages);
   const tShell = useT(shellMessages);
   const tNav = useT(navIaMessages);
   const modules = useXpotModules();
@@ -126,22 +123,8 @@ function XpotAppShell() {
       title={title}
       wide={WIDE_TABS.has(activeTab)}
       mobileColumnClassName={MODULE_COLUMN}
-      mobileHeader={
-        <>
-          {!isOnline && (
-            <div className="mb-4 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-              {t("offline")}
-            </div>
-          )}
-          <ShellHeader module="visits" />
-          {modules.length > 1 && (
-            <div className="mb-4">
-              <ModuleSwitch current="visits" />
-            </div>
-          )}
-          <PersistentRouteProgress className="mb-4" />
-        </>
-      }
+      phoneBar={!phoneBarHidden(pathname.split("?")[0])}
+      mobileHeader={<PersistentRouteProgress className="mb-4" />}
       mobileNav={<VisitsTabBar />}
     >
       <div className="space-y-4">

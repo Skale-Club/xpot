@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { Redirect, Route, Switch, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { ModuleSwitch, rememberModule, useXpotModules } from "@/components/ModuleSwitch";
+import { rememberModule, useXpotModules } from "@/components/ModuleSwitch";
 import { useT } from "@/i18n";
 import { tagsMessages } from "@/i18n/messages/tags";
 import type { XpotMeResponse } from "@/pages/xpot/types";
@@ -16,8 +16,7 @@ import { APP_BASE, tagPath } from "./lib";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { AppLayout, MODULE_COLUMN } from "@/components/xpot/AppLayout";
 import { TAGS_NAV, TagsTabBar, activeTagsTab } from "./TagsTabBar";
-import { ShellHeader } from "@/components/xpot/ShellHeader";
-import { XpotLogo } from "@/components/xpot/XpotLogo";
+import { phoneBarHidden } from "@/components/xpot/moduleNav";
 import { MODULE_HOME, rememberModuleRoute } from "@/lib/xpot";
 import { SessionGate } from "@/components/xpot/SessionGate";
 
@@ -57,18 +56,7 @@ export function TagsApp() {
       title={pieceCode ?? (location.startsWith(`${APP_BASE}/direct`) ? t("navDirect") : t(currentNav.key))}
       wide={wide}
       mobileColumnClassName={MODULE_COLUMN}
-      mobileHeader={
-        <>
-          <ShellHeader module="tags" />
-          <div className="mb-4">
-            {modules.length > 1 ? (
-              <ModuleSwitch current="tags" />
-            ) : (
-              <XpotLogo className="h-7 w-auto" />
-            )}
-          </div>
-        </>
-      }
+      phoneBar={!phoneBarHidden(location)}
       mobileNav={<TagsTabBar />}
     >
       <Switch>

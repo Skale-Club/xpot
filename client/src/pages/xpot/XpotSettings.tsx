@@ -10,8 +10,8 @@ import {
   EyeOff,
   KeyRound,
   Languages,
+  LogOut,
   Save,
-  Shield,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AppLoader } from "@/components/ui/spinner";
@@ -33,8 +33,8 @@ import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { commonMessages } from "@/i18n/messages/common";
 import { settingsMessages } from "@/i18n/messages/settings";
 import { navIaMessages } from "@/i18n/messages/navIa";
-import { workspacesMessages } from "@/i18n/messages/workspaces";
-import { usePanelNames } from "@/components/xpot/panelNames";
+import { shellMessages } from "@/i18n/messages/shell";
+import { SignOutConfirm } from "@/components/xpot/AccountMenu";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { addPersonMessages } from "@/i18n/messages/addPerson";
 import { runsATeam } from "@shared/organizations";
@@ -65,21 +65,20 @@ const COUNTRIES = [
 ];
 
 // Settings is the person's own: Profile (photo, names, contact phone, the Tags
-// wholesale code), My organization (where they work and their role there; the
-// owner adds people here, so someone selling alone needs no panel for it), Sign-in (the sign-in phone, read-only; the password only for
-// an email login) and Language. Administration follows only for someone who
-// can manage: the management-mode switch, and with the mode on, their access
-// (role, modules, organizations) and the admin pages.
+// wholesale code), My company (where they work and their role there; someone
+// selling alone adds the first colleague here), Sign-in (the sign-in phone as
+// text; the password only for an email login) and Language. The panel is not
+// here: "My company" in the area switch is its door. Sign out is the last row
+// of the phone's list, and the avatar menu's on desktop.
 //
 // On a phone it is a list like the phone's own settings (the person's card,
 // Install app, then one row per section showing where it stands), each row
 // opening its own screen. On desktop it is one page, top to bottom.
-const SETTINGS_SECTIONS = ["profile", "organization", "signin", "language", "administration"] as const;
+const SETTINGS_SECTIONS = ["profile", "organization", "signin", "language"] as const;
 type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
 
-/** `?tab=` from older links: "memberships" now lives under Administration. */
+/** `?tab=` of a link; one that names no section (the old "administration", "memberships") opens the list. */
 function sectionFromParam(value: string | null): SettingsSection | null {
-  if (value === "memberships") return "administration";
   return SETTINGS_SECTIONS.find((id) => id === value) ?? null;
 }
 
@@ -215,11 +214,11 @@ export function XpotSettings() {
   const t = useT(settingsMessages);
   const tc = useT(commonMessages);
   const tn = useT(navIaMessages);
-  const tw = useT(workspacesMessages);
+  const ts = useT(shellMessages);
   const tt = useT(tagsMessages);
   const tp = useT(addPersonMessages);
   const access = useViewerAccess();
-  const { panelName } = usePanelNames();
+  const [signingOut, setSigningOut] = useState(false);
   const avatar = useAvatarUpload();
   const [initialized, setInitialized] = useState(false);
   const isDesktop = useIsDesktop();
@@ -351,10 +350,7 @@ export function XpotSettings() {
   // The password is only for the legacy email sign-in: an account without an email has none.
   const hasEmailLogin = Boolean(me?.user.email);
   const signInPhone = me?.user.phone ? formatPhone(me.user.phone) : null;
-  // Administration: someone who can manage sees the management-mode switch; the
-  // admin pages and their access details only with the mode on.
-  const canManage = !!access.reach;
-  // My organization: the one the person works in (a team before their own one-person workspace), and their role in it.
+  // My company: the one the person works in (a team before their own one-person workspace), and their role in it.
   const myOrganizations = (me?.organizations ?? [])
     .map((organization) => ({ organization, membership: me?.organizationMemberships?.find((item) => item.organizationId === organization.id && item.isActive && !item.blockedAt) }))
     .filter((item) => item.membership);
@@ -444,7 +440,8 @@ export function XpotSettings() {
               <Pill tone="slate" data-testid="settings-organization-role">{tp(isOwner ? "roleOwner" : "roleEmployee")}</Pill>
             </div>
             <p className="text-sm leading-relaxed text-white/50">{tp(isOwner ? (mine.organization.personal ? "soloHint" : "ownerHint") : "employeeHint")}</p>
-            {isOwner && <AddPersonForm organizationId={mine.organization.id} hint={false} />}
+            {/* Someone selling alone adds the first colleague here; a team is managed in Team. */}
+            {isOwner && !runsATeam(me?.organizations) && <AddPersonForm organizationId={mine.organization.id} hint={false} />}
             {isOwner && runsATeam(me?.organizations) && (
               <Button asChild variant="secondary"><Link href={`/organizations/${mine.organization.id}?tab=team`} data-testid="settings-open-team"><Building2 className="h-4 w-4" />{tp("openTeam")}</Link></Button>
             )}
@@ -455,9 +452,13 @@ export function XpotSettings() {
         return (
           <div key={id} className="space-y-8">
             <Section id={id} title={tn("tabSignIn")} titled={titled}>
-              <Field label={tn("signInPhone")} hint={tn("signInPhoneHint")}>
-                <Input value={signInPhone ?? tn("signInPhoneNone")} readOnly disabled data-testid="settings-sign-in-phone" />
-              </Field>
+              <div>
+                <p className={EYEBROW}>{tn("signInPhone")}</p>
+                <p className="mt-1.5 text-base font-semibold text-white" data-testid="settings-sign-in-phone">{signInPhone ?? tn("signInPhoneNone")}</p>
+                <p className="mt-1 text-xs text-white/45">
+                  {access.profile === "platform" ? <Link href="/admin/reps" className="underline underline-offset-2">{tn("signInPhoneAdminHint")}</Link> : tn("signInPhoneHint")}
+                </p>
+              </div>
               {hasEmailLogin && (
                 <Field label={tn("signInEmail")}>
                   <Input value={me?.user.email ?? ""} readOnly disabled />
@@ -519,13 +520,6 @@ export function XpotSettings() {
             <LanguageList />
           </Section>
         );
-
-      case "administration":
-        if (!canManage) return null;
-        return <Section key={id} id={id} title={panelName(access.profile)} titled={titled}>
-          <p className="text-sm leading-relaxed text-white/50">{tw(access.profile === "platform" ? "platformHint" : access.profile === "partner" ? "productionHint" : "teamHint")}</p>
-          <Button asChild variant="secondary"><Link href="/admin" data-testid="settings-open-panel"><Shield className="h-4 w-4" />{tw("openPanel")}</Link></Button>
-        </Section>;
     }
   };
 
@@ -534,7 +528,6 @@ export function XpotSettings() {
     organization: tp("sectionTitle"),
     signin: tn("tabSignIn"),
     language: tc("language"),
-    administration: panelName(access.profile),
   };
 
   // Desktop: the whole page, top to bottom.
@@ -569,7 +562,6 @@ export function XpotSettings() {
     ...(mine ? [{ id: "organization" as const, icon: Building2, value: mine.organization.name }] : []),
     { id: "signin", icon: KeyRound, value: signInPhone ?? undefined },
     { id: "language", icon: Languages, value: LANG_LABELS[lang] },
-    ...(canManage ? [{ id: "administration" as const, icon: Shield, value: tw("openPanel") }] : []),
   ];
 
   return (
@@ -621,6 +613,17 @@ export function XpotSettings() {
             </button>
           ))}
         </nav>
+
+        <button
+          type="button"
+          onClick={() => setSigningOut(true)}
+          className={`flex min-h-14 w-full items-center gap-3 rounded-2xl ${GLASS_CLASS} px-4 py-3 text-left text-[15px] font-medium text-red-300 transition-colors active:bg-red-500/10`}
+          data-testid="settings-sign-out"
+        >
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-red-500/10"><LogOut className="h-4 w-4" /></span>
+          {ts("signOut")}
+        </button>
+        <SignOutConfirm open={signingOut} onOpenChange={setSigningOut} />
       </div>
     </AppLayout>
   );
