@@ -19,6 +19,7 @@ import { DANGER_SURFACE, EYEBROW } from "@/components/xpot/surface";
 import { useSalesSummary } from "./hooks/useSalesModule";
 import { useT } from "@/i18n";
 import { dashboardMessages } from "@/i18n/messages/dashboard";
+import { pieceScreenMessages } from "@/i18n/messages/pieceScreen";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { useLocation } from "wouter";
 import { XpotVisits } from "./XpotVisits";
@@ -75,6 +76,7 @@ function DashboardOverview() {
   const { dashboardQuery, setLocation, me } = useXpotQueries();
   const { toast } = useToast();
   const t = useT(dashboardMessages);
+  const tpiece = useT(pieceScreenMessages);
   const tp = useT(prospectingMessages);
   const tl = useT(leadsMessages);
   const tt = useT(tasksMessages);
@@ -476,41 +478,63 @@ function DashboardOverview() {
     </DashboardSection>
   );
 
-  return (
-    <div className="space-y-5 lg:space-y-6">
-      <QuickCheckIn />
-      <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4 lg:gap-4">
-        <KpiTile label={t("metricVisitsToday")} value={metrics?.visitsToday ?? 0} icon={MapPinned} accent="blue" detail={t.plural("metricVisitsRemaining", metrics?.remainingVisitsToday ?? 0)} loading={dashboardQuery.isLoading} onClick={() => setLocation("/route")} />
-        <KpiTile label={t("metricCompletedToday")} value={metrics?.completedVisitsToday ?? 0} icon={Check} accent="blue" detail={t.plural("metricVisitsCompleted", metrics?.completedVisitsToday ?? 0)} loading={dashboardQuery.isLoading} onClick={() => setLocation("/dashboard/history?view=day")} />
-        <KpiTile label={t("metricTasksToday")} value={metrics?.tasksToday ?? 0} icon={ListTodo} accent="amber" detail={t.plural("metricTasksOverdue", metrics?.overdueTasks ?? 0)} loading={dashboardQuery.isLoading} onClick={() => setLocation("/tasks")} />
-        <KpiTile label={t("metricSalesToday")} value={salesSummary.data ? formatCents(salesSummary.data.revenue.todayCents) : "—"} icon={DollarSign} accent="emerald" detail={salesSummary.data ? t("metricSalesProfit", { amount: formatCents(salesSummary.data.profit.todayCents) }) : undefined} loading={salesSummary.isLoading} onClick={() => setLocation("/sales")} />
-      </div>
+  // Everything the rep acts on today stays in view: the route and tasks, what needs attention, and a sync failure
+  // with its retry (it only renders while something failed). The numbers and history are one tap away.
+  const kpiGrid = (
+    <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4 lg:gap-4">
+      <KpiTile label={t("metricVisitsToday")} value={metrics?.visitsToday ?? 0} icon={MapPinned} accent="blue" detail={t.plural("metricVisitsRemaining", metrics?.remainingVisitsToday ?? 0)} loading={dashboardQuery.isLoading} onClick={() => setLocation("/route")} />
+      <KpiTile label={t("metricCompletedToday")} value={metrics?.completedVisitsToday ?? 0} icon={Check} accent="blue" detail={t.plural("metricVisitsCompleted", metrics?.completedVisitsToday ?? 0)} loading={dashboardQuery.isLoading} onClick={() => setLocation("/dashboard/history?view=day")} />
+      <KpiTile label={t("metricTasksToday")} value={metrics?.tasksToday ?? 0} icon={ListTodo} accent="amber" detail={t.plural("metricTasksOverdue", metrics?.overdueTasks ?? 0)} loading={dashboardQuery.isLoading} onClick={() => setLocation("/tasks")} />
+      <KpiTile label={t("metricSalesToday")} value={salesSummary.data ? formatCents(salesSummary.data.revenue.todayCents) : "—"} icon={DollarSign} accent="emerald" detail={salesSummary.data ? t("metricSalesProfit", { amount: formatCents(salesSummary.data.profit.todayCents) }) : undefined} loading={salesSummary.isLoading} onClick={() => setLocation("/sales")} />
+    </div>
+  );
 
+  const moreDetails = (
+    <details className="group space-y-5 lg:space-y-6" data-testid="dashboard-more-details">
+      <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-xl px-1 text-sm font-semibold text-white/60 transition-colors hover:text-white/85 [&::-webkit-details-marker]:hidden">
+        <ChevronRight className="h-4 w-4 shrink-0 transition-transform group-open:rotate-90" aria-hidden="true" />
+        {tpiece("moreDetails")}
+      </summary>
+      {kpiGrid}
       {isDesktop ? (
         <>
           <div className="grid grid-cols-[minmax(0,1fr)_360px] items-start gap-6">
-            <div className="min-w-0">{todayBlock}</div>
-            <div className="space-y-4">
-              {attentionBlock}
-              {salesBlock}
-              {syncBlock}
-            </div>
-          </div>
-          <div className="grid grid-cols-[minmax(0,1fr)_360px] items-start gap-6">
             <div className="min-w-0">{chartBlock}</div>
-            <div>{recentBlock}</div>
+            <div className="space-y-4">
+              {salesBlock}
+              {recentBlock}
+            </div>
           </div>
         </>
       ) : (
         <>
-          {todayBlock}
-          {attentionBlock}
           {salesBlock}
           {chartBlock}
           {recentBlock}
+        </>
+      )}
+    </details>
+  );
+
+  return (
+    <div className="space-y-5 lg:space-y-6">
+      <QuickCheckIn />
+      {isDesktop ? (
+        <div className="grid grid-cols-[minmax(0,1fr)_360px] items-start gap-6">
+          <div className="min-w-0">{todayBlock}</div>
+          <div className="space-y-4">
+            {attentionBlock}
+            {syncBlock}
+          </div>
+        </div>
+      ) : (
+        <>
+          {todayBlock}
+          {attentionBlock}
           {syncBlock}
         </>
       )}
+      {moreDetails}
     </div>
   );
 }
