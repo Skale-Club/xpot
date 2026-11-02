@@ -6,6 +6,7 @@
 import { describe, expect, it } from "vitest";
 import type { PrintRequestItem } from "../shared/printProduction";
 import type { TagQueueCounts } from "../shared/tagQueues";
+import { needsActionQueues } from "../client/src/pages/admin/tags/overview-model";
 import { FILES_STUCK_AFTER_HOURS, plateCounts, todayBlocks, todayFailure, todayRows } from "../client/src/pages/admin/home-model";
 
 const NOW = Date.parse("2026-11-01T12:00:00Z");
@@ -106,6 +107,45 @@ describe("todayRows: owner", () => {
 describe("todayRows: member", () => {
   it("has no panel, so no rows", () => {
     expect(todayRows({ profile: "member", requests: [request("ready")], queues: queues({ chipPending: 3 }), teamPurchases: 2 })).toEqual([]);
+  });
+});
+
+// The Tags overview no longer has a "Needs action" card: Today is the one list. Every queue the card showed (each with
+// a different count so a mix-up shows) must come out of Today with the same count and the same link, per profile.
+describe("todayRows: every overview queue reaches Today", () => {
+  const counts = queues({ stuscleOrders: 1, batchesNotReceived: 2, chipPending: 3, scannedNotLive: 4, noProduct: 5 });
+  const queueIds = Object.keys(counts) as Array<keyof TagQueueCounts>;
+  const hrefOf = (id: keyof TagQueueCounts) => `/admin/tags${needsActionQueues(counts, true).find((card) => card.id === id)!.href}`;
+  const rowOf = (rows: ReturnType<typeof todayRows>, id: string) => rows.find((row) => row.id === id);
+
+  it.each(queueIds)("platform: %s", (id) => {
+    // The wholesale orders come from their own list (same count in the platform block); the rest from the overview.
+    const rows = todayRows({ profile: "platform", queues: counts, pendingOrders: counts.stuscleOrders });
+    expect(rowOf(rows, id)).toMatchObject({ count: counts[id], href: hrefOf(id) });
+  });
+
+  it.each(queueIds.filter((id) => id !== "stuscleOrders"))("partner: %s", (id) => {
+    // A partner does not buy pieces, so there are no wholesale orders to count; batches they receive (produce) show.
+    expect(rowOf(todayRows({ profile: "partner", queues: counts }), id)).toMatchObject({ count: counts[id], href: hrefOf(id) });
+  });
+
+  it.each(queueIds.filter((id) => id !== "stuscleOrders" && id !== "batchesNotReceived"))("owner: %s", (id) => {
+    expect(rowOf(todayRows({ profile: "owner", queues: counts }), id)).toMatchObject({ count: counts[id], href: hrefOf(id) });
+  });
+
+  it("owner: the pending orders are the team purchases row, and batches are not theirs", () => {
+    const rows = todayRows({ profile: "owner", queues: counts, teamPurchases: counts.stuscleOrders, teamPurchasesHref: "/organizations/7?tab=purchases" });
+    expect(rowOf(rows, "teamPurchases")).toMatchObject({ count: 1, href: "/organizations/7?tab=purchases" });
+    expect(rowOf(rows, "batchesNotReceived")).toBeUndefined();
+    expect(rowOf(rows, "stuscleOrders")).toBeUndefined();
+  });
+
+  it("opens the queue lists the card did (/overview/<queue> and the kits, batches pages)", () => {
+    expect(queueIds.map(hrefOf)).toEqual(["/admin/tags/kits?view=orders", "/admin/tags/batches?pending=1", "/admin/tags/overview/chipPending", "/admin/tags/overview/scannedNotLive", "/admin/tags/overview/noProduct"]);
+  });
+
+  it("member: none, they have no panel", () => {
+    expect(todayRows({ profile: "member", queues: counts, pendingOrders: 1 })).toEqual([]);
   });
 });
 
