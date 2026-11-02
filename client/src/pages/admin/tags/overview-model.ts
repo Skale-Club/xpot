@@ -1,5 +1,5 @@
-// Overview: the "Needs action" queues and the activity feed. Each number links to the list that reproduces it: piece
-// queues open /overview/<queue> (GET /api/xpot/tags?queue=). Pure, unit-tested (tests/admin-tags-overview.test.ts).
+// Overview: the queue definitions (shown by the panel home's "Today", home-model.ts) and the activity feed. Each number
+// links to the list that reproduces it: piece queues open /overview/<queue> (GET /api/xpot/tags?queue=). Pure, unit-tested (tests/admin-tags-overview.test.ts).
 
 import type { TagPieceQueue, TagQueueCounts } from "@shared/tagQueues";
 import type { TagOverview } from "@shared/tagsApi";

@@ -119,10 +119,6 @@ const en = {
   takeBackDesc: "They leave whichever reseller holds them and go back to company stock.",
 
   // Overview
-  needsAction: "Needs action",
-  needsActionOpen_one: "{count} queue to look at",
-  needsActionOpen_other: "{count} queues to look at",
-  needsActionClear: "Nothing waiting",
   queueStuscleOrders: "Wholesale orders",
   queueStuscleOrdersHint: "Paid, waiting for their pieces to be separated",
   queueBatchesNotReceived: "Batches awaiting pieces",
@@ -326,10 +322,6 @@ export const adminTagsFlowMessages: Dictionary<typeof en> = {
     takeBackNone: "Recolher",
     takeBackDesc: "Saem do revendedor que estiver com elas e voltam ao estoque da empresa.",
 
-    needsAction: "Precisa de ação",
-    needsActionOpen_one: "{count} fila para olhar",
-    needsActionOpen_other: "{count} filas para olhar",
-    needsActionClear: "Nada esperando",
     queueStuscleOrders: "Pedidos de atacado",
     queueStuscleOrdersHint: "Pagos, esperando a separação das peças",
     queueBatchesNotReceived: "Lotes esperando peças",
@@ -527,10 +519,6 @@ export const adminTagsFlowMessages: Dictionary<typeof en> = {
     takeBackNone: "Devolver",
     takeBackDesc: "Salen del revendedor que las tenga y vuelven al stock de la empresa.",
 
-    needsAction: "Requiere acción",
-    needsActionOpen_one: "{count} cola por revisar",
-    needsActionOpen_other: "{count} colas por revisar",
-    needsActionClear: "Nada pendiente",
     queueStuscleOrders: "Pedidos mayoristas",
     queueStuscleOrdersHint: "Pagados, esperando que se separen sus piezas",
     queueBatchesNotReceived: "Lotes esperando piezas",

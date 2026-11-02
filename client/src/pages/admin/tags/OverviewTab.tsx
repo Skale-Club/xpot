@@ -7,17 +7,11 @@ import {
   CalendarDays,
   CalendarRange,
   ClipboardCheck,
-  Inbox,
   Layers,
-  ListTodo,
-  Nfc,
   Package,
-  PackageX,
   ScanLine,
-  Truck,
   UserRound,
   Users,
-  type LucideIcon,
 } from "lucide-react";
 import type { TagListItem, TagOverview } from "@shared/tagsApi";
 import type { TagPieceQueue } from "@shared/tagQueues";
@@ -29,7 +23,6 @@ import { FilterBar, FilterChips, FilterSelect } from "@/components/xpot/filters"
 import { BackLink } from "@/components/xpot/PageHeader";
 import { Pill } from "@/components/xpot/StatusPill";
 import { useUrlFilters } from "@/hooks/use-url-filters";
-import { useIsSuperAdmin } from "@/components/xpot/AdminBadge";
 import { useT } from "@/i18n";
 import { manageTagsMessages } from "@/i18n/messages/manageTags";
 import { adminTagsFlowMessages } from "@/i18n/messages/adminTagsFlow";
@@ -42,10 +35,8 @@ import { AnalyticsPanel, RangePicker, useDeviceLabel, type AnalyticsRange } from
 import {
   ACTIVITY_FILTERS,
   activityFeed,
-  needsActionQueues,
   pieceQueueCard,
   type ActivityFilter,
-  type QueueId,
 } from "./overview-model";
 
 type Go = (path: string) => void;
@@ -56,41 +47,7 @@ const FEED_DATE = "shrink-0 whitespace-nowrap text-[11px] tabular-nums text-whit
 /** "Oct 17, 8:38 PM": the feed is recent, and on a phone the year ("17 de out. de 2026, 20:38") left the details one letter. */
 const feedDate = (at: string) => formatDate(at, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
-const QUEUE_ICONS: Record<QueueId, LucideIcon> = {
-  stuscleOrders: Inbox,
-  batchesNotReceived: Truck,
-  chipPending: Nfc,
-  scannedNotLive: ScanLine,
-  noProduct: PackageX,
-};
-
-/** Row 1: what needs someone now. Each count opens the list it counts. */
-function NeedsAction({ overview, go }: { overview: TagOverview; go: Go }) {
-  const t = useT(adminTagsFlowMessages);
-  const isAdmin = useIsSuperAdmin();
-  const cards = needsActionQueues(overview.queues, isAdmin);
-  const open = cards.filter((c) => c.count > 0).length;
-  return (
-    <SectionCard accent="tags" icon={ListTodo} title={t("needsAction")} actions={<span className="text-xs text-white/40">{open ? t.plural("needsActionOpen", open) : t("needsActionClear")}</span>} testId="overview-needs-action">
-      <div className={`grid grid-cols-2 gap-3 sm:grid-cols-3 ${cards.length > 4 ? "xl:grid-cols-5" : "xl:grid-cols-4"}`}>
-        {cards.map((card) => (
-          <div key={card.id} className="grid" data-testid={`overview-queue-${card.id}`}>
-            <KpiTile
-              accent={card.count > 0 ? "amber" : "violet"}
-              icon={QUEUE_ICONS[card.id]}
-              label={t(card.labelKey)}
-              value={card.count}
-              detail={t(card.hintKey)}
-              onClick={() => go(card.href)}
-            />
-          </div>
-        ))}
-      </div>
-    </SectionCard>
-  );
-}
-
-/** Row 2: scans (kept from the old Overview). */
+/** Scans (kept from the old Overview). */
 function Scans({ overview }: { overview: TagOverview }) {
   const t = useT(manageTagsMessages);
   const tf = useT(adminTagsFlowMessages);
@@ -226,7 +183,7 @@ function ActivityFeed({ overview, go }: { overview: TagOverview; go: Go }) {
   );
 }
 
-/** /admin/tags/overview/<queue>: the pieces behind a "Needs action" count, by the same rule (GET /api/xpot/tags?queue=). */
+/** /admin/tags/overview/<queue>: the pieces behind a Today count, by the same rule (GET /api/xpot/tags?queue=). */
 export function OverviewQueue({ queue, go }: { queue: TagPieceQueue; go: Go }) {
   const t = useT(adminTagsFlowMessages);
   const card = pieceQueueCard(queue);
@@ -272,8 +229,9 @@ export function useTagOverview(organizationId?: number) {
 }
 
 /**
- * Overview: (1) what needs action, (2) scans, then the fleet analytics with the one Top pieces list, and one
- * activity feed. The stock breakdown lives at the top of Inventory.
+ * Overview: scans, then the fleet analytics with the one Top pieces list, and one activity feed. What needs action is
+ * the panel home's "Today" list; the queue lists (/overview/<queue>) stay, since Today links to them. The stock
+ * breakdown lives at the top of Inventory.
  */
 export function OverviewTab({ go }: { go: Go }) {
   const t = useT(manageTagsMessages);
@@ -284,7 +242,6 @@ export function OverviewTab({ go }: { go: Go }) {
 
   return (
     <div className="min-w-0 space-y-4" data-testid="admin-tags-overview">
-      <NeedsAction overview={data} go={go} />
       <Scans overview={data} />
       <FleetAnalytics go={go} />
       <ActivityFeed overview={data} go={go} />
