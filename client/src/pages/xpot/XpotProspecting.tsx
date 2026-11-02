@@ -1,6 +1,6 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowLeftRight, BellRing, Building2, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Clock3, ExternalLink, GripVertical, Home, Map as MapIcon, MapPin, MapPinCheck, Navigation, Nfc, PencilLine, Phone, Play, Plus, Radar, RotateCw, Route as RouteIcon, SearchX, Search, ShieldCheck, Sparkles, Star, Trash2, X } from "lucide-react";
+import { ArrowLeftRight, BellRing, Building2, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Clock3, ExternalLink, GripVertical, Home, ListOrdered, Map as MapIcon, MapPin, MapPinCheck, Navigation, Nfc, PencilLine, Phone, Play, Plus, Radar, RotateCw, Route as RouteIcon, SearchX, Search, ShieldCheck, Sparkles, Star, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "@/components/ui/loader";
 import { useToast } from "@/hooks/use-toast";
@@ -40,13 +40,16 @@ import {
   MAX_PROSPECTING_SECTORS,
   moveIdByOffset,
   parseSectorSearches,
+  parseTypedCity,
   prospectingProgress,
   reorderIdsAroundTarget,
   routeDateLabel,
-  routeDisplayName,
   routeFill,
+  routeHeading,
   routesByDay,
+  routeStopFocus,
   routeUsage,
+  routeVisitProgress,
   routeStatusIcon,
   routeStatusLabel,
   routeStatusTone,
@@ -63,6 +66,7 @@ import {
   type ProspectingTiming,
 } from "./prospectingUi";
 import { useNow } from "@/hooks/use-now";
+import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { placeTypeLabel } from "@/lib/placeTypes";
 import {
   MAX_DAILY_PROSPECTING_SESSIONS,
@@ -285,15 +289,24 @@ export function XpotProspecting() {
   const parsedSectors = useMemo(() => parseSectorSearches(sectors), [sectors]);
   const parsedSearches = parsedSectors.searches;
   const deferredCity = useDeferredValue(city.trim());
+  // After a failed lookup Google is left alone for a while, so typing a city does
+  // not fire (and fail) one request per letter; the typed "City, ST" is accepted meanwhile.
+  const [suggestionsDownUntil, setSuggestionsDownUntil] = useState(0);
   const citySuggestionsQuery = useQuery<{ suggestions: CitySuggestion[] }>({
     queryKey: ["/api/xpot/place-autocomplete", deferredCity],
-    enabled: builderOpen && planningStep === 0 && cities.length < MAX_PROSPECTING_CITIES && deferredCity.length >= 2,
+    enabled: builderOpen && planningStep === 0 && cities.length < MAX_PROSPECTING_CITIES && deferredCity.length >= 2 && Date.now() >= suggestionsDownUntil,
     queryFn: async () => {
       const response = await fetch(`/api/xpot/place-autocomplete?q=${encodeURIComponent(deferredCity)}`, { credentials: "include" });
       if (!response.ok) throw new Error((await response.text()) || response.statusText);
       return response.json();
     },
   });
+  useEffect(() => {
+    if (citySuggestionsQuery.isError) setSuggestionsDownUntil(Date.now() + 30_000);
+  }, [citySuggestionsQuery.isError, citySuggestionsQuery.errorUpdatedAt]);
+  const citySuggestionsDown = citySuggestionsQuery.isError || Date.now() < suggestionsDownUntil;
+  // "boston, ma" typed by hand, usable only while Google cannot suggest it.
+  const typedCity = citySuggestionsDown ? parseTypedCity(city) : null;
   const sectorFragment = sectorDraft.trim();
   const primaryCity = cities[0] ?? "";
   const sectorPlacesQuery = usePlaceSearch(
@@ -657,7 +670,6 @@ export function XpotProspecting() {
   const routeDetails = routeQuery.data;
   const routeIsToday = routeDetails?.route.routeDate === today;
   const routeContextLabel = routeIsToday ? t("routeReady") : t("pastRoute");
-  const selectedRouteName = routeDetails ? routeDisplayName(routeDetails.route, t.locale) : "";
   const { currentStopId, nextStopId } = useMemo(() => {
     const stops = routeDetails?.stops ?? [];
     const inProgressIndex = stops.findIndex((stop) => ["checked_in", "en_route"].includes(stop.status));
@@ -881,10 +893,65 @@ export function XpotProspecting() {
     }
     if (routeDetails) ensureStopLead.mutate({ routeId: routeDetails.route.id, stopId: stop.id, destination: "company" });
   };
+  // The stop to act on, kept at the top of the route: back to the open visit, or check in at the next one.
+  const isDesktop = useIsDesktop();
+  const [mapOpen, setMapOpen] = useState(false);
+  const showMapPanel = isDesktop || mapOpen;
+  const stopListRef = useRef<HTMLDivElement>(null);
+  const focus = routeDetails ? routeStopFocus(routeDetails.stops) : { now: null, next: null };
+  const routeWorkable = routeDetails ? routeIsToday && ["draft", "published", "in_progress"].includes(routeDetails.route.status) : false;
+  // A draft is published by the same tap that starts working it, so its visits land on today's agenda.
+  const startCheckIn = async (stop: RouteStop) => {
+    if (!routeDetails) return;
+    try {
+      if (routeDetails.route.status === "draft") await publishRoute.mutateAsync(routeDetails.route.id);
+    } catch {
+      return;
+    }
+    prepareCheckIn.mutate({ routeId: routeDetails.route.id, stopId: stop.id });
+  };
+  const nowBlock = routeDetails && routeWorkable ? (
+    focus.now || focus.next ? (() => {
+      const stop = (focus.now ?? focus.next)!;
+      const checkingIn = prepareCheckIn.isPending && prepareCheckIn.variables?.stopId === stop.id;
+      return (
+        <div className="space-y-3 p-4 sm:p-5 lg:flex lg:items-center lg:justify-between lg:gap-6 lg:space-y-0 lg:px-6" data-testid="route-now">
+          <div className="min-w-0 lg:flex-1">
+            <p className="truncate text-base font-bold text-white">{focus.now ? t("stopNow", { name: stop.name }) : t("stopNext", { name: stop.name })}</p>
+            {stop.address ? <p className="mt-0.5 truncate text-sm text-white/55">{stop.address}</p> : null}
+          </div>
+          {focus.now ? (
+            <Button type="button" variant="brand" onClick={() => navigate("/route/check-in")} className="min-h-12 w-full text-base font-bold lg:w-60" data-testid="route-back-to-visit">
+              <MapPinCheck />{t("backToVisit")}
+            </Button>
+          ) : (
+            <div className="grid grid-cols-2 gap-2 lg:w-96">
+              <Button type="button" variant="brand" onClick={() => void startCheckIn(stop)} loading={checkingIn} className="min-h-12 min-w-0 px-2 text-base font-bold" data-testid="route-check-in">
+                <MapPinCheck />{t("checkIn")}
+              </Button>
+              <Button asChild variant="secondary" className="min-h-12 min-w-0 px-2 text-base font-bold">
+                <a href={stopNavigationUrl(stop, appleDevice)} target="_blank" rel="noreferrer"><Navigation />{t("navigate")}</a>
+              </Button>
+            </div>
+          )}
+        </div>
+      );
+    })() : (
+      <p className="p-4 text-sm font-semibold text-white/70 sm:p-5 lg:px-6">{t("routeDone")}</p>
+    )
+  ) : null;
+  // On a computer the stop list scrolls inside its panel: open it at the current stop, not at the top.
+  useEffect(() => {
+    const panel = stopListRef.current;
+    if (!panel || !isDesktop || currentStopId === null) return;
+    const row = panel.querySelector<HTMLElement>(`[data-route-stop-id="${currentStopId}"]`);
+    if (row) panel.scrollTop += row.getBoundingClientRect().top - panel.getBoundingClientRect().top - 160;
+  }, [routeDetails?.route.id, isDesktop]);
+
   const planningTitles = [t("cityStepTitle"), t("sectorsStepTitle"), t("durationStepTitle"), t("reviewStepTitle")];
   const planningBodies = [t("cityStepBody"), t("sectorsStepBody"), t("durationStepBody", { time: dayEndLabel }), t("reviewStepBody")];
   const canAdvancePlanning = planningStep === 0
-    ? cities.length > 0
+    ? cities.length > 0 || typedCity !== null
     : planningStep === 1
       ? (parsedSearches.length > 0 || sectorDraft.trim().length > 0) && parsedSectors.overflow === 0
       : shiftFitsToday;
@@ -907,12 +974,22 @@ export function XpotProspecting() {
     duration: formatDuration(route.totalDurationSeconds),
     distance: formatDistance(route.totalDistanceMeters, t.locale),
   });
-  // A route reads as its search's area ("Framingham, MA"); one built without a search, as its day.
-  const routeTitle = (route: ProspectingRoute) => (route.jobId !== null ? jobsQuery.data?.find((job) => job.id === route.jobId)?.location : undefined)
-    ?? routeDisplayName(route, t.locale);
+  // One name for a route on the list and in its detail: its own name, with the search area below it.
+  const routeHeadingOf = (route: ProspectingRoute) => routeHeading(
+    route,
+    route.jobId !== null ? jobsQuery.data?.find((job) => job.id === route.jobId)?.location : null,
+    t.locale,
+  );
   const routeVisitedLine = (route: ProspectingRoute) => {
     const usage = routeUsage(route);
     return t.plural("routeVisited", usage.total, { visited: usage.visited });
+  };
+  // Today's progress, from its stops: only finished visits count, a skipped stop is told apart.
+  const progressLine = (stops: { status: string }[]) => {
+    const progress = routeVisitProgress(stops);
+    return progress.skipped > 0
+      ? t.plural("routeVisitedSkipped", progress.skipped, { skipped: progress.skipped, visited: progress.visited, total: progress.total })
+      : t("routeVisitedLine", { visited: progress.visited, total: progress.total });
   };
   const todayCompleted = todayRoutes.some((route) => route.status === "completed");
   const openTodayAction = () => {
@@ -925,6 +1002,11 @@ export function XpotProspecting() {
     if (!canAdvancePlanning) return;
     // A typed but not yet added sector counts, so the in-field button never drops it.
     if (planningStep === 1 && sectorDraft.trim()) addSector(sectorDraft, false);
+    if (planningStep === 0 && typedCity && cities.length < MAX_PROSPECTING_CITIES
+      && !cities.some((value) => value.toLocaleLowerCase() === typedCity.toLocaleLowerCase())) {
+      setCities((current) => [...current, typedCity]);
+      setCity("");
+    }
     if (planningStep < 3) {
       setPlanningStep((planningStep + 1) as PlanningStep);
       return;
@@ -990,46 +1072,54 @@ export function XpotProspecting() {
             // Today's route exists: no "build" button. The rep follows it as it is or edits it;
             // there is no redo, since a new search spends paid discovery calls.
             <section className={`w-full rounded-[22px] p-4 lg:px-6 ${GLASS_CLASS}`} data-testid="today-route-card">
-              <div className="flex items-center gap-4">
-                <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-blue-500/15 text-blue-200"><MapIcon className="h-6 w-6" aria-hidden="true" /></span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-indigo-300">{t("todayRouteTitle")}</p>
-                  <p className="mt-0.5 truncate text-lg font-bold tracking-tight text-white first-letter:uppercase">{routeTitle(activeTodayRoute)}</p>
-                  <p className="mt-0.5 text-sm leading-5 text-white/65">{routeSummaryLine(activeTodayRoute)}</p>
-                  {routeUsage(activeTodayRoute).total > 0 ? <p className="text-xs leading-5 text-white/45">{routeVisitedLine(activeTodayRoute)}</p> : null}
-                </div>
-              </div>
-              <div className="mt-4 flex gap-2">
-                {followRouteUrl ? (
-                  <Button asChild variant="brand" className="min-h-12 min-w-0 flex-1 text-base font-bold [&_svg]:size-5">
-                    <a
-                      href={followRouteUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      // A draft is published by the same tap, so its visits land on today's agenda.
-                      onClick={() => { if (activeTodayRoute.status === "draft") publishRoute.mutate(activeTodayRoute.id); }}
-                    >
-                      <Play className="fill-current" />{t("followRoute")}
-                    </a>
-                  </Button>
-                ) : (
-                  <Button type="button" variant="brand" disabled loading={todayRouteQuery.isLoading} className="min-h-12 min-w-0 flex-1 text-base font-bold [&_svg]:size-5">
-                    <Play className="fill-current" />{t("followRoute")}
-                  </Button>
-                )}
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="icon"
-                  onClick={() => openRoute(activeTodayRoute.id)}
-                  aria-label={t("openAndEditRoute")}
-                  title={t("openAndEditRoute")}
-                  className="h-12 w-12 shrink-0 [&_svg]:size-5"
-                >
-                  <PencilLine />
-                </Button>
-              </div>
-              {dailyLimitNote ? <p className="mt-2 text-xs leading-5 text-white/50">{dailyLimitNote}</p> : null}
+              {(() => {
+                const heading = routeHeadingOf(activeTodayRoute);
+                const stops = todayRouteDetails?.stops ?? [];
+                const { now: openStop, next: nextStop } = routeStopFocus(stops);
+                const focusStop = openStop ?? nextStop;
+                return (
+                  <>
+                    <div className="flex items-center gap-4">
+                      <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-blue-500/15 text-blue-200"><MapIcon className="h-6 w-6" aria-hidden="true" /></span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-indigo-300">{t("todayRouteTitle")}</p>
+                        <p className="mt-0.5 truncate text-lg font-bold tracking-tight text-white first-letter:uppercase">{heading.title}</p>
+                        {heading.subtitle ? <p className="truncate text-sm leading-5 text-white/55">{heading.subtitle}</p> : null}
+                        <p className="mt-0.5 text-sm leading-5 text-white/65">{routeSummaryLine(activeTodayRoute)}</p>
+                        {stops.length ? <p className="text-xs leading-5 text-white/55">{progressLine(stops)}</p> : null}
+                      </div>
+                    </div>
+                    {focusStop ? (
+                      <div className="mt-3 min-w-0 rounded-xl bg-white/[0.04] px-3 py-2.5" data-testid="today-route-focus">
+                        <p className="truncate text-sm font-bold text-white/90">{openStop ? t("stopNow", { name: focusStop.name }) : t("stopNext", { name: focusStop.name })}</p>
+                        {focusStop.address ? <p className="mt-0.5 truncate text-xs text-white/50">{focusStop.address}</p> : null}
+                      </div>
+                    ) : null}
+                    <div className="mt-4 grid grid-cols-2 gap-2">
+                      <Button type="button" variant="brand" onClick={() => openRoute(activeTodayRoute.id)} className="min-h-12 min-w-0 px-2 text-sm font-bold [&_svg]:size-5">
+                        <ListOrdered />{t("openAndEditRoute")}
+                      </Button>
+                      {followRouteUrl ? (
+                        <Button asChild variant="secondary" className="min-h-12 min-w-0 px-2 text-sm font-bold [&_svg]:size-5">
+                          <a
+                            href={followRouteUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            // A draft is published by the same tap, so its visits land on today's agenda.
+                            onClick={() => { if (activeTodayRoute.status === "draft") publishRoute.mutate(activeTodayRoute.id); }}
+                          >
+                            <Navigation />{t("followRoute")}
+                          </a>
+                        </Button>
+                      ) : (
+                        <Button type="button" variant="secondary" disabled loading={todayRouteQuery.isLoading} className="min-h-12 min-w-0 px-2 text-sm font-bold [&_svg]:size-5">
+                          <Navigation />{t("followRoute")}
+                        </Button>
+                      )}
+                    </div>
+                  </>
+                );
+              })()}
             </section>
           ) : (
             <section className="flex w-full pb-1">
@@ -1070,14 +1160,16 @@ export function XpotProspecting() {
                       {routes.map((route) => {
                         const StatusIcon = routeStatusIcon(route.status);
                         const { used } = routeUsage(route);
+                        const heading = routeHeadingOf(route);
                         return (
                           <button key={route.id} type="button" onClick={() => openRoute(route.id)} className="flex min-h-[76px] w-full items-center gap-3 py-3 text-left transition hover:bg-white/[0.025]">
                             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/[0.06] text-white/55"><StatusIcon className="h-5 w-5" aria-hidden="true" /></span>
                             <span className="min-w-0 flex-1">
                               <span className="flex min-w-0 items-center gap-2">
-                                <strong className="truncate text-sm text-white/90 first-letter:uppercase">{routeTitle(route)}</strong>
-                                <Pill tone={used ? "green" : "muted"} dot className="shrink-0">{used ? t("routeUsed") : t("routeNotUsed")}</Pill>
+                                <strong className="truncate text-sm text-white/90 first-letter:uppercase">{heading.title}</strong>
+                                {used ? null : <Pill tone="muted" dot className="shrink-0">{t("routeNotUsed")}</Pill>}
                               </span>
+                              {heading.subtitle ? <span className="block truncate text-xs text-white/50">{heading.subtitle}</span> : null}
                               <span className="mt-1 block truncate text-xs text-white/45">
                                 {routeStatusLabel(route.status, t, route.routeDate < today)}
                                 {routeUsage(route).total > 0 ? ` · ${routeVisitedLine(route)}` : ""}
@@ -1163,7 +1255,7 @@ export function XpotProspecting() {
                       id="prospecting-city-suggestions"
                       open={citySuggestionsOpen && cities.length < MAX_PROSPECTING_CITIES && deferredCity.length >= 2}
                     >
-                        <SuggestionStatus loading={citySuggestionsQuery.isFetching} error={citySuggestionsQuery.isError} loadingLabel={t("googleSuggestions")} errorLabel={t("googleUnavailable")} />
+                        <SuggestionStatus loading={citySuggestionsQuery.isFetching} error={citySuggestionsDown} loadingLabel={t("googleSuggestions")} errorLabel={t("googleUnavailableCity")} />
                         {citySuggestionsQuery.data?.suggestions.map((suggestion) => (
                           <SuggestionOption key={suggestion.placeId} icon={MapPin} title={suggestion.mainText} subtitle={suggestion.secondaryText} onPick={() => addCity(suggestion)} />
                         ))}
@@ -1188,7 +1280,9 @@ export function XpotProspecting() {
                     </div>
                   ) : null}
                   <div id="prospecting-cities-help" className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-white/50">
-                    <span>{t("cityHint")}</span>
+                    <span className={citySuggestionsDown && city.trim() && !typedCity ? "text-amber-200" : undefined}>
+                      {citySuggestionsDown && city.trim() && !typedCity ? t("cityTypedInvalid") : t("cityHint")}
+                    </span>
                     <span className="font-semibold tabular-nums">{t("citiesCount", { count: cities.length, max: MAX_PROSPECTING_CITIES })}</span>
                   </div>
                 </div>
@@ -1489,34 +1583,51 @@ export function XpotProspecting() {
           <div className="border-b border-white/[0.08] px-4 py-2 sm:px-5">
             <BackLink onBack={closeRoute}>{t("backToRoutes")}</BackLink>
           </div>
+          {/* The stop to act on comes first, above the map and the list. */}
+          {nowBlock ? <div className="border-b border-white/[0.08]">{nowBlock}</div> : null}
           <div className="grid lg:h-[calc(100vh-11rem)] lg:min-h-[620px] lg:max-h-[820px] lg:grid-cols-[minmax(0,1.08fr)_minmax(420px,0.92fr)]">
             <div className="flex min-w-0 flex-col overflow-hidden border-b border-white/[0.08] lg:border-b-0 lg:border-r">
-              <RoutePreviewMap
-                start={{ lat: Number(routeDetails.route.startLat), lng: Number(routeDetails.route.startLng) }}
-                stops={mapStops}
-                landmarks={routeLandmarks}
-                encodedPolyline={routeDetails.route.optimizationMeta.encodedPolyline}
-                alt={routeContextLabel}
-                showCurrentLocation={routeIsToday}
-                locateLabel={t("showMyLocation")}
-                onStopClick={openStopPreview}
-                className="lg:h-auto lg:flex-1"
-              />
-              {legendItems.length ? (
+              {showMapPanel ? (
+                <RoutePreviewMap
+                  start={{ lat: Number(routeDetails.route.startLat), lng: Number(routeDetails.route.startLng) }}
+                  stops={mapStops}
+                  landmarks={routeLandmarks}
+                  encodedPolyline={routeDetails.route.optimizationMeta.encodedPolyline}
+                  alt={routeContextLabel}
+                  showCurrentLocation={routeIsToday}
+                  locateLabel={t("showMyLocation")}
+                  onStopClick={openStopPreview}
+                  className="lg:h-auto lg:flex-1"
+                />
+              ) : null}
+              {isDesktop ? null : (
+                <button
+                  type="button"
+                  onClick={() => setMapOpen((open) => !open)}
+                  aria-expanded={mapOpen}
+                  className="flex min-h-12 w-full items-center justify-center gap-2 text-sm font-semibold text-white/70 transition hover:bg-white/[0.03]"
+                  data-testid="route-map-toggle"
+                >
+                  <MapIcon className="h-4 w-4" aria-hidden="true" />{mapOpen ? t("hideMap") : t("showMap")}
+                </button>
+              )}
+              {legendItems.length && showMapPanel ? (
                 <ul aria-label={tu("legendLabel")} className="flex flex-wrap gap-x-4 gap-y-1.5 border-t border-white/[0.08] px-4 py-2.5 text-[11px] font-medium text-white/55">
                   {legendItems.map((item) => <LegendItem key={item.key} tone={item.tone} glyph={item.glyph} label={item.label} />)}
                 </ul>
               ) : null}
             </div>
-            <div className="min-w-0 space-y-6 p-4 sm:p-5 lg:overflow-y-auto lg:p-6">
+            <div ref={stopListRef} className="min-w-0 space-y-6 p-4 sm:p-5 lg:overflow-y-auto lg:p-6">
             <div>
               <div className="flex items-center gap-2 text-indigo-300"><RouteIcon className="h-4 w-4" /><span className="text-xs font-bold uppercase tracking-wider">{routeContextLabel}</span></div>
-              <h2 className="mt-2 text-xl font-bold text-white first-letter:uppercase">{selectedRouteName}</h2>
+              <h2 className="mt-2 text-xl font-bold text-white first-letter:uppercase">{routeHeadingOf(routeDetails.route).title}</h2>
+              {routeHeadingOf(routeDetails.route).subtitle ? <p className="text-sm text-white/55">{routeHeadingOf(routeDetails.route).subtitle}</p> : null}
               <p className="mt-1 text-sm text-white/65">{tu("routeDetailLine", {
                 count: routeDetails.stops.length,
                 duration: formatDuration(routeDetails.route.totalDurationSeconds),
                 distance: formatDistance(routeDetails.route.totalDistanceMeters, t.locale),
               })}</p>
+              {routeDetails.stops.length ? <p className="text-sm text-white/65" data-testid="route-progress">{progressLine(routeDetails.stops)}</p> : null}
               <div className="mt-3">
                 {(() => {
                   const StatusIcon = routeStatusIcon(routeDetails.route.status);
@@ -1545,8 +1656,6 @@ export function XpotProspecting() {
                   <Button variant="brand" onClick={() => publishRoute.mutate(routeDetails.route.id)} loading={publishRoute.isPending} aria-label={publishRoute.isPending ? t("publishing") : undefined} className="w-full sm:w-auto">
                     <ShieldCheck />{t("publishRoute")}
                   </Button>
-                ) : routeIsToday && !["cancelled", "draft"].includes(routeDetails.route.status) ? (
-                  <Button asChild variant="brand" className="w-full sm:w-auto"><Link href="/dashboard/history?view=day">{t("openVisits")}</Link></Button>
                 ) : null}
                 {directionsUrl ? <Button asChild variant="secondary" className="w-full sm:w-auto"><a href={directionsUrl} target="_blank" rel="noreferrer"><Navigation />{t("openMaps")}</a></Button> : null}
                 {appleDirectionsUrl ? <Button asChild variant="secondary" className="w-full sm:w-auto"><a href={appleDirectionsUrl} target="_blank" rel="noreferrer"><Navigation />{t("openAppleMaps")}</a></Button> : null}
@@ -1563,11 +1672,10 @@ export function XpotProspecting() {
                   <h3 className="text-sm font-bold text-white">{t("visitOrder")}</h3>
                   {canReorderRoute ? <p className="mt-1 text-xs text-white/45">{t("reorderHint")}</p> : null}
                 </div>
-                <span className="text-xs text-white/60">{reorderRoute.isPending ? t("savingOrder") : t("stopCount", { count: routeDetails.stops.length })}</span>
+                {reorderRoute.isPending ? <span className="text-xs text-white/60">{t("savingOrder")}</span> : null}
               </div>
               <ol className="space-y-2">
                 {routeDetails.stops.map((stop) => {
-                  const stopUrl = stopNavigationUrl(stop, appleDevice);
                   const stopTone = stopMarkerTone(stop, currentStopId, nextStopId);
                   const numberRailClass = stop.status === "completed"
                     ? "border-white/[0.06] bg-white/[0.02] text-emerald-300/80"
@@ -1578,11 +1686,6 @@ export function XpotProspecting() {
                         : stop.id === nextStopId
                           ? "border-blue-300/30 bg-blue-400/[0.1] text-blue-100/85 shadow-[inset_-1px_0_0_rgba(147,197,253,0.12)]"
                           : "border-white/10 bg-white/[0.035] text-white/45";
-                  const checkingInHere = prepareCheckIn.isPending && prepareCheckIn.variables?.stopId === stop.id;
-                  const canRemoveThisStop = routeIsToday
-                    && routeDetails.stops.length > 1
-                    && ["draft", "published", "in_progress"].includes(routeDetails.route.status)
-                    && ["planned", "en_route"].includes(stop.status);
                   return (
                     <li
                       key={stop.id}
@@ -1694,75 +1797,7 @@ export function XpotProspecting() {
                           {stop.origin === "ad_hoc" ? <Pill tone="slate" bordered>{t("stopExtra")}</Pill> : null}
                         </span>
                       </div>
-                      {/* Up to four actions: they sit under the name at every width, so it is never squeezed. */}
-                      <div className="col-start-2 flex self-end justify-end gap-2 px-3 pb-3">
-                        {routeIsToday && isStopOpen(stop.status) ? (
-                          <Button
-                            type="button"
-                            variant="brand"
-                            size="icon"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              prepareCheckIn.mutate({ routeId: routeDetails.route.id, stopId: stop.id });
-                            }}
-                            loading={checkingInHere}
-                            aria-label={t("checkIn")}
-                            title={t("checkIn")}
-                            className="[&_svg]:size-5"
-                          >
-                            <MapPinCheck strokeWidth={2} />
-                          </Button>
-                        ) : null}
-                        <Button
-                          asChild
-                          variant="secondary"
-                          size="icon"
-                          className="[&_svg]:size-5"
-                        >
-                          <a
-                            href={stopUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            aria-label={appleDevice ? t("navigateWithApple", { name: stop.name }) : t("navigateTo", { name: stop.name })}
-                            title={appleDevice ? t("navigateWithApple", { name: stop.name }) : t("navigateTo", { name: stop.name })}
-                            onClick={(event) => event.stopPropagation()}
-                          >
-                            <Navigation strokeWidth={2} aria-hidden="true" />
-                          </a>
-                        </Button>
-                        {canEditRoute && isStopOpen(stop.status) ? (
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            size="icon"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              setStopPicker({ kind: "replace", stop });
-                            }}
-                            aria-label={t("replaceStopFor", { name: stop.name })}
-                            title={t("replaceStopFor", { name: stop.name })}
-                            className="[&_svg]:size-5"
-                          >
-                            <ArrowLeftRight strokeWidth={2} aria-hidden="true" />
-                          </Button>
-                        ) : null}
-                        {canRemoveThisStop ? (
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            size="icon"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              setStopPendingRemoval(stop);
-                            }}
-                            aria-label={t("removeStop", { name: stop.name })}
-                            title={t("removeStop", { name: stop.name })}
-                            className="text-red-200/80 hover:text-red-100 [&_svg]:size-5"
-                          >
-                            <Trash2 strokeWidth={2} aria-hidden="true" />
-                          </Button>
-                        ) : null}
-                      </div>
+                      <ChevronRight className="pointer-events-none absolute bottom-3 right-3 h-4 w-4 text-white/25 transition group-hover:translate-x-0.5 group-hover:text-white/50" aria-hidden="true" />
                     </li>
                   );
                 })}
@@ -1782,6 +1817,11 @@ export function XpotProspecting() {
                   <Home className="h-4 w-4 shrink-0 text-white/45" aria-hidden="true" />
                   <span>{tu("backHomeAt", { time: formatTime(routeDetails.route.plannedEndAt, t.locale) })}</span>
                 </div>
+              ) : null}
+              {routeIsToday && !["cancelled", "draft"].includes(routeDetails.route.status) ? (
+                <Link href="/dashboard/history?view=day" className="mt-4 flex min-h-11 items-center justify-center gap-1 text-sm font-semibold text-indigo-300 transition hover:text-indigo-200">
+                  {t("openVisits")}<ChevronRight className="h-4 w-4" aria-hidden="true" />
+                </Link>
               ) : null}
             </div>
           </div>
@@ -1901,8 +1941,16 @@ export function XpotProspecting() {
                 </div>
 
                 <div className="space-y-2">
-                  {routeIsToday && isStopOpen(selectedStop.status) ? (
-                    <Button type="button" variant="brand" onClick={() => prepareCheckIn.mutate({ routeId: routeDetails.route.id, stopId: selectedStop.id })} loading={checkingInHere} className="w-full font-bold">
+                  {selectedStop.status === "checked_in" && routeIsToday ? (
+                    <Button type="button" variant="brand" onClick={() => navigate("/route/check-in")} className="w-full font-bold">
+                      <MapPinCheck />{t("backToVisit")}
+                    </Button>
+                  ) : selectedStop.status === "completed" && selectedStop.visitId ? (
+                    <Button type="button" variant="brand" onClick={() => navigate(`/dashboard/history/${selectedStop.visitId}`)} className="w-full font-bold">
+                      <MapPinCheck />{t("seeVisit")}
+                    </Button>
+                  ) : routeIsToday && isStopOpen(selectedStop.status) ? (
+                    <Button type="button" variant="brand" onClick={() => void startCheckIn(selectedStop)} loading={checkingInHere} className="w-full font-bold">
                       <MapPinCheck />{t("checkIn")}
                     </Button>
                   ) : null}
@@ -1917,18 +1965,33 @@ export function XpotProspecting() {
                   {canEditRoute ? (() => {
                     // Nothing goes ahead of a visit that already happened.
                     const canAddAfter = canAddAfterStop(routeDetails.stops, selectedStop.id);
+                    const canRemove = routeDetails.stops.length > 1 && isStopOpen(selectedStop.status);
                     const open = (target: StopPickerTarget) => {
                       setSelectedStopId(null);
                       setStopPicker(target);
                     };
                     return (
                       <div className="grid grid-cols-2 gap-2 border-t border-white/[0.08] pt-3">
-                        <Button type="button" variant="ghost" disabled={!isStopOpen(selectedStop.status)} onClick={() => open({ kind: "replace", stop: selectedStop })} className="min-w-0 px-2 sm:px-4">
-                          <ArrowLeftRight />{t("replaceStop")}
-                        </Button>
-                        <Button type="button" variant="ghost" disabled={!canAddAfter} onClick={() => open({ kind: "after", stop: selectedStop })} className="min-w-0 px-2 sm:px-4">
-                          <Plus />{t("addStopAfter")}
-                        </Button>
+                        {isStopOpen(selectedStop.status) ? (
+                          <Button type="button" variant="ghost" onClick={() => open({ kind: "replace", stop: selectedStop })} className="min-w-0 px-2 sm:px-4">
+                            <ArrowLeftRight />{t("replaceStop")}
+                          </Button>
+                        ) : null}
+                        {canAddAfter ? (
+                          <Button type="button" variant="ghost" onClick={() => open({ kind: "after", stop: selectedStop })} className="min-w-0 px-2 sm:px-4">
+                            <Plus />{t("addStopAfter")}
+                          </Button>
+                        ) : null}
+                        {canRemove ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={() => { setSelectedStopId(null); setStopPendingRemoval(selectedStop); }}
+                            className="col-span-2 min-w-0 px-2 text-red-200/80 hover:text-red-100 sm:px-4"
+                          >
+                            <Trash2 />{t("removeStopButton")}
+                          </Button>
+                        ) : null}
                       </div>
                     );
                   })() : null}

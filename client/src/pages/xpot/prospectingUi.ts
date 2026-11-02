@@ -144,10 +144,12 @@ export function localDateKey(date = new Date()) {
 }
 
 /**
- * The search worth keeping in the global shell. Running work always wins; a
- * completed search stays visible while the server is building its route. Once
- * route planning is ready, the route itself becomes the destination. Routes are
- * same-day, so yesterday's search and route never show: they are history.
+ * The search worth keeping in the global shell: only while the route is being
+ * prepared. Running work always wins; a completed search stays visible while
+ * the server builds its route (or if that failed, so it can be retried). Once
+ * the route exists the bar is gone: it measured the search, and next to
+ * "3 of 8 stops" it read as a finished day. Routes are same-day, so
+ * yesterday's search never shows: it is history.
  */
 export function persistentProspectingJob<
   T extends PersistentProspectingJob,
@@ -166,7 +168,7 @@ export function persistentProspectingJob<
   const route = routes.find((candidate) => candidate.jobId === recentJob.id
     && candidate.routeDate === today
     && !["completed", "cancelled"].includes(candidate.status)) ?? null;
-  if (route) return { job: recentJob, route };
+  if (route) return null;
   return recentJob.routePlanningStatus !== "ready" ? { job: recentJob, route: null } : null;
 }
 
@@ -287,14 +289,46 @@ export function routeOfJob<T extends { jobId: number | null }>(routes: T[] | und
   return (routes ?? []).find((route) => route.jobId === jobId);
 }
 
-/** Stops behind the rep: visited or skipped (a cancelled visit skips its stop). */
-export function isStopDone(status: string) {
-  return status === "completed" || status === "skipped";
+/**
+ * A stop counts as visited once its check-in is finished. A skipped stop (a
+ * cancelled visit skips its stop) is not a visit, and the one open right now
+ * only counts after check-out.
+ */
+export function isStopVisited(status: string) {
+  return status === "completed";
 }
 
-export function routeStopProgress(stops: { status: string }[]) {
-  const done = stops.filter((stop) => isStopDone(stop.status)).length;
-  return { done, total: stops.length, percent: stops.length ? Math.round((done / stops.length) * 100) : 0 };
+/** One progress for the route everywhere: visited stops, the skipped ones apart, and how many there are. */
+export function routeVisitProgress(stops: { status: string }[]) {
+  const visited = stops.filter((stop) => isStopVisited(stop.status)).length;
+  const skipped = stops.filter((stop) => stop.status === "skipped").length;
+  return { visited, skipped, total: stops.length, percent: stops.length ? Math.round((visited / stops.length) * 100) : 0 };
+}
+
+/** The stop with a visit open now, and the one to go to next (en route first, else the first still planned). */
+export function routeStopFocus<T extends { id: number; status: string }>(stops: T[]) {
+  const now = stops.find((stop) => stop.status === "checked_in") ?? null;
+  const next = stops.find((stop) => stop.status === "en_route") ?? stops.find((stop) => stop.status === "planned") ?? null;
+  return { now, next };
+}
+
+/**
+ * A route reads the same on the list, in its detail and on the Dashboard: its
+ * name is the title and the area of the search that built it is the line
+ * below (left out when it only repeats the title).
+ */
+export function routeHeading(route: { name: string; routeDate: string }, searchArea: string | null | undefined, locale: string, referenceDate = new Date()) {
+  const title = routeDisplayName(route, locale, referenceDate);
+  const area = searchArea?.trim() ?? "";
+  return { title, subtitle: area && area.toLocaleLowerCase() !== title.toLocaleLowerCase() ? area : null };
+}
+
+/** Whether a typed city can stand in for a Google suggestion: "City, ST". */
+export function parseTypedCity(value: string): string | null {
+  const match = value.trim().replace(/\s+/g, " ").replace(/,?\s*USA$/i, "").match(/^([^,]{2,}?)\s*,\s*([A-Za-z]{2})$/);
+  if (!match) return null;
+  const city = match[1].trim().split(" ").map((word) => word.charAt(0).toLocaleUpperCase() + word.slice(1)).join(" ");
+  return `${city}, ${match[2].toUpperCase()}`;
 }
 
 export type StopMarkerTone = { background: string; border: string; text: string; glyph: string | null };
