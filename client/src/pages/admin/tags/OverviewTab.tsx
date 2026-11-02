@@ -55,25 +55,6 @@ const FEED_DATE = "shrink-0 whitespace-nowrap text-[11px] tabular-nums text-whit
 /** "Oct 17, 8:38 PM": the feed is recent, and on a phone the year ("17 de out. de 2026, 20:38") left the details one letter. */
 const feedDate = (at: string) => formatDate(at, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
-/** Scans (kept from the old Overview). */
-function Scans({ overview }: { overview: TagOverview }) {
-  const t = useT(manageTagsMessages);
-  const tf = useT(adminTagsFlowMessages);
-  const { interactions, split30 } = overview;
-  const split = split30.qr + split30.nfc;
-  return (
-    <SectionCard accent="tags" icon={ScanLine} title={t("scansTaps")}>
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiTile accent="violet" icon={ScanLine} label={t("ovToday")} value={interactions.today} detail={tf("localDay")} />
-        <KpiTile accent="violet" icon={CalendarDays} label={t("ovLast7")} value={interactions.last7} />
-        <KpiTile accent="violet" icon={CalendarRange} label={t("ovLast30")} value={interactions.last30} detail={`QR ${formatShare(split30.qr, split)} · NFC ${formatShare(split30.nfc, split)}`} />
-        <KpiTile accent="violet" icon={UserRound} label={t("ovApproxUnique")} value={overview.approxUnique30} detail={t("ovApproxHint")} />
-      </div>
-      <p className="mt-3 text-xs text-white/40">{tf("scansFootnote")}</p>
-    </SectionCard>
-  );
-}
-
 /** The fleet analytics (moved from Resellers): range, scope, daily chart, devices and the one Top pieces list. */
 function FleetAnalytics({ go }: { go: Go }) {
   const t = useT(manageTagsMessages);
@@ -296,7 +277,6 @@ export function OverviewTab({ go }: { go: Go }) {
 
   return (
     <div className="min-w-0 space-y-4" data-testid="admin-tags-overview">
-      <Scans overview={data} />
       <FleetAnalytics go={go} />
       <ActivityFeed overview={data} go={go} />
     </div>

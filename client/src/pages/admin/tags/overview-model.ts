@@ -57,7 +57,10 @@ export type ActivityItem =
 /** Rows the feed shows at most. */
 export const ACTIVITY_LIMIT = 12;
 
-/** One feed of the latest scans, activations and destination changes, newest first (at most ACTIVITY_LIMIT). */
+/**
+ * One feed of the latest scans, activations and destination changes, newest first (at most ACTIVITY_LIMIT). "All" is what
+ * happened to the pieces (went live, destination changed): the scans are the chart's, and have their own tab.
+ */
 export function activityFeed(overview: Pick<TagOverview, "recentEvents" | "recentActivations" | "recentChanges">, filter: ActivityFilter = "all"): ActivityItem[] {
   const items: ActivityItem[] = [
     ...overview.recentEvents.map((event) => ({ kind: "scans" as const, key: `e${event.id}`, at: event.occurredAt, event })),
@@ -65,7 +68,7 @@ export function activityFeed(overview: Pick<TagOverview, "recentEvents" | "recen
     ...overview.recentChanges.map((change) => ({ kind: "destination" as const, key: `c${change.id}`, at: change.createdAt, change })),
   ];
   return items
-    .filter((item) => filter === "all" || item.kind === filter)
+    .filter((item) => (filter === "all" ? item.kind !== "scans" : item.kind === filter))
     .sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0))
     .slice(0, ACTIVITY_LIMIT);
 }

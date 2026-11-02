@@ -146,9 +146,7 @@ const en = {
 
 
 
-  localDay: "Your local day",
-  scansFootnote: "Scans count real visits only: bots and repeated hits are left out.",
-  analyticsTitle: "Scans by piece",
+  analyticsTitle: "Scans",
   activityTitle: "Activity",
   activityAll: "All",
   activityScans: "Scans",
@@ -351,9 +349,7 @@ export const adminTagsFlowMessages: Dictionary<typeof en> = {
 
 
 
-    localDay: "Seu dia local",
-    scansFootnote: "As leituras contam só visitas reais: robôs e repetições ficam de fora.",
-    analyticsTitle: "Leituras por peça",
+    analyticsTitle: "Leituras",
     activityTitle: "Atividade",
     activityAll: "Tudo",
     activityScans: "Leituras",
@@ -550,9 +546,7 @@ export const adminTagsFlowMessages: Dictionary<typeof en> = {
 
 
 
-    localDay: "Tu día local",
-    scansFootnote: "Las lecturas cuentan solo visitas reales: se excluyen bots y repeticiones.",
-    analyticsTitle: "Lecturas por pieza",
+    analyticsTitle: "Lecturas",
     activityTitle: "Actividad",
     activityAll: "Todo",
     activityScans: "Lecturas",
