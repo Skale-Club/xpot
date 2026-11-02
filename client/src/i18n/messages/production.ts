@@ -880,7 +880,7 @@ export const productionMessages: Dictionary<typeof en> = {
     cardTitle_printedPending: "Impresa, aún fuera del stock",
     cardTitle_printedDone: "Listo",
     buildingBody: "{device} está generando el archivo ahora.",
-    buildingBodyUnknown: "El ordenador de la impresora está generando el archivo ahora.",
+    buildingBodyUnknown: "La computadora de la impresora está generando el archivo ahora.",
     readyBody: "Descarga el archivo y envíalo a la impresora.",
     printingNow: "En la impresora ahora. Márcala cuando salga de la cama.",
     cancelledBody: "Nadie va a imprimir esto. Imprímela de nuevo si aún la necesitas.",

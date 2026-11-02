@@ -36,12 +36,22 @@ export function useModelName() {
   };
 }
 
+/** A model's colour as stored ("black", "white", "mixed") in the words of the language in use; any other value as it is. */
+function useThemeName() {
+  const b = useT(productionBoardMessages);
+  return (value: string) => {
+    const key = value.trim().toLowerCase();
+    return key === "white" || key === "black" || key === "mixed" ? b(`theme_${key}` as "theme_white") : value;
+  };
+}
+
 /** The physical piece and its printed brand stay together throughout production. */
 export function ProductionIdentity({ model, hero = false }: { model: ProductionIdentityData; hero?: boolean }) {
   const u = useT(unifiedProductionMessages);
   const labels = useTagLabels();
   const nameOf = useModelName();
   const name = nameOf(model);
+  const themeName = useThemeName();
   const artwork = model.productType
     ? <TagPieceVisual productType={model.productType} face={model.face} theme={model.theme} modelSlug={model.slug} batchCode={model.batchCode} size={hero ? "lg" : "md"} />
     : <Shapes className={hero ? "h-14 w-14 text-white/40" : "h-9 w-9 text-white/40"} aria-hidden="true" />;

@@ -24,6 +24,7 @@ import { AdminHome } from "./AdminHome";
 import { AdminWork } from "./AdminWork";
 import { can } from "@shared/profiles";
 import { useT } from "@/i18n";
+import { commonMessages } from "@/i18n/messages/common";
 import { shellMessages } from "@/i18n/messages/shell";
 import { tagsMessages } from "@/i18n/messages/tags";
 import { navIaMessages } from "@/i18n/messages/navIa";
@@ -46,6 +47,7 @@ export function AdminApp({ section }: { section: string }) {
   const meQuery = useQuery<XpotMeResponse>({ queryKey: ["/api/xpot/me"], retry: false });
   const t = useT(shellMessages);
   const tt = useT(tagsMessages);
+  const tc = useT(commonMessages);
   const tm = useT(manageMessages);
   const tn = useT(navIaMessages);
   const tw = useT(workspacesMessages);
