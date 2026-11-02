@@ -22,7 +22,7 @@ const en = {
   locationReseller: "Reseller: {name}",
   locationKit: "Kit {id}",
   openInManagement: "Open in management",
-  openAsReseller: "Open in My work",
+  openAsReseller: "Open in Tags",
 
   // Sale
   saleTitle: "Sale",
@@ -162,7 +162,7 @@ export const pieceScreenMessages: Dictionary<typeof en> = {
     locationReseller: "Revendedor: {name}",
     locationKit: "Kit {id}",
     openInManagement: "Abrir na gestão",
-    openAsReseller: "Abrir em Meu trabalho",
+    openAsReseller: "Abrir em Tags",
 
     saleTitle: "Venda",
     saleNotYet: "Ainda não vendida.",
@@ -293,7 +293,7 @@ export const pieceScreenMessages: Dictionary<typeof en> = {
     locationReseller: "Revendedor: {name}",
     locationKit: "Kit {id}",
     openInManagement: "Abrir en gestión",
-    openAsReseller: "Abrir en Mi trabajo",
+    openAsReseller: "Abrir en Tags",
 
     saleTitle: "Venta",
     saleNotYet: "Aún sin vender.",
