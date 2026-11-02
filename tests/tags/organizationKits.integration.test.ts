@@ -93,6 +93,11 @@ test.skipIf(!enabled)("organization kits: the rep's cost rule decides cost and o
     const taken = await api("POST", `/api/xpot/organizations/${company.id}/kits`, { repId: repId["ok-zed"], codes: [codes[1]] });
     assert.equal(taken.status, 409, taken.text);
     assert.equal(taken.json.code, "tag_not_house_stock");
+
+    // The kit list says how many pieces each kit held (the organization page shows "1 piece").
+    const listed = await api("GET", `/api/xpot/organizations/${company.id}/kits`);
+    assert.equal(listed.status, 200, listed.text);
+    assert.deepEqual(listed.json.map((kit: { pieceCount: number }) => kit.pieceCount), [1, 1]);
   } finally {
     server.close();
     await clean();

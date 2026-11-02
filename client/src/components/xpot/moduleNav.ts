@@ -344,7 +344,7 @@ export function panelGroups(profile: Profile | null | undefined, modules: readon
     ? { href: `/organizations/${organizationId}?tab=${tab}`, label, icon, match: (path) => (/^\/organizations\/\d+\/?$/.test(path) && tabs.includes(searchParam("tab"))) || (tab === "team" && /^\/organizations\/\d+\/people\//.test(path)) }
     : { href: "/organizations", label, icon, match: starts("/organizations") };
   return groups([
-    { label: "", items: [today, workspaceItem("team", organizationId ? names.team : names.companies, Users, null, "overview", "team")] },
+    { label: "", items: [today, workspaceItem("team", organizationId ? names.team : names.companies, Users, null, "overview", "team", "settings")] },
     // A partner's production comes first: it is what the panel is for.
     ...(profile === "partner" ? [{ label: names.make, items: [...production, ...stations] }] : []),
     {
