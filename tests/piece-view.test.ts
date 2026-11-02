@@ -12,6 +12,7 @@ import {
   pieceSections,
   pieceSituation,
   pieceStatusChips,
+  showsReceive,
   type PieceViewer,
 } from "../client/src/components/piece/pieceView";
 
@@ -212,10 +213,11 @@ describe("pieceSituation", () => {
   const rep: PieceViewer = { surface: "field", canManage: false, isAdmin: false, hasVisits: false };
   const manager: PieceViewer = { ...rep, canManage: true };
   const admin: PieceViewer = { surface: "admin", canManage: true, isAdmin: true, hasVisits: true };
+  const partner: PieceViewer = { surface: "admin", canManage: true, isAdmin: false, hasVisits: false, producesPrints: true };
   const base = {
     status: "inventory", stockStatus: "available", nfcStatus: "not_programmed", saleId: null as number | null,
     leadId: null as number | null, destinationUrl: null as string | null, destinationType: null as string | null,
-    batchId: null as string | null,
+    batchId: null as string | null, printJobId: null as string | null,
   };
   const set = { leadId: 4, destinationUrl: "https://a.test", destinationType: "website" };
   const receivable = { receive: { targets: ["me" as const], blocker: null } };
@@ -233,9 +235,18 @@ describe("pieceSituation", () => {
     ["pending, reseller who may receive", { stockStatus: "pending", custody: receivable }, rep, "pending", "amber", "receive"],
     ["pending, receive blocked", { stockStatus: "pending", custody: blocked }, rep, "pending", "amber", null],
     ["pending, no custody data", { stockStatus: "pending" }, rep, "pending", "amber", null],
-    ["pending, admin with a batch", { stockStatus: "pending", batchId: "b-1", custody: receivable }, admin, "pending", "amber", "openPrint"],
-    ["pending, admin without a batch falls back to receive", { stockStatus: "pending", custody: receivable }, admin, "pending", "amber", "receive"],
-    ["pending, manager who is not admin has no print screen", { stockStatus: "pending", batchId: "b-1" }, manager, "pending", "amber", null],
+    ["pending, house print, admin: opens the print, no receive", { stockStatus: "pending", batchId: "b-1", printJobId: "j-1", custody: receivable }, admin, "pending", "amber", "openPrint"],
+    ["pending, house print, partner who produces", { stockStatus: "pending", batchId: "b-1", printJobId: "j-1", custody: receivable }, partner, "pending", "amber", "openPrint"],
+    ["pending, house print, print opens even with a blocker", { stockStatus: "pending", batchId: "b-1", printJobId: "j-1", custody: blocked }, admin, "pending", "amber", "openPrint"],
+    ["pending, supplier lot, admin receives", { stockStatus: "pending", batchId: "b-1", custody: receivable }, admin, "pending", "amber", "receive"],
+    ["pending, supplier lot, partner who produces receives", { stockStatus: "pending", batchId: "b-1", custody: receivable }, partner, "pending", "amber", "receive"],
+    ["pending, supplier lot, receive blocked", { stockStatus: "pending", batchId: "b-1", custody: blocked }, admin, "pending", "amber", null],
+    ["pending, no batch, admin receives", { stockStatus: "pending", custody: receivable }, admin, "pending", "amber", "receive"],
+    ["pending, house print, ordinary manager still receives", { stockStatus: "pending", batchId: "b-1", printJobId: "j-1", custody: receivable }, manager, "pending", "amber", "receive"],
+    ["pending, house print, ordinary manager without receive", { stockStatus: "pending", batchId: "b-1", printJobId: "j-1" }, manager, "pending", "amber", null],
+    ["pending, house print, reseller still receives", { stockStatus: "pending", batchId: "b-1", printJobId: "j-1", custody: receivable }, rep, "pending", "amber", "receive"],
+    ["pending, supplier lot, reseller receives", { stockStatus: "pending", batchId: "b-1", custody: receivable }, rep, "pending", "amber", "receive"],
+    ["pending, supplier lot, reseller with a blocker", { stockStatus: "pending", batchId: "b-1", custody: blocked }, rep, "pending", "amber", null],
     ["live", { status: "active", ...set }, rep, "live", "green", "viewPerformance"],
     ["paused", { status: "disabled", ...set }, rep, "paused", "amber", "reactivate"],
     ["paused but activation blocked: no action", { status: "disabled", leadId: 4 }, rep, "paused", "amber", null],
@@ -254,8 +265,29 @@ describe("pieceSituation", () => {
     expect([got.key, got.tone, got.action?.kind ?? null]).toEqual([key, tone, action]);
   });
 
-  it("links the print action to the batch page", () => {
-    const got = pieceSituation({ ...base, stockStatus: "pending", batchId: "b 1" }, admin);
-    expect(got.action).toEqual({ kind: "openPrint", href: "/admin/tags/batches/b%201" });
+  it("links the print action to the print order of the piece", () => {
+    const got = pieceSituation({ ...base, stockStatus: "pending", batchId: "b-1", printJobId: "job 1" }, admin);
+    expect(got.action).toEqual({ kind: "openPrint", href: "/admin/tags/production/jobs/job%201" });
+  });
+});
+
+describe("showsReceive", () => {
+  const rep: PieceViewer = { surface: "field", canManage: false, isAdmin: false, hasVisits: false };
+  const manager: PieceViewer = { ...rep, canManage: true };
+  const admin: PieceViewer = { surface: "admin", canManage: true, isAdmin: true, hasVisits: true };
+  const partner: PieceViewer = { ...manager, producesPrints: true };
+  const cases: Array<[string, { printJobId?: string | null }, PieceViewer, boolean]> = [
+    ["house print, admin", { printJobId: "j" }, admin, false],
+    ["house print, partner who produces", { printJobId: "j" }, partner, false],
+    ["house print, ordinary manager", { printJobId: "j" }, manager, true],
+    ["house print, reseller", { printJobId: "j" }, rep, true],
+    ["house print, producer without management on", { printJobId: "j" }, { ...partner, canManage: false }, true],
+    ["supplier lot, admin", { printJobId: null }, admin, true],
+    ["supplier lot, partner who produces", { printJobId: null }, partner, true],
+    ["supplier lot, reseller", { printJobId: null }, rep, true],
+    ["no data yet", {}, admin, true],
+  ];
+  it.each(cases)("%s", (_name, tag, viewer, expected) => {
+    expect(showsReceive(tag, viewer)).toBe(expected);
   });
 });

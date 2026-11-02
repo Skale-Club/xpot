@@ -93,6 +93,8 @@ export interface TagDetail extends TagListItem {
   qrUrl: string;
   nfcUrl: string;
   history: TagHistoryEntry[];
+  /** The print order of the piece's batch (tag_batches.print_job_id): set for a piece the house prints, null for a supplier's lot or no batch. */
+  printJobId: string | null;
   /** What the viewer may do about who holds the piece (shared/tagCustody.ts); absent when not worked out. */
   custody?: PieceCustodyActions | null;
 }

@@ -15,6 +15,7 @@ import { queryClient } from "@/lib/queryClient";
 import { useViewerAccess } from "@/lib/adminMode";
 import { AdminHttpError, ADMIN_TAGS_KEY, getJson, STALE_MS } from "./api";
 import { Loading, LoadError } from "./pieces-shared";
+import { useProductionAccess } from "./production-shared";
 import { NfcProvisioningCard } from "./pieces-NfcProvisioningCard";
 import { useT } from "@/i18n";
 import { shellMessages } from "@/i18n/messages/shell";
@@ -42,6 +43,7 @@ export function PieceDetail({ id, go, onClose }: { id: string; go: Go; /** Shown
   const { toast } = useToast();
   const access = useViewerAccess();
   const modules = useXpotModules();
+  const { prints } = useProductionAccess();
   const queryKey = [ADMIN_TAGS_KEY, "piece", id];
   const { data: tag, isLoading, error, refetch } = useQuery<TagDetail>({
     queryKey,
@@ -52,8 +54,8 @@ export function PieceDetail({ id, go, onClose }: { id: string; go: Go; /** Shown
   const changed = useCallback((detail: TagDetail) => queryClient.setQueryData(queryKey, detail), [id]); // eslint-disable-line react-hooks/exhaustive-deps
   const viewer = useMemo<PieceViewer>(
     // Management URLs keep the piece in the manager's or super admin's workspace.
-    () => ({ surface: "admin", canManage: access.hasAdminAccess, isAdmin: access.isSuperAdmin, hasVisits: modules.includes("visits"), repId: access.me?.rep.id ?? null }),
-    [access.hasAdminAccess, access.isSuperAdmin, modules, access.me?.rep.id],
+    () => ({ surface: "admin", canManage: access.hasAdminAccess, isAdmin: access.isSuperAdmin, hasVisits: modules.includes("visits"), repId: access.me?.rep.id ?? null, producesPrints: prints }),
+    [access.hasAdminAccess, access.isSuperAdmin, prints, modules, access.me?.rep.id],
   );
 
   const top = onClose ? <PaneBar fullHref={`/admin/tags/pieces/${encodeURIComponent(id)}`} onClose={onClose} testId="admin-piece-pane" /> : <Back go={go} />;

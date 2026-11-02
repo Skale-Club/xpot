@@ -7,6 +7,7 @@ import { CODE_HEADING_TOPBAR, TagPieceVisual } from "@/components/xpot/TagProduc
 import { Button } from "@/components/ui/button";
 import { EmptyState, ErrorState } from "@/components/xpot/EmptyState";
 import { useXpotModules } from "@/components/ModuleSwitch";
+import { useProductionAccess } from "@/pages/admin/tags/production-shared";
 import { PieceBody } from "@/components/piece/PieceBody";
 import { invalidatePieceViews, pieceSend, PieceProvider, type PieceContextValue } from "@/components/piece/PieceContext";
 import { PieceFacts, PieceModelLine, PieceSituationPill } from "@/components/piece/PieceHeader";
@@ -55,6 +56,7 @@ export default function TagScreen({ code, onClose }: {
   const { banner, show } = useBanner();
   const access = useViewerAccess();
   const modules = useXpotModules();
+  const { prints } = useProductionAccess();
   const queryKey = ["tags", "piece", code];
   // A phone without Web NFC (iPhone): written with NFC Tools, confirmed by a real tap.
   const manualFlow = nfcMode() === "app";
@@ -82,8 +84,8 @@ export default function TagScreen({ code, onClose }: {
     [qc, code], // eslint-disable-line react-hooks/exhaustive-deps
   );
   const viewer = useMemo<PieceViewer>(
-    () => ({ surface: "field", canManage: access.canManage, isAdmin: access.isSuperAdmin, hasVisits: modules.includes("visits"), repId: access.me?.rep.id ?? null }),
-    [access.canManage, access.isSuperAdmin, modules, access.me?.rep.id],
+    () => ({ surface: "field", canManage: access.canManage, isAdmin: access.isSuperAdmin, hasVisits: modules.includes("visits"), repId: access.me?.rep.id ?? null, producesPrints: prints }),
+    [access.canManage, access.isSuperAdmin, prints, modules, access.me?.rep.id],
   );
 
   const closeButton = onClose ? (
