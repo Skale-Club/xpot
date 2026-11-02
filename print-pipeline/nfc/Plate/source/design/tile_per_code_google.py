@@ -37,7 +37,7 @@ from shapely.ops import unary_union
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import tile_per_code as ig  # noqa: E402   (body, outline, frames, the Instagram plate's numbers)
-from tile_per_code import fa, igc, T, TOP, INLAY, BACK_ENGRAVE, NFC_D, NFC_Z0, NFC_Z1, SIMPLIFY  # noqa: E402
+from tile_per_code import fa, igc, T, TOP, INLAY, BACK_ENGRAVE, NFC_D, NFC_Z0, NFC_Z1, SIMPLIFY, nfc_mounts  # noqa: E402
 
 PIECE = ig.PIECE
 FACES = {
@@ -118,7 +118,7 @@ def layout(code):
 def build(code, out_dir, size='large', nfc_mount='embedded_round', theme='white', qr='panel'):
     if theme not in ('white', 'black'):
         raise ValueError('theme must be white or black')
-    if nfc_mount not in ('embedded_round', 'sticker_10x20'):
+    if nfc_mount not in nfc_mounts.NFC_MOUNTS:
         raise ValueError('unsupported nfc_mount')
     configure(size)
     code = fa.normalize_code(code)
@@ -154,6 +154,13 @@ def build(code, out_dir, size='large', nfc_mount='embedded_round', theme='white'
         assert sticker_from_top - STICKER_H / 2 >= STICKER_GAP_EDGE,'sticker pocket too close to the top edge'
         assert nfc_z1 < TOP - INLAY, 'sticker pocket must stay behind the face art'
         cavity_expected = nfc.area * STICKER_DEPTH
+    elif nfc_mount == nfc_mounts.ROUND_STICKER:
+        # Too wide to miss the G pocket, so it goes behind it (nfc_mounts): the same floor as the round tag's.
+        nfc = Point(0.0, S - nfc_mounts.FROM_TOP).buffer(nfc_mounts.POCKET_D / 2, quad_segs=64)
+        sticker_z0, sticker_z1, _ = nfc_mounts.print_z(theme, behind_g=True)
+        nfc_z0, nfc_z1 = TOP - sticker_z1, TOP - sticker_z0
+        assert TOP - POCKET - nfc_z1 >= 0.48 - 1e-6, 'floor between the G pocket and the NFC pocket is too thin'
+        cavity_expected = nfc.area * nfc_mounts.POCKET_DEPTH
     else:
         nfc = Point(art['nfc_centre_x'] - S / 2, S - art['nfc_centre_y']).buffer(NFC_D / 2, quad_segs=64)
         nfc_z0, nfc_z1 = NFC_Z0, NFC_Z1
@@ -193,6 +200,10 @@ def build(code, out_dir, size='large', nfc_mount='embedded_round', theme='white'
                    sticker_pocket_print_z=[sticker_z0, sticker_z1], pause_top_z=round(sticker_z1 + 0.16, 2),
                    tag_face_distance_mm=sticker_z0, nfc_centre_from_top_mm=round(sticker_from_top, 2),
                    sticker_gap_to_g_pocket_mm=round(nfc.distance(pocket), 2))
+    if nfc_mount == nfc_mounts.ROUND_STICKER:
+        rep.update(nfc_mount=nfc_mount, sticker_pocket_mm=[nfc_mounts.POCKET_D, nfc_mounts.POCKET_D, nfc_mounts.POCKET_DEPTH],
+                   sticker_pocket_print_z=[sticker_z0, sticker_z1], pause_top_z=round(sticker_z1 + 0.16, 2),
+                   tag_face_distance_mm=sticker_z0, nfc_centre_from_top_mm=nfc_mounts.FROM_TOP)
     q = {'size': FACE['qr']['size'], 'modules': FACE['qr']['modules'], 'y': art['qr_top']}
     igc.H = S
     rep['qr_decoded_polygons'] = igc.decode_qr_polygons(to_tile(art['qr_dark']), q, art['qr']['url'])

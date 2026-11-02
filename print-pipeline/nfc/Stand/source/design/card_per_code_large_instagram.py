@@ -30,6 +30,7 @@ import face_art as fa  # noqa: E402
 import face_art_large as large  # noqa: E402
 import face_composition_large as fc  # noqa: E402
 import card_per_code_large as google  # noqa: E402   (the sticker pocket: size, place, depth by theme)
+import nfc_mounts  # noqa: E402
 
 large.configure()
 
@@ -157,8 +158,11 @@ def mesh_section_polygons(tm, z):
     return fa.even_odd([list(f.exterior.coords)[:-1] for f in faces])
 
 
-def sticker_pocket():
-    """The 23 x 13 sticker pocket outline, card frame, on the round tag's centre (as on the Large Google card)."""
+def sticker_pocket(nfc_mount='sticker_10x20'):
+    """The sticker pocket outline, card frame: the 23 x 13 one on the round tag's centre (as on the Large Google card),
+    or the round sticker's near the top edge."""
+    if nfc_mount == nfc_mounts.ROUND_STICKER:
+        return Point(*google.ROUND_STICKER_CENTRE).buffer(nfc_mounts.POCKET_D / 2, quad_segs=64)
     cx, cy = google.ROUND_CENTRE
     w, h, r = google.STICKER_W / 2, google.STICKER_H / 2, google.STICKER_RADIUS
     return box(cx - w + r, cy - h + r, cx + w - r, cy + h - r).buffer(r, quad_segs=24)
@@ -199,12 +203,12 @@ def plain_card(s_back, n_back, nfc_mount='embedded_round', theme='white'):
     serial_fill = box(*unary_union([s_back, n_back]).bounds).buffer(0.3, join_style='mitre')
     card = card + prism(serial_fill, -OVER, BACK_ENGRAVE + OVER)
     sticker = None
-    if nfc_mount == 'sticker_10x20':
+    if nfc_mount != 'embedded_round':
         # 3b. the round tag cavity back to plain card (the pocket is cut after the plain volume is measured)
         round_fill = Point(*google.ROUND_CENTRE).buffer(google.ROUND_D / 2 + 0.3, quad_segs=64)
         card = card + prism(round_fill, google.ROUND_Z0 - OVER, google.ROUND_Z1 + OVER)
-        pz0, pz1, pause = google.sticker_pocket_z(theme)
-        sticker = {'pocket': sticker_pocket(), 'print_z': [pz0, pz1], 'pause_top_z': pause}
+        pz0, pz1, pause = nfc_mounts.print_z(theme) if nfc_mount == nfc_mounts.ROUND_STICKER else google.sticker_pocket_z(theme)
+        sticker = {'pocket': sticker_pocket(nfc_mount), 'print_z': [pz0, pz1], 'pause_top_z': pause}
     # 4. trim flat to the card's own faces
     slab = m3.Manifold.cube([hi[0] - lo[0] + 2, hi[1] - lo[1] + 2, TOP]).translate((lo[0] - 1, lo[1] - 1, 0.0))
     card = card ^ slab
@@ -222,7 +226,7 @@ def build(code, batch, serial, out_dir, nfc_mount='embedded_round', theme='white
     code alone (user, 2026-10-04). nfc_mount 'sticker_10x20' fills the round tag cavity and cuts the Large Google
     card's 10 x 20 sticker pocket instead, its depth by `theme` (the meshes are the same for both colours
     otherwise)."""
-    if nfc_mount not in ('embedded_round', 'sticker_10x20'):
+    if nfc_mount not in nfc_mounts.NFC_MOUNTS:
         raise ValueError('unsupported nfc_mount')
     large.configure()
     code = fa.normalize_code(code)
@@ -260,8 +264,9 @@ def build(code, batch, serial, out_dir, nfc_mount='embedded_round', theme='white
         'card_bounds': card_tm.bounds.round(3).tolist(),
     }
     if sticker:
+        x0, y0, x1, y1 = sticker['pocket'].bounds
         rep.update(nfc_mount=nfc_mount, theme=theme,
-                   sticker_pocket_mm=[google.STICKER_W, google.STICKER_H, google.STICKER_DEPTH],
+                   sticker_pocket_mm=[round(x1 - x0, 2), round(y1 - y0, 2), google.STICKER_DEPTH],
                    sticker_pocket_print_z=sticker['print_z'], pause_top_z=sticker['pause_top_z'],
                    tag_face_distance_mm=sticker['print_z'][0], **check_sticker(card, sticker['pocket'], sticker['print_z']))
 

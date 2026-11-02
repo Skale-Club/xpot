@@ -94,13 +94,13 @@ class BuilderTest(unittest.TestCase):
         with self.assertRaises(BuildError):
             _theme({'theme': 'red'})
 
-    def test_new_stand_cards_take_only_the_sticker(self):
-        from builders import BuildError, build_piece
+    def test_every_builder_refuses_an_unknown_nfc_type_size_or_font(self):
+        from builders import BUILDERS, BuildError, build_piece
         tag = {'public_code': 'AAAA1111', 'serial_number': '001'}
-        for builder, params in (('stand.google', {'size': 'small'}), ('stand.instagram', {'size': 'small'}),
-                                ('stand.menu', {'size': 'small'}), ('stand.menu', {'size': 'large'}),
-                                ('stand.menu', {'size': 'large', 'nfc_mount': 'sticker_10x20', 'font': 'Metropolis Medium, MENU spaced'}),
-                                ('stand.google', {'size': 'medium', 'nfc_mount': 'sticker_10x20'})):
+        cases = [(builder, {'nfc_mount': 'sticker_round_99'}) for builder in BUILDERS]
+        cases += [('stand.menu', {'size': 'large', 'nfc_mount': 'sticker_10x20', 'font': 'Metropolis Medium, MENU spaced'}),
+                  ('stand.google', {'size': 'medium', 'nfc_mount': 'sticker_10x20'})]
+        for builder, params in cases:
             with self.subTest(builder=builder, params=params), self.assertRaises(BuildError):
                 build_piece(builder, tag, 0, params, '.')
 

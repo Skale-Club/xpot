@@ -40,6 +40,7 @@ import face_composition as fc  # noqa: E402
 import card_per_code_large as google  # noqa: E402   (the sticker: size, radius, depth by theme)
 import card_per_code_large_instagram as ig  # noqa: E402   (to_manifold, to_trimesh, welded_bad_edges, QR decode)
 import card_per_code_large_menu as menu  # noqa: E402   (the Menu face)
+import nfc_mounts  # noqa: E402
 
 small.configure()
 
@@ -98,7 +99,9 @@ def outline():
     return g
 
 
-def sticker_pocket():
+def sticker_pocket(nfc_mount='sticker_10x20'):
+    if nfc_mount == nfc_mounts.ROUND_STICKER:
+        return Point(0.0, H - nfc_mounts.FROM_TOP).buffer(nfc_mounts.POCKET_D / 2, quad_segs=64)
     cx, cy = STICKER_CENTRE
     w, h, r = google.STICKER_W / 2, google.STICKER_H / 2, google.STICKER_RADIUS
     return box(cx - w + r, cy - h + r, cx + w - r, cy + h - r).buffer(r, quad_segs=24)
@@ -115,7 +118,7 @@ def check_sticker(card, pocket, print_z):
     here = [p for p in slice_polys(card, CARD_T - sum(print_z) / 2)[1:] if p.intersects(pocket_mesh)]
     section = round(sum(p.area for p in here), 2)
     rep = {'sticker_section_mm2': section, 'sticker_expected_mm2': round(pocket.area, 2),
-           'round_cavity_filled': len(card.slice((ROUND_Z0 + ROUND_Z1) / 2).to_polygons()) == 1}
+           'round_cavity_filled': len(card.slice(ROUND_Z0 + 0.24).to_polygons()) == 1}   # below any pocket
     rep['sticker_ok'] = len(here) == 1 and abs(section - pocket.area) < 0.5 and rep['round_cavity_filled']
     return rep
 
@@ -166,7 +169,8 @@ def build_google(code, theme, sticker, out_dir):
     card = ig.to_manifold(card0)
     card = card + prism(qr_fill, CARD_T - INLAY - OVER, CARD_T)
     card = card + prism(serial_fill, -OVER, BACK_ENGRAVE + OVER)
-    card = card + prism(round_fill(), ROUND_Z0 - OVER, ROUND_Z1 + OVER)
+    if sticker:
+        card = card + prism(round_fill(), ROUND_Z0 - OVER, ROUND_Z1 + OVER)
     card = trim(card)
     # the sample's QR is not this pipeline's (the retired card encoded skale.club/q/), so the checks measure the
     # filled card and the kept art instead of subtracting the sample's QR: the QR square must be plain card now
@@ -174,7 +178,8 @@ def build_google(code, theme, sticker, out_dir):
     square_mesh = affinity.translate(square, X_OFF, 0)
     qr_left = [p for p in slice_polys(card, TOP - INLAY / 2)[1:] if p.intersects(square_mesh)]
     card = card - prism(n_dark, CARD_T - INLAY, CARD_T + 0.2) - prism(n_back, -0.2, BACK_ENGRAVE)
-    card = card - prism(sticker['pocket'], CARD_T - sticker['print_z'][1], CARD_T - sticker['print_z'][0])
+    if sticker:
+        card = card - prism(sticker['pocket'], CARD_T - sticker['print_z'][1], CARD_T - sticker['print_z'][0])
 
     keep, dropped = [], 0
     qr_box_mesh = affinity.translate(qr_fill, X_OFF, 0)
@@ -188,8 +193,9 @@ def build_google(code, theme, sticker, out_dir):
             keep.append(tm)
     art = ig.to_manifold(trimesh.util.concatenate(keep)) + prism(n_dark, CARD_T - INLAY, CARD_T)
     card_tm, art_tm = ig.to_trimesh(card), ig.to_trimesh(art)
-    want_card = (plain_volume - n_dark.area * INLAY - n_back.area * BACK_ENGRAVE
-                 - sticker['pocket'].area * google.STICKER_DEPTH)
+    want_card = plain_volume - n_dark.area * INLAY - n_back.area * BACK_ENGRAVE
+    if sticker:
+        want_card -= sticker['pocket'].area * google.STICKER_DEPTH
     want_art = sum(tm.volume for tm in keep) + n_dark.area * INLAY
     qd = {'size': q['size'], 'modules': q['modules'], 'y': q['y']}
     url = info['url']
@@ -218,13 +224,15 @@ def plain_card(s_back, n_back, sticker):
     card = card + prism(g_fill, TOP - OLD_POCKET - OVER, TOP + OVER)
     serial_fill = box(*unary_union([s_back, n_back]).bounds).buffer(FILL_MARGIN, join_style='mitre')
     card = card + prism(serial_fill, -OVER, BACK_ENGRAVE + OVER)
-    card = card + prism(round_fill(), ROUND_Z0 - OVER, ROUND_Z1 + OVER)
+    if sticker:
+        card = card + prism(round_fill(), ROUND_Z0 - OVER, ROUND_Z1 + OVER)
     card = trim(card)
     plain_volume = ig.to_trimesh(card).volume
     # the face must be plain everywhere: a section through the inlay depth is the outline alone
     assert len(card.slice(TOP - INLAY / 2).to_polygons()) == 1, 'old face left on the plain card'
-    assert len(card.decompose()) == 1, 'the plain card is not one solid'
-    card = card - prism(sticker['pocket'], TOP - sticker['print_z'][1], TOP - sticker['print_z'][0])
+    assert len(card.decompose()) == (1 if sticker else 2), 'the plain card is not one solid'
+    if sticker:
+        card = card - prism(sticker['pocket'], TOP - sticker['print_z'][1], TOP - sticker['print_z'][0])
     return card, plain_volume
 
 
@@ -264,7 +272,9 @@ def build_refaced(face, code, theme, sticker, font, qr='panel'):
         card_tm = ig.to_trimesh(card)
     ink_tms = [ig.to_trimesh(prism(g, TOP - INLAY, TOP)) for g in inks]
     ink_area = sum(g.area for g in inks)
-    want = plain_volume - ink_area * INLAY - back.area * BACK_ENGRAVE - sticker['pocket'].area * google.STICKER_DEPTH
+    want = plain_volume - ink_area * INLAY - back.area * BACK_ENGRAVE
+    if sticker:
+        want -= sticker['pocket'].area * google.STICKER_DEPTH
     q = {'size': art['q']['size'], 'modules': art['q']['modules'], 'y': art['q']['y']}
     url = art['qr']['url']
     section = mesh_qr(ink_tms[0], q)
@@ -288,31 +298,38 @@ def build_refaced(face, code, theme, sticker, font, qr='panel'):
 
 def build(face, code, batch, serial, out_dir, theme='white', nfc_mount='sticker_10x20', font='Inria Serif Bold', qr='panel'):
     """Write one Small card's STLs (PARTS[face]) into out_dir. `batch` and `serial` are kept for the ledger: the back
-    carries the code alone. Every Small Stand card is new (2026-10-31) and takes the 10 x 20 sticker."""
+    carries the code alone."""
     if face not in FACES:
         raise ValueError('face %r: one of %s' % (face, ', '.join(FACES)))
-    if nfc_mount != 'sticker_10x20':
-        raise ValueError('the Small Stand card only takes the 10 x 20 sticker')
+    if nfc_mount not in nfc_mounts.NFC_MOUNTS:
+        raise ValueError('unsupported nfc_mount')
     if theme not in google.STICKER_Z0_BY_THEME:
         raise ValueError('theme %r: white or black' % theme)
     small.configure()
     code = fa.normalize_code(code)
-    pz0, pz1, pause = google.sticker_pocket_z(theme)
-    sticker = {'pocket': sticker_pocket(), 'print_z': [pz0, pz1], 'pause_top_z': pause}
+    sticker = None
+    if nfc_mount != nfc_mounts.ROUND_TAG:
+        if nfc_mount == nfc_mounts.ROUND_STICKER:
+            pz0, pz1, pause = nfc_mounts.print_z(theme, behind_g=face == 'google')
+        else:
+            pz0, pz1, pause = google.sticker_pocket_z(theme)
+        sticker = {'pocket': sticker_pocket(nfc_mount), 'print_z': [pz0, pz1], 'pause_top_z': pause}
     if face == 'google':
         card, meshes, rep, vol_ok = build_google(code, theme, sticker, out_dir)
     else:
         card, meshes, rep, vol_ok = build_refaced(face, code, theme, sticker, font, qr)
     rep = dict({'face': face, 'code': code, 'batch': batch, 'serial': str(serial), 'theme': theme,
                 'nfc_mount': nfc_mount, 'card_mm': [W, H, CARD_T], 'slot_line_y_mm': SLOT_LINE}, **rep)
-    rep.update(sticker_pocket_mm=[google.STICKER_W, google.STICKER_H, google.STICKER_DEPTH],
-               sticker_pocket_print_z=sticker['print_z'], pause_top_z=pause, tag_face_distance_mm=pz0,
-               card_shells=len(card.decompose()), card_bounds=meshes[0].bounds.round(3).tolist(),
+    rep.update(card_shells=len(card.decompose()), card_bounds=meshes[0].bounds.round(3).tolist(),
                watertight=[bool(m.is_watertight) for m in meshes],
-               bad_edges=sum(ig.welded_bad_edges(m) for m in meshes[:2 if face == 'google' else None]),
-               **check_sticker(card, sticker['pocket'], sticker['print_z']))
+               bad_edges=sum(ig.welded_bad_edges(m) for m in meshes[:2 if face == 'google' else None]))
+    if sticker:
+        x0, y0, x1, y1 = sticker['pocket'].bounds
+        rep.update(sticker_pocket_mm=[round(x1 - x0, 2), round(y1 - y0, 2), google.STICKER_DEPTH],
+                   sticker_pocket_print_z=sticker['print_z'], pause_top_z=pause, tag_face_distance_mm=pz0,
+                   **check_sticker(card, sticker['pocket'], sticker['print_z']))
     ok = (vol_ok and all(rep['watertight']) and rep['card_shells'] == 2 and rep['bad_edges'] == 0
-          and rep['sticker_ok'] and rep['qr_decoded_polygons'] == rep['qr_url'] == rep['qr_decoded_mesh']
+          and (not sticker or rep['sticker_ok']) and rep['qr_decoded_polygons'] == rep['qr_url'] == rep['qr_decoded_mesh']
           and abs(meshes[0].bounds[1][2] - TOP) < 1e-4 and abs(meshes[0].bounds[0][2]) < 1e-4)
     rep['ok'] = bool(ok)
     if not ok:
